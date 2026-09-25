@@ -6,7 +6,10 @@
 // dynamicImportsByModule 的紀錄，importer 是路由分割點
 // `src/App.tsx` 的邊不追（那是 lazy() 按需載入的路由，
 // 不算 Field 載入範圍），其他模組的動態 import 都追到
-// 目標所屬的 chunk。可達 chunk 含 Admin 模組就算違規。
+// 目標所屬的 chunk。可達 chunk 含 Admin 模組就算違規。可達
+// chunk 內任一模組在 dynamicImportsByModule 缺紀錄時 fail
+// closed：`src/` 模組直接視為錯誤；其他模組必須出現在
+// modulesWithoutInfo，否則同樣算錯誤。
 
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -105,7 +108,12 @@ async function main() {
     return
   }
 
-  const { chunks: chunkList, dynamicImportsByModule } = chunkModulesRaw
+  const {
+    chunks: chunkList,
+    dynamicImportsByModule,
+    modulesWithoutInfo,
+  } = chunkModulesRaw
+  const modulesWithoutInfoSet = new Set(modulesWithoutInfo)
 
   const fieldEntry = manifest[FIELD_ENTRY]
   if (!fieldEntry) {
@@ -222,13 +230,32 @@ async function main() {
     }
 
     for (const moduleId of chunk.moduleIds) {
+      const hasRecord = Object.prototype.hasOwnProperty.call(
+        dynamicImportsByModule,
+        moduleId,
+      )
+
+      if (!hasRecord) {
+        if (moduleId.startsWith('src/')) {
+          console.error(`src 模組缺少動態 import 紀錄：${moduleId}`)
+          console.error(`所在 chunk：${chunk.fileName}`)
+          process.exit(1)
+          return
+        }
+        if (!modulesWithoutInfoSet.has(moduleId)) {
+          console.error(`模組無紀錄：${moduleId}`)
+          console.error(`所在 chunk：${chunk.fileName}`)
+          process.exit(1)
+          return
+        }
+        continue
+      }
+
       if (moduleId === ROUTER_MODULE) {
         continue
       }
+
       const targets = dynamicImportsByModule[moduleId]
-      if (targets === undefined) {
-        continue
-      }
       for (const target of targets) {
         const targetChunk = moduleToChunk.get(target)
         if (!targetChunk) {
