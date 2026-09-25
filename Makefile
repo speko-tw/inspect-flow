@@ -13,11 +13,23 @@ setup-frontend:
 # Single entry point for local and CI checks. Runs format, lint,
 # type-check, test and build for backend and frontend, in order.
 # Any failing step stops the run with a non-zero exit code.
-check: check-env check-backend check-frontend
+# check-env/check-backend/check-frontend are invoked as separate
+# $(MAKE) recipe lines (not prerequisites), so `make -j` cannot run
+# them in parallel and a failure in one stops the later ones.
+check:
+	$(MAKE) --no-print-directory check-env
+	$(MAKE) --no-print-directory check-backend
+	$(MAKE) --no-print-directory check-frontend
 
 # Fails if a .env file is tracked in git, or .env.example is missing.
 check-env:
-	@tracked_env=$$(git ls-files | grep -E '\.env$$' || true); \
+	@tracked_files=$$(git ls-files); \
+	status=$$?; \
+	if [ $$status -ne 0 ]; then \
+		echo "git ls-files failed (exit $$status)"; \
+		exit 1; \
+	fi; \
+	tracked_env=$$(echo "$$tracked_files" | grep -E '\.env$$'); \
 	if [ -n "$$tracked_env" ]; then \
 		echo "tracked .env file(s) found (must not be committed):"; \
 		echo "$$tracked_env"; \
