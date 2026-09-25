@@ -3,6 +3,8 @@
 **這份文件回答**：規格（spec）與計畫（plan）怎麼寫、怎麼對應到 GitHub issue 與 PR，做到一半要改規格時怎麼處理。
 **什麼時候讀**：開始一個 Phase 的工作、拆 task、寫 PR，或發現規格需要調整時。
 
+> **用語**：本文的「任務」「計畫」「範本」「狀態」都指開發流程（GitHub task、`plan.md`、文件與 issue 範本、規格文件狀態），不是 [04-glossary.md](../intents/04-glossary.md) 裡的 `Inspection Task`、`Inspection Plan`、`Inspection Template`／`Report Template` 或實體狀態。撰寫 `inspection-planning`、`template-system` 等規格時，領域實體一律寫英文實體名。
+
 ## 四層文件
 
 每一層都從上一層已核准的內容推導出來，只引用上一層，不重抄內容。
@@ -42,7 +44,7 @@ docs/specs/
 | `skeleton` | P0 | 功能 | 未開始 | — | — |
 | `api-conventions` | 全部 | 共用 | 未開始 | — | — |
 | `database-foundation` | P1 | 功能 | 未開始 | — | — |
-| `domain-model` | P1、P3、P4、P6、P9 | 共用 | 未開始 | — | 部分：[G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06)（P1 的 `User`、`Project` 不受影響，可先凍結） |
+| `domain-model` | P1、P3、P4、P6、P9 | 共用 | 未開始 | — | [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06)；不受影響的實體能否先凍結見 [OQ-22](../intents/05-open-questions.md#oq-22) |
 | `state-machines` | P4、P6、P7、P9 | 共用 | 未開始 | — | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-06](../intents/05-open-questions.md#g-06) |
 | `authentication` | P2 | 功能 | 未開始 | — | [OQ-13](../intents/05-open-questions.md#oq-13)、[OQ-08](../intents/05-open-questions.md#oq-08) |
 | `template-system` | P3 | 功能 | 未開始 | — | [G-01](../intents/05-open-questions.md#g-01)、[OQ-06](../intents/05-open-questions.md#oq-06) |
