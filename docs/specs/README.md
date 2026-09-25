@@ -172,7 +172,7 @@ flowchart TD
 | 版本 | Milestone（例如 `0.1.x`） |
 | 進度 | open／closed 與關聯的 PR；需要看板時再用 Projects |
 | 重複、不做 | 關閉原因：duplicate、not planned |
-| 優先順序 | Milestone 與排序；需要時用 Projects 欄位，不用 label |
+| 優先順序、工作量 | 組織 issue 欄位 Priority、Effort（見下方[欄位設定](#issue-pr-fields)），不用 label |
 
 **Label（固定 7 個）**：
 
@@ -195,6 +195,63 @@ flowchart TD
 | Bug | `Bug` | 無（開單者依範圍選 area） |
 
 **新增 label** 只限兩種情況：出現新的程式碼範圍（例如新的頂層目錄），或出現原生功能做不到的例外狀態。新增前先開 issue 說明理由，並在同一個 PR 更新本節。
+
+<a id="issue-pr-fields"></a>
+**Issue 與 PR 欄位**：
+
+| 對象 | 欄位 | 規則 |
+|---|---|---|
+| Issue | Assignee | 指派負責人（目前是 `kavy7884`） |
+| Issue | Issue Type | `Task` 或 `Bug`；`gh issue create` 不一定會套用範本的類型，開完要確認，沒有就補上 |
+| Issue | area label、Milestone | 依實際改動範圍選 area label；Milestone 用目前的版本系列（例如 `0.1.x`） |
+| Issue | Priority、Effort | 一律填寫；`gh issue create` 沒有對應的旗標，要用 GraphQL 設定 |
+| PR | Assignee、area label、Milestone | 與它關閉的 issue 相同 |
+| PR | Priority、Effort | 不適用，PR 沒有這兩個欄位 |
+
+Priority、Effort 是組織層級的 issue 欄位，不是 Projects 欄位，不需要 `read:project` scope。以下的 `<I_…>` 是 issue 的 node id（`gh issue view <編號> --json id -q .id`）。
+
+補 Issue Type（開完查 `issueType` 是 `null` 時）：
+
+```bash
+gh api graphql -f query='mutation{updateIssue(input:{id:"<I_…>",
+  issueTypeId:"<IT_…>"}){issue{issueType{name}}}}'
+```
+
+設定 Priority、Effort：
+
+```bash
+gh api graphql -f query='mutation{setIssueFieldValue(input:{
+  issueId:"<I_…>",issueFields:[
+  {fieldId:"IFSS_kgDOAtKknA",singleSelectOptionId:"<Priority 選項>"},
+  {fieldId:"IFSS_kgDOAtKknw",singleSelectOptionId:"<Effort 選項>"}
+  ]}){clientMutationId}}'
+```
+
+| 欄位 | 欄位 id | 選項 id |
+|---|---|---|
+| Issue Type | — | `Task`＝`IT_kwDOE9-yRc40f_VH`、`Bug`＝`IT_kwDOE9-yRc40f_VI` |
+| Priority | `IFSS_kgDOAtKknA` | `Urgent`＝`IFSSO_kgDOBPEBzg`、`High`＝`IFSSO_kgDOBPEBzw`、`Medium`＝`IFSSO_kgDOBPEB0A`、`Low`＝`IFSSO_kgDOBPEB0Q` |
+| Effort | `IFSS_kgDOAtKknw` | `High`＝`IFSSO_kgDOBPEB0g`、`Medium`＝`IFSSO_kgDOBPEB0w`、`Low`＝`IFSSO_kgDOBPEB1A` |
+
+id 變動或設定失敗時，重查類型、欄位與選項：
+
+```bash
+gh api graphql -f query='{organization(login:"speko-tw"){
+  issueTypes(first:10){nodes{id name}}
+  issueFields(first:20){nodes{... on IssueFieldSingleSelect{
+  id name options{id name}}}}}}'
+```
+
+確認某個 issue 的欄位值：
+
+```bash
+gh api graphql -f query='{repository(owner:"speko-tw",
+  name:"inspect-flow"){issue(number:<編號>){issueType{name}
+  assignees(first:5){nodes{login}}
+  issueFieldValues(first:10){nodes{
+  ... on IssueFieldSingleSelectValue{name
+  field{... on IssueFieldSingleSelect{name}}}}}}}}'
+```
 
 ## 編號
 
