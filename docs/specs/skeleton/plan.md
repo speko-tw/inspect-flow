@@ -12,7 +12,7 @@
 | T2 | 前端骨架：Vite + React + TS；`/admin`、`/field` 以 lazy import 拆分；Vitest 測試；拆包檢查腳本；Prettier、ESLint、tsc 設定 | `frontend/` 全部：`package.json`、`package-lock.json`、`.nvmrc`、Vite／TS／ESLint／Prettier 設定、`src/`、測試、拆包檢查腳本、`frontend/.gitignore` | — | SKL-AC02、SKL-AC03、SKL-AC06（前端部分） | #12 |
 | T3 | 審查準則與自審流程 | `docs/review-guidelines.md`、`.github/pull_request_template.md`（「審查重點」段連結到準則） | — | SKL-AC07、SKL-AC08 | #13 |
 | T4 | 統一檢查入口與 CI | `Makefile`、`.github/workflows/ci.yml`、`.env.example`、`README.md`、`README.zh-TW.md`（補「怎麼跑檢查」） | T1、T2 | SKL-AC04、SKL-AC05、SKL-AC10 | #14 |
-| T5 | `main` 分支保護（**人工步驟**，由人在 repo 設定執行） | repo 設定：必過 check 指定為 T4 的 CI job，並要求至少一人核准 | T4 | SKL-AC09 | #15 |
+| T5 | `main` 分支保護（**人工步驟**，由人在 repo 設定執行） | repo 設定：必過 check 指定為 T4 的 CI job，並要求分支為最新；核准人數設 0（見 SKL-R09） | T4 | SKL-AC09 | #15 |
 
 - 各子目錄自己提供 `make` 可呼叫的指令（後端透過 `uv run`，前端透過 `npm run`）；根目錄 `Makefile` 只負責串接，CI 只呼叫 `make check`。
 - Python 版本寫在 `backend/.python-version`（3.12）；Node 用 LTS 版本，寫在 `frontend/.nvmrc`，CI 從這兩個檔讀版本，不在 workflow 另寫一份。
@@ -50,7 +50,7 @@
 | SKL-AC06 | T1、T2 各自在 PR 說明貼上長行與型別錯誤的失敗輸出（測資不留在 repo） |
 | SKL-AC07 | T3 PR 審查時確認文件結構 |
 | SKL-AC08 | 抽查 T1 至 T4 的 PR 留言 |
-| SKL-AC09 | 人設定完成後，在 T5 issue 回報以未核准 PR 嘗試合併的結果 |
+| SKL-AC09 | 人設定完成後，在 T5 issue 回報以 CI 失敗的 PR 嘗試合併的結果 |
 | SKL-AC10 | T4 在 CI 加入 `git ls-files` 檢查，或在 PR 說明貼上指令輸出 |
 
 ## 考慮過但沒採用的做法
