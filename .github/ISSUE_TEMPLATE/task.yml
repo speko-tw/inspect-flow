@@ -44,5 +44,5 @@ body:
   - type: markdown
     attributes:
       value: |
-        把這個 issue 設為規格追蹤 issue 的 sub-issue，並加上對應的 `area:` label。
+        「規格」欄就是這個任務屬於哪份規格的依據，不另掛追蹤 issue；加上對應的 `area:` label。
         標題用英文，內文用繁體中文。
