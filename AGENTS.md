@@ -48,4 +48,8 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   ```
 
 - 只 stage 相關路徑（`git add -- <paths>`），不用 `git add -A`／`.`。
-- `git push` 與 PR／issue 等遠端操作須先經使用者同意。
+- **自動化範圍**：agent 得自行 push 自己的分支、開與更新 PR、開與更新 issue／sub-issue、套用既有 label、留言，不必逐次詢問。
+- **留給人的關卡**（agent 不得代為決定，見 [`docs/specs/README.md`](docs/specs/README.md#human-gates)）：
+  - 合併 PR 到 `main`（含規格與計畫的 PR）；agent 不得核准或合併自己的 PR。
+  - `needs-decision` 的議題：範圍變更、意圖變更、裁定 OQ／G。agent 只整理選項與影響，等團隊討論決定。
+  - 破壞性或全域操作：force push、刪除他人分支、刪除 issue 或 label、新增 label、變更 repo 設定與分支保護。
