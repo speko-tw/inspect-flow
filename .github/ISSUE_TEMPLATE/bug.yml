@@ -1,0 +1,39 @@
+name: Bug
+description: Report behavior that differs from a spec or from expected behavior.
+type: Bug
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened. Include error messages, logs, or screenshots.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened. Link the spec requirement or acceptance criteria ID if one applies.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Branch or commit, browser or device, and deployment (local, pilot).
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Add the matching `area:` labels. If the fix changes spec scope, open a Spec change issue first.

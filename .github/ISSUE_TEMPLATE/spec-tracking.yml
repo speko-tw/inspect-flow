@@ -1,0 +1,39 @@
+name: Spec tracking
+description: Track one spec from writing to completion. Its sub-issues are the task list.
+title: "[Spec] <slug>"
+type: Feature
+body:
+  - type: input
+    id: spec
+    attributes:
+      label: Spec
+      description: Path of the spec folder.
+      placeholder: docs/specs/<slug>/
+    validations:
+      required: true
+  - type: input
+    id: phase
+    attributes:
+      label: Phase
+      placeholder: P0
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences on what this spec delivers.
+    validations:
+      required: true
+  - type: textarea
+    id: blocked-by
+    attributes:
+      label: Blocked by
+      description: Open questions (OQ-xx / G-xx) or other issues that must be resolved first. Write "None" if not blocked.
+      placeholder: None
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Add sub-issues in this order: write spec, write plan (may be combined for small specs), then one Task issue per plan item.

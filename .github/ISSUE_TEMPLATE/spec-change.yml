@@ -1,0 +1,43 @@
+name: Spec change
+description: Propose a scope or intent change to a frozen spec. Merge the change before changing code.
+type: Task
+labels: ["area: specs", "needs-decision"]
+body:
+  - type: input
+    id: spec
+    attributes:
+      label: Spec
+      placeholder: docs/specs/<slug>/spec.md
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Change level
+      description: Plan adjustments and spec clarifications do not need this issue; handle them in the task PR. See docs/specs/README.md.
+      options:
+        - Scope change (requirements, acceptance criteria, API contract, or moving work between specs)
+        - Intent change (principles, key decisions, or resolving an open question in docs/intents/)
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: What was found
+      description: What came up during work that makes the current spec wrong or suboptimal. Link the task issue or PR where it came up.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Requirement and acceptance criteria IDs to add, change, withdraw, or move.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Other specs, plans, and open task issues that must be updated.
+    validations:
+      required: true
