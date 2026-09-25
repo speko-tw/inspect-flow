@@ -44,7 +44,7 @@
 
 ### 安全
 
-- **RG-M17**：沒有提交 `.env`，repo 只保存 `.env.example`；log 不記錄密碼、session secret 或授權 token；health 端點的回應不含 secret、連線字串或任何設定值（依據：[PR-14](intents/02-principles.md#pr-14)、[SKL-R01、SKL-R10](specs/skeleton/spec.md#需求)）。
+- **RG-M17**：沒有提交 `.env` 或其他機密設定（含金鑰、密碼、token 或連線字串的設定檔與值），repo 只保存 `.env.example`；log 不記錄密碼、session secret 或授權 token；health 端點的回應不含 secret、連線字串或任何設定值（依據：[PR-14](intents/02-principles.md#pr-14)、[SKL-R01、SKL-R10](specs/skeleton/spec.md#需求)）。
 
 ### 文件
 
