@@ -16,7 +16,7 @@
 
 - 各子目錄自己提供 `make` 可呼叫的指令（後端透過 `uv run`，前端透過 `npm run`）；根目錄 `Makefile` 只負責串接，CI 只呼叫 `make check`。
 - Python 版本寫在 `backend/.python-version`（3.12）；Node 用 LTS 版本，寫在 `frontend/.nvmrc`，CI 從這兩個檔讀版本，不在 workflow 另寫一份。
-- 拆包檢查：Vite 開啟 build manifest，腳本從 Field 路由的 chunk 追蹤它匯入的模組，出現 Admin 路徑就失敗。
+- 拆包檢查：Vite manifest 只記每個 chunk 的入口 `src`，看不到被併進同一 chunk 的其他模組，因此另以 Vite plugin 在 build 時輸出每個 chunk 的模組清單（`dist/.vite/chunk-modules.json`）。腳本從 HTML 入口 chunk 與 Field chunk 出發，沿靜態依賴，以及路由模組 `src/App.tsx` 以外發出的動態依賴，找出造訪 `/field` 會載入的 chunk；其中出現 Admin 路徑就失敗。`App.tsx` 的 `lazy()` 是路由分割點，Admin 路由由它按需載入，不算 Field 載入。
 - SKL-AC08 從 T1 起的每個 PR 都要做；T3 合併前，自審依規格與 [AGENTS.md](../../../AGENTS.md) 進行。
 
 ## 並行分組
