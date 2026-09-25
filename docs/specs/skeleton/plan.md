@@ -8,11 +8,11 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1 | 後端骨架：FastAPI app、health router、pytest 測試；ruff 與 pyright 設定 | `backend/` 全部：`pyproject.toml`（含 ruff、pyright 設定）、`uv.lock`、`.python-version`、`app/`、`tests/`、`backend/.gitignore` | — | SKL-AC01、SKL-AC06（Python 部分） | 待開 |
-| T2 | 前端骨架：Vite + React + TS；`/admin`、`/field` 以 lazy import 拆分；Vitest 測試；拆包檢查腳本；Prettier、ESLint、tsc 設定 | `frontend/` 全部：`package.json`、`package-lock.json`、`.nvmrc`、Vite／TS／ESLint／Prettier 設定、`src/`、測試、拆包檢查腳本、`frontend/.gitignore` | — | SKL-AC02、SKL-AC03、SKL-AC06（前端部分） | 待開 |
-| T3 | 審查準則與自審流程 | `docs/review-guidelines.md`、`.github/pull_request_template.md`（「審查重點」段連結到準則） | — | SKL-AC07、SKL-AC08 | 待開 |
-| T4 | 統一檢查入口與 CI | `Makefile`、`.github/workflows/ci.yml`、`.env.example`、`README.md`、`README.zh-TW.md`（補「怎麼跑檢查」） | T1、T2 | SKL-AC04、SKL-AC05、SKL-AC10 | 待開 |
-| T5 | `main` 分支保護（**人工步驟**，由人在 repo 設定執行） | repo 設定：必過 check 指定為 T4 的 CI job，並要求至少一人核准 | T4 | SKL-AC09 | 待開 |
+| T1 | 後端骨架：FastAPI app、health router、pytest 測試；ruff 與 pyright 設定 | `backend/` 全部：`pyproject.toml`（含 ruff、pyright 設定）、`uv.lock`、`.python-version`、`app/`、`tests/`、`backend/.gitignore` | — | SKL-AC01、SKL-AC06（Python 部分） | #11 |
+| T2 | 前端骨架：Vite + React + TS；`/admin`、`/field` 以 lazy import 拆分；Vitest 測試；拆包檢查腳本；Prettier、ESLint、tsc 設定 | `frontend/` 全部：`package.json`、`package-lock.json`、`.nvmrc`、Vite／TS／ESLint／Prettier 設定、`src/`、測試、拆包檢查腳本、`frontend/.gitignore` | — | SKL-AC02、SKL-AC03、SKL-AC06（前端部分） | #12 |
+| T3 | 審查準則與自審流程 | `docs/review-guidelines.md`、`.github/pull_request_template.md`（「審查重點」段連結到準則） | — | SKL-AC07、SKL-AC08 | #13 |
+| T4 | 統一檢查入口與 CI | `Makefile`、`.github/workflows/ci.yml`、`.env.example`、`README.md`、`README.zh-TW.md`（補「怎麼跑檢查」） | T1、T2 | SKL-AC04、SKL-AC05、SKL-AC10 | #14 |
+| T5 | `main` 分支保護（**人工步驟**，由人在 repo 設定執行） | repo 設定：必過 check 指定為 T4 的 CI job，並要求至少一人核准 | T4 | SKL-AC09 | #15 |
 
 - 各子目錄自己提供 `make` 可呼叫的指令（後端透過 `uv run`，前端透過 `npm run`）；根目錄 `Makefile` 只負責串接，CI 只呼叫 `make check`。
 - Python 版本寫在 `backend/.python-version`（3.12）；Node 用 LTS 版本，寫在 `frontend/.nvmrc`，CI 從這兩個檔讀版本，不在 workflow 另寫一份。
