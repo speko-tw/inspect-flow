@@ -16,14 +16,14 @@
 
 ### 範圍與規格
 
-- **RG-M01**：一個 PR 對應一個 task，不跨兩份規格；改動的檔案都在 `plan.md` 該 task 的「改動的檔案」內，超出時已在同一個 PR 更新 `plan.md`（依據：[流程](specs/README.md#流程與-github-對應)、[變更規則](specs/README.md#change)）。
+- **RG-M01**：一個 PR 對應一個 task，不跨兩份規格；改動的檔案都在 `plan.md` 該 task 的「改動的檔案」內，超出時已在同一個 PR 更新 `plan.md`，並調整對應的 task issue（依據：[流程](specs/README.md#流程與-github-對應)、[變更規則](specs/README.md#change)）。
 - **RG-M02**：PR 依範本填寫「規格」「滿足的驗收條件」「規格影響」「驗證」，並以 `Closes #<task issue>` 關聯 issue；不屬於任何規格的工作，「規格」段寫 `N/A`（依據：[流程](specs/README.md#流程與-github-對應)）。
 - **RG-M03**：規格影響等級判斷正確；範圍變更與意圖變更已先透過 spec-change issue 與 PR 合併，未以程式碼繞過規格；拿不準等級時往高一級處理（依據：[變更規則](specs/README.md#change)、[AGENTS.md](../AGENTS.md)）。
-- **RG-M04**：PR 聲稱滿足的每條驗收條件，都附上 `plan.md`「驗證」欄指定的證據（測試，或貼在 PR 說明的指令輸出與連結）（依據：[狀態](specs/README.md#狀態)、各規格的 `plan.md`）。
+- **RG-M04**：改動符合所屬規格中「必須」等級的需求與介面（例如 skeleton 的 SKL-R01 health 回應、SKL-R02 拆包、SKL-R05／R06 工具設定）；要偏離時依 RG-M03 處理（依據：各規格的「需求」表、[AGENTS.md](../AGENTS.md)）。
 - **RG-M05**：不違反 [02-principles.md](intents/02-principles.md) 中「必須」等級的原則；確有需要時，已先在 [03-decisions-and-stack.md](intents/03-decisions-and-stack.md) 新增決策並經團隊同意（依據：[AGENTS.md](../AGENTS.md)）。
 - **RG-M06**：沒有把 [05-open-questions.md](intents/05-open-questions.md) 中未定案或來源矛盾的議題當成既定事實（依據：[AGENTS.md](../AGENTS.md)）。
-- **RG-M07**：遵守共用檔案規則：每個 PR 最多新增一支 Alembic migration 且不留多個 head；lockfile 衝突以重新產生處理，不手動合併；應用程式入口與 router 註冊只加一行（依據：[共用檔案規則](specs/README.md#parallel)）。
-- **RG-M08**：規格狀態只在 PR 裡改，並同步更新規格索引；撤回的需求或驗收條件保留編號並標「撤回」，不默默刪除（依據：[狀態](specs/README.md#狀態)、[變更規則](specs/README.md#change)）。
+- **RG-M07**：遵守共用檔案規則：每個 PR 最多新增一支 Alembic migration 且不留多個 head；lockfile 衝突以重新產生處理，不手動合併；共用規格只改自己負責的段落，新增共用慣例另開任務；應用程式入口與 router 註冊只加一行（依據：[共用檔案規則](specs/README.md#parallel)）。
+- **RG-M08**：規格狀態只在 PR 裡改，並同步更新規格索引；撤回的需求或驗收條件保留編號、標「撤回」並附原因與連結，移到其他規格的標「移至 `<slug>`」，編號不重複使用；範圍變更以上在規格末尾「變更紀錄」加一行（依據：[狀態](specs/README.md#狀態)、[變更規則](specs/README.md#change)）。
 
 ### Git
 
@@ -31,22 +31,26 @@
 - **RG-M10**：commit 訊息用英文，格式為 `<type>(scope): <description>`，內文列點，最後一行 `Issue: #<編號>`，不含 `PR:` 或 `MR:` 行（依據：[AGENTS.md](../AGENTS.md)）。
 - **RG-M11**：commit、PR、issue 留言與程式註解都沒有 AI 署名（`Co-Authored-By`、`Claude-Session`、「Generated with」、`🤖`，或 AI／Claude／Codex／LLM／bot／assistant 等字眼）；每個 commit 都跑過 AGENTS.md 的檢查指令且沒有輸出（依據：[AGENTS.md](../AGENTS.md)）。
 - **RG-M12**：diff 只包含與該 task 相關的檔案，沒有順手改到其他任務的檔案（依據：[AGENTS.md](../AGENTS.md)）。
+
+### PR 與審查
+
 - **RG-M13**：PR 標題用英文，內文與留言用繁體中文；area label 依實際改動範圍標記（依據：[AGENTS.md](../AGENTS.md)、[GitHub 分類](specs/README.md#github-taxonomy)）。
+- **RG-M14**：agent 開的 PR 上有一則依本準則寫成的自審留言（依據：[SKL-R08](specs/skeleton/spec.md#需求)、[人的關卡](specs/README.md#human-gates)）。
 
 ### 程式碼
 
-- **RG-M14**：CI 的 check 通過。統一檢查入口 `make check` 建立前，以各子目錄既有的格式、lint、型別檢查、測試與 build 指令驗證，並把結果貼在「驗證」段（依據：[SKL-R03、SKL-R04](specs/skeleton/spec.md#需求)）。
-- **RG-M15**：程式碼行寬不超過 79 字元；更動 formatter、linter 或型別檢查的規則集與設定，已先開 `needs-decision` issue 經團隊決定（依據：[程式品質工具](intents/03-decisions-and-stack.md#stack-code-quality)、[人的關卡](specs/README.md#human-gates)）。
+- **RG-M15**：CI 的 check 通過；失敗不得合併（依據：[SKL-R04](specs/skeleton/spec.md#需求)、[人的關卡](specs/README.md#human-gates)）。
+- **RG-M16**：程式碼行寬不超過 79 字元，formatter 與 linter 設定與之一致；會引起爭議或影響既有程式碼的規則變更（例如換 formatter、改命名慣例），已先開 `needs-decision` issue 經團隊決定（依據：[程式品質工具](intents/03-decisions-and-stack.md#stack-code-quality)、[人的關卡](specs/README.md#human-gates)）。
 
 ### 安全
 
-- **RG-M16**：沒有提交 `.env`、secret 或連線字串，repo 只保存 `.env.example`；API 回應與 log 不含密碼、session secret、token 或設定值（依據：[PR-14](intents/02-principles.md#pr-14)、[SKL-R01、SKL-R10](specs/skeleton/spec.md#需求)）。
+- **RG-M17**：沒有提交 `.env`，repo 只保存 `.env.example`；log 不記錄密碼、session secret 或授權 token；health 端點的回應不含 secret、連線字串或任何設定值（依據：[PR-14](intents/02-principles.md#pr-14)、[SKL-R01、SKL-R10](specs/skeleton/spec.md#需求)）。
 
 ### 文件
 
-- **RG-M17**：文件用繁體中文（臺灣用語），只有 AGENTS.md 列出的項目用英文；`README.md` 與 `README.zh-TW.md` 內容同步並保留頂端語言切換列；不標示文件版本號（依據：[AGENTS.md](../AGENTS.md)）。
-- **RG-M18**：新增或修改的原則、決策與非目標都標註架構基準章節；規範用語「必須／應／得」使用正確，來源只是建議的項目不升級為「必須」（依據：[AGENTS.md](../AGENTS.md)）。
-- **RG-M19**：沒有新建 `CLAUDE.md`、`.claude/CLAUDE.md` 或 `CLAUDE.local.md`（依據：[AGENTS.md](../AGENTS.md)）。
+- **RG-M18**：文件用繁體中文（臺灣用語），只有 AGENTS.md 列出的項目用英文；`README.md` 與 `README.zh-TW.md` 內容同步並保留頂端語言切換列；不標示文件版本號（依據：[AGENTS.md](../AGENTS.md)）。
+- **RG-M19**：新增或修改的原則、決策與非目標都標註架構基準章節；規範用語「必須／應／得」使用正確，來源只是建議的項目不升級為「必須」（依據：[AGENTS.md](../AGENTS.md)）。
+- **RG-M20**：沒有新建 `CLAUDE.md`、`.claude/CLAUDE.md` 或 `CLAUDE.local.md`（依據：[AGENTS.md](../AGENTS.md)）。
 
 ## 建議
 
@@ -56,6 +60,8 @@
 - **RG-S04**：PR 維持單一目的；每個 commit 可以單獨看懂。
 - **RG-S05**：PR 掛上與所關 issue 相同的 milestone（依據：[GitHub 分類](specs/README.md#github-taxonomy)）。
 - **RG-S06**：自審後又推送了會影響範圍或驗收條件的改動時，更新自審留言。
+- **RG-S07**：PR 聲稱滿足的每條驗收條件，附上 `plan.md`「驗證」欄指定的證據（測試，或貼在 PR 說明的指令輸出與連結）（依據：各規格的 `plan.md`）。
+- **RG-S08**：統一檢查入口 `make check` 建立前，以各子目錄既有的格式、lint、型別檢查、測試與 build 指令驗證，並把結果貼在「驗證」段（依據：[skeleton 計畫](specs/skeleton/plan.md)）。
 
 ## 自審留言格式
 
@@ -67,13 +73,14 @@
 ### 必修
 
 - RG-M01 通過：改動只有 `<檔案>`，都在 plan T<n> 的範圍內。
-- RG-M04 通過：<AC 編號> 的證據見「驗證」段。
+- RG-M04 通過：<需求編號> 由 `<檔案>` 實作。
 - RG-M07 不適用：本 PR 沒有 migration、lockfile 或入口檔。
-- …（逐條列出 RG-M01 至最後一條）
+- …（逐條列出所有必修項目）
 
 ### 建議
 
 - RG-S02 採用：`<檔案>:<行>` 的 `noqa` 已註明理由。
+- RG-S07 採用：<AC 編號> 的證據見「驗證」段。
 
 ### 結論
 
