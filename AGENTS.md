@@ -8,15 +8,23 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 - 涉及功能、資料模型、API、儲存或報表的變更，先讀 [`docs/intents/`](docs/intents/README.md)。
 - 違反 `02-principles.md` 中「必須」等級原則的變更，須先在 `03-decisions-and-stack.md` 新增決策並經團隊同意。
 - 未定案或來源矛盾的議題查 `05-open-questions.md`，不得把自己的假設當成既定事實。
+- 實作任務前，先讀對應的 `docs/specs/<slug>/spec.md` 與 `plan.md`；流程、變更等級與共用檔案規則見 [`docs/specs/README.md`](docs/specs/README.md)。
+- 實作中發現規格要調整時，依變更等級處理：計畫調整與規格澄清在同一個 PR 內修改文件；範圍變更與意圖變更先開 spec-change issue，不得直接改程式碼繞過規格。
 
 ## 文件
 
 - **語言**：預設繁體中文（臺灣用語；白話、精確、可照做，不用文言或公文腔；識別字與技術名保留英文）。僅以下用英文：
-  commit 訊息、根目錄 `README.md`（對外預設版）、負責人指定之處。
+  commit 訊息、根目錄 `README.md`（對外預設版）、GitHub issue 與 PR 的標題、負責人指定之處。
+  GitHub issue 與 PR 的內文、留言一律用繁體中文。
 - `README.md` 與 `README.zh-TW.md` 頂端保留語言切換列，內容須同步更新。
 - 規範用語「必須／應／得」＝ MUST／SHOULD／MAY。
 - 不標示文件版本號；歷程以 Git 為準。
 - 設計意圖以宣告式規則陳述並附理由；每條原則、決策與非目標都要標註架構基準章節，依文件版型使用「依據」欄或規則內引註（依據：架構基準 §x）。來源只是建議的項目，維持「應／得」或技術棧卡片的「建議」，不得升級為「必須」；需要團隊選定、且來源沒有結論的，才列入待決議。
+
+## 程式碼
+
+- 程式碼行寬上限 80 字元；formatter 與 linter 的設定必須與之一致。Markdown 文件不受此限。
+- 其餘格式與審查規則以 repo 內的設定檔與審查準則為準，由 `skeleton` 規格建立。
 
 ## Git
 
@@ -46,4 +54,8 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   ```
 
 - 只 stage 相關路徑（`git add -- <paths>`），不用 `git add -A`／`.`。
-- `git push` 與 PR／issue 等遠端操作須先經使用者同意。
+- **自動化範圍**：agent 得自行 push 自己的分支、開與更新 PR、開與更新 issue／sub-issue、套用既有 label、留言，不必逐次詢問。
+- **留給人的關卡**（agent 不得代為決定，見 [`docs/specs/README.md`](docs/specs/README.md#human-gates)）：
+  - 合併 PR 到 `main`（含規格與計畫的 PR）；agent 不得核准或合併自己的 PR。
+  - `needs-decision` 的議題：範圍變更、意圖變更、裁定 OQ／G。agent 只整理選項與影響，等團隊討論決定。
+  - 破壞性或全域操作：force push、刪除他人分支、刪除 issue 或 label、新增 label、變更 repo 設定與分支保護。

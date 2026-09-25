@@ -10,6 +10,10 @@
 GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件中沒有獨立的實體對應；它實際指的是
 **`Inspection Task`（查核任務）**——後台建立、指派給現場工程師執行的最小可執行工作單位 （依據：架構基準 §12.8）。撰寫規格或程式碼時請一律使用 `Inspection Task`，不要另外引入 "work order" 作為系統實體名稱，以免與 `Inspection Task` 產生兩套平行詞彙。
 
+## 開發流程用語對照
+
+[docs/specs/README.md](../specs/README.md) 描述開發流程時使用的「任務」「計畫」「範本」「狀態」，分別指 GitHub 上的開發工作（task）、`plan.md`、文件與 issue 範本、規格文件狀態，與本表的 `Inspection Task`、`Inspection Plan`、`Inspection Template`／`Report Template` 及實體狀態無關。規格或程式碼提到領域實體時，一律寫英文實體名。
+
 ## 名詞總表
 
 | 中文名稱 | 英文名稱（系統實體名） | 定義 | 關聯 |

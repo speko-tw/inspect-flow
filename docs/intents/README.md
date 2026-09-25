@@ -33,6 +33,7 @@ InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整�
 | 要做什麼 | 先讀 |
 |---|---|
 | 規劃新功能，確認是否屬第一階段範圍 | [01-overview.md](01-overview.md) |
+| 開始寫規格或計畫、拆 task、規格要改 | [docs/specs/README.md](../specs/README.md) |
 | 寫程式前檢查有沒有違反設計原則 | [02-principles.md](02-principles.md) |
 | 改報表欄位或版面 | [PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)、[KD-05](03-decisions-and-stack.md#kd-05)、[G-06](05-open-questions.md#g-06)、[G-07](05-open-questions.md#g-07)、[OQ-07](05-open-questions.md#oq-07) |
 | 新增證據類型（NUMBER／SIGNATURE 等） | [OQ-20](05-open-questions.md#oq-20)、[PR-09](02-principles.md#pr-09) |
