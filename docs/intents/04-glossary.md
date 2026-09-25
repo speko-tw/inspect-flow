@@ -42,8 +42,8 @@ GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件�
 | Report View Model | `Report View Model` | Report Service 從資料庫組裝出的渲染資料模型，介於原始資料與 DOCX／HTML 輸出之間（依據：架構基準 §20.2、§20.21）。 | 分別供 DOCX Template Engine 與 HTML Preview 使用；與 `Data Snapshot` 的邊界待 [G-07](05-open-questions.md#g-07) 決定。 |
 | 文件編號 | `document_no` | 正式文件的對外編號（例如 `IF-P001-MEP-INS-00023`），命名規則抽象為「Document Number Policy」，具體規則待定（依據：架構基準 §20.8）。 | 與 `revision` 搭配識別同一份文件的不同版次；具體編碼規則見 [OQ-07](05-open-questions.md#oq-07)。 |
 | 版次 | `revision` | 同一份 `document_no` 底下的版次序號（REV.0、REV.1……），新版次因資料變動而產生，不覆蓋舊版次（依據：架構基準 §20.7–20.8）。 | 與 [PR-06](02-principles.md#pr-06)「報告即不可覆蓋快照」原則直接對應。 |
-| 現場端 UI | `Field UI` | 現場工程師使用的介面，聚焦「今日任務 → 拍照 → 說明 → 完成」，刻意隱藏後台概念（依據：架構基準 §6.1）。 | 是否與 `Admin UI` 共用 React 專案，見 [OQ-21](05-open-questions.md#oq-21)。 |
-| 後台 UI | `Admin UI` | 管理者／協調者使用的介面，負責人員、專案、範本、計畫、進度與報告等複雜功能（依據：架構基準 §6.2）。 | 是否與 `Field UI` 共用 React 專案，見 [OQ-21](05-open-questions.md#oq-21)。 |
+| 現場端 UI | `Field UI` | 現場工程師使用的介面，聚焦「今日任務 → 拍照 → 說明 → 完成」，刻意隱藏後台概念（依據：架構基準 §6.1）。 | 與 `Admin UI` 共用同一個 React 專案，見 [KD-12](03-decisions-and-stack.md#kd-12)。 |
+| 後台 UI | `Admin UI` | 管理者／協調者使用的介面，負責人員、專案、範本、計畫、進度與報告等複雜功能（依據：架構基準 §6.2）。 | 與 `Field UI` 共用同一個 React 專案，見 [KD-12](03-decisions-and-stack.md#kd-12)。 |
 | 稽核紀錄 | `audit_logs`（概念，非必然的既有資料表） | 記錄「誰、何時、對哪個 entity、做了什麼、修改前後內容」的完整事件記錄，MVP 不強制要求完整事件溯源，但重要資料至少要有 `created_at`／`created_by` 等欄位（依據：架構基準 §19）。 | 與 [PR-08](02-principles.md#pr-08)（最低限度稽核）對應；是 §35 列出「延後但不排除」的完整能力之一。 |
 
 ## 相關文件

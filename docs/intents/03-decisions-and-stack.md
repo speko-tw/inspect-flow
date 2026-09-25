@@ -129,15 +129,15 @@
 - **依據**：架構基準 §6.1–6.2、§31、§37 ADR-008。
 
 <a id="kd-12"></a>
-## KD-12：單一前端程式庫尚未定案
+## KD-12：Admin／Field 共用單一前端程式庫
 
-- **決策**：尚無定案。單一 React 程式庫、以 Admin／Field 路由區分，是來源 §5.1 的建議，不是已拍板的 ADR。完整問題見 [OQ-21](05-open-questions.md#oq-21)。
-- **狀態**：待決議。
-- **考慮過但沒選**：尚未排除單一程式庫或分開維護兩個前端專案。
-- **為什麼選這個**：保留既有 KD 編號與連結；不把來源的建議寫成決策。
-- **代價**：前端專案切分要在建立專案骨架前確認。
-- **什麼情況要重新討論**：開始建立 Admin／Field 前端目錄、路由與部署流程前，先結束 [OQ-21](05-open-questions.md#oq-21)。
-- **依據**：架構基準 §5.1。
+- **決策**：Admin UI 與 Field UI **必須**放在同一個 React application，以 `/admin/*`、`/field/*` 路由與權限區分；**必須**依路由拆分程式碼，Field 的程式包不得載入 Admin 的模組。
+- **狀態**：已決定（團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 裁定 [OQ-21](05-open-questions.md#oq-21)，採來源 §5.1 的建議）。
+- **考慮過但沒選**：同一 repo 內分成兩個 app 加共用套件。
+- **為什麼選這個**：一套 build、一條 CI、一次部署；API client、登入與元件共用；符合模組化單體方向（[KD-10](#kd-10)）。
+- **代價**：沒有依路由拆分時，Field 會載入 Admin 的程式；日後要拆開需要搬遷。
+- **什麼情況要重新討論**：Field PWA 需要獨立發布週期，或兩者差異大到共用成本高於分開維護時，評估拆分。
+- **依據**：架構基準 §5.1；團隊裁定 [OQ-21](05-open-questions.md#oq-21)。
 
 ## 技術棧卡片
 
@@ -201,9 +201,9 @@
 <a id="stack-frontend"></a>
 ### Frontend
 
-- **選用**：React、TypeScript、Vite；單一 Admin／Field 程式庫是待決選項，見 [KD-12](#kd-12)、[OQ-21](05-open-questions.md#oq-21)。
+- **選用**：React、TypeScript、Vite；Admin／Field 共用單一程式庫，見 [KD-12](#kd-12)。
 - **負責什麼**：現場與後台操作畫面、API Client、前端建置。
-- **狀態**：建議（工具）；待定（程式庫切分）。
+- **狀態**：建議（工具）；已決定（單一程式庫，見 [KD-12](#kd-12)）。
 - **為什麼**：支援手機介面與 Dashboard，TypeScript 可減少欄位錯誤。
 - **不要用**：把資料庫或 storage key 當作前端存取契約。
 - **未來升級路線**：如差異擴大，評估拆分；實際套件版由 lockfile 固定。
@@ -322,9 +322,9 @@
 <a id="stack-ci"></a>
 ### CI
 
-- **選用**：使用現有 CI 平台；每次 PR 執行 lint、後端測試、前端測試、build 與 PostgreSQL 相容性測試。見 [KD-09](#kd-09)。
+- **選用**：GitHub Actions；每次 PR 執行 lint、後端測試、前端測試、build 與 PostgreSQL 相容性測試。見 [KD-09](#kd-09)。
 - **負責什麼**：在版本化 image 進入正式發布前擋下失敗變更。
-- **狀態**：已決定（CI 閘門）；待定（CI 平台；repo 目前在 GitHub，選型在 `skeleton` 規格處理）。
+- **狀態**：已決定（CI 閘門）；已決定（CI 平台採 GitHub Actions，團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 選定，非架構基準來源）。理由：repo 在 GitHub，檢查結果可直接接上分支保護與 PR 審查。
 - **為什麼**：正式環境只部署已審查、已建置、已驗證的產物。
 - **不要用**：CI 失敗仍發布，或在 Production 現場編譯臨時版本。
 - **未來升級路線**：部署自動化可稍後加入；先維持可重現的手動發布流程。
@@ -333,10 +333,14 @@
 <a id="stack-code-quality"></a>
 ### 程式品質工具
 
-- **選用**：Python 可用 ruff；Frontend 可用 ESLint、TypeScript、Prettier；mypy／pyright 待團隊選擇。
-- **負責什麼**：基本 lint、格式與型別檢查。
-- **狀態**：建議；mypy／pyright 待定。程式碼行寬上限 80 字元已決定（專案負責人指定，非架構基準來源；Markdown 文件不受此限），formatter 與 linter 設定**必須**與之一致。
-- **為什麼**：維持基本一致性，同時避免 MVP 一開始導入過多規則。
+- **選用**：Python 用 ruff（format 與 lint）；Frontend 用 Prettier（格式）、ESLint（lint）、TypeScript（型別）；Python 型別檢查用 pyright。
+- **負責什麼**：基本 lint、格式與型別檢查。formatter 管排版、linter 管寫法、型別檢查器管型別，三者不重疊。
+- **狀態**：
+  - 建議（ruff、ESLint、TypeScript、Prettier）。
+  - 已決定：pyright，先 `basic`、再逐個模組改 `strict`（團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 裁定 [OQ-16](05-open-questions.md#oq-16)）。
+  - 已決定：程式碼行寬上限 79 字元，依 PEP 8，全專案程式碼一律適用（專案負責人指定，非架構基準來源；Markdown 文件不受此限）；formatter 與 linter 設定**必須**與之一致。
+  - Python 風格以 PEP 8 為基準。起始規則集與新增規則的方式由 `skeleton` 規格與設定檔維護。
+- **為什麼**：維持基本一致性，同時避免 MVP 一開始導入過多規則。pyright 與 VS Code 的 Pylance 同一引擎，編輯器與 CI 的結果一致。
 - **不要用**：未經團隊評估就把多套重疊的 lint 或架構框架加入發布閘門。
-- **未來升級路線**：依程式量與缺陷資料調整檢查；型別工具見 [OQ-16](05-open-questions.md#oq-16)。
+- **未來升級路線**：依程式量與缺陷資料調整檢查；pyright 逐個模組改為 `strict`。
 - **依據**：架構基準 §29。

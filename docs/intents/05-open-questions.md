@@ -293,7 +293,9 @@
 
 <a id="oq-16"></a>
 
-### OQ-16：Python 靜態型別檢查工具採 mypy 還是 pyright？
+### OQ-16：Python 靜態型別檢查工具採 mypy 還是 pyright？（已裁定）
+
+**裁定**：採 pyright，先用 `basic` 模式，之後逐個模組改成 `strict`。理由：團隊多數使用 VS Code，其 Pylance 與 pyright 同一引擎，編輯器與 CI 的結果一致；不需 plugin 即可處理 Pydantic v2 與 SQLAlchemy 2.x 的 `Mapped` 型別。記錄於 [程式品質工具](03-decisions-and-stack.md#stack-code-quality)；討論見 [#5](https://github.com/speko-tw/inspect-flow/issues/5)。
 
 **為什麼要先決定**：屬於工程規範選擇，影響 CI Lint 設定，但不影響架構決策本身。
 
@@ -301,7 +303,7 @@
 
 **目前暫定**：無，明言「依團隊決定」，未給出傾向。
 
-**誰決定、何時**：團隊；時間未指定。
+**誰決定、何時**：團隊；已於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 裁定。
 
 **影響的原則**：無。
 
@@ -361,7 +363,9 @@
 
 <a id="oq-21"></a>
 
-### OQ-21：Admin／Field 是否維持單一前端 React Codebase？
+### OQ-21：Admin／Field 是否維持單一前端 React Codebase？（已裁定）
+
+**裁定**：維持單一 React application，以 `/admin/*`、`/field/*` 路由與權限區分，並依路由拆分程式碼，讓 Field 不載入 Admin 的程式。Field PWA 需要獨立發布週期時再評估拆分。記錄於 [KD-12](03-decisions-and-stack.md#kd-12)；討論見 [#5](https://github.com/speko-tw/inspect-flow/issues/5)。
 
 **為什麼要先決定**：影響前端專案結構、部署流程與未來 Admin／Field 分離的時機。原本以 KD-12 的形式收錄，因不符合「僅收錄明確拍板決策」的標準而改列於此。
 
@@ -369,7 +373,7 @@
 
 **目前暫定**：架構基準文件以「建議先使用」的語氣提出單一 React application，而非以 ADR 或不含糊祈使語氣拍板；若未來兩者差異變得非常大，再拆分為獨立專案。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：團隊；已於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 裁定。
 
 **影響的原則**：無。
 
