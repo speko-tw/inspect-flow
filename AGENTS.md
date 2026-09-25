@@ -22,7 +22,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 
 ## 程式碼
 
-- 行寬上限 80 字元；formatter 與 linter 的設定必須與之一致。
+- 程式碼行寬上限 80 字元；formatter 與 linter 的設定必須與之一致。Markdown 文件不受此限。
 - 其餘格式與審查規則以 repo 內的設定檔與審查準則為準，由 `skeleton` 規格建立。
 
 ## Git
