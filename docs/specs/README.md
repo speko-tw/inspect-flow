@@ -43,7 +43,7 @@ docs/specs/
 
 | 規格 | Phase | 類型 | 狀態 | 被擋議題 |
 |---|---|---|---|---|
-| `skeleton` | P0 | 功能 | 未開始 | — |
+| [`skeleton`](skeleton/spec.md) | P0 | 功能 | 草稿 | — |
 | `api-conventions` | 全部 | 共用 | 未開始 | — |
 | `database-foundation` | P1 | 功能 | 未開始 | — |
 | `domain-model` | P1、P3、P4、P6、P9 | 共用 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06)；不受影響的實體能否先凍結見 [OQ-22](../intents/05-open-questions.md#oq-22) |
@@ -101,7 +101,7 @@ flowchart TD
 
 判斷與實作由 agent 自動推進；決定與核准留給人。
 
-**agent 自動做**：挑下一個可開工的任務（依本檔索引與 issue 的「依賴」欄，跳過 `blocked`）→ 讀規格與計畫 → 在自己的 worktree 實作 → 跑驗證、失敗自行修正 → 判斷變更等級 → 依 PR 範本開 PR → PR 合併後更新規格狀態與索引。
+**agent 自動做**：挑下一個可開工的任務（依本檔索引與 issue 的「依賴」欄，跳過 `blocked`）→ 讀規格與計畫 → 在自己的 worktree 實作 → 跑驗證、失敗自行修正 → 判斷變更等級 → 依 PR 範本開 PR → 依審查準則自審並在 PR 留言 → PR 合併後更新規格狀態與索引。
 
 **留給人的關卡**：
 
@@ -115,10 +115,10 @@ flowchart TD
 
 **閉環前提**：agent 要能自行證明「做完了」，人也要能有效率地審查，因此 `skeleton` 規格**必須**建立：
 
-- CI：每個 PR 跑格式檢查、lint、測試與 build；失敗不得合併。
+- CI：每個 PR 跑格式檢查、lint、型別檢查、測試與 build；失敗不得合併。
 - 統一的測試指令：本機與 CI 用同一個入口。
 - 程式碼格式規範：formatter 與 linter 設定進版控，行寬上限 79 字元（見 [程式品質工具](../intents/03-decisions-and-stack.md#stack-code-quality)）。
-- 程式碼審查：PR 開出時自動產生審查意見，並有一份審查準則說明查什麼、哪些算必修；最後仍由人核准合併。
+- 程式碼審查：有一份審查準則（`docs/review-guidelines.md`）說明查什麼、哪些算必修。agent 開出 PR 後依準則自審並在 PR 留言；人開的 PR 由人或 agent 依同一份準則審查；最後仍由人核准合併。
 - `main` 的分支保護：需審查、CI 通過才能合併。
 
 **規範怎麼長出來**：`skeleton` 只放最小可用的格式與審查規則；之後在審查中發現值得固定的規則，由發現的 PR 直接補進準則。會引起爭議或影響既有程式碼的規則（例如換 formatter、改命名慣例），開 issue 標 `needs-decision` 討論。
