@@ -43,7 +43,7 @@ docs/specs/
 
 | 規格 | Phase | 類型 | 狀態 | 被擋議題 |
 |---|---|---|---|---|
-| [`skeleton`](skeleton/spec.md) | P0 | 功能 | 草稿 | — |
+| [`skeleton`](skeleton/spec.md) | P0 | 功能 | 已凍結 | — |
 | `api-conventions` | 全部 | 共用 | 未開始 | — |
 | `database-foundation` | P1 | 功能 | 未開始 | — |
 | `domain-model` | P1、P3、P4、P6、P9 | 共用 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06)；不受影響的實體能否先凍結見 [OQ-22](../intents/05-open-questions.md#oq-22) |
