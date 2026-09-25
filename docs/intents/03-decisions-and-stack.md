@@ -336,7 +336,7 @@
 - **選用**：Python 用 ruff（format 與 lint）；Frontend 用 Prettier（格式）、ESLint（lint）、TypeScript（型別）；Python 型別檢查用 pyright。
 - **負責什麼**：基本 lint、格式與型別檢查。formatter 管排版、linter 管寫法、型別檢查器管型別，三者不重疊。
 - **狀態**：
-  - 建議（ruff、ESLint、TypeScript、Prettier）。
+  - 已決定：ruff、ESLint、TypeScript、Prettier（團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 選定，非架構基準來源）；起始設定見 `skeleton` 規格。
   - 已決定：pyright，先 `basic`、再逐個模組改 `strict`（團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 裁定 [OQ-16](05-open-questions.md#oq-16)）。
   - 已決定：程式碼行寬上限 79 字元，依 PEP 8，全專案程式碼一律適用（專案負責人指定，非架構基準來源；Markdown 文件不受此限）；formatter 與 linter 設定**必須**與之一致。
   - Python 風格以 PEP 8 為基準。起始規則集與新增規則的方式由 `skeleton` 規格與設定檔維護。
