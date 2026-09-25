@@ -98,8 +98,8 @@
 <a id="kd-09"></a>
 ## KD-09：Pilot 與正式環境採 Linux 和 Docker Compose
 
-- **決策**：Pilot／Production 使用 Linux Server、Docker Engine、Docker Compose 與持久化儲存。正式變更經 Git、審查、CI、版本化 image、migration，再部署。見 [PR-13](02-principles.md#pr-13)。
-- **狀態**：已決定。
+- **決策**：Pilot／Production 使用 Linux Server、Docker Engine、Docker Compose 與持久化儲存。正式變更經 Git、審查、CI、版本化 image；migration 必須納入發布流程。見 [PR-13](02-principles.md#pr-13)。
+- **狀態**：已決定；migration 與服務啟動的先後順序暫定，見 [PR-13](02-principles.md#pr-13)、[G-09](05-open-questions.md#g-09)。
 - **考慮過但沒選**：個人電腦、臨時 VM、沒有持久化磁碟的主機，或第一天就導入多節點編排。
 - **為什麼選這個**：開發與正式環境較易重現，也能以固定流程備份、更新及回滾。
 - **代價**：Compose 本身不提供多節點協調與自動容錯；部署仍需要維運程序。
