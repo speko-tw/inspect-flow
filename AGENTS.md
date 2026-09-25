@@ -6,12 +6,12 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 ## 動手前
 
 - 涉及功能、資料模型、API、儲存或報表的變更，先讀 [`docs/intents/`](docs/intents/README.md)。
-- 違反 `03-design-principles.md` 中「必須」等級原則的變更，須先在 `04-key-decisions.md` 新增決策並經團隊同意。
-- 未定案或來源矛盾的議題查 `06-open-questions.md`，不得把自己的假設當成既定事實。
+- 違反 `02-principles.md` 中「必須」等級原則的變更，須先在 `03-decisions-and-stack.md` 新增決策並經團隊同意。
+- 未定案或來源矛盾的議題查 `05-open-questions.md`，不得把自己的假設當成既定事實。
 
 ## 文件
 
-- **語言**：預設繁體中文（臺灣用語、正式工程語氣；識別字與技術名保留英文）。僅以下用英文：
+- **語言**：預設繁體中文（臺灣用語；白話、精確、可照做，不用文言或公文腔；識別字與技術名保留英文）。僅以下用英文：
   commit 訊息、根目錄 `README.md`（對外預設版）、負責人指定之處。
 - `README.md` 與 `README.zh-TW.md` 頂端保留語言切換列，內容須同步更新。
 - 規範用語「必須／應／得」＝ MUST／SHOULD／MAY。

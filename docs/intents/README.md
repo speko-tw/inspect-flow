@@ -1,58 +1,49 @@
 # 設計意圖文件（Design Intents）
 
-說明 InspectFlow「為什麼」如此設計，而非重複技術規格書「怎麼做」。
+InspectFlow 要把工程現場查核從「照片、檢查表事後人工彙整」串成一個完整閉環系統；本資料夾把來源的架
+構討論稿蒸餾成給實作者看的規範性結論——一條規則一句話，附理由與來源引註。
 
-## 這個資料夾是什麼
+## 核心意圖一覽
 
-來源文件（見下方「來源文件」）是一份討論草稿：內容包含選項權衡、反覆論證與大量修辭性問答。本資料夾
-的目的是把該文件蒸餾成給實作者看的規範性結論——一條規則一句話、附理由、附回溯來源的引註。本資料夾
-**刻意不**重製 API 清單、目錄樹、資料表欄位清單或 Docker Compose 檔案內容；這些屬於架構基準文件建議的
-下一份文件《Domain Model & Data Schema Specification》與《API Specification》的範疇
-（依據：架構基準 §39），不屬於本資料夾。
+一旦做錯，之後很難補救的規則：
 
-## 本資料夾使用的規範用語
+1. 任務建立當下就把需求凍結成快照，之後範本怎麼改都不影響舊任務 → [PR-04](02-principles.md#pr-04)
+2. 報告是版本化快照，已核發版次不能覆蓋，只能發新版次 → [PR-06](02-principles.md#pr-06)
+3. 證據照片不能就地覆寫，原圖必須永久保留，編輯只能產生新版本 → [PR-05](02-principles.md#pr-05)
+4. 前端一律經後端 API 存取資料，能不能完成永遠由後端覆核一次 → [PR-01](02-principles.md#pr-01)
+5. 照片不進資料庫，只存 metadata；儲存鍵由後端產生，不用原始檔名 → [PR-02](02-principles.md#pr-02)
+6. 資料庫存取與結構演進只能走 SQLAlchemy／Alembic，不能手動改 schema → [PR-03](02-principles.md#pr-03)
+7. 主要 entity 一律用 UUID，業務編號另外存，兩者不可混用 → [KD-07](03-decisions-and-stack.md#kd-07)
+8. 備份必須涵蓋資料庫、照片與報表，且要回到同一個時間點 → [PR-12](02-principles.md#pr-12)
 
-為避免把討論草稿裡的「建議」誤讀成「規定」，本資料夾統一使用以下三個詞（對應 RFC 2119 的
-MUST／SHOULD／MAY，於此定義一次，全資料夾共用）：
+## 文件索引
 
-| 用語 | 意義 |
+| 檔案 | 這份回答什麼 |
 |---|---|
-| **必須** | 來源文件將此列為明確、已拍板的規則——已寫入 Architecture Decision Record（架構基準 §37）、寫入最終技術準則（§40），或使用「禁止」「不得」「必須」等不含糊的祈使語氣。違反視為架構層級的問題，而非風格瑕疵。 |
-| **應** | 來源文件以「建議」語氣提出這是預設做法，但未完全封閉其他可能；偏離此做法應有明確理由，但來源文件本身並未禁止偏離。 |
-| **得** | 來源文件明確將此列為選項、多個可行做法之間的偏好，或留待團隊 / Pilot 階段才決定的事項。 |
+| [01-overview.md](01-overview.md) | InspectFlow 要解決什麼、服務誰、第一階段做到哪、整體架構長怎樣。 |
+| [02-principles.md](02-principles.md) | 每次改動都要對照檢查的設計原則（PR-xx）。 |
+| [03-decisions-and-stack.md](03-decisions-and-stack.md) | 已拍板的關鍵決策（KD-xx）與技術棧選型。 |
+| [04-glossary.md](04-glossary.md) | 名詞對照：中文說法 ↔ 系統實體名。 |
+| [05-open-questions.md](05-open-questions.md) | 待決議（OQ-xx）與來源矛盾／缺漏（G-xx）。 |
 
-## 如何使用本資料夾
+## 任務 → 要讀的條目
 
-- **功能規劃**：先讀 [01-purpose.md](01-purpose.md) 與 [02-scope.md](02-scope.md)，確認提案功能屬於
-  第一階段範圍，或是被刻意排序延後而非排除的能力。
-- **設計 / Code Review**：對照 [03-design-principles.md](03-design-principles.md) 檢查新程式碼。若變
-  更違反「必須」等級的原則，需要重做，或依治理原則在 [04-key-decisions.md](04-key-decisions.md) 新增
-  一筆明確取代該原則的決策（依據：架構基準 §42）。
-- **命名 / 資料模型問題**：先查 [05-glossary.md](05-glossary.md) 再自創新名詞；其中也把 Issue 上使用
-  的非正式用語「work order」對應到來源文件的正式用語。
-- **遇到看似未定案或前後矛盾之處**：先查 [06-open-questions.md](06-open-questions.md)，不要把自己的假
-  設當成定案——許多落差已被記錄並追蹤在該檔案中，包含來源文件內部彼此矛盾之處。
-- **何時更新本資料夾**：每當基準文件新增一筆 ADR、[06-open-questions.md](06-open-questions.md) 的某
-  個開放問題被團隊拍板、或範圍隨階段調整時，應在同一次變更中同步更新對應檔案，避免本資料夾與實際決
-  策脫節。
-- **凍結 Domain Model／API 契約前**：務必先看 [06-open-questions.md](06-open-questions.md) 「E. 開工
-  門檻」一節的清單，逐項確認每一則是否已有團隊裁定的答案，再開始資料雛形與端點設計。
-
-## 檔案清單
-
-| 檔案 | 內容 |
+| 要做什麼 | 先讀 |
 |---|---|
-| [01-purpose.md](01-purpose.md) | 要解決的問題、服務對象、InspectFlow 生命週期、核心價值。 |
-| [02-scope.md](02-scope.md) | 第一階段（MVP）範圍、明確排除項目、延後但不排除的能力。 |
-| [03-design-principles.md](03-design-principles.md) | 每次變更都要對照檢查的常設「必須」等級原則，依對實作者的重要性排序；並列出不可延後的意圖。 |
-| [04-key-decisions.md](04-key-decisions.md) | ADR-lite 決策記錄：決策 / 考慮過的替代方案 / 理由 / 接受的取捨 / 重新檢討條件。 |
-| [05-glossary.md](05-glossary.md) | 領域名詞、其來源中文用語、定義與彼此關聯，含「work order」對應到 `Inspection Task` 的說明。 |
-| [06-open-questions.md](06-open-questions.md) | 來源文件尚未拍板的議題（含來源內部彼此矛盾之處），並標註來源傾向作為目前的預設假設。 |
+| 規劃新功能，確認是否屬第一階段範圍 | [01-overview.md](01-overview.md) |
+| 寫程式前檢查有沒有違反設計原則 | [02-principles.md](02-principles.md) |
+| 改報表欄位或版面 | [PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)、[KD-05](03-decisions-and-stack.md#kd-05)、[G-06/G-07](05-open-questions.md#g-06) |
+| 新增證據類型（NUMBER／SIGNATURE 等） | [OQ-20](05-open-questions.md#oq-20)、[PR-09](02-principles.md#pr-09) |
+| 選或換技術棧套件 | [03-decisions-and-stack.md](03-decisions-and-stack.md) |
+| 命名或資料模型問題 | [04-glossary.md](04-glossary.md) |
+| 部署／上線流程 | [PR-13](02-principles.md#pr-13)、[PR-14](02-principles.md#pr-14)、[KD-09](03-decisions-and-stack.md#kd-09)、[OQ-18](05-open-questions.md#oq-18) |
+| 遇到看似矛盾或未定案的地方 | [05-open-questions.md](05-open-questions.md) |
 
-## 來源文件
+## 用語
 
-- 文件名稱：《InspectFlow：工程稽查核系統技術架構與建設基準文件》，即 **InspectFlow Architecture
-  Baseline**（下文簡稱「架構基準文件」）。
-- 狀態：初始架構基準，供後續團隊討論、資料雛形設計、MVP 開發與技術決策使用。
-- 本資料夾內每一句陳述都附上章節引註，例如 `（依據：架構基準 §2.3）`，方便審閱者回溯來源；不標註版本
-  號，以章節號為唯一追蹤依據。
+- 規範用語：**必須**＝來源明確拍板，違反算架構問題；**應**＝來源建議的預設做法，偏離要有理由；
+  **得**＝來源列為選項，或留待團隊決定。
+- 狀態：**已決定**＝已拍板可直接照做；**暫定（待團隊確認）**＝本資料夾為釐清落差所作的暫定判讀；
+  **待決議**＝來源留待團隊拍板，或來源內部矛盾，不能自行假設答案。
+
+凍結 Domain Model／API 契約前，先看 [05-open-questions.md](05-open-questions.md) 的開工門檻清單。
