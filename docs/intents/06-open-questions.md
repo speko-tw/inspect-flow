@@ -1,9 +1,10 @@
 # 未定案議題（Open Questions）
 
-架構基準文件明確留待團隊後續拍板的議題，以及文件內部彼此矛盾、需要團隊選邊站的地方。每一則都附上：
-問題本身、為何重要（影響哪些意圖檔案）、目前的預設假設（若來源文件有傾向）、狀態。**目前的預設假設**
-一律標註為來源的「傾向」，不是決策——不得把這裡的任何一條當成 [04-key-decisions.md](04-key-decisions.md)
-的替代品。
+本檔列出來源文件明確留待團隊後續拍板的議題、文件內部彼此矛盾或缺漏之處，以及本資料夾（尤其
+[03-design-principles.md](03-design-principles.md)）為釐清這些落差而暫定採用的實作基線——這些暫定
+基線**均待團隊確認**，不是既定決策。每一則都附上：問題本身、為何重要（影響哪些意圖檔案）、目前的預
+設假設（若來源文件有傾向）、狀態。**目前的預設假設**一律標註為來源的「傾向」，不是決策——不得把這
+裡的任何一條當成 [04-key-decisions.md](04-key-decisions.md) 的替代品。
 
 ## A. 業務資料與規則待決
 
@@ -62,9 +63,24 @@
 
 - **為何重要**：影響 [04-key-decisions.md](04-key-decisions.md) KD-05（DOCX/PDF 核心交付物）與
   [05-glossary.md](05-glossary.md) `Report` / `Report Template` 的完整欄位設計。
-- **目前預設假設**：架構基準文件已定案「必須有 `document_no`／`revision`／`status`」（見 KD-05、
-  KD-06 的報告快照原則），但實際版面、照片排列、簽核欄位內容、業主／標案指定格式，明確留待未來團隊
-  與業主／標案規範決定（依據：架構基準 §0、§20.3–20.12、§20.19、§38 Report）。
+- **目前預設假設**：架構基準文件已定案「必須有 `document_no`／`revision`／`status`」（見 KD-05
+  「DOCX/PDF 為正式核心交付物」之決策；報告即不可覆蓋快照的原則見
+  [03-design-principles.md](03-design-principles.md) PR-06，**非** KD-06——KD-06 是
+  SQLAlchemy／Alembic 決策，與報告快照無關），但實際版面、照片排列、簽核欄位內容、業主／標案指定格
+  式，明確留待未來團隊與業主／標案規範決定（依據：架構基準 §0、§20.3–20.12、§20.19、§38 Report）。
+  MVP 最低必備治理中繼資料（Document Number、Revision、Template Version、Generated Time/By、
+  Storage Keys、Data Snapshot、SHA-256）見 [02-scope.md](02-scope.md) Phase 9；完整簽核／電子簽章／
+  核發流程留待本項定案（依據：架構基準 §15、§20.12、§20.21）。
+- **狀態**：Open。
+
+### OQ-20　由誰、何時決定擴大 MVP 的 Evidence Type 範圍？
+
+- **為何重要**：直接影響 [02-scope.md](02-scope.md)「MVP 的證據類型邊界」一節如何落地，以及
+  `EvidenceRequirement.type` 實際支援哪些值。
+- **目前預設假設**：架構基準文件只說 MVP **可**只實作 `PHOTO`／`TEXT`，並列出
+  `NUMBER`／`BOOLEAN`／`SIGNATURE`／`DOCUMENT` 為資料模型預留欄位，但未指名由誰、在什麼時間點決定
+  是否啟用其他類型（依據：架構基準 §12.6、§38 Evidence/Result）。這與 OQ-04（工項分類）、OQ-06
+  （Result 語意）是同一個「範圍決策治理」缺口的不同面向。
 - **狀態**：Open。
 
 ## B. 系統流程與權限待決
@@ -124,7 +140,7 @@
 
 - **為何重要**：影響 Authentication 模組的實作選擇，以及是否需要額外的 Token 撤銷機制設計。
 - **目前預設假設**：架構基準文件把兩者並列為「推薦」與「或經團隊評估採用」，並未鎖定其中一種；密碼
-  雜湊僅以「例如 Argon2id」表達傾向。唯一明確禁止的是「將長效 JWT 直接放在 browser localStorage」
+  雜湊僅以「例如 Argon2id」表達傾向。唯一明確建議避免的是「將長效 JWT 直接放在 browser localStorage」
   （依據：架構基準 §17）。
 - **狀態**：Open。
 
@@ -177,10 +193,21 @@
   （依據：架構基準 §13A.10）。
 - **狀態**：Open。
 
+### OQ-21　Admin／Field 是否維持單一前端 React Codebase？
+
+- **為何重要**：影響前端專案結構、部署流程與未來 Admin／Field 分離的時機；原本以
+  [04-key-decisions.md](04-key-decisions.md) KD-12 的形式收錄，因不符合該檔「僅收錄明確拍板決策」的
+  標準而改列於此。
+- **目前預設假設**：架構基準文件以「建議先使用」的語氣提出單一 React application（`/admin/*`、
+  `/field/*` 以路由與權限區分），而非以 ADR 或不含糊祈使語氣拍板；若未來兩者差異變得非常大，再拆分
+  為獨立專案（依據：架構基準 §5.1）。
+- **狀態**：Open。
+
 ## D. 來源內部不一致（Source-Internal Contradictions）
 
-以下議題不是「尚未討論」，而是架構基準文件在不同章節給出彼此對不上的說法。此處只並陳兩種立場，**不
-代為裁決**；團隊應在下一輪資料雛形討論時擇一並記錄理由。
+以下議題大多不是「尚未討論」，而是架構基準文件在不同章節給出彼此對不上的說法（G-10 是例外：它是來
+源**缺漏**——三處要求分開看都成立，只是沒有任何一處把它們寫在同一句話裡，見該則說明）。此處只並陳
+立場或標出缺漏，**不代為裁決**；團隊應在下一輪資料雛形討論時擇一並記錄理由。
 
 ### G-01　Interval（查核間距）欄位歸屬何處，沒有單一權責來源
 
@@ -266,30 +293,33 @@
   OQ-06 是同一個缺口的兩面，應合併處理，且任何後續定案都要遵守 PR-04 的歷史不可變原則。
 - **狀態**：Open（來源內部不一致）。
 
-### G-09　正式部署流程中，「先 Migration 再啟動服務」與「先啟動服務再 Migration」的範例互相矛盾
+### G-09　正式部署流程中，「先 Migration 再啟動服務」與「先啟動服務再 Migration」的範例需要團隊裁定
+    適用情境
 
-- **立場 A**：§22.15（Startup / Migration 流程）明訂順序為 Backup → Alembic Migration →
-  Start/Restart API → Health Check → Smoke Test，並給出範例
+- **立場 A**：§22.15（Startup / Migration 流程，對應升級／標準 release）明訂順序為 Backup → Alembic
+  Migration → Start/Restart API → Health Check → Smoke Test，並給出範例
   `docker compose run --rm api alembic upgrade head` 在前、`docker compose up -d` 在後。
-- **立場 B**：§22A.16（「一鍵部署的真正定義」）給出的範例卻是
+- **立場 B**：§22.16（「一鍵部署的真正定義」，對應初次部署）給出的範例卻是
   `docker compose build` → `docker compose up -d` → `docker compose run --rm api alembic upgrade
   head`，migration 反而排在服務啟動之後。
-- **為何重要**：兩種順序若混用，可能讓新版服務在 Schema 尚未升級前就先接受請求；
-  [03-design-principles.md](03-design-principles.md) PR-13 已採 §22.15 的順序為準，但團隊應明確在
-  `DEPLOYMENT.md` 中只保留一種順序，避免依範例各自實作。
-- **狀態**：Open（來源內部不一致；本文件 PR-13 暫以 §22.15 為準）。
+- **為何重要**：兩段範例若不分情境地混用，可能讓已有既有資料的升級部署在 Schema 尚未升級前就先接受
+  請求；[03-design-principles.md](03-design-principles.md) PR-13 目前的判讀是：§22.16 描述的是尚無
+  既有資料的初次部署，順序影響較小，§22.15 才是有既有資料的升級部署應遵守的順序——但來源文件本身沒
+  有明講兩段範例分屬不同情境，這是本文件的暫定判讀，待團隊確認在 `DEPLOYMENT.md` 中明確分別記錄
+  「初次部署」與「升級部署」兩套流程。
+- **狀態**：Open（來源用語未區分初次部署與升級部署；本文件 PR-13 暫以「§22.16 對應初次部署、§22.15
+  對應升級部署」為準）。
 
-### G-10　備份範圍在不同章節的敘述廣度不一致
+### G-10　來源缺漏：備份範圍（並非互相矛盾，而是來源未把三者寫在同一句）
 
-- **立場 A**：§23（Backup）明確要求「照片與 Database 必須視為同一套業務資料」，只點名這兩者需要一致
-  對應的備份策略。
-- **立場 B**：§22.12（Persistent Volumes）與 §20.5／§20.15 都把 Database、Photos、Reports 三者並列為
-  「至少需要持久化」的對象，暗示 Reports（DOCX/PDF 與範本檔案）也應該和資料庫、照片一樣被一致備份，
-  但 §23 本身沒有把 Reports 明講進同一句要求裡。
-- **為何重要**：[03-design-principles.md](03-design-principles.md) PR-12 採兩處要求的聯集（即備份範
-  圍涵蓋 Database、Photos、Reports 三者）作為預設，但這是本文件的整合結果，不是來源文件單一章節的明
-  文規定，團隊應確認此聯集是否即為預期範圍。
-- **狀態**：Open（來源內部不一致；本文件 PR-12 暫採聯集為準）。
+- **缺漏說明**：§23（Backup）明確要求「照片與 Database 必須視為同一套業務資料」，只點名這兩者需要一
+  致對應的備份策略；§22.12（Persistent Volumes）與 §20.5／§20.15 把 Database、Photos、Reports 三者
+  並列為「至少需要持久化」；§22A.10（Rollback）另要求 Storage Backup Strategy。三處沒有任何一處把
+  「資料庫＋照片＋報表必須一致備份」逐字寫在同一句話裡——這是來源**缺漏**，不是兩條互相矛盾的規則。
+- **為何重要**：[03-design-principles.md](03-design-principles.md) PR-12 為此補上一個整合決策：備份
+  範圍涵蓋 Database、範本檔案、原圖與衍生照片、已核發 DOCX／PDF，並定義一致性邊界；但這是本文件的整
+  合結果，不是來源文件單一章節的明文規定，團隊應確認此整合範圍是否即為預期範圍。
+- **狀態**：Open（來源缺漏；本文件 PR-12 暫採整合範圍為準，待團隊確認）。
 
 ### G-11　Report Phase 排序的措辭可能誤導 MVP 範圍認定
 
@@ -302,3 +332,25 @@
 - **為何重要**：若團隊只照 §20.21 的排序表面理解，可能誤把版次／核發治理當成 MVP 之後才做的事，與
   §30 Phase 9 的實際驗收要求牴觸。
 - **狀態**：Open（來源內部不一致；本文件的 KD-05／PR-06 採 §30 Phase 9 的驗收要求為準）。
+
+## E. 開工門檻（Domain Model／API 契約凍結前必須裁定）
+
+以下議題**必須**在 Domain Model 與 API 契約凍結之前，先由團隊裁定出單一答案；它們目前都已在本檔中
+留有紀錄，但尚沒有能讓兩組實作者各自做出相容實作的單一結論。
+
+- **G-01**（Interval 查核間距歸屬）：interval 該存在 `Template`／`Requirement`，還是只存在於
+  `Inspection Plan` 輸入層，決定 `Task Requirement Snapshot` 是否需要快照這個欄位。
+- **G-02**（Original 的唯一來源）：原圖到底是 `evidence.storage_key` 本身，還是
+  `evidence_variants` 裡 `variant_type = ORIGINAL` 的那一筆，決定 PR-05／PR-07 的資料模型如何落地。
+- **G-03**（原圖上傳與編輯時序）：使用者何時看到編輯結果、原圖何時真正上傳、重試與失敗時的行為。
+- **G-04**（報告選圖／核可）：「Approved Edited Variant」的核可者、核可流程與狀態欄位如何定義，否則
+  「Approved」在實作上可能等於「Latest」。
+- **G-05**（刪除與保留）：`Evidence` 的 `DELETE` API 與「原圖不可覆蓋、報告照片必須可追溯」如何共
+  存，是否為軟刪除、是否禁止刪除已被報告引用的證據。
+- **G-06／G-07**（報告狀態與版次快照邊界）：合併出一份唯一、完整的 `Report` 狀態機（含
+  `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
+- **OQ-06**（Result 對完成判定的影響）：查核結果是否需要 PASS/FAIL/N/A、量測值、嚴重度、缺失欄位，
+  直接影響任務完成判定邏輯與報告版面設計。
+
+[docs/intents/README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項
+確認以上各則是否已有團隊裁定的答案。

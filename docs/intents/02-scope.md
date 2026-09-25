@@ -25,8 +25,12 @@
 - **Phase 7 — Task Completion Validation**：必要證據 vs. 已上傳證據的伺服器端驗證。
 - **Phase 8 — Admin Dashboard**：今日工作量、完成數／完成率、工程師與專案進度。
 - **Phase 9 — Formal Report Delivery**：Report View Model → DOCX 範本 → DOCX 產出 → PDF 轉換 →
-  版本／核發控管。MVP 的完成條件明確要求同時具備 DOCX **與** PDF 輸出，而不只是儀表板可視化
-  （依據：架構基準 §20.22、§30 Phase 9）。
+  版本／核發控管。MVP **必須**同時具備 DOCX 與 PDF 輸出，並保存 Report Template Version、文件編號
+  （Document Number）、版次（Revision）、產製時間與產製者、DOCX／PDF 儲存鍵、資料快照（Data
+  Snapshot）與 SHA-256，且已核發之產物不得被覆蓋，而不只是儀表板可視化
+  （依據：架構基準 §20.22、§30 Phase 9 MVP 驗收）。完整的簽核／電子簽章／核發流程（Report Phase E
+  的 Approval、Issue）**得**先以空白簽名欄簡化處理，正式版面與流程留待
+  [06-open-questions.md](06-open-questions.md) OQ-07 定案（依據：架構基準 §15、§20.12、§20.21）。
 - **Phase 10 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
 
 一個版本要被視為「可部署」，必須滿足 §22A.20 的完整 Deployment Definition of Done，包括 DOCX／PDF 可
@@ -34,17 +38,20 @@
 
 ### MVP 的證據類型邊界
 
-MVP 的 Evidence Type **必須**僅限 `PHOTO` 與 `TEXT`，除非團隊明確擴大範圍；資料模型雖預留了
-`NUMBER`、`BOOLEAN`、`SIGNATURE`、`DOCUMENT`，但這只是預留欄位，不代表這些類型是目前的交付項目
-（依據：架構基準 §12.6、§38 Evidence/Result）。
+MVP **應**預設先實作 Evidence Type `PHOTO` 與 `TEXT`；來源文件僅列為「可只實作」這兩類，並非唯一合
+法類型（依據：架構基準 §12.6）。資料模型雖預留了 `NUMBER`、`BOOLEAN`、`SIGNATURE`、`DOCUMENT`，是否
+啟用其他類型，**須**經團隊範圍決策後才納入交付範圍，不由本文件片面認定（依據：架構基準 §12.6、
+§38 Evidence/Result）。由誰、何時決定擴大證據類型範圍，見 [06-open-questions.md](06-open-questions.md)
+OQ-20；若團隊已於 Pilot 前確定僅實作兩類，應在 [04-key-decisions.md](04-key-decisions.md) 另立決策
+並註明這是團隊決策而非來源硬性規定。
 
 ### 目前的運作前提（屬第一階段基準，非永久限制）
 
 第一階段的運作前提為：Online-first、單一後端 host、SQLite + WAL、本機持久化照片／報告儲存、單一
-React 專案（Admin／Field 以路由區分）、Linux 伺服器 + Docker Compose
+React 專案（Admin／Field 以路由區分，惟此為建議而非拍板決策，見下）、Linux 伺服器 + Docker Compose
 （依據：架構基準 §3、§5.1–5.3、§9、§22.1–22.7）。這些是第一階段的部署決策，不是永久上限；對應的演進
-條件見 [04-key-decisions.md](04-key-decisions.md)（KD-08 SQLite、KD-09 Docker Compose、KD-12 單一前端
-專案）。
+條件見 [04-key-decisions.md](04-key-decisions.md)（KD-08 SQLite、KD-09 Docker Compose）；單一前端專案
+本身是「建議」而非拍板決策，已改列為待決議，見 [06-open-questions.md](06-open-questions.md) OQ-21。
 
 ## 明確排除的非目標（第一階段）
 

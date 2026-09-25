@@ -7,14 +7,15 @@ ADR 編號以利對照。
 
 ## KD-01 — 前端僅能透過後端 API 存取資料
 
-- **決策**：Field Web、Admin Web、報告產製，一律透過 Backend API 取得與寫入資料；禁止前端直接讀寫資
-  料庫或檔案儲存。
+- **決策**：所有外部用戶端（Field Web、Admin Web，含由 UI 觸發報告產製的操作）一律透過 Backend API
+  取得與寫入資料；禁止前端直接讀寫資料庫或檔案儲存。後端內部服務（例如 Report Service）直接透過
+  Service／Persistence／Storage 介面存取自己的資料，不需要對自身發出 HTTP API 呼叫。
 - **考慮過的替代方案**：前端直接連線資料庫（架構基準文件明確以圖示列為禁止做法並否決）。
 - **理由**：集中權限控管、集中資料驗證、集中商業邏輯；資料庫由 SQLite 換成 PostgreSQL 時前端不必重
   寫；未來 App、PWA、第三方介面可共用同一套 API。
-- **接受的取捨**：所有跨層存取都必須繞經一層 API，前期開發速度會比「前端直連資料庫」慢一點。
+- **接受的取捨**：所有外部用戶端存取都必須繞經一層 API，前期開發速度會比「前端直連資料庫」慢一點。
 - **重新檢討條件**：架構基準文件未給出重新檢討條件——本決策視為長期原則，不因規模成長而鬆動。
-- **依據**：架構基準 §2.2、§37 ADR-002。
+- **依據**：架構基準 §2.2、§20.2、§37 ADR-002。
 
 ---
 
@@ -114,8 +115,10 @@ ADR 編號以利對照。
 
 ## KD-08 — SQLite 作為 MVP 資料庫
 
-- **決策**：第一階段使用 SQLite（搭配 `PRAGMA foreign_keys = ON` 與 `PRAGMA journal_mode = WAL`），且
-  僅限單一 Backend Host 存取，不透過 network filesystem 讓多台伺服器共同讀寫同一個 `.db` 檔。
+- **決策**：第一階段使用 SQLite，且僅限單一 Backend Host 存取，不透過 network filesystem 讓多台伺服
+  器共同讀寫同一個 `.db` 檔。`PRAGMA foreign_keys = ON` 與 `PRAGMA journal_mode = WAL` 是連線初始化
+  時**應**確認的建議設定（架構基準 §9.2 用語為「建議確認」），非本決策鎖定為 ADR 等級必須項目的一部
+  分。
 - **考慮過的替代方案**：一開始就採用 PostgreSQL（因為目前使用者數少、schema 仍在變動、不想先維運一
   套 DB Server 而暫不採用）；多伺服器共享同一個 SQLite 檔（明確被否決）。
 - **理由**：低維運成本、schema 容易迭代，符合小規模 Pilot 需求；系統最大資料量來源其實是照片而非關聯
@@ -174,15 +177,9 @@ ADR 編號以利對照。
 
 ---
 
-## KD-12 — 單一 React 專案，Admin／Field 以路由區分
+## KD-12 — 單一前端 Codebase（已移至待決議）
 
-- **決策**：Admin 與 Field 使用同一個 React application，以 `/admin/*`、`/field/*` 路由與權限區分，
-  而不是第一天就建立兩個獨立的前端 repository。
-- **考慮過的替代方案**：一開始就分別建立 `Admin App Repository` 與 `Field App Repository`（被明確否
-  決：「不要第一天就建立」兩個獨立專案）。
-- **理由**：共用登入、共用 API Client、共用 TypeScript type、共用 component、共用部署流程，降低 MVP
-  維護成本。
-- **接受的取捨**：Admin 與 Field 的畫面、權限邊界都要在同一個程式庫內管理，若兩者未來風格差異很大，
-  短期內較難各自獨立演進。
-- **重新檢討條件**：若未來 Admin 與 Field 的差異變得非常大，再拆分為獨立專案。
-- **依據**：架構基準 §5.1。
+架構基準文件在 §5.1 使用「建議先使用」的語氣提出單一 React Codebase（Admin／Field 以路由區分），並
+非以 ADR 或不含糊祈使語氣拍板的決策；本檔的收錄標準是「明確拍板的決策」（見檔案開頭說明），因此本條
+目改列為待決議，內容移至 [06-open-questions.md](06-open-questions.md) OQ-21。KD 編號保留 `KD-12` 這
+個 stub，避免影響既有交叉引用；請勿把 KD-12 當成已拍板的決策使用。
