@@ -6,4 +6,4 @@ Engineering Inspection Management System
 
 ## Documentation
 
-- [Design Intents](docs/intents/README.md) (Traditional Chinese): why InspectFlow is designed the way it is — purpose, scope, design principles, key decisions, glossary, and open questions.
+- [Design Intents](docs/intents/README.md) (Traditional Chinese): why InspectFlow is designed the way it is — overview and architecture diagrams, design principles, key decisions and tech stack, glossary, and open questions.

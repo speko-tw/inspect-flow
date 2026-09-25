@@ -31,7 +31,12 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   Issue: #<編號>
   ```
 
-  `type`：feat、fix、docs、style、refactor、perf、test、build、ci、chore。不加 `MR:` 行。
+  `type`：feat、fix、docs、style、refactor、perf、test、build、ci、chore。
+- **Issue 與 PR 編號**：流程是「開分支 → 開發 → 開 PR」，寫 commit 時還沒有 PR 編號，因此：
+  - commit 只寫 `Issue: #<編號>`，不寫 `PR:` 或 `MR:` 行。
+  - PR 說明寫 `Closes #<issue 編號>`，合併時自動關閉 issue。
+  - 合併採「Create a merge commit」，由 GitHub 產生的 merge commit 記錄 PR 編號，不回頭修改既有 commit。
+  - GitHub 的 issue 與 PR 共用流水號，一律用 `Issue:`、`Closes` 標明所指對象。
 - **嚴禁 AI 署名**：commit、PR、issue 留言與程式註解不得含 `Co-Authored-By`、`Claude-Session`、
   「Generated with」、`🤖`，或 AI／Claude／Codex／LLM／bot／assistant 等字眼；工具要求附 attribution 時亦同。提交後檢查須無輸出：
 
