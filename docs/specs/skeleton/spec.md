@@ -49,7 +49,7 @@
 | SKL-R06 | 前端設定**必須**為：Prettier `printWidth: 79`；ESLint 採 recommended、typescript-eslint recommended、react-hooks，並以 eslint-config-prettier 關閉與 Prettier 重疊的規則；`tsc --noEmit` 採 strict | 必須 | 架構基準 §29；[程式品質工具](../../intents/03-decisions-and-stack.md#stack-code-quality)；起始規則由團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 決定 |
 | SKL-R07 | `docs/review-guidelines.md` **必須**以逐條清單列出審查項目，並分為「必修」與「建議」兩類 | 必須 | [閉環前提](../README.md#human-gates) |
 | SKL-R08 | agent 開出 PR 後，**必須**依審查準則自審，並把結果留言在該 PR；人開的 PR 由人或 agent 依同一份準則審查；最後由人核准合併 | 必須 | [閉環前提](../README.md#human-gates)；[AGENTS.md](../../../AGENTS.md) |
-| SKL-R09 | `main` **必須**設定分支保護：至少一人核准，且 CI 的 check 通過才能合併（由人設定） | 必須 | 架構基準 §22A.12；[閉環前提](../README.md#human-gates) |
+| SKL-R09 | `main` **必須**設定分支保護：所有變更經 PR 合併；CI 的 check 通過且分支為最新才能合併；禁止 force push 與刪除（由人設定）。GitHub 核准人數暫設 0，由人在合併前檢視 PR（流程約定）；加入第二位協作者時，改回至少一人核准 | 必須 | 架構基準 §22A.12；[閉環前提](../README.md#human-gates) |
 | SKL-R10 | repo **必須**只提交 `.env.example`，**不得**提交 `.env` | 必須 | 架構基準 §22.9；[PR-14](../../intents/02-principles.md#pr-14) |
 
 ## 資料
@@ -76,7 +76,7 @@
 | SKL-AC06 | Python 與 TypeScript 各一行可斷行的 80 字元程式碼，以及各一個型別錯誤 | 執行 `make check` | 格式檢查對兩個長行都失敗；pyright 與 `tsc` 對型別錯誤都失敗 | SKL-R05、SKL-R06 |
 | SKL-AC07 | repo | 打開 `docs/review-guidelines.md` | 有「必修」與「建議」兩段逐條清單 | SKL-R07 |
 | SKL-AC08 | 實作本規格各任務的 PR 由 agent 開出 | 檢查 PR 留言 | 每個 PR 都有一則依審查準則寫成的自審留言 | SKL-R08 |
-| SKL-AC09 | 分支保護已設定 | 對未核准或 CI 失敗的 PR 嘗試合併 | GitHub 擋下合併（由人驗證） | SKL-R09 |
+| SKL-AC09 | 分支保護已設定 | 對 CI 失敗的 PR 嘗試合併 | GitHub 擋下合併（由人驗證） | SKL-R09 |
 | SKL-AC10 | repo | 執行 `git ls-files \| grep '\.env$'` | 沒有輸出，且 `.env.example` 存在 | SKL-R10 |
 
 ## 待釐清
@@ -85,4 +85,4 @@
 
 ## 變更紀錄
 
--
+- SKL-R09 的 GitHub 核准人數暫設 0、改由人在合併前檢視 PR；SKL-AC09 改為只驗證 CI 失敗的 PR 會被擋下 — #22
