@@ -1,5 +1,5 @@
 .PHONY: setup setup-backend setup-frontend check \
-	check-env check-backend check-frontend
+	check-temp-fail check-env check-backend check-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -13,7 +13,10 @@ setup-frontend:
 # Single entry point for local and CI checks. Runs format, lint,
 # type-check, test and build for backend and frontend, in order.
 # Any failing step stops the run with a non-zero exit code.
-check: check-env check-backend check-frontend
+check: check-temp-fail check-env check-backend check-frontend
+
+check-temp-fail:
+	@false
 
 # Fails if a .env file is tracked in git, or .env.example is missing.
 check-env:
