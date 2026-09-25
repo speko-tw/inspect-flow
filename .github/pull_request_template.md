@@ -32,6 +32,10 @@
 
 ## 審查重點
 
+<!-- 列出希望審查者特別注意的地方。 -->
+
+審查依 [`docs/review-guidelines.md`](https://github.com/speko-tw/inspect-flow/blob/main/docs/review-guidelines.md)；agent 開 PR 後依準則自審，結果留言在本 PR。
+
 -
 
 Closes #
