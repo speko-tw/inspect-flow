@@ -1,6 +1,6 @@
 # 專案骨架（skeleton）
 
-**代碼**：`SKL`　**Phase**：P0　**狀態**：已凍結
+**代碼**：`SKL`　**Phase**：P0　**狀態**：已完成
 **前置規格**：無
 **引用意圖**：[KD-09](../../intents/03-decisions-and-stack.md#kd-09)、[KD-10](../../intents/03-decisions-and-stack.md#kd-10)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)、[PR-11](../../intents/02-principles.md#pr-11)、[PR-13](../../intents/02-principles.md#pr-13)、[PR-14](../../intents/02-principles.md#pr-14)；技術棧卡片：[Backend 語言](../../intents/03-decisions-and-stack.md#stack-backend-language)、[Web API](../../intents/03-decisions-and-stack.md#stack-web-api)、[Frontend](../../intents/03-decisions-and-stack.md#stack-frontend)、[測試工具](../../intents/03-decisions-and-stack.md#stack-tests)、[CI](../../intents/03-decisions-and-stack.md#stack-ci)、[程式品質工具](../../intents/03-decisions-and-stack.md#stack-code-quality)
 **被擋議題**：無
