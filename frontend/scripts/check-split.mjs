@@ -2,10 +2,11 @@
 // @ts-check
 // 拆包檢查（SKL-AC03）。定義「造訪 /field 會載入的 chunk」：
 // 所有 HTML 入口 chunk（isEntry）加上 Field chunk，一律沿
-// imports 走，也沿 dynamicImports 走；唯一例外是含
-// `src/App.tsx`（路由分割點）的 chunk 發出的 dynamicImports
-// 不追：那是 lazy() 按需載入的路由，不算 Field 載入範圍。
-// 可達 chunk 只要含 Admin 模組就算違規。
+// imports 走。動態依賴以模組為單位：查每個模組在
+// dynamicImportsByModule 的紀錄，importer 是路由分割點
+// `src/App.tsx` 的邊不追（那是 lazy() 按需載入的路由，
+// 不算 Field 載入範圍），其他模組的動態 import 都追到
+// 目標所屬的 chunk。可達 chunk 含 Admin 模組就算違規。
 
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -33,6 +34,14 @@ const chunkModulesPath = path.join(distDir, '.vite', 'chunk-modules.json')
  *   dynamicImports: string[]
  *   moduleIds: string[]
  * }} ChunkInfo
+ */
+
+/**
+ * @typedef {{
+ *   chunks: ChunkInfo[]
+ *   dynamicImportsByModule: Record<string, string[]>
+ *   modulesWithoutInfo: string[]
+ * }} ChunkModulesReport
  */
 
 /**
@@ -64,11 +73,20 @@ async function readJsonOrExit(label, filePath) {
 }
 
 /**
- * @param {ChunkInfo} chunk
- * @returns {boolean}
+ * @param {unknown} value
+ * @returns {value is ChunkModulesReport}
  */
-function isRouterChunk(chunk) {
-  return chunk.moduleIds.includes(ROUTER_MODULE)
+function isChunkModulesReport(value) {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+  const record = /** @type {Record<string, unknown>} */ (value)
+  return (
+    Array.isArray(record.chunks) &&
+    typeof record.dynamicImportsByModule === 'object' &&
+    record.dynamicImportsByModule !== null &&
+    Array.isArray(record.modulesWithoutInfo)
+  )
 }
 
 async function main() {
@@ -79,7 +97,15 @@ async function main() {
   )
 
   const manifest = /** @type {Record<string, ManifestEntry>} */ (manifestRaw)
-  const chunkList = /** @type {ChunkInfo[]} */ (chunkModulesRaw)
+
+  if (!isChunkModulesReport(chunkModulesRaw)) {
+    console.error(`chunk 模組清單格式不符：${chunkModulesPath}`)
+    console.error('缺少模組層級欄位，請重新 `npm run build`。')
+    process.exit(1)
+    return
+  }
+
+  const { chunks: chunkList, dynamicImportsByModule } = chunkModulesRaw
 
   const fieldEntry = manifest[FIELD_ENTRY]
   if (!fieldEntry) {
@@ -119,8 +145,16 @@ async function main() {
     return
   }
 
-  if (!chunkList.some(isRouterChunk)) {
-    console.error(`找不到路由分割點 chunk：${ROUTER_MODULE}`)
+  /** @type {Map<string, ChunkInfo>} */
+  const moduleToChunk = new Map()
+  for (const chunk of chunkList) {
+    for (const moduleId of chunk.moduleIds) {
+      moduleToChunk.set(moduleId, chunk)
+    }
+  }
+
+  if (!moduleToChunk.has(ROUTER_MODULE)) {
+    console.error(`找不到路由分割點模組：${ROUTER_MODULE}`)
     process.exit(1)
     return
   }
@@ -144,8 +178,24 @@ async function main() {
     enqueue(chunk)
   }
 
+  /** @type {Set<string>} */
+  const violationKeys = new Set()
   /** @type {{ chunk: string, moduleId: string }[]} */
   const violations = []
+
+  /**
+   * @param {string} chunkFileName
+   * @param {string} moduleId
+   */
+  function recordViolation(chunkFileName, moduleId) {
+    const key = `${chunkFileName}::${moduleId}`
+    if (violationKeys.has(key)) {
+      return
+    }
+    violationKeys.add(key)
+    violations.push({ chunk: chunkFileName, moduleId })
+  }
+
   let totalModules = 0
 
   while (queue.length > 0) {
@@ -154,20 +204,46 @@ async function main() {
     totalModules += chunk.moduleIds.length
     for (const moduleId of chunk.moduleIds) {
       if (moduleId.startsWith(ADMIN_PREFIX)) {
-        violations.push({ chunk: chunk.fileName, moduleId })
+        recordViolation(chunk.fileName, moduleId)
       }
     }
 
-    const nextFileNames = isRouterChunk(chunk)
-      ? chunk.imports
-      : [...chunk.imports, ...chunk.dynamicImports]
-
-    for (const fileName of nextFileNames) {
+    for (const fileName of chunk.imports) {
       const nextChunk = chunksByFile.get(fileName)
       if (!nextChunk) {
-        continue
+        console.error(
+          `chunk 的 imports 指向不存在的 chunk：` +
+            `${fileName}（來自 ${chunk.fileName}）`,
+        )
+        process.exit(1)
+        return
       }
       enqueue(nextChunk)
+    }
+
+    for (const moduleId of chunk.moduleIds) {
+      if (moduleId === ROUTER_MODULE) {
+        continue
+      }
+      const targets = dynamicImportsByModule[moduleId]
+      if (targets === undefined) {
+        continue
+      }
+      for (const target of targets) {
+        const targetChunk = moduleToChunk.get(target)
+        if (!targetChunk) {
+          console.error(
+            `動態 import 目標找不到所屬 chunk：` +
+              `${target}（來自 ${moduleId}）`,
+          )
+          process.exit(1)
+          return
+        }
+        if (target.startsWith(ADMIN_PREFIX)) {
+          recordViolation(targetChunk.fileName, target)
+        }
+        enqueue(targetChunk)
+      }
     }
   }
 

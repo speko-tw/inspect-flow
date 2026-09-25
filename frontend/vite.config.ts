@@ -15,10 +15,23 @@ function toRelativeModuleId(id: string, root: string): string {
 
 /**
  * Emits `dist/.vite/chunk-modules.json`: for every output chunk, which
- * modules were bundled into it. The Vite manifest only records each
- * chunk's entry `src`, not the other modules merged into it, so a
- * split-boundary check based on the manifest alone cannot see a module
- * that got pulled into a shared chunk. This file fills that gap.
+ * modules were bundled into it, plus a module-level dynamic-import
+ * graph (`dynamicImportsByModule`). The Vite manifest only records
+ * each chunk's entry `src`, not the other modules merged into it, and
+ * a chunk-level dynamic-import list is too coarse to tell which
+ * *module* inside a shared chunk issued a given `import()` — so a
+ * split-boundary check needs per-module data to avoid both false
+ * positives and false negatives. This file provides that.
+ *
+ * A project-source module (its id resolves under `<root>/src/`) is
+ * the only kind of module that could plausibly `import()` an Admin
+ * module, so its `dynamicallyImportedIds` must be available — if
+ * `getModuleInfo` can't provide it, that's treated as a hard build
+ * failure rather than silently assumed to have no dynamic imports.
+ * Any other module (dependencies, Rolldown-injected runtime helpers)
+ * cannot reference project source, so a missing `ModuleInfo` for one
+ * of those is recorded in `modulesWithoutInfo` and treated as having
+ * no dynamic imports.
  */
 function chunkModulesReportPlugin(): Plugin {
   let root = process.cwd()
@@ -30,11 +43,42 @@ function chunkModulesReportPlugin(): Plugin {
       root = resolvedConfig.root
     },
     generateBundle(_options, bundle) {
+      const dynamicImportsByModule: Record<string, string[]> = {}
+      const modulesWithoutInfo: string[] = []
+      const seenModules = new Set<string>()
+
       const chunks = []
       for (const item of Object.values(bundle)) {
         if (item.type !== 'chunk') {
           continue
         }
+
+        for (const rawId of item.moduleIds) {
+          if (seenModules.has(rawId)) {
+            continue
+          }
+          seenModules.add(rawId)
+
+          const relId = toRelativeModuleId(rawId, root)
+          const isProjectSource = relId.startsWith('src/')
+          const info = this.getModuleInfo(rawId)
+
+          if (
+            isProjectSource &&
+            (info === null || !Array.isArray(info.dynamicallyImportedIds))
+          ) {
+            this.error('取不到動態 import 資訊：' + relId)
+          }
+
+          if (info !== null && Array.isArray(info.dynamicallyImportedIds)) {
+            dynamicImportsByModule[relId] = info.dynamicallyImportedIds.map(
+              (id) => toRelativeModuleId(id, root),
+            )
+          } else {
+            modulesWithoutInfo.push(relId)
+          }
+        }
+
         chunks.push({
           fileName: item.fileName,
           isEntry: item.isEntry,
@@ -53,7 +97,11 @@ function chunkModulesReportPlugin(): Plugin {
       this.emitFile({
         type: 'asset',
         fileName: '.vite/chunk-modules.json',
-        source: JSON.stringify(chunks, null, 2),
+        source: JSON.stringify(
+          { chunks, dynamicImportsByModule, modulesWithoutInfo },
+          null,
+          2,
+        ),
       })
     },
   }
