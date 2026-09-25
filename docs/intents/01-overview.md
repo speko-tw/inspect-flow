@@ -84,7 +84,7 @@ MVP **得**只實作 `PHOTO` 與 `TEXT`；`NUMBER`、`BOOLEAN`、`SIGNATURE`、`
 
 ### 目前的運作前提（屬第一階段基準，非永久限制）
 
-第一階段採 Online-first、單一後端 host、SQLite、本機持久化儲存與 Linux／Docker Compose（依據：架構基準 §3、§9、§22.1–22.7）。SQLite 的 WAL 設定是建議，見 [KD-08](03-decisions-and-stack.md#kd-08)；Admin／Field 是否共用 React 專案待 [OQ-21](05-open-questions.md#oq-21) 決定。
+第一階段採 Online-first、單一後端 host、SQLite、本機持久化儲存與 Linux／Docker Compose（依據：架構基準 §3、§9、§22.1–22.7）。SQLite 的 WAL 設定是建議，見 [KD-08](03-decisions-and-stack.md#kd-08)；Admin／Field 共用同一個 React 專案，見 [KD-12](03-decisions-and-stack.md#kd-12)。
 
 ## 明確排除的非目標（第一階段）
 
@@ -147,7 +147,7 @@ flowchart TB
 
 - 前端（Admin、Field）一律經 HTTPS/REST 呼叫 Backend API，不直接碰資料庫或檔案儲存（見 [PR-01](02-principles.md#pr-01)）。
 - 第一版資料庫是 SQLite、照片存本機資料夾；兩者的演進路徑見下方「儲存與資料庫演進路徑」。
-- Admin 與 Field 是否維持同一個前端專案待定（見 [OQ-21](05-open-questions.md#oq-21)）。
+- Admin 與 Field 共用同一個前端專案，以路由區分並依路由拆分程式碼（見 [KD-12](03-decisions-and-stack.md#kd-12)）。
 
 ### Backend 分層與存取邊界
 
