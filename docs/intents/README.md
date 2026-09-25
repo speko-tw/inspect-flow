@@ -1,20 +1,22 @@
 # 設計意圖文件（Design Intents）
 
-InspectFlow 要把工程現場查核從「照片、檢查表事後人工彙整」串成一個完整閉環系統；本資料夾把來源的架
-構討論稿蒸餾成給實作者看的規範性結論——一條規則一句話，附理由與來源引註。
+**這份文件回答**：設計意圖文件要怎麼讀，做不同任務時先看哪些條目？
+**什麼時候讀**：第一次接觸 InspectFlow，或準備修改功能、資料模型與部署流程時。
+
+InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整理可執行的規則、理由與來源引註（依據：架構基準 §0.1、§1）。
 
 ## 核心意圖一覽
 
-一旦做錯，之後很難補救的規則：
+以下規則一旦做錯，日後很難補救：
 
 1. 任務建立當下就把需求凍結成快照，之後範本怎麼改都不影響舊任務 → [PR-04](02-principles.md#pr-04)
 2. 報告是版本化快照，已核發版次不能覆蓋，只能發新版次 → [PR-06](02-principles.md#pr-06)
-3. 證據照片不能就地覆寫，原圖必須永久保留，編輯只能產生新版本 → [PR-05](02-principles.md#pr-05)
+3. 證據照片不能就地覆寫，編輯只能產生新版本；刪除與保留期限待定 → [PR-05](02-principles.md#pr-05)、[G-05](05-open-questions.md#g-05)
 4. 前端一律經後端 API 存取資料，能不能完成永遠由後端覆核一次 → [PR-01](02-principles.md#pr-01)
 5. 照片不進資料庫，只存 metadata；儲存鍵由後端產生，不用原始檔名 → [PR-02](02-principles.md#pr-02)
 6. 資料庫存取與結構演進只能走 SQLAlchemy／Alembic，不能手動改 schema → [PR-03](02-principles.md#pr-03)
 7. 主要 entity 一律用 UUID，業務編號另外存，兩者不可混用 → [KD-07](03-decisions-and-stack.md#kd-07)
-8. 備份必須涵蓋資料庫、照片與報表，且要回到同一個時間點 → [PR-12](02-principles.md#pr-12)
+8. 資料庫與照片必須配對備份；報表也納入同組還原是待確認的整合決策 → [PR-12](02-principles.md#pr-12)、[G-10](05-open-questions.md#g-10)
 
 ## 文件索引
 
@@ -32,7 +34,7 @@ InspectFlow 要把工程現場查核從「照片、檢查表事後人工彙整�
 |---|---|
 | 規劃新功能，確認是否屬第一階段範圍 | [01-overview.md](01-overview.md) |
 | 寫程式前檢查有沒有違反設計原則 | [02-principles.md](02-principles.md) |
-| 改報表欄位或版面 | [PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)、[KD-05](03-decisions-and-stack.md#kd-05)、[G-06/G-07](05-open-questions.md#g-06) |
+| 改報表欄位或版面 | [PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)、[KD-05](03-decisions-and-stack.md#kd-05)、[G-06](05-open-questions.md#g-06)、[G-07](05-open-questions.md#g-07) |
 | 新增證據類型（NUMBER／SIGNATURE 等） | [OQ-20](05-open-questions.md#oq-20)、[PR-09](02-principles.md#pr-09) |
 | 選或換技術棧套件 | [03-decisions-and-stack.md](03-decisions-and-stack.md) |
 | 命名或資料模型問題 | [04-glossary.md](04-glossary.md) |
