@@ -1,25 +1,25 @@
 name: Bug
-description: Report behavior that differs from a spec or from expected behavior.
+description: 回報與規格或預期不符的行為。
 type: Bug
 body:
   - type: textarea
     id: observed
     attributes:
-      label: Observed behavior
-      description: What happened. Include error messages, logs, or screenshots.
+      label: 實際行為
+      description: 發生了什麼。附上錯誤訊息、log 或截圖。
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
-      description: What should have happened. Link the spec requirement or acceptance criteria ID if one applies.
+      label: 預期行為
+      description: 應該發生什麼。有對應的規格需求或驗收條件時附上編號。
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
+      label: 重現步驟
       placeholder: |
         1.
         2.
@@ -29,11 +29,12 @@ body:
   - type: input
     id: environment
     attributes:
-      label: Environment
-      description: Branch or commit, browser or device, and deployment (local, pilot).
+      label: 環境
+      description: 分支或 commit、瀏覽器或裝置、部署環境（本機、pilot）。
     validations:
       required: false
   - type: markdown
     attributes:
       value: |
-        Add the matching `area:` labels. If the fix changes spec scope, open a Spec change issue first.
+        加上對應的 `area:` label。修正會改變規格範圍時，先開 Spec change issue。
+        標題用英文，內文用繁體中文。

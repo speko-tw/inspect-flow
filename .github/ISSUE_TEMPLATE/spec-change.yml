@@ -1,43 +1,47 @@
 name: Spec change
-description: Propose a scope or intent change to a frozen spec. Merge the change before changing code.
+description: 對已凍結的規格提出範圍變更或意圖變更；變更合併後才改程式碼。
 type: Task
 labels: ["area: specs", "needs-decision"]
 body:
   - type: input
     id: spec
     attributes:
-      label: Spec
+      label: 規格
       placeholder: docs/specs/<slug>/spec.md
     validations:
       required: true
   - type: dropdown
     id: level
     attributes:
-      label: Change level
-      description: Plan adjustments and spec clarifications do not need this issue; handle them in the task PR. See docs/specs/README.md.
+      label: 變更等級
+      description: 計畫調整與規格澄清不必開這個 issue，在任務的 PR 內處理即可。見 docs/specs/README.md。
       options:
-        - Scope change (requirements, acceptance criteria, API contract, or moving work between specs)
-        - Intent change (principles, key decisions, or resolving an open question in docs/intents/)
+        - 範圍變更（需求、驗收條件、API 契約，或把工作移到其他規格）
+        - 意圖變更（原則、關鍵決策，或裁定 docs/intents/ 的待決議）
     validations:
       required: true
   - type: textarea
     id: finding
     attributes:
-      label: What was found
-      description: What came up during work that makes the current spec wrong or suboptimal. Link the task issue or PR where it came up.
+      label: 發現了什麼
+      description: 工作中發現了什麼，讓目前的規格不對或不夠好。附上發現時的任務 issue 或 PR 連結。
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed change
-      description: Requirement and acceptance criteria IDs to add, change, withdraw, or move.
+      label: 建議的變更
+      description: 要新增、修改、撤回或移動的需求與驗收條件編號。
     validations:
       required: true
   - type: textarea
     id: impact
     attributes:
-      label: Impact
-      description: Other specs, plans, and open task issues that must be updated.
+      label: 影響
+      description: 需要一起更新的其他規格、計畫與進行中的任務 issue。
     validations:
       required: true
+  - type: markdown
+    attributes:
+      value: |
+        標題用英文，內文用繁體中文。

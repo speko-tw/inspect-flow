@@ -1,47 +1,48 @@
 name: Task
-description: One unit of work from a spec's plan. One task = one branch = one PR.
+description: 計畫中的一個工作單位。一個任務＝一個分支＝一個 PR。
 type: Task
 body:
   - type: input
     id: spec
     attributes:
-      label: Spec
-      description: Write N/A for work not tied to a spec, such as process or tooling changes.
+      label: 規格
+      description: 不屬於任何規格的工作（例如流程或工具）寫 N/A。
       placeholder: docs/specs/<slug>/spec.md
     validations:
       required: true
   - type: input
     id: task-id
     attributes:
-      label: Plan item
-      description: Task ID in plan.md. Use "spec" or "plan" when this task writes those documents, or N/A.
+      label: 計畫項目
+      description: plan.md 裡的任務編號。撰寫規格或計畫本身寫 spec 或 plan；沒有規格寫 N/A。
       placeholder: T1
     validations:
       required: true
   - type: input
     id: acceptance
     attributes:
-      label: Acceptance criteria covered
-      description: Write N/A when there is no spec.
+      label: 涵蓋的驗收條件
+      description: 沒有規格寫 N/A。
       placeholder: XXX-AC01, XXX-AC02
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: Scope
-      description: What this task changes, and the files or areas it owns.
+      label: 範圍
+      description: 這個任務改什麼，以及它負責的檔案或區域。
     validations:
       required: true
   - type: input
     id: depends-on
     attributes:
-      label: Depends on
-      description: Issues that must be merged first, including issues from other specs.
-      placeholder: "None, or #12"
+      label: 依賴
+      description: 必須先合併的 issue，包含其他規格的 issue。
+      placeholder: "無，或 #12"
     validations:
       required: true
   - type: markdown
     attributes:
       value: |
-        Set this issue as a sub-issue of the spec's tracking issue, and add the matching `area:` labels.
+        把這個 issue 設為規格追蹤 issue 的 sub-issue，並加上對應的 `area:` label。
+        標題用英文，內文用繁體中文。

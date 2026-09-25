@@ -1,26 +1,28 @@
-## Summary
+<!-- 標題用英文（與 commit 格式相同），內文用繁體中文。 -->
+
+## 摘要
 
 -
 
-## Spec
+## 規格
 
-<!-- Write N/A for work not tied to a spec, such as process or tooling changes. -->
+<!-- 不屬於任何規格的工作（例如流程或工具）寫 N/A。 -->
 
-- Spec: `docs/specs/<slug>/spec.md`
-- Acceptance criteria satisfied: `XXX-AC01`
+- 規格：`docs/specs/<slug>/spec.md`
+- 滿足的驗收條件：`XXX-AC01`
 
-## Spec impact
+## 規格影響
 
-- [ ] None
-- [ ] Plan adjustment: `plan.md` updated in this PR
-- [ ] Spec clarification: `spec.md` updated in this PR, no change in behavior or scope
-- [ ] Scope or intent change: already merged through spec-change issue #
+- [ ] 無
+- [ ] 計畫調整：本 PR 已更新 `plan.md`
+- [ ] 規格澄清：本 PR 已更新 `spec.md`，行為與範圍不變
+- [ ] 範圍或意圖變更：已透過 spec-change issue # 合併
 
-## Verification
+## 驗證
 
 -
 
-## Notes for reviewers
+## 審查重點
 
 -
 

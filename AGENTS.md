@@ -14,7 +14,8 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 ## 文件
 
 - **語言**：預設繁體中文（臺灣用語；白話、精確、可照做，不用文言或公文腔；識別字與技術名保留英文）。僅以下用英文：
-  commit 訊息、根目錄 `README.md`（對外預設版）、負責人指定之處。
+  commit 訊息、根目錄 `README.md`（對外預設版）、GitHub issue 與 PR 的標題、負責人指定之處。
+  GitHub issue 與 PR 的內文、留言一律用繁體中文。
 - `README.md` 與 `README.zh-TW.md` 頂端保留語言切換列，內容須同步更新。
 - 規範用語「必須／應／得」＝ MUST／SHOULD／MAY。
 - 不標示文件版本號；歷程以 Git 為準。

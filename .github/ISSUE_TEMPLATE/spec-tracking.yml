@@ -1,13 +1,13 @@
 name: Spec tracking
-description: Track one spec from writing to completion. Its sub-issues are the task list.
+description: 追蹤一份規格從撰寫到完成；底下的 sub-issue 就是工作清單。
 title: "[Spec] <slug>"
 type: Feature
 body:
   - type: input
     id: spec
     attributes:
-      label: Spec
-      description: Path of the spec folder.
+      label: 規格
+      description: 規格資料夾路徑。
       placeholder: docs/specs/<slug>/
     validations:
       required: true
@@ -21,19 +21,20 @@ body:
   - type: textarea
     id: goal
     attributes:
-      label: Goal
-      description: One or two sentences on what this spec delivers.
+      label: 目標
+      description: 一兩句話說明這份規格要交付什麼。
     validations:
       required: true
   - type: textarea
     id: blocked-by
     attributes:
-      label: Blocked by
-      description: Open questions (OQ-xx / G-xx) or other issues that must be resolved first. Write "None" if not blocked.
-      placeholder: None
+      label: 被擋議題
+      description: 必須先裁定的 OQ-xx／G-xx，或必須先完成的 issue。沒有就寫「無」。
+      placeholder: 無
     validations:
       required: true
   - type: markdown
     attributes:
       value: |
-        Add sub-issues in this order: write spec, write plan (may be combined for small specs), then one Task issue per plan item.
+        依序加入 sub-issue：撰寫規格、撰寫計畫（小規格可合併為一個），再依計畫每個項目開一個 Task。
+        標題用英文，內文用繁體中文。
