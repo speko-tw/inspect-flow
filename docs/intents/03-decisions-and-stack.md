@@ -335,7 +335,7 @@
 
 - **選用**：Python 可用 ruff；Frontend 可用 ESLint、TypeScript、Prettier；mypy／pyright 待團隊選擇。
 - **負責什麼**：基本 lint、格式與型別檢查。
-- **狀態**：建議；mypy／pyright 待定。
+- **狀態**：建議；mypy／pyright 待定。程式碼行寬上限 80 字元已決定（專案負責人指定，非架構基準來源），formatter 與 linter 設定**必須**與之一致。
 - **為什麼**：維持基本一致性，同時避免 MVP 一開始導入過多規則。
 - **不要用**：未經團隊評估就把多套重疊的 lint 或架構框架加入發布閘門。
 - **未來升級路線**：依程式量與缺陷資料調整檢查；型別工具見 [OQ-16](05-open-questions.md#oq-16)。

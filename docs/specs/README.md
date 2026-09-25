@@ -113,7 +113,15 @@ flowchart TD
 
 人每天只需要看兩處：待審查的 PR，以及 `label:needs-decision` 的 issue。
 
-**閉環前提**：agent 要能自行證明「做完了」，因此 `skeleton` 規格**必須**建立 CI 與統一的測試指令，並設定 `main` 的分支保護（需審查、CI 通過才能合併）。
+**閉環前提**：agent 要能自行證明「做完了」，人也要能有效率地審查，因此 `skeleton` 規格**必須**建立：
+
+- CI：每個 PR 跑格式檢查、lint、測試與 build；失敗不得合併。
+- 統一的測試指令：本機與 CI 用同一個入口。
+- 程式碼格式規範：formatter 與 linter 設定進版控，行寬上限 80 字元（見 [程式品質工具](../intents/03-decisions-and-stack.md#stack-code-quality)）。
+- 程式碼審查：PR 開出時自動產生審查意見，並有一份審查準則說明查什麼、哪些算必修；最後仍由人核准合併。
+- `main` 的分支保護：需審查、CI 通過才能合併。
+
+**規範怎麼長出來**：`skeleton` 只放最小可用的格式與審查規則；之後在審查中發現值得固定的規則，由發現的 PR 直接補進準則。會引起爭議或影響既有程式碼的規則（例如換 formatter、改命名慣例），開 issue 標 `needs-decision` 討論。
 
 <a id="change"></a>
 ## 變更規則（保留彈性）
