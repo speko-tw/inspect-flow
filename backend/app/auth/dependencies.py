@@ -9,13 +9,11 @@ dependency so the gate applies to every layer).
 """
 
 import contextvars
-from collections.abc import AsyncGenerator, Generator, Iterator, Sequence
-from typing import Any
+from collections.abc import AsyncGenerator, Generator
 
 from fastapi import Depends, Request
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
-from starlette.routing import BaseRoute, compile_path
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, validate_and_touch_session
@@ -23,17 +21,19 @@ from app.db.unit_of_work import unit_of_work
 from app.models import User, UserPassword
 
 # AUT-R33: while a ``local`` account's password is still marked
-# temporary, only these (method, route-template) pairs are let
-# through the gate below; every other request that reaches
-# ``require_login`` is rejected before its route handler runs.
-# Route templates, not raw request paths, so a path parameter's
-# value can never accidentally match (or fail to match) an entry
-# here. AUT-AC35/AUT-AC36 assert this set's exact contents against
+# temporary, only these (method, endpoint) pairs are let through the
+# gate below; every other request that reaches ``require_login`` is
+# rejected before its route handler runs. Identified by the matched
+# route's *endpoint* -- ``f"{endpoint.__module__}.{endpoint.__qualname__}"``
+# -- rather than by request path or route-template string, so the
+# allowlist keeps working (and keeps meaning "this one operation")
+# regardless of which prefix(es) ``include_router`` mounts the route
+# under. AUT-AC35/AUT-AC36 assert this set's exact contents against
 # the real application's routes.
 TEMPORARY_PASSWORD_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
-        ("GET", "/api/v1/auth/me"),
-        ("POST", "/api/v1/auth/logout"),
+        ("GET", "app.api.v1.auth.get_me"),
+        ("POST", "app.api.v1.auth.logout"),
     }
 )
 
@@ -176,127 +176,38 @@ def has_effective_temporary_password_flag(db: Session, user: User) -> bool:
     return user_password is not None and user_password.must_change_password
 
 
-def _iter_routes_with_full_path(
-    routes: Sequence[BaseRoute],
-) -> Iterator[tuple[APIRoute, str]]:
-    """Yield every ``APIRoute`` mounted (directly or through a
-    ``include_router``) on ``routes`` together with its effective,
-    fully-prefixed path.
-
-    ``app.routes`` used to hold ``APIRoute`` objects with
-    ``include_router(..., prefix=...)`` already rewriting each
-    one's ``.path`` to include the prefix. The installed FastAPI no
-    longer flattens an included router this way: it groups the
-    included router's routes behind an internal node instead, whose
-    own ``APIRoute`` objects keep their *unprefixed* path. Each such
-    node still exposes ``effective_candidates()`` -- the same
-    lookup FastAPI itself uses to resolve a request -- which
-    resolves the original ``APIRoute`` together with its effective,
-    fully-prefixed path; this is used via duck typing (``hasattr``)
-    rather than importing any internal class, so it keeps working
-    whether or not a given route happens to be flattened. Mirrors
-    ``tests/contract/test_route_conventions.py``'s
-    ``_iter_business_routes`` (not imported from there: that module
-    is test-only).
-    """
-    for route in routes:
-        if isinstance(route, APIRoute):
-            yield route, route.path
-            continue
-        effective_candidates = getattr(route, "effective_candidates", None)
-        if not callable(effective_candidates):
-            continue
-        # No stable public type to annotate against here -- this is
-        # a duck-typed lookup on an internal FastAPI grouping node --
-        # so each item is verified via ``isinstance`` below before
-        # being yielded.
-        candidates: Any = effective_candidates()
-        for context in candidates:
-            original_route = getattr(context, "original_route", None)
-            path = getattr(context, "path", None)
-            if isinstance(original_route, APIRoute) and isinstance(path, str):
-                yield original_route, path
-
-
-def _route_path(request: Request) -> str:
-    """The path used for route matching -- mirrors Starlette 1.7's
-    own (private) ``starlette._utils.get_route_path``:
-    ``request.scope["path"]`` with ``scope["root_path"]`` stripped
-    when the ASGI server mounted the app under one. Reimplemented
-    rather than imported since that helper lives in an underscored,
-    private module.
-
-    Matches Starlette's boundary rule exactly, including the case
-    it exists for: ``root_path`` is only ever stripped as a full
-    path *segment* prefix. When ``path`` starts with ``root_path``
-    but the next character isn't a ``/`` (e.g. ``root_path
-    ="/api/v1/auth/m"`` and ``path="/api/v1/auth/me"``), the match
-    is coincidental substring overlap, not root_path actually
-    containing that prefix as mounted segments -- so the original
-    ``path`` is returned unchanged, same as Starlette does.
-    """
-    path = request.scope["path"]
-    root_path = request.scope.get("root_path", "")
-    if not root_path:
-        return path
-    if not path.startswith(root_path):
-        return path
-    if path == root_path:
-        return ""
-    if path[len(root_path)] == "/":
-        return path[len(root_path) :]
-    return path
-
-
-def _matched_route_template(request: Request) -> str | None:
-    """The matched route's fully-prefixed path template (e.g.
-    ``/api/v1/auth/me``), used instead of the raw request path so a
-    path parameter's value can never accidentally widen or narrow
-    ``TEMPORARY_PASSWORD_ALLOWLIST``.
+def _matched_route_operation(request: Request) -> str | None:
+    """The matched route's endpoint identity, as
+    ``f"{endpoint.__module__}.{endpoint.__qualname__}"`` (e.g.
+    ``"app.api.v1.auth.get_me"``), used instead of the request path
+    so which prefix(es) ``include_router`` happens to mount the
+    route under can never affect ``TEMPORARY_PASSWORD_ALLOWLIST``:
+    the same handler function is the same operation no matter how
+    many aliases reach it.
 
     ``request.scope["route"]`` (the same attribute
     ``app/api/errors.py``'s unhandled-exception handler already
-    reads) only carries the *unprefixed* path on this FastAPI
-    version once the route was reached through an included
-    sub-router (see ``_iter_routes_with_full_path``), so the
-    matched route's fully-prefixed candidates are looked up by
-    identity against ``request.app``'s own routes to recover its
-    effective path.
+    reads) is already the ``APIRoute`` Starlette matched this
+    request against by the time a dependency of that route (such as
+    this gate) runs -- so this never has to re-derive or re-compile
+    anything path-related itself.
 
-    The same ``APIRoute`` object is matched by identity alone when
-    only one router mounts it, but a router that is
-    ``include_router``-ed more than once (e.g. under an additional
-    alias prefix) makes the *same* ``APIRoute`` object show up for
-    more than one full path template (AUT-R33): identity is not
-    enough to tell which of those templates this particular request
-    actually took. Each identity-matching candidate's template is
-    therefore compiled with ``starlette.routing.compile_path`` and
-    matched against this request's actual path
-    (``_route_path(request)``, which accounts for ``root_path`` the
-    same way Starlette's own route matching does); only a template
-    whose regex actually matches is returned.
-
-    No candidate's template matching -- including the route not
-    being found among ``request.app``'s routes at all -- reports
-    ``None`` rather than falling back to some other path (e.g. the
-    unprefixed ``route.path``). ``None`` never matches any entry in
-    ``TEMPORARY_PASSWORD_ALLOWLIST`` (all of them are ``(method,
-    template)`` pairs with a real template), so this keeps the gate
-    fail-closed: a request whose effective path template cannot be
-    confirmed is rejected rather than risk wrongly allowing it
-    through.
+    Reports ``None`` when the matched route isn't an ``APIRoute``
+    with a real ``endpoint`` (defensive; every route that reaches
+    ``require_login`` is one in practice). ``None`` never matches
+    any entry in ``TEMPORARY_PASSWORD_ALLOWLIST``, so this keeps the
+    gate fail-closed: a request whose operation cannot be confirmed
+    is rejected rather than risk wrongly allowing it through.
     """
     route = request.scope.get("route")
-    if route is None:
+    if not isinstance(route, APIRoute):
         return None
-    route_path = _route_path(request)
-    for candidate, path in _iter_routes_with_full_path(request.app.routes):
-        if candidate is not route:
-            continue
-        path_regex, _, _ = compile_path(path)
-        if path_regex.match(route_path):
-            return path
-    return None
+    endpoint = route.endpoint
+    module = getattr(endpoint, "__module__", None)
+    qualname = getattr(endpoint, "__qualname__", None)
+    if not module or not qualname:
+        return None
+    return f"{module}.{qualname}"
 
 
 def _check_temporary_password_gate(
@@ -313,8 +224,8 @@ def _check_temporary_password_gate(
     same as ``_check_login`` raising 401 does).
     """
     if has_effective_temporary_password_flag(db, user):
-        template = _matched_route_template(request)
-        if (request.method, template) not in TEMPORARY_PASSWORD_ALLOWLIST:
+        operation = _matched_route_operation(request)
+        if (request.method, operation) not in TEMPORARY_PASSWORD_ALLOWLIST:
             raise APIError(ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED, 403)
     return user
 
