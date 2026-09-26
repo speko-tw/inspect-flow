@@ -10,39 +10,15 @@ row), and an ``is_active`` flag that defaults to enabled (DOM-Q7,
 issue #127).
 
 DOM-Q1/DOM-R29 fixes ``code``/``name``/``tax_id`` length limits and
-``code``/``tax_id`` formats. PostgreSQL enforces the length limits
-through the column types below (DOM-R31), but SQLite does not
-enforce ``String`` length at all, and neither backend's column type
-enforces the character-class format restrictions. The rules
-themselves (length + format) live in exactly one place each --
-``_check_code``/``_check_name``/``_check_tax_id`` below -- and are
-enforced through two independent layers so no write path can skip
-them:
-
-- ``@validates`` (``_validate_code``/``_validate_name``/
-  ``_validate_tax_id``) runs on attribute assignment and on
-  construction (SQLAlchemy calls it for constructor keyword
-  arguments too), giving immediate feedback when code builds or
-  mutates a ``Company`` object directly.
-- ``_CodeType``/``_NameType``/``_TaxIdType`` (``TypeDecorator``
-  subclasses, same pattern as ``UTCDateTime`` in
-  ``app/db/base.py``) run in ``process_bind_param``, which SQLAlchemy
-  calls whenever a value is bound to the column -- covering not only
-  the unit-of-work flush that ``@validates`` already catches, but
-  also the paths ``@validates`` cannot see because they never touch
-  a mapped attribute: ``session.execute(insert(Company).values(...))``
-  and ``session.execute(update(Company).values(...))`` (both a
-  single-row and a bulk/Core statement). Only ``None`` is passed
-  through unchecked at bind time -- ``tax_id`` may legitimately be
-  NULL, and a NULL ``code``/``name`` is left for the columns'
-  ``NOT NULL`` constraints to reject, not for these checks.
-
-This project has no existing domain/validation exception hierarchy,
-so both layers raise the standard library's ``ValueError`` (which
-SQLAlchemy wraps in a ``sqlalchemy.exc.StatementError`` when raised
-from ``process_bind_param``), consistent with how a constructor
-already rejects bad input elsewhere in this codebase
-(``UTCDateTime.process_bind_param`` in ``app/db/base.py``).
+``code``/``tax_id`` formats. The rules themselves (length + format)
+live in exactly one place each -- ``_check_code``/``_check_name``/
+``_check_tax_id`` below -- and are enforced through two independent
+layers (``@validates`` plus the ``BoundedString`` column type from
+``app/models/_bounded_string.py``, see that module's docstring for
+why) so no write path can skip them. Only ``None`` is passed through
+unchecked at bind time -- ``tax_id`` may legitimately be NULL, and a
+NULL ``code``/``name`` is left for the columns' ``NOT NULL``
+constraints to reject, not for these checks.
 
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered by DOM-R31 here.
@@ -53,10 +29,11 @@ import uuid
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, true
 from sqlalchemy.orm import Mapped, mapped_column, validates
-from sqlalchemy.types import TypeDecorator, Uuid
+from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase
 from app.models._audit import AuditMixin
+from app.models._bounded_string import BoundedString
 
 _CODE_MAX_LENGTH = 32
 _NAME_MAX_LENGTH = 128
@@ -94,57 +71,6 @@ def _check_tax_id(value: str) -> None:
         )
 
 
-class _CodeType(TypeDecorator):
-    """Bind-time counterpart of ``_validate_code`` (DOM-R31): the
-    column type itself, so ``insert(Company)``/``update(Company)``
-    Core statements and any other bind path are checked too, not
-    only attribute assignment.
-    """
-
-    impl = String
-    cache_ok = True
-
-    def process_bind_param(
-        self, value: str | None, dialect: object
-    ) -> str | None:
-        if value is None:
-            return None
-        _check_code(value)
-        return value
-
-
-class _NameType(TypeDecorator):
-    """Bind-time counterpart of ``_validate_name`` (DOM-R31)."""
-
-    impl = String
-    cache_ok = True
-
-    def process_bind_param(
-        self, value: str | None, dialect: object
-    ) -> str | None:
-        if value is None:
-            return None
-        _check_name(value)
-        return value
-
-
-class _TaxIdType(TypeDecorator):
-    """Bind-time counterpart of ``_validate_tax_id`` (DOM-R31).
-    ``None`` (an absent ``tax_id``) is always allowed through.
-    """
-
-    impl = String
-    cache_ok = True
-
-    def process_bind_param(
-        self, value: str | None, dialect: object
-    ) -> str | None:
-        if value is None:
-            return None
-        _check_tax_id(value)
-        return value
-
-
 class Company(AuditMixin, TimestampedBase):
     """A company known to InspectFlow: InspectFlow's own
     organization (``kind = "internal"``) or a customer
@@ -155,13 +81,17 @@ class Company(AuditMixin, TimestampedBase):
     __tablename__ = "companies"
 
     code: Mapped[str] = mapped_column(
-        _CodeType(_CODE_MAX_LENGTH), nullable=False, unique=True
+        BoundedString(_CODE_MAX_LENGTH, _check_code),
+        nullable=False,
+        unique=True,
     )
     name: Mapped[str] = mapped_column(
-        _NameType(_NAME_MAX_LENGTH), nullable=False
+        BoundedString(_NAME_MAX_LENGTH, _check_name), nullable=False
     )
     tax_id: Mapped[str | None] = mapped_column(
-        _TaxIdType(_TAX_ID_LENGTH), nullable=True, unique=True
+        BoundedString(_TAX_ID_LENGTH, _check_tax_id),
+        nullable=True,
+        unique=True,
     )
     kind: Mapped[str] = mapped_column(String, nullable=False)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(

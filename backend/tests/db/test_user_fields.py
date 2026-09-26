@@ -584,8 +584,9 @@ class TestDomAc19StringLengthsAndEmailFormat:
         self, session, operator
     ):
         """``session.execute(insert(User).values(department=...))``
-        never calls ``@validates`` -- only ``_BoundedStringType.
-        process_bind_param`` (bind-time) sees this value.
+        never calls ``@validates`` -- only
+        ``BoundedString.process_bind_param`` (bind-time) sees this
+        value.
         """
         before = session.query(User).count()
         kwargs = _user_kwargs(operator, "OVR003", department="D" * 65)
