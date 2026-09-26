@@ -67,9 +67,17 @@ def verify_password(password_hash: str, password: str) -> bool:
 def needs_rehash(password_hash: str) -> bool:
     """Report whether ``password_hash`` uses outdated parameters.
 
-    Delegates to ``PasswordHasher.check_needs_rehash`` using the
-    module's current Argon2id parameters (AUT-R02). A structurally
-    invalid PHC string raises ``argon2.exceptions.InvalidHashError``
-    rather than being reported as "needs rehash".
+    Delegates to ``PasswordHasher.check_needs_rehash``, which only
+    decodes the PHC string's variant and parameter segment and
+    compares it against the module's current Argon2id parameters
+    (AUT-R02). It does not validate the salt or digest bytes, so a
+    hash with a corrupted salt or digest can still report
+    ``False`` here — this function must not be used as hash-format
+    validation. Callers must confirm ``verify_password`` returns
+    ``True`` before calling this function, since AUT-R02 only
+    rehashes after a successful password verification.
+
+    Only when the variant/parameter segment itself cannot be
+    parsed does this raise ``argon2.exceptions.InvalidHashError``.
     """
     return _hasher.check_needs_rehash(password_hash)

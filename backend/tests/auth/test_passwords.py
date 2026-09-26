@@ -100,10 +100,29 @@ def test_verify_password_raises_on_malformed_hash_body():
 
 
 def test_needs_rehash_raises_on_malformed_hash():
+    # Not even the variant/parameter segment can be parsed here,
+    # which is the only case needs_rehash raises on — it does not
+    # validate the salt or digest (see the test below).
     malformed = "not-an-argon2-hash-at-all"
 
     with pytest.raises(InvalidHashError):
         needs_rehash(malformed)
+
+
+def test_needs_rehash_false_for_corrupted_hash_body():
+    # needs_rehash only decodes the variant/parameter segment; it
+    # does not validate the salt or digest bytes, so a hash with a
+    # corrupted body still reports False here. This is why callers
+    # must confirm verify_password succeeds first (AUT-R02) rather
+    # than treating needs_rehash as hash-format validation.
+    password = "correct horse battery staple"
+    password_hash = hash_password(password)
+    prefix, digest = password_hash.rsplit("$", 1)
+    corrupted = f"{prefix}${'!' * len(digest)}"
+
+    assert needs_rehash(corrupted) is False
+    with pytest.raises(VerificationError):
+        verify_password(corrupted, password)
 
 
 def test_needs_rehash_false_for_current_parameters():
