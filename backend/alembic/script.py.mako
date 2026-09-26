@@ -13,6 +13,9 @@ from collections.abc import Sequence
 import sqlalchemy as sa  # noqa: F401
 
 from alembic import op  # noqa: F401
+# Use only SQLAlchemy built-in types (e.g. sa.DateTime(timezone=True))
+# and never import from app: a migration must replay unchanged
+# whatever the app code later becomes (#139).
 ${imports if imports else ""}
 # revision identifiers, used by Alembic.
 revision: str = ${repr(up_revision)}
