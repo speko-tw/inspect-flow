@@ -25,7 +25,7 @@
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
 - `User`、`Project` 的業務欄位（例如 `name`、`location`、`status`、`email`、`role`、`active`）：由 `domain-model` 定義（依 spec 範本「資料」段：完整定義寫在 `domain-model`；負責人決定，#51，2026-09-26）。`Project` 正式欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；`User` 組織欄位已裁定，見 [OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）。
-- 密碼雜湊、登入狀態等認證欄位：移至 `authentication`，受 [OQ-13](../../intents/05-open-questions.md#oq-13) 擋；角色權限機制已裁定，見 [OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）。
+- 密碼雜湊、登入狀態等認證欄位：移至 `authentication`；登入機制與密碼雜湊已裁定，見 [OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）；角色權限機制已裁定，見 [OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）。
 - `User`、`Project` 的 API 端點（建立、查詢、修改）：本規格不定義資源端點；由之後的功能規格負責（例如 `authentication`、`admin-dashboard`）。
 - 資料庫備份與還原：屬 [PR-12](../../intents/02-principles.md#pr-12)，落地於 `pilot-deployment`。
 - 部署時 migration 與 API 啟動的先後順序、SQLite 檔案的持久化掛載、多台後端不得共用 SQLite 檔：屬 [PR-13](../../intents/02-principles.md#pr-13)、[KD-08](../../intents/03-decisions-and-stack.md#kd-08)、[KD-09](../../intents/03-decisions-and-stack.md#kd-09)，落地於 `pilot-deployment`。
@@ -97,7 +97,7 @@
 
 `User`、`Project` 的命中都只是「其他實體引用它的 UUID」，判為無關是本規格的判讀；規則 1 是否要補上這類例外，見 [DBF-Q3](#dbf-q3)。
 
-**門檻外、但影響業務欄位的議題**（不在本規格範圍，列出供 `domain-model` 參考）：[OQ-01](../../intents/05-open-questions.md#oq-01)（`Project` 正式欄位）、[OQ-02](../../intents/05-open-questions.md#oq-02)（`User` 組織欄位，已裁定，見 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-22](../../intents/03-decisions-and-stack.md#kd-22)）、[OQ-08](../../intents/05-open-questions.md#oq-08)（角色與權限機制，已裁定，見 [KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）、[OQ-13](../../intents/05-open-questions.md#oq-13)（密碼雜湊與登入機制）。
+**門檻外、但影響業務欄位的議題**（不在本規格範圍，列出供 `domain-model` 參考）：[OQ-01](../../intents/05-open-questions.md#oq-01)（`Project` 正式欄位）、[OQ-02](../../intents/05-open-questions.md#oq-02)（`User` 組織欄位，已裁定，見 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-22](../../intents/03-decisions-and-stack.md#kd-22)）、[OQ-08](../../intents/05-open-questions.md#oq-08)（角色與權限機制，已裁定，見 [KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）、[OQ-13](../../intents/05-open-questions.md#oq-13)（密碼雜湊與登入機制，已裁定，見 [KD-30](../../intents/03-decisions-and-stack.md#kd-30)、[KD-31](../../intents/03-decisions-and-stack.md#kd-31)）。
 
 ## 介面
 

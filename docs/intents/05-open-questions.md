@@ -246,7 +246,9 @@
 
 <a id="oq-13"></a>
 
-### OQ-13：登入機制採 Server-managed Session + HttpOnly Cookie，還是 Short-lived Token in HttpOnly Cookie？密碼雜湊演算法是否鎖定 Argon2id？
+### OQ-13：登入機制採 Server-managed Session + HttpOnly Cookie，還是 Short-lived Token in HttpOnly Cookie？密碼雜湊演算法是否鎖定 Argon2id？（已裁定）
+
+**裁定**：登入機制採 Server-managed Session + HttpOnly Cookie（Cookie 加上 Secure、SameSite）；密碼雜湊採 Argon2id；維持架構基準原本就要避免的做法，不把長效 JWT 放在 browser localStorage。理由：部署是單一伺服器，停用人員時可以立刻讓現有的登入失效（依 [KD-21](03-decisions-and-stack.md#kd-21)），不需要另外做 token 撤銷機制；將來串接外部身分來源（LDAP、AD、Entra ID）時，登入成功後一樣建立伺服器端的 Session，兩者不衝突。Argon2id 是 OWASP 目前推薦的第一選擇，架構基準也以 Argon2id 表達傾向；參數依實作時 OWASP 的建議值，寫在 `authentication` 規格裡。記錄於 [KD-30](03-decisions-and-stack.md#kd-30)、[KD-31](03-decisions-and-stack.md#kd-31)；討論見 [#82](https://github.com/speko-tw/inspect-flow/issues/82)。
 
 **為什麼要先決定**：影響 Authentication 模組的實作選擇，以及是否需要額外的 Token 撤銷機制設計。
 
@@ -254,11 +256,11 @@
 
 **目前暫定**：架構基準文件把兩者並列為「推薦」與「或經團隊評估採用」，並未鎖定其中一種；密碼雜湊僅以 「例如 Argon2id」表達傾向。唯一明確建議避免的是「將長效 JWT 直接放在 browser localStorage」。
 
-**誰決定、何時**：團隊；時間未指定。
+**誰決定、何時**：負責人；已於 [#82](https://github.com/speko-tw/inspect-flow/issues/82) 裁定（2026-09-26）。
 
 **影響的原則**：無直接對應的 PR。
 
-**依據**：架構基準 §17
+**依據**：議題背景為架構基準 §17；裁定為負責人決定（#82，2026-09-26），在架構基準 §17 並列的兩個選項中選定一個。
 
 
 <a id="oq-14"></a>
