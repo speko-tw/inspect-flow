@@ -75,7 +75,7 @@ Phase 是實作順序與相依；Milestone 是哪個版本系列交付該能力�
 | 0.1.x | Core Foundation（核心基礎） | 打好能安心持續開發下去的基礎 | Repository skeleton、Agent／Git／PR 工作流程、CI、後端／前端基礎、API 慣例、資料庫基礎、SQLAlchemy、Alembic、SQLite／PostgreSQL 相容性、UUID／UTC／錯誤回應格式等共用規則、`User`、`Company`、`Project`、共用的稽核與時間戳記基礎、Repository 治理、文件治理 | 不包含完整的登入驗證（Authentication）、角色與權限（Role／Permission） | Phase 0、Phase 1（第一段） |
 | 0.2.x | Identity & Access（身分與存取） | 能登入，也能判斷「誰可以做什麼」 | 登入、登出、目前使用者、伺服器端管理的登入狀態、HttpOnly Cookie、密碼雜湊、密碼管理、帳號啟用、Role、`ProjectMember`、Permission、存取權限檢查、目前操作者、管理員規則、初始化帳號、登入鎖定與登入驗證強化 | Domain Model 裡，只要是直接用來做登入驗證或授權判斷（Authentication／Authorization）的部分，就算原本寫在共用的 Domain Model 規格裡，也**應**歸在這個版本 | Phase 2 |
 | 0.3.x | Template System（範本系統） | 打造能版本控管、能重複使用的查核範本系統 | Inspection Template、Template Version、Template Item、Evidence Requirement、Template CRUD、Template 版本控管、Template 發布語意、Evidence Requirement 的定義、與 Template 直接相關的決策 | — | Phase 3 |
-| 0.4.x | Inspection Planning（查核規劃） | 能建立真正可用的查核計畫與任務 | Inspection Plan、Inspection Task、Assignment、起始／結束時間與 interval、Task 產生、Task Requirement Snapshot、Plan／Task 狀態、任務指派、鎖定 Template Version | — | Phase 4 |
+| 0.4.x | Inspection Planning（查核規劃） | 能建立真正可用的查核計畫與任務 | Inspection Plan、Inspection Task、Assignment、起點／終點與間距（interval）、Task 產生、Task Requirement Snapshot、Plan／Task 狀態、任務指派、鎖定 Template Version | — | Phase 4 |
 | 0.5.x | Field UI（現場介面） | 現場人員能用手機或平板做基本操作 | `/field/*`、今日任務、任務清單、任務詳情、證據檢查清單、手機／平板操作體驗、登入驗證整合、現場頁面路由、基礎 PWA-ready 結構 | 不要求做到完整的 Evidence 上傳與影像編輯 | Phase 5 |
 | 0.6.x | Evidence（證據） | 能建立、保存、追溯證據，並做非破壞性影像編輯 | 照片上傳、文字證據、原始 Evidence、Evidence 變體、儲存抽象層、裁切、旋轉、亮度、縮放預覽、編輯後的 Evidence 變體、Hash、上傳重試、Idempotency、檔案大小限制、Evidence 刪除與保留政策 | — | Phase 6 |
 | 0.7.x | Completion Validation（完成驗證） | 由伺服器判斷任務有沒有真的完成 | 必要 Evidence 驗證、Task Requirement Snapshot 驗證、Result、PASS／FAIL／N/A 等語意、Completion、重新開啟／更正的語意、伺服器端完成條件強制檢查、缺少證據的處理方式 | — | Phase 7 |
@@ -182,7 +182,7 @@ Issue 涵蓋多個版本系列時，先判斷能否作為單一工作完成；�
 <a id="vg-12"></a>
 **VG-12：先 dry-run、分批、每批驗證，不確定就列 `NEEDS_REVIEW`**
 
-1. 本文件合併進 `main` 前，**不得**開始 migration；開始前**必須**先確認這一點。
+1. migration 開始前**必須**先確認本文件已合併進 `main`；合併前**不得**開始大規模修改歷史 metadata。
 2. 不應一次改整個 repo；**必須**先做 dry-run 分類。
 3. Current＝Proposed 時**不得**產生無意義的更新。
 4. 分批進行，**不得**改了大量筆數才驗證；每批**必須**重讀並確認 expected＝actual，有失敗先查明原因再繼續。
