@@ -2,10 +2,13 @@
 allowlist (AUT-R33).
 """
 
+import functools
+
 from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 
 from app.api.errors import ErrorCode
+from app.api.v1.auth import get_me, logout
 from app.api.v1.auth import router as auth_router
 from app.auth.dependencies import TEMPORARY_PASSWORD_ALLOWLIST, require_login
 from app.auth.passwords import hash_password
@@ -84,6 +87,40 @@ def _client_with_gated_probe() -> tuple[TestClient, dict[str, int]]:
     return TestClient(app, base_url="https://testserver"), calls
 
 
+def _client_with_wrapped_lookalike_probe() -> tuple[
+    TestClient, dict[str, int]
+]:
+    """A needs-login test-only route whose handler is wrapped with
+    ``functools.wraps(get_me)`` -- so it shares ``get_me``'s
+    ``__module__``/``__qualname__`` (and thus the same
+    ``f"{module}.{qualname}"`` string) while being a distinct
+    function object. Reproduces the vulnerability AUT-R33's
+    endpoint-identity allowlist closes: a name-based allowlist would
+    wrongly recognize this as the real ``get_me`` operation and let
+    it through.
+    """
+    app = create_app()
+    router = APIRouter()
+    calls = {"count": 0}
+
+    @router.get("/api/v1/test/wrapped-probe", response_model=dict[str, int])
+    @functools.wraps(get_me)
+    def wrapped_lookalike(*args, **kwargs) -> dict[str, int]:
+        # ``functools.wraps`` copies ``__wrapped__`` and
+        # ``__annotations__``, both of which FastAPI would otherwise
+        # read from ``get_me`` (its parameter signature, so the
+        # dependencies below arrive as keyword arguments regardless
+        # of this function's own parameter names; and its return
+        # type, so ``response_model`` is set explicitly here to
+        # override that). ``*args, **kwargs`` absorbs whatever
+        # dependencies ``get_me``'s signature resolves to.
+        calls["count"] += 1
+        return {"count": calls["count"]}
+
+    app.include_router(router)
+    return TestClient(app, base_url="https://testserver"), calls
+
+
 def _client_with_aliased_auth_router() -> TestClient:
     """The auth router mounted under both its real ``/api/v1``
     prefix and an extra alias prefix, so the same handler function
@@ -103,30 +140,27 @@ class TestAutAc36AllowlistContents:
     """
 
     def test_allowlist_is_exactly_me_and_logout(self):
-        assert TEMPORARY_PASSWORD_ALLOWLIST == frozenset(
-            {
-                ("GET", "app.api.v1.auth.get_me"),
-                ("POST", "app.api.v1.auth.logout"),
-            }
-        )
+        assert TEMPORARY_PASSWORD_ALLOWLIST == {
+            ("GET", get_me),
+            ("POST", logout),
+        }
 
     def test_allowlist_entries_match_real_routes(self):
         """Each allowlist entry names a real business route on the
         actual application -- not merely a function that happens to
         exist somewhere -- and it is exactly the route this task
         expects: ``GET /api/v1/auth/me`` and
-        ``POST /api/v1/auth/logout`` (AUT-AC36). Paves the way for
-        T11's change-password route to be added to both this set and
-        the allowlist together.
+        ``POST /api/v1/auth/logout`` (AUT-AC36). Matches by the
+        route's ``endpoint`` object itself (AUT-R33), the same
+        identity ``create_app()``'s real ``APIRoute`` will hold.
+        Paves the way for T11's change-password route to be added to
+        both this set and the allowlist together.
         """
         app = create_app()
         matched: set[tuple[str, str]] = set()
         for route, path in _iter_business_routes(app):
-            operation = (
-                f"{route.endpoint.__module__}.{route.endpoint.__qualname__}"
-            )
             for method in route.methods or set():
-                if (method, operation) in TEMPORARY_PASSWORD_ALLOWLIST:
+                if (method, route.endpoint) in TEMPORARY_PASSWORD_ALLOWLIST:
                     matched.add((method, path))
         assert matched == {
             ("GET", "/api/v1/auth/me"),
@@ -252,3 +286,33 @@ class TestAutR33AliasedRouteIsRecognizedAsTheSameOperation:
         )
         assert real_resp.status_code == 200
         assert real_resp.json()["must_change_password"] is True
+
+
+class TestAutR33NameLookalikeIsNotRecognized:
+    """The allowlist matches by the matched route's *endpoint
+    object*, not by ``f"{module}.{qualname}"`` -- so a
+    ``functools.wraps``-wrapped look-alike that shares ``get_me``'s
+    name is still rejected (the vulnerability fixed on issue #200).
+    """
+
+    def test_wrapped_lookalike_is_blocked(self, db_session):
+        user = _make_temporary_password_user(db_session, "E954")
+        client, calls = _client_with_wrapped_lookalike_probe()
+
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": user.email, "password": PASSWORD},
+        )
+        assert login_resp.status_code == 200
+        token = login_resp.cookies[SESSION_COOKIE_NAME]
+
+        wrapped_resp = client.get(
+            "/api/v1/test/wrapped-probe",
+            cookies={SESSION_COOKIE_NAME: token},
+        )
+        assert wrapped_resp.status_code == 403
+        assert (
+            wrapped_resp.json()["error"]["code"]
+            == ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED.value
+        )
+        assert calls["count"] == 0
