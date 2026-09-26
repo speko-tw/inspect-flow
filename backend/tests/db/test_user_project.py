@@ -1,7 +1,9 @@
 """Tests for the ``User``/``Project`` common structure migration
 (DBF-AC09, DBF-AC10, DBF-AC11).
 
-Builds a temporary SQLite database with the real Alembic migration
+Migrates the database behind ``conftest.py``'s ``db_url`` fixture
+(a temporary SQLite file by default, PostgreSQL under
+``--db-backend=postgresql``) with the real Alembic migration
 chain (through the public ``alembic.config``/``alembic.command``
 API, as ``test_migrations.py`` does), then reads and writes it
 exclusively through SQLAlchemy -- never ``sqlite3`` directly, per
@@ -24,7 +26,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from alembic import command
-from app.db import clock, settings
+from app.db import clock
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import Project, User
@@ -57,20 +59,17 @@ def _reset_clock_after_test() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def db_url(tmp_path, monkeypatch) -> str:
-    """Migrate a fresh temporary SQLite database to head and return
-    its connection URL.
+def migrated_url(db_url) -> str:
+    """Migrate the test database from ``conftest.py``'s ``db_url``
+    fixture to head and return its connection URL.
     """
-    db_path = tmp_path / "user_project.db"
-    url = f"sqlite:///{db_path}"
-    monkeypatch.setenv(settings.DATABASE_URL_ENV_VAR, url)
     command.upgrade(_alembic_config(), "head")
-    return url
+    return db_url
 
 
 @pytest.fixture
-def engine(db_url) -> Generator[Engine, None, None]:
-    eng = create_engine_from_settings(db_url)
+def engine(migrated_url) -> Generator[Engine, None, None]:
+    eng = create_engine_from_settings(migrated_url)
     try:
         yield eng
     finally:
@@ -101,14 +100,14 @@ def _new_root_user(employee_no: str) -> User:
     )
 
 
-def test_migration_registers_both_tables(db_url):
+def test_migration_registers_both_tables(migrated_url):
     """Guards ``app/models/__init__.py`` actually importing both
     model modules -- a missing import would leave the table off
     ``Base.metadata`` and this migration would never have matched
     it, but a regression that removes the import later should
     still be caught here.
     """
-    engine = create_engine_from_settings(db_url)
+    engine = create_engine_from_settings(migrated_url)
     try:
         table_names = inspect(engine).get_table_names()
     finally:
