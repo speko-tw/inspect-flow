@@ -164,11 +164,11 @@
 <a id="kd-15"></a>
 ## KD-15：`error.code` 採 dot-namespace 命名，對照表由程式列舉自動產生
 
-- **決策**：`error.code` **必須**採 dot-namespace 命名（`<resource>.<reason>`，例如 `task.not_found`）；`error.code` 對照表**必須**由程式的列舉自動產生，不手寫維護獨立文件。
+- **決策**：`error.code` **必須**採 dot-namespace 命名（`<resource>.<reason>`，例如 `task.not_found`）；`error.code` 對照表**必須**由程式的列舉自動產生，不手寫維護獨立文件。不特定於單一資源的跨資源共用錯誤，依錯誤性質分類型 namespace：`request.*`（請求本身的問題，例如 `request.validation_failed`）、`resource.*`（不特定於某資源的通用資源錯誤，例如框架產生的 `resource.not_found`）、`server.*`（伺服器端錯誤，例如 `server.internal_error`）；資源專屬錯誤仍用 `<resource>.<reason>`。
 - **狀態**：已決定。
 - **考慮過但沒選**：SCREAMING_SNAKE_CASE 全域列舉、泛用少數碼、手寫維護對照表文件。
-- **為什麼選這個**：dot-namespace 讓前端能依資源分類做程式化分支；對照表自動產生可避免列舉與文件長期不同步。
-- **代價**：每個資源都要維護自己的 reason 列舉；跨資源共用的錯誤原因（例如驗證失敗、伺服器內部錯誤）需要另外決定歸屬的 namespace。
+- **為什麼選這個**：dot-namespace 讓前端能依資源分類做程式化分支；對照表自動產生可避免列舉與文件長期不同步；跨資源共用錯誤依性質分為 `request`／`resource`／`server` 三類，讓歸屬判斷有固定規則可循，不必逐一個案討論。
+- **代價**：每個資源都要維護自己的 reason 列舉；新增跨資源共用的錯誤原因時，須先判斷屬於 `request`／`resource`／`server` 三類中的哪一類，而非任意新增 namespace。
 - **什麼情況要重新討論**：出現大量跨資源共用、難以歸入單一 `<resource>` 的錯誤原因時，重新評估命名法。
 - **依據**：負責人決定（PR #30，2026-09-26）；架構基準無對應章節。
 
