@@ -25,27 +25,43 @@ from app.main import create_app
 
 DOT_NAMESPACE_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
-# Documents that legitimately mention error codes because they
-# *define* the dot-namespace convention itself -- they are not a
-# separate hand-maintained lookup table competing with
+# Files that legitimately mention every error code because they
+# *define* or *test* the dot-namespace convention itself -- they
+# are not a separate hand-maintained lookup table competing with
 # ``build_error_code_descriptions`` (API-AC10c). Python source is
-# not listed here: it is excluded from the scan entirely (code and
-# tests import ``ErrorCode`` rather than keep an independent list),
-# so ``backend/app/api/errors.py`` and the test file that used to
-# need an exemption no longer do. If a future document wants to
-# list error codes as a table, it must either be added here after
-# explicit review, or link to ``build_error_code_descriptions``
-# instead of restating the codes.
+# no longer excluded from the scan (see ``_TABLE_LIKE_EXTENSIONS``
+# below): a hand-written table can just as easily live in a ``.py``
+# module as in a document, so it must be caught there too. That
+# means the two Python files that legitimately name every code need
+# an explicit exemption instead of a blanket extension exclusion:
+#
+# - ``backend/app/api/errors.py`` defines ``ErrorCode`` and
+#   ``build_error_code_descriptions`` -- the single source of
+#   truth the scan is protecting, not a competing table.
+# - This test file deliberately writes error-code strings shaped
+#   like table rows to exercise the scanner's own counter-example
+#   cases; those are fixtures, not a real lookup table.
+#
+# If a future document or module wants to list error codes as a
+# table, it must either be added here after explicit review, or
+# link to ``build_error_code_descriptions`` instead of restating
+# the codes.
 ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
     {
         "docs/specs/api-conventions/spec.md",
         "docs/specs/api-conventions/plan.md",
         "docs/intents/03-decisions-and-stack.md",
+        "backend/app/api/errors.py",
+        "backend/tests/contract/test_error_envelope.py",
     }
 )
 
-# Only documents and data files can hold a competing hand-written
-# table; Python source is excluded (see ``ALLOWED_CODE_MENTIONS``).
+# Documents, data files and Python source can all hold a competing
+# hand-written table -- a plain dict literal or a CSV/YAML-shaped
+# block reads the same way regardless of extension. The two Python
+# files that legitimately name every code are exempted individually
+# via ``ALLOWED_CODE_MENTIONS`` instead of excluding ``.py``
+# outright.
 _TABLE_LIKE_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".md",
@@ -59,6 +75,7 @@ _TABLE_LIKE_EXTENSIONS: frozenset[str] = frozenset(
         ".tsv",
         ".toml",
         ".html",
+        ".py",
     }
 )
 
@@ -92,11 +109,15 @@ def _find_hand_written_tables(
     error-code table kept separate from
     ``build_error_code_descriptions`` (API-AC10c).
 
-    Only documents and data files are scanned (see
-    ``_TABLE_LIKE_EXTENSIONS``, matched case-insensitively). Python
-    source is never scanned: code and tests should import
-    ``ErrorCode`` rather than keep an independent list, so a Python
-    file mentioning every code is not itself a competing table.
+    Documents, data files and Python source are all scanned (see
+    ``_TABLE_LIKE_EXTENSIONS``, matched case-insensitively): a
+    hand-written lookup table can be a Python dict literal just as
+    easily as a Markdown table or a YAML mapping, so restricting
+    the scan to non-code extensions would let a duplicated table
+    hide in a ``.py`` module. The two Python files that
+    legitimately name every code (the formal definition and this
+    test file's own fixtures) are excluded by path via
+    ``ALLOWED_CODE_MENTIONS`` instead.
 
     A file not on ``ALLOWED_CODE_MENTIONS`` is flagged when any
     single line looks like a table or lookup structure (see
@@ -462,9 +483,9 @@ def test_find_hand_written_tables_detects_single_code_data_formats() -> None:
     """API-AC10c regression: a table naming even a single code is
     still a duplicated mapping, and Markdown is not the only shape
     a hand-written table can take -- key/value and CSV-shaped rows
-    in other document/data formats must be caught too. Checked
-    against representative positive and negative cases in one
-    place, each asserted individually.
+    in other document/data formats, and in Python source itself,
+    must be caught too. Checked against representative positive
+    and negative cases in one place, each asserted individually.
     """
     codes = {member.value for member in ErrorCode}
 
@@ -514,10 +535,55 @@ def test_find_hand_written_tables_detects_single_code_data_formats() -> None:
         == []
     )
 
-    # (7) Python source is never scanned, even with a table shape.
+    # (7) A hand-written table hiding in Python source (a plain
+    # dict literal) is now caught, not blanket-excluded by
+    # extension.
+    assert _find_hand_written_tables(
+        {"backend/app/foo.py": '{"resource.not_found": "x"}'},
+        codes,
+    ) == ["backend/app/foo.py"]
+
+    # (8) A separate Python module keeping its own hand-written
+    # code -> description mapping is exactly the duplicated table
+    # this check exists to catch.
+    assert _find_hand_written_tables(
+        {
+            "backend/app/duplicate_error_codes.py": (
+                "ERROR_CODE_DESCRIPTIONS = "
+                '{"request.validation_failed": "..."}'
+            )
+        },
+        codes,
+    ) == ["backend/app/duplicate_error_codes.py"]
+
+    # (9) An ordinary test assertion that merely checks a response
+    # body's code is not a lookup table -- the code is followed by
+    # a closing quote and braces (``"}}``), not ``:``, ``=`` or
+    # ``,``.
     assert (
         _find_hand_written_tables(
-            {"backend/app/foo.py": '{"resource.not_found": "x"}'},
+            {
+                "backend/tests/contract/test_other.py": (
+                    'assert body == {"error": {"code": "resource.not_found"}}'
+                )
+            },
+            codes,
+        )
+        == []
+    )
+
+    # (10) The formal definition itself contains lines shaped like
+    # a lookup table (each enum member is a quoted code followed by
+    # a comma) but is exempted by path, not by extension.
+    assert (
+        _find_hand_written_tables(
+            {
+                "backend/app/api/errors.py": (
+                    '"request.validation_failed",\n'
+                    '"resource.not_found",\n'
+                    '"server.internal_error",\n'
+                )
+            },
             codes,
         )
         == []
