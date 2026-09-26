@@ -358,9 +358,9 @@ class TestDomAc20LengthAndFormatValidation:
     The "batch" tests below cover the write paths that never touch
     a mapped attribute -- ``session.execute(insert(Company)...)``
     and ``session.execute(update(Company)...)`` -- which
-    ``@validates`` cannot see; only the bind-time column types
-    (``_CodeType``/``_NameType``/``_TaxIdType`` in
-    ``app/models/company.py``) catch these.
+    ``@validates`` cannot see; only the bind-time ``BoundedString``
+    column type (``app/models/_bounded_string.py``, used by
+    ``app/models/company.py``) catches these.
     """
 
     # 32 characters mixing letters, digits, ``-`` and ``_``.
@@ -457,8 +457,8 @@ class TestDomAc20LengthAndFormatValidation:
         self, session, creator, existing_company
     ):
         """``session.execute(insert(Company).values(code=...))``
-        never calls ``@validates`` -- only ``_CodeType.
-        process_bind_param`` sees this value.
+        never calls ``@validates`` -- only
+        ``BoundedString.process_bind_param`` sees this value.
         """
         before = session.query(Company).count()
         with pytest.raises(StatementError):

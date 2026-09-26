@@ -6,12 +6,6 @@ Pytest only shares a ``conftest.py``'s fixtures with test modules in
 its own directory and below; ``tests/auth/`` is a sibling of
 ``tests/db/``, so ``db_url`` and the root-user helpers are
 re-exported here rather than duplicated.
-
-Migrates with a bare ``Config()`` (no ini path) instead of
-``tests/db/test_auth_tables.py``'s ``Config(str(_ALEMBIC_INI))``: a
-``config_file_name`` makes ``alembic/env.py`` call ``fileConfig``,
-which disables every not-yet-configured logger (including
-``app.api.errors``'s) for the rest of the process.
 """
 
 from collections.abc import Callable, Generator
@@ -37,12 +31,11 @@ from tests.db.conftest import (  # noqa: F401 -- re-exported fixtures
 DEFAULT_TEST_PASSWORD = "Sup3rSecret!"
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
+_ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 
 
 def _alembic_config() -> Config:
-    cfg = Config()
-    cfg.set_main_option("script_location", str(_BACKEND_DIR / "alembic"))
-    return cfg
+    return Config(str(_ALEMBIC_INI))
 
 
 @pytest.fixture(autouse=True)
