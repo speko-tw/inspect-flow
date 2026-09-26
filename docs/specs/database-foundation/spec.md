@@ -124,7 +124,7 @@
 | DBF-AC05 | 後端的連線初始化邏輯，分別套用在 SQLite 檔案資料庫與非 SQLite 方言的連線上 | SQLite：從後端取得的連線查 `PRAGMA foreign_keys` 與 `PRAGMA journal_mode`；非 SQLite：以非 SQLite 方言觸發同一段初始化；另掃描 `backend/app` 原始碼中所有 `PRAGMA` 語句 | SQLite 分別回傳 `1` 與 `wal`；非 SQLite 連線上沒有執行任何 `PRAGMA`；每一處 `PRAGMA` 都帶有計畫規定格式的資料庫相依性標註 | DBF-R06、DBF-R07 |
 | DBF-AC06 | 一張測試專用、含時間欄位的資料表 | 寫入一個 `+08:00` 時區的時間後讀回 | 讀回的值帶時區、換算成 UTC 後與寫入的時刻相同；用 `api-conventions` 的時間格式輸出以 `Z` 結尾 | DBF-R08 |
 | DBF-AC07 | 一張測試專用的資料表，以及在同一個交易單位內寫入兩筆、第二筆後拋出例外的操作 | 執行該操作，再執行一次不拋例外的同樣操作 | 拋例外時兩筆都不存在；不拋例外時兩筆都存在 | DBF-R09 |
-| DBF-AC08 | 一個 PR 的 CI 執行，CI 以 service container 提供 PostgreSQL 並設定連線；另有一個沒有設定 PostgreSQL 連線的本機環境 | CI 執行 `make check`；本機執行 `make check` | CI 對 PostgreSQL 執行 `alembic upgrade head` 與 `backend/tests/db/` 的測試，全部成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗；CI 設定裡的 PostgreSQL 版本是固定的主版本號，不是 `latest` 這類浮動標籤；本機略過 PostgreSQL 這一段，其餘檢查照常執行 | DBF-R10 |
+| DBF-AC08 | 一個 PR 的 CI 執行，CI 以 service container 提供 PostgreSQL 並設定連線；另有一個沒有設定 PostgreSQL 連線的本機環境 | CI 執行 `make check`；本機執行 `make check` | CI 對 PostgreSQL 執行 `alembic upgrade head` 與 `backend/tests/db/` 的測試，全部成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗；故意讓 `backend/tests/db/` 的一個測試在 PostgreSQL 上失敗時，check 也失敗；CI 設定裡的 PostgreSQL 版本是固定的主版本號，不是 `latest` 這類浮動標籤，且是實作當時 PostgreSQL 官方支援中的最新穩定主版本；本機略過 PostgreSQL 這一段，其餘檢查照常執行 | DBF-R10 |
 
 ### 第一段：`User`、`Project` 共通結構
 
