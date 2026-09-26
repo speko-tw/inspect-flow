@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, inspect, text
+from sqlalchemy import Engine, insert, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -115,9 +115,11 @@ def test_migration_registers_companies_table(migrated_url):
 class TestDomAc11CompanyFieldsAndConstraints:
     """DOM-AC11: primary key, DOM-R16's fields, and the
     created/updated audit columns; duplicate ``code``/``tax_id``,
-    an out-of-range ``kind``, a dangling ``parent_id``, and a null
-    ``created_by`` are all rejected by the database, with row count
-    unchanged. Two companies with a null ``tax_id`` both succeed.
+    an out-of-range ``kind``, a dangling ``parent_id``, a null
+    ``created_by`` and a null ``is_active`` are all rejected by the
+    database, with row count unchanged. Two companies with a null
+    ``tax_id`` and no ``is_active`` given both succeed, and both
+    come out active (DOM-R16's default).
     """
 
     _EXPECTED_COLUMNS = {
@@ -229,7 +231,9 @@ class TestDomAc11CompanyFieldsAndConstraints:
         )
         session.commit()
 
-        assert session.query(Company).filter_by(tax_id=None).count() == 2
+        rows = session.query(Company).filter_by(tax_id=None).all()
+        assert len(rows) == 2
+        assert all(row.is_active is True for row in rows)
 
     def test_kind_outside_allowed_values_is_rejected(
         self, session, creator, existing_company
@@ -279,6 +283,31 @@ class TestDomAc11CompanyFieldsAndConstraints:
             )
         )
         with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        assert session.query(Company).count() == before
+
+    def test_null_is_active_is_rejected(
+        self, session, creator, existing_company
+    ):
+        # Core ``insert`` sends an explicit ``None`` as NULL. The ORM
+        # would not: it treats ``is_active=None`` on a new object as
+        # "not specified" and applies the column default instead, so
+        # it cannot show that the database itself rejects NULL.
+        before = session.query(Company).count()
+        with pytest.raises(IntegrityError):
+            session.execute(
+                insert(Company).values(
+                    id=uuid7(),
+                    code="C008",
+                    name="Company Eight",
+                    kind="internal",
+                    is_active=None,
+                    created_by=creator.id,
+                    updated_by=creator.id,
+                )
+            )
             session.commit()
         session.rollback()
 
