@@ -154,7 +154,7 @@ class TestAutR09NotLoggedInDuringRequestIsRejected:
         app = FastAPI()
 
         def probe(
-            db: Session = Depends(get_db),  # noqa: B008
+            db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
             _scope: None = Depends(bind_request_scope),  # noqa: B008
         ) -> None:
             get_current_operator(db)
