@@ -1,7 +1,7 @@
 """add user passwords and auth sessions tables
 
 Revision ID: 09f4dbabea8f
-Revises: 78a4ba191ab5
+Revises: 22bfdd8a72a4
 Create Date: 2026-09-26 18:16:02.426790
 
 ``UserPassword``, ``AuthSession``: the two entities the
@@ -21,7 +21,7 @@ from app.db.base import UTCDateTime
 
 # revision identifiers, used by Alembic.
 revision: str = "09f4dbabea8f"
-down_revision: str | Sequence[str] | None = "78a4ba191ab5"
+down_revision: str | Sequence[str] | None = "22bfdd8a72a4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
