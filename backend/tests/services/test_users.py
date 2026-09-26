@@ -155,6 +155,10 @@ class TestDomAc22DisabledCompanyIsRejectedOnlyForCompanyAssignment:
         with pytest.raises(CompanyNotActiveError):
             update_user_manual(session, user_u, company_id=company_b.id)
 
+        # In-session state first: expire_all() would discard any
+        # unflushed change and hide it from the assertion.
+        assert snapshot_persisted_columns(user_u) == user_u_before
+        session.commit()
         session.expire_all()
         total_users_after = session.scalar(
             select(func.count()).select_from(User)
