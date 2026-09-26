@@ -104,7 +104,7 @@ def db_url(
     ``test_migrations.py`` and ``test_engine_reuse.py`` already
     guarded against individually before this fixture existed.
     """
-    backend = request.config.getoption("--db-backend")
+    backend = request.config.getoption("--db-backend", default="sqlite")
     if backend == "postgresql":
         url = os.environ[TEST_POSTGRES_URL_ENV_VAR]
     else:
