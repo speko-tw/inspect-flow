@@ -28,9 +28,9 @@
 
 <a id="oq-02"></a>
 
-### OQ-02：人員需要哪些組織與角色欄位？（已裁定，部分涵蓋）
+### OQ-02：人員需要哪些組織與角色欄位？（已裁定）
 
-**裁定**：組織欄位裁定為公司、部門、地點、工號、英文姓名、中文姓名、email、啟用狀態（除啟用狀態外皆必填），另加聯絡與補充欄位（分機1、分機2、手機、Line ID、WeChat、負責事務），記錄於 [KD-16](03-decisions-and-stack.md#kd-16)、[KD-17](03-decisions-and-stack.md#kd-17)；角色欄位改為「系統管理者開關＋掛在專案成員上的可自訂角色」，不再是 `User` 上的單一 `role` 欄位，記錄於 [KD-19](03-decisions-and-stack.md#kd-19)、[KD-24](03-decisions-and-stack.md#kd-24)、[KD-27](03-decisions-and-stack.md#kd-27)。**職稱、承包商歸屬**：#63 未涵蓋，仍待團隊決定。討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
+**裁定**：組織欄位裁定為公司、部門、地點、工號、英文姓名、中文姓名、email、啟用狀態（除啟用狀態外皆必填），另加聯絡與補充欄位（分機1、分機2、手機、Line ID、WeChat、負責事務），記錄於 [KD-16](03-decisions-and-stack.md#kd-16)、[KD-17](03-decisions-and-stack.md#kd-17)；角色欄位改為「系統管理者開關＋掛在專案成員上的可自訂角色」，不再是 `User` 上的單一 `role` 欄位，記錄於 [KD-19](03-decisions-and-stack.md#kd-19)、[KD-24](03-decisions-and-stack.md#kd-24)、[KD-27](03-decisions-and-stack.md#kd-27)。**職稱、承包商歸屬**：不列入；客戶現有的人員資料表沒有這兩項，日後有需要再新增。討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
 
 **為什麼要先決定**：影響 [01-overview.md](01-overview.md) 的角色定義與 §17 權限矩陣的完整設計。
 
@@ -40,7 +40,7 @@
 
 **目前暫定**：無。架構基準文件只給出 `employee_no`／`name`／`email`／`role`／`active` 等最小欄位，組織層級尚未定義。
 
-**誰決定、何時**：負責人；已於 [#63](https://github.com/speko-tw/inspect-flow/issues/63) 裁定公司、部門、地點、工號、姓名、email、啟用狀態與聯絡補充欄位，以及角色改掛專案成員（2026-09-26）；職稱、承包商歸屬未指定。
+**誰決定、何時**：負責人；已於 [#63](https://github.com/speko-tw/inspect-flow/issues/63) 裁定公司、部門、地點、工號、姓名、email、啟用狀態與聯絡補充欄位，以及角色改掛專案成員；職稱、承包商歸屬不列入（2026-09-26）。
 
 **影響的原則**：與 [OQ-08](#oq-08) 權限矩陣屬同一治理缺口，已一併裁定。
 
