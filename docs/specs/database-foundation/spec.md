@@ -8,7 +8,7 @@
 
 ## 目的
 
-後端所有資料存取都經 SQLAlchemy，schema 只由 Alembic migration 建立與演進；同一條 migration 鏈在 SQLite 與 PostgreSQL 上都能套用，日後換資料庫時 API 契約不變（依據：架構基準 §4.4–4.5、§9、§30 Phase 1、§32）。`User`、`Project` 有穩定的 UUID 身分、與 UUID 分開的業務編號，以及建立與修改紀錄，後續規格可以放心引用（依據：架構基準 §11、§19）。
+後端所有資料存取都經 SQLAlchemy，schema 只由 Alembic migration 建立與演進；同一條 migration 鏈在 SQLite 與 PostgreSQL 上都能套用，日後換資料庫時 API 契約不變（依據：架構基準 §4.4–4.5、§9、§30 Phase 1、§32）。MVP 實際執行的資料庫只有 SQLite；PostgreSQL 只用在 CI 的相容性檢查，確保日後依 [KD-08](../../intents/03-decisions-and-stack.md#kd-08) 的觸發條件轉換時路徑可行，不代表本規格要切換資料庫。`User`、`Project` 有穩定的 UUID 身分、與 UUID 分開的業務編號，以及建立與修改紀錄，後續規格可以放心引用（依據：架構基準 §11、§19）。
 
 ## 範圍
 
