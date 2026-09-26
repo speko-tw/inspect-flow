@@ -30,6 +30,7 @@ from app.db import clock
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import Project, User
+from tests.db.conftest import build_root_user, create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -80,24 +81,6 @@ def engine(migrated_url) -> Generator[Engine, None, None]:
 def session(engine) -> Generator[Session, None, None]:
     with Session(engine) as sess:
         yield sess
-
-
-def _new_root_user(employee_no: str) -> User:
-    """Build a ``User`` whose ``created_by``/``updated_by`` point at
-    its own id (produced by the application, not the database), the
-    way the first ``User`` row must be created per DBF-R14/DBF-Q2
-    (plan.md's "第一筆 User 自我參照" risk): the primary key has to
-    exist client-side before the row is written, since it is also
-    this row's own foreign key value, and both must go in the same
-    INSERT.
-    """
-    self_id = uuid7()
-    return User(
-        id=self_id,
-        employee_no=employee_no,
-        created_by=self_id,
-        updated_by=self_id,
-    )
 
 
 def test_migration_registers_both_tables(migrated_url):
@@ -151,7 +134,7 @@ class TestDbfAc09PrimaryKeysAreSingleColumnUuids:
         assert isinstance(model.__table__.c.id.type, Uuid)
 
     def test_inserted_rows_get_a_uuid_parseable_primary_key(self, session):
-        user = _new_root_user("E100")
+        user = create_root_user_with_company(session, "E100")
         session.add(user)
         session.commit()
         project = Project(
@@ -178,10 +161,15 @@ class TestDbfAc10BusinessNumbersAreUnique:
     def test_duplicate_employee_no_is_rejected_and_row_count_unchanged(
         self, session
     ):
-        session.add(_new_root_user("E001"))
+        first = create_root_user_with_company(session, "E001")
         session.commit()
 
-        session.add(_new_root_user("E001"))
+        # A second call to ``create_root_user_with_company`` would
+        # raise on its own eager flush instead of at this test's own
+        # ``session.commit()`` (see that helper's docstring), so the
+        # duplicate row is built with ``build_root_user`` instead,
+        # reusing the first row's already-committed ``company_id``.
+        session.add(build_root_user("E001", first.company_id))
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
@@ -191,7 +179,7 @@ class TestDbfAc10BusinessNumbersAreUnique:
     def test_duplicate_project_code_is_rejected_and_row_count_unchanged(
         self, session
     ):
-        owner = _new_root_user("E002")
+        owner = create_root_user_with_company(session, "E002")
         session.add(owner)
         session.commit()
         session.add(
@@ -271,7 +259,7 @@ class TestDbfAc11AuditColumns:
         t0 = datetime(2026, 1, 1, tzinfo=UTC)
         clock.set_clock(lambda: t0)
 
-        user = _new_root_user("E200")
+        user = create_root_user_with_company(session, "E200")
         session.add(user)
         session.commit()
 
@@ -296,7 +284,7 @@ class TestDbfAc11AuditColumns:
     ):
         t0 = datetime(2026, 1, 1, tzinfo=UTC)
         clock.set_clock(lambda: t0)
-        user = _new_root_user("E201")
+        user = create_root_user_with_company(session, "E201")
         session.add(user)
         session.commit()
         original_created_at = user.created_at
@@ -312,7 +300,7 @@ class TestDbfAc11AuditColumns:
         assert user.updated_at > original_updated_at
 
     def test_null_created_by_is_rejected_on_both_tables(self, session):
-        user = _new_root_user("E300")
+        user = create_root_user_with_company(session, "E300")
         session.add(user)
         session.commit()
 
@@ -338,7 +326,7 @@ class TestDbfAc11AuditColumns:
         assert session.query(Project).count() == 0
 
     def test_null_updated_by_is_rejected_on_both_tables(self, session):
-        user = _new_root_user("E400")
+        user = create_root_user_with_company(session, "E400")
         session.add(user)
         session.commit()
 
@@ -366,7 +354,7 @@ class TestDbfAc11AuditColumns:
     def test_created_by_pointing_to_a_nonexistent_user_is_rejected(
         self, session
     ):
-        user = _new_root_user("E500")
+        user = create_root_user_with_company(session, "E500")
         session.add(user)
         session.commit()
         dangling = uuid7()

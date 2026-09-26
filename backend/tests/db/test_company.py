@@ -21,6 +21,7 @@ from app.db import clock
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import Company, User
+from tests.db.conftest import create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -66,27 +67,17 @@ def session(engine) -> Generator[Session, None, None]:
         yield sess
 
 
-def _new_root_user(employee_no: str) -> User:
-    """Same self-referential construction as
-    ``test_user_project.py``'s helper of the same name: this row's
-    ``created_by``/``updated_by`` point at its own id.
-    """
-    self_id = uuid7()
-    return User(
-        id=self_id,
-        employee_no=employee_no,
-        created_by=self_id,
-        updated_by=self_id,
-    )
-
-
 @pytest.fixture
 def creator(session) -> User:
     """A ``User`` to use as ``created_by``/``updated_by`` for
     ``Company`` rows in these tests -- not itself under test.
+
+    Built with ``create_root_user_with_company`` (its own throwaway
+    ``Company``, distinct from ``existing_company``/
+    ``boundary_company`` below), since ``User.company_id`` is now
+    required (DOM-R01).
     """
-    user = _new_root_user("E900")
-    session.add(user)
+    user = create_root_user_with_company(session, "E900")
     session.commit()
     return user
 
@@ -223,6 +214,11 @@ class TestDomAc11CompanyFieldsAndConstraints:
     def test_two_null_tax_ids_both_succeed(
         self, session, creator, existing_company
     ):
+        # Relative to a "before" snapshot, not an absolute count:
+        # ``creator`` (DOM-R01's ``company_id``) now brings its own
+        # ``Company`` row along too, and it also has a null
+        # ``tax_id``.
+        before = session.query(Company).filter_by(tax_id=None).count()
         session.add(
             _new_company(
                 creator, code="C003", name="Company Three", kind="internal"
@@ -236,7 +232,7 @@ class TestDomAc11CompanyFieldsAndConstraints:
         session.commit()
 
         rows = session.query(Company).filter_by(tax_id=None).all()
-        assert len(rows) == 2
+        assert len(rows) == before + 2
         assert all(row.is_active is True for row in rows)
 
     def test_kind_outside_allowed_values_is_rejected(
@@ -399,7 +395,10 @@ class TestDomAc20LengthAndFormatValidation:
         self, session, boundary_company
     ):
         assert len(self._MAX_CODE) == 32
-        assert session.query(Company).count() == 2
+        # 3, not 2: ``creator`` (DOM-R01's ``company_id``) brings its
+        # own ``Company`` row along, on top of ``existing_company``
+        # and ``boundary_company``.
+        assert session.query(Company).count() == 3
         session.expire(boundary_company)
         stored = session.get(Company, boundary_company.id)
         assert stored.code == self._MAX_CODE
