@@ -21,6 +21,12 @@ DOM-R31).
 Both layers read the limit from ``_PROJECT_CODE_MAX_LENGTH`` below --
 when OQ-01 settles on a final value, change only that constant.
 
+``project_code`` is ``NOT NULL``, so ``_validate_project_code`` calls
+``validate_nullable`` (``app/models/_bounded_string.py``) before the
+length check: a ``None`` value is rejected with the same
+``ValueError`` an invalid value gets, instead of failing inside
+``_check_project_code`` with ``len(None)``'s ``TypeError``.
+
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered here.
 """
@@ -29,7 +35,7 @@ from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db.base import TimestampedBase
 from app.models._audit import AuditMixin
-from app.models._bounded_string import BoundedString
+from app.models._bounded_string import BoundedString, validate_nullable
 
 # Provisional per DOM-Q1's ruling (#121), carried over from
 # ``employee_no`` pending Project's own business columns (OQ-01).
@@ -70,6 +76,11 @@ class Project(AuditMixin, TimestampedBase):
     )
 
     @validates("project_code")
-    def _validate_project_code(self, key: str, value: str) -> str:
+    def _validate_project_code(
+        self, key: str, value: str | None
+    ) -> str | None:
+        value = validate_nullable(self, key, value, "Project.project_code")
+        if value is None:
+            return value
         _check_project_code(value)
         return value
