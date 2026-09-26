@@ -84,7 +84,7 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | AUT-R18 | 後端**必須**預設拒絕：每一條 `/api/v1` 業務路由都**必須**明確宣告一種存取層級：公開、需登入、需 Admin、需專案權限（附權限代碼）。沒有宣告的路由**必須**讓自動化測試失敗；公開路由**必須**列在一份明確的清單上，目前只有健康檢查與登入、登出。需登入以上的路由，未登入時回傳 401、`auth.not_authenticated` | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（後端預設拒絕）、[PR-01](../../intents/02-principles.md#pr-01)（伺服器端覆核）；「沒宣告就測試失敗」是本規格把預設拒絕落實成可驗證的做法 |
-| AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`，且所需代碼是查看或修改類的動作（讀取、新增、修改、刪除）：放行，不需要 `ProjectMember`。所需代碼是簽核、匯出等特殊動作時，Admin 怎麼判斷待 [AUT-Q2](#aut-q2) 裁定，本規格不定義；怎麼從代碼辨識動作類別依 [DOM-Q3](../domain-model/spec.md#dom-q3)。（2）其他情況，取登入者在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）不是該專案成員，有效權限為空集合，拒絕。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
+| AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`，且所需代碼是查看或修改類的動作（讀取、新增、修改、刪除）：放行，不需要 `ProjectMember`。所需代碼是簽核、匯出等特殊動作時，Admin 怎麼判斷待 [AUT-Q2](#aut-q2) 裁定，本規格不定義；怎麼從代碼辨識動作類別依 [DOM-Q3](../domain-model/spec.md#dom-q3)。（2）登入者不是 Admin：取他在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）非 Admin 且不是該專案成員，有效權限為空集合，拒絕。Admin 要求特殊動作時不適用（2）、（3），待 AUT-Q2 裁定。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
 | AUT-R20 | 需 Admin 的檢查**必須**只放行 `is_admin = true` 的登入者，否則回傳 403、`permission.denied`。管理人員（含建立帳號、停用、修改 `is_admin`）、公司、角色定義的端點**必須**使用這一層 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 管理系統設定、人員、公司、角色定義）；建立帳號只由 Admin 做，依 [#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定（之後每個帳號都由某個 Admin 建立） |
 | AUT-R21 | 後端**必須**提供「本人或 Admin」的檢查：登入者就是目標 `User`，或 `is_admin = true` 時放行，否則回傳 403、`permission.denied`。修改人員聯絡與補充欄位的端點**必須**使用這一層 | 必須 | [KD-17](../../intents/03-decisions-and-stack.md#kd-17)；DOM-R04（判斷操作者是不是 Admin 或本人由本規格執行） |
 | AUT-R22 | 替 `ProjectMember` 指派或移除角色的端點，**必須**使用需專案權限的檢查（代碼依 [DOM-Q3](../domain-model/spec.md#dom-q3) 登記），Admin 依 AUT-R19 一律放行 | 必須 | [KD-27](../../intents/03-decisions-and-stack.md#kd-27)（角色由有權限的人設定） |
@@ -156,7 +156,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | AUT-AC01 | 一段測試用的密碼 | 以本規格的雜湊函式雜湊兩次，並檢查結果 | 兩個雜湊字串都以 `$argon2id$` 開頭，參數段等於程式設定的參數組，且該組是 AUT-R01 列出的 OWASP 配置之一，兩者不同（salt 不同），都不含明文；以正確密碼驗證成功、以錯誤密碼驗證失敗 | AUT-R01 |
-| AUT-AC02 | 一個以較低參數（例如 `t=1`）產生的密碼雜湊存在 `UserPassword` | 以正確密碼登入 | 登入成功；`UserPassword.password_hash` 被改寫為程式設定的參數組，且新的雜湊仍能驗證同一個密碼 | AUT-R02 |
+| AUT-AC02 | 一個以「與程式設定不同的另一組 AUT-R01 配置」產生的密碼雜湊存在 `UserPassword`（例如程式設定為 19456／2／1 時，用 12288／3／1） | 以正確密碼登入 | 登入成功；`UserPassword.password_hash` 被改寫為程式設定的參數組，且新的雜湊仍能驗證同一個密碼 | AUT-R02 |
 | AUT-AC03 | 一個已設定密碼的帳號；測試擷取應用程式日誌 | 分別呼叫登入（成功與失敗）與目前使用者 API | 每個回應本體都不含 `password_hash` 的值、明文密碼與 token；擷取到的日誌不含明文密碼與雜湊 | AUT-R03、AUT-R10 |
 | AUT-AC04 | 依 [AUT-Q3](#aut-q3) 裁定的長度規則 | 以設定密碼的指令分別設定：長度下限減一、剛好下限、剛好上限、上限加一的密碼 | 下限與上限成功，其餘失敗且資料不變 | AUT-R04、AUT-R24 |
 

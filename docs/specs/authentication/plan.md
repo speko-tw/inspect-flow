@@ -60,7 +60,7 @@
 | AC | 驗證方式 |
 |---|---|
 | AUT-AC01 | `backend/tests/auth/test_passwords.py`：雜湊兩次，斷言前綴、參數段等於設定的參數組且屬於 AUT-R01 的清單、兩者不同、驗證正確與錯誤密碼 |
-| AUT-AC02 | `backend/tests/auth/test_login_api.py`：以 `t=1` 預先寫入雜湊，登入後讀回 `UserPassword`，斷言參數段已更新且仍可驗證 |
+| AUT-AC02 | `backend/tests/auth/test_login_api.py`：以 AUT-R01 清單中與程式設定不同的一組完整參數預先寫入雜湊，登入後讀回 `UserPassword`，斷言參數段已更新且仍可驗證 |
 | AUT-AC03 | `backend/tests/auth/test_login_api.py`：以 pytest 的 `caplog` 擷取日誌，呼叫登入與 `me`，斷言回應本體與日誌不含密碼、雜湊與 token |
 | AUT-AC04 | `backend/tests/cli/test_set_password.py`（T6）：依 AUT-Q3 的邊界值各執行一次指令，斷言成功或失敗與 `UserPassword` 的內容 |
 | AUT-AC05 | `backend/tests/auth/test_login_api.py`：解析 `Set-Cookie` 的屬性，查資料庫比對 `token_hash` 與 Cookie 值的 SHA-256 |
