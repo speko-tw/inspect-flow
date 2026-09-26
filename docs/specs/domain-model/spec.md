@@ -161,7 +161,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | DOM-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，由測試在同一個交易裡建立一筆 `Company` 與一筆作為操作者的 `User`（`created_by`、`updated_by` 指向自己，`company_id` 指向該公司） | 用 SQLAlchemy inspector 檢查 `User` 資料表；以該操作者為 `created_by`、`updated_by`，新增一筆只提供必填基本欄位的 `User`；再分別嘗試新增缺少任一必填基本欄位的 `User` | DOM-R01、DOM-R03、DOM-R05、DOM-R08 列出的欄位都存在；基本欄位、`is_admin`、`is_system`、`auth_source` 不可空值，聯絡與補充欄位可空值；`company_id` 外鍵指向 `Company`；第一筆成功，且 `is_admin`、`is_system` 為 `false`、`auth_source` 為 `local`、聯絡欄位為空值；缺欄位的每一次都被資料庫拒絕，筆數不變 | DOM-R01、DOM-R03、DOM-R05 |
-| DOM-AC02 | 與 DOM-AC01 相同的前置資料，並已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 新增另一筆相同 `email` 的 `User` | 因唯一約束失敗，資料庫仍只有一筆 | DOM-R02 |
+| DOM-AC02 | 與 DOM-AC01 相同的前置資料，並已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 新增另一筆相同 `email` 的 `User` | 因唯一約束失敗；該 email 的 `User` 仍只有一筆，`User` 總筆數與新增前相同 | DOM-R02 |
 | DOM-AC03 | 與 DOM-AC01 相同的前置資料，並已有一筆 `auth_source = local`、外部欄位皆為空值的 `User` | 另新增一筆同樣外部欄位皆為空值的 `local` 帳號；新增一筆 `auth_source = external` 且 `external_source`、`external_id` 有值的帳號；再分別嘗試：`auth_source` 為 `local`、`external` 以外的值；`external` 但 `external_id` 為空值；`external` 但 `external_source` 為空值；`external_source` 與 `external_id` 都和前一筆相同的帳號 | 前兩次新增成功；後四次都被資料庫拒絕，筆數不變 | DOM-R08 |
 | DOM-AC04 | 一筆 `external` 帳號、一筆 `local` 帳號 | 透過 Service 層的人工修改入口，分別修改兩者的 `department` 與 `mobile` | `external` 帳號的 `department` 修改被拒絕、值不變，`mobile` 修改成功；`local` 帳號兩者都修改成功 | DOM-R04 |
 | DOM-AC05 | 初始化後的資料庫（內建 `admin` 與另一位 Admin） | 透過 Service 層嘗試把 `admin` 的 `is_active` 改為 `false`，以及把 `is_admin` 改為 `false` | 兩次都被拒絕，`admin` 的資料不變 | DOM-R06 |
@@ -209,7 +209,7 @@
 <a id="dom-q5"></a>
 - **DOM-Q5：專案成員的角色下限與移除方式**。`ProjectMember` 得不得沒有任何角色（沒有角色時有效權限為空集合，依預設拒絕仍然安全）；把人移出專案時是刪除 `ProjectMember`，還是保留紀錄並標記移除（[KD-21](../../intents/03-decisions-and-stack.md#kd-21) 只規定人員停用時保留資料）。影響計畫 T3。
 <a id="dom-q6"></a>
-- **DOM-Q6：稽核紀錄的資料模型由哪份規格定義**。[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部值覆蓋基本欄位）與 [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色變更）都要求寫稽核紀錄，[04-glossary](../../intents/04-glossary.md)「稽核紀錄」只是概念，目前沒有規格定義它的欄位。可以放在本規格擴大凍結範圍，或另開規格。DOM-R22 在此之前無法驗收。
+- **DOM-Q6：稽核紀錄的資料模型由哪份規格定義**。[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部值覆蓋基本欄位）與 [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色變更）都要求寫稽核紀錄，[04-glossary](../../intents/04-glossary.md)「稽核紀錄」只是概念，目前沒有規格定義它的欄位。可以放在本規格擴大凍結範圍，或另開規格。另外要決定：初始化指令建立的帳號與範本角色是否也要寫稽核紀錄，以及 `is_admin` 的變更是否算「權限變更」（本規格依字面視為是）。DOM-R22 在此之前無法驗收，計畫 T6、T7 依賴本題裁定。
 <a id="dom-q7"></a>
 - **DOM-Q7：`is_active` 的預設值，以及停用公司的影響**。[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說啟用狀態不是必填，但沒說未提供時是啟用還是停用；`Company.is_active` 同樣沒有預設值。另外 `Company` 停用後，其人員能不能登入、能不能再被加入專案，#63 沒有寫。影響計畫 T1、T2。
 <a id="dom-q8"></a>
