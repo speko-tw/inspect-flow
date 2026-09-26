@@ -28,7 +28,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
-from app.db.base import UTCDateTime
 
 # revision identifiers, used by Alembic.
 revision: str = "88da78b69aa7"
@@ -53,8 +52,8 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.true(),
         ),
-        sa.Column("created_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", UTCDateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.CheckConstraint(
