@@ -619,6 +619,6 @@
 - **[G-06](#g-06)／[G-07](#g-07)**（報告狀態與版次快照邊界）：合併出一份唯一、完整的 `Report` 狀態機 （含 `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
 - **[OQ-06](#oq-06)**（Result 對完成判定的影響）：查核結果是否需要 PASS/FAIL/N/A、量測值、嚴重度、缺 失欄位，直接影響任務完成判定邏輯與報告版面設計。
 
-[README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](#oq-22) 的裁定；做法見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)）。
+[README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態，以及「部分凍結」規格標頭列出的凍結範圍（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](#oq-22) 的裁定；做法見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)）。
 
 此處「API 契約」指資源層端點契約（各功能規格與 `domain-model` 定義的資源、欄位與端點），不含只定義跨端點共用慣例（路徑前綴、內容型別、錯誤 envelope、分頁、時間格式、ID 表示法等）的 `api-conventions`（依據：負責人決定，PR #30，2026-09-26）。
