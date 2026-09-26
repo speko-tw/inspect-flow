@@ -109,9 +109,13 @@ class TestBoundaryLengthValuesAreAccepted:
 
 class TestOverLimitValuesAreRejectedByPostgresql:
     """PostgreSQL enforces ``VARCHAR(n)`` server-side; SQLite does
-    not, so these skip themselves outside a PostgreSQL run
-    (``--db-backend=postgresql``) rather than asserting a rejection
-    SQLite never actually performs.
+    not. ``test_employee_no_over_16_chars_is_rejected`` below still
+    skips itself outside a PostgreSQL run rather than asserting a
+    rejection SQLite never actually performs at the database level.
+    ``test_project_code_over_32_chars_is_rejected`` no longer skips:
+    issue #168 added a Python-side check for ``project_code`` that
+    rejects the same value on every backend (see that test's own
+    comment and ``test_project_code_length.py``).
     """
 
     def test_employee_no_over_16_chars_is_rejected(self, session, engine):
@@ -137,22 +141,28 @@ class TestOverLimitValuesAreRejectedByPostgresql:
         session.rollback()
 
     def test_project_code_over_32_chars_is_rejected(self, session, engine):
-        if engine.dialect.name != "postgresql":
-            pytest.skip(
-                "VARCHAR length is not enforced by SQLite; run with "
-                "--db-backend=postgresql to exercise this"
-            )
+        # Unlike ``test_employee_no_over_16_chars_is_rejected`` above,
+        # this test never skips on SQLite: issue #168 (after this
+        # test was written) added a Python-side check for
+        # ``project_code`` (``Project``'s own ``@validates``, a
+        # ``ValueError`` raised while the row is constructed) on top
+        # of PostgreSQL's ``VARCHAR(32)`` column (a ``DataError``) --
+        # both still reject the same value, only the layer that
+        # catches it changed, and the Python layer runs on every
+        # backend. ``test_project_code_length.py`` covers the same
+        # rejection (and the Core ``insert``/``update`` paths this
+        # test does not) explicitly on SQLite.
         owner = create_root_user_with_company(session, "E601")
         session.commit()
 
-        session.add(
-            Project(
-                project_code="P" * 33,
-                created_by=owner.id,
-                updated_by=owner.id,
+        with pytest.raises((DataError, ValueError)):
+            session.add(
+                Project(
+                    project_code="P" * 33,
+                    created_by=owner.id,
+                    updated_by=owner.id,
+                )
             )
-        )
-        with pytest.raises(DataError):
             session.commit()
         session.rollback()
 
