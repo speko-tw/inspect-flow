@@ -64,7 +64,7 @@
 | DBF-R11 | `User`、`Project` **必須**以 UUID 作為主鍵；**不得**以自增整數作為主鍵或對外識別。UUID 版本**得**優先評估 UUIDv7，由實作任務選定 | 必須；得（UUIDv7） | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-03](../../intents/02-principles.md#pr-03)；API 表示法見 API-R06 |
 | DBF-R12 | `Project` **必須**有與 UUID 分開保存的業務編號 `project_code`；`User` **必須**有與 UUID 分開保存的業務編號 `employee_no`。兩者不得互相取代 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[04-glossary](../../intents/04-glossary.md)「專案」「業務編號」（依據：架構基準 §11、§12.1–12.2） |
 | DBF-R13 | `project_code` 在所有 `Project` 之間**必須**唯一；`employee_no` 在所有 `User` 之間**必須**唯一；由資料庫約束保證 | 必須 | 負責人決定（#51，2026-09-26）；intents 沒有明文 |
-| DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫；`created_by`、`updated_by` **必須**有值，認證完成前沒有登入者時填內建 `admin` 帳號（依 [DBF-Q2](#dbf-q2) 的裁定） | 必須（保留）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08) |
+| DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫；操作者在認證完成前怎麼填見 [DBF-Q2](#dbf-q2) | 必須（保留）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08) |
 
 <a id="phase-1-part-2"></a>
 ### 第二段：`Inspection Template`、`Template Version`（草稿）
@@ -132,7 +132,7 @@
 |---|---|---|---|---|
 | DBF-AC09 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 SQLAlchemy inspector 檢查 `User`、`Project` 的資料表，並各新增一筆資料 | 主鍵是單一欄位、型別對應 UUID、不是自增整數；新增的資料取得可被 `uuid.UUID(...)` 解析的主鍵 | DBF-R07、DBF-R11 |
 | DBF-AC10 | 已有一筆 `project_code = "P001"` 的 `Project`、一筆 `employee_no = "E001"` 的 `User` | 再新增一筆相同 `project_code` 的 `Project`、一筆相同 `employee_no` 的 `User` | 兩次都因唯一約束失敗，資料庫各仍只有一筆；業務編號與主鍵是不同欄位 | DBF-R12、DBF-R13 |
-| DBF-AC11 | 新增一筆 `User` 與一筆 `Project` | 檢查欄位後修改該筆資料 | 兩張表都有 `created_at`、`updated_at`、`created_by`、`updated_by`；新增時 `created_at`、`updated_at` 自動有值；以可控時間讓修改發生在新增的至少一秒之後，修改後 `updated_at` 嚴格晚於修改前、等於修改當下的時間，`created_at` 不變。新增與修改時沒有登入者，`created_by`、`updated_by` 都等於內建 `admin` 帳號的 UUID；兩欄不接受空值（依 [DBF-Q2](#dbf-q2) 的裁定） | DBF-R14 |
+| DBF-AC11 | 新增一筆 `User` 與一筆 `Project` | 檢查欄位後修改該筆資料 | 兩張表都有 `created_at`、`updated_at`、`created_by`、`updated_by`；新增時 `created_at`、`updated_at` 自動有值；以可控時間讓修改發生在新增的至少一秒之後，修改後 `updated_at` 嚴格晚於修改前、等於修改當下的時間，`created_at` 不變。操作者欄位的填寫規則待 [DBF-Q2](#dbf-q2) 裁定後補進本條 | DBF-R14 |
 
 ## 待釐清
 
@@ -146,7 +146,6 @@
   - PostgreSQL 版本：來源沒寫。
 <a id="dbf-q2"></a>
 - **DBF-Q2：認證完成前，`created_by`、`updated_by` 怎麼填**。`authentication`（P2）完成前沒有「目前使用者」，而 `User` 的第一筆資料也沒有建立者可以指。選項：欄位先允許空值，等 `authentication` 完成後再收緊；建立一個系統帳號，當作沒有登入者時的操作者；或把這兩欄延到 `authentication` 的 migration 才加。後兩者會牽動 [OQ-13](../../intents/05-open-questions.md#oq-13)、[OQ-08](../../intents/05-open-questions.md#oq-08)。
-  **已裁定**（負責人，2026-09-26，[#54](https://github.com/speko-tw/inspect-flow/issues/54)）：選第二項，系統帳號就是 [KD-22](../../intents/03-decisions-and-stack.md#kd-22) 的內建 `admin`。認證完成前沒有登入者時，`created_by`、`updated_by` 都填 `admin`，兩欄從一開始就不接受空值；`admin` 自己那一筆的 `created_by` 指向自己。認證完成後改填實際登入的人。已補進 DBF-R14、DBF-AC11。
 <a id="dbf-q3"></a>
 - **DBF-Q3：部分凍結規則 1 要不要補「只引用 ID 不算有關」的例外**。本規格把 `User`、`Project` 的字面命中判為無關（見[資料](#資料)段），但規則 1 原文是「字面可能指到它，就算有關」。寫 `domain-model` 時會再碰到同樣的判斷，要不要改規則由負責人決定。
 - **migration 是否必須能 downgrade**：intents 沒有依據（[PR-13](../../intents/02-principles.md#pr-13) 的回滾以備份為主），本規格不要求；需要時另行提出。
