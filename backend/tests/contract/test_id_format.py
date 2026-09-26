@@ -30,4 +30,5 @@ def test_entity_id_is_a_uuid_string_not_an_incrementing_integer() -> None:
 
 def test_entity_id_response_requires_id() -> None:
     with pytest.raises(ValidationError):
+        # Omit id on purpose to check that the field is required.
         EntityIdResponse()  # pyright: ignore[reportCallIssue]
