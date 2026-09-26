@@ -37,15 +37,16 @@ class DescribedStrEnum(StrEnum):
 
 
 class ErrorCode(DescribedStrEnum):
-    """The three dot-namespace error codes used by the shared
-    error handlers (API-R07 / KD-15).
+    """Every dot-namespace error code used across the backend
+    (API-R07 / KD-15).
 
-    Each member's namespace matches its cause: ``request.*`` for
-    problems with the request itself, ``resource.*`` for
-    resource-related errors not tied to one resource, and
-    ``server.*`` for server-side failures. No other codes exist
-    here; resource-specific codes (e.g. ``task.not_found``) are
-    decided by each feature spec.
+    ``request.*``, ``resource.*`` and ``server.*`` are the three
+    shared, cross-cutting namespaces used by the handlers below for
+    problems that are not tied to one feature. Each feature spec
+    (for example ``authentication``'s ``auth.*`` members) adds its
+    own members here rather than maintaining a separate table, so
+    ``build_error_code_descriptions`` stays the single source of
+    truth API-R07 requires.
     """
 
     REQUEST_VALIDATION_FAILED = (
@@ -59,6 +60,14 @@ class ErrorCode(DescribedStrEnum):
     SERVER_INTERNAL_ERROR = (
         "server.internal_error",
         "An unexpected server error occurred.",
+    )
+    AUTH_NOT_AUTHENTICATED = (
+        "auth.not_authenticated",
+        "Authentication is required for this request.",
+    )
+    AUTH_INVALID_CREDENTIALS = (
+        "auth.invalid_credentials",
+        "The email or password is incorrect.",
     )
 
 
