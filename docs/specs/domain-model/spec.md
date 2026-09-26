@@ -106,7 +106,7 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| DOM-R31 | DOM-R28～DOM-R30 的長度以字元數計，不是位元組數。長度上限**必須**寫進資料庫欄位型別（例如 `VARCHAR(n)`），PostgreSQL 因此會直接拒絕超長的值。SQLite 不強制 `VARCHAR` 長度，兩種資料庫的格式比對語法也不同，所以後端**必須**在寫入資料庫前檢查長度與格式，不符時拒絕、不寫入；這個檢查**必須**涵蓋所有經 ORM model 的寫入（含初始化指令），不只 Service 層。本規格不要求以資料庫 CHECK 約束檢查長度或格式 | 必須 | [DOM-Q1](#dom-q1) 原文（SQLite 不強制 `VARCHAR` 長度，之後再加上限要新的 migration）；[PR-03](../../intents/02-principles.md#pr-03)（SQLite 與 PostgreSQL 結果一致，不依賴資料庫專屬功能）；「寫入前檢查、涵蓋所有 ORM 寫入」是本規格的推導，理由：建表任務沒有 Service 層，而直接用 ORM 寫入可以繞過 Service 層，只在 Service 層檢查會讓 SQLite 上的超長值寫得進去 | DOM-AC19～DOM-AC21 |
+| DOM-R31 | DOM-R28～DOM-R30 的長度以字元數計，不是位元組數。長度上限**必須**寫進資料庫欄位型別（例如 `VARCHAR(n)`），PostgreSQL 因此會直接拒絕超長的值。SQLite 不強制 `VARCHAR` 長度，兩種資料庫的格式比對語法也不同，所以後端**必須**在寫入資料庫前檢查長度與格式，不符時拒絕、不寫入；這個檢查**必須**涵蓋所有經 ORM model 的寫入（含初始化指令），不只 Service 層。本規格不要求以資料庫 CHECK 約束檢查長度或格式 | 必須 | [DOM-Q1](#dom-q1) 原文（SQLite 不強制 `VARCHAR` 長度，之後再加上限要新的 migration）；[PR-03](../../intents/02-principles.md#pr-03)（SQLite 與 PostgreSQL 結果一致，不依賴資料庫專屬功能）；「寫入前檢查、涵蓋所有 ORM 寫入」是本規格的推導，理由：建表任務沒有 Service 層，而直接用 ORM 寫入可以繞過 Service 層，只在 Service 層檢查會讓 SQLite 上的超長值寫得進去 | DOM-AC08（初始化指令）、DOM-AC19～DOM-AC21 |
 
 <a id="draft-project"></a>
 ### `Project` 業務欄位（草稿）
@@ -176,13 +176,13 @@
 | DOM-AC05 | 初始化後的資料庫（內建 `admin` 與另一位 Admin） | 透過 Service 層嘗試把 `admin` 的 `is_active` 改為 `false`，以及把 `is_admin` 改為 `false` | 兩次都被拒絕，`admin` 的資料不變 | DOM-R06 |
 | DOM-AC06 | 一個只有一位啟用中 Admin（`is_system = false`）的測試資料庫 | 透過 Service 層取消他的 `is_admin`，以及停用他；再新增第二位啟用中的 Admin 後，重做一次取消 `is_admin` | 前兩次都被拒絕、資料不變；有第二位 Admin 時修改成功 | DOM-R07 |
 | DOM-AC07 | 一筆 `User`，被另一筆資料的 `created_by` 引用 | 刪除這筆 `User` | 被資料庫外鍵約束拒絕，資料不變 | DOM-R10 |
-| DOM-AC19 | 與 DOM-AC01 相同的前置資料 | 用 inspector 檢查 `User` 資料表的字串欄位；以 ORM 新增一筆 DOM-R28 列出的欄位都恰為上限字元數的 `User`（`name_zh` 用中文字，`email` 符合格式）；再逐欄各新增一筆只有該欄比上限多 1 個字元的 `User`；再分別新增 `email` 不含 `@`、`email` 含空格、`email` 含 Tab 的 `User` | inspector 顯示每個欄位的字串長度等於 DOM-R28 的上限；恰為上限的那筆成功；其餘每一次都被拒絕，`User` 筆數不變 | DOM-R28、DOM-R31 |
+| DOM-AC19 | 與 DOM-AC01 相同的前置資料 | 用 inspector 檢查 `User` 資料表的字串欄位；以 ORM 新增一筆 DOM-R28 列出的欄位都恰為上限字元數的 `User`（`name_zh` 用中文字，`email` 符合格式）；再逐欄各新增一筆只有該欄比上限多 1 個字元的 `User`；再分別新增 `email` 不含 `@`、`email` 含空格、`email` 含 Tab 的 `User`；最後以 ORM 把恰為上限的那筆的 `name_en` 改為 129 個字元、`email` 改為不含 `@` 的值（各一次） | inspector 顯示每個欄位的字串長度等於 DOM-R28 的上限；恰為上限的那筆成功；其餘每一次新增都被拒絕，`User` 筆數不變；兩次修改都被拒絕，該筆資料不變 | DOM-R28、DOM-R31 |
 
 ### 初始化指令與操作者
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| DOM-AC08 | 對空資料庫執行 `alembic upgrade head` 之後；一組只存在於測試內的輸入值 | 執行初始化指令並提供這組輸入；另在一個新的空資料庫，提供會讓第二個帳號寫入失敗的輸入（例如兩個帳號的 email 相同）再執行一次 | 第一次：恰有一筆 `kind = internal` 的 `Company`、兩筆 `User`、三筆 `Role`（名稱為「內業整理」「現場查核」「唯讀」），欄位值等於輸入值；`admin` 為 `is_admin`、`is_system`，`created_by`、`updated_by` 指向自己；個人帳號為 `is_admin`、非 `is_system`，`created_by`、`updated_by` 指向 `admin`；公司與三個角色的 `created_by`、`updated_by` 指向 `admin`；兩個帳號的 `company_id` 指向該公司。第二次：指令回報失敗，資料庫沒有任何 `Company`、`User`、`Role` | DOM-R11、DOM-R12 |
+| DOM-AC08 | 對空資料庫執行 `alembic upgrade head` 之後；一組只存在於測試內的輸入值 | 執行初始化指令並提供這組輸入；另在一個新的空資料庫，提供會讓第二個帳號寫入失敗的輸入（例如兩個帳號的 email 相同）再執行一次；再在另一個新的空資料庫，提供第二個帳號的 `email` 不含 `@` 的輸入執行一次 | 第一次：恰有一筆 `kind = internal` 的 `Company`、兩筆 `User`、三筆 `Role`（名稱為「內業整理」「現場查核」「唯讀」），欄位值等於輸入值；`admin` 為 `is_admin`、`is_system`，`created_by`、`updated_by` 指向自己；個人帳號為 `is_admin`、非 `is_system`，`created_by`、`updated_by` 指向 `admin`；公司與三個角色的 `created_by`、`updated_by` 指向 `admin`；兩個帳號的 `company_id` 指向該公司。第二次與第三次：指令回報失敗，資料庫沒有任何 `Company`、`User`、`Role` | DOM-R11、DOM-R12、DOM-R31 |
 | DOM-AC09 | 已執行過一次初始化指令的資料庫 | 以另一組輸入再執行一次 | 指令回報已初始化；`Company`、`User`、`Role` 的筆數與內容都不變 | DOM-R13 |
 | DOM-AC10 | 初始化後的資料庫，尚未有 `authentication` | 透過 Service 層新增一筆 `Company`，之後修改它 | 新增後 `created_by`、`updated_by` 都等於 `admin` 的 UUID；修改後 `updated_by` 仍為 `admin` | DOM-R14 |
 
@@ -193,7 +193,7 @@
 | DOM-AC11 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `code = "C001"`、`tax_id = "12345678"` 的 `Company` | 用 inspector 檢查 `Company` 資料表；再分別新增：`code` 相同的公司；`tax_id` 相同的公司；兩筆 `tax_id` 皆為空值的公司；`kind` 為 `internal`、`customer` 以外值的公司；`parent_id` 指向不存在 UUID 的公司；`created_by` 為空值的公司 | 資料表有 UUID 主鍵、DOM-R16 的欄位與建立及修改紀錄欄位；兩筆 `tax_id` 空值的公司新增成功；其餘每一次都被資料庫拒絕，筆數不變 | DOM-R15、DOM-R16 |
 | DOM-AC12 | 對空資料庫執行 `alembic upgrade head` 之後，兩筆 `Company`：A、B | 把 B 的 `parent_id` 設為 B；再把 B 的 `parent_id` 設為 A | 第一次被資料庫拒絕、資料不變；第二次成功 | DOM-R17 |
 | DOM-AC13 | 一筆 `local` 帳號，屬於一間 `kind = customer` 的公司 | 透過 Service 層把他的 `company_id` 改為一間 `kind = internal` 的公司 | 修改成功 | DOM-R18 |
-| DOM-AC20 | 與 DOM-AC11 相同的前置資料 | 用 inspector 檢查 `Company` 資料表的字串欄位；以 ORM 新增一筆 `code` 恰為 32 個字元且含英文字母、數字、`-`、`_`，`name` 恰為 128 個字元，`tax_id` 為 8 位數字的公司；再分別新增：`code` 為 33 個字元；`code` 含空格；`code` 含中文字；`name` 為 129 個字元；`tax_id` 為 7 位數字；`tax_id` 為 9 位數字；`tax_id` 為含英文字母的 8 個字元 | inspector 顯示 `code`、`name`、`tax_id` 的字串長度分別為 32、128、8；第一筆成功；其餘每一次都被拒絕，`Company` 筆數不變 | DOM-R29、DOM-R31 |
+| DOM-AC20 | 與 DOM-AC11 相同的前置資料 | 用 inspector 檢查 `Company` 資料表的字串欄位；以 ORM 新增一筆 `code` 恰為 32 個字元且含英文字母、數字、`-`、`_`，`name` 恰為 128 個字元，`tax_id` 為 8 位數字的公司；再分別新增：`code` 為 33 個字元；`code` 含空格；`code` 含中文字；`name` 為 129 個字元；`tax_id` 為 7 位數字；`tax_id` 為 9 位數字；`tax_id` 為含英文字母的 8 個字元；最後以 ORM 把第一筆的 `code` 改為 33 個字元、`tax_id` 改為 7 位數字（各一次） | inspector 顯示 `code`、`name`、`tax_id` 的字串長度分別為 32、128、8；第一筆成功；其餘每一次新增都被拒絕，`Company` 筆數不變；兩次修改都被拒絕，該筆資料不變 | DOM-R29、DOM-R31 |
 
 ### `Role` 與 `ProjectMember`
 
@@ -204,7 +204,7 @@
 | DOM-AC16 | 兩筆 `ProjectMember` 都持有角色 R1，其中一筆另持有 R2 | 透過 Service 層刪除 R1 | R1 不存在；兩筆 `ProjectMember` 仍存在；沒有任何指派指向 R1；持有 R2 的那筆仍持有 R2 | DOM-R21 |
 | DOM-AC17 | 角色 R 被三筆 `ProjectMember` 持有，分屬兩個 `User`（其中一人在兩個專案都持有 R）；另一個角色沒有人持有 | 計算兩個角色的影響範圍 | R 為 3 筆成員、2 人；另一個角色為 0 筆、0 人 | DOM-R23 |
 | DOM-AC18 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 P、U 的 `ProjectMember` | 用 inspector 檢查 `ProjectMember` 與角色指派的資料表；再新增相同 P、U 的 `ProjectMember`；對同一筆成員重複指派同一個 `Role`；新增 `project_id` 或 `user_id` 指向不存在 UUID 的成員；對同一筆成員指派兩個不同的 `Role` | 資料表有 UUID 主鍵與建立及修改紀錄欄位；重複成員、重複指派、外鍵不存在都被資料庫拒絕，筆數不變；兩個不同的角色指派成功 | DOM-R15、DOM-R25 |
-| DOM-AC21 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role` | 用 inspector 檢查 `Role` 與權限代碼的資料表；以 ORM 分別：新增 `name` 恰為 64 個字元的 `Role`；新增 `name` 為 65 個字元的 `Role`；在該角色加入恰為 64 個字元且符合格式的權限代碼；加入 65 個字元的權限代碼；加入 `report`（沒有 `.`）、`Report.read`（大寫）、`report.read.all`（三段）、`1report.read`（數字開頭） | inspector 顯示 `name` 與權限代碼欄位的字串長度都是 64；恰為上限的名稱與權限代碼成功；其餘每一次都被拒絕，`Role` 與權限代碼的筆數不變 | DOM-R30、DOM-R31 |
+| DOM-AC21 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role` | 用 inspector 檢查 `Role` 與權限代碼的資料表；以 ORM 分別：新增 `name` 恰為 64 個字元的 `Role`；新增 `name` 為 65 個字元的 `Role`；在該角色加入恰為 64 個字元且符合格式的權限代碼；加入 65 個字元的權限代碼；加入 `report`（沒有 `.`）、`Report.read`（大寫）、`report.read.all`（三段）、`1report.read`（數字開頭）；最後以 ORM 把恰為上限的那個 `Role` 的 `name` 改為 65 個字元、把恰為上限的權限代碼改為 `Report.read`（各一次） | inspector 顯示 `name` 與權限代碼欄位的字串長度都是 64；恰為上限的名稱與權限代碼成功；其餘每一次新增都被拒絕，`Role` 與權限代碼的筆數不變；兩次修改都被拒絕，資料不變 | DOM-R30、DOM-R31 |
 
 ## 待釐清
 
