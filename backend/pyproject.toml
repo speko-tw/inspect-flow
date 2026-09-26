@@ -33,7 +33,7 @@ select = ["E", "F", "W", "I", "B", "UP", "N"]
 [tool.pyright]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
-include = ["app", "tests"]
+include = ["app", "tests", "alembic"]
 venvPath = "."
 venv = ".venv"
 
