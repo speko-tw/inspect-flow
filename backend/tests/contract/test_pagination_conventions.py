@@ -154,6 +154,28 @@ def _encode_raw(payload: dict[str, Any]) -> str:
     return encoded.decode("ascii").rstrip("=")
 
 
+def _encode_raw_bytes(raw: bytes) -> str:
+    encoded = base64.urlsafe_b64encode(raw)
+    return encoded.decode("ascii").rstrip("=")
+
+
+_VALID_CURSOR = encode_cursor(CursorKey(created_at=CREATED_AT, id=_uuid(1)))
+
+# Same key/payload as _VALID_CURSOR, but re-encoded with extra JSON
+# whitespace instead of the canonical tight separators.
+_WHITESPACE_PAYLOAD_CURSOR = _encode_raw_bytes(
+    json.dumps({"t": format_utc(CREATED_AT), "id": str(_uuid(1))}).encode(
+        "utf-8"
+    )
+)
+
+# Same key as _VALID_CURSOR, but with a non-canonical UUID spelling
+# (uppercase, no hyphens) that `uuid.UUID()` still parses.
+_UPPERCASE_UUID_CURSOR = _encode_raw(
+    {"t": format_utc(CREATED_AT), "id": str(_uuid(1)).upper().replace("-", "")}
+)
+
+
 @pytest.mark.parametrize(
     "bad_cursor",
     [
@@ -164,6 +186,12 @@ def _encode_raw(payload: dict[str, Any]) -> str:
         ),
         _encode_raw({"t": "bad-time", "id": str(_uuid(1))}),
         _encode_raw({"t": "2026-09-26T08:30:00Z", "id": "not-a-uuid"}),
+        _VALID_CURSOR + "!",
+        _VALID_CURSOR[:4] + "\n" + _VALID_CURSOR[4:],
+        _VALID_CURSOR + "\n",
+        _VALID_CURSOR + "=",
+        _WHITESPACE_PAYLOAD_CURSOR,
+        _UPPERCASE_UUID_CURSOR,
     ],
 )
 def test_decode_cursor_rejects_malformed_input(bad_cursor: str) -> None:

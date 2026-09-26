@@ -13,11 +13,14 @@ section of docs/specs/api-conventions/spec.md).
 import base64
 import binascii
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
 from app.api.time_format import format_utc, parse_utc
+
+_CURSOR_ALPHABET = re.compile(r"[A-Za-z0-9_-]+")
 
 
 @dataclass(frozen=True, order=True)
@@ -43,14 +46,23 @@ def encode_cursor(key: CursorKey) -> str:
 def decode_cursor(cursor: str) -> CursorKey:
     """Decode an opaque cursor string back into a CursorKey.
 
-    Any malformed input is reported as a plain ValueError; mapping
+    Decoding is strict: the only strings accepted are the exact,
+    canonical cursors ``encode_cursor`` produces. Any malformed or
+    non-canonical input is reported as a plain ValueError; mapping
     that to an HTTP error response is left to the shared error
     handling module (not part of this task).
 
     Raises:
-        ValueError: for any malformed input (bad base64, bad JSON,
-            missing/extra keys, invalid timestamp, invalid UUID).
+        ValueError: for any malformed input (bad base64 alphabet or
+            padding, bad JSON, missing/extra keys, invalid timestamp,
+            invalid UUID) or any input that decodes but is not the
+            canonical cursor string for its key (e.g. non-canonical
+            base64 trailing bits, extra JSON whitespace, or a
+            non-canonical UUID spelling).
     """
+    if not _CURSOR_ALPHABET.fullmatch(cursor):
+        raise ValueError(f"invalid cursor: {cursor!r}")
+
     padding = "=" * (-len(cursor) % 4)
     try:
         raw = base64.urlsafe_b64decode(cursor + padding)
@@ -71,4 +83,8 @@ def decode_cursor(cursor: str) -> CursorKey:
     except (AttributeError, TypeError, ValueError) as exc:
         raise ValueError(f"invalid cursor payload: {payload!r}") from exc
 
-    return CursorKey(created_at=created_at, id=key_id)
+    key = CursorKey(created_at=created_at, id=key_id)
+    if encode_cursor(key) != cursor:
+        raise ValueError(f"non-canonical cursor: {cursor!r}")
+
+    return key
