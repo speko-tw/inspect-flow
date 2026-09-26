@@ -29,6 +29,7 @@ from alembic import command
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import AuthSession, User, UserPassword
+from tests.db.conftest import create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -82,20 +83,6 @@ def session(engine) -> Generator[Session, None, None]:
         yield sess
 
 
-def _new_root_user(employee_no: str) -> User:
-    """Build a ``User`` whose ``created_by``/``updated_by`` point
-    at its own id, the way the first ``User`` row must be created
-    (see ``test_user_project.py``'s helper of the same name).
-    """
-    self_id = uuid7()
-    return User(
-        id=self_id,
-        employee_no=employee_no,
-        created_by=self_id,
-        updated_by=self_id,
-    )
-
-
 def _new_user_password(user: User) -> UserPassword:
     return UserPassword(
         user_id=user.id,
@@ -124,8 +111,7 @@ def user(session) -> User:
     """A committed ``User`` row that ``UserPassword``/
     ``AuthSession`` rows can point at.
     """
-    u = _new_root_user("E900")
-    session.add(u)
+    u = create_root_user_with_company(session, "E900")
     session.commit()
     return u
 
