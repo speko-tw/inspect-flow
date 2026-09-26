@@ -61,7 +61,7 @@
 - **RG-S05**：PR 掛上與所關 issue 相同的 milestone（依據：[GitHub 分類](specs/README.md#github-taxonomy)）。
 - **RG-S06**：自審後又推送了會影響範圍或驗收條件的改動時，更新自審留言。
 - **RG-S07**：PR 聲稱滿足的每條驗收條件，附上 `plan.md`「驗證」欄指定的證據（測試，或貼在 PR 說明的指令輸出與連結）（依據：各規格的 `plan.md`）。
-- **RG-S08**：統一檢查入口 `make check` 建立前，以各子目錄既有的格式、lint、型別檢查、測試與 build 指令驗證，並把結果貼在「驗證」段（依據：[skeleton 計畫](specs/skeleton/plan.md)）。
+- **RG-S08**：以 `make check` 驗證，並把結果貼在「驗證」段。其中的 PostgreSQL 檢查（`make check-postgres`）只在設定 `INSPECTFLOW_TEST_POSTGRES_URL` 時執行，未設定就印 SKIPPED 略過，由 CI 的 PostgreSQL service container 補驗；要在本機跑，這個變數只能指向專用的測試資料庫，因為每次都會清空它（依據：[SKL-R03、SKL-R04](specs/skeleton/spec.md#需求)、[DBF-R10](specs/database-foundation/spec.md#需求)）。
 
 ## 自審留言格式
 
