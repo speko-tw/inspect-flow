@@ -17,16 +17,34 @@ model module so each one registers its table on ``Base.metadata``
 before autogenerate compares against it. This module only needs to
 import the ``app.models`` package itself (if present) to trigger
 that; it does not need to change when new models are added.
+
+``render_item`` below is the other half of #139's rule (enforced by
+``tests/db/test_db_access_rules.py``'s
+``test_no_app_imports_in_migrations``): a generated migration must
+only use SQLAlchemy's built-in types and must never import ``app``.
+Left to its default rendering, autogenerate would otherwise write
+out an app-defined ``TypeDecorator`` (e.g. ``app.db.base.UTCDateTime``,
+``app.models._bounded_string.BoundedString``) verbatim, plus an
+``import app...`` line to go with it. ``render_item`` intercepts
+each of those two types and renders their SQLAlchemy-built-in
+``impl`` instead, so the generated script never needs that import.
+Adding another app-defined column type later means adding a case
+here too, or ``test_no_app_imports_in_migrations`` will fail on the
+next autogenerate run that touches it (#199).
 """
 
 import importlib.util
 from importlib import import_module
 from logging.config import fileConfig
+from typing import Literal
+
+from alembic.autogenerate.api import AutogenContext
 
 from alembic import context
-from app.db.base import Base
+from app.db.base import Base, UTCDateTime
 from app.db.engine import create_engine_from_settings
 from app.db.settings import get_database_url
+from app.models._bounded_string import BoundedString
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -52,6 +70,24 @@ if importlib.util.find_spec("app.models") is not None:
 target_metadata = Base.metadata
 
 
+def render_item(
+    type_: str, obj: object, autogen_context: AutogenContext
+) -> str | Literal[False]:
+    """Render an app-defined column type as its SQLAlchemy
+    built-in ``impl`` instead of the app's own class (see this
+    module's docstring, #139/#199).
+
+    Returning ``False`` for anything else keeps autogenerate's
+    default rendering for every other item kind and type.
+    """
+    if type_ == "type":
+        if isinstance(obj, UTCDateTime):
+            return "sa.DateTime(timezone=True)"
+        if isinstance(obj, BoundedString):
+            return f"sa.String(length={obj.length})"
+    return False
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -73,6 +109,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         render_as_batch=is_sqlite,
         compare_type=True,
+        render_item=render_item,
     )
 
     with context.begin_transaction():
@@ -104,6 +141,7 @@ def run_migrations_online() -> None:
                 # other dialects.
                 render_as_batch=is_sqlite,
                 compare_type=True,
+                render_item=render_item,
             )
 
             with context.begin_transaction():
