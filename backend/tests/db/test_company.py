@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, insert, inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import Engine, insert, inspect, text, update
+from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -358,6 +358,13 @@ class TestDomAc20LengthAndFormatValidation:
     ``String`` length or format) still rejects the same values
     PostgreSQL's column types and this project's format rules
     reject.
+
+    The "batch" tests below cover the write paths that never touch
+    a mapped attribute -- ``session.execute(insert(Company)...)``
+    and ``session.execute(update(Company)...)`` -- which
+    ``@validates`` cannot see; only the bind-time column types
+    (``_CodeType``/``_NameType``/``_TaxIdType`` in
+    ``app/models/company.py``) catch these.
     """
 
     # 32 characters mixing letters, digits, ``-`` and ``_``.
@@ -446,6 +453,87 @@ class TestDomAc20LengthAndFormatValidation:
         session.expire(boundary_company)
         stored = session.get(Company, boundary_company.id)
         assert stored.tax_id == self._VALID_TAX_ID
+
+    def test_dom_ac20_batch_insert_with_invalid_code_is_rejected(
+        self, session, creator, existing_company
+    ):
+        """``session.execute(insert(Company).values(code=...))``
+        never calls ``@validates`` -- only ``_CodeType.
+        process_bind_param`` sees this value.
+        """
+        before = session.query(Company).count()
+        with pytest.raises(StatementError):
+            session.execute(
+                insert(Company).values(
+                    id=uuid7(),
+                    code="bad code",
+                    name="Company Nine",
+                    kind="internal",
+                    created_by=creator.id,
+                    updated_by=creator.id,
+                )
+            )
+            session.commit()
+        session.rollback()
+
+        assert session.query(Company).count() == before
+
+    def test_dom_ac20_batch_update_of_code_to_invalid_value_is_rejected(
+        self, session, existing_company
+    ):
+        """``session.execute(update(Company).values(code=...))``
+        against a mapped ``Company`` never calls ``@validates``
+        either -- same bind-time coverage as the insert case above.
+        """
+        with pytest.raises(StatementError):
+            session.execute(
+                update(Company)
+                .where(Company.id == existing_company.id)
+                .values(code="中文")
+            )
+            session.commit()
+        session.rollback()
+
+        session.expire_all()
+        stored = session.get(Company, existing_company.id)
+        assert stored.code == "C001"
+
+    def test_dom_ac20_batch_insert_with_invalid_tax_id_is_rejected(
+        self, session, creator, existing_company
+    ):
+        before = session.query(Company).count()
+        with pytest.raises(StatementError):
+            session.execute(
+                insert(Company).values(
+                    id=uuid7(),
+                    code="C010",
+                    name="Company Ten",
+                    tax_id="1234567",
+                    kind="internal",
+                    created_by=creator.id,
+                    updated_by=creator.id,
+                )
+            )
+            session.commit()
+        session.rollback()
+
+        assert session.query(Company).count() == before
+
+    def test_dom_ac20_batch_update_of_name_to_129_characters_is_rejected(
+        self, session, existing_company
+    ):
+        with pytest.raises(StatementError):
+            session.execute(
+                update(Company)
+                .where(Company.id == existing_company.id)
+                .values(name="N" * 129)
+            )
+            session.commit()
+        session.rollback()
+
+        session.expire_all()
+        stored = session.get(Company, existing_company.id)
+        assert stored.name == "Company One"
 
 
 class TestIsActiveDefault:
