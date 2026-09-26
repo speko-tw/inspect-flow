@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, inspect
+from sqlalchemy import CHAR, Engine, Uuid, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -143,6 +143,30 @@ class TestAutAc31TableStructure:
         for table_name in ("user_passwords", "auth_sessions"):
             pk = inspector.get_pk_constraint(table_name)
             assert pk["constrained_columns"] == ["id"]
+
+            columns = {
+                col["name"]: col for col in inspector.get_columns(table_name)
+            }
+            id_column = columns["id"]
+            assert id_column["nullable"] is False
+            id_type = id_column["type"]
+            # sa.Uuid reflects back as CHAR(32) on SQLite (no
+            # native UUID storage type) and as a native UUID
+            # elsewhere; an autoincrement primary key would
+            # instead reflect as an integer type -- DBF-R07 rules
+            # that out as a cross-system identity.
+            assert id_type.python_type is not int
+            if engine.dialect.name == "sqlite":
+                assert isinstance(id_type, CHAR)
+                assert id_type.length == 32
+            else:
+                assert isinstance(id_type, Uuid)
+
+            model = {
+                "user_passwords": UserPassword,
+                "auth_sessions": AuthSession,
+            }[table_name]
+            assert isinstance(model.__table__.c.id.type, Uuid)
 
     def test_user_passwords_columns_and_constraints(self, engine):
         inspector = inspect(engine)
