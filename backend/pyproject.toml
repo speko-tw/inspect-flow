@@ -7,6 +7,7 @@ dependencies = [
     "alembic>=1.20.0",
     # Upgrading fastapi: re-check test_route_conventions.py's
     # _iter_business_routes (internal effective_candidates(), API-AC01).
+    "argon2-cffi>=25.1.0",
     "fastapi>=0.141.1",
     "psycopg[binary]>=3.3.6",
     "python-multipart>=0.0.32",
