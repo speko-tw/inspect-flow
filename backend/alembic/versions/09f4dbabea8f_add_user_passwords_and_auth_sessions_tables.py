@@ -17,7 +17,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
-from app.db.base import UTCDateTime
 
 # revision identifiers, used by Alembic.
 revision: str = "09f4dbabea8f"
@@ -33,8 +32,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("password_hash", sa.String(), nullable=False),
-        sa.Column("created_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", UTCDateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_user_passwords")),
@@ -60,10 +59,10 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("token_hash", sa.String(), nullable=False),
-        sa.Column("expires_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("last_seen_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("created_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", UTCDateTime(timezone=True), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_auth_sessions")),

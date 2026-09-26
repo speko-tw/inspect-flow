@@ -15,10 +15,12 @@ live in exactly one place each -- ``_check_code``/``_check_name``/
 ``_check_tax_id`` below -- and are enforced through two independent
 layers (``@validates`` plus the ``BoundedString`` column type from
 ``app/models/_bounded_string.py``, see that module's docstring for
-why) so no write path can skip them. Only ``None`` is passed through
-unchecked at bind time -- ``tax_id`` may legitimately be NULL, and a
-NULL ``code``/``name`` is left for the columns' ``NOT NULL``
-constraints to reject, not for these checks.
+why) so no write path can skip them. ``None`` is passed through
+unchecked at bind time (``BoundedString`` never checks it), but each
+``@validates`` method calls ``validate_nullable`` first: ``tax_id``
+allows ``None`` (nullable), while ``code``/``name`` reject it with
+the same ``ValueError`` an invalid value gets, since both are
+``NOT NULL``.
 
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered by DOM-R31 here.
@@ -33,7 +35,7 @@ from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase
 from app.models._audit import AuditMixin
-from app.models._bounded_string import BoundedString
+from app.models._bounded_string import BoundedString, validate_nullable
 
 _CODE_MAX_LENGTH = 32
 _NAME_MAX_LENGTH = 128
@@ -116,17 +118,24 @@ class Company(AuditMixin, TimestampedBase):
     )
 
     @validates("code")
-    def _validate_code(self, key: str, value: str) -> str:
+    def _validate_code(self, key: str, value: str | None) -> str | None:
+        value = validate_nullable(self, key, value, "Company.code")
+        if value is None:
+            return value
         _check_code(value)
         return value
 
     @validates("name")
-    def _validate_name(self, key: str, value: str) -> str:
+    def _validate_name(self, key: str, value: str | None) -> str | None:
+        value = validate_nullable(self, key, value, "Company.name")
+        if value is None:
+            return value
         _check_name(value)
         return value
 
     @validates("tax_id")
     def _validate_tax_id(self, key: str, value: str | None) -> str | None:
+        value = validate_nullable(self, key, value, "Company.tax_id")
         if value is None:
             return value
         _check_tax_id(value)

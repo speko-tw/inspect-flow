@@ -165,7 +165,7 @@ flowchart TD
 
 | 共用檔案 | 規則 |
 |---|---|
-| Alembic migration 鏈 | 每個 PR 最多新增一支 migration；後合併的一方先 rebase，並把 `down_revision` 改接到最新 head，不留多個 head |
+| Alembic migration 鏈 | 每個 PR 最多新增一支 migration；後合併的一方先 rebase，並把 `down_revision` 改接到最新 head，不留多個 head；型別只用 SQLAlchemy 內建型別，見 [database-foundation 計畫](database-foundation/plan.md#風險)（#139） |
 | lockfile（Python、前端） | 新增或升級套件的 PR 先合併，其他分支再 rebase 並重新產生 lockfile，不手動合併衝突 |
 | 共用規格（`api-conventions`、`domain-model`、`state-machines`） | 各規格只改自己負責的段落；新增共用慣例要開獨立任務 |
 | 應用程式入口、router 註冊、設定檔 | 每個模組自己一個檔案，入口只加一行註冊 |

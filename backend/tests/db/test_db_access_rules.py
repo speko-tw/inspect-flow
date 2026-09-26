@@ -1,11 +1,14 @@
 """Static scans over ``backend/app`` and ``backend/alembic``
-enforcing DBF-AC01 (no direct database driver imports) and DBF-AC03
-(no ``create_all`` shortcut).
+enforcing DBF-AC01 (no direct database driver imports), DBF-AC03
+(no ``create_all`` shortcut), and issue #139's rule that a migration
+under ``alembic/versions`` may only use SQLAlchemy's built-in types
+and must never import ``app`` -- a migration must replay unchanged
+whatever the app code later becomes.
 
-Both rules are checked with ``ast`` over every ``*.py`` file under
-either directory (never by string-matching Python source, which
-would also flag mentions inside docstrings/comments -- see
-``app/db/engine.py``'s own module docstring, which names
+All three rules are checked with ``ast`` over every ``*.py`` file
+under the relevant directory (never by string-matching Python
+source, which would also flag mentions inside docstrings/comments --
+see ``app/db/engine.py``'s own module docstring, which names
 ``sqlite3`` in prose). The Alembic scaffold's non-Python files
 (``alembic.ini``, ``script.py.mako``) are covered separately with a
 plain text search, since ``create_all`` there would not be Python
@@ -19,6 +22,7 @@ from pathlib import Path
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _APP_DIR = _BACKEND_DIR / "app"
 _ALEMBIC_DIR = _BACKEND_DIR / "alembic"
+_VERSIONS_DIR = _ALEMBIC_DIR / "versions"
 
 # DBF-R01: SQLAlchemy is the only allowed database access path.
 # These are the modules a direct import of a database driver would
@@ -193,6 +197,35 @@ def test_no_create_all_in_non_python_alembic_scaffold_files():
     assert not hits, [str(path) for path in hits]
 
 
+def test_migration_versions_directory_is_non_empty():
+    """Guards the scan below: an empty file list would make its
+    assertion vacuously pass.
+    """
+    assert _VERSIONS_DIR.is_dir(), f"scan root missing: {_VERSIONS_DIR}"
+    assert any(_VERSIONS_DIR.glob("*.py")), (
+        f"no migration files in {_VERSIONS_DIR}"
+    )
+
+
+def test_no_app_imports_in_migrations():
+    """Issue #139: a migration must only use SQLAlchemy's built-in
+    types and must never import ``app``, so that it keeps replaying
+    unchanged no matter how the app's own types later change.
+    """
+    forbidden_imports: list[tuple[Path, int, str]] = []
+    for path in sorted(_VERSIONS_DIR.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        hits = find_forbidden_db_imports(source, forbidden=frozenset({"app"}))
+        forbidden_imports.extend(
+            (path, lineno, module) for lineno, module in hits
+        )
+
+    assert not forbidden_imports, "\n".join(
+        f"{path}:{lineno}: forbidden import of {module!r}"
+        for path, lineno, module in forbidden_imports
+    )
+
+
 # -- Self-tests for the scanner functions themselves --------------
 #
 # These feed synthetic source strings straight to
@@ -226,6 +259,22 @@ def test_scanner_detects_dynamic_import_forms():
     hits = find_forbidden_db_imports(source)
 
     assert hits == [(2, "psycopg2"), (3, "aiosqlite")]
+
+
+def test_scanner_detects_app_import_when_app_is_forbidden():
+    source = "from app.db.base import UTCDateTime\n"
+
+    hits = find_forbidden_db_imports(source, forbidden=frozenset({"app"}))
+
+    assert hits == [(1, "app")]
+
+
+def test_scanner_ignores_sqlalchemy_import_when_app_is_forbidden():
+    source = "import sqlalchemy as sa\n"
+
+    hits = find_forbidden_db_imports(source, forbidden=frozenset({"app"}))
+
+    assert hits == []
 
 
 def test_scanner_ignores_forbidden_module_name_in_docstring():
