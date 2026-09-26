@@ -47,8 +47,8 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   - 合併採「Create a merge commit」，由 GitHub 產生的 merge commit 記錄 PR 編號，不回頭修改既有 commit。
   - GitHub 的 issue 與 PR 共用流水號，一律用 `Issue:`、`Closes` 標明所指對象。
 - **Issue 與 PR 欄位**（設定方式與 id 見 [`docs/specs/README.md`](docs/specs/README.md#issue-pr-fields)）：
-  - Issue：assignee（目前是 `kavy7884`）、Issue Type（`Task` 或 `Bug`，開完確認有套用）、area label、Milestone（目前的版本系列），以及組織欄位 Priority、Effort，一律填寫。
-  - PR：assignee、area label、Milestone 與它關閉的 issue 相同；PR 沒有 Priority、Effort。
+  - Issue：assignee（目前是 `kavy7884`）、Issue Type（`Task` 或 `Bug`，開完確認有套用）、area label、Milestone（依 [`docs/intents/06-versioning-and-milestone-governance.md`](docs/intents/06-versioning-and-milestone-governance.md#issue-milestone-rules) 判斷所屬版本系列），以及組織欄位 Priority、Effort，一律填寫。
+  - PR：assignee、area label、Milestone 與它關閉的 issue 相同（見 [`docs/intents/06-versioning-and-milestone-governance.md`](docs/intents/06-versioning-and-milestone-governance.md#pr-milestone)）；PR 沒有 Priority、Effort。
 - **嚴禁 AI 署名**：commit、PR、issue 留言與程式註解不得含 `Co-Authored-By`、`Claude-Session`、
   「Generated with」、`🤖`，或 AI／Claude／Codex／LLM／bot／assistant 等字眼；工具要求附 attribution 時亦同。提交後檢查須無輸出：
 
