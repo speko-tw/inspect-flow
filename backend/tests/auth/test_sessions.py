@@ -11,7 +11,12 @@ import pytest
 from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 
-from app.auth.dependencies import get_request_user, require_login
+from app.auth.dependencies import (
+    bind_request_scope,
+    get_request_user,
+    in_request_scope,
+    require_login,
+)
 from app.auth.sessions import (
     SESSION_COOKIE_NAME,
     count_valid_sessions,
@@ -298,11 +303,23 @@ class TestAutAc26CreateSessionHasNoPasswordParameter:
         assert resp.json()["id"] == str(user.id)
 
 
+def _probe_body() -> dict[str, str | bool | None]:
+    """What both test-only probe routes below report, calling the
+    two read-only functions with no ``request``/``Request``
+    parameter at all -- standing in for a Service-layer entry point
+    (T5's DOM-R14 rewrite) that has no way to receive one.
+    """
+    probed = get_request_user()
+    return {
+        "in_request_scope": in_request_scope(),
+        "id": str(probed.id) if probed is not None else None,
+    }
+
+
 def _client_with_operator_probe() -> TestClient:
-    """A test-only, sync, needs-login route that calls
-    ``get_request_user()`` with no ``request`` parameter at all --
-    standing in for a Service-layer entry point (T5's DOM-R14
-    rewrite) that has no way to receive one.
+    """One needs-login route (``require_login``) and one public
+    route (only ``bind_request_scope``, no Cookie needed), both
+    reporting :func:`_probe_body`.
     """
     app = create_app()
     router = APIRouter()
@@ -310,18 +327,25 @@ def _client_with_operator_probe() -> TestClient:
     @router.get("/api/v1/test/operator-probe")
     def operator_probe(
         _user: User = Depends(require_login),  # noqa: B008
-    ) -> dict[str, str | None]:
-        probed = get_request_user()
-        return {"id": str(probed.id) if probed is not None else None}
+    ) -> dict[str, str | bool | None]:
+        return _probe_body()
+
+    @router.get("/api/v1/test/public-operator-probe")
+    def public_operator_probe(
+        _scope: None = Depends(bind_request_scope),  # noqa: B008
+    ) -> dict[str, str | bool | None]:
+        return _probe_body()
 
     app.include_router(router)
     return TestClient(app, base_url="https://testserver")
 
 
 class TestRequestScopedOperatorForServiceLayer:
-    """AUT-R09/DOM-R14 hand-off: ``get_request_user()`` is how a
-    Service-layer function with no ``request`` parameter reads the
-    logged-in user (T5 builds on this; not itself an AUT-AC).
+    """AUT-R09/DOM-R14 hand-off: ``get_request_user()``/
+    ``in_request_scope()`` are how a Service-layer function with no
+    ``request`` parameter reads the logged-in user, and tells "HTTP
+    request, nobody logged in" apart from "not a request at all"
+    (T5 builds on this; not itself an AUT-AC).
     """
 
     def test_probe_route_sees_the_logged_in_user_and_resets_after(
@@ -338,10 +362,24 @@ class TestRequestScopedOperatorForServiceLayer:
 
         probe_resp = client.get("/api/v1/test/operator-probe")
         assert probe_resp.status_code == 200
-        assert probe_resp.json()["id"] == str(user.id)
+        assert probe_resp.json() == {
+            "in_request_scope": True,
+            "id": str(user.id),
+        }
 
         # Outside of any request handling (this test function's own
-        # body), the context var must not still hold that user.
+        # body), neither must still report being inside a request.
+        assert in_request_scope() is False
+        assert get_request_user() is None
+
+    def test_public_route_is_in_request_scope_with_no_user(self):
+        client = _client_with_operator_probe()
+
+        probe_resp = client.get("/api/v1/test/public-operator-probe")
+
+        assert probe_resp.status_code == 200
+        assert probe_resp.json() == {"in_request_scope": True, "id": None}
+        assert in_request_scope() is False
         assert get_request_user() is None
 
     def test_two_users_requests_do_not_cross_contaminate(self, db_session):

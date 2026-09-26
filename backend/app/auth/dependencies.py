@@ -33,25 +33,66 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
+class _NotInRequest:
+    """Sentinel: ``_request_user``'s default value, meaning no
+    request-scoped dependency (``bind_request_scope``) is active in
+    the current context -- as opposed to one being active with no
+    logged-in user. AUT-R09 tells these two apart: a command (not a
+    request at all) falls back to the built-in ``admin``, while an
+    HTTP request with nobody logged in must be rejected.
+    """
+
+
+_NOT_IN_REQUEST = _NotInRequest()
+
 # The request-scoped current user (DOM-R14/AUT-R09): Service-layer
 # code that has no ``Request`` parameter at all -- T5's rewrite of
 # the "目前操作者" entry point -- reads this through
-# ``get_request_user()`` instead. ``request.state`` (used by an
-# earlier version of this module) only helps callers that already
-# have ``request`` in hand, which a Service-layer function usually
-# does not; this variable is set from an ``async`` dependency (see
-# ``require_login`` below), not from ``_check_login`` itself.
-_request_user: contextvars.ContextVar[User | None] = contextvars.ContextVar(
-    "request_user", default=None
+# ``get_request_user()``/``in_request_scope()`` instead.
+# ``request.state`` (used by an earlier version of this module) only
+# helps callers that already have ``request`` in hand, which a
+# Service-layer function usually does not. Set from ``async``
+# dependencies only (``bind_request_scope``, ``require_login``), not
+# from ``_check_login`` itself -- see ``require_login``'s docstring
+# for why.
+_request_user: contextvars.ContextVar[User | None | _NotInRequest] = (
+    contextvars.ContextVar("request_user", default=_NOT_IN_REQUEST)
 )
 
 
 def get_request_user() -> User | None:
-    """The current request's logged-in ``User``, or ``None`` when
-    called outside of a request that passed ``require_login`` (for
-    example, a command-line entry point).
+    """The current request's logged-in ``User``; ``None`` both when
+    nobody is logged in and when called outside of any request (use
+    ``in_request_scope()`` to tell those two apart).
     """
-    return _request_user.get()
+    value = _request_user.get()
+    return None if isinstance(value, _NotInRequest) else value
+
+
+def in_request_scope() -> bool:
+    """Whether the current context is inside a request that ran
+    ``bind_request_scope`` -- with or without a logged-in user.
+    ``False`` outside of any HTTP request (a command-line entry
+    point, for instance).
+    """
+    return not isinstance(_request_user.get(), _NotInRequest)
+
+
+async def bind_request_scope() -> AsyncGenerator[None, None]:
+    """Marks "an HTTP request is being handled" for the rest of
+    this request, independent of whether anyone is logged in.
+
+    Every access level -- including T4's "公開" one -- must depend
+    on this (directly or, like ``require_login`` below, through a
+    dependency that itself does); a route that skips it makes T5's
+    entry point treat it as a non-request call and fall back to the
+    built-in ``admin`` instead of rejecting an anonymous request.
+    """
+    token = _request_user.set(None)
+    try:
+        yield
+    finally:
+        _request_user.reset(token)
 
 
 def _check_login(
@@ -83,12 +124,14 @@ def _check_login(
 
 
 async def require_login(
+    _scope: None = Depends(bind_request_scope),  # noqa: B008
     user: User = Depends(_check_login),  # noqa: B008 -- FastAPI's DI
 ) -> AsyncGenerator[User, None]:
     """The "需登入" access level (AUT-R14, AUT-R18): ``_check_login``
-    does the actual validation; this ``async`` wrapper only sets
-    ``_request_user`` for the rest of this request and resets it
-    once the request is done.
+    does the actual validation; this ``async`` wrapper marks the
+    request scope (``bind_request_scope``) and then upgrades it from
+    "logged out" to ``user`` for the rest of this request, resetting
+    back once the request is done.
 
     Must be ``async`` (not a plain ``def``) for the ``set`` below
     to reach the route handler at all: FastAPI/Starlette dispatch a
