@@ -1,4 +1,13 @@
-"""Tests for the UTC-aware datetime column type (DBF-AC06)."""
+"""Tests for the UTC-aware datetime column type (DBF-AC06, DBF-AC08).
+
+Runs against the database ``conftest.py``'s ``db_url`` fixture
+configures (SQLite by default, PostgreSQL under
+``--db-backend=postgresql``). On PostgreSQL, ``DateTime(timezone=
+True)`` is natively timezone-aware (unlike SQLite, where
+``UTCDateTime``'s own normalization does most of the work), so
+running this module against both backends proves the type behaves
+the same regardless.
+"""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
@@ -29,8 +38,8 @@ class TimestampedRow(_ProbeBase):
 
 
 @pytest.fixture
-def engine(tmp_path) -> Generator[Engine, None, None]:
-    eng = create_engine(f"sqlite:///{tmp_path / 'utc_datetime.db'}")
+def engine(db_url: str) -> Generator[Engine, None, None]:
+    eng = create_engine(db_url)
     _ProbeBase.metadata.create_all(eng)
     try:
         yield eng
