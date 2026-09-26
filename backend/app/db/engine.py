@@ -1,10 +1,21 @@
 """Engine and session construction (DBF-R04, DBF-R05, DBF-R06).
 
-Engines are built lazily through :func:`create_engine_from_settings`
-/ :func:`get_engine` rather than at import time, so importing this
-module never touches the filesystem or opens a connection. Access
-goes through SQLAlchemy exclusively (DBF-R01): this module does not
+Engines are built lazily -- through :func:`create_engine_from_settings`
+directly, or through :func:`get_engine`, which additionally caches
+the result -- rather than at import time, so importing this module
+never touches the filesystem or opens a connection. Access goes
+through SQLAlchemy exclusively (DBF-R01): this module does not
 import ``sqlite3`` or any PostgreSQL driver.
+
+:func:`get_engine` and :func:`get_session_factory` (when called
+without an explicit engine) are the ones the Service layer's unit
+of work uses by default. They build their engine/sessionmaker once
+per process and reuse it afterwards, so repeated units of work do
+not each open their own connection pool against the configured
+database. Call :func:`dispose_engine` to drop that shared state --
+tests that change ``INSPECTFLOW_DATABASE_URL`` between cases must
+do this in teardown, and a long-running process may do it on
+shutdown.
 """
 
 from pathlib import Path
@@ -81,20 +92,54 @@ def create_engine_from_settings(database_url: str | None = None) -> Engine:
     return engine
 
 
-def get_engine() -> Engine:
-    """Build a fresh engine for the currently configured database.
+_engine: Engine | None = None
+_session_factory: sessionmaker[Session] | None = None
 
-    Cheap to call repeatedly; callers that want a single long-lived
-    engine (such as the application at startup) should hold onto
-    the returned value themselves.
+
+def get_engine() -> Engine:
+    """Return the shared engine for the currently configured
+    database, building it on first use and reusing the same
+    instance on every later call within this process.
+
+    This is what the default unit of work goes through, so a
+    process making many units of work against the configured
+    database shares one connection pool instead of opening a new
+    one per call. Use :func:`dispose_engine` to drop the cached
+    engine (for example, after changing the connection settings).
     """
-    return create_engine_from_settings()
+    global _engine
+    if _engine is None:
+        _engine = create_engine_from_settings()
+    return _engine
+
+
+def dispose_engine() -> None:
+    """Dispose of and forget the shared engine and session factory.
+
+    Safe to call even when no shared engine has been built yet. A
+    later :func:`get_engine`/:func:`get_session_factory` call
+    rebuilds them from the currently configured database.
+    """
+    global _engine, _session_factory
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
+    _session_factory = None
 
 
 def get_session_factory(
     engine: Engine | None = None,
 ) -> sessionmaker[Session]:
-    """Return a ``sessionmaker`` bound to ``engine`` (or a fresh
-    engine for the configured database when omitted).
+    """Return a ``sessionmaker`` for ``engine``.
+
+    With an explicit ``engine``, always builds a fresh
+    ``sessionmaker`` bound to it. Without one, returns the shared
+    ``sessionmaker`` bound to the shared engine from
+    :func:`get_engine`, building and caching it on first use.
     """
-    return sessionmaker(bind=engine or get_engine())
+    if engine is not None:
+        return sessionmaker(bind=engine)
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = sessionmaker(bind=get_engine())
+    return _session_factory
