@@ -100,13 +100,37 @@ def test_verify_password_raises_on_malformed_hash_body():
 
 
 def test_needs_rehash_raises_on_malformed_hash():
-    # Not even the variant/parameter segment can be parsed here,
-    # which is the only case needs_rehash raises on — it does not
-    # validate the salt or digest (see the test below).
+    # Not even the variant/parameter segment can be parsed here.
+    # needs_rehash does not only raise in this case, though — see
+    # the digest-boundary tests below, where a damaged digest
+    # segment can raise, or instead return True or False.
     malformed = "not-an-argon2-hash-at-all"
 
     with pytest.raises(InvalidHashError):
         needs_rehash(malformed)
+
+
+def test_needs_rehash_raises_when_digest_segment_is_missing():
+    # Removing the digest segment entirely (but keeping a valid
+    # variant/parameter/salt segment) still raises InvalidHashError,
+    # even though the parameter segment itself parses fine — the
+    # "only the parameter segment matters" mental model is wrong.
+    password_hash = hash_password("correct horse battery staple")
+    prefix, _digest = password_hash.rsplit("$", 1)
+
+    with pytest.raises(InvalidHashError):
+        needs_rehash(prefix)
+
+
+def test_needs_rehash_true_when_digest_segment_is_empty():
+    # An empty digest segment (hash ends in a trailing "$") does
+    # not raise at all — it reports True, unlike the missing-
+    # segment case above.
+    password_hash = hash_password("correct horse battery staple")
+    prefix, _digest = password_hash.rsplit("$", 1)
+    empty_digest = f"{prefix}$"
+
+    assert needs_rehash(empty_digest) is True
 
 
 def test_needs_rehash_false_for_corrupted_hash_body():

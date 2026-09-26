@@ -77,7 +77,12 @@ def needs_rehash(password_hash: str) -> bool:
     ``True`` before calling this function, since AUT-R02 only
     rehashes after a successful password verification.
 
-    Only when the variant/parameter segment itself cannot be
-    parsed does this raise ``argon2.exceptions.InvalidHashError``.
+    ``check_needs_rehash`` on a structurally damaged PHC string may
+    raise ``argon2.exceptions.InvalidHashError``, or may instead
+    return ``True`` or ``False``, depending on where the damage
+    falls — for example, dropping the digest segment entirely
+    raises ``InvalidHashError``, while truncating the digest to an
+    empty string returns ``True``. Callers must not assume that a
+    particular kind of damage will or will not raise.
     """
     return _hasher.check_needs_rehash(password_hash)
