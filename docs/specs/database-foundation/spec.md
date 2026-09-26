@@ -18,7 +18,7 @@
   - SQLAlchemy 2.x 的連線設定、宣告式 model 基底，以及 Service 層使用的交易單位。
   - Alembic 初始化：migration 鏈、`alembic upgrade head` 能從空資料庫建出完整 schema。
   - SQLite 作為 MVP 資料庫，連線初始化的 PRAGMA 設定。
-  - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（最低範圍見 DBF-R10；擴充範圍見 [DBF-Q1](#dbf-q1)）。
+  - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（範圍見 DBF-R10，依 [DBF-Q1](#dbf-q1) 裁定）。
   - `User`、`Project` 的共通結構：UUID 主鍵、與 UUID 分開的業務編號、建立與修改紀錄欄位。
 - 第二段（草稿，G-01 裁定後擴大凍結範圍）：`Inspection Template`、`Template Version` 的資料表，見[第二段草稿](#phase-1-part-2)。
 
@@ -55,7 +55,7 @@
 | DBF-R07 | 程式碼**應**避免 SQLite 專用的 raw SQL；**不得**依賴 SQLite AUTOINCREMENT 作為跨系統身分 | 應（避免 raw SQL）；不得（AUTOINCREMENT） | [PR-03](../../intents/02-principles.md#pr-03)「規則」「怎麼做」；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)（考慮過但沒選：AUTOINCREMENT） |
 | DBF-R08 | 時間欄位**應**以含時區的型別儲存 UTC 時間，SQLite 與 PostgreSQL 讀回的都是同一個 UTC 時刻；API 輸出沿用 `api-conventions` 的時間格式（API-R09） | 應 | [PR-03](../../intents/02-principles.md#pr-03)「怎麼做」（timestamp 跨資料庫一致）；[KD-14](../../intents/03-decisions-and-stack.md#kd-14) |
 | DBF-R09 | 後端**應**提供一個交易單位給 Service 層使用：一次請求內的寫入在成功時一起提交，拋出例外時一起回滾；API 層不直接組 SQL | 應 | [KD-10](../../intents/03-decisions-and-stack.md#kd-10)；[01-overview Backend 分層](../../intents/01-overview.md#backend-分層與存取邊界)（依據：架構基準 §2.2、§7） |
-| DBF-R10 | CI **必須**對 PostgreSQL 執行 `alembic upgrade head`，失敗時 check 為失敗。擴充範圍（整合測試跑多少、頻率、執行機制、PostgreSQL 版本）見 [DBF-Q1](#dbf-q1) | 必須 | [CI](../../intents/03-decisions-and-stack.md#stack-ci)（PostgreSQL 相容性測試為 CI 閘門，已決定）；[PR-03](../../intents/02-principles.md#pr-03)「怎麼檢查」；由 `skeleton` 移交 |
+| DBF-R10 | CI **必須**在每個 PR 對 PostgreSQL 執行 `alembic upgrade head` 與資料庫相關的測試（`backend/tests/db/`），任一失敗時 check 為失敗；整套後端測試不對 PostgreSQL 跑。這一段**必須**經由 `make check` 執行，不另開 CI job（依 SKL-R04）：`make check` 只在設定了 PostgreSQL 連線時執行這一段，未設定時略過、其餘檢查照常；CI 以 service container 提供 PostgreSQL 並設定連線。PostgreSQL 採實作時官方支援中的最新穩定主版本，版本號固定寫在 CI 設定裡，升級時另外調整 | 必須 | [CI](../../intents/03-decisions-and-stack.md#stack-ci)（PostgreSQL 相容性測試為 CI 閘門，已決定）；[PR-03](../../intents/02-principles.md#pr-03)「怎麼檢查」；由 `skeleton` 移交；範圍、頻率、機制與版本依 [DBF-Q1](#dbf-q1) 裁定（[#53](https://github.com/speko-tw/inspect-flow/issues/53)） |
 
 ### 第一段：`User`、`Project` 共通結構（凍結）
 
@@ -111,7 +111,7 @@
 
 ## 驗收條件
 
-每條至少對應一個需求；除 DBF-AC08 在 CI 上驗證外，皆以 `make check` 內的自動化測試驗證。
+每條至少對應一個需求；除 DBF-AC08 以 CI 執行紀錄與本機未設定 PostgreSQL 連線的 `make check` 驗證外，皆以 `make check` 內的自動化測試驗證。
 
 ### 第一段：基礎設施
 
@@ -124,7 +124,7 @@
 | DBF-AC05 | 後端的連線初始化邏輯，分別套用在 SQLite 檔案資料庫與非 SQLite 方言的連線上 | SQLite：從後端取得的連線查 `PRAGMA foreign_keys` 與 `PRAGMA journal_mode`；非 SQLite：以非 SQLite 方言觸發同一段初始化；另掃描 `backend/app` 原始碼中所有 `PRAGMA` 語句 | SQLite 分別回傳 `1` 與 `wal`；非 SQLite 連線上沒有執行任何 `PRAGMA`；每一處 `PRAGMA` 都帶有計畫規定格式的資料庫相依性標註 | DBF-R06、DBF-R07 |
 | DBF-AC06 | 一張測試專用、含時間欄位的資料表 | 寫入一個 `+08:00` 時區的時間後讀回 | 讀回的值帶時區、換算成 UTC 後與寫入的時刻相同；用 `api-conventions` 的時間格式輸出以 `Z` 結尾 | DBF-R08 |
 | DBF-AC07 | 一張測試專用的資料表，以及在同一個交易單位內寫入兩筆、第二筆後拋出例外的操作 | 執行該操作，再執行一次不拋例外的同樣操作 | 拋例外時兩筆都不存在；不拋例外時兩筆都存在 | DBF-R09 |
-| DBF-AC08 | 一個 PR 的 CI 執行 | CI 對 PostgreSQL 執行 `alembic upgrade head` | 成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗 | DBF-R10 |
+| DBF-AC08 | 一個 PR 的 CI 執行，CI 以 service container 提供 PostgreSQL 並設定連線；另有一個沒有設定 PostgreSQL 連線的本機環境 | CI 執行 `make check`；本機執行 `make check` | CI 對 PostgreSQL 執行 `alembic upgrade head` 與 `backend/tests/db/` 的測試，全部成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗；CI 設定裡的 PostgreSQL 版本是固定的主版本號，不是 `latest` 這類浮動標籤；本機略過 PostgreSQL 這一段，其餘檢查照常執行 | DBF-R10 |
 
 ### 第一段：`User`、`Project` 共通結構
 
@@ -139,11 +139,13 @@
 撰寫中發現、本規格不自行拍板的問題。若負責人判定需要團隊裁定，另開 issue 移到 `05-open-questions.md`，並在此留連結。
 
 <a id="dbf-q1"></a>
-- **DBF-Q1：CI PostgreSQL 相容性測試的範圍與機制**。DBF-R10 只凍結最低範圍（對 PostgreSQL 跑 `alembic upgrade head`）；以下幾點 intents 沒有結論：
+- **DBF-Q1：CI PostgreSQL 相容性測試的範圍與機制**（已裁定，[#53](https://github.com/speko-tw/inspect-flow/issues/53)）。DBF-R10 原本只凍結最低範圍（對 PostgreSQL 跑 `alembic upgrade head`）；以下幾點 intents 沒有結論：
   - 範圍：只跑 migration，或再加上資料庫相關的整合測試，或整套後端測試都對 PostgreSQL 跑一次（[測試工具](../../intents/03-decisions-and-stack.md#stack-tests)只寫「PostgreSQL 相容性」）。
   - 頻率：[CI](../../intents/03-decisions-and-stack.md#stack-ci) 卡片寫「每次 PR」，[PR-03](../../intents/02-principles.md#pr-03) 寫「CI 定期跑」，兩處說法不同。
   - 機制：SKL-R04 要求 CI 只跑 `make check`、不另寫第二套檢查步驟。可以讓 `make check` 永遠需要 PostgreSQL（本機要有 Docker），或設定了 PostgreSQL 連線時才跑、CI 提供 service container（本機與 CI 結果可能不同），或另開 CI job（牴觸 SKL-R04，要改 `skeleton` 規格）。
   - PostgreSQL 版本：來源沒寫。
+  - **裁定**（負責人，[#53](https://github.com/speko-tw/inspect-flow/issues/53)，2026-09-26）：範圍是 migration 加上資料庫相關的測試（`backend/tests/db/`），不跑整套後端測試；每個 PR 都跑；`make check` 有設定 PostgreSQL 連線時才跑，CI 提供 PostgreSQL service container，本機沒設定時略過、不強制安裝 Docker，仍只經由 `make check` 執行，符合 SKL-R04；版本採實作時 PostgreSQL 官方支援中的最新穩定主版本，版本號固定寫在 CI 設定裡，升級時另外調整。已知代價：本機沒設定 PostgreSQL 時會略過這一段，可能本機通過、CI 失敗，最晚在 PR 階段擋下。
+  - **落地**：寫進 DBF-R10、DBF-AC08；實作由 T3（[#58](https://github.com/speko-tw/inspect-flow/issues/58)）負責。
 <a id="dbf-q2"></a>
 - **DBF-Q2：認證完成前，`created_by`、`updated_by` 怎麼填**（已裁定，[#54](https://github.com/speko-tw/inspect-flow/issues/54)）。`authentication`（P2）完成前沒有「目前使用者」，而 `User` 的第一筆資料也沒有建立者可以指。選項：欄位先允許空值，等 `authentication` 完成後再收緊；建立一個系統帳號，當作沒有登入者時的操作者；或把這兩欄延到 `authentication` 的 migration 才加。後兩者會牽動 [OQ-13](../../intents/05-open-questions.md#oq-13)、[OQ-08](../../intents/05-open-questions.md#oq-08)。
   - **裁定**（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26）：不採上述三個選項。`created_by`、`updated_by` 不允許空白，必須指向某個 `User`。初始化指令建立兩個 Admin 帳號：內建 `admin`（`is_system`，`created_by` 指向自己）與負責人的個人帳號（`created_by` 指向 `admin`）；之後每個帳號都由某個 Admin 建立，所以 `created_by` 永遠有值。認證機制仍待 `authentication` 與 [OQ-13](../../intents/05-open-questions.md#oq-13)，在那之前帳號先建好但還不能登入。完整決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
@@ -157,3 +159,4 @@
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
 - DBF-R14、DBF-AC11：依 DBF-Q2 裁定，`created_by`、`updated_by` 改為不得為空值、外鍵指向 `User`，並補上對應的驗收條件 — [#65](https://github.com/speko-tw/inspect-flow/issues/65)
+- DBF-R10、DBF-AC08：依 DBF-Q1 裁定，PostgreSQL 相容性測試的範圍從只跑 migration 擴大為加上 `backend/tests/db/` 的測試，並定下每個 PR 執行、經由 `make check` 在設定 PostgreSQL 連線時執行、版本固定寫在 CI 設定 — [#53](https://github.com/speko-tw/inspect-flow/issues/53)
