@@ -57,11 +57,14 @@ see that module's docstring for why) so no write path can skip them:
   never changes behavior between two compilations of the same
   statement.
 
-Only ``None`` is passed through unchecked at both layers --
-``employee_no``/``department``/``location``/``name_en``/
-``name_zh``/``email`` are left for the columns' ``NOT NULL``
-constraints to reject a missing value, not for these checks, and
-the remaining fields (DOM-R03) may legitimately be ``NULL``.
+``None`` is passed through unchecked at bind time (``BoundedString``
+never checks it), but ``_validate_string_field`` calls
+``validate_nullable`` (``app/models/_bounded_string.py``) first for
+every one of these twelve columns: the six ``NOT NULL`` basic
+fields -- ``employee_no``/``department``/``location``/``name_en``/
+``name_zh``/``email`` -- reject ``None`` with the same
+``ValueError`` an invalid value gets, while the six DOM-R03 contact
+and supplementary fields allow it, since they are nullable.
 
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered by DOM-R31 here.
@@ -87,7 +90,7 @@ from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase, UTCDateTime
 from app.models._audit import AuditMixin
-from app.models._bounded_string import BoundedString
+from app.models._bounded_string import BoundedString, validate_nullable
 
 # DOM-R28's length limits, one entry per string column this model
 # defines. ``employee_no`` was previously narrowed to 16 by the
@@ -272,6 +275,7 @@ class User(AuditMixin, TimestampedBase):
     def _validate_string_field(
         self, key: str, value: str | None
     ) -> str | None:
+        value = validate_nullable(self, key, value, f"User.{key}")
         if value is None:
             return value
         _check_string_field(key, value)

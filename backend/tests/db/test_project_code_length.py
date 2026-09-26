@@ -119,6 +119,29 @@ class TestOrmConstructionAndAssignment:
         session.commit()
         assert project.project_code == "P" * _MAX_LENGTH
 
+    def test_construction_with_none_is_rejected(self, owner):
+        """Issue #188: ``project_code`` is ``NOT NULL``, so ``None``
+        is rejected by ``@validates`` with the same ``ValueError``
+        an invalid value gets, not the ``TypeError`` ``len(None)``
+        would raise inside ``_check_project_code``.
+        """
+        with pytest.raises(ValueError):
+            Project(
+                project_code=None,
+                created_by=owner.id,
+                updated_by=owner.id,
+            )
+
+    def test_assignment_of_none_is_rejected_and_unchanged(
+        self, session, existing_project
+    ):
+        with pytest.raises(ValueError):
+            existing_project.project_code = None
+
+        session.expire(existing_project)
+        stored = session.get(Project, existing_project.id)
+        assert stored.project_code == "P900"
+
 
 class TestCoreInsertAndUpdate:
     """``session.execute(insert(Project)...)``/
