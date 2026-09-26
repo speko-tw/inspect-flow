@@ -1,22 +1,41 @@
-"""FastAPI dependencies for the database session and the "需登入"
-access level (AUT-R14, AUT-R18).
+"""FastAPI dependencies for the database session, the "需登入"
+access level (AUT-R14, AUT-R18) and the temporary-password gate on
+top of it (AUT-R32, AUT-R33).
 
-Only the "需登入" layer lives here; T4 builds "需 Admin"、"需專案
-權限"、"本人或 Admin" on top of it (plan.md's risk section requires
-those to sit above this same dependency so T9's temporary-password
-gate, once added here, applies to every layer).
+Only the "需登入" layer and the temporary-password gate live here;
+T4 builds "需 Admin"、"需專案權限"、"本人或 Admin" on top of both
+(plan.md's risk section requires those to sit above this same
+dependency so the gate applies to every layer).
 """
 
 import contextvars
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator, Iterator, Sequence
+from typing import Any
 
 from fastapi import Depends, Request
+from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
+from starlette.routing import BaseRoute
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, validate_and_touch_session
 from app.db.unit_of_work import unit_of_work
-from app.models import User
+from app.models import User, UserPassword
+
+# AUT-R33: while a ``local`` account's password is still marked
+# temporary, only these (method, route-template) pairs are let
+# through the gate below; every other request that reaches
+# ``require_login`` is rejected before its route handler runs.
+# Route templates, not raw request paths, so a path parameter's
+# value can never accidentally match (or fail to match) an entry
+# here. AUT-AC35/AUT-AC36 assert this set's exact contents against
+# the real application's routes.
+TEMPORARY_PASSWORD_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/api/v1/auth/me"),
+        ("POST", "/api/v1/auth/logout"),
+    }
+)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -123,13 +142,128 @@ def _check_login(
     return user
 
 
+def has_effective_temporary_password_flag(db: Session, user: User) -> bool:
+    """AUT-R32/AUT-R33's "有效標記": whether ``user`` currently must
+    change a temporary password.
+
+    Only ``auth_source = "local"`` accounts are ever affected
+    (AUT-R32): an external account reports ``False`` here even when
+    a leftover ``UserPassword`` row (from before it was converted)
+    still carries the flag, since that row "not being used" is
+    exactly what AUT-R32 means by "外部帳號不使用本地密碼". A
+    ``local`` account with no ``UserPassword`` row at all (cannot
+    log in with a password anyway) also reports ``False``.
+
+    Shared by the temporary-password gate below and by the
+    ``me``/login response bodies (AUT-R08, ``app/api/v1/auth.py``)
+    so the two can never disagree about what the flag currently
+    is.
+    """
+    if user.auth_source != "local":
+        return False
+    user_password = (
+        db.query(UserPassword).filter_by(user_id=user.id).one_or_none()
+    )
+    return user_password is not None and user_password.must_change_password
+
+
+def _iter_routes_with_full_path(
+    routes: Sequence[BaseRoute],
+) -> Iterator[tuple[APIRoute, str]]:
+    """Yield every ``APIRoute`` mounted (directly or through a
+    ``include_router``) on ``routes`` together with its effective,
+    fully-prefixed path.
+
+    ``app.routes`` used to hold ``APIRoute`` objects with
+    ``include_router(..., prefix=...)`` already rewriting each
+    one's ``.path`` to include the prefix. The installed FastAPI no
+    longer flattens an included router this way: it groups the
+    included router's routes behind an internal node instead, whose
+    own ``APIRoute`` objects keep their *unprefixed* path. Each such
+    node still exposes ``effective_candidates()`` -- the same
+    lookup FastAPI itself uses to resolve a request -- which
+    resolves the original ``APIRoute`` together with its effective,
+    fully-prefixed path; this is used via duck typing (``hasattr``)
+    rather than importing any internal class, so it keeps working
+    whether or not a given route happens to be flattened. Mirrors
+    ``tests/contract/test_route_conventions.py``'s
+    ``_iter_business_routes`` (not imported from there: that module
+    is test-only).
+    """
+    for route in routes:
+        if isinstance(route, APIRoute):
+            yield route, route.path
+            continue
+        effective_candidates = getattr(route, "effective_candidates", None)
+        if not callable(effective_candidates):
+            continue
+        # No stable public type to annotate against here -- this is
+        # a duck-typed lookup on an internal FastAPI grouping node --
+        # so each item is verified via ``isinstance`` below before
+        # being yielded.
+        candidates: Any = effective_candidates()
+        for context in candidates:
+            original_route = getattr(context, "original_route", None)
+            path = getattr(context, "path", None)
+            if isinstance(original_route, APIRoute) and isinstance(path, str):
+                yield original_route, path
+
+
+def _matched_route_template(request: Request) -> str | None:
+    """The matched route's fully-prefixed path template (e.g.
+    ``/api/v1/auth/me``), used instead of the raw request path so a
+    path parameter's value can never accidentally widen or narrow
+    ``TEMPORARY_PASSWORD_ALLOWLIST``.
+
+    ``request.scope["route"]`` (the same attribute
+    ``app/api/errors.py``'s unhandled-exception handler already
+    reads) only carries the *unprefixed* path on this FastAPI
+    version once the route was reached through an included
+    sub-router (see ``_iter_routes_with_full_path``), so the
+    matched route is looked up by identity against ``request.app``'s
+    own routes to recover its effective path; falls back to the
+    unprefixed path if the route cannot be found there at all
+    (defensive only -- every route this gate ever sees is mounted on
+    ``request.app``).
+    """
+    route = request.scope.get("route")
+    if route is None:
+        return None
+    for candidate, path in _iter_routes_with_full_path(request.app.routes):
+        if candidate is route:
+            return path
+    return getattr(route, "path", None)
+
+
+def _check_temporary_password_gate(
+    request: Request,
+    user: User = Depends(_check_login),  # noqa: B008 -- FastAPI's DI
+    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+) -> User:
+    """AUT-R33: once AUT-R14 (``_check_login``) has confirmed the
+    login state itself is valid, reject a still-temporary ``local``
+    password's request unless it matches
+    ``TEMPORARY_PASSWORD_ALLOWLIST`` -- with 403
+    ``auth.password_change_required``, and before the route handler
+    ever runs (raising here stops FastAPI's dependency resolution,
+    same as ``_check_login`` raising 401 does).
+    """
+    if has_effective_temporary_password_flag(db, user):
+        template = _matched_route_template(request)
+        if (request.method, template) not in TEMPORARY_PASSWORD_ALLOWLIST:
+            raise APIError(ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED, 403)
+    return user
+
+
 async def require_login(
     _scope: None = Depends(bind_request_scope),  # noqa: B008
-    user: User = Depends(_check_login),  # noqa: B008 -- FastAPI's DI
+    user: User = Depends(_check_temporary_password_gate),  # noqa: B008
 ) -> AsyncGenerator[User, None]:
-    """The "需登入" access level (AUT-R14, AUT-R18): ``_check_login``
-    does the actual validation; this ``async`` wrapper marks the
-    request scope (``bind_request_scope``) and then upgrades it from
+    """The "需登入" access level (AUT-R14, AUT-R18) plus the
+    temporary-password gate on top of it (AUT-R33):
+    ``_check_temporary_password_gate`` runs ``_check_login`` and
+    then the gate itself; this ``async`` wrapper marks the request
+    scope (``bind_request_scope``) and then upgrades it from
     "logged out" to ``user`` for the rest of this request, resetting
     back once the request is done.
 

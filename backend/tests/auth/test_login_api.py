@@ -100,6 +100,7 @@ class TestAutAc05LoginCookieAndBody:
             "name_en": user.name_en,
             "name_zh": user.name_zh,
             "is_admin": user.is_admin,
+            "must_change_password": False,
         }
 
         set_cookie_header = resp.headers["set-cookie"]
