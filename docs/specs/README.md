@@ -57,7 +57,7 @@ docs/specs/
 | `completion-validation` | P7 | 功能 | 未開始 | [OQ-06](../intents/05-open-questions.md#oq-06) |
 | `admin-dashboard` | P8 | 功能 | 未開始 | — |
 | `report-delivery` | P9 | 功能 | 未開始 | [G-04](../intents/05-open-questions.md#g-04)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
-| `pilot-deployment` | P10 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18)、[G-09](../intents/05-open-questions.md#g-09) |
+| `pilot-deployment` | P10 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
 
 ## 狀態
 
