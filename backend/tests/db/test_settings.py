@@ -50,3 +50,30 @@ def test_engine_creates_file_at_configured_path(monkeypatch, tmp_path):
         engine.dispose()
 
     assert db_path.exists()
+
+
+def test_engine_creates_file_at_replaced_default_path(monkeypatch, tmp_path):
+    """DBF-AC04's default-path case, with a real connection.
+
+    Replaces the module's default SQLite path constant with one
+    under ``tmp_path`` (rather than connecting to the real default
+    ``backend/data/inspectflow.db``, which this test must never
+    touch), unsets the env var so ``get_database_url()`` falls
+    back to that replaced default, and drives a real connection
+    through it -- checking both that the file is created and that
+    its parent directory is created automatically.
+    """
+    replaced_default = tmp_path / "nested" / "inspectflow.db"
+    monkeypatch.setattr(settings, "_DEFAULT_SQLITE_PATH", replaced_default)
+    monkeypatch.delenv(settings.DATABASE_URL_ENV_VAR, raising=False)
+
+    assert settings.get_database_url() == f"sqlite:///{replaced_default}"
+
+    engine = create_engine_from_settings()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    finally:
+        engine.dispose()
+
+    assert replaced_default.exists()

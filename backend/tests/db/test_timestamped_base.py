@@ -1,7 +1,15 @@
-"""Tests for the shared timestamped model base (DBF-R14), and a
+"""Tests for the shared timestamped columns mixin (DBF-R14), and a
 pre-check that the replaceable clock feeds ``onupdate`` (a simple
 predecessor to the full DBF-AC11 check, which lands with the
 ``User``/``Project`` models).
+
+Uses ``TimestampedMixin`` combined with a throwaway
+``DeclarativeBase`` of this test's own, instead of subclassing
+``TimestampedBase`` (which lives on the shared, production
+``app.db.base.Base`` metadata) -- so this test never registers a
+table on the metadata Alembic and the running application actually
+use (DBF-R03: tests may still ``create_all`` a metadata of their
+own).
 """
 
 from collections.abc import Generator
@@ -9,16 +17,24 @@ from datetime import timedelta
 
 import pytest
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from app.db import clock
-from app.db.base import Base, TimestampedBase
+from app.db.base import Base, TimestampedMixin
 
 
-class TimestampedProbe(TimestampedBase):
-    __tablename__ = "timestamped_base_probe"
+class _ProbeBase(DeclarativeBase):
+    """A metadata island private to this test module."""
+
+
+class TimestampedProbe(TimestampedMixin, _ProbeBase):
+    __tablename__ = "timestamped_mixin_probe"
 
     label: Mapped[str] = mapped_column(default="probe")
+
+
+def test_mixin_does_not_register_a_table_on_the_shared_base():
+    assert TimestampedProbe.__tablename__ not in Base.metadata.tables
 
 
 @pytest.fixture(autouse=True)
@@ -30,9 +46,9 @@ def _reset_clock_after_test() -> Generator[None, None, None]:
 @pytest.fixture
 def session(tmp_path) -> Generator[Session, None, None]:
     engine: Engine = create_engine(
-        f"sqlite:///{tmp_path / 'timestamped_base.db'}"
+        f"sqlite:///{tmp_path / 'timestamped_mixin.db'}"
     )
-    Base.metadata.create_all(engine)
+    _ProbeBase.metadata.create_all(engine)
     try:
         with Session(engine) as session:
             yield session

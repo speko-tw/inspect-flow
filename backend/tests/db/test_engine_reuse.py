@@ -4,12 +4,14 @@ reuses one shared engine per process instead of building a new
 connection pool on every call.
 """
 
+import threading
 from collections.abc import Generator
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+import app.db.engine as engine_module
 from app.db import settings
 from app.db.engine import dispose_engine, get_engine, get_session_factory
 from app.db.unit_of_work import unit_of_work
@@ -93,3 +95,53 @@ def test_unit_of_work_without_factory_uses_the_env_configured_db():
         names = sorted(session.scalars(select(Widget.name)))
 
     assert names == ["a"]
+
+
+def test_concurrent_first_calls_build_the_engine_once(monkeypatch):
+    """Regression test: several threads calling ``get_engine()`` for
+    the first time at once must still build exactly one engine and
+    all observe the same instance (the lock guarding the shared
+    engine/session-factory state must actually serialize the build,
+    not just look like it does under a single thread).
+    """
+    real_create_engine_from_settings = (
+        engine_module.create_engine_from_settings
+    )
+    call_count = 0
+    count_lock = threading.Lock()
+
+    def counting_create_engine_from_settings(*args, **kwargs):
+        nonlocal call_count
+        with count_lock:
+            call_count += 1
+        return real_create_engine_from_settings(*args, **kwargs)
+
+    monkeypatch.setattr(
+        engine_module,
+        "create_engine_from_settings",
+        counting_create_engine_from_settings,
+    )
+
+    thread_count = 8
+    barrier = threading.Barrier(thread_count)
+    results: list[object] = [None] * thread_count
+    errors: list[BaseException] = []
+
+    def worker(index: int) -> None:
+        try:
+            barrier.wait()
+            results[index] = get_engine()
+        except BaseException as exc:  # pragma: no cover - defensive
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=worker, args=(i,)) for i in range(thread_count)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    assert call_count == 1
+    assert len({id(result) for result in results}) == 1

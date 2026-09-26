@@ -9,8 +9,13 @@ Provides:
   that behaves the same on SQLite and PostgreSQL.
 - :class:`Base`: the shared declarative base (with a naming
   convention so Alembic-generated constraint names stay stable).
-- :class:`TimestampedBase`: an abstract base adding the common
-  ``id``/``created_at``/``updated_at`` columns every model shares.
+- :class:`TimestampedMixin`: a plain mixin (not itself a
+  ``DeclarativeBase``) providing the ``id``/``created_at``/
+  ``updated_at`` columns every model shares, so it can be combined
+  with any declarative base -- including a test's own throwaway
+  one, instead of only the shared production ``Base``.
+- :class:`TimestampedBase`: :class:`TimestampedMixin` combined
+  with :class:`Base`, for production models to subclass.
 """
 
 import os
@@ -108,17 +113,25 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-class TimestampedBase(Base):
-    """Abstract base providing the id/created_at/updated_at columns
-    shared by every model (DBF-R11, DBF-R14).
+class TimestampedMixin:
+    """Mixin providing the id/created_at/updated_at columns shared
+    by every model (DBF-R11, DBF-R14).
+
+    A plain class, not a ``DeclarativeBase`` subclass itself:
+    SQLAlchemy's "mixin and base classes" declarative pattern picks
+    up its ``Mapped``/``mapped_column`` attributes on whichever
+    declarative base a subclass combines it with. Production models
+    get these columns through :class:`TimestampedBase` below (which
+    binds the mixin to the shared ``Base``); a test that wants the
+    same columns without registering a table on the shared
+    production metadata can instead combine this mixin with a
+    throwaway ``DeclarativeBase`` of its own.
 
     ``created_at``/``updated_at`` defaults call ``clock.utc_now``
     (not ``datetime.now`` directly) so a test can replace the
     active clock via ``app.db.clock.set_clock`` and see it take
     effect on both insert and update (DBF-AC11).
     """
-
-    __abstract__ = True
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid, primary_key=True, default=uuid7
@@ -132,3 +145,13 @@ class TimestampedBase(Base):
         default=clock.utc_now,
         onupdate=clock.utc_now,
     )
+
+
+class TimestampedBase(TimestampedMixin, Base):
+    """Abstract base combining :class:`TimestampedMixin` with the
+    shared application :class:`Base`. Production models subclass
+    this (not :class:`TimestampedMixin` directly) to share the
+    application's metadata and naming convention.
+    """
+
+    __abstract__ = True

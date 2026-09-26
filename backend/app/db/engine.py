@@ -15,9 +15,12 @@ not each open their own connection pool against the configured
 database. Call :func:`dispose_engine` to drop that shared state --
 tests that change ``INSPECTFLOW_DATABASE_URL`` between cases must
 do this in teardown, and a long-running process may do it on
-shutdown.
+shutdown. Building this shared engine/factory is guarded by a
+module-level lock, so concurrent first calls from several threads
+still only build one engine.
 """
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +98,12 @@ def create_engine_from_settings(database_url: str | None = None) -> Engine:
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
+# Guards ``_engine``/``_session_factory``. Re-entrant because
+# ``get_session_factory``'s critical section calls ``get_engine``,
+# which takes the same lock again on the same thread when it needs
+# to build the engine.
+_state_lock = threading.RLock()
+
 
 def get_engine() -> Engine:
     """Return the shared engine for the currently configured
@@ -104,13 +113,19 @@ def get_engine() -> Engine:
     This is what the default unit of work goes through, so a
     process making many units of work against the configured
     database shares one connection pool instead of opening a new
-    one per call. Use :func:`dispose_engine` to drop the cached
-    engine (for example, after changing the connection settings).
+    one per call. Safe to call from multiple threads at once: a
+    double-checked lock ensures concurrent first calls still build
+    exactly one engine. Use :func:`dispose_engine` to drop the
+    cached engine (for example, after changing the connection
+    settings).
     """
     global _engine
-    if _engine is None:
-        _engine = create_engine_from_settings()
-    return _engine
+    if _engine is not None:
+        return _engine
+    with _state_lock:
+        if _engine is None:
+            _engine = create_engine_from_settings()
+        return _engine
 
 
 def dispose_engine() -> None:
@@ -121,10 +136,11 @@ def dispose_engine() -> None:
     rebuilds them from the currently configured database.
     """
     global _engine, _session_factory
-    if _engine is not None:
-        _engine.dispose()
-    _engine = None
-    _session_factory = None
+    with _state_lock:
+        if _engine is not None:
+            _engine.dispose()
+        _engine = None
+        _session_factory = None
 
 
 def get_session_factory(
@@ -135,11 +151,15 @@ def get_session_factory(
     With an explicit ``engine``, always builds a fresh
     ``sessionmaker`` bound to it. Without one, returns the shared
     ``sessionmaker`` bound to the shared engine from
-    :func:`get_engine`, building and caching it on first use.
+    :func:`get_engine`, building and caching it on first use (also
+    protected by the same double-checked lock as ``get_engine``).
     """
     if engine is not None:
         return sessionmaker(bind=engine)
     global _session_factory
-    if _session_factory is None:
-        _session_factory = sessionmaker(bind=get_engine())
-    return _session_factory
+    if _session_factory is not None:
+        return _session_factory
+    with _state_lock:
+        if _session_factory is None:
+            _session_factory = sessionmaker(bind=get_engine())
+        return _session_factory
