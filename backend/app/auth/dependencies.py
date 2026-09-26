@@ -1,22 +1,41 @@
-"""FastAPI dependencies for the database session and the "需登入"
-access level (AUT-R14, AUT-R18).
+"""FastAPI dependencies for the database session, the "需登入"
+access level (AUT-R14, AUT-R18) and the temporary-password gate on
+top of it (AUT-R32, AUT-R33).
 
-Only the "需登入" layer lives here; T4 builds "需 Admin"、"需專案
-權限"、"本人或 Admin" on top of it (plan.md's risk section requires
-those to sit above this same dependency so T9's temporary-password
-gate, once added here, applies to every layer).
+Only the "需登入" layer and the temporary-password gate live here;
+T4 builds "需 Admin"、"需專案權限"、"本人或 Admin" on top of both
+(plan.md's risk section requires those to sit above this same
+dependency so the gate applies to every layer).
 """
 
 import contextvars
 from collections.abc import AsyncGenerator, Generator
 
 from fastapi import Depends, Request
+from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, validate_and_touch_session
 from app.db.unit_of_work import unit_of_work
-from app.models import User
+from app.models import User, UserPassword
+
+# AUT-R33: while a ``local`` account's password is still marked
+# temporary, only these (method, endpoint) pairs are let through the
+# gate below; every other request that reaches ``require_login`` is
+# rejected before its route handler runs. Identified by the matched
+# route's *endpoint* -- ``f"{endpoint.__module__}.{endpoint.__qualname__}"``
+# -- rather than by request path or route-template string, so the
+# allowlist keeps working (and keeps meaning "this one operation")
+# regardless of which prefix(es) ``include_router`` mounts the route
+# under. AUT-AC35/AUT-AC36 assert this set's exact contents against
+# the real application's routes.
+TEMPORARY_PASSWORD_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "app.api.v1.auth.get_me"),
+        ("POST", "app.api.v1.auth.logout"),
+    }
+)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -82,11 +101,20 @@ async def bind_request_scope() -> AsyncGenerator[None, None]:
     """Marks "an HTTP request is being handled" for the rest of
     this request, independent of whether anyone is logged in.
 
-    Every access level -- including T4's "公開" one -- must depend
-    on this (directly or, like ``require_login`` below, through a
-    dependency that itself does); a route that skips it makes T5's
-    entry point treat it as a non-request call and fall back to the
-    built-in ``admin`` instead of rejecting an anonymous request.
+    ``app.main.create_app()`` applies this at the app level
+    (``FastAPI(dependencies=[Depends(bind_request_scope)])``), so
+    every route on the real application already runs inside the
+    request scope -- including T4's "公開" one -- without having to
+    declare it itself. ``require_login`` below still depends on it
+    directly too; FastAPI caches a dependency's result per request
+    by callable identity, so the two calls resolve to the same
+    cached run instead of entering (and leaving) the scope twice.
+    A route built on a bare ``FastAPI()`` in a test (rather than
+    through ``create_app()``) does not get this for free and must
+    add ``Depends(bind_request_scope)`` itself, or T5's
+    ``get_current_operator`` treats the call as a non-request call
+    and falls back to the built-in ``admin`` instead of rejecting an
+    anonymous request.
     """
     token = _request_user.set(None)
     try:
@@ -123,13 +151,94 @@ def _check_login(
     return user
 
 
+def has_effective_temporary_password_flag(db: Session, user: User) -> bool:
+    """AUT-R32/AUT-R33's "有效標記": whether ``user`` currently must
+    change a temporary password.
+
+    Only ``auth_source = "local"`` accounts are ever affected
+    (AUT-R32): an external account reports ``False`` here even when
+    a leftover ``UserPassword`` row (from before it was converted)
+    still carries the flag, since that row "not being used" is
+    exactly what AUT-R32 means by "外部帳號不使用本地密碼". A
+    ``local`` account with no ``UserPassword`` row at all (cannot
+    log in with a password anyway) also reports ``False``.
+
+    Shared by the temporary-password gate below and by the
+    ``me``/login response bodies (AUT-R08, ``app/api/v1/auth.py``)
+    so the two can never disagree about what the flag currently
+    is.
+    """
+    if user.auth_source != "local":
+        return False
+    user_password = (
+        db.query(UserPassword).filter_by(user_id=user.id).one_or_none()
+    )
+    return user_password is not None and user_password.must_change_password
+
+
+def _matched_route_operation(request: Request) -> str | None:
+    """The matched route's endpoint identity, as
+    ``f"{endpoint.__module__}.{endpoint.__qualname__}"`` (e.g.
+    ``"app.api.v1.auth.get_me"``), used instead of the request path
+    so which prefix(es) ``include_router`` happens to mount the
+    route under can never affect ``TEMPORARY_PASSWORD_ALLOWLIST``:
+    the same handler function is the same operation no matter how
+    many aliases reach it.
+
+    ``request.scope["route"]`` (the same attribute
+    ``app/api/errors.py``'s unhandled-exception handler already
+    reads) is already the ``APIRoute`` Starlette matched this
+    request against by the time a dependency of that route (such as
+    this gate) runs -- so this never has to re-derive or re-compile
+    anything path-related itself.
+
+    Reports ``None`` when the matched route isn't an ``APIRoute``
+    with a real ``endpoint`` (defensive; every route that reaches
+    ``require_login`` is one in practice). ``None`` never matches
+    any entry in ``TEMPORARY_PASSWORD_ALLOWLIST``, so this keeps the
+    gate fail-closed: a request whose operation cannot be confirmed
+    is rejected rather than risk wrongly allowing it through.
+    """
+    route = request.scope.get("route")
+    if not isinstance(route, APIRoute):
+        return None
+    endpoint = route.endpoint
+    module = getattr(endpoint, "__module__", None)
+    qualname = getattr(endpoint, "__qualname__", None)
+    if not module or not qualname:
+        return None
+    return f"{module}.{qualname}"
+
+
+def _check_temporary_password_gate(
+    request: Request,
+    user: User = Depends(_check_login),  # noqa: B008 -- FastAPI's DI
+    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+) -> User:
+    """AUT-R33: once AUT-R14 (``_check_login``) has confirmed the
+    login state itself is valid, reject a still-temporary ``local``
+    password's request unless it matches
+    ``TEMPORARY_PASSWORD_ALLOWLIST`` -- with 403
+    ``auth.password_change_required``, and before the route handler
+    ever runs (raising here stops FastAPI's dependency resolution,
+    same as ``_check_login`` raising 401 does).
+    """
+    if has_effective_temporary_password_flag(db, user):
+        operation = _matched_route_operation(request)
+        if (request.method, operation) not in TEMPORARY_PASSWORD_ALLOWLIST:
+            raise APIError(ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED, 403)
+    return user
+
+
 async def require_login(
     _scope: None = Depends(bind_request_scope),  # noqa: B008
-    user: User = Depends(_check_login),  # noqa: B008 -- FastAPI's DI
+    user: User = Depends(_check_temporary_password_gate),  # noqa: B008
 ) -> AsyncGenerator[User, None]:
-    """The "需登入" access level (AUT-R14, AUT-R18): ``_check_login``
-    does the actual validation; this ``async`` wrapper marks the
-    request scope (``bind_request_scope``) and then upgrades it from
+    """The "需登入" access level (AUT-R14, AUT-R18) plus the
+    temporary-password gate on top of it (AUT-R33):
+    ``_check_temporary_password_gate`` runs ``_check_login`` and
+    then the gate itself; this ``async`` wrapper marks the request
+    scope (``bind_request_scope``) and then upgrades it from
     "logged out" to ``user`` for the rest of this request, resetting
     back once the request is done.
 

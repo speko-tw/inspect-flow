@@ -69,6 +69,11 @@ class ErrorCode(DescribedStrEnum):
         "auth.invalid_credentials",
         "The email or password is incorrect.",
     )
+    AUTH_PASSWORD_CHANGE_REQUIRED = (
+        "auth.password_change_required",
+        "The temporary password must be changed before this "
+        "request can proceed.",
+    )
 
 
 def build_error_code_descriptions(
