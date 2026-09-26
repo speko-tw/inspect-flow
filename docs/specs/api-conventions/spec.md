@@ -1,6 +1,6 @@
 # API 共用慣例（api-conventions）
 
-**代碼**：`API`　**Phase**：全部　**狀態**：已凍結
+**代碼**：`API`　**Phase**：全部　**狀態**：已完成
 **前置規格**：無（`skeleton` 已完成，提供可掛載測試路由的後端骨架）
 **引用意圖**：[PR-17](../../intents/02-principles.md#pr-17)、[PR-02](../../intents/02-principles.md#pr-02)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)
 **被擋議題**：無
