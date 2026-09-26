@@ -25,7 +25,7 @@
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
 - `User`、`Company`、`Role`、`ProjectMember` 的欄位與約束、有效權限與角色影響範圍的計算、初始化指令本身：由 `domain-model` 定義（DOM-R01～DOM-R27），本規格只引用。
-- 外部身分來源（LDAP、AD、Entra ID）的登入與同步：移至 `external-identity-sync`。本規格的設計不得阻礙日後串接（AUT-R20；[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) 的理由）。
+- 外部身分來源（LDAP、AD、Entra ID）的登入與同步，以及本系統帳號轉成外部帳號時既有登入狀態的處理：移至 `external-identity-sync`。本規格的設計不得阻礙日後串接（AUT-R20；[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) 的理由）。
 - 人員、公司、角色、專案成員的管理 API 與畫面（含停用人員、修改前顯示影響範圍的畫面與確認流程、替客戶公司成員指派可修改角色的確認提示）：由 `admin-dashboard` 等功能規格負責；本規格只提供它們要呼叫的權限檢查與登入狀態筆數（AUT-R16、AUT-R19）。
 - 權限代碼的命名規則與可用清單：見 [DOM-Q3](../domain-model/spec.md#dom-q3)。本規格的檢查元件以權限代碼字串為輸入，不登記任何代碼。
 - 稽核紀錄：[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 要求權限與角色的變更寫稽核紀錄，資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。本規格不新增權限或角色的寫入入口；登入、登出、設定密碼是否要寫稽核紀錄，見 [AUT-Q6](#aut-q6)。
@@ -51,7 +51,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| AUT-R01 | 密碼**必須**以 Argon2id 雜湊後儲存；**不得**儲存明文或可逆加密的密碼。每個雜湊**必須**使用各自隨機產生的 salt，雜湊值連同演算法、參數與 salt 以 PHC 字串格式（`$argon2id$v=19$m=…,t=…,p=…$…`）存放。參數**應**為 m = 19456 KiB（19 MiB）、t = 2、p = 1，這是 OWASP 列出的最低建議配置；**不得**低於此值 | 必須（Argon2id、不存明文、salt）；應（參數） | [KD-31](../../intents/03-decisions-and-stack.md#kd-31)；參數依 OWASP Password Storage Cheat Sheet（2026-09-26 查詢） |
+| AUT-R01 | 密碼**必須**以 Argon2id 雜湊後儲存；**不得**儲存明文或可逆加密的密碼。每個雜湊**必須**使用各自隨機產生的 salt，雜湊值連同演算法、參數與 salt 以 PHC 字串格式（`$argon2id$v=19$m=…,t=…,p=…$…`）存放。參數**應**採 OWASP 列出、防護程度相同的其中一組完整配置（m／t／p 為 47104／1／1、19456／2／1、12288／3／1、9216／4／1、7168／5／1，單位 KiB），本規格建議 m = 19456 KiB（19 MiB）、t = 2、p = 1；實作時得依伺服器規格改選同一份清單中的另一組，並寫在計畫與程式的單一常數處 | 必須（Argon2id、不存明文、salt）；應（參數） | [KD-31](../../intents/03-decisions-and-stack.md#kd-31)；參數依 OWASP Password Storage Cheat Sheet（2026-09-26 查詢） |
 | AUT-R02 | 登入時驗證成功、但雜湊的參數與目前設定不同時，**應**以目前參數重新雜湊並更新儲存值 | 應 | OWASP Password Storage Cheat Sheet「等使用者下次登入時重新雜湊」 |
 | AUT-R03 | 密碼雜湊**必須**只存在本規格的 `UserPassword`（見[資料](#資料)），**不得**出現在任何 API 回應、錯誤訊息或應用程式日誌。請求中的明文密碼同樣**不得**寫入日誌 | 必須 | [KD-31](../../intents/03-decisions-and-stack.md#kd-31)（雜湊儲存的前提是雜湊與明文都不外流）；本規格推導 |
 | AUT-R04 | 密碼**必須**符合長度規則才能設定；下限、上限與是否另有字元規則見 [AUT-Q3](#aut-q3)。上限**應**至少 64 字元，讓人員可以用長句當密碼 | 必須（檢查）；應（上限至少 64） | OWASP Authentication Cheat Sheet；數值待 [AUT-Q3](#aut-q3) |
@@ -74,7 +74,7 @@
 | AUT-R11 | 登入狀態**必須**保存在伺服器端資料庫的 `AuthSession`。Cookie 只帶一個隨機產生、不含任何個人資料的 token；token **應**至少有 256 位元的隨機性（OWASP 下限為 64 位元），資料庫**應**只存 token 的 SHA-256 雜湊，不存 token 本身 | 必須（伺服器端、token 不含個資）；應（長度、存雜湊） | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；OWASP Session Management Cheat Sheet；存雜湊是本規格的建議，理由：資料庫外洩時，外洩的內容不能直接拿來登入 |
 | AUT-R12 | Cookie **必須**帶 `HttpOnly`、`Secure`、`SameSite`。`SameSite` **應**為 `Strict`；Cookie **應**命名為 `__Host-inspectflow_session`，`Path=/`、不設 `Domain` | 必須（三個屬性）；應（`Strict`、名稱、`__Host-` 前綴） | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；OWASP Session Management Cheat Sheet（`SameSite=Strict`、`__Host-` 前綴、不用框架預設名稱） |
 | AUT-R13 | 每次登入成功**必須**產生新的 token；後端**不得**沿用請求帶來的任何 token 作為新登入狀態 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)（伺服器決定登入狀態）；防止 session fixation，依 OWASP Session Management Cheat Sheet |
-| AUT-R14 | 每個需要登入的請求，後端**必須**確認：Cookie 的 token 對應到一筆 `AuthSession`、未超過有效期限（AUT-R15）、對應的 `User` 目前 `is_active = true` 且 `auth_source = local`。任一不成立時，視為未登入（401、`auth.not_authenticated`），並刪除該筆 `AuthSession`。`is_active` **必須**在每個請求時讀取資料庫目前的值，不得快取在 `AuthSession`，停用人員才會立即生效 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)（停用時現有登入立即失效，不需撤銷機制）；`auth_source` 的檢查依 [KD-20](../../intents/03-decisions-and-stack.md#kd-20)：帳號轉成外部帳號後，本系統的密碼登入不再有效 |
+| AUT-R14 | 每個需要登入的請求，後端**必須**確認：Cookie 的 token 對應到一筆 `AuthSession`、未超過有效期限（AUT-R15）、對應的 `User` 目前 `is_active = true`。任一不成立時，視為未登入（401、`auth.not_authenticated`），並刪除該筆 `AuthSession`。`is_active` **必須**在每個請求時讀取資料庫目前的值，不得快取在 `AuthSession`，停用人員才會立即生效 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)（停用時現有登入立即失效，不需撤銷機制）。本條不檢查 `auth_source`：外部帳號日後經外部驗證建立的登入狀態也適用本條（AUT-R27、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)）；本系統帳號轉成外部帳號時，既有登入狀態是否撤銷，由 `external-identity-sync` 決定 |
 | AUT-R15 | `AuthSession` **應**有兩種有效期限，都由伺服器判斷：從登入起算的絕對期限，以及從最後一次請求起算的閒置期限。兩個值**應**可由環境變數設定；預設值見 [AUT-Q1](#aut-q1)。請求成功通過 AUT-R14 時，更新最後一次請求的時間 | 應 | OWASP Session Management Cheat Sheet（伺服器端逾時）；數值待 [AUT-Q1](#aut-q1) |
 | AUT-R16 | Service 層**應**能算出一個 `User` 目前有效（未過期）的 `AuthSession` 筆數，供停用人員前顯示影響範圍；畫面顯示與確認流程由提供停用操作的功能規格負責 | 應 | [PR-18](../../intents/02-principles.md#pr-18)（影響範圍怎麼計算留給相關規格決定）；[KD-21](../../intents/03-decisions-and-stack.md#kd-21) |
 | AUT-R17 | 同一個 `User` **得**同時有多筆 `AuthSession`（例如電腦與手機）；本規格不限制筆數 | 得 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；限制筆數沒有 intents 依據 |
@@ -84,7 +84,7 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | AUT-R18 | 後端**必須**預設拒絕：每一條 `/api/v1` 業務路由都**必須**明確宣告一種存取層級：公開、需登入、需 Admin、需專案權限（附權限代碼）。沒有宣告的路由**必須**讓自動化測試失敗；公開路由**必須**列在一份明確的清單上，目前只有健康檢查與登入、登出。需登入以上的路由，未登入時回傳 401、`auth.not_authenticated` | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（後端預設拒絕）、[PR-01](../../intents/02-principles.md#pr-01)（伺服器端覆核）；「沒宣告就測試失敗」是本規格把預設拒絕落實成可驗證的做法 |
-| AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`：放行，不需要 `ProjectMember`；Admin 是否也通過簽核、匯出等特殊動作，見 [AUT-Q2](#aut-q2)。（2）否則，取登入者在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）不是該專案成員，有效權限為空集合，拒絕。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
+| AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`，且所需代碼是查看或修改類的動作（讀取、新增、修改、刪除）：放行，不需要 `ProjectMember`。所需代碼是簽核、匯出等特殊動作時，Admin 怎麼判斷待 [AUT-Q2](#aut-q2) 裁定，本規格不定義；怎麼從代碼辨識動作類別依 [DOM-Q3](../domain-model/spec.md#dom-q3)。（2）其他情況，取登入者在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）不是該專案成員，有效權限為空集合，拒絕。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
 | AUT-R20 | 需 Admin 的檢查**必須**只放行 `is_admin = true` 的登入者，否則回傳 403、`permission.denied`。管理人員（含建立帳號、停用、修改 `is_admin`）、公司、角色定義的端點**必須**使用這一層 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 管理系統設定、人員、公司、角色定義）；建立帳號只由 Admin 做，依 [#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定（之後每個帳號都由某個 Admin 建立） |
 | AUT-R21 | 後端**必須**提供「本人或 Admin」的檢查：登入者就是目標 `User`，或 `is_admin = true` 時放行，否則回傳 403、`permission.denied`。修改人員聯絡與補充欄位的端點**必須**使用這一層 | 必須 | [KD-17](../../intents/03-decisions-and-stack.md#kd-17)；DOM-R04（判斷操作者是不是 Admin 或本人由本規格執行） |
 | AUT-R22 | 替 `ProjectMember` 指派或移除角色的端點，**必須**使用需專案權限的檢查（代碼依 [DOM-Q3](../domain-model/spec.md#dom-q3) 登記），Admin 依 AUT-R19 一律放行 | 必須 | [KD-27](../../intents/03-decisions-and-stack.md#kd-27)（角色由有權限的人設定） |
@@ -94,7 +94,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| AUT-R24 | 後端**必須**提供設定密碼的指令：以 email 指定一個 `auth_source = local` 的 `User`，在執行時由終端機輸入兩次密碼（不回顯），兩次相同且符合 AUT-R04 才寫入。密碼**不得**從指令列參數、環境變數或設定檔讀取，repo **不得**含任何密碼或其預設值；指令**得**另提供從標準輸入讀取的方式供自動化測試使用。email 不存在、帳號為 `external`、兩次輸入不同或不符合規則時，指令回報失敗且資料不變 | 必須；得（標準輸入） | [#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定（初始帳號的密碼等本規格；個資與密碼在執行時輸入，不寫進 repo）、[KD-22](../../intents/03-decisions-and-stack.md#kd-22) |
+| AUT-R24 | 後端**必須**提供設定密碼的指令：以 email 指定一個 `auth_source = local` 的 `User`（內建 `admin` 能否指定待 [AUT-Q4](#aut-q4)），在執行時由終端機輸入兩次密碼（不回顯），兩次相同且符合 AUT-R04 才寫入。密碼**不得**從指令列參數、環境變數或設定檔讀取，repo **不得**含任何密碼或其預設值；指令**得**另提供從標準輸入讀取的方式供自動化測試使用。email 不存在、帳號為 `external`、兩次輸入不同或不符合規則時，指令回報失敗且資料不變 | 必須；得（標準輸入） | [#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定（初始帳號的密碼等本規格；個資與密碼在執行時輸入，不寫進 repo）、[KD-22](../../intents/03-decisions-and-stack.md#kd-22) |
 | AUT-R25 | 設定密碼成功時，**應**刪除該 `User` 所有既有的 `AuthSession` | 應 | OWASP Session Management Cheat Sheet（權限等級改變時換發登入狀態）；本規格的建議，理由：重設密碼通常是因為密碼可能外流 |
 | AUT-R26 | 指令寫入時，建立與修改紀錄的操作者**必須**依 DOM-R14 為內建 `admin` | 必須 | [#54](https://github.com/speko-tw/inspect-flow/issues/54) 補充裁定；DOM-R14；AUT-R09 |
 
@@ -122,7 +122,7 @@
 | `UserPassword` | `user_id`（不可空值、唯一、外鍵指向 `User`）、`password_hash`（不可空值，PHC 字串） | 一個 `User` 至多一筆；沒有這一筆就是「尚未設定密碼」，不能以密碼登入。外部帳號不需要這一筆 | AUT-R01～AUT-R04、AUT-R24 |
 | `AuthSession` | `user_id`（不可空值、外鍵指向 `User`）、`token_hash`（不可空值、唯一）、`expires_at`（絕對期限，UTC）、`last_seen_at`（最後一次請求，UTC） | 一次登入一筆；登出、過期、帳號停用時刪除。`created_by`、`updated_by` 填登入者本人 | AUT-R11～AUT-R17 |
 
-- **為什麼密碼放在獨立的 `UserPassword`，不放在 `User` 上**：外部帳號沒有密碼，獨立一張表就不必在 `User` 上留一個只對本系統帳號有意義、而且永遠不能出現在回應裡的欄位；`domain-model` 的 `User` 修改入口與查詢也不會意外帶出雜湊。帳號轉成外部帳號（DOM-R09）時，`UserPassword` 留著也不會被使用，AUT-R06、AUT-R14 以 `auth_source` 擋下。
+- **為什麼密碼放在獨立的 `UserPassword`，不放在 `User` 上**：外部帳號沒有密碼，獨立一張表就不必在 `User` 上留一個只對本系統帳號有意義、而且永遠不能出現在回應裡的欄位；`domain-model` 的 `User` 修改入口與查詢也不會意外帶出雜湊。帳號轉成外部帳號（DOM-R09）時，`UserPassword` 留著也不會被使用，AUT-R06 以 `auth_source` 擋下密碼登入；既有登入狀態是否撤銷由 `external-identity-sync` 決定。
 - **為什麼 `AuthSession` 也沿用共通結構**：[#54](https://github.com/speko-tw/inspect-flow/issues/54) 補充裁定要求所有資料的 `created_by`、`updated_by` 都有值；登入狀態的操作者就是登入者本人，填起來沒有額外成本。
 - 刪除 `User` 本來就被外鍵擋下（DOM-R10），因此兩張表不需要設定連帶刪除。
 
@@ -155,8 +155,8 @@
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| AUT-AC01 | 一段測試用的密碼 | 以本規格的雜湊函式雜湊兩次，並檢查結果 | 兩個雜湊字串都以 `$argon2id$` 開頭，參數段為 `m=19456,t=2,p=1`，兩者不同（salt 不同），都不含明文；以正確密碼驗證成功、以錯誤密碼驗證失敗 | AUT-R01 |
-| AUT-AC02 | 一個以較低參數（例如 `t=1`）產生的密碼雜湊存在 `UserPassword` | 以正確密碼登入 | 登入成功；`UserPassword.password_hash` 被改寫為目前參數（`m=19456,t=2,p=1`），且新的雜湊仍能驗證同一個密碼 | AUT-R02 |
+| AUT-AC01 | 一段測試用的密碼 | 以本規格的雜湊函式雜湊兩次，並檢查結果 | 兩個雜湊字串都以 `$argon2id$` 開頭，參數段等於程式設定的參數組，且該組是 AUT-R01 列出的 OWASP 配置之一，兩者不同（salt 不同），都不含明文；以正確密碼驗證成功、以錯誤密碼驗證失敗 | AUT-R01 |
+| AUT-AC02 | 一個以較低參數（例如 `t=1`）產生的密碼雜湊存在 `UserPassword` | 以正確密碼登入 | 登入成功；`UserPassword.password_hash` 被改寫為程式設定的參數組，且新的雜湊仍能驗證同一個密碼 | AUT-R02 |
 | AUT-AC03 | 一個已設定密碼的帳號；測試擷取應用程式日誌 | 分別呼叫登入（成功與失敗）與目前使用者 API | 每個回應本體都不含 `password_hash` 的值、明文密碼與 token；擷取到的日誌不含明文密碼與雜湊 | AUT-R03、AUT-R10 |
 | AUT-AC04 | 依 [AUT-Q3](#aut-q3) 裁定的長度規則 | 以設定密碼的指令分別設定：長度下限減一、剛好下限、剛好上限、上限加一的密碼 | 下限與上限成功，其餘失敗且資料不變 | AUT-R04、AUT-R24 |
 
@@ -176,7 +176,7 @@
 |---|---|---|---|---|
 | AUT-AC10 | 一個帳號 | 登入兩次（兩個不同用戶端），第二次請求時另帶上第一次取得的 Cookie | 兩次取得的 token 不同，長度至少 43 個 base64url 字元（256 位元）；第二次回應的 token 不等於請求帶來的 token；兩個 Cookie 都能呼叫 `me` 成功（同一人可有多筆） | AUT-R11、AUT-R13、AUT-R17 |
 | AUT-AC11 | 帳號 U 已在兩個用戶端登入 | 直接在資料庫把 U 的 `is_active` 改為 `false`（不經過任何登出或撤銷流程），再以兩個 Cookie 各呼叫 `me` | 兩次都回 401 `auth.not_authenticated`；U 的 `AuthSession` 都已刪除 | AUT-R14 |
-| AUT-AC12 | 帳號 U 已登入 | 直接在資料庫把 U 的 `auth_source` 改為 `external`（補上外部欄位），再以該 Cookie 呼叫 `me` | 401；該筆 `AuthSession` 已刪除 | AUT-R14 |
+| AUT-AC12 | 一個啟用中的 `external` 帳號 E（沒有 `UserPassword`）；由測試直接呼叫「建立登入狀態」的函式替 E 建立登入狀態 | 以取得的 Cookie 呼叫 `me`；再以 E 的 email 與任意密碼呼叫登入 API | `me` 回 200（登入狀態的檢查不因 `auth_source` 拒絕）；密碼登入回 401 `auth.invalid_credentials` | AUT-R06、AUT-R14、AUT-R27 |
 | AUT-AC13 | 以可控時間設定絕對期限 A、閒置期限 I（測試內給定，例如 A = 8 小時、I = 30 分鐘） | 登入後，每隔少於 I 的時間呼叫一次 `me`，直到超過 A；另一個用戶端登入後閒置超過 I 再呼叫 `me`；每次成功呼叫後檢查 `last_seen_at` | 第一個用戶端在 A 之前都成功、超過 A 後 401；第二個用戶端 401；成功呼叫後 `last_seen_at` 等於當下時間；過期的 `AuthSession` 都已刪除 | AUT-R15 |
 | AUT-AC14 | 帳號 U 有兩筆有效與一筆已過期的 `AuthSession`；帳號 V 沒有 | 計算 U、V 的有效登入狀態筆數 | U 為 2、V 為 0 | AUT-R16 |
 | AUT-AC15 | 預設的環境（未設定逾時相關環境變數），以及分別設定這兩個環境變數的環境 | 讀取後端的逾時設定 | 未設定時等於 [AUT-Q1](#aut-q1) 裁定的預設值；有設定時等於設定值；`.env.example` 列出這兩個變數 | AUT-R15 |
@@ -206,7 +206,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | AUT-AC26 | 一個 `local` 帳號，不經過登入 API，由測試直接呼叫「建立登入狀態」的函式 | 以回傳的 Cookie 呼叫 `me` | 200；建立登入狀態的函式簽章不含密碼參數 | AUT-R27 |
-| AUT-AC27 | 依 [AUT-Q5](#aut-q5) 裁定的門檻 N、計算期間 W、鎖定時間 L；以可控時間測試 | 在 W 內對同一帳號連續以錯誤密碼登入 N 次，再以正確密碼登入；經過 L 後再以正確密碼登入 | 第 N＋1 次（正確密碼）回 401，回應與一般失敗相同；經過 L 後登入成功 | AUT-R28 |
+| AUT-AC27 | 依 [AUT-Q5](#aut-q5) 裁定的方案；以可控時間測試 | 對同一帳號以錯誤密碼登入直到達成該方案的觸發條件，在解除條件達成前以正確密碼登入；推進時間到解除條件達成後，再以正確密碼登入 | 解除前的正確密碼登入回 401，回應與一般失敗相同；解除後登入成功。具體的觸發次數、期間與等待時間在 AUT-Q5 裁定後補進本條（規格澄清）；若裁定不做（選項 C），本條與 AUT-R28 改標撤回 | AUT-R28 |
 
 ### 前端
 
@@ -237,7 +237,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q3"></a>
 - **AUT-Q3：密碼長度與字元規則**（AUT-R04、AUT-AC04）。OWASP：沒有多因素認證時，短於 15 字元視為弱密碼；上限至少 64 字元；不建議強制字元組成規則。選項：（A）下限 15、上限 128、不限字元組成，符合 OWASP；（B）下限 12、上限 128，較好記，但低於 OWASP 無 MFA 時的建議；（C）下限 8，另要求大小寫、數字、符號。**建議 A**。影響計畫 T1。
 <a id="aut-q4"></a>
-- **AUT-Q4：之後建立的帳號怎麼取得第一次的密碼，以及內建 `admin` 能不能登入**。本規格只提供部署人員執行的指令（AUT-R24）。Admin 在畫面上建立帳號後，被建立的人怎麼拿到密碼，#54 沒有規定。選項：（A）先只用指令，畫面上的重設與自助變更密碼另開規格；（B）`admin-dashboard` 提供「Admin 設定臨時密碼，首次登入強制變更」；（C）以 email 寄送設定密碼的連結（需要寄信服務，目前沒有）。**建議 A**，等 `admin-dashboard` 開工時再決定是否擴充為 B。另外，內建 `admin`（`is_system`）是否可以設定密碼並登入：選項（甲）可以，作為負責人帳號無法使用時的備援；（乙）不行，只作為系統操作者，指令拒絕替它設定密碼。**建議甲**，並由部署人員妥善保管密碼。本規格目前的行為是甲；若選乙，AUT-R24 加一條拒絕條件。不擋任何任務。
+- **AUT-Q4：之後建立的帳號怎麼取得第一次的密碼，以及內建 `admin` 能不能登入**。本規格只提供部署人員執行的指令（AUT-R24）。Admin 在畫面上建立帳號後，被建立的人怎麼拿到密碼，#54 沒有規定。選項：（A）先只用指令，畫面上的重設與自助變更密碼另開規格；（B）`admin-dashboard` 提供「Admin 設定臨時密碼，首次登入強制變更」；（C）以 email 寄送設定密碼的連結（需要寄信服務，目前沒有）。**建議 A**，等 `admin-dashboard` 開工時再決定是否擴充為 B。另外，內建 `admin`（`is_system`）是否可以設定密碼並登入：選項（甲）可以，作為負責人帳號無法使用時的備援；（乙）不行，只作為系統操作者，指令拒絕替它設定密碼。**建議甲**，並由部署人員妥善保管密碼。裁定前，AUT-R24 對內建 `admin` 的行為不定義；計畫 T6 在裁定後才開工。
 <a id="aut-q5"></a>
 - **AUT-Q5：登入失敗鎖定**（AUT-R28、AUT-AC27）。OWASP 建議依帳號計算、鎖定時間可遞增，並提醒鎖定可能被用來阻擋他人登入。選項：（A）15 分鐘內失敗 10 次，鎖定 15 分鐘；（B）失敗 5 次後開始遞增延遲（1、2、4…分鐘，上限 1 小時）；（C）MVP 不做，只在內網使用。**建議 A**：規則簡單、好測試，10 次的門檻讓一般打錯密碼不會被鎖。鎖定是否要寫稽核紀錄，併入 AUT-Q6。影響計畫 T8；裁定前 T8 不開工。
 <a id="aut-q6"></a>
