@@ -10,7 +10,7 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1 | 資料庫連線與共用基底：新增 SQLAlchemy 2.x 與 Alembic 依賴（一次加齊，避免兩個 PR 都改 lockfile）；讀取資料庫連線環境變數，未設定時用本機 SQLite 預設路徑；SQLite 連線初始化設定 `foreign_keys = ON` 與 WAL，並標註資料庫相依性；宣告式 model 基底與共用欄位（UUID 主鍵，版本依 KD-07 評估 UUIDv7 後選定並記在程式註解；`created_at`、`updated_at` 以含時區型別存 UTC 並自動填寫）；Service 層使用的交易單位（成功提交、例外回滾）。測試用暫存 SQLite 與測試專用 metadata | `backend/pyproject.toml`、`backend/uv.lock`、`backend/app/db/`（新增：設定、engine、基底、交易單位）、`.env.example`（新增變數說明）、`backend/tests/db/`（新增） | — | DBF-AC04、DBF-AC05、DBF-AC06、DBF-AC07 | #? |
+| T1 | 資料庫連線與共用基底：新增 SQLAlchemy 2.x 與 Alembic 依賴（一次加齊，避免兩個 PR 都改 lockfile）；讀取資料庫連線環境變數，未設定時用本機 SQLite 預設路徑；SQLite 連線初始化設定 `foreign_keys = ON` 與 WAL，只在 SQLite 方言上執行，每一處 `PRAGMA` 以 `# db-dependency: sqlite` 註解標註資料庫相依性；`created_at`、`updated_at` 的時間來源要能在測試中替換（供 DBF-AC11 使用）；宣告式 model 基底與共用欄位（UUID 主鍵，版本依 KD-07 評估 UUIDv7 後選定並記在程式註解；`created_at`、`updated_at` 以含時區型別存 UTC 並自動填寫）；Service 層使用的交易單位（成功提交、例外回滾）。測試用暫存 SQLite 與測試專用 metadata | `backend/pyproject.toml`、`backend/uv.lock`、`backend/app/db/`（新增：設定、engine、基底、交易單位）、`.env.example`（新增變數說明）、`backend/tests/db/`（新增） | — | DBF-AC04、DBF-AC05、DBF-AC06、DBF-AC07 | #? |
 | T2 | Alembic 初始化：`alembic.ini`、`env.py` 綁定 T1 的 metadata 並讀同一個連線環境變數；第一支 migration 為空的 baseline（不含任何資料表）；測試：空 SQLite 執行 `alembic upgrade head` 成功且只有一個 head；靜態掃描 `backend/app` 與 Alembic 目錄，不得有資料庫驅動 import 與 `create_all` 呼叫 | `backend/alembic.ini`（新增）、`backend/alembic/`（新增，含 `env.py` 與 baseline migration）、`backend/tests/db/test_migrations.py`、`backend/tests/db/test_db_access_rules.py`（新增）、`backend/pyproject.toml`（僅在 pyright／ruff 需要納入 `alembic` 目錄時調整設定，不改依賴） | T1 | DBF-AC01、DBF-AC02、DBF-AC03 | #? |
 | T3 | CI PostgreSQL 相容性測試：CI 提供 PostgreSQL，對它執行 `alembic upgrade head`，失敗時 check 失敗；加入 PostgreSQL 驅動依賴。執行機制與範圍依 [DBF-Q1](spec.md#dbf-q1) 的裁定 | `.github/workflows/ci.yml`、`Makefile`、`backend/pyproject.toml`、`backend/uv.lock`、`backend/tests/db/`（視裁定新增 PostgreSQL 測試）；若裁定需要另開 CI job，另需 `skeleton` 規格的範圍變更 | T2；[DBF-Q1](spec.md#dbf-q1) 裁定 | DBF-AC08 | #? |
 | T4 | `User`、`Project` 資料表：兩個 model 繼承 T1 的基底，含 `employee_no`、`project_code`（唯一約束）與 `created_by`、`updated_by`（外鍵指向 `User` 的 UUID，空值與填寫規則依 [DBF-Q2](spec.md#dbf-q2)）；業務欄位依 `domain-model` 已凍結的定義；新增一支 migration | `backend/app/models/`（新增 `user.py`、`project.py`）、`backend/alembic/versions/`（新增一支 migration）、`backend/tests/db/test_user_project.py`（新增） | T2；`domain-model` 部分凍結 `User`、`Project`（尚無 issue）；[DBF-Q2](spec.md#dbf-q2) 裁定 | DBF-AC09、DBF-AC10、DBF-AC11 | #? |
@@ -51,13 +51,13 @@
 | DBF-AC02 | `backend/tests/db/test_migrations.py`：在暫存目錄的空 SQLite 上以 Alembic API 執行 upgrade head，斷言 head 恰一個且 `alembic_version` 相符；`make check` |
 | DBF-AC03 | `backend/tests/db/test_db_access_rules.py`：掃描同一批目錄，斷言沒有 `create_all` 呼叫；`make check` |
 | DBF-AC04 | `backend/tests/db/`：以 `monkeypatch` 設定連線環境變數為暫存路徑，斷言檔案被建立；清掉變數時斷言使用預設路徑；讀 `.env.example` 斷言列出該變數；`make check` |
-| DBF-AC05 | `backend/tests/db/`：對暫存檔案資料庫取得連線，查兩個 PRAGMA；`make check` |
+| DBF-AC05 | `backend/tests/db/`：對暫存檔案資料庫取得連線，查兩個 PRAGMA；以非 SQLite 方言（例如 PostgreSQL 方言的 engine，用假的 DBAPI 連線記錄執行過的語句，不需真的連線）觸發同一段連線初始化，斷言沒有執行任何 `PRAGMA`；掃描 `backend/app` 原始碼，斷言每一行含 `PRAGMA` 的語句在同一行或上一行有 `# db-dependency: sqlite` 標註；`make check` |
 | DBF-AC06 | `backend/tests/db/`：測試專用資料表寫入 `+08:00` 時間後讀回，斷言帶時區且 UTC 時刻相同，再以 `app.api.time_format.format_utc` 輸出斷言以 `Z` 結尾；`make check` |
 | DBF-AC07 | `backend/tests/db/`：交易單位內寫兩筆後拋例外，斷言兩筆都不存在；不拋例外時斷言兩筆都存在；`make check` |
 | DBF-AC08 | CI 的 PostgreSQL 步驟；PR 內附一次故意失敗的 CI 執行紀錄（例如在草稿 commit 放一支 PostgreSQL 不接受的 migration），證明失敗會讓 check 失敗 |
 | DBF-AC09 | `backend/tests/db/test_user_project.py`：upgrade head 後以 inspector 檢查主鍵欄位與型別，新增資料後以 `uuid.UUID(...)` 解析主鍵；`make check`，PostgreSQL 由 T3 的 CI 補驗 |
 | DBF-AC10 | `backend/tests/db/test_user_project.py`：重複業務編號寫入時斷言拋出 `IntegrityError` 且筆數不變；`make check` |
-| DBF-AC11 | `backend/tests/db/test_user_project.py`：斷言四個欄位存在、新增時時間有值、修改後 `updated_at` 不早於修改前且 `created_at` 不變；`make check` |
+| DBF-AC11 | `backend/tests/db/test_user_project.py`：斷言四個欄位存在、新增時時間有值、以可控時間（注入時鐘或凍結時間的測試工具）讓修改時間比新增時間晚一秒，斷言修改後 `updated_at` 嚴格晚於修改前且等於注入的時間、`created_at` 不變；`make check` |
 
 ## 考慮過但沒採用的做法
 

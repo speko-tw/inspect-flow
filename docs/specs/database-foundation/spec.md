@@ -121,7 +121,7 @@
 | DBF-AC02 | 一個空的 SQLite 資料庫檔 | 執行 `alembic upgrade head`，再查 `alembic heads` | 結束碼為 0；`alembic heads` 恰好一個 head；資料庫的 `alembic_version` 等於該 head | DBF-R02、DBF-R04 |
 | DBF-AC03 | repo 內 `backend/app` 與 Alembic 目錄的原始碼 | 測試搜尋 `create_all` | 沒有任何呼叫 | DBF-R03 |
 | DBF-AC04 | 資料庫連線環境變數設成一個暫存目錄下的 SQLite 路徑 | 後端建立連線並執行一次查詢 | 暫存路徑出現資料庫檔；未設定該變數時連到預設路徑；`.env.example` 列出該變數名稱 | DBF-R05 |
-| DBF-AC05 | 後端連到 SQLite 檔案資料庫 | 從後端取得的連線查 `PRAGMA foreign_keys` 與 `PRAGMA journal_mode` | 分別回傳 `1` 與 `wal`；原始碼中這段 PRAGMA 旁有資料庫相依性標註 | DBF-R06、DBF-R07 |
+| DBF-AC05 | 後端的連線初始化邏輯，分別套用在 SQLite 檔案資料庫與非 SQLite 方言的連線上 | SQLite：從後端取得的連線查 `PRAGMA foreign_keys` 與 `PRAGMA journal_mode`；非 SQLite：以非 SQLite 方言觸發同一段初始化；另掃描 `backend/app` 原始碼中所有 `PRAGMA` 語句 | SQLite 分別回傳 `1` 與 `wal`；非 SQLite 連線上沒有執行任何 `PRAGMA`；每一處 `PRAGMA` 都帶有計畫規定格式的資料庫相依性標註 | DBF-R06、DBF-R07 |
 | DBF-AC06 | 一張測試專用、含時間欄位的資料表 | 寫入一個 `+08:00` 時區的時間後讀回 | 讀回的值帶時區、換算成 UTC 後與寫入的時刻相同；用 `api-conventions` 的時間格式輸出以 `Z` 結尾 | DBF-R08 |
 | DBF-AC07 | 一張測試專用的資料表，以及在同一個交易單位內寫入兩筆、第二筆後拋出例外的操作 | 執行該操作，再執行一次不拋例外的同樣操作 | 拋例外時兩筆都不存在；不拋例外時兩筆都存在 | DBF-R09 |
 | DBF-AC08 | 一個 PR 的 CI 執行 | CI 對 PostgreSQL 執行 `alembic upgrade head` | 成功時 check 通過；故意放入一支在 PostgreSQL 上會失敗的 migration 時，check 失敗 | DBF-R10 |
@@ -132,7 +132,7 @@
 |---|---|---|---|---|
 | DBF-AC09 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 SQLAlchemy inspector 檢查 `User`、`Project` 的資料表，並各新增一筆資料 | 主鍵是單一欄位、型別對應 UUID、不是自增整數；新增的資料取得可被 `uuid.UUID(...)` 解析的主鍵 | DBF-R07、DBF-R11 |
 | DBF-AC10 | 已有一筆 `project_code = "P001"` 的 `Project`、一筆 `employee_no = "E001"` 的 `User` | 再新增一筆相同 `project_code` 的 `Project`、一筆相同 `employee_no` 的 `User` | 兩次都因唯一約束失敗，資料庫各仍只有一筆；業務編號與主鍵是不同欄位 | DBF-R12、DBF-R13 |
-| DBF-AC11 | 新增一筆 `User` 與一筆 `Project` | 檢查欄位後修改該筆資料 | 兩張表都有 `created_at`、`updated_at`、`created_by`、`updated_by`；新增時 `created_at`、`updated_at` 自動有值；修改後 `updated_at` 不早於修改前、`created_at` 不變。操作者欄位的填寫規則待 [DBF-Q2](#dbf-q2) 裁定後補進本條 | DBF-R14 |
+| DBF-AC11 | 新增一筆 `User` 與一筆 `Project` | 檢查欄位後修改該筆資料 | 兩張表都有 `created_at`、`updated_at`、`created_by`、`updated_by`；新增時 `created_at`、`updated_at` 自動有值；以可控時間讓修改發生在新增的至少一秒之後，修改後 `updated_at` 嚴格晚於修改前、等於修改當下的時間，`created_at` 不變。操作者欄位的填寫規則待 [DBF-Q2](#dbf-q2) 裁定後補進本條 | DBF-R14 |
 
 ## 待釐清
 
