@@ -11,7 +11,7 @@
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
 | T1 | 共用錯誤處理模組：`ErrorCode`（dot-namespace 字串列舉，依 [KD-15](../../intents/03-decisions-and-stack.md#kd-15)，共用錯誤原因分屬 `request.*`／`resource.*`／`server.*` 三個 namespace）與由單一生成函式 `build_error_code_descriptions(enum_cls)` 產生的描述對照表 `ERROR_CODE_DESCRIPTIONS`（該函式是對照表的唯一來源，不手寫維護）；`APIError` 例外類別（`code`／`status_code`／`message`）；`register_error_handlers(app)` 註冊函式，為 `APIError`、`RequestValidationError`、`StarletteHTTPException`（涵蓋框架自動產生的 404）、未攔截 `Exception` 各註冊一個 FastAPI exception handler，統一轉成 `{"error": {"code": ...}}` | `backend/app/api/errors.py`（新增）、`backend/app/main.py`（`create_app()` 內呼叫 `register_error_handlers(app)`，只加一行）、`backend/tests/contract/test_error_envelope.py`（新增；測試 app 與正式 app 一樣呼叫 `register_error_handlers`；500 測試使用 `TestClient(app, raise_server_exceptions=False)`） | — | API-AC02、API-AC03、API-AC07、API-AC09、API-AC10 | #31 |
-| T2 | 路由與內容型別契約測試：走訪 `create_app().routes`，只挑 `isinstance(route, fastapi.routing.APIRoute)` 的業務路由斷言前綴（排除框架自動產生的 `/openapi.json`、`/docs`、`/docs/oauth2-redirect`、`/redoc`，它們不是 `APIRoute`）；對 `GET /api/v1/health` 斷言 `Content-Type`；新增請求側內容型別測試：對一個測試用 JSON 端點以非 JSON `Content-Type` 送出請求本體，斷言回應為 4xx 且符合共用錯誤 envelope | `backend/tests/contract/test_route_conventions.py`（新增） | T1（請求側情境要靠 `register_error_handlers` 已註冊在 `create_app()`，才能拿到統一 envelope） | API-AC01、API-AC04、API-AC05 | #34 |
+| T2 | 路由與內容型別契約測試：走訪 `create_app().routes`，只挑 `isinstance(route, fastapi.routing.APIRoute)` 的業務路由斷言有效路徑的前綴（排除框架自動產生的 `/openapi.json`、`/docs`、`/docs/oauth2-redirect`、`/redoc`，它們不是 `APIRoute`）。目前鎖定的 FastAPI 版本不會把 `include_router` 掛上的路由攤平到 `app.routes`，而是包在內部分組節點裡，因此要透過節點的 `effective_candidates()` 展開，取得原始 `APIRoute` 與含前綴的有效路徑，再以 `app.openapi()["paths"]` 交叉核對；對 `GET /api/v1/health` 斷言 `Content-Type`；新增請求側內容型別測試：對一個測試用 JSON 端點以非 JSON `Content-Type` 送出請求本體，斷言回應為 4xx 且符合共用錯誤 envelope | `backend/tests/contract/test_route_conventions.py`（新增）、`docs/specs/api-conventions/plan.md`（計畫調整：同步本列與 API-AC01 的驗證方式） | T1（請求側情境要靠 `register_error_handlers` 已註冊在 `create_app()`，才能拿到統一 envelope） | API-AC01、API-AC04、API-AC05 | #34 |
 | T3 | multipart 慣例契約測試：測試模組內建立一個臨時 `APIRouter`，掛一個只接受 `UploadFile` 的路由；分別以 multipart 與 JSON base64 送出同一檔案。JSON base64 因缺少必要的 multipart 欄位，由 FastAPI 產生 `RequestValidationError`，經 T1 的 handler 轉成統一 envelope（4xx），不需要另外實作特定狀態碼的處理邏輯 | `backend/tests/contract/test_multipart_conventions.py`（新增）、`backend/pyproject.toml`（新增 `python-multipart` 依賴）、`backend/uv.lock` | T1（統一錯誤 envelope 與 handler） | API-AC06 | #35 |
 | T4 | ID 格式契約測試與共用型別：一個回傳 UUID 字串 ID 的最小 Pydantic model／輔助函式，供其他規格之後引用 | `backend/app/api/schemas.py`（新增）、`backend/tests/contract/test_id_format.py`（新增） | — | API-AC08 | #32 |
 | T5 | 時間格式與 cursor 分頁契約測試：共用的 UTC ISO-8601 秒精度時間序列化輔助函式（依 [KD-14](../../intents/03-decisions-and-stack.md#kd-14)）；一個不透明的 cursor 編碼／解碼輔助函式，排序鍵為「時間＋UUID」（依 [KD-13](../../intents/03-decisions-and-stack.md#kd-13)）；測試模組內建立測試路由驗證兩者可行，時間格式測試先以 regex 檢查原始字串形狀（不得含小數秒），再以實際解析器（非只驗字形）確認 UTC 秒精度，並列兩個無效範例反例（含小數秒與日期時間本身無效各一），分頁測試以受控初始資料取得第一頁後、在翻頁過程插入新資料驗證 cursor 綁定「時間＋UUID」而非位移。這兩個輔助函式與測試路由只證明機制可行，不代表任何清單端點的正式頁大小或回應 envelope 形狀——那些留給第一個實作清單端點的功能規格決定 | `backend/app/api/time_format.py`（新增）、`backend/app/api/pagination.py`（新增）、`backend/tests/contract/test_time_format.py`（新增）、`backend/tests/contract/test_pagination_conventions.py`（新增） | — | API-AC11、API-AC12 | #33 |
@@ -26,7 +26,7 @@
 依「改動的檔案」與「依賴」分波；同一波內的任務檔案不重疊，也互不依賴。
 
 - 第 1 波：T1、T4、T5（`backend/app/api/errors.py`／`backend/app/main.py`、`backend/app/api/schemas.py`、`backend/app/api/time_format.py`／`backend/app/api/pagination.py` 互不重疊；三者彼此不依賴）。
-- 第 2 波：T2（依賴 T1 的 `register_error_handlers`；只改 `backend/tests/contract/test_route_conventions.py`，與其他任務不重疊）。
+- 第 2 波：T2（依賴 T1 的 `register_error_handlers`；改 `backend/tests/contract/test_route_conventions.py`，另因計畫調整同步本檔的 T2 列與 API-AC01 驗證方式，與其他任務的程式檔不重疊）。
 - 第 3 波：T3（依賴 T1；新增 `backend/pyproject.toml`／`backend/uv.lock` 依賴，與其他任務同波容易撞共用檔案，故獨立一波）。
 
 碰到[共用檔案](../README.md#parallel)的地方：
@@ -46,7 +46,7 @@
 
 | AC | 驗證方式 |
 |---|---|
-| API-AC01 | `backend/tests/contract/test_route_conventions.py`：走訪 `create_app().routes`，只保留 `isinstance(route, fastapi.routing.APIRoute)` 的路由，斷言每個 `route.path` 以 `/api/v1/` 開頭 |
+| API-AC01 | `backend/tests/contract/test_route_conventions.py`：走訪 `create_app().routes`，直接掛載的 `APIRoute` 取 `route.path`，`include_router` 產生的分組節點則以 `effective_candidates()` 展開成原始 `APIRoute` 與含前綴的有效路徑；斷言至少有一條業務路由，且每條有效路徑都以 `/api/v1/` 開頭，並以 `app.openapi()["paths"]` 交叉核對同一條件 |
 | API-AC02 | `backend/tests/contract/test_error_envelope.py`：`TestClient` 對不存在路徑發 `GET`，斷言狀態碼 404 |
 | API-AC03 | `backend/tests/contract/test_error_envelope.py`：測試模組內掛一個刻意 `raise Exception(...)` 的路由，使用 `TestClient(app, raise_server_exceptions=False)`，斷言狀態碼 500 且回應非純文字 |
 | API-AC04 | `backend/tests/contract/test_route_conventions.py`：`TestClient` 呼叫 `GET /api/v1/health`，斷言 `response.headers["content-type"]` 為 `application/json` |
