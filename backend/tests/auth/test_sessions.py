@@ -8,7 +8,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from fastapi import APIRouter, Depends
+from fastapi.testclient import TestClient
 
+from app.auth.dependencies import get_request_user, require_login
 from app.auth.sessions import (
     SESSION_COOKIE_NAME,
     count_valid_sessions,
@@ -22,7 +25,8 @@ from app.auth.settings import (
 )
 from app.db import clock
 from app.db.base import uuid7
-from app.models import AuthSession
+from app.main import create_app
+from app.models import AuthSession, User
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 from tests.db.conftest import build_root_user, create_root_user_with_company
 
@@ -292,3 +296,80 @@ class TestAutAc26CreateSessionHasNoPasswordParameter:
         )
         assert resp.status_code == 200
         assert resp.json()["id"] == str(user.id)
+
+
+def _client_with_operator_probe() -> TestClient:
+    """A test-only, sync, needs-login route that calls
+    ``get_request_user()`` with no ``request`` parameter at all --
+    standing in for a Service-layer entry point (T5's DOM-R14
+    rewrite) that has no way to receive one.
+    """
+    app = create_app()
+    router = APIRouter()
+
+    @router.get("/api/v1/test/operator-probe")
+    def operator_probe(
+        _user: User = Depends(require_login),  # noqa: B008
+    ) -> dict[str, str | None]:
+        probed = get_request_user()
+        return {"id": str(probed.id) if probed is not None else None}
+
+    app.include_router(router)
+    return TestClient(app, base_url="https://testserver")
+
+
+class TestRequestScopedOperatorForServiceLayer:
+    """AUT-R09/DOM-R14 hand-off: ``get_request_user()`` is how a
+    Service-layer function with no ``request`` parameter reads the
+    logged-in user (T5 builds on this; not itself an AUT-AC).
+    """
+
+    def test_probe_route_sees_the_logged_in_user_and_resets_after(
+        self, db_session
+    ):
+        user = make_local_user(db_session, "E900")
+        client = _client_with_operator_probe()
+
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": user.email, "password": PASSWORD},
+        )
+        assert login_resp.status_code == 200
+
+        probe_resp = client.get("/api/v1/test/operator-probe")
+        assert probe_resp.status_code == 200
+        assert probe_resp.json()["id"] == str(user.id)
+
+        # Outside of any request handling (this test function's own
+        # body), the context var must not still hold that user.
+        assert get_request_user() is None
+
+    def test_two_users_requests_do_not_cross_contaminate(self, db_session):
+        user_a = make_local_user(db_session, "E901")
+        user_b = make_local_user(db_session, "E902")
+        client = _client_with_operator_probe()
+
+        login_a = client.post(
+            "/api/v1/auth/login",
+            json={"email": user_a.email, "password": PASSWORD},
+        )
+        token_a = login_a.cookies[SESSION_COOKIE_NAME]
+
+        login_b = client.post(
+            "/api/v1/auth/login",
+            json={"email": user_b.email, "password": PASSWORD},
+        )
+        token_b = login_b.cookies[SESSION_COOKIE_NAME]
+
+        probe_a = client.get(
+            "/api/v1/test/operator-probe",
+            cookies={SESSION_COOKIE_NAME: token_a},
+        )
+        probe_b = client.get(
+            "/api/v1/test/operator-probe",
+            cookies={SESSION_COOKIE_NAME: token_b},
+        )
+
+        assert probe_a.json()["id"] == str(user_a.id)
+        assert probe_b.json()["id"] == str(user_b.id)
+        assert get_request_user() is None
