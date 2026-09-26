@@ -103,7 +103,7 @@
 | AUT-AC35 | `backend/tests/auth/test_password_gate.py`（T9）：以 ORM 把標記設為 `true`，掛一條計數的需登入測試路由，斷言 403 與計數 0、`me` 與登出放行；以 ORM 建立帶標記的 `external` 帳號，直接建立登入狀態後斷言放行 |
 | AUT-AC36 | `backend/tests/auth/test_password_change.py`（T11）：讀取允許清單常數，斷言內容恰為三條，且每條都在 `create_app()` 的路由中 |
 | AUT-AC37 | `backend/tests/auth/test_password_change.py`（T11）：參數化四種失敗，斷言狀態碼與 `error.code`，並讀回 `UserPassword` 與登入狀態筆數斷言不變 |
-| AUT-AC38 | `backend/tests/auth/test_password_change.py`（T11）：三個用戶端登入後由 A 變更，斷言 204、換發的 `Set-Cookie`、標記、`updated_by`、A 原 Cookie 與 B、C 的 401、剩一筆登入狀態且 `token_hash` 對應新 Cookie，以及新舊密碼登入結果 |
+| AUT-AC38 | `backend/tests/auth/test_password_change.py`（T11）：三個用戶端登入後由 A 變更，斷言 204、換發的 `Set-Cookie`（值不同於原 Cookie、至少 43 個 base64url 字元、屬性同 AUT-AC05）、標記、`updated_by`、A 原 Cookie 與 B、C 的 401、剩一筆登入狀態且 `token_hash` 對應新 Cookie，以及新舊密碼登入結果 |
 | AUT-AC39 | `backend/tests/auth/test_password_change.py`（T11）：直接呼叫 Service 入口，依序斷言標記、雜湊可驗證、登入狀態刪除，以及 7 字元被拒絕 |
 | AUT-AC40 | `backend/tests/auth/test_password_change.py`（T11）：呼叫 `build_error_code_descriptions(ErrorCode)`，斷言含四個代碼並符合 API-AC09 的 regex |
 | AUT-AC41 | `frontend/src/auth/RequireAuth.test.tsx`（T10）：替身回 `must_change_password: true`，渲染 `/admin`、`/field` 斷言導向 `/change-password` 並帶原路徑；送出表單後斷言回到原路徑；`npm run test` |
