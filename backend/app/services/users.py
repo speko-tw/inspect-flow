@@ -146,8 +146,9 @@ def update_user_manual(
     Contact and supplementary fields (``extension_1``,
     ``extension_2``, ``mobile``, ``line_id``, ``wechat_id``,
     ``responsibilities``) are always allowed regardless of
-    ``auth_source``, and are never blocked by a basic-field
-    rejection in the same call.
+    ``auth_source``; but when the same call is rejected for a
+    basic field, none of its fields -- contact fields included --
+    are written.
 
     Only keyword arguments actually passed are changed -- see
     :data:`app.services.UNSET`.
