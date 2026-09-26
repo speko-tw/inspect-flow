@@ -1,7 +1,7 @@
 """add companies table
 
 Revision ID: 88da78b69aa7
-Revises: 78a4ba191ab5
+Revises: 22bfdd8a72a4
 Create Date: 2026-09-26 18:21:53.516372
 
 ``Company`` (DOM-R15, DOM-R16, DOM-R17, DOM-Q7's issue #127
@@ -32,7 +32,7 @@ from app.db.base import UTCDateTime
 
 # revision identifiers, used by Alembic.
 revision: str = "88da78b69aa7"
-down_revision: str | Sequence[str] | None = "78a4ba191ab5"
+down_revision: str | Sequence[str] | None = "22bfdd8a72a4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
