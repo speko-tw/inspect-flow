@@ -25,35 +25,97 @@ from app.main import create_app
 
 DOT_NAMESPACE_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
-# Files that legitimately mention every error code because they
-# *define* or *verify* the dot-namespace convention itself -- they
-# are not a separate hand-maintained lookup table competing with
-# ``build_error_code_descriptions`` (API-AC10c).
+# Documents that legitimately mention error codes because they
+# *define* the dot-namespace convention itself -- they are not a
+# separate hand-maintained lookup table competing with
+# ``build_error_code_descriptions`` (API-AC10c). Python source is
+# not listed here: it is excluded from the scan entirely (code and
+# tests import ``ErrorCode`` rather than keep an independent list),
+# so ``backend/app/api/errors.py`` and the test file that used to
+# need an exemption no longer do. If a future document wants to
+# list error codes as a table, it must either be added here after
+# explicit review, or link to ``build_error_code_descriptions``
+# instead of restating the codes.
 ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
     {
-        "backend/app/api/errors.py",
-        "backend/tests/contract/test_error_envelope.py",
         "docs/specs/api-conventions/spec.md",
         "docs/specs/api-conventions/plan.md",
         "docs/intents/03-decisions-and-stack.md",
     }
 )
 
+# Only documents and data files can hold a competing hand-written
+# table; Python source is excluded (see ``ALLOWED_CODE_MENTIONS``).
+_TABLE_LIKE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".md",
+        ".markdown",
+        ".rst",
+        ".txt",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".csv",
+        ".tsv",
+        ".toml",
+        ".html",
+    }
+)
+
+
+def _is_table_like_line(line: str, code: str) -> bool:
+    """Return whether ``line`` looks like a table/lookup row naming
+    ``code``, in either of two shapes:
+
+    (a) a Markdown table row: the line (after stripping leading
+        whitespace) starts with ``|`` and contains ``code``
+        anywhere.
+    (b) a key/value or CSV-shaped row: ``code`` immediately
+        preceded by the start of the line, whitespace or a quote,
+        and immediately followed by an optional quote, optional
+        whitespace, then one of ``:``, ``=``, ``,`` or a tab.
+
+    Plain prose that merely mentions a code in running text (e.g.
+    "returns `resource.not_found`") matches neither shape.
+    """
+    if line.lstrip().startswith("|") and code in line:
+        return True
+
+    pattern = r'(?:^|[\s"\'])' + re.escape(code) + r'[\'"]?\s*[:=,\t]'
+    return re.search(pattern, line) is not None
+
 
 def _find_hand_written_tables(
     files: Mapping[str, str], codes: Iterable[str]
 ) -> list[str]:
     """Return the paths (sorted) that look like a hand-written
-    error-code table: not on the exemption list, and whose content
-    mentions every one of ``codes``.
+    error-code table kept separate from
+    ``build_error_code_descriptions`` (API-AC10c).
+
+    Only documents and data files are scanned (see
+    ``_TABLE_LIKE_EXTENSIONS``, matched case-insensitively). Python
+    source is never scanned: code and tests should import
+    ``ErrorCode`` rather than keep an independent list, so a Python
+    file mentioning every code is not itself a competing table.
+
+    A file not on ``ALLOWED_CODE_MENTIONS`` is flagged when any
+    single line looks like a table or lookup structure (see
+    ``_is_table_like_line``) and names one of ``codes``. A single
+    such line is enough -- the file need not mention every code, so
+    a table listing just one code still counts as a duplicated
+    mapping.
     """
     code_list = list(codes)
-    offending = [
-        path
-        for path, text in files.items()
-        if path not in ALLOWED_CODE_MENTIONS
-        and all(code in text for code in code_list)
-    ]
+    offending: list[str] = []
+    for path, text in files.items():
+        if path in ALLOWED_CODE_MENTIONS:
+            continue
+        if Path(path).suffix.lower() not in _TABLE_LIKE_EXTENSIONS:
+            continue
+        for line in text.splitlines():
+            if any(_is_table_like_line(line, code) for code in code_list):
+                offending.append(path)
+                break
     return sorted(offending)
 
 
@@ -155,34 +217,46 @@ def test_unhandled_exception_does_not_log_secret_message(
     sensitive request data (e.g. an authorization token); the
     handler must not log that message or a traceback, only the
     exception type and the request line (RG-M17).
+
+    A path *parameter's value* can be just as sensitive as the
+    exception message, so the log must record the route template
+    (``/leaky/{token}``) rather than the resolved path
+    (``/leaky/path-secret-value``).
     """
     secret = "synthetic-secret-token"
+    path_secret = "path-secret-value"
 
     router = APIRouter()
 
-    @router.get("/leaky")
-    def leaky() -> None:
+    @router.get("/leaky/{token}")
+    def leaky(token: str) -> None:
         raise RuntimeError(f"Bearer {secret}")
 
     error_app.include_router(router)
     client = TestClient(error_app, raise_server_exceptions=False)
 
     with caplog.at_level(logging.ERROR, logger="app.api.errors"):
-        response = client.get("/leaky")
+        response = client.get(f"/leaky/{path_secret}")
 
     assert response.status_code == 500
     assert secret not in response.text
+    assert path_secret not in response.text
 
     app_records = [
         record for record in caplog.records if record.name == "app.api.errors"
     ]
     assert len(app_records) >= 1
     for record in app_records:
-        assert secret not in record.getMessage()
+        message = record.getMessage()
+        assert secret not in message
+        assert path_secret not in message
         assert record.exc_info is None
         assert not record.exc_text
 
     assert "RuntimeError" in caplog.text
+    assert any(
+        "/leaky/{token}" in record.getMessage() for record in app_records
+    )
 
 
 def test_three_error_codes_are_distinct_non_empty_strings(
@@ -382,3 +456,69 @@ def test_find_hand_written_tables_exempts_allowed_files() -> None:
     }
 
     assert _find_hand_written_tables(files, codes) == []
+
+
+def test_find_hand_written_tables_detects_single_code_data_formats() -> None:
+    """API-AC10c regression: a table naming even a single code is
+    still a duplicated mapping, and Markdown is not the only shape
+    a hand-written table can take -- key/value and CSV-shaped rows
+    in other document/data formats must be caught too. Checked
+    against representative positive and negative cases in one
+    place, each asserted individually.
+    """
+    codes = {member.value for member in ErrorCode}
+
+    # (1) A single-row Markdown table naming only one code.
+    assert _find_hand_written_tables(
+        {"docs/api-error-reference.md": "| resource.not_found | x |\n"},
+        codes,
+    ) == ["docs/api-error-reference.md"]
+
+    # (2) A YAML key/value lookup.
+    assert _find_hand_written_tables(
+        {"config/errors.yaml": "resource.not_found: Not found\n"},
+        codes,
+    ) == ["config/errors.yaml"]
+
+    # (3) A JSON object.
+    assert _find_hand_written_tables(
+        {"docs/errors.json": '{"server.internal_error": "x"}'},
+        codes,
+    ) == ["docs/errors.json"]
+
+    # (4) A CSV row.
+    assert _find_hand_written_tables(
+        {"docs/errors.csv": "request.validation_failed,bad"},
+        codes,
+    ) == ["docs/errors.csv"]
+
+    # (5) Plain prose mentioning a code -- not a table.
+    assert (
+        _find_hand_written_tables(
+            {"docs/guide.md": "失敗時回傳 `resource.not_found`。"},
+            codes,
+        )
+        == []
+    )
+
+    # (6) An exempted document containing a real table row.
+    assert (
+        _find_hand_written_tables(
+            {
+                "docs/specs/api-conventions/plan.md": (
+                    "| resource.not_found | plan table |\n"
+                )
+            },
+            codes,
+        )
+        == []
+    )
+
+    # (7) Python source is never scanned, even with a table shape.
+    assert (
+        _find_hand_written_tables(
+            {"backend/app/foo.py": '{"resource.not_found": "x"}'},
+            codes,
+        )
+        == []
+    )

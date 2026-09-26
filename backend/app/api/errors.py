@@ -163,13 +163,20 @@ def register_error_handlers(app: FastAPI) -> None:
         # exception's message may embed request data such as an
         # authorization token, and logging it would leak that
         # value (RG-M17 forbids logging authorization tokens).
-        # Only the exception type and the request line are safe
-        # to record.
+        # The actual request path is also omitted -- a path
+        # parameter's value may itself be sensitive (RG-M17) -- so
+        # only the route template (e.g. ``/leaky/{token}``) is
+        # recorded, not the resolved path. Only the exception type,
+        # the method and the route template are safe to record.
+        route = request.scope.get("route")
+        template = getattr(route, "path", None)
+        if not isinstance(template, str):
+            template = "<unmatched>"
         logger.error(
             "Unhandled %s during %s %s",
             type(exc).__name__,
             request.method,
-            request.url.path,
+            template,
         )
         return JSONResponse(
             status_code=500,
