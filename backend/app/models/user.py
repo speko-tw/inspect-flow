@@ -29,10 +29,8 @@ class User(AuditMixin, TimestampedBase):
     # "users" avoids it.
     __tablename__ = "users"
 
-    # No length is specified: the maximum length of an employee
-    # number is undecided (domain-model's DOM-Q1). An unbounded
-    # String avoids guessing a limit that a later migration would
-    # then have to narrow or widen.
+    # Length 16 per DOM-Q1's ruling (#121); narrowed from an
+    # unbounded String by the ``22bfdd8a72a4`` migration (#140).
     employee_no: Mapped[str] = mapped_column(
-        String, nullable=False, unique=True
+        String(16), nullable=False, unique=True
     )
