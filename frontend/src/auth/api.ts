@@ -13,16 +13,36 @@ export interface CurrentUser {
   name_en: string
   name_zh: string
   is_admin: boolean
+  must_change_password: boolean
 }
 
-/** 目前使用者、登入 API 回傳非預期狀態碼時拋出。 */
+/**
+ * 目前使用者、登入、變更密碼 API 回傳非預期狀態碼時拋出。
+ *
+ * `code` 是錯誤 envelope 的 `error.code`（沿用 `api-conventions` 的
+ * dot-namespace 命名），解析不到時為 `undefined`；呼叫端需要依錯誤
+ * 碼分流訊息時才用得到（例如變更密碼頁，AUT-R34），登入頁等只顯示
+ * 通用訊息的呼叫端不需要讀它。
+ */
 export class ApiError extends Error {
   readonly status: number
+  readonly code?: string
 
-  constructor(status: number) {
+  constructor(status: number, code?: string) {
     super(`API 錯誤（狀態碼 ${status}）`)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
+  }
+}
+
+/** 盡力從錯誤回應本體讀出 `error.code`；解析失敗回傳 `undefined`。 */
+async function readErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const body = (await response.json()) as { error?: { code?: string } }
+    return body.error?.code
+  } catch {
+    return undefined
   }
 }
 
@@ -91,5 +111,36 @@ export async function logout(): Promise<void> {
 
   if (!response.ok) {
     throw new ApiError(response.status)
+  }
+}
+
+/**
+ * 本人變更密碼（`POST /api/v1/auth/password`，AUT-R34）。
+ *
+ * 成功時後端以 `Set-Cookie` 換發登入 Cookie（AUT-R35），瀏覽器會自
+ * 動處理，前端不必讀取或轉存。失敗（400 `auth.current_password_incorrect`、
+ * 422 `auth.password_invalid`／`auth.password_unchanged`、403
+ * `permission.denied` 或其他狀態碼）一律拋出帶 `code` 的
+ * `ApiError`，呼叫端（`ChangePasswordPage`）依 `code` 顯示對應訊
+ * 息，讀不到 `code` 時顯示通用錯誤訊息。
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const response = await fetch(`${AUTH_BASE}/password`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new ApiError(response.status, await readErrorCode(response))
   }
 }
