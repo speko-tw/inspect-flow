@@ -52,7 +52,7 @@
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | DOM-R01 | `User` **必須**具備基本欄位：公司 `company_id`（外鍵指向 `Company`）、部門 `department`、地點 `location`、工號 `employee_no`（定義與唯一性見 DBF-R12、DBF-R13）、英文姓名 `name_en`、中文姓名 `name_zh`、email `email`、啟用狀態 `is_active`。以上欄位**不得**為空值，由資料庫約束保證；除 `is_active` 外，建立時都**必須**由呼叫端提供。`is_active` 建立時的預設值見 [DOM-Q7](#dom-q7) | 必須；應（欄位名） | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-23](../../intents/03-decisions-and-stack.md#kd-23)（人員屬於一個 `Company`）；[OQ-02](../../intents/05-open-questions.md#oq-02) 裁定 | DOM-AC01 |
-| DOM-R02 | `email` 是登入帳號，在所有 `User`（含已停用）之間**必須**唯一，由資料庫約束保證；本規格不另設帳號名稱欄位。email 比對是否不分大小寫見 [DOM-Q2](#dom-q2) | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號一律用 email）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（同步以 email 找本系統帳號）、[KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用後資料保留）；「唯一」是本規格由三者推導，理由：email 重複時登入與同步比對都無法確定是哪一個人 | DOM-AC02 |
+| DOM-R02 | `email` 是登入帳號，在所有 `User`（含已停用）之間**必須**唯一，由資料庫約束保證；本規格不另設帳號名稱欄位。email 比對是否不分大小寫見 [DOM-Q2](#dom-q2) | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號一律用 email）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（同步以 email 找本系統帳號）、[KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用後資料保留）；唯一（含已停用帳號）為負責人決定（PR [#111](https://github.com/speko-tw/inspect-flow/pull/111) 審查，2026-09-26） | DOM-AC02 |
 | DOM-R03 | `User` **必須**具備聯絡與補充欄位：分機1 `extension_1`、分機2 `extension_2`、手機 `mobile`、Line ID `line_id`、WeChat `wechat_id`、負責事務 `responsibilities`；皆為選填（允許空值） | 必須；應（欄位名） | [KD-17](../../intents/03-decisions-and-stack.md#kd-17) | DOM-AC01 |
 | DOM-R04 | 基本欄位的可修改性依帳號來源決定：`auth_source = local` 的帳號，基本欄位只由 Admin 修改；`auth_source = external` 的帳號，Service 層**必須**拒絕任何人工修改基本欄位，只有外部身分同步流程得覆蓋。聯絡與補充欄位由本人與 Admin 修改，外部身分同步**不得**覆蓋。Service 層的修改入口**必須**區分「人工修改」與「同步」兩種來源；判斷操作者是不是 Admin 或本人，由 `authentication` 執行 | 必須 | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)；[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 與外部帳號的衝突見 [DOM-Q8](#dom-q8) | DOM-AC04（外部帳號拒絕人工修改）；操作者身分由 `authentication` 驗收；同步不覆蓋由 `external-identity-sync` 驗收 |
 | DOM-R05 | `User` **必須**具備系統欄位 `is_admin`（系統管理者）、`is_system`（內建帳號），皆為不可空值的布林值，未指定時為 `false`。系統管理者是 `User` 身上的開關，**不得**以 `Role` 或 `ProjectMember` 表示 | 必須 | [KD-19](../../intents/03-decisions-and-stack.md#kd-19)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24) | DOM-AC01 |
@@ -138,7 +138,7 @@
 | `ProjectMember` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/...` | 無關，凍結 | 路徑裡的是 `Project` 的 UUID，不是 `ProjectMember`，本身就不算命中 `ProjectMember`；`ProjectMember` 只以 UUID 外鍵引用 `Project`、`User`，不依賴 `Project` 的業務欄位 |
 | `Project`（業務欄位） | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑（同 `database-foundation` 的比對） | 門檻無關，但維持草稿 | 路徑只以 UUID 引用 `Project`，適用 #55 的例外，結論同 `database-foundation`；不凍結的原因是門檻外的 [OQ-01](../../intents/05-open-questions.md#oq-01) 尚未裁定（負責人決定，[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844531219)，2026-09-26） |
 
-`User` 的命中屬於 #55 例外（只以 ID 引用、不影響 `User` 本身），或只是泛稱。`Role` 不適用這個例外：G-04 沒有點名角色，判為無關的理由是 G-04 的任何裁定最多新增一個權限代碼，那是 `Role` 權限內容裡的資料，不改變 `Role` 的欄位、狀態或規則；若 G-04 裁定出「只有特定角色能核可」這類規則，依規則 3 處理。
+`User` 的命中屬於 #55 例外（只以 ID 引用、不影響 `User` 本身），或只是泛稱。`Role` 不適用這個例外，判為無關的理由是：G-04 沒有點名角色；依 [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)，「誰能核可」只能表示成一個權限代碼，由有權限的人勾選進任何角色，是 `Role` 權限內容裡的資料，不改變 `Role` 的欄位、狀態或規則。G-04 的選項原文也只談 Variant 的核可紀錄、核可者與狀態欄位，沒有要求固定或不可刪除的角色；若要那樣做，會牴觸 KD-26「角色全部可自訂」，屬意圖變更，不是 G-04 的裁定範圍。
 
 ## 介面
 
