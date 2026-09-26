@@ -69,6 +69,17 @@ class BoundedString(TypeDecorator):
     def __init__(self, length: int, check: Callable[[str], None]) -> None:
         super().__init__(length)
         self.check = check
+        # ``TypeDecorator.__init__`` only stores ``length`` on
+        # ``self.impl`` (the wrapped ``String``), not on ``self``
+        # itself. SQLAlchemy's compiled-statement cache key
+        # (``TypeEngine._static_cache_key``) is built from
+        # ``__init__`` parameter names that are also present in
+        # ``self.__dict__``, so without this assignment two
+        # ``BoundedString`` instances with the same ``check`` but
+        # different ``length`` would collide on the same cache key
+        # and a cached ``CAST`` from one column's length could leak
+        # into another's compiled SQL.
+        self.length = length
 
     def process_bind_param(
         self, value: str | None, dialect: object
