@@ -48,7 +48,7 @@ docs/specs/
 | [`database-foundation`](database-foundation/spec.md) | P1 | 功能 | 部分凍結 | 第一段（基礎設施、`User`、`Project` 的共通結構）無；第二段（`Template`、`TemplateVersion`）受 [G-01](../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P9 | 共用 | 部分凍結 | 凍結範圍（`User`、`Company`、`Role`、`ProjectMember`、初始化指令）無；`Project` 業務欄位待 [OQ-01](../intents/05-open-questions.md#oq-01)；其餘實體受 [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06) 等開工門檻擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | `state-machines` | P4、P6、P7、P9 | 共用 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-06](../intents/05-open-questions.md#g-06) |
-| `authentication` | P2 | 功能 | 未開始 | [OQ-13](../intents/05-open-questions.md#oq-13)；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定） |
+| `authentication` | P2 | 功能 | 未開始 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定） |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
 | `template-system` | P3 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[OQ-06](../intents/05-open-questions.md#oq-06) |
 | `inspection-planning` | P4 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01) |
