@@ -92,6 +92,8 @@ flowchart LR
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
 
+Phase 不等於 Milestone，見 [06-versioning-and-milestone-governance.md](06-versioning-and-milestone-governance.md#vg-05)。
+
 一個版本要視為「可部署」，**必須**滿足 §22A.20 的完整 Deployment Definition of Done，包括 DOCX／PDF 可產出、重啟後資料不消失等條件（依據：架構基準 §22A.20）。
 
 ### MVP 的證據類型邊界
