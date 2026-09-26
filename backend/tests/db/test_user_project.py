@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, inspect
+from sqlalchemy import CHAR, Engine, Uuid, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -137,11 +137,19 @@ class TestDbfAc09PrimaryKeysAreSingleColumnUuids:
         }
         id_type = columns["id"]["type"]
         # sa.Uuid reflects back as CHAR(32) on SQLite (no native
-        # UUID storage type); an autoincrement primary key would
-        # instead reflect as an integer type with a Python int
-        # value -- DBF-R07 rules that out as a cross-system
-        # identity.
+        # UUID storage type) and as a native UUID elsewhere; an
+        # autoincrement primary key would instead reflect as an
+        # integer type with a Python int value -- DBF-R07 rules
+        # that out as a cross-system identity.
         assert id_type.python_type is not int
+        if engine.dialect.name == "sqlite":
+            assert isinstance(id_type, CHAR)
+            assert id_type.length == 32
+        else:
+            assert isinstance(id_type, Uuid)
+
+        model = {"users": User, "projects": Project}[table_name]
+        assert isinstance(model.__table__.c.id.type, Uuid)
 
     def test_inserted_rows_get_a_uuid_parseable_primary_key(self, session):
         user = _new_root_user("E100")
@@ -248,12 +256,15 @@ class TestDbfAc11AuditColumns:
         inspector = inspect(engine)
         foreign_keys = inspector.get_foreign_keys(table_name)
 
-        referenced_columns = {
-            fk["constrained_columns"][0]: fk["referred_table"]
+        references = {
+            fk["constrained_columns"][0]: (
+                fk["referred_table"],
+                fk["referred_columns"],
+            )
             for fk in foreign_keys
         }
-        assert referenced_columns["created_by"] == "users"
-        assert referenced_columns["updated_by"] == "users"
+        assert references["created_by"] == ("users", ["id"])
+        assert references["updated_by"] == ("users", ["id"])
 
     def test_first_user_self_references_and_project_references_it(
         self, session
