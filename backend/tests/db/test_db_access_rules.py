@@ -158,10 +158,14 @@ def test_scanned_python_files_are_non_empty_and_cover_env_py():
     """Guards the scan itself: an empty file list would make every
     assertion below vacuously pass.
     """
+    # Each root is checked on its own (DBF-AC01, DBF-AC03 name both),
+    # so losing one of them cannot hide behind the other's files.
+    for root in (_APP_DIR, _ALEMBIC_DIR):
+        assert root.is_dir(), f"scan root missing: {root}"
+        assert any(root.rglob("*.py")), f"no Python files in {root}"
+
     files = _iter_python_files()
     relative = {path.relative_to(_BACKEND_DIR) for path in files}
-
-    assert files
     assert Path("alembic/env.py") in relative
 
 

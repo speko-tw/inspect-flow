@@ -71,11 +71,16 @@ def test_upgrade_head_creates_a_single_head_and_stamps_it(
 def test_baseline_upgrade_creates_no_tables_besides_alembic_version(
     tmp_path, monkeypatch
 ):
+    """Upgrades only to the chain's root (the baseline), not to
+    ``head``, so this stays true after later migrations add tables.
+    """
     db_path = tmp_path / "migrations.db"
     monkeypatch.setenv(settings.DATABASE_URL_ENV_VAR, f"sqlite:///{db_path}")
     cfg = _alembic_config()
+    baseline = ScriptDirectory.from_config(cfg).get_base()
+    assert baseline is not None
 
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, baseline)
 
     engine = create_engine(f"sqlite:///{db_path}")
     try:
@@ -142,9 +147,13 @@ def test_upgrade_head_works_from_a_non_backend_working_directory(
 
     command.upgrade(cfg, "head")
 
+    expected_head = ScriptDirectory.from_config(cfg).get_current_head()
     engine = create_engine(f"sqlite:///{db_path}")
     try:
-        table_names = inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            stamped = conn.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar()
     finally:
         engine.dispose()
-    assert table_names == ["alembic_version"]
+    assert stamped == expected_head
