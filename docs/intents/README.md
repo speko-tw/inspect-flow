@@ -41,6 +41,7 @@ InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整�
 | 命名或名詞問題 | [04-glossary.md](04-glossary.md) |
 | 設計或凍結資料模型、API 契約 | [05-open-questions.md 開工門檻](05-open-questions.md#gate)、[G-01](05-open-questions.md#g-01)～[G-07](05-open-questions.md#g-07)、[OQ-06](05-open-questions.md#oq-06) |
 | 部署／上線流程 | [PR-13](02-principles.md#pr-13)、[PR-14](02-principles.md#pr-14)、[KD-09](03-decisions-and-stack.md#kd-09)、[OQ-18](05-open-questions.md#oq-18) |
+| 人員、公司、角色與權限相關功能 | [PR-18](02-principles.md#pr-18)、[KD-16](03-decisions-and-stack.md#kd-16)～[KD-29](03-decisions-and-stack.md#kd-29)、[OQ-08](05-open-questions.md#oq-08)、[OQ-02](05-open-questions.md#oq-02) |
 | 遇到看似矛盾或未定案的地方 | [05-open-questions.md](05-open-questions.md) |
 
 ## 用語
