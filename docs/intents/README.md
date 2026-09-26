@@ -27,6 +27,7 @@ InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整�
 | [03-decisions-and-stack.md](03-decisions-and-stack.md) | 關鍵決策（含保留編號的待決項目）與技術棧選型。 |
 | [04-glossary.md](04-glossary.md) | 名詞對照：中文說法 ↔ 系統實體名。 |
 | [05-open-questions.md](05-open-questions.md) | 待決議（OQ-xx）與來源矛盾／缺漏（G-xx）。 |
+| [06-versioning-and-milestone-governance.md](06-versioning-and-milestone-governance.md) | InspectFlow 的版本號、GitHub Milestone 規則，以及 Issue／PR 的版本歸屬判斷。 |
 
 ## 任務 → 要讀的條目
 
