@@ -1,9 +1,10 @@
-"""Login, logout and current-user endpoints (AUT-R05~AUT-R14).
+"""Login, logout and current-user endpoints (AUT-R05~AUT-R14,
+AUT-R32~AUT-R33).
 
-The temporary-password gate (AUT-R33), the "本人或 Admin" etc.
-access-level decorations (AUT-R18~AUT-R22) and the change-password
-route (AUT-R34) are later tasks (T9, T4, T11); this module only
-wires up the three routes T3 owns.
+The "本人或 Admin" etc. access-level decorations (AUT-R18~AUT-R22)
+and the change-password route (AUT-R34) are later tasks (T4, T11);
+this module wires up the three routes T3 owns plus the
+``must_change_password`` field T9 adds to their response body.
 """
 
 from uuid import UUID
@@ -13,7 +14,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.auth.dependencies import get_db, require_login
+from app.auth.dependencies import (
+    get_db,
+    has_effective_temporary_password_flag,
+    require_login,
+)
 from app.auth.login import authenticate
 from app.auth.sessions import (
     SESSION_COOKIE_NAME,
@@ -33,26 +38,24 @@ class LoginRequest(BaseModel):
 
 
 class CurrentUserResponse(BaseModel):
-    """The login and current-user response body (AUT-R08, AUT-R10).
-
-    Exactly these five keys for this task (T9 adds
-    ``must_change_password`` back on top -- see plan.md's T3 row).
-    """
+    """The login and current-user response body (AUT-R08, AUT-R10)."""
 
     id: UUID
     email: str
     name_en: str
     name_zh: str
     is_admin: bool
+    must_change_password: bool
 
 
-def _current_user_response(user: User) -> CurrentUserResponse:
+def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
     return CurrentUserResponse(
         id=user.id,
         email=user.email,
         name_en=user.name_en,
         name_zh=user.name_zh,
         is_admin=user.is_admin,
+        must_change_password=has_effective_temporary_password_flag(db, user),
     )
 
 
@@ -99,7 +102,7 @@ def login(
 
     _session, token = create_session(db, user)
     _set_session_cookie(response, token)
-    return _current_user_response(user)
+    return _current_user_response(db, user)
 
 
 @router.post("/logout", status_code=204)
@@ -121,9 +124,10 @@ def logout(
 @router.get("/me", response_model=CurrentUserResponse)
 def get_me(
     user: User = Depends(require_login),  # noqa: B008 -- FastAPI's DI
+    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
 ) -> CurrentUserResponse:
     """AUT-R08: the current user, or 401 ``auth.not_authenticated``
     (raised by the ``require_login`` dependency itself) when not
     logged in.
     """
-    return _current_user_response(user)
+    return _current_user_response(db, user)
