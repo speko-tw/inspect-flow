@@ -245,7 +245,7 @@
 - **狀態**：已決定。
 - **考慮過但沒選**：無，issue #63 未列出替代方案。
 - **為什麼選這個**：這是 `database-foundation` T4 與 `authentication` 的前提（依負責人 #63 決定）；兩個帳號的 email 與姓名不寫進 repo，是 #63 的明文要求。
-- **代價**：`admin` 的 `created_by` 指向自己，與 [DBF-Q2](../specs/database-foundation/spec.md#dbf-q2)（認證完成前 `created_by`／`updated_by` 怎麼填）相關，兩者需要對齊；DBF-Q2 本身仍留給人裁定，不因本決策代為裁定。
+- **代價**：`admin` 的 `created_by` 指向自己，與 [DBF-Q2](../specs/database-foundation/spec.md#dbf-q2)（認證完成前 `created_by`／`updated_by` 怎麼填）相關；DBF-Q2 已由負責人另行裁定（#54，2026-09-26），認證完成前沒有登入者時，兩欄都填這個 `admin`。
 - **什麼情況要重新討論**：無，屬已決定的初始化規則。
 - **依據**：負責人決定（#63，2026-09-26）；架構基準無對應章節。
 
