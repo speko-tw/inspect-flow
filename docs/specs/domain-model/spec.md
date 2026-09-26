@@ -52,7 +52,7 @@
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | DOM-R01 | `User` **必須**具備基本欄位：公司 `company_id`（外鍵指向 `Company`）、部門 `department`、地點 `location`、工號 `employee_no`（定義與唯一性見 DBF-R12、DBF-R13）、英文姓名 `name_en`、中文姓名 `name_zh`、email `email`、啟用狀態 `is_active`。以上欄位**不得**為空值，由資料庫約束保證；除 `is_active` 外，建立時都**必須**由呼叫端提供。`is_active` 建立時的預設值見 [DOM-Q7](#dom-q7) | 必須；應（欄位名） | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-23](../../intents/03-decisions-and-stack.md#kd-23)（人員屬於一個 `Company`）；[OQ-02](../../intents/05-open-questions.md#oq-02) 裁定 | DOM-AC01 |
-| DOM-R02 | `email` 是登入帳號，在所有 `User`（含已停用）之間**必須**唯一，由資料庫約束保證；本規格不另設帳號名稱欄位。email 比對是否不分大小寫見 [DOM-Q2](#dom-q2) | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號一律用 email）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（同步以 email 找本系統帳號）、[KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用後資料保留）；唯一（含已停用帳號）為負責人決定（[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844708436)，2026-09-26） | DOM-AC02 |
+| DOM-R02 | `email` 是登入帳號，在所有 `User`（含已停用）之間**必須**唯一，由資料庫約束保證；本規格不另設帳號名稱欄位。email 的比對與唯一性**必須**不分大小寫：`Anna.Deng@company.com` 與 `anna.deng@company.com` 是同一個 email，已有其中一個時，另一個新增會被擋下。`email` **必須**保留輸入的原樣存放，只在比對與唯一約束時轉成小寫；唯一約束的寫法（以小寫比對的唯一索引，或另存正規化欄位並加唯一約束）由實作任務選擇，並寫在計畫。其他以 email 找帳號的地方（`authentication` 的登入、`external-identity-sync` 的帳號對應）也**必須**不分大小寫 | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號一律用 email）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（同步以 email 找本系統帳號）、[KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用後資料保留）；唯一（含已停用帳號）為負責人決定（[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844708436)，2026-09-26）；不分大小寫與原樣存放為負責人決定（[#122 裁定](https://github.com/speko-tw/inspect-flow/issues/122#issuecomment-5845418601)，2026-09-26；[DOM-Q2](#dom-q2)） | DOM-AC02 |
 | DOM-R03 | `User` **必須**具備聯絡與補充欄位：分機1 `extension_1`、分機2 `extension_2`、手機 `mobile`、Line ID `line_id`、WeChat `wechat_id`、負責事務 `responsibilities`；皆為選填（允許空值） | 必須；應（欄位名） | [KD-17](../../intents/03-decisions-and-stack.md#kd-17) | DOM-AC01 |
 | DOM-R04 | 基本欄位的可修改性依帳號來源決定：`auth_source = local` 的帳號，基本欄位只由 Admin 修改；`auth_source = external` 的帳號，Service 層**必須**拒絕任何人工修改基本欄位，只有外部身分同步流程得覆蓋。聯絡與補充欄位由本人與 Admin 修改，外部身分同步**不得**覆蓋。Service 層的修改入口**必須**區分「人工修改」與「同步」兩種來源；判斷操作者是不是 Admin 或本人，由 `authentication` 執行 | 必須 | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)；[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 與外部帳號的衝突見 [DOM-Q8](#dom-q8) | DOM-AC04（外部帳號拒絕人工修改）；操作者身分由 `authentication` 驗收；同步不覆蓋由 `external-identity-sync` 驗收 |
 | DOM-R05 | `User` **必須**具備系統欄位 `is_admin`（系統管理者）、`is_system`（內建帳號），皆為不可空值的布林值，未指定時為 `false`。系統管理者是 `User` 身上的開關，**不得**以 `Role` 或 `ProjectMember` 表示 | 必須 | [KD-19](../../intents/03-decisions-and-stack.md#kd-19)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24) | DOM-AC01 |
@@ -161,7 +161,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | DOM-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，由測試在同一個交易裡建立一筆 `Company` 與一筆作為操作者的 `User`（`created_by`、`updated_by` 指向自己，`company_id` 指向該公司） | 用 SQLAlchemy inspector 檢查 `User` 資料表；以該操作者為 `created_by`、`updated_by`，新增一筆只提供必填基本欄位的 `User`；再分別嘗試新增缺少任一必填基本欄位的 `User` | DOM-R01、DOM-R03、DOM-R05、DOM-R08 列出的欄位都存在；基本欄位、`is_admin`、`is_system`、`auth_source` 不可空值，聯絡與補充欄位可空值；`company_id` 外鍵指向 `Company`；第一筆成功，且 `is_admin`、`is_system` 為 `false`、`auth_source` 為 `local`、聯絡欄位為空值；缺欄位的每一次都被資料庫拒絕，筆數不變 | DOM-R01、DOM-R03、DOM-R05 |
-| DOM-AC02 | 與 DOM-AC01 相同的前置資料，並已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 新增另一筆相同 `email` 的 `User` | 因唯一約束失敗；該 email 的 `User` 仍只有一筆，`User` 總筆數與新增前相同 | DOM-R02 |
+| DOM-AC02 | 與 DOM-AC01 相同的前置資料，並已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 依序新增三筆 `User`：`email` 相同（`a@example.com`）；`email` 只差大小寫（`A@Example.COM`）；`email` 為 `Anna.Deng@Example.com`，新增後重新查詢讀回 | 前兩次都因唯一約束被資料庫拒絕，不分大小寫等於 `a@example.com` 的 `User` 仍只有一筆，`User` 總筆數與新增前相同；第三次成功，讀回的 `email` 逐字等於 `Anna.Deng@Example.com`（大小寫不變） | DOM-R02 |
 | DOM-AC03 | 與 DOM-AC01 相同的前置資料，並已有一筆 `auth_source = local`、外部欄位皆為空值的 `User` | 另新增一筆同樣外部欄位皆為空值的 `local` 帳號；新增一筆 `auth_source = external` 且 `external_source`、`external_id` 有值的帳號；再分別嘗試：`auth_source` 為 `local`、`external` 以外的值；`external` 但 `external_id` 為空值；`external` 但 `external_source` 為空值；`external_source` 與 `external_id` 都和前一筆相同的帳號 | 前兩次新增成功；後四次都被資料庫拒絕，筆數不變 | DOM-R08 |
 | DOM-AC04 | 一筆 `external` 帳號、一筆 `local` 帳號 | 透過 Service 層的人工修改入口，分別修改兩者的 `department` 與 `mobile` | `external` 帳號的 `department` 修改被拒絕、值不變，`mobile` 修改成功；`local` 帳號兩者都修改成功 | DOM-R04 |
 | DOM-AC05 | 初始化後的資料庫（內建 `admin` 與另一位 Admin） | 透過 Service 層嘗試把 `admin` 的 `is_active` 改為 `false`，以及把 `is_admin` 改為 `false` | 兩次都被拒絕，`admin` 的資料不變 | DOM-R06 |
@@ -201,7 +201,7 @@
 <a id="dom-q1"></a>
 - **DOM-Q1：字串欄位的長度上限與格式**。#63 只定了欄位，沒有定長度（例如 `email`、`employee_no`、`Company.code`、`name_en`、`name_zh`、權限代碼）與格式（例如 `tax_id` 是否限定 8 位數字、`email` 是否檢查格式）。SQLite 不強制 `VARCHAR` 長度，PostgreSQL 會；之後再加上限需要新的 migration。影響計畫 T1～T3。
 <a id="dom-q2"></a>
-- **DOM-Q2：email 比對是否不分大小寫**。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（存正規化後的值，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。
+- **DOM-Q2：email 比對是否不分大小寫**（已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)）。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（存正規化後的值，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。裁定：不分大小寫，唯一性也不分大小寫（含已停用帳號）；保留輸入的原樣存放，只在比對與唯一約束時轉成小寫，寫法由計畫 T2 選擇；登入與外部身分同步的比對同樣不分大小寫。已寫入 DOM-R02、DOM-AC02。
 <a id="dom-q3"></a>
 - **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。待定的有：格式是否固定為 `<資料>.<動作>`；可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
 <a id="dom-q4"></a>
@@ -218,5 +218,7 @@
 ## 變更紀錄
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
+
+- DOM-R02、DOM-AC02：依 DOM-Q2 裁定，email 的比對與唯一性改為不分大小寫、保留原樣存放，並在驗收條件補上大小寫不同被擋下與原樣讀回的檢查 — [#122](https://github.com/speko-tw/inspect-flow/issues/122)
 
 -
