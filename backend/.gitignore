@@ -3,3 +3,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .env
+# Default local SQLite database (INSPECTFLOW_DATABASE_URL unset).
+data/
