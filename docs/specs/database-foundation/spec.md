@@ -25,7 +25,7 @@
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
 - `User`、`Project` 的業務欄位（例如 `name`、`location`、`status`、`email`、`role`、`active`）：由 `domain-model` 定義（依 spec 範本「資料」段：完整定義寫在 `domain-model`；負責人決定，#51，2026-09-26）。`Project` 正式欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；`User` 組織欄位已裁定，見 [OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）。
-- 密碼雜湊、登入狀態等認證欄位：移至 `authentication`，受 [OQ-13](../../intents/05-open-questions.md#oq-13) 擋；角色權限機制已裁定，見 [OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）。
+- 密碼雜湊、登入狀態等認證欄位：移至 `authentication`；登入機制與密碼雜湊已裁定，見 [OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）；角色權限機制已裁定，見 [OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）。
 - `User`、`Project` 的 API 端點（建立、查詢、修改）：本規格不定義資源端點；由之後的功能規格負責（例如 `authentication`、`admin-dashboard`）。
 - 資料庫備份與還原：屬 [PR-12](../../intents/02-principles.md#pr-12)，落地於 `pilot-deployment`。
 - 部署時 migration 與 API 啟動的先後順序、SQLite 檔案的持久化掛載、多台後端不得共用 SQLite 檔：屬 [PR-13](../../intents/02-principles.md#pr-13)、[KD-08](../../intents/03-decisions-and-stack.md#kd-08)、[KD-09](../../intents/03-decisions-and-stack.md#kd-09)，落地於 `pilot-deployment`。
@@ -95,9 +95,9 @@
 | `Inspection Template` | G-01～G-07、OQ-06 | G-01 立場 A「`Interval` 是 `Template` 本身的一部分」 | 有關，維持草稿 | 立場 A 的 `Template` 可能指頂層實體，也可能泛指範本層級，字面無法分辨；若指頂層，這張表就要多一個 `interval` 欄位（見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)） |
 | `Template Version` | G-01～G-07、OQ-06 | G-01 立場 A（同上，程度較低） | 有關，維持草稿 | 同上；`interval` 也可能落在版本層（見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)） |
 
-`User`、`Project` 的命中都只是「其他實體引用它的 UUID」，判為無關是本規格的判讀；規則 1 是否要補上這類例外，見 [DBF-Q3](#dbf-q3)。
+`User`、`Project` 判為無關的依據分兩種：G-02 的 `<project_id>` 與 G-04 的「核可者」只是其他實體用 UUID 引用它，適用規則 1 的「只用 ID 引用」例外；G-03 的「使用者」是泛稱，談的是編輯結果的可見時序，沒有指向 `User` 或它的任何欄位。#55 的裁定把這三處判讀都列為該例外的先例（見 [DBF-Q3](#dbf-q3)）。
 
-**門檻外、但影響業務欄位的議題**（不在本規格範圍，列出供 `domain-model` 參考）：[OQ-01](../../intents/05-open-questions.md#oq-01)（`Project` 正式欄位）、[OQ-02](../../intents/05-open-questions.md#oq-02)（`User` 組織欄位，已裁定，見 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-22](../../intents/03-decisions-and-stack.md#kd-22)）、[OQ-08](../../intents/05-open-questions.md#oq-08)（角色與權限機制，已裁定，見 [KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）、[OQ-13](../../intents/05-open-questions.md#oq-13)（密碼雜湊與登入機制）。
+**門檻外、但影響業務欄位的議題**（不在本規格範圍，列出供 `domain-model` 參考）：[OQ-01](../../intents/05-open-questions.md#oq-01)（`Project` 正式欄位）、[OQ-02](../../intents/05-open-questions.md#oq-02)（`User` 組織欄位，已裁定，見 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-22](../../intents/03-decisions-and-stack.md#kd-22)）、[OQ-08](../../intents/05-open-questions.md#oq-08)（角色與權限機制，已裁定，見 [KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）、[OQ-13](../../intents/05-open-questions.md#oq-13)（密碼雜湊與登入機制，已裁定，見 [KD-30](../../intents/03-decisions-and-stack.md#kd-30)、[KD-31](../../intents/03-decisions-and-stack.md#kd-31)）。
 
 ## 介面
 
@@ -151,7 +151,9 @@
   - **裁定**（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26）：不採上述三個選項。`created_by`、`updated_by` 不允許空白，必須指向某個 `User`。初始化指令建立兩個 Admin 帳號：內建 `admin`（`is_system`，`created_by` 指向自己）與負責人的個人帳號（`created_by` 指向 `admin`）；之後每個帳號都由某個 Admin 建立，所以 `created_by` 永遠有值。認證機制仍待 `authentication` 與 [OQ-13](../../intents/05-open-questions.md#oq-13)，在那之前帳號先建好但還不能登入。完整決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
   - **落地**：資料庫約束寫進 DBF-R14、DBF-AC11；初始化指令與 `is_admin`、`is_system` 欄位歸 `domain-model`（負責人決定，[#65](https://github.com/speko-tw/inspect-flow/issues/65)，2026-09-26），本規格只引用。
 <a id="dbf-q3"></a>
-- **DBF-Q3：部分凍結規則 1 要不要補「只引用 ID 不算有關」的例外**。本規格把 `User`、`Project` 的字面命中判為無關（見[資料](#資料)段），但規則 1 原文是「字面可能指到它，就算有關」。寫 `domain-model` 時會再碰到同樣的判斷，要不要改規則由負責人決定。
+- **DBF-Q3：部分凍結規則 1 要不要補「只引用 ID 不算有關」的例外**（已裁定，[#55](https://github.com/speko-tw/inspect-flow/issues/55)）。本規格把 `User`、`Project` 的字面命中判為無關（見[資料](#資料)段），但當時規則 1 的原文是「字面可能指到它，就算有關」；寫 `domain-model` 時也會碰到同樣的判斷，因此交由負責人決定要不要改規則。
+  - **裁定**（負責人，[#55](https://github.com/speko-tw/inspect-flow/issues/55)，2026-09-26）：選項 A。規則 1 補上例外：只用 ID 引用、不影響該實體本身欄位的，不算有關；仍須在「資料」段寫明理由；可能影響該實體本身欄位、狀態或規則的仍算有關。本規格對 `User`、`Project` 的判讀是這個例外的先例。
+  - **落地**：例外寫進 [部分凍結](../README.md#partial-freeze)規則 1。本規格的判讀結論不變。
 - **migration 是否必須能 downgrade**：intents 沒有依據（[PR-13](../../intents/02-principles.md#pr-13) 的回滾以備份為主），本規格不要求；需要時另行提出。
 
 ## 變更紀錄

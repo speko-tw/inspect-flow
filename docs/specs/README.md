@@ -48,7 +48,7 @@ docs/specs/
 | [`database-foundation`](database-foundation/spec.md) | P1 | 功能 | 部分凍結 | 第一段（基礎設施、`User`、`Project` 的共通結構）無；第二段（`Template`、`TemplateVersion`）受 [G-01](../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | `domain-model` | P1、P3、P4、P6、P9 | 共用 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06)；`User`、`Project` 得先[部分凍結](#partial-freeze)（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | `state-machines` | P4、P6、P7、P9 | 共用 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-06](../intents/05-open-questions.md#g-06) |
-| `authentication` | P2 | 功能 | 未開始 | [OQ-13](../intents/05-open-questions.md#oq-13)；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定） |
+| `authentication` | P2 | 功能 | 未開始 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定） |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
 | `template-system` | P3 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[OQ-06](../intents/05-open-questions.md#oq-06) |
 | `inspection-planning` | P4 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01) |
@@ -78,6 +78,7 @@ docs/specs/
 [開工門檻](../intents/05-open-questions.md#gate)未全部裁定前，規格裡確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](../intents/05-open-questions.md#oq-22)）。依據：負責人決定（#46，2026-09-26）；架構基準無對應章節。
 
 1. **確認無關**：逐條比對門檻內每一個 G／OQ 的「為什麼要先決定」與選項原文。只要有一條點名該實體，或字面可能指到它，就算有關，該實體不先凍結。比對結果寫在規格的「資料」段，每個實體一列：比對過哪些議題、結論、理由。理由：誤判無關的代價是凍結後返工資料表，多等一次裁定的代價通常較小（例如 G-01 立場 A 的 `Template` 字面有歧義，`Inspection Template` 因此延後）。
+   - **例外：只用 ID 引用**：議題原文只是用 ID 引用該實體（例如記錄「是哪個人」「是哪個專案」），不會影響該實體本身的欄位，就不算有關。仍須在「資料」段寫明判讀理由，審查時照常檢查。議題可能影響該實體本身的欄位、狀態或規則時，仍算有關，不適用這個例外。先例：[`database-foundation`](database-foundation/spec.md#資料) 對 `User`、`Project` 的判讀。依據：負責人決定（#55，2026-09-26）；架構基準無對應章節。理由：引用端要加的是自己那一側的外鍵欄位，被引用的實體結構不變，凍結後不會因此返工。
 2. **規格內標示**：標頭「狀態」寫「部分凍結」，並填寫範本標頭的「凍結範圍」行，列出已凍結的實體與涵蓋它們的需求、驗收條件編號；沒列到的都是草稿。計畫與任務只能涵蓋凍結範圍內的部分。擴大凍結範圍時，在同一份規格的 PR 裡更新這一行與比對結果；全部凍結後改為「已凍結」並刪掉這一行。理由：標示集中在標頭一行，讀規格的人一眼就知道哪些能拆任務。
 3. **已凍結的實體被裁定牽動**：依[意圖變更](#change)處理：先改 `docs/intents/`，再改規格，並加一支新的 migration 調整資料表。理由：已凍結的實體可能已經有資料表，改動要留在 migration 鏈裡才能一致地套用到每個環境（見 [PR-03](../intents/02-principles.md#pr-03)）。
 
