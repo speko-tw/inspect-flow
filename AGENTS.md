@@ -5,6 +5,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 
 ## 動手前
 
+- 新的 worktree 先執行 `make setup`，前端與後端依賴才會就緒。
 - 涉及功能、資料模型、API、儲存或報表的變更，先讀 [`docs/intents/`](docs/intents/README.md)。
 - 違反 `02-principles.md` 中「必須」等級原則的變更，須先在 `03-decisions-and-stack.md` 新增決策並經團隊同意。
 - 未定案或來源矛盾的議題查 `05-open-questions.md`，不得把自己的假設當成既定事實。

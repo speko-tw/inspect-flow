@@ -45,7 +45,14 @@ check-backend:
 	cd backend && uv run --locked pytest
 	cd backend && uv run --locked python -m compileall -q app
 
+# Fails fast if frontend deps are missing. Not auto-installed here:
+# CI runs its own `npm ci`, so installing on demand would hide
+# lockfile problems that should fail the check instead.
 check-frontend:
+	@test -d frontend/node_modules || \
+		(echo "frontend/node_modules not found. Run" \
+			"'make setup' or 'make setup-frontend' first." && \
+		exit 1)
 	cd frontend && npm run format:check
 	cd frontend && npm run lint
 	cd frontend && npm run typecheck
