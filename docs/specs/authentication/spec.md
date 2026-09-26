@@ -3,7 +3,7 @@
 **代碼**：`AUT`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R01～DOM-R27）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)～[KD-31](../../intents/03-decisions-and-stack.md#kd-31)、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）
-**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q3、DOM-Q6、DOM-Q7（DOM-Q2 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)），只擋對應任務，不擋本規格
+**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q3、DOM-Q6（DOM-Q2 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)），只擋對應任務，不擋本規格
 
 ## 目的
 
@@ -75,7 +75,7 @@
 | AUT-R12 | Cookie **必須**帶 `HttpOnly`、`Secure`、`SameSite`。`SameSite` **應**為 `Strict`；Cookie **應**命名為 `__Host-inspectflow_session`，`Path=/`、不設 `Domain` | 必須（三個屬性）；應（`Strict`、名稱、`__Host-` 前綴） | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；OWASP Session Management Cheat Sheet（`SameSite=Strict`、`__Host-` 前綴、不用框架預設名稱） |
 | AUT-R13 | 每次登入成功**必須**產生新的 token；後端**不得**沿用請求帶來的任何 token 作為新登入狀態 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)（伺服器決定登入狀態）；防止 session fixation，依 OWASP Session Management Cheat Sheet |
 | AUT-R14 | 每個需要登入的請求，後端**必須**確認：Cookie 的 token 對應到一筆 `AuthSession`、未超過有效期限（AUT-R15）、對應的 `User` 目前 `is_active = true`。任一不成立時，視為未登入（401、`auth.not_authenticated`），並刪除該筆 `AuthSession`。`is_active` **必須**在每個請求時讀取資料庫目前的值，不得快取在 `AuthSession`，停用人員才會立即生效 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)（停用時現有登入立即失效，不需撤銷機制）。本條不檢查 `auth_source`：外部帳號日後經外部驗證建立的登入狀態也適用本條（AUT-R27、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)）；本系統帳號轉成外部帳號時，既有登入狀態是否撤銷，由 `external-identity-sync` 決定 |
-| AUT-R15 | `AuthSession` **應**有兩種有效期限，都由伺服器判斷：從登入起算的絕對期限，以及從最後一次請求起算的閒置期限。兩個值**應**可由環境變數設定；預設值見 [AUT-Q1](#aut-q1)。請求成功通過 AUT-R14 時，更新最後一次請求的時間 | 應 | OWASP Session Management Cheat Sheet（伺服器端逾時）；數值待 [AUT-Q1](#aut-q1) |
+| AUT-R15 | `AuthSession` **應**有兩種有效期限，都由伺服器判斷：從登入起算的絕對期限，以及從最後一次請求起算的閒置期限。兩個值**應**可由環境變數設定；未設定時，閒置期限預設 60 分鐘、絕對期限預設 8 小時（[AUT-Q1](#aut-q1) 裁定）。從登入起算滿絕對期限（經過時間大於或等於期限）即失效；閒置時間超過閒置期限（大於期限）才失效，剛好等於時仍有效。請求成功通過 AUT-R14 時，更新最後一次請求的時間 | 應 | OWASP Session Management Cheat Sheet（伺服器端逾時）；NIST SP 800-63B §2.2.3（AAL2）；預設值依 [AUT-Q1](#aut-q1) 裁定（[#143](https://github.com/speko-tw/inspect-flow/issues/143)） |
 | AUT-R16 | Service 層**應**能算出一個 `User` 目前有效（未過期）的 `AuthSession` 筆數，供停用人員前顯示影響範圍；畫面顯示與確認流程由提供停用操作的功能規格負責 | 應 | [PR-18](../../intents/02-principles.md#pr-18)（影響範圍怎麼計算留給相關規格決定）；[KD-21](../../intents/03-decisions-and-stack.md#kd-21) |
 | AUT-R17 | 同一個 `User` **得**同時有多筆 `AuthSession`（例如電腦與手機）；本規格不限制筆數 | 得 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；限制筆數沒有 intents 依據 |
 
@@ -177,9 +177,9 @@
 | AUT-AC10 | 一個帳號 | 登入兩次（兩個不同用戶端），第二次請求時另帶上第一次取得的 Cookie | 兩次取得的 token 不同，長度至少 43 個 base64url 字元（256 位元）；第二次回應的 token 不等於請求帶來的 token；兩個 Cookie 都能呼叫 `me` 成功（同一人可有多筆） | AUT-R11、AUT-R13、AUT-R17 |
 | AUT-AC11 | 帳號 U 已在兩個用戶端登入 | 直接在資料庫把 U 的 `is_active` 改為 `false`（不經過任何登出或撤銷流程），再以兩個 Cookie 各呼叫 `me` | 兩次都回 401 `auth.not_authenticated`；U 的 `AuthSession` 都已刪除 | AUT-R14 |
 | AUT-AC12 | 一個啟用中的 `external` 帳號 E（沒有 `UserPassword`）；由測試直接呼叫「建立登入狀態」的函式替 E 建立登入狀態 | 以取得的 Cookie 呼叫 `me`；再以 E 的 email 與任意密碼呼叫登入 API | `me` 回 200（登入狀態的檢查不因 `auth_source` 拒絕）；密碼登入回 401 `auth.invalid_credentials` | AUT-R06、AUT-R14、AUT-R27 |
-| AUT-AC13 | 以可控時間設定絕對期限 A、閒置期限 I（測試內給定，例如 A = 8 小時、I = 30 分鐘） | 登入後，每隔少於 I 的時間呼叫一次 `me`，直到超過 A；另一個用戶端登入後閒置超過 I 再呼叫 `me`；每次成功呼叫後檢查 `last_seen_at` | 第一個用戶端在 A 之前都成功、超過 A 後 401；第二個用戶端 401；成功呼叫後 `last_seen_at` 等於當下時間；過期的 `AuthSession` 都已刪除 | AUT-R15 |
+| AUT-AC13 | 以可替換的時鐘控制時間；未設定逾時相關環境變數，因此 A = 8 小時、I = 60 分鐘（AUT-R15 的預設值） | 登入後，每隔少於 I 的時間呼叫一次 `me`，在登入後 A 減 1 秒時呼叫一次，再推進到剛好 A 呼叫一次；另兩個用戶端各自登入後，一個閒置剛好 I、一個閒置 I 加 1 秒再呼叫 `me`；每次成功呼叫後檢查 `last_seen_at` | 第一個用戶端到 A 減 1 秒時都成功、剛好 A 時 401；閒置剛好 I 的用戶端成功、閒置 I 加 1 秒的用戶端 401；成功呼叫後 `last_seen_at` 等於當下時間；過期的 `AuthSession` 都已刪除 | AUT-R15 |
 | AUT-AC14 | 帳號 U 有兩筆有效與一筆已過期的 `AuthSession`；帳號 V 沒有 | 計算 U、V 的有效登入狀態筆數 | U 為 2、V 為 0 | AUT-R16 |
-| AUT-AC15 | 預設的環境（未設定逾時相關環境變數），以及分別設定這兩個環境變數的環境 | 讀取後端的逾時設定 | 未設定時等於 [AUT-Q1](#aut-q1) 裁定的預設值；有設定時等於設定值；`.env.example` 列出這兩個變數 | AUT-R15 |
+| AUT-AC15 | 預設的環境（未設定逾時相關環境變數），以及分別設定這兩個環境變數的環境 | 讀取後端的逾時設定 | 未設定時，閒置期限為 60 分鐘、絕對期限為 8 小時；有設定時等於設定值；`.env.example` 列出這兩個變數 | AUT-R15 |
 
 ### 權限檢查
 
@@ -231,7 +231,9 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 撰寫中發現、intents 沒有依據、需要負責人選定的細節。每題附選項與建議；裁定後屬規格澄清，在實作該任務的 PR 內更新本規格。
 
 <a id="aut-q1"></a>
-- **AUT-Q1：登入狀態的絕對期限與閒置期限預設值**（AUT-R15、AUT-AC13、AUT-AC15）。OWASP 建議一般辦公用途絕對期限 4～8 小時、低風險系統閒置期限 15～30 分鐘。選項：（A）閒置 30 分鐘、絕對 8 小時，符合 OWASP；（B）閒置 2 小時、絕對 12 小時，現場查核人員拍照、走動時不容易被登出，但超出 OWASP 範圍；（C）不設閒置期限，絕對 7 天，最方便，風險最高。**建議 A**，現場使用若反映太常被登出，再以環境變數調長。影響計畫 T3。
+- **AUT-Q1：登入狀態的絕對期限與閒置期限預設值**（已裁定，[#143](https://github.com/speko-tw/inspect-flow/issues/143)；AUT-R15、AUT-AC13、AUT-AC15）。OWASP 建議一般辦公用途絕對期限 4～8 小時、低風險系統閒置期限 15～30 分鐘。選項：（A）閒置 30 分鐘、絕對 8 小時，符合 OWASP；（B）閒置 2 小時、絕對 12 小時，現場查核人員拍照、走動時不容易被登出，但超出 OWASP 範圍；（C）不設閒置期限，絕對 7 天，最方便，風險最高。**建議 A**，現場使用若反映太常被登出，再以環境變數調長。影響計畫 T3。
+  - **裁定**（負責人，[#143](https://github.com/speko-tw/inspect-flow/issues/143)，2026-09-26）：閒置期限 60 分鐘、絕對期限 8 小時。裁定留言標為選項 B，但數值與上列三個選項都不同，以這裡的數值為準。依據：OWASP Session Management Cheat Sheet 對整天使用的辦公系統，絕對期限建議 4～8 小時，低風險系統閒置期限建議 15～30 分鐘；NIST SP 800-63B（第 4 版）§2.2.3 要求 AAL2 設定絕對的重新認證期限，並建議絕對期限不超過 24 小時、閒置期限不超過 1 小時（兩個數值上限都是建議，不是強制）。現場工程師在查核點之間移動時常有一段時間沒有操作，閒置期限放寬到 60 分鐘，避免在現場被登出。60 分鐘仍在 NIST AAL2 的範圍內，但高於 OWASP 對低風險系統建議的 30 分鐘，這是依使用情境接受的取捨。
+  - **落地**：寫進 AUT-R15、AUT-AC13、AUT-AC15；實作由計畫 T3 負責。
 <a id="aut-q2"></a>
 - **AUT-Q2：Admin 是否也通過新增、刪除與特殊動作（例如簽核、匯出列印）的權限檢查**（AUT-R19）。[KD-24](../../intents/03-decisions-and-stack.md#kd-24) 寫「查看、修改所有專案」，[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 把讀取、新增、修改、刪除與特殊動作分列，因此本規格只把讀取、修改視為已裁定。選項：（A）Admin 通過所有專案權限代碼，含新增、刪除與特殊動作；（B）Admin 通過讀取、新增、修改、刪除，特殊動作仍要專案角色；（C）Admin 只通過讀取、修改，其餘都要專案角色。**建議 A**：Admin 本來就能把自己加進專案並指派任何角色，B、C 只多一道手續，擋不住 Admin；若簽核要求「本人親自具備角色」，應在該功能規格另訂。影響計畫 T4。
 <a id="aut-q3"></a>
@@ -248,10 +250,10 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：已裁定（[#122](https://github.com/speko-tw/inspect-flow/issues/122)），不分大小寫，AUT-R05 已依此寫定；計畫 T3 不再受本題擋。
 - [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：影響 AUT-R22 用哪個代碼；檢查元件本身以字串為輸入，不受影響。
 - [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：影響 [AUT-Q6](#aut-q6)。
-- [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：AUT-R14 目前只檢查 `User.is_active`。若裁定「公司停用後人員不能登入」，AUT-R06、AUT-R14 要加上 `Company.is_active` 的檢查，並補一條 AC；屬範圍變更，依[變更規則](../README.md#change)處理。
+- [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：已裁定（[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。人員能不能登入只看 `User.is_active`，不需要檢查公司狀態；AUT-R06、AUT-R14 維持現狀（見 DOM-R32）。
 
 ## 變更紀錄
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
--
+- AUT-Q1 裁定：AUT-R15 寫入預設值閒置 60 分鐘、絕對 8 小時，以及邊界（絕對期限滿即失效、閒置剛好等於期限仍有效）；AUT-AC13 改用預設值，驗證絕對期限未滿（A 減 1 秒）與剛好到期（A）、閒置期限剛好到期（I）與超過（I 加 1 秒）時的結果，AUT-AC15 寫明預設值 — #143
