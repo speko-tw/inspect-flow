@@ -13,8 +13,10 @@ own ``get_engine()`` calls) never leaks into another test or into
 the real default database under ``backend/data``.
 """
 
+import logging
 from pathlib import Path
 
+import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
@@ -114,6 +116,47 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
 
     expected_head = ScriptDirectory.from_config(cfg).get_current_head()
     assert _stamped_version(db_url) == expected_head
+
+
+_PRE_EXISTING_LOGGER_NAME = "tests.db.test_migrations.pre_existing_logger"
+
+
+@pytest.fixture
+def upgraded_db_with_pre_existing_logger(db_url) -> logging.Logger:
+    """Create a logger *before* migrating (mirrors the application:
+    ``app.api.errors``'s module-level logger already exists by the
+    time a migration ever runs), then migrate. Runs during fixture
+    setup, like ``tests/auth/conftest.py``'s ``migrated_url`` --
+    not inside the test body -- so the assertions below see the
+    same pytest log-capture setup real callers see.
+    """
+    logger = logging.getLogger(_PRE_EXISTING_LOGGER_NAME)
+    command.upgrade(_alembic_config(), "head")
+    return logger
+
+
+def test_upgrade_head_keeps_a_pre_existing_logger_enabled(
+    upgraded_db_with_pre_existing_logger, caplog
+):
+    """Issue #185: ``fileConfig``'s default ``disable_existing_loggers``
+    is ``True``, which -- when a migration runs in the same process
+    as code that already created its own logger (the application, or
+    an earlier fixture/test) -- disables that logger for the rest of
+    the process. ``env.py`` must pass
+    ``disable_existing_loggers=False`` so a logger created before
+    ``command.upgrade`` runs still emits records afterwards.
+    """
+    logger = upgraded_db_with_pre_existing_logger
+
+    assert logger.disabled is False
+    with caplog.at_level(logging.INFO, logger=_PRE_EXISTING_LOGGER_NAME):
+        logger.info("still alive after migration")
+
+    assert any(
+        record.name == _PRE_EXISTING_LOGGER_NAME
+        and record.getMessage() == "still alive after migration"
+        for record in caplog.records
+    )
 
 
 def test_upgrade_head_works_from_a_non_backend_working_directory(
