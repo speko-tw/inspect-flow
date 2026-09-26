@@ -1,6 +1,9 @@
 import { lazy, Suspense } from 'react'
 import { Link, Route, Routes } from 'react-router'
 
+import LoginPage from './auth/LoginPage'
+import RequireAuth from './auth/RequireAuth'
+
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
 
@@ -27,8 +30,23 @@ export default function App() {
     <Suspense fallback={null}>
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/admin/*" element={<AdminPage />} />
-        <Route path="/field/*" element={<FieldPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/admin/*"
+          element={
+            <RequireAuth>
+              <AdminPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/field/*"
+          element={
+            <RequireAuth>
+              <FieldPage />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </Suspense>
   )

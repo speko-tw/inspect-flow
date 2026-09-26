@@ -1,6 +1,7 @@
 import path from 'node:path'
 
 import react from '@vitejs/plugin-react'
+import { loadEnv } from 'vite'
 import { defineConfig, type Plugin } from 'vitest/config'
 
 /**
@@ -108,13 +109,32 @@ function chunkModulesReportPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), chunkModulesReportPlugin()],
-  build: {
-    manifest: true,
-  },
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/setupTests.ts'],
-  },
+export default defineConfig(({ mode }) => {
+  // 開發用的後端位址。預設 http://localhost:8000（後端目前的預設
+  // port，見 docs/specs/authentication/plan.md 風險段）；可用
+  // VITE_BACKEND_URL 覆寫，不需改這個檔案就能切換到不同的後端。
+  const env = loadEnv(mode, process.cwd(), '')
+  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
+
+  return {
+    plugins: [react(), chunkModulesReportPlugin()],
+    build: {
+      manifest: true,
+    },
+    server: {
+      proxy: {
+        // 讓前端以同一個 origin 呼叫後端 API，開發環境不需要
+        // CORS；同時符合 AUT-R30：Cookie 由瀏覽器依同源規則
+        // 自動處理，前端不需另外設定。
+        '/api': {
+          target: backendUrl,
+          changeOrigin: true,
+        },
+      },
+    },
+    test: {
+      environment: 'jsdom',
+      setupFiles: ['./src/setupTests.ts'],
+    },
+  }
 })

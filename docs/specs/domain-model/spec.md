@@ -4,7 +4,7 @@
 **前置規格**：`database-foundation`（UUID 主鍵、業務編號、建立與修改紀錄等共通結構，見 DBF-R11～DBF-R14）、`api-conventions`（UUID 字串 ID、UTC 時間格式）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
 **被擋議題**：凍結範圍無；`Project` 業務欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；其餘實體受 [G-01](../../intents/05-open-questions.md#g-01)、[G-02](../../intents/05-open-questions.md#g-02)、[OQ-06](../../intents/05-open-questions.md#oq-06) 等[開工門檻](../../intents/05-open-questions.md#gate)擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
-**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令、認證前的操作者與字串欄位的長度及格式（DOM-R01～DOM-R21、DOM-R23～DOM-R31、DOM-AC01～DOM-AC21）。DOM-R22（稽核紀錄）待 [DOM-Q6](#dom-q6) 維持草稿；DOM-R40 以後為草稿
+**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令、認證前的操作者與字串欄位的長度及格式（DOM-R01～DOM-R21、DOM-R23～DOM-R33、DOM-AC01～DOM-AC23）。DOM-R22（稽核紀錄）待 [DOM-Q6](#dom-q6) 維持草稿；DOM-R40 以後為草稿
 
 ## 目的
 
@@ -17,7 +17,7 @@
 - 凍結：
   - `User` 的業務欄位（基本欄位、聯絡與補充欄位）、系統欄位 `is_admin`、`is_system`，以及外部身分來源的預留欄位。
   - `Company`、`Role`、`ProjectMember` 的資料模型。
-  - 這些實體的資料規則：字串欄位的長度上限與格式、可修改性、內建帳號保護、最後一個 Admin、公司階層、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算。
+  - 這些實體的資料規則：字串欄位的長度上限與格式、可修改性、內建帳號保護、最後一個 Admin、公司階層、停用公司的限制與影響範圍、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算。
   - 建立初始 Admin 帳號、本公司與三個範本角色的初始化指令。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
 - 草稿（本次不凍結，不拆任務）：
@@ -42,6 +42,7 @@
 - Admin 修改「現場查核」角色的權限內容前，系統先算出有多少人、多少筆專案成員持有這個角色，供畫面顯示影響範圍；修改後，所有持有者的權限立即改變。
 - 一位外部來源匯入的人員想修改自己的手機號碼，可以改；Admin 想修改他的部門，會被拒絕，因為基本欄位以外部來源為準。
 - Admin 想停用內建 `admin`，或拿掉系統中唯一的 Admin，會被拒絕。
+- Admin 停用一家已結束合作的客戶公司，畫面先顯示「這家公司還有 3 位啟用中的人員」，並讓他勾選要一併停用哪些人；沒被勾選的人照常登入、照常參與專案，但之後新建人員或修改人員所屬公司時，已經不能選這家公司。
 
 ## 需求
 
@@ -51,7 +52,7 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| DOM-R01 | `User` **必須**具備基本欄位：公司 `company_id`（外鍵指向 `Company`）、部門 `department`、地點 `location`、工號 `employee_no`（定義與唯一性見 DBF-R12、DBF-R13）、英文姓名 `name_en`、中文姓名 `name_zh`、email `email`、啟用狀態 `is_active`。以上欄位**不得**為空值，由資料庫約束保證；除 `is_active` 外，建立時都**必須**由呼叫端提供。`is_active` 建立時的預設值見 [DOM-Q7](#dom-q7) | 必須；應（欄位名） | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-23](../../intents/03-decisions-and-stack.md#kd-23)（人員屬於一個 `Company`）；[OQ-02](../../intents/05-open-questions.md#oq-02) 裁定 | DOM-AC01 |
+| DOM-R01 | `User` **必須**具備基本欄位：公司 `company_id`（外鍵指向 `Company`）、部門 `department`、地點 `location`、工號 `employee_no`（定義與唯一性見 DBF-R12、DBF-R13）、英文姓名 `name_en`、中文姓名 `name_zh`、email `email`、啟用狀態 `is_active`。以上欄位**不得**為空值，由資料庫約束保證；除 `is_active` 外，建立時都**必須**由呼叫端提供；`is_active` 未指定時為 `true`（啟用） | 必須；應（欄位名） | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-23](../../intents/03-decisions-and-stack.md#kd-23)（人員屬於一個 `Company`）；[OQ-02](../../intents/05-open-questions.md#oq-02) 裁定；`is_active` 預設啟用為負責人裁定（[DOM-Q7](#dom-q7)，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26） | DOM-AC01 |
 | DOM-R02 | `email` 是登入帳號，在所有 `User`（含已停用）之間**必須**唯一，由資料庫約束保證；本規格不另設帳號名稱欄位。email 比對是否不分大小寫見 [DOM-Q2](#dom-q2) | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號一律用 email）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（同步以 email 找本系統帳號）、[KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用後資料保留）；唯一（含已停用帳號）為負責人決定（[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844708436)，2026-09-26） | DOM-AC02 |
 | DOM-R03 | `User` **必須**具備聯絡與補充欄位：分機1 `extension_1`、分機2 `extension_2`、手機 `mobile`、Line ID `line_id`、WeChat `wechat_id`、負責事務 `responsibilities`；皆為選填（允許空值） | 必須；應（欄位名） | [KD-17](../../intents/03-decisions-and-stack.md#kd-17) | DOM-AC01 |
 | DOM-R04 | 基本欄位的可修改性依帳號來源決定：`auth_source = local` 的帳號，基本欄位只由 Admin 修改；`auth_source = external` 的帳號，Service 層**必須**拒絕任何人工修改基本欄位，只有外部身分同步流程得覆蓋。聯絡與補充欄位由本人與 Admin 修改，外部身分同步**不得**覆蓋。Service 層的修改入口**必須**區分「人工修改」與「同步」兩種來源；判斷操作者是不是 Admin 或本人，由 `authentication` 執行 | 必須 | [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)；[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 與外部帳號的衝突見 [DOM-Q8](#dom-q8) | DOM-AC04（外部帳號拒絕人工修改）；操作者身分由 `authentication` 驗收；同步不覆蓋由 `external-identity-sync` 驗收 |
@@ -77,10 +78,12 @@
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | DOM-R15 | `Company` **必須**沿用 `User`、`Project` 的共通結構：UUID 主鍵，以及 `created_at`、`updated_at`、`created_by`、`updated_by`（不可空值、外鍵指向 `User`）。`Role`、`ProjectMember` 同樣適用 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R11、DBF-R14；[#54](https://github.com/speko-tw/inspect-flow/issues/54) 補充裁定（所有資料的 `created_by` 都有值） | DOM-AC11、DOM-AC14、DOM-AC18 |
-| DOM-R16 | `Company` **必須**具備：`code`（不可空值，在所有 `Company` 之間唯一）、`name`（不可空值）、`tax_id`（統一編號，允許空值，有值時唯一）、`kind`（只允許 `internal`、`customer`，不可空值）、`parent_id`（母公司，允許空值，外鍵指向 `Company`）、`is_active`（不可空值的布林值）。以上由資料庫約束保證 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23) | DOM-AC11 |
+| DOM-R16 | `Company` **必須**具備：`code`（不可空值，在所有 `Company` 之間唯一）、`name`（不可空值）、`tax_id`（統一編號，允許空值，有值時唯一）、`kind`（只允許 `internal`、`customer`，不可空值）、`parent_id`（母公司，允許空值，外鍵指向 `Company`）、`is_active`（不可空值的布林值，未指定時為 `true`）。以上由資料庫約束保證 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；`is_active` 預設啟用為負責人裁定（[DOM-Q7](#dom-q7)，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26） | DOM-AC11 |
 | DOM-R17 | `parent_id` **不得**指向自己，由資料庫約束保證。本規格不檢查多層的循環（例如 A → C → B → A）：目前沒有功能會讀取公司階層，循環檢查由日後需要查公司階層的規格負責 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；不做循環檢查為負責人決定（[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844742074)，2026-09-26） | DOM-AC12 |
-| DOM-R18 | 本系統帳號（`auth_source = local`）所屬的 `Company` 得隨時修改，不受原公司或新公司的 `kind` 限制（例如從客戶轉為員工） | 得 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；外部帳號見 [DOM-Q8](#dom-q8) | DOM-AC13 |
+| DOM-R18 | 本系統帳號（`auth_source = local`）所屬的 `Company` 得隨時修改，不受原公司或新公司的 `kind` 限制（例如從客戶轉為員工）；新公司須為啟用中，見 DOM-R32 | 得 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；外部帳號見 [DOM-Q8](#dom-q8) | DOM-AC13 |
 | DOM-R29 | `Company` 字串欄位的長度上限與格式：`code` 最多 32 個字元，只能由英文字母（A–Z、a–z）、數字、`-`、`_` 組成；`name` 最多 128 個字元，不限格式；`tax_id` 選填，有值時**必須**恰為 8 位數字（臺灣統一編號），外國公司不填。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31 | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-23](../../intents/03-decisions-and-stack.md#kd-23) | DOM-AC20 |
+| DOM-R32 | `Company` 停用（`is_active = false`）只有一個效果：Service 層的 `User` 新增入口與人工修改入口，**必須**拒絕把 `company_id` 設為停用中的公司，資料不變。停用公司**不得**改變旗下 `User` 的任何資料（含 `is_active`、`company_id`），也不影響他們登入與參與專案；修改這些人員的其他欄位不受限制。人員能不能登入只看 `User.is_active`，不看所屬公司，由 `authentication` 執行（AUT-R05、AUT-R14 不檢查公司狀態）。外部身分同步把人員對應到停用中的公司時怎麼處理，由 `external-identity-sync` 決定 | 必須 | 負責人裁定（[DOM-Q7](#dom-q7) 選項 A，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26）；[KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用人員才不能登入） | DOM-AC22；登入不看公司狀態由 `authentication` 驗收 |
+| DOM-R33 | Service 層**必須**能列出一個 `Company` 目前啟用中（`is_active = true`）的 `User` 與其人數，供停用公司前顯示「這家公司還有 N 位啟用中的人員」。提供停用公司操作的功能規格**必須**顯示這個人數，並提供一併停用的選擇，由操作者決定實際停用哪些人；選中的人員逐一經 `User` 的停用入口處理，仍受 DOM-R06、DOM-R07 保護。沒有被選中的人員維持啟用 | 必須 | [PR-18](../../intents/02-principles.md#pr-18)；負責人裁定（[DOM-Q7](#dom-q7)，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26：顯示啟用中人數、一併停用由操作者決定） | DOM-AC23（人數、名單與停用公司不連動）；顯示與一併停用的流程由功能規格驗收 |
 
 ### `Role`（凍結）
 
@@ -158,7 +161,8 @@
 | 指令 | 初始化指令：互動式詢問本公司與兩個帳號的欄位，建立初始資料；已初始化時不寫入 | DOM-R11～DOM-R13 |
 | 程式介面 | 取得「目前操作者」的單一入口 | DOM-R14 |
 | 程式介面 | `User` 修改入口（區分人工修改與同步；內建帳號與最後一個 Admin 的保護） | DOM-R04、DOM-R06、DOM-R07 |
-| 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄） | DOM-R14 |
+| 程式介面 | `User` 新增入口（拒絕停用中的公司） | DOM-R32 |
+| 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄）；列出公司啟用中的人員與人數 | DOM-R14、DOM-R33 |
 | 程式介面 | `Role` 修改與刪除、角色影響範圍、有效權限計算 | DOM-R20、DOM-R21、DOM-R23、DOM-R26 |
 
 ## 驗收條件
@@ -169,7 +173,7 @@
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| DOM-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，由測試在同一個交易裡建立一筆 `Company` 與一筆作為操作者的 `User`（`created_by`、`updated_by` 指向自己，`company_id` 指向該公司） | 用 SQLAlchemy inspector 檢查 `User` 資料表；以該操作者為 `created_by`、`updated_by`，新增一筆只提供必填基本欄位的 `User`；再分別嘗試新增缺少任一必填基本欄位的 `User` | DOM-R01、DOM-R03、DOM-R05、DOM-R08 列出的欄位都存在；基本欄位、`is_admin`、`is_system`、`auth_source` 不可空值，聯絡與補充欄位可空值；`company_id` 外鍵指向 `Company`；第一筆成功，且 `is_admin`、`is_system` 為 `false`、`auth_source` 為 `local`、聯絡欄位為空值；缺欄位的每一次都被資料庫拒絕，筆數不變 | DOM-R01、DOM-R03、DOM-R05 |
+| DOM-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，由測試在同一個交易裡建立一筆 `Company` 與一筆作為操作者的 `User`（`created_by`、`updated_by` 指向自己，`company_id` 指向該公司） | 用 SQLAlchemy inspector 檢查 `User` 資料表；以該操作者為 `created_by`、`updated_by`，新增一筆只提供必填基本欄位的 `User`；再分別嘗試新增缺少任一必填基本欄位的 `User` | DOM-R01、DOM-R03、DOM-R05、DOM-R08 列出的欄位都存在；基本欄位（含 `is_active`）、`is_admin`、`is_system`、`auth_source` 不可空值，聯絡與補充欄位可空值；`company_id` 外鍵指向 `Company`；第一筆成功，且 `is_active` 為 `true`、`is_admin`、`is_system` 為 `false`、`auth_source` 為 `local`、聯絡欄位為空值；缺欄位的每一次都被資料庫拒絕，筆數不變 | DOM-R01、DOM-R03、DOM-R05 |
 | DOM-AC02 | 與 DOM-AC01 相同的前置資料，並已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 新增另一筆相同 `email` 的 `User` | 因唯一約束失敗；該 email 的 `User` 仍只有一筆，`User` 總筆數與新增前相同 | DOM-R02 |
 | DOM-AC03 | 與 DOM-AC01 相同的前置資料，並已有一筆 `auth_source = local`、外部欄位皆為空值的 `User` | 另新增一筆同樣外部欄位皆為空值的 `local` 帳號；新增一筆 `auth_source = external` 且 `external_source`、`external_id` 有值的帳號；再分別嘗試：`auth_source` 為 `local`、`external` 以外的值；`external` 但 `external_id` 為空值；`external` 但 `external_source` 為空值；`external_source` 與 `external_id` 都和前一筆相同的帳號 | 前兩次新增成功；後四次都被資料庫拒絕，筆數不變 | DOM-R08 |
 | DOM-AC04 | 一筆 `external` 帳號、一筆 `local` 帳號 | 透過 Service 層的人工修改入口，分別修改兩者的 `department` 與 `mobile` | `external` 帳號的 `department` 修改被拒絕、值不變，`mobile` 修改成功；`local` 帳號兩者都修改成功 | DOM-R04 |
@@ -190,10 +194,12 @@
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| DOM-AC11 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `code = "C001"`、`tax_id = "12345678"` 的 `Company` | 用 inspector 檢查 `Company` 資料表；再分別新增：`code` 相同的公司；`tax_id` 相同的公司；兩筆 `tax_id` 皆為空值的公司；`kind` 為 `internal`、`customer` 以外值的公司；`parent_id` 指向不存在 UUID 的公司；`created_by` 為空值的公司 | 資料表有 UUID 主鍵、DOM-R16 的欄位與建立及修改紀錄欄位；兩筆 `tax_id` 空值的公司新增成功；其餘每一次都被資料庫拒絕，筆數不變 | DOM-R15、DOM-R16 |
+| DOM-AC11 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `code = "C001"`、`tax_id = "12345678"` 的 `Company` | 用 inspector 檢查 `Company` 資料表；再分別新增：`code` 相同的公司；`tax_id` 相同的公司；兩筆 `tax_id` 皆為空值、未指定 `is_active` 的公司；`kind` 為 `internal`、`customer` 以外值的公司；`parent_id` 指向不存在 UUID 的公司；`created_by` 為空值的公司；`is_active` 為空值的公司 | 資料表有 UUID 主鍵、DOM-R16 的欄位與建立及修改紀錄欄位；兩筆 `tax_id` 空值的公司（都未指定 `is_active`）新增成功，`is_active` 都是 `true`；其餘每一次都被資料庫拒絕，筆數不變 | DOM-R15、DOM-R16 |
 | DOM-AC12 | 對空資料庫執行 `alembic upgrade head` 之後，兩筆 `Company`：A、B | 把 B 的 `parent_id` 設為 B；再把 B 的 `parent_id` 設為 A | 第一次被資料庫拒絕、資料不變；第二次成功 | DOM-R17 |
 | DOM-AC13 | 一筆 `local` 帳號，屬於一間 `kind = customer` 的公司 | 透過 Service 層把他的 `company_id` 改為一間 `kind = internal` 的公司 | 修改成功 | DOM-R18 |
 | DOM-AC20 | 與 DOM-AC11 相同的前置資料 | 用 inspector 檢查 `Company` 資料表的字串欄位；以 ORM 新增一筆 `code` 恰為 32 個字元且含英文字母、數字、`-`、`_`，`name` 恰為 128 個字元，`tax_id` 為 8 位數字的公司；再分別新增：`code` 為 33 個字元；`code` 含空格；`code` 含中文字；`name` 為 129 個字元；`tax_id` 為 7 位數字；`tax_id` 為 9 位數字；`tax_id` 為含英文字母的 8 個字元；最後以 ORM 把第一筆的 `code` 改為 33 個字元、`tax_id` 改為 7 位數字（各一次） | inspector 顯示 `code`、`name`、`tax_id` 的字串長度分別為 32、128、8；第一筆成功；其餘每一次新增都被拒絕，`Company` 筆數不變；兩次修改都被拒絕，該筆資料不變 | DOM-R29、DOM-R31 |
+| DOM-AC22 | 啟用中的公司 A、停用中的公司 B；`local` 帳號 U 屬於 A；`local` 帳號 V 屬於 B（B 啟用時建立，之後才停用），`is_active = true` | 透過 Service 層：新增一筆 `company_id` 為 B 的 `User`；把 U 的 `company_id` 改為 B；修改 V 的 `department` 與 `mobile`；把 V 的 `company_id` 改為 A | 前兩次都被拒絕，`User` 筆數與 U 的資料不變；V 的兩個欄位修改成功，`is_active` 仍為 `true`；V 改到 A 成功 | DOM-R18、DOM-R32 |
+| DOM-AC23 | 公司 C 有三筆 `User`：兩筆啟用中、一筆已停用；公司 D 沒有啟用中的人員 | 列出 C、D 啟用中的人員與人數；再透過 Service 層把 C 的 `is_active` 改為 `false` | C 為 2 人，名單恰為那兩筆啟用中的 `User`；D 為 0 人、名單為空；C 停用成功，三筆 `User` 的 `is_active` 與 `company_id` 都和停用前相同 | DOM-R32、DOM-R33 |
 
 ### `Role` 與 `ProjectMember`
 
@@ -225,7 +231,9 @@
 <a id="dom-q6"></a>
 - **DOM-Q6：稽核紀錄的資料模型由哪份規格定義**。[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部值覆蓋基本欄位）與 [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色變更）都要求寫稽核紀錄，[04-glossary](../../intents/04-glossary.md)「稽核紀錄」只是概念，目前沒有規格定義它的欄位。可以放在本規格擴大凍結範圍，或另開規格。另外要決定：初始化指令建立的帳號與範本角色是否也要寫稽核紀錄，以及 `is_admin` 的變更是否算「權限變更」（本規格依字面視為是）。DOM-R22 在此之前無法驗收，計畫 T6、T7 依賴本題裁定。
 <a id="dom-q7"></a>
-- **DOM-Q7：`is_active` 的預設值，以及停用公司的影響**。[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說啟用狀態不是必填，但沒說未提供時是啟用還是停用；`Company.is_active` 同樣沒有預設值。另外 `Company` 停用後，其人員能不能登入、能不能再被加入專案，#63 沒有寫。影響計畫 T1、T2。
+- **DOM-Q7：`is_active` 的預設值，以及停用公司的影響**（已裁定，[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說啟用狀態不是必填，但沒說未提供時是啟用還是停用；`Company.is_active` 同樣沒有預設值。另外 `Company` 停用後，其人員能不能登入、能不能再被加入專案，#63 沒有寫。影響計畫 T1、T2。
+  - **裁定**（負責人，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26）：`User.is_active`、`Company.is_active` 未指定時都是啟用。公司停用不影響旗下人員（選項 A）：停用只代表新建或修改人員時不能再選這家公司；人員能不能登入只看自己的 `is_active`，`authentication` 不需要增加公司狀態的檢查。停用公司時依 [PR-18](../../intents/02-principles.md#pr-18) 顯示「這家公司還有 N 位啟用中的人員」，並提供一併停用的選擇，實際停用哪些人由操作者決定。
+  - **落地**：預設值寫進 DOM-R01、DOM-R16、DOM-AC01、DOM-AC11；停用公司的效果與影響範圍寫進 DOM-R32、DOM-R33、DOM-AC22、DOM-AC23，DOM-R18 加上新公司須為啟用中的引用。
 <a id="dom-q8"></a>
 - **DOM-Q8：外部帳號能不能修改所屬公司**。[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 說人員所屬公司可以隨時修改，[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說外部帳號的基本欄位（含公司）任何人都不能修改，兩者對外部帳號的說法相反。本規格只凍結本系統帳號的部分（DOM-R18），外部帳號依 DOM-R04 暫以 KD-16 為準；這屬於意圖層的衝突，需要負責人裁定後回頭調整 KD-16 或 KD-23。
 
@@ -234,3 +242,4 @@
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
 - DOM-R28～DOM-R31、DOM-AC19～DOM-AC21：依 DOM-Q1 裁定，新增 `User`、`Company`、`Role` 與權限代碼的字串長度上限及格式，並擴大凍結範圍；`project_code` 的長度暫定、待確認（DOM-R40，草稿） — [#121](https://github.com/speko-tw/inspect-flow/issues/121)
+- DOM-Q7 裁定：DOM-R01、DOM-R16 補上 `is_active` 預設啟用；新增 DOM-R32（停用公司不能再被選用、不影響旗下人員）、DOM-R33（停用前列出啟用中人員與人數），以及 DOM-AC22、DOM-AC23；DOM-AC01、DOM-AC11 補上預設值的斷言 — [#127](https://github.com/speko-tw/inspect-flow/issues/127)
