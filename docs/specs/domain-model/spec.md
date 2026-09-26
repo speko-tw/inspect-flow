@@ -77,7 +77,7 @@
 |---|---|---|---|---|
 | DOM-R15 | `Company` **必須**沿用 `User`、`Project` 的共通結構：UUID 主鍵，以及 `created_at`、`updated_at`、`created_by`、`updated_by`（不可空值、外鍵指向 `User`）。`Role`、`ProjectMember` 同樣適用 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R11、DBF-R14；[#54](https://github.com/speko-tw/inspect-flow/issues/54) 補充裁定（所有資料的 `created_by` 都有值） | DOM-AC11、DOM-AC14、DOM-AC18 |
 | DOM-R16 | `Company` **必須**具備：`code`（不可空值，在所有 `Company` 之間唯一）、`name`（不可空值）、`tax_id`（統一編號，允許空值，有值時唯一）、`kind`（只允許 `internal`、`customer`，不可空值）、`parent_id`（母公司，允許空值，外鍵指向 `Company`）、`is_active`（不可空值的布林值）。以上由資料庫約束保證 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23) | DOM-AC11 |
-| DOM-R17 | `parent_id` **不得**指向自己；修改 `parent_id` 時，Service 層**應**拒絕會形成循環的母公司關係 | 必須（不指向自己）；應（循環） | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)（母公司階層）；循環檢查是本規格依「母公司」的語意推導 | DOM-AC12 |
+| DOM-R17 | `parent_id` **不得**指向自己，由資料庫約束保證。本規格不檢查多層的循環（例如 A → C → B → A）：目前沒有功能會讀取公司階層，循環檢查由日後需要查公司階層的規格負責 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；不做循環檢查為負責人決定（[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844742074)，2026-09-26） | DOM-AC12 |
 | DOM-R18 | 本系統帳號（`auth_source = local`）所屬的 `Company` 得隨時修改，不受原公司或新公司的 `kind` 限制（例如從客戶轉為員工） | 得 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；外部帳號見 [DOM-Q8](#dom-q8) | DOM-AC13 |
 
 ### `Role`（凍結）
@@ -149,7 +149,7 @@
 | 指令 | 初始化指令：互動式詢問本公司與兩個帳號的欄位，建立初始資料；已初始化時不寫入 | DOM-R11～DOM-R13 |
 | 程式介面 | 取得「目前操作者」的單一入口 | DOM-R14 |
 | 程式介面 | `User` 修改入口（區分人工修改與同步；內建帳號與最後一個 Admin 的保護） | DOM-R04、DOM-R06、DOM-R07 |
-| 程式介面 | `Company` 修改入口（母公司檢查） | DOM-R17、DOM-R18 |
+| 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄） | DOM-R14 |
 | 程式介面 | `Role` 修改與刪除、角色影響範圍、有效權限計算 | DOM-R20、DOM-R21、DOM-R23、DOM-R26 |
 
 ## 驗收條件
@@ -181,7 +181,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | DOM-AC11 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `code = "C001"`、`tax_id = "12345678"` 的 `Company` | 用 inspector 檢查 `Company` 資料表；再分別新增：`code` 相同的公司；`tax_id` 相同的公司；兩筆 `tax_id` 皆為空值的公司；`kind` 為 `internal`、`customer` 以外值的公司；`parent_id` 指向不存在 UUID 的公司；`created_by` 為空值的公司 | 資料表有 UUID 主鍵、DOM-R16 的欄位與建立及修改紀錄欄位；兩筆 `tax_id` 空值的公司新增成功；其餘每一次都被資料庫拒絕，筆數不變 | DOM-R15、DOM-R16 |
-| DOM-AC12 | 三筆 `Company`：A、B（`parent_id = A`）、C | 透過 Service 層把 C 的 `parent_id` 設為 C；把 A 的 `parent_id` 設為 B；把 C 的 `parent_id` 設為 B | 前兩次被拒絕、資料不變；第三次成功 | DOM-R17 |
+| DOM-AC12 | 對空資料庫執行 `alembic upgrade head` 之後，兩筆 `Company`：A、B | 把 B 的 `parent_id` 設為 B；再把 B 的 `parent_id` 設為 A | 第一次被資料庫拒絕、資料不變；第二次成功 | DOM-R17 |
 | DOM-AC13 | 一筆 `local` 帳號，屬於一間 `kind = customer` 的公司 | 透過 Service 層把他的 `company_id` 改為一間 `kind = internal` 的公司 | 修改成功 | DOM-R18 |
 
 ### `Role` 與 `ProjectMember`
