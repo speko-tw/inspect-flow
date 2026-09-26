@@ -382,7 +382,9 @@
 
 <a id="oq-22"></a>
 
-### OQ-22：開工門檻未裁定前，不受影響的實體能否先凍結？
+### OQ-22：開工門檻未裁定前，不受影響的實體能否先凍結？（已裁定）
+
+**裁定**：允許部分凍結（選項 B1），第一批只凍結 `User`、`Project`。`Inspection Template`、`Template Version` 等 [G-01](#g-01) 裁定、並說清楚立場 A 的 `Template` 指哪一層之後再凍結。理由：這兩個實體本來就同時列在 P3 `template-system`，而 P3 也被 G-01 擋住，延後的實際成本很小；Phase 1 因此分成兩段（見 [01-overview.md](01-overview.md)）。怎麼確認實體與門檻無關、規格內怎麼標示、已凍結的實體之後被裁定牽動時怎麼處理，見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)；討論見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)。
 
 **為什麼要先決定**：[開工門檻](#gate)要求 Domain Model 與 API 契約凍結前先裁定 G-01～G-07 與 OQ-06，但 Phase 1 的 `User`、`Project` 看起來不受這些議題影響。若不允許部分凍結，`domain-model` 規格（見 [docs/specs/README.md](../specs/README.md#index)）要等整個門檻裁定完才能凍結，Phase 1 的資料表也跟著延後。
 
@@ -392,11 +394,12 @@
 
 **目前暫定**：無。來源只規定凍結前必須裁定，沒有提到部分凍結。
 
-**誰決定、何時**：團隊；應在 `domain-model` 規格凍結前決定。
+**誰決定、何時**：負責人；已於 [#46](https://github.com/speko-tw/inspect-flow/issues/46) 裁定（2026-09-26）。
 
 **影響的原則**：[PR-03](02-principles.md#pr-03)、[PR-09](02-principles.md#pr-09)。
 
-**依據**：架構基準 §14、§25
+**依據**：議題背景為架構基準 §14、§25；裁定為負責人決定（#46，2026-09-26），架構基準無對應章節。
+
 
 ## D. 來源內部不一致（Source-Internal Contradictions）
 
@@ -616,6 +619,6 @@
 - **[G-06](#g-06)／[G-07](#g-07)**（報告狀態與版次快照邊界）：合併出一份唯一、完整的 `Report` 狀態機 （含 `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
 - **[OQ-06](#oq-06)**（Result 對完成判定的影響）：查核結果是否需要 PASS/FAIL/N/A、量測值、嚴重度、缺 失欄位，直接影響任務完成判定邏輯與報告版面設計。
 
-[README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，與門檻無關的實體能否先凍結，見 [OQ-22](#oq-22)。
+[README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](#oq-22) 的裁定；做法見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)）。
 
 此處「API 契約」指資源層端點契約（各功能規格與 `domain-model` 定義的資源、欄位與端點），不含只定義跨端點共用慣例（路徑前綴、內容型別、錯誤 envelope、分頁、時間格式、ID 表示法等）的 `api-conventions`（依據：負責人決定，PR #30，2026-09-26）。
