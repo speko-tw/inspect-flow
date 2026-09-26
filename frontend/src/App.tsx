@@ -52,7 +52,7 @@ export default function App() {
             // 跑，導致從 /change-password 導回 /admin 或 /field 時
             // 讀到的還是變更密碼前、`must_change_password` 仍為
             // true 的舊狀態，被誤判又導回 /change-password（在有
-            // /change-password 這個目的地之前，仨個守衛互不切換，
+            // /change-password 這個目的地之前，三個守衛互不切換，
             // 這個問題不會出現）。給不同的 key 強制切換時視為不同
             // 元件，一律重新掛載並重新查詢。
             <RequireAuth key="admin">

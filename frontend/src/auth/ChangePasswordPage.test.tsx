@@ -1,12 +1,26 @@
 // 變更密碼頁的頁面行為（AUT-AC42）：兩次新密碼不一致時不呼叫
 // API、三個錯誤碼各顯示不同訊息、三個密碼欄位的 type 都是
-// password。
+// password；另外驗證本頁在 `RequireAuth` 內仍可用 `LogoutButton`
+// 登出（AUT-R30、AUT-R33）。頁面需要 `RequireAuth` 提供的
+// `useCurrentUser` context 才能渲染 `LogoutButton`，因此這裡的
+// 替身沿用 `LogoutButton.test.tsx` 的寫法，連同
+// `/api/v1/auth/me` 一併模擬。
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import ChangePasswordPage from './ChangePasswordPage'
+import RequireAuth from './RequireAuth'
+
+const TEMP_PASSWORD_USER = {
+  id: 'u1',
+  email: 'user@example.com',
+  name_en: 'Test User',
+  name_zh: '測試使用者',
+  is_admin: false,
+  must_change_password: true,
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -29,10 +43,23 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/change-password']}>
       <Routes>
-        <Route path="/change-password" element={<ChangePasswordPage />} />
+        <Route path="/login" element={<h1>登入</h1>} />
+        <Route
+          path="/change-password"
+          element={
+            <RequireAuth>
+              <ChangePasswordPage />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
+}
+
+async function renderReadyPage() {
+  renderPage()
+  await screen.findByRole('heading', { name: '變更密碼' })
 }
 
 function fillAndSubmit(current: string, next: string, confirm: string) {
@@ -48,27 +75,36 @@ function fillAndSubmit(current: string, next: string, confirm: string) {
   fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 }
 
-describe('變更密碼頁：兩次新密碼不一致與欄位型別（AUT-AC42）', () => {
+describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC42）', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('兩次新密碼不同時不呼叫 API，並顯示不一致的訊息', async () => {
-    const fetchMock = vi.fn(async () => {
-      throw new Error('兩次新密碼不同時不應呼叫 API')
-    })
-    vi.stubGlobal('fetch', fetchMock)
+  it('同一次渲染依序測試不一致、三種錯誤碼與欄位型別', async () => {
+    const codesByCall: Array<[number, string]> = [
+      [400, 'auth.current_password_incorrect'],
+      [422, 'auth.password_invalid'],
+      [422, 'auth.password_unchanged'],
+    ]
+    let postCallCount = 0
 
-    renderPage()
-    fillAndSubmit('current-pw', 'new-password-1', 'new-password-2')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse(TEMP_PASSWORD_USER)
+        }
+        if (url.endsWith('/api/v1/auth/password') && init?.method === 'POST') {
+          const [status, code] = codesByCall[postCallCount]
+          postCallCount += 1
+          return jsonResponse({ error: { code } }, status)
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      }),
+    )
 
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('兩次輸入的新密碼不一致，請重新輸入。')
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('三個密碼欄位的 type 都是 password', () => {
-    renderPage()
+    await renderReadyPage()
 
     expect(screen.getByLabelText('目前密碼')).toHaveAttribute(
       'type',
@@ -79,39 +115,52 @@ describe('變更密碼頁：兩次新密碼不一致與欄位型別（AUT-AC42�
       'type',
       'password',
     )
-  })
-})
 
-describe('變更密碼頁：三個錯誤碼各顯示不同訊息（AUT-AC42）', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
+    // 第一次：兩次新密碼不一致，不呼叫變更密碼 API。
+    fillAndSubmit('current-pw', 'new-password-1', 'new-password-2')
+    let alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('兩次輸入的新密碼不一致，請重新輸入。')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(postCallCount).toBe(0)
+    const messages = [alert.textContent]
 
-  it.each([
-    ['auth.current_password_incorrect', 400, '目前密碼錯誤，請再試一次。'],
-    ['auth.password_invalid', 422, '新密碼不符合規則，請重新輸入。'],
-    ['auth.password_unchanged', 422, '新密碼不能與目前密碼相同，請重新輸入。'],
-  ])('錯誤碼 %s 顯示對應訊息', async (code, status, message) => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = requestUrl(input)
-        if (url.endsWith('/api/v1/auth/password') && init?.method === 'POST') {
-          return jsonResponse({ error: { code } }, status)
-        }
-        throw new Error(`unexpected fetch: ${url}`)
-      }),
-    )
-
-    renderPage()
+    // 第二次：兩次新密碼一致，API 回 400 目前密碼錯誤。
     fillAndSubmit(
       'wrong-current-password',
       'same-new-password',
       'same-new-password',
     )
+    alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('目前密碼錯誤，請再試一次。')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(postCallCount).toBe(1)
+    messages.push(alert.textContent)
 
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe(message)
+    // 第三次：API 回 422 新密碼不符規則。
+    fillAndSubmit(
+      'same-current-password',
+      'same-new-password',
+      'same-new-password',
+    )
+    alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('新密碼不符合規則，請重新輸入。')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(postCallCount).toBe(2)
+    messages.push(alert.textContent)
+
+    // 第四次：API 回 422 新密碼與目前密碼相同。
+    fillAndSubmit(
+      'same-current-password',
+      'same-new-password',
+      'same-new-password',
+    )
+    alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('新密碼不能與目前密碼相同，請重新輸入。')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(postCallCount).toBe(3)
+    messages.push(alert.textContent)
+
+    expect(new Set(messages).size).toBe(messages.length)
   })
 })
 
@@ -127,12 +176,16 @@ describe('變更密碼頁：外部帳號與未知錯誤（補充，非 AUT-AC42 
   it('外部帳號（403 permission.denied）顯示對應訊息', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        jsonResponse({ error: { code: 'permission.denied' } }, 403),
-      ),
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input)
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse(TEMP_PASSWORD_USER)
+        }
+        return jsonResponse({ error: { code: 'permission.denied' } }, 403)
+      }),
     )
 
-    renderPage()
+    await renderReadyPage()
     fillAndSubmit('current-pw', 'new-password', 'new-password')
 
     const alert = await screen.findByRole('alert')
@@ -142,13 +195,48 @@ describe('變更密碼頁：外部帳號與未知錯誤（補充，非 AUT-AC42 
   it('未知錯誤碼顯示通用訊息', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(null, { status: 500 })),
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input)
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse(TEMP_PASSWORD_USER)
+        }
+        return new Response(null, { status: 500 })
+      }),
     )
 
-    renderPage()
+    await renderReadyPage()
     fillAndSubmit('current-pw', 'new-password', 'new-password')
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('變更密碼失敗，請稍後再試。')
+  })
+})
+
+describe('變更密碼頁可登出（AUT-R30、AUT-R33）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('臨時密碼帳號在本頁按登出，回到 /login', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        const method = init?.method ?? 'GET'
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse(TEMP_PASSWORD_USER)
+        }
+        if (url.endsWith('/api/v1/auth/logout') && method === 'POST') {
+          return new Response(null, { status: 204 })
+        }
+        throw new Error(`unexpected fetch: ${method} ${url}`)
+      }),
+    )
+
+    await renderReadyPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '登出' }))
+
+    await screen.findByRole('heading', { name: '登入' })
   })
 })

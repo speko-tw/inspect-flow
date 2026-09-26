@@ -5,14 +5,20 @@
 // 報，前端只負責顯示對應訊息，不重複規則（避免兩處各自維護、互相
 // 不同步）。
 //
-// 成功後重新取得目前使用者（讓 `must_change_password` 更新為
-// `false`），再導回原路徑（`RequireAuth` 導向這裡時放進
-// `location.state.from`；沒有時回預設頁）。
+// 成功後直接導回原路徑（`RequireAuth` 導向這裡時放進
+// `location.state.from`；沒有時回預設頁）；不必在這裡重新查詢目
+// 前使用者——導回的路由用不同的 `RequireAuth` key（見 `App.tsx`），
+// 會重新掛載並自行查詢，讀到的 `must_change_password` 自然是最新
+// 的。
+//
+// 頁面也放了 `LogoutButton`：臨時密碼帳號被導到本頁後，若不想現
+// 在改密碼，仍可登出（AUT-R30、AUT-R33 允許登出）。
 
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
-import { ApiError, changePassword, fetchCurrentUser } from './api'
+import { ApiError, changePassword } from './api'
+import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 
 const MISMATCH_MESSAGE = '兩次輸入的新密碼不一致，請重新輸入。'
@@ -55,14 +61,6 @@ export default function ChangePasswordPage() {
 
     try {
       await changePassword(currentPassword, newPassword)
-
-      // 讓 must_change_password 更新為 false；不影響導向的結果，即
-      // 使這次查詢失敗，導回原路徑後 RequireAuth 也會重新查一次。
-      try {
-        await fetchCurrentUser()
-      } catch {
-        // 忽略：導向後由目的頁面的 RequireAuth 重新查詢。
-      }
 
       const state = location.state as RedirectState | null
       const from = state?.from
@@ -123,6 +121,7 @@ export default function ChangePasswordPage() {
           變更密碼
         </button>
       </form>
+      <LogoutButton />
     </main>
   )
 }

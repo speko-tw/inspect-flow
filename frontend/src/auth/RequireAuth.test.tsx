@@ -147,7 +147,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
     vi.unstubAllGlobals()
   })
 
-  it('/admin 的 must_change_password 為 true 時導向 /change-password，並保留原路徑', async () => {
+  it('/admin 需改密碼時導向 /change-password，並保留原路徑', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -164,7 +164,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
     expect(probe).toContain('/admin/reports?x=1')
   })
 
-  it('/field 的 must_change_password 為 true 時導向 /change-password，並保留原路徑', async () => {
+  it('/field 需改密碼時導向 /change-password，並保留原路徑', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -181,7 +181,10 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
     expect(probe).toContain('/field/tasks')
   })
 
-  it('變更密碼成功後回到原本的路徑', async () => {
+  it.each([
+    ['/admin/reports', 'Admin'],
+    ['/field/tasks', 'Field'],
+  ])('%s 變更密碼成功後回到原本的路徑', async (path, heading) => {
     let mustChangePassword = true
 
     vi.stubGlobal(
@@ -205,7 +208,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
       }),
     )
 
-    renderApp(['/admin/reports'])
+    renderApp([path])
 
     await screen.findByRole('heading', { name: '變更密碼' })
 
@@ -220,11 +223,11 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
     })
     fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 
-    await screen.findByRole('heading', { name: 'Admin' })
+    await screen.findByRole('heading', { name: heading })
 
     await waitFor(() => {
       const probe = screen.getByTestId('location-probe').textContent ?? ''
-      expect(probe.startsWith('/admin/reports|')).toBe(true)
+      expect(probe.startsWith(`${path}|`)).toBe(true)
     })
   })
 })
