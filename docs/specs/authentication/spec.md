@@ -3,7 +3,7 @@
 **代碼**：`AUT`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R01～DOM-R27）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)～[KD-31](../../intents/03-decisions-and-stack.md#kd-31)、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）
-**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q2、DOM-Q3、DOM-Q6、DOM-Q7，只擋對應任務，不擋本規格
+**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q2、DOM-Q3、DOM-Q6，只擋對應任務，不擋本規格
 
 ## 目的
 
@@ -248,7 +248,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：影響 AUT-R05 登入時怎麼比對 email，以及計畫 T3。
 - [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：影響 AUT-R22 用哪個代碼；檢查元件本身以字串為輸入，不受影響。
 - [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：影響 [AUT-Q6](#aut-q6)。
-- [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：AUT-R14 目前只檢查 `User.is_active`。若裁定「公司停用後人員不能登入」，AUT-R06、AUT-R14 要加上 `Company.is_active` 的檢查，並補一條 AC；屬範圍變更，依[變更規則](../README.md#change)處理。
+- [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：已裁定（[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。人員能不能登入只看 `User.is_active`，不需要檢查公司狀態；AUT-R06、AUT-R14 維持現狀（見 DOM-R32）。
 
 ## 變更紀錄
 
