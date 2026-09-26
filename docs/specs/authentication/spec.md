@@ -3,7 +3,7 @@
 **代碼**：`AUT`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R01～DOM-R27）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)～[KD-31](../../intents/03-decisions-and-stack.md#kd-31)、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）
-**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q2、DOM-Q3、DOM-Q6，只擋對應任務，不擋本規格
+**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q3、DOM-Q6（DOM-Q2 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)），只擋對應任務，不擋本規格
 
 ## 目的
 
@@ -67,7 +67,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| AUT-R05 | 後端**必須**提供以 email 與密碼登入的 API。email 與一筆 `auth_source = local`、`is_active = true`、已設定密碼的 `User` 相符，且密碼驗證成功時，建立一筆新的 `AuthSession`，以 Cookie 回傳，並在回應本體回傳目前使用者（同 AUT-R10）。email 的比對方式依 [DOM-Q2](../domain-model/spec.md#dom-q2) 的裁定 | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號用 email）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) |
+| AUT-R05 | 後端**必須**提供以 email 與密碼登入的 API。email 與一筆 `auth_source = local`、`is_active = true`、已設定密碼的 `User` 相符，且密碼驗證成功時，建立一筆新的 `AuthSession`，以 Cookie 回傳，並在回應本體回傳目前使用者（同 AUT-R10）。email 的比對**必須**不分大小寫，依 `domain-model` 的 DOM-R02（[DOM-Q2](../domain-model/spec.md#dom-q2) 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)） | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號用 email）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) |
 | AUT-R06 | 以下情況登入**必須**失敗，而且**不得**建立 `AuthSession`：email 不存在、密碼錯誤、帳號已停用、帳號為 `auth_source = external`、帳號尚未設定密碼。這幾種失敗**應**回傳完全相同的狀態碼與回應本體（401、`auth.invalid_credentials`），不透露是哪一種；email 不存在或沒有密碼時，**應**仍執行一次同樣成本的雜湊驗證，讓回應時間不因帳號是否存在而明顯不同 | 必須（失敗、不建立）；應（回應一致、時間一致） | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用不能登入）；[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部帳號由外部來源驗證，本規格判讀）；回應一致依 OWASP Authentication Cheat Sheet |
 | AUT-R07 | 後端**必須**提供登出 API：刪除這個請求所帶的 `AuthSession`，並要求瀏覽器清除 Cookie。請求沒有帶有效登入狀態時，登出**應**仍回傳成功，行為冪等 | 必須（刪除）；應（冪等） | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)（伺服器保存登入狀態，登出就是刪除它）；冪等依 OWASP Session Management Cheat Sheet |
 | AUT-R08 | 後端**必須**提供取得目前使用者的 API：已登入時回傳該 `User` 的 `id`、`email`、`name_en`、`name_zh`、`is_admin`，以及 `must_change_password`（布林值，是否需要先變更臨時密碼，見 AUT-R33）；未登入時回傳 401、`auth.not_authenticated` | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（前端需要知道是不是 Admin）；架構基準 §17 與[認證與授權卡片](../../intents/03-decisions-and-stack.md#stack-auth)（負責「登入、目前使用者與 API 權限檢查」）；`must_change_password` 依 [AUT-Q4](#aut-q4) 裁定（前端要知道是否導向變更密碼頁） |
@@ -295,9 +295,9 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q6"></a>
 - **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。**建議 A**，等 DOM-Q6 定案後再評估 B。不擋任何任務。
 
-本規格另依賴 `domain-model` 尚未裁定的題目，本規格不自行定案：
+本規格另依賴 `domain-model` 的下列題目；尚未裁定的，本規格不自行定案：
 
-- [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：影響 AUT-R05 登入時怎麼比對 email，以及計畫 T3。
+- [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：已裁定（[#122](https://github.com/speko-tw/inspect-flow/issues/122)），不分大小寫，AUT-R05 已依此寫定；計畫 T3 不再受本題擋。
 - [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：影響 AUT-R22 用哪個代碼；檢查元件本身以字串為輸入，不受影響。
 - [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：影響 [AUT-Q6](#aut-q6)。
 - [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：已裁定（[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。人員能不能登入只看 `User.is_active`，不需要檢查公司狀態；AUT-R06、AUT-R14 維持現狀（見 DOM-R32）。
