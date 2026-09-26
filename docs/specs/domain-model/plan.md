@@ -4,15 +4,15 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫只涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R27、DOM-AC01～DOM-AC18）。`Project` 業務欄位（DOM-R40）與其他實體在擴大凍結範圍後，再於同一份計畫補任務。
+本計畫只涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R21、DOM-R23～DOM-R27、DOM-AC01～DOM-AC18）。DOM-R22（稽核紀錄）待 [DOM-Q6](spec.md#dom-q6) 裁定後再補任務；T5 的角色修改、刪除屆時要接上稽核紀錄。`Project` 業務欄位（DOM-R40）與其他實體在擴大凍結範圍後，再於同一份計畫補任務。
 
 ## 任務
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1 | `Company` 資料表：model 繼承 `database-foundation` 的共用基底（UUID 主鍵、建立與修改紀錄），`created_by`、`updated_by` 為不可空值、指向 `User` 的外鍵；`code` 唯一、`tax_id` 可空值且有值時唯一、`kind` 以 CHECK 約束限定 `internal`、`customer`、`parent_id` 自參照外鍵並以 CHECK 約束禁止指向自己；新增一支 migration | `backend/app/models/company.py`（新增）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_company.py`（新增） | #59（`User` 資料表）；[DOM-Q1](spec.md#dom-q1)、[DOM-Q7](spec.md#dom-q7) 裁定 | DOM-AC11 | #? |
+| T1 | `Company` 資料表：model 繼承 `database-foundation` 的共用基底（UUID 主鍵、建立與修改紀錄），`created_by`、`updated_by` 為不可空值、指向 `User` 的外鍵；`code` 唯一、`tax_id` 可空值且有值時唯一、`kind` 以 CHECK 約束限定 `internal`、`customer`、`parent_id` 自參照外鍵並以 CHECK 約束禁止指向自己；新增一支 migration | `backend/app/models/company.py`（新增）、`backend/app/models/__init__.py`（加一行 import，讓 `Company` 登記到 `Base.metadata`；檔案由 #59 建立）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_company.py`（新增） | #59（`User` 資料表）；[DOM-Q1](spec.md#dom-q1)、[DOM-Q7](spec.md#dom-q7) 裁定 | DOM-AC11 | #? |
 | T2 | `User` 業務欄位：在 #59 建好的 `User` 資料表加上基本欄位（`company_id` 為不可空值、指向 `Company` 的外鍵）、聯絡與補充欄位、`is_admin`、`is_system`、外部身分預留欄位；`email` 唯一約束（寫法依 DOM-Q2）；`auth_source` 的 CHECK 約束、`external` 時外部欄位必填的 CHECK 約束、`external_source` 與 `external_id` 組合的唯一約束；`company_id` 與 `Company.created_by` 互相引用，外鍵設為可延後到提交時才檢查（見[風險](#風險)）；新增一支 migration | `backend/app/models/user.py`（修改，檔案由 #59 建立）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_user_fields.py`（新增） | T1；[DOM-Q1](spec.md#dom-q1)、[DOM-Q2](spec.md#dom-q2)、[DOM-Q7](spec.md#dom-q7) 裁定 | DOM-AC01、DOM-AC02、DOM-AC03、DOM-AC07 | #? |
-| T3 | `Role`、`ProjectMember` 資料表：`Role` 與 `ProjectMember` 繼承共用基底；`Role` 的權限代碼存在子表（`role_id`、權限代碼，組合唯一，刪除 `Role` 時一併刪除）；`ProjectMember` 的 `project_id`、`user_id` 為不可空值外鍵、組合唯一；角色指派存在關聯表（`project_member_id`、`role_id`，組合唯一；刪除 `Role` 時一併刪除指派）；新增一支 migration | `backend/app/models/role.py`、`backend/app/models/project_member.py`（新增）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_role_member.py`（新增） | #59（`User`、`Project` 資料表）；[DOM-Q1](spec.md#dom-q1)、[DOM-Q3](spec.md#dom-q3)、[DOM-Q4](spec.md#dom-q4)、[DOM-Q5](spec.md#dom-q5) 裁定 | DOM-AC18 | #? |
+| T3 | `Role`、`ProjectMember` 資料表：`Role` 與 `ProjectMember` 繼承共用基底；`Role` 的權限代碼存在子表（`role_id`、權限代碼，組合唯一，刪除 `Role` 時一併刪除）；`ProjectMember` 的 `project_id`、`user_id` 為不可空值外鍵、組合唯一；角色指派存在關聯表（`project_member_id`、`role_id`，組合唯一；刪除 `Role` 時一併刪除指派）；新增一支 migration | `backend/app/models/role.py`、`backend/app/models/project_member.py`（新增）、`backend/app/models/__init__.py`（加 import）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_role_member.py`（新增） | #59（`User`、`Project` 資料表）；[DOM-Q1](spec.md#dom-q1)、[DOM-Q3](spec.md#dom-q3)、[DOM-Q4](spec.md#dom-q4)、[DOM-Q5](spec.md#dom-q5) 裁定 | DOM-AC18 | #? |
 | T4 | 目前操作者與 `User`、`Company` 的 Service 層規則：取得目前操作者的單一入口（認證前回傳 `is_system` 的 `User`）；`Company` 新增與修改（填 `created_by`、`updated_by`，母公司循環檢查）；`User` 的人工修改入口（外部帳號拒絕修改基本欄位、內建帳號保護、最後一個 Admin 保護、本系統帳號改公司）。本任務不做授權檢查 | `backend/app/services/__init__.py`、`backend/app/services/operator.py`、`backend/app/services/companies.py`、`backend/app/services/users.py`（新增）、`backend/tests/services/`（新增） | T2 | DOM-AC04、DOM-AC05、DOM-AC06、DOM-AC10、DOM-AC12、DOM-AC13 | #? |
 | T5 | `Role` 與 `ProjectMember` 的 Service 層規則：`Role` 改名與修改權限內容（更新修改紀錄）、刪除 `Role`（連同指派）、角色影響範圍、有效權限計算（從 `Role` 目前內容取聯集，非成員為空集合） | `backend/app/services/roles.py`、`backend/app/services/permissions.py`（新增）、`backend/tests/services/test_roles.py`、`backend/tests/services/test_permissions.py`（新增） | T3、T4（使用目前操作者入口） | DOM-AC14、DOM-AC15、DOM-AC16、DOM-AC17 | #? |
 | T6 | 初始化指令：互動式詢問本公司的 `code`、`name` 與兩個帳號的必填基本欄位，也接受測試用的非互動輸入（例如從標準輸入讀取），但原始碼不含任何預設值；在同一個交易裡建立本公司、內建 `admin`（UUID 在寫入前由應用端產生，`created_by`、`updated_by` 指向自己）、個人帳號與三個範本角色；已有 `is_system` 帳號時不寫入並回報已初始化；在 `Makefile` 加一個執行入口 | `backend/app/cli/__init__.py`、`backend/app/cli/init_system.py`（新增）、`backend/pyproject.toml`（只加指令入口，不改依賴）、`Makefile`（加一個 target）、`backend/tests/cli/test_init_system.py`（新增） | T2、T3；[DOM-Q4](spec.md#dom-q4) 裁定（範本角色的初始權限） | DOM-AC08、DOM-AC09 | #? |
@@ -27,14 +27,15 @@
 
 依「改動的檔案」與「依賴」分波；同一波內的任務檔案不重疊，也互不依賴。
 
-- 第 1 波：T1、T3（都只依賴 #59；T1 改 `company.py`，T3 改 `role.py`、`project_member.py`，檔案不重疊，但都新增 migration）。
-- 第 2 波：T2（依賴 T1 的 `Company`）。
+- 第 1 波：T1（依賴 #59）。
+- 第 2 波：T2（依賴 T1 的 `Company`）、T3（依賴 #59）。T2 改 `user.py`，T3 改 `role.py`、`project_member.py`、`models/__init__.py`，檔案不重疊，但都新增 migration。T3 排在 T1 之後，是因為兩者都要改 `backend/app/models/__init__.py`。
 - 第 3 波：T4（依賴 T2）、T6（依賴 T2、T3）；T4 改 `backend/app/services/`，T6 改 `backend/app/cli/`、`Makefile`、`pyproject.toml`，檔案不重疊。
 - 第 4 波：T5（依賴 T3、T4）。
 
 碰到[共用檔案](../README.md#parallel)的地方：
 
-- Alembic migration 鏈：T1、T2、T3 各新增一支，每個 PR 最多一支。T1、T3 同一波並行，後合併的一方先 rebase，並把 `down_revision` 改接到最新 head，不留多個 head。
+- Alembic migration 鏈：T1、T2、T3 各新增一支，每個 PR 最多一支。T2、T3 同一波並行，後合併的一方先 rebase，並把 `down_revision` 改接到最新 head，不留多個 head。
+- `backend/app/models/__init__.py`：`backend/alembic/env.py` 只 import `app.models`，新 model 要在這個檔案 import 才會進入 `Base.metadata`。T1、T3 都要改，所以不同波；T1、T3 的測試都要斷言 upgrade head 後新資料表存在，確認註冊沒有漏掉。
 - `backend/pyproject.toml`：只有 T6 加指令入口，不改依賴，因此不動 lockfile；若實作時發現需要新套件，改為先開獨立任務加依賴。
 - `Makefile`：只有 T6 加一個 target。
 - `backend/app/main.py`：本計畫不改；Service 層由之後的功能規格在 API 層取用。
@@ -51,9 +52,9 @@
 
 | AC | 驗證方式 |
 |---|---|
-| DOM-AC01 | `backend/tests/db/test_user_fields.py`：upgrade head 後以 inspector 檢查欄位、可空性與外鍵；新增只含必填欄位的 `User` 斷言預設值；逐一省略必填欄位斷言 `IntegrityError` 且筆數不變；`make check` |
+| DOM-AC01 | `backend/tests/db/test_user_fields.py`：upgrade head 後，以 fixture 在同一交易建立 `Company` 與自我參照的操作者 `User`（DOM-AC02、DOM-AC03 共用）；以 inspector 檢查欄位、可空性與外鍵；新增只含必填欄位的 `User` 斷言預設值；逐一省略必填欄位斷言 `IntegrityError` 且筆數不變；`make check` |
 | DOM-AC02 | `backend/tests/db/test_user_fields.py`：已停用帳號的 email 再寫入一次，斷言 `IntegrityError`；`make check` |
-| DOM-AC03 | `backend/tests/db/test_user_fields.py`：依 AC 列出的五種寫入，斷言前兩種成功、後三種 `IntegrityError`；`make check` |
+| DOM-AC03 | `backend/tests/db/test_user_fields.py`：依 AC 列出的六種寫入，斷言前兩種成功、後四種 `IntegrityError`；`make check` |
 | DOM-AC04 | `backend/tests/services/test_users.py`：呼叫人工修改入口，斷言外部帳號的基本欄位被拒絕且值不變、聯絡欄位成功；`make check` |
 | DOM-AC05 | `backend/tests/services/test_users.py`：對 `is_system` 帳號停用與取消 Admin，斷言被拒絕且資料不變；`make check` |
 | DOM-AC06 | `backend/tests/services/test_users.py`：只有一位 Admin 時取消與停用都被拒絕；新增第二位後取消成功；`make check` |

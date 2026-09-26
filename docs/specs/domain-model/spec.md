@@ -4,7 +4,7 @@
 **前置規格**：`database-foundation`（UUID 主鍵、業務編號、建立與修改紀錄等共通結構，見 DBF-R11～DBF-R14）、`api-conventions`（UUID 字串 ID、UTC 時間格式）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
 **被擋議題**：凍結範圍無；`Project` 業務欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；其餘實體受 [G-01](../../intents/05-open-questions.md#g-01)、[G-02](../../intents/05-open-questions.md#g-02)、[OQ-06](../../intents/05-open-questions.md#oq-06) 等[開工門檻](../../intents/05-open-questions.md#gate)擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
-**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令與認證前的操作者（DOM-R01～DOM-R27、DOM-AC01～DOM-AC18）。DOM-R40 以後為草稿
+**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令與認證前的操作者（DOM-R01～DOM-R21、DOM-R23～DOM-R27、DOM-AC01～DOM-AC18）。DOM-R22（稽核紀錄）待 [DOM-Q6](#dom-q6) 維持草稿；DOM-R40 以後為草稿
 
 ## 目的
 
@@ -87,7 +87,7 @@
 | DOM-R19 | `Role` 是全系統共用的一份清單，不分專案；**必須**具備名稱 `name`（不可空值），以及權限內容：一組權限代碼（文字，例如 `report.read`、`report.approve`）。同一個 `Role` 內的權限代碼**不得**重複，由資料庫約束保證。名稱是否唯一見 [DOM-Q4](#dom-q4)；權限代碼的命名規則與可用清單見 [DOM-Q3](#dom-q3) | 必須 | [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC14 |
 | DOM-R20 | 所有 `Role`（含三個範本角色）都得改名、修改權限內容與刪除；本規格不設不可修改的角色。修改權限內容或名稱時，**必須**更新該 `Role` 的 `updated_at`、`updated_by` | 得（修改、刪除）；必須（修改紀錄） | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)；[PR-08](../../intents/02-principles.md#pr-08) | DOM-AC14 |
 | DOM-R21 | 刪除一個 `Role` 時，**必須**同時移除所有 `ProjectMember` 對它的指派；這些 `ProjectMember` 本身與其他角色的指派不受影響 | 必須 | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)（刪除角色立即影響所有持有者） | DOM-AC16 |
-| DOM-R22 | 權限與角色的變更（含角色的新增、修改、刪除，以及 `ProjectMember` 的角色指派）**必須**寫稽核紀錄 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29) | 稽核紀錄的資料模型未定，見 [DOM-Q6](#dom-q6)；由定義稽核紀錄的規格驗收 |
+| DOM-R22 | （草稿，不在凍結範圍）權限與角色的變更（含角色的新增、修改、刪除，以及 `ProjectMember` 的角色指派）**必須**寫稽核紀錄。稽核紀錄的資料模型未定，本條在 [DOM-Q6](#dom-q6) 裁定、確定由哪份規格與任務實作後，才擴大凍結範圍並補驗收條件 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29) | 待 DOM-Q6；裁定前不拆任務 |
 | DOM-R23 | Service 層**應**能算出一個 `Role` 的影響範圍：持有它的 `ProjectMember` 筆數，以及這些成員涉及的不重複 `User` 人數，供修改或刪除前顯示。畫面顯示與確認流程由提供該操作的功能規格負責 | 應 | [PR-18](../../intents/02-principles.md#pr-18)（影響範圍怎麼計算留給相關規格決定）、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC17；顯示與確認由功能規格驗收 |
 | DOM-R24 | 替 `kind = customer` 的 `Company` 所屬人員指派「有修改能力」的角色時，功能規格**必須**顯示確認提示、但不阻擋（[KD-28](../../intents/03-decisions-and-stack.md#kd-28)）。本規格提供判斷所需的資料：人員所屬 `Company` 的 `kind`，以及角色的權限代碼；怎麼從權限代碼判斷「有修改能力」見 [DOM-Q3](#dom-q3) | 必須 | [KD-28](../../intents/03-decisions-and-stack.md#kd-28) | 由提供指派操作的功能規格驗收 |
 
@@ -160,9 +160,9 @@
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| DOM-AC01 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 SQLAlchemy inspector 檢查 `User` 資料表；新增一筆只提供必填基本欄位的 `User`；再分別嘗試新增缺少任一必填基本欄位的 `User` | DOM-R01、DOM-R03、DOM-R05、DOM-R08 列出的欄位都存在；基本欄位、`is_admin`、`is_system`、`auth_source` 不可空值，聯絡與補充欄位可空值；`company_id` 外鍵指向 `Company`；第一筆成功，且 `is_admin`、`is_system` 為 `false`、`auth_source` 為 `local`、聯絡欄位為空值；缺欄位的每一次都被資料庫拒絕，筆數不變 | DOM-R01、DOM-R03、DOM-R05 |
-| DOM-AC02 | 已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 新增另一筆相同 `email` 的 `User` | 因唯一約束失敗，資料庫仍只有一筆 | DOM-R02 |
-| DOM-AC03 | 已有一筆 `auth_source = local`、外部欄位皆為空值的 `User` | 另新增一筆同樣外部欄位皆為空值的 `local` 帳號；新增一筆 `auth_source = external` 且 `external_source`、`external_id` 有值的帳號；再分別嘗試：`auth_source` 為 `local`、`external` 以外的值；`external` 但 `external_id` 為空值；`external_source` 與 `external_id` 都和前一筆相同的帳號 | 前兩次新增成功；後三次都被資料庫拒絕，筆數不變 | DOM-R08 |
+| DOM-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，由測試在同一個交易裡建立一筆 `Company` 與一筆作為操作者的 `User`（`created_by`、`updated_by` 指向自己，`company_id` 指向該公司） | 用 SQLAlchemy inspector 檢查 `User` 資料表；以該操作者為 `created_by`、`updated_by`，新增一筆只提供必填基本欄位的 `User`；再分別嘗試新增缺少任一必填基本欄位的 `User` | DOM-R01、DOM-R03、DOM-R05、DOM-R08 列出的欄位都存在；基本欄位、`is_admin`、`is_system`、`auth_source` 不可空值，聯絡與補充欄位可空值；`company_id` 外鍵指向 `Company`；第一筆成功，且 `is_admin`、`is_system` 為 `false`、`auth_source` 為 `local`、聯絡欄位為空值；缺欄位的每一次都被資料庫拒絕，筆數不變 | DOM-R01、DOM-R03、DOM-R05 |
+| DOM-AC02 | 與 DOM-AC01 相同的前置資料，並已有一筆 `email = "a@example.com"` 的 `User`，並已停用 | 新增另一筆相同 `email` 的 `User` | 因唯一約束失敗，資料庫仍只有一筆 | DOM-R02 |
+| DOM-AC03 | 與 DOM-AC01 相同的前置資料，並已有一筆 `auth_source = local`、外部欄位皆為空值的 `User` | 另新增一筆同樣外部欄位皆為空值的 `local` 帳號；新增一筆 `auth_source = external` 且 `external_source`、`external_id` 有值的帳號；再分別嘗試：`auth_source` 為 `local`、`external` 以外的值；`external` 但 `external_id` 為空值；`external` 但 `external_source` 為空值；`external_source` 與 `external_id` 都和前一筆相同的帳號 | 前兩次新增成功；後四次都被資料庫拒絕，筆數不變 | DOM-R08 |
 | DOM-AC04 | 一筆 `external` 帳號、一筆 `local` 帳號 | 透過 Service 層的人工修改入口，分別修改兩者的 `department` 與 `mobile` | `external` 帳號的 `department` 修改被拒絕、值不變，`mobile` 修改成功；`local` 帳號兩者都修改成功 | DOM-R04 |
 | DOM-AC05 | 初始化後的資料庫（內建 `admin` 與另一位 Admin） | 透過 Service 層嘗試把 `admin` 的 `is_active` 改為 `false`，以及把 `is_admin` 改為 `false` | 兩次都被拒絕，`admin` 的資料不變 | DOM-R06 |
 | DOM-AC06 | 一個只有一位啟用中 Admin（`is_system = false`）的測試資料庫 | 透過 Service 層取消他的 `is_admin`，以及停用他；再新增第二位啟用中的 Admin 後，重做一次取消 `is_admin` | 前兩次都被拒絕、資料不變；有第二位 Admin 時修改成功 | DOM-R07 |
