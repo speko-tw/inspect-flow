@@ -15,6 +15,31 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      # Consumed by `make check`'s check-postgres target (DBF-R10).
+      # Points at the postgres service container below; that
+      # container only ever holds this run's throwaway data, so a
+      # fixed CI-only username/password here is not a secret.
+      INSPECTFLOW_TEST_POSTGRES_URL: "postgresql+psycopg://inspectflow:\
+        inspectflow@localhost:5432/inspectflow_test"
+    services:
+      postgres:
+        # Pinned to the newest supported major version per
+        # https://www.postgresql.org/support/versioning/ (checked
+        # 2026-09-26: 18 is current, minor 18.6). Bump this image
+        # tag when upgrading the target PostgreSQL version.
+        image: postgres:18
+        env:
+          POSTGRES_USER: inspectflow
+          POSTGRES_PASSWORD: inspectflow
+          POSTGRES_DB: inspectflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
 

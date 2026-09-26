@@ -1,7 +1,17 @@
-"""Tests for the database connection settings (DBF-AC04)."""
+"""Tests for the database connection settings (DBF-AC04).
+
+The env-var resolution tests below run the same regardless of
+``--db-backend`` (they never touch a real connection). The two
+tests that drive a real connection to prove SQLite file/parent-
+directory creation are marked ``sqlite_only``: that behavior is
+specific to SQLite as a backend (a PostgreSQL connection string
+never creates a file), not something DBF-AC08 needs proven against
+PostgreSQL too.
+"""
 
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 
 from app.db import settings
@@ -38,6 +48,7 @@ def test_env_var_overrides_default(monkeypatch, tmp_path):
     assert settings.get_database_url() == f"sqlite:///{db_path}"
 
 
+@pytest.mark.sqlite_only
 def test_engine_creates_file_at_configured_path(monkeypatch, tmp_path):
     db_path = tmp_path / "nested" / "configured.db"
     monkeypatch.setenv(settings.DATABASE_URL_ENV_VAR, f"sqlite:///{db_path}")
@@ -52,6 +63,7 @@ def test_engine_creates_file_at_configured_path(monkeypatch, tmp_path):
     assert db_path.exists()
 
 
+@pytest.mark.sqlite_only
 def test_engine_creates_file_at_replaced_default_path(monkeypatch, tmp_path):
     """DBF-AC04's default-path case, with a real connection.
 

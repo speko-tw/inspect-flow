@@ -44,10 +44,8 @@ def _reset_clock_after_test() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def session(tmp_path) -> Generator[Session, None, None]:
-    engine: Engine = create_engine(
-        f"sqlite:///{tmp_path / 'timestamped_mixin.db'}"
-    )
+def session(db_url: str) -> Generator[Session, None, None]:
+    engine: Engine = create_engine(db_url)
     _ProbeBase.metadata.create_all(engine)
     try:
         with Session(engine) as session:
