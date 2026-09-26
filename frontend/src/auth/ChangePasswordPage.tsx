@@ -2,8 +2,9 @@
 // 欄位。兩次新密碼不同時不送出 API，只顯示不一致的訊息；送出後依
 // AUT-R34 的錯誤碼分別顯示不同訊息。前端不自行檢查新密碼長度——
 // 長度規則（AUT-R04）由後端的 `auth.password_invalid` 錯誤碼回
-// 報，前端只負責顯示對應訊息，不重複規則（避免兩處各自維護、互相
-// 不同步）。
+// 報，前端只負責顯示對應訊息；訊息裡的上下限數字集中成常數
+// （見下方 `PASSWORD_MIN_LENGTH`、`PASSWORD_MAX_LENGTH`），
+// 不在別處另外硬寫規則，避免兩處各自維護、互相不同步。
 //
 // 成功後直接導回原路徑（`RequireAuth` 導向這裡時放進
 // `location.state.from`；沒有時回預設頁）；不必在這裡重新查詢目
@@ -21,9 +22,17 @@ import { ApiError, changePassword } from './api'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 
+// AUT-R04：新密碼長度必須介於 8～128 個字元（含兩端），以 Unicode
+// code point 計算；集中成常數只為了組出下面的錯誤訊息，前端不會
+// 拿這兩個數字自行檢查長度。
+const PASSWORD_MIN_LENGTH = 8
+const PASSWORD_MAX_LENGTH = 128
+
 const MISMATCH_MESSAGE = '兩次輸入的新密碼不一致，請重新輸入。'
 const CURRENT_PASSWORD_INCORRECT_MESSAGE = '目前密碼錯誤，請再試一次。'
-const PASSWORD_INVALID_MESSAGE = '新密碼不符合規則，請重新輸入。'
+const PASSWORD_INVALID_MESSAGE =
+  `新密碼長度需為 ${PASSWORD_MIN_LENGTH}～${PASSWORD_MAX_LENGTH}` +
+  ' 個字元，請重新輸入。'
 const PASSWORD_UNCHANGED_MESSAGE = '新密碼不能與目前密碼相同，請重新輸入。'
 const PERMISSION_DENIED_MESSAGE = '此帳號無法變更密碼，請洽系統管理員。'
 const GENERIC_ERROR_MESSAGE = '變更密碼失敗，請稍後再試。'

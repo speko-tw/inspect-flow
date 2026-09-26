@@ -143,7 +143,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'same-new-password',
     )
     alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('新密碼不符合規則，請重新輸入。')
+    expect(alert.textContent).toBe('新密碼長度需為 8～128 個字元，請重新輸入。')
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(2)
     messages.push(alert.textContent)
