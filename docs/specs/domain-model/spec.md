@@ -27,7 +27,7 @@
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
 - UUID 主鍵、業務編號 `employee_no` 的唯一性、`created_at`／`updated_at`／`created_by`／`updated_by` 的欄位與約束：由 `database-foundation` 定義（DBF-R11～DBF-R14），本規格只引用。
-- 密碼與其雜湊、登入流程、session 或 token、「目前使用者」的辨識、API 權限檢查的執行方式（含後端預設拒絕、Admin 可存取所有專案、誰可以建立帳號與指派角色）：移至 `authentication`（登入機制與密碼雜湊已裁定，見 [OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)、[KD-31](../../intents/03-decisions-and-stack.md#kd-31)）。本規格只定義資料與規則，`authentication` 依此執行。
+- 密碼與其雜湊（Argon2id）、登入流程、伺服器端 Session 與 HttpOnly Cookie 的實作、「目前使用者」的辨識、API 權限檢查的執行方式（含後端預設拒絕、Admin 可存取所有專案、誰可以建立帳號與指派角色）：移至 `authentication`（登入機制與密碼雜湊已裁定，見 [OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)、[KD-31](../../intents/03-decisions-and-stack.md#kd-31)）。本規格只定義資料與規則，`authentication` 依此執行。
 - 外部身分來源的串接與同步流程（比對、轉換、覆蓋基本欄位）：移至 `external-identity-sync`；本規格只預留欄位與約束（DOM-R08）。
 - 修改前顯示影響範圍的畫面與確認流程（[PR-18](../../intents/02-principles.md#pr-18)）、替客戶公司成員指派可修改角色時的確認提示（[KD-28](../../intents/03-decisions-and-stack.md#kd-28)）：屬 UI／API 行為，由提供這些操作的功能規格（例如 `admin-dashboard`）負責；本規格只提供計算影響範圍所需的資料（DOM-R23）。
 - 稽核紀錄的資料模型：[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 要求寫稽核紀錄，但哪份規格定義稽核紀錄尚未決定，見 [DOM-Q6](#dom-q6)。
