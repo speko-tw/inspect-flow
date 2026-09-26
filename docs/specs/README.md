@@ -181,7 +181,7 @@ flowchart TD
 |---|---|
 | 類型 | Issue Type：`Task`＝任務（含撰寫規格、計畫與不屬於規格的工作）、`Bug`＝缺陷。規格本身不開 issue，不使用 `Feature` |
 | 屬於哪份規格、哪個 Phase | `Task` 範本的「規格」欄，以及本檔[規格索引](#index) |
-| 版本 | Milestone（例如 `0.1.x`） |
+| 版本 | Milestone；判斷規則見 [版本與 Milestone 治理](../intents/06-versioning-and-milestone-governance.md)（例如 `0.1.x`） |
 | 進度 | open／closed 與關聯的 PR；需要看板時再用 Projects |
 | 重複、不做 | 關閉原因：duplicate、not planned |
 | 優先順序、工作量 | 組織 issue 欄位 Priority、Effort（見下方[欄位設定](#issue-pr-fields)），不用 label |
@@ -215,9 +215,9 @@ flowchart TD
 |---|---|---|
 | Issue | Assignee | 指派負責人（目前是 `kavy7884`） |
 | Issue | Issue Type | `Task` 或 `Bug`；`gh issue create` 不一定會套用範本的類型，開完要確認，沒有就補上 |
-| Issue | area label、Milestone | 依實際改動範圍選 area label；Milestone 用目前的版本系列（例如 `0.1.x`） |
+| Issue | area label、Milestone | 依實際改動範圍選 area label；Milestone 依 [版本與 Milestone 治理](../intents/06-versioning-and-milestone-governance.md#issue-ownership-table) 判斷所屬版本系列（例如 `0.1.x`） |
 | Issue | Priority、Effort | 一律填寫；`gh issue create` 沒有對應的旗標，要用 GraphQL 設定 |
-| PR | Assignee、area label、Milestone | 與它關閉的 issue 相同 |
+| PR | Assignee、area label、Milestone | 與它關閉的 issue 相同（見 [版本與 Milestone 治理](../intents/06-versioning-and-milestone-governance.md#pr-ownership-table)） |
 | PR | Priority、Effort | 不適用，PR 沒有這兩個欄位 |
 
 Priority、Effort 是組織層級的 issue 欄位，不是 Projects 欄位，不需要 `read:project` scope。以下的 `<I_…>` 是 issue 的 node id（`gh issue view <編號> --json id -q .id`）。
