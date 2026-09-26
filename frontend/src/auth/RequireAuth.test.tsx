@@ -141,3 +141,93 @@ describe('RequireAuth 導向登入頁並保留原路徑（AUT-AC28）', () => {
     expect(probe.startsWith('/admin|')).toBe(true)
   })
 })
+
+describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('/admin 需改密碼時導向 /change-password，並保留原路徑', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ ...ADMIN_USER, must_change_password: true }),
+      ),
+    )
+
+    renderApp(['/admin/reports?x=1'])
+
+    await screen.findByRole('heading', { name: '變更密碼' })
+
+    const probe = screen.getByTestId('location-probe').textContent ?? ''
+    expect(probe).toContain('/change-password')
+    expect(probe).toContain('/admin/reports?x=1')
+  })
+
+  it('/field 需改密碼時導向 /change-password，並保留原路徑', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ ...ADMIN_USER, must_change_password: true }),
+      ),
+    )
+
+    renderApp(['/field/tasks'])
+
+    await screen.findByRole('heading', { name: '變更密碼' })
+
+    const probe = screen.getByTestId('location-probe').textContent ?? ''
+    expect(probe).toContain('/change-password')
+    expect(probe).toContain('/field/tasks')
+  })
+
+  it.each([
+    ['/admin/reports', 'Admin'],
+    ['/field/tasks', 'Field'],
+  ])('%s 變更密碼成功後回到原本的路徑', async (path, heading) => {
+    let mustChangePassword = true
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        const method = init?.method ?? 'GET'
+
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse({
+            ...ADMIN_USER,
+            must_change_password: mustChangePassword,
+          })
+        }
+        if (url.endsWith('/api/v1/auth/password') && method === 'POST') {
+          mustChangePassword = false
+          return new Response(null, { status: 204 })
+        }
+
+        throw new Error(`unexpected fetch: ${method} ${url}`)
+      }),
+    )
+
+    renderApp([path])
+
+    await screen.findByRole('heading', { name: '變更密碼' })
+
+    fireEvent.change(screen.getByLabelText('目前密碼'), {
+      target: { value: 'old-temp-password' },
+    })
+    fireEvent.change(screen.getByLabelText('新密碼'), {
+      target: { value: 'new-password-123' },
+    })
+    fireEvent.change(screen.getByLabelText('再輸入一次新密碼'), {
+      target: { value: 'new-password-123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
+
+    await screen.findByRole('heading', { name: heading })
+
+    await waitFor(() => {
+      const probe = screen.getByTestId('location-probe').textContent ?? ''
+      expect(probe.startsWith(`${path}|`)).toBe(true)
+    })
+  })
+})

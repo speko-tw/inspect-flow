@@ -194,7 +194,7 @@ Issue 涵蓋多個版本系列時，先判斷能否作為單一工作完成；�
 
 **沒有 Issue 的歷史 PR**：依 title、body、changed files、相關 Spec、commit、最接近的能力判斷 Milestone；仍無法可靠判斷標 `NEEDS_REVIEW`，**不得**任意分類。
 
-執行步驟、欄位與分批分組見 migration issue（待開，開好後補連結）。
+執行步驟、欄位與分批分組見 [#189](https://github.com/speko-tw/inspect-flow/issues/189)。
 
 ---
 
