@@ -20,11 +20,12 @@ same helpers.
 
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic.config import Config
 from sqlalchemy import Engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, class_mapper
 
 from alembic import command
 from app.db.engine import create_engine_from_settings, dispose_engine
@@ -34,6 +35,28 @@ from tests.db.conftest import create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
+
+
+def snapshot_persisted_columns(instance: object) -> dict[str, Any]:
+    """Capture every persisted column's current value for a mapped
+    instance, keyed by column name.
+
+    Used by "rejected write leaves the row untouched" assertions
+    (DOM-AC22, DOM-AC23, DOM-R32) instead of comparing a handful of
+    fields by hand: :func:`sqlalchemy.orm.class_mapper` on the
+    instance's class enumerates every actual persisted column, so a
+    column added later is covered automatically. Callers should
+    re-read or refresh the instance (or call
+    ``session.expire_all()``) before taking the "after" snapshot,
+    so a rejected in-memory mutation that never reached the
+    database is not mistaken for "unchanged" -- this is a plain
+    snapshot, not a DB re-fetch itself.
+    """
+    mapper = class_mapper(type(instance))
+    return {
+        column.name: getattr(instance, column.name)
+        for column in mapper.columns
+    }
 
 
 @pytest.fixture(autouse=True)

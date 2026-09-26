@@ -11,6 +11,7 @@ from app.services.companies import (
     update_company,
 )
 from app.services.users import create_user
+from tests.services.conftest import snapshot_persisted_columns
 
 
 def _company_kwargs(code: str, **overrides) -> dict:
@@ -59,7 +60,8 @@ class TestDomAc10OperatorAttribution:
 class TestDomAc23ListActiveUsersAndDisable:
     """DOM-AC23: 公司 C 有兩筆啟用中、一筆已停用的 ``User``；公司 D
     沒有啟用中的人員。列出各自啟用中的人員與人數；停用 C 後，三筆
-    ``User`` 的 ``is_active``、``company_id`` 都與停用前相同。
+    ``User`` 的所有持久化欄位都與停用前相同（DOM-R32：停用公司不
+    得改變旗下 User 的任何資料，不只 ``is_active``、``company_id``）。
     """
 
     def test_list_counts_and_disabling_leaves_users_unchanged(
@@ -88,7 +90,7 @@ class TestDomAc23ListActiveUsersAndDisable:
         assert list(d_users) == []
 
         before = {
-            user.id: (user.is_active, user.company_id)
+            user.id: snapshot_persisted_columns(user)
             for user in (active_1, active_2, inactive)
         }
 
@@ -98,7 +100,7 @@ class TestDomAc23ListActiveUsersAndDisable:
         assert company_c.is_active is False
         for user in (active_1, active_2, inactive):
             session.refresh(user)
-            assert (user.is_active, user.company_id) == before[user.id]
+            assert snapshot_persisted_columns(user) == before[user.id]
 
     def test_company_with_no_active_users_reports_empty(
         self, session, operator

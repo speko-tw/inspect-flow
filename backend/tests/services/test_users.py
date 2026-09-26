@@ -6,7 +6,7 @@ Fixtures (``session``, ``operator``) come from this directory's
 """
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models import User
 from app.services.companies import create_company, update_company
@@ -16,6 +16,7 @@ from app.services.users import (
     create_user,
     update_user_manual,
 )
+from tests.services.conftest import snapshot_persisted_columns
 
 
 def _company_kwargs(code: str, **overrides) -> dict:
@@ -143,16 +144,23 @@ class TestDomAc22DisabledCompanyIsRejectedOnlyForCompanyAssignment:
         update_company(session, company_b, is_active=False)
         session.commit()
 
+        total_users_before = session.scalar(
+            select(func.count()).select_from(User)
+        )
+        user_u_before = snapshot_persisted_columns(user_u)
+
         with pytest.raises(CompanyNotActiveError):
             create_user(session, **_user_kwargs("U022NEW", company_b.id))
 
         with pytest.raises(CompanyNotActiveError):
             update_user_manual(session, user_u, company_id=company_b.id)
 
-        user_count = session.scalars(
-            select(User).where(User.employee_no.like("U022%"))
-        ).all()
-        assert len(user_count) == 2
+        session.expire_all()
+        total_users_after = session.scalar(
+            select(func.count()).select_from(User)
+        )
+        assert total_users_after == total_users_before
+        assert snapshot_persisted_columns(user_u) == user_u_before
         assert user_u.company_id == company_a.id
 
         update_user_manual(
