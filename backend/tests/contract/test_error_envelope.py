@@ -49,6 +49,7 @@ DOT_NAMESPACE_RE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
     {
         "docs/specs/api-conventions/spec.md",
+        "docs/specs/authentication/spec.md",
         "docs/specs/api-conventions/plan.md",
         "docs/intents/03-decisions-and-stack.md",
         "backend/app/api/errors.py",
