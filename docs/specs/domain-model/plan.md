@@ -68,9 +68,9 @@
 | DOM-AC12 | `backend/tests/services/test_companies.py`：依 AC 的三次修改，斷言前兩次被拒絕、第三次成功；`make check` |
 | DOM-AC13 | `backend/tests/services/test_users.py`：本系統帳號改公司，斷言成功；`make check` |
 | DOM-AC14 | `backend/tests/services/test_roles.py`（T7）：inspector 檢查 `Role` 資料表、重複代碼斷言 `IntegrityError`，再以可控時間斷言改名與新增代碼後的修改紀錄；`make check` |
-| DOM-AC15 | `backend/tests/services/test_permissions.py`：依 AC 建立資料，斷言兩個專案的有效權限集合，修改 R1 後再斷言一次，並以 inspector 確認 `ProjectMember` 相關資料表沒有權限代碼欄位；`make check` |
+| DOM-AC15 | `backend/tests/services/test_permissions.py`（T5）：依 AC 建立資料，斷言兩個專案的有效權限集合，修改 R1 後再斷言一次，並以 inspector 確認 `ProjectMember` 相關資料表沒有權限代碼欄位；`make check` |
 | DOM-AC16 | `backend/tests/services/test_roles.py`（T7）：刪除 R1 後斷言成員仍在、R1 的指派為零、R2 的指派仍在；`make check` |
-| DOM-AC17 | `backend/tests/services/test_roles.py`：斷言兩個角色的影響範圍數字；`make check` |
+| DOM-AC17 | `backend/tests/services/test_permissions.py`（T5）：斷言兩個角色的影響範圍數字；`make check` |
 | DOM-AC18 | `backend/tests/db/test_role_member.py`：inspector 檢查資料表；依 AC 的寫入斷言 `IntegrityError` 或成功；`make check` |
 
 ## 考慮過但沒採用的做法
