@@ -2,13 +2,16 @@
 allowlist (AUT-R33).
 """
 
-from fastapi import APIRouter, Depends
+import pytest
+from fastapi import APIRouter, Depends, Request
 from fastapi.testclient import TestClient
+from starlette._utils import get_route_path
 
 from app.api.errors import ErrorCode
 from app.api.v1.auth import router as auth_router
 from app.auth.dependencies import (
     TEMPORARY_PASSWORD_ALLOWLIST,
+    _route_path,
     require_login,
 )
 from app.auth.passwords import hash_password
@@ -230,3 +233,69 @@ class TestAutR33AliasedRouteIsMatchedByPathNotIdentity:
         )
         assert real_resp.status_code == 200
         assert real_resp.json()["must_change_password"] is True
+
+
+def _request_with_scope(path: str, root_path: str) -> Request:
+    """A bare ``Request`` carrying just the scope fields
+    ``_route_path`` (and Starlette's own ``get_route_path``) read:
+    ``scope["path"]`` and ``scope["root_path"]``.
+    """
+    return Request({"type": "http", "path": path, "root_path": root_path})
+
+
+class TestRoutePathMatchesStarletteBoundaryRule:
+    """``_route_path`` reimplements Starlette's private
+    ``get_route_path`` (rather than importing it) and must match it
+    exactly, including the path-segment boundary check: ``root_path``
+    is only stripped when the next character after it is ``/`` (or
+    ``path`` and ``root_path`` are equal), never on a bare substring
+    match (AUT-R33 depends on this: a wrongly-stripped path could
+    make ``_matched_route_template`` recover the wrong template, or
+    none at all, and either wrongly allow or wrongly block a request
+    under the temporary-password gate).
+    """
+
+    @pytest.mark.parametrize(
+        ("path", "root_path", "expected"),
+        [
+            # (a) no root_path: returned unchanged.
+            ("/api/v1/auth/me", "", "/api/v1/auth/me"),
+            # (b) normal root_path prefix, segment boundary.
+            ("/api/v1/auth/me", "/api/v1", "/auth/me"),
+            # (c) path == root_path: empty string, not None.
+            ("/api/v1/auth/me", "/api/v1/auth/me", ""),
+            # (d) coincidental substring overlap, not a segment
+            # boundary -- root_path="/api/v1/auth/m" is a prefix of
+            # path="/api/v1/auth/me" as raw characters, but the byte
+            # right after root_path is "e", not "/", so Starlette
+            # (and this function) return the original path
+            # unchanged rather than stripping to "e".
+            (
+                "/api/v1/auth/me",
+                "/api/v1/auth/m",
+                "/api/v1/auth/me",
+            ),
+        ],
+    )
+    def test_matches_expected_and_starlette(
+        self, path: str, root_path: str, expected: str
+    ) -> None:
+        request = _request_with_scope(path, root_path)
+        assert _route_path(request) == expected
+        assert get_route_path(request.scope) == expected
+
+    @pytest.mark.parametrize(
+        ("path", "root_path"),
+        [
+            ("/api/v1/auth/me", ""),
+            ("/api/v1/auth/me", "/api/v1"),
+            ("/api/v1/auth/me", "/api/v1/auth/me"),
+            ("/api/v1/auth/me", "/api/v1/auth/m"),
+            ("/other/path", "/api/v1"),
+        ],
+    )
+    def test_always_agrees_with_starlette(
+        self, path: str, root_path: str
+    ) -> None:
+        request = _request_with_scope(path, root_path)
+        assert _route_path(request) == get_route_path(request.scope)

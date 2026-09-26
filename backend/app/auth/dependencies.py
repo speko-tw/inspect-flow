@@ -101,11 +101,20 @@ async def bind_request_scope() -> AsyncGenerator[None, None]:
     """Marks "an HTTP request is being handled" for the rest of
     this request, independent of whether anyone is logged in.
 
-    Every access level -- including T4's "公開" one -- must depend
-    on this (directly or, like ``require_login`` below, through a
-    dependency that itself does); a route that skips it makes T5's
-    entry point treat it as a non-request call and fall back to the
-    built-in ``admin`` instead of rejecting an anonymous request.
+    ``app.main.create_app()`` applies this at the app level
+    (``FastAPI(dependencies=[Depends(bind_request_scope)])``), so
+    every route on the real application already runs inside the
+    request scope -- including T4's "公開" one -- without having to
+    declare it itself. ``require_login`` below still depends on it
+    directly too; FastAPI caches a dependency's result per request
+    by callable identity, so the two calls resolve to the same
+    cached run instead of entering (and leaving) the scope twice.
+    A route built on a bare ``FastAPI()`` in a test (rather than
+    through ``create_app()``) does not get this for free and must
+    add ``Depends(bind_request_scope)`` itself, or T5's
+    ``get_current_operator`` treats the call as a non-request call
+    and falls back to the built-in ``admin`` instead of rejecting an
+    anonymous request.
     """
     token = _request_user.set(None)
     try:
@@ -210,19 +219,33 @@ def _iter_routes_with_full_path(
 
 
 def _route_path(request: Request) -> str:
-    """The path used for route matching -- mirrors Starlette's own
-    (private) ``get_route_path``: ``request.scope["path"]`` with
-    ``scope["root_path"]`` stripped when the ASGI server mounted the
-    app under one. Reimplemented rather than imported since that
-    helper lives in an underscored, private module.
+    """The path used for route matching -- mirrors Starlette 1.7's
+    own (private) ``starlette._utils.get_route_path``:
+    ``request.scope["path"]`` with ``scope["root_path"]`` stripped
+    when the ASGI server mounted the app under one. Reimplemented
+    rather than imported since that helper lives in an underscored,
+    private module.
+
+    Matches Starlette's boundary rule exactly, including the case
+    it exists for: ``root_path`` is only ever stripped as a full
+    path *segment* prefix. When ``path`` starts with ``root_path``
+    but the next character isn't a ``/`` (e.g. ``root_path
+    ="/api/v1/auth/m"`` and ``path="/api/v1/auth/me"``), the match
+    is coincidental substring overlap, not root_path actually
+    containing that prefix as mounted segments -- so the original
+    ``path`` is returned unchanged, same as Starlette does.
     """
     path = request.scope["path"]
     root_path = request.scope.get("root_path", "")
-    if not root_path or not path.startswith(root_path):
+    if not root_path:
+        return path
+    if not path.startswith(root_path):
         return path
     if path == root_path:
         return ""
-    return path[len(root_path) :]
+    if path[len(root_path)] == "/":
+        return path[len(root_path) :]
+    return path
 
 
 def _matched_route_template(request: Request) -> str | None:
