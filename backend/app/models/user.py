@@ -38,30 +38,24 @@ normalized column was rejected (a Core ``update()`` touching only
 
 DOM-Q1/DOM-R28 fixes every string column's length limit (and, for
 ``email``, its format: must contain ``@``, must not contain any
-whitespace). Exactly like ``app/models/company.py``'s
-``_CodeType``/``_NameType``/``_TaxIdType``, PostgreSQL enforces the
-length limits through the column types below (DOM-R31), but SQLite
-does not enforce ``String`` length at all, and neither backend's
-column type checks ``email``'s format restriction, so the rules
-themselves (length + format) live in exactly one place each --
-``_check_string_field`` below -- and are enforced through two
-independent layers so no write path can skip them:
+whitespace). The rules themselves (length + format) live in exactly
+one place each -- ``_check_string_field`` below -- and are enforced
+through two independent layers (``@validates`` plus the
+``BoundedString`` column type from ``app/models/_bounded_string.py``,
+see that module's docstring for why) so no write path can skip them:
 
 - ``@validates`` (``_validate_string_field``, registered for every
   DOM-R28 column in one method via ``@validates(*_MAX_LENGTHS)``)
   runs on attribute assignment and on construction.
-- ``_BoundedStringType`` (a ``TypeDecorator``, same pattern as
-  ``UTCDateTime`` in ``app/db/base.py``) runs in
-  ``process_bind_param``, covering the paths ``@validates`` cannot
-  see: ``session.execute(insert(User).values(...))`` and
-  ``session.execute(update(User).values(...))``. One instance is
-  built per column (parametrized by field name instead of one
-  near-identical subclass per field, unlike ``company.py``'s three
-  separate classes), each fixed for the lifetime of the mapped
-  class the same way ``_CodeType(_CODE_MAX_LENGTH)`` is -- so
-  ``cache_ok = True`` is safe here for the same reason it is there:
-  a given column's type instance never changes behavior between
-  two compilations of the same statement.
+- ``_bounded_string`` below builds one ``BoundedString`` instance
+  per column (parametrized by field name instead of one
+  near-identical ``TypeDecorator`` subclass per field, unlike
+  ``company.py``'s pre-#183 three separate classes), each fixed for
+  the lifetime of the mapped class -- so ``BoundedString``'s
+  ``cache_ok = True`` is safe here for the same reason it is in
+  ``company.py``/``project.py``: a given column's type instance
+  never changes behavior between two compilations of the same
+  statement.
 
 Only ``None`` is passed through unchecked at both layers --
 ``employee_no``/``department``/``location``/``name_en``/
@@ -69,18 +63,13 @@ Only ``None`` is passed through unchecked at both layers --
 constraints to reject a missing value, not for these checks, and
 the remaining fields (DOM-R03) may legitimately be ``NULL``.
 
-This project has no existing domain/validation exception hierarchy,
-so both layers raise the standard library's ``ValueError`` (which
-SQLAlchemy wraps in a ``sqlalchemy.exc.StatementError`` when raised
-from ``process_bind_param``), consistent with ``company.py`` and
-``UTCDateTime.process_bind_param`` in ``app/db/base.py``.
-
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered by DOM-R31 here.
 """
 
 import uuid
 from datetime import datetime
+from functools import partial
 
 from sqlalchemy import (
     Boolean,
@@ -94,10 +83,11 @@ from sqlalchemy import (
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, validates
-from sqlalchemy.types import TypeDecorator, Uuid
+from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase, UTCDateTime
 from app.models._audit import AuditMixin
+from app.models._bounded_string import BoundedString
 
 # DOM-R28's length limits, one entry per string column this model
 # defines. ``employee_no`` was previously narrowed to 16 by the
@@ -139,27 +129,16 @@ def _check_string_field(field_name: str, value: str) -> None:
             )
 
 
-class _BoundedStringType(TypeDecorator):
-    """Bind-time counterpart of ``_validate_string_field`` (DOM-R31)
-    for one DOM-R28 string column, parametrized by field name so a
-    single class covers all twelve columns instead of one
-    near-identical ``TypeDecorator`` subclass per field.
+def _bounded_string(field_name: str) -> BoundedString:
+    """A ``BoundedString`` for one DOM-R28 column, parametrized by
+    field name so a single call site covers all twelve columns
+    instead of one near-identical ``TypeDecorator`` subclass per
+    field.
     """
 
-    impl = String
-    cache_ok = True
-
-    def __init__(self, field_name: str) -> None:
-        super().__init__(_MAX_LENGTHS[field_name])
-        self._field_name = field_name
-
-    def process_bind_param(
-        self, value: str | None, dialect: object
-    ) -> str | None:
-        if value is None:
-            return None
-        _check_string_field(self._field_name, value)
-        return value
+    return BoundedString(
+        _MAX_LENGTHS[field_name], partial(_check_string_field, field_name)
+    )
 
 
 class User(AuditMixin, TimestampedBase):
@@ -178,7 +157,7 @@ class User(AuditMixin, TimestampedBase):
     __tablename__ = "users"
 
     employee_no: Mapped[str] = mapped_column(
-        _BoundedStringType("employee_no"), nullable=False, unique=True
+        _bounded_string("employee_no"), nullable=False, unique=True
     )
 
     # -- DOM-R01: basic fields -----------------------------------
@@ -198,23 +177,23 @@ class User(AuditMixin, TimestampedBase):
         nullable=False,
     )
     department: Mapped[str] = mapped_column(
-        _BoundedStringType("department"), nullable=False
+        _bounded_string("department"), nullable=False
     )
     location: Mapped[str] = mapped_column(
-        _BoundedStringType("location"), nullable=False
+        _bounded_string("location"), nullable=False
     )
     name_en: Mapped[str] = mapped_column(
-        _BoundedStringType("name_en"), nullable=False
+        _bounded_string("name_en"), nullable=False
     )
     name_zh: Mapped[str] = mapped_column(
-        _BoundedStringType("name_zh"), nullable=False
+        _bounded_string("name_zh"), nullable=False
     )
     # No ``unique=True`` here: uniqueness is case-insensitive
     # (DOM-R02) and enforced by ``ix_users_email_lower`` below, not
     # by a plain column-level unique constraint on the stored,
     # as-typed value.
     email: Mapped[str] = mapped_column(
-        _BoundedStringType("email"), nullable=False
+        _bounded_string("email"), nullable=False
     )
     # ``server_default`` (DOM-Q7/issue #127) makes an unspecified
     # value default to enabled at the database level too, matching
@@ -226,22 +205,22 @@ class User(AuditMixin, TimestampedBase):
 
     # -- DOM-R03: contact and supplementary fields (all optional) -
     extension_1: Mapped[str | None] = mapped_column(
-        _BoundedStringType("extension_1"), nullable=True
+        _bounded_string("extension_1"), nullable=True
     )
     extension_2: Mapped[str | None] = mapped_column(
-        _BoundedStringType("extension_2"), nullable=True
+        _bounded_string("extension_2"), nullable=True
     )
     mobile: Mapped[str | None] = mapped_column(
-        _BoundedStringType("mobile"), nullable=True
+        _bounded_string("mobile"), nullable=True
     )
     line_id: Mapped[str | None] = mapped_column(
-        _BoundedStringType("line_id"), nullable=True
+        _bounded_string("line_id"), nullable=True
     )
     wechat_id: Mapped[str | None] = mapped_column(
-        _BoundedStringType("wechat_id"), nullable=True
+        _bounded_string("wechat_id"), nullable=True
     )
     responsibilities: Mapped[str | None] = mapped_column(
-        _BoundedStringType("responsibilities"), nullable=True
+        _bounded_string("responsibilities"), nullable=True
     )
 
     # -- DOM-R05: system fields -----------------------------------

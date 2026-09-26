@@ -2,8 +2,9 @@
 (issue #168): SQLite does not enforce ``VARCHAR(n)`` at all, so
 without a Python-side check an over-limit value written through
 SQLite would silently persist. ``app/models/project.py``'s
-``_ProjectCodeType``/``_validate_project_code`` close that gap on
-both write paths (ORM attribute assignment/construction and Core
+``BoundedString`` column type (``app/models/_bounded_string.py``)/
+``_validate_project_code`` close that gap on both write paths (ORM
+attribute assignment/construction and Core
 ``insert()``/``update()``), the same two-layer pattern
 ``app/models/user.py``/``app/models/company.py`` use for their own
 DOM-R28/DOM-R29 columns.
@@ -122,7 +123,7 @@ class TestOrmConstructionAndAssignment:
 class TestCoreInsertAndUpdate:
     """``session.execute(insert(Project)...)``/
     ``session.execute(update(Project)...)`` never call
-    ``@validates`` -- only ``_ProjectCodeType.process_bind_param``
+    ``@validates`` -- only ``BoundedString.process_bind_param``
     sees these values.
     """
 
