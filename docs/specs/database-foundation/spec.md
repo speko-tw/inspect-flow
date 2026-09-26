@@ -62,7 +62,7 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | DBF-R11 | `User`、`Project` **必須**以 UUID 作為主鍵；**不得**以自增整數作為主鍵或對外識別。UUID 版本**得**優先評估 UUIDv7，由實作任務選定 | 必須；得（UUIDv7） | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-03](../../intents/02-principles.md#pr-03)；API 表示法見 API-R06 |
-| DBF-R12 | `Project` **必須**有與 UUID 分開保存的業務編號 `project_code`；`User` **必須**有與 UUID 分開保存的業務編號 `employee_no`。兩者不得互相取代 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[04-glossary](../../intents/04-glossary.md)「專案」「業務編號」（依據：架構基準 §11、§12.1–12.2） |
+| DBF-R12 | `Project` **必須**有與 UUID 分開保存的業務編號 `project_code`；`User` **必須**有與 UUID 分開保存的業務編號 `employee_no`。兩者不得互相取代。長度上限由 `domain-model` 定義，本規格不另定：`employee_no` 見 DOM-R28，`project_code` 見 DOM-R40（暫定、待確認） | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[04-glossary](../../intents/04-glossary.md)「專案」「業務編號」（依據：架構基準 §11、§12.1–12.2） |
 | DBF-R13 | `project_code` 在所有 `Project` 之間**必須**唯一；`employee_no` 在所有 `User` 之間**必須**唯一；由資料庫約束保證 | 必須 | 負責人決定（#51，2026-09-26）；intents 沒有明文 |
 | DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫。`created_by`、`updated_by` **不得**為空值，**必須**是指向 `User` 主鍵的外鍵，由資料庫約束保證；外鍵**必須**允許指向同一筆 `User` 自己（內建 `admin` 的 `created_by` 指向自己）。建立初始帳號的初始化指令，以及 `is_admin`、`is_system` 欄位，由 `domain-model` 定義 | 必須（保留、不得為空、外鍵）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08)；[DBF-Q2](#dbf-q2) 裁定（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26；決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)）；架構基準無對應章節 |
 
