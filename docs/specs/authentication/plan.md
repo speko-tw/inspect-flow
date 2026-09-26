@@ -71,7 +71,7 @@
 | AUT-AC10 | `backend/tests/auth/test_sessions.py`：兩個用戶端登入，斷言 token 不同、長度、不沿用請求帶來的 token、兩者皆可呼叫 `me` |
 | AUT-AC11 | `backend/tests/auth/test_sessions.py`：直接以 ORM 停用帳號，斷言兩個 Cookie 都 401 且 `AuthSession` 已刪除 |
 | AUT-AC12 | `backend/tests/auth/test_sessions.py`：以 ORM 建立 `external` 帳號，直接呼叫建立登入狀態的函式後呼叫 `me` 斷言 200，再以密碼登入斷言 401 |
-| AUT-AC13 | `backend/tests/auth/test_sessions.py`：以 `database-foundation` 的可控時間推進時鐘，斷言預設的絕對與閒置期限在剛好到期時仍有效、超過 1 秒時失效，以及`last_seen_at` 的更新與過期資料的刪除 |
+| AUT-AC13 | `backend/tests/auth/test_sessions.py`：以 `database-foundation` 的可控時間推進時鐘，斷言預設的絕對期限在滿 8 小時前 1 秒仍有效、剛好 8 小時失效，閒置期限在剛好 60 分鐘仍有效、超過 1 秒失效，以及`last_seen_at` 的更新與過期資料的刪除 |
 | AUT-AC14 | `backend/tests/auth/test_sessions.py`：直接建立三筆 `AuthSession`（其中一筆過期），呼叫筆數查詢 |
 | AUT-AC15 | `backend/tests/auth/test_sessions.py`：以 monkeypatch 設定與清除環境變數，斷言讀到的設定值；讀取 repo 根目錄的 `.env.example`，斷言含兩個變數名稱 |
 | AUT-AC16 | `backend/tests/contract/test_route_access.py`（T4）：走訪 `create_app()` 的業務路由（沿用 API-AC01 的走訪方式），斷言都有宣告、公開清單內容；另建一個加了未宣告路由的 app，斷言檢查失敗並回報路由路徑 |
