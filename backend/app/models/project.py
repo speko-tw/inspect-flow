@@ -23,11 +23,11 @@ class Project(AuditMixin, TimestampedBase):
 
     __tablename__ = "projects"
 
-    # No length is specified: the maximum length of a project code
-    # is undecided (domain-model's DOM-Q1, same open question as
-    # User.employee_no). An unbounded String avoids guessing a
-    # limit that a later migration would then have to narrow or
-    # widen.
+    # Length 32 per DOM-Q1's ruling (#121): provisional, carried
+    # over from ``employee_no`` pending Project's own business
+    # columns (OQ-01) -- see #121 and the PR description. Narrowed
+    # from an unbounded String by the ``22bfdd8a72a4`` migration
+    # (#140).
     project_code: Mapped[str] = mapped_column(
-        String, nullable=False, unique=True
+        String(32), nullable=False, unique=True
     )
