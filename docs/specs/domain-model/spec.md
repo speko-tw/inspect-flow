@@ -201,7 +201,7 @@
 <a id="dom-q1"></a>
 - **DOM-Q1：字串欄位的長度上限與格式**。#63 只定了欄位，沒有定長度（例如 `email`、`employee_no`、`Company.code`、`name_en`、`name_zh`、權限代碼）與格式（例如 `tax_id` 是否限定 8 位數字、`email` 是否檢查格式）。SQLite 不強制 `VARCHAR` 長度，PostgreSQL 會；之後再加上限需要新的 migration。影響計畫 T1～T3。
 <a id="dom-q2"></a>
-- **DOM-Q2：email 比對是否不分大小寫**（已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)）。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（存正規化後的值，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。裁定：不分大小寫，唯一性也不分大小寫（含已停用帳號）；保留輸入的原樣存放，只在比對與唯一約束時轉成小寫，寫法由計畫 T2 選擇；登入與外部身分同步的比對同樣不分大小寫。已寫入 DOM-R02、DOM-AC02。
+- **DOM-Q2：email 比對是否不分大小寫**（已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)）。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（另存正規化欄位並加唯一約束，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。裁定：不分大小寫，唯一性也不分大小寫（含已停用帳號）；保留輸入的原樣存放，只在比對與唯一約束時轉成小寫，寫法由計畫 T2 選擇；登入與外部身分同步的比對同樣不分大小寫。已寫入 DOM-R02、DOM-AC02。
 <a id="dom-q3"></a>
 - **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。待定的有：格式是否固定為 `<資料>.<動作>`；可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
 <a id="dom-q4"></a>

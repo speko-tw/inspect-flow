@@ -243,7 +243,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q6"></a>
 - **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。**建議 A**，等 DOM-Q6 定案後再評估 B。不擋任何任務。
 
-本規格另依賴 `domain-model` 尚未裁定的題目，本規格不自行定案：
+本規格另依賴 `domain-model` 的下列題目；尚未裁定的，本規格不自行定案：
 
 - [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：已裁定（[#122](https://github.com/speko-tw/inspect-flow/issues/122)），不分大小寫，AUT-R05 已依此寫定；計畫 T3 不再受本題擋。
 - [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：影響 AUT-R22 用哪個代碼；檢查元件本身以字串為輸入，不受影響。
