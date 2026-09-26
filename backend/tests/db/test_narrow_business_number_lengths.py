@@ -187,7 +187,9 @@ def test_narrowing_migration_round_trip_preserves_rows_and_constraints(
     finally:
         engine.dispose()
 
-    command.downgrade(cfg, "-1")
+    # Target the narrowing migration's parent explicitly: "-1"
+    # would only undo whichever migration is head at the time.
+    command.downgrade(cfg, "78a4ba191ab5")
     command.upgrade(cfg, "head")
 
     engine = create_engine_from_settings(db_url)
