@@ -329,7 +329,7 @@
 <a id="kd-30"></a>
 ## KD-30：登入採伺服器端 Session 搭配 HttpOnly Cookie
 
-- **決策**：登入**必須**採 Server-managed Session + HttpOnly Cookie，Cookie **必須**加上 Secure、SameSite；**不得**把長效 JWT 放在 browser localStorage。
+- **決策**：登入**必須**採 Server-managed Session + HttpOnly Cookie，Cookie **必須**加上 Secure、SameSite；**應**避免把長效 JWT 放在 browser localStorage（維持架構基準原本的建議）。
 - **狀態**：已決定。
 - **考慮過但沒選**：Short-lived Token in HttpOnly Cookie（架構基準 §17 列為「或經團隊評估採用」的選項）。
 - **為什麼選這個**：部署是單一伺服器；停用人員時可以立刻讓現有的登入失效（依 [KD-21](#kd-21)），不需要另外做 token 撤銷機制。將來串接外部身分來源（LDAP、AD、Entra ID）時，登入成功後一樣建立伺服器端的 Session，兩者不衝突（依負責人 #82 決定）。
