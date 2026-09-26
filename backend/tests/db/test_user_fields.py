@@ -639,8 +639,8 @@ class TestDomAc19StringLengthsAndEmailFormat:
     ):
         """Issue #188: ``None`` on a ``NOT NULL`` column is rejected
         by ``@validates`` with the same ``ValueError`` an invalid
-        value gets, not the ``TypeError`` ``len(None)`` would raise
-        inside ``_check_string_field``.
+        value gets, instead of being passed through to the
+        database's ``NOT NULL`` constraint as before.
         """
         before = session.query(User).count()
         kwargs = _user_kwargs(operator, "OVR004")
