@@ -107,15 +107,15 @@
 
 ### 臨時密碼與變更密碼
 
-錯誤碼與狀態碼是本規格建議的契約，強度為「應」；「臨時密碼要強制變更」本身依 [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26），強度為「必須」。
+「有臨時密碼標記、標記未清除前強制變更、本人能變更密碼」依 [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26），強度為「必須」；欄位約束、錯誤碼、狀態碼與實作方式是本規格的建議，強度為「應」。
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| AUT-R32 | `UserPassword` **必須**記錄這組密碼是不是臨時密碼（本規格稱 `must_change_password`，不可空值，未指定時為 `false`）。標記只對 `auth_source = local` 的帳號有作用；外部來源帳號不使用本地密碼，標記一律不影響它 | 必須 | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（選項 B：Admin 設定臨時密碼，首次登入強制變更；外部帳號不使用本地密碼） |
-| AUT-R33 | `auth_source = local` 且 `must_change_password = true` 的帳號，仍可依 AUT-R05 登入並取得 `AuthSession`；但標記清除前，這個登入狀態的請求只放行一份明確的允許清單：取得目前使用者、登出、變更密碼（AUT-R34）。其他需登入以上的請求**必須**拒絕，而且不執行路由處理函式；拒絕時**應**回傳 403、`auth.password_change_required`。允許清單**必須**集中在一處，並由自動化測試斷言內容 | 必須（只放行允許清單、不執行處理函式、清單可測）；應（狀態碼與錯誤碼） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（首次登入強制變更）；以允許清單而非封鎖清單實作，延續 AUT-R18 的預設拒絕 |
-| AUT-R34 | 後端**必須**提供本人變更密碼的 API：已登入的 `auth_source = local` 帳號送出目前密碼與新密碼，目前密碼驗證成功、新密碼符合 AUT-R04，且（標記為臨時時）新密碼與目前密碼不同，才以新密碼的雜湊取代舊的、清除 `must_change_password`。任一條件不符時資料不變，**應**分別回傳：目前密碼錯誤 400、`auth.current_password_incorrect`；新密碼不符 AUT-R04 為 422、`auth.password_invalid`；臨時密碼改成同一組 422、`auth.password_unchanged`。外部來源帳號呼叫時**必須**拒絕（403、`permission.denied`）。修改紀錄的操作者依 AUT-R09 為本人。這三個錯誤碼與 AUT-R33 的錯誤碼**必須**登記在共用的錯誤碼列舉（同 AUT-R23） | 必須（API、三項檢查、外部帳號拒絕、登記錯誤碼）；應（狀態碼與錯誤碼） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（變更密碼的流程與頁面）；「臨時密碼不得改成同一組」是本規格的推導，理由：否則強制變更沒有效果；API-R05、API-R07 |
-| AUT-R35 | 變更密碼成功時，**應**刪除該 `User` 其他所有的 `AuthSession`，保留發出這個請求的登入狀態 | 應 | OWASP Session Management Cheat Sheet（密碼變更後讓其他登入狀態失效）；保留目前這一筆是本規格的建議，理由：本人剛證明知道密碼，不必再登入一次 |
-| AUT-R36 | Service 層**必須**提供「設定密碼」的單一入口，參數含目標 `User`、新密碼，以及是否標為臨時；入口負責 AUT-R04 的長度檢查、雜湊、寫入 `UserPassword` 與 `must_change_password`，以及 AUT-R25 的刪除登入狀態。設定密碼的指令與 `admin-dashboard` 日後的「Admin 設定臨時密碼」都**必須**經過這個入口；Admin 替他人設定密碼時標為臨時，由 `admin-dashboard` 驗收 | 必須 | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（Admin 在畫面上設定臨時密碼的操作介面屬 `admin-dashboard`，本規格提供後端機制） |
+| AUT-R32 | `UserPassword` **必須**記錄這組密碼是不是臨時密碼（本規格稱 `must_change_password`）；欄位**應**為不可空值，未指定時為 `false`。標記只對 `auth_source = local` 的帳號有作用；外部來源帳號不使用本地密碼，標記一律不影響它 | 必須（記錄標記、只對 `local` 有作用）；應（不可空值、預設 `false`） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（選項 B：Admin 設定臨時密碼，首次登入強制變更；外部帳號不使用本地密碼） |
+| AUT-R33 | `auth_source = local` 且 `must_change_password = true` 的帳號，仍可依 AUT-R05 登入並取得 `AuthSession`；但標記清除前，這個登入狀態的請求只放行一份明確的允許清單：取得目前使用者、登出、變更密碼（AUT-R34）。其他需登入以上的請求（含需 Admin、需專案權限、本人或 Admin）**必須**拒絕，而且不執行路由處理函式；拒絕時**應**回傳 403、`auth.password_change_required`。允許清單**應**集中在一處，並由自動化測試斷言內容 | 必須（只放行允許清單、各存取層級都拒絕、不執行處理函式）；應（狀態碼與錯誤碼、清單集中與測試方式） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（首次登入強制變更）；以允許清單而非封鎖清單實作，延續 AUT-R18 的預設拒絕 |
+| AUT-R34 | 後端**必須**提供本人變更密碼的 API：已登入的 `auth_source = local` 帳號送出目前密碼與新密碼，目前密碼驗證成功、新密碼符合 AUT-R04，且（標記為臨時時）新密碼與目前密碼不同，才以新密碼的雜湊取代舊的、清除 `must_change_password`。任一條件不符時資料不變，**應**分別回傳：目前密碼錯誤 400、`auth.current_password_incorrect`；新密碼不符 AUT-R04 為 422、`auth.password_invalid`；臨時密碼改成同一組 422、`auth.password_unchanged`。外部來源帳號呼叫時**必須**拒絕，資料不變（**應**回傳 403、`permission.denied`）。修改紀錄的操作者依 AUT-R09 為本人。本條與 AUT-R33 實際採用的錯誤碼，依 API-R07 登記在共用的錯誤碼列舉 | 必須（API、三項檢查、外部帳號拒絕）；應（狀態碼與錯誤碼的名稱）；錯誤碼的登記方式依 API-R07 | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（變更密碼的流程與頁面）；「臨時密碼不得改成同一組」是本規格的推導，理由：否則強制變更沒有效果；API-R05、API-R07 |
+| AUT-R35 | 變更密碼成功時，**應**刪除該 `User` 所有的 `AuthSession`（含發出這個請求的那一筆），並依 AUT-R11～AUT-R13 為這個請求建立一筆新的 `AuthSession`、以 Cookie 回傳，讓本人不必重新登入 | 應 | OWASP Session Management Cheat Sheet（密碼變更屬權限等級改變，應換發登入識別碼；其他登入狀態失效）；換發而非要求重新登入是本規格的建議，理由：本人剛證明知道密碼 |
+| AUT-R36 | 後端**必須**提供可把密碼標為臨時的設定方式，供 `admin-dashboard` 日後的「Admin 設定臨時密碼」使用；Admin 在畫面上替他人設定的密碼**必須**標為臨時，由 `admin-dashboard` 驗收。這個設定方式**應**是 Service 層的單一入口，參數含目標 `User`、新密碼與是否標為臨時，負責 AUT-R04 的長度檢查、雜湊、寫入 `UserPassword` 與 `must_change_password`，以及 AUT-R25 的刪除登入狀態；設定密碼的指令**應**也經過這個入口 | 必須（可標為臨時、Admin 設定的標為臨時）；應（單一入口與指令共用） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（Admin 設定臨時密碼；操作介面屬 `admin-dashboard`，本規格提供後端機制）；單一入口是本規格的建議，理由：規則只寫一次，指令與畫面不會各自漏掉長度檢查或刪除登入狀態 |
 | AUT-R37 | 設定密碼的指令**應**依帳號決定是否標為臨時：`is_system = false` 的帳號標為臨時，本人第一次登入時變更；內建 `admin`（`is_system = true`）不標，部署人員保管的密碼就是登入用的密碼 | 應 | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（一般帳號首次登入強制變更；內建 `admin` 作為緊急備援、密碼由部署人員保管）；依帳號區分是本規格的建議，待負責人確認 |
 
 ### 外部身分來源與登入失敗
@@ -157,7 +157,7 @@
 | `POST` | `/api/v1/auth/login` | 本體 `{"email": "…", "password": "…"}`；成功 200，設定 Cookie，本體同目前使用者；失敗 401 `auth.invalid_credentials`；本體不合法 422（沿用共用錯誤處理） | 公開 |
 | `POST` | `/api/v1/auth/logout` | 刪除登入狀態並清除 Cookie；一律 204 | 公開（沒有登入狀態也回 204） |
 | `GET` | `/api/v1/auth/me` | 目前使用者 `{"id", "email", "name_en", "name_zh", "is_admin", "must_change_password"}`；未登入 401 `auth.not_authenticated` | 需登入（臨時密碼未變更時仍放行） |
-| `POST` | `/api/v1/auth/password` | 本人變更密碼，本體 `{"current_password": "…", "new_password": "…"}`；成功 204；目前密碼錯誤 400 `auth.current_password_incorrect`；新密碼不符規則 422 `auth.password_invalid`；臨時密碼改成同一組 422 `auth.password_unchanged`；外部帳號 403 `permission.denied` | 需登入（臨時密碼未變更時仍放行） |
+| `POST` | `/api/v1/auth/password` | 本人變更密碼，本體 `{"current_password": "…", "new_password": "…"}`；成功 204，並以 `Set-Cookie` 換發新的登入 Cookie；目前密碼錯誤 400 `auth.current_password_incorrect`；新密碼不符規則 422 `auth.password_invalid`；臨時密碼改成同一組 422 `auth.password_unchanged`；外部帳號 403 `permission.denied` | 需登入（臨時密碼未變更時仍放行） |
 
 | 其他介面 | 內容 | 對應需求 |
 |---|---|---|
@@ -239,9 +239,10 @@
 | AUT-AC35 | T 的密碼標為臨時；一條僅存在於測試中、需登入的路由，處理函式會計數；一個 `external` 帳號 E，有一筆 `must_change_password = true` 的 `UserPassword`（模擬轉成外部帳號前留下的），由測試直接呼叫「建立登入狀態」的函式替 E 建立登入狀態 | T 登入，依序呼叫 `me`、測試路由、登出；E 以取得的 Cookie 呼叫測試路由 | T 登入 200 並取得 Cookie；`me` 200；測試路由 403 `auth.password_change_required`，處理函式計數為 0；登出 204；E 呼叫測試路由放行（標記不影響外部帳號） | AUT-R32、AUT-R33 |
 | AUT-AC36 | 臨時密碼的允許清單 | 讀取允許清單，並比對正式應用程式的路由 | 清單恰為 `GET /api/v1/auth/me`、`POST /api/v1/auth/logout`、`POST /api/v1/auth/password`，每一條都存在於正式路由 | AUT-R33 |
 | AUT-AC37 | T 的密碼標為臨時且已登入；E 同 AUT-AC35 | T 分別送出：錯誤的目前密碼；正確的目前密碼與 7 字元的新密碼；正確的目前密碼與「和目前密碼相同」的新密碼。E 以正確格式的本體呼叫變更密碼 | 依序回 400 `auth.current_password_incorrect`、422 `auth.password_invalid`、422 `auth.password_unchanged`、403 `permission.denied`；四次之後 T 的 `UserPassword`（雜湊與標記）不變，T 的登入狀態筆數不變 | AUT-R34 |
-| AUT-AC38 | T 的密碼標為臨時，在三個用戶端 A、B、C 登入 | A 以正確的目前密碼與一組符合規則的新密碼呼叫變更密碼；之後 A 呼叫 AUT-AC35 的測試路由，B、C 呼叫 `me`；再分別以舊密碼、新密碼登入 | 變更回 204；`must_change_password` 為 `false`，雜湊能驗證新密碼，`updated_by` 為 T；A 的測試路由放行；B、C 回 401，只剩 A 的 `AuthSession`；舊密碼登入 401、新密碼登入 200 | AUT-R09、AUT-R34、AUT-R35 |
+| AUT-AC38 | T 的密碼標為臨時，在三個用戶端 A、B、C 登入；記下 A 原本的 Cookie 值 | A 以正確的目前密碼與一組符合規則的新密碼呼叫變更密碼；之後 A 以回應換發的 Cookie 呼叫 AUT-AC35 的測試路由，另以 A 原本的 Cookie、B、C 呼叫 `me`；再分別以舊密碼、新密碼登入 | 變更回 204，`Set-Cookie` 帶新的 token（不等於原本的值，屬性同 AUT-AC05）；`must_change_password` 為 `false`，雜湊能驗證新密碼，`updated_by` 為 T；新 Cookie 呼叫測試路由放行；A 原本的 Cookie、B、C 都回 401，T 只剩一筆 `AuthSession`，其 `token_hash` 等於新 Cookie 值的 SHA-256；舊密碼登入 401、新密碼登入 200 | AUT-R09、AUT-R34、AUT-R35 |
 | AUT-AC39 | 帳號 T 已登入兩個用戶端 | 直接呼叫設定密碼的 Service 入口：標為臨時設定一次，檢查後再不標為臨時設定一次；另以 7 字元的密碼呼叫一次 | 第一次後標記為 `true`、第二次後為 `false`，每次的雜湊都能驗證剛設定的密碼，兩個用戶端在第一次後都回 401；7 字元那一次被拒絕，`UserPassword` 不變 | AUT-R04、AUT-R25、AUT-R36 |
 | AUT-AC40 | 共用錯誤碼列舉與由它產生的對照表（API-AC10） | 檢查對照表 | 含 `auth.password_change_required`、`auth.current_password_incorrect`、`auth.password_invalid`、`auth.password_unchanged`，且都符合 API-AC09 的 dot-namespace 格式 | AUT-R33、AUT-R34 |
+| AUT-AC43 | 帳號 T 為 `is_admin = true`、`must_change_password = true`，已登入；T 是專案 P 的成員，角色含 `report.read`；AUT-AC17 的四條測試路由（需登入、需 Admin、需專案權限 `report.read`、本人或 Admin），處理函式會計數 | T 以 P 與自己為目標呼叫四條路由；再由測試把標記改為 `false`，重呼叫一次 | 第一次四條都回 403 `auth.password_change_required`，處理函式計數都是 0；標記清除後四條都放行 | AUT-R18、AUT-R33 |
 
 ### 外部身分來源與登入失敗
 
@@ -288,7 +289,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q4"></a>
 - **AUT-Q4：之後建立的帳號怎麼取得第一次的密碼，以及內建 `admin` 能不能登入**（已裁定，[#146](https://github.com/speko-tw/inspect-flow/issues/146)；AUT-R24、AUT-R32～AUT-R38）。以下是裁定前的討論紀錄。本規格原本只提供部署人員執行的指令（AUT-R24）。Admin 在畫面上建立帳號後，被建立的人怎麼拿到密碼，#54 沒有規定。選項：（A）先只用指令，畫面上的重設與自助變更密碼另開規格；（B）`admin-dashboard` 提供「Admin 設定臨時密碼，首次登入強制變更」；（C）以 email 寄送設定密碼的連結（需要寄信服務，目前沒有）。**建議 A**，等 `admin-dashboard` 開工時再決定是否擴充為 B。另外，內建 `admin`（`is_system`）是否可以設定密碼並登入：選項（甲）可以，作為負責人帳號無法使用時的備援；（乙）不行，只作為系統操作者，指令拒絕替它設定密碼。**建議甲**，並由部署人員妥善保管密碼。當時寫：裁定前，AUT-R24 對內建 `admin` 的行為不定義；計畫 T6 在裁定後才開工。
   - **裁定**（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）：第一題選 B，由 Admin 設定臨時密碼，本人第一次登入時強制變更；理由是本系統在企業內部使用，這是內網系統常見的做法。`authentication` 補後端機制（臨時密碼標記、首次登入強制變更、變更密碼的流程與頁面）；「Admin 在畫面上設定臨時密碼」的操作介面屬 `admin-dashboard`，在那之前帳號密碼仍由部署人員以指令設定（AUT-R24）。外部來源帳號（`auth_source = external`）交給 AD／LDAP 驗證，本系統不保存外部密碼，也不使用本地密碼；轉成外部來源時要不要刪除本地密碼，留給 `external-identity-sync`。第二題選甲，內建 `admin` 可以設定密碼並登入，作為負責人帳號無法使用時的緊急備援帳號（業界稱 break-glass 帳號），密碼由部署人員保管，平常使用個人帳號。
-  - **落地**：AUT-R24 寫明可指定內建 `admin`（AUT-AC32）；新增 AUT-R32～AUT-R38 與 AUT-AC33～AUT-AC42；AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`；「不包含」改寫畫面上設定密碼的歸屬，並排除臨時密碼的有效期限。實作由計畫 T6（[#154](https://github.com/speko-tw/inspect-flow/issues/154)）與新增的 T9、T10 負責。
+  - **落地**：AUT-R24 寫明可指定內建 `admin`（AUT-AC32）；新增 AUT-R32～AUT-R38 與 AUT-AC33～AUT-AC43；AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`；「不包含」改寫畫面上設定密碼的歸屬，並排除臨時密碼的有效期限。實作由計畫 T4（[#152](https://github.com/speko-tw/inspect-flow/issues/152)）、T6（[#154](https://github.com/speko-tw/inspect-flow/issues/154)）與新增的 T9、T10、T11 負責。
 <a id="aut-q5"></a>
 - **AUT-Q5：登入失敗鎖定**（AUT-R28、AUT-AC27）。OWASP 建議依帳號計算、鎖定時間可遞增，並提醒鎖定可能被用來阻擋他人登入。選項：（A）15 分鐘內失敗 10 次，鎖定 15 分鐘；（B）失敗 5 次後開始遞增延遲（1、2、4…分鐘，上限 1 小時）；（C）MVP 不做，只在內網使用。**建議 A**：規則簡單、好測試，10 次的門檻讓一般打錯密碼不會被鎖。鎖定是否要寫稽核紀錄，併入 AUT-Q6。影響計畫 T8；裁定前 T8 不開工。
 <a id="aut-q6"></a>
@@ -307,4 +308,4 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 
 - AUT-Q1 裁定：AUT-R15 寫入預設值閒置 60 分鐘、絕對 8 小時，以及邊界（絕對期限滿即失效、閒置剛好等於期限仍有效）；AUT-AC13 改用預設值，驗證絕對期限未滿（A 減 1 秒）與剛好到期（A）、閒置期限剛好到期（I）與超過（I 加 1 秒）時的結果，AUT-AC15 寫明預設值 — #143
 - 依 AUT-Q3 裁定，AUT-R04 定為長度 8～128 字元、不要求字元組成、不強制定期更換，AUT-AC04 改為具體邊界值並補只含小寫字母的情境，「不包含」新增常見密碼黑名單 — [#145](https://github.com/speko-tw/inspect-flow/issues/145)
-- 依 AUT-Q4 裁定，AUT-R24 可指定內建 `admin`，新增臨時密碼與首次登入強制變更（AUT-R32～AUT-R38、AUT-AC32～AUT-AC42），AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`，「不包含」改寫 Admin 設定臨時密碼的歸屬並排除臨時密碼的有效期限 — [#146](https://github.com/speko-tw/inspect-flow/issues/146)
+- 依 AUT-Q4 裁定，AUT-R24 可指定內建 `admin`，新增臨時密碼與首次登入強制變更（AUT-R32～AUT-R38、AUT-AC32～AUT-AC43），AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`，「不包含」改寫 Admin 設定臨時密碼的歸屬並排除臨時密碼的有效期限 — [#146](https://github.com/speko-tw/inspect-flow/issues/146)

@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 AUT-AC01～AUT-AC42。跨規格的依賴：`database-foundation` T4（[#59](https://github.com/speko-tw/inspect-flow/issues/59)，`User`、`Project` 資料表），以及 `domain-model` 計畫的 T2（`User` 業務欄位）、T4（目前操作者與 Service 層）、T5（有效權限計算）、T6（初始化指令）；後者開 task issue 前還沒有編號，下表以「DOM T<n>」表示，開 issue 時換成 issue 編號。
+本計畫涵蓋 AUT-AC01～AUT-AC43。跨規格的依賴：`database-foundation` T4（[#59](https://github.com/speko-tw/inspect-flow/issues/59)，`User`、`Project` 資料表），以及 `domain-model` 計畫的 T2（`User` 業務欄位）、T4（目前操作者與 Service 層）、T5（有效權限計算）、T6（初始化指令）；後者開 task issue 前還沒有編號，下表以「DOM T<n>」表示，開 issue 時換成 issue 編號。
 
 ## 任務
 
@@ -13,16 +13,17 @@
 | T1 | 加入 Argon2id 套件（例如 `argon2-cffi`），實作密碼雜湊、驗證與「是否需要重新雜湊」三個函式；參數採 AUT-R01 建議的 m = 19456 KiB、t = 2、p = 1（改選 OWASP 清單中另一組時，在本 PR 更新本檔），集中在一處常數。本任務不含長度規則（AUT-Q3 已裁定，併入 T6） | `backend/pyproject.toml`、`backend/uv.lock`、`backend/app/auth/__init__.py`、`backend/app/auth/passwords.py`（新增）、`backend/tests/auth/__init__.py`、`backend/tests/auth/test_passwords.py`（新增） | — | AUT-AC01 | #149 |
 | T2 | `UserPassword`、`AuthSession` 資料表：兩個 model 繼承 `database-foundation` 的共用基底；`UserPassword.user_id` 唯一、`AuthSession.token_hash` 唯一，`user_id` 為不可空值、指向 `User` 的外鍵；新增一支 migration | `backend/app/models/user_password.py`、`backend/app/models/auth_session.py`（新增）、`backend/app/models/__init__.py`（加 import）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_auth_tables.py`（新增） | #59 | AUT-AC31 | #150 |
 | T3 | 登入狀態與登入、登出、目前使用者 API：產生 token 與存 SHA-256、建立與刪除 `AuthSession`、每個請求的檢查（存在、兩種期限、`is_active`）並更新 `last_seen_at`、有效筆數查詢；密碼登入（一致的失敗回應、帳號不存在時仍驗證一次雜湊、驗證後重新雜湊）；「建立登入狀態」與「驗證密碼」分成兩個函式；需登入的 FastAPI dependency，並把登入者放進請求範圍的 context，供 T5 讀取；逾時設定讀環境變數（未設定時閒置 60 分鐘、絕對 8 小時）並寫進 `.env.example`；`auth.*` 錯誤碼加入 `ErrorCode`；`/api/v1/auth` router 註冊到 `main.py` | `backend/app/auth/sessions.py`、`backend/app/auth/login.py`、`backend/app/auth/settings.py`、`backend/app/auth/dependencies.py`（新增）、`backend/app/api/v1/auth.py`（新增）、`backend/app/api/errors.py`（加列舉成員）、`backend/app/main.py`（加一行註冊）、`.env.example`、`backend/tests/auth/test_sessions.py`、`backend/tests/auth/test_login_api.py`（新增） | T1、T2、#130；[DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對）裁定（[AUT-Q1](spec.md#aut-q1) 已裁定，#143） | AUT-AC02、AUT-AC03、AUT-AC05～AUT-AC07、AUT-AC10～AUT-AC15、AUT-AC26（AUT-AC08 因 `must_change_password` 移到 T9；本任務的 `me` 先回傳其餘五個鍵） | #151 |
-| T4 | 權限檢查共用元件：路由存取層級的宣告方式（公開、需登入、需 Admin、需專案權限、本人或 Admin）、公開路由清單、列出所有路由宣告並檢查的測試；需專案權限的判斷依 AUT-R19 呼叫 DOM T5 的有效權限計算，每次請求重算；`permission.denied` 加入 `ErrorCode`；替既有的健康檢查與 T3 的三條路由補上宣告 | `backend/app/auth/access.py`（新增）、`backend/app/api/errors.py`（加列舉成員）、`backend/app/api/v1/health.py`、`backend/app/api/v1/auth.py`（只加宣告）、`backend/tests/auth/test_access.py`、`backend/tests/contract/test_route_access.py`（新增） | T3、#133；[AUT-Q2](spec.md#aut-q2)（Admin 與新增、刪除、特殊動作）、[DOM-Q3](../domain-model/spec.md#dom-q3)（從代碼辨識動作類別）裁定 | AUT-AC16～AUT-AC22 | #152 |
+| T4 | 權限檢查共用元件：路由存取層級的宣告方式（公開、需登入、需 Admin、需專案權限、本人或 Admin）、公開路由清單、列出所有路由宣告並檢查的測試；需專案權限的判斷依 AUT-R19 呼叫 DOM T5 的有效權限計算，每次請求重算；`permission.denied` 加入 `ErrorCode`；替既有的健康檢查與 T3 的三條路由補上宣告；各存取層級都疊在 T3 的需登入 dependency 上，臨時密碼的阻擋（T9）因此對所有層級生效 | `backend/app/auth/access.py`（新增）、`backend/app/api/errors.py`（加列舉成員）、`backend/app/api/v1/health.py`、`backend/app/api/v1/auth.py`（只加宣告）、`backend/tests/auth/test_access.py`、`backend/tests/contract/test_route_access.py`（新增） | T3、T9（臨時密碼的阻擋）、#133；[AUT-Q2](spec.md#aut-q2)（Admin 與新增、刪除、特殊動作）、[DOM-Q3](../domain-model/spec.md#dom-q3)（從代碼辨識動作類別）裁定 | AUT-AC16～AUT-AC22、AUT-AC43 | #152 |
 | T5 | 目前操作者入口改寫：HTTP 請求中回傳 T3 放進 context 的登入者，沒有登入者時拒絕；不在請求中時維持回傳內建 `admin` | `backend/app/services/operator.py`（修改，檔案由 DOM T4 建立）、`backend/tests/services/test_operator_auth.py`（新增） | T3、#132 | AUT-AC09 | #153 |
 | T6 | 設定密碼的指令：以 email 指定帳號（含內建 `admin`，AUT-Q4 裁定），`getpass` 輸入兩次，也接受標準輸入；長度規則檢查；拒絕不存在與 `external` 帳號；寫入或更新 `UserPassword`（操作者為內建 `admin`）並刪除該帳號所有 `AuthSession`；指令列不提供密碼參數；在 `Makefile` 加一個執行入口 | `backend/app/cli/set_password.py`（新增；`backend/app/cli/` 套件由 DOM T6 建立）、`backend/app/auth/passwords.py`（加長度規則）、`Makefile`（加一個 target）、`backend/tests/cli/test_set_password.py`（新增） | T1、T2、T3（刪除登入狀態）、#134（[AUT-Q3](spec.md#aut-q3)、[AUT-Q4](spec.md#aut-q4) 已裁定，#145、#146） | AUT-AC04、AUT-AC23～AUT-AC25、AUT-AC32 | #154 |
 | T7 | 前端登入：`/login` 頁、呼叫目前使用者 API 的共用 hook、未登入導向 `/login` 並保留原路徑的守衛、登出按鈕；Admin Web 與 Field Web 都掛上守衛。守衛與登入頁放在 `src/auth/`，不得 import `src/admin/`，拆包檢查（SKL-AC03）照常通過。**新 worktree 先執行 `make setup`** | `frontend/src/auth/`（新增 `LoginPage.tsx`、`RequireAuth.tsx`、`api.ts` 與測試）、`frontend/src/App.tsx`（加路由與守衛）、`frontend/src/admin/AdminPage.tsx`、`frontend/src/field/FieldPage.tsx`（加登出操作）、`frontend/vite.config.ts`（加開發用的 `/api` proxy） | —（依 spec 的 HTTP 契約以測試替身開發；與後端的實際串接在 T3 合併後手動確認一次） | AUT-AC28～AUT-AC30 | #155 |
 | T8 | 登入失敗鎖定：依帳號記錄失敗次數與時間，達門檻後在鎖定期間回傳一般失敗；需要保存失敗紀錄時，新增欄位或資料表與一支 migration | `backend/app/auth/login.py`（修改）、`backend/app/models/`（視設計新增）、`backend/alembic/versions/`（視設計新增一支）、`backend/tests/auth/test_login_lockout.py`（新增） | T3；[AUT-Q5](spec.md#aut-q5) 裁定；選 C（不做）時本任務以 *not planned* 關閉，AUT-R28 改標撤回 | AUT-AC27 | #156 |
-| T9 | 臨時密碼與變更密碼（後端）：`UserPassword` 加 `must_change_password` 欄位與一支 migration；設定密碼的 Service 入口（目標、新密碼、是否標為臨時；長度檢查、雜湊、寫入、刪除登入狀態），T6 的指令改呼叫它，並依 `is_system` 決定是否標為臨時；需登入的 dependency 加上臨時密碼檢查與允許清單；`POST /api/v1/auth/password`（驗證目前密碼、長度規則、臨時密碼不得不變、外部帳號拒絕、刪除其他登入狀態）；`me` 與登入回應加 `must_change_password`；四個錯誤碼加入 `ErrorCode`。T4 已合併時，替新路由補上存取層級宣告；否則由 T4 補 | `backend/app/models/user_password.py`（加欄位）、`backend/alembic/versions/`（新增一支）、`backend/app/auth/password_service.py`（新增）、`backend/app/auth/dependencies.py`（加檢查）、`backend/app/api/v1/auth.py`（加路由與回應欄位）、`backend/app/api/errors.py`（加列舉成員）、`backend/app/cli/set_password.py`（改呼叫 Service 入口）、`backend/tests/auth/test_password_change.py`、`backend/tests/db/test_user_password_flag.py`（新增）、`backend/tests/cli/test_set_password.py`（加案例） | T2（#150）、T3、T5（操作者為本人）、T6 | AUT-AC08、AUT-AC33～AUT-AC40 | 待開 |
-| T10 | 前端變更密碼：`/change-password` 頁（目前密碼、新密碼、再輸入一次）、依錯誤碼顯示訊息；守衛在 `must_change_password = true` 時導向此頁並保留原路徑；Admin Web 與 Field Web 的登出旁加變更密碼入口。守衛與頁面放在 `src/auth/`，不得 import `src/admin/`。**新 worktree 先執行 `make setup`** | `frontend/src/auth/`（新增 `ChangePasswordPage.tsx` 與測試；修改 `RequireAuth.tsx`、`api.ts`）、`frontend/src/App.tsx`（加路由）、`frontend/src/admin/AdminPage.tsx`、`frontend/src/field/FieldPage.tsx`（加入口） | T7（#155）；依 spec 的 HTTP 契約以測試替身開發，與後端的實際串接在 T9 合併後手動確認一次 | AUT-AC41、AUT-AC42 | 待開 |
+| T9 | 臨時密碼標記與阻擋：`UserPassword` 加 `must_change_password` 欄位與一支 migration；需登入的 dependency 在 AUT-R14 的檢查之後加上臨時密碼檢查，只放行集中在一處的允許清單（本任務先列 `me`、登出，T11 加入變更密碼）；`me` 與登入回應加 `must_change_password`；`auth.password_change_required` 加入 `ErrorCode` | `backend/app/models/user_password.py`（加欄位）、`backend/alembic/versions/`（新增一支）、`backend/app/auth/dependencies.py`（加檢查與允許清單）、`backend/app/api/v1/auth.py`（回應加欄位）、`backend/app/api/errors.py`（加列舉成員）、`backend/tests/auth/test_password_gate.py`、`backend/tests/db/test_user_password_flag.py`（新增） | T2（#150）、T3 | AUT-AC08、AUT-AC33、AUT-AC35 | 待開 |
+| T10 | 前端變更密碼：`/change-password` 頁（目前密碼、新密碼、再輸入一次）、依錯誤碼顯示訊息；守衛在 `must_change_password = true` 時導向此頁並保留原路徑；Admin Web 與 Field Web 的登出旁加變更密碼入口。守衛與頁面放在 `src/auth/`，不得 import `src/admin/`。**新 worktree 先執行 `make setup`** | `frontend/src/auth/`（新增 `ChangePasswordPage.tsx` 與測試；修改 `RequireAuth.tsx`、`api.ts`）、`frontend/src/App.tsx`（加路由）、`frontend/src/admin/AdminPage.tsx`、`frontend/src/field/FieldPage.tsx`（加入口） | T7（#155）；依 spec 的 HTTP 契約以測試替身開發，與後端的實際串接在 T9、T11 合併後手動確認一次 | AUT-AC41、AUT-AC42 | 待開 |
+| T11 | 變更密碼與設定密碼入口（後端）：設定密碼的 Service 入口（目標、新密碼、是否標為臨時；長度檢查、雜湊、寫入、刪除登入狀態），T6 的指令改呼叫它，並依 `is_system` 決定是否標為臨時；`POST /api/v1/auth/password`（驗證目前密碼、長度規則、臨時密碼不得不變、外部帳號拒絕、刪除所有登入狀態並換發目前這一筆），加入 T9 的允許清單；變更密碼的三個錯誤碼加入 `ErrorCode`。T4 已合併時，替新路由補上存取層級宣告；否則由 T4 補 | `backend/app/auth/password_service.py`（新增）、`backend/app/auth/dependencies.py`（允許清單加一條）、`backend/app/api/v1/auth.py`（加路由）、`backend/app/api/errors.py`（加列舉成員）、`backend/app/cli/set_password.py`（改呼叫 Service 入口）、`backend/tests/auth/test_password_change.py`（新增）、`backend/tests/cli/test_set_password.py`（加案例） | T5（操作者為本人）、T6、T9 | AUT-AC34、AUT-AC36～AUT-AC40 | 待開 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
-- 每個任務至少對應一條 AC；AUT-AC01～AUT-AC42 每條都被一個任務涵蓋。
+- 每個任務至少對應一條 AC；AUT-AC01～AUT-AC43 每條都被一個任務涵蓋。
 - 依 plan 開 task issue 時才建立上表的 issue 編號；本 PR 只寫文件，不開 task issue。開 issue 時，若依賴的裁定或其他規格的任務尚未完成，issue 標 `blocked` 並寫明原因。
 - AUT-R31（前端隱藏功能不取代後端檢查）沒有獨立的任務，由 T4 的後端測試保證。
 
@@ -32,18 +33,19 @@
 
 - 第 1 波：T1、T2、T7。T1 改依賴檔與 `app/auth/passwords.py`，T2 改 `app/models/` 與 migration（等 #59），T7 只改 `frontend/`。
 - 第 2 波：T3（依賴 T1、T2、DOM T2）。
-- 第 3 波：T4（依賴 T3、DOM T5）、T5（依賴 T3、DOM T4）、T6（依賴 T1～T3、DOM T6）。T4 改 `app/auth/access.py`、`errors.py`、兩個 router；T5 只改 `app/services/operator.py`；T6 改 `app/cli/`、`passwords.py`、`Makefile`。三者檔案不重疊。
-- 第 4 波：T8（依賴 T3 與 AUT-Q5；改 T3 的 `login.py`，所以排在 T3 之後；與第 3 波的檔案不重疊，裁定完成後得與第 3 波並行）；T9（依賴 T3、T5、T6；改 T3 的 `dependencies.py`、`auth.py` 與 T6 的 `set_password.py`，所以排在它們之後）。T8 與 T9 的檔案不重疊，得並行。
+- 第 3 波：T5（依賴 T3、DOM T4）、T6（依賴 T1～T3、DOM T6）、T9（依賴 T2、T3）。T5 只改 `app/services/operator.py`；T6 改 `app/cli/`、`passwords.py`、`Makefile`；T9 改 `user_password.py`、migration、`dependencies.py`、`auth.py`、`errors.py`。三者檔案不重疊。
+- 第 4 波：T4（依賴 T3、T9、DOM T5 與 AUT-Q2 等裁定）、T8（依賴 T3 與 AUT-Q5；改 T3 的 `login.py`）。T4 改 `access.py`、`errors.py`、兩個 router；T8 改 `login.py` 與視設計新增的 model、migration。兩者檔案不重疊。
+- 第 5 波：T11（依賴 T5、T6、T9）。T11 與 T4 都改 `errors.py`、`api/v1/auth.py`，所以排在 T4 之後；T4 仍被裁定擋住時，T11 得先做，後合併的一方 rebase。
 - T10 只改 `frontend/`，依賴已合併的 T7，得隨時開工，不必等後端。
 
 碰到[共用檔案](../README.md#parallel)的地方：
 
 - lockfile：只有 T1 新增套件（`argon2-cffi`），T1 先合併，其他後端分支再 rebase 並重新產生 `uv.lock`。其他任務若發現需要新套件，改為先開獨立任務加依賴。
-- Alembic migration 鏈：T2 新增一支，T8 視設計新增一支，T9 新增一支（加欄位）；每個 PR 最多一支，T8 與 T9 並行時後合併的一方 rebase 並改接 `down_revision`。T2 與 `domain-model` 的 T1～T3 都會新增 migration，後合併的一方先 rebase，並把 `down_revision` 改接到最新 head。
+- Alembic migration 鏈：T2 新增一支，T8 視設計新增一支，T9 新增一支（加欄位）；每個 PR 最多一支，T2、T8、T9 之間後合併的一方 rebase 並改接 `down_revision`。T2 與 `domain-model` 的 T1～T3 都會新增 migration，後合併的一方先 rebase，並把 `down_revision` 改接到最新 head。
 - `backend/app/models/__init__.py`：T2 加兩行 import；`domain-model` 的 T1、T3 也改這個檔案，同時進行時後合併的一方 rebase。
-- `backend/app/api/errors.py` 的 `ErrorCode`：T3 加 `auth.*`，T4 加 `permission.denied`，T9 加臨時密碼與變更密碼的四個 `auth.*`；T3 與 T4 不同波，T4 與 T9 若同時進行，後合併的一方 rebase。
+- `backend/app/api/errors.py` 的 `ErrorCode`：T3 加 `auth.*`，T4 加 `permission.denied`，T9 加 `auth.password_change_required`，T11 加變更密碼的三個 `auth.*`；各任務不同波，T11 若先於 T4 合併，後合併的一方 rebase。
 - `backend/app/main.py`：只有 T3 加一行 router 註冊。
-- `Makefile`：只有 T6 加一個 target（T9 只改指令內部，不動 target）；`domain-model` T6 也加一個 target，後合併的一方 rebase。
+- `Makefile`：只有 T6 加一個 target（T11 只改指令內部，不動 target）；`domain-model` T6 也加一個 target，後合併的一方 rebase。
 - `.env.example`：只有 T3 加逾時的兩個變數。
 
 ## 風險
@@ -54,8 +56,8 @@
 - **帳號不存在時的時間差**：AUT-R06 要求帳號不存在時仍驗證一次雜湊。T3 以一個啟動時產生的假雜湊來驗證，不要每次重新產生（產生雜湊本身也要時間，會讓兩條路徑的時間不同）。AC 只驗「驗證函式有被呼叫」，不量測時間，避免測試不穩定。
 - **有效權限每次請求重算的效能**：AUT-R19 不允許跨請求快取。一次請求多次檢查時，T4 **得**在同一個請求內重用第一次的結果；跨請求的快取等效能出現問題再評估，且必須先處理「修改角色立即生效」。
 - **目前操作者入口在請求中不再退回 `admin`**：T5 合併後，任何在請求中寫入、卻沒有經過需登入 dependency 的程式會直接失敗。這是預期行為（AUT-R09），但 T5 要先在 repo 內搜尋所有呼叫端，確認都在已宣告需登入以上的路由之下。
-- **T4 的存取層級必須疊在 T3 的需登入 dependency 上**：AUT-R33 的臨時密碼檢查放在需登入的 dependency；需 Admin、需專案權限、本人或 Admin 若另寫一套登入檢查，會繞過臨時密碼的限制。T4 實作時沿用 T3 的 dependency；T9 若在 T4 之後合併，另補一個需 Admin 路由的案例確認同樣被擋。
-- **T9 改寫 T6 的指令**：T6 先照 AUT-R24 直接寫 `UserPassword`，T9 再把寫入改成呼叫 Service 入口並加上標記。T6 實作時把寫入集中在一個函式，T9 才容易替換；AUT-AC04、AUT-AC23～AUT-AC25、AUT-AC32 在 T9 之後仍須通過。
+- **T4 的存取層級必須疊在 T3 的需登入 dependency 上**：AUT-R33 的臨時密碼檢查放在需登入的 dependency（T9）；需 Admin、需專案權限、本人或 Admin 若另寫一套登入檢查，會繞過臨時密碼的限制。因此 T4 排在 T9 之後，並以 AUT-AC43 驗收四種存取層級都被擋。
+- **T11 改寫 T6 的指令**：T6 先照 AUT-R24 直接寫 `UserPassword`，T11 再把寫入改成呼叫 Service 入口並加上標記。T6 實作時把寫入集中在一個函式，T11 才容易替換；AUT-AC04、AUT-AC23～AUT-AC25、AUT-AC32 在 T11 之後仍須通過。
 - **裁定未完成就開工**：T3 依 DOM-Q2（AUT-Q1 已裁定）；T4 依 AUT-Q2、DOM-Q3；T6 的裁定都已完成（AUT-Q3、AUT-Q4）；T8 依 AUT-Q5。不要先用建議值實作再等裁定；建議值寫在規格裡，是給負責人選的，不是預設。
 
 ## 驗證（Proof）
@@ -71,7 +73,7 @@
 | AUT-AC05 | `backend/tests/auth/test_login_api.py`：解析 `Set-Cookie` 的屬性，查資料庫比對 `token_hash` 與 Cookie 值的 SHA-256 |
 | AUT-AC06 | `backend/tests/auth/test_login_api.py`：參數化五種情境，斷言狀態碼、回應本體逐位元組相同、無 `Set-Cookie`、`AuthSession` 筆數不變；以 monkeypatch 計數驗證函式的呼叫次數 |
 | AUT-AC07 | `backend/tests/auth/test_login_api.py`：登出後斷言 204、清除 Cookie 的 `Set-Cookie`、資料庫無該筆，再呼叫 `me` 斷言 401；無 Cookie 登出斷言 204 |
-| AUT-AC08 | `backend/tests/auth/test_password_change.py`（T9）：斷言 `me` 回應的鍵集合（含 `must_change_password`）與未登入的 401 |
+| AUT-AC08 | `backend/tests/auth/test_password_gate.py`（T9）：斷言 `me` 回應的鍵集合（含 `must_change_password`）與未登入的 401 |
 | AUT-AC09 | `backend/tests/services/test_operator_auth.py`（T5）：測試專用路由經 Service 層寫入 `Company`，分別以登入、未登入、非請求情境斷言 `created_by` |
 | AUT-AC10 | `backend/tests/auth/test_sessions.py`：兩個用戶端登入，斷言 token 不同、長度、不沿用請求帶來的 token、兩者皆可呼叫 `me` |
 | AUT-AC11 | `backend/tests/auth/test_sessions.py`：直接以 ORM 停用帳號，斷言兩個 Cookie 都 401 且 `AuthSession` 已刪除 |
@@ -97,15 +99,16 @@
 | AUT-AC31 | `backend/tests/db/test_auth_tables.py`（T2）：inspector 檢查兩張表的欄位、可空性、唯一與外鍵，並斷言 `User` 資料表沒有密碼或 token 欄位；依 AC 的錯誤寫入斷言 `IntegrityError` 且筆數不變 |
 | AUT-AC32 | `backend/tests/cli/test_set_password.py`（T6）：初始化後以標準輸入對內建 `admin` 執行指令，斷言 `UserPassword` 有一筆，再以登入 API 斷言 200 與 `is_admin` |
 | AUT-AC33 | `backend/tests/db/test_user_password_flag.py`（T9）：inspector 檢查欄位與可空性；以 ORM 新增不指定欄位的資料讀回 `false`，空值寫入斷言 `IntegrityError` 且筆數不變 |
-| AUT-AC34 | `backend/tests/cli/test_set_password.py`（T9）：分別對一般帳號與內建 `admin` 執行指令，斷言標記，再登入並呼叫 `me` 斷言回應欄位 |
-| AUT-AC35 | `backend/tests/auth/test_password_change.py`（T9）：掛一條計數的需登入測試路由，斷言臨時密碼帳號的 403 與計數 0、`me` 與登出放行；以 ORM 建立帶標記的 `external` 帳號，直接建立登入狀態後斷言放行 |
-| AUT-AC36 | `backend/tests/auth/test_password_change.py`（T9）：讀取允許清單常數，斷言內容恰為三條，且每條都在 `create_app()` 的路由中 |
-| AUT-AC37 | `backend/tests/auth/test_password_change.py`（T9）：參數化四種失敗，斷言狀態碼與 `error.code`，並讀回 `UserPassword` 與登入狀態筆數斷言不變 |
-| AUT-AC38 | `backend/tests/auth/test_password_change.py`（T9）：三個用戶端登入後由 A 變更，斷言 204、標記、`updated_by`、B 與 C 的 401、剩餘登入狀態筆數，以及新舊密碼登入結果 |
-| AUT-AC39 | `backend/tests/auth/test_password_change.py`（T9）：直接呼叫 Service 入口，依序斷言標記、雜湊可驗證、登入狀態刪除，以及 7 字元被拒絕 |
-| AUT-AC40 | `backend/tests/auth/test_password_change.py`（T9）：呼叫 `build_error_code_descriptions(ErrorCode)`，斷言含四個代碼並符合 API-AC09 的 regex |
+| AUT-AC34 | `backend/tests/cli/test_set_password.py`（T11）：分別對一般帳號與內建 `admin` 執行指令，斷言標記，再登入並呼叫 `me` 斷言回應欄位 |
+| AUT-AC35 | `backend/tests/auth/test_password_gate.py`（T9）：以 ORM 把標記設為 `true`，掛一條計數的需登入測試路由，斷言 403 與計數 0、`me` 與登出放行；以 ORM 建立帶標記的 `external` 帳號，直接建立登入狀態後斷言放行 |
+| AUT-AC36 | `backend/tests/auth/test_password_change.py`（T11）：讀取允許清單常數，斷言內容恰為三條，且每條都在 `create_app()` 的路由中 |
+| AUT-AC37 | `backend/tests/auth/test_password_change.py`（T11）：參數化四種失敗，斷言狀態碼與 `error.code`，並讀回 `UserPassword` 與登入狀態筆數斷言不變 |
+| AUT-AC38 | `backend/tests/auth/test_password_change.py`（T11）：三個用戶端登入後由 A 變更，斷言 204、換發的 `Set-Cookie`、標記、`updated_by`、A 原 Cookie 與 B、C 的 401、剩一筆登入狀態且 `token_hash` 對應新 Cookie，以及新舊密碼登入結果 |
+| AUT-AC39 | `backend/tests/auth/test_password_change.py`（T11）：直接呼叫 Service 入口，依序斷言標記、雜湊可驗證、登入狀態刪除，以及 7 字元被拒絕 |
+| AUT-AC40 | `backend/tests/auth/test_password_change.py`（T11）：呼叫 `build_error_code_descriptions(ErrorCode)`，斷言含四個代碼並符合 API-AC09 的 regex |
 | AUT-AC41 | `frontend/src/auth/RequireAuth.test.tsx`（T10）：替身回 `must_change_password: true`，渲染 `/admin`、`/field` 斷言導向 `/change-password` 並帶原路徑；送出表單後斷言回到原路徑；`npm run test` |
 | AUT-AC42 | `frontend/src/auth/ChangePasswordPage.test.tsx`（T10）：兩次新密碼不同時斷言 `fetch` 未被呼叫；依序讓替身回三種錯誤，斷言三則訊息不同、三個欄位的 `type`；`npm run test` |
+| AUT-AC43 | `backend/tests/auth/test_access.py`（T4）：以 ORM 建立 Admin 兼專案成員的 T 並設標記，呼叫 AUT-AC17 的四條測試路由，斷言 403 `auth.password_change_required` 與計數 0；清除標記後斷言四條放行 |
 
 ## 考慮過但沒採用的做法
 
@@ -114,5 +117,5 @@
 - **資料庫存 token 本身**：實作最簡單，但資料庫備份外洩時，裡面的 token 可以直接拿來登入；存 SHA-256 的成本只是多一次雜湊。token 本身有 256 位元的隨機性，不需要加 salt 或用慢雜湊。
 - **用框架或套件的簽章 Cookie（例如 Starlette `SessionMiddleware`）**：把資料放在 Cookie 裡，不是伺服器端保存，停用人員時無法讓既有登入立即失效，牴觸 [KD-30](../../intents/03-decisions-and-stack.md#kd-30)。
 - **非成員存取專案時回 404，隱藏專案是否存在**：可以避免從錯誤碼推測專案存在，但與 `api-conventions` 的 `resource.not_found` 語意混在一起，前端也難以區分「沒權限」與「不存在」。專案 ID 是 UUID，無法列舉，先採 403；若日後有需要，屬範圍變更。
-- **把臨時密碼併進 T6 或 T3**：T6 只是一支指令，併入欄位、migration、dependency 與新 API 後就不是一個 PR 能單獨驗收的大小；併進 T3 則會讓 T3 多等 T5、T6。另開 T9 排在它們之後，代價是 T9 要改寫 T3、T6 已合併的檔案，見[風險](#風險)。前端獨立成 T10，因為它只依賴 HTTP 契約，可以先做。
+- **把臨時密碼併進 T6 或 T3，或整包放在一個任務**：T6 只是一支指令，併入欄位、migration、dependency 與新 API 後就不是一個 PR 能單獨驗收的大小；併進 T3 則會讓 T3 多等 T5、T6。整包放在一個任務時，T4 要等 T5、T6 才能驗收各層級都被擋。因此拆成 T9（標記與阻擋，只依賴 T2、T3，讓 T4 儘早接上）與 T11（變更密碼 API 與設定入口，依賴 T5、T6），代價是 T9、T11 要改寫 T3、T6 已合併的檔案，見[風險](#風險)。前端獨立成 T10，因為它只依賴 HTTP 契約，可以先做。
 - **另做 CSRF token**：`SameSite=Strict` 讓跨站請求不帶 Cookie，加上非上傳 API 只接受 JSON（API-R03），跨站表單無法送出有效請求；多一套 token 會增加前端與測試的負擔。若 `SameSite` 改為 `Lax`，要重新評估。
