@@ -13,6 +13,8 @@ racing to be the chain's root.
 
 from collections.abc import Sequence
 
+# sa and op are unused in an empty migration (e.g. the baseline);
+# the template keeps them so every migration starts with both.
 import sqlalchemy as sa  # noqa: F401
 
 from alembic import op  # noqa: F401
