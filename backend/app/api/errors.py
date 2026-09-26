@@ -158,7 +158,19 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_unhandled_exception(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        logger.exception("Unhandled exception while processing request")
+        # Deliberately omit the exception message and traceback
+        # (no ``exc_info``, no ``str(exc)``): an unhandled
+        # exception's message may embed request data such as an
+        # authorization token, and logging it would leak that
+        # value (RG-M17 forbids logging authorization tokens).
+        # Only the exception type and the request line are safe
+        # to record.
+        logger.error(
+            "Unhandled %s during %s %s",
+            type(exc).__name__,
+            request.method,
+            request.url.path,
+        )
         return JSONResponse(
             status_code=500,
             content={"error": {"code": ErrorCode.SERVER_INTERNAL_ERROR.value}},
