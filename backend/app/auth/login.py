@@ -15,7 +15,7 @@ from app.models import User, UserPassword
 # AUT-R06: when the email does not exist, or exists but has no
 # password set, a same-cost hash verification still runs so the
 # response time does not give away which of these is true. This
-# hash is generated once, at import time, and reused for every such
+# hash is created once, at import time, and reused for every such
 # call -- generating a fresh hash per request would itself take
 # time and reintroduce the gap this is meant to close (see plan.md's
 # "風險" section). The password string is arbitrary: it only needs
