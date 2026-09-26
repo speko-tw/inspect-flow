@@ -63,7 +63,7 @@ flowchart LR
 第一階段的目標是完成一個完整閉環，不是打造大平台（依據：架構基準 §1）。架構基準文件以開發階段順序具體定義了這個範圍（依據：架構基準 §30）：
 
 - **Phase 0 — Repository / Skeleton**：專案骨架、健康檢查端點。
-- **Phase 1 — Database Foundation**：SQLAlchemy + Alembic + SQLite；`User`、`Project`、`Template`、 `TemplateVersion`。
+- **Phase 1 — Database Foundation**：SQLAlchemy + Alembic + SQLite；`User`、`Project`、`Template`、 `TemplateVersion`。分成兩段：第一段是基礎設施加上 `User`、`Project`；第二段是 `Template`、`TemplateVersion`，等 [G-01](05-open-questions.md#g-01) 裁定後再做（依 [OQ-22](05-open-questions.md#oq-22)；依據：負責人決定（#46，2026-09-26），架構基準無對應章節）。
 - **Phase 2 — Authentication**：登入 / 登出 / 目前使用者 / 角色。
 - **Phase 3 — Template System**：`Template`、`TemplateVersion`、`TemplateItem`、`EvidenceRequirement`。
 - **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照，並由起訖點與 間距自動產生任務。
