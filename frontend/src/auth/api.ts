@@ -77,18 +77,19 @@ export async function login(
 }
 
 /**
- * 登出（`POST /api/v1/auth/logout`）。後端一律回 204，這裡也不因
- * 請求失敗而拋出例外——呼叫端（`LogoutButton`）不論登出 API 是否
- * 成功都要清掉前端狀態並導向 `/login`。
+ * 登出（`POST /api/v1/auth/logout`）。後端一律回 204；非 2xx 一律
+ * 拋出 `ApiError`，網路層級的例外（例如打不通）也會往上拋出，不
+ * 吞掉——呼叫端（`LogoutButton`）只在確定登出成功時才清掉前端狀
+ * 態並導向 `/login`，避免伺服器端的登入狀態與 Cookie 其實還有
+ * 效，使用者卻誤以為已經登出。
  */
 export async function logout(): Promise<void> {
-  try {
-    await fetch(`${AUTH_BASE}/logout`, {
-      method: 'POST',
-      credentials: 'same-origin',
-    })
-  } catch {
-    // 忽略網路層級的失敗：AUT-R30 要求前端一定要能登出（清掉本地
-    // 狀態並導向 `/login`），即使登出 API 本身打不通。
+  const response = await fetch(`${AUTH_BASE}/logout`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new ApiError(response.status)
   }
 }
