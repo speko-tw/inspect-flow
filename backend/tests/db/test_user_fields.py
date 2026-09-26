@@ -484,6 +484,26 @@ class TestDomAc19StringLengthsAndEmailFormat:
     row count/data unchanged.
     """
 
+    # Issue #188: the six ``NOT NULL`` basic fields must reject
+    # ``None``; the six DOM-R03 fields (all ``nullable=True``) must
+    # accept it.
+    _NOT_NULL_STRING_FIELDS = [
+        "employee_no",
+        "department",
+        "location",
+        "name_en",
+        "name_zh",
+        "email",
+    ]
+    _NULLABLE_STRING_FIELDS = [
+        "extension_1",
+        "extension_2",
+        "mobile",
+        "line_id",
+        "wechat_id",
+        "responsibilities",
+    ]
+
     _BOUNDARY_VALUES = {
         "employee_no": "E" * _MAX_LENGTHS["employee_no"],
         "department": "D" * _MAX_LENGTHS["department"],
@@ -612,6 +632,62 @@ class TestDomAc19StringLengthsAndEmailFormat:
         session.expire_all()
         stored = session.get(User, boundary_user.id)
         assert stored.email == self._BOUNDARY_VALUES["email"]
+
+    @pytest.mark.parametrize("field", _NOT_NULL_STRING_FIELDS)
+    def test_none_on_not_null_field_is_rejected_on_construction(
+        self, session, operator, field
+    ):
+        """Issue #188: ``None`` on a ``NOT NULL`` column is rejected
+        by ``@validates`` with the same ``ValueError`` an invalid
+        value gets, not the ``TypeError`` ``len(None)`` would raise
+        inside ``_check_string_field``.
+        """
+        before = session.query(User).count()
+        kwargs = _user_kwargs(operator, "OVR004")
+        kwargs[field] = None
+
+        with pytest.raises(ValueError):
+            User(**kwargs)
+
+        assert session.query(User).count() == before
+
+    @pytest.mark.parametrize("field", _NOT_NULL_STRING_FIELDS)
+    def test_none_on_not_null_field_is_rejected_on_assignment(
+        self, session, boundary_user, field
+    ):
+        original = getattr(boundary_user, field)
+        with pytest.raises(ValueError):
+            setattr(boundary_user, field, None)
+
+        session.expire(boundary_user)
+        stored = session.get(User, boundary_user.id)
+        assert getattr(stored, field) == original
+
+    @pytest.mark.parametrize("field", _NULLABLE_STRING_FIELDS)
+    def test_none_on_nullable_field_is_accepted_on_construction(
+        self, session, operator, field
+    ):
+        kwargs = _user_kwargs(operator, "OVR005")
+        kwargs[field] = None
+
+        user = User(**kwargs)
+        session.add(user)
+        session.commit()
+
+        session.expire(user)
+        stored = session.get(User, user.id)
+        assert getattr(stored, field) is None
+
+    @pytest.mark.parametrize("field", _NULLABLE_STRING_FIELDS)
+    def test_none_on_nullable_field_is_accepted_on_assignment(
+        self, session, boundary_user, field
+    ):
+        setattr(boundary_user, field, None)
+        session.commit()
+
+        session.expire(boundary_user)
+        stored = session.get(User, boundary_user.id)
+        assert getattr(stored, field) is None
 
 
 class TestMigrationRoundTrip:

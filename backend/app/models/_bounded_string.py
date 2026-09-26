@@ -30,11 +30,20 @@ through two independent layers so no write path can skip it:
   single-row and a bulk/Core statement).
 
 ``BoundedString`` itself always passes ``None`` through unchecked at
-bind time -- whether ``None`` is a legitimate value for a given
-column (and thus needs the same pass-through in that column's
-``@validates`` method) is each model's own decision, not this
-module's; a column that must never be ``None`` still has the
-database's ``NOT NULL`` constraint as a backstop.
+bind time: a column's ``NOT NULL`` constraint is the backstop for
+values written through paths ``@validates`` cannot see (see above).
+
+For paths ``@validates`` *can* see, ``None`` handling is consistent
+across every column instead of being decided ad hoc per column:
+``validate_nullable`` below is the single source of truth for "is
+``None`` legal here", reading the column's own ``nullable`` flag
+(``obj.__table__.c[key].nullable``) instead of a second,
+hand-maintained list that could drift from the column definition
+itself. A ``NOT NULL`` column's ``@validates`` method therefore
+rejects ``None`` immediately -- with the same ``ValueError`` every
+other invalid value gets -- rather than raising a ``TypeError`` out
+of ``len(None)`` inside the column's ``_check_*`` function or
+silently deferring to the database's constraint.
 
 This project has no existing domain/validation exception hierarchy,
 so ``check`` is expected to raise the standard library's
@@ -52,6 +61,8 @@ from collections.abc import Callable
 
 from sqlalchemy import String
 from sqlalchemy.types import TypeDecorator
+
+from app.db.base import Base
 
 
 class BoundedString(TypeDecorator):
@@ -88,3 +99,24 @@ class BoundedString(TypeDecorator):
             return None
         self.check(value)
         return value
+
+
+def validate_nullable(
+    obj: Base, key: str, value: str | None, label: str
+) -> str | None:
+    """Shared "is ``None`` legal on this column" check for a
+    model's ``@validates`` method (module docstring above explains
+    why this lives here instead of being decided per column).
+
+    Reads ``obj.__table__.c[key].nullable`` -- the column's own
+    ``nullable`` flag is the single source of truth, so a column's
+    ``None`` behaviour cannot drift from its ``mapped_column``
+    definition. Returns ``value`` unchanged when it is not ``None``
+    or the column allows ``None``; raises ``ValueError`` when the
+    column is ``NOT NULL`` and ``value`` is ``None``.
+    """
+    if value is not None:
+        return value
+    if obj.__table__.c[key].nullable:
+        return None
+    raise ValueError(f"{label} must not be None")
