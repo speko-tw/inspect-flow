@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 
 from app.api.errors import ErrorCode
+from app.api.v1.auth import router as auth_router
 from app.auth.dependencies import (
     TEMPORARY_PASSWORD_ALLOWLIST,
     require_login,
@@ -83,6 +84,19 @@ def _client_with_gated_probe() -> tuple[TestClient, dict[str, int]]:
 
     app.include_router(router)
     return TestClient(app, base_url="https://testserver"), calls
+
+
+def _client_with_aliased_auth_router() -> TestClient:
+    """The auth router mounted under both its real ``/api/v1``
+    prefix and an extra alias prefix, so the same ``APIRoute``
+    object (e.g. the one backing ``GET /me``) is reachable through
+    two different full path templates -- reproducing the setup
+    where matching a route by identity alone is not enough to know
+    which template this particular request actually took (AUT-R33).
+    """
+    app = create_app()
+    app.include_router(auth_router, prefix="/internal-alias")
+    return TestClient(app, base_url="https://testserver")
 
 
 class TestAutAc36AllowlistContents:
@@ -182,3 +196,37 @@ class TestAutAc35TemporaryPasswordGate:
         )
         assert allowed_resp.status_code == 200
         assert calls["count"] == 1
+
+
+class TestAutR33AliasedRouteIsMatchedByPathNotIdentity:
+    """The same ``APIRoute`` object mounted under two prefixes must
+    be told apart by which path this request actually took, not
+    just by identity (AUT-R33).
+    """
+
+    def test_alias_path_is_blocked_but_real_path_is_allowed(self, db_session):
+        user = _make_temporary_password_user(db_session, "E953")
+        client = _client_with_aliased_auth_router()
+
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": user.email, "password": PASSWORD},
+        )
+        assert login_resp.status_code == 200
+        token = login_resp.cookies[SESSION_COOKIE_NAME]
+
+        alias_resp = client.get(
+            "/internal-alias/auth/me",
+            cookies={SESSION_COOKIE_NAME: token},
+        )
+        assert alias_resp.status_code == 403
+        assert (
+            alias_resp.json()["error"]["code"]
+            == ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED.value
+        )
+
+        real_resp = client.get(
+            "/api/v1/auth/me", cookies={SESSION_COOKIE_NAME: token}
+        )
+        assert real_resp.status_code == 200
+        assert real_resp.json()["must_change_password"] is True

@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import Depends, Request
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
-from starlette.routing import BaseRoute
+from starlette.routing import BaseRoute, compile_path
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, validate_and_touch_session
@@ -209,6 +209,22 @@ def _iter_routes_with_full_path(
                 yield original_route, path
 
 
+def _route_path(request: Request) -> str:
+    """The path used for route matching -- mirrors Starlette's own
+    (private) ``get_route_path``: ``request.scope["path"]`` with
+    ``scope["root_path"]`` stripped when the ASGI server mounted the
+    app under one. Reimplemented rather than imported since that
+    helper lives in an underscored, private module.
+    """
+    path = request.scope["path"]
+    root_path = request.scope.get("root_path", "")
+    if not root_path or not path.startswith(root_path):
+        return path
+    if path == root_path:
+        return ""
+    return path[len(root_path) :]
+
+
 def _matched_route_template(request: Request) -> str | None:
     """The matched route's fully-prefixed path template (e.g.
     ``/api/v1/auth/me``), used instead of the raw request path so a
@@ -220,19 +236,44 @@ def _matched_route_template(request: Request) -> str | None:
     reads) only carries the *unprefixed* path on this FastAPI
     version once the route was reached through an included
     sub-router (see ``_iter_routes_with_full_path``), so the
-    matched route is looked up by identity against ``request.app``'s
-    own routes to recover its effective path; falls back to the
-    unprefixed path if the route cannot be found there at all
-    (defensive only -- every route this gate ever sees is mounted on
-    ``request.app``).
+    matched route's fully-prefixed candidates are looked up by
+    identity against ``request.app``'s own routes to recover its
+    effective path.
+
+    The same ``APIRoute`` object is matched by identity alone when
+    only one router mounts it, but a router that is
+    ``include_router``-ed more than once (e.g. under an additional
+    alias prefix) makes the *same* ``APIRoute`` object show up for
+    more than one full path template (AUT-R33): identity is not
+    enough to tell which of those templates this particular request
+    actually took. Each identity-matching candidate's template is
+    therefore compiled with ``starlette.routing.compile_path`` and
+    matched against this request's actual path
+    (``_route_path(request)``, which accounts for ``root_path`` the
+    same way Starlette's own route matching does); only a template
+    whose regex actually matches is returned.
+
+    No candidate's template matching -- including the route not
+    being found among ``request.app``'s routes at all -- reports
+    ``None`` rather than falling back to some other path (e.g. the
+    unprefixed ``route.path``). ``None`` never matches any entry in
+    ``TEMPORARY_PASSWORD_ALLOWLIST`` (all of them are ``(method,
+    template)`` pairs with a real template), so this keeps the gate
+    fail-closed: a request whose effective path template cannot be
+    confirmed is rejected rather than risk wrongly allowing it
+    through.
     """
     route = request.scope.get("route")
     if route is None:
         return None
+    route_path = _route_path(request)
     for candidate, path in _iter_routes_with_full_path(request.app.routes):
-        if candidate is route:
+        if candidate is not route:
+            continue
+        path_regex, _, _ = compile_path(path)
+        if path_regex.match(route_path):
             return path
-    return getattr(route, "path", None)
+    return None
 
 
 def _check_temporary_password_gate(
