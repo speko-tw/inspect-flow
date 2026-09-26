@@ -16,7 +16,7 @@
 - email＋密碼登入、登出、取得目前使用者的 API（[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)）。
 - 伺服器端登入狀態（本規格稱 `AuthSession`）與 HttpOnly Cookie：產生、驗證、有效期限、登出、停用人員後立即失效（[KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)）。
 - 密碼以 Argon2id 雜湊與驗證，參數依 OWASP 建議值（[KD-31](../../intents/03-decisions-and-stack.md#kd-31)）。
-- 權限檢查的執行方式：後端預設拒絕、`is_admin` 可存取所有專案、依 `ProjectMember` 上角色的權限加總，以及系統管理操作與「本人或 Admin」的檢查（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；資料模型與有效權限的計算引用 DOM-R19～DOM-R27，不重複定義）。
+- 權限檢查的執行方式：後端預設拒絕、`is_admin` 可查看、修改所有專案、依 `ProjectMember` 上角色的權限加總，以及系統管理操作與「本人或 Admin」的檢查（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；資料模型與有效權限的計算引用 DOM-R19～DOM-R27，不重複定義）。
 - 登入後，`domain-model` 的「目前操作者」入口改回傳實際登入的人（DOM-R14；[#54](https://github.com/speko-tw/inspect-flow/issues/54) 補充裁定）。
 - 設定密碼的指令：初始化指令建立的帳號（DOM-R11）與之後建立的本系統帳號，由部署人員在執行時輸入密碼（[#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定）。
 - 停用人員前計算他有幾個有效的登入狀態，供影響範圍顯示使用（[PR-18](../../intents/02-principles.md#pr-18)）。
@@ -87,7 +87,7 @@
 | AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`，且所需代碼的動作是讀取或修改：放行，不需要 `ProjectMember`。所需代碼是新增、刪除，或簽核、匯出等特殊動作時，Admin 怎麼判斷待 [AUT-Q2](#aut-q2) 裁定，本規格不定義；怎麼從代碼辨識動作類別依 [DOM-Q3](../domain-model/spec.md#dom-q3)。（2）登入者不是 Admin：取他在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）非 Admin 且不是該專案成員，有效權限為空集合，拒絕。Admin 要求新增、刪除或特殊動作時不適用（2）、（3），待 AUT-Q2 裁定。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
 | AUT-R20 | 需 Admin 的檢查**必須**只放行 `is_admin = true` 的登入者，否則回傳 403、`permission.denied`。管理人員（含建立帳號、停用、修改 `is_admin`）、公司、角色定義的端點**必須**使用這一層 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 管理系統設定、人員、公司、角色定義）；建立帳號只由 Admin 做，依 [#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定（之後每個帳號都由某個 Admin 建立） |
 | AUT-R21 | 後端**必須**提供「本人或 Admin」的檢查：登入者就是目標 `User`，或 `is_admin = true` 時放行，否則回傳 403、`permission.denied`。修改人員聯絡與補充欄位的端點**必須**使用這一層 | 必須 | [KD-17](../../intents/03-decisions-and-stack.md#kd-17)；DOM-R04（判斷操作者是不是 Admin 或本人由本規格執行） |
-| AUT-R22 | 替 `ProjectMember` 指派或移除角色的端點，**必須**使用需專案權限的檢查（代碼依 [DOM-Q3](../domain-model/spec.md#dom-q3) 登記），Admin 依 AUT-R19 一律放行 | 必須 | [KD-27](../../intents/03-decisions-and-stack.md#kd-27)（角色由有權限的人設定） |
+| AUT-R22 | 替 `ProjectMember` 指派或移除角色的端點，**必須**使用需專案權限的檢查（代碼依 [DOM-Q3](../domain-model/spec.md#dom-q3) 登記）；Admin 是否免查依 AUT-R19，視該代碼的動作類別（[DOM-Q3](../domain-model/spec.md#dom-q3)）與 [AUT-Q2](#aut-q2) 的裁定，本條不另設例外 | 必須 | [KD-27](../../intents/03-decisions-and-stack.md#kd-27)（角色由有權限的人設定） |
 | AUT-R23 | 未登入的錯誤碼 `auth.not_authenticated`、帳號密碼錯誤 `auth.invalid_credentials`、權限不足 `permission.denied` **必須**登記在共用的錯誤碼列舉，並使用共用錯誤 envelope | 必須 | API-R05、API-R07；[KD-15](../../intents/03-decisions-and-stack.md#kd-15) |
 
 ### 設定密碼的指令
