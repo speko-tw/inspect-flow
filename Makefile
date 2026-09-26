@@ -1,5 +1,5 @@
 .PHONY: setup setup-backend setup-frontend check \
-	check-env check-backend check-frontend
+	check-env check-backend check-postgres check-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -12,13 +12,18 @@ setup-frontend:
 
 # Single entry point for local and CI checks. Runs format, lint,
 # type-check, test and build for backend and frontend, in order.
-# Any failing step stops the run with a non-zero exit code.
-# check-env/check-backend/check-frontend are invoked as separate
-# $(MAKE) recipe lines (not prerequisites), so `make -j` cannot run
-# them in parallel and a failure in one stops the later ones.
+# check-postgres runs the PostgreSQL compatibility check (DBF-R10)
+# between them: SKIPPED (exit 0) when INSPECTFLOW_TEST_POSTGRES_URL
+# is unset, so this passes on a machine with no PostgreSQL
+# available. Any failing step stops the run with a non-zero exit
+# code. check-env/check-backend/check-postgres/check-frontend are
+# invoked as separate $(MAKE) recipe lines (not prerequisites), so
+# `make -j` cannot run them in parallel and a failure in one stops
+# the later ones.
 check:
 	$(MAKE) --no-print-directory check-env
 	$(MAKE) --no-print-directory check-backend
+	$(MAKE) --no-print-directory check-postgres
 	$(MAKE) --no-print-directory check-frontend
 
 # Fails if a .env file is tracked in git, or .env.example is missing.
@@ -44,6 +49,24 @@ check-backend:
 	cd backend && uv run --locked pyright
 	cd backend && uv run --locked pytest
 	cd backend && uv run --locked python -m compileall -q app
+
+# PostgreSQL compatibility check (DBF-R10, DBF-AC08). Uses
+# INSPECTFLOW_TEST_POSTGRES_URL rather than INSPECTFLOW_DATABASE_URL
+# because this check drops and recreates the target database's
+# entire `public` schema -- a developer's configured
+# INSPECTFLOW_DATABASE_URL may point at a database with real data,
+# so it must never be assumed safe to wipe (see .env.example).
+# SKIPPED (exit 0) rather than failed when the variable is unset.
+# Not echoed anywhere below: the URL may carry a password.
+check-postgres:
+	@if [ -z "$$INSPECTFLOW_TEST_POSTGRES_URL" ]; then \
+		echo "check-postgres: SKIPPED (INSPECTFLOW_TEST_POSTGRES_URL is not set)"; \
+		exit 0; \
+	fi; \
+	cd backend && uv run --locked python -m tests.db.reset_postgres_schema && \
+	INSPECTFLOW_DATABASE_URL="$$INSPECTFLOW_TEST_POSTGRES_URL" \
+		uv run --locked alembic upgrade head && \
+	uv run --locked pytest tests/db --db-backend=postgresql
 
 # Fails fast if frontend deps are missing. Not auto-installed here:
 # CI runs its own `npm ci`, so installing on demand would hide

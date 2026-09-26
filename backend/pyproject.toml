@@ -8,6 +8,7 @@ dependencies = [
     # Upgrading fastapi: re-check test_route_conventions.py's
     # _iter_business_routes (internal effective_candidates(), API-AC01).
     "fastapi>=0.141.1",
+    "psycopg[binary]>=3.3.6",
     "python-multipart>=0.0.32",
     "sqlalchemy>=2",
 ]
@@ -39,3 +40,9 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "--strict-markers"
+# The `sqlite_only` marker (backend/tests/db/conftest.py) is
+# registered programmatically via pytest_configure's
+# addinivalue_line rather than declared here, since it is the only
+# custom marker and lives right next to the fixture that acts on
+# it.

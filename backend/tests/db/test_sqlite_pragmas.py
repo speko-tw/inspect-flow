@@ -1,13 +1,17 @@
 """Tests for SQLite connection initialization (DBF-AC05).
 
 Covers: PRAGMA settings take effect on a real SQLite file
-database; the same initialization is a no-op on a non-SQLite
-dialect; and every PRAGMA statement under ``backend/app`` carries
-the ``# db-dependency: sqlite`` annotation the plan requires.
+database (marked ``sqlite_only``: skipped under
+``--db-backend=postgresql``, since this behavior is specific to
+SQLite by definition); the same initialization is a no-op on a
+non-SQLite dialect; and every PRAGMA statement under
+``backend/app`` carries the ``# db-dependency: sqlite`` annotation
+the plan requires.
 """
 
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 
@@ -19,6 +23,7 @@ from app.db.engine import (
 PRAGMA_TAG = "# db-dependency: sqlite"
 
 
+@pytest.mark.sqlite_only
 def test_sqlite_pragmas_enabled_on_file_database(tmp_path):
     db_path = tmp_path / "pragma.db"
     engine = create_engine_from_settings(f"sqlite:///{db_path}")

@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 import app.db.engine as engine_module
-from app.db import settings
 from app.db.engine import dispose_engine, get_engine, get_session_factory
 from app.db.unit_of_work import unit_of_work
 
@@ -32,24 +31,21 @@ class Widget(_ProbeBase):
 
 
 @pytest.fixture(autouse=True)
-def _reset_shared_engine(monkeypatch, tmp_path) -> Generator[None, None, None]:
-    """Point the shared engine at a tmp SQLite file for every test
-    in this module, and always dispose it afterwards.
+def _reset_shared_engine(db_url) -> Generator[None, None, None]:
+    """Point the shared engine at this test's configured database
+    (SQLite by default, PostgreSQL under ``--db-backend=postgresql``)
+    for every test in this module.
 
-    Disposing before the test too guards against a shared engine
-    left over from an earlier test elsewhere in the suite; without
-    it, ``get_engine()`` here could reuse a stale cached engine
-    instead of one built from this test's own tmp path -- and,
-    worse, that stale engine could be pointed at the real default
-    path under ``backend/data``.
+    ``conftest.py``'s ``db_url`` fixture already disposes the
+    shared engine before and after each test -- guarding against a
+    shared engine left over from an earlier test elsewhere in the
+    suite, which could otherwise mean ``get_engine()`` here reuses
+    a stale cached engine instead of one built from this test's own
+    database, or worse, one pointed at the real default path under
+    ``backend/data``. This fixture only needs to depend on it to
+    trigger that setup for every test in this module.
     """
-    dispose_engine()
-    db_path = tmp_path / "shared.db"
-    monkeypatch.setenv(settings.DATABASE_URL_ENV_VAR, f"sqlite:///{db_path}")
-    try:
-        yield
-    finally:
-        dispose_engine()
+    yield
 
 
 def test_get_engine_returns_the_same_instance_on_repeat_calls():
