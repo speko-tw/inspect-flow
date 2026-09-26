@@ -65,12 +65,17 @@ class OperatorNotAuthenticatedError(RuntimeError):
     on the API layer. In practice, this can only happen when a route
     handler reaches a Service-layer write without depending on
     ``require_login`` (or a stricter access level) -- a routing bug,
-    not a normal "not logged in" request. Left uncaught, it surfaces
-    as an unhandled exception (500 ``server.internal_error``) and
-    the surrounding transaction rolls back (``app.db.unit_of_work``),
-    so no write ever lands; the offending route is not masked behind
-    an ordinary 401 either, since that would look like working-as-
-    intended access control instead of a bug.
+    not a normal "not logged in" request; this is only guaranteed to
+    surface at all because ``app.main.create_app()`` applies
+    ``Depends(bind_request_scope)`` at the app level, so even such a
+    route still runs inside the request scope instead of being
+    treated as "not a request" and falling back to the built-in
+    ``admin``. Left uncaught, it surfaces as an unhandled exception
+    (500 ``server.internal_error``) and the surrounding transaction
+    rolls back (``app.db.unit_of_work``), so no write ever lands;
+    the offending route is not masked behind an ordinary 401 either,
+    since that would look like working-as-intended access control
+    instead of a bug.
     """
 
 

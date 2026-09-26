@@ -164,3 +164,86 @@ class TestAutR09NotLoggedInDuringRequestIsRejected:
 
         with pytest.raises(OperatorNotAuthenticatedError):
             client.get("/probe")
+
+
+class TestForgottenRouteStillRejectedByAppLevelScope:
+    """Reviewer's required counter-example (PR #187): a route built
+    on ``app.main.create_app()`` that depends on neither
+    ``require_login`` nor ``bind_request_scope`` directly must still
+    be rejected for an anonymous caller.
+
+    Before this fix, such a route left ``in_request_scope()`` at
+    ``False`` (nothing ever called ``bind_request_scope``), so
+    ``get_current_operator`` treated it as "not a request" and fell
+    back to the built-in ``admin`` -- an anonymous POST would
+    succeed with ``created_by = admin`` instead of failing (AUT-R09,
+    plan.md's T5 risk section). ``create_app()`` now applies
+    ``Depends(bind_request_scope)`` at the app level
+    (``backend/app/main.py``), so every route -- including one that
+    forgets to declare an access level -- runs inside the request
+    scope, and an anonymous write raises
+    ``OperatorNotAuthenticatedError``, which the catch-all handler
+    turns into a 500 ``server.internal_error`` with the transaction
+    rolled back (``app.db.unit_of_work``).
+
+    Depends on the ``operator`` fixture (a committed ``is_system``
+    row) rather than a bare empty database: without one, the "not a
+    request" fallback path in ``get_current_operator`` raises its
+    own ``OperatorNotFoundError`` regardless of this fix, which would
+    also surface as a 500 and mask whether the fix actually did
+    anything. With a built-in admin present, the pre-fix behavior is
+    a *successful* 201 with ``created_by`` set to that admin -- the
+    exact silent-fallback bug this test guards against -- so only
+    the fix turns this into a rejected write.
+    """
+
+    def test_route_without_explicit_scope_rejects_anonymous_write(
+        self, session, migrated_url, operator
+    ):
+        # ``operator`` only flushes (tests/services/conftest.py);
+        # commit so the TestClient's own DB connection (a separate
+        # connection to the same SQLite file, opened through
+        # ``app.db.unit_of_work``) can see this row.
+        session.commit()
+        app = create_app()
+        router = APIRouter()
+
+        def create_test_company_no_scope(
+            body: _CreateCompanyBody,
+            db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
+        ) -> dict[str, str]:
+            company = create_company(
+                db, code=body.code, name=f"AC09 {body.code}", kind="customer"
+            )
+            return {"id": str(company.id)}
+
+        assert not inspect.iscoroutinefunction(create_test_company_no_scope)
+        router.add_api_route(
+            "/api/v1/test/companies-no-scope",
+            create_test_company_no_scope,
+            methods=["POST"],
+            status_code=201,
+        )
+        app.include_router(router)
+        # ``raise_server_exceptions=False``: create_app()'s catch-all
+        # handler turns the unhandled exception into a JSON 500
+        # response, but Starlette's ``ServerErrorMiddleware``
+        # re-raises the original exception after sending it anyway
+        # (so it is still visible to e.g. logging middleware) --
+        # this is Starlette's documented ``TestClient`` behavior,
+        # not private API poking, and matches how this module's own
+        # ``_client_with_company_route`` test client is used for the
+        # 401 case above (a plain ``APIError`` does not hit this
+        # code path since it is not the catch-all handler).
+        client = TestClient(
+            app, base_url="https://testserver", raise_server_exceptions=False
+        )
+        before = _company_count(session)
+
+        resp = client.post(
+            "/api/v1/test/companies-no-scope", json={"code": "AC09D"}
+        )
+
+        assert resp.status_code == 500
+        assert resp.json()["error"]["code"] == "server.internal_error"
+        assert _company_count(session) == before
