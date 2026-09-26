@@ -26,15 +26,31 @@ InspectFlow 要避免照片、查核項目與說明分散，造成證據難核�
 
 ## 服務對象
 
-系統內部角色（依據：架構基準 §17）與後台／現場的職責分工（依據：架構基準 §6.1–6.2）如下：
+系統內部角色與後台／現場的職責分工（依據：架構基準 §6.1–6.2）如下：
 
 | 角色 | 職責 |
 |---|---|
-| 管理者 / 協調者（Admin / Coordinator） | 建立人員、專案、查核範本與範本版本，建立查核計畫、指派工程師、批次產生任務，監看完成度與異常，審閱照片並產生報告（依據：架構基準 §6.2）。 |
-| 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成（依據：架構基準 §6.1）。 |
-| 檢視者（Viewer） | 依權限矩陣唯讀存取後台儀表板（依據：架構基準 §17）。 |
+| 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
+| 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立查核計畫、指派工程師、批次產生任務、監看完成度、審閱照片並產生報告，或依權限矩陣唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
+| 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
-系統定義的四個基準角色為 `ADMIN`、`COORDINATOR`、`INSPECTOR`、`VIEWER`（依據：架構基準 §17）；確切的權限矩陣待決議，見 [05-open-questions.md](05-open-questions.md) [OQ-08](05-open-questions.md#oq-08)。
+系統採「系統管理者開關＋可自訂的專案角色」模式，取代原本架構基準 §17 例示的四個固定角色 `ADMIN`、`COORDINATOR`、`INSPECTOR`、`VIEWER`；首次安裝預建三個範本角色：內業整理、現場查核、唯讀，之後都可以改名、改內容，也可以刪除（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17，見 [KD-24](03-decisions-and-stack.md#kd-24)、[KD-26](03-decisions-and-stack.md#kd-26)）。權限機制的細節（權限＝資料 × 動作、角色掛在專案成員上、安全機制）已裁定，見 [05-open-questions.md](05-open-questions.md) [OQ-08](05-open-questions.md#oq-08)（已裁定）。
+
+### 人員、公司與權限的實體關係
+
+```mermaid
+flowchart LR
+  Company["Company（公司）"] -->|所屬| User["User（人員）"]
+  User -->|一人可掛多筆| ProjectMember["ProjectMember（專案成員）"]
+  Project["Project（專案）"] -->|一專案多筆成員| ProjectMember
+  Role["Role（角色，全系統共用清單）"] -.->|一筆成員可掛多個角色，權限加總| ProjectMember
+  User -.->|is_admin 開關，不經 Role| Admin["系統管理者權限"]
+```
+
+- `Company` 與 `User` 是一對多：人員所屬 `Company` 可隨時修改，見 [KD-23](03-decisions-and-stack.md#kd-23)。
+- `ProjectMember` 是 `User`、`Project`、`Role` 三者的關聯實體：同一人在同一 `Project` 下可掛多個 `Role`，權限加總，見 [KD-27](03-decisions-and-stack.md#kd-27)。
+- `Role` 全系統共用一份清單，可自訂、可刪除，修改時立即影響所有持有者，見 [KD-26](03-decisions-and-stack.md#kd-26)。
+- 系統管理者（`is_admin`）是 `User` 身上的開關，不透過 `Role` 授予，見 [KD-24](03-decisions-and-stack.md#kd-24)。
 
 除了系統內部角色之外，正式報告（DOCX／PDF）另有一群**文件收受方**：業主、監造單位、品管、政府標案審查方，以及文件歸檔／管理系統，他們不一定是系統的登入使用者，而是報告的閱讀與簽核對象 （依據：架構基準 §20.1、§20.12–20.13）。設計現場與後台流程時，需要區分「誰是系統使用者」與「誰只是最終文件的收受者」。
 
