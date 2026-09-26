@@ -45,7 +45,7 @@ docs/specs/
 |---|---|---|---|---|
 | [`skeleton`](skeleton/spec.md) | P0 | 功能 | 已完成 | — |
 | [`api-conventions`](api-conventions/spec.md) | 全部 | 共用 | 已完成 | — |
-| `database-foundation` | P1 | 功能 | 未開始 | 第一段（基礎設施、`User`、`Project`）無；第二段（`Template`、`TemplateVersion`）受 [G-01](../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
+| [`database-foundation`](database-foundation/spec.md) | P1 | 功能 | 部分凍結 | 第一段（基礎設施、`User`、`Project` 的共通結構）無；第二段（`Template`、`TemplateVersion`）受 [G-01](../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | `domain-model` | P1、P3、P4、P6、P9 | 共用 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06)；`User`、`Project` 得先[部分凍結](#partial-freeze)（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | `state-machines` | P4、P6、P7、P9 | 共用 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-06](../intents/05-open-questions.md#g-06) |
 | `authentication` | P2 | 功能 | 未開始 | [OQ-13](../intents/05-open-questions.md#oq-13)、[OQ-08](../intents/05-open-questions.md#oq-08) |
