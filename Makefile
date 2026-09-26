@@ -71,9 +71,12 @@ check-postgres:
 # Fails fast if frontend deps are missing. Not auto-installed here:
 # CI runs its own `npm ci`, so installing on demand would hide
 # lockfile problems that should fail the check instead.
+# Checks for .bin/prettier (the first tool format:check runs)
+# instead of the node_modules dir itself, since a dir that exists
+# but is empty (e.g. an interrupted `npm ci`) would otherwise pass.
 check-frontend:
-	@test -d frontend/node_modules || \
-		(echo "frontend/node_modules not found. Run" \
+	@test -x frontend/node_modules/.bin/prettier || \
+		(echo "frontend/node_modules is missing or incomplete. Run" \
 			"'make setup' or 'make setup-frontend' first." && \
 		exit 1)
 	cd frontend && npm run format:check
