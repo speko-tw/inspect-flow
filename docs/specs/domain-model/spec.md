@@ -128,17 +128,17 @@
 
 關聯：`Company` 1—多 `User`；`Company` 可指向母公司 `Company`；`User` 1—多 `ProjectMember`；`Project` 1—多 `ProjectMember`；`ProjectMember` 多—多 `Role`（見 [01-overview 實體關係](../../intents/01-overview.md#人員公司與權限的實體關係)）。`User.company_id` 與 `Company.created_by` 互相引用，而且都不可空值，所以初始化指令必須在同一個交易裡建立兩者（DOM-R11）。
 
-**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-01～G-07、OQ-06 的「為什麼要先決定」、選項原文與門檻摘要，搜尋人員、使用者、管理者、核可者、角色、權限、公司、成員、客戶、帳號、專案等字面。
+**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，含 [#55](https://github.com/speko-tw/inspect-flow/issues/55) 裁定的例外：門檻議題原文只以 ID 引用某實體、且不影響該實體本身的欄位、狀態或規則時，不算有關，但要寫明理由）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-01～G-07、OQ-06 的「為什麼要先決定」、選項原文與門檻摘要，搜尋人員、使用者、管理者、核可者、角色、權限、公司、成員、客戶、帳號、專案等字面。
 
 | 實體 | 比對過的議題 | 字面命中 | 結論 | 理由 |
 |---|---|---|---|---|
-| `User` | G-01～G-07、OQ-06 | G-01 立場 B「由**管理者**輸入的參數」；G-03「**使用者**何時看到編輯結果」；G-04「Variant 核可紀錄、**核可者**」 | 無關，凍結 | G-01 的「管理者」指輸入 `Inspection Plan` 參數的人，議題只在問 interval 放在哪一張表，不涉及 `User` 欄位。G-03 的「使用者」是泛稱，談的是編輯與上傳的時序。G-04 的「核可者」若日後要記錄，是在 Variant 或核可紀錄那一側加指向 `User` 的 UUID 外鍵，`User` 自己的欄位不會改變。判讀方式同 `database-foundation` 的先例（見其 spec.md「資料」段） |
+| `User` | G-01～G-07、OQ-06 | G-01 立場 B「由**管理者**輸入的參數」；G-03「**使用者**何時看到編輯結果」；G-04「Variant 核可紀錄、**核可者**」 | 無關，凍結 | G-01 的「管理者」指輸入 `Inspection Plan` 參數的人，議題只在問 interval 放在哪一張表，不涉及 `User` 欄位。G-03 的「使用者」是泛稱，談的是編輯與上傳的時序。G-04 的「核可者」是記錄「是哪個人」，若日後要記錄，是在 Variant 或核可紀錄那一側加指向 `User` 的 UUID 外鍵，`User` 自己的欄位、狀態與規則都不會改變，適用 #55 的例外。G-01、G-03 是泛稱，連 ID 引用都不是 |
 | `Company` | G-01～G-07、OQ-06 | 無 | 無關，凍結 | 門檻內沒有任何議題提到公司、客戶或組織 |
 | `Role` | G-01～G-07、OQ-06 | 無直接命中；G-04「核可者、核可流程」可能延伸到「誰有權核可」 | 無關，凍結 | G-04 若裁定「由具備某權限的人核可」，只會多一個權限代碼（例如 `evidence_variant.approve`），那是 `Role` 權限內容裡的一筆資料，不改變 `Role` 的欄位或約束（[KD-25](../../intents/03-decisions-and-stack.md#kd-25)：系統存的是權限代碼，不是寫死的功能表） |
-| `ProjectMember` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/...` | 無關，凍結 | 路徑裡的是 `Project` 的 UUID，不是 `ProjectMember`；`ProjectMember` 只以 UUID 外鍵引用 `Project`、`User`，不依賴 `Project` 的業務欄位 |
-| `Project`（業務欄位） | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑（同 `database-foundation` 的比對） | 門檻無關，但維持草稿 | 門檻比對結論同 `database-foundation`；不凍結的原因是門檻外的 [OQ-01](../../intents/05-open-questions.md#oq-01) 尚未裁定（負責人決定，[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844531219)，2026-09-26） |
+| `ProjectMember` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/...` | 無關，凍結 | 路徑裡的是 `Project` 的 UUID，不是 `ProjectMember`，本身就不算命中 `ProjectMember`；`ProjectMember` 只以 UUID 外鍵引用 `Project`、`User`，不依賴 `Project` 的業務欄位 |
+| `Project`（業務欄位） | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑（同 `database-foundation` 的比對） | 門檻無關，但維持草稿 | 路徑只以 UUID 引用 `Project`，適用 #55 的例外，結論同 `database-foundation`；不凍結的原因是門檻外的 [OQ-01](../../intents/05-open-questions.md#oq-01) 尚未裁定（負責人決定，[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844531219)，2026-09-26） |
 
-`User`、`ProjectMember` 的命中都只是「其他實體以 UUID 引用它」或泛稱，`Role` 的延伸只會增加資料列；判為無關是本規格依 `database-foundation` 先例的判讀。[#55](https://github.com/speko-tw/inspect-flow/issues/55)（[DBF-Q3](../database-foundation/spec.md#dbf-q3)：規則 1 要不要補「只引用 ID 不算有關」的例外）尚未裁定；若裁定不補例外，`User`、`ProjectMember` 依規則 3 處理。
+`User` 的命中屬於 #55 例外（只以 ID 引用、不影響 `User` 本身），或只是泛稱。`Role` 不適用這個例外：G-04 沒有點名角色，判為無關的理由是 G-04 的任何裁定最多新增一個權限代碼，那是 `Role` 權限內容裡的資料，不改變 `Role` 的欄位、狀態或規則；若 G-04 裁定出「只有特定角色能核可」這類規則，依規則 3 處理。
 
 ## 介面
 
@@ -214,7 +214,6 @@
 - **DOM-Q7：`is_active` 的預設值，以及停用公司的影響**。[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說啟用狀態不是必填，但沒說未提供時是啟用還是停用；`Company.is_active` 同樣沒有預設值。另外 `Company` 停用後，其人員能不能登入、能不能再被加入專案，#63 沒有寫。影響計畫 T1、T2。
 <a id="dom-q8"></a>
 - **DOM-Q8：外部帳號能不能修改所屬公司**。[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 說人員所屬公司可以隨時修改，[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說外部帳號的基本欄位（含公司）任何人都不能修改，兩者對外部帳號的說法相反。本規格只凍結本系統帳號的部分（DOM-R18），外部帳號依 DOM-R04 暫以 KD-16 為準；這屬於意圖層的衝突，需要負責人裁定後回頭調整 KD-16 或 KD-23。
-- **部分凍結規則 1 的例外**：本規格的門檻比對沿用 [DBF-Q3](../database-foundation/spec.md#dbf-q3)（[#55](https://github.com/speko-tw/inspect-flow/issues/55)）的判讀，不另開議題。
 
 ## 變更紀錄
 
