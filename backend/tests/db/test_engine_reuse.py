@@ -53,6 +53,7 @@ def test_get_engine_returns_the_same_instance_on_repeat_calls():
     second = get_engine()
 
     assert first is second
+    assert first.dialect.name != "postgresql"
 
 
 def test_dispose_engine_forces_a_fresh_engine_on_next_call():
