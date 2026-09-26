@@ -342,13 +342,13 @@ graph LR
 
 ## PR-13：正式環境變更使用版本控管與可重現流程
 
-**狀態**：暫定（§22.15 與 §22.16 的啟動順序衝突，見 [G-09](05-open-questions.md#g-09)）。
+**狀態**：已決定（部署順序依 [G-09](05-open-questions.md#g-09) 的裁定）。
 
-**規則**：正式環境**不得**直接改程式碼、安裝未納入版本的套件或手動改 Schema；變更**必須**經 Git → Review → Build → Versioned Image → Deploy（§22A.12）。本文件暫以 §22.15 為部署順序：備份 → Alembic migration → 啟動新版 API → 健康檢查 → Smoke Test；**必須**等 migration 完成才讓新版 API 接受請求。升級時，還**必須**隔離舊版寫入，或採用已驗證的向前相容遷移策略；失敗時依備份與回滾程序處理（§22A.9–10）。交付版本**必須**符合 Deployment Definition of Done（§22A.20）。
+**規則**：正式環境**不得**直接改程式碼、安裝未納入版本的套件或手動改 Schema；變更**必須**經 Git → Review → Build → Versioned Image → Deploy（§22A.12）。部署順序依 [G-09](05-open-questions.md#g-09) 的裁定，初次與升級部署相同：備份 → Alembic migration → migration 成功後才啟動或重啟新版 API → 健康檢查 → Smoke Test；**必須**等 migration 成功才讓新版 API 接受請求，migration 失敗即停止部署。升級時，還**必須**隔離舊版寫入，或採用已驗證的向前相容遷移策略；失敗時依備份與回滾程序處理（§22A.9–10）。交付版本**必須**符合 Deployment Definition of Done（§22A.20）。
 
 **為什麼**：§22.16 的 `up -d` → migration 範例可能讓尚未遷移的 API 先接收流量；即使是初次部署，也不能假定啟動後沒有請求或啟動相依問題。
 
-**怎麼做**：`DEPLOYMENT.md` 記錄備份、遷移、服務開放流量、健康檢查與回滾閘點；團隊在 [G-09](05-open-questions.md#g-09) 裁定初次與升級部署是否需要不同腳本。
+**怎麼做**：`DEPLOYMENT.md` 記錄備份、遷移、服務開放流量、健康檢查與回滾閘點；初次與升級部署採同一套順序（[G-09](05-open-questions.md#g-09)），不採用 §22.16 先 `up -d` 再 migration 的範例。
 
 **不要做**：在 migration 完成前讓新版 API 接受請求；未隔離舊版寫入就執行不相容遷移。
 

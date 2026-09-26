@@ -563,7 +563,9 @@
 
 <a id="g-09"></a>
 
-### G-09：部署範例的 migration 與服務啟動順序相反
+### G-09：部署範例的 migration 與服務啟動順序相反（已裁定）
+
+**裁定**：採 §22.15 的順序，初次部署與升級部署相同：備份 → Alembic migration → migration 成功後才啟動或重啟 API → Health Check → Smoke Test。migration 失敗時停止部署，不啟動新版 API。不採用 §22.16 先 `docker compose up -d` 再跑 migration 的範例；`pilot-deployment` 規格依此順序撰寫部署步驟。理由：先啟動 API 會讓尚未遷移的服務接收請求，初次部署可能缺資料表，升級部署可能遇到舊 Schema；同一套順序也不必維護兩份部署腳本。此裁定把 [PR-13](02-principles.md#pr-13) 原本的暫定做法轉為正式；討論見 [#97](https://github.com/speko-tw/inspect-flow/issues/97)。
 
 **為什麼要先決定**：若 API 在 migration 完成前接收請求，初次部署可能缺資料表，升級部署可能遇到舊 Schema。[PR-13](02-principles.md#pr-13) 的安全閘點需要團隊確認。
 
@@ -571,11 +573,11 @@
 
 **目前暫定**：[PR-13](02-principles.md#pr-13) 採 §22.15 的順序；無論初次或升級部署，都等 migration 完成才讓新版 API 接流量。
 
-**誰決定、何時**：團隊；時間未指定。
+**誰決定、何時**：負責人；已於 [#97](https://github.com/speko-tw/inspect-flow/issues/97) 裁定（2026-09-26）。
 
 **影響的原則**：[PR-13](02-principles.md#pr-13)。
 
-**依據**：架構基準 §22.15–22.16
+**依據**：議題背景為架構基準 §22.15–22.16；裁定為負責人決定（#97，2026-09-26），採 §22.15 的順序。
 
 <a id="g-10"></a>
 
