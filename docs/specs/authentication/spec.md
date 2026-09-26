@@ -3,7 +3,7 @@
 **代碼**：`AUT`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R01～DOM-R27）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)～[KD-31](../../intents/03-decisions-and-stack.md#kd-31)、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）
-**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q2、DOM-Q3、DOM-Q6，只擋對應任務，不擋本規格
+**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q3、DOM-Q6（DOM-Q2 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)），只擋對應任務，不擋本規格
 
 ## 目的
 
@@ -31,6 +31,7 @@
 - 稽核紀錄：[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 要求權限與角色的變更寫稽核紀錄，資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。本規格不新增權限或角色的寫入入口；登入、登出、設定密碼是否要寫稽核紀錄，見 [AUT-Q6](#aut-q6)。
 - 在畫面上變更密碼、忘記密碼、Admin 替他人重設密碼：本規格只提供指令，見 [AUT-Q4](#aut-q4)。
 - 多因素認證、Corporate SSO：架構基準 §35 延後的能力，不在 MVP。
+- 常見或已外洩密碼的黑名單檢查：這次不做，等日後改用外部身分來源（LDAP／AD）登入時，由 `external-identity-sync` 一併評估。這低於 NIST SP 800-63B（第 4 版）§3.1.1.2 的要求，是負責人接受的取捨（[AUT-Q3](#aut-q3) 裁定，[#145](https://github.com/speko-tw/inspect-flow/issues/145)）。
 - 部署時的 HTTPS 終止與反向代理設定：由 `pilot-deployment` 負責；本規格只要求 Cookie 帶 `Secure`（AUT-R06）。
 
 ## 使用情境
@@ -54,13 +55,13 @@
 | AUT-R01 | 密碼**必須**以 Argon2id 雜湊後儲存；**不得**儲存明文或可逆加密的密碼。每個雜湊**必須**使用各自隨機產生的 salt，雜湊值連同演算法、參數與 salt 以 PHC 字串格式（`$argon2id$v=19$m=…,t=…,p=…$…`）存放。參數**應**採 OWASP 列出、防護程度相同的其中一組完整配置（m／t／p 為 47104／1／1、19456／2／1、12288／3／1、9216／4／1、7168／5／1，單位 KiB），本規格建議 m = 19456 KiB（19 MiB）、t = 2、p = 1；實作時得依伺服器規格改選同一份清單中的另一組，並寫在計畫與程式的單一常數處 | 必須（Argon2id、不存明文、salt）；應（參數） | [KD-31](../../intents/03-decisions-and-stack.md#kd-31)；參數依 OWASP Password Storage Cheat Sheet（2026-09-26 查詢） |
 | AUT-R02 | 登入時驗證成功、但雜湊的參數與目前設定不同時，**應**以目前參數重新雜湊並更新儲存值 | 應 | OWASP Password Storage Cheat Sheet「等使用者下次登入時重新雜湊」 |
 | AUT-R03 | 密碼雜湊**必須**只存在本規格的 `UserPassword`（見[資料](#資料)），**不得**出現在任何 API 回應、錯誤訊息或應用程式日誌。請求中的明文密碼同樣**不得**寫入日誌 | 必須 | [KD-31](../../intents/03-decisions-and-stack.md#kd-31)（雜湊儲存的前提是雜湊與明文都不外流）；本規格推導 |
-| AUT-R04 | 密碼**必須**符合長度規則才能設定；下限、上限與是否另有字元規則見 [AUT-Q3](#aut-q3)。上限**應**至少 64 字元，讓人員可以用長句當密碼 | 必須（檢查）；應（上限至少 64） | OWASP Authentication Cheat Sheet；數值待 [AUT-Q3](#aut-q3) |
+| AUT-R04 | 設定密碼時，長度**必須**介於 8～128 個字元（含兩端）才能設定，不符合時拒絕、資料不變；長度以 Unicode 字元（code point）計算，不以位元組計算。不要求大小寫、數字、符號等字元組成。不強制定期更換密碼，也不設密碼有效期限；只有在有證據顯示密碼外洩時才要求更換，更換方式是設定密碼的指令（AUT-R24）。本規格不檢查常見或已外洩的密碼（見[範圍](#範圍)的「不包含」）。最短 8 字元與不做黑名單都未達 NIST 對只用密碼登入的規定，是負責人接受的取捨，見 [AUT-Q3](#aut-q3) | 必須 | [AUT-Q3](#aut-q3) 裁定（負責人，[#145](https://github.com/speko-tw/inspect-flow/issues/145)，2026-09-26）；上限 128 用來防止超長輸入拖慢雜湊運算；以 code point 計算長度依 NIST SP 800-63B（第 4 版）§3.1.1.2 |
 
 ### 登入、登出與目前使用者
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| AUT-R05 | 後端**必須**提供以 email 與密碼登入的 API。email 與一筆 `auth_source = local`、`is_active = true`、已設定密碼的 `User` 相符，且密碼驗證成功時，建立一筆新的 `AuthSession`，以 Cookie 回傳，並在回應本體回傳目前使用者（同 AUT-R10）。email 的比對方式依 [DOM-Q2](../domain-model/spec.md#dom-q2) 的裁定 | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號用 email）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) |
+| AUT-R05 | 後端**必須**提供以 email 與密碼登入的 API。email 與一筆 `auth_source = local`、`is_active = true`、已設定密碼的 `User` 相符，且密碼驗證成功時，建立一筆新的 `AuthSession`，以 Cookie 回傳，並在回應本體回傳目前使用者（同 AUT-R10）。email 的比對**必須**不分大小寫，依 `domain-model` 的 DOM-R02（[DOM-Q2](../domain-model/spec.md#dom-q2) 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)） | 必須 | [KD-18](../../intents/03-decisions-and-stack.md#kd-18)（登入帳號用 email）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) |
 | AUT-R06 | 以下情況登入**必須**失敗，而且**不得**建立 `AuthSession`：email 不存在、密碼錯誤、帳號已停用、帳號為 `auth_source = external`、帳號尚未設定密碼。這幾種失敗**應**回傳完全相同的狀態碼與回應本體（401、`auth.invalid_credentials`），不透露是哪一種；email 不存在或沒有密碼時，**應**仍執行一次同樣成本的雜湊驗證，讓回應時間不因帳號是否存在而明顯不同 | 必須（失敗、不建立）；應（回應一致、時間一致） | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)（停用不能登入）；[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部帳號由外部來源驗證，本規格判讀）；回應一致依 OWASP Authentication Cheat Sheet |
 | AUT-R07 | 後端**必須**提供登出 API：刪除這個請求所帶的 `AuthSession`，並要求瀏覽器清除 Cookie。請求沒有帶有效登入狀態時，登出**應**仍回傳成功，行為冪等 | 必須（刪除）；應（冪等） | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)（伺服器保存登入狀態，登出就是刪除它）；冪等依 OWASP Session Management Cheat Sheet |
 | AUT-R08 | 後端**必須**提供取得目前使用者的 API：已登入時回傳該 `User` 的 `id`、`email`、`name_en`、`name_zh`、`is_admin`；未登入時回傳 401、`auth.not_authenticated` | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（前端需要知道是不是 Admin）；架構基準 §17 與[認證與授權卡片](../../intents/03-decisions-and-stack.md#stack-auth)（負責「登入、目前使用者與 API 權限檢查」） |
@@ -158,7 +159,7 @@
 | AUT-AC01 | 一段測試用的密碼 | 以本規格的雜湊函式雜湊兩次，並檢查結果 | 兩個雜湊字串都以 `$argon2id$` 開頭，參數段等於程式設定的參數組，且該組是 AUT-R01 列出的 OWASP 配置之一，兩者不同（salt 不同），都不含明文；以正確密碼驗證成功、以錯誤密碼驗證失敗 | AUT-R01 |
 | AUT-AC02 | 一個以「與程式設定不同的另一組 AUT-R01 配置」產生的密碼雜湊存在 `UserPassword`（例如程式設定為 19456／2／1 時，用 12288／3／1） | 以正確密碼登入 | 登入成功；`UserPassword.password_hash` 被改寫為程式設定的參數組，且新的雜湊仍能驗證同一個密碼 | AUT-R02 |
 | AUT-AC03 | 一個已設定密碼的帳號；測試擷取應用程式日誌 | 分別呼叫登入（成功與失敗）與目前使用者 API | 每個回應本體都不含 `password_hash` 的值、明文密碼與 token；擷取到的日誌不含明文密碼與雜湊 | AUT-R03、AUT-R10 |
-| AUT-AC04 | 依 [AUT-Q3](#aut-q3) 裁定的長度規則 | 以設定密碼的指令分別設定：長度下限減一、剛好下限、剛好上限、上限加一的密碼 | 下限與上限成功，其餘失敗且資料不變 | AUT-R04、AUT-R24 |
+| AUT-AC04 | 一個啟用中的 `local` 帳號 | 以設定密碼的指令（標準輸入）分別設定：7 字元的密碼；8 字元的密碼；128 字元、其中含中文字（UTF-8 編碼超過 128 個位元組）的密碼；129 字元的 ASCII 密碼；12 字元、只含小寫英文字母的密碼 | 8 字元、128 字元與只含小寫字母的三次成功，每次成功後 `UserPassword` 的雜湊都能驗證剛設定的密碼；7 字元與 129 字元的兩次失敗，`UserPassword` 不變 | AUT-R04、AUT-R24 |
 
 ### 登入、登出與目前使用者
 
@@ -237,7 +238,10 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q2"></a>
 - **AUT-Q2：Admin 是否也通過新增、刪除與特殊動作（例如簽核、匯出列印）的權限檢查**（AUT-R19）。[KD-24](../../intents/03-decisions-and-stack.md#kd-24) 寫「查看、修改所有專案」，[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 把讀取、新增、修改、刪除與特殊動作分列，因此本規格只把讀取、修改視為已裁定。選項：（A）Admin 通過所有專案權限代碼，含新增、刪除與特殊動作；（B）Admin 通過讀取、新增、修改、刪除，特殊動作仍要專案角色；（C）Admin 只通過讀取、修改，其餘都要專案角色。**建議 A**：Admin 本來就能把自己加進專案並指派任何角色，B、C 只多一道手續，擋不住 Admin；若簽核要求「本人親自具備角色」，應在該功能規格另訂。影響計畫 T4。
 <a id="aut-q3"></a>
-- **AUT-Q3：密碼長度與字元規則**（AUT-R04、AUT-AC04）。OWASP：沒有多因素認證時，短於 15 字元視為弱密碼；上限至少 64 字元；不建議強制字元組成規則。選項：（A）下限 15、上限 128、不限字元組成，符合 OWASP；（B）下限 12、上限 128，較好記，但低於 OWASP 無 MFA 時的建議；（C）下限 8，另要求大小寫、數字、符號。**建議 A**。影響計畫 T1。
+- **AUT-Q3：密碼長度與字元規則**（已裁定，[#145](https://github.com/speko-tw/inspect-flow/issues/145)；AUT-R04、AUT-AC04）。以下是裁定前的討論紀錄。OWASP：沒有多因素認證時，短於 15 字元視為弱密碼；上限至少 64 字元；不建議強制字元組成規則。當時的選項：（A）下限 15、上限 128、不限字元組成，符合 OWASP；（B）下限 12、上限 128，較好記，但低於 OWASP 無 MFA 時的建議；（C）下限 8，另要求大小寫、數字、符號。裁定前建議 A，當時寫影響計畫 T1；裁定後長度規則併入 T6，實際影響計畫 T6。
+  - **裁定**（負責人，[#145](https://github.com/speko-tw/inspect-flow/issues/145)，2026-09-26）：不採上述三個選項。最短 8 字元、最長 128 字元（只用來防止超長輸入拖慢雜湊運算）；不要求字元組成；不強制定期更換，只有在有證據顯示密碼外洩時才要求更換；常見密碼黑名單這次不做，等之後改用外部身分來源（LDAP／AD）登入時再一併評估。
+  - **取捨**（照實記錄）：NIST SP 800-63B（第 4 版）§3.1.1.2 對只用密碼登入規定（SHALL）最短 15 字元，並規定（SHALL）檢查常見或已外洩的密碼；搭配多因素驗證時，最短是 8 字元。本裁定的最短 8 字元低於 NIST 對單一因素的規定，也沒有做黑名單，**不符合** NIST 對只用密碼登入的規定。負責人的考量：系統在公司內網使用；現場用手機輸入長密碼負擔大；之後會改用公司的 LDAP／AD 帳號，或加入驗證碼等多因素驗證，屆時本系統的密碼不再是主要的登入方式，因此接受這個取捨，規則以簡單為原則。加入多因素驗證後，最短 8 字元這一項就符合 NIST 的規定；黑名單仍要另外評估。
+  - **落地**：寫進 AUT-R04、AUT-AC04，黑名單寫成「不包含」的排除項；長度規則由計畫 T6（[#154](https://github.com/speko-tw/inspect-flow/issues/154)）實作，T1 不受影響。
 <a id="aut-q4"></a>
 - **AUT-Q4：之後建立的帳號怎麼取得第一次的密碼，以及內建 `admin` 能不能登入**。本規格只提供部署人員執行的指令（AUT-R24）。Admin 在畫面上建立帳號後，被建立的人怎麼拿到密碼，#54 沒有規定。選項：（A）先只用指令，畫面上的重設與自助變更密碼另開規格；（B）`admin-dashboard` 提供「Admin 設定臨時密碼，首次登入強制變更」；（C）以 email 寄送設定密碼的連結（需要寄信服務，目前沒有）。**建議 A**，等 `admin-dashboard` 開工時再決定是否擴充為 B。另外，內建 `admin`（`is_system`）是否可以設定密碼並登入：選項（甲）可以，作為負責人帳號無法使用時的備援；（乙）不行，只作為系統操作者，指令拒絕替它設定密碼。**建議甲**，並由部署人員妥善保管密碼。裁定前，AUT-R24 對內建 `admin` 的行為不定義；計畫 T6 在裁定後才開工。
 <a id="aut-q5"></a>
@@ -245,9 +249,9 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q6"></a>
 - **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。**建議 A**，等 DOM-Q6 定案後再評估 B。不擋任何任務。
 
-本規格另依賴 `domain-model` 尚未裁定的題目，本規格不自行定案：
+本規格另依賴 `domain-model` 的下列題目；尚未裁定的，本規格不自行定案：
 
-- [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：影響 AUT-R05 登入時怎麼比對 email，以及計畫 T3。
+- [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：已裁定（[#122](https://github.com/speko-tw/inspect-flow/issues/122)），不分大小寫，AUT-R05 已依此寫定；計畫 T3 不再受本題擋。
 - [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：影響 AUT-R22 用哪個代碼；檢查元件本身以字串為輸入，不受影響。
 - [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：影響 [AUT-Q6](#aut-q6)。
 - [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：已裁定（[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。人員能不能登入只看 `User.is_active`，不需要檢查公司狀態；AUT-R06、AUT-R14 維持現狀（見 DOM-R32）。
@@ -257,3 +261,4 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
 - AUT-Q1 裁定：AUT-R15 寫入預設值閒置 60 分鐘、絕對 8 小時，以及邊界（絕對期限滿即失效、閒置剛好等於期限仍有效）；AUT-AC13 改用預設值，驗證絕對期限未滿（A 減 1 秒）與剛好到期（A）、閒置期限剛好到期（I）與超過（I 加 1 秒）時的結果，AUT-AC15 寫明預設值 — #143
+- 依 AUT-Q3 裁定，AUT-R04 定為長度 8～128 字元、不要求字元組成、不強制定期更換，AUT-AC04 改為具體邊界值並補只含小寫字母的情境，「不包含」新增常見密碼黑名單 — [#145](https://github.com/speko-tw/inspect-flow/issues/145)

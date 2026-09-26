@@ -6,8 +6,10 @@ so each model registers its table as a side effect of that import;
 ``env.py`` itself does not change when a model is added.
 """
 
+from app.models.auth_session import AuthSession
 from app.models.company import Company
 from app.models.project import Project
 from app.models.user import User
+from app.models.user_password import UserPassword
 
-__all__ = ["Company", "Project", "User"]
+__all__ = ["AuthSession", "Company", "Project", "User", "UserPassword"]
