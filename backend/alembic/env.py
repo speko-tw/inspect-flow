@@ -34,8 +34,14 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
+#
+# ``disable_existing_loggers=False``: when migrations run in the
+# same process as the application or a test (not just Alembic's own
+# CLI), loggers other code already created (e.g. ``app.api.errors``)
+# must stay enabled afterwards -- fileConfig's default disables
+# every logger not named in the ini file.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # See this module's docstring: app/models (introduced in a later
 # task) registers its models on Base.metadata as a side effect of
