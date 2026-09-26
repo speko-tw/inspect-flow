@@ -2,9 +2,9 @@
 
 **代碼**：`DOM`　**Phase**：P1、P3、P4、P6、P9　**狀態**：部分凍結
 **前置規格**：`database-foundation`（UUID 主鍵、業務編號、建立與修改紀錄等共通結構，見 DBF-R11～DBF-R14）、`api-conventions`（UUID 字串 ID、UTC 時間格式）
-**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
+**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
 **被擋議題**：凍結範圍無；`Project` 業務欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；其餘實體受 [G-01](../../intents/05-open-questions.md#g-01)、[G-02](../../intents/05-open-questions.md#g-02)、[OQ-06](../../intents/05-open-questions.md#oq-06) 等[開工門檻](../../intents/05-open-questions.md#gate)擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
-**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令與認證前的操作者（DOM-R01～DOM-R21、DOM-R23～DOM-R27、DOM-AC01～DOM-AC18）。DOM-R22（稽核紀錄）待 [DOM-Q6](#dom-q6) 維持草稿；DOM-R40 以後為草稿
+**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令、認證前的操作者與字串欄位的長度及格式（DOM-R01～DOM-R21、DOM-R23～DOM-R31、DOM-AC01～DOM-AC21）。DOM-R22（稽核紀錄）待 [DOM-Q6](#dom-q6) 維持草稿；DOM-R40 以後為草稿
 
 ## 目的
 
@@ -17,7 +17,7 @@
 - 凍結：
   - `User` 的業務欄位（基本欄位、聯絡與補充欄位）、系統欄位 `is_admin`、`is_system`，以及外部身分來源的預留欄位。
   - `Company`、`Role`、`ProjectMember` 的資料模型。
-  - 這些實體的資料規則：可修改性、內建帳號保護、最後一個 Admin、公司階層、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算。
+  - 這些實體的資料規則：字串欄位的長度上限與格式、可修改性、內建帳號保護、最後一個 Admin、公司階層、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算。
   - 建立初始 Admin 帳號、本公司與三個範本角色的初始化指令。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
 - 草稿（本次不凍結，不拆任務）：
@@ -26,7 +26,7 @@
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
-- UUID 主鍵、業務編號 `employee_no` 的唯一性、`created_at`／`updated_at`／`created_by`／`updated_by` 的欄位與約束：由 `database-foundation` 定義（DBF-R11～DBF-R14），本規格只引用。
+- UUID 主鍵、業務編號 `employee_no` 與 `project_code` 的定義與唯一性、`created_at`／`updated_at`／`created_by`／`updated_by` 的欄位與約束：由 `database-foundation` 定義（DBF-R11～DBF-R14），本規格只引用。兩個業務編號的長度上限例外，由本規格定義（`employee_no` 見 DOM-R28，`project_code` 見 DOM-R40），`database-foundation` 引用。
 - 密碼與其雜湊（Argon2id）、登入流程、伺服器端 Session 與 HttpOnly Cookie 的實作、「目前使用者」的辨識、API 權限檢查的執行方式（含後端預設拒絕、Admin 可存取所有專案、誰可以建立帳號與指派角色）：移至 `authentication`（登入機制與密碼雜湊已裁定，見 [OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）、[KD-30](../../intents/03-decisions-and-stack.md#kd-30)、[KD-31](../../intents/03-decisions-and-stack.md#kd-31)）。本規格只定義資料與規則，`authentication` 依此執行。
 - 外部身分來源的串接與同步流程（比對、轉換、覆蓋基本欄位）：移至 `external-identity-sync`；本規格只預留欄位與約束（DOM-R08）。
 - 修改前顯示影響範圍的畫面與確認流程（[PR-18](../../intents/02-principles.md#pr-18)）、替客戶公司成員指派可修改角色時的確認提示（[KD-28](../../intents/03-decisions-and-stack.md#kd-28)）：屬 UI／API 行為，由提供這些操作的功能規格（例如 `admin-dashboard`）負責；本規格只提供計算影響範圍所需的資料（DOM-R23）。
@@ -45,7 +45,7 @@
 
 ## 需求
 
-用「必須／應／得」，每條附依據；來源只是建議的，不得寫成「必須」。欄位名稱是本規格建議的識別字（強度為「應」）；型別與長度上限見 [DOM-Q1](#dom-q1)。「驗收」欄寫明在本規格驗收，或由哪份規格驗收。
+用「必須／應／得」，每條附依據；來源只是建議的，不得寫成「必須」。欄位名稱是本規格建議的識別字（強度為「應」）；字串欄位的長度上限與格式見 DOM-R28～DOM-R31。「驗收」欄寫明在本規格驗收，或由哪份規格驗收。
 
 ### `User`（凍結）
 
@@ -61,6 +61,7 @@
 | DOM-R08 | `User` **必須**預留外部身分來源欄位：`auth_source`（只允許 `local`、`external`，不可空值，未指定時為 `local`）、`external_source`（文字，例如 `ldap`、`ad`、`entra`、`erp`）、`external_id`（文字）、`external_synced_at`（UTC 時間）；後三者允許空值。`auth_source = external` 時，`external_source`、`external_id` **必須**有值；`external_source` 與 `external_id` 的組合在有值時**必須**唯一。以上由資料庫約束保證 | 必須 | [KD-20](../../intents/03-decisions-and-stack.md#kd-20)（欄位；同步先以「來源＋`external_id`」找人，組合必須能唯一指到一個人） | DOM-AC03 |
 | DOM-R09 | 本系統帳號轉為外部帳號時，**必須**原地更新同一筆 `User`，UUID 不變，不得刪除重建 | 必須 | [KD-20](../../intents/03-decisions-and-stack.md#kd-20) | 由 `external-identity-sync` 驗收 |
 | DOM-R10 | 人員離職時以 `is_active = false` 停用，不刪除 `User`。被其他資料以 `created_by`、`updated_by` 引用的 `User` **必須**無法被刪除，由資料庫外鍵約束保證；停用後不能登入，由 `authentication` 執行 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)；外鍵見 DBF-R14 | DOM-AC07（無法刪除）；不能登入由 `authentication` 驗收 |
+| DOM-R28 | `User` 字串欄位的長度上限：`email` 254、`employee_no` 16、`name_en` 128、`name_zh` 64、`department` 與 `location` 各 64、`extension_1`、`extension_2`、`mobile` 各 64、`line_id` 與 `wechat_id` 各 64、`responsibilities` 2000；超過上限的值**必須**被拒絕。`email` 只檢查基本格式：**必須**含 `@`，且**不得**含任何空白字元（例如空格、Tab、換行）。其餘欄位不限格式，例如分機得含地點文字（「新竹3875」）。長度的算法與檢查方式見 DOM-R31 | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）：上限不短於將來外部身分來源（AD、Entra ID）的上限，避免同步時截斷或寫入失敗（[KD-20](../../intents/03-decisions-and-stack.md#kd-20)）；`employee_no` 的定義與唯一性見 DBF-R12、DBF-R13 | DOM-AC19 |
 
 ### 初始化指令與操作者（凍結）
 
@@ -79,17 +80,19 @@
 | DOM-R16 | `Company` **必須**具備：`code`（不可空值，在所有 `Company` 之間唯一）、`name`（不可空值）、`tax_id`（統一編號，允許空值，有值時唯一）、`kind`（只允許 `internal`、`customer`，不可空值）、`parent_id`（母公司，允許空值，外鍵指向 `Company`）、`is_active`（不可空值的布林值）。以上由資料庫約束保證 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23) | DOM-AC11 |
 | DOM-R17 | `parent_id` **不得**指向自己，由資料庫約束保證。本規格不檢查多層的循環（例如 A → C → B → A）：目前沒有功能會讀取公司階層，循環檢查由日後需要查公司階層的規格負責 | 必須 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；不做循環檢查為負責人決定（[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844742074)，2026-09-26） | DOM-AC12 |
 | DOM-R18 | 本系統帳號（`auth_source = local`）所屬的 `Company` 得隨時修改，不受原公司或新公司的 `kind` 限制（例如從客戶轉為員工） | 得 | [KD-23](../../intents/03-decisions-and-stack.md#kd-23)；外部帳號見 [DOM-Q8](#dom-q8) | DOM-AC13 |
+| DOM-R29 | `Company` 字串欄位的長度上限與格式：`code` 最多 32 個字元，只能由英文字母（A–Z、a–z）、數字、`-`、`_` 組成；`name` 最多 128 個字元，不限格式；`tax_id` 選填，有值時**必須**恰為 8 位數字（臺灣統一編號），外國公司不填。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31 | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-23](../../intents/03-decisions-and-stack.md#kd-23) | DOM-AC20 |
 
 ### `Role`（凍結）
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| DOM-R19 | `Role` 是全系統共用的一份清單，不分專案；**必須**具備名稱 `name`（不可空值），以及權限內容：一組權限代碼（文字，例如 `report.read`、`report.approve`）。同一個 `Role` 內的權限代碼**不得**重複，由資料庫約束保證。名稱是否唯一見 [DOM-Q4](#dom-q4)；權限代碼的命名規則與可用清單見 [DOM-Q3](#dom-q3) | 必須 | [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC14 |
+| DOM-R19 | `Role` 是全系統共用的一份清單，不分專案；**必須**具備名稱 `name`（不可空值），以及權限內容：一組權限代碼（文字，例如 `report.read`、`report.approve`）。同一個 `Role` 內的權限代碼**不得**重複，由資料庫約束保證。名稱是否唯一見 [DOM-Q4](#dom-q4)；名稱與權限代碼的長度及格式見 DOM-R30，可用的權限代碼清單見 [DOM-Q3](#dom-q3) | 必須 | [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC14 |
 | DOM-R20 | 所有 `Role`（含三個範本角色）都得改名、修改權限內容與刪除；本規格不設不可修改的角色。修改權限內容或名稱時，**必須**更新該 `Role` 的 `updated_at`、`updated_by` | 得（修改、刪除）；必須（修改紀錄） | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)；[PR-08](../../intents/02-principles.md#pr-08) | DOM-AC14 |
 | DOM-R21 | 刪除一個 `Role` 時，**必須**同時移除所有 `ProjectMember` 對它的指派；這些 `ProjectMember` 本身與其他角色的指派不受影響 | 必須 | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)（刪除角色立即影響所有持有者） | DOM-AC16 |
 | DOM-R22 | （草稿，不在凍結範圍）權限與角色的變更（含角色的新增、修改、刪除，以及 `ProjectMember` 的角色指派）**必須**寫稽核紀錄。稽核紀錄的資料模型未定，本條在 [DOM-Q6](#dom-q6) 裁定、確定由哪份規格與任務實作後，才擴大凍結範圍並補驗收條件 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29) | 待 DOM-Q6；裁定前不拆任務 |
 | DOM-R23 | Service 層**應**能算出一個 `Role` 的影響範圍：持有它的 `ProjectMember` 筆數，以及這些成員涉及的不重複 `User` 人數，供修改或刪除前顯示。畫面顯示與確認流程由提供該操作的功能規格負責 | 應 | [PR-18](../../intents/02-principles.md#pr-18)（影響範圍怎麼計算留給相關規格決定）、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC17；顯示與確認由功能規格驗收 |
 | DOM-R24 | 替 `kind = customer` 的 `Company` 所屬人員指派「有修改能力」的角色時，功能規格**必須**顯示確認提示、但不阻擋（[KD-28](../../intents/03-decisions-and-stack.md#kd-28)）。本規格提供判斷所需的資料：人員所屬 `Company` 的 `kind`，以及角色的權限代碼；怎麼從權限代碼判斷「有修改能力」見 [DOM-Q3](#dom-q3) | 必須 | [KD-28](../../intents/03-decisions-and-stack.md#kd-28) | 由提供指派操作的功能規格驗收 |
+| DOM-R30 | `Role.name` 最多 64 個字元，不限格式。權限代碼最多 64 個字元，格式**必須**是 `<資料>.<動作>`，與 `error.code` 的 dot-namespace 格式一致：符合 `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`（與 API-AC09 相同），例如 `report.read`、`evidence_variant.approve`。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31。可用的權限代碼清單與「有修改能力」的判斷仍見 [DOM-Q3](#dom-q3) | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、API-R07（格式）；[KD-25](../../intents/03-decisions-and-stack.md#kd-25)（命名規則待相關規格定案） | DOM-AC21 |
 
 ### `ProjectMember`（凍結）
 
@@ -99,6 +102,12 @@
 | DOM-R26 | 一個人在一個專案的有效權限，**必須**是他在該專案的 `ProjectMember` 上所有 `Role` 權限代碼的聯集，而且**必須**在使用時從 `Role` 目前的內容計算，不得把權限代碼複製到 `ProjectMember`，修改角色才會立即影響所有持有者。不是該專案成員的人，有效權限為空集合 | 必須 | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)；空集合對應 [KD-29](../../intents/03-decisions-and-stack.md#kd-29) 預設拒絕 | DOM-AC15 |
 | DOM-R27 | Admin 查看、修改所有專案的權力來自 `is_admin`，不需要、也不透過 `ProjectMember`；授權檢查怎麼合併 `is_admin` 與有效權限，由 `authentication` 執行 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24) | 由 `authentication` 驗收 |
 
+### 字串長度與格式的檢查方式（凍結）
+
+| 編號 | 需求 | 強度 | 依據 | 驗收 |
+|---|---|---|---|---|
+| DOM-R31 | DOM-R28～DOM-R30 的長度以字元數計，不是位元組數。長度上限**必須**寫進資料庫欄位型別（例如 `VARCHAR(n)`），PostgreSQL 因此會直接拒絕超長的值。SQLite 不強制 `VARCHAR` 長度，兩種資料庫的格式比對語法也不同，所以後端**必須**在寫入資料庫前檢查長度與格式，不符時拒絕、不寫入；這個檢查**必須**涵蓋所有經 ORM model 的寫入（含初始化指令），不只 Service 層。本規格不要求以資料庫 CHECK 約束檢查長度或格式 | 必須 | [DOM-Q1](#dom-q1) 原文（SQLite 不強制 `VARCHAR` 長度，之後再加上限要新的 migration）；[PR-03](../../intents/02-principles.md#pr-03)（SQLite 與 PostgreSQL 結果一致，不依賴資料庫專屬功能）；「寫入前檢查、涵蓋所有 ORM 寫入」是本規格的推導，理由：建表任務沒有 Service 層，而直接用 ORM 寫入可以繞過 Service 層，只在 Service 層檢查會讓 SQLite 上的超長值寫得進去 | DOM-AC08（初始化指令）、DOM-AC19～DOM-AC21 |
+
 <a id="draft-project"></a>
 ### `Project` 業務欄位（草稿）
 
@@ -106,7 +115,7 @@
 
 | 編號 | 需求（草稿） | 強度 | 依據 |
 |---|---|---|---|
-| DOM-R40 | `Project` 的業務欄位待 OQ-01 裁定。架構基準只給出 `name`、`location`、`status` 等佔位欄位，並提示未來可能需要 Building／Floor／Area／WBS／Contractor 等結構。UUID 主鍵、`project_code` 與建立及修改紀錄已由 DBF-R11～DBF-R14 凍結 | 待 OQ-01 | [OQ-01](../../intents/05-open-questions.md#oq-01)（依據：架構基準 §12.2、§38 Project） |
+| DOM-R40 | `Project` 的業務欄位待 OQ-01 裁定。架構基準只給出 `name`、`location`、`status` 等佔位欄位，並提示未來可能需要 Building／Floor／Area／WBS／Contractor 等結構。UUID 主鍵、`project_code` 與建立及修改紀錄已由 DBF-R11～DBF-R14 凍結。`project_code` 的長度上限暫定 32 個字元，**待確認**：[#121](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305) 因 `Project` 業務欄位仍待 OQ-01 而未列入裁定表，只要求收緊時先用這個暫定值，OQ-01 裁定時一併確認 | 待 OQ-01；`project_code` 長度暫定、待確認 | [OQ-01](../../intents/05-open-questions.md#oq-01)（依據：架構基準 §12.2、§38 Project） |
 
 <a id="draft-others"></a>
 ### 其他實體（草稿）
@@ -119,11 +128,11 @@
 
 | 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
 |---|---|---|---|
-| `User` | UUID 主鍵、`employee_no`、`created_at`、`updated_at`、`created_by`、`updated_by`（DBF-R11～DBF-R14） | 基本欄位、聯絡與補充欄位、`is_admin`、`is_system`、外部身分預留欄位（DOM-R01～DOM-R10）；認證欄位歸 `authentication` | 凍結 |
-| `Company` | 沿用同一套共通結構（DOM-R15） | `code`、`name`、`tax_id`、`kind`、`parent_id`、`is_active`（DOM-R16～DOM-R18） | 凍結 |
-| `Role` | 沿用同一套共通結構（DOM-R15） | `name`、權限代碼集合（DOM-R19～DOM-R24） | 凍結 |
+| `User` | UUID 主鍵、`employee_no`、`created_at`、`updated_at`、`created_by`、`updated_by`（DBF-R11～DBF-R14） | 基本欄位、聯絡與補充欄位、`is_admin`、`is_system`、外部身分預留欄位（DOM-R01～DOM-R10）；字串欄位的長度與格式，含 `employee_no` 的長度（DOM-R28）；認證欄位歸 `authentication` | 凍結 |
+| `Company` | 沿用同一套共通結構（DOM-R15） | `code`、`name`、`tax_id`、`kind`、`parent_id`、`is_active`（DOM-R16～DOM-R18）；字串欄位的長度與格式（DOM-R29） | 凍結 |
+| `Role` | 沿用同一套共通結構（DOM-R15） | `name`、權限代碼集合（DOM-R19～DOM-R24）；名稱與權限代碼的長度及格式（DOM-R30） | 凍結 |
 | `ProjectMember` | 沿用同一套共通結構（DOM-R15） | `project_id`、`user_id`、角色指派（DOM-R25～DOM-R27） | 凍結 |
-| `Project` | UUID 主鍵、`project_code`、建立與修改紀錄（DBF-R11～DBF-R14） | 業務欄位待 OQ-01（DOM-R40） | 草稿 |
+| `Project` | UUID 主鍵、`project_code`、建立與修改紀錄（DBF-R11～DBF-R14） | 業務欄位待 OQ-01；`project_code` 長度暫定 32、待確認（DOM-R40） | 草稿 |
 | 其他實體 | — | 見[其他實體](#draft-others) | 草稿 |
 
 關聯：`Company` 1—多 `User`；`Company` 可指向母公司 `Company`；`User` 1—多 `ProjectMember`；`Project` 1—多 `ProjectMember`；`ProjectMember` 多—多 `Role`（見 [01-overview 實體關係](../../intents/01-overview.md#人員公司與權限的實體關係)）。`User.company_id` 與 `Company.created_by` 互相引用，而且都不可空值，所以初始化指令必須在同一個交易裡建立兩者（DOM-R11）。
@@ -167,12 +176,13 @@
 | DOM-AC05 | 初始化後的資料庫（內建 `admin` 與另一位 Admin） | 透過 Service 層嘗試把 `admin` 的 `is_active` 改為 `false`，以及把 `is_admin` 改為 `false` | 兩次都被拒絕，`admin` 的資料不變 | DOM-R06 |
 | DOM-AC06 | 一個只有一位啟用中 Admin（`is_system = false`）的測試資料庫 | 透過 Service 層取消他的 `is_admin`，以及停用他；再新增第二位啟用中的 Admin 後，重做一次取消 `is_admin` | 前兩次都被拒絕、資料不變；有第二位 Admin 時修改成功 | DOM-R07 |
 | DOM-AC07 | 一筆 `User`，被另一筆資料的 `created_by` 引用 | 刪除這筆 `User` | 被資料庫外鍵約束拒絕，資料不變 | DOM-R10 |
+| DOM-AC19 | 與 DOM-AC01 相同的前置資料 | 用 inspector 檢查 `User` 資料表的字串欄位；以 ORM 新增一筆 DOM-R28 列出的欄位都恰為上限字元數的 `User`（`name_zh` 用中文字，`email` 符合格式）；再逐欄各新增一筆只有該欄比上限多 1 個字元的 `User`；再分別新增 `email` 不含 `@`、`email` 含空格、`email` 含 Tab 的 `User`；最後以 ORM 把恰為上限的那筆的 `name_en` 改為 129 個字元、`email` 改為不含 `@` 的值（各一次） | inspector 顯示每個欄位的字串長度等於 DOM-R28 的上限；恰為上限的那筆成功；其餘每一次新增都被拒絕，`User` 筆數不變；兩次修改都被拒絕，該筆資料不變 | DOM-R28、DOM-R31 |
 
 ### 初始化指令與操作者
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| DOM-AC08 | 對空資料庫執行 `alembic upgrade head` 之後；一組只存在於測試內的輸入值 | 執行初始化指令並提供這組輸入；另在一個新的空資料庫，提供會讓第二個帳號寫入失敗的輸入（例如兩個帳號的 email 相同）再執行一次 | 第一次：恰有一筆 `kind = internal` 的 `Company`、兩筆 `User`、三筆 `Role`（名稱為「內業整理」「現場查核」「唯讀」），欄位值等於輸入值；`admin` 為 `is_admin`、`is_system`，`created_by`、`updated_by` 指向自己；個人帳號為 `is_admin`、非 `is_system`，`created_by`、`updated_by` 指向 `admin`；公司與三個角色的 `created_by`、`updated_by` 指向 `admin`；兩個帳號的 `company_id` 指向該公司。第二次：指令回報失敗，資料庫沒有任何 `Company`、`User`、`Role` | DOM-R11、DOM-R12 |
+| DOM-AC08 | 對空資料庫執行 `alembic upgrade head` 之後；一組只存在於測試內的輸入值 | 執行初始化指令並提供這組輸入；另在一個新的空資料庫，提供會讓第二個帳號寫入失敗的輸入（例如兩個帳號的 email 相同）再執行一次；再在另一個新的空資料庫，提供第二個帳號的 `email` 不含 `@` 的輸入執行一次 | 第一次：恰有一筆 `kind = internal` 的 `Company`、兩筆 `User`、三筆 `Role`（名稱為「內業整理」「現場查核」「唯讀」），欄位值等於輸入值；`admin` 為 `is_admin`、`is_system`，`created_by`、`updated_by` 指向自己；個人帳號為 `is_admin`、非 `is_system`，`created_by`、`updated_by` 指向 `admin`；公司與三個角色的 `created_by`、`updated_by` 指向 `admin`；兩個帳號的 `company_id` 指向該公司。第二次與第三次：指令回報失敗，資料庫沒有任何 `Company`、`User`、`Role` | DOM-R11、DOM-R12、DOM-R31 |
 | DOM-AC09 | 已執行過一次初始化指令的資料庫 | 以另一組輸入再執行一次 | 指令回報已初始化；`Company`、`User`、`Role` 的筆數與內容都不變 | DOM-R13 |
 | DOM-AC10 | 初始化後的資料庫，尚未有 `authentication` | 透過 Service 層新增一筆 `Company`，之後修改它 | 新增後 `created_by`、`updated_by` 都等於 `admin` 的 UUID；修改後 `updated_by` 仍為 `admin` | DOM-R14 |
 
@@ -183,6 +193,7 @@
 | DOM-AC11 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `code = "C001"`、`tax_id = "12345678"` 的 `Company` | 用 inspector 檢查 `Company` 資料表；再分別新增：`code` 相同的公司；`tax_id` 相同的公司；兩筆 `tax_id` 皆為空值的公司；`kind` 為 `internal`、`customer` 以外值的公司；`parent_id` 指向不存在 UUID 的公司；`created_by` 為空值的公司 | 資料表有 UUID 主鍵、DOM-R16 的欄位與建立及修改紀錄欄位；兩筆 `tax_id` 空值的公司新增成功；其餘每一次都被資料庫拒絕，筆數不變 | DOM-R15、DOM-R16 |
 | DOM-AC12 | 對空資料庫執行 `alembic upgrade head` 之後，兩筆 `Company`：A、B | 把 B 的 `parent_id` 設為 B；再把 B 的 `parent_id` 設為 A | 第一次被資料庫拒絕、資料不變；第二次成功 | DOM-R17 |
 | DOM-AC13 | 一筆 `local` 帳號，屬於一間 `kind = customer` 的公司 | 透過 Service 層把他的 `company_id` 改為一間 `kind = internal` 的公司 | 修改成功 | DOM-R18 |
+| DOM-AC20 | 與 DOM-AC11 相同的前置資料 | 用 inspector 檢查 `Company` 資料表的字串欄位；以 ORM 新增一筆 `code` 恰為 32 個字元且含英文字母、數字、`-`、`_`，`name` 恰為 128 個字元，`tax_id` 為 8 位數字的公司；再分別新增：`code` 為 33 個字元；`code` 含空格；`code` 含中文字；`name` 為 129 個字元；`tax_id` 為 7 位數字；`tax_id` 為 9 位數字；`tax_id` 為含英文字母的 8 個字元；最後以 ORM 把第一筆的 `code` 改為 33 個字元、`tax_id` 改為 7 位數字（各一次） | inspector 顯示 `code`、`name`、`tax_id` 的字串長度分別為 32、128、8；第一筆成功；其餘每一次新增都被拒絕，`Company` 筆數不變；兩次修改都被拒絕，該筆資料不變 | DOM-R29、DOM-R31 |
 
 ### `Role` 與 `ProjectMember`
 
@@ -193,17 +204,20 @@
 | DOM-AC16 | 兩筆 `ProjectMember` 都持有角色 R1，其中一筆另持有 R2 | 透過 Service 層刪除 R1 | R1 不存在；兩筆 `ProjectMember` 仍存在；沒有任何指派指向 R1；持有 R2 的那筆仍持有 R2 | DOM-R21 |
 | DOM-AC17 | 角色 R 被三筆 `ProjectMember` 持有，分屬兩個 `User`（其中一人在兩個專案都持有 R）；另一個角色沒有人持有 | 計算兩個角色的影響範圍 | R 為 3 筆成員、2 人；另一個角色為 0 筆、0 人 | DOM-R23 |
 | DOM-AC18 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 P、U 的 `ProjectMember` | 用 inspector 檢查 `ProjectMember` 與角色指派的資料表；再新增相同 P、U 的 `ProjectMember`；對同一筆成員重複指派同一個 `Role`；新增 `project_id` 或 `user_id` 指向不存在 UUID 的成員；對同一筆成員指派兩個不同的 `Role` | 資料表有 UUID 主鍵與建立及修改紀錄欄位；重複成員、重複指派、外鍵不存在都被資料庫拒絕，筆數不變；兩個不同的角色指派成功 | DOM-R15、DOM-R25 |
+| DOM-AC21 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role` | 用 inspector 檢查 `Role` 與權限代碼的資料表；以 ORM 分別：新增 `name` 恰為 64 個字元的 `Role`；新增 `name` 為 65 個字元的 `Role`；在該角色加入恰為 64 個字元且符合格式的權限代碼；加入 65 個字元的權限代碼；加入 `report`（沒有 `.`）、`Report.read`（大寫）、`report.read.all`（三段）、`1report.read`（數字開頭）；最後以 ORM 把恰為上限的那個 `Role` 的 `name` 改為 65 個字元、把恰為上限的權限代碼改為 `Report.read`（各一次） | inspector 顯示 `name` 與權限代碼欄位的字串長度都是 64；恰為上限的名稱與權限代碼成功；其餘每一次新增都被拒絕，`Role` 與權限代碼的筆數不變；兩次修改都被拒絕，資料不變 | DOM-R30、DOM-R31 |
 
 ## 待釐清
 
 撰寫中發現、本規格不自行拍板的問題。若負責人判定需要團隊裁定，另開 issue 移到 `05-open-questions.md`，並在此留連結。
 
 <a id="dom-q1"></a>
-- **DOM-Q1：字串欄位的長度上限與格式**。#63 只定了欄位，沒有定長度（例如 `email`、`employee_no`、`Company.code`、`name_en`、`name_zh`、權限代碼）與格式（例如 `tax_id` 是否限定 8 位數字、`email` 是否檢查格式）。SQLite 不強制 `VARCHAR` 長度，PostgreSQL 會；之後再加上限需要新的 migration。影響計畫 T1～T3。
+- **DOM-Q1：字串欄位的長度上限與格式**（已裁定，[#121](https://github.com/speko-tw/inspect-flow/issues/121)）。#63 只定了欄位，沒有定長度（例如 `email`、`employee_no`、`Company.code`、`name_en`、`name_zh`、權限代碼）與格式（例如 `tax_id` 是否限定 8 位數字、`email` 是否檢查格式）。SQLite 不強制 `VARCHAR` 長度，PostgreSQL 會；之後再加上限需要新的 migration。影響計畫 T1～T3。
+  - **裁定**（負責人，[#121](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)，2026-09-26）：欄位上限不短於將來外部身分來源（AD、Entra ID）的上限，避免同步時截斷或寫入失敗；各欄位的上限與格式依裁定表。`email` 只檢查有 `@`、沒有空白；`Company.code` 限英數字、`-`、`_`；`tax_id` 選填，有填時必須是 8 位數字；權限代碼採 `<資料>.<動作>`，與錯誤碼的格式一致（[KD-15](../../intents/03-decisions-and-stack.md#kd-15)）。`project_code` 不在裁定表內，因為 `Project` 的業務欄位還在等 OQ-01；收緊長度時暫定 32，標為待確認。
+  - **落地**：寫進 DOM-R28～DOM-R31、DOM-AC19～DOM-AC21；`project_code` 的暫定值寫在 DOM-R40（草稿），不是定案；`database-foundation` 的 DBF-R12 引用本規格的上限，不另外定義。#59 建立 `employee_no`、`project_code` 時沒有設長度，收緊由 [#140](https://github.com/speko-tw/inspect-flow/issues/140) 新增 migration 負責。權限代碼的格式一併定案，DOM-Q3 其餘部分仍待裁定。`external_source`、`external_id` 不在裁定表內，仍未定上限。
 <a id="dom-q2"></a>
 - **DOM-Q2：email 比對是否不分大小寫**。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（存正規化後的值，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。
 <a id="dom-q3"></a>
-- **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。待定的有：格式是否固定為 `<資料>.<動作>`；可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
+- **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。權限代碼的格式與長度已由 [#121](https://github.com/speko-tw/inspect-flow/issues/121) 裁定（DOM-R30）。仍待定的有：可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
 <a id="dom-q4"></a>
 - **DOM-Q4：範本角色的初始權限內容與角色名稱是否唯一**。[OQ-08](../../intents/05-open-questions.md#oq-08) 裁定各範本角色勾選哪些權限在系統畫面上調整，但沒說首次安裝時三個範本角色的權限內容是空集合還是有預設值（DOM-R11 目前只建立名稱）。另外 `Role.name` 是否必須唯一，#63 沒有寫；名稱重複時指派畫面會難以分辨。影響計畫 T3、T6。
 <a id="dom-q5"></a>
@@ -219,4 +233,4 @@
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
--
+- DOM-R28～DOM-R31、DOM-AC19～DOM-AC21：依 DOM-Q1 裁定，新增 `User`、`Company`、`Role` 與權限代碼的字串長度上限及格式，並擴大凍結範圍；`project_code` 的長度暫定、待確認（DOM-R40，草稿） — [#121](https://github.com/speko-tw/inspect-flow/issues/121)
