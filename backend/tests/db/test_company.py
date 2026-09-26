@@ -97,6 +97,23 @@ def _new_company(creator: User, **kwargs) -> Company:
     return Company(**kwargs)
 
 
+@pytest.fixture
+def existing_company(session, creator) -> Company:
+    """DOM-AC11's (and DOM-AC20's) precondition: one company with
+    ``code = "C001"`` and ``tax_id = "12345678"``.
+    """
+    company = _new_company(
+        creator,
+        code="C001",
+        name="Company One",
+        tax_id="12345678",
+        kind="internal",
+    )
+    session.add(company)
+    session.commit()
+    return company
+
+
 def test_migration_registers_companies_table(migrated_url):
     """Guards ``app/models/__init__.py`` actually importing
     ``company`` -- a missing import would leave the table off
@@ -166,19 +183,6 @@ class TestDomAc11CompanyFieldsAndConstraints:
         assert references["parent_id"] == ("companies", ["id"])
         assert references["created_by"] == ("users", ["id"])
         assert references["updated_by"] == ("users", ["id"])
-
-    @pytest.fixture
-    def existing_company(self, session, creator) -> Company:
-        company = _new_company(
-            creator,
-            code="C001",
-            name="Company One",
-            tax_id="12345678",
-            kind="internal",
-        )
-        session.add(company)
-        session.commit()
-        return company
 
     def test_duplicate_code_is_rejected_and_row_count_unchanged(
         self, session, creator, existing_company
@@ -356,11 +360,13 @@ class TestDomAc20LengthAndFormatValidation:
     reject.
     """
 
-    _MAX_CODE = "A" * 31 + "9"  # 32 chars, letters/digits
+    # 32 characters mixing letters, digits, ``-`` and ``_``.
+    _MAX_CODE = "Ab1-_" + "x" * 27
     _MAX_NAME = "N" * 128
-    _VALID_TAX_ID = "12345678"
+    _VALID_TAX_ID = "87654321"
 
-    def test_boundary_valid_values_are_accepted(self, session, creator):
+    @pytest.fixture
+    def boundary_company(self, session, creator, existing_company):
         company = _new_company(
             creator,
             code=self._MAX_CODE,
@@ -370,9 +376,25 @@ class TestDomAc20LengthAndFormatValidation:
         )
         session.add(company)
         session.commit()
+        return company
 
-        assert session.query(Company).count() == 1
-        stored = session.get(Company, company.id)
+    def test_string_column_lengths(self, engine):
+        columns = {
+            col["name"]: col
+            for col in inspect(engine).get_columns("companies")
+        }
+
+        assert columns["code"]["type"].length == 32
+        assert columns["name"]["type"].length == 128
+        assert columns["tax_id"]["type"].length == 8
+
+    def test_boundary_valid_values_are_accepted(
+        self, session, boundary_company
+    ):
+        assert len(self._MAX_CODE) == 32
+        assert session.query(Company).count() == 2
+        session.expire(boundary_company)
+        stored = session.get(Company, boundary_company.id)
         assert stored.code == self._MAX_CODE
         assert stored.name == self._MAX_NAME
         assert stored.tax_id == self._VALID_TAX_ID
@@ -390,8 +412,9 @@ class TestDomAc20LengthAndFormatValidation:
         ],
     )
     def test_invalid_value_is_rejected_on_construction(
-        self, session, creator, field, value
+        self, session, creator, existing_company, field, value
     ):
+        before = session.query(Company).count()
         kwargs = {
             "code": "GOOD1",
             "name": "Good Name",
@@ -402,41 +425,27 @@ class TestDomAc20LengthAndFormatValidation:
         with pytest.raises(ValueError):
             _new_company(creator, **kwargs)
 
-        assert session.query(Company).count() == 0
+        assert session.query(Company).count() == before
 
     def test_updating_code_to_33_characters_is_rejected_and_unchanged(
-        self, session, creator
+        self, session, boundary_company
     ):
-        company = _new_company(
-            creator, code="ORIG1", name="Original", kind="internal"
-        )
-        session.add(company)
-        session.commit()
-
         with pytest.raises(ValueError):
-            company.code = "B" * 33
+            boundary_company.code = "B" * 33
 
-        session.expire(company)
-        assert session.get(Company, company.id).code == "ORIG1"
+        session.expire(boundary_company)
+        stored = session.get(Company, boundary_company.id)
+        assert stored.code == self._MAX_CODE
 
     def test_updating_tax_id_to_7_digits_is_rejected_and_unchanged(
-        self, session, creator
+        self, session, boundary_company
     ):
-        company = _new_company(
-            creator,
-            code="ORIG2",
-            name="Original Two",
-            tax_id="12345678",
-            kind="internal",
-        )
-        session.add(company)
-        session.commit()
-
         with pytest.raises(ValueError):
-            company.tax_id = "1234567"
+            boundary_company.tax_id = "1234567"
 
-        session.expire(company)
-        assert session.get(Company, company.id).tax_id == "12345678"
+        session.expire(boundary_company)
+        stored = session.get(Company, boundary_company.id)
+        assert stored.tax_id == self._VALID_TAX_ID
 
 
 class TestIsActiveDefault:
