@@ -1,11 +1,12 @@
 # inspect-flow：Agent 工作指引
 
-InspectFlow 工程查核系統（Engineering Inspection Management System），目前為設計文件階段，尚無程式碼。
+InspectFlow 工程查核系統（Engineering Inspection Management System），持續開發中；repo 同時有設計意圖、規格與計畫、前後端程式碼、資料庫 migration、測試與 CI。
 本檔是唯一的 agent 指引檔；**不得**另建 `CLAUDE.md`、`.claude/CLAUDE.md` 或 `CLAUDE.local.md`（存在時 Claude Code 會略過本檔）。
 
 ## 動手前
 
 - 新的 worktree 先執行 `make setup`，前端與後端依賴才會就緒。
+- 本檔不記錄進度。某功能做了沒、做到哪，以 `main` 的程式碼與測試為準；規格進度看 [`docs/specs/README.md`](docs/specs/README.md#規格索引) 的規格索引，細節看對應的 `spec.md`、`plan.md`，任務進度看相關 issue 與 PR。不得憑本檔的概述假設功能已完成或尚未實作。
 - 涉及功能、資料模型、API、儲存或報表的變更，先讀 [`docs/intents/`](docs/intents/README.md)。
 - 違反 `02-principles.md` 中「必須」等級原則的變更，須先在 `03-decisions-and-stack.md` 新增決策並經團隊同意。
 - 未定案或來源矛盾的議題查 `05-open-questions.md`，不得把自己的假設當成既定事實。
@@ -25,7 +26,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 ## 程式碼
 
 - 程式碼行寬上限 79 字元（依 PEP 8，全專案程式碼一律適用）；formatter 與 linter 的設定必須與之一致。Markdown 文件不受此限。
-- 其餘格式與審查規則以 repo 內的設定檔與審查準則為準，由 `skeleton` 規格建立。
+- 其餘格式規則以 repo 內的設定檔為準；審查規則見 [`docs/review-guidelines.md`](docs/review-guidelines.md)。
 
 ## Git
 
