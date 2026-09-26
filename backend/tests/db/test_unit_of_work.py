@@ -33,8 +33,8 @@ class _SimulatedError(Exception):
 
 
 @pytest.fixture
-def session_factory(tmp_path) -> Generator[sessionmaker, None, None]:
-    engine: Engine = create_engine(f"sqlite:///{tmp_path / 'uow.db'}")
+def session_factory(db_url: str) -> Generator[sessionmaker, None, None]:
+    engine: Engine = create_engine(db_url)
     _ProbeBase.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     try:
