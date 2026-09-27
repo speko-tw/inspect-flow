@@ -35,7 +35,7 @@
 
 - **Auto-add 開啟**：以 `is:issue,pr` 收錄新項目。建立 Issue／PR 後要確認已出現在 Project；不要假設它會自動補進舊項目。
 - **Auto-close issue 關閉**：改 Project `Status` 不會、也不應關閉 Issue。
-- **Issue 自動關閉**：PR 合併且內文標明 `Closes #<issue>` 時，才關閉對應 Issue；PR 關閉但未合併不算完成。
+- **Issue 自動關閉**：本專案約定在 PR 說明寫 `Closes #<issue>`，由 PR 合併進 `main` 時關閉對應 Issue；改 Project `Status` 或關閉未合併的 PR，都不會關閉 Issue。
 - **看板狀態**：原生 workflow 可在 PR 連結 Issue 時將 Issue 設為 In Progress、PR 合併時將 PR 設為 Done。這些狀態和 Insights 圖表不是 open／closed 的權威統計；不一致時以 Issue／PR 為準，不要為了對齊看板改 Issue。
 
 操作權限、人工關卡、署名與機密規則見 [AGENTS.md](../AGENTS.md)。
