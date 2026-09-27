@@ -32,7 +32,7 @@ Project #1 目前包含以下八個 Views。名稱和篩選條件是導覽方式
 
 | View | 用途 |
 |---|---|
-| **All Issues by Milestone** | 所有 Issue 的 TABLE；顯示 Milestone 欄，可排序／查看各項目歸屬。這不是依 Milestone 分組的視圖 |
+| **All Issues by Milestone** | 所有 Issue 的 TABLE，依 Milestone 分組；可展開各版本系列查看 Issue |
 | **Current Milestone** | `0.2.x` 的開啟中 Issue，查看目前版本系列的交付工作 |
 | **Open Work** | 所有開啟中的 Issue，跨 Milestone 查看待辦 |
 | **Review Queue** | 開啟中的 PR，供負責人查看待審工作 |
@@ -41,15 +41,16 @@ Project #1 目前包含以下八個 Views。名稱和篩選條件是導覽方式
 | **Issue History** | 已關閉的 Issue |
 | **PR History** | 非開啟中的 PR，包含已合併或已關閉的 PR |
 
-`All Issues by Milestone` 是 TABLE，Milestone 是可見欄位，不是分組條件。`Current Milestone` 的 Milestone 篩選是視圖設定；若目前版本系列改變，負責人可更新該 View 的篩選。其他 View 也只能依既有 Issue／PR 原生狀態和 labels 做篩選。新增或修改 View 不得引入與分類規範衝突的狀態或欄位。
+`All Issues by Milestone` 已在 Project 介面設定為依 Milestone 分組，並儲存供所有使用者查看。`Current Milestone` 的 Milestone 篩選是視圖設定；若目前版本系列改變，負責人可更新該 View 的篩選。其他 View 也只能依既有 Issue／PR 原生狀態和 labels 做篩選。新增或修改 View 不得引入與分類規範衝突的狀態或欄位。
 
 ## 4. 自動更新與歷史資料
 
 - Issue／PR 自己的狀態、label、Milestone 及內容變更後，符合 View 篩選的結果會依 GitHub Project 的篩選呈現更新；這不代表自動把每個狀態轉換成 Project `Status`。
-- 新 Issue／PR 是否自動加入 Project，須以 Project 中已啟用並驗證成功的 Auto-add 工作流程為準。若尚未啟用或無法驗證，agent 建立 Issue／PR 後必須確認項目是否已加入 Project，必要時依人可操作的方式加入並回報。
-- **不得宣稱 Auto-add 已設定或保證未來項目自動加入，除非已在 GitHub Project 設定中實際確認。** 自動加入規則不得修改或補造 Issue／PR 欄位值。
+- Project 已啟用原生 **Auto-add to project** 工作流程，來源為 `speko-tw/inspect-flow`，篩選 `is:issue,pr`。新 Issue #241 在未手動加入 Project 的情況下自動出現，已驗證 Issue 路徑；PR 路徑仍須於下一個新 PR 實際核對。Agent 每次建立 Issue／PR 後仍須確認其 Project 關聯；若缺漏，查明原因並修復，不把工作流程設定當成每筆資料都已成功的證據。自動加入規則不得修改或補造 Issue／PR 欄位值。
+- Project 的 **Auto-close issue** 工作流程維持關閉。移動 Project `Status` 到 Done 不應關閉 Issue。只有 PR **合併**且 PR 說明中含 `Closes #<issue>`（指向對應 Issue）時，才由 GitHub 的原生關聯關閉該 Issue；關閉未合併 PR 不等於完成 Issue。Agent 要在合併前核對 PR 的 closing issue 關聯，合併後核對實際 Issue state。合併 PR 仍由人執行。
+- Project 原生的「Pull request linked to issue」會將關聯 Issue 的 Project `Status` 設為 In Progress；「Pull request merged」會將 PR 項目的 Project `Status` 設為 Done；原生關閉事件也可更新 Project 狀態。`Status` 是輔助看板欄位，不能取代 Issue／PR 的原生狀態或審查結果。
 - 歷史資料的完整性以 Issue／PR 本身為準。既有歷史項目可以加入 Project 供歷史檢視，但不得因加入 Project 而改動其 title、body、state、labels、Milestone、assignee 或組織欄位。
-- GitHub Project 預設的 **Burn up** Insights 圖表已確認可用，篩選條件為 `is:issue`。這是 GitHub 預設圖表，不代表已設定自訂 Insights。自訂圖表仍屬未設定；不得把 Views 稱為 Insights。
+- **Insights** 有預設的 **Burn up** 圖表（篩選 `is:issue`），以及自訂的 [**Issue Progress by Milestone**](https://github.com/orgs/speko-tw/projects/1/insights/1)：篩選 `is:issue`、X 軸 Milestone、Y 軸項目數、依 Project `Status` 堆疊。後者用來看各版本系列的看板分布；它顯示的是 Project `Status`，若與 Issue 原生 open／closed 不一致，以 Issue 為準。Insights 不計入已封存的 Project 項目；檢視完整歷史仍用 Issue History／PR History 與 GitHub 原生紀錄。
 
 ## 5. Agent 操作規則
 
@@ -93,8 +94,8 @@ Agent 在收到回饋後，應先確認留言所指 Issue／PR、整理可執行
 
 1. 先確認 Project #1 可存取，八個 Views 的名稱、篩選及結果都符合本文件。
 2. 檢查既有歷史與開啟中的 Issue／PR 是否已加入 Project；只修復 Project 關聯，不批次改動來源欄位。逐批核對總數與例項。
-3. 驗證新增 Issue／PR 的加入方式。只有在 GitHub 設定中確認 Auto-add 規則存在，並以新測試項目或可核對紀錄證明生效後，才更新本文件宣告已啟用。
-4. 預設 Burn up 圖表已可用；若負責人希望增加自訂 Insights，再建立有明確問題用途的圖表，核對其篩選範圍及歷史項目限制後，記錄實際設定。
+3. Auto-add 已啟用且以新 Issue #241 驗證；下一個新 PR 建立時核對 PR 路徑，不以舊 PR 的既有關聯冒充驗收。
+4. 每次調整 Insights，都要核對篩選範圍、軸、分組與封存項目限制；不要把 Project `Status` 圖表誤稱為 Issue 原生狀態統計。
 5. 日常只維護 Issue／PR 的原生內容與既有分類；Project 依這些資料提供檢視。Project 設定或治理規則的變更，透過 repo PR 更新本文件並由人合併。
 
 ## 8. 本文件的維護
