@@ -7,10 +7,12 @@ this module wires up the three routes T3 owns plus the
 ``must_change_password`` field T9 adds to their response body.
 """
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
@@ -25,10 +27,17 @@ from app.auth.sessions import (
     SESSION_COOKIE_NAME,
     create_session,
     delete_session_by_token,
+    hash_token,
 )
-from app.models import User
+from app.models import AuthSession, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# AUT-R40, AUT-R41: same fixed logger name as ``app.auth.login``,
+# used here only for ``auth.logout`` (login/login-failure logging
+# lives in ``authenticate`` itself, the only place that knows the
+# failure reason).
+logger = logging.getLogger("app.auth")
 
 
 class LoginRequest(BaseModel):
@@ -115,11 +124,32 @@ def logout(
     """AUT-R07: deletes the Cookie's login state (if any) and asks
     the browser to clear the Cookie either way -- idempotent, so a
     request with no Cookie at all still succeeds.
+
+    AUT-R40: logs exactly one ``auth.logout`` entry regardless --
+    with no Cookie, or a token that no longer resolves to a row,
+    ``user_id`` is logged as ``None``. The owning ``user_id`` is
+    read before deletion since the row (and the only place it is
+    recorded) disappears afterwards; the token itself is never
+    logged (AUT-R41).
     """
     token = request.cookies.get(SESSION_COOKIE_NAME)
+    user_id: UUID | None = None
     if token is not None:
+        user_id = db.scalar(
+            select(AuthSession.user_id).where(
+                AuthSession.token_hash == hash_token(token)
+            )
+        )
         delete_session_by_token(db, token)
     _clear_session_cookie(response)
+    logger.info(
+        "auth.logout",
+        extra={
+            "event": "auth.logout",
+            "user_id": str(user_id) if user_id is not None else None,
+            "reason": None,
+        },
+    )
 
 
 # AUT-R33: registers the exact function object above (the same one

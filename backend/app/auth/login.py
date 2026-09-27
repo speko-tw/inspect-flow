@@ -4,13 +4,24 @@ password belongs to (AUT-R01, AUT-R02, AUT-R05, AUT-R06, AUT-R27).
 Deliberately separate from ``app.auth.sessions.create_session``
 (AUT-R27): this module only verifies a password. It never creates
 an ``AuthSession`` or touches a Cookie itself.
+
+Also writes the ``auth.login_succeeded``/``auth.login_failed``
+application log entries AUT-R40 requires (this is the only place
+that knows both the resolved ``User``, if any, and the specific
+failure reason). AUT-R41: the log message is a fixed string, never
+built from ``email`` or ``password``; ``extra`` never carries a
+password, a hash or a Cookie/token value.
 """
+
+import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.passwords import hash_password, needs_rehash, verify_password
 from app.models import User, UserPassword
+
+logger = logging.getLogger("app.auth")
 
 # AUT-R06: when the email does not exist, or exists but has no
 # password set, a same-cost hash verification still runs so the
@@ -43,6 +54,16 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
     when there is no real hash to check (AUT-R06). Rehashes the
     stored hash in place (AUT-R02, flushed but not committed) when
     it verified successfully but uses outdated parameters.
+
+    AUT-R40: logs exactly one ``auth.login_succeeded`` or
+    ``auth.login_failed`` entry per call. The failure reason
+    (``invalid_credentials`` or ``account_disabled``) is only ever
+    distinguished in this log, never in the response AUT-R06
+    requires to stay uniform: an unknown email, a local account with
+    no ``UserPassword`` row, an external account, and a wrong
+    password (including a wrong password on a disabled account) are
+    all ``invalid_credentials``; ``account_disabled`` is reported
+    only once the password itself has already checked out.
     """
     user = db.scalar(
         select(User).where(func.lower(User.email) == email.lower())
@@ -59,14 +80,40 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
 
     password_ok = verify_password(password_hash, password)
 
-    if (
-        user is None
-        or user_password is None
-        or not user.is_active
-        or user.auth_source != "local"
-        or not password_ok
-    ):
+    def _log_failed(user_id: str | None, reason: str) -> None:
+        logger.info(
+            "auth.login_failed",
+            extra={
+                "event": "auth.login_failed",
+                "user_id": user_id,
+                "reason": reason,
+            },
+        )
+
+    if user is None:
+        _log_failed(None, "invalid_credentials")
         return None
+    if user_password is None:
+        _log_failed(str(user.id), "invalid_credentials")
+        return None
+    if user.auth_source != "local":
+        _log_failed(str(user.id), "invalid_credentials")
+        return None
+    if not password_ok:
+        _log_failed(str(user.id), "invalid_credentials")
+        return None
+    if not user.is_active:
+        _log_failed(str(user.id), "account_disabled")
+        return None
+
+    logger.info(
+        "auth.login_succeeded",
+        extra={
+            "event": "auth.login_succeeded",
+            "user_id": str(user.id),
+            "reason": None,
+        },
+    )
 
     if needs_rehash(password_hash):
         user_password.password_hash = hash_password(password)
