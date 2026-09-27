@@ -64,3 +64,4 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   - 合併 PR 到 `main`（含規格與計畫的 PR）；agent 不得核准或合併自己的 PR。
   - `needs-decision` 的議題：範圍變更、意圖變更、裁定 OQ／G。agent 只整理選項與影響，等團隊討論決定。
   - 破壞性或全域操作：force push、刪除他人分支、刪除 issue 或 label、新增 label、變更 repo 設定與分支保護。
+  - 建立 Git tag 與 GitHub Release；agent 只準備 Release Notes 草稿（流程見 [`docs/release.md`](docs/release.md)）。
