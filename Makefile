@@ -1,6 +1,6 @@
 .PHONY: setup setup-backend setup-frontend check \
 	check-env check-backend check-postgres check-frontend \
-	migrate run-backend run-frontend
+	migrate init run-backend run-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -22,6 +22,22 @@ setup-frontend:
 # (frontend/vite.config.ts).
 migrate:
 	cd backend && uv run --locked alembic upgrade head
+
+# System initialization command (DOM-R11): creates the first
+# company, the built-in admin, the owner's personal account and the
+# three template roles. Prompts interactively, or reads piped
+# stdin non-interactively (see README "Running locally"). Run once
+# per database, after `make migrate`; a second run reports the
+# system is already initialized and writes nothing (DOM-R13).
+# Invoked as a module (`python -m`), not a `uv run` script entry
+# point: backend/pyproject.toml sets `[tool.uv] package = false`
+# (backend/pyproject.toml), so uv does not install
+# `[project.scripts]` entry points for it (verified: `uv sync`
+# prints "Skipping installation of entry points" for such a
+# project) -- see plan.md's T6 row for this deviation from its
+# original "只加指令入口" file list.
+init:
+	cd backend && uv run --locked python -m app.cli.init_system
 
 run-backend:
 	cd backend && uv run --locked uvicorn app.main:app --reload \
