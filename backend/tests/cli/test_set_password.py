@@ -169,10 +169,6 @@ def _set_stdin_pair(
     monkeypatch.setattr(sys, "stdin", io.StringIO(f"{first}\n{second}\n"))
 
 
-def _no_input_reader() -> None:
-    return None
-
-
 def _make_client() -> TestClient:
     return TestClient(create_app(), base_url="https://testserver")
 
