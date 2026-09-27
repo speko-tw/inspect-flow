@@ -75,6 +75,44 @@ class TestDomAc04ExternalAccountBasicFieldsRejected:
         assert external_user.mobile == "0911-000-004"
         assert external_user.department == original_department
 
+    def test_dom_r04_external_account_company_id_rejected(
+        self, session, operator
+    ):
+        """DOM-AC04／DOM-R04：``external`` 帳號經人工修改入口改
+        ``company_id`` 被拒絕，整列（含 ``updated_at``、
+        ``updated_by``）不變。目標公司為啟用中，排除 DOM-R32 的
+        拒絕原因。
+        """
+        company_a = create_company(session, **_company_kwargs("C004A"))
+        company_b = create_company(session, **_company_kwargs("C004B"))
+        session.flush()
+        external_user = create_user(
+            session,
+            **_user_kwargs(
+                "U004C",
+                company_a.id,
+                auth_source="external",
+                external_source="ldap",
+                external_id="ext-004c",
+            ),
+        )
+        session.commit()
+        before = snapshot_persisted_columns(external_user)
+
+        with pytest.raises(ExternalBasicFieldModificationError):
+            update_user_manual(session, external_user, company_id=company_b.id)
+
+        # In-session state first: expire_all() would discard any
+        # unflushed change and hide it from the assertion.
+        assert snapshot_persisted_columns(external_user) == before
+        session.commit()
+        session.expire_all()
+        after = snapshot_persisted_columns(external_user)
+        assert after == before
+        assert after["company_id"] == company_a.id
+        assert after["updated_at"] == before["updated_at"]
+        assert after["updated_by"] == before["updated_by"]
+
     def test_local_account_department_and_mobile_both_succeed(
         self, session, operator
     ):
