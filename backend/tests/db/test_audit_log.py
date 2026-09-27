@@ -1,0 +1,495 @@
+"""Tests for the ``audit_logs`` table and its append-only guard
+(``docs/specs/audit-log/spec.md`` T1, issue #215).
+
+AC labels below follow that spec's numbering:
+
+- ALG-AC01: table structure -- every ``ALG-R01`` column present with
+  the right nullability, UUID primary key, ``created_by`` foreign
+  key, and no ``updated_at``/``updated_by`` (ALG-R02).
+- ALG-AC02: ``created_by`` is the table's only foreign key;
+  ``entity_id`` is not one (ALG-R03), so it accepts a UUID that
+  matches no row anywhere.
+- ALG-AC03: every ``UPDATE``/``DELETE`` reaching ``audit_logs`` --
+  from an ORM flush, an ORM/Core bulk statement, or raw ``text()``
+  SQL in any of the spellings the spec lists -- is rejected and
+  leaves the table unchanged, while ``INSERT``/``SELECT`` against
+  ``audit_logs`` and any statement against another table still work.
+
+Same fixture pattern as ``test_role_member.py``/``test_company.py``:
+migrates the database behind ``conftest.py``'s ``db_url`` fixture
+with the real Alembic migration chain, then reads and writes it
+exclusively through SQLAlchemy (DBF-R01). Runs against SQLite by
+default and against PostgreSQL under ``--db-backend=postgresql``
+(spec.md requires ALG-AC01~ALG-AC03 to pass on both).
+"""
+
+from collections.abc import Generator
+from pathlib import Path
+
+import pytest
+from alembic.config import Config
+from sqlalchemy import Engine, bindparam, delete, inspect, text, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from sqlalchemy.types import JSON, Uuid
+
+from alembic import command
+from app.db.base import UTCDateTime, uuid7
+from app.db.engine import create_engine_from_settings, dispose_engine
+from app.models import AuditLog, User
+from app.models.audit_log import AuditLogImmutableError, _targets_audit_logs
+from tests.db.conftest import create_root_user_with_company
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
+
+
+def _alembic_config() -> Config:
+    return Config(str(_ALEMBIC_INI))
+
+
+@pytest.fixture(autouse=True)
+def _dispose_shared_engine() -> Generator[None, None, None]:
+    dispose_engine()
+    try:
+        yield
+    finally:
+        dispose_engine()
+
+
+@pytest.fixture
+def migrated_url(db_url) -> str:
+    command.upgrade(_alembic_config(), "head")
+    return db_url
+
+
+@pytest.fixture
+def engine(migrated_url) -> Generator[Engine, None, None]:
+    eng = create_engine_from_settings(migrated_url)
+    try:
+        yield eng
+    finally:
+        eng.dispose()
+
+
+@pytest.fixture
+def session(engine) -> Generator[Session, None, None]:
+    with Session(engine) as sess:
+        yield sess
+
+
+@pytest.fixture
+def operator(session) -> User:
+    """A ``User`` to use as ``created_by`` for ``AuditLog`` rows in
+    these tests -- not itself under test.
+    """
+    user = create_root_user_with_company(session, "E920")
+    session.commit()
+    return user
+
+
+def _new_log(operator: User, **kwargs) -> AuditLog:
+    kwargs.setdefault("created_by", operator.id)
+    kwargs.setdefault("event_type", "role.created")
+    kwargs.setdefault("entity_type", "role")
+    kwargs.setdefault("entity_id", uuid7())
+    kwargs.setdefault("before", None)
+    kwargs.setdefault("after", {"name": "Inspector"})
+    return AuditLog(**kwargs)
+
+
+def test_migration_registers_audit_logs_table(migrated_url):
+    """Guards ``app/models/__init__.py`` actually importing
+    ``audit_log`` -- a missing import would leave the table off
+    ``Base.metadata`` and this migration would never have matched
+    it.
+    """
+    engine = create_engine_from_settings(migrated_url)
+    try:
+        table_names = inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+    assert "audit_logs" in table_names
+
+
+class TestTableStructure:
+    """ALG-AC01, ALG-AC02."""
+
+    def test_columns_pk_and_nullability(self, engine):
+        inspector = inspect(engine)
+
+        pk = inspector.get_pk_constraint("audit_logs")
+        assert pk["constrained_columns"] == ["id"]
+
+        columns = {
+            col["name"]: col for col in inspector.get_columns("audit_logs")
+        }
+        expected = {
+            "id",
+            "created_at",
+            "created_by",
+            "event_type",
+            "entity_type",
+            "entity_id",
+            "before",
+            "after",
+        }
+        assert expected <= columns.keys()
+        assert "updated_at" not in columns
+        assert "updated_by" not in columns
+
+        assert columns["created_at"]["nullable"] is False
+        assert columns["created_by"]["nullable"] is False
+        assert columns["event_type"]["nullable"] is False
+        assert columns["entity_type"]["nullable"] is False
+        assert columns["entity_id"]["nullable"] is False
+        assert columns["before"]["nullable"] is True
+        assert columns["after"]["nullable"] is True
+
+    def test_created_by_is_the_only_foreign_key(self, engine):
+        """ALG-AC02: ``entity_id`` is not a foreign key (ALG-R03)."""
+        foreign_keys = inspect(engine).get_foreign_keys("audit_logs")
+        references = {
+            fk["constrained_columns"][0]: (
+                fk["referred_table"],
+                fk["referred_columns"],
+            )
+            for fk in foreign_keys
+        }
+        assert references == {"created_by": ("users", ["id"])}
+
+    def test_full_row_insert_succeeds(self, session, operator):
+        log = _new_log(operator)
+        session.add(log)
+        session.commit()
+
+        fetched = session.get(AuditLog, log.id)
+        assert fetched is not None
+        assert fetched.created_by == operator.id
+        assert fetched.event_type == "role.created"
+        assert fetched.entity_type == "role"
+        assert fetched.before is None
+        assert fetched.after == {"name": "Inspector"}
+
+    @pytest.mark.parametrize(
+        "field", ["created_by", "event_type", "entity_type", "entity_id"]
+    )
+    def test_required_field_null_is_rejected(self, session, operator, field):
+        before = session.query(AuditLog).count()
+        kwargs = {field: None}
+        session.add(_new_log(operator, **kwargs))
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        assert session.query(AuditLog).count() == before
+
+    def test_created_by_pointing_to_nonexistent_user_is_rejected(
+        self, session, operator
+    ):
+        before = session.query(AuditLog).count()
+        session.add(_new_log(operator, created_by=uuid7()))
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        assert session.query(AuditLog).count() == before
+
+    def test_entity_id_pointing_to_nothing_is_accepted(
+        self, session, operator
+    ):
+        """ALG-AC02: ``entity_id`` is only a UUID value, never
+        validated against any table, so a value matching no row
+        anywhere is still accepted.
+        """
+        log = _new_log(operator, entity_id=uuid7())
+        session.add(log)
+        session.commit()
+
+        assert session.get(AuditLog, log.id) is not None
+
+
+class TestRegexMatchesOnlyAuditLogsTable:
+    """Unit tests for ``_targets_audit_logs`` itself (no database):
+    proves the append-only guard's matching rule directly, including
+    the "same-prefix but different table" case
+    (``audit_logs_x``) called out in plan.md's risk section, without
+    needing a second real table in the database just to exercise it.
+    """
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "UPDATE \"audit_logs\" SET entity_type = 'x'",
+            "UPDATE main.audit_logs SET entity_type = 'x'",
+            "UPDATE public.audit_logs SET entity_type = 'x'",
+            "uPdAtE AUDIT_LOGS SET entity_type = 'x'",
+            "\n\n   UPDATE audit_logs SET entity_type = 'x'",
+            "DELETE FROM audit_logs",
+            'DELETE FROM "audit_logs"',
+            "DELETE FROM main.audit_logs",
+            "DELETE FROM public.audit_logs",
+            "dElEtE FrOm AUDIT_LOGS",
+            "\n   DELETE FROM audit_logs",
+        ],
+    )
+    def test_matches_every_blocked_spelling(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "INSERT INTO audit_logs (id) VALUES ('x')",
+            "SELECT * FROM audit_logs",
+            "UPDATE audit_logs_x SET entity_type = 'x'",
+            "UPDATE \"audit_logs_x\" SET entity_type = 'x'",
+            "DELETE FROM audit_logs_x",
+            "UPDATE other_table SET entity_type = 'x'",
+            "DELETE FROM users",
+        ],
+    )
+    def test_does_not_match_other_statements(self, statement):
+        assert _targets_audit_logs(statement) is False
+
+
+class TestAppendOnlyGuard:
+    """ALG-AC03: 16 blocked writes (4 ORM, 2 Core, 10 ``text()``),
+    plus proof that inserts, reads, and writes to other tables are
+    never mistakenly blocked.
+    """
+
+    @pytest.fixture
+    def existing_log(self, session, operator) -> AuditLog:
+        log = _new_log(operator)
+        session.add(log)
+        session.commit()
+        return log
+
+    @pytest.fixture
+    def snapshot(self, session, existing_log):
+        """The full set of rows before a blocked write is attempted,
+        to prove content -- not only row count -- is unchanged
+        afterwards.
+        """
+
+        def _read() -> list[tuple]:
+            return sorted(
+                (
+                    row.id,
+                    row.created_by,
+                    row.event_type,
+                    row.entity_type,
+                    row.entity_id,
+                    row.before,
+                    row.after,
+                )
+                for row in session.query(AuditLog).all()
+            )
+
+        return _read
+
+    def test_orm_attribute_update_then_flush_is_rejected(
+        self, session, existing_log, snapshot
+    ):
+        before = snapshot()
+        existing_log.after = {"name": "Changed"}
+
+        with pytest.raises(AuditLogImmutableError):
+            session.flush()
+        session.rollback()
+
+        assert snapshot() == before
+
+    def test_orm_delete_then_flush_is_rejected(
+        self, session, existing_log, snapshot
+    ):
+        before = snapshot()
+        session.delete(existing_log)
+
+        with pytest.raises(AuditLogImmutableError):
+            session.flush()
+        session.rollback()
+
+        assert snapshot() == before
+
+    def test_orm_bulk_update_is_rejected(
+        self, session, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        with pytest.raises(AuditLogImmutableError):
+            session.execute(
+                update(AuditLog)
+                .where(AuditLog.id == existing_log.id)
+                .values(entity_type="changed")
+            )
+        session.rollback()
+
+        assert snapshot() == before
+
+    def test_orm_bulk_delete_is_rejected(
+        self, session, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        with pytest.raises(AuditLogImmutableError):
+            session.execute(
+                delete(AuditLog).where(AuditLog.id == existing_log.id)
+            )
+        session.rollback()
+
+        assert snapshot() == before
+
+    def test_core_update_is_rejected(self, engine, existing_log, snapshot):
+        """ALG-AC03's Core ``update(audit_logs)``: a plain
+        ``Connection.execute`` (no ``Session``/unit of work
+        involved), unlike ``test_orm_bulk_update_is_rejected`` above.
+        """
+        before = snapshot()
+
+        with engine.connect() as conn, pytest.raises(AuditLogImmutableError):
+            conn.execute(
+                update(AuditLog)
+                .where(AuditLog.id == existing_log.id)
+                .values(entity_type="changed")
+            )
+
+        assert snapshot() == before
+
+    def test_core_delete_is_rejected(self, engine, existing_log, snapshot):
+        """ALG-AC03's Core ``delete(audit_logs)``: see
+        ``test_core_update_is_rejected`` above.
+        """
+        before = snapshot()
+
+        with engine.connect() as conn, pytest.raises(AuditLogImmutableError):
+            conn.execute(
+                delete(AuditLog).where(AuditLog.id == existing_log.id)
+            )
+
+        assert snapshot() == before
+
+    @staticmethod
+    def _schema_prefix(engine: Engine) -> str:
+        return "main" if engine.dialect.name == "sqlite" else "public"
+
+    def _text_update_statements(self, engine: Engine) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "UPDATE \"audit_logs\" SET entity_type = 'changed'",
+            f"UPDATE {schema}.audit_logs SET entity_type = 'changed'",
+            "uPdAtE AUDIT_LOGS SET entity_type = 'changed'",
+            "\n\n   UPDATE audit_logs SET entity_type = 'changed'",
+        ]
+
+    def _text_delete_statements(self, engine: Engine) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            "DELETE FROM audit_logs",
+            'DELETE FROM "audit_logs"',
+            f"DELETE FROM {schema}.audit_logs",
+            "dElEtE FrOm AUDIT_LOGS",
+            "\n   DELETE FROM audit_logs",
+        ]
+
+    def test_text_updates_are_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_update_statements(engine):
+            with (
+                engine.connect() as conn,
+                pytest.raises(AuditLogImmutableError),
+            ):
+                conn.execute(text(statement))
+
+        assert snapshot() == before
+
+    def test_text_deletes_are_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_delete_statements(engine):
+            with (
+                engine.connect() as conn,
+                pytest.raises(AuditLogImmutableError),
+            ):
+                conn.execute(text(statement))
+
+        assert snapshot() == before
+
+    def test_text_insert_and_select_still_work(
+        self, engine, operator, existing_log
+    ):
+        # Bound with explicit ``Uuid``/``UTCDateTime`` types (not
+        # plain strings): the ``Uuid`` column type stores its value
+        # in a backend-specific representation (SQLite: a 32-char
+        # hex string with no dashes; PostgreSQL: its native ``uuid``
+        # type) that neither DBAPI accepts as a raw Python
+        # ``uuid.UUID`` object, so a raw ``text()`` write against a
+        # ``Uuid``/``UTCDateTime`` column still needs SQLAlchemy's
+        # own bind processing -- exactly like the ORM/Core paths
+        # this same guard also covers.
+        new_id = uuid7()
+        insert_stmt = text(
+            "INSERT INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after)"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            conn.execute(
+                insert_stmt,
+                {
+                    "id": new_id,
+                    "created_at": existing_log.created_at,
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": None,
+                },
+            )
+            conn.commit()
+
+            rows = conn.execute(text("SELECT id FROM audit_logs")).fetchall()
+
+        assert len(rows) == 2
+
+    def test_orm_insert_still_works(self, session, operator, existing_log):
+        before = session.query(AuditLog).count()
+
+        session.add(_new_log(operator, event_type="role.deleted"))
+        session.commit()
+
+        assert session.query(AuditLog).count() == before + 1
+
+    def test_writes_to_other_tables_are_not_blocked(
+        self, session, engine, operator, existing_log
+    ):
+        update_stmt = text(
+            "UPDATE users SET department = 'Engineering' WHERE id = :id"
+        ).bindparams(bindparam("id", type_=Uuid))
+        with engine.connect() as conn:
+            conn.execute(update_stmt, {"id": operator.id})
+            conn.commit()
+
+        session.expire_all()
+        assert session.get(User, operator.id).department == "Engineering"
