@@ -9,19 +9,25 @@ personal account, both ``auth_source = local``. All test data below
 uses demo values (``demo-corp.example``, ``demo`` account names) --
 never a real company or person.
 
-Most tests call :func:`run` directly with an injected
-``password_reader`` (mirroring ``test_init_system.py``'s injected
-``input_fn``), against the process's shared engine (the same one
-``app.auth.dependencies.get_db`` uses), so a ``fastapi.testclient.
-TestClient`` built in the same test sees the same data (AUT-AC23,
-AUT-AC32). AUT-AC25 alone needs a real subprocess: it asserts on
-``--help``'s actual argument parsing and on an unrecognized
-``--password`` option, neither of which a direct Python call can
-exercise.
+Most tests call :func:`run` directly against the process's shared
+engine (the same one ``app.auth.dependencies.get_db`` uses), so a
+``fastapi.testclient.TestClient`` built in the same test sees the
+same data (AUT-AC23, AUT-AC32). They patch ``sys.stdin`` to a
+non-tty ``io.StringIO`` (``isatty()`` is ``False``) holding the two
+password lines, so :func:`app.cli.set_password.read_password_pair`
+runs its real ``readline()`` path instead of a test double -- the
+same path a piped ``uv run`` subprocess takes. AUT-AC25 still needs
+real subprocesses for what only a child process can show: ``--help``'s
+actual argument parsing, argparse rejecting an unrecognized
+``--password`` option, and an empty piped stdin. One further
+subprocess case, next to AUT-AC25's, proves the same stdin path end
+to end through a real child process into exit code 0.
 """
 
+import io
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -36,7 +42,7 @@ from app.auth.passwords import (
     verify_password,
 )
 from app.cli.init_system import AccountInput, CompanyInput, initialize_system
-from app.cli.set_password import PasswordReader, run
+from app.cli.set_password import run
 from app.db.engine import dispose_engine, get_session_factory
 from app.db.settings import DATABASE_URL_ENV_VAR
 from app.main import create_app
@@ -150,14 +156,17 @@ def _count_user_passwords() -> int:
         return len(session.scalars(select(UserPassword)).all())
 
 
-def _fixed_reader(first: str, second: str | None = None) -> PasswordReader:
+def _set_stdin_pair(
+    monkeypatch: pytest.MonkeyPatch, first: str, second: str | None = None
+) -> None:
+    """Patch ``sys.stdin`` to a non-tty ``io.StringIO`` yielding
+    ``first``/``second`` as two lines, so :func:`read_password_pair`
+    takes its real ``readline()`` path (``io.StringIO.isatty()`` is
+    always ``False``) instead of a test double.
+    """
     if second is None:
         second = first
-
-    def _reader() -> tuple[str, str]:
-        return first, second
-
-    return _reader
+    monkeypatch.setattr(sys, "stdin", io.StringIO(f"{first}\n{second}\n"))
 
 
 def _no_input_reader() -> None:
@@ -176,20 +185,20 @@ class TestAutAc04LengthRule:
     characters fail, leaving ``UserPassword`` unchanged.
     """
 
-    def test_boundary_and_composition_cases(self, initialized: None):
+    def test_boundary_and_composition_cases(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
         owner = _get_user(_OWNER_EMAIL)
 
         # 7 characters: too short, fails, nothing written yet.
-        exit_code = run(
-            [_OWNER_EMAIL], password_reader=_fixed_reader("abcdefg")
-        )
+        _set_stdin_pair(monkeypatch, "abcdefg")
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 1
         assert _get_user_password(owner.id) is None
 
         # 8 characters: minimum valid length, succeeds.
-        exit_code = run(
-            [_OWNER_EMAIL], password_reader=_fixed_reader("abcd1234")
-        )
+        _set_stdin_pair(monkeypatch, "abcd1234")
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 0
         assert MIN_PASSWORD_LENGTH == 8
         row = _get_user_password(owner.id)
@@ -201,9 +210,8 @@ class TestAutAc04LengthRule:
         long_cjk_password = "密" * 128
         assert len(long_cjk_password) == 128
         assert len(long_cjk_password.encode("utf-8")) > 128
-        exit_code = run(
-            [_OWNER_EMAIL], password_reader=_fixed_reader(long_cjk_password)
-        )
+        _set_stdin_pair(monkeypatch, long_cjk_password)
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 0
         assert MAX_PASSWORD_LENGTH == 128
         row = _get_user_password(owner.id)
@@ -213,9 +221,8 @@ class TestAutAc04LengthRule:
 
         # 129 ASCII characters: one over the limit, fails, the
         # previous (128-character) hash is left in place.
-        exit_code = run(
-            [_OWNER_EMAIL], password_reader=_fixed_reader("a" * 129)
-        )
+        _set_stdin_pair(monkeypatch, "a" * 129)
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 1
         row = _get_user_password(owner.id)
         assert row is not None
@@ -223,10 +230,8 @@ class TestAutAc04LengthRule:
 
         # 12 characters, lowercase letters only: no character
         # composition rule is enforced, so this succeeds too.
-        exit_code = run(
-            [_OWNER_EMAIL],
-            password_reader=_fixed_reader("abcdefghijkl"),
-        )
+        _set_stdin_pair(monkeypatch, "abcdefghijkl")
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 0
         row = _get_user_password(owner.id)
         assert row is not None
@@ -242,17 +247,15 @@ class TestAutAc23SetPasswordInvalidatesSessionsAndLogsIn:
     """
 
     def test_old_session_dies_and_new_password_logs_in(
-        self, initialized: None
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
     ):
         admin = _get_user(_ADMIN_EMAIL)
         owner = _get_user(_OWNER_EMAIL)
 
         # Give the owner an initial password directly (this task's
         # own command has not run yet) and log in with it.
-        first_exit_code = run(
-            [_OWNER_EMAIL],
-            password_reader=_fixed_reader(_VALID_PASSWORD),
-        )
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        first_exit_code = run([_OWNER_EMAIL])
         assert first_exit_code == 0
 
         old_client = _make_client()
@@ -264,9 +267,8 @@ class TestAutAc23SetPasswordInvalidatesSessionsAndLogsIn:
         assert old_client.get("/api/v1/auth/me").status_code == 200
 
         new_password = "Demo-Pass2"
-        exit_code = run(
-            [_OWNER_EMAIL], password_reader=_fixed_reader(new_password)
-        )
+        _set_stdin_pair(monkeypatch, new_password)
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 0
 
         row = _get_user_password(owner.id)
@@ -296,32 +298,55 @@ class TestAutAc24RejectedInputsWriteNothing:
     mismatched entries all fail, leaving ``UserPassword`` untouched.
     """
 
-    def test_unknown_email_fails(self, initialized: None):
-        exit_code = run(
-            ["nobody@demo-corp.example"],
-            password_reader=_fixed_reader(_VALID_PASSWORD),
-        )
+    def test_unknown_email_fails(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        exit_code = run(["nobody@demo-corp.example"])
         assert exit_code == 1
         assert _count_user_passwords() == 0
 
-    def test_external_account_fails(self, initialized: None):
+    def test_external_account_fails(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
         owner = _get_user(_OWNER_EMAIL)
         _add_external_user(owner.company_id, owner.id)
 
-        exit_code = run(
-            [_EXTERNAL_EMAIL],
-            password_reader=_fixed_reader(_VALID_PASSWORD),
-        )
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        exit_code = run([_EXTERNAL_EMAIL])
         assert exit_code == 1
         assert _count_user_passwords() == 0
 
-    def test_mismatched_entries_fail(self, initialized: None):
-        exit_code = run(
-            [_OWNER_EMAIL],
-            password_reader=_fixed_reader("Demo-Pass1", "Demo-Pass2"),
-        )
+    def test_mismatched_entries_fail(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
+        _set_stdin_pair(monkeypatch, "Demo-Pass1", "Demo-Pass2")
+        exit_code = run([_OWNER_EMAIL])
         assert exit_code == 1
         assert _count_user_passwords() == 0
+
+
+def _run_cli(*args: str, stdin_input: str) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env["INSPECTFLOW_PASSWORD"] = _VALID_PASSWORD
+    env["PASSWORD"] = _VALID_PASSWORD
+    return subprocess.run(
+        [
+            "uv",
+            "run",
+            "--locked",
+            "python",
+            "-m",
+            "app.cli.set_password",
+            *args,
+        ],
+        cwd=_BACKEND_DIR,
+        env=env,
+        input=stdin_input,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
 
 
 class TestAutAc25NoPasswordOnTheCommandLineOrEnvironment:
@@ -334,44 +359,20 @@ class TestAutAc25NoPasswordOnTheCommandLineOrEnvironment:
     direct Python call exercises.
     """
 
-    def _run_cli(
-        self, *args: str, stdin_input: str
-    ) -> subprocess.CompletedProcess:
-        env = dict(os.environ)
-        env["INSPECTFLOW_PASSWORD"] = _VALID_PASSWORD
-        env["PASSWORD"] = _VALID_PASSWORD
-        return subprocess.run(
-            [
-                "uv",
-                "run",
-                "--locked",
-                "python",
-                "-m",
-                "app.cli.set_password",
-                *args,
-            ],
-            cwd=_BACKEND_DIR,
-            env=env,
-            input=stdin_input,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
     def test_help_defines_no_password_option(self, initialized: None):
-        result = self._run_cli("--help", stdin_input="")
+        result = _run_cli("--help", stdin_input="")
         assert result.returncode == 0
         assert "--password" not in result.stdout
         assert "PASSWORD" not in result.stdout
         assert "INSPECTFLOW_PASSWORD" not in result.stdout
 
     def test_empty_stdin_fails_without_using_env_vars(self, initialized: None):
-        result = self._run_cli(_OWNER_EMAIL, stdin_input="")
+        result = _run_cli(_OWNER_EMAIL, stdin_input="")
         assert result.returncode != 0
         assert _count_user_passwords() == 0
 
     def test_password_option_is_unrecognized(self, initialized: None):
-        result = self._run_cli(
+        result = _run_cli(
             _OWNER_EMAIL,
             "--password",
             _VALID_PASSWORD,
@@ -382,19 +383,44 @@ class TestAutAc25NoPasswordOnTheCommandLineOrEnvironment:
         assert _count_user_passwords() == 0
 
 
+class TestSetPasswordSubprocessSuccessPath:
+    """Alongside AUT-AC25's rejection-only subprocess cases: a real
+    child process, given the owner's email and two matching lines on
+    its piped standard input, succeeds end to end -- proving the
+    non-tty ``readline()`` path in :func:`read_password_pair` works
+    outside this test process too, against the same isolated sqlite
+    database the other tests in this module use.
+    """
+
+    def test_owner_password_set_via_piped_stdin(self, initialized: None):
+        owner = _get_user(_OWNER_EMAIL)
+
+        result = _run_cli(
+            _OWNER_EMAIL,
+            stdin_input=f"{_VALID_PASSWORD}\n{_VALID_PASSWORD}\n",
+        )
+        assert result.returncode == 0
+
+        assert _count_user_passwords() == 1
+        row = _get_user_password(owner.id)
+        assert row is not None
+        assert verify_password(row.password_hash, _VALID_PASSWORD)
+
+
 class TestAutAc32BuiltinAdminCanSetPasswordAndLogIn:
     """AUT-AC32: the built-in ``admin`` has no password yet; setting
     one succeeds, and logging in with it returns 200 and
     ``is_admin: true``.
     """
 
-    def test_builtin_admin_sets_password_and_logs_in(self, initialized: None):
+    def test_builtin_admin_sets_password_and_logs_in(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
         admin = _get_user(_ADMIN_EMAIL)
         assert admin.is_system is True
 
-        exit_code = run(
-            [_ADMIN_EMAIL], password_reader=_fixed_reader(_VALID_PASSWORD)
-        )
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        exit_code = run([_ADMIN_EMAIL])
         assert exit_code == 0
 
         row = _get_user_password(admin.id)
