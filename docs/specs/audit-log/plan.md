@@ -42,7 +42,7 @@
 |---|---|
 | ALG-AC01 | `backend/tests/db/test_audit_log.py`：inspector 檢查欄位、可空值、外鍵；逐欄空值與外鍵不存在的新增被拒絕 |
 | ALG-AC02 | 同上：外鍵只有 `created_by`；`entity_id` 指向不存在 UUID 仍可新增 |
-| ALG-AC03 | 同上：ORM、Core 四種與 `text()` 五種寫法 × `UPDATE`／`DELETE` 都拋錯，重讀資料不變；`text()` 的 `INSERT`、`SELECT` 與 ORM 新增成功（CI 也在 PostgreSQL 跑） |
+| ALG-AC03 | 同上：ORM 四種、Core 兩種與 `text()` 五種寫法 × `UPDATE`／`DELETE`，共 16 次都拋錯，重讀資料不變；`text()` 的 `INSERT`、`SELECT` 與 ORM 新增成功（CI 也在 PostgreSQL 跑） |
 | ALG-AC04 | `backend/tests/services/test_audit.py`：以 `set_clock` 固定時間；請求範圍外、綁定 U、無登入者三種情況；檢查入口函式的參數沒有操作者與時間 |
 | ALG-AC05 | 同上：用 `unit_of_work` 包住 `Company` 修改與寫紀錄，兩種失敗後重讀 |
 | ALG-AC06 | 同上：三種錯誤寫入都拋錯、筆數不變；掃描目錄的宣告欄位名稱 |
