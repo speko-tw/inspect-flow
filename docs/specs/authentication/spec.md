@@ -3,7 +3,7 @@
 **代碼**：`AUT`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R01～DOM-R27）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)～[KD-31](../../intents/03-decisions-and-stack.md#kd-31)、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）
-**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的 DOM-Q3、DOM-Q6（DOM-Q2 已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)），只擋對應任務，不擋本規格
+**被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的裁定（DOM-Q2、DOM-Q3、DOM-Q6 皆已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)、[#123](https://github.com/speko-tw/inspect-flow/issues/123)、[#126](https://github.com/speko-tw/inspect-flow/issues/126)），只擋對應任務，不擋本規格
 
 ## 目的
 
@@ -28,8 +28,8 @@
 - `User`、`Company`、`Role`、`ProjectMember` 的欄位與約束、有效權限與角色影響範圍的計算、初始化指令本身：由 `domain-model` 定義（DOM-R01～DOM-R27），本規格只引用。
 - 外部身分來源（LDAP、AD、Entra ID）的登入與同步，以及本系統帳號轉成外部帳號時既有登入狀態的處理：移至 `external-identity-sync`。本規格的設計不得阻礙日後串接（AUT-R20；[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) 的理由）。
 - 人員、公司、角色、專案成員的管理 API 與畫面（含停用人員、修改前顯示影響範圍的畫面與確認流程、替客戶公司成員指派可修改角色的確認提示）：由 `admin-dashboard` 等功能規格負責；本規格只提供它們要呼叫的權限檢查與登入狀態筆數（AUT-R16、AUT-R19）。
-- 權限代碼的命名規則與可用清單：見 [DOM-Q3](../domain-model/spec.md#dom-q3)。本規格的檢查元件以權限代碼字串為輸入，不登記任何代碼。
-- 稽核紀錄：[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 要求權限與角色的變更寫稽核紀錄，資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。本規格不新增權限或角色的寫入入口；登入、登出、設定密碼是否要寫稽核紀錄，見 [AUT-Q6](#aut-q6)。
+- 權限代碼的命名規則與可用清單：見 `domain-model` 的 DOM-R30、DOM-R35（[DOM-Q3](../domain-model/spec.md#dom-q3) 已裁定）。本規格的檢查元件以權限代碼字串為輸入，不登記任何代碼。
+- 稽核紀錄：[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 要求權限與角色的變更寫稽核紀錄，資料模型由 `audit-log` 定義（[DOM-Q6](../domain-model/spec.md#dom-q6) 裁定，[#203](https://github.com/speko-tw/inspect-flow/issues/203)）。本規格不新增權限或角色的寫入入口；登入、登出、設定密碼是否要寫稽核紀錄，見 [AUT-Q6](#aut-q6)。
 - Admin 在畫面上替他人設定臨時密碼的 API 與畫面：由 `admin-dashboard` 負責，呼叫本規格的 Service 入口（AUT-R36）並標為臨時；在那之前，帳號密碼由部署人員以指令設定（AUT-R24）。本規格只提供入口與首次登入強制變更的機制（[AUT-Q4](#aut-q4) 裁定）。
 - 忘記密碼、以 email 寄送設定密碼的連結：需要寄信服務，目前沒有（[AUT-Q4](#aut-q4) 選項 C 未採用）。
 - 臨時密碼的有效期限（例如 72 小時內未變更就失效）：intents 與 [AUT-Q4](#aut-q4) 裁定都沒有依據，這次不做；臨時密碼外洩或過久未用時，由 Admin 重新設定。若要加上期限，屬範圍變更。
@@ -91,10 +91,10 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | AUT-R18 | 後端**必須**預設拒絕：每一條 `/api/v1` 業務路由都**必須**明確宣告一種存取層級：公開、需登入、需 Admin、需專案權限（附權限代碼）。沒有宣告的路由**必須**讓自動化測試失敗；公開路由**必須**列在一份明確的清單上，目前只有健康檢查與登入、登出。需登入以上的路由，未登入時回傳 401、`auth.not_authenticated` | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（後端預設拒絕）、[PR-01](../../intents/02-principles.md#pr-01)（伺服器端覆核）；「沒宣告就測試失敗」是本規格把預設拒絕落實成可驗證的做法 |
-| AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`，且所需代碼的動作是讀取或修改：放行，不需要 `ProjectMember`。所需代碼是新增、刪除，或簽核、匯出等特殊動作時，Admin 怎麼判斷待 [AUT-Q2](#aut-q2) 裁定，本規格不定義；怎麼從代碼辨識動作類別依 [DOM-Q3](../domain-model/spec.md#dom-q3)。（2）登入者不是 Admin：取他在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）非 Admin 且不是該專案成員，有效權限為空集合，拒絕。Admin 要求新增、刪除或特殊動作時不適用（2）、（3），待 AUT-Q2 裁定。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
+| AUT-R19 | 需專案權限的檢查**必須**依下列順序判斷，只在通過時放行，否則回傳 403、`permission.denied`：（1）登入者 `is_admin = true`，且所需代碼的動作是讀取或修改：放行，不需要 `ProjectMember`。所需代碼是新增、刪除，或簽核、匯出等特殊動作時，Admin 怎麼判斷待 [AUT-Q2](#aut-q2) 裁定，本規格不定義；動作類別看代碼的 `<動作>` 段（DOM-R30）；[DOM-Q3](../domain-model/spec.md#dom-q3) 已裁定（[#123](https://github.com/speko-tw/inspect-flow/issues/123)），只定義讀取（`read`）與其他動作的區分（DOM-R24），讀取以外怎麼再細分仍待 AUT-Q2。（2）登入者不是 Admin：取他在該專案的有效權限（DOM-R26：所有角色權限代碼的聯集，使用時從 `Role` 目前內容計算），含所需代碼時放行。（3）非 Admin 且不是該專案成員，有效權限為空集合，拒絕。Admin 要求新增、刪除或特殊動作時不適用（2）、（3），待 AUT-Q2 裁定。有效權限**不得**跨請求快取，修改角色才會立即影響下一個請求 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 可查看、修改所有專案）、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)（修改角色立即影響持有者）、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R26、DOM-R27 |
 | AUT-R20 | 需 Admin 的檢查**必須**只放行 `is_admin = true` 的登入者，否則回傳 403、`permission.denied`。管理人員（含建立帳號、停用、修改 `is_admin`）、公司、角色定義的端點**必須**使用這一層 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（Admin 管理系統設定、人員、公司、角色定義）；建立帳號只由 Admin 做，依 [#54](https://github.com/speko-tw/inspect-flow/issues/54) 裁定（之後每個帳號都由某個 Admin 建立） |
 | AUT-R21 | 後端**必須**提供「本人或 Admin」的檢查：登入者就是目標 `User`，或 `is_admin = true` 時放行，否則回傳 403、`permission.denied`。修改人員聯絡與補充欄位的端點**必須**使用這一層 | 必須 | [KD-17](../../intents/03-decisions-and-stack.md#kd-17)；DOM-R04（判斷操作者是不是 Admin 或本人由本規格執行） |
-| AUT-R22 | 替 `ProjectMember` 指派或移除角色的端點，**必須**使用需專案權限的檢查（代碼依 [DOM-Q3](../domain-model/spec.md#dom-q3) 登記）；Admin 是否免查依 AUT-R19，視該代碼的動作類別（[DOM-Q3](../domain-model/spec.md#dom-q3)）與 [AUT-Q2](#aut-q2) 的裁定，本條不另設例外 | 必須 | [KD-27](../../intents/03-decisions-and-stack.md#kd-27)（角色由有權限的人設定） |
+| AUT-R22 | 替 `ProjectMember` 指派或移除角色的端點，**必須**使用需專案權限的檢查（代碼依 `domain-model` 的 DOM-R35 登記）；Admin 是否免查依 AUT-R19，視該代碼的動作類別與 [AUT-Q2](#aut-q2) 的裁定，本條不另設例外 | 必須 | [KD-27](../../intents/03-decisions-and-stack.md#kd-27)（角色由有權限的人設定） |
 | AUT-R23 | 未登入的錯誤碼 `auth.not_authenticated`、帳號密碼錯誤 `auth.invalid_credentials`、權限不足 `permission.denied` **必須**登記在共用的錯誤碼列舉，並使用共用錯誤 envelope | 必須 | API-R05、API-R07；[KD-15](../../intents/03-decisions-and-stack.md#kd-15) |
 
 ### 設定密碼的指令
@@ -293,13 +293,13 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q5"></a>
 - **AUT-Q5：登入失敗鎖定**（AUT-R28、AUT-AC27）。OWASP 建議依帳號計算、鎖定時間可遞增，並提醒鎖定可能被用來阻擋他人登入。選項：（A）15 分鐘內失敗 10 次，鎖定 15 分鐘；（B）失敗 5 次後開始遞增延遲（1、2、4…分鐘，上限 1 小時）；（C）MVP 不做，只在內網使用。**建議 A**：規則簡單、好測試，10 次的門檻讓一般打錯密碼不會被鎖。鎖定是否要寫稽核紀錄，併入 AUT-Q6。影響計畫 T8；裁定前 T8 不開工。
 <a id="aut-q6"></a>
-- **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型待 [DOM-Q6](../domain-model/spec.md#dom-q6)。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。**建議 A**，等 DOM-Q6 定案後再評估 B。不擋任何任務。
+- **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型由 `audit-log` 定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。**建議 A**，等 `audit-log` 定案後再評估 B。不擋任何任務。
 
 本規格另依賴 `domain-model` 的下列題目；尚未裁定的，本規格不自行定案：
 
 - [DOM-Q2](../domain-model/spec.md#dom-q2)（email 比對是否不分大小寫）：已裁定（[#122](https://github.com/speko-tw/inspect-flow/issues/122)），不分大小寫，AUT-R05 已依此寫定；計畫 T3 不再受本題擋。
-- [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：影響 AUT-R22 用哪個代碼；檢查元件本身以字串為輸入，不受影響。
-- [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：影響 [AUT-Q6](#aut-q6)。
+- [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：已裁定（[#123](https://github.com/speko-tw/inspect-flow/issues/123)），代碼登記在程式內的登記表（DOM-R35）；AUT-R22 用哪個代碼，由登記它的規格決定。
+- [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：已裁定（[#126](https://github.com/speko-tw/inspect-flow/issues/126)），另開 `audit-log`（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）；[AUT-Q6](#aut-q6) 仍待決定。
 - [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：已裁定（[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。人員能不能登入只看 `User.is_active`，不需要檢查公司狀態；AUT-R06、AUT-R14 維持現狀（見 DOM-R32）。
 
 ## 變更紀錄
