@@ -30,7 +30,7 @@
 
 ## 風險
 
-- **攔截靠比對 SQL 文字**：`before_cursor_execute` 拿到的是最後的 SQL 字串，要能辨認帶引號的表名（`"audit_logs"`）、`DELETE FROM`、大小寫與前置空白，也不能誤擋 `INSERT` 或 `SELECT`。ALG-AC03 在 SQLite 與 PostgreSQL 各跑八種寫法，並確認新增與讀取照常。後端以外直接連資料庫（例如 `sqlite3` 指令）仍改得動，要防這條需要資料庫層保護，本規格不要求（PR-03）。
+- **攔截靠比對 SQL 文字**：`before_cursor_execute` 拿到的是最後的 SQL 字串，要能辨認帶引號的表名（`"audit_logs"`）、`DELETE FROM`、大小寫與前置空白，也不能誤擋 `INSERT` 或 `SELECT`。ALG-AC03 在 SQLite 與 PostgreSQL 都跑 ORM、Core 與 `text()` 的各種寫法（引號、schema 前綴、大小寫、前置空白），並確認新增與讀取照常。後端以外直接連資料庫（例如 `sqlite3` 指令）仍改得動，要防這條需要資料庫層保護，本規格不要求（PR-03）。
 - **名稱混淆**：既有的 `backend/app/models/_audit.py` 是 `created_by`／`updated_by` 的 `AuditMixin`，和稽核紀錄無關。新檔案用 `audit_log.py`、`services/audit.py`，T1 在 docstring 註明兩者的差別；`AuditLog` 不套用 `AuditMixin`（它帶 `updated_by`）。
 - **JSON 在兩種資料庫的行為不同**：SQLite 存成文字，PostgreSQL 是 `JSON` 型別。只用 `sa.JSON`，不用 PostgreSQL 的 `JSONB`；不在 SQL 裡查 JSON 內容。ALG-AC07 放在 `backend/tests/db/`，CI 會在 PostgreSQL 上讀回比對。
 - **請求中沒有登入者**：`get_current_operator` 會拋錯，整個交易回滾（AUT-R09），不會寫出操作者錯誤的紀錄。ALG-AC04 守這一點。
@@ -42,7 +42,7 @@
 |---|---|
 | ALG-AC01 | `backend/tests/db/test_audit_log.py`：inspector 檢查欄位、可空值、外鍵；逐欄空值與外鍵不存在的新增被拒絕 |
 | ALG-AC02 | 同上：外鍵只有 `created_by`；`entity_id` 指向不存在 UUID 仍可新增 |
-| ALG-AC03 | 同上：ORM flush、ORM 批次、Core、`text()` 的修改與刪除共八種都拋錯，重讀資料不變；新增與讀取不受影響 |
+| ALG-AC03 | 同上：ORM、Core 四種與 `text()` 五種寫法 × `UPDATE`／`DELETE` 都拋錯，重讀資料不變；`text()` 的 `INSERT`、`SELECT` 與 ORM 新增成功（CI 也在 PostgreSQL 跑） |
 | ALG-AC04 | `backend/tests/services/test_audit.py`：以 `set_clock` 固定時間；請求範圍外、綁定 U、無登入者三種情況；檢查入口函式的參數沒有操作者與時間 |
 | ALG-AC05 | 同上：用 `unit_of_work` 包住 `Company` 修改與寫紀錄，兩種失敗後重讀 |
 | ALG-AC06 | 同上：三種錯誤寫入都拋錯、筆數不變；掃描目錄的宣告欄位名稱 |
