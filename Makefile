@@ -1,5 +1,6 @@
 .PHONY: setup setup-backend setup-frontend check \
-	check-env check-backend check-postgres check-frontend
+	check-env check-backend check-postgres check-frontend \
+	migrate run-backend run-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -9,6 +10,25 @@ setup-backend:
 
 setup-frontend:
 	cd frontend && npm ci
+
+# Local run (see README "Running locally"). migrate and
+# run-backend read the database target from
+# INSPECTFLOW_DATABASE_URL in the environment; unset means the
+# default SQLite file backend/data/inspectflow.db (ignored by
+# backend/.gitignore). Neither Make nor the backend
+# loads .env, so export its variables in the shell first.
+# run-backend and run-frontend each block; run them in separate
+# terminals. Port 8000 matches the Vite /api proxy default
+# (frontend/vite.config.ts).
+migrate:
+	cd backend && uv run --locked alembic upgrade head
+
+run-backend:
+	cd backend && uv run --locked uvicorn app.main:app --reload \
+		--host 127.0.0.1 --port 8000
+
+run-frontend:
+	cd frontend && npm run dev
 
 # Single entry point for local and CI checks. Runs format, lint,
 # type-check, test and build for backend and frontend, in order.
