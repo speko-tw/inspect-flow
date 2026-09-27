@@ -36,18 +36,18 @@
 6. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
    ```bash
    RELEASE_SHA=0123abcd   # 換成第 4 步記下的 commit；v0.X.Y 換成版號
-   git fetch origin
-   if [ "$(git rev-parse origin/main)" = "$(git rev-parse "$RELEASE_SHA")" ]
+   if git fetch origin &&
+     [ "$(git rev-parse origin/main)" = "$(git rev-parse "$RELEASE_SHA")" ]
    then
      git tag -a v0.X.Y "$RELEASE_SHA" -m "v0.X.Y" &&
        git push origin v0.X.Y &&
        gh release create v0.X.Y --verify-tag --title "v0.X.Y" \
          --notes-file release-notes.md
    else
-     echo "main 已變動，回到第 4 步"
+     echo "fetch 失敗或 main 已變動，未建 tag"
    fi
    ```
-   印出「main 已變動」表示第 4 步之後又有合併，不會建 tag 或 Release：回到第 4 步重新確認新的 commit。任一行失敗（例如 tag 已存在）也會停在該行。
+   印出「fetch 失敗或 main 已變動」時不會建 tag 或 Release：fetch 失敗就排除網路或權限問題後重跑；`main` 已變動（第 4 步之後又有合併）就回到第 4 步。建 tag 之後任一行失敗（例如 tag 已存在）也會停在該行。
 7. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
 
 ## Release Notes 格式
