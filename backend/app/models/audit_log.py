@@ -47,9 +47,12 @@ and PostgreSQL's ``ONLY`` in between) and the table reference that
 immediately follows: it does not scan the rest of the statement
 text, so a table merely mentioning ``audit_logs`` elsewhere (for
 example in a subquery, or a string literal in another table's
-``SET`` clause) is never a false positive, and an unquoted
-identifier match is greedy, so ``audit_logs_x`` is never mistaken
-for ``audit_logs``.
+``SET`` clause) is never a false positive; an unquoted identifier
+match is both greedy *and* boundary-checked (see
+``_table_identifier``'s docstring), so neither ``audit_logs_x`` nor
+a same-prefix table using characters outside this module's
+identifier class (``audit_logs$archive``, ``audit_logs中``) is ever
+mistaken for ``audit_logs``.
 
 Known limitations -- these never reach the leading-keyword check
 above, so they are not covered: a database client outside this
@@ -90,10 +93,55 @@ def _identifier(quoted_group: str, plain_group: str) -> str:
     plain alternative is greedy over word characters, so it always
     consumes an entire identifier like ``audit_logs_x`` rather than
     stopping early at ``audit_logs``.
+
+    Used for the optional ``schema.`` prefix in ``_TABLE_REF_RE``
+    below, where a following literal ``.`` is already the
+    boundary -- unlike the table name itself, which needs
+    :func:`_table_identifier`'s extra check (see there).
     """
     return (
         rf'"(?P<{quoted_group}>[^"]*)"'
         rf"|(?P<{plain_group}>[A-Za-z_][A-Za-z0-9_]*)"
+    )
+
+
+# What may legally follow a bare table reference in the statement
+# shapes this guard looks at: whitespace (before ``SET``/``WHERE``),
+# a statement terminator (``;``), or a punctuation character that
+# could follow it inside a larger expression (``(``, ``,``, ``)``),
+# or nothing at all (end of the string).
+_IDENTIFIER_BOUNDARY = r"(?=[\s;,()]|\Z)"
+
+
+def _table_identifier(quoted_group: str, plain_group: str) -> str:
+    """Like :func:`_identifier`, but for the table name itself: the
+    unquoted alternative additionally requires (via a lookahead,
+    consuming no characters) that what follows the matched word is
+    one of ``_IDENTIFIER_BOUNDARY``'s characters, not simply that
+    ``[A-Za-z0-9_]`` runs out.
+
+    Without this, ``audit_logs$archive`` -- a different table that
+    merely starts with ``audit_logs`` -- would match only its
+    ``audit_logs`` prefix and be mistaken for the real table:
+    PostgreSQL and SQLite both accept ``$`` and non-ASCII letters in
+    an *unquoted* identifier, characters this module's identifier
+    character class never included, so the old plain-greedy match
+    would stop right there and call that a match. The boundary
+    lookahead makes that same "ran out of matchable characters"
+    case fail instead of silently succeeding: with nothing after
+    ``audit_logs`` in ``_IDENTIFIER_BOUNDARY``'s set, there is no
+    length this identifier can back off to that both stays a valid
+    ``[A-Za-z_][A-Za-z0-9_]*`` word *and* is immediately followed by
+    a real boundary character, so the whole alternative fails to
+    match and :func:`_targets_audit_logs` correctly reports no
+    match. A double-quoted identifier never had this problem: its
+    contents are read verbatim up to the closing quote, so
+    ``"audit_logs$archive"`` was already never mistaken for
+    ``audit_logs``.
+    """
+    return (
+        rf'"(?P<{quoted_group}>[^"]*)"'
+        rf"|(?P<{plain_group}>[A-Za-z_][A-Za-z0-9_]*){_IDENTIFIER_BOUNDARY}"
     )
 
 
@@ -150,10 +198,11 @@ _OPERATION_RE = re.compile(
 # Matches the table reference right after that keyword: an optional
 # ``schema.`` prefix (``main.audit_logs``, ``public.audit_logs``,
 # each side independently quotable) followed by the table name
-# itself.
+# itself (with its own boundary check -- see
+# ``_table_identifier``'s docstring).
 _TABLE_REF_RE = re.compile(
     "(?:(?:" + _identifier("schema_q", "schema_u") + r")\.)?"
-    "(?:" + _identifier("table_q", "table_u") + ")"
+    "(?:" + _table_identifier("table_q", "table_u") + ")"
 )
 
 _AUDIT_LOGS_TABLE = "audit_logs"

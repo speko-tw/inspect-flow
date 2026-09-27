@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, bindparam, delete, inspect, text, update
+from sqlalchemy import Engine, bindparam, delete, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.types import JSON, Uuid
@@ -102,6 +102,23 @@ def _new_log(operator: User, **kwargs) -> AuditLog:
     kwargs.setdefault("before", None)
     kwargs.setdefault("after", {"name": "Inspector"})
     return AuditLog(**kwargs)
+
+
+def _read_all_audit_log_rows(engine: Engine) -> list[tuple]:
+    """Read every column of every ``audit_logs`` row through a
+    brand-new ``Connection`` opened just for this call, never the
+    ``Session``/``Connection`` under test in the caller: proves a
+    rejected write left the table unchanged using evidence that
+    cannot be explained away by ORM identity-map caching or a
+    not-yet-rolled-back transaction still being visible to the same
+    session. Includes every column (notably ``created_at``, which
+    an earlier version of this fixture omitted).
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(AuditLog.__table__).order_by(AuditLog.__table__.c.id)
+        ).all()
+    return sorted(tuple(row) for row in rows)
 
 
 def test_migration_registers_audit_logs_table(migrated_url):
@@ -295,6 +312,12 @@ class TestRegexMatchesOnlyAuditLogsTable:
             # inheriting tables from the statement).
             "UPDATE ONLY audit_logs SET entity_type = 'x'",
             "DELETE FROM ONLY audit_logs",
+            # A statement terminator or end-of-string right after the
+            # bare table name is still a valid boundary (regression:
+            # must not be broken by the boundary check added for
+            # ``audit_logs$archive`` below).
+            "UPDATE audit_logs;",
+            "DELETE FROM audit_logs",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
@@ -315,6 +338,20 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "UPDATE OR REPLACE audit_logs_x SET entity_type = 'x'",
             "UPDATE ONLY audit_logs_x SET entity_type = 'x'",
             "UPDATE ONLY users SET entity_type = 'x'",
+            # Regression: an unquoted table name sharing the
+            # ``audit_logs`` prefix but continuing with a character
+            # outside this module's identifier class (``$``, a
+            # non-ASCII letter) is a different table, not
+            # ``audit_logs`` truncated -- a reviewer caught this
+            # actually mis-firing against a real SQLite database.
+            "UPDATE audit_logs$archive SET entity_type = 'x'",
+            "DELETE FROM audit_logs$archive",
+            "UPDATE audit_logs中 SET entity_type = 'x'",
+            "DELETE FROM audit_logs中",
+            # A quoted name never had this problem (its contents are
+            # read verbatim to the closing quote), kept here as the
+            # same regression's quoted-name counterpart.
+            "UPDATE \"audit_logs$archive\" SET entity_type = 'x'",
         ],
     )
     def test_does_not_match_other_statements(self, statement):
@@ -337,25 +374,19 @@ class TestAppendOnlyGuard:
         return log
 
     @pytest.fixture
-    def snapshot(self, session, existing_log):
-        """The full set of rows before a blocked write is attempted,
-        to prove content -- not only row count -- is unchanged
-        afterwards.
+    def snapshot(self, engine, existing_log):
+        """The full set of rows (every column, via a fresh
+        ``Connection`` -- see :func:`_read_all_audit_log_rows`)
+        before a blocked write is attempted, to prove content -- not
+        only row count -- is unchanged afterwards. Deliberately does
+        not depend on ``session``: reading through the same ORM
+        session under test could look unchanged merely because nothing
+        forced its identity map to refresh, which would prove nothing
+        about what is actually stored.
         """
 
         def _read() -> list[tuple]:
-            return sorted(
-                (
-                    row.id,
-                    row.created_by,
-                    row.event_type,
-                    row.entity_type,
-                    row.entity_id,
-                    row.before,
-                    row.after,
-                )
-                for row in session.query(AuditLog).all()
-            )
+            return _read_all_audit_log_rows(engine)
 
         return _read
 
@@ -418,12 +449,14 @@ class TestAppendOnlyGuard:
         """
         before = snapshot()
 
-        with engine.connect() as conn, pytest.raises(AuditLogImmutableError):
-            conn.execute(
-                update(AuditLog)
-                .where(AuditLog.id == existing_log.id)
-                .values(entity_type="changed")
-            )
+        with engine.connect() as conn:
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(
+                    update(AuditLog)
+                    .where(AuditLog.id == existing_log.id)
+                    .values(entity_type="changed")
+                )
+            conn.rollback()
 
         assert snapshot() == before
 
@@ -433,10 +466,12 @@ class TestAppendOnlyGuard:
         """
         before = snapshot()
 
-        with engine.connect() as conn, pytest.raises(AuditLogImmutableError):
-            conn.execute(
-                delete(AuditLog).where(AuditLog.id == existing_log.id)
-            )
+        with engine.connect() as conn:
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(
+                    delete(AuditLog).where(AuditLog.id == existing_log.id)
+                )
+            conn.rollback()
 
         assert snapshot() == before
 
@@ -477,11 +512,10 @@ class TestAppendOnlyGuard:
         before = snapshot()
 
         for statement in self._text_update_statements(engine):
-            with (
-                engine.connect() as conn,
-                pytest.raises(AuditLogImmutableError),
-            ):
-                conn.execute(text(statement))
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
 
         assert snapshot() == before
 
@@ -491,11 +525,10 @@ class TestAppendOnlyGuard:
         before = snapshot()
 
         for statement in self._text_delete_statements(engine):
-            with (
-                engine.connect() as conn,
-                pytest.raises(AuditLogImmutableError),
-            ):
-                conn.execute(text(statement))
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
 
         assert snapshot() == before
 
@@ -567,3 +600,35 @@ class TestAppendOnlyGuard:
 
         session.expire_all()
         assert session.get(User, operator.id).department == "Engineering"
+
+    def test_table_sharing_audit_logs_prefix_is_not_blocked(self, engine):
+        """Regression for the false positive a reviewer found
+        against a real SQLite database: a distinct table that
+        merely starts with ``audit_logs`` -- here continuing with
+        ``$``, a character PostgreSQL and SQLite both allow in an
+        unquoted identifier but this module's identifier class does
+        not -- must not be mistaken for ``audit_logs`` itself and
+        blocked.
+        """
+        table = '"audit_logs$archive"'
+        with engine.connect() as conn:
+            conn.execute(
+                text(
+                    f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, note TEXT)"
+                )
+            )
+            conn.execute(
+                text(f"INSERT INTO {table} (id, note) VALUES (1, 'original')")
+            )
+            conn.commit()
+
+            conn.execute(
+                text(f"UPDATE {table} SET note = 'changed' WHERE id = 1")
+            )
+            conn.commit()
+
+            note = conn.execute(
+                text(f"SELECT note FROM {table} WHERE id = 1")
+            ).scalar()
+
+        assert note == "changed"
