@@ -1,6 +1,6 @@
 # 稽核紀錄（audit-log）
 
-**代碼**：`ALG`　**Phase**：P2　**狀態**：草稿
+**代碼**：`ALG`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`database-foundation`（UUID 主鍵、UTC 時間、`created_by` 外鍵，見 DBF-R08、DBF-R11、DBF-R14）、`domain-model`（`User`、`Role`、`ProjectMember`、目前操作者，見 DOM-R05、DOM-R14、DOM-R19～DOM-R25）、`api-conventions`（UUID 字串、時間格式，見 API-R06、API-R09）
 **引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」
 **被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q5](#alg-q5) 不影響資料表，不擋凍結）
@@ -102,7 +102,7 @@
 
 | 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
 |---|---|---|---|
-| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（做法同 DBF-R11、DBF-R14）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`（ALG-R01～ALG-R04） | 草稿 |
+| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（做法同 DBF-R11、DBF-R14）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`（ALG-R01～ALG-R04） | 已凍結 |
 
 關聯：`User` 1—多 `AuditLog`（`created_by`）。`entity_id` 只存 UUID，不是外鍵（ALG-R03）。
 
