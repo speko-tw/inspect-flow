@@ -166,7 +166,7 @@
 | 程式介面 | `User` 修改入口（區分人工修改與同步；內建帳號與最後一個 Admin 的保護） | DOM-R04、DOM-R06、DOM-R07 |
 | 程式介面 | `User` 新增入口（拒絕停用中的公司） | DOM-R32 |
 | 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄）；列出公司啟用中的人員與人數 | DOM-R14、DOM-R33 |
-| 程式介面 | `Role` 修改與刪除、角色影響範圍、有效權限計算、「有修改能力」的判斷 | DOM-R20、DOM-R21、DOM-R23、DOM-R24、DOM-R26 |
+| 程式介面 | `Role` 新增、修改與刪除；`ProjectMember` 的角色指派與移除、移出專案；角色影響範圍、有效權限計算、「有修改能力」的判斷 | DOM-R20～DOM-R26、DOM-R36 |
 | 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
 
 ## 驗收條件
@@ -218,7 +218,7 @@
 | DOM-AC24 | 對空資料庫執行 `alembic upgrade head` 之後，已有 `name = "Viewer"` 的 `Role` | 依序新增三個 `Role`：`name` 相同（`Viewer`）；只差大小寫（`viewer`）；`Field Inspector`，新增後重新查詢讀回；再把 `Field Inspector` 改名為 `VIEWER` | 前兩次都被資料庫拒絕，`Role` 筆數不變；第三次成功，讀回的 `name` 逐字等於 `Field Inspector`；改名被拒絕，資料不變 | DOM-R34 |
 | DOM-AC25 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role`；測試暫時登記 `report.read`，`reprot.read` 未登記 | 以 ORM 在該角色加入 `report.read`；加入 `reprot.read`；再把 `report.read` 那筆改為 `reprot.read` | 第一次成功；第二次被拒絕，權限代碼筆數不變；修改被拒絕，資料不變 | DOM-R35 |
 | DOM-AC26 | 四個 `Role`：沒有代碼；只有 `report.read`；`report.read` 與 `report.approve`；只有 `evidence.delete` | 分別判斷是否「有修改能力」 | 依序為否、否、是、是 | DOM-R24 |
-| DOM-AC27 | 對空資料庫執行 `alembic upgrade head` 之後，專案 P 的兩筆 `ProjectMember`：M1 持有 R1、R2，M2 持有 R1；另一筆沒有任何角色的 M3 | 新增 M3；以 ORM 刪除 M1 | M3 新增成功；M1 不存在，指向 M1 的指派為零；R1、R2 仍存在，M2 仍持有 R1 | DOM-R25、DOM-R36 |
+| DOM-AC27 | 對空資料庫執行 `alembic upgrade head` 之後，專案 P 的兩筆 `ProjectMember`：M1 持有 R1、R2，M2 持有 R1；另一筆沒有任何角色的 M3 | 新增 M3；直接對資料表刪除 M1（不經 ORM 關聯） | M3 新增成功；M1 不存在，指向 M1 的指派為零；R1、R2 仍存在，M2 仍持有 R1 | DOM-R25、DOM-R36 |
 
 ## 待釐清
 
