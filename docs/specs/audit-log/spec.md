@@ -3,7 +3,7 @@
 **代碼**：`ALG`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`database-foundation`（UUID 主鍵、UTC 時間、`created_by` 外鍵，見 DBF-R08、DBF-R11、DBF-R14）、`domain-model`（`User`、`Role`、`ProjectMember`、目前操作者，見 DOM-R05、DOM-R14、DOM-R19～DOM-R25）、`api-conventions`（UUID 字串、時間格式，見 API-R06、API-R09）
 **引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」
-**被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q5](#alg-q5) 不影響資料表，不擋凍結）
+**被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q5](#alg-q5) 不擋凍結：Q1～Q4 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變）
 
 ## 目的
 
@@ -141,7 +141,7 @@
 
 ## 待釐清
 
-以下 intents 沒有依據，本規格不自行拍板；需要團隊裁定時另開 issue 移到 `05-open-questions.md`。都不影響資料表，不擋凍結；ALG-Q5 若選 B 要多一支 migration。
+以下 intents 沒有依據，本規格不自行拍板；需要團隊裁定時另開 issue 移到 `05-open-questions.md`。ALG-Q1～Q4 不影響資料表；ALG-Q5 若選 B，要另加一支 migration 新增可空值的來源欄位，本規格已凍結的欄位不變。都不擋凍結。
 
 <a id="alg-q1"></a>
 - **ALG-Q1：保存期限**。選項：（A）永久保存，不提供清除；（B）保存固定年限後清除或封存；（C）可設定。業界：OWASP Logging Cheat Sheet 要求依法規與內部政策訂保存期限；ISO 27001、SOC 2 的稽核常見要求至少保存一年。**建議 A**：第一批事件只有權限變更，量很小，也和「不能刪除」一致；真要清除時另開規格。
