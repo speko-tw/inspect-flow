@@ -30,16 +30,26 @@ itself, both per DOM-R36 (deleting a ``ProjectMember`` removes its
 role assignments) and per DOM-R21 (deleting a ``Role`` removes every
 ``ProjectMember``'s assignment to it, without disturbing the member
 row itself or its other role assignments). Both are enforced by the
-database's own
-``ON DELETE CASCADE`` on ``ProjectMemberRole``'s two foreign keys,
-not by the ORM: the ``role_assignments`` relationship below sets
-``passive_deletes=True`` so a ``session.delete(member)`` never tries
-to first ``UPDATE ... SET project_member_id = NULL`` on its
-assignments (which would fail outright, since that column is
-``NOT NULL``) before the database cascade ever runs. No relationship
-connects ``Role`` to ``ProjectMemberRole`` at all (see
-``app/models/role.py``'s docstring) -- DOM-R21's cascade only needs
-the ``role_id`` foreign key's own ``ON DELETE CASCADE``, verified in
+database's own ``ON DELETE CASCADE`` on ``ProjectMemberRole``'s two
+foreign keys, not by the ORM. The ``role_assignments`` relationship
+below therefore sets ``passive_deletes="all"``, not plain ``True``:
+with plain ``True`` the ORM still skips the SELECT for an *unloaded*
+collection, but if the collection happens to already be loaded in
+the session, ``cascade="delete-orphan"`` would still make it emit a
+``DELETE FROM project_member_roles`` per row itself before the
+database's cascade ever runs -- ``passive_deletes="all"`` disables
+that regardless of load state, so a ``session.delete(member)`` never
+touches ``ProjectMemberRole`` rows either way (verified for both
+cases in ``tests/db/test_role_member.py``). The cascade tuple is
+correspondingly trimmed to ``"save-update, merge"``: with deletes
+fully handed to the database, keeping ``"delete, delete-orphan"``
+declared here would be both inert and misleading about which layer
+is actually responsible. ``"save-update"`` is what makes
+``member.role_assignments.append(...)`` still persist a new
+assignment on flush. No relationship connects ``Role`` to
+``ProjectMemberRole`` at all (see ``app/models/role.py``'s
+docstring) -- DOM-R21's cascade only needs the ``role_id`` foreign
+key's own ``ON DELETE CASCADE``, verified in
 ``tests/db/test_role_member.py``.
 """
 
@@ -81,8 +91,8 @@ class ProjectMember(AuditMixin, TimestampedBase):
 
     role_assignments: Mapped[list["ProjectMemberRole"]] = relationship(
         back_populates="member",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
+        cascade="save-update, merge",
+        passive_deletes="all",
     )
 
     __table_args__ = (

@@ -26,12 +26,13 @@ with the real Alembic migration chain, then reads and writes it
 exclusively through SQLAlchemy (DBF-R01).
 """
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, delete, inspect
+from sqlalchemy import Engine, delete, event, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -142,6 +143,26 @@ def _new_member(creator: User, project: Project, **kwargs) -> ProjectMember:
     kwargs.setdefault("created_by", creator.id)
     kwargs.setdefault("updated_by", creator.id)
     return ProjectMember(**kwargs)
+
+
+@contextmanager
+def _capture_sql(engine: Engine) -> Iterator[list[str]]:
+    """Yields a list that collects every SQL statement text the ORM
+    sends to ``engine`` for the block's duration -- used by
+    ``TestDomR36MemberDeletionLeftToTheDatabase`` below to prove the
+    ORM itself never emits a ``DELETE``/``UPDATE`` against
+    ``project_member_roles``.
+    """
+    statements: list[str] = []
+
+    def _listener(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _listener)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", _listener)
 
 
 def test_migration_registers_all_four_tables(migrated_url):
@@ -696,3 +717,99 @@ class TestDomAc27CoreDeleteCascadesMemberAssignments:
         )
         assert {a.role_id for a in remaining} == {role_1.id}
         assert session.get(ProjectMember, member_3.id) is not None
+
+
+class TestDomR36MemberDeletionLeftToTheDatabase:
+    """DOM-R36/plan.md T3: deleting a ``ProjectMember`` through the
+    ORM (``session.delete``) must never make SQLAlchemy itself send
+    a ``DELETE``/``UPDATE`` against ``project_member_roles`` -- that
+    is the job of that table's ``ON DELETE CASCADE`` foreign keys.
+    ``TestDomAc27CoreDeleteCascadesMemberAssignments`` above already
+    proves the database side works through a Core ``delete()``
+    statement, which never touches the ORM's unit of work at all;
+    these two tests instead go through ``session.delete(member)``
+    and check the ORM's own behavior in both states a
+    ``role_assignments`` collection can be in when that happens.
+    """
+
+    def test_orm_delete_with_assignments_already_loaded(
+        self, session, engine, creator, project, registered_permission_codes
+    ):
+        """``role_assignments`` is loaded (accessed) before the
+        member is deleted -- the case where a naive
+        ``cascade="delete-orphan"`` plus ``passive_deletes=True``
+        would still make the ORM emit one ``DELETE`` per already-
+        loaded row instead of leaving it to the database.
+        """
+        member = _new_member(creator, project, user_id=creator.id)
+        role = _new_role(creator, name="Loaded Role")
+        session.add_all([member, role])
+        session.commit()
+        session.add(
+            ProjectMemberRole(project_member_id=member.id, role_id=role.id)
+        )
+        session.commit()
+        member_id = member.id
+
+        # Force the collection to load before the delete.
+        assert len(member.role_assignments) == 1
+
+        with _capture_sql(engine) as statements:
+            session.delete(member)
+            session.commit()
+
+        touching = [
+            s for s in statements if "project_member_roles" in s.lower()
+        ]
+        assert not any(
+            s.lower().lstrip().startswith(("delete", "update"))
+            for s in touching
+        ), touching
+
+        assert session.get(ProjectMember, member_id) is None
+        assert (
+            session.query(ProjectMemberRole)
+            .filter_by(project_member_id=member_id)
+            .count()
+            == 0
+        )
+
+    def test_orm_delete_with_assignments_not_loaded(
+        self, session, engine, creator, project, registered_permission_codes
+    ):
+        """``role_assignments`` was never accessed before the
+        member is deleted -- ``passive_deletes="all"`` must also
+        skip the SELECT that would otherwise load it just to decide
+        whether to act on it.
+        """
+        member = _new_member(creator, project, user_id=creator.id)
+        role = _new_role(creator, name="Unloaded Role")
+        session.add_all([member, role])
+        session.commit()
+        session.add(
+            ProjectMemberRole(project_member_id=member.id, role_id=role.id)
+        )
+        session.commit()
+        member_id = member.id
+
+        # Drop everything from the identity map so the member
+        # re-fetched below carries no loaded ``role_assignments``.
+        session.expire_all()
+
+        with _capture_sql(engine) as statements:
+            member = session.get(ProjectMember, member_id)
+            session.delete(member)
+            session.commit()
+
+        touching = [
+            s for s in statements if "project_member_roles" in s.lower()
+        ]
+        assert touching == []
+
+        assert session.get(ProjectMember, member_id) is None
+        assert (
+            session.query(ProjectMemberRole)
+            .filter_by(project_member_id=member_id)
+            .count()
+            == 0
+        )
