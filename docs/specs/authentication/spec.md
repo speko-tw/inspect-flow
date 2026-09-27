@@ -325,7 +325,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 <a id="aut-q6"></a>
 - **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**（已裁定，[#148](https://github.com/speko-tw/inspect-flow/issues/148)；AUT-R39～AUT-R41、AUT-AC49～AUT-AC52）。以下是裁定前的討論紀錄。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型由 `audit-log` 定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。當時建議 A，等 `audit-log` 定案後再評估 B。
   - **裁定**（負責人，[#148](https://github.com/speko-tw/inspect-flow/issues/148)，2026-09-27）：選 D（不在上列選項）。設定或變更密碼（含 Admin 設臨時密碼、本人變更、設定密碼指令）與帳號被鎖寫稽核紀錄；登入成功、登入失敗、登出寫應用程式日誌，不進資料庫；任何紀錄都不得含密碼（含錯誤的密碼）或 token。理由：OWASP 建議這些事件都要留紀錄；少見且重要的放稽核紀錄，頻繁的放日誌，避免稽核紀錄被淹沒。IP 等來源資訊屬 ALG-Q5，另行裁定。
-  - **落地**：寫進 AUT-R39～AUT-R41、AUT-AC49～AUT-AC52；`audit-log` 登記 `user.password_set`、`user.locked` 兩種事件（ALG-R15～ALG-R17）。實作：指令由計畫 T6（[#154](https://github.com/speko-tw/inspect-flow/issues/154)）、Service 入口與變更密碼由 T11（[#192](https://github.com/speko-tw/inspect-flow/issues/192)）、鎖定由 T8（[#156](https://github.com/speko-tw/inspect-flow/issues/156)）、日誌由新增的 T12 負責；寫稽核紀錄的任務都依賴 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）。
+  - **落地**：寫進 AUT-R39～AUT-R41、AUT-AC49～AUT-AC52；`audit-log` 登記 `user.password_set`、`user.locked` 兩種事件（ALG-R15～ALG-R17）。實作：指令、Service 入口與變更密碼都由 T11（[#192](https://github.com/speko-tw/inspect-flow/issues/192)，指令經 Service 入口寫入）、鎖定由 T8（[#156](https://github.com/speko-tw/inspect-flow/issues/156)）、日誌由新增的 T12 負責；寫稽核紀錄的任務都依賴 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）。
 
 本規格另依賴 `domain-model` 的下列題目；尚未裁定的，本規格不自行定案：
 

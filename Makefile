@@ -1,6 +1,6 @@
 .PHONY: setup setup-backend setup-frontend check \
 	check-env check-backend check-postgres check-frontend \
-	migrate init run-backend run-frontend
+	migrate init set-password run-backend run-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -38,6 +38,23 @@ migrate:
 # original "只加指令入口" file list.
 init:
 	cd backend && uv run --locked python -m app.cli.init_system
+
+# Set-password command (AUT-R24~AUT-R26): sets or replaces the
+# Argon2id password of one auth_source=local User (including the
+# built-in admin) identified by EMAIL, and deletes that account's
+# existing AuthSession rows. Prompts twice for the new password
+# (not echoed) at a terminal, or reads two lines from piped stdin
+# non-interactively (see README "Running locally"). Fails with
+# unchanged data when EMAIL is unset, the account does not exist or
+# is auth_source=external, the two entries differ, or the length
+# rule (AUT-R04) is not met. Same package-false deviation as `init`
+# above.
+set-password:
+	@test -n "$(EMAIL)" || \
+		(echo "EMAIL is required, e.g. make set-password" \
+			"EMAIL=admin@example.com" && \
+		exit 1)
+	cd backend && uv run --locked python -m app.cli.set_password "$(EMAIL)"
 
 run-backend:
 	cd backend && uv run --locked uvicorn app.main:app --reload \

@@ -51,6 +51,13 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         "docs/specs/api-conventions/spec.md",
         "docs/specs/authentication/spec.md",
         "docs/specs/api-conventions/plan.md",
+        # T4 (#152) registers ``permission.denied``; plan.md's own
+        # task row and its AUT-AC44 verification-table row both
+        # mention it in passing (describing the task and the
+        # assertion, not a competing lookup table) inside a
+        # pipe-table-formatted row, which otherwise trips this
+        # scan's table-row heuristic.
+        "docs/specs/authentication/plan.md",
         "docs/intents/03-decisions-and-stack.md",
         "backend/app/api/errors.py",
         "backend/tests/contract/test_error_envelope.py",
