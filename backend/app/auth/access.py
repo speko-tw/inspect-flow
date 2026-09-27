@@ -90,6 +90,8 @@ def _mark(
     return ``func`` unchanged, so this can wrap a ``def``/``async
     def`` statement's result in one line.
     """
+    # Functions accept arbitrary attributes at runtime; pyright
+    # cannot see this one on the ``Callable`` type.
     func.__route_access__ = declaration  # type: ignore[attr-defined]
     return func
 
