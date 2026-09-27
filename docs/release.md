@@ -49,6 +49,7 @@
    ```
    印出「fetch 失敗或 main 已變動」時不會建 tag 或 Release：fetch 失敗就排除網路或權限問題後重跑；`main` 已變動（第 4 步之後又有合併）就回到第 4 步。建 tag 之後任一行失敗也會停在該行；不要整段重跑，先用 `git rev-parse v0.X.Y^{commit}` 確認 tag 指向第 4 步的 commit，再從中斷的那行（push 或 `gh release create`）接著執行。tag 指向別的 commit 就停下，找負責人處理。
 7. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
+   - Milestone `0.X.x` 保持開啟，之後的 PATCH（例：`v0.2.1`）照樣放在同一個 Milestone；確定這個系列不用再修 bug，或確認沒問題要進入下一個階段後才關閉。
 
 ## Release Notes 格式
 
