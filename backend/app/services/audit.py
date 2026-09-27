@@ -381,11 +381,33 @@ def _validate_shape(
                 f"{definition.event_type}: a 新增 event's before must "
                 "be None (ALG-R09)"
             )
+        if after is None:
+            raise InvalidAuditEventShapeError(
+                f"{definition.event_type}: a 新增 event's after must "
+                "not be None (ALG-R09)"
+            )
+        missing = definition.fields - after.keys()
+        if missing:
+            raise InvalidAuditEventShapeError(
+                f"{definition.event_type}: field(s) {sorted(missing)} "
+                "must be present in after (ALG-R09, ALG-R11)"
+            )
     elif definition.kind is AuditEventKind.DELETED:
         if after is not None:
             raise InvalidAuditEventShapeError(
                 f"{definition.event_type}: a 刪除 event's after must "
                 "be None (ALG-R09)"
+            )
+        if before is None:
+            raise InvalidAuditEventShapeError(
+                f"{definition.event_type}: a 刪除 event's before must "
+                "not be None (ALG-R09)"
+            )
+        missing = definition.fields - before.keys()
+        if missing:
+            raise InvalidAuditEventShapeError(
+                f"{definition.event_type}: field(s) {sorted(missing)} "
+                "must be present in before (ALG-R09, ALG-R11)"
             )
     else:
         if after is None:

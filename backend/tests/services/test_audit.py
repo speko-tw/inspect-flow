@@ -642,3 +642,74 @@ class TestAlgR09BeforeOptionalForPasswordSet:
             )
 
         assert session.query(AuditLog).count() == before_count
+
+
+class TestAlgR09CreatedDeletedRequireAllDeclaredFields:
+    """PR #237 review (comment 4114338417): a 新增 event's ``after``
+    and a 刪除 event's ``before`` must be a dict containing *every*
+    declared field, not merely a dict (an empty ``{}`` was wrongly
+    accepted before this fix, for both an ordinary event and a
+    ``system_event`` one).
+    """
+
+    def test_role_created_with_empty_after_is_rejected(
+        self, session, operator
+    ):
+        before_count = session.query(AuditLog).count()
+
+        with pytest.raises(InvalidAuditEventShapeError):
+            record_audit_event(
+                session,
+                "role.created",
+                entity_id=uuid7(),
+                before=None,
+                after={},
+            )
+
+        assert session.query(AuditLog).count() == before_count
+
+    def test_role_created_missing_one_field_is_rejected(
+        self, session, operator
+    ):
+        before_count = session.query(AuditLog).count()
+
+        with pytest.raises(InvalidAuditEventShapeError):
+            record_audit_event(
+                session,
+                "role.created",
+                entity_id=uuid7(),
+                before=None,
+                after={"name": "R"},
+            )
+
+        assert session.query(AuditLog).count() == before_count
+
+    def test_role_deleted_with_empty_before_is_rejected(
+        self, session, operator
+    ):
+        before_count = session.query(AuditLog).count()
+
+        with pytest.raises(InvalidAuditEventShapeError):
+            record_audit_event(
+                session,
+                "role.deleted",
+                entity_id=uuid7(),
+                before={},
+                after=None,
+            )
+
+        assert session.query(AuditLog).count() == before_count
+
+    def test_user_locked_with_empty_after_is_rejected(self, session, operator):
+        before_count = session.query(AuditLog).count()
+
+        with pytest.raises(InvalidAuditEventShapeError):
+            record_audit_event(
+                session,
+                "user.locked",
+                entity_id=uuid7(),
+                before=None,
+                after={},
+            )
+
+        assert session.query(AuditLog).count() == before_count
