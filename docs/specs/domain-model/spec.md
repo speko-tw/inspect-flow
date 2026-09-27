@@ -4,7 +4,7 @@
 **前置規格**：`database-foundation`（UUID 主鍵、業務編號、建立與修改紀錄等共通結構，見 DBF-R11～DBF-R14）、`api-conventions`（UUID 字串 ID、UTC 時間格式）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
 **被擋議題**：凍結範圍無；`Project` 業務欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；其餘實體受 [G-01](../../intents/05-open-questions.md#g-01)、[G-02](../../intents/05-open-questions.md#g-02)、[OQ-06](../../intents/05-open-questions.md#oq-06) 等[開工門檻](../../intents/05-open-questions.md#gate)擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
-**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令、認證前的操作者、字串欄位的長度及格式與稽核紀錄的寫入範圍（DOM-R01～DOM-R34、DOM-AC01～DOM-AC24）。DOM-R40 以後為草稿
+**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令、認證前的操作者、字串欄位的長度及格式與稽核紀錄的寫入範圍（DOM-R01～DOM-R36、DOM-AC01～DOM-AC27）。DOM-R40 以後為草稿
 
 ## 目的
 
@@ -17,7 +17,7 @@
 - 凍結：
   - `User` 的業務欄位（基本欄位、聯絡與補充欄位）、系統欄位 `is_admin`、`is_system`，以及外部身分來源的預留欄位。
   - `Company`、`Role`、`ProjectMember` 的資料模型。
-  - 這些實體的資料規則：字串欄位的長度上限與格式、可修改性、內建帳號保護、最後一個 Admin、公司階層、停用公司的限制與影響範圍、角色名稱的唯一性、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算，以及哪些變更要寫稽核紀錄。
+  - 這些實體的資料規則：字串欄位的長度上限與格式、可修改性、內建帳號保護、最後一個 Admin、公司階層、停用公司的限制與影響範圍、角色名稱的唯一性、權限代碼的登記表、「有修改能力」的判斷、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算、專案成員的角色下限與移出方式，以及哪些變更要寫稽核紀錄。
   - 建立初始 Admin 帳號、本公司與三個範本角色的初始化指令。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
 - 草稿（本次不凍結，不拆任務）：
@@ -89,22 +89,24 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| DOM-R19 | `Role` 是全系統共用的一份清單，不分專案；**必須**具備名稱 `name`（不可空值），以及權限內容：一組權限代碼（文字，例如 `report.read`、`report.approve`）。同一個 `Role` 內的權限代碼**不得**重複，由資料庫約束保證。名稱的唯一性見 DOM-R34；名稱與權限代碼的長度及格式見 DOM-R30，可用的權限代碼清單見 [DOM-Q3](#dom-q3) | 必須 | [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC14 |
+| DOM-R19 | `Role` 是全系統共用的一份清單，不分專案；**必須**具備名稱 `name`（不可空值），以及權限內容：一組權限代碼（文字，例如 `report.read`、`report.approve`）。同一個 `Role` 內的權限代碼**不得**重複，由資料庫約束保證。名稱的唯一性見 DOM-R34；名稱與權限代碼的長度及格式見 DOM-R30，可用的權限代碼見 DOM-R35 | 必須 | [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC14 |
 | DOM-R20 | 所有 `Role`（含三個範本角色）都得改名、修改權限內容與刪除；本規格不設不可修改的角色。修改權限內容或名稱時，**必須**更新該 `Role` 的 `updated_at`、`updated_by` | 得（修改、刪除）；必須（修改紀錄） | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)；[PR-08](../../intents/02-principles.md#pr-08) | DOM-AC14 |
 | DOM-R21 | 刪除一個 `Role` 時，**必須**同時移除所有 `ProjectMember` 對它的指派；這些 `ProjectMember` 本身與其他角色的指派不受影響 | 必須 | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)（刪除角色立即影響所有持有者） | DOM-AC16 |
-| DOM-R22 | 權限與角色的變更**必須**寫稽核紀錄，包括：角色的新增、修改、刪除，`ProjectMember` 的角色指派，以及 `User.is_admin` 的變更（Admin 的提升與取消屬權限變更）。初始化指令建立的資料**不**寫稽核紀錄。稽核紀錄的資料模型由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)） | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；負責人裁定（[DOM-Q6](#dom-q6)，[#126](https://github.com/speko-tw/inspect-flow/issues/126)，2026-09-27：另開 `audit-log`、初始化不寫、`is_admin` 變更要寫） | 由 `audit-log` 驗收 |
+| DOM-R22 | 權限與角色的變更**必須**寫稽核紀錄，包括：角色的新增、修改、刪除，`ProjectMember` 的角色指派、把人移出專案（刪除 `ProjectMember`），以及 `User.is_admin` 的變更（Admin 的提升與取消屬權限變更）。初始化指令建立的資料**不**寫稽核紀錄。稽核紀錄的資料模型由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)） | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；負責人裁定（[DOM-Q6](#dom-q6)，[#126](https://github.com/speko-tw/inspect-flow/issues/126)，2026-09-27：另開 `audit-log`、初始化不寫、`is_admin` 變更要寫）；移出專案要寫為負責人裁定（[DOM-Q5](#dom-q5)，[#125](https://github.com/speko-tw/inspect-flow/issues/125)，2026-09-27） | 由 `audit-log` 驗收 |
 | DOM-R23 | Service 層**應**能算出一個 `Role` 的影響範圍：持有它的 `ProjectMember` 筆數，以及這些成員涉及的不重複 `User` 人數，供修改或刪除前顯示。畫面顯示與確認流程由提供該操作的功能規格負責 | 應 | [PR-18](../../intents/02-principles.md#pr-18)（影響範圍怎麼計算留給相關規格決定）、[KD-26](../../intents/03-decisions-and-stack.md#kd-26) | DOM-AC17；顯示與確認由功能規格驗收 |
-| DOM-R24 | 替 `kind = customer` 的 `Company` 所屬人員指派「有修改能力」的角色時，功能規格**必須**顯示確認提示、但不阻擋（[KD-28](../../intents/03-decisions-and-stack.md#kd-28)）。本規格提供判斷所需的資料：人員所屬 `Company` 的 `kind`，以及角色的權限代碼；怎麼從權限代碼判斷「有修改能力」見 [DOM-Q3](#dom-q3) | 必須 | [KD-28](../../intents/03-decisions-and-stack.md#kd-28) | 由提供指派操作的功能規格驗收 |
-| DOM-R30 | `Role.name` 最多 64 個字元，不限格式。權限代碼最多 64 個字元，格式**必須**是 `<資料>.<動作>`，與 `error.code` 的 dot-namespace 格式一致：符合 `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`（與 API-AC09 相同），例如 `report.read`、`evidence_variant.approve`。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31。可用的權限代碼清單與「有修改能力」的判斷仍見 [DOM-Q3](#dom-q3) | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、API-R07（格式）；[KD-25](../../intents/03-decisions-and-stack.md#kd-25)（命名規則待相關規格定案） | DOM-AC21 |
+| DOM-R24 | 替 `kind = customer` 的 `Company` 所屬人員指派「有修改能力」的角色時，功能規格**必須**顯示確認提示、但不阻擋（[KD-28](../../intents/03-decisions-and-stack.md#kd-28)）。「有修改能力」的判斷：角色的權限代碼中，只要有一個的動作不是讀取（`read`），就算有修改能力，例如新增、修改、刪除、簽核、匯出；沒有任何代碼的角色不算。Service 層**必須**提供這個判斷，功能規格依人員所屬 `Company` 的 `kind` 與判斷結果決定是否提示 | 必須 | [KD-28](../../intents/03-decisions-and-stack.md#kd-28)；判斷規則為負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：規則簡單，寧可多提醒一次；讀取的動作一律寫成 `read` 是本規格的推導，理由：判斷才能只看動作名稱 | DOM-AC26（判斷）；確認提示由提供指派操作的功能規格驗收 |
+| DOM-R30 | `Role.name` 最多 64 個字元，不限格式。權限代碼最多 64 個字元，格式**必須**是 `<資料>.<動作>`，與 `error.code` 的 dot-namespace 格式一致：符合 `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`（與 API-AC09 相同），例如 `report.read`、`evidence_variant.approve`。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31。可用的權限代碼見 DOM-R35，「有修改能力」的判斷見 DOM-R24 | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、API-R07（格式）；[KD-25](../../intents/03-decisions-and-stack.md#kd-25)（命名規則待相關規格定案） | DOM-AC21 |
 | DOM-R34 | `Role.name` 在所有 `Role` 之間**必須**唯一，由資料庫約束保證；比對與唯一性**必須**不分大小寫：已有 `Viewer` 時，新增或改名為 `viewer` 會被擋下。`name` **必須**保留輸入的原樣存放，只在比對與唯一約束時轉成小寫；寫法比照 DOM-R02 的 `email`，由計畫選擇 | 必須 | 負責人裁定（[DOM-Q4](#dom-q4)，[#124](https://github.com/speko-tw/inspect-flow/issues/124)，2026-09-27）：名稱重複時指派畫面分辨不出來；規則與 `email` 一致（DOM-R02） | DOM-AC24 |
+| DOM-R35 | 可用的權限代碼**必須**集中登記在程式內的一份登記表（做法比照 `ErrorCode`，API-R07），不存在資料表。`Role` 寫入未登記的權限代碼時**必須**拒絕、不寫入；比照 DOM-R31，檢查涵蓋所有經 ORM model 的寫入。登記表初始為空，由各功能規格登記自己用到的代碼 | 必須 | 負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：每個代碼都對應一段檢查程式，清單應和程式放在一起，存在資料表可能出現程式不認得的代碼；拒絕未登記代碼可擋住打錯字（例如 `reprot.read`）；清單先空著，每個代碼都要有規格依據 | DOM-AC25 |
 
 ### `ProjectMember`（凍結）
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| DOM-R25 | `ProjectMember` 表示一個 `User` 參與一個 `Project`：**必須**具備 `project_id`（外鍵指向 `Project`）與 `user_id`（外鍵指向 `User`），皆不可空值；同一個 `Project` 與 `User` 的組合**必須**唯一。一筆 `ProjectMember` 得指派多個 `Role`，同一個 `Role` 在同一筆成員上**不得**重複指派。以上由資料庫約束保證。成員得不得沒有任何角色、移除成員時怎麼保留紀錄，見 [DOM-Q5](#dom-q5) | 必須；得（多個角色） | [KD-27](../../intents/03-decisions-and-stack.md#kd-27) | DOM-AC18 |
-| DOM-R26 | 一個人在一個專案的有效權限，**必須**是他在該專案的 `ProjectMember` 上所有 `Role` 權限代碼的聯集，而且**必須**在使用時從 `Role` 目前的內容計算，不得把權限代碼複製到 `ProjectMember`，修改角色才會立即影響所有持有者。不是該專案成員的人，有效權限為空集合 | 必須 | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)；空集合對應 [KD-29](../../intents/03-decisions-and-stack.md#kd-29) 預設拒絕 | DOM-AC15 |
+| DOM-R25 | `ProjectMember` 表示一個 `User` 參與一個 `Project`：**必須**具備 `project_id`（外鍵指向 `Project`）與 `user_id`（外鍵指向 `User`），皆不可空值；同一個 `Project` 與 `User` 的組合**必須**唯一。一筆 `ProjectMember` 得指派多個 `Role`，同一個 `Role` 在同一筆成員上**不得**重複指派。以上由資料庫約束保證。成員的角色下限與移出方式見 DOM-R36 | 必須；得（多個角色） | [KD-27](../../intents/03-decisions-and-stack.md#kd-27) | DOM-AC18 |
+| DOM-R26 | 一個人在一個專案的有效權限，**必須**是他在該專案的 `ProjectMember` 上所有 `Role` 權限代碼的聯集，而且**必須**在使用時從 `Role` 目前的內容計算，不得把權限代碼複製到 `ProjectMember`，修改角色才會立即影響所有持有者。不是該專案成員的人，以及沒有任何角色的成員，有效權限為空集合 | 必須 | [KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)；空集合對應 [KD-29](../../intents/03-decisions-and-stack.md#kd-29) 預設拒絕 | DOM-AC15 |
 | DOM-R27 | Admin 查看、修改所有專案的權力來自 `is_admin`，不需要、也不透過 `ProjectMember`；授權檢查怎麼合併 `is_admin` 與有效權限，由 `authentication` 執行 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24) | 由 `authentication` 驗收 |
+| DOM-R36 | 一筆 `ProjectMember` 得沒有任何 `Role`。把人移出專案時**必須**刪除該筆 `ProjectMember`，不保留「已移除」的紀錄；它的角色指派**必須**一併刪除，由資料庫外鍵的連帶刪除保證。其他成員的指派與 `Role` 本身不受影響；成員在專案中建立的其他資料不因移出而改變 | 得（沒有角色）；必須（刪除方式） | 負責人裁定（[DOM-Q5](#dom-q5)，[#125](https://github.com/speko-tw/inspect-flow/issues/125)，2026-09-27）；[KD-21](../../intents/03-decisions-and-stack.md#kd-21) 只規範人員停用；移出專案的稽核紀錄見 DOM-R22 | DOM-AC27 |
 
 ### 字串長度與格式的檢查方式（凍結）
 
@@ -134,7 +136,7 @@
 |---|---|---|---|
 | `User` | UUID 主鍵、`employee_no`、`created_at`、`updated_at`、`created_by`、`updated_by`（DBF-R11～DBF-R14） | 基本欄位、聯絡與補充欄位、`is_admin`、`is_system`、外部身分預留欄位（DOM-R01～DOM-R10）；字串欄位的長度與格式，含 `employee_no` 的長度（DOM-R28）；認證欄位歸 `authentication` | 凍結 |
 | `Company` | 沿用同一套共通結構（DOM-R15） | `code`、`name`、`tax_id`、`kind`、`parent_id`、`is_active`（DOM-R16～DOM-R18）；字串欄位的長度與格式（DOM-R29） | 凍結 |
-| `Role` | 沿用同一套共通結構（DOM-R15） | `name`、權限代碼集合（DOM-R19～DOM-R24）；名稱與權限代碼的長度及格式（DOM-R30）；名稱不分大小寫唯一（DOM-R34） | 凍結 |
+| `Role` | 沿用同一套共通結構（DOM-R15） | `name`、權限代碼集合（DOM-R19～DOM-R24）；名稱與權限代碼的長度及格式（DOM-R30）；名稱不分大小寫唯一（DOM-R34）；權限代碼須已登記（DOM-R35） | 凍結 |
 | `ProjectMember` | 沿用同一套共通結構（DOM-R15） | `project_id`、`user_id`、角色指派（DOM-R25～DOM-R27） | 凍結 |
 | `Project` | UUID 主鍵、`project_code`、建立與修改紀錄（DBF-R11～DBF-R14） | 業務欄位待 OQ-01；`project_code` 長度暫定 32、待確認（DOM-R40） | 草稿 |
 | 其他實體 | — | 見[其他實體](#draft-others) | 草稿 |
@@ -164,11 +166,12 @@
 | 程式介面 | `User` 修改入口（區分人工修改與同步；內建帳號與最後一個 Admin 的保護） | DOM-R04、DOM-R06、DOM-R07 |
 | 程式介面 | `User` 新增入口（拒絕停用中的公司） | DOM-R32 |
 | 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄）；列出公司啟用中的人員與人數 | DOM-R14、DOM-R33 |
-| 程式介面 | `Role` 修改與刪除、角色影響範圍、有效權限計算 | DOM-R20、DOM-R21、DOM-R23、DOM-R26 |
+| 程式介面 | `Role` 修改與刪除、角色影響範圍、有效權限計算、「有修改能力」的判斷 | DOM-R20、DOM-R21、DOM-R23、DOM-R24、DOM-R26 |
+| 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
 
 ## 驗收條件
 
-每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。
+每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。登記表初始為空，AC 用到的權限代碼（例如 `report.read`）由測試暫時登記（DOM-R35）。
 
 ### `User`
 
@@ -207,12 +210,15 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | DOM-AC14 | 對空資料庫執行 `alembic upgrade head` 之後，一個含 `report.read` 的 `Role` | 用 inspector 檢查 `Role` 資料表；在同一個 `Role` 再加一次 `report.read`；在另一個 `Role` 加 `report.read`；以可控時間在建立至少一秒後，透過 Service 層改名並加入 `report.approve` | 資料表有 UUID 主鍵與建立及修改紀錄欄位；同一角色重複的代碼被資料庫拒絕；另一角色加入成功；改名與新增代碼成功，`updated_at` 晚於修改前，`updated_by` 為目前操作者 | DOM-R15、DOM-R19、DOM-R20 |
-| DOM-AC15 | 使用者 U 在專案 P 的 `ProjectMember` 上有角色 R1（`report.read`）與 R2（`report.approve`、`report.read`）；U 不是專案 Q 的成員 | 計算 U 在 P、Q 的有效權限；再把 R1 的權限內容改為 `evidence.read`，重新計算 U 在 P 的有效權限 | P 的第一次結果為 `{report.read, report.approve}`；Q 為空集合；R1 修改後，P 的結果為 `{evidence.read, report.read, report.approve}`，且 `ProjectMember` 上沒有權限代碼的副本 | DOM-R26 |
+| DOM-AC15 | 使用者 U 在專案 P 的 `ProjectMember` 上有角色 R1（`report.read`）與 R2（`report.approve`、`report.read`）；U 不是專案 Q 的成員；V 是 P 的成員但沒有任何角色 | 計算 U 在 P、Q 與 V 在 P 的有效權限；再把 R1 的權限內容改為 `evidence.read`，重新計算 U 在 P 的有效權限 | P 的第一次結果為 `{report.read, report.approve}`；Q 為空集合；同在 P、沒有任何角色的成員 V 為空集合；R1 修改後，P 的結果為 `{evidence.read, report.read, report.approve}`，且 `ProjectMember` 上沒有權限代碼的副本 | DOM-R26 |
 | DOM-AC16 | 兩筆 `ProjectMember` 都持有角色 R1，其中一筆另持有 R2 | 透過 Service 層刪除 R1 | R1 不存在；兩筆 `ProjectMember` 仍存在；沒有任何指派指向 R1；持有 R2 的那筆仍持有 R2 | DOM-R21 |
 | DOM-AC17 | 角色 R 被三筆 `ProjectMember` 持有，分屬兩個 `User`（其中一人在兩個專案都持有 R）；另一個角色沒有人持有 | 計算兩個角色的影響範圍 | R 為 3 筆成員、2 人；另一個角色為 0 筆、0 人 | DOM-R23 |
 | DOM-AC18 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 P、U 的 `ProjectMember` | 用 inspector 檢查 `ProjectMember` 與角色指派的資料表；再新增相同 P、U 的 `ProjectMember`；對同一筆成員重複指派同一個 `Role`；新增 `project_id` 或 `user_id` 指向不存在 UUID 的成員；對同一筆成員指派兩個不同的 `Role` | 資料表有 UUID 主鍵與建立及修改紀錄欄位；重複成員、重複指派、外鍵不存在都被資料庫拒絕，筆數不變；兩個不同的角色指派成功 | DOM-R15、DOM-R25 |
 | DOM-AC21 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role` | 用 inspector 檢查 `Role` 與權限代碼的資料表；以 ORM 分別：新增 `name` 恰為 64 個字元的 `Role`；新增 `name` 為 65 個字元的 `Role`；在該角色加入恰為 64 個字元且符合格式的權限代碼；加入 65 個字元的權限代碼；加入 `report`（沒有 `.`）、`Report.read`（大寫）、`report.read.all`（三段）、`1report.read`（數字開頭）；最後以 ORM 把恰為上限的那個 `Role` 的 `name` 改為 65 個字元、把恰為上限的權限代碼改為 `Report.read`（各一次） | inspector 顯示 `name` 與權限代碼欄位的字串長度都是 64；恰為上限的名稱與權限代碼成功；其餘每一次新增都被拒絕，`Role` 與權限代碼的筆數不變；兩次修改都被拒絕，資料不變 | DOM-R30、DOM-R31 |
 | DOM-AC24 | 對空資料庫執行 `alembic upgrade head` 之後，已有 `name = "Viewer"` 的 `Role` | 依序新增三個 `Role`：`name` 相同（`Viewer`）；只差大小寫（`viewer`）；`Field Inspector`，新增後重新查詢讀回；再把 `Field Inspector` 改名為 `VIEWER` | 前兩次都被資料庫拒絕，`Role` 筆數不變；第三次成功，讀回的 `name` 逐字等於 `Field Inspector`；改名被拒絕，資料不變 | DOM-R34 |
+| DOM-AC25 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role`；測試暫時登記 `report.read`，`reprot.read` 未登記 | 以 ORM 在該角色加入 `report.read`；加入 `reprot.read`；再把 `report.read` 那筆改為 `reprot.read` | 第一次成功；第二次被拒絕，權限代碼筆數不變；修改被拒絕，資料不變 | DOM-R35 |
+| DOM-AC26 | 四個 `Role`：沒有代碼；只有 `report.read`；`report.read` 與 `report.approve`；只有 `evidence.delete` | 分別判斷是否「有修改能力」 | 依序為否、否、是、是 | DOM-R24 |
+| DOM-AC27 | 對空資料庫執行 `alembic upgrade head` 之後，專案 P 的兩筆 `ProjectMember`：M1 持有 R1、R2，M2 持有 R1；另一筆沒有任何角色的 M3 | 新增 M3；以 ORM 刪除 M1 | M3 新增成功；M1 不存在，指向 M1 的指派為零；R1、R2 仍存在，M2 仍持有 R1 | DOM-R25、DOM-R36 |
 
 ## 待釐清
 
@@ -226,14 +232,20 @@
 - **DOM-Q2：email 比對是否不分大小寫**（已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)）。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（另存正規化欄位並加唯一約束，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。
   - **裁定**（負責人，[#122](https://github.com/speko-tw/inspect-flow/issues/122#issuecomment-5845418601)，2026-09-26）：不分大小寫，唯一性也不分大小寫（含已停用帳號）；保留輸入的原樣存放，只在比對與唯一約束時轉成小寫，寫法由計畫 T2 選擇；登入與外部身分同步的比對同樣不分大小寫。已寫入 DOM-R02、DOM-AC02。
 <a id="dom-q3"></a>
-- **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。權限代碼的格式與長度已由 [#121](https://github.com/speko-tw/inspect-flow/issues/121) 裁定（DOM-R30）。仍待定的有：可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
+- **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**（已裁定，[#123](https://github.com/speko-tw/inspect-flow/issues/123)）。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。權限代碼的格式與長度已由 [#121](https://github.com/speko-tw/inspect-flow/issues/121) 裁定（DOM-R30）。仍待定的有：可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
+  - **裁定**（負責人，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：清單放程式內的登記表（比照 `ErrorCode`）；`Role` 寫入清單外的代碼要拒絕；清單先空著，由各功能規格登記；角色含任何一個讀取以外的動作，就算有修改能力。
+  - **理由**：代碼對應檢查程式，清單應和程式放一起；拒絕未登記代碼可擋打錯字；每個代碼都要有規格依據；判斷規則簡單，寧可多提醒一次。
+  - **落地**：新增 DOM-R35、DOM-AC25（登記表、拒絕未登記代碼）；DOM-R24 寫明判斷規則並新增 DOM-AC26；DOM-R19、DOM-R30 改引用 DOM-R35、DOM-R24。
 <a id="dom-q4"></a>
 - **DOM-Q4：範本角色的初始權限內容與角色名稱是否唯一**（已裁定，[#124](https://github.com/speko-tw/inspect-flow/issues/124)）。[OQ-08](../../intents/05-open-questions.md#oq-08) 裁定各範本角色勾選哪些權限在系統畫面上調整，但沒說首次安裝時三個範本角色的權限內容是空集合還是有預設值（DOM-R11 目前只建立名稱）。另外 `Role.name` 是否必須唯一，#63 沒有寫；名稱重複時指派畫面會難以分辨。影響計畫 T3、T6。
   - **裁定**（負責人，[#124](https://github.com/speko-tw/inspect-flow/issues/124)，2026-09-27）：範本角色的初始權限是空集合，由 Admin 在畫面上勾選；`Role.name` 唯一、不分大小寫。
-  - **理由**：目前還沒有任何權限代碼（要等 DOM-Q3 與功能規格），而且預設拒絕最安全（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）；名稱重複時指派畫面分辨不出來。之後要不要替範本角色補預設權限，等功能規格登記權限代碼時再決定，用 migration 補上。
+  - **理由**：目前還沒有任何權限代碼（登記表先空著，由功能規格登記，DOM-R35），而且預設拒絕最安全（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）；名稱重複時指派畫面分辨不出來。之後要不要替範本角色補預設權限，等功能規格登記權限代碼時再決定，用 migration 補上。
   - **落地**：DOM-R11、DOM-AC08 補上權限為空集合；新增 DOM-R34、DOM-AC24（名稱不分大小寫唯一）。
 <a id="dom-q5"></a>
-- **DOM-Q5：專案成員的角色下限與移除方式**。`ProjectMember` 得不得沒有任何角色（沒有角色時有效權限為空集合，依預設拒絕仍然安全）；把人移出專案時是刪除 `ProjectMember`，還是保留紀錄並標記移除（[KD-21](../../intents/03-decisions-and-stack.md#kd-21) 只規定人員停用時保留資料）。影響計畫 T3。
+- **DOM-Q5：專案成員的角色下限與移除方式**（已裁定，[#125](https://github.com/speko-tw/inspect-flow/issues/125)）。`ProjectMember` 得不得沒有任何角色（沒有角色時有效權限為空集合，依預設拒絕仍然安全）；把人移出專案時是刪除 `ProjectMember`，還是保留紀錄並標記移除（[KD-21](../../intents/03-decisions-and-stack.md#kd-21) 只規定人員停用時保留資料）。影響計畫 T3。
+  - **裁定**（負責人，[#125](https://github.com/speko-tw/inspect-flow/issues/125)，2026-09-27）：成員可以沒有角色，有效權限為空集合；移出專案時直接刪除 `ProjectMember`，角色指派一併刪除，由稽核紀錄記錄誰、何時移出。
+  - **理由**：預設拒絕，沒有角色也安全；刪除 `Role` 本來就會讓成員變成零個角色。保留並標記「已移除」的話，每個查詢都要記得排除，漏掉就是權限漏洞。KD-21 的保留資料講的是人員停用，不是移出專案；成員在專案留下的資料不受影響。
+  - **落地**：新增 DOM-R36、DOM-AC27；DOM-R25 改引用 DOM-R36；DOM-R26、DOM-AC15 補上沒有角色的成員；DOM-R22 補上移出專案要寫稽核紀錄。
 <a id="dom-q6"></a>
 - **DOM-Q6：稽核紀錄的資料模型由哪份規格定義**（已裁定，[#126](https://github.com/speko-tw/inspect-flow/issues/126)）。[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部值覆蓋基本欄位）與 [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色變更）都要求寫稽核紀錄，[04-glossary](../../intents/04-glossary.md)「稽核紀錄」只是概念，目前沒有規格定義它的欄位。可以放在本規格擴大凍結範圍，或另開規格。另外要決定：初始化指令建立的帳號與範本角色是否也要寫稽核紀錄，以及 `is_admin` 的變更是否算「權限變更」（本規格依字面視為是）。DOM-R22 在此之前無法驗收，計畫 T6、T7 依賴本題裁定。
   - **裁定**（負責人，[#126](https://github.com/speko-tw/inspect-flow/issues/126)，2026-09-27）：另開 `audit-log` 規格（[#203](https://github.com/speko-tw/inspect-flow/issues/203)，`0.2.x`）；初始化指令不寫稽核紀錄；`is_admin` 的變更算權限變更，要寫。
@@ -255,3 +267,5 @@
 - DOM-R02、DOM-AC02：依 DOM-Q2 裁定，email 的比對與唯一性改為不分大小寫、保留原樣存放，並在驗收條件補上大小寫不同被擋下與原樣讀回的檢查 — [#122](https://github.com/speko-tw/inspect-flow/issues/122)
 - DOM-Q4 裁定：DOM-R11、DOM-AC08 補上範本角色的權限為空集合；新增 DOM-R34、DOM-AC24（`Role.name` 不分大小寫唯一），DOM-R19 改引用 DOM-R34 — [#124](https://github.com/speko-tw/inspect-flow/issues/124)
 - DOM-Q6 裁定：DOM-R22 補上 `is_admin` 變更、初始化不寫，資料模型與驗收移至 `audit-log`（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）；DOM-R22 沒有待決議題、也與開工門檻無關，比照 DOM-R09 由其他規格驗收的做法納入凍結範圍 — [#126](https://github.com/speko-tw/inspect-flow/issues/126)
+- DOM-Q3 裁定：新增 DOM-R35、DOM-AC25（權限代碼登記表，拒絕未登記代碼，初始為空）；DOM-R24 寫明「有修改能力」的判斷並新增 DOM-AC26；DOM-R19、DOM-R30 改引用新條文 — [#123](https://github.com/speko-tw/inspect-flow/issues/123)
+- DOM-Q5 裁定：新增 DOM-R36、DOM-AC27（成員可沒有角色；移出專案即刪除成員，指派連帶刪除）；DOM-R26、DOM-AC15 補上沒有角色的成員；DOM-R22 補上移出專案；DOM-R25 改引用 DOM-R36 — [#125](https://github.com/speko-tw/inspect-flow/issues/125)
