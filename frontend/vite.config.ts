@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 
 import react from '@vitejs/plugin-react'
@@ -108,13 +109,64 @@ function chunkModulesReportPlugin(): Plugin {
   }
 }
 
+/**
+ * 開發伺服器的 HTTPS 設定（#169）。Safari 在 http://localhost
+ * 不送 `__Host-` 前綴的 Secure Cookie，要在 Safari／iPhone 驗收
+ * 登入就得用 HTTPS。憑證用 mkcert 等工具在本機產生，不進版控：
+ *
+ * - INSPECTFLOW_DEV_HTTPS_CERT、INSPECTFLOW_DEV_HTTPS_KEY：憑證與
+ *   私鑰的檔案路徑，兩個都設才啟用 HTTPS；都不設就維持 HTTP。
+ * - INSPECTFLOW_DEV_HOST：開發伺服器綁定的位址（例如 0.0.0.0，
+ *   讓同網段的 iPhone 連進來）。只在 HTTPS 模式下接受，避免在
+ *   HTTP 下意外對外開放；未設定時沿用 Vite 預設（只綁本機）。
+ *
+ * 不用 VITE_ 前綴，這些值才不會被 Vite 帶進前端程式。
+ */
+function resolveDevHttps(env: Record<string, string>): {
+  https?: { cert: Buffer; key: Buffer }
+  host?: string
+} {
+  const certPath = env.INSPECTFLOW_DEV_HTTPS_CERT
+  const keyPath = env.INSPECTFLOW_DEV_HTTPS_KEY
+  const host = env.INSPECTFLOW_DEV_HOST
+
+  if (!certPath && !keyPath) {
+    if (host) {
+      throw new Error(
+        'INSPECTFLOW_DEV_HOST 只能在 HTTPS 模式使用，' +
+          '請同時設定 INSPECTFLOW_DEV_HTTPS_CERT 與 ' +
+          'INSPECTFLOW_DEV_HTTPS_KEY',
+      )
+    }
+    return {}
+  }
+  if (!certPath || !keyPath) {
+    throw new Error(
+      'INSPECTFLOW_DEV_HTTPS_CERT 與 INSPECTFLOW_DEV_HTTPS_KEY ' +
+        '必須同時設定',
+    )
+  }
+
+  return {
+    https: {
+      cert: fs.readFileSync(certPath),
+      key: fs.readFileSync(keyPath),
+    },
+    host: host || undefined,
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command, isPreview }) => {
   // 開發用的後端位址。預設 http://localhost:8000（後端目前的預設
   // port，見 docs/specs/authentication/plan.md 風險段）；可用
   // VITE_BACKEND_URL 覆寫，不需改這個檔案就能切換到不同的後端。
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
+  // 只有開發伺服器（vite serve）才讀憑證；build、preview 與 vitest
+  // 不受影響（preview 的 command 也是 serve，要另外排除）。
+  const isDevServer = command === 'serve' && !isPreview && mode !== 'test'
+  const devHttps = isDevServer ? resolveDevHttps(env) : {}
 
   return {
     plugins: [react(), chunkModulesReportPlugin()],
@@ -122,6 +174,7 @@ export default defineConfig(({ mode }) => {
       manifest: true,
     },
     server: {
+      ...devHttps,
       proxy: {
         // 讓前端以同一個 origin 呼叫後端 API，開發環境不需要
         // CORS；同時符合 AUT-R30：Cookie 由瀏覽器依同源規則
