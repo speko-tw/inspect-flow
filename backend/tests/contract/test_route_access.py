@@ -2,7 +2,7 @@
 (AUT-AC16) and AUT-R23's shared error-code registry (AUT-AC22).
 """
 
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 
 from app.api.errors import (
     ErrorCode,
@@ -10,8 +10,12 @@ from app.api.errors import (
     register_error_handlers,
 )
 from app.auth.access import (
+    PUBLIC,
     PUBLIC_ROUTES,
+    AccessLevel,
     declared_public_routes,
+    iter_route_access,
+    require_admin,
     undeclared_routes,
 )
 from app.main import create_app
@@ -58,6 +62,58 @@ def test_aut_ac16_an_undeclared_route_fails_and_names_its_path() -> None:
         return {"ok": True}
 
     assert undeclared_routes(app) == ["GET /api/v1/test/undeclared-probe"]
+
+
+def test_aut_ac16_admin_at_include_level_uncovers_declaration() -> None:
+    """AUT-AC16 (reviewer regression): a route that declares 公開 at
+    the route level, then gets an Admin check pinned on via
+    ``app.include_router(..., dependencies=[...])``, must be treated
+    as *not* declared -- two access-level markers now apply to the
+    same route, even though the original ``APIRoute``'s own
+    ``.dependant`` only ever saw the route-level one (the
+    include-level one never reaches it; see
+    ``app/auth/access.py``'s module docstring).
+    """
+    router = APIRouter()
+
+    @router.get("/api/v1/test/public-then-admin-gated", dependencies=[PUBLIC])
+    def public_then_admin_gated() -> dict[str, bool]:
+        return {"ok": True}
+
+    app = FastAPI()
+    app.include_router(router, dependencies=[Depends(require_admin)])
+
+    assert "GET /api/v1/test/public-then-admin-gated" in undeclared_routes(app)
+    assert (
+        "GET",
+        "/api/v1/test/public-then-admin-gated",
+    ) not in declared_public_routes(app)
+
+
+def test_aut_ac16_include_level_dependency_alone_counts_as_declared() -> None:
+    """AUT-AC16 (reviewer regression): a route with no dependency of
+    its own, mounted via ``app.include_router(..., dependencies=
+    [Depends(require_admin)])``, is recognized as declaring 需
+    Admin -- a declaration living entirely at the include level still
+    counts.
+    """
+    router = APIRouter()
+
+    @router.get("/api/v1/test/admin-only-via-include")
+    def admin_only_via_include() -> dict[str, bool]:
+        return {"ok": True}
+
+    app = FastAPI()
+    app.include_router(router, dependencies=[Depends(require_admin)])
+
+    infos = [
+        info
+        for info in iter_route_access(app)
+        if info.path == "/api/v1/test/admin-only-via-include"
+    ]
+    assert len(infos) == 1
+    assert infos[0].declaration is not None
+    assert infos[0].declaration.level is AccessLevel.ADMIN_REQUIRED
 
 
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:

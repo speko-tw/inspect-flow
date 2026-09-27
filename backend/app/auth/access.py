@@ -31,15 +31,34 @@ not get ``create_app()``'s app-level ``Depends(bind_request_scope)``
 for free) still marks the request scope correctly.
 
 A route's access level is read only from the *top level* of its
-resolved dependency tree (``route.dependant.dependencies``, not
-recursed into further) -- verified empirically that FastAPI does not
-fold ``require_login`` in as a top-level entry when it is only
-reached *through* e.g. ``require_admin``'s own ``Depends(
-require_login)`` parameter; it appears nested one level down, inside
-``require_admin``'s own ``Dependant.dependencies``. Reading only the
-top level therefore finds exactly the one dependency a route
-declared for itself, never also the login check hiding underneath
-it.
+resolved dependency tree, not recursed into further -- verified
+empirically that FastAPI does not fold ``require_login`` in as a
+top-level entry when it is only reached *through* e.g.
+``require_admin``'s own ``Depends(require_login)`` parameter; it
+appears nested one level down, inside ``require_admin``'s own
+``Dependant.dependencies``. Reading only the top level therefore
+finds exactly the one dependency a route declared for itself, never
+also the login check hiding underneath it.
+
+That top level is *not* simply ``route.dependant.dependencies`` on
+the original ``APIRoute`` -- verified empirically (FastAPI 0.141.1)
+that a ``dependencies=[...]`` passed to ``app.include_router(...)``
+or to an ``APIRouter(...)`` never gets folded into the original
+route's own ``.dependant`` (that one is built once, at ``@router.get
+(...)`` decoration time, before any ``include_router`` call exists to
+contribute to it). It only lands in the separate ``Dependant``
+FastAPI builds for the mounted ``_EffectiveRouteContext`` -- the same
+object ``effective_candidates()`` yields and the one actually used to
+handle a real request -- accumulated from every level (nested
+``include_router`` calls' and ``APIRouter(...)``'s ``dependencies=``,
+plus the route's own) via ``_RouterIncludeContext.combine()``. So
+:func:`_route_declaration` reads that context's ``.dependant`` when
+one exists, falling back to the route's own only for a route mounted
+directly on ``app`` with no ``effective_candidates()`` wrapper. The
+app-level ``Depends(bind_request_scope)`` (``create_app()``'s own
+``FastAPI(dependencies=[...])``) rides along in that same merged list
+too, but carries no ``__route_access__`` marker, so it never counts
+as a declaration.
 """
 
 import uuid
@@ -205,16 +224,20 @@ def require_project_permission(
     from the path parameter named ``param_name`` (default
     ``project_id``).
 
-    AUT-R19's order: (1) ``user.is_admin`` passes regardless of
-    membership or ``code``; (2) otherwise the union of the caller's
-    project roles' permission codes (recomputed fresh on every call,
-    never cached across requests -- ``effective_permissions`` itself
-    already runs inside ``session.no_autoflush`` and only reflects
-    already-flushed rows) must contain ``code``; (3) a non-member's
-    empty set, and a path parameter that is missing or not a valid
-    UUID, both fail closed with 403 ``permission.denied`` -- a
-    nonexistent project simply matches zero membership rows, so it
-    needs no separate check.
+    AUT-R19's order: (1) the ``param_name`` path parameter is parsed
+    as a UUID *first*, before any Admin check -- missing or not a
+    valid UUID fails closed with 403 ``permission.denied``
+    regardless of ``user.is_admin``, so Admin can never bypass a
+    malformed request to reach the permission check; (2) once parsed,
+    ``user.is_admin`` passes regardless of membership or ``code``;
+    (3) otherwise the union of the caller's project roles'
+    permission codes (recomputed fresh on every call, never cached
+    across requests -- ``effective_permissions`` itself already runs
+    inside ``session.no_autoflush`` and only reflects already-flushed
+    rows) must contain ``code``; (4) a non-member's empty set also
+    fails closed with 403 ``permission.denied`` -- a nonexistent
+    project simply matches zero membership rows, so it needs no
+    separate check.
 
     ``code`` is checked against DOM-R35's registry *here*, at
     declaration time (fail fast): an unregistered code raises
@@ -234,11 +257,11 @@ def require_project_permission(
         user: User = Depends(require_login),  # noqa: B008
         db: Session = Depends(get_db),  # noqa: B008
     ) -> User:
-        if user.is_admin:
-            return user
         project_id = _parse_uuid(request.path_params.get(param_name))
         if project_id is None:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        if user.is_admin:
+            return user
         codes = effective_permissions(
             db, user_id=user.id, project_id=project_id
         )
@@ -263,21 +286,26 @@ def require_self_or_admin(
     *, param_name: str = "user_id"
 ) -> Callable[..., User]:
     """Build a dependency declaring 本人或 Admin, read from the path
-    parameter named ``param_name`` (default ``user_id``): passes
-    when the logged-in user's own id equals the target id, or when
-    ``user.is_admin``; otherwise 403 ``permission.denied``. A target
-    path parameter that is missing or not a valid UUID fails closed
-    the same way (AUT-R21).
+    parameter named ``param_name`` (default ``user_id``): the target
+    path parameter is parsed as a UUID *first*, before any Admin
+    check -- missing or not a valid UUID fails closed with 403
+    ``permission.denied`` regardless of ``user.is_admin``, so Admin
+    can never bypass a malformed request to reach the identity check
+    (AUT-R21). Once parsed, it passes when the logged-in user's own
+    id equals the target id, or when ``user.is_admin``; otherwise 403
+    ``permission.denied``.
     """
 
     def _check(
         request: Request,
         user: User = Depends(require_login),  # noqa: B008
     ) -> User:
+        target_id = _parse_uuid(request.path_params.get(param_name))
+        if target_id is None:
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         if user.is_admin:
             return user
-        target_id = _parse_uuid(request.path_params.get(param_name))
-        if target_id is None or target_id != user.id:
+        if target_id != user.id:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -294,9 +322,14 @@ def require_self_or_admin(
 
 def _iter_business_routes(
     app: FastAPI,
-) -> Iterator[tuple[APIRoute, str]]:
+) -> Iterator[tuple[APIRoute, str, list[Any]]]:
     """Yield every business ``APIRoute`` mounted on ``app`` together
-    with its effective, fully-prefixed path.
+    with its effective, fully-prefixed path and its *effective*
+    top-level dependencies -- the ones that actually run for a real
+    request, after any ``include_router(...)``/``APIRouter(...)``
+    level ``dependencies=[...]`` have been folded in (see this
+    module's docstring: those never reach the original route's own
+    ``.dependant``).
 
     Deliberately the same duck-typed ``effective_candidates()``
     traversal ``tests/contract/test_route_conventions.py``'s helper
@@ -308,7 +341,7 @@ def _iter_business_routes(
     """
     for route in app.routes:
         if isinstance(route, APIRoute):
-            yield route, route.path
+            yield route, route.path, route.dependant.dependencies
             continue
         effective_candidates = getattr(route, "effective_candidates", None)
         if not callable(effective_candidates):
@@ -318,7 +351,15 @@ def _iter_business_routes(
             original_route = getattr(context, "original_route", None)
             path = getattr(context, "path", None)
             if isinstance(original_route, APIRoute) and isinstance(path, str):
-                yield original_route, path
+                effective_dependant = (
+                    getattr(context, "dependant", None)
+                    or original_route.dependant
+                )
+                yield (
+                    original_route,
+                    path,
+                    effective_dependant.dependencies,
+                )
 
 
 @dataclass(frozen=True)
@@ -334,10 +375,19 @@ class RouteAccessInfo:
     declaration: RouteAccessDeclaration | None
 
 
-def _route_declaration(route: APIRoute) -> RouteAccessDeclaration | None:
+def _route_declaration(
+    dependencies: list[Any],
+) -> RouteAccessDeclaration | None:
+    """Find the single access-level declaration among a route's
+    effective top-level ``dependencies`` (see this module's and
+    :func:`_iter_business_routes`'s docstrings for why that list is
+    not simply the original route's own ``.dependant.dependencies``)
+    -- ``None`` when zero or more than one were found, both of which
+    AUT-R18 counts as "not declared".
+    """
     found = [
         declaration
-        for dependant in route.dependant.dependencies
+        for dependant in dependencies
         if (declaration := _declaration_of(dependant.call)) is not None
     ]
     if len(found) == 1:
@@ -350,8 +400,8 @@ def iter_route_access(app: FastAPI) -> Iterator[RouteAccessInfo]:
     across every business route mounted on ``app`` (AUT-AC16's
     "程式介面：列出所有路由宣告的方式").
     """
-    for route, path in _iter_business_routes(app):
-        declaration = _route_declaration(route)
+    for route, path, dependencies in _iter_business_routes(app):
+        declaration = _route_declaration(dependencies)
         for method in sorted(route.methods or set()):
             yield RouteAccessInfo(
                 method=method, path=path, declaration=declaration
