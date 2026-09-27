@@ -1,0 +1,155 @@
+# 稽核紀錄（audit-log）
+
+**代碼**：`ALG`　**Phase**：P2　**狀態**：草稿
+**前置規格**：`database-foundation`（UUID 主鍵、UTC 時間、`created_by` 外鍵，見 DBF-R08、DBF-R11、DBF-R14）、`domain-model`（`User`、`Role`、`ProjectMember`、目前操作者，見 DOM-R05、DOM-R14、DOM-R19～DOM-R25）、`api-conventions`（UUID 字串、時間格式，見 API-R06、API-R09）
+**引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」
+**被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q5](#alg-q5) 不影響資料表，不擋凍結）
+
+## 目的
+
+權限與角色每一次變更都留下一筆不能修改、不能刪除的紀錄，事後能回答「誰、何時、對哪一筆資料、做了什麼、改之前與改之後是什麼」。這份規格定義紀錄的資料模型、寫入方式與第一批事件，之後外部身分同步覆蓋基本欄位時沿用同一套（依據：[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」（架構基準 §19）；由本規格定義為負責人裁定，[#126](https://github.com/speko-tw/inspect-flow/issues/126)，2026-09-27）。
+
+## 範圍
+
+**包含**：
+
+- `AuditLog` 的資料模型與「只能新增」的保護。
+- Service 層寫入稽核紀錄的單一入口，以及事件目錄（每種事件記哪些欄位）。
+- 第一批事件：`Role` 的新增、修改、刪除；`ProjectMember` 的角色指派；`User.is_admin` 的變更（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[#126](https://github.com/speko-tw/inspect-flow/issues/126)）。
+- 預留：外部身分同步覆蓋基本欄位的事件（[KD-20](../../intents/03-decisions-and-stack.md#kd-20)），只保證之後不用改資料表就能套用。
+
+**不包含**：
+
+- 在各個寫入入口呼叫本規格的寫入入口：由提供入口的規格負責並驗收。`Role`、`User.is_admin` 見 `domain-model` 的 DOM-R22；見[寫入時機](#寫入時機)。
+- 初始化指令建立的資料：不寫稽核紀錄（[#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定），見 ALG-R12。
+- 外部身分同步的事件代碼與欄位：由 `external-identity-sync` 登記（ALG-R13）。
+- 登入、登出、設定密碼、登入失敗：見 `authentication` 的 [AUT-Q6](../authentication/spec.md#aut-q6)。
+- 查詢 API 與畫面、保存期限、讀取紀錄、請求來源資訊：intents 沒有依據，見[待釐清](#待釐清)。
+- 其他資料（`Company`、`User` 基本欄位的人工修改等）的完整操作歷史：屬「延後但不排除」的 Audit Trail（[01-overview](../../intents/01-overview.md#延後但不排除的能力)，架構基準 §35）；這些資料目前只靠 [PR-08](../../intents/02-principles.md#pr-08) 的建立與修改紀錄。
+- 資料庫層的防竄改（trigger、權限控管、雜湊鏈）：見[考慮過但沒採用的做法](plan.md#考慮過但沒採用的做法)。
+
+## 使用情境
+
+- Admin 把「現場查核」角色的權限加上 `report.approve`；系統同時寫一筆 `role.updated`，記下改前、改後的權限代碼清單與操作者。
+- Admin 刪除「唯讀」角色；三位成員的這個角色指派一併被移除（DOM-R21），紀錄保留角色原本的名稱、權限與受影響的成員。角色刪掉後，紀錄仍查得到。
+- Admin 把一位同事設為 Admin；寫一筆 `user.admin_changed`。
+- 修改在寫稽核紀錄時失敗，整筆修改一起回滾，不會出現「改了但沒紀錄」。
+- 工程師想改掉一筆寫錯的稽核紀錄，程式會拒絕。
+
+## 需求
+
+欄位名稱是本規格建議的識別字（強度為「應」）。
+
+### 資料模型
+
+| 編號 | 需求 | 強度 | 依據 | 驗收 |
+|---|---|---|---|---|
+| ALG-R01 | `AuditLog`（資料表 `audit_logs`）**必須**具備：`id`（UUID 主鍵）、`created_at`（事件時間，含時區的 UTC）、`created_by`（操作者，外鍵指向 `User`）、`event_type`（事件代碼）、`entity_type`（被記錄的資料種類，例如 `role`）、`entity_id`（被記錄那一筆的 UUID）、`before`、`after`（改前、改後的內容，JSON）。`before`、`after` 允許空值，其餘不可空值，由資料庫約束保證 | 必須；應（欄位名） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（誰、何時、哪個 entity、做了什麼、前後內容，架構基準 §19）；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R08、DBF-R11、DBF-R14 | ALG-AC01 |
+| ALG-R02 | `AuditLog` **不得**有 `updated_at`、`updated_by` | 必須 | 本規格推導：紀錄不會被修改（ALG-R04），PR-08 的「最後修改」不適用，留著欄位會讓人以為可以改 | ALG-AC01 |
+| ALG-R03 | `entity_id` **不得**是外鍵；被記錄的資料刪除後，紀錄**必須**保留 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126)（只能新增、不能刪除）；`Role` 可刪除（DOM-R21），外鍵會擋下刪除或連帶刪掉紀錄 | ALG-AC02 |
+| ALG-R04 | 稽核紀錄只能新增：Service 層只提供新增入口；經 ORM 修改或刪除 `AuditLog`（含 flush 與 ORM 的批次 `update`、`delete`）**必須**被拒絕，資料不變 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（依 OWASP：只能新增，不能修改或刪除）；不要求資料庫層保護，理由見 PR-03 與[計畫](plan.md#考慮過但沒採用的做法) | ALG-AC03 |
+
+### 寫入
+
+| 編號 | 需求 | 強度 | 依據 | 驗收 |
+|---|---|---|---|---|
+| ALG-R05 | Service 層**必須**從單一入口寫稽核紀錄。`created_by` **必須**取自「目前操作者」入口（DOM-R14、AUT-R09），`created_at` 由後端填寫，呼叫端不能指定 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R14、AUT-R09（請求中沒有登入者時拒絕，不記成內建 `admin`） | ALG-AC04 |
+| ALG-R06 | 稽核紀錄**必須**和它記錄的變更在同一個交易（DBF-R09）寫入：變更回滾時紀錄一起回滾；寫紀錄失敗時變更也不生效 | 必須 | 本規格推導：[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 要求所有變更都有紀錄，分開提交會留下「改了但沒紀錄」 | ALG-AC05 |
+| ALG-R07 | `event_type` **必須**是事件目錄（ALG-R11）登記過的代碼，否則拒絕寫入。代碼**應**採 `<資料>.<動作>`，符合 `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$` | 必須（登記）；應（格式） | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；格式沿用 API-R07、DOM-R30 的 dot-namespace（[KD-15](../../intents/03-decisions-and-stack.md#kd-15)），理由：同一套命名好辨認 | ALG-AC06、ALG-AC10 |
+| ALG-R08 | `before`、`after` **必須**只含事件目錄為該事件宣告的欄位，多出的欄位拒絕寫入；密碼、密碼雜湊、Session 值**不得**出現在任何事件的宣告欄位裡 | 必須 | [PR-14](../../intents/02-principles.md#pr-14)（log 不得記錄密碼、Session secret）；稽核紀錄也是一種 log，本規格從嚴判讀 | ALG-AC06 |
+| ALG-R09 | 內容的形狀：新增事件 `before` 為空值；刪除事件 `after` 為空值；修改事件只記有變動的欄位，目錄另有標明「一律記錄」的欄位除外。修改前後完全相同時**應**不寫紀錄，寫入入口拒絕 | 必須（形狀）；應（無變動不寫） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（修改前後內容）；形狀是本規格的定義，理由：讀紀錄的人一眼看出改了什麼 | ALG-AC06、ALG-AC07 |
+| ALG-R10 | JSON 內的值**應**統一表示：UUID 為字串（API-R06）；時間為 API-R09 格式；權限代碼、角色 ID 等集合為排序後的陣列 | 應 | API-R06、API-R09；排序是本規格的推導，理由：同樣的內容永遠寫成同樣的 JSON，比對前後才不會誤判 | ALG-AC07 |
+
+### 事件
+
+| 編號 | 需求 | 強度 | 依據 | 驗收 |
+|---|---|---|---|---|
+| ALG-R11 | 事件目錄**必須**至少包含[第一批事件](#第一批事件)，欄位依該表 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色的變更）；[#126](https://github.com/speko-tw/inspect-flow/issues/126)（`is_admin` 的變更算權限變更） | ALG-AC07 |
+| ALG-R12 | 初始化指令（DOM-R11）**不得**寫稽核紀錄 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（初始化是系統安裝，不是權限變更；資料本身已有建立紀錄） | ALG-AC08 |
+| ALG-R13 | 外部來源的值覆蓋 `User` 基本欄位時，每次覆蓋**必須**寫一筆稽核紀錄；事件代碼與欄位由 `external-identity-sync` 登記進事件目錄。本規格的資料表與寫入入口**必須**不改 schema 就能登記新事件 | 必須 | [KD-20](../../intents/03-decisions-and-stack.md#kd-20)；「不改 schema」是本規格為預留所做的推導 | ALG-AC09（新增事件不需 migration）；覆蓋時寫紀錄由 `external-identity-sync` 驗收 |
+
+## 第一批事件
+
+`entity_type` 與事件代碼的「資料」段相同。「一律記錄」的欄位不論有沒有變動都寫，讓紀錄在被記錄的資料刪除後仍看得懂。
+
+| 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
+|---|---|---|---|---|
+| `role.created` | 新增 `Role` | `role` | 空值 | `name`、`permission_codes` |
+| `role.updated` | 改名或修改權限內容 | `role` | 有變動的 `name`、`permission_codes` | 同左 |
+| `role.deleted` | 刪除 `Role`，連同移除所有指派（DOM-R21） | `role` | `name`、`permission_codes`、`project_member_ids`（被一併移除這個角色的成員） | 空值 |
+| `project_member.roles_changed` | 一筆 `ProjectMember` 的角色集合改變：加入專案時指派、增減角色、移出專案（移出方式待 [DOM-Q5](../domain-model/spec.md#dom-q5)）。新加入時 `before.role_ids` 為空陣列；移出後 `after.role_ids` 為空陣列 | `project_member` | `role_ids`；一律記錄 `project_id`、`user_id` | 同左 |
+| `user.admin_changed` | `User.is_admin` 改變 | `user` | `is_admin` | `is_admin` |
+
+- `permission_codes`、`role_ids`、`project_member_ids` 記整個集合，不記差異，讀的人不必自己推算。
+- 刪除角色只寫一筆 `role.deleted`，不再替每位受影響的成員各寫一筆 `project_member.roles_changed`：`project_member_ids` 已能還原影響範圍，也避免一次刪除寫出大量紀錄。
+
+<a id="寫入時機"></a>
+### 寫入時機
+
+哪個入口在什麼時候呼叫寫入入口，由提供入口的規格負責並驗收：
+
+| 事件 | 提供入口的規格 | 目前狀態 |
+|---|---|---|
+| `role.updated`、`role.deleted`、`user.admin_changed` | `domain-model`（DOM-R22；計畫 T7，[#135](https://github.com/speko-tw/inspect-flow/issues/135)） | DOM-R22 待依 #126 更新 |
+| `role.created`、`project_member.roles_changed` | 尚無規格提供這兩個寫入入口 | 提供入口的規格（例如 `admin-dashboard`）必須依 DOM-R22 寫紀錄 |
+
+## 資料
+
+| 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
+|---|---|---|---|
+| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（做法同 DBF-R11、DBF-R14）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`（ALG-R01～ALG-R04） | 草稿 |
+
+關聯：`User` 1—多 `AuditLog`（`created_by`）。`entity_id` 只存 UUID，不是外鍵（ALG-R03）。
+
+**門檻比對**（參照[部分凍結](../README.md#partial-freeze)規則 1）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-01～G-07、OQ-06，搜尋稽核、紀錄、歷程、刪除、保留、核可等字面。
+
+| 實體 | 字面命中 | 結論 | 理由 |
+|---|---|---|---|
+| `AuditLog` | G-04「核可紀錄」；G-05「刪除與保留」 | 無關 | G-04 的核可紀錄是 Variant 那一側的欄位；日後若要把核可寫進稽核紀錄，只是在事件目錄多登記一種事件，不改資料表（ALG-R13）。G-05 談的是 `Evidence` 的刪除，與稽核紀錄的保留無關 |
+
+## 介面
+
+本規格不新增 API 端點與畫面（查詢介面見 [ALG-Q2](#alg-q2)）。對開發者的介面如下；模組與函式名稱由計畫決定。
+
+| 介面 | 內容 | 對應需求 |
+|---|---|---|
+| 程式介面 | 寫入稽核紀錄的單一入口：傳入事件代碼、被記錄的資料與 `before`、`after`；操作者與時間由入口填寫 | ALG-R05～ALG-R10 |
+| 程式介面 | 事件目錄：事件代碼與各自宣告的欄位；其他規格在這裡登記自己的事件 | ALG-R07、ALG-R08、ALG-R11、ALG-R13 |
+
+## 驗收條件
+
+皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立；ALG-AC01～ALG-AC03、ALG-AC07 的測試放在 `backend/tests/db/`，CI 也對 PostgreSQL 執行（DBF-R10）。
+
+| 編號 | Given | When | Then | 對應需求 |
+|---|---|---|---|---|
+| ALG-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，一筆作為操作者的 `User` | 用 SQLAlchemy inspector 檢查 `audit_logs`；新增一筆欄位齊全的紀錄；再分別嘗試新增 `created_by`、`event_type`、`entity_type`、`entity_id` 各為空值的紀錄，以及 `created_by` 指向不存在 UUID 的紀錄 | 有 ALG-R01 的所有欄位，主鍵是 UUID；`before`、`after` 可空值，其餘不可空值；`created_by` 外鍵指向 `users.id`；沒有 `updated_at`、`updated_by`；第一筆成功，其餘每一次都被資料庫拒絕，筆數不變 | ALG-R01、ALG-R02 |
+| ALG-AC02 | 同 ALG-AC01 | 用 inspector 列出 `audit_logs` 的外鍵；新增一筆 `entity_id` 為任何資料表都不存在的 UUID 的紀錄 | 唯一的外鍵是 `created_by`；新增成功 | ALG-R03 |
+| ALG-AC03 | 已有一筆紀錄 | 以 ORM 修改它的 `after` 後 flush；以 ORM 刪除它後 flush；以 `session.execute` 對 `AuditLog` 執行批次 `update`、批次 `delete` | 四次都被拒絕；重新讀取時，筆數與內容都和操作前相同 | ALG-R04 |
+| ALG-AC04 | 初始化後的資料庫（有內建 `admin`）與另一位已登入的 `User` U；以可控時間固定現在時刻 | 不在 HTTP 請求中寫一筆紀錄；在已綁定 U 的請求範圍內寫一筆；在沒有登入者的請求範圍內寫一筆；呼叫端試圖自行指定操作者或時間 | 第一筆的 `created_by` 是 `admin`，第二筆是 U，兩筆的 `created_at` 都等於固定的時刻；第三次被拒絕、不寫入；入口不接受操作者與時間參數 | ALG-R05 |
+| ALG-AC05 | 一個交易單位（DBF-R09） | 在同一個交易裡修改一筆 `Company`、寫一筆紀錄，然後拋出例外；另一個交易裡修改同一筆 `Company` 後，用未登記的事件代碼寫紀錄 | 兩次都回滾：`Company` 不變，`audit_logs` 沒有新紀錄 | ALG-R06 |
+| ALG-AC06 | 事件目錄已登記 `role.updated` | 分別寫入：未登記的代碼 `role.renamed`；`after` 多了未宣告欄位 `password_hash`；`before`、`after` 完全相同的 `role.updated`；另掃描事件目錄所有宣告欄位 | 三次都被拒絕，筆數不變；沒有任何事件宣告含 `password`、`secret`、`token`、`session` 字樣的欄位 | ALG-R07、ALG-R08、ALG-R09 |
+| ALG-AC07 | 初始化後的資料庫 | 依[第一批事件](#第一批事件)各寫一筆（`role.updated` 只改名；`project_member.roles_changed` 以「新加入」與「移出」各一筆），集合欄位故意以未排序的順序、UUID 以 `uuid.UUID` 物件傳入，再從資料庫讀回 | 五種代碼都寫入成功；讀回的 `event_type`、`entity_type`、`entity_id` 等於輸入；`role.created` 的 `before`、`role.deleted` 的 `after` 為空值；`role.updated` 只有 `name`；`project_member.roles_changed` 前後都有 `project_id`、`user_id`，新加入的 `before.role_ids`、移出的 `after.role_ids` 為空陣列；UUID 為字串、集合為排序後的陣列 | ALG-R09、ALG-R10、ALG-R11 |
+| ALG-AC08 | 對空資料庫執行 `alembic upgrade head` 之後 | 執行初始化指令（DOM-AC08 的成功案例） | 初始化成功，`audit_logs` 為 0 筆 | ALG-R12 |
+| ALG-AC09 | 事件目錄；測試結束後還原 | 在測試中登記一個測試用事件（`entity_type = user`，三個欄位），寫入一筆再讀回；比對寫入前後的 `alembic heads` 與 `audit_logs` 欄位 | 寫入與讀回成功；migration head 與欄位都沒有變 | ALG-R13 |
+| ALG-AC10 | 事件目錄 | 逐一檢查所有已登記的事件代碼 | 每個代碼都符合 ALG-R07 的格式，且「資料」段等於該事件的 `entity_type` | ALG-R07 |
+
+## 待釐清
+
+以下 intents 沒有依據，本規格不自行拍板；需要團隊裁定時另開 issue 移到 `05-open-questions.md`。都不影響資料表，不擋凍結；ALG-Q5 若選 B 要多一支 migration。
+
+<a id="alg-q1"></a>
+- **ALG-Q1：保存期限**。選項：（A）永久保存，不提供清除；（B）保存固定年限後清除或封存；（C）可設定。業界：OWASP Logging Cheat Sheet 要求依法規與內部政策訂保存期限；ISO 27001、SOC 2 的稽核常見要求至少保存一年。**建議 A**：第一批事件只有權限變更，量很小，也和「不能刪除」一致；真要清除時另開規格。
+<a id="alg-q2"></a>
+- **ALG-Q2：查詢介面**。選項：（A）MVP 不提供，需要時由維運人員查資料庫；（B）Admin 專用的唯讀 API，可依資料、事件、時間篩選，cursor 分頁（KD-13）；（C）另做 `admin-dashboard` 畫面。業界：稽核紀錄通常只給系統管理者或稽核人員看，不給一般使用者。**建議 A**，到 `admin-dashboard`（0.8.x）再決定 B、C；誰能看，建議只限 Admin（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)）。
+<a id="alg-q3"></a>
+- **ALG-Q3：要不要記錄讀取**。選項：（A）不記錄；（B）只記錄敏感資料的讀取或匯出（例如報告匯出）。業界：OWASP 建議視需要記錄敏感資料的存取，但讀取量大，一般不全記。**建議 A**：intents 沒有敏感讀取的要求；日後報告匯出若要記錄，再登記事件（ALG-R13）。
+<a id="alg-q4"></a>
+- **ALG-Q4：`User.is_active`（停用、啟用帳號）要不要記錄**。#126 只裁定 `is_admin`。選項：（A）記錄，新增 `user.active_changed`；（B）不記錄，只靠 `updated_at`、`updated_by`。業界：OWASP 把新增、刪除帳號與權限變更列為應記錄的高風險操作。**建議 A**：停用就是拿掉登入能力，DOM-R07 也把停用當成拿掉 Admin。選 A 時只要在事件目錄多登記一種事件，由 DOM T7（#135）寫入。
+<a id="alg-q5"></a>
+- **ALG-Q5：要不要記錄請求來源（IP、User-Agent、Session）**。選項：（A）不記錄；（B）新增可空值的來源欄位。業界：OWASP 建議記錄「何時、何處、誰、做什麼」，「何處」通常包含 IP。**建議 A**：第一階段是單機、內網，操作者已記在 `created_by`；之後要加，只需一支新增可空值欄位的 migration。
+
+## 變更紀錄
+
+凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
+
+-
