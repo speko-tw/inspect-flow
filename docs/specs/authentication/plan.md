@@ -109,7 +109,7 @@
 | AUT-AC41 | `frontend/src/auth/RequireAuth.test.tsx`（T10）：替身回 `must_change_password: true`，渲染 `/admin`、`/field` 斷言導向 `/change-password` 並帶原路徑；送出表單後斷言回到原路徑；`npm run test` |
 | AUT-AC42 | `frontend/src/auth/ChangePasswordPage.test.tsx`（T10）：兩次新密碼不同時斷言 `fetch` 未被呼叫；依序讓替身回三種錯誤，斷言三則訊息不同、三個欄位的 `type`；`npm run test` |
 | AUT-AC43 | `backend/tests/auth/test_access.py`（T4）：以 ORM 建立 Admin 兼專案成員的 T 並設標記，呼叫 AUT-AC17 的四條測試路由，斷言 403（AUT-R33 的錯誤碼）與計數 0；清除標記後斷言四條放行 |
-| AUT-AC44 | `backend/tests/auth/test_access.py`（T4）：以 ORM 建立非成員的 Admin 與只有讀取角色的成員，參數化四條路由，斷言狀態碼 |
+| AUT-AC44 | `backend/tests/auth/test_access.py`（T4）：以 ORM 建立非成員的 Admin 與只有讀取角色的成員，參數化四條路由，斷言 Admin 放行、成員四次都是 403 且 `error.code` 為 `permission.denied` |
 
 ## 考慮過但沒採用的做法
 
