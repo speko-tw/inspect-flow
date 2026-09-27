@@ -25,9 +25,11 @@ already-flushed admin row), then the three template roles. It
 raises :class:`AlreadyInitializedError` without writing anything
 when an ``is_system = True`` User already exists (DOM-R13) -- this
 check runs again here, inside the write transaction, even though
-:func:`run` already made the same check before prompting; only the
-one inside this function actually closes the race between that
-friendly early check and the write.
+:func:`run` already made the same check before prompting. Neither
+``SELECT`` actually closes the race against a concurrent run by
+itself; :func:`run` tells a losing run's resulting
+``IntegrityError`` (from the template roles' global unique name
+index, DOM-R34) apart from a real failure.
 
 :func:`run` wraps one attempt in :func:`app.db.unit_of_work.unit_of_work`,
 the same commit-or-rollback-everything unit the Service layer uses,
@@ -271,10 +273,12 @@ def run(
         input_fn = input
     # DOM-R13: checking before prompting is friendlier (an operator
     # re-running this command against an already-initialized
-    # database is not asked to retype every field first), but does
-    # not by itself close the race against a concurrent run --
-    # ``initialize_system`` repeats the same check inside the write
-    # transaction below for that.
+    # database is not asked to retype every field first), but --
+    # like the repeated check inside the write transaction that
+    # ``initialize_system`` makes -- it is still just a ``SELECT``:
+    # neither check by itself closes the race against a concurrent
+    # run. What actually closes it is below, where a losing run's
+    # ``IntegrityError`` is told apart from a real failure.
     with unit_of_work(session_factory) as precheck_session:
         if is_system_initialized(precheck_session):
             print("系統已初始化，未寫入任何資料。")
@@ -296,7 +300,26 @@ def run(
     except AlreadyInitializedError:
         print("系統已初始化，未寫入任何資料。")
         return 0
-    except (ValueError, IntegrityError) as exc:
+    except ValueError as exc:
+        print(f"初始化失敗：{exc}", file=sys.stderr)
+        return 1
+    except IntegrityError as exc:
+        # DOM-R13: both checks above are plain ``SELECT``s, so two
+        # concurrent runs can each pass both before either commits.
+        # The three template role names are fixed and
+        # ``ix_roles_name_lower`` (DOM-R34) is a *global* unique
+        # index, so whichever run's role rows reach the database
+        # second always hits an ``IntegrityError`` there -- that
+        # index, not either ``SELECT``, is the actual serialization
+        # point. ``unit_of_work`` already rolled this run's
+        # transaction back; re-check with a fresh session to tell
+        # "the other run won" apart from a real failure (e.g. two
+        # accounts sharing one email, which stays a failure since
+        # nothing was ever committed for either run).
+        with unit_of_work(session_factory) as recheck_session:
+            if is_system_initialized(recheck_session):
+                print("系統已初始化，未寫入任何資料。")
+                return 0
         print(f"初始化失敗：{exc}", file=sys.stderr)
         return 1
 

@@ -22,6 +22,7 @@ from alembic.config import Config
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
+import app.cli.init_system as init_system_module
 from alembic import command
 from app.cli.init_system import (
     _TEMPLATE_ROLE_NAMES,
@@ -91,6 +92,35 @@ def _count(session: Session, model: type) -> int:
     return len(session.scalars(select(model)).all())
 
 
+def _table_snapshot(session: Session) -> dict[str, list[dict]]:
+    """Every column (including ``created_at``/``updated_at``) of
+    every row in the four tables this command may write, as a
+    plain, order-independent, comparable structure. Used by
+    DOM-AC09's "content unchanged" assertions, which need more than
+    matching row counts.
+    """
+
+    def _rows(model: type) -> list[dict]:
+        rows = session.scalars(select(model)).all()
+        return sorted(
+            (
+                {
+                    column.name: getattr(row, column.name)
+                    for column in model.__table__.columns
+                }
+                for row in rows
+            ),
+            key=lambda row: str(row["id"]),
+        )
+
+    return {
+        "companies": _rows(Company),
+        "users": _rows(User),
+        "roles": _rows(Role),
+        "role_permissions": _rows(RolePermission),
+    }
+
+
 def _valid_answers(
     *,
     company_code: str = "ACME",
@@ -114,7 +144,7 @@ def _valid_answers(
         "系統管理員",
         admin_email,
         "Management",
-        "HQ",
+        "Branch",
         owner_employee_no,
         "Owner Person",
         "負責人",
@@ -260,6 +290,7 @@ class TestRun:
             assert _count(check, Role) == 3
             assert _count(check, RolePermission) == 0
 
+            company = check.scalars(select(Company)).one()
             admin = check.scalars(
                 select(User).where(User.is_system.is_(True))
             ).one()
@@ -268,15 +299,52 @@ class TestRun:
                     User.is_system.is_(False), User.is_admin.is_(True)
                 )
             ).one()
+
+            assert company.code == "ACME"
+            assert company.name == "Acme Corp"
+            assert company.kind == "internal"
+            assert company.created_by == admin.id
+            assert company.updated_by == admin.id
+
+            assert admin.company_id == company.id
+            assert admin.department == "IT"
+            assert admin.location == "HQ"
+            assert admin.employee_no == "A0001"
+            assert admin.name_en == "System Admin"
+            assert admin.name_zh == "系統管理員"
             assert admin.email == "admin@example.com"
+            assert admin.is_admin is True
+            assert admin.is_system is True
+            assert admin.created_by == admin.id
+            assert admin.updated_by == admin.id
+
+            assert owner.company_id == company.id
+            assert owner.department == "Management"
+            assert owner.location == "Branch"
+            assert owner.employee_no == "A0002"
+            assert owner.name_en == "Owner Person"
+            assert owner.name_zh == "負責人"
             assert owner.email == "owner@example.com"
+            assert owner.is_admin is True
+            assert owner.is_system is False
             assert owner.created_by == admin.id
             assert owner.updated_by == admin.id
 
-            role_names = {
-                role.name for role in check.scalars(select(Role)).all()
-            }
+            roles = check.scalars(select(Role)).all()
+            role_names = {role.name for role in roles}
             assert role_names == set(_TEMPLATE_ROLE_NAMES)
+            for role in roles:
+                assert role.created_by == admin.id
+                assert role.updated_by == admin.id
+                has_permission_codes = (
+                    check.scalars(
+                        select(RolePermission).where(
+                            RolePermission.role_id == role.id
+                        )
+                    ).first()
+                    is not None
+                )
+                assert not has_permission_codes
 
     def test_duplicate_email_fails_and_writes_nothing(
         self, session_factory: sessionmaker[Session]
@@ -302,28 +370,88 @@ class TestRun:
             assert _count(check, User) == 0
             assert _count(check, Role) == 0
 
+    def test_concurrent_initialization_reports_already_initialized(
+        self,
+        session_factory: sessionmaker[Session],
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ):
+        """DOM-R13: two runs whose ``is_system_initialized`` precheck
+        and in-transaction check *both* pass before either commits
+        (simulated below by forcing the first two calls to return
+        ``False``) must not both report success. The losing run's
+        inputs differ in every field from the winner's, so only the
+        template roles' shared names -- not any of those fields --
+        can be what makes its write fail.
+        """
+        first_exit_code = run(
+            _make_reader(_valid_answers()), session_factory=session_factory
+        )
+        assert first_exit_code == 0
+
+        with session_factory() as check:
+            before = _table_snapshot(check)
+
+        real_is_system_initialized = init_system_module.is_system_initialized
+        calls_seen = 0
+
+        def _fake_is_system_initialized(session: Session) -> bool:
+            nonlocal calls_seen
+            calls_seen += 1
+            if calls_seen <= 2:
+                return False
+            return real_is_system_initialized(session)
+
+        monkeypatch.setattr(
+            init_system_module,
+            "is_system_initialized",
+            _fake_is_system_initialized,
+        )
+
+        losing_answers = _valid_answers(
+            company_code="OTHER",
+            company_name="Other Co",
+            admin_employee_no="B0001",
+            admin_email="second-admin@example.com",
+            owner_employee_no="B0002",
+            owner_email="second-owner@example.com",
+        )
+        capsys.readouterr()
+        second_exit_code = run(
+            _make_reader(losing_answers), session_factory=session_factory
+        )
+
+        assert second_exit_code == 0
+        assert "系統已初始化，未寫入任何資料。" in capsys.readouterr().out
+
+        with session_factory() as check:
+            after = _table_snapshot(check)
+        assert after == before
+
     def test_second_run_reports_already_initialized_without_prompting(
-        self, session_factory: sessionmaker[Session]
+        self,
+        session_factory: sessionmaker[Session],
+        capsys: pytest.CaptureFixture[str],
     ):
         first_exit_code = run(
             _make_reader(_valid_answers()), session_factory=session_factory
         )
         assert first_exit_code == 0
 
+        with session_factory() as check:
+            before = _table_snapshot(check)
+
+        capsys.readouterr()
         second_exit_code = run(
             _forbidden_reader,
             session_factory=session_factory,
         )
         assert second_exit_code == 0
+        assert "系統已初始化，未寫入任何資料。" in capsys.readouterr().out
 
         with session_factory() as check:
-            assert _count(check, Company) == 1
-            assert _count(check, User) == 2
-            assert _count(check, Role) == 3
-            admin = check.scalars(
-                select(User).where(User.is_system.is_(True))
-            ).one()
-            assert admin.email == "admin@example.com"
+            after = _table_snapshot(check)
+        assert after == before
 
 
 class TestMain:
