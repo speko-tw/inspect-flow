@@ -374,6 +374,17 @@
 - **未來升級路線**：維持 `/api/v1` 契約；框架版本由測試後的 lockfile 固定。
 - **依據**：架構基準 §4.2、§7.1、§14。
 
+<a id="stack-asgi-server"></a>
+### ASGI 伺服器
+
+- **選用**：uvicorn。
+- **負責什麼**：本機開發時啟動 FastAPI（`make run-backend`）。
+- **狀態**：建議；正式部署用什麼伺服器不在此決定，留給 pilot-deployment（[#109](https://github.com/speko-tw/inspect-flow/issues/109)）。
+- **為什麼**：FastAPI 需要 ASGI 伺服器才能執行；uvicorn 是它文件的預設選擇，支援開發用的自動重載。
+- **不要用**：把本機開發的啟動方式直接當成正式部署設定。
+- **未來升級路線**：部署方式定案後再補正式環境的伺服器設定；依賴版本由 lockfile 固定。
+- **依據**：負責人裁定（[PR #212 留言](https://github.com/speko-tw/inspect-flow/pull/212#issuecomment-5851963155)，2026-09-27）；架構基準無對應章節。
+
 <a id="stack-api-schema"></a>
 ### API Schema
 
