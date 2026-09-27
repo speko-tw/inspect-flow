@@ -31,7 +31,10 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
    ```
 
 2. **套用 migration**：`make migrate`。
-3. **初始化與設定密碼**：指令由 #134、#154 提供，合併後補上。
+3. **初始化系統**：`make init`。會詢問本公司的代碼與名稱，以及內建
+   `admin` 與負責人個人帳號的必填基本欄位；對已初始化的資料庫再執行
+   一次，會回報已初始化並且不寫入任何資料。**設定密碼**：由 #154
+   提供，合併後補上。
 4. **啟動後端與前端**，各開一個終端機：
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把

@@ -35,8 +35,12 @@ root.
    ```
 
 2. **Apply migrations**: `make migrate`.
-3. **Initialize and set a password**: the commands come from #134
-   and #154 and will be added here once those are merged.
+3. **Initialize the system**: `make init`. Prompts for the first
+   company's code and name, and the required basic fields of the
+   built-in `admin` account and the owner's personal account;
+   running it again on an already-initialized database reports that
+   and writes nothing. **Set a password**: provided by #154, to be
+   added here once merged.
 4. **Start the backend and frontend**, each in its own terminal:
    - `make run-backend` — API at `http://127.0.0.1:8000`.
    - `make run-frontend` — Vite at `http://localhost:5173`; it
