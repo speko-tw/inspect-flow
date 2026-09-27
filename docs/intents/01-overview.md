@@ -47,7 +47,7 @@ flowchart LR
   User -.->|is_admin 開關，不經 Role| Admin["系統管理者權限"]
 ```
 
-- `Company` 與 `User` 是一對多：人員所屬 `Company` 可隨時修改，見 [KD-23](03-decisions-and-stack.md#kd-23)。
+- `Company` 與 `User` 是一對多：本系統帳號的所屬 `Company` 可隨時修改，外部帳號以外部來源為準、不能在系統內修改，見 [KD-23](03-decisions-and-stack.md#kd-23)、[KD-16](03-decisions-and-stack.md#kd-16)。
 - `ProjectMember` 是 `User`、`Project`、`Role` 三者的關聯實體：同一人在同一 `Project` 下可掛多個 `Role`，權限加總，見 [KD-27](03-decisions-and-stack.md#kd-27)。
 - `Role` 全系統共用一份清單，可自訂、可刪除，修改時立即影響所有持有者，見 [KD-26](03-decisions-and-stack.md#kd-26)。
 - 系統管理者（`is_admin`）是 `User` 身上的開關，不透過 `Role` 授予，見 [KD-24](03-decisions-and-stack.md#kd-24)。
