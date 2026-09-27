@@ -45,7 +45,7 @@
 ## 風險
 
 - **`User.company_id` 與 `Company.created_by` 互相引用**：兩者都不可空值，初始化時不論先寫哪張表，當下都會違反外鍵。降低方式：T2 把 `User.company_id` 設為 `DEFERRABLE INITIALLY DEFERRED`（SQLite 與 PostgreSQL 都支援），`Company.created_by` 維持立即檢查，不改 T1 的資料表與共用的建立及修改紀錄欄位。因此同一個交易的寫入順序是：先寫帳號（`company_id` 指向由應用端預先產生 UUID、尚未寫入的公司），再寫公司（`created_by` 指向該帳號），外鍵在提交時才檢查。T6 照這個順序寫入；T2 的測試要包含這個情境，以及提交時公司仍不存在會被拒絕的反向情境，並由 `database-foundation` T3 的 CI 在 PostgreSQL 上補驗。
-- **`email` 不分大小寫的唯一約束**：採 `lower(email)` 的唯一索引，SQLite 與 PostgreSQL 都支援運算式索引，而且唯一性由資料庫保證，任何寫入路徑都擋得下。不採正規化欄位，因為以 Core `update()` 只改 `email` 時，正規化欄位可能沒有同步更新，唯一性就出現漏洞。已知差異：SQLite 的 `lower()` 只轉換 ASCII 字母，PostgreSQL 依資料庫語系也會轉換非 ASCII 字母，所以只差非 ASCII 大小寫的兩個 email，在 SQLite 會被當成不同；DOM-AC02 只用 ASCII，兩種資料庫結果一致。T3 的 `Role.name`（DOM-R34）用同樣做法，差異相同；DOM-AC24 也只用 ASCII。
+- **`email` 不分大小寫的唯一約束**：採 `lower(email)` 的唯一索引，SQLite 與 PostgreSQL 都支援運算式索引，而且唯一性由資料庫保證，任何寫入路徑都擋得下。不採正規化欄位，因為以 Core `update()` 只改 `email` 時，正規化欄位可能沒有同步更新，唯一性就出現漏洞。已知差異：SQLite 的 `lower()` 只轉換 ASCII 字母，PostgreSQL 依資料庫語系也會轉換非 ASCII 字母，所以只差非 ASCII 大小寫的兩個 email，在 SQLite 會被當成不同；DOM-AC02 只用 ASCII，兩種資料庫結果一致。T3 的 `Role.name`（DOM-R34）用同樣做法，差異相同；DOM-AC24 也只用 ASCII。負責人已接受這個差異，正式環境的 PostgreSQL 不受影響，不改用正規化欄位（[PR #205 裁定](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851795833)，2026-09-27）。
 - **對既有資料表加不可空值欄位**：SQLite 的 `ALTER TABLE ADD COLUMN` 不能直接加沒有預設值的不可空值欄位，也不能事後加外鍵與 CHECK 約束。T2 的 migration 用 Alembic 的 batch 模式重建資料表；因為這時 `User` 資料表還沒有正式資料，重建不需要資料轉換。
 - **內建 `admin` 的自我參照**：`created_by` 要在同一筆 INSERT 裡指向自己，主鍵必須在寫入前由應用端產生（同 `database-foundation` 計畫的風險段）。T6 照這個方式建立 `admin`。
 - **裁定未完成就開工**：T1～T3 的唯一約束與預設值依 DOM-Q2～DOM-Q7（欄位長度與格式已由 DOM-Q1 裁定，見 DOM-R28～DOM-R31）。任一裁定未完成時，對應任務標 `blocked`；不要先用猜的長度或預設值建表，事後改約束要多一支 migration。
