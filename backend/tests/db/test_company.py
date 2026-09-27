@@ -453,6 +453,60 @@ class TestDomAc20LengthAndFormatValidation:
         stored = session.get(Company, boundary_company.id)
         assert stored.tax_id == self._VALID_TAX_ID
 
+    @pytest.mark.parametrize("field", ["code", "name"])
+    def test_none_on_not_null_field_is_rejected_on_construction(
+        self, session, creator, field
+    ):
+        """Issue #188: ``None`` on a ``NOT NULL`` column is rejected
+        by ``@validates`` with the same ``ValueError`` an invalid
+        value gets, not the ``TypeError`` ``len(None)`` would raise
+        inside ``_check_code``/``_check_name``.
+        """
+        before = session.query(Company).count()
+        kwargs: dict[str, str | None] = {
+            "code": "GOOD2",
+            "name": "Good Name",
+            "kind": "internal",
+        }
+        kwargs[field] = None
+
+        with pytest.raises(ValueError):
+            _new_company(creator, **kwargs)
+
+        assert session.query(Company).count() == before
+
+    @pytest.mark.parametrize("field", ["code", "name"])
+    def test_none_on_not_null_field_is_rejected_on_assignment(
+        self, session, boundary_company, field
+    ):
+        original = getattr(boundary_company, field)
+        with pytest.raises(ValueError):
+            setattr(boundary_company, field, None)
+
+        session.expire(boundary_company)
+        stored = session.get(Company, boundary_company.id)
+        assert getattr(stored, field) == original
+
+    def test_none_tax_id_is_accepted_on_construction(
+        self, session, creator, existing_company
+    ):
+        company = _new_company(
+            creator, code="C011", name="Company Eleven", kind="internal"
+        )
+        assert company.tax_id is None
+        session.add(company)
+        session.commit()
+
+    def test_none_tax_id_is_accepted_on_assignment(
+        self, session, boundary_company
+    ):
+        boundary_company.tax_id = None
+        session.commit()
+
+        session.expire(boundary_company)
+        stored = session.get(Company, boundary_company.id)
+        assert stored.tax_id is None
+
     def test_dom_ac20_batch_insert_with_invalid_code_is_rejected(
         self, session, creator, existing_company
     ):

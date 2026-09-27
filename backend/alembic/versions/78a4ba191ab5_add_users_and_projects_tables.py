@@ -21,7 +21,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
-from app.db.base import UTCDateTime
 
 # revision identifiers, used by Alembic.
 revision: str = "78a4ba191ab5"
@@ -36,8 +35,8 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("employee_no", sa.String(), nullable=False),
-        sa.Column("created_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", UTCDateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
@@ -57,8 +56,8 @@ def upgrade() -> None:
         "projects",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("project_code", sa.String(), nullable=False),
-        sa.Column("created_at", UTCDateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", UTCDateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_projects")),

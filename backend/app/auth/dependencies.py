@@ -9,7 +9,8 @@ dependency so the gate applies to every layer).
 """
 
 import contextvars
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
+from typing import Any
 
 from fastapi import Depends, Request
 from fastapi.routing import APIRoute
@@ -23,19 +24,35 @@ from app.models import User, UserPassword
 # AUT-R33: while a ``local`` account's password is still marked
 # temporary, only these (method, endpoint) pairs are let through the
 # gate below; every other request that reaches ``require_login`` is
-# rejected before its route handler runs. Identified by the matched
-# route's *endpoint* -- ``f"{endpoint.__module__}.{endpoint.__qualname__}"``
-# -- rather than by request path or route-template string, so the
-# allowlist keeps working (and keeps meaning "this one operation")
-# regardless of which prefix(es) ``include_router`` mounts the route
-# under. AUT-AC35/AUT-AC36 assert this set's exact contents against
-# the real application's routes.
-TEMPORARY_PASSWORD_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("GET", "app.api.v1.auth.get_me"),
-        ("POST", "app.api.v1.auth.logout"),
-    }
-)
+# rejected before its route handler runs. Populated by
+# ``register_temporary_password_allowed`` below -- ``app/api/v1/
+# auth.py`` calls it right after declaring each route's handler
+# function, so every entry holds the exact function object FastAPI's
+# ``APIRoute.endpoint`` will later point to for that route.
+#
+# Matching by that object's identity (rather than by request path,
+# route-template string, or ``f"{endpoint.__module__}.
+# {endpoint.__qualname__}"``) is deliberate: a route-template or path
+# match would break the moment ``include_router`` mounts the route
+# under a different prefix, and a name-based match can be defeated by
+# an unrelated handler wrapped with ``functools.wraps(get_me)`` --
+# which copies ``__module__``/``__qualname__`` onto a distinct
+# function object and would otherwise be wrongly recognized as the
+# same operation (issue #200). AUT-AC35/AUT-AC36 assert this set's
+# exact contents against the real application's routes.
+TEMPORARY_PASSWORD_ALLOWLIST: set[tuple[str, Callable[..., Any]]] = set()
+
+
+def register_temporary_password_allowed(
+    method: str, endpoint: Callable[..., Any]
+) -> None:
+    """Adds ``(method, endpoint)`` to ``TEMPORARY_PASSWORD_ALLOWLIST``
+    (AUT-R33). ``endpoint`` must be the exact function object the
+    route's ``APIRoute.endpoint`` holds -- i.e. call this with the
+    same function FastAPI's router decorator was applied to, after
+    that decorator has run, so both refer to the identical object.
+    """
+    TEMPORARY_PASSWORD_ALLOWLIST.add((method, endpoint))
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -176,14 +193,14 @@ def has_effective_temporary_password_flag(db: Session, user: User) -> bool:
     return user_password is not None and user_password.must_change_password
 
 
-def _matched_route_operation(request: Request) -> str | None:
-    """The matched route's endpoint identity, as
-    ``f"{endpoint.__module__}.{endpoint.__qualname__}"`` (e.g.
-    ``"app.api.v1.auth.get_me"``), used instead of the request path
-    so which prefix(es) ``include_router`` happens to mount the
-    route under can never affect ``TEMPORARY_PASSWORD_ALLOWLIST``:
-    the same handler function is the same operation no matter how
-    many aliases reach it.
+def _matched_route_endpoint(request: Request) -> Callable[..., Any] | None:
+    """The matched route's endpoint *object* itself, used instead of
+    the request path (so which prefix(es) ``include_router`` happens
+    to mount the route under can never affect
+    ``TEMPORARY_PASSWORD_ALLOWLIST``) and instead of the endpoint's
+    name (so a distinct function that merely shares a name --
+    e.g. via ``functools.wraps`` -- is never mistaken for it,
+    closing the gap fixed on issue #200).
 
     ``request.scope["route"]`` (the same attribute
     ``app/api/errors.py``'s unhandled-exception handler already
@@ -193,21 +210,16 @@ def _matched_route_operation(request: Request) -> str | None:
     anything path-related itself.
 
     Reports ``None`` when the matched route isn't an ``APIRoute``
-    with a real ``endpoint`` (defensive; every route that reaches
-    ``require_login`` is one in practice). ``None`` never matches
-    any entry in ``TEMPORARY_PASSWORD_ALLOWLIST``, so this keeps the
-    gate fail-closed: a request whose operation cannot be confirmed
-    is rejected rather than risk wrongly allowing it through.
+    (defensive; every route that reaches ``require_login`` is one in
+    practice). ``None`` never matches any entry in
+    ``TEMPORARY_PASSWORD_ALLOWLIST``, so this keeps the gate
+    fail-closed: a request whose endpoint cannot be confirmed is
+    rejected rather than risk wrongly allowing it through.
     """
     route = request.scope.get("route")
     if not isinstance(route, APIRoute):
         return None
-    endpoint = route.endpoint
-    module = getattr(endpoint, "__module__", None)
-    qualname = getattr(endpoint, "__qualname__", None)
-    if not module or not qualname:
-        return None
-    return f"{module}.{qualname}"
+    return route.endpoint
 
 
 def _check_temporary_password_gate(
@@ -224,8 +236,8 @@ def _check_temporary_password_gate(
     same as ``_check_login`` raising 401 does).
     """
     if has_effective_temporary_password_flag(db, user):
-        operation = _matched_route_operation(request)
-        if (request.method, operation) not in TEMPORARY_PASSWORD_ALLOWLIST:
+        endpoint = _matched_route_endpoint(request)
+        if (request.method, endpoint) not in TEMPORARY_PASSWORD_ALLOWLIST:
             raise APIError(ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED, 403)
     return user
 

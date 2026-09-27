@@ -17,6 +17,7 @@ from app.api.errors import APIError, ErrorCode
 from app.auth.dependencies import (
     get_db,
     has_effective_temporary_password_flag,
+    register_temporary_password_allowed,
     require_login,
 )
 from app.auth.login import authenticate
@@ -121,6 +122,14 @@ def logout(
     _clear_session_cookie(response)
 
 
+# AUT-R33: registers the exact function object above (the same one
+# the ``@router.post`` decorator returned unchanged and FastAPI's
+# ``APIRoute.endpoint`` will hold) as one of the temporary-password
+# gate's allowed operations. T11 (#192) registers the change-password
+# route's handler the same way.
+register_temporary_password_allowed("POST", logout)
+
+
 @router.get("/me", response_model=CurrentUserResponse)
 def get_me(
     user: User = Depends(require_login),  # noqa: B008 -- FastAPI's DI
@@ -131,3 +140,6 @@ def get_me(
     logged in.
     """
     return _current_user_response(db, user)
+
+
+register_temporary_password_allowed("GET", get_me)

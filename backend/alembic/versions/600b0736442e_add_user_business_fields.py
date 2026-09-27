@@ -73,7 +73,6 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
-from app.db.base import UTCDateTime
 
 # revision identifiers, used by Alembic.
 revision: str = "600b0736442e"
@@ -168,7 +167,7 @@ def upgrade() -> None:
             batch_op.add_column(
                 sa.Column(
                     "external_synced_at",
-                    UTCDateTime(timezone=True),
+                    sa.DateTime(timezone=True),
                     nullable=True,
                 )
             )

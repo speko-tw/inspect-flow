@@ -44,6 +44,7 @@
 - **UUID 在 SQLite 與 PostgreSQL 的儲存型別不同**：SQLite 沒有原生 UUID 型別。T1 用 SQLAlchemy 的跨資料庫 UUID 型別，並在 T3 的 PostgreSQL 驗證中確認 migration 產出的欄位型別。
 - **含時區時間在 SQLite 上會失去時區資訊**：SQLite 沒有原生時區型別，讀回時可能變成不帶時區的值。T1 的 DBF-AC06 測試專門守這一點，寫入非 UTC 時間後讀回比對。
 - **WAL 只對檔案資料庫有效**：記憶體資料庫的 `journal_mode` 不會是 `wal`。DBF-AC05 的測試一律用暫存檔案資料庫。
+- **migration 綁住應用程式程式碼**（#139 已裁定）：migration 只用 SQLAlchemy 內建型別（例如 `sa.DateTime(timezone=True)`），不得 import `app`，否則之後改了 `app` 的型別，舊 migration 就無法從頭重播。`backend/alembic/env.py` 的 `render_item`（#199）已把 `UTCDateTime`、`BoundedString` 直接渲染成內建型別，autogenerate 不會再寫出 `app.db.base.UTCDateTime` 這類寫法；之後新增自訂型別，要在 `render_item` 補上對應的一條，漏了的話 `backend/tests/db/test_db_access_rules.py` 會擋下。
 
 ## 驗證（Proof）
 
