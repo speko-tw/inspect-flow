@@ -36,6 +36,7 @@ and would raise ``ValueError`` for any code no feature spec has
 registered yet.
 """
 
+import contextlib
 import uuid
 from dataclasses import dataclass
 
@@ -125,18 +126,25 @@ def has_modify_capability(role: Role) -> bool:
     the relationship is already loaded in memory, this reads it as
     is; if it is not, accessing it below triggers a lazy load,
     which -- for a ``role`` attached to a ``Session`` -- would
-    autoflush that ``Session`` just like a direct query would, so
-    that lazy load is done inside the owning ``Session``'s
-    ``no_autoflush``. A detached or transient ``role`` has no
-    owning ``Session`` to protect and is read directly.
+    autoflush that ``Session`` just like a direct query would.
+    Reading each permission's ``code`` further below can *also* hit
+    the database: if that attribute has been expired (e.g. by
+    ``session.expire(perm, ["code"])``) while the collection itself
+    stayed loaded, accessing it triggers a refresh, which likewise
+    autoflushes. So both the collection access and the iteration
+    that reads ``.code`` off each element must happen inside the
+    owning ``Session``'s ``no_autoflush``. A detached or transient
+    ``role`` has no owning ``Session`` to protect and is read
+    directly.
     """
     owning_session = object_session(role)
-    if owning_session is None:
-        permission_codes = role.permission_codes
-    else:
-        with owning_session.no_autoflush:
-            permission_codes = role.permission_codes
-    return any(
-        permission.code.split(".", 1)[1] != "read"
-        for permission in permission_codes
+    guard = (
+        owning_session.no_autoflush
+        if owning_session is not None
+        else contextlib.nullcontext()
     )
+    with guard:
+        return any(
+            permission.code.split(".", 1)[1] != "read"
+            for permission in role.permission_codes
+        )

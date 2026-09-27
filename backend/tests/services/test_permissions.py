@@ -20,6 +20,8 @@ Fixtures (``session``, ``operator``) come from this directory's
 ``backend/tests/conftest.py``.
 """
 
+from contextlib import contextmanager
+
 from sqlalchemy import event, inspect
 
 from app.models import (
@@ -64,6 +66,34 @@ def _new_member(
         ProjectMemberRole(role=role) for role in roles
     )
     return member
+
+
+@contextmanager
+def _record_sql_statements(engine):
+    """Record every SQL statement run on ``engine`` for the
+    duration of the ``with`` block, so a test can assert on which
+    statements did (or, more often here, did not) run.
+    """
+    statements: list[str] = []
+
+    def _record_statement(
+        conn, cursor, statement, parameters, context, executemany
+    ):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", _record_statement)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", _record_statement)
+
+
+def _mutating_statements(statements: list[str]) -> list[str]:
+    return [
+        statement
+        for statement in statements
+        if statement.strip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+    ]
 
 
 class TestDomAc15EffectivePermissions:
@@ -275,29 +305,61 @@ class TestNoAutoflushOnRead:
         # loaded state.
         session.expire(role, ["permission_codes"])
 
-        statements: list[str] = []
-
-        def _record_statement(
-            conn, cursor, statement, parameters, context, executemany
-        ):
-            statements.append(statement)
-
-        event.listen(engine, "before_cursor_execute", _record_statement)
-        try:
+        with _record_sql_statements(engine) as statements:
             effective_permissions(
                 session, user_id=user.id, project_id=project.id
             )
             role_impact_scope(session, role_id=role.id)
             has_modify_capability(role)
-        finally:
-            event.remove(engine, "before_cursor_execute", _record_statement)
 
-        mutating_statements = [
-            statement
-            for statement in statements
-            if statement.strip()
-            .upper()
-            .startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        assert mutating_statements == []
+        assert _mutating_statements(statements) == []
         assert role in session.dirty
+
+    def test_pending_role_edit_survives_expired_permission_code_read(
+        self, session, engine, operator, registered_permission_codes
+    ):
+        """PR #226 review 4113974122: even when
+        ``role.permission_codes`` is already loaded (no lazy load
+        needed), ``has_modify_capability`` still reads each
+        ``RolePermission.code`` -- and if one of those ``code``
+        columns has itself been expired (e.g. by
+        ``session.expire(perm, ["code"])``), reading it triggers a
+        refresh, which is a database hit just like a lazy load and
+        must be guarded the same way. This reproduces that: the
+        collection is loaded up front (so no lazy load occurs), one
+        member's ``code`` is expired, and ``role.name`` carries a
+        pending edit that must not be autoflushed out when
+        ``has_modify_capability`` refreshes that expired ``code``.
+        """
+        project = _new_project("P-NOFLUSH-CODE", operator)
+        user = create_root_user_with_company(session, "U-NOFLUSH-CODE")
+        session.add_all([project, user])
+        session.flush()
+
+        role = _new_role(operator, "Role-NOFLUSH-CODE", "report.read")
+        session.add(role)
+        session.flush()
+
+        member = _new_member(operator, project, user, role)
+        session.add(member)
+        session.flush()
+
+        # Load the collection up front so has_modify_capability finds
+        # it already in memory -- no lazy load path is exercised
+        # here, only the per-element ``.code`` read.
+        permission = role.permission_codes[0]
+        assert permission is not None
+
+        # A pending, unflushed edit -- this is the state under test.
+        role.name = "Role-NOFLUSH-CODE-renamed"
+        # Expire just the ``code`` column on the already-loaded
+        # RolePermission, so has_modify_capability's ``.code`` read
+        # below must refresh it from the database.
+        session.expire(permission, ["code"])
+
+        with _record_sql_statements(engine) as statements:
+            result = has_modify_capability(role)
+
+        assert _mutating_statements(statements) == []
+        assert role in session.dirty
+        assert result is False
