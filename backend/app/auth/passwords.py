@@ -1,4 +1,5 @@
-"""Argon2id password hashing (AUT-R01, AUT-R02).
+"""Argon2id password hashing (AUT-R01, AUT-R02) and the length rule
+(AUT-R04) enforced when a password is set.
 
 Parameters below are one of the OWASP Password Storage Cheat
 Sheet configurations (checked 2026-09-26): m/t/p in KiB of
@@ -13,6 +14,17 @@ from argon2 import PasswordHasher, Type
 from argon2.exceptions import VerifyMismatchError
 
 _ARGON2ID_PREFIX = "$argon2id$"
+
+# AUT-R04: length bounds enforced when a password is set, in
+# Unicode code points -- Python's ``len(str)`` already counts code
+# points, never UTF-8 bytes, so no separate decoding step is needed
+# to satisfy "以 Unicode 字元（code point）計算，不以位元組計算".
+# No character-composition rule (case, digits, symbols) is
+# required. The upper bound guards against very long input slowing
+# down the Argon2id hash above; it is not itself a security
+# requirement.
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 128
 
 # OWASP Password Storage Cheat Sheet, m/t/p = 19456 KiB / 2 / 1.
 MEMORY_COST_KIB = 19456
@@ -29,6 +41,17 @@ _hasher = PasswordHasher(
     salt_len=SALT_LEN,
     type=Type.ID,
 )
+
+
+def check_password_length(password: str) -> bool:
+    """AUT-R04: whether ``password``'s length, in Unicode code
+    points, falls within [:data:`MIN_PASSWORD_LENGTH`,
+    :data:`MAX_PASSWORD_LENGTH`], inclusive of both ends. Callers
+    (the set-password command, and later the change-password API)
+    must reject a password that fails this check without writing
+    anything.
+    """
+    return MIN_PASSWORD_LENGTH <= len(password) <= MAX_PASSWORD_LENGTH
 
 
 def hash_password(password: str) -> str:

@@ -1,0 +1,136 @@
+"""Contract tests for AUT-R18's route access-level declarations
+(AUT-AC16) and AUT-R23's shared error-code registry (AUT-AC22).
+"""
+
+from fastapi import APIRouter, Depends, FastAPI
+
+from app.api.errors import (
+    ErrorCode,
+    build_error_code_descriptions,
+    register_error_handlers,
+)
+from app.auth.access import (
+    PUBLIC,
+    PUBLIC_ROUTES,
+    AccessLevel,
+    declared_public_routes,
+    iter_route_access,
+    require_admin,
+    undeclared_routes,
+)
+from app.main import create_app
+from tests.contract.test_error_envelope import DOT_NAMESPACE_RE
+
+
+def test_aut_ac16_every_business_route_has_exactly_one_declaration() -> None:
+    """AUT-AC16: every business route mounted on the real
+    application (the same scope API-AC01 walks) carries exactly one
+    access-level declaration.
+    """
+    app = create_app()
+
+    assert undeclared_routes(app) == []
+
+
+def test_aut_ac16_public_routes_are_exactly_health_login_and_logout() -> None:
+    """AUT-AC16: the routes declared 公開 on the real application are
+    exactly the health check, login and logout -- nothing more,
+    nothing less.
+    """
+    app = create_app()
+
+    assert declared_public_routes(app) == PUBLIC_ROUTES
+    assert PUBLIC_ROUTES == frozenset(
+        {
+            ("GET", "/api/v1/health"),
+            ("POST", "/api/v1/auth/login"),
+            ("POST", "/api/v1/auth/logout"),
+        }
+    )
+
+
+def test_aut_ac16_an_undeclared_route_fails_and_names_its_path() -> None:
+    """AUT-AC16: a route mounted with no access-level declaration at
+    all fails the check, and the failure names that route's method
+    and path.
+    """
+    app = FastAPI()
+    register_error_handlers(app)
+
+    @app.get("/api/v1/test/undeclared-probe")
+    def undeclared_probe() -> dict[str, bool]:
+        return {"ok": True}
+
+    assert undeclared_routes(app) == ["GET /api/v1/test/undeclared-probe"]
+
+
+def test_aut_ac16_admin_at_include_level_uncovers_declaration() -> None:
+    """AUT-AC16 (reviewer regression): a route that declares 公開 at
+    the route level, then gets an Admin check pinned on via
+    ``app.include_router(..., dependencies=[...])``, must be treated
+    as *not* declared -- two access-level markers now apply to the
+    same route, even though the original ``APIRoute``'s own
+    ``.dependant`` only ever saw the route-level one (the
+    include-level one never reaches it; see
+    ``app/auth/access.py``'s module docstring).
+    """
+    router = APIRouter()
+
+    @router.get("/api/v1/test/public-then-admin-gated", dependencies=[PUBLIC])
+    def public_then_admin_gated() -> dict[str, bool]:
+        return {"ok": True}
+
+    app = FastAPI()
+    app.include_router(router, dependencies=[Depends(require_admin)])
+
+    assert "GET /api/v1/test/public-then-admin-gated" in undeclared_routes(app)
+    assert (
+        "GET",
+        "/api/v1/test/public-then-admin-gated",
+    ) not in declared_public_routes(app)
+
+
+def test_aut_ac16_include_level_dependency_alone_counts_as_declared() -> None:
+    """AUT-AC16 (reviewer regression): a route with no dependency of
+    its own, mounted via ``app.include_router(..., dependencies=
+    [Depends(require_admin)])``, is recognized as declaring 需
+    Admin -- a declaration living entirely at the include level still
+    counts.
+    """
+    router = APIRouter()
+
+    @router.get("/api/v1/test/admin-only-via-include")
+    def admin_only_via_include() -> dict[str, bool]:
+        return {"ok": True}
+
+    app = FastAPI()
+    app.include_router(router, dependencies=[Depends(require_admin)])
+
+    infos = [
+        info
+        for info in iter_route_access(app)
+        if info.path == "/api/v1/test/admin-only-via-include"
+    ]
+    assert len(infos) == 1
+    assert infos[0].declaration is not None
+    assert infos[0].declaration.level is AccessLevel.ADMIN_REQUIRED
+
+
+def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
+    """AUT-AC22: ``auth.not_authenticated``,
+    ``auth.invalid_credentials`` and ``permission.denied`` are all
+    registered in the shared ``ErrorCode`` enum and its generated
+    description table, and every code in it follows the
+    dot-namespace pattern (API-AC09).
+    """
+    descriptions = build_error_code_descriptions(ErrorCode)
+
+    for member in (
+        ErrorCode.AUTH_NOT_AUTHENTICATED,
+        ErrorCode.AUTH_INVALID_CREDENTIALS,
+        ErrorCode.PERMISSION_DENIED,
+    ):
+        assert member.value in descriptions
+
+    for code in descriptions:
+        assert DOT_NAMESPACE_RE.match(code)

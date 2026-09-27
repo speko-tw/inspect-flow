@@ -1,6 +1,6 @@
 .PHONY: setup setup-backend setup-frontend check \
 	check-env check-backend check-postgres check-frontend \
-	migrate run-backend run-frontend
+	migrate init set-password run-backend run-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -22,6 +22,39 @@ setup-frontend:
 # (frontend/vite.config.ts).
 migrate:
 	cd backend && uv run --locked alembic upgrade head
+
+# System initialization command (DOM-R11): creates the first
+# company, the built-in admin, the owner's personal account and the
+# three template roles. Prompts interactively, or reads piped
+# stdin non-interactively (see README "Running locally"). Run once
+# per database, after `make migrate`; a second run reports the
+# system is already initialized and writes nothing (DOM-R13).
+# Invoked as a module (`python -m`), not a `uv run` script entry
+# point: backend/pyproject.toml sets `[tool.uv] package = false`
+# (backend/pyproject.toml), so uv does not install
+# `[project.scripts]` entry points for it (verified: `uv sync`
+# prints "Skipping installation of entry points" for such a
+# project) -- see plan.md's T6 row for this deviation from its
+# original "只加指令入口" file list.
+init:
+	cd backend && uv run --locked python -m app.cli.init_system
+
+# Set-password command (AUT-R24~AUT-R26): sets or replaces the
+# Argon2id password of one auth_source=local User (including the
+# built-in admin) identified by EMAIL, and deletes that account's
+# existing AuthSession rows. Prompts twice for the new password
+# (not echoed) at a terminal, or reads two lines from piped stdin
+# non-interactively (see README "Running locally"). Fails with
+# unchanged data when EMAIL is unset, the account does not exist or
+# is auth_source=external, the two entries differ, or the length
+# rule (AUT-R04) is not met. Same package-false deviation as `init`
+# above.
+set-password:
+	@test -n "$(EMAIL)" || \
+		(echo "EMAIL is required, e.g. make set-password" \
+			"EMAIL=admin@example.com" && \
+		exit 1)
+	cd backend && uv run --locked python -m app.cli.set_password "$(EMAIL)"
 
 run-backend:
 	cd backend && uv run --locked uvicorn app.main:app --reload \
