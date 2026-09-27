@@ -17,7 +17,7 @@
 - 規格凍結後才依本表開 task issue；本 PR 只寫文件。
 - T3 開工時若 T2 還沒合併，也可以併進 T2（只要 #134 已合併），在 T2 的 PR 更新本表。
 - **和 `domain-model` T7（[#135](https://github.com/speko-tw/inspect-flow/issues/135)）的分工**：T7 依賴本計畫 T2，在 `Role`、角色指派、移出專案、`is_admin` 的入口呼叫寫入入口；DOM-R22 寫明由本規格驗收，所以驗收測試放在本計畫 T4，排在 #135 之後。T4 若發現 T7 漏寫或寫錯，開 `Bug` 修 `domain-model` 的 Service 檔，T4 本身不改 Service 檔（一個任務不跨兩份規格）。
-- **和 `authentication` 的分工**：`user.password_set`、`user.locked` 由本計畫 T2 登記進目錄；實際寫入與寫入時機的驗收在 `authentication` 計畫的 T6、T8、T11（AUT-AC49～AUT-AC51），它們都依賴 T2。
+- **和 `authentication` 的分工**：`user.password_set`、`user.locked` 由本計畫 T2 登記進目錄；實際寫入與寫入時機的驗收在 `authentication` 計畫的 T8、T11（AUT-AC49～AUT-AC51），它們都依賴 T2。
 
 ## 並行分組
 
