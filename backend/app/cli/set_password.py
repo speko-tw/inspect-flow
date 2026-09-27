@@ -42,9 +42,11 @@ AUT-R36 defines; nothing else in this module changes then (plan.md's
 對應測試"), this command must keep passing AUT-AC04, AUT-AC23~
 AUT-AC25 and AUT-AC32 after that change.
 
-Deliberately writes no audit log entry (a plan.md adjustment: that
-work moved to T11, alongside the change-password API -- there is no
-audit log table yet for either to write to).
+Deliberately writes no audit log entry (a plan.md adjustment,
+"T6 不寫稽核紀錄" in its "風險" section): ``user.password_set``
+(AUT-R39, AUT-AC49) is written once by the Service-layer entry point
+T11 introduces, which covers both this command and the
+change-password API.
 """
 
 from __future__ import annotations
