@@ -9,8 +9,8 @@ here.
 
 import logging
 
-from app.auth.sessions import SESSION_COOKIE_NAME
-from app.models import AuditLog
+from app.auth.sessions import SESSION_COOKIE_NAME, hash_token
+from app.models import AuditLog, UserPassword
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 
 PASSWORD = DEFAULT_TEST_PASSWORD
@@ -18,6 +18,18 @@ PASSWORD = DEFAULT_TEST_PASSWORD
 
 def _auth_records(caplog):
     return [r for r in caplog.records if r.name == "app.auth"]
+
+
+def _password_hash(db_session, user) -> str:
+    """The stored ``UserPassword.password_hash`` for ``user``
+    (AUT-R41: it must never end up in a log record either).
+    """
+    return (
+        db_session.query(UserPassword)
+        .filter_by(user_id=user.id)
+        .one()
+        .password_hash
+    )
 
 
 def _assert_no_secrets(caplog, *secrets: str) -> None:
@@ -56,7 +68,13 @@ class TestAutAc52LoginSucceeded:
         assert events[0].user_id == str(user.id)
         assert events[0].reason is None
 
-        _assert_no_secrets(caplog, PASSWORD, submitted_email, user.email)
+        _assert_no_secrets(
+            caplog,
+            PASSWORD,
+            submitted_email,
+            user.email,
+            _password_hash(db_session, user),
+        )
 
         assert db_session.query(AuditLog).count() == 0
 
@@ -83,7 +101,14 @@ class TestAutAc52Logout:
         assert events[0].user_id == str(user.id)
         assert events[0].reason is None
 
-        _assert_no_secrets(caplog, PASSWORD, user.email, token)
+        _assert_no_secrets(
+            caplog,
+            PASSWORD,
+            user.email,
+            token,
+            _password_hash(db_session, user),
+            hash_token(token),
+        )
 
         assert db_session.query(AuditLog).count() == 0
 
@@ -127,7 +152,12 @@ class TestAutAc52LoginFailedWrongPassword:
         assert events[0].reason == "invalid_credentials"
 
         _assert_no_secrets(
-            caplog, PASSWORD, "definitely-wrong", submitted_email, user.email
+            caplog,
+            PASSWORD,
+            "definitely-wrong",
+            submitted_email,
+            user.email,
+            _password_hash(db_session, user),
         )
 
         assert db_session.query(AuditLog).count() == 0
@@ -180,6 +210,12 @@ class TestAutAc52LoginFailedAccountDisabled:
         assert events[0].user_id == str(user.id)
         assert events[0].reason == "account_disabled"
 
-        _assert_no_secrets(caplog, PASSWORD, submitted_email, user.email)
+        _assert_no_secrets(
+            caplog,
+            PASSWORD,
+            submitted_email,
+            user.email,
+            _password_hash(db_session, user),
+        )
 
         assert db_session.query(AuditLog).count() == 0
