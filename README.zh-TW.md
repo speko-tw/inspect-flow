@@ -41,9 +41,43 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
      `/api` 轉給後端。
 5. **登入**：用瀏覽器開 `http://localhost:5173`。
 
-已知限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`。Safari
-在 `http://localhost` 不送這種 Cookie，因此無法登入（見 #169）；
-Chrome、Firefox 可用。
+Safari 限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`，Safari
+在 `http://localhost` 不送，因此無法登入。Chrome、Firefox 可用；
+要用 Safari 請見下一節。
+
+## 用 Safari／iPhone 測試
+
+改用 HTTPS 開發伺服器。憑證用 [mkcert](https://github.com/FiloSottile/mkcert)
+在本機產生，放在已被 git 忽略的 `frontend/.cert/`，不得提交。
+
+1. **安裝 mkcert**（只需一次）：`brew install mkcert`，再執行
+   `mkcert -install` 讓本機信任它的根憑證。
+2. **產生憑證**：
+
+   ```bash
+   mkdir -p frontend/.cert
+   mkcert -cert-file frontend/.cert/dev.pem \
+     -key-file frontend/.cert/dev-key.pem localhost 127.0.0.1
+   ```
+
+   要給 iPhone 連，最後再加上這台電腦的區網 IP。
+3. **啟動**：後端照上一節執行 `make run-backend`；前端改成：
+
+   ```bash
+   export INSPECTFLOW_DEV_HTTPS_CERT="$PWD/frontend/.cert/dev.pem"
+   export INSPECTFLOW_DEV_HTTPS_KEY="$PWD/frontend/.cert/dev-key.pem"
+   make run-frontend
+   ```
+
+   用 Safari 開 `https://localhost:5173`。兩個變數都不設就是原本的
+   HTTP。
+4. **iPhone／iPad**（同一個區網）：
+   - 啟動前端前再 `export INSPECTFLOW_DEV_HOST=0.0.0.0`，讓前端對
+     區網開放；這個變數只在 HTTPS 模式有效。後端仍只綁 127.0.0.1，
+     由前端轉送 `/api`。
+   - 把 `mkcert -CAROOT` 目錄裡的 `rootCA.pem` 傳到 iPhone 安裝，
+     再到「設定 > 一般 > 關於本機 > 憑證信任設定」開啟信任。
+   - 用 `https://<區網 IP>:5173` 開啟。
 
 ## 文件
 
