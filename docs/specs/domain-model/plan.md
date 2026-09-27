@@ -15,7 +15,7 @@
 | T3 | `Role`、`ProjectMember` 資料表：`Role` 與 `ProjectMember` 繼承共用基底；`Role` 的權限代碼存在子表（`role_id`、權限代碼，組合唯一，刪除 `Role` 時一併刪除）；`ProjectMember` 的 `project_id`、`user_id` 為不可空值外鍵、組合唯一；角色指派存在關聯表（`project_member_id`、`role_id`，組合唯一；刪除 `Role` 或 `ProjectMember` 時都由資料庫外鍵的 `ON DELETE CASCADE` 刪除指派，ORM 關聯設 `passive_deletes`，不由 ORM 自行刪除；成員可以沒有指派，DOM-R36）；權限代碼登記表 `PermissionCode`（比照 `ErrorCode` 的列舉，初始沒有成員，DOM-R35），model 寫入前拒絕未登記的代碼；`Role.name` 不分大小寫的唯一約束（依 DOM-R34，比照 T2 的 `email` 採 `lower(name)` 的唯一索引，`name` 原樣存放）；`Role.name` 與權限代碼依 DOM-R30 設長度上限，並在 model 寫入前檢查長度與權限代碼格式（DOM-R31）；新增一支 migration | `backend/app/permission_codes.py`（新增：登記表）、`backend/app/models/role.py`、`backend/app/models/project_member.py`（新增）、`backend/app/models/__init__.py`（加 import）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_role_member.py`（新增）、`backend/tests/conftest.py`（新增：測試用登記表 fixture，T5、T7 沿用） | #59（`User`、`Project` 資料表） | DOM-AC18、DOM-AC21、DOM-AC24、DOM-AC25、DOM-AC27 | #131 |
 | T4 | 目前操作者與 `User`、`Company` 的 Service 層規則（不含權限變更）：取得目前操作者的單一入口（認證前回傳 `is_system` 的 `User`）；`Company` 新增與修改（填 `created_by`、`updated_by`，可改 `is_active`）、列出一個公司啟用中的人員與人數；`User` 新增入口（拒絕停用中的公司）與人工修改入口（外部帳號拒絕修改基本欄位、本系統帳號改公司時新公司須啟用中）。本任務不提供 `is_admin`、`is_active` 的修改，也不做授權檢查 | `backend/app/services/__init__.py`、`backend/app/services/operator.py`、`backend/app/services/companies.py`、`backend/app/services/users.py`（新增）、`backend/tests/services/__init__.py`、`backend/tests/services/conftest.py`、`backend/tests/services/test_users.py`、`backend/tests/services/test_companies.py`（新增）、`backend/tests/services/test_operator.py`（新增） | T2 | DOM-AC04、DOM-AC10、DOM-AC13、DOM-AC22、DOM-AC23 | #132 |
 | T5 | 權限的唯讀計算：有效權限（從 `Role` 目前內容取聯集，非成員與沒有角色的成員為空集合）、角色影響範圍，以及角色是否「有修改能力」（任一代碼的動作不是 `read`，DOM-R24）。只讀取，不修改任何資料；測試資料直接以 ORM 建立與修改 | `backend/app/services/permissions.py`（新增）、`backend/tests/services/test_permissions.py`（新增） | T3、T4（`backend/app/services/` 套件由 T4 建立） | DOM-AC15、DOM-AC17、DOM-AC26 | #133 |
-| T6 | 初始化指令：互動式詢問本公司的 `code`、`name` 與兩個帳號的必填基本欄位，也接受測試用的非互動輸入（例如從標準輸入讀取），但原始碼不含任何預設值；在同一個交易裡建立本公司、內建 `admin`（UUID 在寫入前由應用端產生，`created_by`、`updated_by` 指向自己）、個人帳號與三個範本角色（不含任何權限代碼，DOM-R11）；不寫稽核紀錄（DOM-R22）；已有 `is_system` 帳號時不寫入並回報已初始化；在 `Makefile` 加一個執行入口 | `backend/app/cli/__init__.py`、`backend/app/cli/init_system.py`（新增）、`backend/pyproject.toml`（只加指令入口，不改依賴）、`Makefile`（加一個 target）、`backend/tests/cli/test_init_system.py`（新增） | T2、T3 | DOM-AC08、DOM-AC09 | #134 |
+| T6 | 初始化指令：互動式詢問本公司的 `code`、`name` 與兩個帳號的必填基本欄位，也接受測試用的非互動輸入（例如從標準輸入讀取），但原始碼不含任何預設值；在同一個交易裡建立本公司、內建 `admin`（UUID 在寫入前由應用端產生，`created_by`、`updated_by` 指向自己）、個人帳號與三個範本角色（不含任何權限代碼，DOM-R11）；不寫稽核紀錄（DOM-R22）；已有 `is_system` 帳號時不寫入並回報已初始化；在 `Makefile` 加一個執行入口 | `backend/app/cli/__init__.py`、`backend/app/cli/init_system.py`（新增）、`Makefile`（加一個 target）、`backend/tests/cli/__init__.py`（新增）、`backend/tests/cli/test_init_system.py`（新增） | T2、T3 | DOM-AC08、DOM-AC09 | #134 |
 | T7 | 權限與角色的寫入入口：`User` 的 `is_admin`、`is_active` 修改（內建帳號保護、最後一個 Admin 保護）；`Role` 新增、改名、修改權限內容（更新修改紀錄）、刪除（連同指派）；替 `ProjectMember` 指派與移除 `Role`；把人移出專案（刪除 `ProjectMember`，DOM-R36）。`Role`、角色指派、移出專案與 `is_admin` 的每一次成功變更，都依 DOM-R22 寫稽核紀錄；`is_active` 的修改不在 DOM-R22 的事件範圍內，不寫 | `backend/app/services/users.py`（加入口，檔案由 T4 建立）、`backend/app/services/roles.py`、`backend/app/services/project_members.py`（新增）、`backend/tests/services/test_users.py`（加案例）、`backend/tests/services/test_roles.py`、`backend/tests/services/test_project_members.py`（新增） | T3、T4；`audit-log` T2（寫入入口，[#216](https://github.com/speko-tw/inspect-flow/issues/216)；DOM-R22 由 `audit-log` 驗收） | DOM-AC05、DOM-AC06、DOM-AC14、DOM-AC16 | #135 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
@@ -30,7 +30,7 @@
 
 - 第 1 波：T1（依賴 #59）。
 - 第 2 波：T2（依賴 T1 的 `Company`）、T3（依賴 #59）。T2 改 `user.py`，T3 改 `role.py`、`project_member.py`、`models/__init__.py`，檔案不重疊，但都新增 migration。T3 排在 T1 之後，是因為兩者都要改 `backend/app/models/__init__.py`。
-- 第 3 波：T4（依賴 T2）、T6（依賴 T2、T3）；T4 改 `backend/app/services/`，T6 改 `backend/app/cli/`、`Makefile`、`pyproject.toml`，檔案不重疊。
+- 第 3 波：T4（依賴 T2）、T6（依賴 T2、T3）；T4 改 `backend/app/services/`，T6 改 `backend/app/cli/`、`Makefile`，檔案不重疊。
 - 第 4 波：T5（依賴 T3、T4）。
 - 第 5 波：T7（依賴 T3、T4 與 `audit-log` T2 [#216](https://github.com/speko-tw/inspect-flow/issues/216)；改 T4 建立的 `users.py`，因此排在 T4 之後）。
 
@@ -38,7 +38,7 @@
 
 - Alembic migration 鏈：T1、T2、T3 各新增一支，每個 PR 最多一支。T2、T3 同一波並行，後合併的一方先 rebase，並把 `down_revision` 改接到最新 head，不留多個 head。驗證特定 migration 的 upgrade／downgrade 往返時，downgrade **應**指定該 migration 的上一個 revision，不用相對的 `"-1"`：之後有新 migration 疊上去，`"-1"` 只會退掉最新的那一支，測試仍會通過，卻不再驗證原本的 migration。
 - `backend/app/models/__init__.py`：`backend/alembic/env.py` 只 import `app.models`，新 model 要在這個檔案 import 才會進入 `Base.metadata`。T1、T3 都要改，所以不同波；T1、T3 的測試都要斷言 upgrade head 後新資料表存在，確認註冊沒有漏掉。
-- `backend/pyproject.toml`：只有 T6 加指令入口，不改依賴，因此不動 lockfile；若實作時發現需要新套件，改為先開獨立任務加依賴。
+- `backend/pyproject.toml`：T6 實作時發現 `[tool.uv] package = false` 會讓 `uv sync` 略過安裝 `[project.scripts]` 入口（`uv sync` 印出「Skipping installation of entry points」），因此改為計畫調整：T6 不改 `pyproject.toml`，`Makefile` 的 `init` target 改用 `uv run --locked python -m app.cli.init_system` 直接執行模組，不新增指令入口、不動依賴與 lockfile；若之後要新增依賴，仍改為先開獨立任務。
 - `Makefile`：只有 T6 加一個 target。
 - `backend/app/main.py`：本計畫不改；Service 層由之後的功能規格在 API 層取用。
 
