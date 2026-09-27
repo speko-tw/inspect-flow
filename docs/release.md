@@ -3,7 +3,7 @@
 **這份文件回答**：一個版本從「功能做完」到「建好 Git tag 與 GitHub Release」要經過哪些步驟、誰負責做？
 **什麼時候讀**：規劃版本、準備發版，或要寫 Release Notes 草稿時。
 
-版號規則見 [06 VG-03、VG-04](intents/06-versioning-and-milestone-governance.md#vg-03)：tag 用 `v0.MINOR.PATCH`，新能力升 MINOR，PATCH 只放修正。第一個正式版是 `v0.2.0`（#211）。
+版號規則見 06 的 [VG-03](intents/06-versioning-and-milestone-governance.md#vg-03)、[VG-04](intents/06-versioning-and-milestone-governance.md#vg-04)：tag 用 `v0.MINOR.PATCH`，新能力升 MINOR，PATCH 只放修正。第一個正式版是 `v0.2.0`（#211）。
 
 ## 誰做什麼
 
@@ -27,19 +27,19 @@
    - PATCH 版（例：`v0.2.1`）得只檢查這次變更的部分。
 4. **確認可以發**：
    - Release 追蹤 issue 的清單全部關閉（含檢查 issue）。
-   - `main` 最新 commit 的 CI 綠燈。
+   - 記下 `main` 最新 commit（`git rev-parse origin/main`），確認它的 CI 綠燈。這個 commit 就是要打 tag 的對象。
 5. **準備 Release Notes 草稿**：agent 依下方格式撰寫，貼在 Release 追蹤 issue 的留言。
-6. **建立 tag 與 Release**（負責人）：
+6. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
    ```bash
-   git switch main && git pull
-   git tag -a v0.X.Y -m "v0.X.Y"      # annotated tag，打在 main 最新 commit
+   git fetch origin
+   git rev-parse origin/main      # 須等於第 4 步記下的 commit
+   git tag -a v0.X.Y <第 4 步的 commit> -m "v0.X.Y"
    git push origin v0.X.Y
    gh release create v0.X.Y --verify-tag --title "v0.X.Y" \
      --notes-file release-notes.md
    ```
+   `origin/main` 若已不同（第 4 步之後又有合併），回到第 4 步重新確認新的 commit。
 7. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
-
-tag 打在「第 4 步確認 CI 綠燈的那個 `main` commit」；確認後若 `main` 又有新合併，重跑第 4 步。
 
 ## Release Notes 格式
 
