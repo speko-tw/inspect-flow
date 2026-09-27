@@ -32,6 +32,21 @@ and two flags (ALG-R15, ALG-R16):
   even when unchanged (``user.password_set``: the difference is in
   the password hash, which must never be recorded at all, ALG-R08).
 
+A third, narrower flag, ``before_optional``, only matters for a 修改
+event: normally both ``before``/``after`` must be present (ALG-R09),
+but spec.md's "``authentication`` 事件" table reads "之前沒有密碼時
+為空值" the same way it reads a 新增 event's own "before 為空值" --
+the *whole* ``before`` is ``None``, not a present dict with a
+``None``-valued field (``user.password_set``: a user who never had a
+password before has no prior ``is_temporary`` flag to report at
+all). ``before_optional`` lets ``record_audit_event`` accept
+``before=None`` for such an event while still requiring ``after``
+(which must then carry every declared field, since it is the only
+side with content); every other 修改 event still rejects
+``before=None``. A declared field's *value* is never allowed to be
+``None`` on either side, whether ``before_optional`` applies or not
+-- see :func:`_validate_no_null_field_values`.
+
 ``docs/specs/audit-log/spec.md``'s "第一批事件" and "``authentication``
 事件" tables are registered at the bottom of this module; a caller
 elsewhere in the codebase (e.g. ``domain-model`` T7 issue #135,
@@ -100,8 +115,9 @@ class AuditEventDefinition:
     every field name this event's ``before``/``after`` may contain;
     ``always_recorded`` (a subset of ``fields``) lists which of them
     a 修改 event must include even when unchanged. ``system_event``
-    and ``always_write`` are ALG-R15/ALG-R16's two flags -- see this
-    module's docstring.
+    and ``always_write`` are ALG-R15/ALG-R16's two flags;
+    ``before_optional`` is a third, narrower one -- see this module's
+    docstring.
     """
 
     event_type: str
@@ -111,6 +127,7 @@ class AuditEventDefinition:
     always_recorded: frozenset[str] = field(default_factory=frozenset)
     system_event: bool = False
     always_write: bool = False
+    before_optional: bool = False
 
 
 _EVENT_CATALOG: dict[str, AuditEventDefinition] = {}
@@ -142,12 +159,18 @@ def register_audit_event(
     always_recorded: Iterable[str] = (),
     system_event: bool = False,
     always_write: bool = False,
+    before_optional: bool = False,
 ) -> None:
     """Add one event to the catalog (ALG-R11, ALG-R13): other specs
     (``external-identity-sync``) call this to register their own
     event codes without any change to this module or a migration.
     ``system_event`` and ``always_write`` are ALG-R15/ALG-R16's two
-    flags (see this module's docstring); both default to ``False``.
+    flags; ``before_optional`` is a third, narrower one (see this
+    module's docstring); all three default to ``False``.
+    ``before_optional`` is only meaningful on a 修改 (``kind=
+    AuditEventKind.UPDATED``) event -- a 新增 event's ``before`` is
+    already always ``None`` (ALG-R09), and a 刪除 event has no
+    ``after`` to fall back on.
 
     Raises:
         AuditEventAlreadyRegisteredError: ``event_type`` is already
@@ -155,7 +178,8 @@ def register_audit_event(
         InvalidAuditEventDefinitionError: ``event_type`` does not
             match ALG-R07's ``^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$``
             format, its "資料" segment does not equal ``entity_type``,
-            ``always_recorded`` is not a subset of ``fields``, or any
+            ``always_recorded`` is not a subset of ``fields``,
+            ``before_optional`` is set on a non-修改 event, or any
             field name contains ``password``/``secret``/``token``/
             ``session`` (case-insensitive, ALG-R08).
     """
@@ -173,6 +197,11 @@ def register_audit_event(
         raise InvalidAuditEventDefinitionError(
             f"{event_type!r}: the 資料 segment {data_segment!r} must "
             f"equal entity_type {entity_type!r} (ALG-R07)"
+        )
+    if before_optional and kind is not AuditEventKind.UPDATED:
+        raise InvalidAuditEventDefinitionError(
+            f"{event_type!r}: before_optional only applies to a 修改 "
+            "event (kind=AuditEventKind.UPDATED)"
         )
 
     fields_set = frozenset(fields)
@@ -199,6 +228,7 @@ def register_audit_event(
         always_recorded=always_recorded_set,
         system_event=system_event,
         always_write=always_write,
+        before_optional=before_optional,
     )
 
 
@@ -292,6 +322,33 @@ def _validate_fields(
             )
 
 
+def _validate_no_null_field_values(
+    definition: AuditEventDefinition,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+) -> None:
+    """A present ``before``/``after`` dict's fields must never carry
+    a Python ``None`` value: "this field has no value" is already
+    spelled by omitting the whole ``before``/``after`` (a 新增/刪除
+    event, or -- for ``before_optional`` -- a 修改 event with no
+    prior state at all), so a ``None``-valued field would be a
+    second, redundant way to say the same thing. This is what keeps
+    ``user.password_set``'s ``is_temporary`` a plain ``bool`` on
+    every row that has one at all, rather than sometimes a ``bool``
+    and sometimes ``None``.
+    """
+    for payload in (before, after):
+        if payload is None:
+            continue
+        for field_name, value in payload.items():
+            if value is None:
+                raise InvalidAuditEventShapeError(
+                    f"{definition.event_type}: field {field_name!r} "
+                    "must not be None -- omit the whole before/after "
+                    "instead of recording a null field value (ALG-R09)"
+                )
+
+
 def _reject_unchanged_update(
     definition: AuditEventDefinition,
     before: dict[str, Any],
@@ -331,11 +388,29 @@ def _validate_shape(
                 "be None (ALG-R09)"
             )
     else:
-        if before is None or after is None:
+        if after is None:
             raise InvalidAuditEventShapeError(
-                f"{definition.event_type}: a 修改 event needs both "
-                "before and after (ALG-R09)"
+                f"{definition.event_type}: a 修改 event's after must "
+                "not be None (ALG-R09)"
             )
+        if before is None:
+            if not definition.before_optional:
+                raise InvalidAuditEventShapeError(
+                    f"{definition.event_type}: a 修改 event needs both "
+                    "before and after (ALG-R09)"
+                )
+            # before_optional: before's absence means "no prior
+            # state to report" (e.g. no password set yet), not "no
+            # change" -- after is the only side with content, so it
+            # alone must carry every declared field.
+            missing = definition.fields - after.keys()
+            if missing:
+                raise InvalidAuditEventShapeError(
+                    f"{definition.event_type}: field(s) "
+                    f"{sorted(missing)} must be present in after "
+                    "when before is None (ALG-R09, before_optional)"
+                )
+            return
         # ALG-R16: an "每次都寫" event requires every declared field
         # present on both sides (not only its "一律記錄" subset), since
         # none of them can be dropped for being unchanged.
@@ -415,8 +490,9 @@ def record_audit_event(
         UndeclaredAuditFieldError: ``before``/``after`` names a field
             the event does not declare (ALG-R08).
         InvalidAuditEventShapeError: ``before``/``after``'s shape
-            does not match the event's kind, or a "一律記錄" field is
-            missing (ALG-R09).
+            does not match the event's kind, a "一律記錄" field is
+            missing, or a declared field's value is ``None``
+            (ALG-R09).
         UnchangedAuditFieldError: a 修改 event's before/after are
             identical, or a non-"一律記錄" field did not change
             (ALG-R09).
@@ -437,6 +513,9 @@ def record_audit_event(
     normalized_after = _normalize_payload(after)
 
     _validate_fields(definition, normalized_before, normalized_after)
+    _validate_no_null_field_values(
+        definition, normalized_before, normalized_after
+    )
     _validate_shape(definition, normalized_before, normalized_after)
 
     operator = (
@@ -506,17 +585,14 @@ register_audit_event(
     "user.password_set",
     entity_type="user",
     kind=AuditEventKind.UPDATED,
-    # "之前沒有密碼時為空值" (spec.md) is read here as the *value* of
-    # is_temporary being None on the before side when there was no
-    # prior password to report a flag for -- before/after stay
-    # present dicts (still a 修改 shape, ALG-R09), not a ``None``
-    # payload: this event can also just change the flag on an
-    # existing password, which only a 修改 shape covers uniformly.
-    # Not exercised by this module's own tests (ALG-AC12 only covers
-    # the "flag unchanged" case) -- authentication's own T6 call site
-    # is where this reading gets its real test.
+    # "之前沒有密碼時為空值" (spec.md) reads the same way a 新增 event's
+    # own "before 為空值" does elsewhere in this same table: the
+    # *whole* before is None (before_optional), not a present dict
+    # with a None-valued is_temporary -- see this module's docstring
+    # and _validate_no_null_field_values.
     fields=("is_temporary",),
     always_write=True,
+    before_optional=True,
 )
 register_audit_event(
     "user.locked",

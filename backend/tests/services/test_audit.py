@@ -49,6 +49,7 @@ from app.services.audit import (
     _EVENT_CATALOG,
     _EVENT_TYPE_RE,
     AuditEventKind,
+    InvalidAuditEventShapeError,
     UnchangedAuditFieldError,
     UndeclaredAuditFieldError,
     UnregisteredAuditEventError,
@@ -581,3 +582,63 @@ class TestAlgAc12SystemEventAndAlwaysWriteFlags:
         # (locked + 2 password_set), the two no-login rejections add
         # none.
         assert session.query(AuditLog).count() == before_count + 3
+
+
+class TestAlgR09BeforeOptionalForPasswordSet:
+    """Follow-up to ALG-AC12: ``user.password_set``'s
+    ``before_optional`` flag (a user who never had a password before
+    has no prior ``is_temporary`` flag to report at all, spec.md's
+    "之前沒有密碼時為空值") versus every other 修改 event, which still
+    rejects ``before=None``; and a declared field's value is never
+    allowed to be ``None`` on either side.
+    """
+
+    def test_password_set_before_none_succeeds_and_reads_back_as_null(
+        self, session, operator
+    ):
+        log = record_audit_event(
+            session,
+            "user.password_set",
+            entity_id=uuid7(),
+            before=None,
+            after={"is_temporary": True},
+        )
+        session.commit()
+
+        session.expire_all()
+        fetched = session.get(AuditLog, log.id)
+        assert fetched is not None
+        assert fetched.before is None
+        assert fetched.after == {"is_temporary": True}
+
+    def test_password_set_null_field_value_is_rejected(
+        self, session, operator
+    ):
+        before_count = session.query(AuditLog).count()
+
+        with pytest.raises(InvalidAuditEventShapeError):
+            record_audit_event(
+                session,
+                "user.password_set",
+                entity_id=uuid7(),
+                before={"is_temporary": None},
+                after={"is_temporary": True},
+            )
+
+        assert session.query(AuditLog).count() == before_count
+
+    def test_role_updated_before_none_is_still_rejected(
+        self, session, operator
+    ):
+        before_count = session.query(AuditLog).count()
+
+        with pytest.raises(InvalidAuditEventShapeError):
+            record_audit_event(
+                session,
+                "role.updated",
+                entity_id=uuid7(),
+                before=None,
+                after={"name": "New Name"},
+            )
+
+        assert session.query(AuditLog).count() == before_count
