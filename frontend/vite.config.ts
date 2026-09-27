@@ -157,15 +157,16 @@ function resolveDevHttps(env: Record<string, string>): {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ mode, command }) => {
+export default defineConfig(({ mode, command, isPreview }) => {
   // 開發用的後端位址。預設 http://localhost:8000（後端目前的預設
   // port，見 docs/specs/authentication/plan.md 風險段）；可用
   // VITE_BACKEND_URL 覆寫，不需改這個檔案就能切換到不同的後端。
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
-  // 只有開發伺服器（vite serve）才讀憑證；build 與 vitest 不受影響。
-  const devHttps =
-    command === 'serve' && mode !== 'test' ? resolveDevHttps(env) : {}
+  // 只有開發伺服器（vite serve）才讀憑證；build、preview 與 vitest
+  // 不受影響（preview 的 command 也是 serve，要另外排除）。
+  const isDevServer = command === 'serve' && !isPreview && mode !== 'test'
+  const devHttps = isDevServer ? resolveDevHttps(env) : {}
 
   return {
     plugins: [react(), chunkModulesReportPlugin()],
