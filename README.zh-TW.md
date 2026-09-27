@@ -33,13 +33,16 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
 2. **套用 migration**：`make migrate`。
 3. **初始化系統**：`make init`。會詢問本公司的代碼與名稱，以及內建
    `admin` 與負責人個人帳號的必填基本欄位；對已初始化的資料庫再執行
-   一次，會回報已初始化並且不寫入任何資料。**設定密碼**：由 #154
-   提供，合併後補上。
-4. **啟動後端與前端**，各開一個終端機：
+   一次，會回報已初始化並且不寫入任何資料。
+4. **設定密碼**：`make set-password EMAIL=<email>`（含內建
+   `admin`）。連接終端機時會提示輸入兩次新密碼（不回顯）；也可從
+   標準輸入以管線提供兩行密碼供自動化使用。指令列不接受任何密碼
+   參數。
+5. **啟動後端與前端**，各開一個終端機：
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把
      `/api` 轉給後端。
-5. **登入**：用瀏覽器開 `http://localhost:5173`。
+6. **登入**：用瀏覽器開 `http://localhost:5173`。
 
 已知限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`。Safari
 在 `http://localhost` 不送這種 Cookie，因此無法登入（見 #169）；

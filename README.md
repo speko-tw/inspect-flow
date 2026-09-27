@@ -39,13 +39,17 @@ root.
    company's code and name, and the required basic fields of the
    built-in `admin` account and the owner's personal account;
    running it again on an already-initialized database reports that
-   and writes nothing. **Set a password**: provided by #154, to be
-   added here once merged.
-4. **Start the backend and frontend**, each in its own terminal:
+   and writes nothing.
+4. **Set a password**: `make set-password EMAIL=<email>` (including
+   the built-in `admin`). Prompts twice for the new password (not
+   echoed) at a terminal; also accepts two lines of piped standard
+   input for automation. The command line accepts no password
+   argument of any kind.
+5. **Start the backend and frontend**, each in its own terminal:
    - `make run-backend` — API at `http://127.0.0.1:8000`.
    - `make run-frontend` — Vite at `http://localhost:5173`; it
      forwards `/api` to the backend.
-5. **Sign in**: open `http://localhost:5173` in a browser.
+6. **Sign in**: open `http://localhost:5173` in a browser.
 
 Known limitation: the session cookie uses the `__Host-` prefix,
 which requires `Secure`. Safari does not send it over
