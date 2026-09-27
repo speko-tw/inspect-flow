@@ -123,6 +123,7 @@ flowchart TD
 | 合併 PR | 審查後合併到 `main`。規格 PR 合併即「凍結」：確認這份規格可以作為拆任務與驗收的基準 | 改做不依賴該 PR 的其他任務，不停下來等 |
 | `needs-decision` | 團隊討論範圍變更、意圖變更、OQ／G 裁定 | 在 issue 整理選項與影響；受影響的任務標 `blocked`，改做其他任務 |
 | 破壞性或全域操作 | 核准 force push、刪除、新增 label、repo 設定 | 先詢問，不自行執行 |
+| 建立 tag 與 GitHub Release | 依 [發布流程](../release.md) 建立 tag 與 Release | 準備 Release Notes 草稿，貼在 Release 追蹤 issue |
 
 人每天只需要看兩處：待審查的 PR，以及 `label:needs-decision` 的 issue。
 
