@@ -27,18 +27,24 @@
    - PATCH 版（例：`v0.2.1`）得只檢查這次變更的部分。
 4. **確認可以發**：
    - Release 追蹤 issue 的清單全部關閉（含檢查 issue）。
-   - 記下 `main` 最新 commit（`git rev-parse origin/main`），確認它的 CI 綠燈。這個 commit 就是要打 tag 的對象。
+   - 取得 `main` 最新 commit，確認它的 CI 綠燈並記下來，這個 commit 就是要打 tag 的對象：
+     ```bash
+     git fetch origin
+     git rev-parse origin/main
+     ```
 5. **準備 Release Notes 草稿**：agent 依下方格式撰寫，貼在 Release 追蹤 issue 的留言。
 6. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
    ```bash
+   RELEASE_SHA=0123abcd   # 換成第 4 步記下的 commit；v0.X.Y 換成版號
    git fetch origin
-   git rev-parse origin/main      # 須等於第 4 步記下的 commit
-   git tag -a v0.X.Y <第 4 步的 commit> -m "v0.X.Y"
+   # main 未變動才建 tag；不相等時不建 tag，後兩行也會失敗
+   test "$(git rev-parse origin/main)" = "$(git rev-parse "$RELEASE_SHA")" \
+     && git tag -a v0.X.Y "$RELEASE_SHA" -m "v0.X.Y"
    git push origin v0.X.Y
    gh release create v0.X.Y --verify-tag --title "v0.X.Y" \
      --notes-file release-notes.md
    ```
-   `origin/main` 若已不同（第 4 步之後又有合併），回到第 4 步重新確認新的 commit。
+   沒有建出 tag，表示第 4 步之後 `main` 又有合併：回到第 4 步重新確認新的 commit。
 7. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
 
 ## Release Notes 格式
