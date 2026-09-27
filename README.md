@@ -51,10 +51,48 @@ root.
      forwards `/api` to the backend.
 6. **Sign in**: open `http://localhost:5173` in a browser.
 
-Known limitation: the session cookie uses the `__Host-` prefix,
+Safari limitation: the session cookie uses the `__Host-` prefix,
 which requires `Secure`. Safari does not send it over
-`http://localhost`, so sign-in fails there (see #169). Chrome and
-Firefox work.
+`http://localhost`, so sign-in fails there. Chrome and Firefox work;
+for Safari, see the next section.
+
+## Testing with Safari or iPhone
+
+Use the HTTPS dev server. Generate a local certificate with
+[mkcert](https://github.com/FiloSottile/mkcert) into
+`frontend/.cert/`, which is git-ignored; never commit it.
+
+1. **Install mkcert** (once): `brew install mkcert`, then run
+   `mkcert -install` so this machine trusts its root CA.
+2. **Create a certificate**:
+
+   ```bash
+   mkdir -p frontend/.cert
+   mkcert -cert-file frontend/.cert/dev.pem \
+     -key-file frontend/.cert/dev-key.pem localhost 127.0.0.1
+   ```
+
+   For an iPhone, also append this machine's LAN IP.
+3. **Start**: run `make run-backend` as above; start the frontend
+   with:
+
+   ```bash
+   export INSPECTFLOW_DEV_HTTPS_CERT="$PWD/frontend/.cert/dev.pem"
+   export INSPECTFLOW_DEV_HTTPS_KEY="$PWD/frontend/.cert/dev-key.pem"
+   make run-frontend
+   ```
+
+   Open `https://localhost:5173` in Safari. With neither variable
+   set, the dev server stays on plain HTTP.
+4. **iPhone or iPad** (same LAN):
+   - Also `export INSPECTFLOW_DEV_HOST=0.0.0.0` before starting the
+     frontend so it listens on the LAN; the variable only works in
+     HTTPS mode. The backend still binds 127.0.0.1 only; the
+     frontend forwards `/api` to it.
+   - Copy `rootCA.pem` from the `mkcert -CAROOT` directory to the
+     iPhone, install it, then enable it under Settings > General >
+     About > Certificate Trust Settings.
+   - Open `https://<LAN IP>:5173`.
 
 ## Documentation
 
