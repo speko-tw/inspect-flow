@@ -18,11 +18,17 @@ class _TestPermissionCode(DescribedStrEnum):
     ``SupersetCode``/``SwappedCode`` pattern (API-AC10b): a
     throwaway ``DescribedStrEnum`` subclass exercised in tests,
     never a member added to the real, still-empty ``PermissionCode``.
+
+    ``EVIDENCE_CREATE``/``EVIDENCE_UPDATE`` were added for T4's
+    AUT-AC44 (``tests/auth/test_access.py``), which needs a code per
+    non-read action to prove Admin passes every one of them.
     """
 
     REPORT_READ = ("report.read", "test")
     REPORT_APPROVE = ("report.approve", "test")
     EVIDENCE_READ = ("evidence.read", "test")
+    EVIDENCE_CREATE = ("evidence.create", "test")
+    EVIDENCE_UPDATE = ("evidence.update", "test")
     EVIDENCE_DELETE = ("evidence.delete", "test")
 
 

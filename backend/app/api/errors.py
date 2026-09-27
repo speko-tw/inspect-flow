@@ -74,6 +74,10 @@ class ErrorCode(DescribedStrEnum):
         "The temporary password must be changed before this "
         "request can proceed.",
     )
+    PERMISSION_DENIED = (
+        "permission.denied",
+        "You do not have permission to perform this request.",
+    )
 
 
 def build_error_code_descriptions(

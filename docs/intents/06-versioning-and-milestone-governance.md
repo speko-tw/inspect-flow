@@ -53,6 +53,8 @@ Milestone 用 `0.MINOR.x`（`x` 是系列 wildcard，例：`0.2.x`）；Git tag�
 
 **理由**：Milestone 是版本系列的規劃單位，Release 才是實際發布的版本。（依據：負責人決定（2026-09-26））
 
+發布步驟（發版前檢查、建立 tag 與 Release、Release Notes）見 [`docs/release.md`](../release.md)。
+
 ---
 
 ## 2. Phase 與 Milestone

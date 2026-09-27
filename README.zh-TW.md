@@ -33,17 +33,54 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
 2. **套用 migration**：`make migrate`。
 3. **初始化系統**：`make init`。會詢問本公司的代碼與名稱，以及內建
    `admin` 與負責人個人帳號的必填基本欄位；對已初始化的資料庫再執行
-   一次，會回報已初始化並且不寫入任何資料。**設定密碼**：由 #154
-   提供，合併後補上。
-4. **啟動後端與前端**，各開一個終端機：
+   一次，會回報已初始化並且不寫入任何資料。
+4. **設定密碼**：`make set-password EMAIL=<email>`（含內建
+   `admin`）。連接終端機時會提示輸入兩次新密碼（不回顯）；也可從
+   標準輸入以管線提供兩行密碼供自動化使用。指令列不接受任何密碼
+   參數。
+5. **啟動後端與前端**，各開一個終端機：
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把
      `/api` 轉給後端。
-5. **登入**：用瀏覽器開 `http://localhost:5173`。
+6. **登入**：用瀏覽器開 `http://localhost:5173`。
 
-已知限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`。Safari
-在 `http://localhost` 不送這種 Cookie，因此無法登入（見 #169）；
-Chrome、Firefox 可用。
+Safari 限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`，Safari
+在 `http://localhost` 不送，因此無法登入。Chrome、Firefox 可用；
+要用 Safari 請見下一節。
+
+## 用 Safari／iPhone 測試
+
+改用 HTTPS 開發伺服器。憑證用 [mkcert](https://github.com/FiloSottile/mkcert)
+在本機產生，放在已被 git 忽略的 `frontend/.cert/`，不得提交。
+
+1. **安裝 mkcert**（只需一次）：`brew install mkcert`，再執行
+   `mkcert -install` 讓本機信任它的根憑證。
+2. **產生憑證**：
+
+   ```bash
+   mkdir -p frontend/.cert
+   mkcert -cert-file frontend/.cert/dev.pem \
+     -key-file frontend/.cert/dev-key.pem localhost 127.0.0.1
+   ```
+
+   要給 iPhone 連，最後再加上這台電腦的區網 IP。
+3. **啟動**：後端照上一節執行 `make run-backend`；前端改成：
+
+   ```bash
+   export INSPECTFLOW_DEV_HTTPS_CERT="$PWD/frontend/.cert/dev.pem"
+   export INSPECTFLOW_DEV_HTTPS_KEY="$PWD/frontend/.cert/dev-key.pem"
+   make run-frontend
+   ```
+
+   用 Safari 開 `https://localhost:5173`。兩個變數都不設就是原本的
+   HTTP。
+4. **iPhone／iPad**（同一個區網）：
+   - 啟動前端前再 `export INSPECTFLOW_DEV_HOST=0.0.0.0`，讓前端對
+     區網開放；這個變數只在 HTTPS 模式有效。後端仍只綁 127.0.0.1，
+     由前端轉送 `/api`。
+   - 把 `mkcert -CAROOT` 目錄裡的 `rootCA.pem` 傳到 iPhone 安裝，
+     再到「設定 > 一般 > 關於本機 > 憑證信任設定」開啟信任。
+   - 用 `https://<區網 IP>:5173` 開啟。
 
 ## 文件
 
