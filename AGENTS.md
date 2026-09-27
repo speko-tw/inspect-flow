@@ -19,6 +19,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   commit 訊息、根目錄 `README.md`（對外預設版）、GitHub issue 與 PR 的標題、負責人指定之處。
   GitHub issue 與 PR 的內文、留言一律用繁體中文。
 - `README.md` 與 `README.zh-TW.md` 頂端保留語言切換列，內容須同步更新。
+- GitHub Project #1 的用途、Views、Issue／PR 關係與 agent 操作邊界見 [`docs/github-project.md`](docs/github-project.md)。Project 是進度檢視入口；不得以 Project 欄位取代 repo 已定義的分類、版本與 Issue／PR 原生狀態。
 - 規範用語「必須／應／得」＝ MUST／SHOULD／MAY。
 - 不標示文件版本號；歷程以 Git 為準。
 - 設計意圖以宣告式規則陳述並附理由；每條原則、決策與非目標都要標註架構基準章節，依文件版型使用「依據」欄或規則內引註（依據：架構基準 §x）。來源只是建議的項目，維持「應／得」或技術棧卡片的「建議」，不得升級為「必須」；需要團隊選定、且來源沒有結論的，才列入待決議。
@@ -60,6 +61,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 
 - 只 stage 相關路徑（`git add -- <paths>`），不用 `git add -A`／`.`。
 - **自動化範圍**：agent 得自行 push 自己的分支、開與更新 PR、開與更新 issue／sub-issue、套用既有 label、留言，不必逐次詢問。
+- GitHub Project 的項目加入與回饋流程依 [`docs/github-project.md`](docs/github-project.md)；加入 Project 不代表可以修改來源 Issue／PR 的其他 metadata。
 - **留給人的關卡**（agent 不得代為決定，見 [`docs/specs/README.md`](docs/specs/README.md#human-gates)）：
   - 合併 PR 到 `main`（含規格與計畫的 PR）；agent 不得核准或合併自己的 PR。
   - `needs-decision` 的議題：範圍變更、意圖變更、裁定 OQ／G。agent 只整理選項與影響，等團隊討論決定。

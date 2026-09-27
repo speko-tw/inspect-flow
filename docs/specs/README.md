@@ -210,6 +210,8 @@ flowchart TD
 
 **新增 label** 只限兩種情況：出現新的程式碼範圍（例如新的頂層目錄），或出現原生功能做不到的例外狀態。新增前先開 issue 說明理由，並在同一個 PR 更新本節。
 
+GitHub Project #1 的用途、Views、歷史項目與 agent 操作方式見 [`docs/github-project.md`](../github-project.md)。Project 只呈現與導覽既有 Issue／PR 資料，不另定義一套分類或狀態。
+
 <a id="issue-pr-fields"></a>
 **Issue 與 PR 欄位**：
 
