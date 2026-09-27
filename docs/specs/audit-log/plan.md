@@ -54,7 +54,7 @@
 | ALG-AC09 | `backend/tests/services/test_audit.py`：測試內登記事件、寫入讀回，比對 `alembic heads` 與 inspector 欄位；fixture 還原目錄 |
 | ALG-AC10 | 同上：所有代碼符合格式，「資料」段等於 `entity_type` |
 | ALG-AC11 | `backend/tests/services/test_audit_write_timing.py`：依序操作後比對紀錄的筆數、代碼順序與內容；被拒絕與範圍外的操作沒有紀錄 |
-| ALG-AC12 | `backend/tests/services/test_audit.py`（T2）：以沒有登入者與已綁定 U 的請求範圍各寫入，斷言 `user.locked` 的操作者是內建 `admin`、其他事件在沒有登入者時被拒絕、`user.password_set` 前後相同仍寫入 |
+| ALG-AC12 | `backend/tests/services/test_audit.py`（T2）：以沒有登入者與已綁定 U 的請求範圍各寫入，斷言兩種範圍的 `user.locked` 操作者都是內建 `admin`、其他事件在沒有登入者時被拒絕、`user.password_set` 前後相同仍寫入 |
 
 ## 考慮過但沒採用的做法
 

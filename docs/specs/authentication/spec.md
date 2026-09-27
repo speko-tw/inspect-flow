@@ -272,7 +272,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | AUT-AC49 | 初始化後的資料庫；一般帳號 U 與內建 `admin`；`audit-log` 的寫入入口可用 | 以設定密碼的指令替 U、內建 `admin` 各設定一次密碼；再替 U 執行一次兩次輸入不同的指令 | 前兩次各恰有一筆 `user.password_set`，`entity_id` 分別是 U 與內建 `admin`，`created_by` 都是內建 `admin`，`is_temporary` 符合 AUT-R37；失敗的那次沒有紀錄；紀錄的 `before`、`after` 序列化後不含輸入的密碼或雜湊 | AUT-R39、AUT-R41 |
-| AUT-AC50 | 初始化後的資料庫；Admin A、一般帳號 U；`audit-log` 的寫入入口可用 | A 經 Service 入口替 U 設定臨時密碼；U 登入後以變更密碼 API 改成新密碼；再以太短的新密碼、錯誤的目前密碼各呼叫一次 | 前兩次各恰有一筆 `user.password_set`，`entity_id` 是 U，`created_by` 依序是 A、U，`before.is_temporary`／`after.is_temporary` 依序為 `false`／`true`、`true`／`false`；被拒絕的兩次沒有紀錄；紀錄序列化後不含任何一組密碼、雜湊或 Cookie 值 | AUT-R39、AUT-R41 |
+| AUT-AC50 | 初始化後的資料庫；Admin A、一般帳號 U，U 已有一組非臨時的本地密碼；`audit-log` 的寫入入口可用 | A 經 Service 入口替 U 設定臨時密碼；U 登入後以變更密碼 API 改成新密碼；再以太短的新密碼、錯誤的目前密碼各呼叫一次 | 前兩次各恰有一筆 `user.password_set`，`entity_id` 是 U，`created_by` 依序是 A、U，`before.is_temporary`／`after.is_temporary` 依序為 `false`／`true`、`true`／`false`；被拒絕的兩次沒有紀錄；紀錄序列化後不含任何一組密碼、雜湊或 Cookie 值 | AUT-R39、AUT-R41 |
 | AUT-AC51 | 同 AUT-AC27 的 U；可控時間 | 依 AUT-AC27 觸發鎖定（第 10 次在時間 L），鎖定期間再嘗試 2 次 | `audit_logs` 恰有一筆 `user.locked`，`entity_id` 是 U，`created_by` 是內建 `admin`，`after.locked_until` 等於 L 加 15 分鐘；鎖定期間的嘗試沒有新增紀錄；登入回應仍是 401 | AUT-R28、AUT-R39 |
 | AUT-AC52 | 一個 `local` 帳號 U；測試攔截該 logger 的輸出 | 以正確密碼登入、登出；以錯誤密碼登入；以不存在的 email 登入；U 被鎖後以正確密碼登入 | 依序各有一筆 `auth.login_succeeded`、`auth.logout`、`auth.login_failed`（帳密不符）、`auth.login_failed`（`user_id` 為空值）、`auth.login_failed`（鎖定中）；`user_id` 正確；所有日誌的訊息與欄位都不含送出的密碼、Cookie 值、token 或送出的 email 原文；`audit_logs` 沒有登入、登出的紀錄 | AUT-R40、AUT-R41 |
 
