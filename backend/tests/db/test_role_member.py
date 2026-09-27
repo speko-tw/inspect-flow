@@ -2,20 +2,23 @@
 ``ProjectMember``/``ProjectMemberRole`` tables (domain-model plan.md
 T3, issue #131).
 
-Tentative AC labels below follow the T3 dispatch ticket's mapping
-(the frozen spec's own AC numbers may be renumbered once DOM-Q3/
-DOM-Q5 and PR #205's DOM-R34/DOM-AC24 land in ``spec.md``):
+AC labels below follow ``docs/specs/domain-model/spec.md``'s final
+numbering:
 
 - DOM-AC18: ``ProjectMember``/``ProjectMemberRole`` table structure
-  and constraints.
-- DOM-AC21: ``Role``/``RolePermission`` length and format limits.
-- DOM-AC24 (PR #205, not yet merged): ``Role.name``'s
-  case-insensitive uniqueness.
-- DOM-Q3: the permission code registry and the "has modify
-  capability" judgment (``app/models/permissions.py``).
-- DOM-Q5/DOM-R21: a member's role count has no lower bound, and
-  deleting either side of a role assignment cascades at the
-  database level.
+  and constraints (DOM-R15, DOM-R25).
+- DOM-AC21: ``Role``/``RolePermission`` length and format limits
+  (DOM-R30).
+- DOM-AC24: ``Role.name``'s case-insensitive uniqueness (DOM-R34).
+- DOM-AC25: the permission code registry (DOM-R35).
+- DOM-AC27: a member's role count has no lower bound, and deleting
+  either side of a role assignment cascades at the database level
+  (DOM-R25, DOM-R36).
+
+A few extra tests cover DOM-R19 and DOM-R21 directly (deleting a
+``Role`` cascades to its own permission codes and to every
+``ProjectMemberRole`` assignment pointing at it); neither has its own
+AC number, so they are labeled by requirement instead.
 
 Same fixture pattern as ``test_company.py``/``test_user_fields.py``:
 migrates the database behind ``conftest.py``'s ``db_url`` fixture
@@ -33,6 +36,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app import permission_codes
+from app.api.errors import DescribedStrEnum
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import (
@@ -43,16 +48,29 @@ from app.models import (
     RolePermission,
     User,
 )
-from app.models.permissions import (
-    has_modify_capability,
+from app.permission_codes import (
     is_permission_code_registered,
     permission_code_descriptions,
-    temporarily_registered_permission_codes,
 )
 from tests.db.conftest import create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
+
+_MAX_NAME = "N" * 64
+# 31 + 1 (dot) + 32 = 64 characters, matching DOM-R30's format.
+_MAX_CODE = "d" * 31 + "." + "a" * 32
+
+
+class _BoundaryCodeRegistry(DescribedStrEnum):
+    """Test-only registry containing exactly the boundary-length
+    code ``_MAX_CODE`` DOM-AC21 needs -- separate from
+    ``tests/conftest.py``'s ``registered_permission_codes`` fixture,
+    whose fixed code set does not include an artificial 64-character
+    boundary string.
+    """
+
+    MAX_CODE = (_MAX_CODE, "boundary-length test code")
 
 
 def _alembic_config() -> Config:
@@ -211,29 +229,26 @@ class TestDomAc18ProjectMemberAndRoleAssignment:
         assert count == 1
 
     def test_duplicate_role_assignment_is_rejected(
-        self, session, creator, project
+        self, session, creator, project, registered_permission_codes
     ):
         member = _new_member(creator, project, user_id=creator.id)
         session.add(member)
-        with temporarily_registered_permission_codes(
-            ("report.read", "Read reports")
-        ):
-            role = _new_role(creator, name="Reader")
-            role.permission_codes.append(RolePermission(code="report.read"))
-            session.add(role)
-            session.commit()
+        role = _new_role(creator, name="Reader")
+        role.permission_codes.append(RolePermission(code="report.read"))
+        session.add(role)
+        session.commit()
 
-            session.add(
-                ProjectMemberRole(project_member_id=member.id, role_id=role.id)
-            )
-            session.commit()
+        session.add(
+            ProjectMemberRole(project_member_id=member.id, role_id=role.id)
+        )
+        session.commit()
 
-            session.add(
-                ProjectMemberRole(project_member_id=member.id, role_id=role.id)
-            )
-            with pytest.raises(IntegrityError):
-                session.commit()
-            session.rollback()
+        session.add(
+            ProjectMemberRole(project_member_id=member.id, role_id=role.id)
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
 
         count = (
             session.query(ProjectMemberRole)
@@ -301,16 +316,14 @@ class TestDomAc21LengthAndFormatValidation:
     attribute assignment.
     """
 
-    _MAX_NAME = "N" * 64
-    # 31 + 1 (dot) + 32 = 64 characters, matching DOM-R30's format.
-    _MAX_CODE = "d" * 31 + "." + "a" * 32
+    _MAX_NAME = _MAX_NAME
+    _MAX_CODE = _MAX_CODE
 
     @pytest.fixture(autouse=True)
-    def _register_max_code(self):
-        with temporarily_registered_permission_codes(
-            (self._MAX_CODE, "boundary-length test code")
-        ):
-            yield
+    def _register_max_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            permission_codes, "_active_registry", _BoundaryCodeRegistry
+        )
 
     def test_inspector_shows_column_lengths(self, engine):
         role_columns = {
@@ -350,11 +363,8 @@ class TestDomAc21LengthAndFormatValidation:
 
         over_length_code = "d" * 31 + "." + "a" * 33
         assert len(over_length_code) == 65
-        with temporarily_registered_permission_codes(
-            (over_length_code, "over-length test code")
-        ):
-            with pytest.raises(ValueError):
-                RolePermission(role_id=role.id, code=over_length_code)
+        with pytest.raises(ValueError):
+            RolePermission(role_id=role.id, code=over_length_code)
 
         assert (
             session.query(RolePermission).filter_by(role_id=role.id).count()
@@ -415,9 +425,8 @@ class TestDomAc21LengthAndFormatValidation:
 
 
 class TestDomAc24RoleNameCaseInsensitiveUniqueness:
-    """DOM-R34/DOM-AC24 (PR #205, not yet merged): ``Role.name`` is
-    unique regardless of case, stored exactly as typed, using ASCII
-    names only.
+    """DOM-R34/DOM-AC24: ``Role.name`` is unique regardless of case,
+    stored exactly as typed, using ASCII names only.
     """
 
     def test_duplicate_and_case_variant_names_are_rejected(
@@ -466,175 +475,78 @@ class TestDomAc24RoleNameCaseInsensitiveUniqueness:
         assert stored.name == "Field Inspector"
 
 
-class TestDomQ3PermissionCodeRegistry:
-    """DOM-Q3: an unregistered, format-valid code is rejected; a
-    temporarily registered one is accepted and removed again after
-    the test; the real, production registry starts empty.
+class TestDomAc25PermissionCodeRegistry:
+    """DOM-AC25 (DOM-R35): the production registry starts empty; a
+    registered code is accepted while an unregistered one is
+    rejected, on both insert and update, with row counts and stored
+    data unchanged.
     """
 
     def test_formal_registry_starts_empty(self):
         assert permission_code_descriptions() == {}
 
-    def test_unregistered_code_is_rejected_on_construction(
-        self, session, creator
+    def test_registered_code_is_accepted(
+        self, session, creator, registered_permission_codes
     ):
-        code = "report.read"
-        assert not is_permission_code_registered(code)
-
         role = _new_role(creator, name="Some Role")
         session.add(role)
         session.commit()
 
+        assert is_permission_code_registered("report.read")
+        session.add(RolePermission(role_id=role.id, code="report.read"))
+        session.commit()
+
+        stored = session.query(RolePermission).filter_by(role_id=role.id).one()
+        assert stored.code == "report.read"
+
+    def test_unregistered_code_is_rejected_on_insert(
+        self, session, creator, registered_permission_codes
+    ):
+        role = _new_role(creator, name="Some Role")
+        session.add(role)
+        session.commit()
+
+        assert not is_permission_code_registered("reprot.read")
         with pytest.raises(ValueError):
-            RolePermission(role_id=role.id, code=code)
+            RolePermission(role_id=role.id, code="reprot.read")
 
         assert (
             session.query(RolePermission).filter_by(role_id=role.id).count()
             == 0
         )
 
-    def test_temporarily_registered_code_can_be_written_then_forgotten(
-        self, session, creator
+    def test_unregistered_code_is_rejected_on_update(
+        self, session, creator, registered_permission_codes
     ):
-        code = "report.read"
         role = _new_role(creator, name="Some Role")
+        perm = RolePermission(code="report.read")
+        role.permission_codes.append(perm)
         session.add(role)
         session.commit()
 
-        with temporarily_registered_permission_codes((code, "Read reports")):
-            assert is_permission_code_registered(code)
-            session.add(RolePermission(role_id=role.id, code=code))
-            session.commit()
+        with pytest.raises(ValueError):
+            perm.code = "reprot.read"
 
-        # Registration is gone again, but the already-written row is
-        # untouched: the registry only guards new writes.
-        assert not is_permission_code_registered(code)
-        stored = session.query(RolePermission).filter_by(role_id=role.id).one()
-        assert stored.code == code
+        session.expire(perm)
+        stored = session.get(RolePermission, perm.id)
+        assert stored.code == "report.read"
 
 
-class TestDomQ3HasModifyCapability:
-    """DOM-R24/KD-28: ``has_modify_capability`` is ``True`` only when
-    at least one code's action segment is not ``read``.
+class TestDomR19R21RoleDeletionCascades:
+    """Not their own AC labels, but exercised alongside DOM-AC27:
+    deleting a ``Role`` removes its own permission codes (DOM-R19)
+    and every ``ProjectMemberRole`` assignment pointing at it
+    (DOM-R21), without disturbing the member rows, their other role
+    assignments, or other roles -- verified once through the ORM's
+    ``session.delete`` and once through a Core ``delete()``
+    statement, since the cascade is enforced by the database's own
+    ``ON DELETE CASCADE``, not by SQLAlchemy.
     """
-
-    @pytest.mark.parametrize(
-        "codes,expected",
-        [
-            ([], False),
-            (["report.read"], False),
-            (["report.read", "evidence.read"], False),
-            (["report.approve"], True),
-            (["report.read", "report.create"], True),
-        ],
-    )
-    def test_codes_collection(self, codes, expected):
-        assert has_modify_capability(codes) is expected
-
-    def test_role_method_reads_its_own_permission_codes(
-        self, session, creator
-    ):
-        with temporarily_registered_permission_codes(
-            ("report.read", "Read reports"),
-            ("report.approve", "Approve reports"),
-        ):
-            read_only_role = _new_role(creator, name="Read Only")
-            read_only_role.permission_codes.append(
-                RolePermission(code="report.read")
-            )
-            modify_role = _new_role(creator, name="Modifier")
-            modify_role.permission_codes.append(
-                RolePermission(code="report.read")
-            )
-            modify_role.permission_codes.append(
-                RolePermission(code="report.approve")
-            )
-            session.add_all([read_only_role, modify_role])
-            session.commit()
-
-            assert read_only_role.has_modify_capability() is False
-            assert modify_role.has_modify_capability() is True
-
-
-class TestDomQ5MemberRoleCountAndCascadeDeletes:
-    """DOM-Q5/DOM-R21: a member may hold zero roles; deleting a
-    ``ProjectMember`` removes its role assignments; deleting a
-    ``Role`` removes assignments to it without touching the member
-    row or its other role assignments -- all enforced by the
-    database's own ``ON DELETE CASCADE``, verified once through the
-    ORM's ``session.delete`` and once through a Core ``delete()``
-    statement.
-    """
-
-    def test_member_with_zero_roles_is_valid(self, session, creator, project):
-        member = _new_member(creator, project, user_id=creator.id)
-        session.add(member)
-        session.commit()
-
-        assert (
-            session.query(ProjectMemberRole)
-            .filter_by(project_member_id=member.id)
-            .count()
-            == 0
-        )
-
-    def test_orm_delete_of_member_cascades_to_its_assignments(
-        self, session, creator, project
-    ):
-        member = _new_member(creator, project, user_id=creator.id)
-        role = _new_role(creator, name="Role X")
-        session.add_all([member, role])
-        session.commit()
-        session.add(
-            ProjectMemberRole(project_member_id=member.id, role_id=role.id)
-        )
-        session.commit()
-
-        session.delete(member)
-        session.commit()
-
-        assert (
-            session.query(ProjectMemberRole)
-            .filter_by(project_member_id=member.id)
-            .count()
-            == 0
-        )
-        # The role itself is untouched by deleting the member.
-        assert session.get(Role, role.id) is not None
-
-    def test_core_delete_of_member_cascades_to_its_assignments(
-        self, session, creator, project
-    ):
-        """Proves the cascade is enforced by the database's own
-        ``ON DELETE CASCADE``, not by SQLAlchemy's ORM-level
-        cascade: a Core ``delete()`` statement never loads or
-        manages related objects the way ``session.delete`` can.
-        """
-        member = _new_member(creator, project, user_id=creator.id)
-        role = _new_role(creator, name="Role Y")
-        session.add_all([member, role])
-        session.commit()
-        session.add(
-            ProjectMemberRole(project_member_id=member.id, role_id=role.id)
-        )
-        session.commit()
-        member_id = member.id
-
-        session.execute(
-            delete(ProjectMember).where(ProjectMember.id == member_id)
-        )
-        session.commit()
-
-        assert (
-            session.query(ProjectMemberRole)
-            .filter_by(project_member_id=member_id)
-            .count()
-            == 0
-        )
 
     def test_orm_delete_of_role_cascades_without_touching_members(
         self, session, creator, project
     ):
+        """DOM-R21."""
         member_a = _new_member(creator, project, user_id=creator.id)
         other_user = create_root_user_with_company(session, "E911")
         member_b = _new_member(creator, project, user_id=other_user.id)
@@ -681,6 +593,7 @@ class TestDomQ5MemberRoleCountAndCascadeDeletes:
     def test_core_delete_of_role_cascades_to_assignments(
         self, session, creator, project
     ):
+        """DOM-R21."""
         member = _new_member(creator, project, user_id=creator.id)
         role = _new_role(creator, name="Role Z")
         session.add_all([member, role])
@@ -701,26 +614,85 @@ class TestDomQ5MemberRoleCountAndCascadeDeletes:
         assert session.get(ProjectMember, member.id) is not None
 
     def test_deleting_role_also_removes_its_own_permission_codes(
-        self, session, creator
+        self, session, creator, registered_permission_codes
     ):
-        """Not a DOM-Q5/DOM-R21 case (that's about ``ProjectMember``
-        assignments), but the same ``ON DELETE CASCADE`` mechanism
-        applies to ``RolePermission`` (DOM-R19): worth a quick check
-        alongside the assignment-cascade tests above.
-        """
-        with temporarily_registered_permission_codes(
-            ("report.read", "Read reports")
-        ):
-            role = _new_role(creator, name="Role W")
-            role.permission_codes.append(RolePermission(code="report.read"))
-            session.add(role)
-            session.commit()
-            role_id = role.id
+        """DOM-R19."""
+        role = _new_role(creator, name="Role W")
+        role.permission_codes.append(RolePermission(code="report.read"))
+        session.add(role)
+        session.commit()
+        role_id = role.id
 
-            session.execute(delete(Role).where(Role.id == role_id))
-            session.commit()
+        session.execute(delete(Role).where(Role.id == role_id))
+        session.commit()
 
         assert (
             session.query(RolePermission).filter_by(role_id=role_id).count()
             == 0
         )
+
+
+class TestDomAc27CoreDeleteCascadesMemberAssignments:
+    """DOM-AC27 (DOM-R25, DOM-R36): project P has M1 (holding R1 and
+    R2) and M2 (holding R1); adding M3 with zero roles succeeds
+    (DOM-R36's "a member may hold zero roles"); deleting M1 through a
+    Core ``delete()`` statement -- not the ORM, so no relationship-
+    level cascade can be doing the work -- removes M1 and every
+    assignment pointing at it, while R1, R2, M2's assignment to R1
+    and M3 are all untouched.
+    """
+
+    def test_core_delete_of_m1_cascades_without_touching_others(
+        self, session, creator, project
+    ):
+        user_m1 = creator
+        user_m2 = create_root_user_with_company(session, "E911")
+        user_m3 = create_root_user_with_company(session, "E912")
+
+        member_1 = _new_member(creator, project, user_id=user_m1.id)
+        member_2 = _new_member(creator, project, user_id=user_m2.id)
+        role_1 = _new_role(creator, name="Role One")
+        role_2 = _new_role(creator, name="Role Two")
+        session.add_all([member_1, member_2, role_1, role_2])
+        session.commit()
+        session.add_all(
+            [
+                ProjectMemberRole(
+                    project_member_id=member_1.id, role_id=role_1.id
+                ),
+                ProjectMemberRole(
+                    project_member_id=member_1.id, role_id=role_2.id
+                ),
+                ProjectMemberRole(
+                    project_member_id=member_2.id, role_id=role_1.id
+                ),
+            ]
+        )
+        session.commit()
+        member_1_id = member_1.id
+
+        member_3 = _new_member(creator, project, user_id=user_m3.id)
+        session.add(member_3)
+        session.commit()
+
+        session.execute(
+            delete(ProjectMember).where(ProjectMember.id == member_1_id)
+        )
+        session.commit()
+
+        assert session.get(ProjectMember, member_1_id) is None
+        assert (
+            session.query(ProjectMemberRole)
+            .filter_by(project_member_id=member_1_id)
+            .count()
+            == 0
+        )
+        assert session.get(Role, role_1.id) is not None
+        assert session.get(Role, role_2.id) is not None
+        remaining = (
+            session.query(ProjectMemberRole)
+            .filter_by(project_member_id=member_2.id)
+            .all()
+        )
+        assert {a.role_id for a in remaining} == {role_1.id}
+        assert session.get(ProjectMember, member_3.id) is not None

@@ -7,29 +7,30 @@ assignment subtable ``ProjectMemberRole``.
 ``Company``/``Role``): a ``Project``/``User`` pair, unique per
 DOM-R25, optionally holding any number of ``Role`` assignments.
 
-A member may have zero roles (issue #131's ticket, DOM-Q5): there is
-no ``NOT NULL`` or minimum-count constraint tying a ``ProjectMember``
-to any ``ProjectMemberRole`` row -- an empty ``role_assignments``
-collection is exactly as valid as a populated one, and DOM-R26's
-effective-permission union over zero rows is simply the empty set.
+A member may have zero roles (DOM-R36): there is no ``NOT NULL`` or
+minimum-count constraint tying a ``ProjectMember`` to any
+``ProjectMemberRole`` row -- an empty ``role_assignments`` collection
+is exactly as valid as a populated one, and DOM-R26's effective-
+permission union over zero rows is simply the empty set.
 
 ``ProjectMemberRole`` (the role-assignment table) is deliberately
 *not* combined with ``AuditMixin``, for the same reason
 ``app/models/role.py``'s ``RolePermission`` is not: DOM-R15 only
 lists ``ProjectMember`` itself (not its child table) as sharing the
-common structure, and neither DOM-R25 nor DOM-Q5 defines a "who/when"
-value for a single assignment row. It still gets ``TimestampedBase``
-(a UUID primary key plus ``created_at``/``updated_at``), matching
-DOM-AC18's inspector check that both tables carry a UUID primary key
-and created/updated timestamp columns, and the same "every table
-gets a UUID surrogate key" convention ``RolePermission`` follows.
+common structure, and neither DOM-R25 nor DOM-R36 defines a
+"who/when" value for a single assignment row. It still gets
+``TimestampedBase`` (a UUID primary key plus ``created_at``/
+``updated_at``), matching DOM-AC18's inspector check that both
+tables carry a UUID primary key and created/updated timestamp
+columns, and the same "every table gets a UUID surrogate key"
+convention ``RolePermission`` follows.
 
 Removing either side of an assignment must remove the assignment
-itself, both per issue #131's ticket (DOM-Q5: deleting a
-``ProjectMember`` removes its role assignments) and per DOM-R21
-(deleting a ``Role`` removes every ``ProjectMember``'s assignment to
-it, without disturbing the member row itself or its other role
-assignments). Both are enforced by the database's own
+itself, both per DOM-R36 (deleting a ``ProjectMember`` removes its
+role assignments) and per DOM-R21 (deleting a ``Role`` removes every
+``ProjectMember``'s assignment to it, without disturbing the member
+row itself or its other role assignments). Both are enforced by the
+database's own
 ``ON DELETE CASCADE`` on ``ProjectMemberRole``'s two foreign keys,
 not by the ORM: the ``role_assignments`` relationship below sets
 ``passive_deletes=True`` so a ``session.delete(member)`` never tries
@@ -66,7 +67,7 @@ class ProjectMember(AuditMixin, TimestampedBase):
     ``project_id``/``user_id`` are both required and unique as a
     pair; a member's ``Role`` assignments live in
     ``ProjectMemberRole`` (``role_assignments`` below), and may be
-    empty (DOM-Q5).
+    empty (DOM-R36).
     """
 
     __tablename__ = "project_members"

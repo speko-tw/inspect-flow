@@ -7,13 +7,12 @@ primary key, ``created_at``/``updated_at``/``created_by``/
 ``updated_by`` via ``TimestampedBase``/``AuditMixin``, same as
 ``Company``): a unique ``name`` and a set of permission codes.
 
-``name``'s case-insensitive uniqueness (DOM-R34, issue #131's
-ticket -- PR #205 not yet merged when this was written, so the spec
-prose has not caught up) is enforced the same way ``User.email``'s
-is (DOM-R02, ``app/models/user.py``): a ``lower(name)`` functional
-unique index (``ix_roles_name_lower`` below), with ``name`` itself
-stored exactly as typed. See that module's docstring for why a
-functional index was chosen over a second, normalized column.
+``name``'s case-insensitive uniqueness (DOM-R34) is enforced the
+same way ``User.email``'s is (DOM-R02, ``app/models/user.py``): a
+``lower(name)`` functional unique index (``ix_roles_name_lower``
+below), with ``name`` itself stored exactly as typed. See that
+module's docstring for why a functional index was chosen over a
+second, normalized column.
 
 Permission codes live in ``RolePermission``, not on ``Role`` itself
 (DOM-R19's "同一個 Role 內的權限代碼不得重複，由資料庫約束保證" needs
@@ -58,9 +57,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase
-from app.models import permissions
 from app.models._audit import AuditMixin
 from app.models._bounded_string import BoundedString, validate_nullable
+from app.permission_codes import is_permission_code_registered
 
 _NAME_MAX_LENGTH = 64
 _CODE_MAX_LENGTH = 64
@@ -86,12 +85,12 @@ def _check_code(value: str) -> None:
             f"{_CODE_MAX_LENGTH} characters, formatted as "
             f"'<data>.<action>' (DOM-R30); got {value!r}"
         )
-    # DOM-Q3: a format-valid code is still rejected if no feature
-    # spec has registered it (see app/models/permissions.py).
-    if not permissions.is_permission_code_registered(value):
+    # DOM-R35: a format-valid code is still rejected if no feature
+    # spec has registered it (see app/permission_codes.py).
+    if not is_permission_code_registered(value):
         raise ValueError(
             f"RolePermission.code {value!r} is not a registered "
-            "permission code (DOM-Q3)"
+            "permission code (DOM-R35)"
         )
 
 
@@ -130,16 +129,6 @@ class Role(AuditMixin, TimestampedBase):
             return value
         _check_name(value)
         return value
-
-    def has_modify_capability(self) -> bool:
-        """DOM-R24/KD-28: whether this role's current permission
-        codes include any action other than ``read`` -- see
-        ``app/models/permissions.py``'s ``has_modify_capability``
-        for the rule itself.
-        """
-        return permissions.has_modify_capability(
-            code_row.code for code_row in self.permission_codes
-        )
 
 
 class RolePermission(TimestampedBase):
