@@ -15,12 +15,13 @@
 
 - `AuditLog` 的資料模型與「只能新增」的保護。
 - Service 層寫入稽核紀錄的單一入口，以及事件目錄（每種事件記哪些欄位）。
-- 第一批事件：`Role` 的新增、修改、刪除；`ProjectMember` 的角色指派；`User.is_admin` 的變更（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[#126](https://github.com/speko-tw/inspect-flow/issues/126)）。
+- 第一批事件：`Role` 的新增、修改、刪除；`ProjectMember` 的角色指派；把人移出專案；`User.is_admin` 的變更（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、DOM-R22、[#126](https://github.com/speko-tw/inspect-flow/issues/126)、[#125](https://github.com/speko-tw/inspect-flow/issues/125)）。
+- 寫入時機的驗收：DOM-R22 列出的每一種變更是否寫出正確的紀錄（DOM-R22 寫明由本規格驗收）。
 - 預留：外部身分同步覆蓋基本欄位的事件（[KD-20](../../intents/03-decisions-and-stack.md#kd-20)），只保證之後不用改資料表就能套用。
 
 **不包含**：
 
-- 在各個寫入入口呼叫本規格的寫入入口：由提供入口的規格負責並驗收。`Role`、`User.is_admin` 見 `domain-model` 的 DOM-R22；見[寫入時機](#寫入時機)。
+- 寫入入口本身（`Role`、角色指派、移出專案、`is_admin` 的 Service 層入口）與在其中呼叫本規格的寫入入口：由 `domain-model` 實作（DOM-R22；計畫 T7，[#135](https://github.com/speko-tw/inspect-flow/issues/135)），本規格只驗收，見[寫入時機](#寫入時機)。
 - 初始化指令建立的資料：不寫稽核紀錄（[#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定），見 ALG-R12。
 - 外部身分同步的事件代碼與欄位：由 `external-identity-sync` 登記（ALG-R13）。
 - 登入、登出、設定密碼、登入失敗：見 `authentication` 的 [AUT-Q6](../authentication/spec.md#aut-q6)。
@@ -64,9 +65,10 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| ALG-R11 | 事件目錄**必須**至少包含[第一批事件](#第一批事件)，欄位依該表 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色的變更）；[#126](https://github.com/speko-tw/inspect-flow/issues/126)（`is_admin` 的變更算權限變更） | ALG-AC07 |
+| ALG-R11 | 事件目錄**必須**至少包含[第一批事件](#第一批事件)，欄位依該表 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色的變更）；DOM-R22（事件範圍，含移出專案，[#125](https://github.com/speko-tw/inspect-flow/issues/125)）；[#126](https://github.com/speko-tw/inspect-flow/issues/126)（`is_admin` 的變更算權限變更） | ALG-AC07 |
 | ALG-R12 | 初始化指令（DOM-R11）**不得**寫稽核紀錄 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（初始化是系統安裝，不是權限變更；資料本身已有建立紀錄） | ALG-AC08 |
 | ALG-R13 | 外部來源的值覆蓋 `User` 基本欄位時，每次覆蓋**必須**寫一筆稽核紀錄；事件代碼與欄位由 `external-identity-sync` 登記進事件目錄。本規格的資料表與寫入入口**必須**不改 schema 就能登記新事件 | 必須 | [KD-20](../../intents/03-decisions-and-stack.md#kd-20)；「不改 schema」是本規格為預留所做的推導 | ALG-AC09（新增事件不需 migration）；覆蓋時寫紀錄由 `external-identity-sync` 驗收 |
+| ALG-R14 | DOM-R22 列出的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件的紀錄，內容依[第一批事件](#第一批事件)；變更被拒絕或回滾時**不得**留下紀錄；DOM-R22 範圍外的變更（例如新增沒有角色的成員、`is_active`，待 [ALG-Q4](#alg-q4)）不寫 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R22（由本規格驗收）；「恰好一筆」是本規格推導，理由：同一次變更寫多筆或漏寫都會讓紀錄對不上 | ALG-AC11 |
 
 ## 第一批事件
 
@@ -77,21 +79,24 @@
 | `role.created` | 新增 `Role` | `role` | 空值 | `name`、`permission_codes` |
 | `role.updated` | 改名或修改權限內容 | `role` | 有變動的 `name`、`permission_codes` | 同左 |
 | `role.deleted` | 刪除 `Role`，連同移除所有指派（DOM-R21） | `role` | `name`、`permission_codes`、`project_member_ids`（被一併移除這個角色的成員） | 空值 |
-| `project_member.roles_changed` | 一筆 `ProjectMember` 的角色集合改變：加入專案時指派、增減角色、移出專案（移出方式待 [DOM-Q5](../domain-model/spec.md#dom-q5)）。新加入時 `before.role_ids` 為空陣列；移出後 `after.role_ids` 為空陣列 | `project_member` | `role_ids`；一律記錄 `project_id`、`user_id` | 同左 |
+| `project_member.roles_changed` | 一筆 `ProjectMember` 的角色集合改變：加入專案時就指派角色、之後增減角色。加入時 `before.role_ids` 為空陣列；加入時沒有指派角色不寫（DOM-R22 範圍外，DOM-R36 允許沒有角色） | `project_member` | `role_ids`；一律記錄 `project_id`、`user_id` | 同左 |
+| `project_member.removed` | 把人移出專案，刪除 `ProjectMember` 與它的指派（DOM-R36）；成員沒有角色時也寫 | `project_member` | `project_id`、`user_id`、`role_ids` | 空值 |
 | `user.admin_changed` | `User.is_admin` 改變 | `user` | `is_admin` | `is_admin` |
 
 - `permission_codes`、`role_ids`、`project_member_ids` 記整個集合，不記差異，讀的人不必自己推算。
-- 刪除角色只寫一筆 `role.deleted`，不再替每位受影響的成員各寫一筆 `project_member.roles_changed`：`project_member_ids` 已能還原影響範圍，也避免一次刪除寫出大量紀錄。
+- 刪除角色只寫一筆 `role.deleted`，不再替每位受影響的成員各寫一筆 `project_member.roles_changed`；移出專案同理，只寫 `project_member.removed`：`project_member_ids` 已能還原影響範圍，也避免一次刪除寫出大量紀錄。
 
 <a id="寫入時機"></a>
 ### 寫入時機
 
-哪個入口在什麼時候呼叫寫入入口，由提供入口的規格負責並驗收：
+入口由 `domain-model` 實作，本規格驗收（DOM-R22、ALG-R14、ALG-AC11）：
 
-| 事件 | 提供入口的規格 | 目前狀態 |
-|---|---|---|
-| `role.updated`、`role.deleted`、`user.admin_changed` | `domain-model`（DOM-R22；計畫 T7，[#135](https://github.com/speko-tw/inspect-flow/issues/135)） | DOM-R22 待依 #126 更新 |
-| `role.created`、`project_member.roles_changed` | 尚無規格提供這兩個寫入入口 | 提供入口的規格（例如 `admin-dashboard`）必須依 DOM-R22 寫紀錄 |
+| 事件 | 入口（`domain-model`） |
+|---|---|
+| `role.created`、`role.updated`、`role.deleted` | `Role` 新增、改名與修改權限、刪除（DOM-R20、DOM-R21；T7，[#135](https://github.com/speko-tw/inspect-flow/issues/135)） |
+| `project_member.roles_changed` | 替 `ProjectMember` 指派與移除 `Role`（T7，#135） |
+| `project_member.removed` | 把人移出專案（DOM-R36；T7，#135） |
+| `user.admin_changed` | `User.is_admin` 修改（DOM-R06、DOM-R07；T7，#135） |
 
 ## 資料
 
@@ -128,10 +133,11 @@
 | ALG-AC04 | 初始化後的資料庫（有內建 `admin`）與另一位已登入的 `User` U；以可控時間固定現在時刻 | 不在 HTTP 請求中寫一筆紀錄；在已綁定 U 的請求範圍內寫一筆；在沒有登入者的請求範圍內寫一筆；呼叫端試圖自行指定操作者或時間 | 第一筆的 `created_by` 是 `admin`，第二筆是 U，兩筆的 `created_at` 都等於固定的時刻；第三次被拒絕、不寫入；入口不接受操作者與時間參數 | ALG-R05 |
 | ALG-AC05 | 一個交易單位（DBF-R09） | 在同一個交易裡修改一筆 `Company`、寫一筆紀錄，然後拋出例外；另一個交易裡修改同一筆 `Company` 後，用未登記的事件代碼寫紀錄 | 兩次都回滾：`Company` 不變，`audit_logs` 沒有新紀錄 | ALG-R06 |
 | ALG-AC06 | 事件目錄已登記 `role.updated` | 分別寫入：未登記的代碼 `role.renamed`；`after` 多了未宣告欄位 `password_hash`；`before`、`after` 完全相同的 `role.updated`；另掃描事件目錄所有宣告欄位 | 三次都被拒絕，筆數不變；沒有任何事件宣告含 `password`、`secret`、`token`、`session` 字樣的欄位 | ALG-R07、ALG-R08、ALG-R09 |
-| ALG-AC07 | 初始化後的資料庫 | 依[第一批事件](#第一批事件)各寫一筆（`role.updated` 只改名；`project_member.roles_changed` 以「新加入」與「移出」各一筆），集合欄位故意以未排序的順序、UUID 以 `uuid.UUID` 物件傳入，再從資料庫讀回 | 五種代碼都寫入成功；讀回的 `event_type`、`entity_type`、`entity_id` 等於輸入；`role.created` 的 `before`、`role.deleted` 的 `after` 為空值；`role.updated` 只有 `name`；`project_member.roles_changed` 前後都有 `project_id`、`user_id`，新加入的 `before.role_ids`、移出的 `after.role_ids` 為空陣列；UUID 為字串、集合為排序後的陣列 | ALG-R09、ALG-R10、ALG-R11 |
+| ALG-AC07 | 初始化後的資料庫 | 依[第一批事件](#第一批事件)各寫一筆（`role.updated` 只改名；`project_member.roles_changed` 為新加入；`project_member.removed` 的 `role_ids` 為空陣列），集合欄位故意以未排序的順序、UUID 以 `uuid.UUID` 物件傳入，再從資料庫讀回 | 六種代碼都寫入成功；讀回的 `event_type`、`entity_type`、`entity_id` 等於輸入；`role.created` 的 `before`、`role.deleted` 與 `project_member.removed` 的 `after` 為空值；`role.updated` 只有 `name`；`project_member.roles_changed` 前後都有 `project_id`、`user_id`，`before.role_ids` 為空陣列；UUID 為字串、集合為排序後的陣列 | ALG-R09、ALG-R10、ALG-R11 |
 | ALG-AC08 | 對空資料庫執行 `alembic upgrade head` 之後 | 執行初始化指令（DOM-AC08 的成功案例） | 初始化成功，`audit_logs` 為 0 筆 | ALG-R12 |
 | ALG-AC09 | 事件目錄；測試結束後還原 | 在測試中登記一個測試用事件（`entity_type = user`，三個欄位），寫入一筆再讀回；比對寫入前後的 `alembic heads` 與 `audit_logs` 欄位 | 寫入與讀回成功；migration head 與欄位都沒有變 | ALG-R13 |
 | ALG-AC10 | 事件目錄 | 逐一檢查所有已登記的事件代碼 | 每個代碼都符合 ALG-R07 的格式，且「資料」段等於該事件的 `entity_type` | ALG-R07 |
+| ALG-AC11 | 初始化後的資料庫，`domain-model` T7 的入口可用；兩位啟用中的 Admin；角色 R1 由兩筆成員持有；專案 P | 透過 Service 層依序：新增角色 R2；R2 改名；把 U 加入 P 並指派 R2；替 U 再加 R1；把 V 加入 P 但不指派角色；刪除 R1；把 V 移出 P；取消一位 Admin 的 `is_admin`；嘗試取消最後一位 Admin 的 `is_admin`；停用一位非 Admin 的帳號 | 每一次成功的變更各恰有一筆紀錄，事件代碼依序為 `role.created`、`role.updated`、`project_member.roles_changed`、`project_member.roles_changed`、`role.deleted`、`project_member.removed`、`user.admin_changed`，內容依第一批事件；`role.deleted` 的 `project_member_ids` 恰為持有 R1 的兩筆成員，且沒有另寫 `roles_changed`；加入 V、被拒絕的取消與停用帳號都沒有紀錄；`created_by` 都是目前操作者 | ALG-R14 |
 
 ## 待釐清
 
