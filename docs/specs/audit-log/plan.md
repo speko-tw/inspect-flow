@@ -9,14 +9,15 @@
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
 | T1 | `AuditLog` 資料表與「只能新增」的保護：model 用 `Base` 加 `id`、`created_at`、`created_by`，不繼承 `TimestampedBase`（它帶 `updated_at`）；`before`、`after` 用 `sa.JSON`；`entity_id` 用 `Uuid`、不設外鍵；在 SQLAlchemy 的 `before_cursor_execute` 事件統一攔截：送往資料庫的 SQL 若是對 `audit_logs` 的 `UPDATE` 或 `DELETE` 就拋錯，ORM、Core、`text()` 都走這一層，一處就涵蓋（掛在 `Engine` 類別上，測試自建的 engine 也適用）；新增一支 migration | `backend/app/models/audit_log.py`（新增）、`backend/app/models/__init__.py`（加一行 import）、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_audit_log.py`（新增） | — | ALG-AC01、ALG-AC02、ALG-AC03 | #215 |
-| T2 | 寫入入口與事件目錄：單一入口從 `get_current_operator` 取操作者、從 `app.db.clock` 取時間；事件目錄登記第一批六種事件與宣告欄位；拒絕未登記代碼、未宣告欄位、前後相同的修改；把 UUID 轉字串、集合排序 | `backend/app/services/audit.py`（新增）、`backend/tests/services/test_audit.py`（新增）、`backend/tests/db/test_audit_events.py`（新增，ALG-AC07 要在 PostgreSQL 上跑） | T1 | ALG-AC04、ALG-AC05、ALG-AC06、ALG-AC07、ALG-AC09、ALG-AC10 | #216 |
+| T2 | 寫入入口與事件目錄：單一入口從 `get_current_operator` 取操作者、從 `app.db.clock` 取時間；事件目錄登記第一批六種事件與 `authentication` 的兩種事件（`user.password_set`、`user.locked`）及宣告欄位；支援「系統事件」（操作者固定為內建 `admin`）與「每次都寫」兩個標記；拒絕未登記代碼、未宣告欄位、前後相同的修改；把 UUID 轉字串、集合排序 | `backend/app/services/audit.py`（新增）、`backend/tests/services/test_audit.py`（新增）、`backend/tests/db/test_audit_events.py`（新增，ALG-AC07 要在 PostgreSQL 上跑） | T1 | ALG-AC04、ALG-AC05、ALG-AC06、ALG-AC07、ALG-AC09、ALG-AC10、ALG-AC12 | #216 |
 | T3 | 初始化指令不寫稽核紀錄的測試 | `backend/tests/cli/test_init_system_audit.py`（新增） | T1；[#134](https://github.com/speko-tw/inspect-flow/issues/134)（初始化指令，會建立 `backend/tests/cli/`） | ALG-AC08 | #217 |
 | T4 | 寫入時機的驗收測試：只寫測試，透過 `domain-model` T7 的入口做 ALG-AC11 的操作序列，檢查紀錄 | `backend/tests/services/test_audit_write_timing.py`（新增） | T2；[#135](https://github.com/speko-tw/inspect-flow/issues/135)（DOM T7） | ALG-AC11 | #218 |
 
-- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC11 每條都被一個任務涵蓋。
+- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。
 - 規格凍結後才依本表開 task issue；本 PR 只寫文件。
 - T3 開工時若 T2 還沒合併，也可以併進 T2（只要 #134 已合併），在 T2 的 PR 更新本表。
 - **和 `domain-model` T7（[#135](https://github.com/speko-tw/inspect-flow/issues/135)）的分工**：T7 依賴本計畫 T2，在 `Role`、角色指派、移出專案、`is_admin` 的入口呼叫寫入入口；DOM-R22 寫明由本規格驗收，所以驗收測試放在本計畫 T4，排在 #135 之後。T4 若發現 T7 漏寫或寫錯，開 `Bug` 修 `domain-model` 的 Service 檔，T4 本身不改 Service 檔（一個任務不跨兩份規格）。
+- **和 `authentication` 的分工**：`user.password_set`、`user.locked` 由本計畫 T2 登記進目錄；實際寫入與寫入時機的驗收在 `authentication` 計畫的 T6、T8、T11（AUT-AC49～AUT-AC51），它們都依賴 T2。
 
 ## 並行分組
 
@@ -53,6 +54,7 @@
 | ALG-AC09 | `backend/tests/services/test_audit.py`：測試內登記事件、寫入讀回，比對 `alembic heads` 與 inspector 欄位；fixture 還原目錄 |
 | ALG-AC10 | 同上：所有代碼符合格式，「資料」段等於 `entity_type` |
 | ALG-AC11 | `backend/tests/services/test_audit_write_timing.py`：依序操作後比對紀錄的筆數、代碼順序與內容；被拒絕與範圍外的操作沒有紀錄 |
+| ALG-AC12 | `backend/tests/services/test_audit.py`（T2）：以沒有登入者與已綁定 U 的請求範圍各寫入，斷言兩種範圍的 `user.locked` 操作者都是內建 `admin`、其他事件在沒有登入者時被拒絕、`user.password_set` 前後相同仍寫入 |
 
 ## 考慮過但沒採用的做法
 
