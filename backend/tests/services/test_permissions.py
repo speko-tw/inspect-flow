@@ -20,7 +20,7 @@ Fixtures (``session``, ``operator``) come from this directory's
 ``backend/tests/conftest.py``.
 """
 
-from sqlalchemy import inspect
+from sqlalchemy import event, inspect
 
 from app.models import (
     Project,
@@ -231,3 +231,73 @@ class TestReadOnly:
         assert not session.new
         assert not session.dirty
         assert not session.deleted
+
+
+class TestNoAutoflushOnRead:
+    """PR #226 review comment 4113944357: a caller may hold a
+    pending (unflushed) edit on a ``Role`` -- e.g. it is mid-way
+    through renaming one -- when it asks one of these three
+    functions a read-only question. None of them may flush that
+    pending edit out as a side effect of their own ``SELECT``s: this
+    module's docstring says a caller must flush its own pending
+    changes itself if it wants them counted, which only holds if a
+    read here never does that flushing on the caller's behalf
+    (SQLAlchemy's default autoflush otherwise runs a pending
+    ``UPDATE`` before every ``SELECT``).
+
+    ``has_modify_capability``'s only path to the database is a lazy
+    load of ``role.permission_codes`` if that relationship is not
+    already loaded, so ``role`` is expired first to force that lazy
+    load rather than let it silently read already-loaded identity
+    map state.
+    """
+
+    def test_pending_role_edit_is_not_autoflushed(
+        self, session, engine, operator, registered_permission_codes
+    ):
+        project = _new_project("P-NOFLUSH", operator)
+        user = create_root_user_with_company(session, "U-NOFLUSH")
+        session.add_all([project, user])
+        session.flush()
+
+        role = _new_role(operator, "Role-NOFLUSH", "report.read")
+        session.add(role)
+        session.flush()
+
+        member = _new_member(operator, project, user, role)
+        session.add(member)
+        session.flush()
+
+        # A pending, unflushed edit -- this is the state under test.
+        role.name = "Role-NOFLUSH-renamed"
+        # Force has_modify_capability's relationship access below to
+        # go through a real lazy load instead of reading already
+        # loaded state.
+        session.expire(role, ["permission_codes"])
+
+        statements: list[str] = []
+
+        def _record_statement(
+            conn, cursor, statement, parameters, context, executemany
+        ):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _record_statement)
+        try:
+            effective_permissions(
+                session, user_id=user.id, project_id=project.id
+            )
+            role_impact_scope(session, role_id=role.id)
+            has_modify_capability(role)
+        finally:
+            event.remove(engine, "before_cursor_execute", _record_statement)
+
+        mutating_statements = [
+            statement
+            for statement in statements
+            if statement.strip()
+            .upper()
+            .startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        assert mutating_statements == []
+        assert role in session.dirty
