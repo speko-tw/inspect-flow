@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫只涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-AC01～DOM-AC27）。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` 建好稽核紀錄的實作任務後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40）與其他實體在擴大凍結範圍後，再於同一份計畫補任務。
+本計畫只涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-AC01～DOM-AC27）。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40）與其他實體在擴大凍結範圍後，再於同一份計畫補任務。
 
 ## 任務
 
@@ -16,7 +16,7 @@
 | T4 | 目前操作者與 `User`、`Company` 的 Service 層規則（不含權限變更）：取得目前操作者的單一入口（認證前回傳 `is_system` 的 `User`）；`Company` 新增與修改（填 `created_by`、`updated_by`，可改 `is_active`）、列出一個公司啟用中的人員與人數；`User` 新增入口（拒絕停用中的公司）與人工修改入口（外部帳號拒絕修改基本欄位、本系統帳號改公司時新公司須啟用中）。本任務不提供 `is_admin`、`is_active` 的修改，也不做授權檢查 | `backend/app/services/__init__.py`、`backend/app/services/operator.py`、`backend/app/services/companies.py`、`backend/app/services/users.py`（新增）、`backend/tests/services/__init__.py`、`backend/tests/services/conftest.py`、`backend/tests/services/test_users.py`、`backend/tests/services/test_companies.py`（新增）、`backend/tests/services/test_operator.py`（新增） | T2 | DOM-AC04、DOM-AC10、DOM-AC13、DOM-AC22、DOM-AC23 | #132 |
 | T5 | 權限的唯讀計算：有效權限（從 `Role` 目前內容取聯集，非成員與沒有角色的成員為空集合）、角色影響範圍，以及角色是否「有修改能力」（任一代碼的動作不是 `read`，DOM-R24）。只讀取，不修改任何資料；測試資料直接以 ORM 建立與修改 | `backend/app/services/permissions.py`（新增）、`backend/tests/services/test_permissions.py`（新增） | T3、T4（`backend/app/services/` 套件由 T4 建立） | DOM-AC15、DOM-AC17、DOM-AC26 | #133 |
 | T6 | 初始化指令：互動式詢問本公司的 `code`、`name` 與兩個帳號的必填基本欄位，也接受測試用的非互動輸入（例如從標準輸入讀取），但原始碼不含任何預設值；在同一個交易裡建立本公司、內建 `admin`（UUID 在寫入前由應用端產生，`created_by`、`updated_by` 指向自己）、個人帳號與三個範本角色（不含任何權限代碼，DOM-R11）；不寫稽核紀錄（DOM-R22）；已有 `is_system` 帳號時不寫入並回報已初始化；在 `Makefile` 加一個執行入口 | `backend/app/cli/__init__.py`、`backend/app/cli/init_system.py`（新增）、`Makefile`（加一個 target）、`backend/tests/cli/__init__.py`（新增）、`backend/tests/cli/test_init_system.py`（新增） | T2、T3 | DOM-AC08、DOM-AC09 | #134 |
-| T7 | 權限與角色的寫入入口：`User` 的 `is_admin`、`is_active` 修改（內建帳號保護、最後一個 Admin 保護）；`Role` 新增、改名、修改權限內容（更新修改紀錄）、刪除（連同指派）；替 `ProjectMember` 指派與移除 `Role`；把人移出專案（刪除 `ProjectMember`，DOM-R36）。`Role`、角色指派、移出專案與 `is_admin` 的每一次成功變更，都依 DOM-R22 寫稽核紀錄；`is_active` 的修改不在 DOM-R22 的事件範圍內，不寫 | `backend/app/services/users.py`（加入口，檔案由 T4 建立）、`backend/app/services/roles.py`、`backend/app/services/project_members.py`（新增）、`backend/tests/services/test_users.py`（加案例）、`backend/tests/services/test_roles.py`、`backend/tests/services/test_project_members.py`（新增） | T3、T4；`audit-log` 建立稽核紀錄的實作任務（依 [#203](https://github.com/speko-tw/inspect-flow/issues/203) 的計畫開 issue；DOM-R22 由 `audit-log` 驗收） | DOM-AC05、DOM-AC06、DOM-AC14、DOM-AC16 | #135 |
+| T7 | 權限與角色的寫入入口：`User` 的 `is_admin`、`is_active` 修改（內建帳號保護、最後一個 Admin 保護）；`Role` 新增、改名、修改權限內容（更新修改紀錄）、刪除（連同指派）；替 `ProjectMember` 指派與移除 `Role`；把人移出專案（刪除 `ProjectMember`，DOM-R36）。`Role`、角色指派、移出專案與 `is_admin` 的每一次成功變更，都依 DOM-R22 寫稽核紀錄；`is_active` 的修改不在 DOM-R22 的事件範圍內，不寫 | `backend/app/services/users.py`（加入口，檔案由 T4 建立）、`backend/app/services/roles.py`、`backend/app/services/project_members.py`（新增）、`backend/tests/services/test_users.py`（加案例）、`backend/tests/services/test_roles.py`、`backend/tests/services/test_project_members.py`（新增） | T3、T4；`audit-log` T2（寫入入口，[#216](https://github.com/speko-tw/inspect-flow/issues/216)；DOM-R22 由 `audit-log` 驗收） | DOM-AC05、DOM-AC06、DOM-AC14、DOM-AC16 | #135 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
 - 每個任務至少對應一條 AC；DOM-AC01～DOM-AC27 每條都被一個任務涵蓋。
@@ -32,7 +32,7 @@
 - 第 2 波：T2（依賴 T1 的 `Company`）、T3（依賴 #59）。T2 改 `user.py`，T3 改 `role.py`、`project_member.py`、`models/__init__.py`，檔案不重疊，但都新增 migration。T3 排在 T1 之後，是因為兩者都要改 `backend/app/models/__init__.py`。
 - 第 3 波：T4（依賴 T2）、T6（依賴 T2、T3）；T4 改 `backend/app/services/`，T6 改 `backend/app/cli/`、`Makefile`，檔案不重疊。
 - 第 4 波：T5（依賴 T3、T4）。
-- 第 5 波：T7（依賴 T3、T4 與 `audit-log` 的實作任務；改 T4 建立的 `users.py`，因此排在 T4 之後）。
+- 第 5 波：T7（依賴 T3、T4 與 `audit-log` T2 [#216](https://github.com/speko-tw/inspect-flow/issues/216)；改 T4 建立的 `users.py`，因此排在 T4 之後）。
 
 碰到[共用檔案](../README.md#parallel)的地方：
 
