@@ -236,7 +236,7 @@
   - **裁定**（負責人，[#127](https://github.com/speko-tw/inspect-flow/issues/127)，2026-09-26）：`User.is_active`、`Company.is_active` 未指定時都是啟用。公司停用不影響旗下人員（選項 A）：停用只代表新建或修改人員時不能再選這家公司；人員能不能登入只看自己的 `is_active`，`authentication` 不需要增加公司狀態的檢查。停用公司時依 [PR-18](../../intents/02-principles.md#pr-18) 顯示「這家公司還有 N 位啟用中的人員」，並提供一併停用的選擇，實際停用哪些人由操作者決定。
   - **落地**：預設值寫進 DOM-R01、DOM-R16、DOM-AC01、DOM-AC11；停用公司的效果與影響範圍寫進 DOM-R32、DOM-R33、DOM-AC22、DOM-AC23，DOM-R18 加上新公司須為啟用中的引用。
 <a id="dom-q8"></a>
-- **DOM-Q8：外部帳號能不能修改所屬公司**（已裁定，[#128](https://github.com/speko-tw/inspect-flow/issues/128)）。[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 說人員所屬公司可以隨時修改，[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 說外部帳號的基本欄位（含公司）任何人都不能修改，兩者對外部帳號的說法相反。裁定前，本規格只凍結本系統帳號的部分（DOM-R18），外部帳號依 DOM-R04 以 KD-16 為準，並等負責人裁定意圖層的衝突。
+- **DOM-Q8：外部帳號能不能修改所屬公司**（已裁定，[#128](https://github.com/speko-tw/inspect-flow/issues/128)）。裁定前，[KD-23](../../intents/03-decisions-and-stack.md#kd-23) 寫人員所屬公司可以隨時修改，[KD-16](../../intents/03-decisions-and-stack.md#kd-16) 寫外部帳號的基本欄位（含公司）任何人都不能修改，兩者對外部帳號的說法相反；當時本規格只凍結本系統帳號的部分（DOM-R18），外部帳號依 DOM-R04 以 KD-16 為準，並等負責人裁定意圖層的衝突。
   - **裁定**（負責人，[#128](https://github.com/speko-tw/inspect-flow/issues/128)，2026-09-27）：外部帳號（`auth_source = external`）的所屬公司不能在系統內人工修改，以外部來源（AD／LDAP）為準，由外部身分同步更新；本系統帳號照 DOM-R18，可以隨時修改。
   - **理由**：外部來源是基本欄位的權威來源；在本地手動改的值，下次同步會被蓋掉，反而造成混亂。
   - **落地**：KD-23 補上「適用於本系統帳號；外部帳號依 KD-16」，[01-overview](../../intents/01-overview.md)、[04-glossary](../../intents/04-glossary.md) 的「公司可隨時修改」同步限定。規格行為不變：DOM-R04 本來就拒絕外部帳號人工修改基本欄位（含公司），只在 DOM-R04、DOM-R18 的依據欄改成引用本裁定。同步流程怎麼更新公司，留給延後的 `external-identity-sync`。
