@@ -19,6 +19,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
   commit 訊息、根目錄 `README.md`（對外預設版）、GitHub issue 與 PR 的標題、負責人指定之處。
   GitHub issue 與 PR 的內文、留言一律用繁體中文。
 - `README.md` 與 `README.zh-TW.md` 頂端保留語言切換列，內容須同步更新。
+- GitHub Project 的用法見 [`docs/github-project.md`](docs/github-project.md)；Project 只是看板，不取代 repo 的分類、版本與 Issue／PR 原生狀態。
 - 規範用語「必須／應／得」＝ MUST／SHOULD／MAY。
 - 不標示文件版本號；歷程以 Git 為準。
 - 設計意圖以宣告式規則陳述並附理由；每條原則、決策與非目標都要標註架構基準章節，依文件版型使用「依據」欄或規則內引註（依據：架構基準 §x）。來源只是建議的項目，維持「應／得」或技術棧卡片的「建議」，不得升級為「必須」；需要團隊選定、且來源沒有結論的，才列入待決議。
