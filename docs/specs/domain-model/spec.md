@@ -228,14 +228,14 @@
 <a id="dom-q3"></a>
 - **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。權限代碼的格式與長度已由 [#121](https://github.com/speko-tw/inspect-flow/issues/121) 裁定（DOM-R30）。仍待定的有：可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。影響計畫 T3 的約束與 T6 的範本角色。
 <a id="dom-q4"></a>
-- **DOM-Q4：範本角色的初始權限內容與角色名稱是否唯一**。[OQ-08](../../intents/05-open-questions.md#oq-08) 裁定各範本角色勾選哪些權限在系統畫面上調整，但沒說首次安裝時三個範本角色的權限內容是空集合還是有預設值（DOM-R11 目前只建立名稱）。另外 `Role.name` 是否必須唯一，#63 沒有寫；名稱重複時指派畫面會難以分辨。影響計畫 T3、T6。
+- **DOM-Q4：範本角色的初始權限內容與角色名稱是否唯一**（已裁定，[#124](https://github.com/speko-tw/inspect-flow/issues/124)）。[OQ-08](../../intents/05-open-questions.md#oq-08) 裁定各範本角色勾選哪些權限在系統畫面上調整，但沒說首次安裝時三個範本角色的權限內容是空集合還是有預設值（DOM-R11 目前只建立名稱）。另外 `Role.name` 是否必須唯一，#63 沒有寫；名稱重複時指派畫面會難以分辨。影響計畫 T3、T6。
   - **裁定**（負責人，[#124](https://github.com/speko-tw/inspect-flow/issues/124)，2026-09-27）：範本角色的初始權限是空集合，由 Admin 在畫面上勾選；`Role.name` 唯一、不分大小寫。
   - **理由**：目前還沒有任何權限代碼（要等 DOM-Q3 與功能規格），而且預設拒絕最安全（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)）；名稱重複時指派畫面分辨不出來。之後要不要替範本角色補預設權限，等功能規格登記權限代碼時再決定，用 migration 補上。
   - **落地**：DOM-R11、DOM-AC08 補上權限為空集合；新增 DOM-R34、DOM-AC24（名稱不分大小寫唯一）。
 <a id="dom-q5"></a>
 - **DOM-Q5：專案成員的角色下限與移除方式**。`ProjectMember` 得不得沒有任何角色（沒有角色時有效權限為空集合，依預設拒絕仍然安全）；把人移出專案時是刪除 `ProjectMember`，還是保留紀錄並標記移除（[KD-21](../../intents/03-decisions-and-stack.md#kd-21) 只規定人員停用時保留資料）。影響計畫 T3。
 <a id="dom-q6"></a>
-- **DOM-Q6：稽核紀錄的資料模型由哪份規格定義**。[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部值覆蓋基本欄位）與 [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色變更）都要求寫稽核紀錄，[04-glossary](../../intents/04-glossary.md)「稽核紀錄」只是概念，目前沒有規格定義它的欄位。可以放在本規格擴大凍結範圍，或另開規格。另外要決定：初始化指令建立的帳號與範本角色是否也要寫稽核紀錄，以及 `is_admin` 的變更是否算「權限變更」（本規格依字面視為是）。DOM-R22 在此之前無法驗收，計畫 T6、T7 依賴本題裁定。
+- **DOM-Q6：稽核紀錄的資料模型由哪份規格定義**（已裁定，[#126](https://github.com/speko-tw/inspect-flow/issues/126)）。[KD-20](../../intents/03-decisions-and-stack.md#kd-20)（外部值覆蓋基本欄位）與 [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色變更）都要求寫稽核紀錄，[04-glossary](../../intents/04-glossary.md)「稽核紀錄」只是概念，目前沒有規格定義它的欄位。可以放在本規格擴大凍結範圍，或另開規格。另外要決定：初始化指令建立的帳號與範本角色是否也要寫稽核紀錄，以及 `is_admin` 的變更是否算「權限變更」（本規格依字面視為是）。DOM-R22 在此之前無法驗收，計畫 T6、T7 依賴本題裁定。
   - **裁定**（負責人，[#126](https://github.com/speko-tw/inspect-flow/issues/126)，2026-09-27）：另開 `audit-log` 規格（[#203](https://github.com/speko-tw/inspect-flow/issues/203)，`0.2.x`）；初始化指令不寫稽核紀錄；`is_admin` 的變更算權限變更，要寫。
   - **理由**：稽核紀錄是跨功能的共用機制（KD-29、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)，以及之後的報告）；初始化是系統安裝不是權限變更，資料本身已記錄由 `admin` 建立與時間；Admin 是權限最大的身分，提升或取消是最重要的稽核事件。
   - **落地**：DOM-R22 寫明事件範圍與由 `audit-log` 定義資料模型、由 `audit-log` 驗收，並納入凍結範圍（理由見變更紀錄）；計畫 T6 不再依賴本題，T7 改依賴 `audit-log` 的實作任務。
