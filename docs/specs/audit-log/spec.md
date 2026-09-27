@@ -47,7 +47,7 @@
 | ALG-R01 | `AuditLog`（資料表 `audit_logs`）**必須**具備：`id`（UUID 主鍵）、`created_at`（事件時間，含時區的 UTC）、`created_by`（操作者，外鍵指向 `User`）、`event_type`（事件代碼）、`entity_type`（被記錄的資料種類，例如 `role`）、`entity_id`（被記錄那一筆的 UUID）、`before`、`after`（改前、改後的內容，JSON）。`before`、`after` 允許空值，其餘不可空值，由資料庫約束保證 | 必須；應（欄位名） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（誰、何時、哪個 entity、做了什麼、前後內容，架構基準 §19）；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R08、DBF-R11、DBF-R14 | ALG-AC01 |
 | ALG-R02 | `AuditLog` **不得**有 `updated_at`、`updated_by` | 必須 | 本規格推導：紀錄不會被修改（ALG-R04），PR-08 的「最後修改」不適用，留著欄位會讓人以為可以改 | ALG-AC01 |
 | ALG-R03 | `entity_id` **不得**是外鍵；被記錄的資料刪除後，紀錄**必須**保留 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126)（只能新增、不能刪除）；`Role` 可刪除（DOM-R21），外鍵會擋下刪除或連帶刪掉紀錄 | ALG-AC02 |
-| ALG-R04 | 稽核紀錄只能新增：Service 層只提供新增入口；經 ORM 修改或刪除 `AuditLog`（含 flush 與 ORM 的批次 `update`、`delete`）**必須**被拒絕，資料不變 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（依 OWASP：只能新增，不能修改或刪除）；不要求資料庫層保護，理由見 PR-03 與[計畫](plan.md#考慮過但沒採用的做法) | ALG-AC03 |
+| ALG-R04 | 稽核紀錄只能新增：Service 層只提供新增入口；後端經 SQLAlchemy 對 `audit_logs` 執行的任何修改或刪除（ORM flush、ORM 批次 `update`／`delete`、Core 語句、`text()` 原始 SQL）**必須**被拒絕，資料不變。後端以外直接連資料庫不在本條範圍：後端程式不得直接用資料庫驅動（DBF-R01），資料庫層保護見[計畫](plan.md#考慮過但沒採用的做法) | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（依 OWASP：只能新增，不能修改或刪除）；不要求資料庫層保護，理由：要寫資料庫專用 SQL（[PR-03](../../intents/02-principles.md#pr-03)） | ALG-AC03 |
 
 ### 寫入
 
@@ -124,7 +124,7 @@
 |---|---|---|---|---|
 | ALG-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，一筆作為操作者的 `User` | 用 SQLAlchemy inspector 檢查 `audit_logs`；新增一筆欄位齊全的紀錄；再分別嘗試新增 `created_by`、`event_type`、`entity_type`、`entity_id` 各為空值的紀錄，以及 `created_by` 指向不存在 UUID 的紀錄 | 有 ALG-R01 的所有欄位，主鍵是 UUID；`before`、`after` 可空值，其餘不可空值；`created_by` 外鍵指向 `users.id`；沒有 `updated_at`、`updated_by`；第一筆成功，其餘每一次都被資料庫拒絕，筆數不變 | ALG-R01、ALG-R02 |
 | ALG-AC02 | 同 ALG-AC01 | 用 inspector 列出 `audit_logs` 的外鍵；新增一筆 `entity_id` 為任何資料表都不存在的 UUID 的紀錄 | 唯一的外鍵是 `created_by`；新增成功 | ALG-R03 |
-| ALG-AC03 | 已有一筆紀錄 | 以 ORM 修改它的 `after` 後 flush；以 ORM 刪除它後 flush；以 `session.execute` 對 `AuditLog` 執行批次 `update`、批次 `delete` | 四次都被拒絕；重新讀取時，筆數與內容都和操作前相同 | ALG-R04 |
+| ALG-AC03 | 已有一筆紀錄 | 以 ORM 修改它的 `after` 後 flush；以 ORM 刪除它後 flush；以 `session.execute` 對 `AuditLog` 執行 ORM 批次 `update`、`delete`；以 `connection.execute` 執行 Core 的 `update(audit_logs)`、`delete(audit_logs)`；以 `text()` 執行 `UPDATE audit_logs ...`、`DELETE FROM audit_logs ...` | 八次都被拒絕；重新讀取時，筆數與內容都和操作前相同；同一連線上新增紀錄與讀取其他資料表不受影響 | ALG-R04 |
 | ALG-AC04 | 初始化後的資料庫（有內建 `admin`）與另一位已登入的 `User` U；以可控時間固定現在時刻 | 不在 HTTP 請求中寫一筆紀錄；在已綁定 U 的請求範圍內寫一筆；在沒有登入者的請求範圍內寫一筆；呼叫端試圖自行指定操作者或時間 | 第一筆的 `created_by` 是 `admin`，第二筆是 U，兩筆的 `created_at` 都等於固定的時刻；第三次被拒絕、不寫入；入口不接受操作者與時間參數 | ALG-R05 |
 | ALG-AC05 | 一個交易單位（DBF-R09） | 在同一個交易裡修改一筆 `Company`、寫一筆紀錄，然後拋出例外；另一個交易裡修改同一筆 `Company` 後，用未登記的事件代碼寫紀錄 | 兩次都回滾：`Company` 不變，`audit_logs` 沒有新紀錄 | ALG-R06 |
 | ALG-AC06 | 事件目錄已登記 `role.updated` | 分別寫入：未登記的代碼 `role.renamed`；`after` 多了未宣告欄位 `password_hash`；`before`、`after` 完全相同的 `role.updated`；另掃描事件目錄所有宣告欄位 | 三次都被拒絕，筆數不變；沒有任何事件宣告含 `password`、`secret`、`token`、`session` 字樣的欄位 | ALG-R07、ALG-R08、ALG-R09 |
