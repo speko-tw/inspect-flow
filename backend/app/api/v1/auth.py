@@ -1,10 +1,11 @@
 """Login, logout and current-user endpoints (AUT-R05~AUT-R14,
-AUT-R32~AUT-R33).
+AUT-R32~AUT-R33, AUT-R18).
 
-The "本人或 Admin" etc. access-level decorations (AUT-R18~AUT-R22)
-and the change-password route (AUT-R34) are later tasks (T4, T11);
-this module wires up the three routes T3 owns plus the
-``must_change_password`` field T9 adds to their response body.
+The change-password route (AUT-R34) is a later task (T11); this
+module wires up the three routes T3 owns plus the
+``must_change_password`` field T9 adds to their response body and
+T4's access-level declarations (login and logout are 公開; ``me`` is
+需登入).
 """
 
 import logging
@@ -16,11 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.auth.access import PUBLIC, require_login_access
 from app.auth.dependencies import (
     get_db,
     has_effective_temporary_password_flag,
     register_temporary_password_allowed,
-    require_login,
 )
 from app.auth.login import authenticate
 from app.auth.sessions import (
@@ -94,7 +95,9 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-@router.post("/login", response_model=CurrentUserResponse)
+@router.post(
+    "/login", response_model=CurrentUserResponse, dependencies=[PUBLIC]
+)
 def login(
     body: LoginRequest,
     response: Response,
@@ -115,7 +118,7 @@ def login(
     return _current_user_response(db, user)
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", status_code=204, dependencies=[PUBLIC])
 def logout(
     request: Request,
     response: Response,
@@ -162,12 +165,12 @@ register_temporary_password_allowed("POST", logout)
 
 @router.get("/me", response_model=CurrentUserResponse)
 def get_me(
-    user: User = Depends(require_login),  # noqa: B008 -- FastAPI's DI
+    user: User = Depends(require_login_access),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
 ) -> CurrentUserResponse:
     """AUT-R08: the current user, or 401 ``auth.not_authenticated``
-    (raised by the ``require_login`` dependency itself) when not
-    logged in.
+    (raised by ``require_login`` underneath ``require_login_access``)
+    when not logged in.
     """
     return _current_user_response(db, user)
 
