@@ -41,15 +41,26 @@ to special-case each one, and listening on the class means every
 no per-engine wiring required.
 
 The check itself only looks at the statement's leading
-``UPDATE``/``DELETE FROM`` keyword and the table reference that
+``UPDATE``/``DELETE FROM`` keyword (skipping any leading whitespace
+and SQL comments, and SQLite's ``UPDATE OR <conflict-algorithm>``
+and PostgreSQL's ``ONLY`` in between) and the table reference that
 immediately follows: it does not scan the rest of the statement
 text, so a table merely mentioning ``audit_logs`` elsewhere (for
-example in a subquery) is never a false positive, and an unquoted
+example in a subquery, or a string literal in another table's
+``SET`` clause) is never a false positive, and an unquoted
 identifier match is greedy, so ``audit_logs_x`` is never mistaken
-for ``audit_logs``. Out of scope, per ALG-R04's own text: a
-database client outside this backend (e.g. a bare ``psql`` session)
-is not covered -- there is no way for an in-process SQLAlchemy event
-to intercept a connection this process never made.
+for ``audit_logs``.
+
+Known limitations -- these never reach the leading-keyword check
+above, so they are not covered: a database client outside this
+backend (e.g. a bare ``psql`` session; there is no way for an
+in-process SQLAlchemy event to intercept a connection this process
+never made -- out of scope per ALG-R04's own text); a mutation
+wrapped in a CTE (``WITH ... UPDATE/DELETE ...``); an
+``INSERT ... ON CONFLICT DO UPDATE`` upsert; SQLite's
+``REPLACE INTO``/``INSERT OR REPLACE``; and ``TRUNCATE``. None of
+these begin with a bare ``UPDATE``/``DELETE FROM`` keyword, so this
+guard does not (yet) recognize them as a write to ``audit_logs``.
 """
 
 import re
@@ -86,12 +97,53 @@ def _identifier(quoted_group: str, plain_group: str) -> str:
     )
 
 
+# A leading SQL line comment (``-- ...`` to end of line/string) or
+# block comment (``/* ... */``, not itself nested), or plain
+# whitespace -- whatever precedes the statement's real keyword.
+_LEADING_TRIVIA_RE = re.compile(
+    r"(?:\s+|--[^\n]*(?:\n|\Z)|/\*.*?\*/)",
+    re.DOTALL,
+)
+
+
+def _skip_leading_trivia(statement: str) -> str:
+    """Strip every leading run of whitespace and SQL comments
+    (mixed, any number of times) off the front of ``statement``, so
+    ``_OPERATION_RE`` below always sees the statement's real leading
+    keyword. Only comments *before* that keyword are handled: one
+    appearing later in the statement (e.g. between ``UPDATE`` and
+    the table name) is not something ALG-AC03 asks for and is left
+    alone.
+    """
+    pos = 0
+    while True:
+        match = _LEADING_TRIVIA_RE.match(statement, pos)
+        if match is None or match.end() == pos:
+            return statement[pos:]
+        pos = match.end()
+
+
+# SQLite's ``UPDATE OR <algorithm>`` conflict-resolution clause
+# (https://sqlite.org/lang_conflict.html). Deliberately excludes
+# ``REPLACE`` when it starts a statement on its own (bare
+# ``REPLACE INTO``) or follows ``INSERT OR`` -- neither begins with
+# ``UPDATE``, so ``_OPERATION_RE`` below never reaches them anyway;
+# this constant only spells out the algorithm names legal after
+# ``UPDATE OR``.
+_SQLITE_CONFLICT_ALGORITHMS = r"(?:REPLACE|ROLLBACK|ABORT|FAIL|IGNORE)"
+
 # Matches the leading ``UPDATE``/``DELETE FROM`` keyword of a
-# statement (case-insensitive, any leading whitespace/newlines),
-# leaving the match position right at the start of the table
-# reference that follows.
+# statement (case-insensitive; ``statement`` is assumed already run
+# through :func:`_skip_leading_trivia`), followed by SQLite's
+# optional ``OR <algorithm>`` clause (``UPDATE`` only) and/or
+# PostgreSQL's optional ``ONLY`` keyword (both ``UPDATE`` and
+# ``DELETE FROM``), leaving the match position right at the start of
+# the table reference that follows.
 _OPERATION_RE = re.compile(
-    r"\s*(?:(?P<update>UPDATE)|(?P<delete>DELETE\s+FROM))\s+",
+    r"\s*(?:"
+    rf"(?P<update>UPDATE)(?:\s+OR\s+{_SQLITE_CONFLICT_ALGORITHMS})?"
+    r"|(?P<delete>DELETE\s+FROM)"
+    r")\s+(?:ONLY\s+)?",
     re.IGNORECASE,
 )
 
@@ -111,9 +163,11 @@ def _targets_audit_logs(statement: str) -> bool:
     """Return whether ``statement`` is an ``UPDATE``/``DELETE FROM``
     whose target table is ``audit_logs`` -- covering every writing
     the spelling ALG-AC03 lists: unquoted, double-quoted, schema
-    prefixed, mixed case, and leading whitespace/newlines all
-    resolve to the same table name here.
+    prefixed, mixed case, and leading whitespace/newlines/comments
+    all resolve to the same table name here, as do SQLite's
+    ``UPDATE OR <algorithm>`` and PostgreSQL's ``ONLY``.
     """
+    statement = _skip_leading_trivia(statement)
     op_match = _OPERATION_RE.match(statement)
     if op_match is None:
         return False

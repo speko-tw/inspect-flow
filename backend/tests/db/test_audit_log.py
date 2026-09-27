@@ -11,9 +11,15 @@ AC labels below follow that spec's numbering:
   matches no row anywhere.
 - ALG-AC03: every ``UPDATE``/``DELETE`` reaching ``audit_logs`` --
   from an ORM flush, an ORM/Core bulk statement, or raw ``text()``
-  SQL in any of the spellings the spec lists -- is rejected and
+  SQL in any of the spellings the spec lists, plus a few cheap-to-add
+  ones beyond it (a leading SQL comment, SQLite's ``UPDATE OR
+  <algorithm>`` clause, PostgreSQL's ``ONLY``) -- is rejected and
   leaves the table unchanged, while ``INSERT``/``SELECT`` against
   ``audit_logs`` and any statement against another table still work.
+  Deliberately not covered (see ``app/models/audit_log.py``'s module
+  docstring): a CTE-wrapped mutation, ``INSERT ... ON CONFLICT DO
+  UPDATE``, SQLite's ``REPLACE INTO``/``INSERT OR REPLACE``, and
+  ``TRUNCATE``.
 
 Same fixture pattern as ``test_role_member.py``/``test_company.py``:
 migrates the database behind ``conftest.py``'s ``db_url`` fixture
@@ -111,6 +117,43 @@ def test_migration_registers_audit_logs_table(migrated_url):
         engine.dispose()
 
     assert "audit_logs" in table_names
+
+
+def test_migration_round_trip_with_explicit_revisions(db_url):
+    """Migration round trip using this revision's own explicit id
+    and its parent's, not a relative writing like ``-1``/``head``/
+    ``base``: upgrades straight to ``4c38ff477939`` (this table's
+    migration), downgrades one step to its parent ``710e91fda9cd``
+    and checks ``audit_logs`` is gone while an earlier table
+    survives, then upgrades back to ``4c38ff477939`` and checks
+    ``audit_logs`` is back. ``test_migrations.py`` already covers
+    the whole chain's ``base``/``head`` round trip; this is specific
+    to the one step this migration adds.
+    """
+    cfg = _alembic_config()
+
+    command.upgrade(cfg, "4c38ff477939")
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert "audit_logs" in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, "710e91fda9cd")
+    engine = create_engine_from_settings(db_url)
+    try:
+        table_names = set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+    assert "audit_logs" not in table_names
+    assert {"users", "roles", "project_members"} <= table_names
+
+    command.upgrade(cfg, "4c38ff477939")
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert "audit_logs" in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
 
 
 class TestTableStructure:
@@ -235,6 +278,23 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "DELETE FROM public.audit_logs",
             "dElEtE FrOm AUDIT_LOGS",
             "\n   DELETE FROM audit_logs",
+            # A leading SQL comment (line or block, possibly more
+            # than one) before the real keyword.
+            "-- a comment\nUPDATE audit_logs SET entity_type = 'x'",
+            "/* a comment */ DELETE FROM audit_logs",
+            "-- one\n-- two\nUPDATE audit_logs SET entity_type = 'x'",
+            "/* one */ /* two */ DELETE FROM audit_logs",
+            # SQLite's ``UPDATE OR <algorithm>`` conflict-resolution
+            # clause (UPDATE only -- SQLite has no ``DELETE OR``).
+            "UPDATE OR REPLACE audit_logs SET entity_type = 'x'",
+            "UPDATE OR ROLLBACK audit_logs SET entity_type = 'x'",
+            "UPDATE OR ABORT audit_logs SET entity_type = 'x'",
+            "UPDATE OR FAIL audit_logs SET entity_type = 'x'",
+            "UPDATE OR IGNORE audit_logs SET entity_type = 'x'",
+            # PostgreSQL's ``ONLY`` (excludes descendant partitions/
+            # inheriting tables from the statement).
+            "UPDATE ONLY audit_logs SET entity_type = 'x'",
+            "DELETE FROM ONLY audit_logs",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
@@ -250,6 +310,11 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "DELETE FROM audit_logs_x",
             "UPDATE other_table SET entity_type = 'x'",
             "DELETE FROM users",
+            "UPDATE users SET entity_type = 'audit_logs'",
+            "-- a comment\nUPDATE users SET entity_type = 'x'",
+            "UPDATE OR REPLACE audit_logs_x SET entity_type = 'x'",
+            "UPDATE ONLY audit_logs_x SET entity_type = 'x'",
+            "UPDATE ONLY users SET entity_type = 'x'",
         ],
     )
     def test_does_not_match_other_statements(self, statement):
@@ -257,9 +322,11 @@ class TestRegexMatchesOnlyAuditLogsTable:
 
 
 class TestAppendOnlyGuard:
-    """ALG-AC03: 16 blocked writes (4 ORM, 2 Core, 10 ``text()``),
-    plus proof that inserts, reads, and writes to other tables are
-    never mistakenly blocked.
+    """ALG-AC03: 19 blocked writes (4 ORM, 2 Core, 13 ``text()`` --
+    the spec's own 10 spellings plus a leading SQL comment and
+    SQLite's ``UPDATE OR IGNORE`` conflict clause each for UPDATE/
+    DELETE where applicable), plus proof that inserts, reads, and
+    writes to other tables are never mistakenly blocked.
     """
 
     @pytest.fixture
@@ -385,6 +452,11 @@ class TestAppendOnlyGuard:
             f"UPDATE {schema}.audit_logs SET entity_type = 'changed'",
             "uPdAtE AUDIT_LOGS SET entity_type = 'changed'",
             "\n\n   UPDATE audit_logs SET entity_type = 'changed'",
+            # A leading SQL comment before the keyword.
+            "-- audit-log guard test\n"
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            # SQLite's ``UPDATE OR <algorithm>`` conflict clause.
+            "UPDATE OR IGNORE audit_logs SET entity_type = 'changed'",
         ]
 
     def _text_delete_statements(self, engine: Engine) -> list[str]:
@@ -395,6 +467,8 @@ class TestAppendOnlyGuard:
             f"DELETE FROM {schema}.audit_logs",
             "dElEtE FrOm AUDIT_LOGS",
             "\n   DELETE FROM audit_logs",
+            # A leading SQL comment before the keyword.
+            "/* audit-log guard test */ DELETE FROM audit_logs",
         ]
 
     def test_text_updates_are_all_rejected(
