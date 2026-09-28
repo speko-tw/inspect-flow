@@ -1,11 +1,10 @@
-"""Login, logout and current-user endpoints (AUT-R05~AUT-R14,
-AUT-R32~AUT-R33, AUT-R18).
+"""Login, logout, current-user and change-password endpoints
+(AUT-R05~AUT-R14, AUT-R32~AUT-R34, AUT-R18).
 
-The change-password route (AUT-R34) is a later task (T11); this
-module wires up the three routes T3 owns plus the
-``must_change_password`` field T9 adds to their response body and
-T4's access-level declarations (login and logout are 公開; ``me`` is
-需登入).
+T3 owns login/logout/``me`` plus the ``must_change_password`` field
+T9 adds to their response body; T4's access-level declarations
+(login and logout are 公開; ``me`` and change-password are 需登入).
+T11 (issue #192) adds the change-password route itself.
 """
 
 import logging
@@ -24,13 +23,15 @@ from app.auth.dependencies import (
     register_temporary_password_allowed,
 )
 from app.auth.login import authenticate
+from app.auth.password_service import set_password
+from app.auth.passwords import check_password_length, verify_password
 from app.auth.sessions import (
     SESSION_COOKIE_NAME,
     create_session,
     delete_session_by_token,
     hash_token,
 )
-from app.models import AuthSession, User
+from app.models import AuthSession, User, UserPassword
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -46,6 +47,13 @@ class LoginRequest(BaseModel):
 
     email: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """``POST /api/v1/auth/password`` request body (AUT-R34)."""
+
+    current_password: str
+    new_password: str
 
 
 class CurrentUserResponse(BaseModel):
@@ -176,3 +184,75 @@ def get_me(
 
 
 register_temporary_password_allowed("GET", get_me)
+
+
+@router.post("/password", status_code=204)
+def change_password(
+    body: ChangePasswordRequest,
+    response: Response,
+    user: User = Depends(require_login_access),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+) -> None:
+    """AUT-R34: change the logged-in user's own password.
+
+    Checks, in order, leaving every table unchanged on any failure:
+    (1) ``user.auth_source == "local"``, otherwise 403
+    ``permission.denied`` -- an external account never has a usable
+    local password to verify or replace; (2) the current password
+    verifies against the stored hash, otherwise 400
+    ``auth.current_password_incorrect``; (3) the new password passes
+    AUT-R04's length rule, otherwise 422 ``auth.password_invalid``;
+    (4) when the account's password is currently temporary
+    (AUT-R32), the new password must differ from the current one,
+    otherwise 422 ``auth.password_unchanged`` (a temporary password
+    "changed" to itself would defeat AUT-R33's forced change).
+
+    T8 (#156) handoff -- AUT-AC47, AUT-R28's shared failure counter:
+    neither exists yet. Once T8 merges ``app.auth.lockout``, whichever
+    of T8/T11 merges second must add, right here before step (2)
+    above: reject with the same 400 ``auth.current_password_incorrect``
+    (data unchanged, nothing counted) while this account is locked;
+    and after step (2) fails, record one failed attempt against the
+    same per-account counter ``app.auth.login.authenticate`` records
+    against, so the two entry points keep sharing one counter.
+
+    On success, delegates the write itself -- hashing, updating
+    ``UserPassword``, clearing ``must_change_password``, deleting
+    every existing ``AuthSession`` (AUT-R25) and writing the
+    ``user.password_set`` audit record (AUT-R39) -- to
+    :func:`app.auth.password_service.set_password` with
+    ``is_temporary=False``, the same entry point the set-password
+    command uses. That call already deletes this request's own
+    login state along with every other one, so a fresh ``AuthSession``
+    is then created for this request and returned as a new Cookie
+    (AUT-R35) -- the caller does not have to log in again.
+    """
+    if user.auth_source != "local":
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+
+    user_password = db.scalar(
+        select(UserPassword).where(UserPassword.user_id == user.id)
+    )
+    if user_password is None or not verify_password(
+        user_password.password_hash, body.current_password
+    ):
+        raise APIError(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT, 400)
+
+    if not check_password_length(body.new_password):
+        raise APIError(ErrorCode.AUTH_PASSWORD_INVALID, 422)
+
+    if user_password.must_change_password and verify_password(
+        user_password.password_hash, body.new_password
+    ):
+        raise APIError(ErrorCode.AUTH_PASSWORD_UNCHANGED, 422)
+
+    set_password(db, user, body.new_password, is_temporary=False)
+
+    _session, token = create_session(db, user)
+    _set_session_cookie(response, token)
+
+
+# AUT-R33: the allowlist's third and final entry (AUT-AC36) -- a
+# still-temporary password must be able to reach this route, or
+# AUT-R33's forced change could never happen.
+register_temporary_password_allowed("POST", change_password)
