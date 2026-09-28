@@ -149,14 +149,14 @@ class TestAutAc37FourFailureModes:
         )
 
 
-class TestAutAc38SuccessRotatesCookieAndSessions:
+class TestAutAc38SuccessRotatesCookieAndLoginStates:
     """AUT-AC38: a successful change clears the temporary flag,
     rotates the caller's Cookie, invalidates every other login state
     (including the caller's own old Cookie), and the old/new
     passwords behave accordingly at login.
     """
 
-    def test_change_succeeds_and_invalidates_other_sessions(
+    def test_change_succeeds_and_invalidates_other_login_states(
         self, db_session, make_client
     ):
         user = _make_temporary_password_user(db_session, "P380")
