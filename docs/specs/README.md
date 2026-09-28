@@ -100,7 +100,7 @@ flowchart TD
 1. **撰寫規格**：開一個 `Task` issue，「規格」欄填 `docs/specs/<slug>/spec.md`、「計畫項目」填 `spec`，掛 milestone。規格用 plan mode 或對談整理，只寫「做完長什麼樣子」，不寫怎麼做。
 2. **撰寫計畫**：規格凍結後才寫，從規格推導；部分凍結的規格只為凍結範圍寫計畫，「計畫項目」填 `plan`。小規格（例如 `skeleton`）可以和上一步用同一個 task、同一個 PR 完成。
 3. **開任務**：依 plan 的 T 編號逐一開 `Task` issue，填寫規格、計畫項目（T 編號）、涵蓋的驗收條件與「依賴」。
-4. **實作**：分支 `<issue 編號>-<簡短描述>`，一個任務一個 worktree。PR 用範本填寫滿足的 AC 與規格影響，`Closes #<task issue>`。
+4. **實作**：一個任務一個 worktree 與分支，命名見 [AGENTS.md 的 Git 段落](../../AGENTS.md#git)。PR 用範本填寫滿足的 AC 與規格影響，`Closes #<task issue>`。
 5. **收尾**：最後一個任務的 PR 把規格改為「已完成」並更新索引；最後一個任務沒有 PR 時，另開收尾 task 修改。
 
 計畫只記「為什麼這樣拆」；進度只看 issue，不回頭在計畫裡打勾。

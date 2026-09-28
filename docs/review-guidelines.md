@@ -27,7 +27,7 @@
 
 ### Git
 
-- **RG-M09**：分支名稱為 `<issue 編號>-<簡短描述>`（依據：[AGENTS.md](../AGENTS.md)）。
+- **RG-M09**：分支名稱為 `<N>-<slug>`（`<issue 編號>-<簡短描述>`），`slug` 與 worktree 目錄 `inspect-flow-<N>-<slug>` 一致；PR 開在原本的分支，head branch 沒有改名（依據：[AGENTS.md](../AGENTS.md#git)）。
 - **RG-M10**：commit 訊息用英文，格式為 `<type>(scope): <description>`，內文列點，最後一行 `Issue: #<編號>`，不含 `PR:` 或 `MR:` 行（依據：[AGENTS.md](../AGENTS.md)）。
 - **RG-M11**：commit、PR、issue 留言與程式註解都沒有 AI 署名（`Co-Authored-By`、`Claude-Session`、「Generated with」、`🤖`，或 AI／Claude／Codex／LLM／bot／assistant 等字眼）；每個 commit 都跑過 AGENTS.md 的檢查指令且沒有輸出（依據：[AGENTS.md](../AGENTS.md)）。
 - **RG-M12**：diff 只包含與該 task 相關的檔案，沒有順手改到其他任務的檔案（依據：[AGENTS.md](../AGENTS.md)）。

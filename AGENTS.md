@@ -31,7 +31,10 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 
 ## Git
 
-- 分支：`<issue 編號>-<簡短描述>`。
+- 分支：`<N>-<slug>`（`<issue 編號>-<簡短描述>`）；`N` 是這份工作的起始號碼（通常是 task issue），`slug` 是簡短英文描述，小寫、以連字號分隔。
+- **worktree**：一份工作一個 worktree，目錄名 `inspect-flow-<N>-<slug>`，`N` 與 `slug` 和分支相同，放在主 clone 的上層、與主 clone 並列；建立後不改名。
+  - 從 issue 到 PR：在同一個 worktree、同一個分支開 PR，不改名、不搬目錄、不另開 worktree；PR 的 head branch 一律不改名。
+  - 預設只建 worktree；需要時才另開 Herdr workspace（label `<N>-<slug>`）。Claude 與 Codex 的 remote-control／session 名稱等於 worktree 目錄名。
 - Commit 訊息（英文）：
 
   ```
