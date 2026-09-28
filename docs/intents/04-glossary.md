@@ -18,23 +18,21 @@ GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件�
 
 | 中文名稱 | 英文名稱（系統實體名） | 定義 | 關聯 |
 |---|---|---|---|
-| 專案 | `Project` | 一項工程查核工作所屬的專案，帶有業務編號 `project_code`（依據：架構基準 §12.2）。 | 是 `Inspection Plan` 的上層對象；`Report` 也歸屬於某個 `Project`。 |
+| 專案 | `Project` | 一項工程查核工作所屬的專案；必填欄位為業務編號 `project_code`（可與其他 `Project` 重複，不加資料庫唯一約束）、工程名稱、業主／委託單位、整體工程地點（依據：負責人決定，#71，2026-09-28，見 [KD-39](03-decisions-and-stack.md#kd-39)；取代架構基準 §12.2 的最小佔位欄位）。 | 是 `Inspection Plan` 的上層對象；`Report` 也歸屬於某個 `Project`；內部可依需要選用工項分類與分區（見 [KD-40](03-decisions-and-stack.md#kd-40)）。 |
 | 查核範本 | `Inspection Template` | 一套查核規則的邏輯名稱（例如「Cable Tray Inspection」），本身不含實際欄位內容（依據：架構基準 §12.3）。 | 底下有多個 `Template Version`；`Template Version` 底下才有 `Template Item`。 |
 | 範本版本 | `Template Version` | 某個 `Inspection Template` 在特定時間點的一個固定版本（v1、v2、v3……），版本化以支援歷史追溯（依據：架構基準 §2.5、§12.4）。 | `Inspection Task` 建立時參照某一個 `Template Version`；版本一旦發行不應再被改寫語意。 |
-| 範本項目 | `Template Item` | `Template Version` 底下的一個查核項目（有 `sequence`、`title`、`instruction`）（依據：架構基準 §12.5）。 | 底下掛著一或多個 `Evidence Requirement`。 |
+| 範本項目 — 查核項目組 | `Template Item` | `Template Version` 底下的一個查核項目組（有 `sequence`、`title`、`instruction`）；由內業事先設定，其下**得**再細分多個「查核項次」（例如同一通風管項目組下的材料、尺寸），各項次各自判定符合／不符合（依據：架構基準 §12.5；查核項次的業務語意依負責人決定，#75、#76，2026-09-28，見 [KD-37](03-decisions-and-stack.md#kd-37)、[KD-38](03-decisions-and-stack.md#kd-38)）。查核項次的具體資料表／欄位由 `domain-model` 規格制定，不在此預先假設。 | 底下掛著一或多個 `Evidence Requirement`；查核項次與照片的覆蓋規則見 [KD-38](03-decisions-and-stack.md#kd-38)。 |
 | 證據需求 | `Evidence Requirement` | 某個 `Template Item` 要求提供的一項證據定義，例如「PHOTO / LENGTH / required」，含 `type`、`required`、`min_count`、`max_count`（依據：架構基準 §12.6）。 | 是「查核規則即資料」原則（見 [PR-09](02-principles.md#pr-09)）的具體落實；`Inspection Task` 建立時被複製為 `Task Requirement Snapshot`。 |
 | 查核計畫 | `Inspection Plan` | 某個 `Project` 在某一天／某一批的工作，指派給某位 `Inspector`（依據：架構基準 §12.7）。 | 一個 `Inspection Plan` 展開後產生多筆 `Inspection Task`。 |
 | 查核任務 | `Inspection Task` | 依 `Inspection Plan` 產生的可執行工作單位，可能對應一個區段／位置（例如「0–10 m」），有自己的狀態機（依據：架構基準 §12.8、§18）。**Issue 上俗稱的「work order」即指此實體**，見上方對照說明。 | 隸屬於某個 `Inspection Plan`；建立時鎖定某個 `Template Version`，並產生自己的 `Task Requirement Snapshot`；完成後可作為 `Report` 的資料來源之一。 |
 | 任務需求快照 | `Task Requirement Snapshot`（資料表：`task_requirements`） | `Inspection Task` 建立當下，把當時生效的 `Evidence Requirement` 複製、固定下來的紀錄，含 `source_requirement_id` 回指原始需求（依據：架構基準 §2.5、§12.9）。 | 是 [PR-04](02-principles.md#pr-04)（歷史不可變）原則的核心資料結構；`Inspection Task` 的完成度檢查與報告，都應讀這張快照，而非目前版本的 `Evidence Requirement`。 |
-| 證據 | `Evidence` | 現場工程師針對某個 `Task Requirement Snapshot` 提交的一筆記錄，可能是照片（`storage_key`）或文字（`text_value`）等（依據：架構基準 §12.10）。 | 屬於某個 `Inspection Task` 與某個 `Task Requirement Snapshot`；可以有多個 `Evidence Variant`。 |
-| 原始證據 — 原圖 | `Evidence`；是否另有 `Evidence Variant`（`ORIGINAL`）見 [G-02](05-open-questions.md#g-02) | 使用者提交當下的原始檔案，其位元組不得就地覆蓋或修改（依據：架構基準 §13A.2、§13A.4）；刪除、保留期限與軟刪除政策待 [G-05](05-open-questions.md#g-05) 定案。 | 是影像衍生版的回溯終點；原圖資料列的歸屬見 [G-02](05-open-questions.md#g-02)。 |
-| 證據變體 — 編輯版 | `Evidence Variant`（`variant_type = EDITED`） | 現場工程師以裁切／旋轉／亮度等非破壞式操作，從 `ORIGINAL` 衍生出的版本，保存 `edit_operations_json`（依據：架構基準 §13A.4）。 | 必須可回溯至其 `ORIGINAL`；正式報告得優先使用「已核可」的 `EDITED` 版本（見 §13A.9，惟「已核可」狀態的治理機制屬未定案項目，見 [OQ-10](05-open-questions.md#oq-10)）。 |
-| 證據變體 — 縮圖 | `Evidence Variant`（`variant_type = THUMBNAIL`） | 供 Dashboard 快速顯示用的小尺寸版本，避免每次列表都下載原始高解析照片（依據：架構基準 §13.4、§13A.11）。 | 由 `ORIGINAL` 或 `EDITED` 衍生。 |
-| 證據變體 — 報告用 | `Evidence Variant`（`variant_type = REPORT`） | 針對 DOCX／PDF 最佳化過的版本（適當解析度、壓縮、色彩模式、頁面尺寸），避免把 10–20 MB 原圖直接塞進文件（依據：架構基準 §13A.11、§20.10）。 | 由 `Report Service` 使用，最終仍須可回溯至 `ORIGINAL`（見 [PR-07](02-principles.md#pr-07) 端到端可追溯性）。 |
-| 儲存鍵 | `storage_key` | 後端以 Evidence／檔案的 UUID 產生、指向實際檔案儲存位置的物件定位符（依據：架構基準 §13.1–13.2）；具體路徑格式尚未定案，見 [G-02](05-open-questions.md#g-02)。 | 只是「檔案在哪」的內部定位符，**不是**授權憑證，也不是原始檔名或業務編號；不同章節給的儲存鍵範例路徑並不一致，見 [G-02](05-open-questions.md#g-02)。 |
+| 證據 | `Evidence` | 現場工程師針對某個 `Task Requirement Snapshot` 提交的一筆記錄，可能是照片或文字（`text_value`）等（依據：架構基準 §12.10）。 | 屬於某個 `Inspection Task` 與某個 `Task Requirement Snapshot`；照片類型依「現場版」「內業版」兩階段保存（見下方條目，依負責人決定 #90～#92，2026-09-28），TEXT 等其他類型不適用此兩階段模型。 |
+| 現場版 | 具體資料表／欄位由 `domain-model` 規格制定 | 現場人員拍照、編修並確認後保存的照片版本，是每筆證據照片的第一個保存版本（依據：負責人決定，#90～#92，2026-09-28，見 [KD-32](03-decisions-and-stack.md#kd-32)、[KD-33](03-decisions-and-stack.md#kd-33)）；不另外保存拍攝原圖或編輯中間版本。 | 由現場人員產生並傳送至內業；內業系統據此加工產生內業版。 |
+| 內業版 | 具體資料表／欄位由 `domain-model` 規格制定 | 內業系統取得現場版、加入現場與查核相關資訊後保存的照片版本；內業人員之後得再編修；正式報表一律使用內業版（依據：負責人決定，#90～#92，2026-09-28，見 [KD-32](03-decisions-and-stack.md#kd-32)、[KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)）。 | 由現場版加工衍生；是報表產製的唯一圖片來源（見 [PR-07](02-principles.md#pr-07) 端到端可追溯性）；圖片上呈現的資訊欄位待後續規格定義。 |
+| 儲存鍵 | `storage_key` | 後端以 Evidence／檔案的 UUID 產生、指向實際檔案儲存位置的物件定位符（依據：架構基準 §13.1–13.2）；現場版與內業版各自有自己的 `storage_key`（見「現場版」「內業版」條目）；具體路徑格式尚未定案。 | 只是「檔案在哪」的內部定位符，**不是**授權憑證，也不是原始檔名或業務編號；原圖與衍生版並存的舊疑義已由 [G-02](05-open-questions.md#g-02)（已裁定：不存原圖，只存現場版與內業版）解決，路徑格式本身仍待技術規格定案。 |
 | 原始檔名 | `original_filename` | 使用者裝置上傳照片時的原始檔名（例如 `IMG_1234.jpg`），僅作為附帶 metadata 保存，不作為識別依據（依據：架構基準 §13.2）。 | 與 `storage_key` 是兩個不同欄位，不可混用。 |
 | 業務編號 | 例如 `project_code`、`employee_no`、`document_no` | 給人看、可讀的業務識別碼，與系統內部的 `UUID` 是兩件不同的事（依據：架構基準 §11）。 | 一個實體（如 `Project`）同時擁有內部 `UUID` 與對外業務編號；兩者用途不可互相取代。 |
-| SHA-256 | `sha256` / `content_sha256` | 檔案或文件內容的雜湊值，用於完整性檢查、重複檔案偵測、備份驗證與歷史追蹤，**不用於**授權判斷（依據：架構基準 §13.3、§20.14）。 | 出現在 `Evidence`、`Evidence Variant`、`Report` 等多處實體上。 |
+| SHA-256 | `sha256` / `content_sha256` | 檔案或文件內容的雜湊值，用於完整性檢查、重複檔案偵測、備份驗證與歷史追蹤，**不用於**授權判斷（依據：架構基準 §13.3、§20.14）。 | 出現在 `Evidence`（現場版、內業版）、`Report` 等多處實體上。 |
 | 查核報告 / 報表 | `Report` | 一份正式、持久化的產出實體，帶有 `document_no`、`revision`、DOCX／PDF 儲存鍵與資料快照；`status` 欄位為來源建議（依據：架構基準 §20.6、§30 Phase 9）。 | 由某個 `Inspection Plan`（及其底下的 `Inspection Task` / `Evidence`）產製；使用某個 `Report Template Version` 渲染。 |
 | 報告範本 | `Report Template` | 業主／標案特定的正式文件版面邏輯名稱（例如「Owner A Inspection Report」）（依據：架構基準 §20.5）。 | 底下有多個 `Report Template Version`；與 `Inspection Template` 是兩套不同的版本體系，不可混淆。 |
 | 報告範本版本 | `Report Template Version` | `Report Template` 在特定時間點的固定版面／樣板檔案版本（依據：架構基準 §20.5）。 | 每一份 `Report` 都必須記錄自己使用的是哪一個 `Report Template Version`，確保舊文件不因樣板更新而被重新解釋。 |
