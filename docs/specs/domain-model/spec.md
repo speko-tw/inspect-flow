@@ -3,8 +3,8 @@
 **代碼**：`DOM`　**Phase**：P1、P3、P4、P6、P9　**狀態**：部分凍結
 **前置規格**：`database-foundation`（UUID 主鍵、業務編號、建立與修改紀錄等共通結構，見 DBF-R11～DBF-R14）、`api-conventions`（UUID 字串 ID、UTC 時間格式）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
-**被擋議題**：凍結範圍無；`Project` 業務欄位待 [OQ-01](../../intents/05-open-questions.md#oq-01)；其餘實體受 [G-01](../../intents/05-open-questions.md#g-01)、[G-02](../../intents/05-open-questions.md#g-02)、[OQ-06](../../intents/05-open-questions.md#oq-06) 等[開工門檻](../../intents/05-open-questions.md#gate)擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
-**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`，以及初始化指令、認證前的操作者、字串欄位的長度及格式與稽核紀錄的寫入範圍（DOM-R01～DOM-R36、DOM-AC01～DOM-AC27）。DOM-R40 以後為草稿
+**被擋議題**：凍結範圍無；其餘實體受 [G-01](../../intents/05-open-questions.md#g-01)、[G-02](../../intents/05-open-questions.md#g-02)、[OQ-06](../../intents/05-open-questions.md#oq-06) 等[開工門檻](../../intents/05-open-questions.md#gate)擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
+**凍結範圍**：`User`（業務欄位、`is_admin`、`is_system`、外部身分預留欄位）、`Company`、`Role`、`ProjectMember`、`Project` 業務欄位，以及初始化指令、認證前的操作者、字串欄位的長度及格式與稽核紀錄的寫入範圍（DOM-R01～DOM-R36、DOM-R40～DOM-R44、DOM-AC01～DOM-AC32）。其餘實體待 [G-01](../../intents/05-open-questions.md#g-01) 等裁定，需求編號從 DOM-R45 起接續
 
 ## 目的
 
@@ -20,8 +20,8 @@
   - 這些實體的資料規則：字串欄位的長度上限與格式、可修改性、內建帳號保護、最後一個 Admin、公司階層、停用公司的限制與影響範圍、角色名稱的唯一性、權限代碼的登記表、「有修改能力」的判斷、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算、專案成員的角色下限與移出方式，以及哪些變更要寫稽核紀錄。
   - 建立初始 Admin 帳號、本公司與三個範本角色的初始化指令。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
+  - `Project` 的業務欄位：依 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定）與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，見 [`Project` 業務欄位](#project-business-fields)。
 - 草稿（本次不凍結，不拆任務）：
-  - `Project` 的業務欄位：待 [OQ-01](../../intents/05-open-questions.md#oq-01)，見 [DOM-R40](#draft-project)。
   - `Inspection Template`、`Template Version`、`Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體：受開工門檻擋，尚未撰寫，見[其他實體](#draft-others)。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
@@ -33,6 +33,7 @@
 - 稽核紀錄的資料模型（欄位、只能新增不能修改）與各事件的驗收：移至 `audit-log`（[#203](https://github.com/speko-tw/inspect-flow/issues/203) 撰寫；[DOM-Q6](#dom-q6) 裁定）。本規格只定義哪些變更要寫（DOM-R22）。
 - 人員、公司、角色、專案成員的 API 端點與管理畫面：由之後的功能規格負責（例如 `authentication`、`admin-dashboard`）。
 - 職稱、承包商歸屬：不列入人員欄位（[OQ-02](../../intents/05-open-questions.md#oq-02) 裁定，#63）。
+- `Project` 的其他參與單位（承攬／送審等）：不列為建立 `Project` 的必填欄位，待上線後依需求調整（見 DOM-R43）。文件編號、查驗日期、送審版次、查驗結果與會簽等資訊：屬單次文件／查驗／報表層級資料，不放進 `Project`，由之後處理文件與報表的功能規格負責（[OQ-01](../../intents/05-open-questions.md#oq-01) 裁定，負責人，#71，2026-09-28）。工項分類與分區：依 [KD-40](../../intents/03-decisions-and-stack.md#kd-40) 屬另外的實體，皆依專案需求選用，不放進 `Project`，由後續規格定義。
 
 ## 使用情境
 
@@ -114,19 +115,23 @@
 |---|---|---|---|---|
 | DOM-R31 | DOM-R28～DOM-R30 的長度以字元數計，不是位元組數。長度上限**必須**寫進資料庫欄位型別（例如 `VARCHAR(n)`），PostgreSQL 因此會直接拒絕超長的值。SQLite 不強制 `VARCHAR` 長度，兩種資料庫的格式比對語法也不同，所以後端**必須**在寫入資料庫前檢查長度與格式，不符時拒絕、不寫入；這個檢查**必須**涵蓋所有經 ORM model 的寫入（含初始化指令），不只 Service 層。本規格不要求以資料庫 CHECK 約束檢查長度或格式 | 必須 | [DOM-Q1](#dom-q1) 原文（SQLite 不強制 `VARCHAR` 長度，之後再加上限要新的 migration）；[PR-03](../../intents/02-principles.md#pr-03)（SQLite 與 PostgreSQL 結果一致，不依賴資料庫專屬功能）；「寫入前檢查、涵蓋所有 ORM 寫入」是本規格的推導，理由：建表任務沒有 Service 層，而直接用 ORM 寫入可以繞過 Service 層，只在 Service 層檢查會讓 SQLite 上的超長值寫得進去 | DOM-AC08（初始化指令）、DOM-AC19～DOM-AC21 |
 
-<a id="draft-project"></a>
-### `Project` 業務欄位（草稿）
+<a id="project-business-fields"></a>
+### `Project` 業務欄位（凍結）
 
-本段在 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定前維持草稿，不拆任務。OQ-01 不在開工門檻內，但尚未定案，不得把來源的佔位欄位當成定案（依 [AGENTS.md](../../../AGENTS.md)）。
+本段依 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定，[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5870105643)、[#71 補充](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28）與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39) 由草稿轉為正式並納入凍結範圍。UUID 主鍵、`project_code` 與建立及修改紀錄已由 DBF-R11～DBF-R14 凍結；`project_code` **得**與其他 `Project` 重複，見 DBF-R13。
 
-| 編號 | 需求（草稿） | 強度 | 依據 |
+| 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| DOM-R40 | `Project` 的業務欄位待 OQ-01 裁定。架構基準只給出 `name`、`location`、`status` 等佔位欄位，並提示未來可能需要 Building／Floor／Area／WBS／Contractor 等結構。UUID 主鍵、`project_code` 與建立及修改紀錄已由 DBF-R11～DBF-R14 凍結。`project_code` 的長度上限暫定 32 個字元，**待確認**：[#121](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305) 因 `Project` 業務欄位仍待 OQ-01 而未列入裁定表，只要求收緊時先用這個暫定值，OQ-01 裁定時一併確認 | 待 OQ-01；`project_code` 長度暫定、待確認 | [OQ-01](../../intents/05-open-questions.md#oq-01)（依據：架構基準 §12.2、§38 Project） |
+| DOM-R40 | `Project` **必須**具備必填業務欄位：`project_code`（專案編號／代號，定義見 DBF-R12，得重複見 DBF-R13）、`name`（工程名稱）、`client_name`（業主／委託單位）、`site_location`（整體工程地點）。以上欄位**不得**為空值，由資料庫約束保證，建立時**必須**由呼叫端提供 | 必須 | [KD-39](../../intents/03-decisions-and-stack.md#kd-39)（依據：架構基準 §12.2、§38 Project）；「業主／委託單位」是介面建議用語，公共工程等契約文件的正式稱謂於報表規格另行調整（負責人決定，[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5870105643)，2026-09-28） |
+| DOM-R41 | `Project` **得**具備選填業務欄位：`planned_start_date`（預計開工日）、`planned_completion_date`（預計完工日），皆允許空值 | 得 | [KD-39](../../intents/03-decisions-and-stack.md#kd-39) |
+| DOM-R42 | `project_code` 與既有 `Project` 重複時**不得**阻擋建立或儲存，由 DBF-R13 的資料庫規則保證。Service 層**必須**提供依 `project_code` 查出既有 `Project` 的介面，供新建或修改 `Project` 時判斷是否重複並提示警告；警告畫面與提示時機由使用這個介面的功能規格負責 | 必須 | [KD-39](../../intents/03-decisions-and-stack.md#kd-39)；重複時提示警告但不阻擋為負責人補充裁定（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28） |
+| DOM-R43 | `Project` 建立後**必須**直接可用，供內業建立查核工項，**不要求**額外的啟用步驟；本規格**不**為 `Project` 定義啟用、停用或狀態欄位。其他參與單位（承攬／送審等）**不**列為建立 `Project` 的必填欄位，待上線後依需求調整 | 必須（直接可用）；不（本規格不設狀態欄位、不要求其他參與單位為必填） | [KD-39](../../intents/03-decisions-and-stack.md#kd-39) |
+| DOM-R44 | `Project` 字串欄位的長度上限：`project_code` 32（沿用 DOM-Q1 的暫定值，[#121](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)，**待確認**）、`name` 128、`client_name` 128、`site_location` 256；超過上限的值**必須**被拒絕。`name`、`client_name`、`site_location` 不限格式；長度的算法與檢查方式見 DOM-R31 | 必須 | `project_code` 依 [DOM-Q1](#dom-q1)（[#121](https://github.com/speko-tw/inspect-flow/issues/121)）暫定、待確認；`name`、`client_name`、`site_location` 是本規格依 DOM-R28（`User`）、DOM-R29（`Company`）的既有長度慣例推導的暫定值，intents 未定，見 PR 說明 |
 
 <a id="draft-others"></a>
 ### 其他實體（草稿）
 
-`Inspection Template`、`Template Version`、`Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 受[開工門檻](../../intents/05-open-questions.md#gate)（G-01～G-07、OQ-06）擋，本次不撰寫。門檻逐一裁定後，依[部分凍結](../README.md#partial-freeze)規則擴大凍結範圍，需求編號從 DOM-R41 起接續。
+`Inspection Template`、`Template Version`、`Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 受[開工門檻](../../intents/05-open-questions.md#gate)（G-01～G-07、OQ-06）擋，本次不撰寫。門檻逐一裁定後，依[部分凍結](../README.md#partial-freeze)規則擴大凍結範圍，需求編號從 DOM-R45 起接續。
 
 ## 資料
 
@@ -138,7 +143,7 @@
 | `Company` | 沿用同一套共通結構（DOM-R15） | `code`、`name`、`tax_id`、`kind`、`parent_id`、`is_active`（DOM-R16～DOM-R18）；字串欄位的長度與格式（DOM-R29） | 凍結 |
 | `Role` | 沿用同一套共通結構（DOM-R15） | `name`、權限代碼集合（DOM-R19～DOM-R24）；名稱與權限代碼的長度及格式（DOM-R30）；名稱不分大小寫唯一（DOM-R34）；權限代碼須已登記（DOM-R35） | 凍結 |
 | `ProjectMember` | 沿用同一套共通結構（DOM-R15） | `project_id`、`user_id`、角色指派（DOM-R25～DOM-R27） | 凍結 |
-| `Project` | UUID 主鍵、`project_code`、建立與修改紀錄（DBF-R11～DBF-R14） | 業務欄位待 OQ-01；`project_code` 長度暫定 32、待確認（DOM-R40） | 草稿 |
+| `Project` | UUID 主鍵、`project_code`（得重複，DBF-R13）、建立與修改紀錄（DBF-R11～DBF-R14） | 必填業務欄位、選填業務欄位、重複查詢介面、字串長度（`project_code` 暫定 32、待確認）（DOM-R40～DOM-R44） | 凍結 |
 | 其他實體 | — | 見[其他實體](#draft-others) | 草稿 |
 
 關聯：`Company` 1—多 `User`；`Company` 可指向母公司 `Company`；`User` 1—多 `ProjectMember`；`Project` 1—多 `ProjectMember`；`ProjectMember` 多—多 `Role`（見 [01-overview 實體關係](../../intents/01-overview.md#人員公司與權限的實體關係)）。`User.company_id` 與 `Company.created_by` 互相引用，而且都不可空值，所以初始化指令必須在同一個交易裡建立兩者（DOM-R11）。
@@ -151,7 +156,7 @@
 | `Company` | G-01～G-07、OQ-06 | 無 | 無關，凍結 | 門檻內沒有任何議題提到公司、客戶或組織 |
 | `Role` | G-01～G-07、OQ-06 | 無直接命中；G-04「核可者、核可流程」可能延伸到「誰有權核可」 | 無關，凍結 | G-04 若裁定「由具備某權限的人核可」，只會多一個權限代碼（例如 `evidence_variant.approve`），那是 `Role` 權限內容裡的一筆資料，不改變 `Role` 的欄位或約束（[KD-25](../../intents/03-decisions-and-stack.md#kd-25)：系統存的是權限代碼，不是寫死的功能表） |
 | `ProjectMember` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/...` | 無關，凍結 | 路徑裡的是 `Project` 的 UUID，不是 `ProjectMember`，本身就不算命中 `ProjectMember`；`ProjectMember` 只以 UUID 外鍵引用 `Project`、`User`，不依賴 `Project` 的業務欄位 |
-| `Project`（業務欄位） | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑（同 `database-foundation` 的比對） | 門檻無關，但維持草稿 | 路徑只以 UUID 引用 `Project`，適用規則 1 的「只用 ID 引用」例外，結論同 `database-foundation`；不凍結的原因是門檻外的 [OQ-01](../../intents/05-open-questions.md#oq-01) 尚未裁定（負責人決定，[#70 留言](https://github.com/speko-tw/inspect-flow/issues/70#issuecomment-5844531219)，2026-09-26） |
+| `Project`（業務欄位） | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑（同 `database-foundation` 的比對） | 無關，凍結 | 路徑只以 UUID 引用 `Project`，適用規則 1 的「只用 ID 引用」例外，結論同 `database-foundation`；門檻外的 [OQ-01](../../intents/05-open-questions.md#oq-01) 已裁定（負責人，#71，2026-09-28），因此擴大凍結範圍，不再維持草稿 |
 
 `User` 的命中屬於規則 1 的「只用 ID 引用」例外（不影響 `User` 本身），或只是泛稱。`Role` 不適用這個例外，判為無關的理由是：G-04 沒有點名角色；依 [KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)，「誰能核可」只能表示成一個權限代碼，由有權限的人勾選進任何角色，是 `Role` 權限內容裡的資料，不改變 `Role` 的欄位、狀態或規則。G-04 的選項原文也只談 Variant 的核可紀錄、核可者與狀態欄位，沒有要求固定或不可刪除的角色；若要那樣做，會牴觸 KD-26「角色全部可自訂」，屬意圖變更，不是 G-04 的裁定範圍。
 
@@ -168,6 +173,7 @@
 | 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄）；列出公司啟用中的人員與人數 | DOM-R14、DOM-R33 |
 | 程式介面 | `Role` 新增、修改與刪除；`ProjectMember` 的角色指派與移除、移出專案；角色影響範圍、有效權限計算、「有修改能力」的判斷 | DOM-R20～DOM-R26、DOM-R36 |
 | 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
+| 程式介面 | `Project` 新增、修改入口；依 `project_code` 查出既有 `Project` 的介面（供重複警告） | DOM-R40、DOM-R42 |
 
 ## 驗收條件
 
@@ -219,6 +225,16 @@
 | DOM-AC25 | 對空資料庫執行 `alembic upgrade head` 之後，一個 `Role`；測試暫時登記 `report.read`，`reprot.read` 未登記 | 以 ORM 在該角色加入 `report.read`；加入 `reprot.read`；再把 `report.read` 那筆改為 `reprot.read` | 第一次成功；第二次被拒絕，權限代碼筆數不變；修改被拒絕，資料不變 | DOM-R35 |
 | DOM-AC26 | 四個 `Role`：沒有代碼；只有 `report.read`；`report.read` 與 `report.approve`；只有 `evidence.delete` | 分別判斷是否「有修改能力」 | 依序為否、否、是、是 | DOM-R24 |
 | DOM-AC27 | 對空資料庫執行 `alembic upgrade head` 之後，專案 P 的兩筆 `ProjectMember`：M1 持有 R1、R2，M2 持有 R1；另一筆沒有任何角色的 M3 | 新增 M3；直接對資料表刪除 M1（不經 ORM 關聯） | M3 新增成功；M1 不存在，指向 M1 的指派為零；R1、R2 仍存在，M2 仍持有 R1 | DOM-R25、DOM-R36 |
+
+### `Project`
+
+| 編號 | Given | When | Then | 對應需求 |
+|---|---|---|---|---|
+| DOM-AC28 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 SQLAlchemy inspector 檢查 `Project` 資料表；新增一筆只提供 `project_code`、`name`、`client_name`、`site_location` 的 `Project`；再分別嘗試新增缺少其中任一欄位的 `Project` | `name`、`client_name`、`site_location` 欄位存在且不可空值；第一筆成功；缺欄位的每一次都被資料庫拒絕，`Project` 筆數不變 | DOM-R40 |
+| DOM-AC29 | 與 DOM-AC28 相同的前置資料 | 新增一筆不提供 `planned_start_date`、`planned_completion_date` 的 `Project`；再新增一筆兩者皆有值的 `Project` | 兩次都成功；前者兩欄皆為空值，後者兩欄等於輸入值 | DOM-R41 |
+| DOM-AC30 | 已有一筆 `project_code = "P001"` 的 `Project` | 新增第二筆 `project_code = "P001"` 的 `Project`；呼叫 Service 層依 `project_code` 查出既有 `Project` 的介面，查詢 `"P001"` | 新增成功，資料庫有兩筆 `project_code = "P001"` 的 `Project`，UUID 不同；查詢介面回傳這兩筆 `Project` | DOM-R42 |
+| DOM-AC31 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 inspector 檢查 `Project` 資料表的欄位清單；新增一筆 `Project` 後立即查詢它 | 欄位僅為 DBF-R11～DBF-R14 的共通結構加上 DOM-R40、DOM-R41 列出的業務欄位，沒有任何啟用、停用或狀態欄位；新增後立即查得到，不需要另外呼叫任何啟用或狀態變更動作 | DOM-R43 |
+| DOM-AC32 | 與 DOM-AC28 相同的前置資料 | 用 inspector 檢查 `Project` 字串欄位的長度；以 ORM 新增一筆 `project_code`、`name`、`client_name`、`site_location` 皆恰為上限字元數的 `Project`；再逐欄各新增一筆只有該欄比上限多 1 個字元的 `Project`；最後以 ORM 把恰為上限的那筆的 `name` 改為 129 個字元 | inspector 顯示 `project_code`、`name`、`client_name`、`site_location` 的字串長度依序為 32、128、128、256；恰為上限的那筆成功；其餘每一次新增都被拒絕，`Project` 筆數不變；修改被拒絕，資料不變 | DOM-R44、DOM-R31 |
 
 ## 待釐清
 
@@ -273,3 +289,4 @@
 - DOM-Q6 裁定：DOM-R22 補上 `is_admin` 變更、初始化不寫，資料模型與驗收移至 `audit-log`（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）；DOM-R22 沒有待決議題、也與開工門檻無關，比照 DOM-R09 由其他規格驗收的做法納入凍結範圍 — [#126](https://github.com/speko-tw/inspect-flow/issues/126)
 - DOM-Q3 裁定：新增 DOM-R35、DOM-AC25（權限代碼登記表，拒絕未登記代碼，初始為空）；DOM-R24 寫明「有修改能力」的判斷並新增 DOM-AC26；DOM-R19、DOM-R30 改引用新條文 — [#123](https://github.com/speko-tw/inspect-flow/issues/123)
 - DOM-Q5 裁定：新增 DOM-R36、DOM-AC27（成員可沒有角色；移出專案即刪除成員，指派連帶刪除）；DOM-R26、DOM-AC15 補上沒有角色的成員；DOM-R22 補上移出專案；DOM-R25 改引用 DOM-R36 — [#125](https://github.com/speko-tw/inspect-flow/issues/125)
+- DOM-R40～DOM-R44、DOM-AC28～DOM-AC32：依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，`Project` 業務欄位由草稿轉為正式並納入凍結範圍：必填 `project_code`（得重複）、`name`（工程名稱）、`client_name`（業主／委託單位）、`site_location`（整體工程地點）；選填 `planned_start_date`、`planned_completion_date`；新增依 `project_code` 查重複的 Service 層介面供建立時警告；不設啟用或狀態欄位；`name`、`client_name`、`site_location` 的長度上限為本規格依既有慣例推導的暫定值 — [#246](https://github.com/speko-tw/inspect-flow/issues/246)
