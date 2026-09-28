@@ -9,7 +9,9 @@
 
 <a id="oq-01"></a>
 
-### OQ-01：專案（Project）需要哪些正式欄位？
+### OQ-01：專案（Project）需要哪些正式欄位？（已裁定）
+
+**裁定**：一個工程案建立一筆 `Project`；必填欄位為專案編號／代號、工程名稱、業主／委託單位、整體工程地點。`project_code` 必填但**可與其他 Project 重複**，資料庫不得加唯一約束，系統內部的 Project ID（UUID）才必須唯一；預計開工／完工日選填；其他參與單位先不列必填；新建後直接可用、不需啟用步驟；文件編號、查驗日期、會簽等屬文件／報表層級，不放進 `Project`。專案內部**得**依需要選用工項分類與分區，兩者皆非必須建立，見 [OQ-04](#oq-04)、[OQ-03](#oq-03)。記錄於 [KD-39](03-decisions-and-stack.md#kd-39)；討論見 [#71](https://github.com/speko-tw/inspect-flow/issues/71)。
 
 **為什麼要先決定**：影響 [04-glossary.md](04-glossary.md) 的 `Project` 定義與資料模型設計的起點。
 
@@ -19,11 +21,11 @@
 
 **目前暫定**：無。架構基準文件僅給出 `id`／`project_code`／`name`／`location`／`status`／ `created_at`／`updated_at` 這組最小佔位欄位，並提示未來可能需要上述結構，但明言這是佔位而非定案。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#71](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5870105643) 裁定（2026-09-28）。
 
-**影響的原則**：無直接對應的 PR。
+**影響的原則**：無直接對應的 PR；既有 `backend/app/models/project.py` 的 `project_code` 唯一約束與 `database-foundation`／`domain-model` 規格需依本裁定另開 task 修改，不在本次文件變更範圍內。
 
-**依據**：架構基準 §12.2、§0、§38 Project
+**依據**：議題背景為架構基準 §12.2、§0、§38 Project；裁定為負責人決定（#71，2026-09-28），取代架構基準 §12.2 的最小佔位欄位假設。
 
 
 <a id="oq-02"></a>
@@ -49,7 +51,9 @@
 
 <a id="oq-03"></a>
 
-### OQ-03：位置（Location）／樓層／區域／WBS 的正式編碼方式？
+### OQ-03：位置（Location）／樓層／區域／WBS 的正式編碼方式？（部分裁定）
+
+**裁定**：`Project` 建立時填寫整體工程地點；專案內**得**依需要選用分區（例如一樓 A 區、二樓 B 區），分區非每個專案必須建立。若正式建立分區，查核工項按分區分開建立與執行；未建立分區時，工區**得**只是同一查核工項的選項或資訊，與 [OQ-04](#oq-04) 屬同一組決策，見 [KD-40](03-decisions-and-stack.md#kd-40)。`location_text` 是否改為結構化編碼、分區代碼的正式格式、WBS 整合**均未裁定**，不可視為定案；討論見 [#73](https://github.com/speko-tw/inspect-flow/issues/73)。
 
 **為什麼要先決定**：影響 `Inspection Task` 的 `location_text` 欄位是否需要拆成結構化編碼，以及未來與 WBS 系統整合的可行性。
 
@@ -59,16 +63,18 @@
 
 **目前暫定**：維持自由文字 `location_text`（依據：架構基準 §12.8）；是否需要正式編碼尚未決定。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#73](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5870106674) 部分裁定（2026-09-28）；`location_text` 結構化、分區代碼格式、WBS 整合尚未指定何時裁定。
 
 **影響的原則**：無直接對應的 PR。
 
-**依據**：架構基準 §0、§12.8、§38 Location
+**依據**：議題背景為架構基準 §0、§12.8、§38 Location；部分裁定為負責人決定（#73，2026-09-28）。
 
 
 <a id="oq-04"></a>
 
-### OQ-04：查核對象（工項）如何分類？材料／設備／施工工項的正式分類方式？
+### OQ-04：查核對象（工項）如何分類？材料／設備／施工工項的正式分類方式？（部分裁定）
+
+**裁定**：每個專案的內業人員**必須**依該專案需求，自訂要查核的分類與項目，**不得**套用公司共用的固定工項分類。工項分類（例如空調風管、給排水、電力設備）與分區（例如一樓 A 區、二樓 B 區）皆是**依專案需求選用**的設定，不強制每個專案都要建立；若建分區，查核工項按分區分開建立與執行，未建分區則工區只是同一查核工項的選項或資訊。記錄於 [KD-40](03-decisions-and-stack.md#kd-40)；討論見 [#74](https://github.com/speko-tw/inspect-flow/issues/74)。**未定**：分類的複製重用、階層深度、名稱唯一性、分類與分區的固定階層、共用範本複製、名稱與代碼規則；分區不強制為分類的子層。
 
 **為什麼要先決定**：影響範本（Template）之下的工項分類設計，以及查核規則如何組織。
 
@@ -76,33 +82,37 @@
 
 **目前暫定**：無，僅提出這是需要團隊討論的問題。
 
-**誰決定、何時**：團隊；時間未指定。
+**誰決定、何時**：負責人；已於 [#74](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5869623884)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5870106117) 部分裁定（2026-09-28）；未定部分的裁定時間未指定。
 
-**影響的原則**：與 [OQ-20](#oq-20) 同屬「範圍決策治理」缺口。
+**影響的原則**：與 [OQ-20](#oq-20) 同屬「範圍決策治理」缺口；與 [OQ-03](#oq-03) 的分區裁定屬同一組決策。
 
-**依據**：架構基準 §0、§38 Work Item
+**依據**：議題背景為架構基準 §0、§38 Work Item；部分裁定為負責人決定（#74，2026-09-28）。
 
 
 <a id="oq-05"></a>
 
-### OQ-05：不同工程類型各自需要哪些正式查核範本？每一查核點需要多少張照片？
+### OQ-05：不同工程類型各自需要哪些正式查核範本？每一查核點需要多少張照片？（部分裁定）
 
-**為什麼要先決定**：直接影響 `Template Item` / `Evidence Requirement` 的資料模型完整度，也牽動 [KD-03](03-decisions-and-stack.md#kd-03)（範本版本化＋任務快照）如何落地。查核規則的間距 （interval）欄位歸屬何處另屬來源內部不一致，見 [G-01](#g-01)。
+**裁定**：查驗系統採共通查核流程；進料／施工／測試等名稱只對應不同輸出報表樣板，不代表要做三套查驗流程。一個查核項目組下**得**有多個查核項次，項次內容由內業事先設定。現場人員自行選擇每張照片要佐證哪些查核項次，一張照片**得**覆蓋多個項次；每個查核項次**必須**至少被一張非總覽照片覆蓋。**得**額外提供「總覽照片」選項，有拍就在該組報表排第一張，且不計入最低覆蓋要求。記錄於 [KD-38](03-decisions-and-stack.md#kd-38)；討論見 [#75](https://github.com/speko-tw/inspect-flow/issues/75)。**未定**：每個項次可否多張照片、照片張數上限、總覽照片的具體拍攝方式。
+
+**為什麼要先決定**：直接影響 `Template Item` / `Evidence Requirement` 的資料模型完整度，也牽動 [KD-03](03-decisions-and-stack.md#kd-03)（範本版本化＋任務快照）如何落地。查核規則的間距 （interval）欄位歸屬已由 [G-01](#g-01) 裁定方向。
 
 **選項**：架構基準文件只給出「電纜橋架每 10 公尺查核一次，長寬高各一張照片」這類單一範例，未定義正式的每種工程材料／工項查核規則，也未定義每一查核點所需的正式照片張數。
 
 **目前暫定**：無。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#75](https://github.com/speko-tw/inspect-flow/issues/75#issuecomment-5871381243) 部分裁定（2026-09-28）；未定部分的裁定時間未指定。
 
-**影響的原則**：[KD-03](03-decisions-and-stack.md#kd-03)；interval 歸屬另見 [G-01](#g-01)。
+**影響的原則**：[KD-03](03-decisions-and-stack.md#kd-03)、[KD-38](03-decisions-and-stack.md#kd-38)；interval 歸屬另見 [G-01](#g-01)（已裁定方向）。
 
-**依據**：架構基準 §0、§38 Template
+**依據**：議題背景為架構基準 §0、§38 Template；部分裁定為負責人決定（#75，2026-09-28）。
 
 
 <a id="oq-06"></a>
 
-### OQ-06：查核結果（Result）是否需要 PASS／FAIL／N/A？是否需要量測值、嚴重度、缺失（Defect）欄位？
+### OQ-06：查核結果（Result）是否需要 PASS／FAIL／N/A？是否需要量測值、嚴重度、缺失（Defect）欄位？（部分裁定）
+
+**裁定**：每個查核項次**必須**各自有「符合」與「不符合」選項，由現場人員自行選擇，不得只替整個查核項目組選一個結果，也不得預設符合。一個查核項次**得**有多個實測欄位（例如長、寬、高），欄位與標準值由內業事先設定，標準值依計畫書原文以文字輸入，系統不解析比較符號；現場人員填實際值並自行判定，系統不自動判定；不需量測的項次不強制填值。記錄於 [KD-37](03-decisions-and-stack.md#kd-37)；討論見 [#76](https://github.com/speko-tw/inspect-flow/issues/76)。**未定**：`N/A`、嚴重度、缺失（Defect）欄位與不符合後續流程、欄位型別、單位、必填細節。
 
 **為什麼要先決定**：直接影響 `Evidence` 資料模型、任務完成判定邏輯（[PR-01](02-principles.md#pr-01) 的伺服器端覆核）、報告版面設計（照片旁是否顯示 PASS／FAIL），以及「查核結果語意一旦定案後不能追溯性改寫既有資料」這一條不可延後意圖（見 [02-principles.md](02-principles.md#costly-to-retrofit-intents) 第 8 項）。
 
@@ -112,16 +122,18 @@
 
 **目前暫定**：無。架構基準文件明確列為未定案，但報告章節已經在使用 PASS／FAIL 這類措辭（依據：架構基準 §20.10），形成「用了但沒定義」的落差，另見 [G-08](#g-08)。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#76](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5867495484)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5871381768) 部分裁定（2026-09-28）；`N/A`、嚴重度、缺失部分的裁定時間未指定。
 
-**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04) 不可延後意圖第 8 項；另見 [G-08](#g-08)。
+**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04) 不可延後意圖第 8 項、[KD-37](03-decisions-and-stack.md#kd-37)；另見 [G-08](#g-08)。
 
-**依據**：架構基準 §20.10、§38 Result
+**依據**：議題背景為架構基準 §20.10、§38 Result；部分裁定為負責人決定（#76，2026-09-28）。
 
 
 <a id="oq-07"></a>
 
-### OQ-07：正式報表需要哪些欄位？誰簽名？是否需要版次？報表最終版面與簽核流程？
+### OQ-07：正式報表需要哪些欄位？誰簽名？是否需要版次？報表最終版面與簽核流程？（部分裁定）
+
+**裁定**：查驗是一套共通流程，建立查驗時**不得**選定或處理輸出報表樣板；報表是獨立的功能模組，**得**匯入不同樣板格式，並一律使用內業版圖片（見 [G-02](#g-02)、[G-04](#g-04)）。記錄於 [KD-41](03-decisions-and-stack.md#kd-41)；討論見 [#77](https://github.com/speko-tw/inspect-flow/issues/77)。**未定**：具體匯入格式、樣板欄位對應、選樣板時機、簽署欄位、Revision 規則。
 
 **為什麼要先決定**：影響 [KD-05](03-decisions-and-stack.md#kd-05)（DOCX/PDF 核心交付物）與 [04-glossary.md](04-glossary.md) `Report` / `Report Template` 的完整欄位設計。
 
@@ -129,11 +141,11 @@
 
 **目前暫定**：§30 Phase 9 要求保存文件編號、版次、範本版本、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256，見 [KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06)。§20.6 建議 `status` 欄位；完整簽核與核發流程仍待決。
 
-**誰決定、何時**：業主／標案規範與團隊；時間未指定。
+**誰決定、何時**：業主／標案規範與團隊；查驗與報表樣板的流程界線已於 [#77](https://github.com/speko-tw/inspect-flow/issues/77#issuecomment-5871382248) 由負責人部分裁定（2026-09-28）；其餘時間未指定。
 
-**影響的原則**：[KD-05](03-decisions-and-stack.md#kd-05)、[PR-06](02-principles.md#pr-06)。
+**影響的原則**：[KD-05](03-decisions-and-stack.md#kd-05)、[PR-06](02-principles.md#pr-06)、[KD-41](03-decisions-and-stack.md#kd-41)。
 
-**依據**：架構基準 §0、§15、§20.3–20.12、§20.19、§20.21、§38 Report
+**依據**：議題背景為架構基準 §0、§15、§20.3–20.12、§20.19、§20.21、§38 Report；部分裁定為負責人決定（#77，2026-09-28）。
 
 
 <a id="oq-20"></a>
@@ -177,7 +189,9 @@
 
 <a id="oq-09"></a>
 
-### OQ-09：`Inspection Plan`／`Inspection Task`／`Template Version`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？
+### OQ-09：`Inspection Plan`／`Inspection Task`／`Template Version`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？（部分裁定）
+
+**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；**不開放**人員手動修改計畫狀態（負責人已明確撤回此選項）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。**未定**：Plan／Task／Template Version／Evidence／Report 的其他狀態、作廢、取消、失敗與更正路徑。
 
 **為什麼要先決定**：影響任務完成判定（[PR-01](02-principles.md#pr-01)）、報告產製失敗重試（見 [G-06](#g-06)）、以及證據刪除與歷史不可變原則（[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)）之間如何協調。
 
@@ -185,28 +199,30 @@
 
 **目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28）；其餘狀態與例外路徑的裁定時間未指定。
 
-**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)；另見 [G-06](#g-06)。
+**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-42](03-decisions-and-stack.md#kd-42)；另見 [G-06](#g-06)。
 
-**依據**：架構基準 §18、§20.6、§20.17
+**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）。
 
 
 <a id="oq-10"></a>
 
-### OQ-10：`Evidence Variant`（尤其是 `EDITED`）的「核可（Approved）」狀態由誰、依何種流程決定？
+### OQ-10：`Evidence Variant`（尤其是 `EDITED`）的「核可（Approved）」狀態由誰、依何種流程決定？（已裁定，與 G-04 同一問題）
 
-**為什麼要先決定**：直接影響 [PR-07](02-principles.md#pr-07)（可追溯性）與報告優先選用哪一個 Variant 的實作方式；若編輯後就能直接上報告而毫無核可流程，可能與 `KD-04`（非破壞式編輯的證據完整性）的精神產生落差。
+**裁定**：現場人員拍照、編修並確認即完成現場端流程，**不需要**另一位人員對照片執行獨立的核可流程；正式報表**一律**使用內業版圖片。本題與 [G-04](#g-04) 是同一個問題，答案相同，記錄於 [KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)；討論見 [#92](https://github.com/speko-tw/inspect-flow/issues/92)。
+
+**為什麼要先決定**：直接影響 [PR-07](02-principles.md#pr-07)（可追溯性）與報告優先選用哪一個版本的實作方式；若編輯後就能直接上報告而毫無核可流程，可能與原「非破壞式編輯的證據完整性」精神產生落差——此精神已由 [G-02](#g-02) 裁定的照片版本模型取代。
 
 **選項**：無明列選項，見 [G-04](#g-04)。
 
-**目前暫定**：報告用照片的優先序為「1. Approved Edited Variant　2. Latest Edited Variant　3. Original」，但沒有定義任何 Variant 核可紀錄、核可者或核可規則。
+**目前暫定**：架構基準原文的報告用照片優先序（Approved Edited Variant → Latest Edited Variant → Original）已由本裁定取代：報告一律使用內業版，不再有多版次擇優的邏輯。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#92](https://github.com/speko-tw/inspect-flow/issues/92#issuecomment-5869324688) 裁定（2026-09-28）。
 
-**影響的原則**：[PR-07](02-principles.md#pr-07)、[KD-04](03-decisions-and-stack.md#kd-04)；另見 [G-04](#g-04)。
+**影響的原則**：[PR-07](02-principles.md#pr-07)、[PR-05](02-principles.md#pr-05)、[KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)；與 [G-04](#g-04) 為同一問題。
 
-**依據**：架構基準 §13A.9
+**依據**：議題背景為架構基準 §13A.9；裁定為負責人決定（#92，2026-09-28），取代原 Variant 核可與擇優機制的設計。
 
 
 <a id="oq-11"></a>
@@ -413,7 +429,9 @@
 
 <a id="g-01"></a>
 
-### G-01：Interval（查核間距）欄位歸屬何處，沒有單一權責來源
+### G-01：Interval（查核間距）欄位歸屬何處，沒有單一權責來源（已裁定）
+
+**裁定**：查驗項目與查驗點**必須**由內業／後台人員依專案需求事先給定；MVP **不**以 `interval` 作為每個工項的必填規則，也**不**以「輸入間距後自動切分任務」作為完成查驗的必要流程。立場 A、B 的爭議因此不再需要裁決——interval 不是 MVP 必要的資料欄位，若未來要做自動切分，再另定來源、覆寫與快照規則。記錄於 [KD-36](03-decisions-and-stack.md#kd-36)；討論見 [#89](https://github.com/speko-tw/inspect-flow/issues/89)。
 
 **為什麼要先決定**：`Template Item` / `Evidence Requirement` / `Inspection Plan` / `Inspection Task` 的資料表清單中都沒有明確的 `interval` 欄位，因此目前無法判斷 interval 該被快照進 `Task Requirement Snapshot`，還是只存在於 Plan 輸入層。
 
@@ -421,18 +439,20 @@
 - **立場 A**：`Interval`（例如「每 10 公尺」）是 `Template` 本身的一部分，與 `Requirements` 並列在 同一個範本定義下（依據：架構基準 §2.4 範例）。
 - **立場 B**：`Interval` 是建立 `Inspection Plan` 時由管理者輸入的參數，與起點／終點一起決定 Task Generator 如何切分任務（依據：架構基準 §16.2 範例）。
 
-**目前暫定**：無（來源內部不一致，尚未裁決）。
+**目前暫定**：無（來源內部不一致）；裁定方向已使兩個立場都不作為 MVP 必要欄位。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#89](https://github.com/speko-tw/inspect-flow/issues/89#issuecomment-5867481635) 裁定（2026-09-28）。
 
-**影響的原則**：[PR-09](02-principles.md#pr-09)；[OQ-05](#oq-05) 因此無法確定 Template Item / Evidence Requirement 的資料模型完整度。
+**影響的原則**：[PR-09](02-principles.md#pr-09)、[KD-36](03-decisions-and-stack.md#kd-36)；[OQ-05](#oq-05) 的照片與項次覆蓋規則已另行部分裁定。
 
-**依據**：架構基準 §2.4、§12.3–12.9、§16.2
+**依據**：議題背景為架構基準 §2.4、§12.3–12.9、§16.2；裁定為負責人決定（#89，2026-09-28）。
 
 
 <a id="g-02"></a>
 
-### G-02：原始證據（Original Evidence）被建模了兩次，且儲存鍵範例路徑不一致
+### G-02：原始證據（Original Evidence）被建模了兩次，且儲存鍵範例路徑不一致（已裁定）
+
+**裁定**：每筆照片最終**只保存現場版與內業版兩張圖片**，**不另外保存原始拍攝圖**，也不保存編輯過程中的中間圖片。立場 A、B 的爭議因此不再適用——兩者都是「原圖」的建模方式，而系統根本不保存原圖。現場人員拍照、編修、確認後存一張「現場版」；內業系統取得現場版、加入現場及查核相關資訊後存一張「內業版」；內業人員可再編修內業版；報表一律使用內業版。本留言**取代**本議題較早「保留現場拍攝原圖＋一張最終後製圖」的業務釐清。記錄於 [KD-32](03-decisions-and-stack.md#kd-32)；討論見 [#90](https://github.com/speko-tw/inspect-flow/issues/90)。
 
 **為什麼要先決定**：兩種模型並存會導致「原圖到底是 `evidence.storage_key`，還是 `evidence_variants` 裡 `variant_type = ORIGINAL` 的那一筆」定義不清，直接影響 [PR-05](02-principles.md#pr-05)／[PR-07](02-principles.md#pr-07) 的實作；兩處給的儲存鍵路徑格式也不一致。
 
@@ -440,18 +460,20 @@
 - **立場 A**：`evidence` 資料表本身的 `storage_key` 欄位似乎就代表已提交的原始檔案（依 據：架構基準 §12.10、§13.1 範例路徑 `photos/<project_id>/<task_id>/<evidence_id>.<ext>`）。
 - **立場 B**：`evidence_variants` 資料表把 `ORIGINAL` 列為 `variant_type` 的其中一種，暗示原圖應該是 一筆 Variant 記錄（依據：架構基準 §13A.4、§13A.2 範例路徑 `evidence/abc/original.jpg`）。
 
-**目前暫定**：無。
+**目前暫定**：無（來源內部不一致）；裁定已使兩個立場都不再適用，原圖不存在於資料模型中。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#90](https://github.com/speko-tw/inspect-flow/issues/90#issuecomment-5869323681) 裁定（2026-09-28），取代較早的業務釐清。
 
-**影響的原則**：[PR-05](02-principles.md#pr-05)、[PR-07](02-principles.md#pr-07)。
+**影響的原則**：[PR-05](02-principles.md#pr-05)、[PR-07](02-principles.md#pr-07)、[KD-32](03-decisions-and-stack.md#kd-32)。
 
-**依據**：架構基準 §12.10、§13.1、§13A.2、§13A.4
+**依據**：議題背景為架構基準 §12.10、§13.1、§13A.2、§13A.4；裁定為負責人決定（#90，2026-09-28）。
 
 
 <a id="g-03"></a>
 
-### G-03：現場編輯流程與「Backend Render」策略的先後順序沒有對齊
+### G-03：現場編輯流程與「Backend Render」策略的先後順序沒有對齊（部分裁定）
+
+**裁定**：每筆照片最後只保存現場版、內業版兩張圖片，不另外保存拍攝原圖，也不保存編輯中的中間圖片。現場人員拍攝並編修後，確認、存檔一張現場版，再傳遞至內業；內業系統將現場與查核資訊加入圖片後，存一張內業版；內業人員之後可以編修內業版；報表使用內業版。立場 A、B 原本針對「原圖」的先後順序爭議已不適用，因為系統不保存原圖。記錄於 [KD-33](03-decisions-and-stack.md#kd-33)；討論見 [#91](https://github.com/speko-tw/inspect-flow/issues/91)。**未定**：裝置離線暫存／傳送時點、預覽與正式產圖的前後端分工、失敗重試機制，不可依此裁定推定保留第三張原圖。
 
 **為什麼要先決定**：兩種敘述若同時成立，需要團隊明確定義「使用者何時看到編輯結果」「原圖何時真正上傳」「重試與失敗時的行為」，否則實作團隊會依各自理解做出不同的前後端契約。
 
@@ -459,18 +481,20 @@
 - **立場 A**：§13A.5 描述的現場流程是「拍照 → 預覽 → 編輯（Zoom/Crop/Rotate/Brightness/Reset）→ 確 認 → Upload」，暗示編輯發生在上傳之前。
 - **立場 B**：§13A.7–13A.8 建議的「Frontend Preview + Backend Render」策略，要求後端先取得已上傳的 Original Evidence ID，才能依 Edit Operations 產生 Edited Variant；§30 Phase 6 的驗收流程也明寫 「Upload Original → Backend validation → Storage → Evidence DB record → Generate Edited Variant」，即先上傳原圖，編輯結果之後才送出。
 
-**目前暫定**：無。
+**目前暫定**：無（來源內部不一致）；保存時點與流程順序已由裁定取代，原圖相關的先後順序爭議不再適用。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#91](https://github.com/speko-tw/inspect-flow/issues/91#issuecomment-5869324206) 部分裁定（2026-09-28）；離線暫存、前後端分工、重試裁定時間未指定。
 
-**影響的原則**：[OQ-14](#oq-14)。
+**影響的原則**：[OQ-14](#oq-14)、[KD-33](03-decisions-and-stack.md#kd-33)。
 
-**依據**：架構基準 §13A.5、§13A.7–13A.8、§30 Phase 6
+**依據**：議題背景為架構基準 §13A.5、§13A.7–13A.8、§30 Phase 6；部分裁定為負責人決定（#91，2026-09-28）。
 
 
 <a id="g-04"></a>
 
-### G-04：「已核可（Approved）」的 Evidence Variant 被引用，卻沒有對應的治理機制
+### G-04：「已核可（Approved）」的 Evidence Variant 被引用，卻沒有對應的治理機制（已裁定，與 OQ-10 同一問題）
+
+**裁定**：現場人員拍照、編修並確認後，存一張現場版並傳至內業，**不需要**另一位人員對這張照片再執行獨立的核可流程。內業系統根據現場版加入現場與查核相關資訊，存一張內業版；內業人員可以編修內業版，後續圖片編修或報表圖片調整均使用此內業版本處理並存檔。**報表一律使用內業版圖片**；現場資料傳到內業後不會自動出報表，**必須**由內業人員在系統按下「出報表」，系統才產生報表。立場 A（Approved Edited Variant）與立場 B（沒有核可治理機制）的落差因此解消：系統不設計「核可」這個中間狀態，現場確認即完成，報表固定使用內業版。記錄於 [KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)；討論見 [#92](https://github.com/speko-tw/inspect-flow/issues/92)。缺圖時是否允許出報表、每項圖片選用細節尚未裁定。
 
 **為什麼要先決定**：若無治理機制，「Approved」在實作上可能等於「Latest」，使得報告可能引用一張未經任何審核的編輯照片；也與 [OQ-10](#oq-10) 直接相關。
 
@@ -478,13 +502,13 @@
 - **立場 A**：§13A.9 報告用照片的優先序明確提到「1. Approved Edited Variant」。
 - **立場 B**：全文沒有任何 Variant 核可紀錄、核可者、核可流程或狀態欄位的定義（不像 `Report` 有明確 的 `report_approvals`，依據：架構基準 §20.12）。
 
-**目前暫定**：無。
+**目前暫定**：無（來源內部不一致）；裁定已解消此落差，見上方「裁定」段。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；已於 [#92](https://github.com/speko-tw/inspect-flow/issues/92#issuecomment-5869324688) 裁定（2026-09-28）。
 
-**影響的原則**：[OQ-10](#oq-10)。
+**影響的原則**：[OQ-10](#oq-10)、[PR-05](02-principles.md#pr-05)、[KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)。
 
-**依據**：架構基準 §13A.9、§20.12
+**依據**：議題背景為架構基準 §13A.9、§20.12；裁定為負責人決定（#92，2026-09-28）。
 
 
 <a id="g-05"></a>
@@ -619,13 +643,18 @@
 
 以下議題**必須**在 Domain Model 與 API 契約凍結之前，先由團隊裁定出單一答案；它們目前都已在本檔中留有紀錄，但尚沒有能讓兩組實作者各自做出相容實作的單一結論。
 
-- **[G-01](#g-01)**（Interval 查核間距歸屬）：interval 該存在 `Template`／`Requirement`，還是只存在 於 `Inspection Plan` 輸入層，決定 `Task Requirement Snapshot` 是否需要快照這個欄位。
-- **[G-02](#g-02)**（Original 的唯一來源）：原圖到底是 `evidence.storage_key` 本身，還是 `evidence_variants` 裡 `variant_type = ORIGINAL` 的那一筆，決定 PR-05／PR-07 的資料模型如何落地。
-- **[G-03](#g-03)**（原圖上傳與編輯時序）：使用者何時看到編輯結果、原圖何時真正上傳、重試與失敗時的 行為。
-- **[G-04](#g-04)**（報告選圖／核可）：「Approved Edited Variant」的核可者、核可流程與狀態欄位如何定 義，否則「Approved」在實作上可能等於「Latest」。
-- **[G-05](#g-05)**（刪除與保留）：`Evidence` 的 `DELETE` API 與「原圖不可覆蓋、報告照片必須可追溯」 如何共存，是否為軟刪除、是否禁止刪除已被報告引用的證據。
+**已裁定、解除擋門檻**（2026-09-28，見各條目「裁定」段）：
+
+- ~~G-01（Interval 查核間距歸屬）~~：已裁定方向——interval 不作為 MVP 必填規則，查驗項目由內業事先給定，見 [G-01](#g-01)（已裁定）。
+- ~~G-02（Original 的唯一來源）~~：已裁定——不保存原圖，只保存現場版與內業版兩張圖片，見 [G-02](#g-02)（已裁定）。
+- ~~G-04（報告選圖／核可）~~：已裁定——現場確認即完成，不需另一位核可者，報表一律用內業版，見 [G-04](#g-04)（已裁定）。
+
+**仍在擋門檻**：
+
+- **[G-03](#g-03)**（原圖上傳與編輯時序，部分裁定）：現場版、內業版的保存時點已定（見 [G-03](#g-03)）；裝置離線暫存與傳送時點、前後端分工、失敗重試的行為仍未定，繼續擋 `field-evidence` 規格凍結。
+- **[G-05](#g-05)**（刪除與保留）：`Evidence` 的 `DELETE` API 與「照片只保存現場版、內業版兩張」如何共存，是否為軟刪除、是否禁止刪除已被報告引用的證據；本題未受本次裁定影響，仍待決。
 - **[G-06](#g-06)／[G-07](#g-07)**（報告狀態與版次快照邊界）：合併出一份唯一、完整的 `Report` 狀態機 （含 `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
-- **[OQ-06](#oq-06)**（Result 對完成判定的影響）：查核結果是否需要 PASS/FAIL/N/A、量測值、嚴重度、缺 失欄位，直接影響任務完成判定邏輯與報告版面設計。
+- **[OQ-06](#oq-06)**（Result 對完成判定的影響，部分裁定）：每個查核項次自行判定符合／不符合已定（見 [OQ-06](#oq-06)）；`N/A`、嚴重度、缺失欄位仍未定，直接影響任務完成判定邏輯與報告版面設計，繼續擋 `template-system`／`completion-validation` 規格凍結。
 
 [README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態，以及「部分凍結」規格標頭列出的凍結範圍（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](#oq-22) 的裁定；做法見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)）。
 

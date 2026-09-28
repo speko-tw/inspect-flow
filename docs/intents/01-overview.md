@@ -82,7 +82,7 @@ flowchart LR
 - **Phase 1 — Database Foundation**：SQLAlchemy + Alembic + SQLite；`User`、`Project`、`Template`、 `TemplateVersion`。分成兩段：第一段是基礎設施加上 `User`、`Project`；第二段是 `Template`、`TemplateVersion`，等 [G-01](05-open-questions.md#g-01) 裁定後再做（依 [OQ-22](05-open-questions.md#oq-22)；依據：負責人決定（#46，2026-09-26），架構基準無對應章節）。
 - **Phase 2 — Authentication**：登入 / 登出 / 目前使用者 / 角色。
 - **Phase 3 — Template System**：`Template`、`TemplateVersion`、`TemplateItem`、`EvidenceRequirement`。
-- **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照，並由起訖點與 間距自動產生任務。
+- **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照；查驗項目與查驗點由內業事先給定，MVP 不以間距（interval）自動切分任務為必要流程（依 [G-01](05-open-questions.md#g-01) 裁定）。
 - **Phase 5 — Field UI**：今日任務、任務詳情、證據檢查清單、狀態。
 - **Phase 6 — Photo Upload & Field Evidence Editor**：拍照、非破壞式編輯、上傳、儲存、Evidence 紀錄。
 - **Phase 7 — Task Completion Validation**：必要證據 vs. 已上傳證據的伺服器端驗證。
