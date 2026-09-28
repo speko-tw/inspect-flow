@@ -11,7 +11,7 @@
 
 ### OQ-01：專案（Project）需要哪些正式欄位？（已裁定）
 
-**裁定**：一個工程案建立一筆 `Project`；必填欄位為專案編號／代號、工程名稱、業主／委託單位、整體工程地點。`project_code` 必填但**可與其他 Project 重複**，資料庫不得加唯一約束，系統內部的 Project ID（UUID）才必須唯一；預計開工／完工日選填；其他參與單位先不列必填；新建後直接可用、不需啟用步驟；文件編號、查驗日期、會簽等屬文件／報表層級，不放進 `Project`。專案內部**得**依需要選用工項分類與分區，兩者皆非必須建立，見 [OQ-04](#oq-04)、[OQ-03](#oq-03)。記錄於 [KD-39](03-decisions-and-stack.md#kd-39)；討論見 [#71](https://github.com/speko-tw/inspect-flow/issues/71)。
+**裁定**：一個工程案建立一筆 `Project`；必填欄位為專案編號／代號、工程名稱、業主／委託單位、整體工程地點。`project_code` 必填但**可與其他 Project 重複**，資料庫不得加唯一約束，系統內部的 Project ID（UUID）才必須唯一；**新建或修改 Project 時若 `project_code` 與既有 Project 重複，系統必須跳出警告提示使用者，但不得阻擋建立或儲存**（依據：負責人補充，[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28；此補充取代 `database-foundation` DBF-R13「`project_code` 必須唯一」的規則，規格修改另見 [#246](https://github.com/speko-tw/inspect-flow/issues/246)，程式修改另見 [#247](https://github.com/speko-tw/inspect-flow/issues/247)）。預計開工／完工日選填；其他參與單位先不列必填；新建後直接可用、不需啟用步驟；文件編號、查驗日期、會簽等屬文件／報表層級，不放進 `Project`。專案內部**得**依需要選用工項分類與分區，兩者皆非必須建立，見 [OQ-04](#oq-04)、[OQ-03](#oq-03)。記錄於 [KD-39](03-decisions-and-stack.md#kd-39)；討論見 [#71](https://github.com/speko-tw/inspect-flow/issues/71)。
 
 **為什麼要先決定**：影響 [04-glossary.md](04-glossary.md) 的 `Project` 定義與資料模型設計的起點。
 
@@ -21,11 +21,11 @@
 
 **目前暫定**：無。架構基準文件僅給出 `id`／`project_code`／`name`／`location`／`status`／ `created_at`／`updated_at` 這組最小佔位欄位，並提示未來可能需要上述結構，但明言這是佔位而非定案。
 
-**誰決定、何時**：負責人；已於 [#71](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5870105643) 裁定（2026-09-28）。
+**誰決定、何時**：負責人；已於 [#71](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5870105643) 裁定（2026-09-28）；重複時的警告提示由負責人於 [#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815) 補充（2026-09-28）。
 
-**影響的原則**：無直接對應的 PR；既有 `backend/app/models/project.py` 的 `project_code` 唯一約束與 `database-foundation`／`domain-model` 規格需依本裁定另開 task 修改，不在本次文件變更範圍內。
+**影響的原則**：無直接對應的 PR；既有 `backend/app/models/project.py` 的 `project_code` 唯一約束與 `database-foundation` DBF-R13「必須唯一」的規則、`domain-model` 規格需依本裁定另開 task 修改，規格修改見 [#246](https://github.com/speko-tw/inspect-flow/issues/246)、程式修改見 [#247](https://github.com/speko-tw/inspect-flow/issues/247)，不在本次文件變更範圍內。
 
-**依據**：議題背景為架構基準 §12.2、§0、§38 Project；裁定為負責人決定（#71，2026-09-28），取代架構基準 §12.2 的最小佔位欄位假設。
+**依據**：議題背景為架構基準 §12.2、§0、§38 Project；裁定為負責人決定（#71，2026-09-28），取代架構基準 §12.2 的最小佔位欄位假設；重複警告規則依負責人補充（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28），取代 `database-foundation` DBF-R13。
 
 
 <a id="oq-02"></a>

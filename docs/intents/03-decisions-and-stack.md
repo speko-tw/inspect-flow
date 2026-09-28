@@ -428,13 +428,13 @@
 <a id="kd-39"></a>
 ## KD-39：Project 必填欄位與專案編號可重複
 
-- **決策**：一個工程案建立一筆 `Project`；必填欄位為專案編號／代號、工程名稱、業主／委託單位、整體工程地點。`project_code`（專案編號）**必須**允許重複，資料庫**不得**對此欄位加唯一約束；系統內部的 Project ID（UUID）才必須唯一。預計開工日、預計完工日為選填；其他參與單位不列為建立專案的必填欄位。`Project` 建立後**必須**直接可用，不要求額外啟用步驟。
+- **決策**：一個工程案建立一筆 `Project`；必填欄位為專案編號／代號、工程名稱、業主／委託單位、整體工程地點。`project_code`（專案編號）**必須**允許重複，資料庫**不得**對此欄位加唯一約束；系統內部的 Project ID（UUID）才必須唯一。新建或修改 Project 時，若 `project_code` 與既有 Project 重複，系統**必須**跳出警告提示使用者，但**不得**阻擋建立或儲存。預計開工日、預計完工日為選填；其他參與單位不列為建立專案的必填欄位。`Project` 建立後**必須**直接可用，不要求額外啟用步驟。
 - **狀態**：已決定。
-- **考慮過但沒選**：以 `project_code` 作為唯一業務識別（原架構基準假設）；建立時要求額外啟用流程。
-- **為什麼選這個**：現場實務上專案編號可能重複使用或由不同單位各自編碼，不宜由系統強制唯一；建立後即可使用可以縮短內業建立查核工項的前置時間。
-- **代價**：既有 `backend/app/models/project.py`（`project_code` 目前 `unique=True`）與 `database-foundation`／`domain-model` 規格的唯一約束假設須另開 task 修改並新增 migration，不在本次變更範圍內。
+- **考慮過但沒選**：以 `project_code` 作為唯一業務識別（原架構基準假設，`database-foundation` DBF-R13「必須唯一」的規則已被本決策取代）；建立時要求額外啟用流程；重複時直接阻擋建立。
+- **為什麼選這個**：現場實務上專案編號可能重複使用或由不同單位各自編碼，不宜由系統強制唯一；建立後即可使用可以縮短內業建立查核工項的前置時間；重複時提示但不阻擋，兼顧提醒使用者與不影響作業。
+- **代價**：既有 `backend/app/models/project.py`（`project_code` 目前 `unique=True`）與 `database-foundation` DBF-R13、`domain-model` 規格的唯一約束假設須另開 task 修改並新增 migration；規格修改見 [#246](https://github.com/speko-tw/inspect-flow/issues/246)，程式修改見 [#247](https://github.com/speko-tw/inspect-flow/issues/247)，不在本次變更範圍內。
 - **什麼情況要重新討論**：若未來需要以 `project_code` 做唯一查詢鍵，另行評估是否新增複合唯一約束（例如搭配客戶或年度）。
-- **依據**：負責人決定（#71，2026-09-28）；取代架構基準 §12.2 的最小佔位欄位假設，見 [OQ-01](05-open-questions.md#oq-01)。
+- **依據**：負責人決定（#71，2026-09-28）；取代架構基準 §12.2 的最小佔位欄位假設，見 [OQ-01](05-open-questions.md#oq-01)；重複時的警告提示依負責人補充（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28），取代 `database-foundation` DBF-R13。
 
 <a id="kd-40"></a>
 ## KD-40：工項分類與分區皆依專案需求選用
