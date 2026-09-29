@@ -25,6 +25,10 @@ from app.services import UNSET, _Unset
 from app.services.operator import get_current_operator
 
 
+class InvalidCompanyFieldError(ValueError):
+    """A submitted Company field failed model validation."""
+
+
 def create_company(
     session: Session,
     *,
@@ -35,12 +39,15 @@ def create_company(
     ``updated_by`` from the current operator (DOM-R14).
     """
     operator = get_current_operator(session)
-    company = Company(
-        name=name,
-        is_active=is_active,
-        created_by=operator.id,
-        updated_by=operator.id,
-    )
+    try:
+        company = Company(
+            name=name,
+            is_active=is_active,
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+    except ValueError as exc:
+        raise InvalidCompanyFieldError from exc
     session.add(company)
     session.flush()
     return company
@@ -60,7 +67,10 @@ def update_company(
     """
     operator = get_current_operator(session)
     if name is not UNSET:
-        company.name = name
+        try:
+            company.name = name
+        except ValueError as exc:
+            raise InvalidCompanyFieldError from exc
     if is_active is not UNSET:
         company.is_active = is_active
     company.updated_by = operator.id

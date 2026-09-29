@@ -7,6 +7,7 @@ Fixtures (``session``, ``operator``) come from this directory's
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.models import AuditLog, Project, Role, RolePermission, User
 from app.services.companies import create_company, update_company
@@ -64,6 +65,18 @@ def test_dom_ac35_username_change_requires_admin_and_local_account(
         update_user_manual(session, external, username="other.name")
     assert local.username == "new.name"
     assert external.username == "uac35e"
+    create_user(
+        session,
+        username="taken.name",
+        name_zh="已有使用者",
+        email="taken@demo.example",
+    )
+    session.commit()
+    with pytest.raises(IntegrityError):
+        update_user_manual(session, local, username="taken.name")
+    session.rollback()
+    assert session.get(User, local.id).username == "new.name"
+    assert len(_audit_rows_for(session, local.id)) == 1
 
 
 def test_dom_ac38_company_change_clears_old_fields_and_audits(
@@ -103,6 +116,44 @@ def test_dom_ac38_company_change_clears_old_fields_and_audits(
     assert user.department == "新部門"
     assert user.employee_no is None
     assert len(_audit_rows_for(session, user.id)) == 3
+
+
+def test_alg_ac15_company_event_boundaries(session, operator):
+    company_a = create_company(session, name="示範公司甲")
+    company_b = create_company(session, name="示範公司乙")
+    user = create_user(session, **_user_kwargs("AC15U", company_a.id))
+    independent = create_user(
+        session,
+        username="ac15.independent",
+        name_zh="獨立人員",
+        email="independent15@demo.example",
+    )
+    create_user(session, **_user_kwargs("DUP15", company_a.id))
+    session.commit()
+
+    update_user_manual(session, user, company_id=company_b.id)
+    update_user_manual(session, user, department="單獨更新")
+    assert len(_audit_rows_for(session, user.id)) == 1
+    update_user_manual(session, user, company_id=None)
+    update_user_manual(session, independent, company_id=company_a.id)
+    session.commit()
+    linked = _audit_rows_for(session, independent.id)
+    assert len(linked) == 1
+    assert linked[0].before == {
+        "company_id": None,
+        "employee_no": None,
+        "department": None,
+        "location": None,
+    }
+    before_count = len(_audit_rows_for(session, user.id))
+
+    with pytest.raises(IntegrityError):
+        update_user_manual(
+            session, user, company_id=company_a.id, employee_no="DUP15"
+        )
+    session.rollback()
+    assert session.get(User, user.id).company_id is None
+    assert len(_audit_rows_for(session, user.id)) == before_count
 
 
 def test_dom_ac42_company_link_does_not_change_project_roles(

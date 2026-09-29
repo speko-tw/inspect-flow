@@ -89,6 +89,10 @@ class UsernameChangePermissionError(ValueError):
     """Only an Admin may change a local account's username."""
 
 
+class InvalidUserFieldError(ValueError):
+    """A submitted User field failed model validation."""
+
+
 def _reject_if_company_inactive(
     session: Session, company_id: uuid.UUID
 ) -> None:
@@ -137,28 +141,31 @@ def create_user(
     if company_id is not None:
         _reject_if_company_inactive(session, company_id)
     operator = get_current_operator(session)
-    user = User(
-        username=username,
-        company_id=company_id,
-        department=department,
-        location=location,
-        employee_no=employee_no,
-        name_en=name_en,
-        name_zh=name_zh,
-        email=email,
-        is_active=is_active,
-        auth_source=auth_source,
-        external_source=external_source,
-        external_id=external_id,
-        extension_1=extension_1,
-        extension_2=extension_2,
-        mobile=mobile,
-        line_id=line_id,
-        wechat_id=wechat_id,
-        responsibilities=responsibilities,
-        created_by=operator.id,
-        updated_by=operator.id,
-    )
+    try:
+        user = User(
+            username=username,
+            company_id=company_id,
+            department=department,
+            location=location,
+            employee_no=employee_no,
+            name_en=name_en,
+            name_zh=name_zh,
+            email=email,
+            is_active=is_active,
+            auth_source=auth_source,
+            external_source=external_source,
+            external_id=external_id,
+            extension_1=extension_1,
+            extension_2=extension_2,
+            mobile=mobile,
+            line_id=line_id,
+            wechat_id=wechat_id,
+            responsibilities=responsibilities,
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+    except ValueError as exc:
+        raise InvalidUserFieldError from exc
     session.add(user)
     session.flush()
     return user
@@ -249,8 +256,11 @@ def update_user_manual(
         for field in old_company_fields:
             if field not in changed_basic_fields:
                 changed_basic_fields[field] = None
-    for field, value in changed_basic_fields.items():
-        setattr(user, field, value)
+    try:
+        for field, value in changed_basic_fields.items():
+            setattr(user, field, value)
+    except ValueError as exc:
+        raise InvalidUserFieldError from exc
     contact_fields = {
         "extension_1": extension_1,
         "extension_2": extension_2,
@@ -259,9 +269,12 @@ def update_user_manual(
         "wechat_id": wechat_id,
         "responsibilities": responsibilities,
     }
-    for field, value in contact_fields.items():
-        if value is not UNSET:
-            setattr(user, field, value)
+    try:
+        for field, value in contact_fields.items():
+            if value is not UNSET:
+                setattr(user, field, value)
+    except ValueError as exc:
+        raise InvalidUserFieldError from exc
     user.updated_by = operator.id
     session.flush()
     if user.username != old_username:
@@ -415,6 +428,7 @@ __all__ = [
     "CompanyNotActiveError",
     "ExternalBasicFieldModificationError",
     "LastActiveAdminRemovalError",
+    "InvalidUserFieldError",
     "UsernameChangePermissionError",
     "create_user",
     "set_is_active",

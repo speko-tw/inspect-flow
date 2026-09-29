@@ -335,11 +335,19 @@ def _validate_no_null_field_values(
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
 ) -> None:
-    """Reject ``None`` except on fields explicitly declared nullable.
+    """A present ``before``/``after`` dict's fields must never carry
+    a Python ``None`` value: "this field has no value" is already
+    spelled by omitting the whole ``before``/``after`` (a 新增/刪除
+    event, or -- for ``before_optional`` -- a 修改 event with no
+    prior state at all), so a ``None``-valued field would be a
+    second, redundant way to say the same thing. This is what keeps
+    ``user.password_set``'s ``is_temporary`` a plain ``bool`` on
+    every row that has one at all, rather than sometimes a ``bool``
+    and sometimes ``None``.
 
-    ``user.company_changed`` needs nullable company and personnel
-    fields to show links and unlinking. Other events keep the existing
-    rejection, including ``user.password_set``'s boolean flag.
+    The opt-in ``nullable_fields`` exception lets
+    ``user.company_changed`` record unlinked company and personnel
+    fields as null on either side without changing other events.
     """
     for payload in (before, after):
         if payload is None:

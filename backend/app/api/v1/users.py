@@ -3,18 +3,25 @@
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.v1._management_errors import integrity_error_code
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
-from app.auth.password_service import set_password
+from app.auth.password_service import PasswordLengthError, set_password
 from app.models import Company, User
 from app.services.users import (
+    BuiltInAccountModificationError,
+    CompanyNotActiveError,
+    ExternalBasicFieldModificationError,
+    InvalidUserFieldError,
+    LastActiveAdminRemovalError,
+    UsernameChangePermissionError,
     create_user,
     set_is_active,
     set_is_admin,
@@ -112,8 +119,33 @@ def _get_user(db: Session, user_id: UUID) -> User:
     return user
 
 
-def _invalid_write(exc: ValueError | IntegrityError) -> APIError:
-    return APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+def _user_error(exc: ValueError) -> APIError:
+    if isinstance(exc, BuiltInAccountModificationError):
+        code = ErrorCode.USER_BUILTIN_PROTECTED
+    elif isinstance(exc, LastActiveAdminRemovalError):
+        code = ErrorCode.USER_LAST_ADMIN
+    elif isinstance(exc, ExternalBasicFieldModificationError):
+        code = ErrorCode.USER_EXTERNAL_MANAGED
+    elif isinstance(exc, CompanyNotActiveError):
+        code = ErrorCode.COMPANY_INACTIVE
+    elif isinstance(exc, UsernameChangePermissionError):
+        return APIError(ErrorCode.PERMISSION_DENIED, 403)
+    elif isinstance(exc, PasswordLengthError):
+        code = ErrorCode.AUTH_PASSWORD_INVALID
+    else:
+        code = ErrorCode.REQUEST_VALIDATION_FAILED
+    return APIError(code, 422)
+
+
+_USER_BUSINESS_ERRORS = (
+    BuiltInAccountModificationError,
+    LastActiveAdminRemovalError,
+    ExternalBasicFieldModificationError,
+    CompanyNotActiveError,
+    UsernameChangePermissionError,
+    InvalidUserFieldError,
+    PasswordLengthError,
+)
 
 
 def _check_company_exists(db: Session, company_id: UUID | None) -> None:
@@ -137,6 +169,7 @@ def get_user(
 @router.post("", response_model=CreatedUserResponse, status_code=201)
 def add_user(
     body: CreateUserRequest,
+    response: Response,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> CreatedUserResponse:
     _check_company_exists(db, body.company_id)
@@ -146,8 +179,14 @@ def add_user(
             set_is_admin(db, user, True)
         password = secrets.token_urlsafe(24)
         set_password(db, user, password, is_temporary=True)
-    except (ValueError, IntegrityError) as exc:
-        raise _invalid_write(exc) from exc
+    except _USER_BUSINESS_ERRORS as exc:
+        raise _user_error(exc) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
+    response.headers["Cache-Control"] = "no-store"
     return CreatedUserResponse(
         **UserResponse.model_validate(user).model_dump(),
         temporary_password=password,
@@ -161,12 +200,29 @@ def edit_user(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> User:
     user = _get_user(db, user_id)
+    fields = body.model_dump(exclude_unset=True)
+    if (
+        user.is_system
+        and {
+            "username",
+            "name_zh",
+            "name_en",
+            "department",
+            "location",
+            "employee_no",
+        }
+        & fields.keys()
+    ):
+        raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
     try:
-        return update_user_manual(
-            db, user, **body.model_dump(exclude_unset=True)
-        )
-    except (ValueError, IntegrityError) as exc:
-        raise _invalid_write(exc) from exc
+        return update_user_manual(db, user, **fields)
+    except _USER_BUSINESS_ERRORS as exc:
+        raise _user_error(exc) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
 
 
 @router.put("/{user_id}/company", response_model=UserResponse)
@@ -178,10 +234,17 @@ def link_company(
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
     _check_company_exists(db, body.company_id)
+    if user.is_system and body.company_id != user.company_id:
+        raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
     try:
         return update_user_manual(db, user, **fields)
-    except (ValueError, IntegrityError) as exc:
-        raise _invalid_write(exc) from exc
+    except _USER_BUSINESS_ERRORS as exc:
+        raise _user_error(exc) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
 
 
 @router.put("/{user_id}/admin", response_model=UserResponse)
@@ -191,10 +254,17 @@ def change_admin_status(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> User:
     user = _get_user(db, user_id)
+    if user.is_admin == body.is_admin:
+        return user
     try:
         return set_is_admin(db, user, body.is_admin)
-    except (ValueError, IntegrityError) as exc:
-        raise _invalid_write(exc) from exc
+    except _USER_BUSINESS_ERRORS as exc:
+        raise _user_error(exc) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
 
 
 @router.put("/{user_id}/active", response_model=UserResponse)
@@ -206,5 +276,10 @@ def change_active_status(
     user = _get_user(db, user_id)
     try:
         return set_is_active(db, user, body.is_active)
-    except (ValueError, IntegrityError) as exc:
-        raise _invalid_write(exc) from exc
+    except _USER_BUSINESS_ERRORS as exc:
+        raise _user_error(exc) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc

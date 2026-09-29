@@ -9,15 +9,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.v1._management_errors import integrity_error_code
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
 from app.models import Company, User
 from app.services.companies import (
+    InvalidCompanyFieldError,
     create_company,
     list_active_users,
     update_company,
 )
-from app.services.users import set_is_active
+from app.services.users import (
+    BuiltInAccountModificationError,
+    LastActiveAdminRemovalError,
+    set_is_active,
+)
 
 router = APIRouter(
     prefix="/companies",
@@ -110,8 +116,13 @@ def add_company(
 ) -> Company:
     try:
         return create_company(db, name=body.name)
-    except (ValueError, IntegrityError) as exc:
+    except InvalidCompanyFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
 
 
 @router.patch("/{company_id}", response_model=CompanyResponse)
@@ -123,8 +134,13 @@ def rename_company(
     company = _get_company(db, company_id)
     try:
         return update_company(db, company, name=body.name)
-    except (ValueError, IntegrityError) as exc:
+    except InvalidCompanyFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
 
 
 @router.put("/{company_id}/active", response_model=CompanyResponse)
@@ -145,5 +161,14 @@ def change_company_status(
         for user_id in chosen:
             set_is_active(db, by_id[user_id], False)
         return update_company(db, company, is_active=body.is_active)
-    except (ValueError, IntegrityError) as exc:
+    except BuiltInAccountModificationError as exc:
+        raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
+    except LastActiveAdminRemovalError as exc:
+        raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
+    except InvalidCompanyFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    except IntegrityError as exc:
+        code = integrity_error_code(exc)
+        if code is None:
+            raise
+        raise APIError(code, 422) from exc
