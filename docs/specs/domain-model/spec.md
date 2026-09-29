@@ -193,6 +193,19 @@
 | 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
 | 程式介面 | `Project` 新增、修改入口；依 `project_code` 查出既有 `Project` 的介面（供重複警告） | DOM-R40、DOM-R42 |
 
+### 管理介面錯誤
+
+管理 `User` 與 `Company` 的 API 使用共用錯誤 envelope。下列錯誤碼由 API 登記表提供；重複資料回 HTTP 409，其餘業務規則拒絕回 HTTP 422。
+
+- `user.builtin_protected` — HTTP 422：嘗試透過一般管理操作修改內建 `admin` 的受保護欄位、公司連結或狀態。
+- `user.last_admin` — HTTP 422：停用或移除最後一位啟用中的 Admin。
+- `user.external_managed` — HTTP 422：人工修改外部帳號由外部來源管理的基本欄位。
+- `company.inactive` — HTTP 422：新增帳號或變更公司連結時指定已停用公司。
+- `user.username_conflict` — HTTP 409：新增或修改帳號名稱時，名稱已被其他帳號使用（不分大小寫）。
+- `user.email_conflict` — HTTP 409：新增或修改 email 時，email 已被其他帳號使用（不分大小寫）。
+- `user.employee_no_conflict` — HTTP 409：指派或變更公司連結時，同一家公司已有相同工號。
+- `company.name_conflict` — HTTP 409：新增或修改公司名稱時，名稱已被其他公司使用（不分大小寫）。
+
 ## 驗收條件
 
 每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。已被取代的驗收條件保留編號並連到取代它的新條目；新條目從 DOM-AC33 接續。登記表初始為空，AC 用到的權限代碼（例如 `report.read`）由測試暫時登記（DOM-R35）。
@@ -350,3 +363,4 @@
 - DOM-Q9 裁定（範圍變更；含 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-22](../../intents/03-decisions-and-stack.md#kd-22)、[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的意圖變更）：新增 DOM-R45～DOM-R54、DOM-AC33～DOM-AC46（帳號名稱、`User` 基本欄位改寫、公司連結與工號的清空與同公司內唯一、`Company` 只留名稱與啟用狀態且名稱不重複、內建 `admin` 的欄位、Admin 指派與收回、沒有公司的人加入專案、初始化指令改寫、既有資料回填）；DOM-R01、DOM-R11、DOM-R12、DOM-R16、DOM-R17、DOM-R24、DOM-R29 與 DOM-AC01、DOM-AC08、DOM-AC09、DOM-AC11～DOM-AC13、DOM-AC20、DOM-AC26 標示為已被取代；DOM-R02、DOM-R04～DOM-R07、DOM-R13、DOM-R14、DOM-R18、DOM-R22、DOM-R28、DOM-R31～DOM-R33 與相關驗收就地改寫 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 規格澄清（審查修正）：DOM-R46 明定 `email`、`name_zh` 在資料庫層可空並加 CHECK（`is_system = true`，或兩者都不為空值）；DOM-AC33 改為分開驗證可空性與條件式約束，需求欄改指 DOM-R46、DOM-R50；帳號名稱欄位統一稱 `username` — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 依 #274 新增凍結的角色管理 API 契約 DOM-R55、DOM-AC47～DOM-AC49：Admin 角色 CRUD、已登記權限代碼清單、cursor 分頁、錯誤狀態與稽核驗收；刪除沿用 DOM-R21 的既定連帶移除角色指派規則 — [#274](https://github.com/speko-tw/inspect-flow/issues/274)
+- 規格澄清（審查修正）：補列帳號與公司管理 API 的錯誤碼、HTTP 狀態及觸發條件；四種重複資料回 409，其餘列出的業務規則拒絕回 422 — [#263](https://github.com/speko-tw/inspect-flow/issues/263)
