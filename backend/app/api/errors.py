@@ -101,6 +101,7 @@ class ErrorCode(DescribedStrEnum):
     ROLE_PERMISSION_CODE_INVALID = (
         "role.permission_code_invalid",
         "One or more permission codes are invalid or unavailable.",
+    )
     USER_BUILTIN_PROTECTED = (
         "user.builtin_protected",
         "The built-in administrator account cannot be changed this way.",
