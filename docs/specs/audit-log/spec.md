@@ -39,7 +39,7 @@
 - Admin 刪除「唯讀」角色；三位成員的這個角色指派一併被移除（DOM-R21），紀錄保留角色原本的名稱、權限與受影響的成員。角色刪掉後，紀錄仍查得到。
 - Admin 把一位同事設為 Admin；寫一筆 `user.admin_changed`。
 - 負責人首次登入設定 `admin` 密碼；寫一筆 `user.password_set`，操作者記為內建 `admin`（系統事件）。
-- Admin 把一位同事的帳號名稱從 `anna.deng` 改成 `anna.d`；寫一筆 `user.account_name_changed`。Admin 把同事從甲公司改到乙公司；寫一筆 `user.company_changed`，連同被清空的工號、部門與地點一起記下。
+- Admin 把一位同事的帳號名稱從 `anna.deng` 改成 `anna.d`；寫一筆 `user.username_changed`。Admin 把同事從甲公司改到乙公司；寫一筆 `user.company_changed`，連同被清空的工號、部門與地點一起記下。
 - 修改在寫稽核紀錄時失敗，整筆修改一起回滾，不會出現「改了但沒紀錄」。
 - 工程師想改掉一筆寫錯的稽核紀錄，程式會拒絕。
 
@@ -118,10 +118,10 @@
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
-| `user.account_name_changed` | `User.account_name` 被修改（DOM-R45）；只有具 Admin 權限的人能改，改前改後相同不寫 | `user` | `account_name` | `account_name` |
+| `user.username_changed` | `User.username` 被修改（DOM-R45）；只有具 Admin 權限的人能改，改前改後相同不寫 | `user` | `username` | `username` |
 | `user.company_changed` | `User.company_id` 改變：換公司、連結公司、解除連結（DOM-R47）；因此被清空的工號、部門、地點一併記下（ALG-R20） | `user` | `company_id`、`employee_no`、`department`、`location` | 同左 |
 
-- 值用 `account_name` 存放的小寫（DOM-R45）；`company_id` 沒有公司時是空值；欄位沒有值時記空值，不省略。
+- 值用 `username` 存放的小寫（DOM-R45）；`company_id` 沒有公司時是空值；欄位沒有值時記空值，不省略。
 - 本系統帳號與外部帳號都適用；外部身分同步覆蓋這些欄位時另依 ALG-R13 寫。
 
 <a id="寫入時機"></a>
@@ -178,7 +178,7 @@
 | ALG-AC11 | 初始化後的資料庫，`domain-model` T7 的入口可用；兩位啟用中的 Admin；角色 R1 由兩筆成員持有；專案 P | 透過 Service 層依序：新增角色 R2；R2 改名；把 U 加入 P 並指派 R2；替 U 再加 R1；把 V 加入 P 但不指派角色；刪除 R1；把 V 移出 P；取消一位 Admin 的 `is_admin`；嘗試取消最後一位 Admin 的 `is_admin`；停用一位非 Admin 的帳號 | 每一次成功的變更各恰有一筆紀錄，事件代碼依序為 `role.created`、`role.updated`、`project_member.roles_changed`、`project_member.roles_changed`、`role.deleted`、`project_member.removed`、`user.admin_changed`，內容依第一批事件；`role.deleted` 的 `project_member_ids` 恰為刪除當下持有 R1 的三筆成員（前置的兩筆與 U），且沒有另寫 `roles_changed`；加入 V、被拒絕的取消與停用帳號都沒有紀錄；`created_by` 都是目前操作者 | ALG-R14 |
 | ALG-AC12 | 初始化後的資料庫（有內建 `admin`）；事件目錄已登記 `authentication` 事件 | 在沒有登入者的請求範圍內寫一筆 `user.locked`、一筆 `user.password_set`；在已綁定 U 的請求範圍內寫一筆 `user.locked`、兩筆 `before`、`after` 相同的 `user.password_set`；另在沒有登入者的請求範圍內寫一筆 `role.created`（`user.password_set` 未宣告為系統事件） | 兩筆 `user.locked` 都寫入成功，`created_by` 都是內建 `admin`（含已綁定 U 的那筆）；沒有登入者的 `user.password_set` 與 `role.created` 都被拒絕；U 的兩筆都寫入成功，`created_by` 是 U | ALG-R15、ALG-R16、ALG-R17 |
 | ALG-AC13 | 初始化後的資料庫（有內建 `admin`，尚未設定密碼）；事件目錄已登記 `user.password_set`；以可控時間固定現在時刻 | 在沒有登入者的請求範圍內，以首次設定的公開路由的方式（宣告為系統事件）寫一筆 `user.password_set`；在同樣沒有登入者的請求範圍內，不宣告為系統事件再寫一筆；在已綁定 U 的請求範圍內，不宣告再寫一筆 | 第一筆寫入成功，`created_by` 是內建 `admin`，`before` 為空值、`after.is_temporary` 為 `false`；第二筆被拒絕，筆數不變；第三筆寫入成功，`created_by` 是 U；宣告為系統事件的呼叫對其他事件（例如 `role.created`）仍被拒絕 | ALG-R18 |
-| ALG-AC14 | 初始化後的資料庫；具 Admin 權限的操作者 A、本系統帳號 U（`account_name = anna.deng`）；`domain-model` 的使用者 Service 可用 | 以 A 把 U 的 `account_name` 改為 `Anna.D`；再改為 `anna.d`（與上一次存放的值相同）；以 A 嘗試改成已被使用的名稱；掃描事件目錄中這兩種事件的宣告欄位 | 第一次恰有一筆 `user.account_name_changed`，`entity_id` 是 U，`created_by` 是 A，`before.account_name` 為 `anna.deng`、`after.account_name` 為 `anna.d`（小寫）；第二次、被拒絕的那次都沒有紀錄；事件代碼符合 ALG-R07 格式，宣告欄位沒有 `password`、`secret`、`token`、`session` 字樣 | ALG-R14、ALG-R19 |
+| ALG-AC14 | 初始化後的資料庫；具 Admin 權限的操作者 A、本系統帳號 U（`username = anna.deng`）；`domain-model` 的使用者 Service 可用 | 以 A 把 U 的 `username` 改為 `Anna.D`；再改為 `anna.d`（與上一次存放的值相同）；以 A 嘗試改成已被使用的名稱；掃描事件目錄中這兩種事件的宣告欄位 | 第一次恰有一筆 `user.username_changed`，`entity_id` 是 U，`created_by` 是 A，`before.username` 為 `anna.deng`、`after.username` 為 `anna.d`（小寫）；第二次、被拒絕的那次都沒有紀錄；事件代碼符合 ALG-R07 格式，宣告欄位沒有 `password`、`secret`、`token`、`session` 字樣 | ALG-R14、ALG-R19 |
 | ALG-AC15 | 公司 A、B；具 Admin 權限的操作者 A0；本系統帳號 U 屬於公司 A，`employee_no`、`department`、`location` 都有值；沒有公司的帳號 V | 以 A0 依序：把 U 的 `company_id` 改為 B；把 U 的 `department` 單獨改成新值（`company_id` 不變）；為 U 重新填入三個欄位後把 `company_id` 改為空值；把 V 的 `company_id` 設為 A；以會使工號重複的值把 U 改到 A（被資料庫拒絕） | 第一次恰有一筆 `user.company_changed`，`before` 是 A 與三個欄位的原值，`after` 是 B 與三個空值；第二次沒有紀錄；第三次一筆，`after.company_id` 為空值、三欄為空值；第四次一筆，`before.company_id` 為空值；被拒絕的那次沒有紀錄；`created_by` 都是 A0 | ALG-R14、ALG-R19、ALG-R20 |
 | ALG-AC16 | 初始化後的資料庫；`admin` 已設定過一次密碼 | 執行 `admin` 重設指令一次（兩次輸入相同的有效密碼）；再執行一次兩次輸入不同的指令 | 第一次恰有一筆 `user.password_set`，`entity_id` 是內建 `admin`，`created_by` 是內建 `admin`，`after.is_temporary` 為 `false`；事件目錄沒有為重設指令新增的事件代碼；第二次沒有紀錄 | ALG-R21 |
 
@@ -198,7 +198,7 @@
 - **ALG-Q5：要不要記錄請求來源（IP、User-Agent、Session）**。選項：（A）不記錄；（B）新增可空值的來源欄位。業界：OWASP 建議記錄「何時、何處、誰、做什麼」，「何處」通常包含 IP。**建議 A**：第一階段是單機、內網，操作者已記在 `created_by`；之後要加，只需一支新增可空值欄位的 migration。
 
 <a id="alg-q6"></a>
-- **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.account_name_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
+- **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.username_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
 
 ## 變更紀錄
 

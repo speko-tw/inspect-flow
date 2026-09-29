@@ -25,8 +25,8 @@
 
 | 任務 | 稽核相關的內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| C | 事件目錄登記 `user.account_name_changed`、`user.company_changed`（ALG-R19），並把 `user.password_set` 標為「得為系統事件」，寫入入口支援由呼叫端宣告系統事件（ALG-R18）；首次設定路由以系統事件寫 `user.password_set`，`admin` 重設指令沿用同一事件（ALG-R21）；改寫 T3 的測試（初始化與重跑都不寫稽核，ALG-AC08） | T2、`authentication` 計畫的 C | ALG-AC08、ALG-AC13、ALG-AC16 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
-| E | 使用者 Service（帳號名稱修改、公司連結變更）在同一個交易寫 `user.account_name_changed`、`user.company_changed`；換公司或解除連結時清空的欄位一併記下（ALG-R20） | C、`domain-model` 計畫的 E | ALG-AC14、ALG-AC15 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
+| C | 事件目錄登記 `user.username_changed`、`user.company_changed`（ALG-R19），並把 `user.password_set` 標為「得為系統事件」，寫入入口支援由呼叫端宣告系統事件（ALG-R18）；首次設定路由以系統事件寫 `user.password_set`，`admin` 重設指令沿用同一事件（ALG-R21）；改寫 T3 的測試（初始化與重跑都不寫稽核，ALG-AC08） | T2、`authentication` 計畫的 C | ALG-AC08、ALG-AC13、ALG-AC16 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
+| E | 使用者 Service（帳號名稱修改、公司連結變更）在同一個交易寫 `user.username_changed`、`user.company_changed`；換公司或解除連結時清空的欄位一併記下（ALG-R20） | C、`domain-model` 計畫的 E | ALG-AC14、ALG-AC15 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
 | H | 端到端：首次設定的系統事件、新增使用者、改帳號名稱、換公司，最後讀稽核紀錄核對筆數與操作者 | C、E | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
 
 **對既有任務的影響**：

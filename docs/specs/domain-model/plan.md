@@ -31,9 +31,9 @@
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| B | 模型與 migration：`User` 加 `account_name`（小寫存放、格式與保留字檢查、唯一）、`company_id` 改可空值、`department`、`location`、`employee_no` 在沒有公司時必須為空值、`employee_no` 同公司內唯一、`name_en` 選填、內建 `admin` 欄位限制；`Company` 移除 `code`、`tax_id`、`kind`、`parent_id`，`name` 存放前去前後空白且不分大小寫唯一；既有資料回填帳號名稱、清空內建 `admin` 的公司與姓名 | 本計畫 T1～T8；`database-foundation` DBF-R12、DBF-R13 的改寫 | DOM-AC33、DOM-AC34、DOM-AC36、DOM-AC37、DOM-AC39、DOM-AC40、DOM-AC45 | [#260](https://github.com/speko-tw/inspect-flow/issues/260) |
+| B | 模型與 migration：`User` 加 `username`（小寫存放、格式與保留字檢查、唯一）、`company_id` 改可空值、`department`、`location`、`employee_no` 在沒有公司時必須為空值、`employee_no` 同公司內唯一、`name_en` 選填、內建 `admin` 欄位限制；`Company` 移除 `code`、`tax_id`、`kind`、`parent_id`，`name` 存放前去前後空白且不分大小寫唯一；既有資料回填帳號名稱、清空內建 `admin` 的公司與姓名 | 本計畫 T1～T8；`database-foundation` DBF-R12、DBF-R13 的改寫 | DOM-AC33、DOM-AC34、DOM-AC36、DOM-AC37、DOM-AC39、DOM-AC40、DOM-AC45 | [#260](https://github.com/speko-tw/inspect-flow/issues/260) |
 | C | 初始化與首次設定 API：初始化指令改為只建內建 `admin` 與三個範本角色（`make init`）；重跑規則；首次設定流程新增第一個使用者時，操作者為內建 `admin`（登入碼與網頁流程由 `authentication` 定義） | B | DOM-AC43、DOM-AC44、DOM-AC46 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
-| D | 帳號名稱或 email 登入（`authentication` AUT-R05、AUT-R06；本規格只提供 `account_name` 欄位與唯一性） | B | （`authentication` 驗收） | [#262](https://github.com/speko-tw/inspect-flow/issues/262) |
+| D | 帳號名稱或 email 登入（`authentication` AUT-R05、AUT-R06；本規格只提供 `username` 欄位與唯一性） | B | （`authentication` 驗收） | [#262](https://github.com/speko-tw/inspect-flow/issues/262) |
 | E | 使用者與公司 API：帳號名稱的修改權限與稽核、換公司或解除連結時清空並寫稽核、`is_admin` 指派與收回、沒有公司的人加入專案、公司列表／新增／改名／停用 | B | DOM-AC35、DOM-AC38、DOM-AC41、DOM-AC42 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
 | F | 前端登入與首次設定頁 | C、D | （`authentication` 驗收） | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
 | G | 前端管理頁（簡便版：使用者與公司的列表、新增、修改、停用、連結或解除公司） | E | （前端驗收） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
