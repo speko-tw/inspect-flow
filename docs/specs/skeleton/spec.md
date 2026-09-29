@@ -1,13 +1,13 @@
 # 專案骨架（skeleton）
 
-**代碼**：`SKL`　**Phase**：P0　**狀態**：已完成
+**代碼**：`SKL`　**Phase**：P1　**狀態**：已完成
 **前置規格**：無
 **引用意圖**：[KD-09](../../intents/03-decisions-and-stack.md#kd-09)、[KD-10](../../intents/03-decisions-and-stack.md#kd-10)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)、[PR-11](../../intents/02-principles.md#pr-11)、[PR-13](../../intents/02-principles.md#pr-13)、[PR-14](../../intents/02-principles.md#pr-14)；技術棧卡片：[Backend 語言](../../intents/03-decisions-and-stack.md#stack-backend-language)、[Web API](../../intents/03-decisions-and-stack.md#stack-web-api)、[Frontend](../../intents/03-decisions-and-stack.md#stack-frontend)、[測試工具](../../intents/03-decisions-and-stack.md#stack-tests)、[CI](../../intents/03-decisions-and-stack.md#stack-ci)、[程式品質工具](../../intents/03-decisions-and-stack.md#stack-code-quality)
 **被擋議題**：無
 
 ## 目的
 
-工程師與 agent 在本機或 CI 執行同一個 `make check`，就能證明一個變更格式正確、lint 與型別檢查通過、測試通過、可以 build；每個 PR 都有依審查準則寫成的審查意見，最後由人核准合併。這是 [規格流程閉環前提](../README.md#human-gates) 的落地（依據：架構基準 §28、§29、§30 Phase 0）。
+工程師與 agent 在本機或 CI 執行同一個 `make check`，就能證明一個變更格式正確、lint 與型別檢查通過、測試通過、可以 build；每個 PR 都有依審查準則寫成的審查意見，最後由人核准合併。這是 [規格流程閉環前提](../README.md#human-gates) 的落地（依據：架構基準 §28、§29、§30 Phase 0（Repository / Skeleton；本專案 Phase 1））。
 
 ## 範圍
 
@@ -41,7 +41,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| SKL-R01 | 後端**必須**提供 `GET /api/v1/health`，回傳服務狀態；回應**不得**包含 secret、連線字串或任何設定值 | 必須 | 架構基準 §30 Phase 0、§22.14；[PR-14](../../intents/02-principles.md#pr-14) |
+| SKL-R01 | 後端**必須**提供 `GET /api/v1/health`，回傳服務狀態；回應**不得**包含 secret、連線字串或任何設定值 | 必須 | 架構基準 §30 Phase 0（本專案 Phase 1）、§22.14；[PR-14](../../intents/02-principles.md#pr-14) |
 | SKL-R02 | 前端**必須**是單一 React app，`/admin/*`、`/field/*` 依路由拆分程式碼；Field 的程式包**不得**載入 Admin 的模組 | 必須 | 架構基準 §5.1；[KD-12](../../intents/03-decisions-and-stack.md#kd-12) |
 | SKL-R03 | 根目錄 `make check` **必須**依序對後端與前端執行格式檢查、lint、型別檢查、測試與 build；任一步失敗即以非零結束碼結束 | 必須 | 架構基準 §28、§29；[閉環前提](../README.md#human-gates) |
 | SKL-R04 | CI **必須**在每個 PR 與每次 push 到 `main` 時執行 `make check`，不另寫第二套檢查步驟；失敗時 check 為失敗 | 必須 | 架構基準 §22A.4–22A.7；[CI](../../intents/03-decisions-and-stack.md#stack-ci) |

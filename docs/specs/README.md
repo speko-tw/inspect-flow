@@ -33,7 +33,7 @@ docs/specs/
     └── plan.md
 ```
 
-- 資料夾以能力命名（例如 `skeleton`、`template-system`），不放 Phase 編號。Phase 可能拆分或合併，名稱不必跟著改；對應關係記在下方索引。
+- 資料夾以能力命名（例如 `skeleton`、`template-system`），不放 Phase 編號。Phase N 對應 Milestone 0.N.x；資料夾名稱不必跟著 Phase 改，對應關係記在下方索引。
 - 共用規格（`api-conventions`、`domain-model`、`state-machines`）也是一般規格，只是會被多份規格引用。
 
 <a id="index"></a>
@@ -43,9 +43,9 @@ docs/specs/
 
 | 規格 | Phase | 類型 | 狀態 | 被擋議題 |
 |---|---|---|---|---|
-| [`skeleton`](skeleton/spec.md) | P0 | 功能 | 已完成 | — |
+| [`skeleton`](skeleton/spec.md) | P1 | 功能 | 已完成 | — |
 | [`api-conventions`](api-conventions/spec.md) | 全部 | 共用 | 已完成 | — |
-| [`database-foundation`](database-foundation/spec.md) | P1 | 功能 | 部分凍結 | 第一段（基礎設施、`User`、`Project` 的共通結構）無；第二段（`Template`、`TemplateVersion`）受 [G-01](../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
+| [`database-foundation`](database-foundation/spec.md) | P1、P3 | 功能 | 部分凍結 | Phase 1（基礎設施、`User`、`Company`、`Project` 的共通結構）無；Phase 3（`Template`、`TemplateVersion`）受 [G-01](../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P9 | 共用 | 部分凍結 | 凍結範圍（`User`、`Company`、`Role`、`ProjectMember`、`Project` 業務欄位、初始化指令）無；其餘實體受 [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02)、[OQ-06](../intents/05-open-questions.md#oq-06) 等開工門檻擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
 | `state-machines` | P4、P6、P7、P9 | 共用 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-06](../intents/05-open-questions.md#g-06) |
 | [`authentication`](authentication/spec.md) | P2 | 功能 | 已凍結 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定） |
@@ -59,6 +59,7 @@ docs/specs/
 | `admin-dashboard` | P8 | 功能 | 未開始 | — |
 | `report-delivery` | P9 | 功能 | 未開始 | [G-04](../intents/05-open-questions.md#g-04)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
 | `pilot-deployment` | P10 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
+| （尚無專屬規格） | P11 | 功能 | 未開始 | — |
 
 ## 狀態
 
