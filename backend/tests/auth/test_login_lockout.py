@@ -206,7 +206,7 @@ def test_lockout_migration_round_trip(db_url):
             for row in inspect(engine).get_columns("login_failures")
         }
         assert {"user_id", "failed_at", "locked_until"} <= columns
-        command.downgrade(cfg, "4c38ff477939")
+        command.downgrade(cfg, "9d2b7c6e4a10")
         assert "login_failures" not in inspect(engine).get_table_names()
         command.upgrade(cfg, "c1a8e5d13f62")
         assert "login_failures" in inspect(engine).get_table_names()

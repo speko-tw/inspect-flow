@@ -1,7 +1,7 @@
 """Add failed password checks and lockout deadline (AUT-R28).
 
 Revision ID: c1a8e5d13f62
-Revises: 4c38ff477939
+Revises: 9d2b7c6e4a10
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "c1a8e5d13f62"
-down_revision: str | Sequence[str] | None = "4c38ff477939"
+down_revision: str | Sequence[str] | None = "9d2b7c6e4a10"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
