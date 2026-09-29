@@ -98,6 +98,38 @@ class ErrorCode(DescribedStrEnum):
         "setup.already_completed",
         "Initial setup has already been completed.",
     )
+    USER_BUILTIN_PROTECTED = (
+        "user.builtin_protected",
+        "The built-in administrator account cannot be changed this way.",
+    )
+    USER_LAST_ADMIN = (
+        "user.last_admin",
+        "The last active administrator cannot be removed.",
+    )
+    USER_EXTERNAL_MANAGED = (
+        "user.external_managed",
+        "This account's basic fields are managed externally.",
+    )
+    COMPANY_INACTIVE = (
+        "company.inactive",
+        "Users cannot be assigned to an inactive company.",
+    )
+    USER_USERNAME_CONFLICT = (
+        "user.username_conflict",
+        "The username is already in use.",
+    )
+    USER_EMAIL_CONFLICT = (
+        "user.email_conflict",
+        "The email is already in use.",
+    )
+    USER_EMPLOYEE_NO_CONFLICT = (
+        "user.employee_no_conflict",
+        "The employee number is already in use at this company.",
+    )
+    COMPANY_NAME_CONFLICT = (
+        "company.name_conflict",
+        "The company name is already in use.",
+    )
 
 
 def build_error_code_descriptions(

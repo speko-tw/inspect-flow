@@ -70,6 +70,28 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 
 
+def test_alg_ac14_ac15_management_event_catalog():
+    username_event = _EVENT_CATALOG["user.username_changed"]
+    company_event = _EVENT_CATALOG["user.company_changed"]
+    assert username_event.fields == {"username"}
+    assert company_event.fields == {
+        "company_id",
+        "employee_no",
+        "department",
+        "location",
+    }
+    assert company_event.always_recorded == company_event.fields
+    assert company_event.nullable_fields == company_event.fields
+    for definition in (username_event, company_event):
+        assert _EVENT_TYPE_RE.match(definition.event_type)
+        assert definition.entity_type == "user"
+        for field_name in definition.fields:
+            assert not any(
+                secret in field_name
+                for secret in ("password", "secret", "token", "session")
+            )
+
+
 class _RecordAuditBody(BaseModel):
     entity_id: str
 
