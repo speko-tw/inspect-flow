@@ -121,7 +121,9 @@ class TestAlgAc11WriteTimingSequence:
     ``created_by`` is the current operator on every row written.
     """
 
-    def test_full_sequence(self, session, operator):
+    def test_full_sequence(
+        self, session, operator, registered_permission_codes
+    ):
         # -- Given -----------------------------------------------
         # Two enabled Admins, neither the built-in system account
         # (``operator``) itself -- keeping ``operator`` a non-Admin
@@ -132,7 +134,12 @@ class TestAlgAc11WriteTimingSequence:
         admin_2 = create_root_user_with_company(session, "ADM11-2")
         admin_2.is_admin = True
 
-        role_1 = create_role(session, name="R1-AC11")
+        # R1 carries a non-empty permission code so role.deleted's
+        # before content below exercises a real permission_codes
+        # value, not just an empty one.
+        role_1 = create_role(
+            session, name="R1-AC11", permission_codes={"report.approve"}
+        )
         project = _new_project(operator, "P-AC11")
         member_a_user = create_root_user_with_company(session, "MA-AC11")
         member_b_user = create_root_user_with_company(session, "MB-AC11")
@@ -158,11 +165,18 @@ class TestAlgAc11WriteTimingSequence:
         # -- When (ALG-AC11's operation sequence) -----------------
 
         # 1. 新增角色 R2 -> role.created
-        role_2 = create_role(session, name="R2-AC11")
+        role_2 = create_role(
+            session, name="R2-AC11", permission_codes={"report.read"}
+        )
         session.commit()
         row = tracker.assert_one("role.created")
         assert row.entity_id == role_2.id
         assert row.created_by == operator.id
+        assert row.before is None
+        assert row.after == {
+            "name": "R2-AC11",
+            "permission_codes": ["report.read"],
+        }
 
         # 2. R2 改名 -> role.updated
         update_role(session, role_2, name="R2-AC11-Renamed")
@@ -188,17 +202,27 @@ class TestAlgAc11WriteTimingSequence:
             "project_id": str(project.id),
             "user_id": str(user_u.id),
         }
-        assert _field(row.after, "role_ids") == [str(role_2.id)]
+        assert row.after == {
+            "role_ids": [str(role_2.id)],
+            "project_id": str(project.id),
+            "user_id": str(user_u.id),
+        }
 
         # 4. 替 U 再加 R1 -> project_member.roles_changed
         assign_role(session, member_u, role_1.id)
         session.commit()
         row = tracker.assert_one("project_member.roles_changed")
         assert row.entity_id == member_u.id
-        assert _field(row.before, "role_ids") == [str(role_2.id)]
-        assert sorted(_field(row.after, "role_ids")) == sorted(
-            [str(role_1.id), str(role_2.id)]
-        )
+        assert row.before == {
+            "role_ids": [str(role_2.id)],
+            "project_id": str(project.id),
+            "user_id": str(user_u.id),
+        }
+        assert row.after == {
+            "role_ids": sorted([str(role_1.id), str(role_2.id)]),
+            "project_id": str(project.id),
+            "user_id": str(user_u.id),
+        }
 
         # 5. 把 V 加入 P 但不指派角色 -> DOM-R22 範圍外，不寫紀錄
         user_v = create_root_user_with_company(session, "V-AC11")
@@ -216,6 +240,9 @@ class TestAlgAc11WriteTimingSequence:
         session.commit()
         row = tracker.assert_one("role.deleted")
         assert row.entity_id == role_1_id
+        assert row.after is None
+        assert _field(row.before, "name") == "R1-AC11"
+        assert _field(row.before, "permission_codes") == ["report.approve"]
         assert set(_field(row.before, "project_member_ids")) == {
             str(member_a.id),
             str(member_b.id),
@@ -228,7 +255,12 @@ class TestAlgAc11WriteTimingSequence:
         session.commit()
         row = tracker.assert_one("project_member.removed")
         assert row.entity_id == member_v_id
-        assert _field(row.before, "role_ids") == []
+        assert row.after is None
+        assert row.before == {
+            "project_id": str(project.id),
+            "user_id": str(user_v.id),
+            "role_ids": [],
+        }
 
         # 8. 取消一位 Admin 的 is_admin -> user.admin_changed
         #    （admin_2 仍是啟用中的 Admin，DOM-R07 不擋）
