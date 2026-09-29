@@ -361,7 +361,7 @@ describe('admin user and company pages', () => {
     })
   })
 
-  it('patches only company fields when the company stays the same', async () => {
+  it('patches fields when the company stays the same', async () => {
     const fetchMock = managementFetch()
     renderAdmin()
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
