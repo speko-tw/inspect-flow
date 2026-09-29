@@ -421,6 +421,24 @@ class TestRegexMatchesUpsertReplaceTruncateAndCte:
             "REPLACE INTO -- c\naudit_logs (id) VALUES ('x')",
             "INSERT INTO /* c */ audit_logs (id) VALUES ('x') "
             "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            # PR #253 review round 1: a comment between two halves of
+            # a *compound* keyword, or between the second half and
+            # the table name -- not only before the table name as
+            # above. Before normalization these slipped through
+            # because e.g. "DELETE" and "FROM" no longer had real
+            # whitespace between them once the comment was removed.
+            "DELETE/*c*/FROM audit_logs",
+            "REPLACE/*c*/INTO audit_logs (id) VALUES ('x')",
+            "INSERT INTO audit_logs (id) VALUES (1) "
+            "ON/*c*/CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "UPDATE audit_logs/*c*/SET entity_type = 'x'",
+            # PR #253 review round 1: a comment inside a CTE body
+            # that happens to contain a ``)`` character -- before
+            # normalization this closed the CTE's body early (paren
+            # depth reached 0 on the comment's own ``)``), so the
+            # primary statement after it was never reached.
+            "WITH t AS (SELECT 1 /* ) */) "
+            "UPDATE audit_logs SET entity_type = 'x'",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
@@ -434,15 +452,23 @@ class TestRegexMatchesUpsertReplaceTruncateAndCte:
             "INSERT INTO audit_logs (id) VALUES ('x') "
             "ON CONFLICT (id) DO NOTHING",
             "INSERT INTO audit_logs (id) VALUES ('x')",
-            # A value's own literal text containing the phrase this
+            # A literal value's own text containing the phrase this
             # module searches for must not cause a false positive:
-            # the VALUES tuple is skipped whole before searching for
-            # a real ON CONFLICT clause.
+            # every string literal's contents are emptied out before
+            # any keyword search runs (see _normalize_sql).
             "INSERT INTO audit_logs (id, after) VALUES "
             "('x', 'on conflict do update, then on conflict do "
             "nothing') ON CONFLICT (id) DO NOTHING",
             "INSERT INTO audit_logs (id, after) VALUES "
             "('x', 'contains on conflict do update text')",
+            # PR #253 review round 1: the same false positive, but
+            # with the literal text in a later clause (RETURNING)
+            # rather than the inserted value itself -- not bounded by
+            # skipping only the VALUES tuple, which is exactly why
+            # the fix normalizes every string literal in the whole
+            # statement, not only ones inside a VALUES list.
+            "INSERT INTO audit_logs (id, entity_type) VALUES (2, 'new') "
+            "RETURNING 'ON CONFLICT (id) DO UPDATE'",
             # INSERT OR <algorithm> other than REPLACE never
             # overwrites an existing row.
             "INSERT OR IGNORE INTO audit_logs (id) VALUES ('x')",
@@ -603,6 +629,9 @@ class TestAppendOnlyGuard:
             "UPDATE audit_logs SET entity_type = 'changed'",
             # SQLite's ``UPDATE OR <algorithm>`` conflict clause.
             "UPDATE OR IGNORE audit_logs SET entity_type = 'changed'",
+            # PR #253 review round 1: a comment right after the table
+            # name, before SET -- not only before the table name.
+            "UPDATE audit_logs/*c*/SET entity_type = 'changed'",
         ]
 
     def _text_delete_statements(self, engine: Engine) -> list[str]:
@@ -615,6 +644,9 @@ class TestAppendOnlyGuard:
             "\n   DELETE FROM audit_logs",
             # A leading SQL comment before the keyword.
             "/* audit-log guard test */ DELETE FROM audit_logs",
+            # PR #253 review round 1: a comment between the two
+            # halves of the compound ``DELETE FROM`` keyword.
+            "DELETE/*c*/FROM audit_logs",
         ]
 
     def test_text_updates_are_all_rejected(
@@ -668,6 +700,9 @@ class TestAppendOnlyGuard:
             # A comment between the keyword and the table name.
             "REPLACE INTO /* audit-log guard test */ audit_logs "
             "(id) VALUES ('x')",
+            # PR #253 review round 1: a comment between the two
+            # halves of the compound ``REPLACE INTO`` keyword.
+            "REPLACE/*c*/INTO audit_logs (id) VALUES ('x')",
         ]
 
     def _text_upsert_do_update_statements(
@@ -684,6 +719,10 @@ class TestAppendOnlyGuard:
             f"INSERT INTO /* c */ audit_logs (id) "
             f"VALUES ('{existing_id}') "
             "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+            # PR #253 review round 1: a comment between the two
+            # halves of the compound ``ON CONFLICT`` keyword.
+            f"INSERT INTO audit_logs (id) VALUES ('{existing_id}') "
+            "ON/*c*/CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
         ]
 
     def _text_cte_mutation_statements(self, engine: Engine) -> list[str]:
@@ -695,6 +734,12 @@ class TestAppendOnlyGuard:
             # The mutation nested inside the CTE's own body
             # (PostgreSQL's data-modifying CTEs).
             "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
+            # PR #253 review round 1: a comment inside the CTE body
+            # containing a ``)`` character, which (before
+            # normalization) closed the body's paren pairing early
+            # and hid the real mutation that follows.
+            "WITH t AS (SELECT 1 /* ) */) "
+            "UPDATE audit_logs SET entity_type = 'changed'",
         ]
 
     def test_text_truncate_is_all_rejected(
@@ -796,6 +841,54 @@ class TestAppendOnlyGuard:
             conn.commit()
 
         assert snapshot() == before
+
+    def test_plain_insert_with_conflict_looking_returning_still_works(
+        self, engine, operator
+    ):
+        """PR #253 review round 1: a plain ``INSERT`` (no
+        ``ON CONFLICT`` clause at all) whose ``RETURNING`` clause
+        happens to return a string literal that reads like an
+        ``ON CONFLICT ... DO UPDATE`` clause must still succeed --
+        proving the guard's search is not fooled by literal text
+        appearing anywhere in the statement, not only inside a
+        ``VALUES`` list (the false positive a reviewer found).
+        """
+        before = len(_read_all_audit_log_rows(engine))
+        new_id = uuid7()
+        insert_stmt = text(
+            "INSERT INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after) "
+            "RETURNING 'ON CONFLICT (id) DO UPDATE'"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            returned = conn.execute(
+                insert_stmt,
+                {
+                    "id": new_id,
+                    "created_at": clock.utc_now(),
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": None,
+                },
+            ).scalar()
+            conn.commit()
+
+        assert returned == "ON CONFLICT (id) DO UPDATE"
+        assert len(_read_all_audit_log_rows(engine)) == before + 1
 
     @pytest.mark.sqlite_only
     def test_insert_or_ignore_still_works(self, engine, operator):

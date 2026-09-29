@@ -40,8 +40,23 @@ to special-case each one, and listening on the class means every
 ``create_engine_from_settings`` call) is covered automatically, with
 no per-engine wiring required.
 
-The check itself looks at the statement's leading keyword and the
-table reference that immediately follows it -- for a bare
+Before any of that keyword/table matching runs, :func:`_normalize_sql`
+first collapses every SQL comment (``-- ...``, ``/* ... */``) to a
+single space and every single-quoted string literal's contents to
+nothing (``''``): a first PR #253 review round found that matching
+straight against the raw statement missed a comment inserted between
+two keywords or between a keyword and the table name (``DELETE/*c*/
+FROM``, ``UPDATE audit_logs/*c*/SET``), a comment hiding a close
+paren that should have ended a CTE body early, and a literal value
+(for example in a later ``RETURNING`` clause) whose own text happened
+to contain the words ``on conflict do update``. Normalizing once,
+before any other check, means every matcher below -- keyword
+boundaries, table-name boundaries, paren pairing, the ``ON CONFLICT``
+search -- only ever sees the statement's real structure, never text
+that a comment or a literal value merely happens to contain.
+
+Once normalized, the check looks at the statement's leading keyword
+and the table reference that immediately follows it -- for a bare
 ``UPDATE``/``DELETE FROM`` (skipping SQLite's ``UPDATE OR
 <conflict-algorithm>`` and PostgreSQL's ``ONLY`` in between), and
 (issue #233) for every other shape that modifies an existing
@@ -55,33 +70,35 @@ SQLite's shared ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert
 mutation is the CTE's own body (PostgreSQL's data-modifying CTEs,
 e.g. ``WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT ...``)
 or the primary statement the CTE list feeds
-(``WITH t AS (...) UPDATE audit_logs SET ...``). A comment (``--``
-or ``/* */``) between the keyword and the table name is skipped the
-same way one before the statement is. None of this scans the rest
-of the statement text beyond what each shape's own grammar requires,
-so a table merely mentioning ``audit_logs`` elsewhere (for example
-in a subquery, or a string literal in another table's ``SET``
-clause) is never a false positive; an unquoted identifier match is
-both greedy *and* boundary-checked (see ``_table_identifier``'s
-docstring), so neither ``audit_logs_x`` nor a same-prefix table
-using characters outside this module's identifier class
-(``audit_logs$archive``, ``audit_logs中``) is ever mistaken for
-``audit_logs``.
+(``WITH t AS (...) UPDATE audit_logs SET ...``). None of this scans
+the rest of the statement text beyond what each shape's own grammar
+requires, so a table merely mentioning ``audit_logs`` elsewhere (for
+example in a subquery, or a string literal in another table's
+``SET`` clause) is never a false positive; an unquoted identifier
+match is both greedy *and* boundary-checked (see
+``_table_identifier``'s docstring), so neither ``audit_logs_x`` nor
+a same-prefix table using characters outside this module's
+identifier class (``audit_logs$archive``, ``audit_logs中``) is ever
+mistaken for ``audit_logs``.
 
 Known limitations -- these are not covered: a database client
 outside this backend (e.g. a bare ``psql`` session; there is no way
 for an in-process SQLAlchemy event to intercept a connection this
-process never made -- out of scope per ALG-R04's own text); an
-``INSERT ... SELECT ...`` upsert (no ``VALUES`` list) whose
-``SELECT`` happens to contain the literal text of an
-``ON CONFLICT ... DO UPDATE`` clause -- not a shape this codebase's
-own SQL ever produces for ``audit_logs``, unlike the
-``VALUES``-based form, which this guard's quote-aware scan of the
-value list makes immune to this even when a value's own literal
-text contains that phrase; and a ``WITH`` statement using CTE syntax
-this module's regex-based parsing does not recognize (for example a
-dialect extension it does not know), in which case that CTE's own
-body is not checked but the primary statement following it still is.
+process never made -- out of scope per ALG-R04's own text); a
+PostgreSQL dollar-quoted string (``$$...$$``/``$tag$...$tag$``) or a
+non-standard backslash-escaped quote inside a single-quoted string
+(``standard_conforming_strings = off``), neither of which
+:func:`_normalize_sql` recognizes as a string literal, so a comment
+marker or keyword hidden inside one of these would not be
+normalized away -- not a shape this codebase's own SQL ever
+produces; a nested block comment (``/* /* ... */ ... */``,
+non-standard but PostgreSQL accepts it), which is treated the same
+way the original leading-trivia check always did (matched
+non-greedily, so it ends at the first ``*/``); and a ``WITH``
+statement using CTE syntax this module's regex-based parsing does
+not recognize (for example a dialect extension it does not know),
+in which case that CTE's own body is not checked but the primary
+statement following it still is.
 """
 
 import re
@@ -165,33 +182,86 @@ def _table_identifier(quoted_group: str, plain_group: str) -> str:
     )
 
 
-# A leading SQL line comment (``-- ...`` to end of line/string) or
-# block comment (``/* ... */``, not itself nested), or plain
-# whitespace. Used both before a statement's real keyword and, via
-# :func:`_trivia_end`, between that keyword and the table reference
-# that follows it (ALG-AC03's "關鍵字與表名之間夾註解" case).
-_LEADING_TRIVIA_RE = re.compile(
-    r"(?:\s+|--[^\n]*(?:\n|\Z)|/\*.*?\*/)",
-    re.DOTALL,
-)
+def _normalize_sql(statement: str) -> str:
+    """Return a copy of ``statement`` with every SQL comment
+    (``-- ...`` to end of line, ``/* ... */``) replaced by a single
+    space, and every single-quoted string literal's contents
+    (handling ``''`` as an escaped quote) replaced by nothing
+    (``''``) -- run once, before any other matcher in this module,
+    so a keyword, table name, or clause that only *appears* inside a
+    comment or a literal value's own text can never be mistaken for
+    a real one (see the module docstring's account of PR #253's
+    review). A comment always becomes exactly one space rather than
+    nothing, so two keywords a comment used to sit between (for
+    example ``DELETE/*c*/FROM``) stay correctly separated. A
+    double-quoted identifier is copied through unchanged: its
+    contents are read verbatim by :func:`_identifier`/
+    :func:`_table_identifier` already, and are never string data
+    that could hide a comment marker or a keyword.
+    """
+    pieces: list[str] = []
+    pos = 0
+    length = len(statement)
+    while pos < length:
+        char = statement[pos]
+        if char == "'":
+            pos += 1
+            while pos < length:
+                if statement[pos] == "'":
+                    if pos + 1 < length and statement[pos + 1] == "'":
+                        pos += 2
+                        continue
+                    pos += 1
+                    break
+                pos += 1
+            pieces.append("''")
+            continue
+        if char == '"':
+            start = pos
+            pos += 1
+            while pos < length:
+                if statement[pos] == '"':
+                    if pos + 1 < length and statement[pos + 1] == '"':
+                        pos += 2
+                        continue
+                    pos += 1
+                    break
+                pos += 1
+            pieces.append(statement[start:pos])
+            continue
+        if statement.startswith("--", pos):
+            newline = statement.find("\n", pos)
+            pos = length if newline == -1 else newline
+            pieces.append(" ")
+            continue
+        if statement.startswith("/*", pos):
+            end = statement.find("*/", pos + 2)
+            pos = length if end == -1 else end + 2
+            pieces.append(" ")
+            continue
+        pieces.append(char)
+        pos += 1
+    return "".join(pieces)
+
+
+# Plain whitespace: every SQL comment this module's matchers could
+# meet has already become a single space, via _normalize_sql above,
+# by the time any of them runs.
+_LEADING_TRIVIA_RE = re.compile(r"\s+")
 
 
 def _trivia_end(statement: str, pos: int) -> int:
-    """Return the index in ``statement`` right after every run of
-    whitespace and SQL comments (mixed, any number of times)
-    starting at ``pos``.
+    """Return the index in ``statement`` right after the run of
+    whitespace starting at ``pos`` (empty if there is none).
     """
-    while True:
-        match = _LEADING_TRIVIA_RE.match(statement, pos)
-        if match is None or match.end() == pos:
-            return pos
-        pos = match.end()
+    match = _LEADING_TRIVIA_RE.match(statement, pos)
+    return pos if match is None else match.end()
 
 
 def _skip_leading_trivia(statement: str) -> str:
-    """Strip every leading run of whitespace and SQL comments off
-    the front of ``statement``, so the matchers below always see
-    the statement's real leading keyword.
+    """Strip leading whitespace off the front of ``statement``, so
+    the matchers below always see the statement's real leading
+    keyword.
     """
     return statement[_trivia_end(statement, 0) :]
 
@@ -364,7 +434,6 @@ def _skip_paren_group(statement: str, pos: int) -> int:
 
 
 _INSERT_INTO_KEYWORD_RE = re.compile(r"INSERT\s+INTO", re.IGNORECASE)
-_VALUES_KEYWORD_RE = re.compile(r"VALUES\b", re.IGNORECASE)
 _ON_CONFLICT_DO_RE = re.compile(
     r"\bON\s+CONFLICT\b.*?\bDO\s+(?P<action>UPDATE|NOTHING)\b",
     re.IGNORECASE | re.DOTALL,
@@ -378,15 +447,13 @@ def _matches_insert_on_conflict_do_update(statement: str) -> bool:
     ``ON CONFLICT DO NOTHING`` and a plain ``INSERT`` with no
     ``ON CONFLICT`` clause at all must both pass through untouched.
 
-    The optional column list and any ``VALUES (...)`` tuple list are
-    skipped first, using :func:`_find_matching_paren`'s quote-aware
-    scan, before searching for ``ON CONFLICT``: this is what keeps
-    the search from ever mistaking literal text inside an inserted
-    value (for example an audit record whose own content happens to
-    contain the words "on conflict do update") for the real clause
-    -- see the module docstring's "Known limitations" for the one
-    shape (``INSERT ... SELECT ...``) this does not bound the same
-    way.
+    Searches for ``ON CONFLICT`` anywhere after the table name,
+    rather than only right after a ``VALUES (...)`` list, because
+    ``statement`` has already been through :func:`_normalize_sql`:
+    every string literal's own content -- wherever in the statement
+    it appears, including a later ``RETURNING`` clause, not only an
+    inserted value -- has already been emptied out, so nothing
+    literal can be mistaken for this clause.
     """
     match = _INSERT_INTO_KEYWORD_RE.match(statement)
     if match is None:
@@ -395,18 +462,7 @@ def _matches_insert_on_conflict_do_update(statement: str) -> bool:
     table_match = _TABLE_REF_RE.match(statement, pos)
     if table_match is None or not _table_ref_is_audit_logs(table_match):
         return False
-    pos = _trivia_end(statement, table_match.end())
-    pos = _skip_paren_group(statement, pos)
-    values_match = _VALUES_KEYWORD_RE.match(statement, pos)
-    if values_match is not None:
-        pos = _trivia_end(statement, values_match.end())
-        while pos < len(statement) and statement[pos] == "(":
-            pos = _skip_paren_group(statement, pos)
-            if pos < len(statement) and statement[pos] == ",":
-                pos = _trivia_end(statement, pos + 1)
-                continue
-            break
-    conflict_match = _ON_CONFLICT_DO_RE.search(statement, pos)
+    conflict_match = _ON_CONFLICT_DO_RE.search(statement, table_match.end())
     return (
         conflict_match is not None
         and conflict_match.group("action").upper() == "UPDATE"
@@ -508,8 +564,16 @@ def _targets_audit_logs(statement: str) -> bool:
     (unquoted, double-quoted, schema-prefixed, mixed-case and
     whitespace/comment variation all resolve the same way) and the
     "Known limitations" this does not cover.
+
+    Runs :func:`_normalize_sql` first, every time: this function is
+    also how a CTE body recurses back in (see
+    :func:`_targets_audit_logs_after_with`), and that substring has
+    already been normalized once as part of the outer statement, so
+    normalizing again here is idempotent -- a comment or a string
+    literal that no longer exists in the text cannot be "found"
+    again.
     """
-    statement = _skip_leading_trivia(statement)
+    statement = _skip_leading_trivia(_normalize_sql(statement))
     if _targets_audit_logs_after_with(statement):
         return True
     return _targets_audit_logs_without_with(statement)
