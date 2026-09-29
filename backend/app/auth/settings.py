@@ -18,6 +18,29 @@ ABSOLUTE_TIMEOUT_ENV_VAR = "INSPECTFLOW_SESSION_ABSOLUTE_TIMEOUT_HOURS"
 _DEFAULT_IDLE_TIMEOUT = timedelta(minutes=60)
 _DEFAULT_ABSOLUTE_TIMEOUT = timedelta(hours=8)
 
+FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_THRESHOLD"
+FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES"
+LOCKOUT_DURATION_ENV_VAR = "INSPECTFLOW_LOGIN_LOCKOUT_MINUTES"
+
+
+@dataclass(frozen=True)
+class LockoutSettings:
+    failure_threshold: int
+    failure_window: timedelta
+    lockout_duration: timedelta
+
+
+def get_lockout_settings() -> LockoutSettings:
+    """Read AUT-R28 values at call time so env overrides take effect."""
+    threshold = os.environ.get(FAILURE_THRESHOLD_ENV_VAR) or "10"
+    window = os.environ.get(FAILURE_WINDOW_ENV_VAR) or "15"
+    duration = os.environ.get(LOCKOUT_DURATION_ENV_VAR) or "15"
+    return LockoutSettings(
+        failure_threshold=int(threshold),
+        failure_window=timedelta(minutes=float(window)),
+        lockout_duration=timedelta(minutes=float(duration)),
+    )
+
 
 @dataclass(frozen=True)
 class SessionTimeouts:

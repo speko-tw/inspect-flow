@@ -22,6 +22,7 @@ from app.auth.dependencies import (
     has_effective_temporary_password_flag,
     register_temporary_password_allowed,
 )
+from app.auth.lockout import is_locked, record_failure
 from app.auth.login import authenticate
 from app.auth.password_service import set_password
 from app.auth.passwords import check_password_length, verify_password
@@ -119,6 +120,9 @@ def login(
     """
     user = authenticate(db, body.email, body.password)
     if user is None:
+        # A raised APIError rolls back get_db's unit of work. Persist
+        # the failure counter and any user.locked event first.
+        db.commit()
         raise APIError(ErrorCode.AUTH_INVALID_CREDENTIALS, 401)
 
     _session, token = create_session(db, user)
@@ -233,9 +237,13 @@ def change_password(
     user_password = db.scalar(
         select(UserPassword).where(UserPassword.user_id == user.id)
     )
+    if is_locked(db, user):
+        raise APIError(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT, 400)
     if user_password is None or not verify_password(
         user_password.password_hash, body.current_password
     ):
+        record_failure(db, user)
+        db.commit()
         raise APIError(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT, 400)
 
     if not check_password_length(body.new_password):

@@ -18,6 +18,11 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth.lockout import (
+    clear_failed_attempts,
+    is_locked,
+    record_failure,
+)
 from app.auth.passwords import hash_password, needs_rehash, verify_password
 from app.models import User, UserPassword
 
@@ -93,15 +98,22 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
     if user is None:
         _log_failed(None, "invalid_credentials")
         return None
+    if is_locked(db, user):
+        _log_failed(str(user.id), "locked")
+        return None
     if user_password is None:
+        record_failure(db, user)
         _log_failed(str(user.id), "invalid_credentials")
         return None
     if user.auth_source != "local":
+        record_failure(db, user)
         _log_failed(str(user.id), "invalid_credentials")
         return None
     if not password_ok:
+        record_failure(db, user)
         _log_failed(str(user.id), "invalid_credentials")
         return None
+    clear_failed_attempts(db, user)
     if not user.is_active:
         _log_failed(str(user.id), "account_disabled")
         return None
