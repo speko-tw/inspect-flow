@@ -1,5 +1,5 @@
-"""Tests for ``app/services/users.py`` (DOM-AC04, DOM-AC13,
-DOM-AC22).
+"""Tests for ``app/services/users.py`` (DOM-AC04, DOM-AC05, DOM-AC06,
+DOM-AC13, DOM-AC22).
 
 Fixtures (``session``, ``operator``) come from this directory's
 ``conftest.py``.
@@ -8,14 +8,20 @@ Fixtures (``session``, ``operator``) come from this directory's
 import pytest
 from sqlalchemy import func, select
 
-from app.models import User
+from app.models import AuditLog, User
 from app.services.companies import create_company, update_company
 from app.services.users import (
+    AdminStatusUnchangedError,
+    BuiltInAccountModificationError,
     CompanyNotActiveError,
     ExternalBasicFieldModificationError,
+    LastActiveAdminRemovalError,
     create_user,
+    set_is_active,
+    set_is_admin,
     update_user_manual,
 )
+from tests.db.conftest import create_root_user_with_company
 from tests.services.conftest import snapshot_persisted_columns
 
 
@@ -219,3 +225,132 @@ class TestDomAc22DisabledCompanyIsRejectedOnlyForCompanyAssignment:
         update_user_manual(session, user_v, company_id=company_a.id)
         session.commit()
         assert user_v.company_id == company_a.id
+
+
+def _audit_rows_for(session, entity_id) -> list[AuditLog]:
+    return list(
+        session.scalars(
+            select(AuditLog).where(AuditLog.entity_id == entity_id)
+        ).all()
+    )
+
+
+class TestDomAc05BuiltInAccountProtected:
+    """DOM-AC05: initialized database (built-in ``admin`` plus
+    another Admin); through the Service layer, try to disable
+    ``admin`` and to take away its ``is_admin`` -- both rejected,
+    ``admin``'s data unchanged.
+    """
+
+    def test_builtin_account_rejects_deactivation_and_admin_removal(
+        self, session, operator
+    ):
+        # ``operator`` is the built-in admin (is_system=True, set by
+        # this directory's conftest); DOM-AC05's precondition also
+        # needs it to already be an Admin.
+        operator.is_admin = True
+        session.flush()
+        second_admin = create_root_user_with_company(session, "ADMIN05")
+        second_admin.is_admin = True
+        session.commit()
+        before = snapshot_persisted_columns(operator)
+
+        with pytest.raises(BuiltInAccountModificationError):
+            set_is_active(session, operator, False)
+        assert snapshot_persisted_columns(operator) == before
+
+        with pytest.raises(BuiltInAccountModificationError):
+            set_is_admin(session, operator, False)
+        assert snapshot_persisted_columns(operator) == before
+
+        session.commit()
+        assert operator.is_active is True
+        assert operator.is_admin is True
+        assert _audit_rows_for(session, operator.id) == []
+
+
+class TestDomAc06LastActiveAdminProtected:
+    """DOM-AC06: a database with exactly one active, non-built-in
+    Admin; taking away its ``is_admin`` and deactivating it are both
+    rejected; after a second Admin is added, taking away the first
+    one's ``is_admin`` succeeds.
+    """
+
+    def test_last_admin_protected_until_second_admin_exists(
+        self, session, operator
+    ):
+        lone_admin = create_root_user_with_company(session, "LONE06")
+        lone_admin.is_admin = True
+        session.commit()
+        assert lone_admin.is_active is True
+        before = snapshot_persisted_columns(lone_admin)
+
+        with pytest.raises(LastActiveAdminRemovalError):
+            set_is_admin(session, lone_admin, False)
+        # In-session state first: expire_all() would discard any
+        # unflushed change and hide it from the assertion.
+        assert snapshot_persisted_columns(lone_admin) == before
+
+        with pytest.raises(LastActiveAdminRemovalError):
+            set_is_active(session, lone_admin, False)
+        assert snapshot_persisted_columns(lone_admin) == before
+
+        session.commit()
+        session.expire_all()
+        after = snapshot_persisted_columns(lone_admin)
+        assert after == before
+        assert after["is_admin"] is True
+        assert after["is_active"] is True
+        assert _audit_rows_for(session, lone_admin.id) == []
+
+        second_admin = create_root_user_with_company(session, "SECOND06")
+        second_admin.is_admin = True
+        session.commit()
+
+        set_is_admin(session, lone_admin, False)
+        session.commit()
+
+        assert lone_admin.is_admin is False
+        rows = _audit_rows_for(session, lone_admin.id)
+        assert len(rows) == 1
+        assert rows[0].event_type == "user.admin_changed"
+        assert rows[0].before == {"is_admin": True}
+        assert rows[0].after == {"is_admin": False}
+        assert rows[0].created_by == operator.id
+
+
+class TestSetIsAdminUnchangedRejected:
+    def test_same_value_raises_and_writes_nothing(self, session, operator):
+        company = create_company(session, **_company_kwargs("C-ADMU"))
+        session.flush()
+        user = create_user(session, **_user_kwargs("U-ADMU", company.id))
+        session.commit()
+        before = snapshot_persisted_columns(user)
+
+        with pytest.raises(AdminStatusUnchangedError):
+            set_is_admin(session, user, False)
+
+        assert snapshot_persisted_columns(user) == before
+        assert _audit_rows_for(session, user.id) == []
+
+
+class TestSetIsActiveWritesNoAuditEvent:
+    """DOM-R22: ``is_active`` changes are outside the audited event
+    scope, unlike ``is_admin``.
+    """
+
+    def test_is_active_change_has_no_audit_event(self, session, operator):
+        company = create_company(session, **_company_kwargs("C-ACTU"))
+        session.flush()
+        user = create_user(session, **_user_kwargs("U-ACTU", company.id))
+        session.commit()
+
+        set_is_active(session, user, False)
+        session.commit()
+        assert user.is_active is False
+
+        set_is_active(session, user, True)
+        session.commit()
+        assert user.is_active is True
+
+        assert _audit_rows_for(session, user.id) == []
