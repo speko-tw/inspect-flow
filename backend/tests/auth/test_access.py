@@ -50,7 +50,12 @@ _ANY_UUID = str(uuid.uuid4())
 
 def _make_project(session: Session, creator: User, code: str) -> Project:
     project = Project(
-        project_code=code, created_by=creator.id, updated_by=creator.id
+        name="示範廠機電工程",
+        client_name="示範業主",
+        site_location="示範工地",
+        project_code=code,
+        created_by=creator.id,
+        updated_by=creator.id,
     )
     session.add(project)
     session.flush()
