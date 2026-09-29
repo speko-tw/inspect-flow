@@ -90,6 +90,18 @@ class ErrorCode(DescribedStrEnum):
         "auth.password_unchanged",
         "The new password must differ from the current temporary password.",
     )
+    ROLE_NOT_FOUND = (
+        "role.not_found",
+        "The requested role does not exist.",
+    )
+    ROLE_NAME_CONFLICT = (
+        "role.name_conflict",
+        "A role with this name already exists.",
+    )
+    ROLE_PERMISSION_CODE_INVALID = (
+        "role.permission_code_invalid",
+        "One or more permission codes are invalid or unavailable.",
+    )
 
 
 def build_error_code_descriptions(
