@@ -385,25 +385,47 @@ class TestConservativeGuardBlocksRealWrites:
             # runs, so there is no paren to miscount any more.
             "WITH t AS (SELECT 1 /* ) */) "
             "UPDATE audit_logs SET entity_type = 'x'",
-            # PR #253 review round 3: a PostgreSQL/SQLite E'...'
-            # escape string using a backslash-escaped quote --
-            # normalization must recognize this as one escaped quote
-            # (not the string's own terminator), so the string still
-            # ends at its real closing quote and the upsert's own
-            # ON CONFLICT ... DO UPDATE (right after) stays visible.
+            # PR #253 review round 3: a PostgreSQL E'...' escape
+            # string (SQLite has no equivalent syntax) using a
+            # backslash-escaped quote -- normalization must recognize
+            # this as one escaped quote (not the string's own
+            # terminator), so the string still ends at its real
+            # closing quote and the upsert's own ON CONFLICT ... DO
+            # UPDATE (right after) stays visible. This unit test
+            # calls _targets_audit_logs directly (no database), so it
+            # proves only the text-matching logic, not that any
+            # database executes this statement.
             "INSERT INTO audit_logs (id, note) VALUES (1, E'\\'') "
             "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            # PR #253 review round 3: an exactly-quoted audit_logs,
-            # including back-quoted and bracket-quoted (SQLite/
-            # PostgreSQL both also accept these as identifier
-            # quoting), still resolves to the real table and is
-            # blocked -- only a *different* quoted identifier that
-            # merely contains this text is not (see the "does not
-            # match" tests below).
+            # PR #253 review round 3: an exactly double-quoted
+            # audit_logs still resolves to the real table and is
+            # blocked -- only a *different* double-quoted identifier
+            # that merely contains this text is not (see the "does
+            # not match" tests below).
             "UPDATE \"AUDIT_LOGS\" SET entity_type = 'x'",
+            # PR #253 review round 4: a back-quoted or
+            # bracket-quoted audit_logs is *not* specially resolved
+            # (unlike double-quoted -- see the module docstring), but
+            # its content is never consumed/hidden either, so the
+            # bare word audit_logs sitting inside it is still found
+            # like any other token.
             "DELETE FROM `audit_logs`",
             "TRUNCATE [audit_logs]",
             "UPDATE `main`.`audit_logs` SET entity_type = 'x'",
+            # PR #253 review round 4: a PostgreSQL U&"..." Unicode
+            # escape identifier is never decoded, so it is
+            # conservatively assumed to possibly spell audit_logs
+            # whenever a modification keyword is also present.
+            "UPDATE U&\"aud\\0069t_logs\" SET entity_type = 'x'",
+            'DELETE FROM U&"totally_unrelated"',
+            # PR #253 review round 4: since [ is never treated as
+            # identifier-quoting any more, a PostgreSQL array literal
+            # -- nested, or containing a subquery -- can never
+            # swallow a real modification that follows it.
+            "INSERT INTO t (arr) VALUES (ARRAY[[1, 2], [3, 4]]); "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "SELECT ARRAY[(SELECT count(*) FROM audit_logs)] FROM t; "
+            "UPDATE audit_logs SET entity_type = 'x'",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
@@ -527,6 +549,13 @@ class TestConservativeGuardDoesNotBlockSafeStatements:
             # ASCII-only fold does not, so this is correctly a
             # different, unrelated identifier.
             "UPDATE \"audİt_logs\" SET entity_type = 'x'",
+            # PR #253 review round 4: a back-quoted/bracket-quoted
+            # identifier's content is never consumed, so a plain read
+            # using one -- no modification keyword anywhere in the
+            # statement -- is unaffected either way (contrast the
+            # "accepted false positives" below, where the same
+            # identifiers *are* rejected once a modification keyword
+            # is also present).
             "SELECT * FROM `audit_logs archive`",
             "SELECT * FROM [audit_logs archive]",
         ],
@@ -542,8 +571,8 @@ class TestConservativeGuardAcceptedFalsePositives:
     limitations". These assertions are the *expected*, current
     behavior, not bugs to fix: a change that makes any of them start
     returning ``False`` must be checked against the module docstring
-    first, since it may be reintroducing one of the two review
-    rounds' real bypasses instead of genuinely improving precision.
+    first, since it may be reintroducing one of these review rounds'
+    real bypasses instead of genuinely improving precision.
     """
 
     @pytest.mark.parametrize(
@@ -556,6 +585,23 @@ class TestConservativeGuardAcceptedFalsePositives:
             # TRUNCATE ... CASCADE on a table with no real foreign
             # key relationship to audit_logs at all.
             "TRUNCATE unrelated_table CASCADE",
+            # PR #253 review round 4: a back-quoted or bracket-quoted
+            # identifier that is legitimately a *different* table
+            # merely starting with "audit_logs", or spelling out a
+            # keyword and "audit_logs" in a column alias's own name
+            # -- rejected because, unlike the double-quoted
+            # equivalent, this module no longer tries to resolve
+            # (and thus rule out) what a back-quoted/bracket-quoted
+            # identifier actually names, only whether "audit_logs"
+            # happens to sit inside its un-touched text.
+            "UPDATE `audit_logs archive` SET entity_type = 'x'",
+            "UPDATE [audit_logs archive] SET entity_type = 'x'",
+            "SELECT `UPDATE audit_logs` FROM other",
+            # A U&"..." Unicode escape identifier naming a table with
+            # nothing to do with audit_logs -- rejected because its
+            # escapes are never decoded, so this module cannot tell
+            # it apart from one that does spell audit_logs.
+            'UPDATE U&"totally_unrelated" SET x = 1',
         ],
     )
     def test_known_over_blocking_cases(self, statement):

@@ -57,12 +57,21 @@ precision for safety:
 1. :func:`_normalize_sql` still runs first, unchanged in spirit: it
    replaces every SQL comment with a single space; every
    single-quoted string literal's contents with nothing (aware of
-   PostgreSQL's/SQLite's ``E'...'`` backslash-escape convention, not
-   only ``''`` doubling -- see there); and every quoted (``"..."``,
-   `` `...` ``, ``[...]``) identifier with either the bare word
-   ``audit_logs`` or an inert placeholder, so none of these can hide
-   a keyword, a table name, or make one look like it is there when it
-   is not.
+   PostgreSQL's ``E'...'`` backslash-escape convention, not only
+   ``''`` doubling -- see there; SQLite has no such convention, but
+   this guard fires on the raw SQL text before the DBAPI cursor ever
+   sees it, so recognizing this PostgreSQL-only syntax against a
+   SQLite ``Engine`` in a test is exercising the interception itself,
+   never SQLite's own (nonexistent) support for it); every
+   double-quoted
+   (``"..."``) identifier with either the bare word ``audit_logs`` or
+   an inert placeholder; and every ``U&"..."`` Unicode escape
+   identifier, unconditionally, with the bare word ``audit_logs`` (it
+   is never decoded -- see there) -- so none of these can hide a
+   keyword, a table name, or make one look like it is there when it
+   is not. A back-quoted or bracket-quoted identifier is deliberately
+   left untouched, its content still fully visible to every check
+   below -- see "Known limitations".
 2. If the normalized statement is a ``TRUNCATE`` (checked only by
    its leading keyword -- ``TRUNCATE`` is a standalone statement,
    never nested inside another one), it is rejected when
@@ -97,18 +106,16 @@ statement, ``ON CONFLICT ... DO NOTHING``, and any statement that
 never mentions ``audit_logs`` at all still pass through untouched.
 
 :func:`_contains_audit_logs_token` recognizes ``audit_logs`` whether
-unquoted, double-quoted, back-quoted, bracket-quoted
-(SQLite/PostgreSQL both accept all four; the latter three as
-alternative identifier quoting), schema-prefixed (either side
-independently quotable), or mixed case (ASCII-only, see below); a
-same-prefix but different table (``audit_logs_x``,
-``audit_logs$archive``, ``audit_logs中``, a quoted
-``"audit_logs archive"``) is never mistaken for ``audit_logs``
-itself, and a table merely mentioning ``audit_logs`` inside an
-unrelated string literal or a *different* quoted identifier's own
-name (for example a column aliased ``"UPDATE audit_logs"``) is never
-a false positive either -- both are resolved by :func:`_normalize_sql`
-before anything else runs (see there).
+unquoted, double-quoted, schema-prefixed (either side independently
+quotable), or mixed case (ASCII-only, see below); a same-prefix but
+different table (``audit_logs_x``, ``audit_logs$archive``,
+``audit_logs中``, a double-quoted ``"audit_logs archive"``) is never
+mistaken for ``audit_logs`` itself, and a table merely mentioning
+``audit_logs`` inside an unrelated string literal or a *different*
+double-quoted identifier's own name (for example a column aliased
+``"UPDATE audit_logs"``) is never a false positive either -- both
+are resolved by :func:`_normalize_sql` before anything else runs
+(see there).
 
 A third PR #253 review round found that a quoted identifier's raw
 text (kept verbatim by an earlier version of :func:`_normalize_sql`)
@@ -120,17 +127,42 @@ keyword and a table name) would both wrongly trigger this guard, and
 ``"audİt_logs"`` (using U+0130 LATIN CAPITAL LETTER I WITH DOT ABOVE)
 could too, because Python's ``re.IGNORECASE`` treats that character
 as case-equivalent to plain ASCII ``i`` -- confirmed:
-``re.fullmatch(r"i", "İ", re.IGNORECASE)`` is ``True``. Fixed by
-resolving every quoted/back-quoted/bracket-quoted identifier to
-either the bare word ``audit_logs`` (its own content, doubled
-closing delimiters un-escaped, ASCII-only-case-folded, equals
-``audit_logs`` exactly) or a fixed placeholder that can never match
-anything this module looks for, *before* any keyword or identifier
-search runs -- so a quoted identifier's own text can never again be
-scanned as if it were unquoted syntax, and the same round's fix
-applies ASCII-only case folding (never full Unicode case folding)
-everywhere this module compares text against a fixed keyword, for
-the same reason.
+``re.fullmatch(r"i", "İ", re.IGNORECASE)`` is ``True``. Fixed
+(initially for double-quoted, back-quoted, *and* bracket-quoted
+identifiers alike -- see the next paragraph for why back-quoted and
+bracket-quoted were later reverted) by resolving a quoted
+identifier's content to either the bare word ``audit_logs`` (its own
+content, doubled closing delimiters un-escaped,
+ASCII-only-case-folded, equals ``audit_logs`` exactly) or a fixed
+placeholder that can never match anything this module looks for,
+*before* any keyword or identifier search runs -- so a quoted
+identifier's own text can never again be scanned as if it were
+unquoted syntax; and by making every comparison this module makes
+against a fixed keyword ASCII-only case-folded (never fully
+Unicode-case-folded), for the same reason.
+
+A fourth PR #253 review round found that treating back-quoted and
+bracket-quoted identifiers the same way -- *consuming* their content
+up to a closing delimiter -- was itself a "swallows real content"
+bug of exactly the kind ALG-R04 cannot tolerate even once:
+PostgreSQL's ``[`` is not identifier quoting at all but
+array/subscript syntax (``ARRAY[[1, 2], [3, 4]]``, ``arr[1]``), and
+naively consuming up to the next unescaped ``]`` on a nested or
+multi-dimensional array literal could swallow a real, subsequent
+``UPDATE audit_logs`` into an inert placeholder, missing it
+entirely -- an under-block, not merely an over-block. Since a
+backtick has no competing meaning in either dialect but also gains
+this module nothing precision-wise that leaving it untouched does
+not already achieve just as safely (see below), *both* were
+reverted to being left alone, untouched, in :func:`_normalize_sql`;
+only double-quoting -- unambiguous in both PostgreSQL and SQLite,
+with no competing syntax to collide with -- is still resolved by
+content. The same round added ``U&"..."`` Unicode escape identifier
+handling (PostgreSQL only): rather than decode its ``\\XXXX``
+escapes (which this module does not attempt, to stay simple and
+avoid a new place to get the decoding itself wrong), any ``U&"..."``
+identifier is conservatively assumed to *possibly* spell
+``audit_logs`` and replaced with that literal word unconditionally.
 
 Known limitations -- deliberate false positives this trade-off
 accepts (confirmed, by inspection, that nothing in this codebase's
@@ -153,6 +185,21 @@ unless it is genuinely one of the writes ALG-R04 means to block):
   alias literally named ``update``, ``delete``, ``replace``, or
   ``merge``, would trigger the same false positive if it ever
   appeared in a statement that also mentions ``audit_logs``.
+- A back-quoted or bracket-quoted identifier is left completely
+  unresolved (see the fourth PR #253 review round, above): SQLite's
+  `` `audit_logs` ``/``[audit_logs]`` are still correctly detected
+  (their content is never consumed, so the bare word ``audit_logs``
+  inside them is still found like any other token), but a
+  *different*, legitimately-quoted identifier merely containing
+  ``audit_logs`` or a modification keyword in its own name --
+  `` `audit_logs archive` ``, ``[audit_logs archive]``,
+  ``` SELECT `UPDATE audit_logs` FROM other ``` -- is now rejected
+  too, unlike the equivalent double-quoted case.
+- Any ``U&"..."`` Unicode escape identifier is rejected together with
+  a modification keyword regardless of what it actually spells (its
+  escapes are never decoded -- see above), so a statement using one
+  to name a table entirely unrelated to ``audit_logs`` is rejected
+  too.
 - A database client outside this backend (e.g. a bare ``psql``
   session) is not covered at all -- there is no way for an
   in-process SQLAlchemy event to intercept a connection this process
@@ -161,8 +208,8 @@ unless it is genuinely one of the writes ALG-R04 means to block):
   or a non-standard backslash-escaped quote inside a plain (non-``E``)
   single-quoted string (``standard_conforming_strings = off``) is not
   recognized by :func:`_normalize_sql` as a string literal (an
-  ``E'...'`` escape string, PostgreSQL's and SQLite's own escape
-  convention, *is* -- see there), so text inside one of these two
+  ``E'...'`` escape string, PostgreSQL's own convention (SQLite has
+  no equivalent), *is* -- see there), so text inside one of these two
   remaining forms is not normalized away; database-level protection
   for these two (issue #232) is the accepted mitigation, since a
   reliable text-only check for either is not practical. A nested
@@ -218,8 +265,10 @@ def _ascii_fold(text: str) -> str:
 
 def _is_escape_string_prefix(statement: str, quote_pos: int) -> bool:
     """Return whether the ``'`` at ``quote_pos`` in ``statement``
-    opens a PostgreSQL/SQLite "escape string" (``E'...'``): the
-    character right before it is ``E``/``e``, and the character
+    opens a PostgreSQL "escape string" (``E'...'``; SQLite has no
+    equivalent, but see the module docstring for why this guard
+    still needs to recognize it): the character right before it is
+    ``E``/``e``, and the character
     before *that* (if any) is not itself part of a longer identifier
     -- so a column or table merely ending in ``e`` right before an
     ordinary string (``table_e'x'``, however unlikely) is never
@@ -234,12 +283,17 @@ def _is_escape_string_prefix(statement: str, quote_pos: int) -> bool:
 def _consume_delimited_identifier(
     statement: str, pos: int, close_char: str
 ) -> "tuple[str, int]":
-    """Consume a quoted/back-quoted/bracket-quoted identifier's body
-    starting at ``pos`` (its first content character, already past
-    the opening delimiter), where a doubled ``close_char`` is that
-    style's escape for one literal ``close_char`` inside. Returns the
-    content with every doubled ``close_char`` un-escaped to one, and
-    the index right after the identifier's closing delimiter.
+    """Consume a double-quoted identifier's body starting at ``pos``
+    (its first content character, already past the opening ``"``),
+    where a doubled ``close_char`` is the standard escape for one
+    literal ``close_char`` inside. Returns the content with every
+    doubled ``close_char`` un-escaped to one, and the index right
+    after the identifier's closing delimiter. ``close_char`` is
+    always ``"`` -- kept as a parameter only because a plain
+    double-quoted identifier and a ``U&"..."`` Unicode escape
+    identifier (see :func:`_is_unicode_escape_identifier_prefix`)
+    both call this with the same delimiter, from two different call
+    sites in :func:`_normalize_sql`.
     """
     length = len(statement)
     content: list[str] = []
@@ -260,20 +314,47 @@ _INERT_PLACEHOLDER = "_q_"
 
 
 def _resolve_quoted_identifier(inner: str) -> str:
-    """Return ``audit_logs`` if a quoted identifier's own content
-    (delimiters already stripped, any doubled closing delimiter
-    already un-escaped to one) names ``audit_logs``
-    (:func:`_ascii_fold`ed, so case aside but never across a
-    non-ASCII look-alike); otherwise :data:`_INERT_PLACEHOLDER`, a
-    fixed token that can never equal ``audit_logs`` or contain a
-    modification keyword, so a *different* quoted identifier's own
-    text -- which could be anything, e.g. a column alias literally
-    named ``"UPDATE audit_logs"`` -- is never scanned as if it were
+    """Return ``audit_logs`` if a double-quoted identifier's own
+    content (delimiters already stripped, any doubled ``"`` already
+    un-escaped to one) names ``audit_logs`` (:func:`_ascii_fold`ed,
+    so case aside but never across a non-ASCII look-alike); otherwise
+    :data:`_INERT_PLACEHOLDER`, a fixed token that can never equal
+    ``audit_logs`` or contain a modification keyword, so a
+    *different* quoted identifier's own text -- which could be
+    anything, e.g. a column alias literally named
+    ``"UPDATE audit_logs"`` -- is never scanned as if it were
     unquoted SQL syntax (PR #253's third review round).
+
+    Double-quoting is the only identifier-quoting style this
+    resolves by content: a PR #253 fourth review round found that
+    back-quoted and bracket-quoted identifiers cannot be *consumed*
+    (their delimiters, unlike ``"``, both have another, much more
+    common meaning -- SQLite accepts a backtick anywhere a plain
+    word character could also start a bare identifier, and
+    PostgreSQL's ``[`` is array/subscript syntax, not identifier
+    quoting at all), so this module no longer tries: see the module
+    docstring's "Known limitations".
     """
     if _ascii_fold(inner) == "audit_logs":
         return "audit_logs"
     return _INERT_PLACEHOLDER
+
+
+def _is_unicode_escape_identifier_prefix(statement: str, pos: int) -> bool:
+    """Return whether ``statement`` at ``pos`` starts a PostgreSQL
+    Unicode escape identifier (``U&"..."``, optionally followed by
+    its own ``UESCAPE 'c'`` clause): ``U``/``u`` immediately followed
+    by ``&"`` (no whitespace, per the standard), with the character
+    before it, if any, not itself part of a longer identifier.
+    """
+    if pos + 2 >= len(statement):
+        return False
+    if statement[pos] not in ("U", "u"):
+        return False
+    if statement[pos + 1] != "&" or statement[pos + 2] != '"':
+        return False
+    before = pos - 1
+    return before < 0 or not re.match(r"[\w$]", statement[before])
 
 
 def _normalize_sql(statement: str) -> str:
@@ -283,15 +364,22 @@ def _normalize_sql(statement: str) -> str:
     ``''`` as an escaped quote, and, for an ``E'...'`` escape string,
     also a backslash-escaped character -- see
     :func:`_is_escape_string_prefix`) replaced by nothing (``''``);
-    and every double-quoted, back-quoted, or bracket-quoted
-    identifier replaced per :func:`_resolve_quoted_identifier` --
-    run once, before any other check in this module, so a keyword or
-    table name that only *appears* inside a comment, a literal
-    value's own text, or a *different* quoted identifier's own name
-    can never be mistaken for a real one. A comment always becomes
-    exactly one space rather than nothing, so two keywords a comment
-    used to sit between (for example ``DELETE/*c*/FROM``) stay
-    correctly separated.
+    every double-quoted identifier replaced per
+    :func:`_resolve_quoted_identifier`; and every ``U&"..."`` Unicode
+    escape identifier replaced by the literal word ``audit_logs``,
+    unconditionally (see :func:`_is_unicode_escape_identifier_prefix`
+    -- its ``\\XXXX`` escapes are never decoded, so this module
+    cannot tell whether one actually spells ``audit_logs``, and
+    conservatively assumes it might) -- run once, before any other
+    check in this module, so a keyword or table name that only
+    *appears* inside a comment, a literal value's own text, or a
+    *different* double-quoted identifier's own name can never be
+    mistaken for a real one. A comment always becomes exactly one
+    space rather than nothing, so two keywords a comment used to sit
+    between (for example ``DELETE/*c*/FROM``) stay correctly
+    separated. A back-quoted or bracket-quoted identifier is
+    deliberately *not* specially handled -- see the module
+    docstring's "Known limitations".
     """
     pieces: list[str] = []
     pos = 0
@@ -314,11 +402,12 @@ def _normalize_sql(statement: str) -> str:
                 pos += 1
             pieces.append("''")
             continue
-        if char in ('"', "`", "["):
-            close_char = "]" if char == "[" else char
-            inner, pos = _consume_delimited_identifier(
-                statement, pos + 1, close_char
-            )
+        if _is_unicode_escape_identifier_prefix(statement, pos):
+            _, pos = _consume_delimited_identifier(statement, pos + 3, '"')
+            pieces.append("audit_logs")
+            continue
+        if char == '"':
+            inner, pos = _consume_delimited_identifier(statement, pos + 1, '"')
             pieces.append(_resolve_quoted_identifier(inner))
             continue
         if statement.startswith("--", pos):
