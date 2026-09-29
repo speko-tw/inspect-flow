@@ -40,17 +40,17 @@ InspectFlow 要避免照片、查核項目與說明分散，造成證據難核�
 
 ```mermaid
 flowchart LR
-  Company["Company（公司）"] -->|所屬| User["User（人員）"]
+  Company["Company（公司）"] -.->|可選，最多一家| User["User（人員）"]
   User -->|一人可掛多筆| ProjectMember["ProjectMember（專案成員）"]
   Project["Project（專案）"] -->|一專案多筆成員| ProjectMember
   Role["Role（角色，全系統共用清單）"] -.->|一筆成員可掛多個角色，權限加總| ProjectMember
   User -.->|is_admin 開關，不經 Role| Admin["系統管理者權限"]
 ```
 
-- `Company` 與 `User` 是一對多：本系統帳號的所屬 `Company` 可隨時修改，外部帳號以外部來源為準、不能在系統內修改，見 [KD-23](03-decisions-and-stack.md#kd-23)、[KD-16](03-decisions-and-stack.md#kd-16)。
+- `User` 不一定屬於 `Company`，最多連結一家：`Company` 與 `User` 是一對多、且為可選；本系統帳號的公司可隨時修改，外部帳號以外部來源為準、不能在系統內修改。沒有公司的人也能加入專案、被指派角色，專案角色跟著人、不跟著公司。見 [KD-23](03-decisions-and-stack.md#kd-23)、[KD-46](03-decisions-and-stack.md#kd-46)（依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。
 - `ProjectMember` 是 `User`、`Project`、`Role` 三者的關聯實體：同一人在同一 `Project` 下可掛多個 `Role`，權限加總，見 [KD-27](03-decisions-and-stack.md#kd-27)。
 - `Role` 全系統共用一份清單，可自訂、可刪除，修改時立即影響所有持有者，見 [KD-26](03-decisions-and-stack.md#kd-26)。
-- 系統管理者（`is_admin`）是 `User` 身上的開關，不透過 `Role` 授予，見 [KD-24](03-decisions-and-stack.md#kd-24)。
+- 系統管理者（`is_admin`）是 `User` 身上的開關，不透過 `Role` 授予，見 [KD-24](03-decisions-and-stack.md#kd-24)。內建 `admin` 代表系統本身，不屬於任何公司、永遠是系統管理者，見 [KD-44](03-decisions-and-stack.md#kd-44)。
 
 除了系統內部角色之外，正式報告（DOCX／PDF）另有一群**文件收受方**：業主、監造單位、品管、政府標案審查方，以及文件歸檔／管理系統，他們不一定是系統的登入使用者，而是報告的閱讀與簽核對象 （依據：架構基準 §20.1、§20.12–20.13）。設計現場與後台流程時，需要區分「誰是系統使用者」與「誰只是最終文件的收受者」。
 

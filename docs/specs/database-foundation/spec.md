@@ -26,7 +26,7 @@
 
 - `User`、`Project` 的業務欄位（例如 `name`、`location`、`status`、`email`、`role`、`active`）：由 `domain-model` 定義（依 spec 範本「資料」段：完整定義寫在 `domain-model`；負責人決定，#51，2026-09-26）。`Project` 正式欄位由 `domain-model` 定義，見 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定）；`User` 組織欄位已裁定，見 [OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定）。
 - 密碼雜湊、登入狀態等認證欄位：移至 `authentication`；登入機制與密碼雜湊已裁定，見 [OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）；角色權限機制已裁定，見 [OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）。
-- `User`、`Project` 的 API 端點（建立、查詢、修改）：本規格不定義資源端點；由之後的功能規格負責（例如 `authentication`、`admin-dashboard`）。
+- `User`、`Project` 的 API 端點（建立、查詢、修改）：本規格不定義資源端點；由之後的功能規格負責（例如 `authentication`）。基本的使用者與公司管理（簡便版）屬 0.2.x（API [#263](https://github.com/speko-tw/inspect-flow/issues/263)、頁面 [#265](https://github.com/speko-tw/inspect-flow/issues/265)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））；搜尋、分頁、批次等進階功能仍屬 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）。
 - 資料庫備份與還原：屬 [PR-12](../../intents/02-principles.md#pr-12)，落地於 `pilot-deployment`。
 - 部署時 migration 與 API 啟動的先後順序、SQLite 檔案的持久化掛載、多台後端不得共用 SQLite 檔：屬 [PR-13](../../intents/02-principles.md#pr-13)、[KD-08](../../intents/03-decisions-and-stack.md#kd-08)、[KD-09](../../intents/03-decisions-and-stack.md#kd-09)，落地於 `pilot-deployment`。
 - 正式環境切換到 PostgreSQL：屬延後能力（依據：架構基準 §10、§33）；本規格只驗證相容性。
@@ -62,8 +62,8 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | DBF-R11 | `User`、`Project` **必須**以 UUID 作為主鍵；**不得**以自增整數作為主鍵或對外識別。UUID 版本**得**優先評估 UUIDv7，由實作任務選定 | 必須；得（UUIDv7） | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-03](../../intents/02-principles.md#pr-03)；API 表示法見 API-R06 |
-| DBF-R12 | `Project` **必須**有與 UUID 分開保存的業務編號 `project_code`；`User` **必須**有與 UUID 分開保存的業務編號 `employee_no`。兩者不得互相取代。長度上限由 `domain-model` 定義，本規格不另定：`employee_no` 見 DOM-R28，`project_code` 見 DOM-R40（暫定、待確認） | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[04-glossary](../../intents/04-glossary.md)「專案」「業務編號」（依據：架構基準 §11、§12.1–12.2） |
-| DBF-R13 | `employee_no` 在所有 `User` 之間**必須**唯一，由資料庫約束保證。`project_code` **得**在多筆 `Project` 之間重複，資料庫**不得**對它加唯一約束；重複時的處理見 [DOM-R42](../domain-model/spec.md#project-business-fields) | 必須（`employee_no`）；不得（`project_code` 加唯一約束） | [KD-39](../../intents/03-decisions-and-stack.md#kd-39)；原「`project_code` 必須唯一」為負責人決定（#51，2026-09-26），已由負責人補充裁定（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28）取代，見 [OQ-01](../../intents/05-open-questions.md#oq-01) |
+| DBF-R12 | `Project` **必須**有與 UUID 分開保存的業務編號 `project_code`；`User` **得**有與 UUID 分開保存的業務編號 `employee_no`：可為空值，只有連結公司時才填（DOM-R47）。兩者不得互相取代。長度上限由 `domain-model` 定義，本規格不另定：`employee_no` 見 DOM-R28，`project_code` 見 DOM-R40（暫定、待確認） | 必須（`project_code`）；得（`employee_no`） | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)；`employee_no` 改為可為空值：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），見 [KD-46](../../intents/03-decisions-and-stack.md#kd-46)；[04-glossary](../../intents/04-glossary.md)「專案」「業務編號」（依據：架構基準 §11、§12.1–12.2） |
+| DBF-R13 | `employee_no` 在同一家公司內**必須**唯一（`company_id` 與 `employee_no` 合併唯一，`company_id` 由 `domain-model` 定義），由資料庫約束保證；不同公司得有相同工號，沒有公司的人沒有工號，不受這條約束（DOM-R47）。`project_code` **得**在多筆 `Project` 之間重複，資料庫**不得**對它加唯一約束；重複時的處理見 [DOM-R42](../domain-model/spec.md#project-business-fields) | 必須（`employee_no` 同公司內唯一）；不得（`project_code` 加唯一約束） | [KD-39](../../intents/03-decisions-and-stack.md#kd-39)；原「`project_code` 必須唯一」為負責人決定（#51，2026-09-26），已由負責人補充裁定（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28）取代，見 [OQ-01](../../intents/05-open-questions.md#oq-01)；`employee_no` 由全體唯一改為同公司內唯一：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），見 [KD-46](../../intents/03-decisions-and-stack.md#kd-46) |
 | DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫。`created_by`、`updated_by` **不得**為空值，**必須**是指向 `User` 主鍵的外鍵，由資料庫約束保證；外鍵**必須**允許指向同一筆 `User` 自己（內建 `admin` 的 `created_by` 指向自己）。建立初始帳號的初始化指令，以及 `is_admin`、`is_system` 欄位，由 `domain-model` 定義 | 必須（保留、不得為空、外鍵）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08)；[DBF-Q2](#dbf-q2) 裁定（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26；決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)）；架構基準無對應章節 |
 
 <a id="template-tables"></a>
@@ -82,7 +82,7 @@
 
 | 實體 | 本規格負責 | 其餘欄位 |
 |---|---|---|
-| `User` | UUID 主鍵、`employee_no`（唯一）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model`（含 `is_admin`、`is_system` 與初始化指令）；認證欄位歸 `authentication` |
+| `User` | UUID 主鍵、`employee_no`（得為空值，同公司內唯一）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model`（含 `is_admin`、`is_system` 與初始化指令）；認證欄位歸 `authentication` |
 | `Project` | UUID 主鍵、`project_code`（得重複，見 DBF-R13）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model` |
 | `Inspection Template`、`Template Version` | 草稿，見 DBF-R20、DBF-R21 | `domain-model`、`template-system` |
 
@@ -131,7 +131,7 @@
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
 | DBF-AC09 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 SQLAlchemy inspector 檢查 `User`、`Project` 的資料表，並各新增一筆資料 | 主鍵是單一欄位、型別對應 UUID、不是自增整數；新增的資料取得可被 `uuid.UUID(...)` 解析的主鍵 | DBF-R07、DBF-R11 |
-| DBF-AC10 | 已有一筆 `project_code = "P001"` 的 `Project`、一筆 `employee_no = "E001"` 的 `User` | 再新增一筆相同 `project_code` 的 `Project`、一筆相同 `employee_no` 的 `User` | `Project` 的新增成功，資料庫有兩筆 `project_code = "P001"` 的 `Project`，UUID 主鍵不同；`User` 的新增因唯一約束失敗，資料庫仍只有一筆 `employee_no = "E001"`；業務編號與主鍵是不同欄位 | DBF-R12、DBF-R13 |
+| DBF-AC10 | 已有一筆 `project_code = "P001"` 的 `Project`；公司 A、B；A 已有一筆 `employee_no = "E001"` 的 `User` | 再新增一筆相同 `project_code` 的 `Project`；在 A 新增一筆 `employee_no = "E001"` 的 `User`；在 B 新增一筆 `employee_no = "E001"` 的 `User`；再新增兩筆沒有公司、沒有工號的 `User` | `Project` 的新增成功，資料庫有兩筆 `project_code = "P001"` 的 `Project`，UUID 主鍵不同；A 的新增因唯一約束失敗，A 仍只有一筆 `employee_no = "E001"`；B 的新增成功；沒有公司、沒有工號的兩筆都成功；業務編號與主鍵是不同欄位 | DBF-R12、DBF-R13 |
 | DBF-AC11 | 新增一筆 `created_by`、`updated_by` 都指向自己的 `User`，再新增一筆 `created_by`、`updated_by` 指向該 `User` 的 `Project` | 檢查欄位後修改該筆資料；另對兩張表各嘗試寫入 `created_by` 為空值、`updated_by` 為空值、`created_by` 指向不存在的 UUID 的資料 | 兩張表都有 `created_at`、`updated_at`、`created_by`、`updated_by`，其中 `created_by`、`updated_by` 為不可空值、外鍵指向 `User` 主鍵；兩筆新增都成功，`created_at`、`updated_at` 自動有值，`created_by`、`updated_by` 有值且指向存在的 `User`；以可控時間讓修改發生在新增的至少一秒之後，修改後 `updated_at` 嚴格晚於修改前、等於修改當下的時間，`created_at` 不變；每一次錯誤寫入都被資料庫拒絕，資料筆數不變 | DBF-R14 |
 
 ## 待釐清
@@ -147,9 +147,10 @@
   - **裁定**（負責人，[#53](https://github.com/speko-tw/inspect-flow/issues/53)，2026-09-26）：範圍是 migration 加上資料庫相關的測試（`backend/tests/db/`），不跑整套後端測試；每個 PR 都跑；`make check` 有設定 PostgreSQL 連線時才跑，CI 提供 PostgreSQL service container，本機沒設定時略過、不強制安裝 Docker，仍只經由 `make check` 執行，符合 SKL-R04；版本採實作時 PostgreSQL 官方支援中的最新穩定主版本，版本號固定寫在 CI 設定裡，升級時另外調整。已知代價：本機沒設定 PostgreSQL 時會略過這一段，可能本機通過、CI 失敗，最晚在 PR 階段擋下。
   - **落地**：寫進 DBF-R10、DBF-AC08；實作由 T3（[#58](https://github.com/speko-tw/inspect-flow/issues/58)）負責。
 <a id="dbf-q2"></a>
-- **DBF-Q2：認證完成前，`created_by`、`updated_by` 怎麼填**（已裁定，[#54](https://github.com/speko-tw/inspect-flow/issues/54)）。`authentication`（P2）完成前沒有「目前使用者」，而 `User` 的第一筆資料也沒有建立者可以指。選項：欄位先允許空值，等 `authentication` 完成後再收緊；建立一個系統帳號，當作沒有登入者時的操作者；或把這兩欄延到 `authentication` 的 migration 才加。後兩者會牽動 [OQ-13](../../intents/05-open-questions.md#oq-13)、[OQ-08](../../intents/05-open-questions.md#oq-08)。
+- **DBF-Q2：認證完成前，`created_by`、`updated_by` 怎麼填**（已裁定，[#54](https://github.com/speko-tw/inspect-flow/issues/54)；其中「初始化指令建立兩個 Admin 帳號」的部分**已被取代**，見下方「後續變更」）。`authentication`（P2）完成前沒有「目前使用者」，而 `User` 的第一筆資料也沒有建立者可以指。選項：欄位先允許空值，等 `authentication` 完成後再收緊；建立一個系統帳號，當作沒有登入者時的操作者；或把這兩欄延到 `authentication` 的 migration 才加。後兩者會牽動 [OQ-13](../../intents/05-open-questions.md#oq-13)、[OQ-08](../../intents/05-open-questions.md#oq-08)。
   - **裁定**（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26）：不採上述三個選項。`created_by`、`updated_by` 不允許空白，必須指向某個 `User`。初始化指令建立兩個 Admin 帳號：內建 `admin`（`is_system`，`created_by` 指向自己）與負責人的個人帳號（`created_by` 指向 `admin`）；之後每個帳號都由某個 Admin 建立，所以 `created_by` 永遠有值。認證機制仍待 `authentication` 與 [OQ-13](../../intents/05-open-questions.md#oq-13)，在那之前帳號先建好但還不能登入。完整決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
   - **落地**：資料庫約束寫進 DBF-R14、DBF-AC11；初始化指令與 `is_admin`、`is_system` 欄位歸 `domain-model`（負責人決定，[#65](https://github.com/speko-tw/inspect-flow/issues/65)，2026-09-26），本規格只引用。
+  - **後續變更（部分已被取代）**：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），見 [KD-44](../../intents/03-decisions-and-stack.md#kd-44)。初始化指令改為只建立內建 `admin` 與三個範本角色，不再建立負責人的個人帳號（DOM-R53）；第一個個人帳號由 `admin` 在首次設定流程中於網頁新增，`created_by` 指向 `admin`（DOM-AC46）。上面「`created_by`、`updated_by` 不允許空白、必須指向某個 `User`」與內建 `admin` 指向自己的做法**不變**，DBF-R14、DBF-AC11 不需修改。
 <a id="dbf-q3"></a>
 - **DBF-Q3：部分凍結規則 1 要不要補「只引用 ID 不算有關」的例外**（已裁定，[#55](https://github.com/speko-tw/inspect-flow/issues/55)）。本規格把 `User`、`Project` 的字面命中判為無關（見[資料](#資料)段），但當時規則 1 的原文是「字面可能指到它，就算有關」；寫 `domain-model` 時也會碰到同樣的判斷，因此交由負責人決定要不要改規則。
   - **裁定**（負責人，[#55](https://github.com/speko-tw/inspect-flow/issues/55)，2026-09-26）：選項 A。規則 1 補上例外：只用 ID 引用、不影響該實體本身欄位的，不算有關；仍須在「資料」段寫明理由；可能影響該實體本身欄位、狀態或規則的仍算有關。本規格對 `User`、`Project` 的判讀是這個例外的先例。
@@ -163,3 +164,5 @@
 - DBF-R14、DBF-AC11：依 DBF-Q2 裁定，`created_by`、`updated_by` 改為不得為空值、外鍵指向 `User`，並補上對應的驗收條件 — [#65](https://github.com/speko-tw/inspect-flow/issues/65)
 - DBF-R10、DBF-AC08：依 DBF-Q1 裁定，PostgreSQL 相容性測試的範圍從只跑 migration 擴大為加上 `backend/tests/db/` 的測試，並定下每個 PR 執行、經由 `make check` 在設定 PostgreSQL 連線時執行、版本固定寫在 CI 設定 — [#53](https://github.com/speko-tw/inspect-flow/issues/53)
 - DBF-R13、DBF-AC10：拿掉 `project_code` 在所有 `Project` 之間必須唯一的規則，改為得重複、資料庫不得加唯一約束；`employee_no` 唯一不變。原唯一規則是負責人 #51（2026-09-26）的決定，由負責人 #71（2026-09-28）取代，見 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)、[OQ-01](../../intents/05-open-questions.md#oq-01) — [#246](https://github.com/speko-tw/inspect-flow/issues/246)
+- DBF-R12、DBF-R13、DBF-AC10：`employee_no` 由「必須有、全體唯一」改為「得為空值（只有連結公司時才填）、同公司內唯一」；DBF-Q2 加註「初始化建立兩個帳號」已被取代（DBF-R14、DBF-AC11 不變）；`project_code` 的部分不動 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
+- 計畫 T4、T5 與 DBF-AC10 驗收列：對齊 DBF-R12、DBF-R13、DBF-AC10 的新規則（`employee_no` 得為空值、同公司內唯一），落地由 `domain-model` 計畫的 B；規格條文不變 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)

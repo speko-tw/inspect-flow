@@ -30,7 +30,9 @@
 
 <a id="oq-02"></a>
 
-### OQ-02：人員需要哪些組織與角色欄位？（已裁定）
+### OQ-02：人員需要哪些組織與角色欄位？（已裁定；欄位部分已被取代）
+
+> **已被取代**：組織欄位（公司、部門、地點、工號、姓名、email 的必填規則）已由負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）取代：公司改為可選、工號與部門與地點跟著公司、新增帳號名稱、英文姓名改為選填，見 [KD-45](03-decisions-and-stack.md#kd-45)、[KD-46](03-decisions-and-stack.md#kd-46)。聯絡與補充欄位（[KD-17](03-decisions-and-stack.md#kd-17)）與角色欄位的裁定不變。以下保留原裁定供追溯。
 
 **裁定**：組織欄位裁定為公司、部門、地點、工號、英文姓名、中文姓名、email、啟用狀態（除啟用狀態外皆必填），另加聯絡與補充欄位（分機1、分機2、手機、Line ID、WeChat、負責事務），記錄於 [KD-16](03-decisions-and-stack.md#kd-16)、[KD-17](03-decisions-and-stack.md#kd-17)；角色欄位改為「系統管理者開關＋掛在專案成員上的可自訂角色」，不再是 `User` 上的單一 `role` 欄位，記錄於 [KD-19](03-decisions-and-stack.md#kd-19)、[KD-24](03-decisions-and-stack.md#kd-24)、[KD-27](03-decisions-and-stack.md#kd-27)。**職稱、承包商歸屬**：不列入；客戶現有的人員資料表沒有這兩項，日後有需要再新增。討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
 
@@ -171,6 +173,8 @@
 <a id="oq-08"></a>
 
 ### OQ-08：角色權限矩陣（誰能做什麼、在什麼專案範圍內）的正式版本？（已裁定）
+
+> **加註**：其中「客戶公司成員的確認提示」已由負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）取消（[KD-28](03-decisions-and-stack.md#kd-28) 已取消，公司不再有類型）；其餘裁定不變。另補充：具 Admin 權限的人可指派、收回他人的 Admin 權限，內建 `admin` 除外（[KD-24](03-decisions-and-stack.md#kd-24)）；範本角色由初始化指令建立、權限為空集合（[KD-26](03-decisions-and-stack.md#kd-26)）。
 
 **裁定**：不採固定角色矩陣，改為「系統管理者開關（Admin）＋全系統共用、可自訂的角色清單」；權限表示為「資料 × 動作」的權限代碼；角色掛在專案成員（`ProjectMember`）上，同一專案可疊加多個角色；首次安裝預建三個範本角色（內業整理、現場查核、唯讀）。**各範本角色實際勾選哪些權限，改在系統畫面上調整，不寫進本文件。**安全機制（後端預設拒絕、變更寫稽核紀錄、不能拿掉最後一個 Admin）與客戶公司成員的確認提示一併裁定。記錄於 [KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)；討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
 
