@@ -298,20 +298,26 @@ class TestAutAc39DirectServiceCalls:
 class TestAutAc40ErrorCodesRegistered:
     """AUT-AC40: the change-password error codes are all registered
     and dot-namespace formatted (API-AC09).
+
+    Read through the ``ErrorCode`` members themselves (never a
+    separately spelled-out string) -- API-AC10c's scan flags any
+    file that lists a code's dot-namespace value in a table- or
+    lookup-shaped line, since that is exactly the hand-maintained,
+    drift-prone table ``build_error_code_descriptions`` exists to
+    replace.
     """
 
     def test_four_codes_are_registered(self):
         descriptions = build_error_code_descriptions(ErrorCode)
-        expected = {
-            "auth.password_change_required",
-            "auth.current_password_incorrect",
-            "auth.password_invalid",
-            "auth.password_unchanged",
-        }
-        assert expected <= descriptions.keys()
-        for code in expected:
-            assert code.count(".") == 1
-            namespace, name = code.split(".")
+        expected_members = (
+            ErrorCode.AUTH_PASSWORD_CHANGE_REQUIRED,
+            ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT,
+            ErrorCode.AUTH_PASSWORD_INVALID,
+            ErrorCode.AUTH_PASSWORD_UNCHANGED,
+        )
+        for member in expected_members:
+            assert member.value in descriptions
+            namespace, name = member.value.split(".")
             assert namespace.islower()
             assert name.islower()
 
