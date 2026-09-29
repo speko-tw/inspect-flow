@@ -54,7 +54,7 @@ class TestAutAc10TokenIssuance:
 
         resp_a = client_a.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert resp_a.status_code == 200
         token_a = resp_a.cookies[SESSION_COOKIE_NAME]
@@ -64,7 +64,7 @@ class TestAutAc10TokenIssuance:
         # (AUT-R13: never reuse a token the request brought in).
         resp_b = client_b.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
             cookies={SESSION_COOKIE_NAME: token_a},
         )
         assert resp_b.status_code == 200
@@ -90,11 +90,11 @@ class TestAutAc11DeactivationInvalidatesImmediately:
 
         resp_a = client_a.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         resp_b = client_b.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert resp_a.status_code == 200
         assert resp_b.status_code == 200
@@ -136,7 +136,7 @@ class TestAutAc12ExternalAccountSessionBypassesPassword:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": "whatever-password"},
+            json={"login": user.email, "password": "whatever-password"},
         )
         assert login_resp.status_code == 401
         assert login_resp.json()["error"]["code"] == "auth.invalid_credentials"
@@ -150,7 +150,7 @@ class TestAutAc13TimeoutBoundaries:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
         token = login_resp.cookies[SESSION_COOKIE_NAME]
@@ -201,7 +201,7 @@ class TestAutAc13TimeoutBoundaries:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
         token = login_resp.cookies[SESSION_COOKIE_NAME]
@@ -356,7 +356,7 @@ class TestRequestScopedOperatorForServiceLayer:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
 
@@ -389,13 +389,13 @@ class TestRequestScopedOperatorForServiceLayer:
 
         login_a = client.post(
             "/api/v1/auth/login",
-            json={"email": user_a.email, "password": PASSWORD},
+            json={"login": user_a.email, "password": PASSWORD},
         )
         token_a = login_a.cookies[SESSION_COOKIE_NAME]
 
         login_b = client.post(
             "/api/v1/auth/login",
-            json={"email": user_b.email, "password": PASSWORD},
+            json={"login": user_b.email, "password": PASSWORD},
         )
         token_b = login_b.cookies[SESSION_COOKIE_NAME]
 

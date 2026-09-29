@@ -9,9 +9,10 @@ const AUTH_BASE = '/api/v1/auth'
 
 export interface CurrentUser {
   id: string
-  email: string
-  name_en: string
-  name_zh: string
+  username: string
+  email: string | null
+  name_en: string | null
+  name_zh: string | null
   is_admin: boolean
   must_change_password: boolean
 }
@@ -70,14 +71,14 @@ export async function fetchCurrentUser(): Promise<CurrentUser | null> {
 }
 
 /**
- * 以 email 與密碼登入（`POST /api/v1/auth/login`）。
+ * 以帳號名稱或 email 與密碼登入（`POST /api/v1/auth/login`）。
  *
  * 失敗（401 `auth.invalid_credentials`、422 或其他狀態碼）一律拋出
  * `ApiError`；呼叫端依 AUT-R29 只顯示一種通用訊息，不依狀態碼分
  * 流程。
  */
 export async function login(
-  email: string,
+  login: string,
   password: string,
 ): Promise<CurrentUser> {
   const response = await fetch(`${AUTH_BASE}/login`, {
@@ -86,7 +87,7 @@ export async function login(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ login, password }),
   })
 
   if (!response.ok) {

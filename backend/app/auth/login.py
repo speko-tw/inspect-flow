@@ -9,7 +9,7 @@ Also writes the ``auth.login_succeeded``/``auth.login_failed``
 application log entries AUT-R40 requires (this is the only place
 that knows both the resolved ``User``, if any, and the specific
 failure reason). AUT-R41: the log message is a fixed string, never
-built from ``email`` or ``password``; ``extra`` never carries a
+built from ``login`` or ``password``; ``extra`` never carries a
 password, a hash or a Cookie/token value.
 """
 
@@ -28,7 +28,7 @@ from app.models import User, UserPassword
 
 logger = logging.getLogger("app.auth")
 
-# AUT-R06: when the email does not exist, or exists but has no
+# AUT-R06: when the login does not exist, or exists but has no
 # password set, a same-cost hash verification still runs so the
 # response time does not give away which of these is true. This
 # hash is created once, at import time, and reused for every such
@@ -42,17 +42,18 @@ _DUMMY_PASSWORD_HASH = hash_password(
 )
 
 
-def authenticate(db: Session, email: str, password: str) -> User | None:
-    """Verify ``email``/``password`` against a local account.
+def authenticate(db: Session, login: str, password: str) -> User | None:
+    """Verify ``login``/``password`` against a local account.
 
     Returns the matching ``User`` only when every one of AUT-R06's
-    conditions holds: an account with this email (compared
-    case-insensitively, DOM-R02) exists, is ``auth_source =
+    conditions holds: an account matching this login (compared
+    case-insensitively, DOM-R02 and DOM-R45) exists, is ``auth_source =
     "local"``, is ``is_active``, has a password set, and the
     password is correct. Every other combination -- unknown email,
     wrong password, disabled account, external account, or a local
     account with no ``UserPassword`` row -- returns ``None``,
-    indistinguishable from the caller's point of view.
+    indistinguishable from the caller's point of view. An ``@`` in
+    the stripped login selects email; otherwise it selects username.
 
     ``verify_password`` is always called exactly once, against
     either the account's real hash or the module-level dummy hash
@@ -64,14 +65,16 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
     ``auth.login_failed`` entry per call. The failure reason
     (``invalid_credentials`` or ``account_disabled``) is only ever
     distinguished in this log, never in the response AUT-R06
-    requires to stay uniform: an unknown email, a local account with
+    requires to stay uniform: an unknown login, a local account with
     no ``UserPassword`` row, an external account, and a wrong
     password (including a wrong password on a disabled account) are
     all ``invalid_credentials``; ``account_disabled`` is reported
     only once the password itself has already checked out.
     """
+    normalized_login = login.strip().lower()
+    column = User.email if "@" in normalized_login else User.username
     user = db.scalar(
-        select(User).where(func.lower(User.email) == email.lower())
+        select(User).where(func.lower(column) == normalized_login)
     )
 
     user_password: UserPassword | None = None
@@ -101,7 +104,7 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
     # hash cost. This timing difference is accepted for this internal
     # network service, which also locks accounts after repeated failures.
     # AUT-R06: unknown accounts still pay for one lockout lookup,
-    # using a fixed absent ID; neither path reveals the email.
+    # using a fixed absent ID; neither path reveals the login.
     locked = is_locked(db, user_id)
     if user is None:
         _log_failed(None, "invalid_credentials")

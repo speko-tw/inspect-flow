@@ -50,7 +50,7 @@ logger = logging.getLogger("app.auth")
 class LoginRequest(BaseModel):
     """``POST /api/v1/auth/login`` request body."""
 
-    email: str
+    login: str
     password: str
 
 
@@ -65,6 +65,7 @@ class CurrentUserResponse(BaseModel):
     """The login and current-user response body (AUT-R08, AUT-R10)."""
 
     id: UUID
+    username: str
     # Nullable since #260 (DOM-R46/DOM-R50): the built-in account has
     # no email or names, and ``name_en`` is optional for everyone.
     email: str | None
@@ -77,6 +78,7 @@ class CurrentUserResponse(BaseModel):
 def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
     return CurrentUserResponse(
         id=user.id,
+        username=user.username,
         email=user.email,
         name_en=user.name_en,
         name_zh=user.name_zh,
@@ -124,7 +126,7 @@ def login(
     the exact same error -- no ``AuthSession`` is created and no
     ``Set-Cookie`` header is sent.
     """
-    user = authenticate(db, body.email, body.password)
+    user = authenticate(db, body.login, body.password)
     if user is None:
         # A raised APIError rolls back get_db's unit of work. Persist
         # the failure counter and any user.locked event first.
