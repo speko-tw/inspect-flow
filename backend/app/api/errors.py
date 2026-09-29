@@ -90,6 +90,14 @@ class ErrorCode(DescribedStrEnum):
         "auth.password_unchanged",
         "The new password must differ from the current temporary password.",
     )
+    SETUP_INVALID_CODE = (
+        "setup.invalid_code",
+        "The first-login code is invalid.",
+    )
+    SETUP_ALREADY_COMPLETED = (
+        "setup.already_completed",
+        "Initial setup has already been completed.",
+    )
 
 
 def build_error_code_descriptions(

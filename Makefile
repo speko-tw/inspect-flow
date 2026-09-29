@@ -1,9 +1,21 @@
-.PHONY: setup setup-backend setup-frontend check \
+.PHONY: help setup setup-backend setup-frontend check \
 	check-env check-backend check-postgres check-frontend \
-	migrate init set-password run-backend run-frontend
+	migrate init reset-admin-password run-backend run-frontend
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
+
+# Lists the supported local development commands.
+help:
+	@printf '%s\n' \
+		'Local development commands:' \
+		'  make setup                  Install backend and frontend dependencies' \
+		'  make migrate                Apply database migrations' \
+		'  make init                   Create admin and first-login code' \
+		'  make reset-admin-password   Reset the built-in admin password' \
+		'  make run-backend            Start the backend development server' \
+		'  make run-frontend           Start the frontend development server' \
+		'  make check                  Run repository checks'
 
 setup-backend:
 	cd backend && uv sync --locked
@@ -23,12 +35,10 @@ setup-frontend:
 migrate:
 	cd backend && uv run --locked alembic upgrade head
 
-# System initialization command (DOM-R11): creates the first
-# company, the built-in admin, the owner's personal account and the
-# three template roles. Prompts interactively, or reads piped
-# stdin non-interactively (see README "Running locally"). Run once
-# per database, after `make migrate`; a second run reports the
-# system is already initialized and writes nothing (DOM-R13).
+# System initialization command (DOM-R53): creates the built-in
+# admin and three template roles, then prints a one-time setup code.
+# Run after `make migrate`; when admin has no password, rerunning
+# replaces the old code. A configured admin cannot be reinitialized.
 # Invoked as a module (`python -m`), not a `uv run` script entry
 # point: backend/pyproject.toml sets `[tool.uv] package = false`
 # (backend/pyproject.toml), so uv does not install
@@ -39,22 +49,11 @@ migrate:
 init:
 	cd backend && uv run --locked python -m app.cli.init_system
 
-# Set-password command (AUT-R24~AUT-R26): sets or replaces the
-# Argon2id password of one auth_source=local User (including the
-# built-in admin) identified by EMAIL, and deletes that account's
-# existing AuthSession rows. Prompts twice for the new password
-# (not echoed) at a terminal, or reads two lines from piped stdin
-# non-interactively (see README "Running locally"). Fails with
-# unchanged data when EMAIL is unset, the account does not exist or
-# is auth_source=external, the two entries differ, or the length
-# rule (AUT-R04) is not met. Same package-false deviation as `init`
-# above.
-set-password:
-	@test -n "$(EMAIL)" || \
-		(echo "EMAIL is required, e.g. make set-password" \
-			"EMAIL=admin@example.com" && \
-		exit 1)
-	cd backend && uv run --locked python -m app.cli.set_password "$(EMAIL)"
+# Reset only the built-in admin password (AUT-R47). Passwords are
+# read twice without echo, from the terminal or piped stdin. The
+# command accepts no account or password arguments.
+reset-admin-password:
+	cd backend && uv run --locked python -m app.cli.reset_admin_password
 
 run-backend:
 	cd backend && uv run --locked uvicorn app.main:app --reload \

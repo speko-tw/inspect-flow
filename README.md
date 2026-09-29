@@ -35,21 +35,20 @@ root.
    ```
 
 2. **Apply migrations**: `make migrate`.
-3. **Initialize the system**: `make init`. Prompts for the first
-   company's code and name, and the required basic fields of the
-   built-in `admin` account and the owner's personal account;
-   running it again on an already-initialized database reports that
-   and writes nothing.
-4. **Set a password**: `make set-password EMAIL=<email>` (including
-   the built-in `admin`). Prompts twice for the new password (not
-   echoed) at a terminal; also accepts two lines of piped standard
-   input for automation. The command line accepts no password
-   argument of any kind.
-5. **Start the backend and frontend**, each in its own terminal:
+3. **Initialize the system**: `make init`. Copy the one-time
+   first-login code printed by the command. If `admin` has no
+   password yet, running the command again invalidates the old code
+   and prints a new one.
+4. **Start the backend and frontend**, each in its own terminal:
    - `make run-backend` — API at `http://127.0.0.1:8000`.
    - `make run-frontend` — Vite at `http://localhost:5173`; it
      forwards `/api` to the backend.
-6. **Sign in**: open `http://localhost:5173` in a browser.
+5. **Set the admin password**: open `http://localhost:5173` and
+   follow the first-setup page using the code copied above.
+6. **Reset the admin password when needed**: run
+   `make reset-admin-password` on the server. Enter the new password
+   twice; the terminal does not echo it. The command accepts piped
+   standard input for automation and takes no password arguments.
 
 Safari limitation: the session cookie uses the `__Host-` prefix,
 which requires `Secure`. Safari does not send it over

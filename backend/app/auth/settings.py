@@ -26,9 +26,17 @@ FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_THRESHOLD"
 FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES"
 LOCKOUT_DURATION_ENV_VAR = "INSPECTFLOW_LOGIN_LOCKOUT_MINUTES"
 
+SETUP_FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_SETUP_FAILURE_THRESHOLD"
+SETUP_FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES"
+SETUP_LOCKOUT_DURATION_ENV_VAR = "INSPECTFLOW_SETUP_LOCKOUT_MINUTES"
+
 _DEFAULT_FAILURE_THRESHOLD = 10
 _DEFAULT_FAILURE_WINDOW = timedelta(minutes=15)
 _DEFAULT_LOCKOUT_DURATION = timedelta(minutes=15)
+
+_DEFAULT_SETUP_FAILURE_THRESHOLD = 10
+_DEFAULT_SETUP_FAILURE_WINDOW = timedelta(minutes=15)
+_DEFAULT_SETUP_LOCKOUT_DURATION = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
@@ -36,6 +44,35 @@ class LockoutSettings:
     failure_threshold: int
     failure_window: timedelta
     lockout_duration: timedelta
+
+
+@dataclass(frozen=True)
+class SetupLockoutSettings:
+    failure_threshold: int
+    failure_window: timedelta
+    lockout_duration: timedelta
+
+
+def get_setup_lockout_settings() -> SetupLockoutSettings:
+    """Read AUT-R45 settings at call time."""
+    threshold = os.environ.get(SETUP_FAILURE_THRESHOLD_ENV_VAR)
+    window = os.environ.get(SETUP_FAILURE_WINDOW_ENV_VAR)
+    duration = os.environ.get(SETUP_LOCKOUT_DURATION_ENV_VAR)
+    return SetupLockoutSettings(
+        failure_threshold=(
+            int(threshold) if threshold else _DEFAULT_SETUP_FAILURE_THRESHOLD
+        ),
+        failure_window=(
+            timedelta(minutes=float(window))
+            if window
+            else _DEFAULT_SETUP_FAILURE_WINDOW
+        ),
+        lockout_duration=(
+            timedelta(minutes=float(duration))
+            if duration
+            else _DEFAULT_SETUP_LOCKOUT_DURATION
+        ),
+    )
 
 
 def get_lockout_settings() -> LockoutSettings:

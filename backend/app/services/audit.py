@@ -126,6 +126,7 @@ class AuditEventDefinition:
     fields: frozenset[str]
     always_recorded: frozenset[str] = field(default_factory=frozenset)
     system_event: bool = False
+    allow_system_event: bool = False
     always_write: bool = False
     before_optional: bool = False
 
@@ -158,6 +159,7 @@ def register_audit_event(
     fields: Iterable[str],
     always_recorded: Iterable[str] = (),
     system_event: bool = False,
+    allow_system_event: bool = False,
     always_write: bool = False,
     before_optional: bool = False,
 ) -> None:
@@ -227,6 +229,7 @@ def register_audit_event(
         fields=fields_set,
         always_recorded=always_recorded_set,
         system_event=system_event,
+        allow_system_event=allow_system_event,
         always_write=always_write,
         before_optional=before_optional,
     )
@@ -493,6 +496,7 @@ def record_audit_event(
     entity_id: uuid.UUID,
     before: Mapping[str, Any] | None,
     after: Mapping[str, Any] | None,
+    system_event: bool = False,
 ) -> AuditLog:
     """The single entry point for writing an ``AuditLog`` row
     (ALG-R05). ``entity_type`` is not a parameter: it comes from
@@ -540,9 +544,16 @@ def record_audit_event(
     )
     _validate_shape(definition, normalized_before, normalized_after)
 
+    if system_event and not (
+        definition.system_event or definition.allow_system_event
+    ):
+        raise InvalidAuditEventDefinitionError(
+            f"{event_type!r} cannot be declared as a system event"
+        )
+
     operator = (
         _resolve_system_operator(session)
-        if definition.system_event
+        if definition.system_event or system_event
         else get_current_operator(session)
     )
     log = AuditLog(
@@ -615,6 +626,7 @@ register_audit_event(
     fields=("is_temporary",),
     always_write=True,
     before_optional=True,
+    allow_system_event=True,
 )
 register_audit_event(
     "user.locked",

@@ -31,18 +31,17 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
    ```
 
 2. **套用 migration**：`make migrate`。
-3. **初始化系統**：`make init`。會詢問本公司的代碼與名稱，以及內建
-   `admin` 與負責人個人帳號的必填基本欄位；對已初始化的資料庫再執行
-   一次，會回報已初始化並且不寫入任何資料。
-4. **設定密碼**：`make set-password EMAIL=<email>`（含內建
-   `admin`）。連接終端機時會提示輸入兩次新密碼（不回顯）；也可從
-   標準輸入以管線提供兩行密碼供自動化使用。指令列不接受任何密碼
-   參數。
-5. **啟動後端與前端**，各開一個終端機：
+3. **初始化系統**：`make init`。抄下指令印出的一次性首次登入碼。
+   `admin` 尚未設定密碼時重跑，會讓舊碼失效並印出新碼。
+4. **啟動後端與前端**，各開一個終端機：
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把
      `/api` 轉給後端。
-6. **登入**：用瀏覽器開 `http://localhost:5173`。
+5. **設定 admin 密碼**：用瀏覽器開 `http://localhost:5173`，在首次
+   設定頁輸入剛才抄下的首次登入碼並設定密碼。
+6. **需要重設 admin 密碼時**：在伺服器執行
+   `make reset-admin-password`，依提示輸入兩次新密碼（不回顯）。指令
+   也接受管線提供的兩行標準輸入供自動化使用，不接受密碼參數。
 
 Safari 限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`，Safari
 在 `http://localhost` 不送，因此無法登入。Chrome、Firefox 可用；
