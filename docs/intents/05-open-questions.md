@@ -406,7 +406,7 @@
 
 ### OQ-22：開工門檻未裁定前，不受影響的實體能否先凍結？（已裁定）
 
-**裁定**：允許部分凍結（選項 B1），第一批只凍結 `User`、`Project`。`Inspection Template`、`Template Version` 等 [G-01](#g-01) 裁定、並說清楚立場 A 的 `Template` 指哪一層之後再凍結。理由：這兩個實體本來就同時列在 P3 `template-system`，而 P3 也被 G-01 擋住，延後的實際成本很小；Phase 1 因此分成兩段（見 [01-overview.md](01-overview.md)）。怎麼確認實體與門檻無關、規格內怎麼標示、已凍結的實體之後被裁定牽動時怎麼處理，見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)；討論見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)。
+**裁定**：允許部分凍結（選項 B1），第一批只凍結 `User`、`Project` 的共通結構；`Company` 歸 Phase 1，其欄位由 `domain-model` 定義。`Inspection Template`、`Template Version` 等，待 [G-01](#g-01) 裁定並說清楚立場 A 的 `Template` 指哪一層後再凍結，歸 Phase 3（見 [01-overview.md](01-overview.md)）。理由：這些範本實體列在 Phase 3 `template-system`，且該 Phase 受 G-01 阻擋，延後的實際成本很小。怎麼確認實體與門檻無關、規格內怎麼標示、已凍結的實體之後被裁定牽動時怎麼處理，見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)；討論見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)。
 
 **為什麼要先決定**：[開工門檻](#gate)要求 Domain Model 與 API 契約凍結前先裁定 G-01～G-07 與 OQ-06，但 Phase 1 的 `User`、`Project` 看起來不受這些議題影響。若不允許部分凍結，`domain-model` 規格（見 [docs/specs/README.md](../specs/README.md#index)）要等整個門檻裁定完才能凍結，Phase 1 的資料表也跟著延後。
 

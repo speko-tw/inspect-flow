@@ -1,9 +1,9 @@
 # 資料庫基礎（database-foundation）
 
-**代碼**：`DBF`　**Phase**：P1　**狀態**：部分凍結
+**代碼**：`DBF`　**Phase**：P1、P3　**狀態**：部分凍結
 **前置規格**：`skeleton`（後端骨架、`make check`、CI）、`api-conventions`（UUID 字串 ID、UTC 時間格式）；`User`、`Project` 的業務欄位由 `domain-model` 定義
 **引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-06](../../intents/03-decisions-and-stack.md#kd-06)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-08](../../intents/03-decisions-and-stack.md#kd-08)、[KD-10](../../intents/03-decisions-and-stack.md#kd-10)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[OQ-22](../../intents/05-open-questions.md#oq-22)；技術棧卡片：[ORM 與資料存取](../../intents/03-decisions-and-stack.md#stack-orm)、[Database Migration](../../intents/03-decisions-and-stack.md#stack-migration)、[資料庫](../../intents/03-decisions-and-stack.md#stack-database)、[測試工具](../../intents/03-decisions-and-stack.md#stack-tests)、[CI](../../intents/03-decisions-and-stack.md#stack-ci)
-**被擋議題**：第一段無；第二段（`Inspection Template`、`Template Version`）受 [G-01](../../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
+**被擋議題**：Phase 1 範圍無；Phase 3 的範本資料表受 [G-01](../../intents/05-open-questions.md#g-01) 擋（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）
 **凍結範圍**：第一段——資料庫基礎設施（DBF-R01～DBF-R10、DBF-AC01～DBF-AC08），以及 `User`、`Project` 的共通結構（DBF-R11～DBF-R14、DBF-AC09～DBF-AC11）。第二段 DBF-R20 以後為草稿
 
 ## 目的
@@ -20,7 +20,7 @@
   - SQLite 作為 MVP 資料庫，連線初始化的 PRAGMA 設定。
   - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（範圍見 DBF-R10，依 [DBF-Q1](#dbf-q1) 裁定）。
   - `User`、`Project` 的共通結構：UUID 主鍵、與 UUID 分開的業務編號、建立與修改紀錄欄位。
-- 第二段（草稿，G-01 裁定後擴大凍結範圍）：`Inspection Template`、`Template Version` 的資料表，見[第二段草稿](#phase-1-part-2)。
+- Phase 3 範本資料表（草稿，G-01 裁定後擴大凍結範圍）：`Inspection Template`、`Template Version`，見[範本資料表草稿](#template-tables)。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
@@ -66,8 +66,8 @@
 | DBF-R13 | `employee_no` 在所有 `User` 之間**必須**唯一，由資料庫約束保證。`project_code` **得**在多筆 `Project` 之間重複，資料庫**不得**對它加唯一約束；重複時的處理見 [DOM-R42](../domain-model/spec.md#project-business-fields) | 必須（`employee_no`）；不得（`project_code` 加唯一約束） | [KD-39](../../intents/03-decisions-and-stack.md#kd-39)；原「`project_code` 必須唯一」為負責人決定（#51，2026-09-26），已由負責人補充裁定（[#71 留言](https://github.com/speko-tw/inspect-flow/issues/71#issuecomment-5872016815)，2026-09-28）取代，見 [OQ-01](../../intents/05-open-questions.md#oq-01) |
 | DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫。`created_by`、`updated_by` **不得**為空值，**必須**是指向 `User` 主鍵的外鍵，由資料庫約束保證；外鍵**必須**允許指向同一筆 `User` 自己（內建 `admin` 的 `created_by` 指向自己）。建立初始帳號的初始化指令，以及 `is_admin`、`is_system` 欄位，由 `domain-model` 定義 | 必須（保留、不得為空、外鍵）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08)；[DBF-Q2](#dbf-q2) 裁定（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26；決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)）；架構基準無對應章節 |
 
-<a id="phase-1-part-2"></a>
-### 第二段：`Inspection Template`、`Template Version`（草稿）
+<a id="template-tables"></a>
+### Phase 3：`Inspection Template`、`Template Version`（草稿）
 
 本段在 [G-01](../../intents/05-open-questions.md#g-01) 裁定、並說清楚立場 A 的 `Template` 指哪一層之前維持草稿，不拆任務（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）。驗收條件等凍結時再補。
 
