@@ -8,14 +8,17 @@ Fixtures (``session``, ``operator``) come from this directory's
 import pytest
 from sqlalchemy import func, select
 
-from app.models import AuditLog, User
+from app.models import AuditLog, Project, Role, RolePermission, User
 from app.services.companies import create_company, update_company
+from app.services.permissions import effective_permissions
+from app.services.project_members import add_project_member
 from app.services.users import (
     AdminStatusUnchangedError,
     BuiltInAccountModificationError,
     CompanyNotActiveError,
     ExternalBasicFieldModificationError,
     LastActiveAdminRemovalError,
+    UsernameChangePermissionError,
     create_user,
     set_is_active,
     set_is_admin,
@@ -23,6 +26,130 @@ from app.services.users import (
 )
 from tests.db.conftest import create_root_user_with_company
 from tests.services.conftest import snapshot_persisted_columns
+
+
+def test_dom_ac35_username_change_requires_admin_and_local_account(
+    session, operator, monkeypatch
+):
+    company = create_company(session, name="示範公司")
+    local = create_user(session, **_user_kwargs("AC35L", company.id))
+    external = create_user(
+        session,
+        **_user_kwargs(
+            "AC35E",
+            company.id,
+            auth_source="external",
+            external_source="ldap",
+            external_id="ac35e",
+        ),
+    )
+    session.commit()
+
+    update_user_manual(session, local, username="New.Name")
+    assert local.username == "new.name"
+    assert len(_audit_rows_for(session, local.id)) == 1
+    update_user_manual(session, local, username="NEW.NAME")
+    assert len(_audit_rows_for(session, local.id)) == 1
+
+    non_admin = create_user(session, **_user_kwargs("AC35N", company.id))
+    monkeypatch.setattr(
+        "app.services.users.get_current_operator", lambda _: non_admin
+    )
+    with pytest.raises(UsernameChangePermissionError):
+        update_user_manual(session, local, username="other.name")
+    monkeypatch.setattr(
+        "app.services.users.get_current_operator", lambda _: operator
+    )
+    with pytest.raises(ExternalBasicFieldModificationError):
+        update_user_manual(session, external, username="other.name")
+    assert local.username == "new.name"
+    assert external.username == "uac35e"
+
+
+def test_dom_ac38_company_change_clears_old_fields_and_audits(
+    session, operator
+):
+    company_a = create_company(session, name="示範公司甲")
+    company_b = create_company(session, name="示範公司乙")
+    user = create_user(session, **_user_kwargs("AC38", company_a.id))
+    session.commit()
+
+    update_user_manual(session, user, company_id=company_b.id)
+    assert (user.employee_no, user.department, user.location) == (
+        None,
+        None,
+        None,
+    )
+    first = _audit_rows_for(session, user.id)[0]
+    assert first.event_type == "user.company_changed"
+    assert first.before == {
+        "company_id": str(company_a.id),
+        "employee_no": "AC38",
+        "department": "Operations",
+        "location": "HQ",
+    }
+    assert first.after == {
+        "company_id": str(company_b.id),
+        "employee_no": None,
+        "department": None,
+        "location": None,
+    }
+
+    update_user_manual(session, user, company_id=None)
+    assert user.company_id is None
+    update_user_manual(
+        session, user, company_id=company_a.id, department="新部門"
+    )
+    assert user.department == "新部門"
+    assert user.employee_no is None
+    assert len(_audit_rows_for(session, user.id)) == 3
+
+
+def test_dom_ac42_company_link_does_not_change_project_roles(
+    session, operator, registered_permission_codes
+):
+    company = create_company(session, name="示範公司甲")
+    user = create_user(
+        session,
+        username="independent.user",
+        name_zh="獨立使用者",
+        email="independent@demo.example",
+    )
+    project = Project(
+        project_code="DEMO42",
+        name="示範工程",
+        client_name="示範業主",
+        site_location="示範工地",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    role = Role(
+        name="示範唯讀",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    session.add_all((project, role))
+    session.flush()
+    session.add(RolePermission(role_id=role.id, code="report.read"))
+    session.flush()
+    member = add_project_member(
+        session,
+        project_id=project.id,
+        user_id=user.id,
+        role_ids=(role.id,),
+    )
+
+    for company_id in (None, company.id, None):
+        if user.company_id != company_id:
+            update_user_manual(session, user, company_id=company_id)
+        assert effective_permissions(
+            session, user_id=user.id, project_id=project.id
+        ) == frozenset({"report.read"})
+        assert {item.role_id for item in member.role_assignments} == {role.id}
+    update_company(session, company, is_active=False)
+    assert effective_permissions(
+        session, user_id=user.id, project_id=project.id
+    ) == frozenset({"report.read"})
 
 
 def _company_kwargs(tag: str, **overrides) -> dict:

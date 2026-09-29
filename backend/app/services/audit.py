@@ -128,6 +128,7 @@ class AuditEventDefinition:
     system_event: bool = False
     always_write: bool = False
     before_optional: bool = False
+    nullable_fields: frozenset[str] = field(default_factory=frozenset)
 
 
 _EVENT_CATALOG: dict[str, AuditEventDefinition] = {}
@@ -160,6 +161,7 @@ def register_audit_event(
     system_event: bool = False,
     always_write: bool = False,
     before_optional: bool = False,
+    nullable_fields: Iterable[str] = (),
 ) -> None:
     """Add one event to the catalog (ALG-R11, ALG-R13): other specs
     (``external-identity-sync``) call this to register their own
@@ -206,10 +208,15 @@ def register_audit_event(
 
     fields_set = frozenset(fields)
     always_recorded_set = frozenset(always_recorded)
+    nullable_fields_set = frozenset(nullable_fields)
     if not always_recorded_set <= fields_set:
         raise InvalidAuditEventDefinitionError(
             f"{event_type!r}: always_recorded {sorted(always_recorded_set)} "
             f"must be a subset of fields {sorted(fields_set)}"
+        )
+    if not nullable_fields_set <= fields_set:
+        raise InvalidAuditEventDefinitionError(
+            f"{event_type!r}: nullable_fields must be declared fields"
         )
     for field_name in fields_set:
         lowered = field_name.lower()
@@ -229,6 +236,7 @@ def register_audit_event(
         system_event=system_event,
         always_write=always_write,
         before_optional=before_optional,
+        nullable_fields=nullable_fields_set,
     )
 
 
@@ -327,21 +335,17 @@ def _validate_no_null_field_values(
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
 ) -> None:
-    """A present ``before``/``after`` dict's fields must never carry
-    a Python ``None`` value: "this field has no value" is already
-    spelled by omitting the whole ``before``/``after`` (a 新增/刪除
-    event, or -- for ``before_optional`` -- a 修改 event with no
-    prior state at all), so a ``None``-valued field would be a
-    second, redundant way to say the same thing. This is what keeps
-    ``user.password_set``'s ``is_temporary`` a plain ``bool`` on
-    every row that has one at all, rather than sometimes a ``bool``
-    and sometimes ``None``.
+    """Reject ``None`` except on fields explicitly declared nullable.
+
+    ``user.company_changed`` needs nullable company and personnel
+    fields to show links and unlinking. Other events keep the existing
+    rejection, including ``user.password_set``'s boolean flag.
     """
     for payload in (before, after):
         if payload is None:
             continue
         for field_name, value in payload.items():
-            if value is None:
+            if value is None and field_name not in definition.nullable_fields:
                 raise InvalidAuditEventShapeError(
                     f"{definition.event_type}: field {field_name!r} "
                     "must not be None -- omit the whole before/after "
@@ -596,6 +600,20 @@ register_audit_event(
     entity_type="user",
     kind=AuditEventKind.UPDATED,
     fields=("is_admin",),
+)
+register_audit_event(
+    "user.username_changed",
+    entity_type="user",
+    kind=AuditEventKind.UPDATED,
+    fields=("username",),
+)
+register_audit_event(
+    "user.company_changed",
+    entity_type="user",
+    kind=AuditEventKind.UPDATED,
+    fields=("company_id", "employee_no", "department", "location"),
+    always_recorded=("company_id", "employee_no", "department", "location"),
+    nullable_fields=("company_id", "employee_no", "department", "location"),
 )
 
 # `authentication` 事件 (docs/specs/audit-log/spec.md#authentication-事件,

@@ -11,10 +11,9 @@ of scope here and gets its own entry point in that spec -- and (T7,
 issue #135) ``is_admin``/``is_active`` modification
 (:func:`set_is_admin`, :func:`set_is_active`), each protecting the
 built-in account (DOM-R06) and the last active Admin (DOM-R07).
-Still out of scope: any authorization check (whether the operator is
-Admin or the user themselves -- left to ``authentication``, which
-only calls into this module once it has already decided the caller
-may).
+The username path additionally checks the current operator's Admin
+status (DOM-R45). HTTP management routes declare ``require_admin``
+for the other writes.
 
 :func:`set_is_admin` writes one ``user.admin_changed`` audit event
 per call (DOM-R22); :func:`set_is_active` never writes one -- DOM-R22
@@ -84,6 +83,10 @@ class AdminStatusUnchangedError(ValueError):
     this module's docstring for why this is checked here rather than
     left for :func:`app.services.audit.record_audit_event` to catch.
     """
+
+
+class UsernameChangePermissionError(ValueError):
+    """Only an Admin may change a local account's username."""
 
 
 def _reject_if_company_inactive(
@@ -165,6 +168,7 @@ def update_user_manual(
     session: Session,
     user: User,
     *,
+    username: str | _Unset = UNSET,
     company_id: uuid.UUID | None | _Unset = UNSET,
     department: str | None | _Unset = UNSET,
     location: str | None | _Unset = UNSET,
@@ -181,8 +185,8 @@ def update_user_manual(
 ) -> User:
     """Manually modify a ``User`` (DOM-R04, DOM-R18, DOM-R32).
 
-    Basic fields (``company_id``, ``department``, ``location``,
-    ``employee_no``, ``name_en``, ``name_zh``, ``email``) are
+    Basic fields (``username``, ``company_id``, ``department``,
+    ``location``, ``employee_no``, ``name_en``, ``name_zh``, ``email``) are
     rejected outright -- with no change to any field passed in the
     same call -- when ``user.auth_source == "external"`` (DOM-R04).
     For any other account, changing ``company_id`` additionally
@@ -203,6 +207,7 @@ def update_user_manual(
     :data:`app.services.UNSET`.
     """
     basic_fields = {
+        "username": username,
         "company_id": company_id,
         "department": department,
         "location": location,
@@ -229,6 +234,21 @@ def update_user_manual(
         _reject_if_company_inactive(session, new_company_id)
 
     operator = get_current_operator(session)
+    if username is not UNSET and not operator.is_admin:
+        raise UsernameChangePermissionError(
+            "Only an Admin may change a username (DOM-R45)"
+        )
+    old_username = user.username
+    old_company_id = user.company_id
+    old_company_fields = {
+        field: getattr(user, field)
+        for field in ("employee_no", "department", "location")
+    }
+    company_changed = company_id is not UNSET and company_id != old_company_id
+    if company_changed:
+        for field in old_company_fields:
+            if field not in changed_basic_fields:
+                changed_basic_fields[field] = None
     for field, value in changed_basic_fields.items():
         setattr(user, field, value)
     contact_fields = {
@@ -244,6 +264,27 @@ def update_user_manual(
             setattr(user, field, value)
     user.updated_by = operator.id
     session.flush()
+    if user.username != old_username:
+        record_audit_event(
+            session,
+            "user.username_changed",
+            entity_id=user.id,
+            before={"username": old_username},
+            after={"username": user.username},
+        )
+    if company_changed:
+        before_company = {"company_id": old_company_id} | old_company_fields
+        after_company = {
+            "company_id": user.company_id,
+            **{field: getattr(user, field) for field in old_company_fields},
+        }
+        record_audit_event(
+            session,
+            "user.company_changed",
+            entity_id=user.id,
+            before=before_company,
+            after=after_company,
+        )
     return user
 
 
@@ -374,6 +415,7 @@ __all__ = [
     "CompanyNotActiveError",
     "ExternalBasicFieldModificationError",
     "LastActiveAdminRemovalError",
+    "UsernameChangePermissionError",
     "create_user",
     "set_is_active",
     "set_is_admin",

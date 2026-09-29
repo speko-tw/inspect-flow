@@ -4,7 +4,9 @@ from fastapi import Depends, FastAPI
 
 from app.api.errors import register_error_handlers
 from app.api.v1.auth import router as auth_router
+from app.api.v1.companies import router as companies_router
 from app.api.v1.health import router as health_router
+from app.api.v1.users import router as users_router
 from app.auth.dependencies import bind_request_scope
 
 
@@ -23,6 +25,8 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(users_router, prefix="/api/v1")
+    app.include_router(companies_router, prefix="/api/v1")
     return app
 
 
