@@ -51,10 +51,17 @@ def reset_public_schema(url: str) -> None:
     Runs outside of a transaction block per statement (each
     ``DROP``/``CREATE`` auto-commits) so the reset is not left
     half-applied by a driver-level transaction wrapper.
+
+    The ``audit_logs`` append-only guard rejects ``DROP ... CASCADE``
+    (ALG-R04); resetting the schema is a maintenance operation, so
+    this connection opts in to DDL with the same execution option
+    ``alembic/env.py`` uses. The option never permits data
+    modification.
     """
     engine = create_engine(url)
     try:
         with engine.connect() as connection:
+            connection.execution_options(audit_log_ddl_allowed=True)
             connection.execute(text("DROP SCHEMA public CASCADE"))
             connection.execute(text("CREATE SCHEMA public"))
             connection.commit()

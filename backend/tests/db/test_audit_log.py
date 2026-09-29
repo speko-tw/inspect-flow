@@ -16,10 +16,27 @@ AC labels below follow that spec's numbering:
   <algorithm>`` clause, PostgreSQL's ``ONLY``) -- is rejected and
   leaves the table unchanged, while ``INSERT``/``SELECT`` against
   ``audit_logs`` and any statement against another table still work.
-  Deliberately not covered (see ``app/models/audit_log.py``'s module
-  docstring): a CTE-wrapped mutation, ``INSERT ... ON CONFLICT DO
-  UPDATE``, SQLite's ``REPLACE INTO``/``INSERT OR REPLACE``, and
-  ``TRUNCATE``.
+  Issue #233 extends this to every other shape that modifies an
+  existing row or removes all of them: ``TRUNCATE`` (plain or
+  ``CASCADE``), SQLite's ``REPLACE INTO``/``INSERT OR REPLACE INTO``,
+  the ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert, ``MERGE``, and
+  a ``WITH`` (CTE) statement wrapping any of the above in any shape
+  -- while ``ON CONFLICT DO NOTHING`` and a plain ``INSERT`` still
+  work. After two review rounds found real bypasses in a precise,
+  syntax-by-syntax parser, the guard was rewritten (see
+  ``app/models/audit_log.py``'s module docstring) into a
+  deliberately coarser, conservative check: a modification keyword
+  and ``audit_logs`` appearing anywhere in the same statement, in
+  either order, blocks it -- accepting some false positives (also
+  documented there) in exchange for not missing a real bypass. A
+  third review round then found that normalization itself needed
+  fixing rather than the rule built on top of it: an ``E'...'``
+  escape string's backslash-escaped quote could be misread as the
+  string's own terminator (missing a real write after it), and a
+  quoted/back-quoted/bracket-quoted identifier's raw text used to be
+  kept verbatim, so a *different*, legitimately-quoted identifier
+  merely containing "audit_logs" or a keyword in its own name could
+  be mistaken for real SQL syntax.
 
 Same fixture pattern as ``test_role_member.py``/``test_company.py``:
 migrates the database behind ``conftest.py``'s ``db_url`` fixture
@@ -40,6 +57,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.types import JSON, Uuid
 
 from alembic import command
+from app.db import clock
 from app.db.base import UTCDateTime, uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import AuditLog, User
@@ -272,17 +290,21 @@ class TestTableStructure:
         assert session.get(AuditLog, log.id) is not None
 
 
-class TestRegexMatchesOnlyAuditLogsTable:
+class TestConservativeGuardBlocksRealWrites:
     """Unit tests for ``_targets_audit_logs`` itself (no database):
-    proves the append-only guard's matching rule directly, including
-    the "same-prefix but different table" case
-    (``audit_logs_x``) called out in plan.md's risk section, without
+    proves the append-only guard's conservative rule (a modification
+    keyword and ``audit_logs`` anywhere in the same statement, plus
+    ``TRUNCATE``'s own rule -- see ``app/models/audit_log.py``'s
+    module docstring) blocks every real write ALG-AC03/issue #233
+    lists, across two PR review rounds' worth of edge cases, without
     needing a second real table in the database just to exercise it.
     """
 
     @pytest.mark.parametrize(
         "statement",
         [
+            # Bare UPDATE/DELETE: unquoted, double-quoted, schema
+            # prefixed, mixed case, leading whitespace/comments.
             "UPDATE audit_logs SET entity_type = 'x'",
             "UPDATE \"audit_logs\" SET entity_type = 'x'",
             "UPDATE main.audit_logs SET entity_type = 'x'",
@@ -295,33 +317,282 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "DELETE FROM public.audit_logs",
             "dElEtE FrOm AUDIT_LOGS",
             "\n   DELETE FROM audit_logs",
-            # A leading SQL comment (line or block, possibly more
-            # than one) before the real keyword.
             "-- a comment\nUPDATE audit_logs SET entity_type = 'x'",
             "/* a comment */ DELETE FROM audit_logs",
             "-- one\n-- two\nUPDATE audit_logs SET entity_type = 'x'",
             "/* one */ /* two */ DELETE FROM audit_logs",
-            # SQLite's ``UPDATE OR <algorithm>`` conflict-resolution
-            # clause (UPDATE only -- SQLite has no ``DELETE OR``).
+            "UPDATE audit_logs;",
+            # SQLite's UPDATE OR <algorithm>; PostgreSQL's ONLY.
             "UPDATE OR REPLACE audit_logs SET entity_type = 'x'",
-            "UPDATE OR ROLLBACK audit_logs SET entity_type = 'x'",
-            "UPDATE OR ABORT audit_logs SET entity_type = 'x'",
-            "UPDATE OR FAIL audit_logs SET entity_type = 'x'",
             "UPDATE OR IGNORE audit_logs SET entity_type = 'x'",
-            # PostgreSQL's ``ONLY`` (excludes descendant partitions/
-            # inheriting tables from the statement).
             "UPDATE ONLY audit_logs SET entity_type = 'x'",
             "DELETE FROM ONLY audit_logs",
-            # A statement terminator or end-of-string right after the
-            # bare table name is still a valid boundary (regression:
-            # must not be broken by the boundary check added for
-            # ``audit_logs$archive`` below).
-            "UPDATE audit_logs;",
-            "DELETE FROM audit_logs",
+            # upsert INSERT ... ON CONFLICT ... DO UPDATE (contains
+            # the word UPDATE -- DO NOTHING does not, see below).
+            "INSERT INTO audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "insert into audit_logs (id) values ('x') "
+            "on conflict (id) do update set entity_type = 'x'",
+            "INSERT INTO \"audit_logs\" (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            # SQLite's REPLACE INTO / INSERT OR REPLACE INTO.
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR REPLACE INTO audit_logs (id) VALUES ('x')",
+            "insert or replace into audit_logs (id) values ('x')",
+            "REPLACE INTO \"audit_logs\" (id) VALUES ('x')",
+            # PostgreSQL 15's MERGE.
+            "MERGE INTO audit_logs USING src ON audit_logs.id = src.id "
+            "WHEN MATCHED THEN UPDATE SET entity_type = src.entity_type",
+            # A CTE wrapping a mutation, either as the CTE's own body
+            # (a PostgreSQL data-modifying CTE) or as the primary
+            # statement the CTE list feeds -- checked without this
+            # module trying to parse the CTE's structure at all.
+            "WITH t AS (SELECT 1) UPDATE audit_logs SET entity_type = 'x'",
+            "WITH t AS (SELECT 1) DELETE FROM audit_logs",
+            "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
+            "WITH RECURSIVE t AS (DELETE FROM audit_logs RETURNING id) "
+            "SELECT * FROM t",
+            "WITH a AS (SELECT 1), t AS (DELETE FROM audit_logs) "
+            "SELECT * FROM t",
+            "WITH t AS (SELECT 1) REPLACE INTO audit_logs (id) VALUES ('x')",
+            # PR #253 review round 2: PostgreSQL's SEARCH/CYCLE
+            # clauses on a recursive CTE, between the CTE list and
+            # the primary UPDATE -- the old CTE-structure parser
+            # never reached the primary statement past these clauses,
+            # but this rule does not need to parse past anything.
+            "WITH RECURSIVE t AS (SELECT 1) "
+            "SEARCH DEPTH FIRST BY x SET ordercol "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "WITH RECURSIVE t AS (SELECT 1) "
+            "CYCLE x SET is_cycle USING path "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            # A comment between a keyword and the table name, and
+            # (PR #253 review round 1) between the two halves of a
+            # *compound* keyword -- normalization turns every comment
+            # into a single space first, so keywords stay separated.
+            "TRUNCATE /* c */ audit_logs",
+            "REPLACE INTO -- c\naudit_logs (id) VALUES ('x')",
+            "INSERT INTO /* c */ audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "DELETE/*c*/FROM audit_logs",
+            "REPLACE/*c*/INTO audit_logs (id) VALUES ('x')",
+            "INSERT INTO audit_logs (id) VALUES (1) "
+            "ON/*c*/CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "UPDATE audit_logs/*c*/SET entity_type = 'x'",
+            # PR #253 review round 1: a comment inside a CTE body
+            # containing a ``)`` -- normalization removes the whole
+            # comment (including that character) before anything else
+            # runs, so there is no paren to miscount any more.
+            "WITH t AS (SELECT 1 /* ) */) "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            # PR #253 review round 3: a PostgreSQL E'...' escape
+            # string (SQLite has no equivalent syntax) using a
+            # backslash-escaped quote -- normalization must recognize
+            # this as one escaped quote (not the string's own
+            # terminator), so the string still ends at its real
+            # closing quote and the upsert's own ON CONFLICT ... DO
+            # UPDATE (right after) stays visible. This unit test
+            # calls _targets_audit_logs directly (no database), so it
+            # proves only the text-matching logic, not that any
+            # database executes this statement.
+            "INSERT INTO audit_logs (id, note) VALUES (1, E'\\'') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            # PR #253 review round 3: an exactly double-quoted
+            # audit_logs still resolves to the real table and is
+            # blocked -- only a *different* double-quoted identifier
+            # that merely contains this text is not (see the "does
+            # not match" tests below).
+            "UPDATE \"AUDIT_LOGS\" SET entity_type = 'x'",
+            # PR #253 review round 4: a back-quoted or
+            # bracket-quoted audit_logs is *not* specially resolved
+            # (unlike double-quoted -- see the module docstring), but
+            # its content is never consumed/hidden either, so the
+            # bare word audit_logs sitting inside it is still found
+            # like any other token.
+            "DELETE FROM `audit_logs`",
+            "TRUNCATE [audit_logs]",
+            "UPDATE `main`.`audit_logs` SET entity_type = 'x'",
+            # PR #253 review round 4: a PostgreSQL U&"..." Unicode
+            # escape identifier is never decoded, so it is
+            # conservatively assumed to possibly spell audit_logs
+            # whenever a modification keyword is also present.
+            "UPDATE U&\"aud\\0069t_logs\" SET entity_type = 'x'",
+            'DELETE FROM U&"totally_unrelated"',
+            # PR #253 review round 4: since [ is never treated as
+            # identifier-quoting any more, a PostgreSQL array literal
+            # -- nested, or containing a subquery -- can never
+            # swallow a real modification that follows it.
+            "INSERT INTO t (arr) VALUES (ARRAY[[1, 2], [3, 4]]); "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "SELECT ARRAY[(SELECT count(*) FROM audit_logs)] FROM t; "
+            "UPDATE audit_logs SET entity_type = 'x'",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
         assert _targets_audit_logs(statement) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "TRUNCATE audit_logs",
+            "TRUNCATE TABLE audit_logs",
+            "TRUNCATE ONLY audit_logs",
+            "TRUNCATE TABLE ONLY audit_logs",
+            "TRUNCATE users, audit_logs",
+            "TRUNCATE TABLE audit_logs, users",
+            "truncate AUDIT_LOGS",
+            'TRUNCATE "audit_logs"',
+            "TRUNCATE public.audit_logs",
+            # PR #253 review round 2: an unquoted table list where
+            # ``audit_logs`` is not the first table, and PostgreSQL's
+            # ``*`` (include descendants) with and without a space
+            # before the following comma -- this rule does not parse
+            # the table list at all, so none of these spacing/marker
+            # variations matter.
+            "TRUNCATE other_table*, audit_logs",
+            "TRUNCATE other_table *, audit_logs",
+            "TRUNCATE audit_logs*",
+            # PR #253 review round 2: TRUNCATE ... CASCADE, which can
+            # cascade into audit_logs through its created_by foreign
+            # key without ever naming audit_logs in the statement.
+            "TRUNCATE users CASCADE",
+            "TRUNCATE users RESTART IDENTITY CASCADE",
+        ],
+    )
+    def test_matches_every_blocked_truncate(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # PR #253 review round 5: DROP TABLE/ALTER TABLE reaching
+            # audit_logs were not covered by any earlier round at
+            # all -- neither is a "modification keyword" in the
+            # UPDATE/DELETE/REPLACE/MERGE sense, so they reached the
+            # database completely unchecked. Every ALTER TABLE
+            # sub-action is treated alike, destructive or not (a
+            # RENAME/DROP COLUMN the same as an ADD COLUMN): this
+            # module does not try to tell them apart, only whether a
+            # connection was granted the audit_log_ddl_allowed
+            # execution option (tested separately, below).
+            "DROP TABLE audit_logs",
+            "DROP TABLE IF EXISTS audit_logs",
+            "drop table AUDIT_LOGS",
+            "DROP TABLE public.audit_logs",
+            'DROP TABLE "audit_logs"',
+            "ALTER TABLE audit_logs RENAME TO audit_logs_old",
+            "ALTER TABLE audit_logs DROP COLUMN before",
+            "ALTER TABLE audit_logs ADD COLUMN note TEXT",
+            # DROP ... CASCADE of a different table, mirroring
+            # TRUNCATE ... CASCADE's own reasoning: a foreign key
+            # (or other dependent object) could reach audit_logs
+            # without the statement ever naming it.
+            "DROP TABLE users CASCADE",
+        ],
+    )
+    def test_matches_every_blocked_ddl(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # PR #253 sixth review round: a quoted identifier (or
+            # literal / comment) directly touching a keyword, with no
+            # whitespace, used to fuse with it after normalization
+            # ("FROM" + audit_logs -> "FROMaudit_logs") and slip by.
+            'DELETE FROM"audit_logs" WHERE id = 1',
+            'DELETE FROM"audit_logs"WHERE id = 1',
+            "UPDATE\"audit_logs\"SET entity_type = 'x'",
+            'DROP TABLE"audit_logs"',
+            'ALTER TABLE"audit_logs"ADD COLUMN note TEXT',
+            'TRUNCATE"audit_logs"',
+            "INSERT INTO\"audit_logs\"(id)VALUES('x')ON CONFLICT(id)"
+            "DO UPDATE SET id = 'y'",
+            # schema-qualified spellings
+            'DELETE FROM main."audit_logs"',
+            'DELETE FROM"main"."audit_logs"',
+            'DELETE FROM "x"."audit_logs"',
+            'DELETE FROM"x"."audit_logs"',
+            'UPDATE "x"."audit_logs" SET entity_type = \'x\'',
+            'DROP TABLE "x"."audit_logs"',
+            'DROP TABLE main."audit_logs"',
+            'TRUNCATE "x"."audit_logs"',
+            "DELETE FROM/*c*/audit_logs",
+            "DELETE FROM 'x'||audit_logs",
+        ],
+    )
+    def test_matches_when_no_whitespace_separates_tokens(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+
+class TestDdlAllowedExecutionOption:
+    """Unit tests for ``_targets_audit_logs``'s ``ddl_allowed``
+    parameter (the ``audit_log_ddl_allowed`` execution option's
+    effect -- see ``backend/alembic/env.py`` and the module
+    docstring's account of PR #253's fifth review round): it exempts
+    *only* the DDL check, never ``TRUNCATE`` or the
+    modification-keyword check, so it could never be used to slip an
+    ``UPDATE``/``DELETE``/``TRUNCATE`` past this guard.
+    """
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "DROP TABLE audit_logs",
+            "ALTER TABLE audit_logs RENAME TO audit_logs_old",
+            "ALTER TABLE audit_logs ADD COLUMN note TEXT",
+            "DROP TABLE users CASCADE",
+        ],
+    )
+    def test_ddl_allowed_exempts_ddl_against_audit_logs(self, statement):
+        assert _targets_audit_logs(statement, ddl_allowed=True) is False
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "DELETE FROM audit_logs",
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "TRUNCATE audit_logs",
+            "TRUNCATE users CASCADE",
+        ],
+    )
+    def test_ddl_allowed_does_not_exempt_data_modification(self, statement):
+        assert _targets_audit_logs(statement, ddl_allowed=True) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # PR #253 sixth review round: a DROP/ALTER word anywhere
+            # in the statement (here, a bracket-quoted alias) used to
+            # make the option return early and wave the whole
+            # statement through.
+            "UPDATE audit_logs SET entity_type = 'x' "
+            "FROM (SELECT 1) AS [DROP]",
+            "DELETE FROM audit_logs WHERE id IN (SELECT 1 AS [ALTER])",
+            "INSERT INTO audit_logs (id) VALUES ('x') ON CONFLICT (id) "
+            "DO UPDATE SET id = 'y' RETURNING id AS [DROP]",
+            "TRUNCATE audit_logs, [DROP]",
+            "UPDATE audit_logs SET entity_type = 'x' -- DROP\n",
+            "REPLACE INTO audit_logs (id) VALUES ('x') RETURNING [ALTER]",
+            'DELETE FROM"audit_logs" WHERE 1 = 1 AND [DROP] = 1',
+        ],
+    )
+    def test_ddl_word_elsewhere_does_not_bypass_the_option(self, statement):
+        assert _targets_audit_logs(statement, ddl_allowed=True) is True
+
+    def test_ddl_allowed_is_false_by_default(self):
+        assert _targets_audit_logs("DROP TABLE audit_logs") is True
+
+
+class TestConservativeGuardDoesNotBlockSafeStatements:
+    """Unit tests proving the conservative rule still lets through
+    every read, every plain append, and every write to an unrelated
+    table -- including the "same-prefix but different table" case
+    (``audit_logs_x``) called out in plan.md's risk section, and the
+    literal-value false positives two PR review rounds found in
+    earlier, more precise versions of this check.
+    """
 
     @pytest.mark.parametrize(
         "statement",
@@ -338,24 +609,133 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "UPDATE OR REPLACE audit_logs_x SET entity_type = 'x'",
             "UPDATE ONLY audit_logs_x SET entity_type = 'x'",
             "UPDATE ONLY users SET entity_type = 'x'",
-            # Regression: an unquoted table name sharing the
-            # ``audit_logs`` prefix but continuing with a character
-            # outside this module's identifier class (``$``, a
-            # non-ASCII letter) is a different table, not
-            # ``audit_logs`` truncated -- a reviewer caught this
-            # actually mis-firing against a real SQLite database.
+            # A same-prefix table using a character outside this
+            # module's identifier class ($, a non-ASCII letter) is a
+            # different table, not audit_logs truncated.
             "UPDATE audit_logs$archive SET entity_type = 'x'",
             "DELETE FROM audit_logs$archive",
             "UPDATE audit_logs中 SET entity_type = 'x'",
             "DELETE FROM audit_logs中",
-            # A quoted name never had this problem (its contents are
-            # read verbatim to the closing quote), kept here as the
-            # same regression's quoted-name counterpart.
             "UPDATE \"audit_logs$archive\" SET entity_type = 'x'",
+            # ON CONFLICT DO NOTHING and a plain INSERT: no
+            # modification keyword anywhere in the statement.
+            "INSERT INTO audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO NOTHING",
+            # A literal value's own text containing the phrase this
+            # module's keyword search looks for -- including in a
+            # later RETURNING clause, not only the inserted value --
+            # must not cause a false positive: every string literal's
+            # contents are emptied out before any keyword search
+            # runs (see _normalize_sql), in either case leaving no
+            # modification keyword anywhere in the visible text.
+            "INSERT INTO audit_logs (id, after) VALUES "
+            "('x', 'on conflict do update, then on conflict do "
+            "nothing') ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO audit_logs (id, after) VALUES "
+            "('x', 'contains on conflict do update text')",
+            "INSERT INTO audit_logs (id, entity_type) VALUES (2, 'new') "
+            "RETURNING 'ON CONFLICT (id) DO UPDATE'",
+            # INSERT OR <algorithm> other than REPLACE never
+            # overwrites an existing row, and contains no
+            # modification keyword.
+            "INSERT OR IGNORE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR ROLLBACK INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR ABORT INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR FAIL INTO audit_logs (id) VALUES ('x')",
+            # A different, same-prefix table is never mistaken for
+            # audit_logs, even together with a real modification
+            # keyword elsewhere in the same statement.
+            "TRUNCATE audit_logs_x",
+            "TRUNCATE TABLE audit_logs$archive",
+            "REPLACE INTO audit_logs_x (id) VALUES ('x')",
+            "INSERT INTO audit_logs_x (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "TRUNCATE other_table",
+            "TRUNCATE users, other_table",
+            # A CTE that is only read from -- no modification keyword
+            # anywhere in the statement -- is not blocked.
+            "WITH t AS (SELECT * FROM audit_logs) SELECT * FROM t",
+            "WITH t AS (SELECT * FROM users) "
+            "SELECT * FROM t JOIN audit_logs ON t.id = audit_logs.id",
+            # PR #253 review round 3: a quoted identifier is resolved
+            # by its own content, not read through as raw text, so a
+            # *different*, legitimately-quoted identifier that merely
+            # starts with or spells out "audit_logs" (or a keyword)
+            # inside its own name is never mistaken for either.
+            'SELECT * FROM "audit_logs archive"',
+            "UPDATE \"audit_logs archive\" SET entity_type = 'x'",
+            'SELECT "UPDATE audit_logs" FROM other',
+            # A look-alike using U+0130 LATIN CAPITAL LETTER I WITH
+            # DOT ABOVE: Python's plain re.IGNORECASE treats this as
+            # case-equivalent to ASCII "i", but this module's
+            # ASCII-only fold does not, so this is correctly a
+            # different, unrelated identifier.
+            "UPDATE \"audİt_logs\" SET entity_type = 'x'",
+            # PR #253 review round 4: a back-quoted/bracket-quoted
+            # identifier's content is never consumed, so a plain read
+            # using one -- no modification keyword anywhere in the
+            # statement -- is unaffected either way (contrast the
+            # "accepted false positives" below, where the same
+            # identifiers *are* rejected once a modification keyword
+            # is also present).
+            "SELECT * FROM `audit_logs archive`",
+            "SELECT * FROM [audit_logs archive]",
+            # PR #253 review round 5: DROP/ALTER of an unrelated
+            # table, with no audit_logs mention and no CASCADE.
+            "DROP TABLE users",
+            "DROP TABLE audit_logs_x",
+            "ALTER TABLE users ADD COLUMN note TEXT",
+            "ALTER TABLE audit_logs_x RENAME TO audit_logs_x_old",
         ],
     )
     def test_does_not_match_other_statements(self, statement):
         assert _targets_audit_logs(statement) is False
+
+
+class TestConservativeGuardAcceptedFalsePositives:
+    """Documents (rather than hides) the false positives the
+    conservative rule knowingly accepts -- see
+    ``app/models/audit_log.py``'s module docstring's "Known
+    limitations". These assertions are the *expected*, current
+    behavior, not bugs to fix: a change that makes any of them start
+    returning ``False`` must be checked against the module docstring
+    first, since it may be reintroducing one of these review rounds'
+    real bypasses instead of genuinely improving precision.
+    """
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # Modifies a different table while only reading from
+            # audit_logs -- audit_logs itself is never touched.
+            "DELETE FROM other_table WHERE id IN (SELECT id FROM audit_logs)",
+            "UPDATE other_table SET x = (SELECT count(*) FROM audit_logs)",
+            # TRUNCATE/DROP ... CASCADE on a table with no real
+            # foreign key (or other dependent object) relationship to
+            # audit_logs at all.
+            "TRUNCATE unrelated_table CASCADE",
+            "DROP TABLE unrelated_table CASCADE",
+            # PR #253 review round 4: a back-quoted or bracket-quoted
+            # identifier that is legitimately a *different* table
+            # merely starting with "audit_logs", or spelling out a
+            # keyword and "audit_logs" in a column alias's own name
+            # -- rejected because, unlike the double-quoted
+            # equivalent, this module no longer tries to resolve
+            # (and thus rule out) what a back-quoted/bracket-quoted
+            # identifier actually names, only whether "audit_logs"
+            # happens to sit inside its un-touched text.
+            "UPDATE `audit_logs archive` SET entity_type = 'x'",
+            "UPDATE [audit_logs archive] SET entity_type = 'x'",
+            "SELECT `UPDATE audit_logs` FROM other",
+            # A U&"..." Unicode escape identifier naming a table with
+            # nothing to do with audit_logs -- rejected because its
+            # escapes are never decoded, so this module cannot tell
+            # it apart from one that does spell audit_logs.
+            'UPDATE U&"totally_unrelated" SET x = 1',
+        ],
+    )
+    def test_known_over_blocking_cases(self, statement):
+        assert _targets_audit_logs(statement) is True
 
 
 class TestAppendOnlyGuard:
@@ -492,6 +872,9 @@ class TestAppendOnlyGuard:
             "UPDATE audit_logs SET entity_type = 'changed'",
             # SQLite's ``UPDATE OR <algorithm>`` conflict clause.
             "UPDATE OR IGNORE audit_logs SET entity_type = 'changed'",
+            # PR #253 review round 1: a comment right after the table
+            # name, before SET -- not only before the table name.
+            "UPDATE audit_logs/*c*/SET entity_type = 'changed'",
         ]
 
     def _text_delete_statements(self, engine: Engine) -> list[str]:
@@ -504,6 +887,9 @@ class TestAppendOnlyGuard:
             "\n   DELETE FROM audit_logs",
             # A leading SQL comment before the keyword.
             "/* audit-log guard test */ DELETE FROM audit_logs",
+            # PR #253 review round 1: a comment between the two
+            # halves of the compound ``DELETE FROM`` keyword.
+            "DELETE/*c*/FROM audit_logs",
         ]
 
     def test_text_updates_are_all_rejected(
@@ -531,6 +917,282 @@ class TestAppendOnlyGuard:
                 conn.rollback()
 
         assert snapshot() == before
+
+    def _text_truncate_statements(self, engine: Engine) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            "TRUNCATE audit_logs",
+            "TRUNCATE TABLE audit_logs",
+            "TRUNCATE ONLY audit_logs",
+            f"TRUNCATE TABLE {schema}.audit_logs",
+            "truncate AUDIT_LOGS",
+            "TRUNCATE users, audit_logs",
+            # A leading SQL comment, and one between the keyword and
+            # the table name.
+            "-- audit-log guard test\nTRUNCATE audit_logs",
+            "TRUNCATE /* audit-log guard test */ audit_logs",
+            # PR #253 review round 2: audit_logs not first in the
+            # table list, PostgreSQL's `*` (include descendants) with
+            # and without a space before the following comma.
+            "TRUNCATE users*, audit_logs",
+            "TRUNCATE users *, audit_logs",
+            # PR #253 review round 2: CASCADE, which can reach
+            # audit_logs through its created_by foreign key without
+            # naming it -- rejected regardless of which table is
+            # named.
+            "TRUNCATE users CASCADE",
+            "TRUNCATE users RESTART IDENTITY CASCADE",
+        ]
+
+    def _text_replace_statements(self, engine: Engine) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR REPLACE INTO audit_logs (id) VALUES ('x')",
+            f"REPLACE INTO {schema}.audit_logs (id) VALUES ('x')",
+            "replace into AUDIT_LOGS (id) VALUES ('x')",
+            # A comment between the keyword and the table name.
+            "REPLACE INTO /* audit-log guard test */ audit_logs "
+            "(id) VALUES ('x')",
+            # PR #253 review round 1: a comment between the two
+            # halves of the compound ``REPLACE INTO`` keyword.
+            "REPLACE/*c*/INTO audit_logs (id) VALUES ('x')",
+        ]
+
+    def _text_upsert_do_update_statements(
+        self, engine: Engine, existing_id: str
+    ) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            f"INSERT INTO audit_logs (id) VALUES ('{existing_id}') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+            f"INSERT INTO {schema}.audit_logs (id) "
+            f"VALUES ('{existing_id}') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+            # A comment between INTO and the table name.
+            f"INSERT INTO /* c */ audit_logs (id) "
+            f"VALUES ('{existing_id}') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+            # PR #253 review round 1: a comment between the two
+            # halves of the compound ``ON CONFLICT`` keyword.
+            f"INSERT INTO audit_logs (id) VALUES ('{existing_id}') "
+            "ON/*c*/CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+        ]
+
+    def _text_cte_mutation_statements(self, engine: Engine) -> list[str]:
+        return [
+            # The mutation as the primary statement a CTE feeds.
+            "WITH t AS (SELECT 1) "
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "WITH t AS (SELECT 1) DELETE FROM audit_logs",
+            # The mutation nested inside the CTE's own body
+            # (PostgreSQL's data-modifying CTEs).
+            "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
+            # PR #253 review round 1: a comment inside the CTE body
+            # containing a ``)`` character -- normalization removes
+            # the whole comment, including that character, before
+            # anything else runs.
+            "WITH t AS (SELECT 1 /* ) */) "
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            # PR #253 review round 2: PostgreSQL's SEARCH/CYCLE
+            # clauses on a recursive CTE, between the CTE list and
+            # the primary UPDATE.
+            "WITH RECURSIVE t AS (SELECT 1) "
+            "SEARCH DEPTH FIRST BY x SET ordercol "
+            "UPDATE audit_logs SET entity_type = 'changed'",
+        ]
+
+    def test_text_truncate_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_truncate_statements(engine):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_replace_into_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_replace_statements(engine):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_upsert_do_update_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_upsert_do_update_statements(
+            engine, existing_log.id.hex
+        ):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_cte_mutation_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_cte_mutation_statements(engine):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_upsert_on_conflict_do_nothing_still_works(
+        self, engine, operator, existing_log, snapshot
+    ):
+        """ALG-AC03/#233: ``ON CONFLICT ... DO NOTHING`` never
+        modifies an existing row, so it must not be blocked -- here
+        exercised against a real conflicting ``id`` (the insert is a
+        no-op) to prove both that it is not rejected and that it
+        genuinely leaves the row untouched (not merely that no
+        exception was raised).
+        """
+        before = snapshot()
+
+        insert_stmt = text(
+            "INSERT INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after) "
+            "ON CONFLICT (id) DO NOTHING"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            conn.execute(
+                insert_stmt,
+                {
+                    "id": existing_log.id,
+                    "created_at": existing_log.created_at,
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": {"name": "should-not-be-written"},
+                },
+            )
+            conn.commit()
+
+        assert snapshot() == before
+
+    def test_plain_insert_with_conflict_looking_returning_still_works(
+        self, engine, operator
+    ):
+        """PR #253 review round 1: a plain ``INSERT`` (no
+        ``ON CONFLICT`` clause at all) whose ``RETURNING`` clause
+        happens to return a string literal that reads like an
+        ``ON CONFLICT ... DO UPDATE`` clause must still succeed --
+        proving the guard's search is not fooled by literal text
+        appearing anywhere in the statement, not only inside a
+        ``VALUES`` list (the false positive a reviewer found).
+        """
+        before = len(_read_all_audit_log_rows(engine))
+        new_id = uuid7()
+        insert_stmt = text(
+            "INSERT INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after) "
+            "RETURNING 'ON CONFLICT (id) DO UPDATE'"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            returned = conn.execute(
+                insert_stmt,
+                {
+                    "id": new_id,
+                    "created_at": clock.utc_now(),
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": None,
+                },
+            ).scalar()
+            conn.commit()
+
+        assert returned == "ON CONFLICT (id) DO UPDATE"
+        assert len(_read_all_audit_log_rows(engine)) == before + 1
+
+    @pytest.mark.sqlite_only
+    def test_insert_or_ignore_still_works(self, engine, operator):
+        """SQLite's ``INSERT OR IGNORE`` (unlike ``INSERT OR
+        REPLACE``) never overwrites an existing row, so it must not
+        be blocked; used here as a plain insert (no real conflict).
+        ``sqlite_only``: this syntax does not exist on PostgreSQL --
+        the unit-level regex test already covers it not being
+        blocked there too (the guard's check is dialect-agnostic).
+        """
+        before = len(_read_all_audit_log_rows(engine))
+        new_id = uuid7()
+        insert_stmt = text(
+            "INSERT OR IGNORE INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after)"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            conn.execute(
+                insert_stmt,
+                {
+                    "id": new_id,
+                    "created_at": clock.utc_now(),
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": None,
+                },
+            )
+            conn.commit()
+
+        assert len(_read_all_audit_log_rows(engine)) == before + 1
 
     def test_text_insert_and_select_still_work(
         self, engine, operator, existing_log
@@ -632,3 +1294,149 @@ class TestAppendOnlyGuard:
             ).scalar()
 
         assert note == "changed"
+
+    def _text_ddl_statements(self) -> list[str]:
+        """PR #253 review round 5: DDL against ``audit_logs`` on an
+        ordinary connection (no ``audit_log_ddl_allowed`` execution
+        option) was not covered by any earlier round at all -- these
+        used to reach the database unchecked.
+        """
+        return [
+            "DROP TABLE audit_logs",
+            "DROP TABLE IF EXISTS audit_logs",
+            "ALTER TABLE audit_logs RENAME TO audit_logs_old",
+            "ALTER TABLE audit_logs DROP COLUMN before",
+            "ALTER TABLE audit_logs ADD COLUMN note TEXT",
+            # DROP ... CASCADE of a different table, which could
+            # reach audit_logs the same way TRUNCATE ... CASCADE can.
+            "DROP TABLE users CASCADE",
+        ]
+
+    def test_text_ddl_is_all_rejected(self, engine, existing_log, snapshot):
+        before = snapshot()
+
+        for statement in self._text_ddl_statements():
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_ddl_allowed_option_does_not_allow_data_modification(
+        self, engine, existing_log, snapshot
+    ):
+        """PR #253 review round 5: the ``audit_log_ddl_allowed``
+        execution option exists only so Alembic's own migrations can
+        alter ``audit_logs``'s *schema* -- it must never let a
+        connection carrying it modify or remove ``audit_logs``'s
+        *rows* via ``UPDATE``/``DELETE``/``TRUNCATE``.
+        """
+        before = snapshot()
+        statements = [
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "DELETE FROM audit_logs",
+            "TRUNCATE audit_logs",
+        ]
+
+        for statement in statements:
+            with engine.connect() as conn:
+                conn.execution_options(audit_log_ddl_allowed=True)
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_ddl_allowed_option_permits_ddl_on_that_connection(self, engine):
+        """The other half of the previous test: a connection that
+        does carry the option can actually perform DDL against
+        ``audit_logs`` -- proving the escape hatch
+        ``backend/alembic/env.py`` relies on genuinely works, not
+        only that :func:`_targets_audit_logs`'s ``ddl_allowed``
+        parameter does when called directly.
+        """
+        with engine.connect() as conn:
+            conn.execution_options(audit_log_ddl_allowed=True)
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN note TEXT"))
+            conn.commit()
+
+        columns = {
+            col["name"] for col in inspect(engine).get_columns("audit_logs")
+        }
+        assert "note" in columns
+
+    def _flag_bypass_statements(self) -> list[str]:
+        """PR #253 sixth review round: data-modifying statements
+        carrying a ``DROP``/``ALTER`` word (as a bracket-quoted alias)
+        that the ``audit_log_ddl_allowed`` option used to let through.
+        """
+        return [
+            "UPDATE audit_logs SET entity_type = 'changed' "
+            "FROM (SELECT 1) AS [DROP]",
+            "DELETE FROM audit_logs WHERE id IN (SELECT 1 AS [ALTER])",
+            "INSERT INTO audit_logs (id) VALUES ('x') ON CONFLICT (id) "
+            "DO UPDATE SET id = 'y' RETURNING id AS [DROP]",
+        ]
+
+    def test_ddl_allowed_connection_rejects_ddl_word_bypass(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._flag_bypass_statements():
+            with engine.connect() as conn:
+                conn.execution_options(audit_log_ddl_allowed=True)
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_ddl_allowed_session_connection_rejects_ddl_word_bypass(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._flag_bypass_statements():
+            with Session(engine) as fresh:
+                conn = fresh.connection(
+                    execution_options={"audit_log_ddl_allowed": True}
+                )
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                fresh.rollback()
+
+        assert snapshot() == before
+
+    def test_session_connection_with_option_still_permits_ddl(self, engine):
+        with Session(engine) as fresh:
+            conn = fresh.connection(
+                execution_options={"audit_log_ddl_allowed": True}
+            )
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN note2 TEXT"))
+            fresh.commit()
+
+        columns = {
+            col["name"] for col in inspect(engine).get_columns("audit_logs")
+        }
+        assert "note2" in columns
+
+    def test_text_no_whitespace_spellings_are_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+        statements = [
+            'DELETE FROM"audit_logs" WHERE id = 1',
+            'DROP TABLE"audit_logs"',
+            'DELETE FROM main."audit_logs"',
+            'DELETE FROM"x"."audit_logs"',
+        ]
+
+        for statement in statements:
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
