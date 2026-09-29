@@ -167,7 +167,7 @@ class TestAutAc38SuccessRotatesCookieAndLoginStates:
         for client in (client_a, client_b, client_c):
             login_resp = client.post(
                 "/api/v1/auth/login",
-                json={"email": user.email, "password": PASSWORD},
+                json={"login": user.email, "password": PASSWORD},
             )
             assert login_resp.status_code == 200
         original_a_cookie = client_a.cookies[SESSION_COOKIE_NAME]
@@ -221,12 +221,12 @@ class TestAutAc38SuccessRotatesCookieAndLoginStates:
 
         old_login = make_client().post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert old_login.status_code == 401
         new_login = make_client().post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": NEW_PASSWORD},
+            json={"login": user.email, "password": NEW_PASSWORD},
         )
         assert new_login.status_code == 200
 
@@ -377,7 +377,7 @@ class TestAutAc50AuditTrailAcrossServiceAndApi:
         client = _client_with_admin_set_password_route()
         admin_login = client.post(
             "/api/v1/auth/login",
-            json={"email": admin_a.email, "password": "Admin-Pass1"},
+            json={"login": admin_a.email, "password": "Admin-Pass1"},
         )
         assert admin_login.status_code == 200
 
@@ -395,7 +395,7 @@ class TestAutAc50AuditTrailAcrossServiceAndApi:
         u_client = TestClient(create_app(), base_url="https://testserver")
         u_login = u_client.post(
             "/api/v1/auth/login",
-            json={"email": u.email, "password": "Temp-Pass1"},
+            json={"login": u.email, "password": "Temp-Pass1"},
         )
         assert u_login.status_code == 200
         assert u_login.json()["must_change_password"] is True
