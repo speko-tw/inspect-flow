@@ -32,10 +32,10 @@
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
 | B | 模型與 migration：`User` 加 `username`（小寫存放、格式與保留字檢查、唯一）、`company_id` 改可空值、`department`、`location`、`employee_no` 在沒有公司時必須為空值、`employee_no` 同公司內唯一、`name_en` 選填、內建 `admin` 欄位限制；`Company` 移除 `code`、`tax_id`、`kind`、`parent_id`，`name` 存放前去前後空白且不分大小寫唯一；既有資料回填帳號名稱、清空內建 `admin` 的公司與姓名 | 本計畫 T1～T8；`database-foundation` DBF-R12、DBF-R13 的改寫 | DOM-AC33、DOM-AC34、DOM-AC36、DOM-AC37、DOM-AC39、DOM-AC40、DOM-AC45 | [#260](https://github.com/speko-tw/inspect-flow/issues/260) |
-| C | 初始化與首次設定 API：初始化指令改為只建內建 `admin` 與三個範本角色（`make init`）；重跑規則；首次設定流程新增第一個使用者時，操作者為內建 `admin`（登入碼與網頁流程由 `authentication` 定義） | B | DOM-AC43、DOM-AC44、DOM-AC46 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
+| C | 初始化與首次設定 API：初始化指令改為只建內建 `admin` 與三個範本角色（`make init`）；重跑規則（登入碼與網頁流程由 `authentication` 定義；本任務不建立使用者的端點） | B | DOM-AC43、DOM-AC44 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
 | D | 帳號名稱或 email 登入（`authentication` AUT-R05、AUT-R06；本規格只提供 `username` 欄位與唯一性） | B | （`authentication` 驗收） | [#262](https://github.com/speko-tw/inspect-flow/issues/262) |
-| E | 使用者與公司 API：帳號名稱的修改權限與稽核、換公司或解除連結時清空並寫稽核、`is_admin` 指派與收回、沒有公司的人加入專案、公司列表／新增／改名／停用 | B | DOM-AC35、DOM-AC38、DOM-AC41、DOM-AC42 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
-| F | 前端登入與首次設定頁 | C、D | （`authentication` 驗收） | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
+| E | 使用者與公司 API：帳號名稱的修改權限與稽核、換公司或解除連結時清空並寫稽核、`is_admin` 指派與收回、沒有公司的人加入專案、公司列表／新增／改名／停用；首次設定成功後 `admin` 已登入，以新增使用者 API 建立第一個使用者，`created_by`、`updated_by` 為內建 `admin` | B、C | DOM-AC35、DOM-AC38、DOM-AC41、DOM-AC42、DOM-AC46 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
+| F | 前端登入與首次設定頁；驗收涵蓋「設定密碼 → 新增第一個使用者」整段流程（呼叫 E 的 API）；一般管理頁屬 G | C、D、E | （`authentication` 驗收） | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
 | G | 前端管理頁（簡便版：使用者與公司的列表、新增、修改、停用、連結或解除公司） | E | （前端驗收） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者與公司的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
 
@@ -125,7 +125,7 @@
 | DOM-AC43 | `backend/tests/cli/test_init_system.py`（C）：不提供輸入執行指令，逐欄斷言內建 `admin` 與三個範本角色、沒有公司與稽核紀錄；讓中途失敗，斷言整批不生效；`make check`，PostgreSQL 由 CI 補驗 |
 | DOM-AC44 | `backend/tests/cli/test_init_system.py`（C）：兩種狀態各重跑一次，斷言資料不變、已設密碼者被拒絕；`make check` |
 | DOM-AC45 | `backend/tests/db/test_migration_backfill.py`（B）：建立舊結構資料庫與資料、執行 upgrade head，斷言回填與欄位移除；`make check` |
-| DOM-AC46 | `backend/tests/api/`（C）：首次設定流程新增第一個使用者，斷言 `created_by`、`updated_by` 是內建 `admin`；`make check` |
+| DOM-AC46 | `backend/tests/api/`（E）：以首次登入碼完成首次設定後，用登入狀態呼叫新增使用者 API 建立第一個使用者，斷言 `created_by`、`updated_by` 是內建 `admin`；`make check` |
 
 ## 考慮過但沒採用的做法
 

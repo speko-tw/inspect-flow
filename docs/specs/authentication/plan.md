@@ -34,12 +34,12 @@
 
 | 任務 | 內容（與本規格有關的部分） | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| B | 模型與 migration（`domain-model` 計畫的 B）：`User` 加 `username`、內建 `admin` 欄位限制，`Company` 精簡。`SetupCode` 資料表與其 migration 建議併入本任務，讓 migration 鏈只排一次（由計畫在開 issue 時確認） | T2、T9 | AUT-AC31（增列 `SetupCode`） | [#260](https://github.com/speko-tw/inspect-flow/issues/260) |
-| C | 初始化與首次設定 API：初始化指令產生並印出首次登入碼、重跑規則（AUT-R42、AUT-R43）；`GET /api/v1/setup/status`、`POST /api/v1/setup/admin-password`（AUT-R44）；首次登入碼失敗鎖定，計數與 T8 分開（AUT-R45）；首次設定與重設寫系統事件的 `user.password_set`（`audit-log` ALG-R18）；`make reset-admin-password` 取代 T6 的設定密碼指令，經 T11 的 Service 入口寫入（AUT-R47）；公開路由清單加兩條（AUT-R18） | B、T3、T4、T8、T11、`audit-log` T2 | AUT-AC16、AUT-AC23（已取代）、AUT-AC24、AUT-AC25、AUT-AC32（已取代）、AUT-AC34、AUT-AC49、AUT-AC53～AUT-AC64、AUT-AC66；另 AUT-AC04 改用重設指令 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
-| D | 帳號名稱或 email 登入：登入 API 的請求欄位 `login`、含 `@` 用 email 否則用帳號名稱、比對不分大小寫；`me` 加 `username`；失敗回應與鎖定計數維持一致（AUT-R05、AUT-R06、AUT-R08、AUT-R28） | B、T3、T8 | AUT-AC05、AUT-AC06、AUT-AC08、AUT-AC54 | [#262](https://github.com/speko-tw/inspect-flow/issues/262) |
+| B | 模型與 migration（`domain-model` 計畫的 B）：`User` 加 `username`、內建 `admin` 欄位限制，`Company` 精簡。**本任務負責建立 `SetupCode` 資料表與其 migration**（欄位見[資料](spec.md#資料)）：UUID 主鍵、建立及修改紀錄欄位（`created_by`、`updated_by` 外鍵指向 `User`）、`code_hash` 與 `expires_at` 不可空值、`voided_at` 可空值。「同一時間至多一筆有效」是隨時間變化的規則，不做成資料庫約束，由 C 的 Service 保證（AUT-AC55）。migration 鏈只排一次，C 不再新增資料表 | T2、T9 | AUT-AC31（增列 `SetupCode` 的欄位、可空性與外鍵斷言） | [#260](https://github.com/speko-tw/inspect-flow/issues/260) |
+| C | 初始化與首次設定 API：初始化指令產生並印出首次登入碼、重跑規則（AUT-R42、AUT-R43），**只使用 B 建好的 `SetupCode` 資料表**，不建表、不加 migration；`GET /api/v1/setup/status`、`POST /api/v1/setup/admin-password`（AUT-R44）；首次登入碼失敗鎖定，計數與 T8 分開（AUT-R45）；首次設定與重設寫系統事件的 `user.password_set`（`audit-log` ALG-R18）；`make reset-admin-password` 取代 T6 的設定密碼指令，經 T11 的 Service 入口寫入（AUT-R47）；公開路由清單加兩條（AUT-R18）。首次設定成功後 `admin` 已登入（AUT-R44），C **不**建立使用者的端點，新增第一個使用者由前端呼叫 E 的新增使用者 API | B、T3、T4、T8、T11、`audit-log` T2 | AUT-AC16、AUT-AC23（已取代）、AUT-AC24、AUT-AC25、AUT-AC32（已取代）、AUT-AC34、AUT-AC49、AUT-AC53～AUT-AC64、AUT-AC66；另 AUT-AC04 改用重設指令 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
+| D | 帳號名稱或 email 登入：登入 API 的請求欄位 `login`、含 `@` 用 email 否則用帳號名稱、比對不分大小寫；`me` 加 `username`；失敗回應與鎖定計數維持一致（AUT-R05、AUT-R06、AUT-R08、AUT-R28） | B、T3、T8 | AUT-AC05、AUT-AC06、AUT-AC08 | [#262](https://github.com/speko-tw/inspect-flow/issues/262) |
 | E | 使用者與公司 API：新增使用者時由系統產生臨時密碼、只回傳一次、「給予 admin 權限」勾選（AUT-R46）；其餘規則見 `domain-model` 計畫的 E | B、C、T11 | AUT-AC61 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
-| F | 前端登入與首次設定頁：登入頁改為「帳號名稱或 email」、`/setup` 首次設定頁與導向守衛（AUT-R29） | C、D、T7 | AUT-AC65 | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
-| G | 前端管理頁（簡便版）：本規格只要求新增使用者的畫面顯示一次臨時密碼與「給予 admin 權限」勾選框（預設不勾） | E | AUT-AC61（畫面部分） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
+| F | 前端登入與首次設定頁：登入頁改為「帳號名稱或 email」、`/setup` 首次設定頁與導向守衛（AUT-R29）；首次設定成功後（已登入）進入「新增第一個使用者」步驟，呼叫 E 的新增使用者 API。驗收涵蓋「設定密碼 → 新增第一個使用者」整段流程；一般的使用者與公司管理頁屬 G | C、D、E、T7 | AUT-AC65 | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
+| G | 前端管理頁（簡便版，一般管理頁；首次設定後新增第一個使用者的步驟屬 F）：本規格只要求新增使用者的畫面顯示一次臨時密碼與「給予 admin 權限」勾選框（預設不勾） | E | AUT-AC61（畫面部分） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者、首次登入強制變更的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
 
 **本次變更對既有任務的影響**（既有任務的內容保持原樣，影響由 B～H 修改）：
@@ -129,7 +129,7 @@
 | AUT-AC28 | `frontend/src/auth/RequireAuth.test.tsx`（T7）：以 `MemoryRouter` 渲染 `/admin`、`/field`，替身回 401，斷言導向 `/login` 並帶原路徑；替身改回 200 後送出表單，斷言回到原路徑；`npm run test` |
 | AUT-AC29 | `frontend/src/auth/LoginPage.test.tsx`（T7）：替身回 401，斷言顯示通用訊息、密碼欄位的 `type`；`npm run test` |
 | AUT-AC30 | `frontend/src/auth/LoginPage.test.tsx`（T7）：以 `vi.spyOn` 監看 `Storage.prototype.setItem` 與 `fetch`，斷言沒有寫入、沒有自訂 `Authorization` 或 `Cookie` 標頭、登出呼叫 API 並導向 `/login`；`npm run test` |
-| AUT-AC31 | `backend/tests/db/test_auth_tables.py`（T2）：inspector 檢查兩張表的欄位、可空性、唯一與外鍵，並斷言 `User` 資料表沒有密碼或 token 欄位；依 AC 的錯誤寫入斷言 `IntegrityError` 且筆數不變 |
+| AUT-AC31 | `backend/tests/db/test_auth_tables.py`（T2；`SetupCode` 的斷言由 B 增列）：inspector 檢查三張表的欄位、可空性、唯一與外鍵，並斷言 `User` 資料表沒有密碼或 token 欄位；依 AC 的錯誤寫入斷言 `IntegrityError` 且筆數不變 |
 | AUT-AC32 | `backend/tests/cli/test_set_password.py`（T6）：初始化後以標準輸入對內建 `admin` 執行指令，斷言 `UserPassword` 有一筆，再以登入 API 斷言 200 與 `is_admin`。**已被取代**（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）：由 AUT-AC58 接手 |
 | AUT-AC33 | `backend/tests/db/test_user_password_flag.py`（T9）：inspector 檢查欄位與可空性；以 ORM 新增不指定欄位的資料讀回 `false`，空值寫入斷言 `IntegrityError` 且筆數不變 |
 | AUT-AC34 | `backend/tests/cli/test_set_password.py`（T11）：分別對一般帳號與內建 `admin` 執行指令，斷言標記，再登入並呼叫 `me` 斷言回應欄位；本次變更後改為 Service 入口新增的帳號、首次設定與重設指令（C、E） |
@@ -163,7 +163,7 @@
 | AUT-AC62 | `backend/tests/cli/test_reset_admin_password.py`（C）：標準輸入重設，斷言登入狀態刪除、鎖定清除、恰一筆系統事件稽核、新密碼可登入且不標臨時 |
 | AUT-AC63 | `backend/tests/cli/test_reset_admin_password.py`（C）：`admin` 無密碼時執行，斷言拒絕、提示、資料不變 |
 | AUT-AC64 | `backend/tests/cli/test_reset_admin_password.py`（C）：檢查 `Makefile` 的 target 與 `app/cli/` 的指令清單，斷言沒有一般的設定密碼指令 |
-| AUT-AC65 | `frontend/src/auth/SetupPage.test.tsx`、`LoginPage.test.tsx`（F）：替身回 `setup_required` 的兩種值，斷言導向與不可進入；兩種登入輸入；錯碼只顯示一種訊息；`npm run test` |
+| AUT-AC65 | `frontend/src/auth/SetupPage.test.tsx`、`LoginPage.test.tsx`（F）：替身回 `setup_required` 的兩種值，斷言導向與不可進入；兩種登入輸入；錯碼只顯示一種訊息；以替身走完「設定密碼 → 新增第一個使用者」（呼叫 E 的新增使用者 API），斷言臨時密碼只顯示一次、勾選框預設不勾；`npm run test` |
 | AUT-AC66 | `backend/tests/auth/test_auth_logging.py`（C）：全流程後全文搜尋日誌與稽核，斷言不含碼、密碼、雜湊、token、Cookie 值與帳號欄原文 |
 
 ## 考慮過但沒採用的做法

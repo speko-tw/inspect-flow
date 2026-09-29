@@ -1,7 +1,7 @@
 # 認證與授權（authentication）
 
 **代碼**：`AUT`　**Phase**：P2　**狀態**：已凍結
-**前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R01～DOM-R27、DOM-R45～DOM-R54）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
+**前置規格**：`domain-model`（`User`、`Company`、`Role`、`ProjectMember`、初始化指令、目前操作者入口，見 DOM-R02～DOM-R27、DOM-R45～DOM-R54）、`database-foundation`（UUID 主鍵與建立及修改紀錄，見 DBF-R11、DBF-R14）、`api-conventions`（`/api/v1`、錯誤 envelope 與 `error.code`，見 API-R01～API-R07）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-17](../../intents/03-decisions-and-stack.md#kd-17)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)（已被取代，見 KD-45）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)～[KD-31](../../intents/03-decisions-and-stack.md#kd-31)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)～[KD-46](../../intents/03-decisions-and-stack.md#kd-46)、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-13](../../intents/05-open-questions.md#oq-13)（已裁定）
 **被擋議題**：無（登入機制與密碼雜湊見 [OQ-13](../../intents/05-open-questions.md#oq-13)，權限機制見 [OQ-08](../../intents/05-open-questions.md#oq-08)，皆已裁定）。個別數值與細節待本規格的[待釐清](#待釐清)與 `domain-model` 的裁定（DOM-Q2、DOM-Q3、DOM-Q6 皆已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)、[#123](https://github.com/speko-tw/inspect-flow/issues/123)、[#126](https://github.com/speko-tw/inspect-flow/issues/126)），只擋對應任務，不擋本規格
 
@@ -25,7 +25,7 @@
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
-- `User`、`Company`、`Role`、`ProjectMember` 的欄位與約束、有效權限與角色影響範圍的計算、初始化指令本身：由 `domain-model` 定義（DOM-R01～DOM-R27、DOM-R45～DOM-R54），本規格只引用；初始化指令建立哪些資料由 DOM-R53 定義，本規格只定義它印出的首次登入碼與其後的流程。
+- `User`、`Company`、`Role`、`ProjectMember` 的欄位與約束、有效權限與角色影響範圍的計算、初始化指令本身：由 `domain-model` 定義（DOM-R02～DOM-R27、DOM-R45～DOM-R54），本規格只引用；初始化指令建立哪些資料由 DOM-R53 定義，本規格只定義它印出的首次登入碼與其後的流程。
 - 外部身分來源（LDAP、AD、Entra ID）的登入與同步，以及本系統帳號轉成外部帳號時既有登入狀態的處理：移至 `external-identity-sync`。本規格的設計不得阻礙日後串接（AUT-R20；[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-30](../../intents/03-decisions-and-stack.md#kd-30) 的理由）。
 - 人員與公司的簡易管理（新增、修改、停用、連結或解除連結公司）：屬 0.2.x，API 由 [#263](https://github.com/speko-tw/inspect-flow/issues/263)、畫面由 [#265](https://github.com/speko-tw/inspect-flow/issues/265) 提供（負責人裁定 [#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），本規格只提供它們要呼叫的權限檢查、登入狀態筆數與設定密碼入口（AUT-R16、AUT-R19、AUT-R36、AUT-R46）。進階功能（搜尋、分頁、批次操作等）以及角色、專案成員的管理 API 與畫面、停用人員前顯示影響範圍的畫面與確認流程：由 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）等功能規格負責。「替客戶公司成員指派可修改角色的確認提示」已隨客戶公司概念取消（KD-28、DOM-R24 已被取代）。
 - 權限代碼的命名規則與可用清單：見 `domain-model` 的 DOM-R30、DOM-R35（[DOM-Q3](../domain-model/spec.md#dom-q3) 已裁定）。本規格的檢查元件以權限代碼字串為輸入，不登記任何代碼。
@@ -148,14 +148,14 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| AUT-R29 | 前端**必須**提供登入頁，欄位為「帳號名稱或 email」與密碼，送出到登入 API；失敗時只顯示一種通用訊息（「帳號或密碼錯誤」）。Admin Web 與 Field Web 在目前使用者 API 回傳 401 時，**必須**導向登入頁，登入成功後回到原本的頁面。Admin Web 另**必須**提供首次設定頁：`GET /api/v1/setup/status` 回 `setup_required = true` 時，未登入的使用者被導向此頁，輸入首次登入碼與新密碼（兩次），送出到 AUT-R44 的路由；`invalid_code` 只顯示一種通用訊息，設定成功後導向新增第一個使用者的畫面（[#265](https://github.com/speko-tw/inspect-flow/issues/265)）。`setup_required = false` 時，首次設定頁不可進入 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；架構基準 §17；通用訊息依 AUT-R06；[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29） |
+| AUT-R29 | 前端**必須**提供登入頁，欄位為「帳號名稱或 email」與密碼，送出到登入 API；失敗時只顯示一種通用訊息（「帳號或密碼錯誤」）。Admin Web 與 Field Web 在目前使用者 API 回傳 401 時，**必須**導向登入頁，登入成功後回到原本的頁面。Admin Web 另**必須**提供首次設定頁：`GET /api/v1/setup/status` 回 `setup_required = true` 時，未登入的使用者被導向此頁，輸入首次登入碼與新密碼（兩次），送出到 AUT-R44 的路由；`invalid_code` 只顯示一種通用訊息，設定成功後（已登入）進入新增第一個使用者的步驟，由首次設定流程提供，呼叫新增使用者 API（[#263](https://github.com/speko-tw/inspect-flow/issues/263)）；一般的使用者與公司管理頁屬 [#265](https://github.com/speko-tw/inspect-flow/issues/265)。`setup_required = false` 時，首次設定頁不可進入 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)；架構基準 §17；通用訊息依 AUT-R06；[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29） |
 | AUT-R30 | 前端**不得**讀取、儲存或自行傳送登入 token（Cookie 由瀏覽器自動帶），也**不得**把登入資訊寫入 `localStorage`、`sessionStorage`；前端**必須**提供登出操作 | 必須 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30)（不把長效 token 放在 browser localStorage）、[認證與授權卡片](../../intents/03-decisions-and-stack.md#stack-auth)「不要用」 |
 | AUT-R31 | 前端依目前使用者隱藏無權使用的功能，只是方便；**不得**取代 AUT-R18～AUT-R22 的後端檢查 | 必須 | [PR-01](../../intents/02-principles.md#pr-01) |
 | AUT-R38 | 前端**必須**提供變更密碼頁（目前密碼、新密碼、再輸入一次新密碼），兩次新密碼不同時不送出；依 AUT-R34 的錯誤碼顯示對應訊息。目前使用者 API 回傳 `must_change_password = true` 時，Admin Web 與 Field Web **必須**導向變更密碼頁，變更成功後回到原本的頁面。前端**得**在登出操作旁提供變更密碼的入口，供本人主動變更 | 必須；得（主動變更的入口） | [AUT-Q4](#aut-q4) 裁定（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）（變更密碼的頁面）；後端的強制仍以 AUT-R33 為準（[PR-01](../../intents/02-principles.md#pr-01)） |
 
 ## 資料
 
-`User`、`Company`、`Role`、`ProjectMember` 的定義見 `domain-model`（DOM-R01～DOM-R27）。`domain-model` 的資料段寫明「認證欄位歸 `authentication`」，本規格新增下列三個實體；三者都沿用共通結構（UUID 主鍵、`created_at`、`updated_at`、`created_by`、`updated_by`，見 DBF-R11、DBF-R14、DOM-R15）。
+`User`、`Company`、`Role`、`ProjectMember` 的定義見 `domain-model`（DOM-R02～DOM-R27）。`domain-model` 的資料段寫明「認證欄位歸 `authentication`」，本規格新增下列三個實體；三者都沿用共通結構（UUID 主鍵、`created_at`、`updated_at`、`created_by`、`updated_by`，見 DBF-R11、DBF-R14、DOM-R15）。
 
 | 實體 | 欄位（本規格定義） | 說明 | 對應需求 |
 |---|---|---|---|
@@ -265,7 +265,7 @@
 | AUT-AC62 | 初始化後，`admin` 已設定密碼並登入兩個用戶端，且處於密碼登入鎖定狀態 | 以標準輸入提供兩次相同的有效密碼，執行 `make reset-admin-password`；再以新密碼與帳號名稱 `admin` 登入 | 指令成功；原本兩個用戶端的 `me` 回 401；鎖定與失敗計數已清除，新密碼登入回 200 且 `must_change_password` 為 `false`；恰有一筆 `user.password_set` 稽核，操作者為內建 `admin`（系統事件）；`created_by`、`updated_by` 為內建 `admin` | AUT-R47、AUT-R25、AUT-R28、AUT-R39 |
 | AUT-AC63 | 初始化後、`admin` 尚未設定密碼 | 執行重設指令 | 指令拒絕、資料不變，並提示改用初始化指令（判讀，見 [AUT-Q7](#aut-q7)） | AUT-R47 |
 | AUT-AC64 | 專案的指令清單（Makefile 與後端指令入口） | 檢查是否有可用來設定「一般使用者」密碼的指令，並執行 `make help` | 沒有一般的設定密碼指令；只有初始化與 `reset-admin-password` 兩種與密碼相關的指令 | AUT-R24（已取代）、AUT-R47 |
-| AUT-AC65 | 前端登入頁與首次設定頁；`setup_required` 分別為 `true`、`false` | 未登入時開啟 Admin Web 根路徑；在 `false` 時直接開啟首次設定頁；在登入頁輸入 `anna.deng` 與 `anna.deng@demo.example`；在首次設定頁輸入錯碼 | `true` 時被導向首次設定頁；`false` 時首次設定頁不可進入（導向登入頁）；登入頁兩種輸入都能登入，欄位標示為「帳號名稱或 email」；錯碼只顯示一種通用訊息；設定成功後導向新增第一個使用者的畫面 | AUT-R29、AUT-R44 |
+| AUT-AC65 | 前端登入頁與首次設定頁；`setup_required` 分別為 `true`、`false` | 未登入時開啟 Admin Web 根路徑；在 `false` 時直接開啟首次設定頁；在登入頁輸入 `anna.deng` 與 `anna.deng@demo.example`；在首次設定頁輸入錯碼；再以有效碼與密碼完成設定，並在新增第一個使用者的步驟送出 | `true` 時被導向首次設定頁；`false` 時首次設定頁不可進入（導向登入頁）；登入頁兩種輸入都能登入，欄位標示為「帳號名稱或 email」；錯碼只顯示一種通用訊息；設定成功後進入新增第一個使用者的步驟，送出後顯示一次臨時密碼，「給予 admin 權限」預設不勾（AUT-R46） | AUT-R29、AUT-R44、AUT-R46 |
 | AUT-AC66 | 應用程式日誌與稽核紀錄擷取；完成一次首次設定、一次失敗的首次登入碼輸入、一次把密碼打在帳號欄的登入失敗 | 全文搜尋日誌與稽核紀錄 | 找不到首次登入碼（輸入與產生的）、密碼、雜湊、token、Cookie 值，也找不到登入失敗時輸入的帳號欄原文 | AUT-R41、AUT-R42 |
 
 ### 臨時密碼與變更密碼
@@ -320,7 +320,7 @@
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| AUT-AC31 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `User` 與它的 `UserPassword`、`AuthSession` | 用 SQLAlchemy inspector 檢查 `UserPassword`、`AuthSession` 資料表；再分別新增：同一個 `User` 的第二筆 `UserPassword`；`token_hash` 與既有相同的 `AuthSession`；`user_id` 指向不存在 UUID 的兩種資料；`password_hash`、`token_hash`、`expires_at`、`created_by` 為空值的資料 | 兩張表都有 UUID 主鍵、[資料](#資料)列出的欄位（`must_change_password` 由 AUT-AC33 驗收，不在本條範圍）與建立及修改紀錄欄位，`user_id` 外鍵指向 `User`；每一次錯誤寫入都被資料庫拒絕，筆數不變；`User` 資料表沒有任何密碼或 token 欄位 | AUT-R01、AUT-R03、AUT-R11 |
+| AUT-AC31 | 對空資料庫執行 `alembic upgrade head` 之後，已有一筆 `User` 與它的 `UserPassword`、`AuthSession`，以及一筆 `SetupCode` | 用 SQLAlchemy inspector 檢查 `UserPassword`、`AuthSession`、`SetupCode` 資料表；再分別新增：同一個 `User` 的第二筆 `UserPassword`；`token_hash` 與既有相同的 `AuthSession`；`user_id` 指向不存在 UUID 的兩種資料；`password_hash`、`token_hash`、`expires_at`、`created_by` 為空值的資料；`code_hash`、`expires_at`、`created_by` 為空值的 `SetupCode` | 三張表都有 UUID 主鍵、[資料](#資料)列出的欄位（`must_change_password` 由 AUT-AC33 驗收，不在本條範圍）與建立及修改紀錄欄位，`user_id` 外鍵指向 `User`；`SetupCode` 的 `voided_at` 可空值、`code_hash` 與 `expires_at` 不可空值；每一次錯誤寫入都被資料庫拒絕，筆數不變；`User` 資料表沒有任何密碼或 token 欄位 | AUT-R01、AUT-R03、AUT-R11、AUT-R42 |
 
 AUT-R31 屬設計約束，由 AUT-AC16～AUT-AC21 的後端測試保證：前端怎麼隱藏功能，都不影響後端的判斷。
 
@@ -389,3 +389,4 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 依 AUT-Q6 裁定，新增 AUT-R39～AUT-R41（設定密碼與帳號被鎖寫稽核紀錄；登入、登出寫應用程式日誌；紀錄不得含密碼或 token）與 AUT-AC49～AUT-AC52，「範圍」的稽核紀錄段改寫 — [#148](https://github.com/speko-tw/inspect-flow/issues/148)
 - 負責人裁定：AUT-R28 補上細節（6），經設定密碼的 Service 入口重設密碼（指令、Admin 設定臨時密碼）時一併清除失敗計數並解鎖；新增 AUT-AC53；落地由 T11 的 Service 入口留呼叫點，實際計數、解鎖與測試由 T8 接上 — [#192](https://github.com/speko-tw/inspect-flow/issues/192#issuecomment-5853201917) 裁定
 - 範圍變更（admin 與帳號重新設計）：新增首次登入碼、首次設定公開路由、首次登入碼失敗鎖定、新增使用者的臨時密碼與勾選框、`admin` 重設指令（AUT-R42～AUT-R47、AUT-AC54～AUT-AC66、`SetupCode`、AUT-Q7）；AUT-R24、AUT-AC23、AUT-AC32 已被取代（一般使用者的設定密碼指令移除）；改寫 AUT-R04～AUT-R06、AUT-R08、AUT-R09、AUT-R18、AUT-R20、AUT-R26、AUT-R28、AUT-R29、AUT-R36、AUT-R37、AUT-R39、AUT-R41 與對應驗收；AUT-Q4 第二題標為已被取代；目的、範圍、不包含、使用情境與介面同步改寫；人員與公司的簡易管理改屬 0.2.x（#263、#265） — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
+- 規格澄清（審查修正）：AUT-AC31 增列 `SetupCode` 的欄位、可空性與外鍵斷言（資料表與 migration 由 #260 建立）；AUT-R29、AUT-AC65 明定首次設定後的「新增第一個使用者」步驟由首次設定流程提供、呼叫新增使用者 API（#263）；帳號名稱欄位統一稱 `username`；規格內引用 domain-model 的範圍不再含已被取代的 DOM-R01 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
