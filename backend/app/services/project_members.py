@@ -173,6 +173,19 @@ def unassign_role(
     instead try to ``UPDATE ... SET project_member_id = NULL``,
     which fails outright since that column is ``NOT NULL``.
 
+    Deleting the child this way, instead of through the collection,
+    also means SQLAlchemy never removes it from ``member.
+    role_assignments``'s own in-memory list -- that list is only kept
+    in sync when *it* is the thing mutated. Left alone, a later call
+    in the same transaction (no commit in between) that reads
+    ``member.role_assignments`` -- :func:`_current_role_ids`, used by
+    both :func:`assign_role` and this function -- would still see the
+    just-deleted row and wrongly report ``role_id`` as still
+    assigned. This function therefore expires that one relationship
+    (``session.expire(member, ["role_assignments"])``) right after
+    flushing the delete, forcing the next access to re-``SELECT`` it
+    rather than reuse the stale in-memory list.
+
     Raises:
         RoleNotAssignedError: ``member`` does not currently hold
             ``role_id``.
@@ -189,6 +202,7 @@ def unassign_role(
     session.delete(assignment)
     member.updated_by = operator.id
     session.flush()
+    session.expire(member, ["role_assignments"])
     _record_roles_changed(
         session,
         member,

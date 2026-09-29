@@ -33,6 +33,7 @@ from app.services.roles import (
     update_role,
 )
 from tests.db.conftest import create_root_user_with_company
+from tests.services.conftest import snapshot_persisted_columns
 
 
 def _new_project(creator, code: str) -> Project:
@@ -237,6 +238,52 @@ class TestUpdateRoleUnchangedRejected:
         else:
             raise AssertionError("expected RoleUnchangedError")
 
+        assert _audit_rows_for(session, role.id) == rows_before
+
+
+class TestUpdateRoleInvalidCodeLeavesNameUnchanged:
+    """:func:`update_role` validates every new permission code (DOM-
+    R30/DOM-R35) *before* touching ``role`` at all: a rename combined
+    with an unregistered code must reject the whole call and leave
+    ``role`` -- including ``name`` -- completely untouched, with no
+    ``role.updated`` event, rather than leaving the rename sitting in
+    memory for a later, unrelated flush/commit in the same
+    transaction to write with no audit trail behind it.
+    """
+
+    def test_rename_and_unregistered_code_rejected(
+        self, session, operator, registered_permission_codes
+    ):
+        role = create_role(
+            session, name="Old Name", permission_codes={"report.read"}
+        )
+        session.commit()
+        before = snapshot_persisted_columns(role)
+        before_codes = {p.code for p in role.permission_codes}
+        rows_before = _audit_rows_for(session, role.id)
+
+        try:
+            update_role(
+                session,
+                role,
+                name="New Name",
+                permission_codes={"report.read", "not.registered"},
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+
+        # In-session state first: expire_all() would discard any
+        # unflushed change and hide it from the assertion.
+        assert snapshot_persisted_columns(role) == before
+        assert {p.code for p in role.permission_codes} == before_codes
+        session.commit()
+        session.expire_all()
+        after = snapshot_persisted_columns(role)
+        assert after == before
+        assert after["name"] == "Old Name"
+        assert {p.code for p in role.permission_codes} == before_codes
         assert _audit_rows_for(session, role.id) == rows_before
 
 

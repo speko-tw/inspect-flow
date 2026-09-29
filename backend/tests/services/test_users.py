@@ -283,14 +283,24 @@ class TestDomAc06LastActiveAdminProtected:
         lone_admin.is_admin = True
         session.commit()
         assert lone_admin.is_active is True
+        before = snapshot_persisted_columns(lone_admin)
 
         with pytest.raises(LastActiveAdminRemovalError):
             set_is_admin(session, lone_admin, False)
-        assert lone_admin.is_admin is True
+        # In-session state first: expire_all() would discard any
+        # unflushed change and hide it from the assertion.
+        assert snapshot_persisted_columns(lone_admin) == before
 
         with pytest.raises(LastActiveAdminRemovalError):
             set_is_active(session, lone_admin, False)
-        assert lone_admin.is_active is True
+        assert snapshot_persisted_columns(lone_admin) == before
+
+        session.commit()
+        session.expire_all()
+        after = snapshot_persisted_columns(lone_admin)
+        assert after == before
+        assert after["is_admin"] is True
+        assert after["is_active"] is True
         assert _audit_rows_for(session, lone_admin.id) == []
 
         second_admin = create_root_user_with_company(session, "SECOND06")

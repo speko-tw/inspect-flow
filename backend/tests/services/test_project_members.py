@@ -225,6 +225,49 @@ class TestUnassignRole:
         assert list(member.role_assignments) == []
         assert _audit_rows_for(session, member.id) == rows_before
 
+    def test_unassign_then_reassign_same_transaction(self, session, operator):
+        """:func:`unassign_role` must leave ``member.role_assignments``
+        correctly reflecting the removal for the rest of the same
+        transaction (no ``commit`` in between): re-assigning the same
+        role right after unassigning it must succeed, not raise
+        ``RoleAlreadyAssignedError`` from a stale in-memory
+        collection.
+        """
+        project = _new_project(operator, "P-REASSIGN")
+        user = create_root_user_with_company(session, "U-REASSIGN")
+        role_1 = _new_role(operator, "R1-REASSIGN")
+        session.add_all([project, role_1])
+        session.flush()
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=user.id,
+            role_ids=[role_1.id],
+        )
+
+        unassign_role(session, member, role_1.id)
+        assert {a.role_id for a in member.role_assignments} == set()
+
+        assign_role(session, member, role_1.id)
+        session.commit()
+
+        assert {a.role_id for a in member.role_assignments} == {role_1.id}
+        remaining = session.scalars(
+            select(ProjectMemberRole).where(
+                ProjectMemberRole.project_member_id == member.id,
+                ProjectMemberRole.role_id == role_1.id,
+            )
+        ).all()
+        assert len(remaining) == 1
+
+        rows = _audit_rows_for(session, member.id)
+        assert len(rows) == 3  # initial roles_changed, unassign, assign
+        unassign_event, assign_event = rows[1], rows[2]
+        assert _field(unassign_event.before, "role_ids") == [str(role_1.id)]
+        assert _field(unassign_event.after, "role_ids") == []
+        assert _field(assign_event.before, "role_ids") == []
+        assert _field(assign_event.after, "role_ids") == [str(role_1.id)]
+
 
 class TestRemoveProjectMember:
     """DOM-R36: removing a member deletes the row (and, by the

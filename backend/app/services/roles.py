@@ -115,6 +115,17 @@ def update_role(
         RoleUnchangedError: neither argument was passed, or both
             passed values equal ``role``'s current ones -- see that
             class's docstring for why this is checked first.
+        ValueError: ``permission_codes`` contains a code that fails
+            DOM-R30's format check or DOM-R35's registration check
+            (raised by :class:`app.models.role.RolePermission`'s own
+            validation). Every new ``RolePermission`` is constructed
+            -- and therefore validated -- up front, *before* ``role``
+            or ``created_by``/``updated_by`` are touched: constructing
+            them only after ``role.name`` had already been reassigned
+            would leave that reassignment sitting in memory on a
+            rejected call, ready to be written by a later, unrelated
+            ``flush``/``commit`` in the same transaction with no
+            ``role.updated`` event to show for it.
     """
     current_name = role.name
     current_codes = frozenset(
@@ -135,6 +146,20 @@ def update_role(
             "name nor permission_codes would change"
         )
 
+    # Build every new RolePermission row now, while `role` is still
+    # completely untouched: each constructor call runs
+    # RolePermission's own DOM-R30/DOM-R35 validation, so an invalid
+    # or unregistered code raises here -- before role.name (below) or
+    # role.permission_codes has been reassigned to anything.
+    new_permission_rows = None
+    to_remove: frozenset[str] = frozenset()
+    if codes_changed:
+        to_remove = current_codes - desired_codes
+        to_add = desired_codes - current_codes
+        new_permission_rows = [
+            RolePermission(code=code) for code in sorted(to_add)
+        ]
+
     operator = get_current_operator(session)
     before: dict[str, object] = {}
     after: dict[str, object] = {}
@@ -144,15 +169,14 @@ def update_role(
         after["name"] = name
         role.name = name
     if codes_changed:
+        assert new_permission_rows is not None
         before["permission_codes"] = current_codes
         after["permission_codes"] = desired_codes
-        to_remove = current_codes - desired_codes
-        to_add = desired_codes - current_codes
         role.permission_codes[:] = [
             permission
             for permission in role.permission_codes
             if permission.code not in to_remove
-        ] + [RolePermission(code=code) for code in sorted(to_add)]
+        ] + new_permission_rows
     role.updated_by = operator.id
     session.flush()
 
@@ -176,7 +200,20 @@ def delete_role(session: Session, role: Role) -> None:
     ``ProjectMember`` ids that held ``role`` immediately before
     deletion -- captured up front, since the cascade removes the
     rows this would otherwise be computed from.
+
+    Resolves the current operator up front, purely to fail fast: this
+    function has no ``created_by``/``updated_by`` column of its own
+    to fill, but
+    :func:`app.services.audit.record_audit_event` still needs one
+    for the event's ``created_by``, and it does not resolve one until
+    after this function's own ``session.flush()`` has already
+    deleted ``role``. Resolving it first means an unauthenticated
+    caller (:class:`app.services.operator.OperatorNotAuthenticatedError`)
+    is rejected before ``role`` is touched at all, the same "reject
+    before any mutation" ordering :func:`create_role`/
+    :func:`update_role` already give their own operator lookups.
     """
+    get_current_operator(session)
     member_ids = session.scalars(
         select(ProjectMemberRole.project_member_id)
         .distinct()
