@@ -136,3 +136,28 @@ def clear_failed_attempts(db: Session, user_id: uuid.UUID) -> None:
         .where(LoginCounter.user_id == user_id)
         .values(failure_count=0, locked_until=None)
     )
+
+
+def clear_after_successful_check(db: Session, user_id: uuid.UUID) -> bool:
+    """Recheck lockout under the account write lock before clearing.
+
+    Return False if a concurrent failure locked the account after the
+    caller's initial, pre-hash lockout lookup. The caller must keep this
+    transaction open through the successful action it is authorizing.
+    """
+    _serialize_account(db, user_id)
+    locked_until = db.scalar(
+        select(LoginCounter.locked_until).where(
+            LoginCounter.user_id == user_id
+        )
+    )
+    if locked_until is not None and locked_until > clock.utc_now():
+        return False
+
+    db.execute(delete(LoginFailure).where(LoginFailure.user_id == user_id))
+    db.execute(
+        update(LoginCounter)
+        .where(LoginCounter.user_id == user_id)
+        .values(failure_count=0, locked_until=None)
+    )
+    return True

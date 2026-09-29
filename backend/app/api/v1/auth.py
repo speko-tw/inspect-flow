@@ -22,7 +22,11 @@ from app.auth.dependencies import (
     has_effective_temporary_password_flag,
     register_temporary_password_allowed,
 )
-from app.auth.lockout import is_locked, record_failure
+from app.auth.lockout import (
+    clear_after_successful_check,
+    is_locked,
+    record_failure,
+)
 from app.auth.login import authenticate
 from app.auth.password_service import set_password
 from app.auth.passwords import check_password_length, verify_password
@@ -255,6 +259,16 @@ def change_password(
         user_password.password_hash, body.new_password
     ):
         raise APIError(ErrorCode.AUTH_PASSWORD_UNCHANGED, 422)
+
+    # The pre-verification lock lookup can become stale while Argon2 runs.
+    # Recheck under the per-account write lock before changing the password
+    # or creating a replacement login state.
+    # End the read transaction first: a WAL snapshot cannot be upgraded
+    # after the concurrent failure commits its lockout write.
+    user_id = user.id
+    db.commit()
+    if not clear_after_successful_check(db, user_id):
+        raise APIError(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT, 400)
 
     set_password(db, user, body.new_password, is_temporary=False)
 

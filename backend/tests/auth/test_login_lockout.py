@@ -8,14 +8,19 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select
+from sqlalchemy.orm import Session
 
 from alembic import command
+from app.api.v1 import auth as auth_api
 from app.auth import login as login_module
+from app.auth.dependencies import get_db
 from app.auth.password_service import set_password
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.auth.settings import get_lockout_settings
 from app.db import clock
+from app.main import create_app
 from app.models import (
     AuditLog,
     AuthSession,
@@ -268,6 +273,167 @@ def test_concurrent_failures_count_once_and_audit_once(
     assert (
         db_session.query(LoginFailure).filter_by(user_id=user_id).count() == 10
     )
+    audit = (
+        db_session.query(AuditLog).filter_by(event_type="user.locked").one()
+    )
+    assert audit.entity_id == user_id
+    assert audit.created_by == admin.id
+
+
+def test_tenth_failure_wins_race_with_successful_login(
+    make_client, db_session, now, monkeypatch
+):
+    admin = _admin(db_session)
+    user = make_local_user(db_session, "DEMO6")
+    email, user_id = user.email, user.id
+    assert all(r.status_code == 401 for r in _fail(make_client(), user, 9))
+
+    success_reached_lock = threading.Event()
+    tenth_failure_finished = threading.Event()
+    actual_clear = login_module.clear_after_successful_check
+
+    def pause_before_serialized_recheck(db, target_id):
+        success_reached_lock.set()
+        assert tenth_failure_finished.wait(timeout=15)
+        return actual_clear(db, target_id)
+
+    monkeypatch.setattr(
+        login_module,
+        "clear_after_successful_check",
+        pause_before_serialized_recheck,
+    )
+
+    def successful_login():
+        client = make_client()
+        return client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": P},
+        )
+
+    def tenth_failure():
+        assert success_reached_lock.wait(timeout=15)
+        try:
+            client = make_client()
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "wrong-password"},
+            )
+            return response.status_code
+        finally:
+            tenth_failure_finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        success_future = pool.submit(successful_login)
+        failure_future = pool.submit(tenth_failure)
+        success_response = success_future.result(timeout=30)
+        failure_status = failure_future.result(timeout=30)
+
+    assert failure_status == 401
+    assert success_response.status_code == 401
+    assert "set-cookie" not in success_response.headers
+    db_session.rollback()
+    counter = db_session.query(LoginCounter).filter_by(user_id=user_id).one()
+    assert counter.failure_count == 10
+    assert counter.locked_until == T0 + timedelta(minutes=15)
+    assert (
+        db_session.query(LoginFailure).filter_by(user_id=user_id).count() == 10
+    )
+    assert (
+        db_session.query(AuthSession).filter_by(user_id=user_id).count() == 0
+    )
+    audit = (
+        db_session.query(AuditLog).filter_by(event_type="user.locked").one()
+    )
+    assert audit.entity_id == user_id
+    assert audit.created_by == admin.id
+
+
+def test_tenth_failure_wins_race_with_password_change(
+    engine, db_session, now, monkeypatch
+):
+    admin = _admin(db_session)
+    user = make_local_user(db_session, "DEMO7")
+    email, user_id = user.email, user.id
+    password_hash = (
+        db_session.query(UserPassword)
+        .filter_by(user_id=user_id)
+        .one()
+        .password_hash
+    )
+    _session, token = create_session(db_session, user)
+    db_session.commit()
+
+    app = create_app()
+
+    def get_wal_db():
+        with Session(engine) as session:
+            session.connection().exec_driver_sql("BEGIN")
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+
+    app.dependency_overrides[get_db] = get_wal_db
+
+    def make_wal_client():
+        return TestClient(app, base_url="https://testserver")
+
+    assert all(r.status_code == 401 for r in _fail(make_wal_client(), user, 9))
+
+    change_reached_lock = threading.Event()
+    tenth_failure_finished = threading.Event()
+    actual_clear = auth_api.clear_after_successful_check
+
+    def pause_before_serialized_recheck(db, target_id):
+        change_reached_lock.set()
+        assert tenth_failure_finished.wait(timeout=15)
+        return actual_clear(db, target_id)
+
+    monkeypatch.setattr(
+        auth_api,
+        "clear_after_successful_check",
+        pause_before_serialized_recheck,
+    )
+
+    def change_password():
+        client = make_wal_client()
+        return client.post(
+            "/api/v1/auth/password",
+            json={"current_password": P, "new_password": NEW_P},
+            cookies={SESSION_COOKIE_NAME: token},
+        )
+
+    def tenth_failure():
+        assert change_reached_lock.wait(timeout=15)
+        try:
+            client = make_wal_client()
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "wrong-password"},
+            )
+            return response.status_code
+        finally:
+            tenth_failure_finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        change_future = pool.submit(change_password)
+        failure_future = pool.submit(tenth_failure)
+        change_response = change_future.result(timeout=30)
+        failure_status = failure_future.result(timeout=30)
+
+    assert failure_status == 401
+    assert change_response.status_code == 400
+    assert "set-cookie" not in change_response.headers
+    db_session.rollback()
+    password = db_session.query(UserPassword).filter_by(user_id=user_id).one()
+    assert password.password_hash == password_hash
+    assert (
+        db_session.query(AuthSession).filter_by(user_id=user_id).count() == 1
+    )
+    counter = db_session.query(LoginCounter).filter_by(user_id=user_id).one()
+    assert counter.failure_count == 10
     audit = (
         db_session.query(AuditLog).filter_by(event_type="user.locked").one()
     )

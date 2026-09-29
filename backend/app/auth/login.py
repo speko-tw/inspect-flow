@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.lockout import (
-    clear_failed_attempts,
+    clear_after_successful_check,
     is_locked,
     record_failure,
 )
@@ -96,6 +96,10 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
         )
 
     user_id = user.id if user is not None else None
+    # Known wrong passwords also write a failure counter after their
+    # Argon2 check; that extra database round trip is small beside the
+    # hash cost. This timing difference is accepted for this internal
+    # network service, which also locks accounts after repeated failures.
     # AUT-R06: unknown accounts still pay for one lockout lookup,
     # using a fixed absent ID; neither path reveals the email.
     locked = is_locked(db, user_id)
@@ -122,7 +126,12 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
         _log_failed(str(user_id), "invalid_credentials")
         return None
     db.commit()
-    clear_failed_attempts(db, user_id)
+    # The earlier lock check preceded Argon2 and cannot authorize success:
+    # a concurrent tenth failure may have locked this account meanwhile.
+    # Recheck while holding the same per-account write lock used by failures.
+    if not clear_after_successful_check(db, user_id):
+        _log_failed(str(user_id), "locked")
+        return None
     if not user.is_active:
         _log_failed(str(user.id), "account_disabled")
         return None
