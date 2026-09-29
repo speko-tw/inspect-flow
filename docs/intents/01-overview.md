@@ -76,23 +76,23 @@ flowchart LR
 
 ## 第一階段（MVP）範圍
 
-第一階段的目標是完成一個完整閉環，不是打造大平台（依據：架構基準 §1）。架構基準文件以開發階段順序具體定義了這個範圍（依據：架構基準 §30）：
+第一階段的目標是完成一個完整閉環，不是打造大平台（依據：架構基準 §1）。下列 Phase 1～11 依 Milestone 路線圖與負責人裁定對齊；架構基準 §30 提供 MVP 功能範圍與原開發階段的參考：
 
-- **Phase 0 — Repository / Skeleton**：專案骨架、健康檢查端點。
-- **Phase 1 — Database Foundation**：SQLAlchemy + Alembic + SQLite；`User`、`Project`、`Template`、 `TemplateVersion`。分成兩段：第一段是基礎設施加上 `User`、`Project`；第二段是 `Template`、`TemplateVersion`，等 [G-01](05-open-questions.md#g-01) 裁定後再做（依 [OQ-22](05-open-questions.md#oq-22)；依據：負責人決定（#46，2026-09-26），架構基準無對應章節）。
-- **Phase 2 — Authentication**：登入 / 登出 / 目前使用者 / 角色。
+- **Phase 1 — Core Foundation（核心基礎）**：Repository 骨架、健康檢查、CI、後端／前端基礎、API 慣例、SQLAlchemy + Alembic + SQLite、`User`、`Company`、`Project` 與共用基礎。
+- **Phase 2 — Identity & Access（身分與存取）**：登入 / 登出 / 目前使用者、角色、權限與存取檢查。
 - **Phase 3 — Template System**：`Template`、`TemplateVersion`、`TemplateItem`、`EvidenceRequirement`。
 - **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照；查驗項目與查驗點由內業事先給定，MVP 不以間距（interval）自動切分任務為必要流程（依 [G-01](05-open-questions.md#g-01) 裁定）。
 - **Phase 5 — Field UI**：今日任務、任務詳情、證據檢查清單、狀態。
-- **Phase 6 — Photo Upload & Field Evidence Editor**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）。
-- **Phase 7 — Task Completion Validation**：必要證據 vs. 已上傳證據的伺服器端驗證。
+- **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）。
+- **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證。
 - **Phase 8 — Admin Dashboard**：今日工作量、完成數／完成率、工程師與專案進度。
 - **Phase 9 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存範本版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
 - **Phase 10 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
+- **Phase 11 — Pilot Hardening & Release Readiness（試營運強化與發布整備）**：依試營運回饋修正問題，強化效能、資安與維運，驗證相容性、備份／還原及報告正確性，完成發布整備。
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
 
-Phase 不等於 Milestone，見 [06-versioning-and-milestone-governance.md](06-versioning-and-milestone-governance.md#vg-05)。
+Phase N 對應 Milestone 0.N.x，見 [06-versioning-and-milestone-governance.md](06-versioning-and-milestone-governance.md#vg-05)。
 
 一個版本要視為「可部署」，**必須**滿足 §22A.20 的完整 Deployment Definition of Done，包括 DOCX／PDF 可產出、重啟後資料不消失等條件（依據：架構基準 §22A.20）。
 
