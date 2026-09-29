@@ -56,8 +56,9 @@ root.
    printf '\nAdmin password: '
    IFS= read -r -s ADMIN_PASSWORD
    printf '\n'
-   jq -n --arg code "$SETUP_CODE" --arg password "$ADMIN_PASSWORD" \
-     '{code:$code,password:$password}' |
+   export SETUP_CODE ADMIN_PASSWORD
+   uv run --project backend python -c \
+     'import json, os; print(json.dumps({"code": os.environ["SETUP_CODE"], "password": os.environ["ADMIN_PASSWORD"]}))' |
      curl --fail-with-body --silent --show-error \
        -X POST http://127.0.0.1:8000/api/v1/setup/admin-password \
        -H 'Content-Type: application/json' --data-binary @- \

@@ -36,7 +36,7 @@ migrate:
 	cd backend && uv run --locked alembic upgrade head
 
 # System initialization command (DOM-R53): creates the built-in
-# admin and three template roles, then prints a one-time setup code.
+# admin, then prints a one-time setup code.
 # Run after `make migrate`; when admin has no password, rerunning
 # replaces the old code. A configured admin cannot be reinitialized.
 # Invoked as a module (`python -m`), not a `uv run` script entry
