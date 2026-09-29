@@ -59,7 +59,7 @@ class TestAutAc52LoginSucceeded:
 
         resp = client.post(
             "/api/v1/auth/login",
-            json={"email": submitted_email, "password": PASSWORD},
+            json={"login": submitted_email, "password": PASSWORD},
         )
         assert resp.status_code == 200
 
@@ -79,6 +79,30 @@ class TestAutAc52LoginSucceeded:
 
         assert db_session.query(AuditLog).count() == 0
 
+    def test_username_login_does_not_log_submitted_identifier(
+        self, client, db_session, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="app.auth")
+        user = make_local_user(db_session, "L005")
+        submitted_login = user.username.swapcase()
+
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"login": submitted_login, "password": PASSWORD},
+        )
+        assert resp.status_code == 200
+        events = _auth_records(caplog)
+        assert len(events) == 1
+        assert events[0].event == "auth.login_succeeded"
+        assert events[0].user_id == str(user.id)
+        _assert_no_secrets(
+            caplog,
+            submitted_login,
+            user.username,
+            PASSWORD,
+            _password_hash(db_session, user),
+        )
+
 
 class TestAutAc52Logout:
     def test_logout_with_cookie_logs_the_owning_user_id(
@@ -88,7 +112,7 @@ class TestAutAc52Logout:
         assert user.email is not None
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         token = login_resp.cookies[SESSION_COOKIE_NAME]
         caplog.clear()
@@ -144,7 +168,7 @@ class TestAutAc52LoginFailedWrongPassword:
 
         resp = client.post(
             "/api/v1/auth/login",
-            json={"email": submitted_email, "password": "definitely-wrong"},
+            json={"login": submitted_email, "password": "definitely-wrong"},
         )
         assert resp.status_code == 401
 
@@ -178,7 +202,7 @@ class TestAutAc52LoginFailedUnknownEmail:
         resp = client.post(
             "/api/v1/auth/login",
             json={
-                "email": "Nobody@Example.com",
+                "login": "Nobody@Example.com",
                 "password": "whatever-password",
             },
         )
@@ -192,6 +216,29 @@ class TestAutAc52LoginFailedUnknownEmail:
 
         _assert_no_secrets(caplog, "whatever-password", "Nobody@Example.com")
 
+    def test_unknown_username_shaped_login_is_not_logged(self, client, caplog):
+        caplog.set_level(logging.INFO, logger="app.auth")
+        submitted_login = "CorrectHorseBatteryStaple"
+        assert "@" not in submitted_login
+
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"login": submitted_login, "password": "whatever-password"},
+        )
+        assert resp.status_code == 401
+
+        events = _auth_records(caplog)
+        assert len(events) == 1
+        assert events[0].event == "auth.login_failed"
+        assert events[0].user_id is None
+        assert events[0].reason == "invalid_credentials"
+        _assert_no_secrets(
+            caplog,
+            submitted_login,
+            submitted_login.lower(),
+            "whatever-password",
+        )
+
 
 class TestAutAc52LoginFailedAccountDisabled:
     def test_disabled_account_with_correct_password_logs_account_disabled(
@@ -204,7 +251,7 @@ class TestAutAc52LoginFailedAccountDisabled:
 
         resp = client.post(
             "/api/v1/auth/login",
-            json={"email": submitted_email, "password": PASSWORD},
+            json={"login": submitted_email, "password": PASSWORD},
         )
         assert resp.status_code == 401
 

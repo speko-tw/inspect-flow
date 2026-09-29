@@ -14,10 +14,12 @@ function stubAuthenticatedFetch() {
     vi.fn(async () =>
       Response.json({
         id: 'u1',
+        username: 'user',
         email: 'user@example.com',
         name_en: 'Test User',
         name_zh: '測試使用者',
         is_admin: true,
+        must_change_password: false,
       }),
     ),
   )

@@ -10,10 +10,12 @@ import RequireAuth from './RequireAuth'
 
 const CURRENT_USER = {
   id: 'u1',
+  username: 'user',
   email: 'user@example.com',
   name_en: 'Test User',
   name_zh: '測試使用者',
   is_admin: false,
+  must_change_password: false,
 }
 
 const ERROR_MESSAGE = '登出失敗，請再試一次。'

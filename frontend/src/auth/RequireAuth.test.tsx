@@ -6,10 +6,12 @@ import App from '../App'
 
 const ADMIN_USER = {
   id: 'u1',
-  email: 'admin@example.com',
-  name_en: 'Admin User',
-  name_zh: '管理員',
+  username: 'admin',
+  email: null,
+  name_en: null,
+  name_zh: null,
   is_admin: true,
+  must_change_password: false,
 }
 
 function jsonResponse(body: unknown, status = 200): Response {

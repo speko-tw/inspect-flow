@@ -142,7 +142,7 @@ class TestAutAc35TemporaryPasswordGate:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
         assert login_resp.json()["must_change_password"] is True
@@ -192,7 +192,7 @@ class TestAutAc35TemporaryPasswordGate:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         token = login_resp.cookies[SESSION_COOKIE_NAME]
 
@@ -234,7 +234,7 @@ class TestAutR33AliasedRouteIsRecognizedAsTheSameOperation:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
         token = login_resp.cookies[SESSION_COOKIE_NAME]
@@ -266,7 +266,7 @@ class TestAutR33NameLookalikeIsNotRecognized:
 
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
         token = login_resp.cookies[SESSION_COOKIE_NAME]

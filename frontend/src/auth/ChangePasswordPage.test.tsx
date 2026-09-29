@@ -15,6 +15,7 @@ import RequireAuth from './RequireAuth'
 
 const TEMP_PASSWORD_USER = {
   id: 'u1',
+  username: 'user',
   email: 'user@example.com',
   name_en: 'Test User',
   name_zh: '測試使用者',
