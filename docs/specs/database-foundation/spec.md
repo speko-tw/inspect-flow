@@ -165,3 +165,4 @@
 - DBF-R10、DBF-AC08：依 DBF-Q1 裁定，PostgreSQL 相容性測試的範圍從只跑 migration 擴大為加上 `backend/tests/db/` 的測試，並定下每個 PR 執行、經由 `make check` 在設定 PostgreSQL 連線時執行、版本固定寫在 CI 設定 — [#53](https://github.com/speko-tw/inspect-flow/issues/53)
 - DBF-R13、DBF-AC10：拿掉 `project_code` 在所有 `Project` 之間必須唯一的規則，改為得重複、資料庫不得加唯一約束；`employee_no` 唯一不變。原唯一規則是負責人 #51（2026-09-26）的決定，由負責人 #71（2026-09-28）取代，見 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)、[OQ-01](../../intents/05-open-questions.md#oq-01) — [#246](https://github.com/speko-tw/inspect-flow/issues/246)
 - DBF-R12、DBF-R13、DBF-AC10：`employee_no` 由「必須有、全體唯一」改為「得為空值（只有連結公司時才填）、同公司內唯一」；DBF-Q2 加註「初始化建立兩個帳號」已被取代（DBF-R14、DBF-AC11 不變）；`project_code` 的部分不動 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
+- 計畫 T4、T5 與 DBF-AC10 驗收列：對齊 DBF-R12、DBF-R13、DBF-AC10 的新規則（`employee_no` 得為空值、同公司內唯一），落地由 `domain-model` 計畫的 B；規格條文不變 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
