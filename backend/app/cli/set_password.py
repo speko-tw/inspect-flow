@@ -31,22 +31,22 @@ AUT-R04's length rule (``app.auth.passwords.check_password_length``)
 all report failure and leave every table involved unchanged.
 
 The write itself -- hashing, inserting or updating the ``UserPassword``
-row with the built-in admin as ``created_by``/``updated_by``
-(AUT-R26, via ``app.services.operator.get_current_operator``, which
-falls back to the built-in admin outside of any HTTP request), and
-deleting the account's existing ``AuthSession`` rows (AUT-R25) --
-is centralized in :func:`set_user_password`, the one function T11
-(issue #192) replaces with a call to the Service-layer entry point
-AUT-R36 defines; nothing else in this module changes then (plan.md's
-"風險" section, "T11 改寫 T6 的指令"). Per that same plan.md ("AC
-對應測試"), this command must keep passing AUT-AC04, AUT-AC23~
-AUT-AC25 and AUT-AC32 after that change.
-
-Deliberately writes no audit log entry (a plan.md adjustment,
-"T6 不寫稽核紀錄" in its "風險" section): ``user.password_set``
-(AUT-R39, AUT-AC49) is written once by the Service-layer entry point
-T11 introduces, which covers both this command and the
-change-password API.
+row, marking it temporary or not (AUT-R37: any account other than the
+built-in ``admin``, i.e. ``is_system = False``, is marked temporary),
+deleting the account's existing ``AuthSession`` rows (AUT-R25), and
+writing the ``user.password_set`` audit record (AUT-R39, AUT-AC49) --
+is delegated entirely to :func:`app.auth.password_service.set_password`
+(AUT-R36's Service-layer entry point; T11, issue #192). This command
+only decides *whether* to mark the password temporary; everything
+else, including ``created_by``/``updated_by`` (AUT-R26, via
+``app.services.operator.get_current_operator``, which falls back to
+the built-in admin outside of any HTTP request), lives in that one
+shared function. :func:`set_user_password` below keeps its previous
+signature purely so the rest of this module (``run``, and this
+module's own tests) did not need to change when the delegation was
+introduced (plan.md's "風險" section, "T11 改寫 T6 的指令"); per that
+same plan.md ("AC 對應測試"), this command keeps passing AUT-AC04,
+AUT-AC23~AUT-AC25 and AUT-AC32 after that change.
 """
 
 from __future__ import annotations
@@ -59,16 +59,14 @@ from collections.abc import Callable, Iterable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.auth.password_service import set_password
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     check_password_length,
-    hash_password,
 )
-from app.auth.sessions import delete_all_sessions_for_user
 from app.db.unit_of_work import unit_of_work
 from app.models import User, UserPassword
-from app.services.operator import get_current_operator
 
 PasswordReader = Callable[[], tuple[str, str] | None]
 
@@ -135,43 +133,24 @@ def read_password_pair() -> tuple[str, str] | None:
 def set_user_password(
     session: Session, user: User, password: str
 ) -> UserPassword:
-    """Hash ``password`` and write it to ``user``'s ``UserPassword``
-    row -- inserting one if none exists yet, updating it in place
-    otherwise -- with the current operator (AUT-R26,
-    ``app.services.operator.get_current_operator``; outside of any
-    HTTP request, which a command-line entry point always is, that
-    resolves to the built-in ``admin``) recorded as ``created_by``/
-    ``updated_by``. Also deletes every one of ``user``'s existing
-    ``AuthSession`` rows (AUT-R25). Flushes but does not commit --
-    the caller's unit of work does that.
+    """Set ``user``'s password through the Service-layer entry point
+    (AUT-R36, ``app.auth.password_service.set_password``), marking it
+    temporary unless ``user`` is the built-in ``admin`` (AUT-R37:
+    ``is_system = True`` accounts are never marked temporary -- the
+    password stays the one deployment personnel manage directly).
 
-    This is the one function T11 (issue #192) replaces with a call
-    to the Service-layer entry point AUT-R36 defines (plan.md's
-    "風險" section); nothing else in this module needs to change
-    when that happens.
+    Kept as a thin wrapper -- rather than inlining the call at this
+    function's one call site in :func:`run` -- purely so this
+    module's own tests keep calling a stable name (plan.md's "風險"
+    section, "T11 改寫 T6 的指令"): everything the previous,
+    self-contained version of this function did (hashing, writing
+    ``UserPassword``, deleting ``AuthSession`` rows) now lives in
+    :func:`set_password`, which also writes the ``user.password_set``
+    audit record this command previously skipped (AUT-R39, AUT-AC49).
     """
-    operator = get_current_operator(session)
-    password_hash = hash_password(password)
-
-    existing = session.scalars(
-        select(UserPassword).where(UserPassword.user_id == user.id)
-    ).one_or_none()
-    if existing is None:
-        existing = UserPassword(
-            user_id=user.id,
-            password_hash=password_hash,
-            created_by=operator.id,
-            updated_by=operator.id,
-        )
-        session.add(existing)
-    else:
-        existing.password_hash = password_hash
-        existing.updated_by = operator.id
-    session.flush()
-
-    delete_all_sessions_for_user(session, user.id)
-    session.flush()
-    return existing
+    return set_password(
+        session, user, password, is_temporary=not user.is_system
+    )
 
 
 def run(
