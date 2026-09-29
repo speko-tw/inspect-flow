@@ -6,7 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from app.auth.login import authenticate
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
@@ -114,12 +113,12 @@ def test_aut_ac61_default_user_password_and_change_gate(
     )
     assert [event.event_type for event in events] == ["user.password_set"]
 
-    user = db_session.get(User, user_id)
-    assert authenticate(db_session, user.email, password) is user
-    _, token = create_session(db_session, user)
-    db_session.commit()
     temporary_client = make_client()
-    temporary_client.cookies.set(SESSION_COOKIE_NAME, token)
+    login = temporary_client.post(
+        "/api/v1/auth/login",
+        json={"login": "temporary.user", "password": password},
+    )
+    assert login.status_code == 200
     assert (
         temporary_client.get("/api/v1/auth/me").json()["must_change_password"]
         is True
