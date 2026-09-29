@@ -122,6 +122,10 @@ class ErrorCode(DescribedStrEnum):
         "company.name_conflict",
         "The company name is already in use.",
     )
+    PROJECT_MEMBER_CONFLICT = (
+        "project.member_conflict",
+        "The user is already a member of this project.",
+    )
 
 
 def build_error_code_descriptions(

@@ -500,14 +500,17 @@ class TestDomAc24RoleNameCaseInsensitiveUniqueness:
 
 
 class TestDomAc25PermissionCodeRegistry:
-    """DOM-AC25 (DOM-R35): the production registry starts empty; a
-    registered code is accepted while an unregistered one is
+    """DOM-AC25 (DOM-R35): the production registry contains the
+    feature-registered project member code; a test-registered code is
+    accepted while an unregistered one is
     rejected, on both insert and update, with row counts and stored
     data unchanged.
     """
 
-    def test_formal_registry_starts_empty(self):
-        assert permission_code_descriptions() == {}
+    def test_formal_registry_has_feature_registered_code(self):
+        assert permission_code_descriptions() == {
+            "project_member.manage": "管理專案成員與其角色"
+        }
 
     def test_registered_code_is_accepted(
         self, session, creator, registered_permission_codes

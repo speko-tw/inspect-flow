@@ -175,7 +175,9 @@
 
 ## 介面
 
-本規格不新增 API 端點。對開發者的介面如下；具體模組、函式與指令名稱由計畫決定，不屬於本規格的契約。
+除本節列出的專案管理 API 外，本規格不新增 API 端點。對開發者的
+程式介面如下；具體模組、函式與指令名稱由計畫決定，不屬於本規格的
+契約。
 
 | 介面 | 內容 | 對應需求 |
 |---|---|---|
@@ -185,8 +187,37 @@
 | 程式介面 | `User` 新增入口（拒絕停用中的公司；帳號名稱、公司連結的檢查） | DOM-R32、DOM-R45～DOM-R47 |
 | 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄；名稱去空白與不分大小寫唯一）；列出公司啟用中的人員與人數 | DOM-R14、DOM-R33、DOM-R49 |
 | 程式介面 | `Role` 新增、修改與刪除；`ProjectMember` 的角色指派與移除、移出專案；角色影響範圍、有效權限計算 | DOM-R20～DOM-R23、DOM-R26、DOM-R36、DOM-R52 |
-| 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
+| 程式碼 | 權限代碼登記表；本 API 登記 `project_member.manage` | DOM-R35、#275 |
 | 程式介面 | `Project` 新增、修改入口；依 `project_code` 查出既有 `Project` 的介面（供重複警告） | DOM-R40、DOM-R42 |
+
+### 專案管理 API（#275）
+
+以下端點是 0.2.x 的簡便版管理 API，不包含搜尋、分頁或批次操作。
+專案欄位與行為仍以 DOM-R40～DOM-R44 為準。
+
+| 方法與路徑 | 行為 | 存取層級 |
+|---|---|---|
+| `GET /api/v1/projects` | 列出專案 | 需 Admin（AUT-R20） |
+| `GET /api/v1/projects/{project_id}` | 取得專案 | 需 Admin（AUT-R20） |
+| `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
+| `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
+| `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，可同時指定零個以上角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；空集合代表不指派角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `DELETE /api/v1/projects/{project_id}/members/{user_id}` | 將人員移出專案 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+
+新增與修改專案的回應**必須**在 `warnings` 陣列中指出重複的
+`project_code`（警告代碼 `project_code.duplicate`），但仍成功儲存；此警告
+不屬於錯誤碼。專案回應包含 UUID、業務欄位與選填日期。
+ProjectMember 回應包含成員 UUID、`user_id`、`username` 與完整的
+`role_ids` 集合。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
+回 HTTP 204。重複加入同一人回 HTTP 409、`project.member_conflict`；缺少
+專案、人員或角色回 HTTP 404、`resource.not_found`；其餘無效輸入回 HTTP
+422、`request.validation_failed`。
+
+HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中的「全部 Admin」
+覆蓋規格：專案 CRUD 使用 AUT-R20；ProjectMember 加入、角色設定與移出
+使用 AUT-R22 的需專案權限檢查，Admin 依 AUT-R19 放行。未登入仍依 AUT-R18
+回 HTTP 401、`auth.not_authenticated`。
 
 ### 管理介面錯誤
 
@@ -200,10 +231,11 @@
 - `user.email_conflict` — HTTP 409：新增或修改 email 時，email 已被其他帳號使用（不分大小寫）。
 - `user.employee_no_conflict` — HTTP 409：指派或變更公司連結時，同一家公司已有相同工號。
 - `company.name_conflict` — HTTP 409：新增或修改公司名稱時，名稱已被其他公司使用（不分大小寫）。
+- `project.member_conflict` — HTTP 409：同一人已是該專案成員。
 
 ## 驗收條件
 
-每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。已被取代的驗收條件保留編號並連到取代它的新條目；新條目從 DOM-AC33 接續。登記表初始為空，AC 用到的權限代碼（例如 `report.read`）由測試暫時登記（DOM-R35）。
+每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。已被取代的驗收條件保留編號並連到取代它的新條目；新條目從 DOM-AC33 接續。權限登記表由各功能規格新增正式代碼；測試另以暫時登記的代碼驗證通用規則（DOM-R35）。
 
 ### `User`
 
@@ -348,5 +380,6 @@
 - DOM-Q5 裁定：新增 DOM-R36、DOM-AC27（成員可沒有角色；移出專案即刪除成員，指派連帶刪除）；DOM-R26、DOM-AC15 補上沒有角色的成員；DOM-R22 補上移出專案；DOM-R25 改引用 DOM-R36 — [#125](https://github.com/speko-tw/inspect-flow/issues/125)
 - DOM-R40～DOM-R44、DOM-AC28～DOM-AC32：依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，`Project` 業務欄位由草稿轉為正式並納入凍結範圍：必填 `project_code`（得重複）、`name`（工程名稱）、`client_name`（業主／委託單位）、`site_location`（整體工程地點）；選填 `planned_start_date`、`planned_completion_date`；新增依 `project_code` 查重複的 Service 層介面供建立時警告；不設啟用或狀態欄位；`name`、`client_name`、`site_location` 的長度上限為本規格依既有慣例推導的暫定值 — [#246](https://github.com/speko-tw/inspect-flow/issues/246)
 - DOM-Q9 裁定（範圍變更；含 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-22](../../intents/03-decisions-and-stack.md#kd-22)、[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的意圖變更）：新增 DOM-R45～DOM-R54、DOM-AC33～DOM-AC46（帳號名稱、`User` 基本欄位改寫、公司連結與工號的清空與同公司內唯一、`Company` 只留名稱與啟用狀態且名稱不重複、內建 `admin` 的欄位、Admin 指派與收回、沒有公司的人加入專案、初始化指令改寫、既有資料回填）；DOM-R01、DOM-R11、DOM-R12、DOM-R16、DOM-R17、DOM-R24、DOM-R29 與 DOM-AC01、DOM-AC08、DOM-AC09、DOM-AC11～DOM-AC13、DOM-AC20、DOM-AC26 標示為已被取代；DOM-R02、DOM-R04～DOM-R07、DOM-R13、DOM-R14、DOM-R18、DOM-R22、DOM-R28、DOM-R31～DOM-R33 與相關驗收就地改寫 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
+- 規格澄清（#275）：新增 0.2.x 專案管理 API 介面契約；專案 CRUD 使用 Admin 存取層級，ProjectMember 加入、角色設定與移出使用 AUT-R22 專案權限；登記 `project_member.manage` — [#275](https://github.com/speko-tw/inspect-flow/issues/275)
 - 規格澄清（審查修正）：DOM-R46 明定 `email`、`name_zh` 在資料庫層可空並加 CHECK（`is_system = true`，或兩者都不為空值）；DOM-AC33 改為分開驗證可空性與條件式約束，需求欄改指 DOM-R46、DOM-R50；帳號名稱欄位統一稱 `username` — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 規格澄清（審查修正）：補列帳號與公司管理 API 的錯誤碼、HTTP 狀態及觸發條件；四種重複資料回 409，其餘列出的業務規則拒絕回 422 — [#263](https://github.com/speko-tw/inspect-flow/issues/263)
