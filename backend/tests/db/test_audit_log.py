@@ -462,6 +462,76 @@ class TestConservativeGuardBlocksRealWrites:
     def test_matches_every_blocked_truncate(self, statement):
         assert _targets_audit_logs(statement) is True
 
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # PR #253 review round 5: DROP TABLE/ALTER TABLE reaching
+            # audit_logs were not covered by any earlier round at
+            # all -- neither is a "modification keyword" in the
+            # UPDATE/DELETE/REPLACE/MERGE sense, so they reached the
+            # database completely unchecked. Every ALTER TABLE
+            # sub-action is treated alike, destructive or not (a
+            # RENAME/DROP COLUMN the same as an ADD COLUMN): this
+            # module does not try to tell them apart, only whether a
+            # connection was granted the audit_log_ddl_allowed
+            # execution option (tested separately, below).
+            "DROP TABLE audit_logs",
+            "DROP TABLE IF EXISTS audit_logs",
+            "drop table AUDIT_LOGS",
+            "DROP TABLE public.audit_logs",
+            'DROP TABLE "audit_logs"',
+            "ALTER TABLE audit_logs RENAME TO audit_logs_old",
+            "ALTER TABLE audit_logs DROP COLUMN before",
+            "ALTER TABLE audit_logs ADD COLUMN note TEXT",
+            # DROP ... CASCADE of a different table, mirroring
+            # TRUNCATE ... CASCADE's own reasoning: a foreign key
+            # (or other dependent object) could reach audit_logs
+            # without the statement ever naming it.
+            "DROP TABLE users CASCADE",
+        ],
+    )
+    def test_matches_every_blocked_ddl(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+
+class TestDdlAllowedExecutionOption:
+    """Unit tests for ``_targets_audit_logs``'s ``ddl_allowed``
+    parameter (the ``audit_log_ddl_allowed`` execution option's
+    effect -- see ``backend/alembic/env.py`` and the module
+    docstring's account of PR #253's fifth review round): it exempts
+    *only* the DDL check, never ``TRUNCATE`` or the
+    modification-keyword check, so it could never be used to slip an
+    ``UPDATE``/``DELETE``/``TRUNCATE`` past this guard.
+    """
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "DROP TABLE audit_logs",
+            "ALTER TABLE audit_logs RENAME TO audit_logs_old",
+            "ALTER TABLE audit_logs ADD COLUMN note TEXT",
+            "DROP TABLE users CASCADE",
+        ],
+    )
+    def test_ddl_allowed_exempts_ddl_against_audit_logs(self, statement):
+        assert _targets_audit_logs(statement, ddl_allowed=True) is False
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "DELETE FROM audit_logs",
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "TRUNCATE audit_logs",
+            "TRUNCATE users CASCADE",
+        ],
+    )
+    def test_ddl_allowed_does_not_exempt_data_modification(self, statement):
+        assert _targets_audit_logs(statement, ddl_allowed=True) is True
+
+    def test_ddl_allowed_is_false_by_default(self):
+        assert _targets_audit_logs("DROP TABLE audit_logs") is True
+
 
 class TestConservativeGuardDoesNotBlockSafeStatements:
     """Unit tests proving the conservative rule still lets through
@@ -558,6 +628,12 @@ class TestConservativeGuardDoesNotBlockSafeStatements:
             # is also present).
             "SELECT * FROM `audit_logs archive`",
             "SELECT * FROM [audit_logs archive]",
+            # PR #253 review round 5: DROP/ALTER of an unrelated
+            # table, with no audit_logs mention and no CASCADE.
+            "DROP TABLE users",
+            "DROP TABLE audit_logs_x",
+            "ALTER TABLE users ADD COLUMN note TEXT",
+            "ALTER TABLE audit_logs_x RENAME TO audit_logs_x_old",
         ],
     )
     def test_does_not_match_other_statements(self, statement):
@@ -582,9 +658,11 @@ class TestConservativeGuardAcceptedFalsePositives:
             # audit_logs -- audit_logs itself is never touched.
             "DELETE FROM other_table WHERE id IN (SELECT id FROM audit_logs)",
             "UPDATE other_table SET x = (SELECT count(*) FROM audit_logs)",
-            # TRUNCATE ... CASCADE on a table with no real foreign
-            # key relationship to audit_logs at all.
+            # TRUNCATE/DROP ... CASCADE on a table with no real
+            # foreign key (or other dependent object) relationship to
+            # audit_logs at all.
             "TRUNCATE unrelated_table CASCADE",
+            "DROP TABLE unrelated_table CASCADE",
             # PR #253 review round 4: a back-quoted or bracket-quoted
             # identifier that is legitimately a *different* table
             # merely starting with "audit_logs", or spelling out a
@@ -1164,3 +1242,74 @@ class TestAppendOnlyGuard:
             ).scalar()
 
         assert note == "changed"
+
+    def _text_ddl_statements(self) -> list[str]:
+        """PR #253 review round 5: DDL against ``audit_logs`` on an
+        ordinary connection (no ``audit_log_ddl_allowed`` execution
+        option) was not covered by any earlier round at all -- these
+        used to reach the database unchecked.
+        """
+        return [
+            "DROP TABLE audit_logs",
+            "DROP TABLE IF EXISTS audit_logs",
+            "ALTER TABLE audit_logs RENAME TO audit_logs_old",
+            "ALTER TABLE audit_logs DROP COLUMN before",
+            "ALTER TABLE audit_logs ADD COLUMN note TEXT",
+            # DROP ... CASCADE of a different table, which could
+            # reach audit_logs the same way TRUNCATE ... CASCADE can.
+            "DROP TABLE users CASCADE",
+        ]
+
+    def test_text_ddl_is_all_rejected(self, engine, existing_log, snapshot):
+        before = snapshot()
+
+        for statement in self._text_ddl_statements():
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_ddl_allowed_option_does_not_allow_data_modification(
+        self, engine, existing_log, snapshot
+    ):
+        """PR #253 review round 5: the ``audit_log_ddl_allowed``
+        execution option exists only so Alembic's own migrations can
+        alter ``audit_logs``'s *schema* -- it must never let a
+        connection carrying it modify or remove ``audit_logs``'s
+        *rows* via ``UPDATE``/``DELETE``/``TRUNCATE``.
+        """
+        before = snapshot()
+        statements = [
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "DELETE FROM audit_logs",
+            "TRUNCATE audit_logs",
+        ]
+
+        for statement in statements:
+            with engine.connect() as conn:
+                conn.execution_options(audit_log_ddl_allowed=True)
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_ddl_allowed_option_permits_ddl_on_that_connection(self, engine):
+        """The other half of the previous test: a connection that
+        does carry the option can actually perform DDL against
+        ``audit_logs`` -- proving the escape hatch
+        ``backend/alembic/env.py`` relies on genuinely works, not
+        only that :func:`_targets_audit_logs`'s ``ddl_allowed``
+        parameter does when called directly.
+        """
+        with engine.connect() as conn:
+            conn.execution_options(audit_log_ddl_allowed=True)
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN note TEXT"))
+            conn.commit()
+
+        columns = {
+            col["name"] for col in inspect(engine).get_columns("audit_logs")
+        }
+        assert "note" in columns

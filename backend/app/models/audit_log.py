@@ -84,7 +84,27 @@ precision for safety:
    alone whether some *other* table's ``CASCADE`` would ever reach
    ``audit_logs`` is exactly the kind of parsing this module is
    moving away from.
-3. Otherwise, it is rejected when the statement contains, anywhere,
+3. Otherwise, if it contains a DDL keyword (``DROP`` or ``ALTER``,
+   anywhere -- covering ``DROP TABLE audit_logs``,
+   ``ALTER TABLE audit_logs RENAME ...``/``DROP COLUMN ...``/
+   ``ADD COLUMN ...`` alike: this module does not try to tell a
+   destructive ``ALTER`` sub-action apart from a harmless one, the
+   same coarse choice as everywhere else here), it is rejected when
+   ``audit_logs`` or ``CASCADE`` is present, exactly like ``TRUNCATE``
+   above (a fifth PR #253 review round: ``DROP TABLE``/``ALTER TABLE``
+   were not covered at all before this, and a ``DROP ... CASCADE`` can
+   reach ``audit_logs`` the same way ``TRUNCATE ... CASCADE`` can) --
+   **unless** the connection this statement runs on was opened with
+   the ``audit_log_ddl_allowed`` execution option set to true (see
+   :func:`_block_audit_logs_mutation`), the one deliberate escape
+   hatch in this whole module, needed because Alembic's own migrations
+   must still be able to create, and one day alter, ``audit_logs``
+   itself. That option affects *only* this DDL branch: a ``TRUNCATE``,
+   or a statement matching the modification-keyword rule below, is
+   rejected the same way regardless of it, so a migration can never
+   use it to slip an ``UPDATE``/``DELETE``/``TRUNCATE`` past this
+   guard, only genuine schema DDL.
+4. Otherwise, it is rejected when the statement contains, anywhere,
    both a modification keyword (``UPDATE``, ``DELETE``, ``REPLACE``,
    ``MERGE`` -- covering a bare ``UPDATE``/``DELETE``, SQLite's
    ``REPLACE INTO``/``INSERT OR REPLACE`` (both contain the word
@@ -95,15 +115,16 @@ precision for safety:
    ``WITH`` (CTE) statement in any shape, without this module trying
    to understand the CTE's structure at all.
 
-Neither check looks at *where* ``audit_logs`` or the keyword appears
-relative to each other, only that both are present (or, for
-``TRUNCATE``, that ``audit_logs`` or ``CASCADE`` is present at all):
-this is deliberately coarser than a real SQL parser, and known to
-over-block some statements that do not actually touch ``audit_logs``
--- see "Known limitations" below. ``INSERT``/``SELECT`` against
-``audit_logs`` with no modification keyword elsewhere in the same
-statement, ``ON CONFLICT ... DO NOTHING``, and any statement that
-never mentions ``audit_logs`` at all still pass through untouched.
+None of these checks look at *where* ``audit_logs`` or the keyword
+appears relative to each other, only that both are present (or, for
+``TRUNCATE``/DDL, that ``audit_logs`` or ``CASCADE`` is present at
+all): this is deliberately coarser than a real SQL parser, and known
+to over-block some statements that do not actually touch
+``audit_logs`` -- see "Known limitations" below. ``INSERT``/``SELECT``
+against ``audit_logs`` with no modification keyword elsewhere in the
+same statement, ``ON CONFLICT ... DO NOTHING``, ``CREATE``/``DROP``/
+``ALTER`` of anything else, and any statement that never mentions
+``audit_logs`` at all still pass through untouched.
 
 :func:`_contains_audit_logs_token` recognizes ``audit_logs`` whether
 unquoted, double-quoted, schema-prefixed (either side independently
@@ -164,6 +185,28 @@ avoid a new place to get the decoding itself wrong), any ``U&"..."``
 identifier is conservatively assumed to *possibly* spell
 ``audit_logs`` and replaced with that literal word unconditionally.
 
+A fifth PR #253 review round found that every prior round had only
+ever looked for *data*-modifying statements: ``DROP TABLE
+audit_logs`` and ``ALTER TABLE audit_logs ...`` reached the database
+completely unchecked, silently destroying the table (or a column of
+it) rather than merely a row. Fixed by :func:`_contains_ddl_keyword`
+(step 3 above) -- but unlike every other check in this module, this
+one has to *also* have a legitimate way through: Alembic's own
+migration for this very table (and any future one that adds a column
+to it) issues exactly this kind of DDL against ``audit_logs`` on
+purpose. Rather than try to distinguish "a migration's own DDL" from
+"anyone else's" by further inspecting the SQL text -- the same trap
+every earlier round fell into -- :func:`_block_audit_logs_mutation`
+instead checks the *connection*: ``backend/alembic/env.py`` opens its
+migration connection with the ``audit_log_ddl_allowed=True``
+execution option (:meth:`_engine.Connection.execution_options`),
+and only a connection carrying that option is exempted, and only from
+this one DDL check -- never from the ``TRUNCATE`` or
+modification-keyword checks, so a migration still cannot ``UPDATE``,
+``DELETE``, or ``TRUNCATE`` this table through this same connection.
+No other code in this codebase sets that option, so this exemption
+otherwise never fires.
+
 Known limitations -- deliberate false positives this trade-off
 accepts (confirmed, by inspection, that nothing in this codebase's
 own SQL hits any of them: the only code that ever writes to
@@ -178,13 +221,19 @@ unless it is genuinely one of the writes ALG-R04 means to block):
   ``USING audit_logs``) is rejected even though ``audit_logs`` itself
   is never modified -- for example
   ``DELETE FROM other WHERE id IN (SELECT id FROM audit_logs)``.
-- ``TRUNCATE`` of an unrelated table with ``CASCADE`` is rejected
-  even when nothing about that table's foreign keys could ever reach
-  ``audit_logs``.
+- ``TRUNCATE`` or ``DROP``/``ALTER`` of an unrelated table with
+  ``CASCADE`` is rejected even when nothing about that table's
+  foreign keys or dependent objects could ever reach ``audit_logs``.
+- A harmless ``ALTER TABLE audit_logs ADD COLUMN ...`` (run on a
+  connection *without* the ``audit_log_ddl_allowed`` execution
+  option -- see the fifth PR #253 review round, above) is rejected
+  the same as a destructive ``DROP COLUMN``/``RENAME``: this module
+  does not try to tell them apart.
 - The SQL ``REPLACE(...)`` string function, or a column, table, or
-  alias literally named ``update``, ``delete``, ``replace``, or
-  ``merge``, would trigger the same false positive if it ever
-  appeared in a statement that also mentions ``audit_logs``.
+  alias literally named ``update``, ``delete``, ``replace``,
+  ``merge``, ``drop``, or ``alter``, would trigger the same false
+  positive if it ever appeared in a statement that also mentions
+  ``audit_logs``.
 - A back-quoted or bracket-quoted identifier is left completely
   unresolved (see the fourth PR #253 review round, above): SQLite's
   `` `audit_logs` ``/``[audit_logs]`` are still correctly detected
@@ -222,7 +271,7 @@ import re
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Engine, ForeignKey, String, event
+from sqlalchemy import Connection, Engine, ForeignKey, String, event
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, Uuid
 
@@ -233,10 +282,10 @@ from app.db.base import Base, UTCDateTime, uuid7
 class AuditLogImmutableError(Exception):
     """Raised by :func:`_block_audit_logs_mutation` when SQL sent to
     any ``Engine`` would modify an existing ``audit_logs`` row,
-    remove all of its rows, or (conservatively) looks like it might,
-    per :func:`_targets_audit_logs` (ALG-R04). The write is rejected
-    before it ever reaches the database; the table's contents are
-    unchanged.
+    remove all of its rows, change its schema, or (conservatively)
+    looks like it might, per :func:`_targets_audit_logs` (ALG-R04).
+    The write is rejected before it ever reaches the database; the
+    table's contents and schema are unchanged.
     """
 
 
@@ -467,6 +516,22 @@ def _contains_cascade_keyword(statement: str) -> bool:
     return _CASCADE_KEYWORD_RE.search(statement) is not None
 
 
+_DDL_KEYWORD_RE = re.compile(r"\b(?:DROP|ALTER)\b", re.IGNORECASE | re.ASCII)
+
+
+def _contains_ddl_keyword(statement: str) -> bool:
+    """Return whether ``statement`` (already normalized) contains,
+    anywhere, ``DROP`` or ``ALTER`` -- covering ``DROP TABLE
+    audit_logs`` and every ``ALTER TABLE audit_logs ...`` sub-action
+    (``RENAME``, ``DROP COLUMN``, ``ADD COLUMN``, ...) alike, the
+    same coarse, "which specific sub-action" no-parsing choice as
+    everywhere else in this module (PR #253's fifth review round;
+    see the module docstring for the ``audit_log_ddl_allowed``
+    escape hatch this check alone honors).
+    """
+    return _DDL_KEYWORD_RE.search(statement) is not None
+
+
 _MODIFICATION_KEYWORD_RE = re.compile(
     r"\b(?:UPDATE|DELETE|REPLACE|MERGE)\b", re.IGNORECASE | re.ASCII
 )
@@ -524,14 +589,31 @@ def _contains_audit_logs_token(statement: str) -> bool:
     return False
 
 
-def _targets_audit_logs(statement: str) -> bool:
+_DDL_ALLOWED_OPTION = "audit_log_ddl_allowed"
+
+
+def _targets_audit_logs(statement: str, *, ddl_allowed: bool = False) -> bool:
     """Return whether ``statement`` should be rejected as a write to
     ``audit_logs`` (ALG-R04) -- see the module docstring for the
     full rationale, what this covers, and the false positives it
     deliberately accepts in exchange for not missing a real one.
+
+    ``ddl_allowed`` (from the calling connection's
+    :data:`_DDL_ALLOWED_OPTION` execution option -- see
+    :func:`_block_audit_logs_mutation`) exempts *only* a statement
+    this function would otherwise reject solely for containing a DDL
+    keyword: a ``TRUNCATE`` or a modification-keyword match is
+    rejected the same way regardless of it, so this option alone
+    could never let an ``UPDATE``/``DELETE``/``TRUNCATE`` through.
     """
     statement = _normalize_sql(statement)
     if _is_truncate_statement(statement):
+        return _contains_audit_logs_token(
+            statement
+        ) or _contains_cascade_keyword(statement)
+    if _contains_ddl_keyword(statement):
+        if ddl_allowed:
+            return False
         return _contains_audit_logs_token(
             statement
         ) or _contains_cascade_keyword(statement)
@@ -542,7 +624,7 @@ def _targets_audit_logs(statement: str) -> bool:
 
 @event.listens_for(Engine, "before_cursor_execute")
 def _block_audit_logs_mutation(
-    conn: object,
+    conn: Connection,
     cursor: object,
     statement: str,
     parameters: object,
@@ -550,20 +632,30 @@ def _block_audit_logs_mutation(
     executemany: bool,
 ) -> None:
     """ALG-R04: reject any write reaching ``audit_logs`` that would
-    modify an existing row or remove all of its rows, from whichever
-    layer produced it -- ORM flush, ORM/Core bulk
-    ``update()``/``delete()``, or raw ``text()`` SQL, including
+    modify an existing row, remove all of its rows, or change its
+    schema, from whichever layer produced it -- ORM flush, ORM/Core
+    bulk ``update()``/``delete()``, or raw ``text()`` SQL, including
     ``TRUNCATE`` (plain or ``CASCADE``), SQLite's ``REPLACE INTO``/
     ``INSERT OR REPLACE``, an ``INSERT ... ON CONFLICT ... DO UPDATE``
-    upsert, ``MERGE``, and any of these wrapped in a ``WITH`` (CTE)
+    upsert, ``MERGE``, ``DROP TABLE``/``ALTER TABLE`` (plain or
+    ``CASCADE``), and any of these wrapped in a ``WITH`` (CTE)
     statement in any shape (issue #233). ``INSERT``/``SELECT``
     against ``audit_logs`` with no modification keyword elsewhere in
     the same statement, ``ON CONFLICT DO NOTHING``, and any statement
     that never mentions ``audit_logs`` at all pass through untouched
     -- see the module docstring for the false positives this
     deliberately does not try to avoid.
+
+    ``conn``'s :data:`_DDL_ALLOWED_OPTION` execution option (set only
+    by ``backend/alembic/env.py``, on the connection it runs
+    migrations through -- see the module docstring's account of the
+    fifth PR #253 review round) is the one way *any* code can get a
+    DDL statement against ``audit_logs`` past this guard, and it
+    exempts DDL only: it has no effect on the ``TRUNCATE`` or
+    modification-keyword checks.
     """
-    if _targets_audit_logs(statement):
+    ddl_allowed = bool(conn.get_execution_options().get(_DDL_ALLOWED_OPTION))
+    if _targets_audit_logs(statement, ddl_allowed=ddl_allowed):
         raise AuditLogImmutableError(
             "audit_logs is append-only; this write is rejected (ALG-R04)"
         )
