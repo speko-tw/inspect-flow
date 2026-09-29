@@ -493,6 +493,37 @@ class TestConservativeGuardBlocksRealWrites:
     def test_matches_every_blocked_ddl(self, statement):
         assert _targets_audit_logs(statement) is True
 
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # PR #253 sixth review round: a quoted identifier (or
+            # literal / comment) directly touching a keyword, with no
+            # whitespace, used to fuse with it after normalization
+            # ("FROM" + audit_logs -> "FROMaudit_logs") and slip by.
+            'DELETE FROM"audit_logs" WHERE id = 1',
+            'DELETE FROM"audit_logs"WHERE id = 1',
+            "UPDATE\"audit_logs\"SET entity_type = 'x'",
+            'DROP TABLE"audit_logs"',
+            'ALTER TABLE"audit_logs"ADD COLUMN note TEXT',
+            'TRUNCATE"audit_logs"',
+            "INSERT INTO\"audit_logs\"(id)VALUES('x')ON CONFLICT(id)"
+            "DO UPDATE SET id = 'y'",
+            # schema-qualified spellings
+            'DELETE FROM main."audit_logs"',
+            'DELETE FROM"main"."audit_logs"',
+            'DELETE FROM "x"."audit_logs"',
+            'DELETE FROM"x"."audit_logs"',
+            'UPDATE "x"."audit_logs" SET entity_type = \'x\'',
+            'DROP TABLE "x"."audit_logs"',
+            'DROP TABLE main."audit_logs"',
+            'TRUNCATE "x"."audit_logs"',
+            "DELETE FROM/*c*/audit_logs",
+            "DELETE FROM 'x'||audit_logs",
+        ],
+    )
+    def test_matches_when_no_whitespace_separates_tokens(self, statement):
+        assert _targets_audit_logs(statement) is True
+
 
 class TestDdlAllowedExecutionOption:
     """Unit tests for ``_targets_audit_logs``'s ``ddl_allowed``
@@ -527,6 +558,27 @@ class TestDdlAllowedExecutionOption:
         ],
     )
     def test_ddl_allowed_does_not_exempt_data_modification(self, statement):
+        assert _targets_audit_logs(statement, ddl_allowed=True) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # PR #253 sixth review round: a DROP/ALTER word anywhere
+            # in the statement (here, a bracket-quoted alias) used to
+            # make the option return early and wave the whole
+            # statement through.
+            "UPDATE audit_logs SET entity_type = 'x' "
+            "FROM (SELECT 1) AS [DROP]",
+            "DELETE FROM audit_logs WHERE id IN (SELECT 1 AS [ALTER])",
+            "INSERT INTO audit_logs (id) VALUES ('x') ON CONFLICT (id) "
+            "DO UPDATE SET id = 'y' RETURNING id AS [DROP]",
+            "TRUNCATE audit_logs, [DROP]",
+            "UPDATE audit_logs SET entity_type = 'x' -- DROP\n",
+            "REPLACE INTO audit_logs (id) VALUES ('x') RETURNING [ALTER]",
+            'DELETE FROM"audit_logs" WHERE 1 = 1 AND [DROP] = 1',
+        ],
+    )
+    def test_ddl_word_elsewhere_does_not_bypass_the_option(self, statement):
         assert _targets_audit_logs(statement, ddl_allowed=True) is True
 
     def test_ddl_allowed_is_false_by_default(self):
@@ -1313,3 +1365,78 @@ class TestAppendOnlyGuard:
             col["name"] for col in inspect(engine).get_columns("audit_logs")
         }
         assert "note" in columns
+
+    def _flag_bypass_statements(self) -> list[str]:
+        """PR #253 sixth review round: data-modifying statements
+        carrying a ``DROP``/``ALTER`` word (as a bracket-quoted alias)
+        that the ``audit_log_ddl_allowed`` option used to let through.
+        """
+        return [
+            "UPDATE audit_logs SET entity_type = 'changed' "
+            "FROM (SELECT 1) AS [DROP]",
+            "DELETE FROM audit_logs WHERE id IN (SELECT 1 AS [ALTER])",
+            "INSERT INTO audit_logs (id) VALUES ('x') ON CONFLICT (id) "
+            "DO UPDATE SET id = 'y' RETURNING id AS [DROP]",
+        ]
+
+    def test_ddl_allowed_connection_rejects_ddl_word_bypass(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._flag_bypass_statements():
+            with engine.connect() as conn:
+                conn.execution_options(audit_log_ddl_allowed=True)
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_ddl_allowed_session_connection_rejects_ddl_word_bypass(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._flag_bypass_statements():
+            with Session(engine) as fresh:
+                conn = fresh.connection(
+                    execution_options={"audit_log_ddl_allowed": True}
+                )
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                fresh.rollback()
+
+        assert snapshot() == before
+
+    def test_session_connection_with_option_still_permits_ddl(self, engine):
+        with Session(engine) as fresh:
+            conn = fresh.connection(
+                execution_options={"audit_log_ddl_allowed": True}
+            )
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN note2 TEXT"))
+            fresh.commit()
+
+        columns = {
+            col["name"] for col in inspect(engine).get_columns("audit_logs")
+        }
+        assert "note2" in columns
+
+    def test_text_no_whitespace_spellings_are_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+        statements = [
+            'DELETE FROM"audit_logs" WHERE id = 1',
+            'DROP TABLE"audit_logs"',
+            'DELETE FROM main."audit_logs"',
+            'DELETE FROM"x"."audit_logs"',
+        ]
+
+        for statement in statements:
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before

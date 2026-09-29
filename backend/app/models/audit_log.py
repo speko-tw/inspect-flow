@@ -207,6 +207,19 @@ modification-keyword checks, so a migration still cannot ``UPDATE``,
 No other code in this codebase sets that option, so this exemption
 otherwise never fires.
 
+A sixth PR #253 review round found two more bugs, both fixed
+without adding any new rule. First, normalization replaced a quoted
+identifier (or literal) with a bare word and no padding, so
+``DELETE FROM"audit_logs"`` became ``FROMaudit_logs`` and never
+matched: every replacement is now padded with a space on each side.
+Second, the DDL step ran *before* the modification-keyword step and
+returned early when ``audit_log_ddl_allowed`` was set, so any
+``DROP``/``ALTER`` word anywhere (``UPDATE audit_logs ... AS
+[DROP]``) turned the option into a bypass: the order is now
+``TRUNCATE``, then modification keyword plus ``audit_logs`` token
+(both decided without ever reading the option), and only then the
+DDL rule, the sole step that reads it.
+
 Known limitations -- deliberate false positives this trade-off
 accepts (confirmed, by inspection, that nothing in this codebase's
 own SQL hits any of them: the only code that ever writes to
@@ -426,7 +439,12 @@ def _normalize_sql(statement: str) -> str:
     mistaken for a real one. A comment always becomes exactly one
     space rather than nothing, so two keywords a comment used to sit
     between (for example ``DELETE/*c*/FROM``) stay correctly
-    separated. A back-quoted or bracket-quoted identifier is
+    separated; a literal and a quoted identifier are likewise each
+    padded with one space on both sides, so an adjacent keyword that
+    had no whitespace before or after it (``DELETE FROM"audit_logs"``,
+    ``DROP TABLE"audit_logs"``) does not fuse with the replacement
+    into one bogus word (PR #253's sixth review round). A
+    back-quoted or bracket-quoted identifier is
     deliberately *not* specially handled -- see the module
     docstring's "Known limitations".
     """
@@ -449,15 +467,15 @@ def _normalize_sql(statement: str) -> str:
                     pos += 1
                     break
                 pos += 1
-            pieces.append("''")
+            pieces.append(" '' ")
             continue
         if _is_unicode_escape_identifier_prefix(statement, pos):
             _, pos = _consume_delimited_identifier(statement, pos + 3, '"')
-            pieces.append("audit_logs")
+            pieces.append(" audit_logs ")
             continue
         if char == '"':
             inner, pos = _consume_delimited_identifier(statement, pos + 1, '"')
-            pieces.append(_resolve_quoted_identifier(inner))
+            pieces.append(f" {_resolve_quoted_identifier(inner)} ")
             continue
         if statement.startswith("--", pos):
             newline = statement.find("\n", pos)
@@ -598,27 +616,32 @@ def _targets_audit_logs(statement: str, *, ddl_allowed: bool = False) -> bool:
     full rationale, what this covers, and the false positives it
     deliberately accepts in exchange for not missing a real one.
 
+    Check order matters: ``TRUNCATE`` and a modification keyword
+    (``UPDATE``/``DELETE``/``REPLACE``/``MERGE``, which also covers
+    ``ON CONFLICT ... DO UPDATE``) together with an ``audit_logs``
+    token are decided first and rejected *without ever looking at*
+    ``ddl_allowed`` -- so no ``DROP``/``ALTER`` word anywhere in the
+    statement (for instance an ``AS [DROP]`` alias) can turn the
+    option into a bypass. Only the last step, the DDL rule, reads
     ``ddl_allowed`` (from the calling connection's
     :data:`_DDL_ALLOWED_OPTION` execution option -- see
-    :func:`_block_audit_logs_mutation`) exempts *only* a statement
-    this function would otherwise reject solely for containing a DDL
-    keyword: a ``TRUNCATE`` or a modification-keyword match is
-    rejected the same way regardless of it, so this option alone
-    could never let an ``UPDATE``/``DELETE``/``TRUNCATE`` through.
+    :func:`_block_audit_logs_mutation`).
     """
     statement = _normalize_sql(statement)
     if _is_truncate_statement(statement):
         return _contains_audit_logs_token(
             statement
         ) or _contains_cascade_keyword(statement)
+    if _contains_modification_keyword(
+        statement
+    ) and _contains_audit_logs_token(statement):
+        return True
     if _contains_ddl_keyword(statement):
         if ddl_allowed:
             return False
         return _contains_audit_logs_token(
             statement
         ) or _contains_cascade_keyword(statement)
-    if _contains_modification_keyword(statement):
-        return _contains_audit_logs_token(statement)
     return False
 
 
