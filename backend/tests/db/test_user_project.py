@@ -170,7 +170,10 @@ class TestDbfAc10BusinessNumbers:
         # ``session.commit()`` (see that helper's docstring), so the
         # duplicate row is built with ``build_root_user`` instead,
         # reusing the first row's already-committed ``company_id``.
-        session.add(build_root_user("E001", first.company_id))
+        second = build_root_user("E001", first.company_id)
+        assert second.username != first.username
+        assert second.email != first.email
+        session.add(second)
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()

@@ -273,6 +273,36 @@ class TestRoundTrip:
         assert kinds[0] == "internal"
         assert set(kinds[1:]) == {"customer"}
 
+    def test_downgrade_avoids_existing_placeholder_emails(
+        self, db_url, engine
+    ):
+        _seed(
+            engine,
+            ["Admin@UNKNOWN.INVALID", "admin2@unknown.invalid"],
+            ["Demo Co"],
+        )
+        cfg = _cfg()
+        command.upgrade(cfg, "head")
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE users SET email = NULL WHERE is_system"))
+
+        command.downgrade(cfg, _OLD_HEAD)
+        with engine.connect() as conn:
+            emails = conn.execute(
+                text("SELECT email, is_system FROM users")
+            ).all()
+        assert {email for email, is_system in emails if is_system} == {
+            "admin3@unknown.invalid"
+        }
+        assert len({email.lower() for email, _ in emails}) == len(emails)
+
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            admin_email = conn.execute(
+                text("SELECT email FROM users WHERE is_system")
+            ).scalar_one()
+        assert admin_email == "admin3@unknown.invalid"
+
 
 class TestDomAc45BackfillOnExistingData:
     """DOM-AC45: the built-in admin becomes ``admin`` with no company

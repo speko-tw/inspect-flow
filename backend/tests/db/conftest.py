@@ -122,13 +122,13 @@ def db_url(
             reset_public_schema(url)
 
 
-def username_for(employee_no: str) -> str:
-    """Return a valid, unique-per-``employee_no`` ``username`` (DOM-R45).
+def username_for(user_id: uuid.UUID | None = None) -> str:
+    """Return a valid ``username`` independent of ``employee_no``.
 
-    Lowercases ``employee_no`` and prefixes ``u`` so it always starts
-    with a letter; test employee numbers only use ``[A-Za-z0-9-]``.
+    The optional id keeps a root user's username stable while tests
+    can request a fresh value without constructing that user first.
     """
-    return f"u{employee_no.lower()}"
+    return f"u{(user_id or uuid7()).hex[:31]}"
 
 
 def make_system_admin(user: User) -> User:
@@ -238,14 +238,14 @@ def build_root_user(
         self_id = uuid7()
     return User(
         id=self_id,
-        username=username_for(employee_no),
+        username=username_for(self_id),
         employee_no=employee_no,
         company_id=company_id,
         department="Operations",
         location="HQ",
         name_en=f"Root User {employee_no}",
         name_zh=f"根使用者{employee_no}",
-        email=f"{employee_no.lower()}@example.com",
+        email=f"{self_id.hex}@example.com",
         created_by=self_id,
         updated_by=self_id,
     )

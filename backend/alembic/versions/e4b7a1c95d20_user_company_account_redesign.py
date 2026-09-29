@@ -425,6 +425,9 @@ def _restore_users(
         ).order_by(_USERS.c.created_at, _USERS.c.id)
     ).all()
     seen_employee_nos: set[str] = set()
+    taken_emails = {
+        email.lower() for row in rows if (email := row.email) is not None
+    }
     for (
         user_id,
         username,
@@ -439,6 +442,16 @@ def _restore_users(
         if employee_no is None or employee_no in seen_employee_nos:
             employee_no = "U" + user_id.hex[:15]
         seen_employee_nos.add(employee_no)
+        if email is None:
+            number = 1
+            while True:
+                local = username if number == 1 else f"{username}{number}"
+                candidate = f"{local}@unknown.invalid"
+                if candidate.lower() not in taken_emails:
+                    email = candidate
+                    taken_emails.add(candidate.lower())
+                    break
+                number += 1
         conn.execute(
             sa.update(_USERS)
             .where(_USERS.c.id == user_id)
@@ -449,7 +462,7 @@ def _restore_users(
                 employee_no=employee_no,
                 name_zh=name_zh or username[:64],
                 name_en=name_en or username,
-                email=email or f"{username}@unknown.invalid",
+                email=email,
             )
         )
 

@@ -98,7 +98,7 @@ def _full_user_kwargs(company_id, *, employee_no: str) -> dict:
     for building a "normal" ``User`` distinct from ``operator``.
     """
     return {
-        "username": username_for(employee_no),
+        "username": username_for(),
         "employee_no": employee_no,
         "company_id": company_id,
         "department": "Engineering",
