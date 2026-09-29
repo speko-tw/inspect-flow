@@ -1,26 +1,45 @@
 """``User`` create and manual-modification Service entry points
-(DOM-R04, DOM-R14, DOM-R18, DOM-R32).
+(DOM-R04, DOM-R06, DOM-R07, DOM-R14, DOM-R18, DOM-R22, DOM-R32).
 
 Modifying ``User`` must always go through here: direct ORM writes
 skip DOM-R04's "外部帳號拒絕人工修改基本欄位" entirely (see plan.md's
-"Service 層規則被繞過" risk). This module covers only creation
-(:func:`create_user`) and the *manual* modification path
-(:func:`update_user_manual`) -- DOM-R04 explicitly distinguishes
+"Service 層規則被繞過" risk). This module covers creation
+(:func:`create_user`), the *manual* basic/contact-field modification
+path (:func:`update_user_manual`) -- DOM-R04 explicitly distinguishes
 "人工修改" from ``external-identity-sync``'s sync path, which is out
-of scope here and gets its own entry point in that spec. Also out
-of scope, per this task's ticket: ``is_admin``/``is_active``
-modification (DOM-R06/DOM-R07's protections, left to T7) and any
-authorization check (whether the operator is Admin or the user
-themselves -- left to ``authentication``, which only calls into
-this module once it has already decided the caller may).
+of scope here and gets its own entry point in that spec -- and (T7,
+issue #135) ``is_admin``/``is_active`` modification
+(:func:`set_is_admin`, :func:`set_is_active`), each protecting the
+built-in account (DOM-R06) and the last active Admin (DOM-R07).
+Still out of scope: any authorization check (whether the operator is
+Admin or the user themselves -- left to ``authentication``, which
+only calls into this module once it has already decided the caller
+may).
+
+:func:`set_is_admin` writes one ``user.admin_changed`` audit event
+per call (DOM-R22); :func:`set_is_active` never writes one -- DOM-R22
+explicitly lists ``is_active`` as outside its event scope. Both
+reject *before* touching ``user`` at all when DOM-R06/DOM-R07 would
+be violated, the same "reject before any attribute is touched" idiom
+:func:`update_user_manual` already follows for
+``ExternalBasicFieldModificationError``. :func:`set_is_admin`
+additionally rejects a call that would not actually change
+``is_admin`` (:class:`AdminStatusUnchangedError`) before touching
+anything either -- unlike :func:`set_is_active` (which has no audit
+event to protect), letting a no-op through to
+:func:`app.services.audit.record_audit_event` would only fail
+*after* ``updated_by``/``updated_at`` had already been bumped for
+nothing to audit.
 """
 
 import uuid
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Company, User
 from app.services import UNSET, _Unset
+from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
 
 
@@ -39,6 +58,31 @@ class ExternalBasicFieldModificationError(ValueError):
     ``User`` is touched, so none of the fields in the same call --
     including ones that would otherwise have been allowed -- are
     written.
+    """
+
+
+class BuiltInAccountModificationError(ValueError):
+    """DOM-R06: ``user.is_system`` is ``True`` and the requested
+    change would disable it (``is_active = False``) or take away
+    its Admin status (``is_admin = False``). Raised before any
+    attribute on ``user`` is touched.
+    """
+
+
+class LastActiveAdminRemovalError(ValueError):
+    """DOM-R07: the requested change would leave zero ``User`` rows
+    that are both ``is_active = True`` and ``is_admin = True`` --
+    "拿掉 Admin" covers both un-checking ``is_admin`` and disabling
+    an active Admin's account. Raised before any attribute on
+    ``user`` is touched.
+    """
+
+
+class AdminStatusUnchangedError(ValueError):
+    """:func:`set_is_admin` was called with the value ``user.
+    is_admin`` already has. Raised before ``user`` is touched -- see
+    this module's docstring for why this is checked here rather than
+    left for :func:`app.services.audit.record_audit_event` to catch.
     """
 
 
@@ -199,9 +243,135 @@ def update_user_manual(
     return user
 
 
+def _would_remove_last_active_admin(
+    session: Session,
+    user: User,
+    *,
+    is_admin_after: bool,
+    is_active_after: bool,
+) -> bool:
+    """DOM-R07: whether changing ``user`` to
+    ``is_admin=is_admin_after``/``is_active=is_active_after`` would
+    leave zero ``User`` rows that are both active and Admin.
+
+    Only a transition *out of* being an active Admin can possibly
+    cause this: if ``user`` was not already both active and Admin,
+    it was never part of the count to begin with, so this always
+    returns ``False`` regardless of how many active Admins exist
+    elsewhere (including zero -- a pre-existing state this change
+    did not cause). If it *was* an active Admin and still would be
+    after the change, the change is equally always safe. Only when
+    it was an active Admin and would stop being one does the count
+    of every *other* active Admin decide the answer.
+    """
+    was_active_admin = user.is_admin and user.is_active
+    will_be_active_admin = is_admin_after and is_active_after
+    if not was_active_admin or will_be_active_admin:
+        return False
+    remaining = session.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(
+            User.id != user.id,
+            User.is_admin.is_(True),
+            User.is_active.is_(True),
+        )
+    )
+    return remaining == 0
+
+
+def set_is_admin(session: Session, user: User, is_admin: bool) -> User:
+    """Modify ``user.is_admin`` (DOM-R05), filling ``updated_by``
+    from the current operator (DOM-R14), and record one
+    ``user.admin_changed`` audit event (DOM-R22).
+
+    Raises:
+        AdminStatusUnchangedError: ``is_admin`` already equals
+            ``user.is_admin``.
+        BuiltInAccountModificationError: ``is_admin`` is ``False``
+            and ``user.is_system`` is ``True`` (DOM-R06).
+        LastActiveAdminRemovalError: ``is_admin`` is ``False`` and
+            this would leave no active Admin at all (DOM-R07).
+    """
+    if is_admin == user.is_admin:
+        raise AdminStatusUnchangedError(
+            f"User {user.id}: is_admin is already {is_admin}"
+        )
+    if not is_admin:
+        if user.is_system:
+            raise BuiltInAccountModificationError(
+                f"User {user.id} is a built-in account; its is_admin "
+                "cannot be taken away (DOM-R06)"
+            )
+        if _would_remove_last_active_admin(
+            session,
+            user,
+            is_admin_after=False,
+            is_active_after=user.is_active,
+        ):
+            raise LastActiveAdminRemovalError(
+                f"User {user.id}: taking away is_admin would leave no "
+                "active Admin (DOM-R07)"
+            )
+
+    operator = get_current_operator(session)
+    before_is_admin = user.is_admin
+    user.is_admin = is_admin
+    user.updated_by = operator.id
+    session.flush()
+    record_audit_event(
+        session,
+        "user.admin_changed",
+        entity_id=user.id,
+        before={"is_admin": before_is_admin},
+        after={"is_admin": is_admin},
+    )
+    return user
+
+
+def set_is_active(session: Session, user: User, is_active: bool) -> User:
+    """Modify ``user.is_active``, filling ``updated_by`` from the
+    current operator (DOM-R14). Never writes an audit event --
+    DOM-R22 excludes ``is_active`` from its event scope.
+
+    Raises:
+        BuiltInAccountModificationError: ``is_active`` is ``False``
+            and ``user.is_system`` is ``True`` (DOM-R06).
+        LastActiveAdminRemovalError: ``is_active`` is ``False`` and
+            this would leave no active Admin at all (DOM-R07).
+    """
+    if not is_active:
+        if user.is_system:
+            raise BuiltInAccountModificationError(
+                f"User {user.id} is a built-in account; it cannot be "
+                "disabled (DOM-R06)"
+            )
+        if _would_remove_last_active_admin(
+            session,
+            user,
+            is_admin_after=user.is_admin,
+            is_active_after=False,
+        ):
+            raise LastActiveAdminRemovalError(
+                f"User {user.id}: disabling this account would leave "
+                "no active Admin (DOM-R07)"
+            )
+
+    operator = get_current_operator(session)
+    user.is_active = is_active
+    user.updated_by = operator.id
+    session.flush()
+    return user
+
+
 __all__ = [
+    "AdminStatusUnchangedError",
+    "BuiltInAccountModificationError",
     "CompanyNotActiveError",
     "ExternalBasicFieldModificationError",
+    "LastActiveAdminRemovalError",
     "create_user",
+    "set_is_active",
+    "set_is_admin",
     "update_user_manual",
 ]
