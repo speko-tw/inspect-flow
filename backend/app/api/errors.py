@@ -78,6 +78,18 @@ class ErrorCode(DescribedStrEnum):
         "permission.denied",
         "You do not have permission to perform this request.",
     )
+    AUTH_CURRENT_PASSWORD_INCORRECT = (
+        "auth.current_password_incorrect",
+        "The current password is incorrect.",
+    )
+    AUTH_PASSWORD_INVALID = (
+        "auth.password_invalid",
+        "The new password does not meet the length requirement.",
+    )
+    AUTH_PASSWORD_UNCHANGED = (
+        "auth.password_unchanged",
+        "The new password must differ from the current temporary password.",
+    )
 
 
 def build_error_code_descriptions(
