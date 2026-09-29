@@ -188,7 +188,7 @@ def test_aut_ac66_setup_secrets_do_not_reach_logs_or_audit(
     account_field_secret = "PasswordTypedHere1!@example.test"
     login_failure = client.post(
         "/api/v1/auth/login",
-        json={"email": account_field_secret, "password": "WrongSecret!"},
+        json={"login": account_field_secret, "password": "WrongSecret!"},
     )
     assert login_failure.status_code == 401
 

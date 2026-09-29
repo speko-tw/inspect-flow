@@ -1,11 +1,14 @@
 """First-login-code lockout acceptance tests (AUT-AC59, AUT-AC60)."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from threading import Barrier
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+import app.cli.init_system as init_module
 from app.auth.password_service import set_password
 from app.auth.settings import (
     SETUP_FAILURE_THRESHOLD_ENV_VAR,
@@ -63,7 +66,7 @@ def test_aut_ac59_setup_failures_lock_independently_and_log_safely(
             response = client.post(
                 "/api/v1/auth/login",
                 json={
-                    "email": "alice@example.test",
+                    "login": "alice",
                     "password": "wrong password",
                 },
             )
@@ -107,7 +110,7 @@ def test_aut_ac59_setup_failures_lock_independently_and_log_safely(
             response = client.post(
                 "/api/v1/auth/login",
                 json={
-                    "email": "alice@example.test",
+                    "login": "alice",
                     "password": "wrong password",
                 },
             )
@@ -190,3 +193,35 @@ def test_setup_lockout_settings_allow_environment_overrides(
     assert get_setup_lockout_settings().lockout_duration == timedelta(
         minutes=11
     )
+
+
+def test_concurrent_initialization_keeps_one_active_code_on_sqlite(
+    engine, monkeypatch
+) -> None:
+    _initialize(engine)
+    factory = sessionmaker(bind=engine)
+    barrier = Barrier(2)
+    initialize_system = init_module.initialize_system
+
+    def synchronized_initialize(session: Session) -> tuple[User, str]:
+        barrier.wait(timeout=10)
+        return initialize_system(session)
+
+    monkeypatch.setattr(
+        init_module, "initialize_system", synchronized_initialize
+    )
+
+    def initialize_concurrently() -> int:
+        return initialize(factory, output=lambda _line: None)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(lambda _index: initialize_concurrently(), range(2))
+        )
+
+    assert results == [0, 0]
+    with Session(engine) as session:
+        active_codes = session.scalars(
+            select(SetupCode).where(SetupCode.voided_at.is_(None))
+        ).all()
+        assert len(active_codes) == 1

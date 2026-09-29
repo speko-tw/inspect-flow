@@ -25,6 +25,11 @@ class AlreadyInitializedError(RuntimeError):
 
 def initialize_system(session: Session) -> tuple[User, str]:
     """Create system rows once, or issue a replacement setup code."""
+    if session.get_bind().dialect.name == "sqlite":
+        # SQLite ignores SELECT FOR UPDATE. Take its database writer
+        # reservation before reading so concurrent initializers cannot
+        # both read the same old active-code set and insert replacements.
+        session.connection().exec_driver_sql("BEGIN IMMEDIATE")
     try:
         admin = session.scalars(
             select(User).where(User.is_system.is_(True))

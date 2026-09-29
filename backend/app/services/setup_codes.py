@@ -19,6 +19,12 @@ SETUP_CODE_LIFETIME = timedelta(hours=24)
 def issue_setup_code(session: Session, admin: User) -> str:
     """Void prior codes and add a newly hashed code to the transaction."""
     now = clock.utc_now()
+    # The setup-code table may be empty, so locking its existing rows
+    # cannot serialize concurrent initializations. Lock the always-present
+    # admin row first; PostgreSQL then serializes issuers on this row.
+    session.scalar(
+        select(User.id).where(User.id == admin.id).with_for_update()
+    )
     for previous in session.scalars(
         select(SetupCode)
         .where(SetupCode.voided_at.is_(None))
