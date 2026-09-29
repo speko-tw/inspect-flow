@@ -210,7 +210,7 @@
 | DOM-AC38 | 啟用中的公司 A、B；`local` 帳號 U 屬於 A，`department`、`location`、`employee_no` 都有值；沒有公司的 `local` 帳號 V | 依序：以 ORM 與 Service 層各試一次為 V 寫入 `department`；透過 Service 層把 U 的 `company_id` 改為 B；為 U 重新填入三個欄位後，把 U 的 `company_id` 改為空值；再以同一次修改把 U 的 `company_id` 改為 A 並同時提供新的 `department` | 第一步兩次都被拒絕，V 的資料不變；第二步成功，U 的 `department`、`location`、`employee_no` 都為空值，並產生公司連結變更的稽核紀錄（事件內容由 `audit-log` 驗收）；第三步成功，`company_id` 為空值、三個欄位為空值；第四步成功，`department` 為新提供的值，`location`、`employee_no` 為空值 | DOM-R18、DOM-R46、DOM-R47 |
 | DOM-AC39 | 公司 A、B；A 已有一筆 `employee_no = "E001"` 的 `User`；沒有公司的兩筆 `User` | 依序：在 A 新增一筆 `employee_no = "E001"` 的 `User`；在 B 新增一筆 `employee_no = "E001"` 的 `User`；新增兩筆沒有公司、沒有工號的 `User`（若上一步的兩筆不足以驗證，再各新增一筆）；把 B 的那筆改到 A，並同時提供 `employee_no = "E001"` | 第一次被資料庫拒絕，筆數不變；第二次成功；沒有公司、沒有工號的多筆都成功；最後一次被拒絕，資料不變 | DOM-R47、DBF-R13 |
 | DOM-AC40 | 與 DOM-AC33 相同的前置資料 | 分別嘗試：把內建 `admin` 的 `company_id` 設為那家公司；為內建 `admin` 填入 `name_zh`；把內建 `admin` 的 `account_name` 改為 `root`；新增 `is_system = false` 且 `account_name = "Admin"` 的 `User`；新增 `is_system = false` 但 `email` 為空值的 `User` | 每一次都被拒絕，`User` 資料不變；（內建 `admin` 的 `email` 為空值在 DOM-AC33 已成功建立） | DOM-R46、DOM-R50、DOM-R45 |
-| DOM-AC41 | 具 Admin 權限的操作者 A、一般帳號 U、內建 `admin` | 以 A 為操作者，透過 Service 層：把 U 的 `is_admin` 設為 `true`；再設為 `false`；把內建 `admin` 的 `is_admin` 設為 `false` | 前兩次成功，各產生一筆 `user.is_admin_changed` 稽核紀錄（內容由 `audit-log` 驗收）；第三次被拒絕，資料不變；操作者是不是 Admin 由 `authentication` 驗收 | DOM-R51、DOM-R06 |
+| DOM-AC41 | 具 Admin 權限的操作者 A、一般帳號 U、內建 `admin` | 以 A 為操作者，透過 Service 層：把 U 的 `is_admin` 設為 `true`；再設為 `false`；把內建 `admin` 的 `is_admin` 設為 `false` | 前兩次成功，各產生一筆 `user.admin_changed` 稽核紀錄（內容由 `audit-log` 驗收）；第三次被拒絕，資料不變；操作者是不是 Admin 由 `authentication` 驗收 | DOM-R51、DOM-R06 |
 
 ### 初始化指令與操作者
 

@@ -13,11 +13,32 @@
 | T3 | 初始化指令不寫稽核紀錄的測試 | `backend/tests/cli/test_init_system_audit.py`（新增） | T1；[#134](https://github.com/speko-tw/inspect-flow/issues/134)（初始化指令，會建立 `backend/tests/cli/`） | ALG-AC08 | #217 |
 | T4 | 寫入時機的驗收測試：只寫測試，透過 `domain-model` T7 的入口做 ALG-AC11 的操作序列，檢查紀錄 | `backend/tests/services/test_audit_write_timing.py`（新增） | T2；[#135](https://github.com/speko-tw/inspect-flow/issues/135)（DOM T7） | ALG-AC11 | #218 |
 
-- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。
+- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 ALG-AC13～ALG-AC16 由下方[本次變更後續實作](#本次變更後續實作)涵蓋；T1～T4 的內容保持當時的樣子。
 - 規格凍結後才依本表開 task issue；本 PR 只寫文件。
 - T3 開工時若 T2 還沒合併，也可以併進 T2（只要 #134 已合併），在 T2 的 PR 更新本表。
 - **和 `domain-model` T7（[#135](https://github.com/speko-tw/inspect-flow/issues/135)）的分工**：T7 依賴本計畫 T2，在 `Role`、角色指派、移出專案、`is_admin` 的入口呼叫寫入入口；DOM-R22 寫明由本規格驗收，所以驗收測試放在本計畫 T4，排在 #135 之後。T4 若發現 T7 漏寫或寫錯，開 `Bug` 修 `domain-model` 的 Service 檔，T4 本身不改 Service 檔（一個任務不跨兩份規格）。
-- **和 `authentication` 的分工**：`user.password_set`、`user.locked` 由本計畫 T2 登記進目錄；實際寫入與寫入時機的驗收在 `authentication` 計畫的 T8、T11（AUT-AC49～AUT-AC51），它們都依賴 T2。
+- **和 `authentication` 的分工**：`user.password_set`、`user.locked` 由本計畫 T2 登記進目錄；實際寫入與寫入時機的驗收在 `authentication` 計畫的 T8、T11（AUT-AC49～AUT-AC51），它們都依賴 T2；本次變更後首次設定與 `admin` 重設指令的驗收在 AUT-AC62、AUT-AC56，見下方後續實作。
+
+## 本次變更後續實作
+
+依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）。範圍變更；已完成的 T1～T4 不改寫，變動由下列任務在既有程式上處理。每個任務一個 PR，先開 issue 再動工。
+
+| 任務 | 稽核相關的內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| C | 事件目錄登記 `user.account_name_changed`、`user.company_changed`（ALG-R19），並把 `user.password_set` 標為「得為系統事件」，寫入入口支援由呼叫端宣告系統事件（ALG-R18）；首次設定路由以系統事件寫 `user.password_set`，`admin` 重設指令沿用同一事件（ALG-R21）；改寫 T3 的測試（初始化與重跑都不寫稽核，ALG-AC08） | T2、`authentication` 計畫的 C | ALG-AC08、ALG-AC13、ALG-AC16 | [#261](https://github.com/speko-tw/inspect-flow/issues/261) |
+| E | 使用者 Service（帳號名稱修改、公司連結變更）在同一個交易寫 `user.account_name_changed`、`user.company_changed`；換公司或解除連結時清空的欄位一併記下（ALG-R20） | C、`domain-model` 計畫的 E | ALG-AC14、ALG-AC15 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
+| H | 端到端：首次設定的系統事件、新增使用者、改帳號名稱、換公司，最後讀稽核紀錄核對筆數與操作者 | C、E | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
+
+**對既有任務的影響**：
+
+| 既有任務 | 影響 | 由誰接手 |
+|---|---|---|
+| T2（寫入入口與事件目錄） | 入口新增「呼叫端宣告系統事件」的路徑，只限目錄標為「得為系統事件」的事件；`user.locked` 的固定系統事件做法不變 | C |
+| T3（初始化指令不寫稽核） | 測試改為對新的初始化指令（不詢問輸入、不設密碼）與重跑各驗一次 | C |
+| T4（寫入時機驗收） | ALG-AC11 的操作序列不變；帳號名稱與公司連結另由 ALG-AC14、ALG-AC15 驗收，不併進 T4 | E |
+
+- 這些任務的檔案清單，開 issue 時依當時的程式碼盤點，不在這裡預先寫死。
+- 事件目錄 `backend/app/services/audit.py` 是共用檔案：C 只加 `user.*` 的兩個新條目與標記，E 不改目錄，只呼叫；兩者不同時進行。
 
 ## 並行分組
 
@@ -50,11 +71,15 @@
 | ALG-AC05 | 同上：用 `unit_of_work` 包住 `Company` 修改與寫紀錄，兩種失敗後重讀 |
 | ALG-AC06 | 同上：三種錯誤寫入都拋錯、筆數不變；掃描目錄的宣告欄位名稱 |
 | ALG-AC07 | `backend/tests/db/test_audit_events.py`：六種事件寫入後讀回比對（CI 也在 PostgreSQL 跑） |
-| ALG-AC08 | `backend/tests/cli/test_init_system_audit.py`：執行初始化指令後 `audit_logs` 為 0 筆 |
+| ALG-AC08 | `backend/tests/cli/test_init_system_audit.py`：執行初始化指令與重跑後 `audit_logs` 為 0 筆（本次變更後改測新的初始化指令，C） |
 | ALG-AC09 | `backend/tests/services/test_audit.py`：測試內登記事件、寫入讀回，比對 `alembic heads` 與 inspector 欄位；fixture 還原目錄 |
 | ALG-AC10 | 同上：所有代碼符合格式，「資料」段等於 `entity_type` |
 | ALG-AC11 | `backend/tests/services/test_audit_write_timing.py`：依序操作後比對紀錄的筆數、代碼順序與內容；被拒絕與範圍外的操作沒有紀錄 |
 | ALG-AC12 | `backend/tests/services/test_audit.py`（T2）：以沒有登入者與已綁定 U 的請求範圍各寫入，斷言兩種範圍的 `user.locked` 操作者都是內建 `admin`、其他事件在沒有登入者時被拒絕、`user.password_set` 前後相同仍寫入 |
+| ALG-AC13 | `backend/tests/services/test_audit.py`（C）：以 `set_clock` 固定時間；三種請求範圍 × 是否宣告系統事件；斷言宣告只對目錄標記的事件有效 |
+| ALG-AC14 | `backend/tests/services/test_audit_user_events.py`（E，新增）：改名（含大小寫）、相同值、重名被拒絕三種，斷言筆數、`created_by` 與小寫的 `before`、`after`；掃描目錄的宣告欄位 |
+| ALG-AC15 | 同上：換公司、單獨改部門、清空後解除連結、連結公司、工號重複被拒絕，斷言筆數與四欄內容 |
+| ALG-AC16 | `backend/tests/cli/test_reset_admin_password_audit.py`（C，新增）：執行重設指令兩次（一次成功、一次輸入不同），斷言一筆 `user.password_set` 與目錄沒有新增事件代碼 |
 
 ## 考慮過但沒採用的做法
 
