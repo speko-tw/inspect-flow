@@ -47,7 +47,7 @@ class PasswordLengthError(ValueError):
 
 def _clear_login_failures(session: Session, user: User) -> None:
     """Clear failed checks and lift a lockout after password reset."""
-    clear_failed_attempts(session, user)
+    clear_failed_attempts(session, user.id)
 
 
 def set_password(

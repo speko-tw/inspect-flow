@@ -95,25 +95,34 @@ def authenticate(db: Session, email: str, password: str) -> User | None:
             },
         )
 
+    user_id = user.id if user is not None else None
+    # AUT-R06: unknown accounts still pay for one lockout lookup,
+    # using a fixed absent ID; neither path reveals the email.
+    locked = is_locked(db, user_id)
     if user is None:
         _log_failed(None, "invalid_credentials")
         return None
-    if is_locked(db, user):
-        _log_failed(str(user.id), "locked")
+    assert user_id is not None
+    if locked:
+        _log_failed(str(user_id), "locked")
         return None
     if user_password is None:
-        record_failure(db, user)
-        _log_failed(str(user.id), "invalid_credentials")
+        db.commit()
+        record_failure(db, user_id)
+        _log_failed(str(user_id), "invalid_credentials")
         return None
     if user.auth_source != "local":
-        record_failure(db, user)
-        _log_failed(str(user.id), "invalid_credentials")
+        db.commit()
+        record_failure(db, user_id)
+        _log_failed(str(user_id), "invalid_credentials")
         return None
     if not password_ok:
-        record_failure(db, user)
-        _log_failed(str(user.id), "invalid_credentials")
+        db.commit()
+        record_failure(db, user_id)
+        _log_failed(str(user_id), "invalid_credentials")
         return None
-    clear_failed_attempts(db, user)
+    db.commit()
+    clear_failed_attempts(db, user_id)
     if not user.is_active:
         _log_failed(str(user.id), "account_disabled")
         return None

@@ -237,12 +237,14 @@ def change_password(
     user_password = db.scalar(
         select(UserPassword).where(UserPassword.user_id == user.id)
     )
-    if is_locked(db, user):
+    if is_locked(db, user.id):
         raise APIError(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT, 400)
     if user_password is None or not verify_password(
         user_password.password_hash, body.current_password
     ):
-        record_failure(db, user)
+        user_id = user.id
+        db.commit()
+        record_failure(db, user_id)
         db.commit()
         raise APIError(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT, 400)
 

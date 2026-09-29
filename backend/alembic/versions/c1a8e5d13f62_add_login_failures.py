@@ -18,10 +18,22 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.create_table(
+        "login_counters",
+        sa.Column("user_id", sa.Uuid(), nullable=False),
+        sa.Column("revision", sa.Integer(), nullable=False),
+        sa.Column("failure_count", sa.Integer(), nullable=False),
+        sa.Column("locked_until", sa.DateTime(timezone=True)),
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("user_id"),
+    )
+    op.create_table(
         "login_failures",
         sa.Column("user_id", sa.Uuid(), nullable=False),
         sa.Column("failed_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("locked_until", sa.DateTime(timezone=True)),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -38,3 +50,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_login_failures_user_time", "login_failures")
     op.drop_table("login_failures")
+    op.drop_table("login_counters")

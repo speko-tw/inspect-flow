@@ -1,70 +1,138 @@
-"""Shared per-account password failure counter (AUT-R28)."""
+"""Shared, serialized per-account password failure counter (AUT-R28)."""
 
-from sqlalchemy import delete, select
+import uuid
+
+from sqlalchemy import case, delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.auth.settings import get_lockout_settings
 from app.db import clock
-from app.models import LoginFailure, User
+from app.models import LoginCounter, LoginFailure
 from app.services.audit import record_audit_event
 
+_UNKNOWN_USER_ID = uuid.UUID(int=0)
 
-def _failures(db: Session, user: User) -> list[LoginFailure]:
-    # Serialize updates for one account on databases with row locks.
-    db.execute(select(User.id).where(User.id == user.id).with_for_update())
-    return list(
-        db.scalars(
-            select(LoginFailure)
-            .where(LoginFailure.user_id == user.id)
-            .order_by(LoginFailure.failed_at)
+
+def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
+    """Take the per-user write lock before reading failure history.
+
+    SQLite's upsert starts a write transaction; PostgreSQL locks the
+    conflicting counter row. Both then serialize the window count,
+    failure insert, and audit write until the caller commits. The
+    caller must end any earlier read transaction before entering
+    here, since WAL cannot upgrade a stale SQLite read snapshot.
+    """
+    dialect = db.get_bind().dialect.name
+    if dialect == "sqlite":
+        # db-dependency: sqlite; wait for the preceding writer instead
+        # of returning a transient "database is locked" as HTTP 500.
+        # db-dependency: sqlite
+        db.connection().exec_driver_sql("PRAGMA busy_timeout=30000")
+        insert = sqlite_insert(LoginCounter)
+    elif dialect == "postgresql":
+        insert = pg_insert(LoginCounter)
+    else:
+        raise ValueError(f"unsupported lockout database: {dialect}")
+    statement = insert.values(
+        user_id=user_id, revision=0, failure_count=0, locked_until=None
+    ).on_conflict_do_update(
+        index_elements=[LoginCounter.user_id],
+        set_={"revision": LoginCounter.revision + 1},
+    )
+    db.execute(statement)
+
+
+def is_locked(db: Session, user_id: uuid.UUID | None) -> bool:
+    """Check the account's deadline; unknown users use a fixed ID.
+
+    Looking up the sentinel makes an unknown email pay the same
+    lockout-query round trip as a known account, without recording
+    a failure or exposing the submitted email (AUT-R06).
+    """
+    lookup_id = user_id if user_id is not None else _UNKNOWN_USER_ID
+    locked_until = db.scalar(
+        select(LoginCounter.locked_until).where(
+            LoginCounter.user_id == lookup_id
         )
     )
+    return locked_until is not None and locked_until > clock.utc_now()
 
 
-def is_locked(db: Session, user: User) -> bool:
-    """Return whether the account is locked at the current UTC time."""
-    now = clock.utc_now()
-    return any(
-        row.locked_until is not None and row.locked_until > now
-        for row in _failures(db, user)
-    )
+def record_failure(db: Session, user_id: uuid.UUID) -> None:
+    """Atomically count a failed check and audit the lock transition.
 
-
-def record_failure(db: Session, user: User) -> None:
-    """Count one failed check and audit exactly once on transition."""
+    The final count and deadline come from one UPDATE RETURNING.
+    Individual failure timestamps preserve AUT-R28's sliding-window
+    boundary; the counter row serializes concurrent callers.
+    """
+    _serialize_account(db, user_id)
     now = clock.utc_now()
     settings = get_lockout_settings()
-    rows = _failures(db, user)
-    if any(
-        row.locked_until is not None and row.locked_until > now for row in rows
-    ):
+    previous_lock = db.scalar(
+        select(LoginCounter.locked_until).where(
+            LoginCounter.user_id == user_id
+        )
+    )
+    if previous_lock is not None and previous_lock > now:
         return
 
-    # After a lock expires the next failed check starts a new window.
-    if any(row.locked_until is not None for row in rows):
-        clear_failed_attempts(db, user)
-        rows = []
-    window_start = now - settings.failure_window
-    recent = [row for row in rows if row.failed_at > window_start]
-    locked_until = (
-        now + settings.lockout_duration
-        if len(recent) + 1 >= settings.failure_threshold
-        else None
+    cutoff = now - settings.failure_window
+    if previous_lock is not None:
+        # An expired lock starts a new window even if its failures
+        # were recent. Locked attempts never extend the deadline.
+        db.execute(delete(LoginFailure).where(LoginFailure.user_id == user_id))
+    else:
+        db.execute(
+            delete(LoginFailure).where(
+                LoginFailure.user_id == user_id,
+                LoginFailure.failed_at <= cutoff,
+            )
+        )
+
+    recent_count = (
+        select(func.count(LoginFailure.id))
+        .where(
+            LoginFailure.user_id == user_id,
+            LoginFailure.failed_at > cutoff,
+        )
+        .scalar_subquery()
+        + 1
     )
-    db.add(
-        LoginFailure(user_id=user.id, failed_at=now, locked_until=locked_until)
-    )
+    count, locked_until = db.execute(
+        update(LoginCounter)
+        .where(LoginCounter.user_id == user_id)
+        .values(
+            failure_count=recent_count,
+            locked_until=case(
+                (
+                    recent_count >= settings.failure_threshold,
+                    now + settings.lockout_duration,
+                ),
+                else_=None,
+            ),
+        )
+        .returning(LoginCounter.failure_count, LoginCounter.locked_until)
+    ).one()
+    db.add(LoginFailure(user_id=user_id, failed_at=now))
     db.flush()
-    if locked_until is not None:
+    if count == settings.failure_threshold:
         record_audit_event(
             db,
             "user.locked",
-            entity_id=user.id,
+            entity_id=user_id,
             before=None,
             after={"locked_until": locked_until},
         )
 
 
-def clear_failed_attempts(db: Session, user: User) -> None:
-    """Clear the counter and lift any active lockout."""
-    db.execute(delete(LoginFailure).where(LoginFailure.user_id == user.id))
+def clear_failed_attempts(db: Session, user_id: uuid.UUID) -> None:
+    """Clear the window and lift any active lock under the same lock."""
+    _serialize_account(db, user_id)
+    db.execute(delete(LoginFailure).where(LoginFailure.user_id == user_id))
+    db.execute(
+        update(LoginCounter)
+        .where(LoginCounter.user_id == user_id)
+        .values(failure_count=0, locked_until=None)
+    )

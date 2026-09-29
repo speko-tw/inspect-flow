@@ -10,7 +10,7 @@ from app.db.base import TimestampedBase, UTCDateTime
 
 
 class LoginFailure(TimestampedBase):
-    """One failed check; the threshold row carries the lock deadline."""
+    """One failed check, retained within the current sliding window."""
 
     __tablename__ = "login_failures"
     __table_args__ = (
@@ -21,6 +21,3 @@ class LoginFailure(TimestampedBase):
         ForeignKey("users.id"), nullable=False
     )
     failed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
-    locked_until: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )

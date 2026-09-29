@@ -1,6 +1,8 @@
 """AUT-AC27, AC45-AC48, AC51-AC53: shared account lockout."""
 
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,11 +11,18 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, select
 
 from alembic import command
+from app.auth import login as login_module
 from app.auth.password_service import set_password
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.auth.settings import get_lockout_settings
 from app.db import clock
-from app.models import AuditLog, AuthSession, LoginFailure, UserPassword
+from app.models import (
+    AuditLog,
+    AuthSession,
+    LoginCounter,
+    LoginFailure,
+    UserPassword,
+)
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 from tests.auth.test_auth_logging import _assert_no_secrets, _auth_records
 from tests.db.conftest import create_root_user_with_company
@@ -201,14 +210,66 @@ def test_lockout_migration_round_trip(db_url):
     engine = create_engine(db_url)
     try:
         command.upgrade(cfg, "c1a8e5d13f62")
-        columns = {
+        failure_columns = {
             row["name"]
             for row in inspect(engine).get_columns("login_failures")
         }
-        assert {"user_id", "failed_at", "locked_until"} <= columns
+        counter_columns = {
+            row["name"]
+            for row in inspect(engine).get_columns("login_counters")
+        }
+        assert {"user_id", "failed_at"} <= failure_columns
+        assert {"user_id", "failure_count", "locked_until"} <= (
+            counter_columns
+        )
         command.downgrade(cfg, "9d2b7c6e4a10")
         assert "login_failures" not in inspect(engine).get_table_names()
+        assert "login_counters" not in inspect(engine).get_table_names()
         command.upgrade(cfg, "c1a8e5d13f62")
         assert "login_failures" in inspect(engine).get_table_names()
+        assert "login_counters" in inspect(engine).get_table_names()
     finally:
         engine.dispose()
+
+
+def test_concurrent_failures_count_once_and_audit_once(
+    make_client, db_session, now, monkeypatch
+):
+    admin = _admin(db_session)
+    user = make_local_user(db_session, "DEMO5")
+    email, user_id = user.email, user.id
+    barrier = threading.Barrier(5)
+    actual_record = login_module.record_failure
+
+    def synchronized_record(db, target_id):
+        barrier.wait(timeout=15)
+        actual_record(db, target_id)
+
+    monkeypatch.setattr(login_module, "record_failure", synchronized_record)
+
+    def send_two_failures():
+        client = make_client()
+        barrier_results = []
+        for _ in range(2):
+            response = client.post(
+                "/api/v1/auth/login",
+                json={"email": email, "password": "wrong-password"},
+            )
+            barrier_results.append(response.status_code)
+        return barrier_results
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        results = list(pool.map(lambda _: send_two_failures(), range(5)))
+    assert results == [[401, 401]] * 5
+    db_session.rollback()
+    counter = db_session.query(LoginCounter).filter_by(user_id=user_id).one()
+    assert counter.failure_count == 10
+    assert counter.locked_until == T0 + timedelta(minutes=15)
+    assert (
+        db_session.query(LoginFailure).filter_by(user_id=user_id).count() == 10
+    )
+    audit = (
+        db_session.query(AuditLog).filter_by(event_type="user.locked").one()
+    )
+    assert audit.entity_id == user_id
+    assert audit.created_by == admin.id
