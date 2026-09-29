@@ -123,6 +123,9 @@ def creator(session) -> User:
 @pytest.fixture
 def project(session, creator) -> Project:
     proj = Project(
+        name="示範廠機電工程",
+        client_name="示範業主",
+        site_location="示範工地",
         project_code="PM-T3",
         created_by=creator.id,
         updated_by=creator.id,

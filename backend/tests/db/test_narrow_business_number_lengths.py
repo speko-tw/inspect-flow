@@ -98,6 +98,9 @@ class TestBoundaryLengthValuesAreAccepted:
         session.commit()
 
         project = Project(
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
             project_code="P" * 32,
             created_by=owner.id,
             updated_by=owner.id,
@@ -158,6 +161,9 @@ class TestOverLimitValuesAreRejectedByPostgresql:
         with pytest.raises((DataError, ValueError)):
             session.add(
                 Project(
+                    name="示範廠機電工程",
+                    client_name="示範業主",
+                    site_location="示範工地",
                     project_code="P" * 33,
                     created_by=owner.id,
                     updated_by=owner.id,
