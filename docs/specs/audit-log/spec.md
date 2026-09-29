@@ -3,7 +3,7 @@
 **代碼**：`ALG`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`database-foundation`（UUID 主鍵、UTC 時間、`created_by` 外鍵，見 DBF-R08、DBF-R11、DBF-R14）、`domain-model`（`User`、`Role`、`ProjectMember`、目前操作者，見 DOM-R05、DOM-R14、DOM-R19～DOM-R25；帳號名稱與公司連結見 DOM-R45、DOM-R47、DOM-R53）、`api-conventions`（UUID 字串、時間格式，見 API-R06、API-R09）
 **引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)、[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-46](../../intents/03-decisions-and-stack.md#kd-46)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」
-**被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q6](#alg-q6) 不擋凍結：Q1～Q4、Q6 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變）
+**被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q5](#alg-q5) 不擋凍結：Q1～Q4 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變；[ALG-Q6](#alg-q6) 已裁定）
 
 ## 目的
 
@@ -198,7 +198,7 @@
 - **ALG-Q5：要不要記錄請求來源（IP、User-Agent、Session）**。選項：（A）不記錄；（B）新增可空值的來源欄位。業界：OWASP 建議記錄「何時、何處、誰、做什麼」，「何處」通常包含 IP。**建議 A**：第一階段是單機、內網，操作者已記在 `created_by`；之後要加，只需一支新增可空值欄位的 migration。
 
 <a id="alg-q6"></a>
-- **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格判讀，非完全確定：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.account_name_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
+- **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.account_name_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
 
 ## 變更紀錄
 

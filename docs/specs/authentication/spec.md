@@ -358,9 +358,9 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
   - **落地**：寫進 AUT-R39～AUT-R41、AUT-AC49～AUT-AC52；`audit-log` 登記 `user.password_set`、`user.locked` 兩種事件（ALG-R15～ALG-R17）。實作：指令、Service 入口與變更密碼都由 T11（[#192](https://github.com/speko-tw/inspect-flow/issues/192)，指令經 Service 入口寫入）、鎖定由 T8（[#156](https://github.com/speko-tw/inspect-flow/issues/156)）、日誌由新增的 T12 負責；寫稽核紀錄的任務都依賴 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）。
 
 <a id="aut-q7"></a>
-- **AUT-Q7：首次設定與帳號名稱登入的判讀**（裁定範圍已定，下列判讀**待負責人確認**；[#259](https://github.com/speko-tw/inspect-flow/issues/259)；AUT-R05、AUT-R42～AUT-R47、AUT-AC54～AUT-AC66）。
+- **AUT-Q7：首次設定與帳號名稱登入的判讀**（已裁定，[#259](https://github.com/speko-tw/inspect-flow/issues/259)；判讀已由負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）；AUT-R05、AUT-R42～AUT-R47、AUT-AC54～AUT-AC66）。
   - **裁定**（負責人，[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：初始化指令建立資料庫、內建 `admin` 與三個空權限範本角色，並印出一次性首次登入碼（24 小時有效、只存雜湊；15 分鐘內輸錯 10 次鎖 15 分鐘，計數與密碼登入分開，被鎖寫應用程式日誌、不寫稽核）；初始化不問公司與個人資料、不設密碼；`admin` 沒有密碼時重跑會作廢舊碼並印新碼，設定密碼後拒絕；網頁流程是輸入首次登入碼、設定 `admin` 密碼（碼作廢）、新增第一個使用者（系統產生臨時密碼、只顯示一次、首次登入強制變更、「給予 admin 權限」勾選框預設不勾）；`admin` 忘記密碼用伺服器端 `make reset-admin-password`（互動輸入兩次、寫稽核），一般的設定密碼指令移除；輸入含 `@` 用 email 登入，否則用帳號名稱。
-  - **判讀，待確認**（裁定沒有說明，本規格自行推導，所以標「非完全確定」）：
+  - **判讀，已確認**（裁定沒有說明，本規格自行推導，已由負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：
     1. **重跑初始化是否清除首次登入碼的失敗鎖定**（AUT-R43、AUT-AC60）：本規格寫「清除」，理由是部署人員已能在伺服器上操作，再擋沒有意義；若要保留鎖定，改 AUT-R43 與 AUT-AC60。
     2. **首次設定成功後直接登入**（AUT-R44）：本規格讓回應帶 `admin` 的登入 Cookie，第三步才不必再登入一次；若要求重新登入，只影響 AUT-R44 與 AUT-AC56、AUT-AC65。
     3. **之後每一位由 Admin 新增的使用者都由系統產生臨時密碼**（AUT-R46）：裁定只寫第一個使用者；本規格讓所有新增走同一條路徑，避免有兩套建立密碼的方式。
@@ -375,7 +375,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - [DOM-Q3](../domain-model/spec.md#dom-q3)（權限代碼命名規則與清單）：已裁定（[#123](https://github.com/speko-tw/inspect-flow/issues/123)），代碼登記在程式內的登記表（DOM-R35）；AUT-R22 用哪個代碼，由登記它的規格決定。
 - [DOM-Q6](../domain-model/spec.md#dom-q6)（稽核紀錄由哪份規格定義）：已裁定（[#126](https://github.com/speko-tw/inspect-flow/issues/126)），另開 `audit-log`（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）；[AUT-Q6](#aut-q6) 也已裁定（[#148](https://github.com/speko-tw/inspect-flow/issues/148)）。
 - [DOM-Q7](../domain-model/spec.md#dom-q7)（`is_active` 預設值；`Company` 停用後其人員能不能登入）：已裁定（[#127](https://github.com/speko-tw/inspect-flow/issues/127)）。人員能不能登入只看 `User.is_active`，不需要檢查公司狀態；AUT-R06、AUT-R14 維持現狀（見 DOM-R32）。
-- [DOM-Q9](../domain-model/spec.md#dom-q9)（帳號名稱與公司欄位連動的判讀）：待負責人確認；本規格只用到其中「內建 `admin` 的 email 選填」與 email 前段回填兩點，都不影響 AUT-R05 的比對規則。
+- [DOM-Q9](../domain-model/spec.md#dom-q9)（帳號名稱與公司欄位連動的判讀）：已裁定（負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））；本規格只用到其中「內建 `admin` 的 email 選填」與 email 前段回填兩點，都不影響 AUT-R05 的比對規則。
 
 ## 變更紀錄
 

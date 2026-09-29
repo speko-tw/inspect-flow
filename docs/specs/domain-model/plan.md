@@ -68,7 +68,7 @@
 - **`email` 不分大小寫的唯一約束**：採 `lower(email)` 的唯一索引，SQLite 與 PostgreSQL 都支援運算式索引，而且唯一性由資料庫保證，任何寫入路徑都擋得下。不採正規化欄位，因為以 Core `update()` 只改 `email` 時，正規化欄位可能沒有同步更新，唯一性就出現漏洞。已知差異：SQLite 的 `lower()` 只轉換 ASCII 字母，PostgreSQL 依資料庫語系也會轉換非 ASCII 字母，所以只差非 ASCII 大小寫的兩個 email，在 SQLite 會被當成不同；DOM-AC02 只用 ASCII，兩種資料庫結果一致。T3 的 `Role.name`（DOM-R34）用同樣做法，差異相同；DOM-AC24 也只用 ASCII。負責人已接受這個差異，正式環境的 PostgreSQL 不受影響，不改用正規化欄位（[PR #205 裁定](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851795833)，2026-09-27）。
 - **對既有資料表加不可空值欄位**：SQLite 的 `ALTER TABLE ADD COLUMN` 不能直接加沒有預設值的不可空值欄位，也不能事後加外鍵與 CHECK 約束。T2 的 migration 用 Alembic 的 batch 模式重建資料表；因為這時 `User` 資料表還沒有正式資料，重建不需要資料轉換。
 - **內建 `admin` 的自我參照**：`created_by` 要在同一筆 INSERT 裡指向自己，主鍵必須在寫入前由應用端產生（同 `database-foundation` 計畫的風險段）。T6 照這個方式建立 `admin`；C 改寫初始化後仍是這個做法。
-- **既有資料回填帳號名稱（B）**：DOM-R54 的回填規則沒有涵蓋 `email` 前段不合格式、既有公司名稱重複的情況，見 [DOM-Q9](spec.md#dom-q9) 的第 3 點。降低方式：B 在計畫階段先提出處理做法並附驗證，再動工；目前專案還在開發前期，正式資料很少，非完全確定，需負責人確認。
+- **既有資料回填帳號名稱（B）**：DOM-R54 的回填規則沒有涵蓋 `email` 前段不合格式、既有公司名稱重複的情況，見 [DOM-Q9](spec.md#dom-q9) 的第 3 點。降低方式：B 在計畫階段先提出處理做法並附驗證，再動工；目前專案還在開發前期，正式資料很少；負責人已確認由 B 的計畫提出做法（DOM-Q9）。
 - **清空欄位與稽核要同一次修改完成（B、E）**：換公司或解除連結時，清空 `department`、`location`、`employee_no` 與稽核紀錄必須在同一個交易內，否則會出現「公司已換、舊部門還在」的中間狀態。降低方式：E 只提供單一入口做這件事，並用 DOM-AC38 驗收；資料庫另以 CHECK 保證沒有公司就不能有這三個欄位（B）。
 - **裁定未完成就開工**：T1～T3 的唯一約束與預設值依 DOM-Q2～DOM-Q7（欄位長度與格式已由 DOM-Q1 裁定，見 DOM-R28～DOM-R31）。任一裁定未完成時，對應任務標 `blocked`；不要先用猜的長度或預設值建表，事後改約束要多一支 migration。
 - **登記表初始為空，測試用不到正式代碼**：DOM-R35 拒絕未登記的代碼，但登記表要等功能規格才有成員。T3 讓 model 的檢查經由單一查詢函式讀取登記表，測試以 fixture 暫時換成含 `report.read` 等代碼的測試用列舉（做法同 API-AC10 的測試專用列舉）；T5、T7 的測試沿用同一個 fixture。
