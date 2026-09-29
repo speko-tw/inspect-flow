@@ -267,6 +267,7 @@
 | AUT-AC46 | 同 AUT-AC27 的 U；可控時間 | 在 1 分鐘內依序：錯 9 次、以 P 登入、再錯 9 次、以 P 登入、再錯 10 次、以 P 登入 | 前兩次以 P 登入都回 200（成功會清零，所以 18 次失敗沒有觸發鎖定）；連續錯 10 次後以 P 登入回 401 | AUT-R28 |
 | AUT-AC47 | 同 AUT-AC27 的 U，已登入；可控時間 | 以錯誤的目前密碼呼叫變更密碼 API 5 次，再以錯誤密碼登入 5 次；接著以 P 登入，並以正確的目前密碼 P 與有效新密碼呼叫變更密碼 API | 以 P 登入回 401；變更密碼回 400 `auth.current_password_incorrect`，回應與一般的目前密碼錯誤相同；`UserPassword` 與登入狀態筆數不變 | AUT-R28、AUT-R34 |
 | AUT-AC48 | 預設的環境（未設定鎖定相關環境變數），以及分別設定這三個環境變數的環境 | 讀取後端的鎖定設定 | 未設定時為 10 次、15 分鐘、15 分鐘；有設定時等於設定值；`.env.example` 列出這三個變數 | AUT-R28 |
+| AUT-AC53 | 同 AUT-AC27 的 U；依 AUT-AC27 觸發鎖定（第 10 次在時間 L），鎖定仍在生效中 | 在鎖定期間，經設定密碼的 Service 入口（設定密碼的指令，或日後 Admin 設定臨時密碼的畫面）替 U 重設密碼 | 重設後立即以新密碼登入回 200（鎖定已解除、失敗計數已歸零）；重設前後 `AuthSession` 與 `UserPassword` 的筆數、`updated_by` 符合 AUT-R36 的一般寫入行為 | AUT-R28、AUT-R36 |
 
 ### 稽核紀錄與日誌
 
@@ -319,9 +320,9 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
   - **裁定**（負責人，[#146](https://github.com/speko-tw/inspect-flow/issues/146)，2026-09-26）：第一題選 B，由 Admin 設定臨時密碼，本人第一次登入時強制變更；理由是本系統在企業內部使用，這是內網系統常見的做法。`authentication` 補後端機制（臨時密碼標記、首次登入強制變更、變更密碼的流程與頁面）；「Admin 在畫面上設定臨時密碼」的操作介面屬 `admin-dashboard`，在那之前帳號密碼仍由部署人員以指令設定（AUT-R24）。外部來源帳號（`auth_source = external`）交給 AD／LDAP 驗證，本系統不保存外部密碼，也不使用本地密碼；轉成外部來源時要不要刪除本地密碼，留給 `external-identity-sync`。第二題選甲，內建 `admin` 可以設定密碼並登入，作為負責人帳號無法使用時的緊急備援帳號（業界稱 break-glass 帳號），密碼由部署人員保管，平常使用個人帳號。
   - **落地**：AUT-R24 寫明可指定內建 `admin`（AUT-AC32）；新增 AUT-R32～AUT-R38 與 AUT-AC33～AUT-AC43；AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`；「不包含」改寫畫面上設定密碼的歸屬，並排除臨時密碼的有效期限。實作由計畫 T4（[#152](https://github.com/speko-tw/inspect-flow/issues/152)）、T6（[#154](https://github.com/speko-tw/inspect-flow/issues/154)）與新增的 T9、T10、T11 負責。
 <a id="aut-q5"></a>
-- **AUT-Q5：登入失敗鎖定**（已裁定，[#147](https://github.com/speko-tw/inspect-flow/issues/147)；AUT-R28、AUT-AC27、AUT-AC45～AUT-AC48）。以下是裁定前的討論紀錄。OWASP 建議依帳號計算、鎖定時間可遞增，並提醒鎖定可能被用來阻擋他人登入。選項：（A）15 分鐘內失敗 10 次，鎖定 15 分鐘；（B）失敗 5 次後開始遞增延遲（1、2、4…分鐘，上限 1 小時）；（C）MVP 不做，只在內網使用。**建議 A**：規則簡單、好測試，10 次的門檻讓一般打錯密碼不會被鎖。鎖定是否要寫稽核紀錄，併入 AUT-Q6。當時寫：影響計畫 T8，裁定前 T8 不開工。
+- **AUT-Q5：登入失敗鎖定**（已裁定，[#147](https://github.com/speko-tw/inspect-flow/issues/147)；AUT-R28、AUT-AC27、AUT-AC45～AUT-AC48、AUT-AC53）。以下是裁定前的討論紀錄。OWASP 建議依帳號計算、鎖定時間可遞增，並提醒鎖定可能被用來阻擋他人登入。選項：（A）15 分鐘內失敗 10 次，鎖定 15 分鐘；（B）失敗 5 次後開始遞增延遲（1、2、4…分鐘，上限 1 小時）；（C）MVP 不做，只在內網使用。**建議 A**：規則簡單、好測試，10 次的門檻讓一般打錯密碼不會被鎖。鎖定是否要寫稽核紀錄，併入 AUT-Q6。當時寫：影響計畫 T8，裁定前 T8 不開工。
   - **裁定**（負責人，[#147](https://github.com/speko-tw/inspect-flow/issues/147)，2026-09-27）：選 A。依帳號計算，15 分鐘內失敗 10 次鎖定 15 分鐘，時間到自動解鎖；鎖定期間的回應與一般失敗相同；登入與變更密碼 API（驗證目前密碼）共用同一個失敗計數。理由：規則簡單好測；10 次門檻讓一般打錯不會被鎖；自動解鎖降低帳號被故意鎖住的影響（內網風險低）；最短 8 字元的密碼（AUT-Q3）需要限制猜測次數。鎖定是否寫稽核紀錄併入 AUT-Q6。
-  - **落地**：寫進 AUT-R28、AUT-AC27、AUT-AC45～AUT-AC48；計算方式、成功清零、鎖定期間不延長等細節是本規格依 OWASP 的推導。實作由計畫 T8（[#156](https://github.com/speko-tw/inspect-flow/issues/156)）負責，變更密碼 API 的計數與 T11（[#192](https://github.com/speko-tw/inspect-flow/issues/192)）銜接，見計畫 T8。
+  - **落地**：寫進 AUT-R28、AUT-AC27、AUT-AC45～AUT-AC48；計算方式、成功清零、鎖定期間不延長等細節是本規格依 OWASP 的推導。實作由計畫 T8（[#156](https://github.com/speko-tw/inspect-flow/issues/156)）負責，變更密碼 API 的計數與 T11（[#192](https://github.com/speko-tw/inspect-flow/issues/192)）銜接，見計畫 T8。負責人後續補充裁定（[#192](https://github.com/speko-tw/inspect-flow/issues/192#issuecomment-5853201917)，2026-09-27）：經設定密碼的 Service 入口重設密碼時（指令、日後 Admin 設定臨時密碼）一併清除失敗計數並解除鎖定，寫進 AUT-R28 細節（6）與新增的 AUT-AC53；測試由持有鎖定模組的 T8 實作，T11 只在 Service 入口留呼叫點，見計畫 T8、T11。
 <a id="aut-q6"></a>
 - **AUT-Q6：登入、登出、設定密碼、登入失敗是否寫稽核紀錄**（已裁定，[#148](https://github.com/speko-tw/inspect-flow/issues/148)；AUT-R39～AUT-R41、AUT-AC49～AUT-AC52）。以下是裁定前的討論紀錄。[KD-29](../../intents/03-decisions-and-stack.md#kd-29) 只要求權限與角色的變更寫稽核紀錄；登入事件沒有 intents 依據。稽核紀錄的資料模型由 `audit-log` 定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)）。選項：（A）不寫，只保留 `AuthSession` 與 `UserPassword` 的建立及修改紀錄；（B）設定密碼寫、登入事件不寫；（C）全部寫。當時建議 A，等 `audit-log` 定案後再評估 B。
   - **裁定**（負責人，[#148](https://github.com/speko-tw/inspect-flow/issues/148)，2026-09-27）：選 D（不在上列選項）。設定或變更密碼（含 Admin 設臨時密碼、本人變更、設定密碼指令）與帳號被鎖寫稽核紀錄；登入成功、登入失敗、登出寫應用程式日誌，不進資料庫；任何紀錄都不得含密碼（含錯誤的密碼）或 token。理由：OWASP 建議這些事件都要留紀錄；少見且重要的放稽核紀錄，頻繁的放日誌，避免稽核紀錄被淹沒。IP 等來源資訊屬 ALG-Q5，另行裁定。
@@ -344,4 +345,4 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 依 AUT-Q2 裁定，AUT-R19 改為 Admin 通過所有專案權限代碼（含新增、刪除與特殊動作），AUT-R22 改引用 AUT-R19，新增 AUT-AC44 — [#144](https://github.com/speko-tw/inspect-flow/issues/144)
 - 依 AUT-Q5 裁定，AUT-R28 定為依帳號 15 分鐘內失敗 10 次鎖定 15 分鐘、自動解鎖，登入與變更密碼共用計數；AUT-AC27 改為具體邊界，新增 AUT-AC45～AUT-AC48 — [#147](https://github.com/speko-tw/inspect-flow/issues/147)
 - 依 AUT-Q6 裁定，新增 AUT-R39～AUT-R41（設定密碼與帳號被鎖寫稽核紀錄；登入、登出寫應用程式日誌；紀錄不得含密碼或 token）與 AUT-AC49～AUT-AC52，「範圍」的稽核紀錄段改寫 — [#148](https://github.com/speko-tw/inspect-flow/issues/148)
-- 負責人裁定：AUT-R28 補上細節（6），經設定密碼的 Service 入口重設密碼（指令、Admin 設定臨時密碼）時一併清除失敗計數並解鎖；落地由 T11 的 Service 入口留呼叫點，實際計數與解鎖由 T8 接上 — [#192](https://github.com/speko-tw/inspect-flow/issues/192) 留言
+- 負責人裁定：AUT-R28 補上細節（6），經設定密碼的 Service 入口重設密碼（指令、Admin 設定臨時密碼）時一併清除失敗計數並解鎖；新增 AUT-AC53；落地由 T11 的 Service 入口留呼叫點，實際計數、解鎖與測試由 T8 接上 — [#192](https://github.com/speko-tw/inspect-flow/issues/192#issuecomment-5853201917) 裁定
