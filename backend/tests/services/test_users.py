@@ -152,6 +152,29 @@ def test_dom_ac42_company_link_does_not_change_project_roles(
     ) == frozenset({"report.read"})
 
 
+def test_dom_ac41_admin_grant_revoke_and_builtin_protection(session, operator):
+    user = create_user(
+        session,
+        username="ac41.user",
+        name_zh="示範人員",
+        email="ac41@demo.example",
+    )
+    set_is_admin(session, user, True)
+    set_is_admin(session, user, False)
+    with pytest.raises(BuiltInAccountModificationError):
+        set_is_admin(session, operator, False)
+    session.commit()
+
+    assert user.is_admin is False
+    assert operator.is_admin is True
+    events = _audit_rows_for(session, user.id)
+    assert [(item.before, item.after) for item in events] == [
+        ({"is_admin": False}, {"is_admin": True}),
+        ({"is_admin": True}, {"is_admin": False}),
+    ]
+    assert _audit_rows_for(session, operator.id) == []
+
+
 def _company_kwargs(tag: str, **overrides) -> dict:
     kwargs = {"name": f"Company {tag}"}
     kwargs.update(overrides)
