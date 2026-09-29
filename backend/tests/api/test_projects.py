@@ -23,6 +23,7 @@ class ProjectApiContext(TypedDict):
     actor: User
     target: User
     project: Project
+    other_project: Project
     role: Role
     plain_client: TestClient
     admin_client: TestClient
@@ -90,6 +91,13 @@ def project_api(
         client_name="示範業主",
         site_location="示範工地",
     )
+    other_project = create_project(
+        db_session,
+        project_code="DEMO-OTHER-275",
+        name="另一示範工程",
+        client_name="示範業主",
+        site_location="另一示範工地",
+    )
     manage_role = create_role(
         db_session,
         name="專案成員管理",
@@ -108,6 +116,7 @@ def project_api(
         "actor": actor,
         "target": target,
         "project": project,
+        "other_project": other_project,
         "role": manage_role,
         "plain_client": _make_user_client(db_session, make_client, plain),
         "admin_client": _make_user_client(db_session, make_client, admin),
@@ -156,7 +165,7 @@ def test_project_crud_duplicate_code_warning_and_dates(project_api):
     assert edited.json()["warnings"] == [{"code": "project_code.duplicate"}]
     listed = client.get("/api/v1/projects")
     assert listed.status_code == 200
-    assert len(listed.json()) == 3
+    assert len(listed.json()) == 4
     fetched = client.get(f"/api/v1/projects/{first_body['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["warnings"] == [{"code": "project_code.duplicate"}]
@@ -263,6 +272,29 @@ def test_member_operations_require_project_permission_and_audit(
     assert all_events[-1].event_type == "project_member.removed"
 
 
+def test_project_member_permission_does_not_apply_to_other_projects(
+    project_api,
+):
+    client = project_api["actor_client"]
+    project = project_api["other_project"]
+    target = project_api["target"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+
+    responses = [
+        client.post(
+            f"/api/v1/projects/{project.id}/members",
+            json={"user_id": str(target.id)},
+        ),
+        client.put(
+            f"/api/v1/projects/{project.id}/members/{target.id}/roles",
+            json={"role_ids": []},
+        ),
+        client.delete(f"/api/v1/projects/{project.id}/members/{target.id}"),
+    ]
+    assert [response.status_code for response in responses] == [403, 403, 403]
+
+
 def test_admin_can_manage_members_and_anonymous_is_rejected(project_api):
     project = project_api["project"]
     target = project_api["target"]
@@ -311,6 +343,54 @@ def test_member_conflict_and_unknown_role_errors(project_api):
     assert missing_role.json()["error"]["code"] == "resource.not_found"
 
 
+def test_member_missing_resources_and_duplicate_roles(project_api):
+    client = project_api["actor_client"]
+    project = project_api["project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+
+    missing_project = project_api["admin_client"].post(
+        "/api/v1/projects/00000000-0000-7000-8000-000000000003/members",
+        json={"user_id": str(target.id)},
+    )
+    assert missing_project.status_code == 404
+    assert missing_project.json()["error"]["code"] == "resource.not_found"
+
+    missing_user = client.post(
+        f"/api/v1/projects/{project.id}/members",
+        json={"user_id": "00000000-0000-7000-8000-000000000004"},
+    )
+    assert missing_user.status_code == 404
+    assert missing_user.json()["error"]["code"] == "resource.not_found"
+
+    missing_member_roles = client.put(
+        f"/api/v1/projects/{project.id}/members/{target.id}/roles",
+        json={"role_ids": []},
+    )
+    assert missing_member_roles.status_code == 404
+    assert missing_member_roles.json()["error"]["code"] == "resource.not_found"
+    missing_member_removal = client.delete(
+        f"/api/v1/projects/{project.id}/members/{target.id}"
+    )
+    assert missing_member_removal.status_code == 404
+    assert (
+        missing_member_removal.json()["error"]["code"] == "resource.not_found"
+    )
+
+    duplicate_roles = client.post(
+        f"/api/v1/projects/{project.id}/members",
+        json={"user_id": str(target.id), "role_ids": [str(role.id)] * 2},
+    )
+    assert duplicate_roles.status_code == 422
+    assert (
+        duplicate_roles.json()["error"]["code"]
+        == ErrorCode.REQUEST_VALIDATION_FAILED.value
+    )
+
+
 def test_invalid_project_fields_are_422_and_missing_project_is_404(
     project_api,
 ):
@@ -335,3 +415,25 @@ def test_invalid_project_fields_are_422_and_missing_project_is_404(
     )
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "resource.not_found"
+
+
+def test_project_patch_null_required_field_and_empty_body_are_422(project_api):
+    client = project_api["admin_client"]
+    project = project_api["project"]
+    assert isinstance(project, Project)
+
+    null_required_field = client.patch(
+        f"/api/v1/projects/{project.id}", json={"name": None}
+    )
+    assert null_required_field.status_code == 422
+    assert (
+        null_required_field.json()["error"]["code"]
+        == ErrorCode.REQUEST_VALIDATION_FAILED.value
+    )
+
+    empty_body = client.patch(f"/api/v1/projects/{project.id}", json={})
+    assert empty_body.status_code == 422
+    assert (
+        empty_body.json()["error"]["code"]
+        == ErrorCode.REQUEST_VALIDATION_FAILED.value
+    )

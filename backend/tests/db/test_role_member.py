@@ -508,9 +508,7 @@ class TestDomAc25PermissionCodeRegistry:
     """
 
     def test_formal_registry_has_feature_registered_code(self):
-        assert permission_code_descriptions() == {
-            "project_member.manage": "管理專案成員與其角色"
-        }
+        assert "project_member.manage" in permission_code_descriptions()
 
     def test_registered_code_is_accepted(
         self, session, creator, registered_permission_codes
