@@ -9,7 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.v1._management_errors import integrity_error_code
+from app.api.v1._management_errors import (
+    integrity_error_code,
+    management_error_status,
+)
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
 from app.models import Company, User
@@ -122,7 +125,7 @@ def add_company(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.patch("/{company_id}", response_model=CompanyResponse)
@@ -140,7 +143,7 @@ def rename_company(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{company_id}/active", response_model=CompanyResponse)
@@ -171,4 +174,4 @@ def change_company_status(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc

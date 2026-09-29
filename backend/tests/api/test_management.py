@@ -144,7 +144,7 @@ def test_admin_access_and_company_lifecycle(admin_client, db_session):
     duplicate_company = client.post(
         "/api/v1/companies", json={"name": "示範公司"}
     )
-    assert duplicate_company.status_code == 422
+    assert duplicate_company.status_code == 409
     assert duplicate_company.json()["error"]["code"] == (
         "company.name_conflict"
     )
@@ -381,6 +381,29 @@ def test_http_builtin_external_and_username_rules(admin_client, db_session):
         },
     )
     user_id = created.json()["id"]
+    duplicate = client.post(
+        "/api/v1/users",
+        json={
+            "username": "taken.name",
+            "email": "taken@demo.example",
+            "name_zh": "已存在",
+        },
+    )
+    assert duplicate.status_code == 201
+    rejected = client.patch(
+        f"/api/v1/users/{user_id}", json={"username": "TAKEN.NAME"}
+    )
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == "user.username_conflict"
+    assert (
+        db_session.scalar(
+            select(func.count()).where(
+                AuditLog.entity_id == UUID(user_id),
+                AuditLog.event_type == "user.username_changed",
+            )
+        )
+        == 0
+    )
     changed = client.patch(
         f"/api/v1/users/{user_id}", json={"username": "New.Name"}
     )
@@ -423,12 +446,12 @@ def test_conflict_codes_and_idempotent_admin_put(admin_client, db_session):
             "/api/v1/users",
             json={"username": username, "email": email, "name_zh": "第二位"},
         )
-        assert response.status_code == 422
+        assert response.status_code == 409
         assert response.json()["error"]["code"] == expected
     company = client.post("/api/v1/companies", json={"name": "示範公司甲"})
     assert company.status_code == 201
     duplicate = client.post("/api/v1/companies", json={"name": "示範公司甲"})
-    assert duplicate.status_code == 422
+    assert duplicate.status_code == 409
     assert duplicate.json()["error"]["code"] == ("company.name_conflict")
     company_id = company.json()["id"]
     first_link = client.put(
@@ -449,7 +472,7 @@ def test_conflict_codes_and_idempotent_admin_put(admin_client, db_session):
         f"/api/v1/users/{second.json()['id']}/company",
         json={"company_id": company_id, "employee_no": "A001"},
     )
-    assert employee_conflict.status_code == 422
+    assert employee_conflict.status_code == 409
     assert employee_conflict.json()["error"]["code"] == (
         "user.employee_no_conflict"
     )

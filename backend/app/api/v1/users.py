@@ -10,7 +10,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.v1._management_errors import integrity_error_code
+from app.api.v1._management_errors import (
+    integrity_error_code,
+    management_error_status,
+)
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
 from app.auth.password_service import PasswordLengthError, set_password
@@ -185,7 +188,7 @@ def add_user(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc
     response.headers["Cache-Control"] = "no-store"
     return CreatedUserResponse(
         **UserResponse.model_validate(user).model_dump(),
@@ -222,7 +225,7 @@ def edit_user(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{user_id}/company", response_model=UserResponse)
@@ -244,7 +247,7 @@ def link_company(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{user_id}/admin", response_model=UserResponse)
@@ -264,7 +267,7 @@ def change_admin_status(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{user_id}/active", response_model=UserResponse)
@@ -282,4 +285,4 @@ def change_active_status(
         code = integrity_error_code(exc)
         if code is None:
             raise
-        raise APIError(code, 422) from exc
+        raise APIError(code, management_error_status(code)) from exc

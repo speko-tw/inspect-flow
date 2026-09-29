@@ -4,6 +4,18 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.errors import ErrorCode
 
+_CONFLICT_CODES = {
+    ErrorCode.USER_USERNAME_CONFLICT,
+    ErrorCode.USER_EMAIL_CONFLICT,
+    ErrorCode.USER_EMPLOYEE_NO_CONFLICT,
+    ErrorCode.COMPANY_NAME_CONFLICT,
+}
+
+
+def management_error_status(code: ErrorCode) -> int:
+    """Return the HTTP status for a translated management error."""
+    return 409 if code in _CONFLICT_CODES else 422
+
 
 def integrity_error_code(exc: IntegrityError) -> ErrorCode | None:
     """Recognize input constraints; unknown database failures stay 500."""
