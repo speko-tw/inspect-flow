@@ -439,7 +439,7 @@ class TestAlgAc09NewEventNeedsNoSchemaChange:
     ):
         cfg = Config(str(_ALEMBIC_INI))
         heads_before = ScriptDirectory.from_config(cfg).get_heads()
-        assert heads_before == ["4c38ff477939"]
+        assert len(heads_before) == 1
         columns_before = {
             col["name"] for col in sa_inspect(engine).get_columns("audit_logs")
         }

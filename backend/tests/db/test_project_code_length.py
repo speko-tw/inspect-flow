@@ -83,7 +83,12 @@ def owner(session):
 @pytest.fixture
 def existing_project(session, owner):
     project = Project(
-        project_code="P900", created_by=owner.id, updated_by=owner.id
+        name="示範廠機電工程",
+        client_name="示範業主",
+        site_location="示範工地",
+        project_code="P900",
+        created_by=owner.id,
+        updated_by=owner.id,
     )
     session.add(project)
     session.commit()
@@ -94,6 +99,9 @@ class TestOrmConstructionAndAssignment:
     def test_construction_with_33_chars_is_rejected(self, owner):
         with pytest.raises(ValueError):
             Project(
+                name="示範廠機電工程",
+                client_name="示範業主",
+                site_location="示範工地",
                 project_code="P" * (_MAX_LENGTH + 1),
                 created_by=owner.id,
                 updated_by=owner.id,
@@ -111,6 +119,9 @@ class TestOrmConstructionAndAssignment:
 
     def test_construction_with_32_chars_is_accepted(self, session, owner):
         project = Project(
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
             project_code="P" * _MAX_LENGTH,
             created_by=owner.id,
             updated_by=owner.id,
@@ -127,6 +138,9 @@ class TestOrmConstructionAndAssignment:
         """
         with pytest.raises(ValueError):
             Project(
+                name="示範廠機電工程",
+                client_name="示範業主",
+                site_location="示範工地",
                 project_code=None,
                 created_by=owner.id,
                 updated_by=owner.id,
@@ -155,6 +169,9 @@ class TestCoreInsertAndUpdate:
         with pytest.raises((StatementError, ValueError)):
             session.execute(
                 insert(Project).values(
+                    name="示範廠機電工程",
+                    client_name="示範業主",
+                    site_location="示範工地",
                     project_code="P" * (_MAX_LENGTH + 1),
                     created_by=owner.id,
                     updated_by=owner.id,
@@ -185,6 +202,9 @@ class TestCoreInsertAndUpdate:
         before = session.query(Project).count()
         session.execute(
             insert(Project).values(
+                name="示範廠機電工程",
+                client_name="示範業主",
+                site_location="示範工地",
                 project_code="P" * _MAX_LENGTH,
                 created_by=owner.id,
                 updated_by=owner.id,
