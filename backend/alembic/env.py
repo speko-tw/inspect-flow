@@ -31,6 +31,21 @@ each of those two types and renders their SQLAlchemy-built-in
 Adding another app-defined column type later means adding a case
 here too, or ``test_no_app_imports_in_migrations`` will fail on the
 next autogenerate run that touches it (#199).
+
+``run_migrations_online``'s connection carries the
+``audit_log_ddl_allowed=True`` execution option (ALG-R04, issue
+#233's fifth PR review round): ``app/models/audit_log.py``'s
+append-only guard rejects any ``DROP TABLE``/``ALTER TABLE`` reaching
+``audit_logs`` (a migration script's own job -- this table's own
+migration creates it, and downgrading drops it again) *unless* the
+connection running the statement was opened with that option set.
+The string must match that module's ``_DDL_ALLOWED_OPTION`` exactly;
+it is not imported from there to avoid a private, underscore-prefixed
+import across modules for what SQLAlchemy itself treats as a
+conventionally-named keyword argument (like its own built-in
+execution options, e.g. ``isolation_level``), not a shared symbol.
+The option affects only that one DDL check: it does not, and must
+not, let a migration ``UPDATE``/``DELETE``/``TRUNCATE`` this table.
 """
 
 import importlib.util
@@ -125,12 +140,17 @@ def run_migrations_online() -> None:
     parent-directory creation and connection PRAGMAs
     (``foreign_keys``, WAL) the application itself relies on.
 
+    See this module's docstring for ``audit_log_ddl_allowed``, set
+    on ``connection`` below so this run's DDL can reach
+    ``audit_logs`` (ALG-R04's append-only guard would otherwise
+    reject this table's own migration).
     """
     connectable = create_engine_from_settings(get_database_url())
     is_sqlite = connectable.dialect.name == "sqlite"
 
     try:
         with connectable.connect() as connection:
+            connection.execution_options(audit_log_ddl_allowed=True)
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
