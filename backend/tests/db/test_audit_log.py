@@ -28,7 +28,15 @@ AC labels below follow that spec's numbering:
   deliberately coarser, conservative check: a modification keyword
   and ``audit_logs`` appearing anywhere in the same statement, in
   either order, blocks it -- accepting some false positives (also
-  documented there) in exchange for not missing a real bypass.
+  documented there) in exchange for not missing a real bypass. A
+  third review round then found that normalization itself needed
+  fixing rather than the rule built on top of it: an ``E'...'``
+  escape string's backslash-escaped quote could be misread as the
+  string's own terminator (missing a real write after it), and a
+  quoted/back-quoted/bracket-quoted identifier's raw text used to be
+  kept verbatim, so a *different*, legitimately-quoted identifier
+  merely containing "audit_logs" or a keyword in its own name could
+  be mistaken for real SQL syntax.
 
 Same fixture pattern as ``test_role_member.py``/``test_company.py``:
 migrates the database behind ``conftest.py``'s ``db_url`` fixture
@@ -377,6 +385,25 @@ class TestConservativeGuardBlocksRealWrites:
             # runs, so there is no paren to miscount any more.
             "WITH t AS (SELECT 1 /* ) */) "
             "UPDATE audit_logs SET entity_type = 'x'",
+            # PR #253 review round 3: a PostgreSQL/SQLite E'...'
+            # escape string using a backslash-escaped quote --
+            # normalization must recognize this as one escaped quote
+            # (not the string's own terminator), so the string still
+            # ends at its real closing quote and the upsert's own
+            # ON CONFLICT ... DO UPDATE (right after) stays visible.
+            "INSERT INTO audit_logs (id, note) VALUES (1, E'\\'') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            # PR #253 review round 3: an exactly-quoted audit_logs,
+            # including back-quoted and bracket-quoted (SQLite/
+            # PostgreSQL both also accept these as identifier
+            # quoting), still resolves to the real table and is
+            # blocked -- only a *different* quoted identifier that
+            # merely contains this text is not (see the "does not
+            # match" tests below).
+            "UPDATE \"AUDIT_LOGS\" SET entity_type = 'x'",
+            "DELETE FROM `audit_logs`",
+            "TRUNCATE [audit_logs]",
+            "UPDATE `main`.`audit_logs` SET entity_type = 'x'",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
@@ -486,6 +513,22 @@ class TestConservativeGuardDoesNotBlockSafeStatements:
             "WITH t AS (SELECT * FROM audit_logs) SELECT * FROM t",
             "WITH t AS (SELECT * FROM users) "
             "SELECT * FROM t JOIN audit_logs ON t.id = audit_logs.id",
+            # PR #253 review round 3: a quoted identifier is resolved
+            # by its own content, not read through as raw text, so a
+            # *different*, legitimately-quoted identifier that merely
+            # starts with or spells out "audit_logs" (or a keyword)
+            # inside its own name is never mistaken for either.
+            'SELECT * FROM "audit_logs archive"',
+            "UPDATE \"audit_logs archive\" SET entity_type = 'x'",
+            'SELECT "UPDATE audit_logs" FROM other',
+            # A look-alike using U+0130 LATIN CAPITAL LETTER I WITH
+            # DOT ABOVE: Python's plain re.IGNORECASE treats this as
+            # case-equivalent to ASCII "i", but this module's
+            # ASCII-only fold does not, so this is correctly a
+            # different, unrelated identifier.
+            "UPDATE \"audİt_logs\" SET entity_type = 'x'",
+            "SELECT * FROM `audit_logs archive`",
+            "SELECT * FROM [audit_logs archive]",
         ],
     )
     def test_does_not_match_other_statements(self, statement):
