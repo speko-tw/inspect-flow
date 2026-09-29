@@ -112,7 +112,7 @@
 | DOM-AC30 | `backend/tests/services/test_projects.py`（T8）：新增兩筆相同 `project_code` 的 `Project`，斷言都成功、UUID 不同；呼叫查詢介面，斷言回傳這兩筆；`make check` |
 | DOM-AC31 | `backend/tests/db/test_user_project.py`（T8）：inspector 列出 `Project` 資料表欄位，斷言只有共通結構加 DOM-R40、DOM-R41 的欄位；新增後立即查詢成功；`make check` |
 | DOM-AC32 | `backend/tests/db/test_user_project.py`（T8）：同 DOM-AC19／DOM-AC20 的做法，涵蓋 `project_code`、`name`、`client_name`、`site_location` 的長度；`make check`，PostgreSQL 由 `database-foundation` T3 的 CI 補驗 |
-| DOM-AC33 | `backend/tests/db/test_user_fields.py`（B）：upgrade head 後，以 inspector 檢查欄位與可空性；只含必填欄位的 `User` 斷言預設值；逐一省略必填欄位斷言 `IntegrityError`；`make check` |
+| DOM-AC33 | `backend/tests/db/test_user_fields.py`（B）：upgrade head 後，以 inspector 檢查欄位與可空性（`email`、`name_zh` 可空，並確認 CHECK 存在）；內建帳號無 email 與姓名可建立；只含必填欄位的一般 `User` 斷言預設值；逐一省略 `username`、`email`、`name_zh` 斷言一般帳號 `IntegrityError`；`make check` |
 | DOM-AC34 | `backend/tests/db/test_user_fields.py`（B）：邊界長度、各種不合格式與保留字、大小寫重複（含已停用帳號）逐項斷言，讀回小寫；`make check` |
 | DOM-AC35 | `backend/tests/services/test_users.py`（E）：Admin 與非 Admin 各改一次、外部帳號人工修改被拒絕；`make check` |
 | DOM-AC36 | `backend/tests/db/test_company.py`（B）：inspector 檢查欄位已移除；名稱重複、大小寫不同、前後空白、與已停用公司同名逐項斷言；`make check`，PostgreSQL 由 CI 補驗 |
