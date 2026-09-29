@@ -123,26 +123,18 @@ def _table_snapshot(session: Session) -> dict[str, list[dict]]:
 
 def _valid_answers(
     *,
-    company_code: str = "ACME",
     company_name: str = "Acme Corp",
-    admin_employee_no: str = "A0001",
-    admin_email: str = "admin@example.com",
+    owner_username: str = "owner",
     owner_employee_no: str = "A0002",
     owner_email: str = "owner@example.com",
 ) -> list[str]:
     """Answers in the exact order ``run`` prompts for them: the
-    company's ``code``/``name``, then the admin account's six
-    DOM-R01 fields, then the owner account's six DOM-R01 fields.
+    company's ``name``, then the owner account's seven fields. The
+    built-in ``admin`` is no longer prompted for (DOM-R50).
     """
     return [
-        company_code,
         company_name,
-        "IT",
-        "HQ",
-        admin_employee_no,
-        "System Admin",
-        "系統管理員",
-        admin_email,
+        owner_username,
         "Management",
         "Branch",
         owner_employee_no,
@@ -169,21 +161,9 @@ def _forbidden_reader(prompt: str) -> str:
     )
 
 
-def _sample_admin_input(**overrides: str) -> AccountInput:
-    fields: dict[str, str] = {
-        "department": "IT",
-        "location": "HQ",
-        "employee_no": "A0001",
-        "name_en": "System Admin",
-        "name_zh": "系統管理員",
-        "email": "admin@example.com",
-    }
-    fields.update(overrides)
-    return AccountInput(**fields)
-
-
 def _sample_owner_input(**overrides: str) -> AccountInput:
     fields: dict[str, str] = {
+        "username": "owner",
         "department": "Management",
         "location": "HQ",
         "employee_no": "A0002",
@@ -201,24 +181,22 @@ class TestInitializeSystem:
     ):
         company_row, admin_user, owner_user, roles = initialize_system(
             session,
-            company=CompanyInput(code="ACME", name="Acme Corp"),
-            admin=_sample_admin_input(),
+            company=CompanyInput(name="Acme Corp"),
             owner=_sample_owner_input(),
         )
         session.commit()
 
-        assert company_row.code == "ACME"
         assert company_row.name == "Acme Corp"
-        assert company_row.kind == "internal"
         assert company_row.created_by == admin_user.id
         assert company_row.updated_by == admin_user.id
 
-        assert admin_user.email == "admin@example.com"
+        assert admin_user.username == "admin"
+        assert admin_user.email is None
         assert admin_user.is_admin is True
         assert admin_user.is_system is True
         assert admin_user.created_by == admin_user.id
         assert admin_user.updated_by == admin_user.id
-        assert admin_user.company_id == company_row.id
+        assert admin_user.company_id is None
 
         assert owner_user.email == "owner@example.com"
         assert owner_user.is_admin is True
@@ -251,8 +229,7 @@ class TestInitializeSystem:
     ):
         initialize_system(
             session,
-            company=CompanyInput(code="ACME", name="Acme Corp"),
-            admin=_sample_admin_input(),
+            company=CompanyInput(name="Acme Corp"),
             owner=_sample_owner_input(),
         )
         session.commit()
@@ -260,12 +237,11 @@ class TestInitializeSystem:
         with pytest.raises(AlreadyInitializedError):
             initialize_system(
                 session,
-                company=CompanyInput(code="OTHER", name="Other Co"),
-                admin=_sample_admin_input(
-                    employee_no="B0001", email="second-admin@example.com"
-                ),
+                company=CompanyInput(name="Other Co"),
                 owner=_sample_owner_input(
-                    employee_no="B0002", email="second-owner@example.com"
+                    username="second",
+                    employee_no="B0002",
+                    email="second-owner@example.com",
                 ),
             )
         session.rollback()
@@ -300,24 +276,24 @@ class TestRun:
                 )
             ).one()
 
-            assert company.code == "ACME"
             assert company.name == "Acme Corp"
-            assert company.kind == "internal"
             assert company.created_by == admin.id
             assert company.updated_by == admin.id
 
-            assert admin.company_id == company.id
-            assert admin.department == "IT"
-            assert admin.location == "HQ"
-            assert admin.employee_no == "A0001"
-            assert admin.name_en == "System Admin"
-            assert admin.name_zh == "系統管理員"
-            assert admin.email == "admin@example.com"
+            assert admin.username == "admin"
+            assert admin.company_id is None
+            assert admin.department is None
+            assert admin.location is None
+            assert admin.employee_no is None
+            assert admin.name_en is None
+            assert admin.name_zh is None
+            assert admin.email is None
             assert admin.is_admin is True
             assert admin.is_system is True
             assert admin.created_by == admin.id
             assert admin.updated_by == admin.id
 
+            assert owner.username == "owner"
             assert owner.company_id == company.id
             assert owner.department == "Management"
             assert owner.location == "Branch"
@@ -346,10 +322,12 @@ class TestRun:
                 )
                 assert not has_permission_codes
 
-    def test_duplicate_email_fails_and_writes_nothing(
+    def test_reserved_username_fails_and_writes_nothing(
         self, session_factory: sessionmaker[Session]
     ):
-        answers = _valid_answers(owner_email="admin@example.com")
+        # ``admin`` is reserved for the built-in account (DOM-R45),
+        # so the owner cannot take it.
+        answers = _valid_answers(owner_username="admin")
         exit_code = run(_make_reader(answers), session_factory=session_factory)
         assert exit_code == 1
 
@@ -409,10 +387,8 @@ class TestRun:
         )
 
         losing_answers = _valid_answers(
-            company_code="OTHER",
             company_name="Other Co",
-            admin_employee_no="B0001",
-            admin_email="second-admin@example.com",
+            owner_username="second",
             owner_employee_no="B0002",
             owner_email="second-owner@example.com",
         )

@@ -65,9 +65,11 @@ class CurrentUserResponse(BaseModel):
     """The login and current-user response body (AUT-R08, AUT-R10)."""
 
     id: UUID
-    email: str
-    name_en: str
-    name_zh: str
+    # Nullable since #260 (DOM-R46/DOM-R50): the built-in account has
+    # no email or names, and ``name_en`` is optional for everyone.
+    email: str | None
+    name_en: str | None
+    name_zh: str | None
     is_admin: bool
     must_change_password: bool
 

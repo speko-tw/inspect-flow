@@ -92,18 +92,11 @@ def initialized(migrated_url: str) -> None:
     """
     session_factory = get_session_factory()
     with session_factory() as session:
-        initialize_system(
+        _company, admin, _owner, _roles = initialize_system(
             session,
-            company=CompanyInput(code="DEMO", name="示範公司"),
-            admin=AccountInput(
-                department="IT",
-                location="HQ",
-                employee_no="D0001",
-                name_en="System Admin",
-                name_zh="系統管理員",
-                email=_ADMIN_EMAIL,
-            ),
+            company=CompanyInput(name="示範公司"),
             owner=AccountInput(
+                username="owner",
                 department="Management",
                 location="HQ",
                 employee_no="D0002",
@@ -112,6 +105,11 @@ def initialized(migrated_url: str) -> None:
                 email=_OWNER_EMAIL,
             ),
         )
+        # The built-in ``admin`` is created without an email
+        # (DOM-R50, email optional); the set-password CLI still finds
+        # accounts by email until #262 reworks it, so give this one
+        # directly.
+        admin.email = _ADMIN_EMAIL
         session.commit()
 
 
@@ -123,6 +121,7 @@ def _add_external_user(company_id, admin_id) -> None:
     with session_factory() as session:
         session.add(
             User(
+                username="external-demo",
                 company_id=company_id,
                 department="IT",
                 location="HQ",

@@ -1,16 +1,25 @@
 """``User`` model: common structure (DBF-R11, DBF-R12, DBF-R13,
-DBF-R14) plus its business columns (DOM-R01, DOM-R02, DOM-R03,
-DOM-R05, DOM-R08, DOM-R28, DOM-R31).
+DBF-R14) plus its business columns (DOM-R02, DOM-R03, DOM-R05,
+DOM-R08, DOM-R28, DOM-R31, DOM-R45, DOM-R46, DOM-R47, DOM-R50).
 
-Basic fields (DOM-R01, all ``NOT NULL``): ``company_id`` (a
-``DEFERRABLE INITIALLY DEFERRED`` foreign key into ``companies.id``
--- see the "circular foreign keys" risk in plan.md: ``User`` and
-``Company`` reference each other, so at least one of the two
-foreign keys involved must defer its check to commit time),
-``department``, ``location``, ``employee_no`` (already present, see
-below), ``name_en``, ``name_zh``, ``email`` and ``is_active``
-(defaults to enabled, DOM-Q7's issue #127 decision, same as
-``Company.is_active``).
+Basic fields (DOM-R46): ``username`` (``NOT NULL``, stored in
+lowercase, unique, see DOM-R45 below), ``is_active`` (``NOT NULL``,
+defaults to enabled, DOM-Q7's issue #127 decision, same as
+``Company.is_active``), and the optional-at-the-database-level
+``email``/``name_zh`` (a CHECK requires both unless ``is_system``),
+``name_en``, ``company_id`` (a ``DEFERRABLE INITIALLY DEFERRED``
+foreign key into ``companies.id`` -- see the "circular foreign keys"
+risk in plan.md: ``User`` and ``Company`` reference each other, so at
+least one of the two foreign keys involved must defer its check to
+commit time), ``department``, ``location`` and ``employee_no``
+(defined by DBF-R12; unique per company, DOM-R47). ``department``,
+``location`` and ``employee_no`` may only hold a value while
+``company_id`` does (DOM-R47), and the built-in ``admin``
+(``is_system``, DOM-R50) has no company, no names and no
+department/location/employee number; these cross-field rules are
+database CHECK constraints (DOM-R46 lets the plan choose between a
+CHECK and a pre-write check, and a CHECK covers every write path
+through the ORM and Core alike).
 
 Contact and supplementary fields (DOM-R03, all optional):
 ``extension_1``, ``extension_2``, ``mobile``, ``line_id``,
@@ -26,7 +35,15 @@ required together when ``auth_source = external``, and unique as a
 pair when both have a value), ``external_synced_at`` (optional).
 ``external_source``/``external_id`` have no length limit per
 DOM-R28 (which does not list one for them), matching
-``Company.kind``'s unbounded ``String`` in ``app/models/company.py``.
+an unbounded ``String``.
+
+``username`` (DOM-R45) is 3-32 characters, starts with a letter and
+otherwise holds only letters, digits, ``.``, ``_`` and ``-``; the
+``@validates`` method lowercases it before it is stored or compared,
+so a plain unique constraint is already case-insensitive, and a
+CHECK (``username = lower(username)``) keeps Core writes honest. The
+reserved words ``admin``/``system``/``root`` are rejected by a CHECK
+too, except ``admin`` for the built-in account (which must use it).
 
 ``email``'s uniqueness (DOM-R02) is case-insensitive while the
 column itself keeps the value exactly as typed: a ``lower(email)``
@@ -60,16 +77,17 @@ see that module's docstring for why) so no write path can skip them:
 ``None`` is passed through unchecked at bind time (``BoundedString``
 never checks it), but ``_validate_string_field`` calls
 ``validate_nullable`` (``app/models/_bounded_string.py``) first for
-every one of these twelve columns: the six ``NOT NULL`` basic
-fields -- ``employee_no``/``department``/``location``/``name_en``/
-``name_zh``/``email`` -- reject ``None`` with the same
-``ValueError`` an invalid value gets, while the six DOM-R03 contact
-and supplementary fields allow it, since they are nullable.
+every one of these string columns: ``username`` is the only
+``NOT NULL`` one and rejects ``None`` with the same ``ValueError`` an
+invalid value gets, while the rest are nullable (a missing
+``email``/``name_zh`` on an ordinary account is caught by the
+``email_and_name_zh_required`` CHECK instead).
 
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered by DOM-R31 here.
 """
 
+import re
 import uuid
 from datetime import datetime
 from functools import partial
@@ -99,6 +117,7 @@ from app.models._bounded_string import BoundedString, validate_nullable
 # requires one for every DOM-R28 column, so it is folded into the
 # same table instead of being treated as a special case.
 _MAX_LENGTHS = {
+    "username": 32,
     "employee_no": 16,
     "department": 64,
     "location": 64,
@@ -114,8 +133,25 @@ _MAX_LENGTHS = {
 }
 
 
+# DOM-R45. Spelled out instead of ``\w`` for the same reason
+# ``Company``'s old code pattern was: ``\w`` also matches non-ASCII
+# letters in Python's ``re``.
+_USERNAME_MIN_LENGTH = 3
+_USERNAME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9._-]*")
+
+
 def _check_string_field(field_name: str, value: str) -> None:
     max_length = _MAX_LENGTHS[field_name]
+    if field_name == "username" and (
+        len(value) < _USERNAME_MIN_LENGTH
+        or len(value) > max_length
+        or not _USERNAME_PATTERN.fullmatch(value)
+    ):
+        raise ValueError(
+            f"User.username must be {_USERNAME_MIN_LENGTH}-{max_length} "
+            "characters, start with a letter and contain only letters, "
+            f"digits, '.', '_' or '-'; got {value!r}"
+        )
     if len(value) > max_length:
         raise ValueError(
             f"User.{field_name} must be at most {max_length} "
@@ -134,7 +170,7 @@ def _check_string_field(field_name: str, value: str) -> None:
 
 def _bounded_string(field_name: str) -> BoundedString:
     """A ``BoundedString`` for one DOM-R28 column, parametrized by
-    field name so a single call site covers all twelve columns
+    field name so a single call site covers every column
     instead of one near-identical ``TypeDecorator`` subclass per
     field.
     """
@@ -159,11 +195,21 @@ class User(AuditMixin, TimestampedBase):
     # "users" avoids it.
     __tablename__ = "users"
 
-    employee_no: Mapped[str] = mapped_column(
-        _bounded_string("employee_no"), nullable=False, unique=True
+    # DOM-R45: stored in lowercase (the ``@validates`` method below
+    # lowercases every assignment), unique across every ``User``
+    # including deactivated ones.
+    username: Mapped[str] = mapped_column(
+        _bounded_string("username"), nullable=False, unique=True
+    )
+    # DOM-R47/DBF-R12/DBF-R13: optional, only meaningful while
+    # ``company_id`` is set, and unique within one company (the
+    # ``uq_users_company_id_employee_no`` constraint below; a
+    # ``NULL`` in either column never collides).
+    employee_no: Mapped[str | None] = mapped_column(
+        _bounded_string("employee_no"), nullable=True
     )
 
-    # -- DOM-R01: basic fields -----------------------------------
+    # -- DOM-R46: basic fields -----------------------------------
     # ``deferrable``/``initially`` (DEFERRABLE INITIALLY DEFERRED):
     # ``Company.created_by`` also points back at ``users.id`` and is
     # checked immediately, so the first row of each written in the
@@ -174,29 +220,33 @@ class User(AuditMixin, TimestampedBase):
     # that ``INSERT`` succeed before the matching ``Company`` row
     # exists, with the reference verified at COMMIT instead (see
     # plan.md's "風險" section).
-    company_id: Mapped[uuid.UUID] = mapped_column(
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid,
         ForeignKey("companies.id", deferrable=True, initially="DEFERRED"),
-        nullable=False,
+        nullable=True,
     )
-    department: Mapped[str] = mapped_column(
-        _bounded_string("department"), nullable=False
+    department: Mapped[str | None] = mapped_column(
+        _bounded_string("department"), nullable=True
     )
-    location: Mapped[str] = mapped_column(
-        _bounded_string("location"), nullable=False
+    location: Mapped[str | None] = mapped_column(
+        _bounded_string("location"), nullable=True
     )
-    name_en: Mapped[str] = mapped_column(
-        _bounded_string("name_en"), nullable=False
+    name_en: Mapped[str | None] = mapped_column(
+        _bounded_string("name_en"), nullable=True
     )
-    name_zh: Mapped[str] = mapped_column(
-        _bounded_string("name_zh"), nullable=False
+    # ``name_zh``/``email`` are nullable at the database level only
+    # so the built-in ``admin`` can leave them empty: the
+    # ``email_and_name_zh_required`` CHECK below demands both from
+    # every other account.
+    name_zh: Mapped[str | None] = mapped_column(
+        _bounded_string("name_zh"), nullable=True
     )
     # No ``unique=True`` here: uniqueness is case-insensitive
     # (DOM-R02) and enforced by ``ix_users_email_lower`` below, not
     # by a plain column-level unique constraint on the stored,
     # as-typed value.
-    email: Mapped[str] = mapped_column(
-        _bounded_string("email"), nullable=False
+    email: Mapped[str | None] = mapped_column(
+        _bounded_string("email"), nullable=True
     )
     # ``server_default`` (DOM-Q7/issue #127) makes an unspecified
     # value default to enabled at the database level too, matching
@@ -239,8 +289,7 @@ class User(AuditMixin, TimestampedBase):
         String, nullable=False, default="local", server_default="local"
     )
     # No length limit: DOM-R28 does not list one for these two
-    # columns (see DOM-Q1's "落地" note), matching the unbounded
-    # ``String`` ``Company.kind`` uses in ``app/models/company.py``.
+    # columns (see DOM-Q1's "落地" note).
     external_source: Mapped[str | None] = mapped_column(String, nullable=True)
     external_id: Mapped[str | None] = mapped_column(String, nullable=True)
     external_synced_at: Mapped[datetime | None] = mapped_column(
@@ -265,6 +314,45 @@ class User(AuditMixin, TimestampedBase):
             name="external_fields_required",
         ),
         UniqueConstraint("external_source", "external_id"),
+        # DOM-R47/DBF-R13: unique within one company. ``NULL``
+        # ``company_id`` or ``employee_no`` is never compared (SQL
+        # unique constraints ignore rows with a ``NULL`` in any
+        # column, on both SQLite and PostgreSQL).
+        UniqueConstraint(
+            "company_id",
+            "employee_no",
+            name="uq_users_company_id_employee_no",
+        ),
+        # DOM-R45: lowercase storage and reserved words. Only the
+        # built-in account may (and must, see the ``system_account``
+        # CHECK) use ``admin``.
+        CheckConstraint("username = lower(username)", name="username_lower"),
+        CheckConstraint(
+            "username NOT IN ('admin', 'system', 'root') OR "
+            "(is_system AND username = 'admin')",
+            name="username_reserved",
+        ),
+        # DOM-R46: an ordinary account needs both; the built-in
+        # account may have neither.
+        CheckConstraint(
+            "is_system OR (email IS NOT NULL AND name_zh IS NOT NULL)",
+            name="email_and_name_zh_required",
+        ),
+        # DOM-R47: no company, no employee number/department/location.
+        CheckConstraint(
+            "company_id IS NOT NULL OR (employee_no IS NULL AND "
+            "department IS NULL AND location IS NULL)",
+            name="company_fields_need_company",
+        ),
+        # DOM-R50: the built-in account is ``admin``, always an
+        # Admin, and belongs to no company and has no names (its
+        # department/location/employee number are already covered by
+        # the CHECK above).
+        CheckConstraint(
+            "NOT is_system OR (username = 'admin' AND is_admin AND "
+            "company_id IS NULL AND name_zh IS NULL AND name_en IS NULL)",
+            name="system_account",
+        ),
         # DOM-R02: case-insensitive uniqueness on ``email``, without
         # normalizing the stored value -- see this module's
         # docstring and plan.md's "風險" section.
@@ -278,5 +366,9 @@ class User(AuditMixin, TimestampedBase):
         value = validate_nullable(self, key, value, f"User.{key}")
         if value is None:
             return value
+        if key == "username":
+            # DOM-R45: any case is accepted on input, but it is
+            # always stored and compared in lowercase.
+            value = value.lower()
         _check_string_field(key, value)
         return value

@@ -1,63 +1,56 @@
-"""``Company`` model (DOM-R15, DOM-R16, DOM-R17, DOM-Q7).
+"""``Company`` model (DOM-R15, DOM-R32, DOM-R48, DOM-R49, DOM-Q7).
 
 Company shares the same common structure as ``User``/``Project``
 (UUID primary key, created/updated timestamps and audit columns,
-see ``AuditMixin``), plus its own business columns: a unique
-``code``, a ``name``, an optional but unique ``tax_id``, a ``kind``
-restricted to ``internal``/``customer``, a self-referential
-``parent_id`` (which a database CHECK forbids pointing at its own
-row), and an ``is_active`` flag that defaults to enabled (DOM-Q7,
-issue #127).
+see ``AuditMixin``), plus exactly two business columns (DOM-R48):
+``name`` and an ``is_active`` flag that defaults to enabled (DOM-Q7,
+issue #127). A company has no code, tax ID, kind or parent: branches
+and subsidiaries with their own registration are independent
+companies with no hierarchy between them.
 
-DOM-Q1/DOM-R29 fixes ``code``/``name``/``tax_id`` length limits and
-``code``/``tax_id`` formats. The rules themselves (length + format)
-live in exactly one place each -- ``_check_code``/``_check_name``/
-``_check_tax_id`` below -- and are enforced through two independent
+``name`` (DOM-R49) is at most 128 characters with no format rule.
+It is stored with surrounding whitespace removed (the ``@validates``
+method below trims every assignment) and may not be empty after
+trimming. Its uniqueness is case-insensitive and covers deactivated
+companies too, while the column keeps the original casing: a
+``lower(name)`` functional unique index (``ix_companies_name_lower``
+below) enforces this at the database level, the same way
+``ix_users_email_lower`` (``app/models/user.py``) and
+``ix_roles_name_lower`` (``app/models/role.py``) do, without a
+second, easy-to-desync normalized column.
+
+The length rule (DOM-R31) lives in exactly one place --
+``_check_name`` below -- and is enforced through two independent
 layers (``@validates`` plus the ``BoundedString`` column type from
 ``app/models/_bounded_string.py``, see that module's docstring for
-why) so no write path can skip them. ``None`` is passed through
-unchecked at bind time (``BoundedString`` never checks it), but each
-``@validates`` method calls ``validate_nullable`` first: ``tax_id``
-allows ``None`` (nullable), while ``code``/``name`` reject it with
-the same ``ValueError`` an invalid value gets, since both are
-``NOT NULL``.
+why) so no write path can skip it. ``_check_name`` also rejects a
+value that is not already trimmed or is empty, which only a Core
+statement (``@validates`` never sees those) can hand it. ``None`` is
+passed through unchecked at bind time (``BoundedString`` never
+checks it), but ``@validates`` calls ``validate_nullable`` first:
+``name`` is ``NOT NULL``, so ``None`` is rejected with the same
+``ValueError`` an invalid value gets.
 
 Out of scope: raw SQL issued through ``text()`` bypasses the ORM
 column type entirely and is not covered by DOM-R31 here.
 """
 
-import re
-import uuid
-
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, true
+from sqlalchemy import Boolean, Index, func, true
 from sqlalchemy.orm import Mapped, mapped_column, validates
-from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase
 from app.models._audit import AuditMixin
 from app.models._bounded_string import BoundedString, validate_nullable
 
-_CODE_MAX_LENGTH = 32
 _NAME_MAX_LENGTH = 128
-_TAX_ID_LENGTH = 8
-
-# ``\w``/``\d`` also match non-ASCII characters (e.g. full-width
-# digits, CJK letters) in Python's ``re`` by default, which
-# DOM-R29's "只能是英文字母、數字、``-``、``_``" and "恰為 8 位數字"
-# both rule out, so the character classes are spelled out instead.
-_CODE_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
-_TAX_ID_PATTERN = re.compile(r"[0-9]{8}")
-
-
-def _check_code(value: str) -> None:
-    if len(value) > _CODE_MAX_LENGTH or not _CODE_PATTERN.fullmatch(value):
-        raise ValueError(
-            f"Company.code must be 1-{_CODE_MAX_LENGTH} characters "
-            f"of letters, digits, '-' or '_'; got {value!r}"
-        )
 
 
 def _check_name(value: str) -> None:
+    if value != value.strip() or not value:
+        raise ValueError(
+            "Company.name must not be empty and must not have leading "
+            f"or trailing whitespace; got {value!r}"
+        )
     if len(value) > _NAME_MAX_LENGTH:
         raise ValueError(
             f"Company.name must be at most {_NAME_MAX_LENGTH} "
@@ -65,39 +58,15 @@ def _check_name(value: str) -> None:
         )
 
 
-def _check_tax_id(value: str) -> None:
-    if not _TAX_ID_PATTERN.fullmatch(value):
-        raise ValueError(
-            f"Company.tax_id must be exactly {_TAX_ID_LENGTH} "
-            f"digits; got {value!r}"
-        )
-
-
 class Company(AuditMixin, TimestampedBase):
-    """A company known to InspectFlow: InspectFlow's own
-    organization (``kind = "internal"``) or a customer
-    (``kind = "customer"``), optionally grouped under a parent
-    company via ``parent_id``.
+    """A company known to InspectFlow. Only its name and whether it
+    is active are recorded (DOM-R48).
     """
 
     __tablename__ = "companies"
 
-    code: Mapped[str] = mapped_column(
-        BoundedString(_CODE_MAX_LENGTH, _check_code),
-        nullable=False,
-        unique=True,
-    )
     name: Mapped[str] = mapped_column(
         BoundedString(_NAME_MAX_LENGTH, _check_name), nullable=False
-    )
-    tax_id: Mapped[str | None] = mapped_column(
-        BoundedString(_TAX_ID_LENGTH, _check_tax_id),
-        nullable=True,
-        unique=True,
-    )
-    kind: Mapped[str] = mapped_column(String, nullable=False)
-    parent_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("companies.id"), nullable=True
     )
     # ``server_default`` (issue #127/DOM-Q7) makes an unspecified
     # value default to enabled at the database level too -- not
@@ -107,36 +76,18 @@ class Company(AuditMixin, TimestampedBase):
         Boolean, nullable=False, default=True, server_default=true()
     )
 
-    # Names passed here are the naming convention's
-    # ``%(constraint_name)s`` placeholder, not the final constraint
-    # name -- ``app.db.base.NAMING_CONVENTION`` already prefixes it
-    # with ``ck_%(table_name)s_``, so passing an already-prefixed
-    # name (e.g. ``"ck_companies_kind"``) would double the prefix.
     __table_args__ = (
-        CheckConstraint("kind IN ('internal', 'customer')", name="kind"),
-        CheckConstraint("parent_id <> id", name="parent_id_not_self"),
+        # DOM-R49: case-insensitive uniqueness on ``name``, without
+        # normalizing the stored value -- see this module's
+        # docstring.
+        Index("ix_companies_name_lower", func.lower(name), unique=True),
     )
-
-    @validates("code")
-    def _validate_code(self, key: str, value: str | None) -> str | None:
-        value = validate_nullable(self, key, value, "Company.code")
-        if value is None:
-            return value
-        _check_code(value)
-        return value
 
     @validates("name")
     def _validate_name(self, key: str, value: str | None) -> str | None:
         value = validate_nullable(self, key, value, "Company.name")
         if value is None:
             return value
+        value = value.strip()
         _check_name(value)
-        return value
-
-    @validates("tax_id")
-    def _validate_tax_id(self, key: str, value: str | None) -> str | None:
-        value = validate_nullable(self, key, value, "Company.tax_id")
-        if value is None:
-            return value
-        _check_tax_id(value)
         return value

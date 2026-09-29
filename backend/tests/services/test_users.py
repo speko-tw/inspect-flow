@@ -25,14 +25,15 @@ from tests.db.conftest import create_root_user_with_company
 from tests.services.conftest import snapshot_persisted_columns
 
 
-def _company_kwargs(code: str, **overrides) -> dict:
-    kwargs = {"code": code, "name": f"Company {code}", "kind": "customer"}
+def _company_kwargs(tag: str, **overrides) -> dict:
+    kwargs = {"name": f"Company {tag}"}
     kwargs.update(overrides)
     return kwargs
 
 
 def _user_kwargs(employee_no: str, company_id, **overrides) -> dict:
     kwargs = {
+        "username": f"u{employee_no.lower()}",
         "company_id": company_id,
         "department": "Operations",
         "location": "HQ",
@@ -135,18 +136,18 @@ class TestDomAc04ExternalAccountBasicFieldsRejected:
         assert local_user.mobile == "0911-000-005"
 
 
-class TestDomAc13LocalAccountCompanyChangeIgnoresKind:
-    """DOM-AC13: 一筆 ``local`` 帳號屬於一間 ``kind = customer`` 的
-    公司；透過 Service 層把他的 ``company_id`` 改為一間
-    ``kind = internal`` 的公司；修改成功。
+class TestDomAc13LocalAccountCompanyChange:
+    """DOM-AC13 (``Company.kind`` was removed by #259/#260, so only
+    the company change itself remains): a ``local`` account can be
+    moved to another company through the Service layer.
     """
 
-    def test_company_change_across_kinds_succeeds(self, session, operator):
+    def test_company_change_succeeds(self, session, operator):
         customer_company = create_company(
-            session, **_company_kwargs("C013CUST", kind="customer")
+            session, **_company_kwargs("C013CUST")
         )
         internal_company = create_company(
-            session, **_company_kwargs("C013INT", kind="internal")
+            session, **_company_kwargs("C013INT")
         )
         session.flush()
         user = create_user(
@@ -279,6 +280,12 @@ class TestDomAc06LastActiveAdminProtected:
     def test_last_admin_protected_until_second_admin_exists(
         self, session, operator
     ):
+        # The built-in ``admin`` is always an active Admin (DOM-R50), which
+        # would keep DOM-R07 from ever triggering. DOM-AC06 specifies a
+        # database without one, so this test data disables it directly
+        # (the Service layer would refuse, DOM-R06); it stays the
+        # operator that get_current_operator() returns.
+        operator.is_active = False
         lone_admin = create_root_user_with_company(session, "LONE06")
         lone_admin.is_admin = True
         session.commit()

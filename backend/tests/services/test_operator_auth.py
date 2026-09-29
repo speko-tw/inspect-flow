@@ -63,9 +63,7 @@ def _client_with_company_route() -> TestClient:
         db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
         _user: User = Depends(require_login),  # noqa: B008
     ) -> dict[str, str]:
-        company = create_company(
-            db, code=body.code, name=f"AC09 {body.code}", kind="customer"
-        )
+        company = create_company(db, name=f"AC09 {body.code}")
         return {
             "id": str(company.id),
             "created_by": str(company.created_by),
@@ -125,9 +123,7 @@ class TestAutAc09CurrentOperatorEntryPoint:
     def test_direct_service_call_outside_a_request_uses_builtin_admin(
         self, session, operator
     ):
-        company = create_company(
-            session, code="AC09C", name="AC09C Co", kind="customer"
-        )
+        company = create_company(session, name="AC09C Co")
 
         assert company.created_by == operator.id
         assert company.updated_by == operator.id
@@ -212,9 +208,7 @@ class TestForgottenRouteStillRejectedByAppLevelScope:
             body: _CreateCompanyBody,
             db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
         ) -> dict[str, str]:
-            company = create_company(
-                db, code=body.code, name=f"AC09 {body.code}", kind="customer"
-            )
+            company = create_company(db, name=f"AC09 {body.code}")
             return {"id": str(company.id)}
 
         assert not inspect.iscoroutinefunction(create_test_company_no_scope)

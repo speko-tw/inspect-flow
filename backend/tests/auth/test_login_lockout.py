@@ -30,7 +30,7 @@ from app.models import (
 )
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 from tests.auth.test_auth_logging import _assert_no_secrets, _auth_records
-from tests.db.conftest import create_root_user_with_company
+from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 P = DEFAULT_TEST_PASSWORD
 NEW_P = "Demo-New-Pass1"
@@ -49,7 +49,7 @@ def now():
 
 def _admin(db):
     admin = create_root_user_with_company(db, "DEMO0")
-    admin.is_system = True
+    make_system_admin(admin)
     db.commit()
     return admin
 
@@ -70,6 +70,7 @@ def test_ac27_ac51_lock_boundary_audit_and_log(
 ):
     admin = _admin(db_session)
     user = make_local_user(db_session, "DEMO1")
+    assert user.email is not None
     caplog.set_level(logging.INFO, logger="app.auth")
     failed = _fail(client, user, 10)
     assert all(r.status_code == 401 for r in failed)

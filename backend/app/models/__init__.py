@@ -14,6 +14,7 @@ from app.models.login_failure import LoginFailure
 from app.models.project import Project
 from app.models.project_member import ProjectMember, ProjectMemberRole
 from app.models.role import Role, RolePermission
+from app.models.setup_code import SetupCode
 from app.models.user import User
 from app.models.user_password import UserPassword
 
@@ -28,6 +29,7 @@ __all__ = [
     "ProjectMemberRole",
     "Role",
     "RolePermission",
+    "SetupCode",
     "User",
     "UserPassword",
 ]

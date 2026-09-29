@@ -35,7 +35,7 @@ from tests.auth.test_password_gate import (
     _make_temporary_password_user,
 )
 from tests.contract.test_route_conventions import _iter_business_routes
-from tests.db.conftest import create_root_user_with_company
+from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 NEW_PASSWORD = "Demo-New-Pass1"
@@ -243,7 +243,7 @@ class TestAutAc39DirectServiceCalls:
         # A built-in system account is required outside of any HTTP
         # request: get_current_operator() falls back to it there.
         operator = create_root_user_with_company(db_session, "P390")
-        operator.is_system = True
+        make_system_admin(operator)
         user = create_root_user_with_company(db_session, "P391")
         db_session.add(
             UserPassword(

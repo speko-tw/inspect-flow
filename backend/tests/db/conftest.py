@@ -122,6 +122,37 @@ def db_url(
             reset_public_schema(url)
 
 
+def username_for(employee_no: str) -> str:
+    """Return a valid, unique-per-``employee_no`` ``username`` (DOM-R45).
+
+    Lowercases ``employee_no`` and prefixes ``u`` so it always starts
+    with a letter; test employee numbers only use ``[A-Za-z0-9-]``.
+    """
+    return f"u{employee_no.lower()}"
+
+
+def make_system_admin(user: User) -> User:
+    """Turn ``user`` into the built-in ``admin`` (DOM-R50).
+
+    Sets ``is_system`` and clears/sets every field the built-in
+    account is required to have: ``username = "admin"``, ``is_admin``,
+    and no company, department, location, employee number or names.
+    Only one such row can exist (``username`` is unique), so callers
+    that need a *second* ``is_system`` row must bypass the CHECK
+    themselves.
+    """
+    user.is_system = True
+    user.is_admin = True
+    user.username = "admin"
+    user.company_id = None
+    user.department = None
+    user.location = None
+    user.employee_no = None
+    user.name_zh = None
+    user.name_en = None
+    return user
+
+
 def create_root_user_with_company(session: Session, employee_no: str) -> User:
     """Build and flush a self-referential ``User`` (``created_by``/
     ``updated_by`` point at its own id, per DBF-R14/DBF-Q2) together
@@ -175,9 +206,7 @@ def create_root_user_with_company(session: Session, employee_no: str) -> User:
     session.add(
         Company(
             id=company_id,
-            code=f"CO-{employee_no}",
             name=f"Company for {employee_no}",
-            kind="internal",
             created_by=self_id,
             updated_by=self_id,
         )
@@ -189,7 +218,7 @@ def create_root_user_with_company(session: Session, employee_no: str) -> User:
 
 def build_root_user(
     employee_no: str,
-    company_id: uuid.UUID,
+    company_id: uuid.UUID | None,
     *,
     self_id: uuid.UUID | None = None,
 ) -> User:
@@ -209,6 +238,7 @@ def build_root_user(
         self_id = uuid7()
     return User(
         id=self_id,
+        username=username_for(employee_no),
         employee_no=employee_no,
         company_id=company_id,
         department="Operations",

@@ -23,7 +23,7 @@ from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import AuditLog, User
 from app.services.audit import record_audit_event
-from tests.db.conftest import create_root_user_with_company
+from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -71,7 +71,7 @@ def operator(session) -> User:
     :func:`record_audit_event` directly, not through a route.
     """
     user = create_root_user_with_company(session, "E930")
-    user.is_system = True
+    make_system_admin(user)
     session.commit()
     return user
 

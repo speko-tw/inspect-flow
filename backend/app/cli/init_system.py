@@ -3,22 +3,28 @@ DOM-R14).
 
 Run with ``python -m app.cli.init_system`` (wired to ``make init``;
 see the root ``Makefile``). Prompts interactively for the company's
-``code``/``name`` and both accounts' required basic fields (DOM-R01,
+``name`` and the owner account's required basic fields (DOM-R46,
 ``is_active`` excluded -- it defaults to enabled) via the plain
 ``input()`` builtin, which reads ``sys.stdin`` either way: an
 operator typing at a terminal, or a test/deployment script piping
 answers in through stdin non-interactively. No value or default for
 any of these fields lives anywhere in this source file (DOM-R12);
 :data:`_TEMPLATE_ROLE_NAMES` is not one of them -- it names which
-three roles to create, not any of their field values, and
-``kind="internal"`` is a fixed business rule (DOM-R11), not a
-value DOM-R12 requires as input.
+three roles to create, not any of their field values.
+
+Temporary compatibility (#260): the built-in ``admin`` no longer
+belongs to a company and has no names, department, location or
+employee number (DOM-R50), so it is no longer prompted for; it is
+created with ``username = "admin"`` and nothing else. The owner's
+account gains the required ``username`` prompt. The whole command is
+redesigned by #261 (DOM-R53: no prompts at all, no company, no owner
+account); this is only enough to keep it working on the new schema.
 
 :func:`initialize_system` does the actual writes, in the one order
 that satisfies ``User.company_id``'s ``DEFERRABLE INITIALLY
 DEFERRED`` foreign key into the company being created in the very
 same transaction (see ``app/models/user.py`` and plan.md's "風險"
-section): both ``User`` rows first (each pointing ``company_id`` at
+section): both ``User`` rows first (the owner's pointing ``company_id`` at
 an app-generated id the ``Company`` row does not have yet), then the
 ``Company`` row (whose ``created_by``/``updated_by`` point at the
 already-flushed admin row), then the three template roles. It
@@ -65,13 +71,14 @@ InputReader = Callable[[str], str]
 # checks boxes for each on a future admin screen.
 _TEMPLATE_ROLE_NAMES = ("內業整理", "現場查核", "唯讀")
 
-# DOM-R01's required basic fields, excluding ``is_active`` (defaults
-# to enabled) and ``company_id`` (both accounts share the one
-# company built alongside them, not a separately prompted value).
+# The owner account's basic fields, excluding ``is_active``
+# (defaults to enabled) and ``company_id`` (the owner belongs to the
+# one company built alongside it, not a separately prompted value).
 # Each entry is (attribute name, prompt text); prompt text is
 # display copy, not a business default -- DOM-R12 only forbids a
 # default *value*.
 _ACCOUNT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("username", "帳號名稱 username"),
     ("department", "部門 department"),
     ("location", "地點 location"),
     ("employee_no", "工號 employee_no"),
@@ -80,10 +87,7 @@ _ACCOUNT_FIELDS: tuple[tuple[str, str], ...] = (
     ("email", "email"),
 )
 
-_COMPANY_FIELDS: tuple[tuple[str, str], ...] = (
-    ("code", "代碼 code"),
-    ("name", "名稱 name"),
-)
+_COMPANY_FIELDS: tuple[tuple[str, str], ...] = (("name", "名稱 name"),)
 
 
 class AlreadyInitializedError(RuntimeError):
@@ -93,25 +97,24 @@ class AlreadyInitializedError(RuntimeError):
 
 
 class CompanyInput:
-    """The company's ``code``/``name``, as read from the operator
-    (DOM-R12). A plain attribute holder, not a mapped model: nothing
-    here is written to the database directly.
+    """The company's ``name``, as read from the operator (DOM-R12).
+    A plain attribute holder, not a mapped model: nothing here is
+    written to the database directly.
     """
 
-    def __init__(self, *, code: str, name: str) -> None:
-        self.code = code
+    def __init__(self, *, name: str) -> None:
         self.name = name
 
 
 class AccountInput:
-    """One account's required basic fields (DOM-R01), as read from
-    the operator (DOM-R12). A plain attribute holder, not a mapped
-    model.
+    """The owner account's basic fields, as read from the operator
+    (DOM-R12). A plain attribute holder, not a mapped model.
     """
 
     def __init__(
         self,
         *,
+        username: str,
         department: str,
         location: str,
         employee_no: str,
@@ -119,6 +122,7 @@ class AccountInput:
         name_zh: str,
         email: str,
     ) -> None:
+        self.username = username
         self.department = department
         self.location = location
         self.employee_no = employee_no
@@ -140,7 +144,7 @@ def is_system_initialized(session: Session) -> bool:
 
 
 def read_company_input(input_fn: InputReader) -> CompanyInput:
-    """Prompt for the company's ``code``/``name`` via ``input_fn``
+    """Prompt for the company's ``name`` via ``input_fn``
     (DOM-R12)."""
     values = {
         field: input_fn(f"公司{label}: ") for field, label in _COMPANY_FIELDS
@@ -149,9 +153,9 @@ def read_company_input(input_fn: InputReader) -> CompanyInput:
 
 
 def read_account_input(input_fn: InputReader, label: str) -> AccountInput:
-    """Prompt for one account's required basic fields via
-    ``input_fn`` (DOM-R01, DOM-R12); ``label`` distinguishes the
-    prompts for the two accounts this command creates.
+    """Prompt for one account's basic fields via ``input_fn``
+    (DOM-R46, DOM-R12); ``label`` distinguishes the account being
+    asked about.
     """
     values = {
         field: input_fn(f"{label} {prompt}: ")
@@ -164,11 +168,10 @@ def initialize_system(
     session: Session,
     *,
     company: CompanyInput,
-    admin: AccountInput,
     owner: AccountInput,
 ) -> tuple[Company, User, User, list[Role]]:
-    """DOM-R11: create the company, the built-in ``admin``, the
-    owner's personal account, and the three empty template roles, in
+    """DOM-R11: create the company, the built-in ``admin`` (DOM-R50),
+    the owner's personal account, and the three empty template roles, in
     ``session``'s current transaction. Raises
     :class:`AlreadyInitializedError` without writing anything when
     DOM-R13's guard trips. Flushes as it builds each row but never
@@ -195,13 +198,7 @@ def initialize_system(
     # matching ``Company`` row.
     admin_user = User(
         id=admin_id,
-        company_id=company_id,
-        department=admin.department,
-        location=admin.location,
-        employee_no=admin.employee_no,
-        name_en=admin.name_en,
-        name_zh=admin.name_zh,
-        email=admin.email,
+        username="admin",
         is_admin=True,
         is_system=True,
         created_by=admin_id,
@@ -212,6 +209,7 @@ def initialize_system(
 
     owner_user = User(
         id=owner_id,
+        username=owner.username,
         company_id=company_id,
         department=owner.department,
         location=owner.location,
@@ -229,9 +227,7 @@ def initialize_system(
 
     company_row = Company(
         id=company_id,
-        code=company.code,
         name=company.name,
-        kind="internal",
         created_by=admin_id,
         updated_by=admin_id,
     )
@@ -286,7 +282,6 @@ def run(
 
     try:
         company = read_company_input(input_fn)
-        admin = read_account_input(input_fn, "內建 admin 帳號")
         owner = read_account_input(input_fn, "負責人個人帳號")
     except EOFError:
         print("輸入不完整，初始化失敗。", file=sys.stderr)
@@ -294,9 +289,7 @@ def run(
 
     try:
         with unit_of_work(session_factory) as session:
-            initialize_system(
-                session, company=company, admin=admin, owner=owner
-            )
+            initialize_system(session, company=company, owner=owner)
     except AlreadyInitializedError:
         print("系統已初始化，未寫入任何資料。")
         return 0

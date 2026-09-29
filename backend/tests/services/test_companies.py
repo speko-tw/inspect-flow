@@ -14,14 +14,15 @@ from app.services.users import create_user
 from tests.services.conftest import snapshot_persisted_columns
 
 
-def _company_kwargs(code: str, **overrides) -> dict:
-    kwargs = {"code": code, "name": f"Company {code}", "kind": "customer"}
+def _company_kwargs(tag: str, **overrides) -> dict:
+    kwargs = {"name": f"Company {tag}"}
     kwargs.update(overrides)
     return kwargs
 
 
 def _user_kwargs(employee_no: str, company_id, **overrides) -> dict:
     kwargs = {
+        "username": f"u{employee_no.lower()}",
         "company_id": company_id,
         "department": "Operations",
         "location": "HQ",
@@ -116,7 +117,7 @@ def test_update_company_only_changes_passed_fields(session, operator):
     left out of the call keeps its previous value.
     """
     company = create_company(
-        session, **_company_kwargs("C099", tax_id="12345678")
+        session, **_company_kwargs("C099", is_active=False)
     )
     session.commit()
 
@@ -124,5 +125,5 @@ def test_update_company_only_changes_passed_fields(session, operator):
     session.commit()
 
     assert company.name == "New Name"
-    assert company.tax_id == "12345678"
+    assert company.is_active is False
     assert isinstance(company, Company)
