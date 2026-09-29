@@ -216,6 +216,29 @@ class TestAutAc52LoginFailedUnknownEmail:
 
         _assert_no_secrets(caplog, "whatever-password", "Nobody@Example.com")
 
+    def test_unknown_username_shaped_login_is_not_logged(self, client, caplog):
+        caplog.set_level(logging.INFO, logger="app.auth")
+        submitted_login = "CorrectHorseBatteryStaple"
+        assert "@" not in submitted_login
+
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"login": submitted_login, "password": "whatever-password"},
+        )
+        assert resp.status_code == 401
+
+        events = _auth_records(caplog)
+        assert len(events) == 1
+        assert events[0].event == "auth.login_failed"
+        assert events[0].user_id is None
+        assert events[0].reason == "invalid_credentials"
+        _assert_no_secrets(
+            caplog,
+            submitted_login,
+            submitted_login.lower(),
+            "whatever-password",
+        )
+
 
 class TestAutAc52LoginFailedAccountDisabled:
     def test_disabled_account_with_correct_password_logs_account_disabled(

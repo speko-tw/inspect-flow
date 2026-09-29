@@ -110,6 +110,44 @@ def test_ac27_ac51_lock_boundary_audit_and_log(
     )
 
 
+def test_username_and_email_share_lockout_counter(client, db_session, now):
+    _admin(db_session)
+    user = make_local_user(db_session, "DEMO6")
+    assert user.email is not None
+    login_values = (user.username, user.email)
+
+    failures = [
+        client.post(
+            "/api/v1/auth/login",
+            json={"login": login, "password": "wrong-password"},
+        )
+        for login in login_values
+        for _ in range(5)
+    ]
+    assert all(response.status_code == 401 for response in failures)
+    assert all(
+        response.content == failures[0].content for response in failures
+    )
+    assert failures[0].json()["error"]["code"] == "auth.invalid_credentials"
+
+    for login in login_values:
+        locked = client.post(
+            "/api/v1/auth/login",
+            json={"login": login, "password": P},
+        )
+        assert locked.status_code == 401
+        assert locked.content == failures[0].content
+        assert "set-cookie" not in locked.headers
+
+    db_session.expire_all()
+    counter = db_session.query(LoginCounter).filter_by(user_id=user.id).one()
+    assert counter.failure_count == 10
+    assert counter.locked_until == T0 + timedelta(minutes=15)
+    assert (
+        db_session.query(LoginFailure).filter_by(user_id=user.id).count() == 10
+    )
+
+
 @pytest.mark.parametrize("offset,locked", [(899, True), (900, False)])
 def test_ac45_window_boundary(client, db_session, now, offset, locked):
     _admin(db_session)

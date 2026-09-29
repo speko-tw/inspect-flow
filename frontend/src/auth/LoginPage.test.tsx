@@ -8,10 +8,12 @@ import RequireAuth from './RequireAuth'
 
 const CURRENT_USER = {
   id: 'u1',
+  username: 'user',
   email: 'user@example.com',
   name_en: 'Test User',
   name_zh: '測試使用者',
   is_admin: false,
+  must_change_password: false,
 }
 
 const GENERIC_ERROR_MESSAGE = 'Email 或密碼錯誤，請再試一次。'
@@ -189,6 +191,14 @@ describe('登入不碰 token／storage，登出會清狀態並導向 /login（AU
 
     // 瀏覽已登入的畫面。
     await screen.findByRole('heading', { name: '受保護頁面' })
+    const loginCall = fetchMock.mock.calls.find(([input]) =>
+      requestUrl(input).endsWith('/api/v1/auth/login'),
+    )
+    expect(loginCall).toBeDefined()
+    expect(JSON.parse(loginCall?.[1]?.body as string)).toEqual({
+      login: 'user@example.com',
+      password: 'correct-password',
+    })
 
     // 登出。
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
