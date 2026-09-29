@@ -29,7 +29,12 @@ from tests.db.conftest import create_root_user_with_company
 
 def _new_project(creator, code: str) -> Project:
     return Project(
-        project_code=code, created_by=creator.id, updated_by=creator.id
+        project_code=code,
+        name="示範廠機電工程",
+        client_name="示範業主",
+        site_location="示範工地",
+        created_by=creator.id,
+        updated_by=creator.id,
     )
 
 

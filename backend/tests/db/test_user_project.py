@@ -16,12 +16,12 @@ foreign-key rejection checks depend on.
 
 import uuid
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import CHAR, Engine, Uuid, inspect
+from sqlalchemy import CHAR, Engine, Uuid, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -138,6 +138,9 @@ class TestDbfAc09PrimaryKeysAreSingleColumnUuids:
         session.add(user)
         session.commit()
         project = Project(
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
             project_code="P100",
             created_by=user.id,
             updated_by=user.id,
@@ -153,10 +156,8 @@ class TestDbfAc09PrimaryKeysAreSingleColumnUuids:
         assert uuid.UUID(str(project.id)) == project.id
 
 
-class TestDbfAc10BusinessNumbersAreUnique:
-    """DBF-AC10: ``employee_no``/``project_code`` are unique, and
-    are columns distinct from the UUID primary key.
-    """
+class TestDbfAc10BusinessNumbers:
+    """DBF-AC10: employee numbers are unique; project codes repeat."""
 
     def test_duplicate_employee_no_is_rejected_and_row_count_unchanged(
         self, session
@@ -176,30 +177,37 @@ class TestDbfAc10BusinessNumbersAreUnique:
 
         assert session.query(User).filter_by(employee_no="E001").count() == 1
 
-    def test_duplicate_project_code_is_rejected_and_row_count_unchanged(
+    def test_duplicate_project_code_is_accepted_with_distinct_ids(
         self, session
     ):
         owner = create_root_user_with_company(session, "E002")
         session.add(owner)
         session.commit()
-        session.add(
-            Project(
-                project_code="P001", created_by=owner.id, updated_by=owner.id
-            )
+        first = Project(
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
+            project_code="P001",
+            created_by=owner.id,
+            updated_by=owner.id,
         )
+        session.add(first)
         session.commit()
 
-        session.add(
-            Project(
-                project_code="P001", created_by=owner.id, updated_by=owner.id
-            )
+        second = Project(
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
+            project_code="P001",
+            created_by=owner.id,
+            updated_by=owner.id,
         )
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
+        session.add(second)
+        session.commit()
 
         count = session.query(Project).filter_by(project_code="P001").count()
-        assert count == 1
+        assert count == 2
+        assert first.id != second.id
 
     def test_business_number_column_is_not_the_primary_key_column(
         self, engine
@@ -269,7 +277,12 @@ class TestDbfAc11AuditColumns:
         assert user.updated_at == t0
 
         project = Project(
-            project_code="P200", created_by=user.id, updated_by=user.id
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
+            project_code="P200",
+            created_by=user.id,
+            updated_by=user.id,
         )
         session.add(project)
         session.commit()
@@ -317,7 +330,12 @@ class TestDbfAc11AuditColumns:
         assert session.query(User).count() == 1
 
         bad_project = Project(
-            project_code="P300", created_by=None, updated_by=user.id
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
+            project_code="P300",
+            created_by=None,
+            updated_by=user.id,
         )
         session.add(bad_project)
         with pytest.raises(IntegrityError):
@@ -343,7 +361,12 @@ class TestDbfAc11AuditColumns:
         assert session.query(User).count() == 1
 
         bad_project = Project(
-            project_code="P400", created_by=user.id, updated_by=None
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
+            project_code="P400",
+            created_by=user.id,
+            updated_by=None,
         )
         session.add(bad_project)
         with pytest.raises(IntegrityError):
@@ -372,10 +395,175 @@ class TestDbfAc11AuditColumns:
         assert session.query(User).count() == 1
 
         bad_project = Project(
-            project_code="P500", created_by=dangling, updated_by=user.id
+            name="示範廠機電工程",
+            client_name="示範業主",
+            site_location="示範工地",
+            project_code="P500",
+            created_by=dangling,
+            updated_by=user.id,
         )
         session.add(bad_project)
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
         assert session.query(Project).count() == 0
+
+
+class TestProjectBusinessFields:
+    """DOM-AC28, AC29, AC31 and AC32."""
+
+    @staticmethod
+    def _values(owner_id):
+        return {
+            "project_code": "DEMO",
+            "name": "示範廠機電工程",
+            "client_name": "示範業主",
+            "site_location": "示範工地",
+            "created_by": owner_id,
+            "updated_by": owner_id,
+        }
+
+    def test_required_and_optional_columns(self, engine, session):
+        owner = create_root_user_with_company(session, "E601")
+        session.commit()
+        columns = {
+            col["name"]: col for col in inspect(engine).get_columns("projects")
+        }
+        assert set(columns) == {
+            "id",
+            "project_code",
+            "name",
+            "client_name",
+            "site_location",
+            "planned_start_date",
+            "planned_completion_date",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+        }
+        for field in ("project_code", "name", "client_name", "site_location"):
+            assert columns[field]["nullable"] is False
+        for field in ("planned_start_date", "planned_completion_date"):
+            assert columns[field]["nullable"] is True
+
+        first = Project(**self._values(owner.id))
+        session.add(first)
+        session.commit()
+        assert session.get(Project, first.id) is not None
+        assert first.planned_start_date is None
+        assert first.planned_completion_date is None
+
+        dated = Project(
+            **self._values(owner.id),
+            planned_start_date=date(2026, 10, 1),
+            planned_completion_date=date(2027, 1, 1),
+        )
+        session.add(dated)
+        session.commit()
+        assert dated.planned_start_date == date(2026, 10, 1)
+        assert dated.planned_completion_date == date(2027, 1, 1)
+
+        for field in ("project_code", "name", "client_name", "site_location"):
+            values = self._values(owner.id)
+            del values[field]
+            session.add(Project(**values))
+            with pytest.raises(IntegrityError):
+                session.commit()
+            session.rollback()
+            assert session.query(Project).count() == 2
+
+    def test_length_limits_on_insert_and_update(self, engine, session):
+        owner = create_root_user_with_company(session, "E602")
+        session.commit()
+        limits = {
+            "project_code": 32,
+            "name": 128,
+            "client_name": 128,
+            "site_location": 256,
+        }
+        columns = {
+            col["name"]: col for col in inspect(engine).get_columns("projects")
+        }
+        for field, limit in limits.items():
+            assert columns[field]["type"].length == limit
+
+        values = self._values(owner.id)
+        values.update({field: "X" * limit for field, limit in limits.items()})
+        boundary = Project(**values)
+        session.add(boundary)
+        session.commit()
+
+        for field, limit in limits.items():
+            invalid = self._values(owner.id)
+            invalid[field] = "X" * (limit + 1)
+            with pytest.raises(ValueError):
+                Project(**invalid)
+            assert session.query(Project).count() == 1
+
+        with pytest.raises(ValueError):
+            boundary.name = "X" * 129
+        session.refresh(boundary)
+        assert boundary.name == "X" * 128
+
+
+def test_project_migration_round_trip_backfills_existing_row(db_url):
+    """One old row survives upgrade, explicit downgrade and upgrade."""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "4c38ff477939")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            owner = create_root_user_with_company(session, "E603")
+            session.commit()
+            owner_id = owner.id
+        project_id = uuid7()
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO projects (id, project_code, "
+                    "created_at, updated_at, created_by, updated_by) "
+                    "VALUES (:id, :code, :now, :now, :owner, :owner)"
+                ),
+                {
+                    "id": project_id.hex,
+                    "code": "DEMO",
+                    "now": datetime.now(UTC).isoformat(),
+                    "owner": owner_id.hex,
+                },
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(cfg, "9d2b7c6e4a10")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT name, client_name, site_location "
+                    "FROM projects WHERE project_code = :code"
+                ),
+                {"code": "DEMO"},
+            ).one()
+            assert tuple(row) == ("DEMO", "未提供", "未提供")
+    finally:
+        engine.dispose()
+
+    command.downgrade(cfg, "4c38ff477939")
+    command.upgrade(cfg, "9d2b7c6e4a10")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM projects "
+                        "WHERE project_code = :code"
+                    ),
+                    {"code": "DEMO"},
+                ).scalar_one()
+                == 1
+            )
+    finally:
+        engine.dispose()
