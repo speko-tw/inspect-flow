@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.password_service import set_password
 from app.auth.passwords import verify_password
+from app.cli import init_system
 from app.cli.init_system import run
 from app.models import (
     AuditLog,
@@ -48,7 +49,6 @@ def test_aut_ac54_creates_only_system_rows_and_prints_one_code(
             select(User).where(User.is_system.is_(True))
         ).one()
         setup_code = session.scalars(select(SetupCode)).one()
-        roles = session.scalars(select(Role).order_by(Role.name)).all()
         assert admin.username == "admin"
         assert admin.is_admin is True
         assert admin.company_id is None
@@ -57,19 +57,14 @@ def test_aut_ac54_creates_only_system_rows_and_prints_one_code(
         assert admin.name_en is None
         assert session.scalars(select(UserPassword)).all() == []
         assert session.scalars(select(Company)).all() == []
-        assert {role.name for role in roles} == {
-            "內業整理",
-            "現場查核",
-            "唯讀",
-        }
-        assert all(not role.permission_codes for role in roles)
+        assert session.scalars(select(Role)).all() == []
         assert setup_code.code_hash != code
         assert verify_password(setup_code.code_hash, code)
         assert setup_code.expires_at == setup_code.created_at + timedelta(
             hours=24
         )
         assert setup_code.voided_at is None
-        assert _counts(session) == (1, 0, 3, 0, 1, 0)
+        assert _counts(session) == (1, 0, 0, 0, 1, 0)
 
 
 def test_aut_ac55_rerun_replaces_code_and_refuses_configured_admin(
@@ -91,7 +86,7 @@ def test_aut_ac55_rerun_replaces_code_and_refuses_configured_admin(
         assert rows[0].voided_at is not None
         assert rows[1].voided_at is None
         assert verify_password(rows[1].code_hash, second_code)
-        assert _counts(session) == (1, 0, 3, 0, 2, 0)
+        assert _counts(session) == (1, 0, 0, 0, 2, 0)
         admin = session.scalars(
             select(User).where(User.is_system.is_(True))
         ).one()
@@ -117,3 +112,21 @@ def test_aut_ac55_rerun_replaces_code_and_refuses_configured_admin(
     assert error_output == ["System is already initialized."]
     with session_factory() as session:
         assert _counts(session) == before
+
+
+def test_aut_ac54_failure_after_admin_creation_rolls_back_all_rows(
+    session_factory: sessionmaker[Session], monkeypatch
+) -> None:
+    def fail_setup_code(_session: Session, _admin: User) -> str:
+        raise RuntimeError("injected setup-code failure")
+
+    monkeypatch.setattr(init_system, "issue_setup_code", fail_setup_code)
+    try:
+        run(session_factory, output=lambda _line: None)
+    except RuntimeError as exc:
+        assert str(exc) == "injected setup-code failure"
+    else:
+        raise AssertionError("initialization failure was swallowed")
+
+    with session_factory() as session:
+        assert _counts(session) == (0, 0, 0, 0, 0, 0)

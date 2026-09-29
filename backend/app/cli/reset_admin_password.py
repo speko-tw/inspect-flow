@@ -84,7 +84,10 @@ def main() -> int:
     else:
 
         def read_stdin(_prompt: str) -> str:
-            return sys.stdin.readline().rstrip("\r\n")
+            line = sys.stdin.readline()
+            if line == "":
+                raise EOFError
+            return line.rstrip("\r\n")
 
         reader = read_stdin
     try:

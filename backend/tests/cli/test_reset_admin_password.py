@@ -1,5 +1,6 @@
 """Admin password reset command acceptance tests (AUT-AC62~AUT-AC64)."""
 
+import io
 import subprocess
 import sys
 
@@ -23,6 +24,7 @@ from app.models import (
     User,
     UserPassword,
 )
+from app.services.audit import _EVENT_CATALOG
 
 _PASSWORD = "VeryStrongPassword!"
 _NEW_PASSWORD = "NewVeryStrongPassword!"
@@ -96,6 +98,8 @@ def test_aut_ac62_resets_admin_and_clears_sessions_and_lockout(
         assert reset_audit.after == {"is_temporary": False}
         assert _NEW_PASSWORD not in repr(reset_audit)
         assert session.scalars(select(SetupCode)).one().voided_at is None
+        assert "user.password_set" in _EVENT_CATALOG
+        assert not any("reset" in event_type for event_type in _EVENT_CATALOG)
 
 
 def test_aut_ac63_unconfigured_admin_is_refused_without_changes(
@@ -177,3 +181,62 @@ def test_reset_command_rejects_password_arguments(
     )
     with pytest.raises(SystemExit):
         reset_command.main()
+
+
+def test_reset_command_main_reads_two_lines_from_stdin(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: sessionmaker[Session],
+) -> None:
+    _initialized_admin(session_factory)
+    monkeypatch.setattr(sys, "argv", ["reset-admin-password"])
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(f"{_NEW_PASSWORD}\n{_NEW_PASSWORD}\n")
+    )
+    monkeypatch.setattr(
+        reset_command, "get_session_factory", lambda: session_factory
+    )
+
+    assert reset_command.main() == 0
+
+
+def test_reset_command_main_reads_hidden_tty_input(
+    monkeypatch: pytest.MonkeyPatch,
+    session_factory: sessionmaker[Session],
+) -> None:
+    _initialized_admin(session_factory)
+
+    class TTYInput(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    prompts: list[str] = []
+    secrets = iter((_NEW_PASSWORD, _NEW_PASSWORD))
+    monkeypatch.setattr(sys, "argv", ["reset-admin-password"])
+    monkeypatch.setattr(sys, "stdin", TTYInput())
+    monkeypatch.setattr(
+        reset_command.getpass,
+        "getpass",
+        lambda prompt: prompts.append(prompt) or next(secrets),
+    )
+    monkeypatch.setattr(
+        reset_command, "get_session_factory", lambda: session_factory
+    )
+
+    assert reset_command.main() == 0
+    assert prompts == ["New admin password: ", "Repeat password: "]
+
+
+def test_reset_command_main_handles_stdin_eof(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["reset-admin-password"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(
+        reset_command,
+        "get_session_factory",
+        lambda: pytest.fail("EOF must stop before opening a database"),
+    )
+
+    assert reset_command.main() == 1
+    assert "Password input cancelled." in capsys.readouterr().err

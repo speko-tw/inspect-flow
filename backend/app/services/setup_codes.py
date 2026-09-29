@@ -14,6 +14,7 @@ from app.models import SetupCode, User
 
 logger = logging.getLogger("app.auth")
 SETUP_CODE_LIFETIME = timedelta(hours=24)
+_DUMMY_CODE_HASH = hash_password("constant timing placeholder")
 
 
 def issue_setup_code(session: Session, admin: User) -> str:
@@ -58,9 +59,10 @@ def verify_setup_code(
     """
     now = clock.utc_now()
     admin = session.scalars(
-        select(User).where(User.is_system.is_(True))
+        select(User).where(User.is_system.is_(True)).with_for_update()
     ).one_or_none()
     if admin is None:
+        verify_password(_DUMMY_CODE_HASH, code)
         return None
 
     row = session.scalars(
@@ -70,10 +72,15 @@ def verify_setup_code(
         .limit(1)
         .with_for_update()
     ).first()
-    if row is None or row.expires_at <= now:
+    if row is None:
+        verify_password(_DUMMY_CODE_HASH, code)
+        return None
+    if row.expires_at <= now:
+        verify_password(_DUMMY_CODE_HASH, code)
         return None
 
     if row.locked_until is not None and row.locked_until > now:
+        verify_password(_DUMMY_CODE_HASH, code)
         return None
 
     if verify_password(row.code_hash, code):

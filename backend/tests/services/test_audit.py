@@ -19,6 +19,10 @@ AC labels below follow that spec's numbering:
   non-system event still requires a logged-in operator; an "每次都寫"
   event (``user.password_set``) writes successfully even with
   identical before/after.
+- ALG-AC13: only catalogued events accept the ``system_event``
+  declaration, in all request scopes.
+- ALG-AC16: resetting admin reuses ``user.password_set`` without
+  adding a reset-specific event code.
 
 Fixtures (``session``, ``operator``, ``engine``, ``migrated_url``)
 come from this directory's ``conftest.py``.
@@ -37,9 +41,11 @@ from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.dependencies import bind_request_scope, get_db, require_login
+from app.auth.password_service import set_password
+from app.cli.reset_admin_password import run as reset_admin_password
 from app.db import clock
 from app.db.base import uuid7
 from app.db.unit_of_work import unit_of_work
@@ -212,6 +218,73 @@ def _client_with_generic_public_route() -> TestClient:
     app.include_router(router)
     return TestClient(
         app, base_url="https://testserver", raise_server_exceptions=False
+    )
+
+
+class _SystemEventAuditBody(BaseModel):
+    event_type: str
+    entity_id: str
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    system_event: bool = False
+
+
+def _client_with_system_event_audit_route(
+    *, requires_login: bool
+) -> TestClient:
+    app = create_app()
+    router = APIRouter()
+
+    if requires_login:
+
+        def record_event_logged_in(
+            body: _SystemEventAuditBody,
+            db: Session = Depends(get_db),  # noqa: B008
+            _user=Depends(require_login),  # noqa: B008
+        ) -> dict[str, str]:
+            log = record_audit_event(
+                db,
+                body.event_type,
+                entity_id=uuid.UUID(body.entity_id),
+                before=body.before,
+                after=body.after,
+                system_event=body.system_event,
+            )
+            return {"created_by": str(log.created_by)}
+
+        endpoint = record_event_logged_in
+        raise_server_exceptions = True
+    else:
+
+        def record_event_public(
+            body: _SystemEventAuditBody,
+            db: Session = Depends(get_db),  # noqa: B008
+            _scope: None = Depends(bind_request_scope),  # noqa: B008
+        ) -> dict[str, str]:
+            log = record_audit_event(
+                db,
+                body.event_type,
+                entity_id=uuid.UUID(body.entity_id),
+                before=body.before,
+                after=body.after,
+                system_event=body.system_event,
+            )
+            return {"created_by": str(log.created_by)}
+
+        endpoint = record_event_public
+        raise_server_exceptions = False
+
+    router.add_api_route(
+        "/api/v1/test/system-event-audit",
+        endpoint,
+        methods=["POST"],
+        status_code=201,
+    )
+    app.include_router(router)
+    return TestClient(
+        app,
+        base_url="https://testserver",
+        raise_server_exceptions=raise_server_exceptions,
     )
 
 
@@ -578,6 +651,151 @@ class TestAlgAc12SystemEventAndAlwaysWriteFlags:
         # (locked + 2 password_set), the two no-login rejections add
         # none.
         assert session.query(AuditLog).count() == before_count + 3
+
+
+class TestAlgAc13SetupSystemEventAndAc16AdminReset:
+    def test_alg_ac13_declared_system_event_is_limited_to_catalog_entries(
+        self, session, operator, migrated_url
+    ):
+        admin = operator
+        user = make_local_user(session, "AUD013")
+        session.commit()
+
+        outside_request = record_audit_event(
+            session,
+            "user.password_set",
+            entity_id=user.id,
+            before=None,
+            after={"is_temporary": False},
+            system_event=True,
+        )
+        assert outside_request.created_by == admin.id
+        outside_request_without_declaration = record_audit_event(
+            session,
+            "user.password_set",
+            entity_id=user.id,
+            before=None,
+            after={"is_temporary": False},
+            system_event=False,
+        )
+        assert outside_request_without_declaration.created_by == admin.id
+        session.commit()
+
+        public_client = _client_with_system_event_audit_route(
+            requires_login=False
+        )
+        route = "/api/v1/test/system-event-audit"
+
+        role_as_system = public_client.post(
+            route,
+            json={
+                "event_type": "role.created",
+                "entity_id": str(uuid7()),
+                "before": None,
+                "after": {"name": "R013", "permission_codes": []},
+                "system_event": True,
+            },
+        )
+        assert role_as_system.status_code == 500
+
+        no_login_without_declaration = public_client.post(
+            route,
+            json={
+                "event_type": "user.password_set",
+                "entity_id": str(user.id),
+                "before": None,
+                "after": {"is_temporary": False},
+                "system_event": False,
+            },
+        )
+        assert no_login_without_declaration.status_code == 500
+
+        no_login_with_declaration = public_client.post(
+            route,
+            json={
+                "event_type": "user.password_set",
+                "entity_id": str(user.id),
+                "before": None,
+                "after": {"is_temporary": False},
+                "system_event": True,
+            },
+        )
+        assert no_login_with_declaration.status_code == 201
+        assert no_login_with_declaration.json()["created_by"] == str(admin.id)
+
+        login_client = _client_with_system_event_audit_route(
+            requires_login=True
+        )
+        login = login_client.post(
+            "/api/v1/auth/login",
+            json={"login": user.email, "password": PASSWORD},
+        )
+        assert login.status_code == 200
+        user_as_system = login_client.post(
+            route,
+            json={
+                "event_type": "user.password_set",
+                "entity_id": str(user.id),
+                "before": None,
+                "after": {"is_temporary": False},
+                "system_event": True,
+            },
+        )
+        assert user_as_system.status_code == 201
+        assert user_as_system.json()["created_by"] == str(admin.id)
+
+        user_without_declaration = login_client.post(
+            route,
+            json={
+                "event_type": "user.password_set",
+                "entity_id": str(user.id),
+                "before": None,
+                "after": {"is_temporary": False},
+                "system_event": False,
+            },
+        )
+        assert user_without_declaration.status_code == 201
+        assert user_without_declaration.json()["created_by"] == str(user.id)
+
+    def test_alg_ac16_admin_reset_reuses_password_set_catalog_entry(
+        self, session, operator
+    ):
+        admin = operator
+        set_password(
+            session,
+            admin,
+            "AuditResetInitial!",
+            is_temporary=False,
+        )
+        session.commit()
+        catalog_before = frozenset(_EVENT_CATALOG)
+        audit_count_before = session.query(AuditLog).count()
+        factory = sessionmaker(bind=session.get_bind())
+
+        assert (
+            reset_admin_password(
+                "AuditResetNext!",
+                "AuditResetNext!",
+                factory,
+                output=lambda _line: None,
+            )
+            == 0
+        )
+
+        session.expire_all()
+        password_set_rows = (
+            session.query(AuditLog)
+            .filter(AuditLog.event_type == "user.password_set")
+            .order_by(AuditLog.created_at)
+            .all()
+        )
+        assert frozenset(_EVENT_CATALOG) == catalog_before
+        assert len(password_set_rows) == 2
+        assert session.query(AuditLog).count() == audit_count_before + 1
+        reset_row = password_set_rows[-1]
+        assert reset_row.entity_id == admin.id
+        assert reset_row.created_by == admin.id
+        assert reset_row.after == {"is_temporary": False}
 
 
 class TestAlgR09BeforeOptionalForPasswordSet:

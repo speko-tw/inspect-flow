@@ -5,10 +5,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from threading import Barrier
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 import app.cli.init_system as init_module
+import app.services.setup_codes as setup_codes
 from app.auth.password_service import set_password
 from app.auth.settings import (
     SETUP_FAILURE_THRESHOLD_ENV_VAR,
@@ -154,6 +156,72 @@ def test_aut_ac59_setup_failures_lock_independently_and_log_safely(
         clock.reset_clock()
 
 
+def test_setup_failure_window_expires_after_fifteen_minutes(client, engine):
+    _initialize(engine)
+    with Session(engine) as session:
+        row = session.scalars(select(SetupCode)).one()
+        start = row.created_at + timedelta(seconds=1)
+
+    now = start
+    clock.set_clock(lambda: now)
+    try:
+        for _ in range(9):
+            response = client.post(
+                "/api/v1/setup/admin-password",
+                json={"code": "wrong-code", "password": _ADMIN_PASSWORD},
+            )
+            assert response.status_code == 401
+
+        now = start + timedelta(minutes=15)
+        response = client.post(
+            "/api/v1/setup/admin-password",
+            json={"code": "wrong-code", "password": _ADMIN_PASSWORD},
+        )
+        assert response.status_code == 401
+
+        with Session(engine) as session:
+            row = session.scalars(select(SetupCode)).one()
+            assert row.failed_attempts == 1
+            assert row.failure_window_started_at == now
+            assert row.locked_until is None
+    finally:
+        clock.reset_clock()
+
+
+@pytest.mark.parametrize("state", ["missing", "expired", "locked"])
+def test_hidden_setup_code_states_verify_a_dummy_hash(
+    state, engine, monkeypatch
+) -> None:
+    _initialize(engine)
+    with Session(engine) as session:
+        row = session.scalars(select(SetupCode)).one()
+        if state == "missing":
+            row.voided_at = row.created_at
+            now = row.created_at + timedelta(seconds=1)
+        elif state == "expired":
+            now = row.expires_at
+        else:
+            now = row.created_at + timedelta(seconds=1)
+            row.locked_until = now + timedelta(minutes=15)
+        session.commit()
+
+    real_verify = setup_codes.verify_password
+    verified_hashes: list[str] = []
+
+    def recording_verify(password_hash: str, plaintext: str) -> bool:
+        verified_hashes.append(password_hash)
+        return real_verify(password_hash, plaintext)
+
+    monkeypatch.setattr(setup_codes, "verify_password", recording_verify)
+    clock.set_clock(lambda: now)
+    try:
+        with Session(engine) as session:
+            assert setup_codes.verify_setup_code(session, "submitted") is None
+        assert verified_hashes == [setup_codes._DUMMY_CODE_HASH]
+    finally:
+        clock.reset_clock()
+
+
 def test_aut_ac60_rerun_issues_unlocked_code(engine) -> None:
     session_factory = sessionmaker(bind=engine)
     output: list[str] = []
@@ -193,6 +261,14 @@ def test_setup_lockout_settings_allow_environment_overrides(
     assert get_setup_lockout_settings().lockout_duration == timedelta(
         minutes=11
     )
+
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[3]
+    env_example = (repo_root / ".env.example").read_text(encoding="utf-8")
+    assert SETUP_FAILURE_THRESHOLD_ENV_VAR in env_example
+    assert SETUP_FAILURE_WINDOW_ENV_VAR in env_example
+    assert SETUP_LOCKOUT_DURATION_ENV_VAR in env_example
 
 
 def test_concurrent_initialization_keeps_one_active_code_on_sqlite(

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.auth.passwords import hash_password, verify_password
 from app.cli.init_system import run as initialize
 from app.db import clock
-from app.models import AuditLog, SetupCode, UserPassword
+from app.models import AuditLog, SetupCode, User, UserPassword
 
 _CODE_RE = re.compile(r"First-login code: ([A-Za-z0-9_-]+)")
 _PASSWORD = "VeryStrongPassword!"
@@ -27,8 +27,9 @@ def _initialize(engine) -> str:
 
 
 def test_aut_ac56_first_setup_sets_password_audit_and_cookie(
-    client, engine
+    client, engine, caplog
 ) -> None:
+    caplog.set_level(logging.INFO, logger="app.auth")
     code = _initialize(engine)
 
     before = client.get("/api/v1/setup/status")
@@ -41,7 +42,21 @@ def test_aut_ac56_first_setup_sets_password_audit_and_cookie(
     )
     assert response.status_code == 204
     assert "set-cookie" in response.headers
+    cookie_attributes = response.headers["set-cookie"].lower().split(";")
+    assert cookie_attributes[0].startswith("__host-inspectflow_session=")
+    assert " httponly" in cookie_attributes
+    assert " secure" in cookie_attributes
+    assert " samesite=strict" in cookie_attributes
+    assert " path=/" in cookie_attributes
+    assert not any(
+        item.strip().startswith("domain=") for item in cookie_attributes
+    )
     assert response.content == b""
+    assert any(
+        record.getMessage() == "auth.login_succeeded"
+        and getattr(record, "event", None) == "auth.login_succeeded"
+        for record in caplog.records
+    )
 
     after = client.get("/api/v1/setup/status")
     assert after.json() == {"setup_required": False}
@@ -51,6 +66,9 @@ def test_aut_ac56_first_setup_sets_password_audit_and_cookie(
     assert me.json()["must_change_password"] is False
 
     with Session(engine) as session:
+        admin = session.scalars(
+            select(User).where(User.is_system.is_(True))
+        ).one()
         password = session.scalars(select(UserPassword)).one()
         setup_code = session.scalars(select(SetupCode)).one()
         audit = session.scalars(
@@ -59,7 +77,9 @@ def test_aut_ac56_first_setup_sets_password_audit_and_cookie(
         assert password.must_change_password is False
         assert verify_password(password.password_hash, _PASSWORD)
         assert setup_code.voided_at is not None
-        assert audit.created_by == password.created_by
+        assert password.created_by == admin.id
+        assert audit.entity_id == admin.id
+        assert audit.created_by == admin.id
         assert audit.after == {"is_temporary": False}
         assert audit.before is None
 
@@ -75,39 +95,31 @@ def test_aut_ac57_invalid_codes_have_identical_response_and_no_code_use(
     client, engine
 ) -> None:
     code = _initialize(engine)
-    expired_code = "expired-but-random"
     voided_code = "voided-but-random"
-    from app.models import User
 
     with Session(engine) as session:
         admin = session.scalars(
             select(User).where(User.is_system.is_(True))
         ).one()
         now = clock.utc_now()
-        session.add_all(
-            [
-                SetupCode(
-                    code_hash=hash_password(expired_code),
-                    expires_at=now - timedelta(seconds=1),
-                    created_at=now - timedelta(days=2),
-                    updated_at=now - timedelta(days=2),
-                    created_by=admin.id,
-                    updated_by=admin.id,
-                ),
-                SetupCode(
-                    code_hash=hash_password(voided_code),
-                    expires_at=now + timedelta(hours=1),
-                    voided_at=now - timedelta(seconds=1),
-                    created_at=now - timedelta(days=1),
-                    updated_at=now - timedelta(days=1),
-                    created_by=admin.id,
-                    updated_by=admin.id,
-                ),
-            ]
+        active_code = session.scalars(
+            select(SetupCode).where(SetupCode.voided_at.is_(None))
+        ).one()
+        expires_at = active_code.expires_at
+        session.add(
+            SetupCode(
+                code_hash=hash_password(voided_code),
+                expires_at=now + timedelta(hours=1),
+                voided_at=now - timedelta(seconds=1),
+                created_at=now - timedelta(days=1),
+                updated_at=now - timedelta(days=1),
+                created_by=admin.id,
+                updated_by=admin.id,
+            )
         )
         session.commit()
 
-    codes = [expired_code, voided_code, "random-invalid-code"]
+    codes = [voided_code, "random-invalid-code", "another-invalid-code"]
     responses = [
         client.post(
             "/api/v1/setup/admin-password",
@@ -119,6 +131,25 @@ def test_aut_ac57_invalid_codes_have_identical_response_and_no_code_use(
     assert len({response.content for response in responses}) == 1
     assert responses[0].json() == {"error": {"code": "setup.invalid_code"}}
     assert all("set-cookie" not in response.headers for response in responses)
+
+    clock.set_clock(lambda: expires_at)
+    try:
+        at_expiry = client.post(
+            "/api/v1/setup/admin-password",
+            json={"code": code, "password": _PASSWORD},
+        )
+        clock.set_clock(lambda: expires_at + timedelta(microseconds=1))
+        after_expiry = client.post(
+            "/api/v1/setup/admin-password",
+            json={"code": code, "password": _PASSWORD},
+        )
+    finally:
+        clock.reset_clock()
+
+    for expired in (at_expiry, after_expiry):
+        assert expired.status_code == 401
+        assert expired.content == responses[0].content
+        assert "set-cookie" not in expired.headers
 
     with Session(engine) as session:
         password_rows = session.scalars(select(UserPassword)).all()

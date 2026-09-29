@@ -1,5 +1,7 @@
 """Public initial-setup status and admin-password endpoints."""
 
+import logging
+
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -11,11 +13,12 @@ from app.auth.access import PUBLIC
 from app.auth.dependencies import get_db
 from app.auth.password_service import PasswordLengthError, set_password
 from app.auth.passwords import check_password_length
-from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.auth.sessions import create_session, set_session_cookie
 from app.models import User, UserPassword
 from app.services.setup_codes import verify_setup_code, void_setup_code
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+logger = logging.getLogger("app.auth")
 
 
 class SetupStatusResponse(BaseModel):
@@ -29,7 +32,7 @@ class AdminPasswordRequest(BaseModel):
 
 def _get_admin(db: Session) -> User | None:
     return db.scalars(
-        select(User).where(User.is_system.is_(True))
+        select(User).where(User.is_system.is_(True)).with_for_update()
     ).one_or_none()
 
 
@@ -93,12 +96,13 @@ def set_initial_admin_password(
     void_setup_code(db, setup_code, admin)
     _session, token = create_session(db, admin)
     response.status_code = 204
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path="/",
+    set_session_cookie(response, token)
+    logger.info(
+        "auth.login_succeeded",
+        extra={
+            "event": "auth.login_succeeded",
+            "user_id": str(admin.id),
+            "reason": None,
+        },
     )
     return response

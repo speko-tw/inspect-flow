@@ -32,13 +32,35 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
 
 2. **套用 migration**：`make migrate`。
 3. **初始化系統**：`make init`。抄下指令印出的一次性首次登入碼。
-   `admin` 尚未設定密碼時重跑，會讓舊碼失效並印出新碼。
+   `admin` 尚未設定密碼時重跑，會讓舊碼失效並印出新碼。初始化只建立
+   內建 `admin`；角色之後由 Admin 在系統內新增。
 4. **啟動後端與前端**，各開一個終端機：
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把
      `/api` 轉給後端。
-5. **設定 admin 密碼**：用瀏覽器開 `http://localhost:5173`，在首次
-   設定頁輸入剛才抄下的首次登入碼並設定密碼。
+5. **設定 admin 密碼**：#264 的首次設定頁上線前，先在終端機呼叫
+   API。首次登入碼 24 小時後到期；過期或被鎖時，重跑 `make init`
+   就會換發新碼。以下指令會隱藏輸入內容，也不會把碼或密碼放進
+   shell 歷程；以管線傳入 JSON：
+
+   ```bash
+   printf '首次登入碼：'
+   IFS= read -r -s SETUP_CODE
+   printf '\nadmin 密碼：'
+   IFS= read -r -s ADMIN_PASSWORD
+   printf '\n'
+   jq -n --arg code "$SETUP_CODE" --arg password "$ADMIN_PASSWORD" \
+     '{code:$code,password:$password}' |
+     curl --fail-with-body --silent --show-error \
+       -X POST http://127.0.0.1:8000/api/v1/setup/admin-password \
+       -H 'Content-Type: application/json' --data-binary @- \
+       -o /dev/null -w 'HTTP %{http_code}\n'
+   unset SETUP_CODE ADMIN_PASSWORD
+   ```
+
+   回應會帶登入 Cookie；這個 `curl` 範例不保存 Cookie。設定完成後，
+   用帳號 `admin` 和剛設定的密碼從現有登入頁登入。#264 完成後，
+   改用首次設定網頁操作。
 6. **需要重設 admin 密碼時**：在伺服器執行
    `make reset-admin-password`，依提示輸入兩次新密碼（不回顯）。指令
    也接受管線提供的兩行標準輸入供自動化使用，不接受密碼參數。

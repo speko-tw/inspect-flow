@@ -16,6 +16,6 @@ def test_initialization_creates_system_data_without_audit_records(
 
     with session_factory() as session:
         assert len(session.scalars(select(User)).all()) == 1
-        assert len(session.scalars(select(Role)).all()) == 3
+        assert len(session.scalars(select(Role)).all()) == 0
         assert len(session.scalars(select(SetupCode)).all()) == 1
         assert session.scalars(select(AuditLog)).all() == []
