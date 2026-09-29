@@ -1,5 +1,6 @@
 """Tests for ``User``'s business fields (DOM-AC01, DOM-AC02,
-DOM-AC03, DOM-AC07, DOM-AC19).
+DOM-AC03, DOM-AC07, DOM-AC19). The account-redesign rules (DOM-AC33,
+DOM-AC34, DOM-AC39, DOM-AC40) live in ``test_user_account_fields.py``.
 
 Same fixture pattern as ``test_company.py``: migrates the database
 behind ``conftest.py``'s ``db_url`` fixture with the real Alembic
@@ -20,7 +21,7 @@ from alembic import command
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import Company, User
-from tests.db.conftest import create_root_user_with_company
+from tests.db.conftest import create_root_user_with_company, username_for
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -30,6 +31,7 @@ _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 # would notice a change to the model's limits rather than silently
 # tracking it.
 _MAX_LENGTHS = {
+    "username": 32,
     "employee_no": 16,
     "department": 64,
     "location": 64,
@@ -96,6 +98,7 @@ def _full_user_kwargs(company_id, *, employee_no: str) -> dict:
     for building a "normal" ``User`` distinct from ``operator``.
     """
     return {
+        "username": username_for(),
         "employee_no": employee_no,
         "company_id": company_id,
         "department": "Engineering",
@@ -130,6 +133,13 @@ class TestDomAc01BasicFieldsAndDefaults:
     """
 
     _NULLABLE_COLUMNS = {
+        "company_id",
+        "department",
+        "location",
+        "employee_no",
+        "name_en",
+        "name_zh",
+        "email",
         "extension_1",
         "extension_2",
         "mobile",
@@ -141,13 +151,7 @@ class TestDomAc01BasicFieldsAndDefaults:
         "external_synced_at",
     }
     _NOT_NULL_COLUMNS = {
-        "company_id",
-        "department",
-        "location",
-        "employee_no",
-        "name_en",
-        "name_zh",
-        "email",
+        "username",
         "is_active",
         "is_admin",
         "is_system",
@@ -194,18 +198,7 @@ class TestDomAc01BasicFieldsAndDefaults:
         assert stored.external_id is None
         assert stored.external_synced_at is None
 
-    @pytest.mark.parametrize(
-        "missing_field",
-        [
-            "company_id",
-            "department",
-            "location",
-            "employee_no",
-            "name_en",
-            "name_zh",
-            "email",
-        ],
-    )
+    @pytest.mark.parametrize("missing_field", ["username", "name_zh", "email"])
     def test_missing_required_basic_field_is_rejected(
         self, session, operator, missing_field
     ):
@@ -218,6 +211,26 @@ class TestDomAc01BasicFieldsAndDefaults:
         session.rollback()
 
         assert session.query(User).count() == before
+
+    @pytest.mark.parametrize(
+        "missing_field",
+        ["company_id", "department", "location", "employee_no", "name_en"],
+    )
+    def test_missing_optional_basic_field_is_accepted(
+        self, session, operator, missing_field
+    ):
+        kwargs = _user_kwargs(operator, "U0004")
+        del kwargs[missing_field]
+        if missing_field == "company_id":
+            # No company: the company-bound fields must be empty too.
+            for dependent in ("department", "location", "employee_no"):
+                kwargs.pop(dependent)
+        user = User(**kwargs)
+        session.add(user)
+        session.commit()
+        session.expire(user)
+
+        assert getattr(session.get(User, user.id), missing_field) is None
 
     @pytest.mark.parametrize(
         "column", ["is_active", "is_admin", "is_system", "auth_source"]
@@ -458,6 +471,7 @@ class TestCircularForeignKeyWriteOrder:
         session.add(
             User(
                 id=self_id,
+                username="cyc002",
                 employee_no="CYC002",
                 company_id=missing_company_id,
                 department="Engineering",
@@ -484,18 +498,18 @@ class TestDomAc19StringLengthsAndEmailFormat:
     row count/data unchanged.
     """
 
-    # Issue #188: the six ``NOT NULL`` basic fields must reject
-    # ``None``; the six DOM-R03 fields (all ``nullable=True``) must
-    # accept it.
-    _NOT_NULL_STRING_FIELDS = [
+    # Issue #188: ``username`` (the only ``NOT NULL`` string field
+    # left) must reject ``None``; every nullable one must accept it
+    # at the ORM layer. ``email`` and ``name_zh`` are nullable
+    # columns too, but an ordinary account still needs both -- that
+    # is a CHECK the database enforces at flush time, tested
+    # separately below.
+    _NOT_NULL_STRING_FIELDS = ["username"]
+    _NULLABLE_STRING_FIELDS = [
         "employee_no",
         "department",
         "location",
         "name_en",
-        "name_zh",
-        "email",
-    ]
-    _NULLABLE_STRING_FIELDS = [
         "extension_1",
         "extension_2",
         "mobile",
@@ -505,6 +519,7 @@ class TestDomAc19StringLengthsAndEmailFormat:
     ]
 
     _BOUNDARY_VALUES = {
+        "username": "a" * _MAX_LENGTHS["username"],
         "employee_no": "E" * _MAX_LENGTHS["employee_no"],
         "department": "D" * _MAX_LENGTHS["department"],
         "location": "L" * _MAX_LENGTHS["location"],
@@ -663,6 +678,21 @@ class TestDomAc19StringLengthsAndEmailFormat:
         stored = session.get(User, boundary_user.id)
         assert getattr(stored, field) == original
 
+    @pytest.mark.parametrize("field", ["email", "name_zh"])
+    def test_none_email_or_name_zh_is_accepted_by_orm_but_rejected_by_check(
+        self, session, operator, field
+    ):
+        kwargs = _user_kwargs(operator, "OVR006")
+        kwargs[field] = None
+        before = session.query(User).count()
+
+        session.add(User(**kwargs))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        assert session.query(User).count() == before
+
     @pytest.mark.parametrize("field", _NULLABLE_STRING_FIELDS)
     def test_none_on_nullable_field_is_accepted_on_construction(
         self, session, operator, field
@@ -718,6 +748,7 @@ class TestMigrationRoundTrip:
                 sess.add(
                     User(
                         id=uuid7(),
+                        username="rt0001",
                         employee_no="RT0001",
                         company_id=uuid7(),
                         department="Engineering",

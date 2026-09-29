@@ -31,7 +31,7 @@ from alembic import command
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.db.settings import DATABASE_URL_ENV_VAR
 from app.models import User
-from tests.db.conftest import create_root_user_with_company
+from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -108,6 +108,6 @@ def operator(session: Session) -> User:
     each test creates through the Service layer.
     """
     user = create_root_user_with_company(session, "OPR001")
-    user.is_system = True
+    make_system_admin(user)
     session.flush()
     return user

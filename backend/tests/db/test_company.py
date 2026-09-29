@@ -1,5 +1,5 @@
-"""Tests for the ``Company`` table migration (DOM-AC11, DOM-AC12,
-DOM-AC20, and the issue #127/DOM-Q7 ``is_active`` default).
+"""Tests for the ``Company`` table (DOM-AC36, DOM-AC37, and the
+issue #127/DOM-Q7 ``is_active`` default).
 
 Same fixture pattern as ``test_user_project.py``: migrates the
 database behind ``conftest.py``'s ``db_url`` fixture with the real
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, insert, inspect, text, update
+from sqlalchemy import Engine, insert, inspect, text
 from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
@@ -73,9 +73,7 @@ def creator(session) -> User:
     ``Company`` rows in these tests -- not itself under test.
 
     Built with ``create_root_user_with_company`` (its own throwaway
-    ``Company``, distinct from ``existing_company``/
-    ``boundary_company`` below), since ``User.company_id`` is now
-    required (DOM-R01).
+    ``Company``, distinct from ``existing_company`` below).
     """
     user = create_root_user_with_company(session, "E900")
     session.commit()
@@ -89,20 +87,20 @@ def _new_company(creator: User, **kwargs) -> Company:
 
 
 @pytest.fixture
-def existing_company(session, creator) -> Company:
-    """DOM-AC11's (and DOM-AC20's) precondition: one company with
-    ``code = "C001"`` and ``tax_id = "12345678"``.
+def existing_companies(session, creator) -> None:
+    """DOM-AC36's precondition: an active ``Demo Co`` and an
+    inactive ``Old Co``.
     """
-    company = _new_company(
-        creator,
-        code="C001",
-        name="Company One",
-        tax_id="12345678",
-        kind="internal",
-    )
-    session.add(company)
+    session.add(_new_company(creator, name="Demo Co"))
+    session.add(_new_company(creator, name="Old Co", is_active=False))
     session.commit()
-    return company
+
+
+def _reject_on_commit(session: Session, company: Company) -> None:
+    session.add(company)
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
 
 
 def test_migration_registers_companies_table(migrated_url):
@@ -120,23 +118,16 @@ def test_migration_registers_companies_table(migrated_url):
     assert "companies" in table_names
 
 
-class TestDomAc11CompanyFieldsAndConstraints:
-    """DOM-AC11: primary key, DOM-R16's fields, and the
-    created/updated audit columns; duplicate ``code``/``tax_id``,
-    an out-of-range ``kind``, a dangling ``parent_id``, a null
-    ``created_by`` and a null ``is_active`` are all rejected by the
-    database, with row count unchanged. Two companies with a null
-    ``tax_id`` and no ``is_active`` given both succeed, and both
-    come out active (DOM-R16's default).
+class TestDomAc36CompanyFieldsAndConstraints:
+    """DOM-AC36: a UUID primary key, ``name``, ``is_active`` and the
+    audit columns, and none of the removed ``code``, ``tax_id``,
+    ``kind`` or ``parent_id``; every invalid write is rejected with
+    the row count unchanged, and a valid one is stored trimmed.
     """
 
     _EXPECTED_COLUMNS = {
         "id",
-        "code",
         "name",
-        "tax_id",
-        "kind",
-        "parent_id",
         "is_active",
         "created_at",
         "updated_at",
@@ -144,152 +135,100 @@ class TestDomAc11CompanyFieldsAndConstraints:
         "updated_by",
     }
 
-    def test_table_has_primary_key_and_dom_r16_columns(self, engine):
+    def test_table_columns_and_keys(self, engine):
         inspector = inspect(engine)
 
-        pk = inspector.get_pk_constraint("companies")
-        assert pk["constrained_columns"] == ["id"]
+        assert inspector.get_pk_constraint("companies")[
+            "constrained_columns"
+        ] == ["id"]
 
         columns = {
             col["name"]: col for col in inspector.get_columns("companies")
         }
-        assert self._EXPECTED_COLUMNS <= columns.keys()
-        assert columns["code"]["nullable"] is False
+        assert set(columns) == self._EXPECTED_COLUMNS
+        for removed in ("code", "tax_id", "kind", "parent_id"):
+            assert removed not in columns
         assert columns["name"]["nullable"] is False
-        assert columns["tax_id"]["nullable"] is True
-        assert columns["kind"]["nullable"] is False
-        assert columns["parent_id"]["nullable"] is True
         assert columns["is_active"]["nullable"] is False
         assert columns["created_by"]["nullable"] is False
         assert columns["updated_by"]["nullable"] is False
 
-        foreign_keys = inspector.get_foreign_keys("companies")
         references = {
             fk["constrained_columns"][0]: (
                 fk["referred_table"],
                 fk["referred_columns"],
             )
-            for fk in foreign_keys
+            for fk in inspector.get_foreign_keys("companies")
         }
-        assert references["parent_id"] == ("companies", ["id"])
-        assert references["created_by"] == ("users", ["id"])
-        assert references["updated_by"] == ("users", ["id"])
+        assert references == {
+            "created_by": ("users", ["id"]),
+            "updated_by": ("users", ["id"]),
+        }
 
-    def test_duplicate_code_is_rejected_and_row_count_unchanged(
-        self, session, creator, existing_company
-    ):
-        session.add(
-            _new_company(
-                creator,
-                code="C001",
-                name="Company Two",
-                kind="internal",
-            )
-        )
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
+    def test_removed_constraints_and_indexes_are_gone(self, engine):
+        inspector = inspect(engine)
+        index_names = {i["name"] for i in inspector.get_indexes("companies")}
+        unique_names = {
+            u["name"] for u in inspector.get_unique_constraints("companies")
+        }
+        for name in index_names | unique_names:
+            assert "code" not in name
+            assert "tax_id" not in name
+            assert "kind" not in name
+            assert "parent" not in name
 
-        assert session.query(Company).filter_by(code="C001").count() == 1
-
-    def test_duplicate_tax_id_is_rejected_and_row_count_unchanged(
-        self, session, creator, existing_company
-    ):
-        session.add(
-            _new_company(
-                creator,
-                code="C002",
-                name="Company Two",
-                tax_id="12345678",
-                kind="internal",
-            )
-        )
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
-
-        count = session.query(Company).filter_by(tax_id="12345678").count()
-        assert count == 1
-
-    def test_two_null_tax_ids_both_succeed(
-        self, session, creator, existing_company
-    ):
-        # Relative to a "before" snapshot, not an absolute count:
-        # ``creator`` (DOM-R01's ``company_id``) now brings its own
-        # ``Company`` row along too, and it also has a null
-        # ``tax_id``.
-        before = session.query(Company).filter_by(tax_id=None).count()
-        session.add(
-            _new_company(
-                creator, code="C003", name="Company Three", kind="internal"
-            )
-        )
-        session.add(
-            _new_company(
-                creator, code="C004", name="Company Four", kind="customer"
-            )
-        )
-        session.commit()
-
-        rows = session.query(Company).filter_by(tax_id=None).all()
-        assert len(rows) == before + 2
-        assert all(row.is_active is True for row in rows)
-
-    def test_kind_outside_allowed_values_is_rejected(
-        self, session, creator, existing_company
+    @pytest.mark.parametrize(
+        "name", ["Demo Co", "DEMO CO", " Demo Co ", "old co"]
+    )
+    def test_duplicate_name_is_rejected_and_row_count_unchanged(
+        self, session, creator, existing_companies, name
     ):
         before = session.query(Company).count()
-        session.add(
-            _new_company(
-                creator, code="C005", name="Company Five", kind="partner"
-            )
-        )
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
+        _reject_on_commit(session, _new_company(creator, name=name))
 
         assert session.query(Company).count() == before
 
-    def test_parent_id_pointing_to_a_nonexistent_company_is_rejected(
-        self, session, creator, existing_company
+    @pytest.mark.parametrize("name", [None, "", "   "])
+    def test_null_empty_or_blank_name_is_rejected(
+        self, session, creator, existing_companies, name
     ):
         before = session.query(Company).count()
-        session.add(
-            _new_company(
-                creator,
-                code="C006",
-                name="Company Six",
-                kind="internal",
-                parent_id=uuid7(),
-            )
-        )
+        with pytest.raises(ValueError):
+            _new_company(creator, name=name)
+
+        assert session.query(Company).count() == before
+
+    def test_null_name_is_rejected_by_the_database(
+        self, session, creator, existing_companies
+    ):
+        before = session.query(Company).count()
         with pytest.raises(IntegrityError):
+            session.execute(
+                insert(Company).values(
+                    id=uuid7(),
+                    name=None,
+                    created_by=creator.id,
+                    updated_by=creator.id,
+                )
+            )
             session.commit()
         session.rollback()
 
         assert session.query(Company).count() == before
 
     def test_null_created_by_is_rejected(
-        self, session, creator, existing_company
+        self, session, creator, existing_companies
     ):
         before = session.query(Company).count()
-        session.add(
-            Company(
-                code="C007",
-                name="Company Seven",
-                kind="internal",
-                created_by=None,
-                updated_by=creator.id,
-            )
+        _reject_on_commit(
+            session,
+            Company(name="No Creator", created_by=None, updated_by=creator.id),
         )
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
 
         assert session.query(Company).count() == before
 
     def test_null_is_active_is_rejected(
-        self, session, creator, existing_company
+        self, session, creator, existing_companies
     ):
         # Core ``insert`` sends an explicit ``None`` as NULL. The ORM
         # would not: it treats ``is_active=None`` on a new object as
@@ -300,9 +239,7 @@ class TestDomAc11CompanyFieldsAndConstraints:
             session.execute(
                 insert(Company).values(
                     id=uuid7(),
-                    code="C008",
-                    name="Company Eight",
-                    kind="internal",
+                    name="Null Active",
                     is_active=None,
                     created_by=creator.id,
                     updated_by=creator.id,
@@ -313,280 +250,105 @@ class TestDomAc11CompanyFieldsAndConstraints:
 
         assert session.query(Company).count() == before
 
-
-class TestDomAc12ParentIdSelfReferenceRejected:
-    """DOM-AC12: setting ``parent_id`` to a company's own id is
-    rejected by the database with data unchanged; setting it to
-    another company succeeds.
-    """
-
-    def test_self_reference_rejected_then_valid_parent_succeeds(
-        self, session, creator
+    def test_unspecified_is_active_and_padded_name_are_stored_trimmed(
+        self, session, creator, existing_companies
     ):
-        company_a = _new_company(
-            creator, code="A001", name="Company A", kind="internal"
-        )
-        company_b = _new_company(
-            creator, code="B001", name="Company B", kind="internal"
-        )
-        session.add_all([company_a, company_b])
-        session.commit()
-
-        company_b.parent_id = company_b.id
-        with pytest.raises(IntegrityError):
-            session.commit()
-        session.rollback()
-
-        refreshed_b = session.get(Company, company_b.id)
-        assert refreshed_b.parent_id is None
-
-        refreshed_b.parent_id = company_a.id
-        session.commit()
-
-        assert session.get(Company, company_b.id).parent_id == company_a.id
-
-
-class TestDomAc20LengthAndFormatValidation:
-    """DOM-AC20: ``code``/``name``/``tax_id`` length limits (32,
-    128, 8 characters) and ``code``/``tax_id`` format are enforced
-    before a value reaches the database -- on both insert and
-    attribute assignment -- so SQLite (which does not enforce
-    ``String`` length or format) still rejects the same values
-    PostgreSQL's column types and this project's format rules
-    reject.
-
-    The "batch" tests below cover the write paths that never touch
-    a mapped attribute -- ``session.execute(insert(Company)...)``
-    and ``session.execute(update(Company)...)`` -- which
-    ``@validates`` cannot see; only the bind-time ``BoundedString``
-    column type (``app/models/_bounded_string.py``, used by
-    ``app/models/company.py``) catches these.
-    """
-
-    # 32 characters mixing letters, digits, ``-`` and ``_``.
-    _MAX_CODE = "Ab1-_" + "x" * 27
-    _MAX_NAME = "N" * 128
-    _VALID_TAX_ID = "87654321"
-
-    @pytest.fixture
-    def boundary_company(self, session, creator, existing_company):
-        company = _new_company(
-            creator,
-            code=self._MAX_CODE,
-            name=self._MAX_NAME,
-            tax_id=self._VALID_TAX_ID,
-            kind="internal",
-        )
+        company = _new_company(creator, name="  New Co  ")
         session.add(company)
         session.commit()
-        return company
+        session.expire_all()
 
-    def test_string_column_lengths(self, engine):
+        stored = session.get(Company, company.id)
+        assert stored.name == "New Co"
+        assert stored.is_active is True
+
+
+class TestDomAc37NameRules:
+    """DOM-AC37: ``name`` is trimmed on every assignment, at most 128
+    characters, case-insensitively unique across active and inactive
+    companies, and the original casing is what is stored.
+    """
+
+    def test_name_column_length(self, engine):
         columns = {
             col["name"]: col
             for col in inspect(engine).get_columns("companies")
         }
-
-        assert columns["code"]["type"].length == 32
         assert columns["name"]["type"].length == 128
-        assert columns["tax_id"]["type"].length == 8
 
-    def test_boundary_valid_values_are_accepted(
-        self, session, boundary_company
+    def test_128_characters_is_accepted_and_129_rejected(
+        self, session, creator
     ):
-        assert len(self._MAX_CODE) == 32
-        # 3, not 2: ``creator`` (DOM-R01's ``company_id``) brings its
-        # own ``Company`` row along, on top of ``existing_company``
-        # and ``boundary_company``.
-        assert session.query(Company).count() == 3
-        session.expire(boundary_company)
-        stored = session.get(Company, boundary_company.id)
-        assert stored.code == self._MAX_CODE
-        assert stored.name == self._MAX_NAME
-        assert stored.tax_id == self._VALID_TAX_ID
-
-    @pytest.mark.parametrize(
-        "field,value",
-        [
-            ("code", "A" * 33),
-            ("code", "AB CD"),
-            ("code", "AB中文"),
-            ("name", "N" * 129),
-            ("tax_id", "1234567"),
-            ("tax_id", "123456789"),
-            ("tax_id", "1234567A"),
-        ],
-    )
-    def test_invalid_value_is_rejected_on_construction(
-        self, session, creator, existing_company, field, value
-    ):
-        before = session.query(Company).count()
-        kwargs = {
-            "code": "GOOD1",
-            "name": "Good Name",
-            "kind": "internal",
-        }
-        kwargs[field] = value
-
-        with pytest.raises(ValueError):
-            _new_company(creator, **kwargs)
-
-        assert session.query(Company).count() == before
-
-    def test_updating_code_to_33_characters_is_rejected_and_unchanged(
-        self, session, boundary_company
-    ):
-        with pytest.raises(ValueError):
-            boundary_company.code = "B" * 33
-
-        session.expire(boundary_company)
-        stored = session.get(Company, boundary_company.id)
-        assert stored.code == self._MAX_CODE
-
-    def test_updating_tax_id_to_7_digits_is_rejected_and_unchanged(
-        self, session, boundary_company
-    ):
-        with pytest.raises(ValueError):
-            boundary_company.tax_id = "1234567"
-
-        session.expire(boundary_company)
-        stored = session.get(Company, boundary_company.id)
-        assert stored.tax_id == self._VALID_TAX_ID
-
-    @pytest.mark.parametrize("field", ["code", "name"])
-    def test_none_on_not_null_field_is_rejected_on_construction(
-        self, session, creator, field
-    ):
-        """Issue #188: ``None`` on a ``NOT NULL`` column is rejected
-        by ``@validates`` with the same ``ValueError`` an invalid
-        value gets, not the ``TypeError`` ``len(None)`` would raise
-        inside ``_check_code``/``_check_name``.
-        """
-        before = session.query(Company).count()
-        kwargs: dict[str, str | None] = {
-            "code": "GOOD2",
-            "name": "Good Name",
-            "kind": "internal",
-        }
-        kwargs[field] = None
-
-        with pytest.raises(ValueError):
-            _new_company(creator, **kwargs)
-
-        assert session.query(Company).count() == before
-
-    @pytest.mark.parametrize("field", ["code", "name"])
-    def test_none_on_not_null_field_is_rejected_on_assignment(
-        self, session, boundary_company, field
-    ):
-        original = getattr(boundary_company, field)
-        with pytest.raises(ValueError):
-            setattr(boundary_company, field, None)
-
-        session.expire(boundary_company)
-        stored = session.get(Company, boundary_company.id)
-        assert getattr(stored, field) == original
-
-    def test_none_tax_id_is_accepted_on_construction(
-        self, session, creator, existing_company
-    ):
-        company = _new_company(
-            creator, code="C011", name="Company Eleven", kind="internal"
-        )
-        assert company.tax_id is None
-        session.add(company)
+        session.add(_new_company(creator, name="a" * 128))
         session.commit()
 
-    def test_none_tax_id_is_accepted_on_assignment(
-        self, session, boundary_company
+        with pytest.raises(ValueError):
+            _new_company(creator, name="b" * 129)
+
+    def test_129_characters_after_trimming_boundary(self, creator):
+        # Padding does not count: 128 characters plus spaces is valid.
+        company = _new_company(creator, name=" " + "c" * 128 + " ")
+        assert company.name == "c" * 128
+
+    def test_updating_name_to_129_characters_is_rejected_and_unchanged(
+        self, session, creator, existing_companies
     ):
-        boundary_company.tax_id = None
+        company = session.query(Company).filter_by(name="Demo Co").one()
+        with pytest.raises(ValueError):
+            company.name = "d" * 129
+        session.rollback()
+
+        assert session.get(Company, company.id).name == "Demo Co"
+
+    def test_updating_name_trims_whitespace(
+        self, session, creator, existing_companies
+    ):
+        company = session.query(Company).filter_by(name="Demo Co").one()
+        company.name = "  Renamed Co "
         session.commit()
-
-        session.expire(boundary_company)
-        stored = session.get(Company, boundary_company.id)
-        assert stored.tax_id is None
-
-    def test_dom_ac20_batch_insert_with_invalid_code_is_rejected(
-        self, session, creator, existing_company
-    ):
-        """``session.execute(insert(Company).values(code=...))``
-        never calls ``@validates`` -- only
-        ``BoundedString.process_bind_param`` sees this value.
-        """
-        before = session.query(Company).count()
-        with pytest.raises(StatementError):
-            session.execute(
-                insert(Company).values(
-                    id=uuid7(),
-                    code="bad code",
-                    name="Company Nine",
-                    kind="internal",
-                    created_by=creator.id,
-                    updated_by=creator.id,
-                )
-            )
-            session.commit()
-        session.rollback()
-
-        assert session.query(Company).count() == before
-
-    def test_dom_ac20_batch_update_of_code_to_invalid_value_is_rejected(
-        self, session, existing_company
-    ):
-        """``session.execute(update(Company).values(code=...))``
-        against a mapped ``Company`` never calls ``@validates``
-        either -- same bind-time coverage as the insert case above.
-        """
-        with pytest.raises(StatementError):
-            session.execute(
-                update(Company)
-                .where(Company.id == existing_company.id)
-                .values(code="中文")
-            )
-            session.commit()
-        session.rollback()
-
         session.expire_all()
-        stored = session.get(Company, existing_company.id)
-        assert stored.code == "C001"
 
-    def test_dom_ac20_batch_insert_with_invalid_tax_id_is_rejected(
-        self, session, creator, existing_company
+        assert session.get(Company, company.id).name == "Renamed Co"
+
+    def test_updating_name_to_case_variant_of_another_is_rejected(
+        self, session, creator, existing_companies
     ):
-        before = session.query(Company).count()
-        with pytest.raises(StatementError):
-            session.execute(
-                insert(Company).values(
-                    id=uuid7(),
-                    code="C010",
-                    name="Company Ten",
-                    tax_id="1234567",
-                    kind="internal",
-                    created_by=creator.id,
-                    updated_by=creator.id,
-                )
-            )
+        company = session.query(Company).filter_by(name="Demo Co").one()
+        company.name = "OLD CO"
+        with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
 
-        assert session.query(Company).count() == before
+        assert session.get(Company, company.id).name == "Demo Co"
 
-    def test_dom_ac20_batch_update_of_name_to_129_characters_is_rejected(
-        self, session, existing_company
+    def test_renaming_only_the_casing_of_itself_is_allowed(
+        self, session, creator, existing_companies
     ):
-        with pytest.raises(StatementError):
-            session.execute(
-                update(Company)
-                .where(Company.id == existing_company.id)
-                .values(name="N" * 129)
-            )
-            session.commit()
-        session.rollback()
-
+        company = session.query(Company).filter_by(name="Demo Co").one()
+        company.name = "DEMO CO"
+        session.commit()
         session.expire_all()
-        stored = session.get(Company, existing_company.id)
-        assert stored.name == "Company One"
+
+        assert session.get(Company, company.id).name == "DEMO CO"
+
+    def test_core_insert_of_untrimmed_or_blank_name_is_rejected(
+        self, session, creator
+    ):
+        # ``@validates`` never sees a Core statement; ``BoundedString``
+        # is the second layer that still rejects it.
+        for bad in (" padded ", "", "   "):
+            with pytest.raises(StatementError):
+                session.execute(
+                    insert(Company).values(
+                        id=uuid7(),
+                        name=bad,
+                        created_by=creator.id,
+                        updated_by=creator.id,
+                    )
+                )
+            session.rollback()
+
+        assert session.query(Company).filter_by(name="padded").count() == 0
 
 
 class TestIsActiveDefault:
@@ -598,9 +360,7 @@ class TestIsActiveDefault:
     def test_orm_insert_without_is_active_defaults_to_true(
         self, session, creator
     ):
-        company = _new_company(
-            creator, code="D001", name="Company D", kind="internal"
-        )
+        company = _new_company(creator, name="Company D")
         session.add(company)
         session.commit()
         session.expire(company)
@@ -616,30 +376,22 @@ class TestIsActiveDefault:
         level.
         """
         # ``.hex`` (32 lowercase hex digits, no dashes) matches how
-        # ``sqlalchemy.types.Uuid`` stores a UUID on SQLite (see
-        # ``TestDomAc09PrimaryKeysAreSingleColumnUuids`` in
-        # ``test_user_project.py``, which asserts the reflected
-        # column is ``CHAR(32)``); PostgreSQL's native ``uuid``
-        # column accepts the same undashed form on input. Raw text
-        # SQL bypasses SQLAlchemy's column type binding, so a
-        # dashed ``str(uuid)`` would not match either backend's
-        # stored representation and would look like a dangling
-        # foreign key.
+        # ``sqlalchemy.types.Uuid`` stores a UUID on SQLite;
+        # PostgreSQL's native ``uuid`` column accepts the same
+        # undashed form on input. Raw text SQL bypasses SQLAlchemy's
+        # column type binding.
         new_id = uuid7()
         session.execute(
             text(
                 "INSERT INTO companies "
-                "(id, code, name, kind, created_at, updated_at, "
+                "(id, name, created_at, updated_at, "
                 "created_by, updated_by) "
                 "VALUES "
-                "(:id, :code, :name, :kind, :now, :now, :creator, "
-                ":creator)"
+                "(:id, :name, :now, :now, :creator, :creator)"
             ),
             {
                 "id": new_id.hex,
-                "code": "D002",
                 "name": "Company D2",
-                "kind": "internal",
                 "now": "2026-01-01T00:00:00+00:00",
                 "creator": creator.id.hex,
             },

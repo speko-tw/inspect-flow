@@ -91,6 +91,7 @@ class TestBoundaryLengthValuesAreAccepted:
     def test_employee_no_at_16_chars_is_accepted(self, session):
         user = create_root_user_with_company(session, "E" * 16)
         session.commit()
+        assert user.employee_no is not None
         assert len(user.employee_no) == 16
 
     def test_project_code_at_32_chars_is_accepted(self, session):

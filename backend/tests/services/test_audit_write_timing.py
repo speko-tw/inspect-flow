@@ -130,10 +130,16 @@ class TestAlgAc11WriteTimingSequence:
         self, session, operator, registered_permission_codes
     ):
         # -- Given -----------------------------------------------
+        # The built-in ``admin`` is always an active Admin (DOM-R50), which
+        # would keep DOM-R07 from ever triggering. DOM-AC06 specifies a
+        # database without one, so this test data disables it directly
+        # (the Service layer would refuse, DOM-R06); it stays the
+        # operator that get_current_operator() returns.
+        operator.is_active = False
+        session.flush()
         # Two enabled Admins, neither the built-in system account
-        # (``operator``) itself -- keeping ``operator`` a non-Admin
-        # avoids DOM-R06's built-in-account protection ever
-        # interfering with DOM-R07's last-active-Admin check below.
+        # (``operator``) itself, so DOM-R06's built-in-account
+        # protection never interferes with DOM-R07's check below.
         admin_1 = create_root_user_with_company(session, "ADM11-1")
         admin_1.is_admin = True
         admin_2 = create_root_user_with_company(session, "ADM11-2")

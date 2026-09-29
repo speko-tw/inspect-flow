@@ -69,19 +69,13 @@ def _count(session: Session, model: type) -> int:
 
 def _valid_answers() -> list[str]:
     """Answers in the exact order ``run`` prompts for them: the
-    company's ``code``/``name``, then the admin account's six
-    DOM-R01 fields, then the owner account's six DOM-R01 fields.
+    company's ``name``, then the owner account's seven fields (the
+    built-in ``admin`` is no longer prompted for, DOM-R50).
     Demo values only (no real company name).
     """
     return [
-        "ACME",
         "Acme Corp",
-        "IT",
-        "HQ",
-        "A0001",
-        "System Admin",
-        "系統管理員",
-        "admin@example.com",
+        "owner",
         "Management",
         "Branch",
         "A0002",

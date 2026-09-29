@@ -170,7 +170,10 @@ class TestDbfAc10BusinessNumbers:
         # ``session.commit()`` (see that helper's docstring), so the
         # duplicate row is built with ``build_root_user`` instead,
         # reusing the first row's already-committed ``company_id``.
-        session.add(build_root_user("E001", first.company_id))
+        second = build_root_user("E001", first.company_id)
+        assert second.username != first.username
+        assert second.email != first.email
+        session.add(second)
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
@@ -319,6 +322,7 @@ class TestDbfAc11AuditColumns:
 
         bad_user = User(
             id=uuid7(),
+            username="ue301",
             employee_no="E301",
             created_by=None,
             updated_by=user.id,
@@ -350,6 +354,7 @@ class TestDbfAc11AuditColumns:
 
         bad_user = User(
             id=uuid7(),
+            username="ue401",
             employee_no="E401",
             created_by=user.id,
             updated_by=None,
@@ -384,6 +389,7 @@ class TestDbfAc11AuditColumns:
 
         bad_user = User(
             id=uuid7(),
+            username="ue501",
             employee_no="E501",
             created_by=dangling,
             updated_by=user.id,
@@ -513,12 +519,38 @@ def test_project_migration_round_trip_backfills_existing_row(db_url):
     command.upgrade(cfg, "4c38ff477939")
     engine = create_engine_from_settings(db_url)
     try:
-        with Session(engine) as session:
-            owner = create_root_user_with_company(session, "E603")
-            session.commit()
-            owner_id = owner.id
+        owner_id = uuid7()
+        company_id = uuid7()
         project_id = uuid7()
+        params = {
+            "owner": owner_id.hex,
+            "company": company_id.hex,
+            "now": datetime.now(UTC).isoformat(),
+        }
         with engine.begin() as conn:
+            # Raw SQL: the ORM models describe the current schema, and
+            # this database is deliberately older. ``users.company_id``
+            # is deferred, so the owner goes in before its company.
+            conn.execute(
+                text(
+                    "INSERT INTO users (id, employee_no, company_id, "
+                    "department, location, name_en, name_zh, email, "
+                    "created_at, updated_at, created_by, updated_by) "
+                    "VALUES (:owner, 'E603', :company, 'D', 'L', 'N', "
+                    "'名', 'e603@example.com', :now, :now, :owner, "
+                    ":owner)"
+                ),
+                params,
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO companies (id, code, name, kind, "
+                    "created_at, updated_at, created_by, updated_by) "
+                    "VALUES (:company, 'C603', 'Demo Co', 'internal', "
+                    ":now, :now, :owner, :owner)"
+                ),
+                params,
+            )
             conn.execute(
                 text(
                     "INSERT INTO projects (id, project_code, "

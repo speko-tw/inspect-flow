@@ -314,9 +314,7 @@ class TestAlgAc05TransactionalWrite:
     def test_rolls_back_company_change_on_later_exception(
         self, session, operator
     ):
-        company = create_company(
-            session, code="A05A", name="Audit Co A", kind="customer"
-        )
+        company = create_company(session, name="Audit Co A")
         session.commit()
         original_name = company.name
         before_count = session.query(AuditLog).count()
@@ -345,9 +343,7 @@ class TestAlgAc05TransactionalWrite:
     def test_rolls_back_company_change_on_unregistered_event_code(
         self, session, operator
     ):
-        company = create_company(
-            session, code="A05B", name="Audit Co B", kind="customer"
-        )
+        company = create_company(session, name="Audit Co B")
         session.commit()
         original_name = company.name
         before_count = session.query(AuditLog).count()

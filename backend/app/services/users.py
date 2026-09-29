@@ -105,13 +105,14 @@ def _reject_if_company_inactive(
 def create_user(
     session: Session,
     *,
-    company_id: uuid.UUID,
-    department: str,
-    location: str,
-    employee_no: str,
-    name_en: str,
+    username: str,
     name_zh: str,
     email: str,
+    company_id: uuid.UUID | None = None,
+    department: str | None = None,
+    location: str | None = None,
+    employee_no: str | None = None,
+    name_en: str | None = None,
     is_active: bool = True,
     auth_source: str = "local",
     external_source: str | None = None,
@@ -123,14 +124,18 @@ def create_user(
     wechat_id: str | None = None,
     responsibilities: str | None = None,
 ) -> User:
-    """Add a ``User`` (DOM-R01, DOM-R03, DOM-R08), filling
+    """Add a ``User`` (DOM-R46, DOM-R03, DOM-R08), filling
     ``created_by``/``updated_by`` from the current operator
-    (DOM-R14). Refuses a ``company_id`` pointing at a disabled
+    (DOM-R14). ``username``, ``name_zh`` and ``email`` are
+    required (DOM-R46); the company and the fields that depend on it
+    are optional. Refuses a ``company_id`` pointing at a disabled
     ``Company`` (DOM-R32).
     """
-    _reject_if_company_inactive(session, company_id)
+    if company_id is not None:
+        _reject_if_company_inactive(session, company_id)
     operator = get_current_operator(session)
     user = User(
+        username=username,
         company_id=company_id,
         department=department,
         location=location,
@@ -160,11 +165,11 @@ def update_user_manual(
     session: Session,
     user: User,
     *,
-    company_id: uuid.UUID | _Unset = UNSET,
-    department: str | _Unset = UNSET,
-    location: str | _Unset = UNSET,
-    employee_no: str | _Unset = UNSET,
-    name_en: str | _Unset = UNSET,
+    company_id: uuid.UUID | None | _Unset = UNSET,
+    department: str | None | _Unset = UNSET,
+    location: str | None | _Unset = UNSET,
+    employee_no: str | None | _Unset = UNSET,
+    name_en: str | None | _Unset = UNSET,
     name_zh: str | _Unset = UNSET,
     email: str | _Unset = UNSET,
     extension_1: str | None | _Unset = UNSET,
@@ -219,10 +224,9 @@ def update_user_manual(
             f"({', '.join(sorted(changed_basic_fields))}) may only "
             "be changed by external-identity-sync (DOM-R04)"
         )
-    if "company_id" in changed_basic_fields:
-        _reject_if_company_inactive(
-            session, changed_basic_fields["company_id"]
-        )
+    new_company_id = changed_basic_fields.get("company_id")
+    if isinstance(new_company_id, uuid.UUID):
+        _reject_if_company_inactive(session, new_company_id)
 
     operator = get_current_operator(session)
     for field, value in changed_basic_fields.items():

@@ -51,6 +51,7 @@ class TestAutAc52LoginSucceeded:
     ):
         caplog.set_level(logging.INFO, logger="app.auth")
         user = make_local_user(db_session, "L001")
+        assert user.email is not None
         # Deliberately mixed-case so the raw-email assertion below
         # would catch a logger that recorded the submitted input
         # verbatim instead of not recording email at all (AUT-R41).
@@ -84,6 +85,7 @@ class TestAutAc52Logout:
         self, client, db_session, caplog
     ):
         user = make_local_user(db_session, "L002")
+        assert user.email is not None
         login_resp = client.post(
             "/api/v1/auth/login",
             json={"email": user.email, "password": PASSWORD},
@@ -134,6 +136,7 @@ class TestAutAc52LoginFailedWrongPassword:
     ):
         caplog.set_level(logging.INFO, logger="app.auth")
         user = make_local_user(db_session, "L003")
+        assert user.email is not None
         # Deliberately mixed-case so this and the raw-email
         # assertion below would catch a logger that recorded the
         # submitted input verbatim (AUT-R41).
@@ -196,6 +199,7 @@ class TestAutAc52LoginFailedAccountDisabled:
     ):
         caplog.set_level(logging.INFO, logger="app.auth")
         user = make_local_user(db_session, "L004", is_active=False)
+        assert user.email is not None
         submitted_email = user.email.swapcase()
 
         resp = client.post(
