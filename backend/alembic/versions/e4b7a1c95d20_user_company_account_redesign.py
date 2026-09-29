@@ -486,6 +486,10 @@ def downgrade() -> None:
 
         placeholder_id = _restore_companies(conn)
         _restore_users(conn, placeholder_id)
+        if not is_sqlite:
+            # PostgreSQL cannot alter a referenced table while the
+            # preceding writes still have deferred FK trigger events.
+            op.execute("SET CONSTRAINTS ALL IMMEDIATE")
 
         with op.batch_alter_table("companies") as batch_op:
             batch_op.alter_column(
