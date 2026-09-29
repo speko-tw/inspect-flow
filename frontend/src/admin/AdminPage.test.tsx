@@ -127,6 +127,18 @@ function managementFetch({
           { status: 409 },
         )
       }
+      if (url.endsWith('/companies/company-1/active-users')) {
+        return Response.json({
+          count: 1,
+          users: [{ id: 'user-1', username: 'anna.deng', name_zh: '鄧安娜' }],
+        })
+      }
+      if (
+        url.endsWith('/companies/company-1/active') &&
+        init?.method === 'PUT'
+      ) {
+        return Response.json(company)
+      }
       if (url.endsWith('/users/user-1/company')) {
         const body = JSON.parse(String(init?.body)) as {
           company_id: string | null
@@ -187,6 +199,12 @@ describe('admin user and company pages', () => {
     expect(screen.getByText('（系統帳號）')).toBeInTheDocument()
     const adminRow = screen.getByRole('row', { name: /admin.*系統帳號/ })
     expect(
+      within(adminRow).getByRole('button', { name: '修改資料' }),
+    ).toBeDisabled()
+    expect(
+      within(adminRow).getByRole('button', { name: '公司連結' }),
+    ).toBeDisabled()
+    expect(
       within(adminRow).getByRole('button', { name: '收回管理者' }),
     ).toBeDisabled()
     expect(
@@ -195,15 +213,17 @@ describe('admin user and company pages', () => {
   })
 
   it('shows and clears a temporary password', async () => {
+    const password = 'once-only-password'
+    const create = vi.fn((body: Record<string, unknown>) => ({
+      ...regularUser,
+      id: 'user-2',
+      username: String(body.username),
+      email: String(body.email),
+      name_zh: String(body.name_zh),
+      temporary_password: password,
+    }))
     managementFetch({
-      onCreate: (body) => ({
-        ...regularUser,
-        id: 'user-2',
-        username: String(body.username),
-        email: String(body.email),
-        name_zh: String(body.name_zh),
-        temporary_password: 'once-only-password',
-      }),
+      onCreate: create,
     })
     renderAdmin()
 
@@ -218,12 +238,27 @@ describe('admin user and company pages', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
-    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
-      'once-only-password',
+    const passwordHeading = await screen.findByRole('heading', {
+      name: '使用者已新增',
+    })
+    expect(passwordHeading.closest('section')).toHaveAttribute(
+      'role',
+      'status',
+    )
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
+    expectNoPasswordPersistence(password)
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        company_id: null,
+        department: null,
+        location: null,
+        employee_no: null,
+      }),
     )
     fireEvent.click(screen.getByRole('button', { name: '已抄下，關閉' }))
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
-    expect(screen.queryByText('once-only-password')).not.toBeInTheDocument()
+    expect(screen.queryByText(password)).not.toBeInTheDocument()
+    expectNoPasswordPersistence(password)
   })
 
   it('clears the password after leaving the page', async () => {
@@ -257,6 +292,103 @@ describe('admin user and company pages', () => {
       await screen.findByRole('heading', { name: '使用者管理' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('leave-page-password')).not.toBeInTheDocument()
+    expectNoPasswordPersistence('leave-page-password')
+  })
+
+  it('clears the temporary password on browser back navigation', async () => {
+    managementFetch({
+      onCreate: (body) => ({
+        ...regularUser,
+        id: 'user-2',
+        username: String(body.username),
+        email: String(body.email),
+        name_zh: String(body.name_zh),
+        temporary_password: 'back-navigation-password',
+      }),
+    })
+    renderAdmin()
+    fireEvent.change(await screen.findByLabelText('帳號名稱'), {
+      target: { value: 'bob.lee' },
+    })
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'bob@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('中文姓名'), {
+      target: { value: '李柏' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+    expect(
+      await screen.findByText('back-navigation-password'),
+    ).toBeInTheDocument()
+    fireEvent(window, new PopStateEvent('popstate'))
+    expect(
+      screen.queryByText('back-navigation-password'),
+    ).not.toBeInTheDocument()
+    expectNoPasswordPersistence('back-navigation-password')
+  })
+
+  it('clears company fields when switching to another company', async () => {
+    const secondCompany = { ...company, id: 'company-2', name: '第二家公司' }
+    const fetchMock = managementFetch({
+      companyRows: [company, secondCompany],
+    })
+    renderAdmin()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    const form = within(
+      screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
+    )
+    expect(form.getByLabelText('部門')).toHaveValue('工程部')
+    fireEvent.change(form.getByLabelText('公司'), {
+      target: { value: 'company-2' },
+    })
+    expect(form.getByLabelText('部門')).toHaveValue('')
+    expect(form.getByLabelText('地點')).toHaveValue('')
+    expect(form.getByLabelText('工號')).toHaveValue('')
+    fireEvent.click(form.getByRole('button', { name: '儲存公司連結' }))
+    await waitFor(() => {
+      const request = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/company') &&
+          init?.method === 'PUT',
+      )
+      expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+        company_id: 'company-2',
+        department: null,
+        location: null,
+        employee_no: null,
+      })
+    })
+  })
+
+  it('patches only company fields when the company stays the same', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    const form = within(
+      screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
+    )
+    fireEvent.change(form.getByLabelText('部門'), {
+      target: { value: '產品部' },
+    })
+    fireEvent.click(form.getByRole('button', { name: '儲存公司連結' }))
+    await waitFor(() => {
+      const request = fetchMock.mock.calls.find(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1') && init?.method === 'PATCH',
+      )
+      expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+        department: '產品部',
+        location: '台北',
+        employee_no: 'E001',
+      })
+    })
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith('/users/user-1/company'),
+      ),
+    ).toBe(false)
   })
 
   it('translates API conflicts to a Traditional Chinese message', async () => {
@@ -348,16 +480,7 @@ describe('admin user and company pages', () => {
   })
 
   it('enables and clears fields for linked companies', async () => {
-    const unlinkedUser = {
-      ...regularUser,
-      company_id: null,
-      department: null,
-      location: null,
-      employee_no: null,
-    }
-    const fetchMock = managementFetch({
-      userRows: [builtInUser, unlinkedUser],
-    })
+    const fetchMock = managementFetch()
     renderAdmin()
     const userRow = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(within(userRow).getByRole('button', { name: '公司連結' }))
@@ -367,12 +490,7 @@ describe('admin user and company pages', () => {
     expect(linkForm).not.toBeNull()
     const form = within(linkForm as HTMLFormElement)
     const department = form.getByLabelText('部門')
-    expect(department).toBeDisabled()
-    fireEvent.change(form.getByLabelText('公司'), {
-      target: { value: company.id },
-    })
     expect(department).toBeEnabled()
-    fireEvent.change(department, { target: { value: '新部門' } })
     fireEvent.change(form.getByLabelText('公司'), {
       target: { value: '' },
     })
@@ -407,9 +525,8 @@ describe('admin user and company pages', () => {
   it('supports creating, renaming, and deactivating a company', async () => {
     const rows = [{ ...company }]
     let nextId = 2
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input)
         if (
           url.endsWith('/companies') &&
@@ -431,13 +548,24 @@ describe('admin user and company pages', () => {
           rows[0].name = body.name
           return Response.json(rows[0])
         }
+        if (url.endsWith('/companies/company-1/active-users')) {
+          return Response.json({
+            count: 1,
+            users: [{ id: 'active-1', username: 'worker', name_zh: '王小明' }],
+          })
+        }
         if (url.includes('/companies/company-1/active')) {
+          const body = JSON.parse(String(init?.body)) as {
+            disable_user_ids: string[]
+          }
+          expect(body.disable_user_ids).toEqual(['active-1'])
           rows[0].is_active = false
           return Response.json(rows[0])
         }
         return Response.json({}, { status: 204 })
-      }),
+      },
     )
+    vi.stubGlobal('fetch', fetchMock)
     renderAdmin('/admin/companies')
 
     expect(await screen.findByText('示範公司')).toBeInTheDocument()
@@ -455,11 +583,78 @@ describe('admin user and company pages', () => {
     expect(await screen.findByText('更新後公司')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
+    expect(
+      await screen.findByText('還有 1 位啟用中的人員'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByText('還有 1 位啟用中的人員')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/companies/company-1/active') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(false)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
+    expect(
+      await screen.findByText('還有 1 位啟用中的人員'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('王小明（worker）'))
+    expect(screen.getByLabelText('王小明（worker）')).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
     await waitFor(() => {
       expect(screen.getByText('停用', { selector: 'td' })).toBeInTheDocument()
     })
   })
+
+  it('sends an empty disable list when no users are selected', async () => {
+    let activeRequestBody: unknown
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/companies') && !init?.method) {
+          return Response.json([company])
+        }
+        if (url.endsWith('/companies/company-1/active-users')) {
+          return Response.json({
+            count: 1,
+            users: [{ id: 'active-1', username: 'worker', name_zh: '王小明' }],
+          })
+        }
+        if (url.endsWith('/companies/company-1/active')) {
+          activeRequestBody = JSON.parse(String(init?.body))
+          return Response.json({ ...company, is_active: false })
+        }
+        return Response.json({}, { status: 204 })
+      }),
+    )
+    renderAdmin('/admin/companies')
+    fireEvent.click(await screen.findByRole('button', { name: '停用公司' }))
+    expect(
+      await screen.findByText('還有 1 位啟用中的人員'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
+    await waitFor(() => {
+      expect(activeRequestBody).toEqual({
+        is_active: false,
+        disable_user_ids: [],
+      })
+    })
+  })
 })
+
+function expectNoPasswordPersistence(password: string) {
+  const storedValues = [window.localStorage, window.sessionStorage].flatMap(
+    (storage) =>
+      Object.keys(storage).flatMap((key) => [key, storage.getItem(key) ?? '']),
+  )
+  expect(storedValues.join('\n')).not.toContain(password)
+  expect(window.location.href).not.toContain(password)
+  expect(window.location.search).not.toContain(password)
+  expect(window.location.hash).not.toContain(password)
+}
 
 describe('management error messages', () => {
   it.each([

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import {
   createCompany,
+  listActiveCompanyUsers,
   listCompanies,
   managementErrorMessage,
   renameCompany,
@@ -17,6 +18,12 @@ export default function CompaniesPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deactivating, setDeactivating] = useState<{
+    company: Company
+    users: Array<{ id: string; username: string; name_zh: string | null }>
+    count: number
+    selected: string[]
+  } | null>(null)
 
   async function reload() {
     setError('')
@@ -78,7 +85,41 @@ export default function CompaniesPage() {
     setError('')
     setSaving(true)
     try {
-      await setCompanyActive(company.id, !company.is_active)
+      if (!company.is_active) {
+        await setCompanyActive(company.id, true)
+        await reload()
+        return
+      }
+      const activeUsers = await listActiveCompanyUsers(company.id)
+      if (activeUsers.count > 0) {
+        setDeactivating({
+          company,
+          users: activeUsers.users,
+          count: activeUsers.count,
+          selected: [],
+        })
+        return
+      }
+      await setCompanyActive(company.id, false)
+      await reload()
+    } catch (caught) {
+      setError(managementErrorMessage(caught))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmDeactivation() {
+    if (!deactivating) return
+    setError('')
+    setSaving(true)
+    try {
+      await setCompanyActive(
+        deactivating.company.id,
+        false,
+        deactivating.selected,
+      )
+      setDeactivating(null)
       await reload()
     } catch (caught) {
       setError(managementErrorMessage(caught))
@@ -91,6 +132,48 @@ export default function CompaniesPage() {
     <section aria-labelledby="companies-heading">
       <h1 id="companies-heading">公司管理</h1>
       {error && <p role="alert">{error}</p>}
+      {deactivating && (
+        <section aria-labelledby="deactivate-company-heading">
+          <h2 id="deactivate-company-heading">
+            停用「{deactivating.company.name}」
+          </h2>
+          <p>還有 {deactivating.count} 位啟用中的人員</p>
+          <fieldset>
+            <legend>選擇要一併停用的人員</legend>
+            {deactivating.users.map((user) => (
+              <label key={user.id}>
+                <input
+                  checked={deactivating.selected.includes(user.id)}
+                  onChange={(event) => {
+                    setDeactivating((current) => {
+                      if (!current) return current
+                      const selected = event.target.checked
+                        ? [...current.selected, user.id]
+                        : current.selected.filter((id) => id !== user.id)
+                      return { ...current, selected }
+                    })
+                  }}
+                  type="checkbox"
+                  value={user.id}
+                />
+                {user.name_zh
+                  ? `${user.name_zh}（${user.username}）`
+                  : user.username}
+              </label>
+            ))}
+          </fieldset>
+          <button disabled={saving} onClick={() => void confirmDeactivation()}>
+            確認停用公司
+          </button>
+          <button
+            disabled={saving}
+            onClick={() => setDeactivating(null)}
+            type="button"
+          >
+            取消
+          </button>
+        </section>
+      )}
       {loading ? <p>載入中…</p> : null}
       {!loading && companies.length === 0 ? <p>目前沒有公司。</p> : null}
       {companies.length > 0 && (

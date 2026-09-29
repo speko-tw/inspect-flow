@@ -185,7 +185,9 @@ export default function UsersPage({
                         onCancel={() => setEditingCompany(null)}
                         onSave={(companyId, fields) =>
                           void act(user.id, () =>
-                            linkUserCompany(user.id, companyId, fields),
+                            companyId === user.company_id
+                              ? updateUser(user.id, fields)
+                              : linkUserCompany(user.id, companyId, fields),
                           )
                         }
                         user={user}
@@ -297,7 +299,11 @@ function CompanyLinkForm({
 
   function changeCompany(value: string) {
     setCompanyId(value)
-    if (!value) {
+    if (value === user.company_id) {
+      setDepartment(user.department ?? '')
+      setLocation(user.location ?? '')
+      setEmployeeNo(user.employee_no ?? '')
+    } else {
       setDepartment('')
       setLocation('')
       setEmployeeNo('')

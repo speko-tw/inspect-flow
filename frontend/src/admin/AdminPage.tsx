@@ -61,11 +61,11 @@ export default function AdminPage() {
       {temporaryPassword &&
         location.pathname === '/admin/users' &&
         location.key === temporaryPassword.locationKey && (
-          <section aria-labelledby="temporary-password-heading" role="dialog">
+          <section aria-labelledby="temporary-password-heading" role="status">
             <h2 id="temporary-password-heading">使用者已新增</h2>
             <p>
               請將以下臨時密碼交給 {temporaryPassword.username}
-              。首次登入時必須變更密碼； 關閉後無法再次查看。
+              。首次登入時必須變更密碼；關閉後無法再次查看。
             </p>
             <output aria-label="臨時密碼">{temporaryPassword.password}</output>
             <button onClick={() => setTemporaryPassword(null)} type="button">

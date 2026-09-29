@@ -30,6 +30,11 @@ export interface Company {
   is_active: boolean
 }
 
+export interface ActiveCompanyUsers {
+  count: number
+  users: Array<Pick<User, 'id' | 'username' | 'name_zh'>>
+}
+
 export type UserInput = {
   username: string
   email: string
@@ -155,11 +160,21 @@ export function renameCompany(id: string, name: string): Promise<Company> {
 export function setCompanyActive(
   id: string,
   isActive: boolean,
+  disableUserIds: string[] = [],
 ): Promise<Company> {
   return request(`/companies/${id}/active`, {
     method: 'PUT',
-    body: JSON.stringify({ is_active: isActive }),
+    body: JSON.stringify({
+      is_active: isActive,
+      disable_user_ids: disableUserIds,
+    }),
   })
+}
+
+export function listActiveCompanyUsers(
+  id: string,
+): Promise<ActiveCompanyUsers> {
+  return request(`/companies/${id}/active-users`)
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
