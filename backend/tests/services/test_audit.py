@@ -249,7 +249,7 @@ class TestAlgAc04SingleEntryPointOperatorAndClock:
             client = _client_with_login_required_audit_route()
             login_resp = client.post(
                 "/api/v1/auth/login",
-                json={"email": user.email, "password": PASSWORD},
+                json={"login": user.email, "password": PASSWORD},
             )
             assert login_resp.status_code == 200
 
@@ -538,7 +538,7 @@ class TestAlgAc12SystemEventAndAlwaysWriteFlags:
         login_client = _client_with_generic_login_required_route()
         login_resp = login_client.post(
             "/api/v1/auth/login",
-            json={"email": user.email, "password": PASSWORD},
+            json={"login": user.email, "password": PASSWORD},
         )
         assert login_resp.status_code == 200
 

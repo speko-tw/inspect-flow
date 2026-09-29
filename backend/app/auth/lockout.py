@@ -47,9 +47,9 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
 def is_locked(db: Session, user_id: uuid.UUID | None) -> bool:
     """Check the account's deadline; unknown users use a fixed ID.
 
-    Looking up the sentinel makes an unknown email pay the same
+    Looking up the sentinel makes an unknown login pay the same
     lockout-query round trip as a known account, without recording
-    a failure or exposing the submitted email (AUT-R06).
+    a failure or exposing the submitted login (AUT-R06).
     """
     lookup_id = user_id if user_id is not None else _UNKNOWN_USER_ID
     locked_until = db.scalar(

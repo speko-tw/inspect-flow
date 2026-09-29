@@ -257,7 +257,7 @@ class TestAutAc23SetPasswordInvalidatesSessionsAndLogsIn:
         old_client = _make_client()
         login_resp = old_client.post(
             "/api/v1/auth/login",
-            json={"email": _OWNER_EMAIL, "password": _VALID_PASSWORD},
+            json={"login": _OWNER_EMAIL, "password": _VALID_PASSWORD},
         )
         assert login_resp.status_code == 200
         assert old_client.get("/api/v1/auth/me").status_code == 200
@@ -284,7 +284,7 @@ class TestAutAc23SetPasswordInvalidatesSessionsAndLogsIn:
         new_client = _make_client()
         new_login = new_client.post(
             "/api/v1/auth/login",
-            json={"email": _OWNER_EMAIL, "password": new_password},
+            json={"login": _OWNER_EMAIL, "password": new_password},
         )
         assert new_login.status_code == 200
 
@@ -426,7 +426,7 @@ class TestAutAc32BuiltinAdminCanSetPasswordAndLogIn:
         client = _make_client()
         login_resp = client.post(
             "/api/v1/auth/login",
-            json={"email": _ADMIN_EMAIL, "password": _VALID_PASSWORD},
+            json={"login": _ADMIN_EMAIL, "password": _VALID_PASSWORD},
         )
         assert login_resp.status_code == 200
         body = login_resp.json()
@@ -462,7 +462,7 @@ class TestAutAc34TemporaryFlagFollowsIsSystem:
         owner_client = _make_client()
         owner_login = owner_client.post(
             "/api/v1/auth/login",
-            json={"email": _OWNER_EMAIL, "password": _VALID_PASSWORD},
+            json={"login": _OWNER_EMAIL, "password": _VALID_PASSWORD},
         )
         assert owner_login.status_code == 200
         assert owner_login.json()["must_change_password"] is True
@@ -473,7 +473,7 @@ class TestAutAc34TemporaryFlagFollowsIsSystem:
         admin_client = _make_client()
         admin_login = admin_client.post(
             "/api/v1/auth/login",
-            json={"email": _ADMIN_EMAIL, "password": _VALID_PASSWORD},
+            json={"login": _ADMIN_EMAIL, "password": _VALID_PASSWORD},
         )
         assert admin_login.status_code == 200
         assert admin_login.json()["must_change_password"] is False

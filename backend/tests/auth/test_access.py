@@ -122,7 +122,7 @@ def _make_admin_user(session: Session, employee_no: str) -> User:
 def _login(client: TestClient, user: User) -> str:
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": user.email, "password": PASSWORD},
+        json={"login": user.email, "password": PASSWORD},
     )
     assert response.status_code == 200
     return response.cookies[SESSION_COOKIE_NAME]
@@ -611,7 +611,7 @@ def test_aut_ac43_temporary_password_blocks_every_access_level(
 
     login_response = client.post(
         "/api/v1/auth/login",
-        json={"email": account_t.email, "password": PASSWORD},
+        json={"login": account_t.email, "password": PASSWORD},
     )
     assert login_response.status_code == 200
     assert login_response.json()["must_change_password"] is True

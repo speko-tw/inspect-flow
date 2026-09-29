@@ -57,7 +57,7 @@ def _admin(db):
 def _login(client, user, password):
     return client.post(
         "/api/v1/auth/login",
-        json={"email": user.email, "password": password},
+        json={"login": user.email, "password": password},
     )
 
 
@@ -259,7 +259,7 @@ def test_concurrent_failures_count_once_and_audit_once(
         for _ in range(2):
             response = client.post(
                 "/api/v1/auth/login",
-                json={"email": email, "password": "wrong-password"},
+                json={"login": email, "password": "wrong-password"},
             )
             barrier_results.append(response.status_code)
         return barrier_results
@@ -308,7 +308,7 @@ def test_tenth_failure_wins_race_with_successful_login(
         client = make_client()
         return client.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": P},
+            json={"login": email, "password": P},
         )
 
     def tenth_failure():
@@ -317,7 +317,7 @@ def test_tenth_failure_wins_race_with_successful_login(
             client = make_client()
             response = client.post(
                 "/api/v1/auth/login",
-                json={"email": email, "password": "wrong-password"},
+                json={"login": email, "password": "wrong-password"},
             )
             return response.status_code
         finally:
@@ -412,7 +412,7 @@ def test_tenth_failure_wins_race_with_password_change(
             client = make_wal_client()
             response = client.post(
                 "/api/v1/auth/login",
-                json={"email": email, "password": "wrong-password"},
+                json={"login": email, "password": "wrong-password"},
             )
             return response.status_code
         finally:
