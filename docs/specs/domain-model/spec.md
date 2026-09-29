@@ -189,9 +189,10 @@
 | API | `GET /api/v1/roles?limit=<1..100>&cursor=<cursor>` 回 `{items: Role[], next_cursor}`；依 `created_at`、`id` 升冪分頁，預設 `limit=50`、上限 100。`GET /api/v1/roles/{role_id}` 取得單筆；`POST /api/v1/roles` 本體 `{name, permission_codes}` 建立；`PATCH /api/v1/roles/{role_id}` 接受 `name`、完整替換用的 `permission_codes`，至少提供一個實際變更欄位；`DELETE /api/v1/roles/{role_id}` 刪除並依 DOM-R21 移除指派，成功回 204。角色回應包含 UUID `id`、`name`、排序後的 `permission_codes`、`created_at`、`updated_at`；時間依 API-R09。 | DOM-R55 |
 | API | `GET /api/v1/roles/permission-codes` 回 `{items: [{code, description}]}`，依 `code` 排序；只列出 DOM-R35 已登記項目，未登記碼不得由 API 接受。所有角色端點需 Admin；錯誤使用 `error.code`，重複名稱、角色不存在與無效輸入依角色 API 錯誤契約處理。 | DOM-R55 |
 
-角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）。
 | 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
 | 程式介面 | `Project` 新增、修改入口；依 `project_code` 查出既有 `Project` 的介面（供重複警告） | DOM-R40、DOM-R42 |
+
+角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）。
 
 ### 管理介面錯誤
 

@@ -19,6 +19,7 @@ from app.api.time_format import format_utc
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
 from app.models import Role
+from app.models.role import PermissionCodeValidationError
 from app.permission_codes import permission_code_descriptions
 from app.services.roles import (
     RoleUnchangedError,
@@ -126,7 +127,11 @@ def _check_cursor(cursor: str | None) -> CursorKey | None:
 
 
 def _encode_cursor(key: CursorKey) -> str:
-    """Keep timestamp precision in the opaque cursor sort key."""
+    """Keep timestamp precision in the opaque cursor sort key.
+
+    The shared pagination helper truncates timestamps to seconds, which
+    can skip or repeat roles created within the same second.
+    """
     payload = {
         "t": key.created_at.astimezone(UTC).isoformat(timespec="microseconds"),
         "id": str(key.id),
@@ -136,12 +141,17 @@ def _encode_cursor(key: CursorKey) -> str:
     return encoded.decode("ascii").rstrip("=")
 
 
-def _translate_integrity_error(exc: IntegrityError) -> APIError:
+def _translate_integrity_error(exc: IntegrityError) -> APIError | None:
     """Map role uniqueness conflicts to the role-specific 409 code."""
-    return APIError(ErrorCode.ROLE_NAME_CONFLICT, 409)
+    diagnostic = getattr(exc.orig, "diag", None)
+    constraint = getattr(diagnostic, "constraint_name", None)
+    details = str(exc.orig).lower()
+    if constraint == "ix_roles_name_lower" or "ix_roles_name_lower" in details:
+        return APIError(ErrorCode.ROLE_NAME_CONFLICT, 409)
+    return None
 
 
-def _translate_permission_error(exc: ValueError) -> APIError:
+def _translate_permission_error() -> APIError:
     return APIError(ErrorCode.ROLE_PERMISSION_CODE_INVALID, 422)
 
 
@@ -215,9 +225,12 @@ def add_role(
             permission_codes=body.permission_codes,
         )
     except IntegrityError as exc:
-        raise _translate_integrity_error(exc) from exc
-    except ValueError as exc:
-        raise _translate_permission_error(exc) from exc
+        error = _translate_integrity_error(exc)
+        if error is not None:
+            raise error from exc
+        raise
+    except PermissionCodeValidationError as exc:
+        raise _translate_permission_error() from exc
     return _role_response(role)
 
 
@@ -236,11 +249,14 @@ def update_role_endpoint(
     try:
         role = update_role(db, role, **changes)
     except IntegrityError as exc:
-        raise _translate_integrity_error(exc) from exc
+        error = _translate_integrity_error(exc)
+        if error is not None:
+            raise error from exc
+        raise
     except RoleUnchangedError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    except ValueError as exc:
-        raise _translate_permission_error(exc) from exc
+    except PermissionCodeValidationError as exc:
+        raise _translate_permission_error() from exc
     return _role_response(role)
 
 
