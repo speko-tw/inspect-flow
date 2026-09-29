@@ -40,30 +40,48 @@ to special-case each one, and listening on the class means every
 ``create_engine_from_settings`` call) is covered automatically, with
 no per-engine wiring required.
 
-The check itself only looks at the statement's leading
-``UPDATE``/``DELETE FROM`` keyword (skipping any leading whitespace
-and SQL comments, and SQLite's ``UPDATE OR <conflict-algorithm>``
-and PostgreSQL's ``ONLY`` in between) and the table reference that
-immediately follows: it does not scan the rest of the statement
-text, so a table merely mentioning ``audit_logs`` elsewhere (for
-example in a subquery, or a string literal in another table's
-``SET`` clause) is never a false positive; an unquoted identifier
-match is both greedy *and* boundary-checked (see
-``_table_identifier``'s docstring), so neither ``audit_logs_x`` nor
-a same-prefix table using characters outside this module's
-identifier class (``audit_logs$archive``, ``audit_logs中``) is ever
-mistaken for ``audit_logs``.
+The check itself looks at the statement's leading keyword and the
+table reference that immediately follows it -- for a bare
+``UPDATE``/``DELETE FROM`` (skipping SQLite's ``UPDATE OR
+<conflict-algorithm>`` and PostgreSQL's ``ONLY`` in between), and
+(issue #233) for every other shape that modifies an existing
+``audit_logs`` row or removes all of its rows: PostgreSQL's
+``TRUNCATE [TABLE] [ONLY] audit_logs`` (checked against every table
+in its comma-separated list, not only the first); SQLite's
+``REPLACE INTO``/``INSERT OR REPLACE INTO``; PostgreSQL's and
+SQLite's shared ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert
+(``DO NOTHING`` and a plain ``INSERT`` are never blocked); and a
+``WITH`` (CTE) statement wrapping any of the above, whether the
+mutation is the CTE's own body (PostgreSQL's data-modifying CTEs,
+e.g. ``WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT ...``)
+or the primary statement the CTE list feeds
+(``WITH t AS (...) UPDATE audit_logs SET ...``). A comment (``--``
+or ``/* */``) between the keyword and the table name is skipped the
+same way one before the statement is. None of this scans the rest
+of the statement text beyond what each shape's own grammar requires,
+so a table merely mentioning ``audit_logs`` elsewhere (for example
+in a subquery, or a string literal in another table's ``SET``
+clause) is never a false positive; an unquoted identifier match is
+both greedy *and* boundary-checked (see ``_table_identifier``'s
+docstring), so neither ``audit_logs_x`` nor a same-prefix table
+using characters outside this module's identifier class
+(``audit_logs$archive``, ``audit_logs中``) is ever mistaken for
+``audit_logs``.
 
-Known limitations -- these never reach the leading-keyword check
-above, so they are not covered: a database client outside this
-backend (e.g. a bare ``psql`` session; there is no way for an
-in-process SQLAlchemy event to intercept a connection this process
-never made -- out of scope per ALG-R04's own text); a mutation
-wrapped in a CTE (``WITH ... UPDATE/DELETE ...``); an
-``INSERT ... ON CONFLICT DO UPDATE`` upsert; SQLite's
-``REPLACE INTO``/``INSERT OR REPLACE``; and ``TRUNCATE``. None of
-these begin with a bare ``UPDATE``/``DELETE FROM`` keyword, so this
-guard does not (yet) recognize them as a write to ``audit_logs``.
+Known limitations -- these are not covered: a database client
+outside this backend (e.g. a bare ``psql`` session; there is no way
+for an in-process SQLAlchemy event to intercept a connection this
+process never made -- out of scope per ALG-R04's own text); an
+``INSERT ... SELECT ...`` upsert (no ``VALUES`` list) whose
+``SELECT`` happens to contain the literal text of an
+``ON CONFLICT ... DO UPDATE`` clause -- not a shape this codebase's
+own SQL ever produces for ``audit_logs``, unlike the
+``VALUES``-based form, which this guard's quote-aware scan of the
+value list makes immune to this even when a value's own literal
+text contains that phrase; and a ``WITH`` statement using CTE syntax
+this module's regex-based parsing does not recognize (for example a
+dialect extension it does not know), in which case that CTE's own
+body is not checked but the primary statement following it still is.
 """
 
 import re
@@ -80,9 +98,11 @@ from app.db.base import Base, UTCDateTime, uuid7
 
 class AuditLogImmutableError(Exception):
     """Raised by :func:`_block_audit_logs_mutation` when SQL sent to
-    any ``Engine`` would ``UPDATE`` or ``DELETE`` from
-    ``audit_logs`` (ALG-R04). The write is rejected before it ever
-    reaches the database; the table's contents are unchanged.
+    any ``Engine`` would modify an existing ``audit_logs`` row or
+    remove all of its rows, in any of the shapes
+    :func:`_targets_audit_logs` recognizes (ALG-R04). The write is
+    rejected before it ever reaches the database; the table's
+    contents are unchanged.
     """
 
 
@@ -147,58 +167,50 @@ def _table_identifier(quoted_group: str, plain_group: str) -> str:
 
 # A leading SQL line comment (``-- ...`` to end of line/string) or
 # block comment (``/* ... */``, not itself nested), or plain
-# whitespace -- whatever precedes the statement's real keyword.
+# whitespace. Used both before a statement's real keyword and, via
+# :func:`_trivia_end`, between that keyword and the table reference
+# that follows it (ALG-AC03's "關鍵字與表名之間夾註解" case).
 _LEADING_TRIVIA_RE = re.compile(
     r"(?:\s+|--[^\n]*(?:\n|\Z)|/\*.*?\*/)",
     re.DOTALL,
 )
 
 
-def _skip_leading_trivia(statement: str) -> str:
-    """Strip every leading run of whitespace and SQL comments
-    (mixed, any number of times) off the front of ``statement``, so
-    ``_OPERATION_RE`` below always sees the statement's real leading
-    keyword. Only comments *before* that keyword are handled: one
-    appearing later in the statement (e.g. between ``UPDATE`` and
-    the table name) is not something ALG-AC03 asks for and is left
-    alone.
+def _trivia_end(statement: str, pos: int) -> int:
+    """Return the index in ``statement`` right after every run of
+    whitespace and SQL comments (mixed, any number of times)
+    starting at ``pos``.
     """
-    pos = 0
     while True:
         match = _LEADING_TRIVIA_RE.match(statement, pos)
         if match is None or match.end() == pos:
-            return statement[pos:]
+            return pos
         pos = match.end()
 
 
+def _skip_leading_trivia(statement: str) -> str:
+    """Strip every leading run of whitespace and SQL comments off
+    the front of ``statement``, so the matchers below always see
+    the statement's real leading keyword.
+    """
+    return statement[_trivia_end(statement, 0) :]
+
+
 # SQLite's ``UPDATE OR <algorithm>`` conflict-resolution clause
-# (https://sqlite.org/lang_conflict.html). Deliberately excludes
-# ``REPLACE`` when it starts a statement on its own (bare
-# ``REPLACE INTO``) or follows ``INSERT OR`` -- neither begins with
-# ``UPDATE``, so ``_OPERATION_RE`` below never reaches them anyway;
-# this constant only spells out the algorithm names legal after
-# ``UPDATE OR``.
+# (https://sqlite.org/lang_conflict.html), also reused (as
+# ``INSERT OR <algorithm>``) by ``_REPLACE_INTO_KEYWORD_RE`` below.
 _SQLITE_CONFLICT_ALGORITHMS = r"(?:REPLACE|ROLLBACK|ABORT|FAIL|IGNORE)"
 
-# Matches the leading ``UPDATE``/``DELETE FROM`` keyword of a
-# statement (case-insensitive; ``statement`` is assumed already run
-# through :func:`_skip_leading_trivia`), followed by SQLite's
-# optional ``OR <algorithm>`` clause (``UPDATE`` only) and/or
-# PostgreSQL's optional ``ONLY`` keyword (both ``UPDATE`` and
-# ``DELETE FROM``), leaving the match position right at the start of
-# the table reference that follows.
-_OPERATION_RE = re.compile(
-    r"\s*(?:"
-    rf"(?P<update>UPDATE)(?:\s+OR\s+{_SQLITE_CONFLICT_ALGORITHMS})?"
-    r"|(?P<delete>DELETE\s+FROM)"
-    r")\s+(?:ONLY\s+)?",
-    re.IGNORECASE,
+_UPDATE_KEYWORD_RE = re.compile(
+    rf"UPDATE(?:\s+OR\s+{_SQLITE_CONFLICT_ALGORITHMS})?", re.IGNORECASE
 )
+_DELETE_FROM_KEYWORD_RE = re.compile(r"DELETE\s+FROM", re.IGNORECASE)
+_ONLY_KEYWORD_RE = re.compile(r"ONLY\b", re.IGNORECASE)
 
-# Matches the table reference right after that keyword: an optional
-# ``schema.`` prefix (``main.audit_logs``, ``public.audit_logs``,
-# each side independently quotable) followed by the table name
-# itself (with its own boundary check -- see
+# Matches the table reference right after a leading keyword: an
+# optional ``schema.`` prefix (``main.audit_logs``,
+# ``public.audit_logs``, each side independently quotable) followed
+# by the table name itself (with its own boundary check -- see
 # ``_table_identifier``'s docstring).
 _TABLE_REF_RE = re.compile(
     "(?:(?:" + _identifier("schema_q", "schema_u") + r")\.)?"
@@ -208,25 +220,299 @@ _TABLE_REF_RE = re.compile(
 _AUDIT_LOGS_TABLE = "audit_logs"
 
 
-def _targets_audit_logs(statement: str) -> bool:
-    """Return whether ``statement`` is an ``UPDATE``/``DELETE FROM``
-    whose target table is ``audit_logs`` -- covering every writing
-    the spelling ALG-AC03 lists: unquoted, double-quoted, schema
-    prefixed, mixed case, and leading whitespace/newlines/comments
-    all resolve to the same table name here, as do SQLite's
-    ``UPDATE OR <algorithm>`` and PostgreSQL's ``ONLY``.
+def _table_ref_is_audit_logs(match: "re.Match[str] | None") -> bool:
+    """Return whether a match of ``_TABLE_REF_RE`` names
+    ``audit_logs`` -- shared by every matcher below so "is this
+    table audit_logs?" is decided the same way everywhere.
+    """
+    if match is None:
+        return False
+    name = match.group("table_q")
+    if name is None:
+        name = match.group("table_u")
+    return name is not None and name.lower() == _AUDIT_LOGS_TABLE
+
+
+def _matches_update_delete(statement: str) -> bool:
+    """The original ALG-AC03 shapes: a bare ``UPDATE``/``DELETE
+    FROM`` (with SQLite's ``OR <algorithm>`` and/or PostgreSQL's
+    ``ONLY``) whose table is ``audit_logs``. ``statement`` is
+    assumed already run through :func:`_skip_leading_trivia`.
+    """
+    match = _UPDATE_KEYWORD_RE.match(statement)
+    if match is None:
+        match = _DELETE_FROM_KEYWORD_RE.match(statement)
+    if match is None:
+        return False
+    pos = _trivia_end(statement, match.end())
+    only_match = _ONLY_KEYWORD_RE.match(statement, pos)
+    if only_match is not None:
+        pos = _trivia_end(statement, only_match.end())
+    return _table_ref_is_audit_logs(_TABLE_REF_RE.match(statement, pos))
+
+
+_TRUNCATE_KEYWORD_RE = re.compile(r"TRUNCATE\b", re.IGNORECASE)
+_TABLE_KEYWORD_RE = re.compile(r"TABLE\b", re.IGNORECASE)
+
+
+def _matches_truncate(statement: str) -> bool:
+    """PostgreSQL's ``TRUNCATE [TABLE] [ONLY] name [*] [, ...]``:
+    checks every table in the comma-separated list, not only the
+    first, since ``TRUNCATE users, audit_logs`` would otherwise slip
+    through. SQLite has no ``TRUNCATE`` statement at all, but this
+    guard fires on the raw SQL text before it ever reaches the DBAPI
+    cursor (see the module docstring), so a test can exercise this
+    against a SQLite ``Engine`` without SQLite itself ever needing
+    to understand the statement.
+    """
+    match = _TRUNCATE_KEYWORD_RE.match(statement)
+    if match is None:
+        return False
+    pos = _trivia_end(statement, match.end())
+    table_kw_match = _TABLE_KEYWORD_RE.match(statement, pos)
+    if table_kw_match is not None:
+        pos = _trivia_end(statement, table_kw_match.end())
+
+    while True:
+        only_match = _ONLY_KEYWORD_RE.match(statement, pos)
+        if only_match is not None:
+            pos = _trivia_end(statement, only_match.end())
+        table_ref = _TABLE_REF_RE.match(statement, pos)
+        if table_ref is None:
+            return False
+        if _table_ref_is_audit_logs(table_ref):
+            return True
+        pos = table_ref.end()
+        if pos < len(statement) and statement[pos] == "*":
+            pos += 1
+        pos = _trivia_end(statement, pos)
+        if pos < len(statement) and statement[pos] == ",":
+            pos = _trivia_end(statement, pos + 1)
+            continue
+        return False
+
+
+_REPLACE_INTO_KEYWORD_RE = re.compile(
+    r"(?:REPLACE|INSERT\s+OR\s+REPLACE)\s+INTO", re.IGNORECASE
+)
+
+
+def _matches_replace_into(statement: str) -> bool:
+    """SQLite's ``REPLACE INTO``/``INSERT OR REPLACE INTO``: both
+    delete any existing conflicting row and insert the new one in
+    its place, so both count as a modification of an existing row,
+    the same as ``INSERT ... ON CONFLICT ... DO UPDATE`` below.
+    ``INSERT OR IGNORE``/``ROLLBACK``/``ABORT``/``FAIL`` are
+    deliberately not matched here: on a conflict they skip the new
+    row or abort the statement, but never touch an existing row's
+    contents.
+    """
+    match = _REPLACE_INTO_KEYWORD_RE.match(statement)
+    if match is None:
+        return False
+    pos = _trivia_end(statement, match.end())
+    return _table_ref_is_audit_logs(_TABLE_REF_RE.match(statement, pos))
+
+
+def _find_matching_paren(statement: str, open_index: int) -> int:
+    """Return the index of the ``)`` matching the ``(`` at
+    ``open_index`` in ``statement``. Tracks single- and
+    double-quoted strings (each ends only at its own matching,
+    non-doubled quote) so a parenthesis inside a string literal --
+    for example inside an ``INSERT``'s literal value list, or a
+    quoted identifier -- is never mistaken for real nesting. Returns
+    ``len(statement)`` if no matching close paren is found (an
+    unterminated/malformed statement), which callers treat as
+    "nothing more to skip".
+    """
+    depth = 0
+    pos = open_index
+    length = len(statement)
+    while pos < length:
+        char = statement[pos]
+        if char in ("'", '"'):
+            quote = char
+            pos += 1
+            while pos < length:
+                if statement[pos] == quote:
+                    if pos + 1 < length and statement[pos + 1] == quote:
+                        pos += 2
+                        continue
+                    pos += 1
+                    break
+                pos += 1
+            continue
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return pos
+        pos += 1
+    return length
+
+
+def _skip_paren_group(statement: str, pos: int) -> int:
+    """If ``statement[pos]`` is ``(``, return the trivia-skipped
+    index right after its matching close paren; otherwise return
+    ``pos`` unchanged.
+    """
+    if pos < len(statement) and statement[pos] == "(":
+        paren_end = _find_matching_paren(statement, pos) + 1
+        return _trivia_end(statement, paren_end)
+    return pos
+
+
+_INSERT_INTO_KEYWORD_RE = re.compile(r"INSERT\s+INTO", re.IGNORECASE)
+_VALUES_KEYWORD_RE = re.compile(r"VALUES\b", re.IGNORECASE)
+_ON_CONFLICT_DO_RE = re.compile(
+    r"\bON\s+CONFLICT\b.*?\bDO\s+(?P<action>UPDATE|NOTHING)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _matches_insert_on_conflict_do_update(statement: str) -> bool:
+    """PostgreSQL's and SQLite's shared
+    ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert: only the
+    ``DO UPDATE`` form modifies an existing row, so
+    ``ON CONFLICT DO NOTHING`` and a plain ``INSERT`` with no
+    ``ON CONFLICT`` clause at all must both pass through untouched.
+
+    The optional column list and any ``VALUES (...)`` tuple list are
+    skipped first, using :func:`_find_matching_paren`'s quote-aware
+    scan, before searching for ``ON CONFLICT``: this is what keeps
+    the search from ever mistaking literal text inside an inserted
+    value (for example an audit record whose own content happens to
+    contain the words "on conflict do update") for the real clause
+    -- see the module docstring's "Known limitations" for the one
+    shape (``INSERT ... SELECT ...``) this does not bound the same
+    way.
+    """
+    match = _INSERT_INTO_KEYWORD_RE.match(statement)
+    if match is None:
+        return False
+    pos = _trivia_end(statement, match.end())
+    table_match = _TABLE_REF_RE.match(statement, pos)
+    if table_match is None or not _table_ref_is_audit_logs(table_match):
+        return False
+    pos = _trivia_end(statement, table_match.end())
+    pos = _skip_paren_group(statement, pos)
+    values_match = _VALUES_KEYWORD_RE.match(statement, pos)
+    if values_match is not None:
+        pos = _trivia_end(statement, values_match.end())
+        while pos < len(statement) and statement[pos] == "(":
+            pos = _skip_paren_group(statement, pos)
+            if pos < len(statement) and statement[pos] == ",":
+                pos = _trivia_end(statement, pos + 1)
+                continue
+            break
+    conflict_match = _ON_CONFLICT_DO_RE.search(statement, pos)
+    return (
+        conflict_match is not None
+        and conflict_match.group("action").upper() == "UPDATE"
+    )
+
+
+_WITH_KEYWORD_RE = re.compile(r"WITH\b", re.IGNORECASE)
+_RECURSIVE_KEYWORD_RE = re.compile(r"RECURSIVE\b", re.IGNORECASE)
+_AS_KEYWORD_RE = re.compile(r"AS\b", re.IGNORECASE)
+_MATERIALIZED_RE = re.compile(r"(?:NOT\s+)?MATERIALIZED\b", re.IGNORECASE)
+_CTE_NAME_RE = re.compile(_identifier("cte_name_q", "cte_name_u"))
+
+
+def _skip_one_cte(statement: str, pos: int) -> "tuple[str | None, int]":
+    """Parse one ``name [(col, ...)] AS [[NOT] MATERIALIZED] (body)``
+    common table expression starting at ``pos`` (already past the
+    ``WITH``/``RECURSIVE`` keyword or a preceding comma). Returns
+    ``(body, index_after_close_paren)`` on success -- ``body`` being
+    the subquery's own text with its enclosing parens stripped -- or
+    ``(None, pos)`` if what follows does not parse as a CTE
+    definition (this module gives up rather than guessing at
+    non-standard syntax; see the module docstring's "Known
+    limitations").
+    """
+    name_match = _CTE_NAME_RE.match(statement, pos)
+    if name_match is None:
+        return None, pos
+    pos = _trivia_end(statement, name_match.end())
+    pos = _skip_paren_group(statement, pos)  # optional column list
+    as_match = _AS_KEYWORD_RE.match(statement, pos)
+    if as_match is None:
+        return None, pos
+    pos = _trivia_end(statement, as_match.end())
+    materialized_match = _MATERIALIZED_RE.match(statement, pos)
+    if materialized_match is not None:
+        pos = _trivia_end(statement, materialized_match.end())
+    if pos >= len(statement) or statement[pos] != "(":
+        return None, pos
+    close = _find_matching_paren(statement, pos)
+    return statement[pos + 1 : close], _trivia_end(statement, close + 1)
+
+
+def _targets_audit_logs_after_with(statement: str) -> bool:
+    """Handles a statement beginning with ``WITH`` (ALG-AC03's CTE
+    case). ``statement`` is assumed already run through
+    :func:`_skip_leading_trivia`. Every CTE's own body is checked
+    recursively (catching a PostgreSQL data-modifying CTE such as
+    ``WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT ...``,
+    where the mutation is nested *inside* the CTE rather than being
+    the statement's primary clause), and whatever primary statement
+    follows the CTE list is then checked the same way a non-``WITH``
+    statement would be (catching
+    ``WITH t AS (...) UPDATE audit_logs SET ...``, where the CTE
+    itself is untouched but the statement consuming it is the
+    mutation). A CTE that is merely read from (no mutation in its
+    body or in the primary statement) is correctly never blocked.
+    """
+    with_match = _WITH_KEYWORD_RE.match(statement)
+    if with_match is None:
+        return False
+    pos = _trivia_end(statement, with_match.end())
+    recursive_match = _RECURSIVE_KEYWORD_RE.match(statement, pos)
+    if recursive_match is not None:
+        pos = _trivia_end(statement, recursive_match.end())
+
+    while True:
+        body, next_pos = _skip_one_cte(statement, pos)
+        if body is None:
+            break
+        if _targets_audit_logs(body):
+            return True
+        pos = next_pos
+        if pos < len(statement) and statement[pos] == ",":
+            pos = _trivia_end(statement, pos + 1)
+            continue
+        break
+
+    return _targets_audit_logs_without_with(statement[pos:])
+
+
+def _targets_audit_logs_without_with(statement: str) -> bool:
+    """Every shape ALG-AC03/issue #233 lists except the ``WITH``
+    case above (which recurses back into this function for the
+    primary statement following a CTE list).
     """
     statement = _skip_leading_trivia(statement)
-    op_match = _OPERATION_RE.match(statement)
-    if op_match is None:
-        return False
-    table_match = _TABLE_REF_RE.match(statement, op_match.end())
-    if table_match is None:
-        return False
-    table_name = table_match.group("table_q")
-    if table_name is None:
-        table_name = table_match.group("table_u")
-    return table_name is not None and table_name.lower() == _AUDIT_LOGS_TABLE
+    return (
+        _matches_update_delete(statement)
+        or _matches_truncate(statement)
+        or _matches_replace_into(statement)
+        or _matches_insert_on_conflict_do_update(statement)
+    )
+
+
+def _targets_audit_logs(statement: str) -> bool:
+    """Return whether ``statement`` performs a write that modifies
+    an existing ``audit_logs`` row or removes all of its rows -- see
+    the module docstring for the full list of shapes covered
+    (unquoted, double-quoted, schema-prefixed, mixed-case and
+    whitespace/comment variation all resolve the same way) and the
+    "Known limitations" this does not cover.
+    """
+    statement = _skip_leading_trivia(statement)
+    if _targets_audit_logs_after_with(statement):
+        return True
+    return _targets_audit_logs_without_with(statement)
 
 
 @event.listens_for(Engine, "before_cursor_execute")
@@ -238,16 +524,21 @@ def _block_audit_logs_mutation(
     context: object,
     executemany: bool,
 ) -> None:
-    """ALG-R04: reject any ``UPDATE``/``DELETE`` reaching
-    ``audit_logs``, from whichever layer produced it -- ORM flush,
-    ORM/Core bulk ``update()``/``delete()``, or raw ``text()`` SQL.
-    ``INSERT``/``SELECT`` against ``audit_logs``, and any statement
-    against another table (including one merely named
-    ``audit_logs_x``), pass through untouched.
+    """ALG-R04: reject any write reaching ``audit_logs`` that would
+    modify an existing row or remove all of its rows, from
+    whichever layer produced it -- ORM flush, ORM/Core bulk
+    ``update()``/``delete()``, or raw ``text()`` SQL, including
+    ``TRUNCATE``, SQLite's ``REPLACE INTO``/``INSERT OR REPLACE``,
+    an ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert, and any of
+    these wrapped in a ``WITH`` (CTE) statement (issue #233).
+    ``INSERT``/``SELECT`` against ``audit_logs``,
+    ``ON CONFLICT DO NOTHING``, and any statement against another
+    table (including one merely named ``audit_logs_x``), pass
+    through untouched.
     """
     if _targets_audit_logs(statement):
         raise AuditLogImmutableError(
-            "audit_logs is append-only; UPDATE/DELETE are rejected (ALG-R04)"
+            "audit_logs is append-only; this write is rejected (ALG-R04)"
         )
 
 

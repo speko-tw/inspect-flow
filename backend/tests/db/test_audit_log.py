@@ -16,10 +16,15 @@ AC labels below follow that spec's numbering:
   <algorithm>`` clause, PostgreSQL's ``ONLY``) -- is rejected and
   leaves the table unchanged, while ``INSERT``/``SELECT`` against
   ``audit_logs`` and any statement against another table still work.
-  Deliberately not covered (see ``app/models/audit_log.py``'s module
-  docstring): a CTE-wrapped mutation, ``INSERT ... ON CONFLICT DO
-  UPDATE``, SQLite's ``REPLACE INTO``/``INSERT OR REPLACE``, and
-  ``TRUNCATE``.
+  Issue #233 extends this to every other shape that modifies an
+  existing row or removes all of them: ``TRUNCATE``, SQLite's
+  ``REPLACE INTO``/``INSERT OR REPLACE INTO``, the
+  ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert, and a ``WITH``
+  (CTE) statement wrapping any of the above -- while
+  ``ON CONFLICT DO NOTHING`` and a plain ``INSERT`` still work, and a
+  CTE that is merely read from is not blocked. See
+  ``app/models/audit_log.py``'s module docstring for the residual
+  "Known limitations" issue #233 leaves undetected.
 
 Same fixture pattern as ``test_role_member.py``/``test_company.py``:
 migrates the database behind ``conftest.py``'s ``db_url`` fixture
@@ -40,6 +45,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.types import JSON, Uuid
 
 from alembic import command
+from app.db import clock
 from app.db.base import UTCDateTime, uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import AuditLog, User
@@ -358,6 +364,111 @@ class TestRegexMatchesOnlyAuditLogsTable:
         assert _targets_audit_logs(statement) is False
 
 
+class TestRegexMatchesUpsertReplaceTruncateAndCte:
+    """Unit tests for ``_targets_audit_logs`` (no database) covering
+    issue #233's additions: upsert, ``REPLACE``, ``TRUNCATE``, and
+    CTE-wrapped writes.
+    """
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # INSERT ... ON CONFLICT ... DO UPDATE (PostgreSQL and
+            # SQLite share this syntax).
+            "INSERT INTO audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "insert into audit_logs (id) values ('x') "
+            "on conflict (id) do update set entity_type = 'x'",
+            "INSERT INTO audit_logs (id) VALUES ('a'), ('b') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "INSERT INTO \"audit_logs\" (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "INSERT INTO public.audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            # SQLite's REPLACE INTO / INSERT OR REPLACE INTO.
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR REPLACE INTO audit_logs (id) VALUES ('x')",
+            "insert or replace into audit_logs (id) values ('x')",
+            "REPLACE INTO \"audit_logs\" (id) VALUES ('x')",
+            # TRUNCATE, including a table list and PostgreSQL's ONLY.
+            "TRUNCATE audit_logs",
+            "TRUNCATE TABLE audit_logs",
+            "TRUNCATE ONLY audit_logs",
+            "TRUNCATE TABLE ONLY audit_logs",
+            "TRUNCATE users, audit_logs",
+            "TRUNCATE TABLE audit_logs, users",
+            "truncate AUDIT_LOGS",
+            'TRUNCATE "audit_logs"',
+            "TRUNCATE public.audit_logs",
+            # A CTE wrapping a mutation, either as the CTE's own body
+            # (a PostgreSQL data-modifying CTE) or as the primary
+            # statement the CTE list feeds.
+            "WITH t AS (SELECT 1) UPDATE audit_logs SET entity_type = 'x'",
+            "WITH t AS (SELECT 1) DELETE FROM audit_logs",
+            "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
+            "WITH t AS (UPDATE audit_logs SET entity_type = 'x' "
+            "RETURNING id) SELECT * FROM t",
+            "WITH RECURSIVE t AS (DELETE FROM audit_logs RETURNING id) "
+            "SELECT * FROM t",
+            "WITH a AS (SELECT 1), t AS (DELETE FROM audit_logs) "
+            "SELECT * FROM t",
+            "WITH t AS (SELECT 1) TRUNCATE audit_logs",
+            "WITH t AS (SELECT 1) REPLACE INTO audit_logs (id) VALUES ('x')",
+            # A comment between the mutating keyword and the table
+            # name (ALG-AC03's "關鍵字與表名之間夾註解" case), for
+            # each newly-covered shape.
+            "TRUNCATE /* c */ audit_logs",
+            "REPLACE INTO -- c\naudit_logs (id) VALUES ('x')",
+            "INSERT INTO /* c */ audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+        ],
+    )
+    def test_matches_every_blocked_spelling(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # ON CONFLICT DO NOTHING and a plain INSERT must never
+            # be blocked.
+            "INSERT INTO audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO audit_logs (id) VALUES ('x')",
+            # A value's own literal text containing the phrase this
+            # module searches for must not cause a false positive:
+            # the VALUES tuple is skipped whole before searching for
+            # a real ON CONFLICT clause.
+            "INSERT INTO audit_logs (id, after) VALUES "
+            "('x', 'on conflict do update, then on conflict do "
+            "nothing') ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO audit_logs (id, after) VALUES "
+            "('x', 'contains on conflict do update text')",
+            # INSERT OR <algorithm> other than REPLACE never
+            # overwrites an existing row.
+            "INSERT OR IGNORE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR ROLLBACK INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR ABORT INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR FAIL INTO audit_logs (id) VALUES ('x')",
+            # A different, same-prefix table is never mistaken for
+            # audit_logs by any of the new matchers.
+            "TRUNCATE audit_logs_x",
+            "TRUNCATE TABLE audit_logs$archive",
+            "REPLACE INTO audit_logs_x (id) VALUES ('x')",
+            "INSERT INTO audit_logs_x (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "TRUNCATE other_table",
+            "TRUNCATE users, other_table",
+            # A CTE that is only read from -- no mutation anywhere in
+            # its body or in the primary statement -- is not blocked.
+            "WITH t AS (SELECT * FROM audit_logs) SELECT * FROM t",
+            "WITH t AS (SELECT * FROM users) "
+            "SELECT * FROM t JOIN audit_logs ON t.id = audit_logs.id",
+        ],
+    )
+    def test_does_not_match_other_statements(self, statement):
+        assert _targets_audit_logs(statement) is False
+
+
 class TestAppendOnlyGuard:
     """ALG-AC03: 19 blocked writes (4 ORM, 2 Core, 13 ``text()`` --
     the spec's own 10 spellings plus a leading SQL comment and
@@ -531,6 +642,204 @@ class TestAppendOnlyGuard:
                 conn.rollback()
 
         assert snapshot() == before
+
+    def _text_truncate_statements(self, engine: Engine) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            "TRUNCATE audit_logs",
+            "TRUNCATE TABLE audit_logs",
+            "TRUNCATE ONLY audit_logs",
+            f"TRUNCATE TABLE {schema}.audit_logs",
+            "truncate AUDIT_LOGS",
+            "TRUNCATE users, audit_logs",
+            # A leading SQL comment, and one between the keyword and
+            # the table name.
+            "-- audit-log guard test\nTRUNCATE audit_logs",
+            "TRUNCATE /* audit-log guard test */ audit_logs",
+        ]
+
+    def _text_replace_statements(self, engine: Engine) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR REPLACE INTO audit_logs (id) VALUES ('x')",
+            f"REPLACE INTO {schema}.audit_logs (id) VALUES ('x')",
+            "replace into AUDIT_LOGS (id) VALUES ('x')",
+            # A comment between the keyword and the table name.
+            "REPLACE INTO /* audit-log guard test */ audit_logs "
+            "(id) VALUES ('x')",
+        ]
+
+    def _text_upsert_do_update_statements(
+        self, engine: Engine, existing_id: str
+    ) -> list[str]:
+        schema = self._schema_prefix(engine)
+        return [
+            f"INSERT INTO audit_logs (id) VALUES ('{existing_id}') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+            f"INSERT INTO {schema}.audit_logs (id) "
+            f"VALUES ('{existing_id}') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+            # A comment between INTO and the table name.
+            f"INSERT INTO /* c */ audit_logs (id) "
+            f"VALUES ('{existing_id}') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'changed'",
+        ]
+
+    def _text_cte_mutation_statements(self, engine: Engine) -> list[str]:
+        return [
+            # The mutation as the primary statement a CTE feeds.
+            "WITH t AS (SELECT 1) "
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "WITH t AS (SELECT 1) DELETE FROM audit_logs",
+            # The mutation nested inside the CTE's own body
+            # (PostgreSQL's data-modifying CTEs).
+            "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
+        ]
+
+    def test_text_truncate_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_truncate_statements(engine):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_replace_into_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_replace_statements(engine):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_upsert_do_update_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_upsert_do_update_statements(
+            engine, existing_log.id.hex
+        ):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_cte_mutation_is_all_rejected(
+        self, engine, existing_log, snapshot
+    ):
+        before = snapshot()
+
+        for statement in self._text_cte_mutation_statements(engine):
+            with engine.connect() as conn:
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        assert snapshot() == before
+
+    def test_text_upsert_on_conflict_do_nothing_still_works(
+        self, engine, operator, existing_log, snapshot
+    ):
+        """ALG-AC03/#233: ``ON CONFLICT ... DO NOTHING`` never
+        modifies an existing row, so it must not be blocked -- here
+        exercised against a real conflicting ``id`` (the insert is a
+        no-op) to prove both that it is not rejected and that it
+        genuinely leaves the row untouched (not merely that no
+        exception was raised).
+        """
+        before = snapshot()
+
+        insert_stmt = text(
+            "INSERT INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after) "
+            "ON CONFLICT (id) DO NOTHING"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            conn.execute(
+                insert_stmt,
+                {
+                    "id": existing_log.id,
+                    "created_at": existing_log.created_at,
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": {"name": "should-not-be-written"},
+                },
+            )
+            conn.commit()
+
+        assert snapshot() == before
+
+    @pytest.mark.sqlite_only
+    def test_insert_or_ignore_still_works(self, engine, operator):
+        """SQLite's ``INSERT OR IGNORE`` (unlike ``INSERT OR
+        REPLACE``) never overwrites an existing row, so it must not
+        be blocked; used here as a plain insert (no real conflict).
+        ``sqlite_only``: this syntax does not exist on PostgreSQL --
+        the unit-level regex test already covers it not being
+        blocked there too (the guard's check is dialect-agnostic).
+        """
+        before = len(_read_all_audit_log_rows(engine))
+        new_id = uuid7()
+        insert_stmt = text(
+            "INSERT OR IGNORE INTO audit_logs "
+            "(id, created_at, created_by, event_type, "
+            "entity_type, entity_id, before, after) "
+            "VALUES "
+            "(:id, :created_at, :created_by, :event_type, "
+            ":entity_type, :entity_id, :before, :after)"
+        ).bindparams(
+            bindparam("id", type_=Uuid),
+            bindparam("created_at", type_=UTCDateTime),
+            bindparam("created_by", type_=Uuid),
+            bindparam("entity_id", type_=Uuid),
+            bindparam("before", type_=JSON),
+            bindparam("after", type_=JSON),
+        )
+        with engine.connect() as conn:
+            conn.execute(
+                insert_stmt,
+                {
+                    "id": new_id,
+                    "created_at": clock.utc_now(),
+                    "created_by": operator.id,
+                    "event_type": "role.updated",
+                    "entity_type": "role",
+                    "entity_id": uuid7(),
+                    "before": None,
+                    "after": None,
+                },
+            )
+            conn.commit()
+
+        assert len(_read_all_audit_log_rows(engine)) == before + 1
 
     def test_text_insert_and_select_still_work(
         self, engine, operator, existing_log
