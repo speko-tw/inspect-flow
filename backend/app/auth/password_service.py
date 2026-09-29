@@ -23,6 +23,7 @@ what to do once told. The set-password command computes it from
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.lockout import clear_failed_attempts
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
@@ -45,28 +46,8 @@ class PasswordLengthError(ValueError):
 
 
 def _clear_login_failures(session: Session, user: User) -> None:
-    """Placeholder call point for T8's (#156) lockout-clearing
-    function.
-
-    Owner ruling (issue #192, 2026-09-27): resetting a password
-    through this Service entry point -- the set-password command or
-    a future Admin reset, and (transitively, since the
-    change-password API below also calls :func:`set_password`) a
-    successful self-service password change -- clears the target
-    account's failed-login count and lifts any active lockout,
-    since whoever performed the reset has already confirmed the
-    account's identity one way or another. This is a *new* clause
-    for AUT-R28 beyond its existing "驗證成功時清零": here nobody
-    necessarily verified the *current* password (the set-password
-    command and an Admin reset never do).
-
-    T8 has not merged yet (no ``app.auth.lockout`` module exists),
-    so there is nothing to call. Once it does, whichever of T8/T11
-    merges second replaces this function's body with a call to
-    T8's "清除失敗紀錄" function (e.g. ``lockout.
-    clear_failed_attempts(session, user)``) -- see plan.md's T8 row,
-    "與 T11 的銜接".
-    """
+    """Clear failed checks and lift a lockout after password reset."""
+    clear_failed_attempts(session, user.id)
 
 
 def set_password(
@@ -84,8 +65,7 @@ def set_password(
     updates the ``UserPassword`` row (``must_change_password`` set to
     ``is_temporary``), deletes every one of ``user``'s existing
     ``AuthSession`` rows (AUT-R25), clears any login lockout
-    (:func:`_clear_login_failures`, currently a no-op -- see its
-    docstring), and writes exactly one ``user.password_set`` audit
+    (:func:`_clear_login_failures`), and writes one ``user.password_set`` audit
     record (AUT-R39) with ``before``/``after`` holding only the
     ``is_temporary`` flag -- never the password or its hash
     (ALG-R08). ``before`` is omitted entirely when ``user`` had no
