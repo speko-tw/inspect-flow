@@ -17,14 +17,18 @@ AC labels below follow that spec's numbering:
   leaves the table unchanged, while ``INSERT``/``SELECT`` against
   ``audit_logs`` and any statement against another table still work.
   Issue #233 extends this to every other shape that modifies an
-  existing row or removes all of them: ``TRUNCATE``, SQLite's
-  ``REPLACE INTO``/``INSERT OR REPLACE INTO``, the
-  ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert, and a ``WITH``
-  (CTE) statement wrapping any of the above -- while
-  ``ON CONFLICT DO NOTHING`` and a plain ``INSERT`` still work, and a
-  CTE that is merely read from is not blocked. See
-  ``app/models/audit_log.py``'s module docstring for the residual
-  "Known limitations" issue #233 leaves undetected.
+  existing row or removes all of them: ``TRUNCATE`` (plain or
+  ``CASCADE``), SQLite's ``REPLACE INTO``/``INSERT OR REPLACE INTO``,
+  the ``INSERT ... ON CONFLICT ... DO UPDATE`` upsert, ``MERGE``, and
+  a ``WITH`` (CTE) statement wrapping any of the above in any shape
+  -- while ``ON CONFLICT DO NOTHING`` and a plain ``INSERT`` still
+  work. After two review rounds found real bypasses in a precise,
+  syntax-by-syntax parser, the guard was rewritten (see
+  ``app/models/audit_log.py``'s module docstring) into a
+  deliberately coarser, conservative check: a modification keyword
+  and ``audit_logs`` appearing anywhere in the same statement, in
+  either order, blocks it -- accepting some false positives (also
+  documented there) in exchange for not missing a real bypass.
 
 Same fixture pattern as ``test_role_member.py``/``test_company.py``:
 migrates the database behind ``conftest.py``'s ``db_url`` fixture
@@ -278,17 +282,21 @@ class TestTableStructure:
         assert session.get(AuditLog, log.id) is not None
 
 
-class TestRegexMatchesOnlyAuditLogsTable:
+class TestConservativeGuardBlocksRealWrites:
     """Unit tests for ``_targets_audit_logs`` itself (no database):
-    proves the append-only guard's matching rule directly, including
-    the "same-prefix but different table" case
-    (``audit_logs_x``) called out in plan.md's risk section, without
+    proves the append-only guard's conservative rule (a modification
+    keyword and ``audit_logs`` anywhere in the same statement, plus
+    ``TRUNCATE``'s own rule -- see ``app/models/audit_log.py``'s
+    module docstring) blocks every real write ALG-AC03/issue #233
+    lists, across two PR review rounds' worth of edge cases, without
     needing a second real table in the database just to exercise it.
     """
 
     @pytest.mark.parametrize(
         "statement",
         [
+            # Bare UPDATE/DELETE: unquoted, double-quoted, schema
+            # prefixed, mixed case, leading whitespace/comments.
             "UPDATE audit_logs SET entity_type = 'x'",
             "UPDATE \"audit_logs\" SET entity_type = 'x'",
             "UPDATE main.audit_logs SET entity_type = 'x'",
@@ -301,33 +309,119 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "DELETE FROM public.audit_logs",
             "dElEtE FrOm AUDIT_LOGS",
             "\n   DELETE FROM audit_logs",
-            # A leading SQL comment (line or block, possibly more
-            # than one) before the real keyword.
             "-- a comment\nUPDATE audit_logs SET entity_type = 'x'",
             "/* a comment */ DELETE FROM audit_logs",
             "-- one\n-- two\nUPDATE audit_logs SET entity_type = 'x'",
             "/* one */ /* two */ DELETE FROM audit_logs",
-            # SQLite's ``UPDATE OR <algorithm>`` conflict-resolution
-            # clause (UPDATE only -- SQLite has no ``DELETE OR``).
+            "UPDATE audit_logs;",
+            # SQLite's UPDATE OR <algorithm>; PostgreSQL's ONLY.
             "UPDATE OR REPLACE audit_logs SET entity_type = 'x'",
-            "UPDATE OR ROLLBACK audit_logs SET entity_type = 'x'",
-            "UPDATE OR ABORT audit_logs SET entity_type = 'x'",
-            "UPDATE OR FAIL audit_logs SET entity_type = 'x'",
             "UPDATE OR IGNORE audit_logs SET entity_type = 'x'",
-            # PostgreSQL's ``ONLY`` (excludes descendant partitions/
-            # inheriting tables from the statement).
             "UPDATE ONLY audit_logs SET entity_type = 'x'",
             "DELETE FROM ONLY audit_logs",
-            # A statement terminator or end-of-string right after the
-            # bare table name is still a valid boundary (regression:
-            # must not be broken by the boundary check added for
-            # ``audit_logs$archive`` below).
-            "UPDATE audit_logs;",
-            "DELETE FROM audit_logs",
+            # upsert INSERT ... ON CONFLICT ... DO UPDATE (contains
+            # the word UPDATE -- DO NOTHING does not, see below).
+            "INSERT INTO audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "insert into audit_logs (id) values ('x') "
+            "on conflict (id) do update set entity_type = 'x'",
+            "INSERT INTO \"audit_logs\" (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            # SQLite's REPLACE INTO / INSERT OR REPLACE INTO.
+            "REPLACE INTO audit_logs (id) VALUES ('x')",
+            "INSERT OR REPLACE INTO audit_logs (id) VALUES ('x')",
+            "insert or replace into audit_logs (id) values ('x')",
+            "REPLACE INTO \"audit_logs\" (id) VALUES ('x')",
+            # PostgreSQL 15's MERGE.
+            "MERGE INTO audit_logs USING src ON audit_logs.id = src.id "
+            "WHEN MATCHED THEN UPDATE SET entity_type = src.entity_type",
+            # A CTE wrapping a mutation, either as the CTE's own body
+            # (a PostgreSQL data-modifying CTE) or as the primary
+            # statement the CTE list feeds -- checked without this
+            # module trying to parse the CTE's structure at all.
+            "WITH t AS (SELECT 1) UPDATE audit_logs SET entity_type = 'x'",
+            "WITH t AS (SELECT 1) DELETE FROM audit_logs",
+            "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
+            "WITH RECURSIVE t AS (DELETE FROM audit_logs RETURNING id) "
+            "SELECT * FROM t",
+            "WITH a AS (SELECT 1), t AS (DELETE FROM audit_logs) "
+            "SELECT * FROM t",
+            "WITH t AS (SELECT 1) REPLACE INTO audit_logs (id) VALUES ('x')",
+            # PR #253 review round 2: PostgreSQL's SEARCH/CYCLE
+            # clauses on a recursive CTE, between the CTE list and
+            # the primary UPDATE -- the old CTE-structure parser
+            # never reached the primary statement past these clauses,
+            # but this rule does not need to parse past anything.
+            "WITH RECURSIVE t AS (SELECT 1) "
+            "SEARCH DEPTH FIRST BY x SET ordercol "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            "WITH RECURSIVE t AS (SELECT 1) "
+            "CYCLE x SET is_cycle USING path "
+            "UPDATE audit_logs SET entity_type = 'x'",
+            # A comment between a keyword and the table name, and
+            # (PR #253 review round 1) between the two halves of a
+            # *compound* keyword -- normalization turns every comment
+            # into a single space first, so keywords stay separated.
+            "TRUNCATE /* c */ audit_logs",
+            "REPLACE INTO -- c\naudit_logs (id) VALUES ('x')",
+            "INSERT INTO /* c */ audit_logs (id) VALUES ('x') "
+            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "DELETE/*c*/FROM audit_logs",
+            "REPLACE/*c*/INTO audit_logs (id) VALUES ('x')",
+            "INSERT INTO audit_logs (id) VALUES (1) "
+            "ON/*c*/CONFLICT (id) DO UPDATE SET entity_type = 'x'",
+            "UPDATE audit_logs/*c*/SET entity_type = 'x'",
+            # PR #253 review round 1: a comment inside a CTE body
+            # containing a ``)`` -- normalization removes the whole
+            # comment (including that character) before anything else
+            # runs, so there is no paren to miscount any more.
+            "WITH t AS (SELECT 1 /* ) */) "
+            "UPDATE audit_logs SET entity_type = 'x'",
         ],
     )
     def test_matches_every_blocked_spelling(self, statement):
         assert _targets_audit_logs(statement) is True
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "TRUNCATE audit_logs",
+            "TRUNCATE TABLE audit_logs",
+            "TRUNCATE ONLY audit_logs",
+            "TRUNCATE TABLE ONLY audit_logs",
+            "TRUNCATE users, audit_logs",
+            "TRUNCATE TABLE audit_logs, users",
+            "truncate AUDIT_LOGS",
+            'TRUNCATE "audit_logs"',
+            "TRUNCATE public.audit_logs",
+            # PR #253 review round 2: an unquoted table list where
+            # ``audit_logs`` is not the first table, and PostgreSQL's
+            # ``*`` (include descendants) with and without a space
+            # before the following comma -- this rule does not parse
+            # the table list at all, so none of these spacing/marker
+            # variations matter.
+            "TRUNCATE other_table*, audit_logs",
+            "TRUNCATE other_table *, audit_logs",
+            "TRUNCATE audit_logs*",
+            # PR #253 review round 2: TRUNCATE ... CASCADE, which can
+            # cascade into audit_logs through its created_by foreign
+            # key without ever naming audit_logs in the statement.
+            "TRUNCATE users CASCADE",
+            "TRUNCATE users RESTART IDENTITY CASCADE",
+        ],
+    )
+    def test_matches_every_blocked_truncate(self, statement):
+        assert _targets_audit_logs(statement) is True
+
+
+class TestConservativeGuardDoesNotBlockSafeStatements:
+    """Unit tests proving the conservative rule still lets through
+    every read, every plain append, and every write to an unrelated
+    table -- including the "same-prefix but different table" case
+    (``audit_logs_x``) called out in plan.md's risk section, and the
+    literal-value false positives two PR review rounds found in
+    earlier, more precise versions of this check.
+    """
 
     @pytest.mark.parametrize(
         "statement",
@@ -344,139 +438,42 @@ class TestRegexMatchesOnlyAuditLogsTable:
             "UPDATE OR REPLACE audit_logs_x SET entity_type = 'x'",
             "UPDATE ONLY audit_logs_x SET entity_type = 'x'",
             "UPDATE ONLY users SET entity_type = 'x'",
-            # Regression: an unquoted table name sharing the
-            # ``audit_logs`` prefix but continuing with a character
-            # outside this module's identifier class (``$``, a
-            # non-ASCII letter) is a different table, not
-            # ``audit_logs`` truncated -- a reviewer caught this
-            # actually mis-firing against a real SQLite database.
+            # A same-prefix table using a character outside this
+            # module's identifier class ($, a non-ASCII letter) is a
+            # different table, not audit_logs truncated.
             "UPDATE audit_logs$archive SET entity_type = 'x'",
             "DELETE FROM audit_logs$archive",
             "UPDATE audit_logs中 SET entity_type = 'x'",
             "DELETE FROM audit_logs中",
-            # A quoted name never had this problem (its contents are
-            # read verbatim to the closing quote), kept here as the
-            # same regression's quoted-name counterpart.
             "UPDATE \"audit_logs$archive\" SET entity_type = 'x'",
-        ],
-    )
-    def test_does_not_match_other_statements(self, statement):
-        assert _targets_audit_logs(statement) is False
-
-
-class TestRegexMatchesUpsertReplaceTruncateAndCte:
-    """Unit tests for ``_targets_audit_logs`` (no database) covering
-    issue #233's additions: upsert, ``REPLACE``, ``TRUNCATE``, and
-    CTE-wrapped writes.
-    """
-
-    @pytest.mark.parametrize(
-        "statement",
-        [
-            # INSERT ... ON CONFLICT ... DO UPDATE (PostgreSQL and
-            # SQLite share this syntax).
-            "INSERT INTO audit_logs (id) VALUES ('x') "
-            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            "insert into audit_logs (id) values ('x') "
-            "on conflict (id) do update set entity_type = 'x'",
-            "INSERT INTO audit_logs (id) VALUES ('a'), ('b') "
-            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            "INSERT INTO \"audit_logs\" (id) VALUES ('x') "
-            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            "INSERT INTO public.audit_logs (id) VALUES ('x') "
-            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            # SQLite's REPLACE INTO / INSERT OR REPLACE INTO.
-            "REPLACE INTO audit_logs (id) VALUES ('x')",
-            "INSERT OR REPLACE INTO audit_logs (id) VALUES ('x')",
-            "insert or replace into audit_logs (id) values ('x')",
-            "REPLACE INTO \"audit_logs\" (id) VALUES ('x')",
-            # TRUNCATE, including a table list and PostgreSQL's ONLY.
-            "TRUNCATE audit_logs",
-            "TRUNCATE TABLE audit_logs",
-            "TRUNCATE ONLY audit_logs",
-            "TRUNCATE TABLE ONLY audit_logs",
-            "TRUNCATE users, audit_logs",
-            "TRUNCATE TABLE audit_logs, users",
-            "truncate AUDIT_LOGS",
-            'TRUNCATE "audit_logs"',
-            "TRUNCATE public.audit_logs",
-            # A CTE wrapping a mutation, either as the CTE's own body
-            # (a PostgreSQL data-modifying CTE) or as the primary
-            # statement the CTE list feeds.
-            "WITH t AS (SELECT 1) UPDATE audit_logs SET entity_type = 'x'",
-            "WITH t AS (SELECT 1) DELETE FROM audit_logs",
-            "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
-            "WITH t AS (UPDATE audit_logs SET entity_type = 'x' "
-            "RETURNING id) SELECT * FROM t",
-            "WITH RECURSIVE t AS (DELETE FROM audit_logs RETURNING id) "
-            "SELECT * FROM t",
-            "WITH a AS (SELECT 1), t AS (DELETE FROM audit_logs) "
-            "SELECT * FROM t",
-            "WITH t AS (SELECT 1) TRUNCATE audit_logs",
-            "WITH t AS (SELECT 1) REPLACE INTO audit_logs (id) VALUES ('x')",
-            # A comment between the mutating keyword and the table
-            # name (ALG-AC03's "關鍵字與表名之間夾註解" case), for
-            # each newly-covered shape.
-            "TRUNCATE /* c */ audit_logs",
-            "REPLACE INTO -- c\naudit_logs (id) VALUES ('x')",
-            "INSERT INTO /* c */ audit_logs (id) VALUES ('x') "
-            "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            # PR #253 review round 1: a comment between two halves of
-            # a *compound* keyword, or between the second half and
-            # the table name -- not only before the table name as
-            # above. Before normalization these slipped through
-            # because e.g. "DELETE" and "FROM" no longer had real
-            # whitespace between them once the comment was removed.
-            "DELETE/*c*/FROM audit_logs",
-            "REPLACE/*c*/INTO audit_logs (id) VALUES ('x')",
-            "INSERT INTO audit_logs (id) VALUES (1) "
-            "ON/*c*/CONFLICT (id) DO UPDATE SET entity_type = 'x'",
-            "UPDATE audit_logs/*c*/SET entity_type = 'x'",
-            # PR #253 review round 1: a comment inside a CTE body
-            # that happens to contain a ``)`` character -- before
-            # normalization this closed the CTE's body early (paren
-            # depth reached 0 on the comment's own ``)``), so the
-            # primary statement after it was never reached.
-            "WITH t AS (SELECT 1 /* ) */) "
-            "UPDATE audit_logs SET entity_type = 'x'",
-        ],
-    )
-    def test_matches_every_blocked_spelling(self, statement):
-        assert _targets_audit_logs(statement) is True
-
-    @pytest.mark.parametrize(
-        "statement",
-        [
-            # ON CONFLICT DO NOTHING and a plain INSERT must never
-            # be blocked.
+            # ON CONFLICT DO NOTHING and a plain INSERT: no
+            # modification keyword anywhere in the statement.
             "INSERT INTO audit_logs (id) VALUES ('x') "
             "ON CONFLICT (id) DO NOTHING",
-            "INSERT INTO audit_logs (id) VALUES ('x')",
             # A literal value's own text containing the phrase this
-            # module searches for must not cause a false positive:
-            # every string literal's contents are emptied out before
-            # any keyword search runs (see _normalize_sql).
+            # module's keyword search looks for -- including in a
+            # later RETURNING clause, not only the inserted value --
+            # must not cause a false positive: every string literal's
+            # contents are emptied out before any keyword search
+            # runs (see _normalize_sql), in either case leaving no
+            # modification keyword anywhere in the visible text.
             "INSERT INTO audit_logs (id, after) VALUES "
             "('x', 'on conflict do update, then on conflict do "
             "nothing') ON CONFLICT (id) DO NOTHING",
             "INSERT INTO audit_logs (id, after) VALUES "
             "('x', 'contains on conflict do update text')",
-            # PR #253 review round 1: the same false positive, but
-            # with the literal text in a later clause (RETURNING)
-            # rather than the inserted value itself -- not bounded by
-            # skipping only the VALUES tuple, which is exactly why
-            # the fix normalizes every string literal in the whole
-            # statement, not only ones inside a VALUES list.
             "INSERT INTO audit_logs (id, entity_type) VALUES (2, 'new') "
             "RETURNING 'ON CONFLICT (id) DO UPDATE'",
             # INSERT OR <algorithm> other than REPLACE never
-            # overwrites an existing row.
+            # overwrites an existing row, and contains no
+            # modification keyword.
             "INSERT OR IGNORE INTO audit_logs (id) VALUES ('x')",
             "INSERT OR ROLLBACK INTO audit_logs (id) VALUES ('x')",
             "INSERT OR ABORT INTO audit_logs (id) VALUES ('x')",
             "INSERT OR FAIL INTO audit_logs (id) VALUES ('x')",
             # A different, same-prefix table is never mistaken for
-            # audit_logs by any of the new matchers.
+            # audit_logs, even together with a real modification
+            # keyword elsewhere in the same statement.
             "TRUNCATE audit_logs_x",
             "TRUNCATE TABLE audit_logs$archive",
             "REPLACE INTO audit_logs_x (id) VALUES ('x')",
@@ -484,8 +481,8 @@ class TestRegexMatchesUpsertReplaceTruncateAndCte:
             "ON CONFLICT (id) DO UPDATE SET entity_type = 'x'",
             "TRUNCATE other_table",
             "TRUNCATE users, other_table",
-            # A CTE that is only read from -- no mutation anywhere in
-            # its body or in the primary statement -- is not blocked.
+            # A CTE that is only read from -- no modification keyword
+            # anywhere in the statement -- is not blocked.
             "WITH t AS (SELECT * FROM audit_logs) SELECT * FROM t",
             "WITH t AS (SELECT * FROM users) "
             "SELECT * FROM t JOIN audit_logs ON t.id = audit_logs.id",
@@ -493,6 +490,33 @@ class TestRegexMatchesUpsertReplaceTruncateAndCte:
     )
     def test_does_not_match_other_statements(self, statement):
         assert _targets_audit_logs(statement) is False
+
+
+class TestConservativeGuardAcceptedFalsePositives:
+    """Documents (rather than hides) the false positives the
+    conservative rule knowingly accepts -- see
+    ``app/models/audit_log.py``'s module docstring's "Known
+    limitations". These assertions are the *expected*, current
+    behavior, not bugs to fix: a change that makes any of them start
+    returning ``False`` must be checked against the module docstring
+    first, since it may be reintroducing one of the two review
+    rounds' real bypasses instead of genuinely improving precision.
+    """
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            # Modifies a different table while only reading from
+            # audit_logs -- audit_logs itself is never touched.
+            "DELETE FROM other_table WHERE id IN (SELECT id FROM audit_logs)",
+            "UPDATE other_table SET x = (SELECT count(*) FROM audit_logs)",
+            # TRUNCATE ... CASCADE on a table with no real foreign
+            # key relationship to audit_logs at all.
+            "TRUNCATE unrelated_table CASCADE",
+        ],
+    )
+    def test_known_over_blocking_cases(self, statement):
+        assert _targets_audit_logs(statement) is True
 
 
 class TestAppendOnlyGuard:
@@ -688,6 +712,17 @@ class TestAppendOnlyGuard:
             # the table name.
             "-- audit-log guard test\nTRUNCATE audit_logs",
             "TRUNCATE /* audit-log guard test */ audit_logs",
+            # PR #253 review round 2: audit_logs not first in the
+            # table list, PostgreSQL's `*` (include descendants) with
+            # and without a space before the following comma.
+            "TRUNCATE users*, audit_logs",
+            "TRUNCATE users *, audit_logs",
+            # PR #253 review round 2: CASCADE, which can reach
+            # audit_logs through its created_by foreign key without
+            # naming it -- rejected regardless of which table is
+            # named.
+            "TRUNCATE users CASCADE",
+            "TRUNCATE users RESTART IDENTITY CASCADE",
         ]
 
     def _text_replace_statements(self, engine: Engine) -> list[str]:
@@ -735,10 +770,16 @@ class TestAppendOnlyGuard:
             # (PostgreSQL's data-modifying CTEs).
             "WITH t AS (DELETE FROM audit_logs RETURNING id) SELECT * FROM t",
             # PR #253 review round 1: a comment inside the CTE body
-            # containing a ``)`` character, which (before
-            # normalization) closed the body's paren pairing early
-            # and hid the real mutation that follows.
+            # containing a ``)`` character -- normalization removes
+            # the whole comment, including that character, before
+            # anything else runs.
             "WITH t AS (SELECT 1 /* ) */) "
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            # PR #253 review round 2: PostgreSQL's SEARCH/CYCLE
+            # clauses on a recursive CTE, between the CTE list and
+            # the primary UPDATE.
+            "WITH RECURSIVE t AS (SELECT 1) "
+            "SEARCH DEPTH FIRST BY x SET ordercol "
             "UPDATE audit_logs SET entity_type = 'changed'",
         ]
 
