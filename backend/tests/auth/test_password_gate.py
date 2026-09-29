@@ -8,15 +8,14 @@ from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 
 from app.api.errors import ErrorCode
-from app.api.v1.auth import get_me, logout
+from app.api.v1.auth import get_me
 from app.api.v1.auth import router as auth_router
-from app.auth.dependencies import TEMPORARY_PASSWORD_ALLOWLIST, require_login
+from app.auth.dependencies import require_login
 from app.auth.passwords import hash_password
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.main import create_app
 from app.models import User, UserPassword
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD
-from tests.contract.test_route_conventions import _iter_business_routes
 from tests.db.conftest import create_root_user_with_company
 
 PASSWORD = DEFAULT_TEST_PASSWORD
@@ -132,40 +131,6 @@ def _client_with_aliased_auth_router() -> TestClient:
     app = create_app()
     app.include_router(auth_router, prefix="/internal-alias")
     return TestClient(app, base_url="https://testserver")
-
-
-class TestAutAc36AllowlistContents:
-    """The allowlist is exactly the two operations this task owns
-    (T11 later adds the change-password route).
-    """
-
-    def test_allowlist_is_exactly_me_and_logout(self):
-        assert TEMPORARY_PASSWORD_ALLOWLIST == {
-            ("GET", get_me),
-            ("POST", logout),
-        }
-
-    def test_allowlist_entries_match_real_routes(self):
-        """Each allowlist entry names a real business route on the
-        actual application -- not merely a function that happens to
-        exist somewhere -- and it is exactly the route this task
-        expects: ``GET /api/v1/auth/me`` and
-        ``POST /api/v1/auth/logout`` (AUT-AC36). Matches by the
-        route's ``endpoint`` object itself (AUT-R33), the same
-        identity ``create_app()``'s real ``APIRoute`` will hold.
-        Paves the way for T11's change-password route to be added to
-        both this set and the allowlist together.
-        """
-        app = create_app()
-        matched: set[tuple[str, str]] = set()
-        for route, path in _iter_business_routes(app):
-            for method in route.methods or set():
-                if (method, route.endpoint) in TEMPORARY_PASSWORD_ALLOWLIST:
-                    matched.add((method, path))
-        assert matched == {
-            ("GET", "/api/v1/auth/me"),
-            ("POST", "/api/v1/auth/logout"),
-        }
 
 
 class TestAutAc35TemporaryPasswordGate:

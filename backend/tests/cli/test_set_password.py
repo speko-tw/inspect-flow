@@ -25,6 +25,7 @@ to end through a real child process into exit code 0.
 """
 
 import io
+import json
 import os
 import subprocess
 import sys
@@ -46,7 +47,7 @@ from app.cli.set_password import run
 from app.db.engine import dispose_engine, get_session_factory
 from app.db.settings import DATABASE_URL_ENV_VAR
 from app.main import create_app
-from app.models import AuthSession, User, UserPassword
+from app.models import AuditLog, AuthSession, User, UserPassword
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
@@ -432,3 +433,101 @@ class TestAutAc32BuiltinAdminCanSetPasswordAndLogIn:
         body = login_resp.json()
         assert body["id"] == str(admin.id)
         assert body["is_admin"] is True
+
+
+class TestAutAc34TemporaryFlagFollowsIsSystem:
+    """AUT-AC34: the command marks an ordinary account's password
+    temporary but never the built-in ``admin``'s (AUT-R37), and both
+    the login response and ``me`` agree with ``UserPassword`` on it
+    (AUT-R08).
+    """
+
+    def test_owner_is_temporary_admin_is_not(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
+        owner = _get_user(_OWNER_EMAIL)
+        admin = _get_user(_ADMIN_EMAIL)
+
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        assert run([_OWNER_EMAIL]) == 0
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        assert run([_ADMIN_EMAIL]) == 0
+
+        owner_password = _get_user_password(owner.id)
+        admin_password = _get_user_password(admin.id)
+        assert owner_password is not None
+        assert owner_password.must_change_password is True
+        assert admin_password is not None
+        assert admin_password.must_change_password is False
+
+        owner_client = _make_client()
+        owner_login = owner_client.post(
+            "/api/v1/auth/login",
+            json={"email": _OWNER_EMAIL, "password": _VALID_PASSWORD},
+        )
+        assert owner_login.status_code == 200
+        assert owner_login.json()["must_change_password"] is True
+        owner_me = owner_client.get("/api/v1/auth/me")
+        assert owner_me.status_code == 200
+        assert owner_me.json()["must_change_password"] is True
+
+        admin_client = _make_client()
+        admin_login = admin_client.post(
+            "/api/v1/auth/login",
+            json={"email": _ADMIN_EMAIL, "password": _VALID_PASSWORD},
+        )
+        assert admin_login.status_code == 200
+        assert admin_login.json()["must_change_password"] is False
+        admin_me = admin_client.get("/api/v1/auth/me")
+        assert admin_me.status_code == 200
+        assert admin_me.json()["must_change_password"] is False
+
+
+class TestAutAc49SetPasswordCommandWritesAudit:
+    """AUT-AC49: each successful run of the command writes exactly
+    one ``user.password_set`` audit record, through the Service
+    entry point it now delegates to (AUT-R39); a failed run (here,
+    mismatched entries) writes none, and no record's serialized
+    ``before``/``after`` contains the password or its hash.
+    """
+
+    def test_success_writes_one_record_each_failure_writes_none(
+        self, initialized: None, monkeypatch: pytest.MonkeyPatch
+    ):
+        owner = _get_user(_OWNER_EMAIL)
+        admin = _get_user(_ADMIN_EMAIL)
+
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        assert run([_OWNER_EMAIL]) == 0
+        _set_stdin_pair(monkeypatch, _VALID_PASSWORD)
+        assert run([_ADMIN_EMAIL]) == 0
+        _set_stdin_pair(monkeypatch, "Demo-Pass1", "Demo-Pass2")
+        assert run([_OWNER_EMAIL]) == 1
+
+        with get_session_factory()() as session:
+            logs = session.scalars(
+                select(AuditLog).where(
+                    AuditLog.event_type == "user.password_set"
+                )
+            ).all()
+
+        assert len(logs) == 2
+        by_entity = {log.entity_id: log for log in logs}
+        assert set(by_entity) == {owner.id, admin.id}
+
+        owner_log = by_entity[owner.id]
+        assert owner_log.created_by == admin.id
+        assert owner_log.before is None
+        assert owner_log.after == {"is_temporary": True}
+
+        admin_log = by_entity[admin.id]
+        assert admin_log.created_by == admin.id
+        assert admin_log.before is None
+        assert admin_log.after == {"is_temporary": False}
+
+        for log in logs:
+            serialized = json.dumps(
+                {"before": log.before, "after": log.after}
+            ).lower()
+            assert "password" not in serialized
+            assert _VALID_PASSWORD.lower() not in serialized
