@@ -31,7 +31,7 @@
 - 外部身分來源的串接與同步流程（比對、轉換、覆蓋基本欄位）：移至 `external-identity-sync`；本規格只預留欄位與約束（DOM-R08）。
 - 修改前顯示影響範圍的畫面與確認流程（[PR-18](../../intents/02-principles.md#pr-18)）：屬 UI／API 行為，由提供這些操作的功能規格（例如 `admin-dashboard`）負責；本規格只提供計算影響範圍所需的資料（DOM-R23）。
 - 稽核紀錄的資料模型（欄位、只能新增不能修改）與各事件的驗收：移至 `audit-log`（[#203](https://github.com/speko-tw/inspect-flow/issues/203) 撰寫；[DOM-Q6](#dom-q6) 裁定）。本規格只定義哪些變更要寫（DOM-R22）。
-- 人員、公司、角色、專案成員的管理畫面與專案成員 API：由之後的功能規格負責。基本的使用者與公司管理（簡便版：公司列表、新增、改名稱、停用，以及把使用者連結或解除公司）屬 0.2.x（API 見 [#263](https://github.com/speko-tw/inspect-flow/issues/263)、頁面見 [#265](https://github.com/speko-tw/inspect-flow/issues/265)）；角色定義 API（DOM-R55）屬 0.2.x（[#274](https://github.com/speko-tw/inspect-flow/issues/274)）；進階功能（搜尋、分頁、批次等）與管理畫面仍屬 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）。依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29；[#274](https://github.com/speko-tw/inspect-flow/issues/274)）。
+- 人員、公司與角色管理 API 及各管理畫面由功能規格負責。0.2.x 簡便版管理 API 包含使用者與公司管理（[#263](https://github.com/speko-tw/inspect-flow/issues/263)）、角色定義 API（DOM-R55；[#274](https://github.com/speko-tw/inspect-flow/issues/274)）及專案與專案成員管理（[#275](https://github.com/speko-tw/inspect-flow/issues/275)，介面見本規格「專案管理 API」）；使用者與公司管理頁面見 [#265](https://github.com/speko-tw/inspect-flow/issues/265)。搜尋、分頁、批次等進階管理功能與管理畫面仍屬 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）。依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）。
 - 職稱、承包商歸屬：不列入人員欄位（[OQ-02](../../intents/05-open-questions.md#oq-02) 裁定，#63）。
 - 替客戶公司成員指派可修改角色時的確認提示：已取消（[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 已取消，公司不再有類型），見 DOM-R24。
 - `Project` 的其他參與單位（承攬／送審等）：不列為建立 `Project` 的必填欄位，待上線後依需求調整（見 DOM-R43）。文件編號、查驗日期、送審版次、查驗結果與會簽等資訊：屬單次文件／查驗／報表層級資料，不放進 `Project`，由之後處理文件與報表的功能規格負責（[OQ-01](../../intents/05-open-questions.md#oq-01) 裁定，負責人，#71，2026-09-28）。工項分類與分區：依 [KD-40](../../intents/03-decisions-and-stack.md#kd-40) 屬另外的實體，皆依專案需求選用，不放進 `Project`，由後續規格定義。
@@ -108,9 +108,8 @@
 | DOM-R24 | **已被取代**（已取消，沒有取代條目，[#259](https://github.com/speko-tw/inspect-flow/issues/259)）。原規定：替 `kind = customer` 的 `Company` 所屬人員指派「有修改能力」的角色時，功能規格必須顯示確認提示、但不阻擋，Service 層提供「有修改能力」的判斷（角色的權限代碼中只要有一個動作不是 `read` 就算）；公司不再有類型，這個提示與判斷一併取消，沒有取代條目。 | 已取代 | 原依據（已取消）：[KD-28](../../intents/03-decisions-and-stack.md#kd-28)；判斷規則為負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：規則簡單，寧可多提醒一次；讀取的動作一律寫成 `read` 為負責人裁定（[PR #205](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851837293)，2026-09-27），見 DOM-R35；取代依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29） | 原驗收：DOM-AC26（判斷）；確認提示由提供指派操作的功能規格驗收（已隨取代條文改寫） |
 | DOM-R30 | `Role.name` 最多 64 個字元，不限格式。權限代碼最多 64 個字元，格式**必須**是 `<資料>.<動作>`，與 `error.code` 的 dot-namespace 格式一致：符合 `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`（與 API-AC09 相同），例如 `report.read`、`evidence_variant.approve`。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31。可用的權限代碼見 DOM-R35 | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、API-R07（格式）；[KD-25](../../intents/03-decisions-and-stack.md#kd-25)（命名規則待相關規格定案） | DOM-AC21 |
 | DOM-R34 | `Role.name` 在所有 `Role` 之間**必須**唯一，由資料庫約束保證；比對與唯一性**必須**不分大小寫：已有 `Viewer` 時，新增或改名為 `viewer` 會被擋下。`name` **必須**保留輸入的原樣存放，只在比對與唯一約束時轉成小寫；寫法比照 DOM-R02 的 `email`，由計畫選擇；SQLite 只比對 ASCII 字母大小寫的差異已接受（[負責人裁定](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851795833)，見計畫風險段） | 必須 | 負責人裁定（[DOM-Q4](#dom-q4)，[#124](https://github.com/speko-tw/inspect-flow/issues/124)，2026-09-27）：名稱重複時指派畫面分辨不出來；規則與 `email` 一致（DOM-R02） | DOM-AC24 |
-| DOM-R35 | 可用的權限代碼**必須**集中登記在程式內的一份登記表（做法比照 `ErrorCode`，API-R07），不存在資料表。`Role` 寫入未登記的權限代碼時**必須**拒絕、不寫入；比照 DOM-R31，檢查涵蓋所有經 ORM model 的寫入。登記表初始為空，由各功能規格登記自己用到的代碼。讀取動作的代碼**必須**寫成 `read`（例如 `report.read`），**不得**用 `view`、`get` 等同義字；之後登記新代碼都照這個規則 | 必須 | 負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：每個代碼都對應一段檢查程式，清單應和程式放在一起，存在資料表可能出現程式不認得的代碼；拒絕未登記代碼可擋住打錯字（例如 `reprot.read`）；清單先空著，每個代碼都要有規格依據；讀取一律寫 `read` 為負責人裁定（[PR #205](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851837293)，2026-09-27），「有修改能力」的判斷（原 DOM-R24）才能只看動作名稱；DOM-R24 已隨 [KD-28](../../intents/03-decisions-and-stack.md#kd-28) 取消（[#259](https://github.com/speko-tw/inspect-flow/issues/259)），這條命名規則不受影響，仍然有效 | DOM-AC25（拒絕未登記代碼）；`read` 命名由登記代碼的功能規格在審查時確認 |
+| DOM-R35 | 可用的權限代碼**必須**集中登記在程式內的一份登記表（做法比照 `ErrorCode`，API-R07），不存在資料表。`Role` 寫入未登記的權限代碼時**必須**拒絕、不寫入；比照 DOM-R31，檢查涵蓋所有經 ORM model 的寫入。各功能規格**必須**登記自己用到的代碼；目前已登記 `project_member.manage`（#275）。讀取動作的代碼**必須**寫成 `read`（例如 `report.read`），**不得**用 `view`、`get` 等同義字；之後登記新代碼都照這個規則 | 必須 | 負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：每個代碼都對應一段檢查程式，清單應和程式放在一起，存在資料表可能出現程式不認得的代碼；拒絕未登記代碼可擋住打錯字（例如 `reprot.read`）；代碼由功能規格依需求登記；讀取一律寫 `read` 為負責人裁定（[PR #205](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851837293)，2026-09-27），「有修改能力」的判斷（原 DOM-R24）才能只看動作名稱；DOM-R24 已隨 [KD-28](../../intents/03-decisions-and-stack.md#kd-28) 取消（[#259](https://github.com/speko-tw/inspect-flow/issues/259)），這條命名規則不受影響，仍然有效 | DOM-AC25（拒絕未登記代碼）；`read` 命名由登記代碼的功能規格在審查時確認 |
 | DOM-R55 | Backend **必須**提供全系統共用角色清單的 Admin API：列出角色、取得單一角色、新增角色、修改名稱與完整權限代碼集合，以及刪除角色；所有端點**必須**使用 authentication 的需 Admin 檢查（AUT-R20）。角色列表**必須**使用 API-R08 的 cursor-based 分頁，依建立時間與 UUID 穩定排序。API **必須**提供已登記權限代碼及其描述的清單供設定角色時選擇；登記表為空時回傳空清單。重複名稱回 409；角色不存在回 404；未登記或格式錯誤的權限代碼、空更新等規則拒絕回 422。刪除角色依 DOM-R21 同時移除全部成員指派，保留 `ProjectMember` 本身及其他角色指派；角色新增、修改、刪除依 DOM-R22 寫入 `role.*` 稽核事件 | 必須 | [#274](https://github.com/speko-tw/inspect-flow/issues/274)；AUT-R20、DOM-R19～DOM-R22、DOM-R30、DOM-R34、DOM-R35、API-R01～API-R09 | DOM-AC47～DOM-AC49 |
-
 ### `ProjectMember`（凍結）
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
@@ -176,8 +175,7 @@
 
 ## 介面
 
-除角色管理 API（DOM-R55）外，本規格不新增 API 端點。對開發者的介面如下；具體模組與函式名稱由計畫決定，不屬於本規格的契約。
-
+除本節列出的角色管理 API（DOM-R55）及專案管理 API（#275）外，本規格不新增 API 端點。對開發者的程式介面如下；具體模組、函式與指令名稱由計畫決定，不屬於本規格的契約。
 | 介面 | 內容 | 對應需求 |
 |---|---|---|
 | 指令 | 初始化指令：不詢問任何資料，建立內建 `admin`，並交由 `authentication` 印出首次登入碼；已初始化時不重複建立 | DOM-R13、DOM-R53 |
@@ -186,14 +184,41 @@
 | 程式介面 | `User` 新增入口（拒絕停用中的公司；帳號名稱、公司連結的檢查） | DOM-R32、DOM-R45～DOM-R47 |
 | 程式介面 | `Company` 新增與修改入口（填建立與修改紀錄；名稱去空白與不分大小寫唯一）；列出公司啟用中的人員與人數 | DOM-R14、DOM-R33、DOM-R49 |
 | 程式介面 | `Role` 新增、修改與刪除；`ProjectMember` 的角色指派與移除、移出專案；角色影響範圍、有效權限計算 | DOM-R20～DOM-R23、DOM-R26、DOM-R36、DOM-R52 |
+| 程式碼 | 權限代碼登記表；本 API 登記 `project_member.manage` | DOM-R35、#275 |
 | API | `GET /api/v1/roles?limit=<1..100>&cursor=<cursor>` 回 `{items: Role[], next_cursor}`；依 `created_at`、`id` 升冪分頁，預設 `limit=50`、上限 100。`GET /api/v1/roles/{role_id}` 取得單筆；`POST /api/v1/roles` 本體 `{name, permission_codes}` 建立；`PATCH /api/v1/roles/{role_id}` 接受 `name`、完整替換用的 `permission_codes`，至少提供一個實際變更欄位；`DELETE /api/v1/roles/{role_id}` 刪除並依 DOM-R21 移除指派，成功回 204。角色回應包含 UUID `id`、`name`、排序後的 `permission_codes`、`created_at`、`updated_at`；時間依 API-R09。 | DOM-R55 |
 | API | `GET /api/v1/roles/permission-codes` 回 `{items: [{code, description}]}`，依 `code` 排序；只列出 DOM-R35 已登記項目，未登記碼不得由 API 接受。所有角色端點需 Admin；錯誤使用 `error.code`，重複名稱、角色不存在與無效輸入依角色 API 錯誤契約處理。 | DOM-R55 |
-
-| 程式碼 | 權限代碼登記表（初始為空） | DOM-R35 |
 | 程式介面 | `Project` 新增、修改入口；依 `project_code` 查出既有 `Project` 的介面（供重複警告） | DOM-R40、DOM-R42 |
 
-角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）。
+### 專案管理 API（#275）
 
+以下端點是 0.2.x 的簡便版管理 API，不包含搜尋、分頁或批次操作。
+專案欄位與行為仍以 DOM-R40～DOM-R44 為準。
+
+| 方法與路徑 | 行為 | 存取層級 |
+|---|---|---|
+| `GET /api/v1/projects` | 列出專案 | 需 Admin（AUT-R20） |
+| `GET /api/v1/projects/{project_id}` | 取得專案 | 需 Admin（AUT-R20） |
+| `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
+| `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
+| `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，可同時指定零個以上角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；空集合代表不指派角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `DELETE /api/v1/projects/{project_id}/members/{user_id}` | 將人員移出專案 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+
+新增與修改專案的回應**必須**在 `warnings` 陣列中指出重複的
+`project_code`（警告代碼 `project_code.duplicate`），但仍成功儲存；此警告
+不屬於錯誤碼。專案回應包含 UUID、業務欄位與選填日期。
+ProjectMember 回應包含成員 UUID、`user_id`、`username` 與完整的
+`role_ids` 集合。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
+回 HTTP 204。重複加入同一人回 HTTP 409、`project.member_conflict`；缺少
+專案、人員或角色回 HTTP 404、`resource.not_found`；其餘無效輸入回 HTTP
+422、`request.validation_failed`。
+
+HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中的「全部 Admin」
+覆蓋規格：專案 CRUD 使用 AUT-R20；ProjectMember 加入、角色設定與移出
+使用 AUT-R22 的需專案權限檢查，Admin 依 AUT-R19 放行。未登入仍依 AUT-R18
+回 HTTP 401、`auth.not_authenticated`。
+
+角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）。
 ### 管理介面錯誤
 
 管理 `User` 與 `Company` 的 API 使用共用錯誤 envelope。下列錯誤碼由 API 登記表提供；重複資料回 HTTP 409，其餘業務規則拒絕回 HTTP 422。
@@ -206,10 +231,11 @@
 - `user.email_conflict` — HTTP 409：新增或修改 email 時，email 已被其他帳號使用（不分大小寫）。
 - `user.employee_no_conflict` — HTTP 409：指派或變更公司連結時，同一家公司已有相同工號。
 - `company.name_conflict` — HTTP 409：新增或修改公司名稱時，名稱已被其他公司使用（不分大小寫）。
+- `project.member_conflict` — HTTP 409：同一人已是該專案成員。
 
 ## 驗收條件
 
-每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。已被取代的驗收條件保留編號並連到取代它的新條目；新條目從 DOM-AC33 接續。登記表初始為空，AC 用到的權限代碼（例如 `report.read`）由測試暫時登記（DOM-R35）。
+每條至少對應一個需求；皆以 `make check` 內的自動化測試驗證，資料庫由 `alembic upgrade head` 建立。已被取代的驗收條件保留編號並連到取代它的新條目；新條目從 DOM-AC33 接續。權限登記表由各功能規格新增正式代碼；測試另以暫時登記的代碼驗證通用規則（DOM-R35）。
 
 ### `User`
 
@@ -362,6 +388,7 @@
 - DOM-Q5 裁定：新增 DOM-R36、DOM-AC27（成員可沒有角色；移出專案即刪除成員，指派連帶刪除）；DOM-R26、DOM-AC15 補上沒有角色的成員；DOM-R22 補上移出專案；DOM-R25 改引用 DOM-R36 — [#125](https://github.com/speko-tw/inspect-flow/issues/125)
 - DOM-R40～DOM-R44、DOM-AC28～DOM-AC32：依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，`Project` 業務欄位由草稿轉為正式並納入凍結範圍：必填 `project_code`（得重複）、`name`（工程名稱）、`client_name`（業主／委託單位）、`site_location`（整體工程地點）；選填 `planned_start_date`、`planned_completion_date`；新增依 `project_code` 查重複的 Service 層介面供建立時警告；不設啟用或狀態欄位；`name`、`client_name`、`site_location` 的長度上限為本規格依既有慣例推導的暫定值 — [#246](https://github.com/speko-tw/inspect-flow/issues/246)
 - DOM-Q9 裁定（範圍變更；含 [KD-16](../../intents/03-decisions-and-stack.md#kd-16)、[KD-18](../../intents/03-decisions-and-stack.md#kd-18)、[KD-22](../../intents/03-decisions-and-stack.md#kd-22)、[KD-28](../../intents/03-decisions-and-stack.md#kd-28) 的意圖變更）：新增 DOM-R45～DOM-R54、DOM-AC33～DOM-AC46（帳號名稱、`User` 基本欄位改寫、公司連結與工號的清空與同公司內唯一、`Company` 只留名稱與啟用狀態且名稱不重複、內建 `admin` 的欄位、Admin 指派與收回、沒有公司的人加入專案、初始化指令改寫為只建 admin、不預建角色（負責人裁定 #261，2026-09-29）、既有資料回填）；DOM-R01、DOM-R11、DOM-R12、DOM-R16、DOM-R17、DOM-R24、DOM-R29 與 DOM-AC01、DOM-AC08、DOM-AC09、DOM-AC11～DOM-AC13、DOM-AC20、DOM-AC26 標示為已被取代；DOM-R02、DOM-R04～DOM-R07、DOM-R13、DOM-R14、DOM-R18、DOM-R22、DOM-R28、DOM-R31～DOM-R33 與相關驗收就地改寫 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
+- 規格澄清（#275）：新增 0.2.x 專案管理 API 介面契約；專案 CRUD 使用 Admin 存取層級，ProjectMember 加入、角色設定與移出使用 AUT-R22 專案權限；登記 `project_member.manage`；更新範圍說明，將此 API 從未來工作改為已由 #275 負責 — [#275](https://github.com/speko-tw/inspect-flow/issues/275)
 - 規格澄清（審查修正）：DOM-R46 明定 `email`、`name_zh` 在資料庫層可空並加 CHECK（`is_system = true`，或兩者都不為空值）；DOM-AC33 改為分開驗證可空性與條件式約束，需求欄改指 DOM-R46、DOM-R50；帳號名稱欄位統一稱 `username` — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 依 #274 新增凍結的角色管理 API 契約 DOM-R55、DOM-AC47～DOM-AC49：Admin 角色 CRUD、已登記權限代碼清單、cursor 分頁、錯誤狀態與稽核驗收；刪除沿用 DOM-R21 的既定連帶移除角色指派規則 — [#274](https://github.com/speko-tw/inspect-flow/issues/274)
 - 負責人裁定（#261，2026-09-29）：`make init` 不再建立三個範本角色，只建立內建 `admin`；同步改寫 DOM-R13、DOM-R53、DOM-AC43～DOM-AC44、DOM-Q4、KD-26 與 OQ-08 對應段，並更新初始化測試 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)

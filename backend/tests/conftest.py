@@ -12,12 +12,12 @@ from app.api.errors import DescribedStrEnum
 
 
 class _TestPermissionCode(DescribedStrEnum):
-    """Test-only registry standing in for DOM-R35's still-empty
-    production ``PermissionCode`` (``app/permission_codes.py``).
+    """Test-only registry standing in for the production
+    ``PermissionCode`` (``app/permission_codes.py``).
     Mirrors ``tests/contract/test_error_envelope.py``'s
     ``SupersetCode``/``SwappedCode`` pattern (API-AC10b): a
     throwaway ``DescribedStrEnum`` subclass exercised in tests,
-    never a member added to the real, still-empty ``PermissionCode``.
+    never a member added to the production ``PermissionCode``.
 
     ``EVIDENCE_CREATE``/``EVIDENCE_UPDATE`` were added for T4's
     AUT-AC44 (``tests/auth/test_access.py``), which needs a code per
@@ -30,6 +30,7 @@ class _TestPermissionCode(DescribedStrEnum):
     EVIDENCE_CREATE = ("evidence.create", "test")
     EVIDENCE_UPDATE = ("evidence.update", "test")
     EVIDENCE_DELETE = ("evidence.delete", "test")
+    PROJECT_MEMBER_MANAGE = ("project_member.manage", "test")
 
 
 @pytest.fixture

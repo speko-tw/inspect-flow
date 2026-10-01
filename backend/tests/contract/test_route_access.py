@@ -117,6 +117,40 @@ def test_aut_ac16_include_level_dependency_alone_counts_as_declared() -> None:
     assert infos[0].declaration.level is AccessLevel.ADMIN_REQUIRED
 
 
+def test_issue_275_routes_declare_the_specified_access_levels() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/projects")
+    }
+    admin_routes = {
+        ("GET", "/api/v1/projects"),
+        ("GET", "/api/v1/projects/{project_id}"),
+        ("POST", "/api/v1/projects"),
+        ("PATCH", "/api/v1/projects/{project_id}"),
+    }
+    member_routes = {
+        ("POST", "/api/v1/projects/{project_id}/members"),
+        (
+            "PUT",
+            "/api/v1/projects/{project_id}/members/{user_id}/roles",
+        ),
+        ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
+    }
+
+    assert set(routes) == admin_routes | member_routes
+    for route in admin_routes:
+        declaration = routes[route]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.ADMIN_REQUIRED
+    for route in member_routes:
+        declaration = routes[route]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.PROJECT_PERMISSION
+        assert declaration.permission_code == "project_member.manage"
+
+
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
     """AUT-AC22: ``auth.not_authenticated``,
     ``auth.invalid_credentials`` and ``permission.denied`` are all
