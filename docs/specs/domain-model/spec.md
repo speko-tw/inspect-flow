@@ -395,4 +395,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 依 #274 新增凍結的角色管理 API 契約 DOM-R55、DOM-AC47～DOM-AC49：Admin 角色 CRUD、已登記權限代碼清單、cursor 分頁、錯誤狀態與稽核驗收；刪除沿用 DOM-R21 的既定連帶移除角色指派規則 — [#274](https://github.com/speko-tw/inspect-flow/issues/274)
 - 負責人裁定（#261，2026-09-29）：`make init` 不再建立三個範本角色，只建立內建 `admin`；同步改寫 DOM-R13、DOM-R53、DOM-AC43～DOM-AC44、DOM-Q4、KD-26 與 OQ-08 對應段，並更新初始化測試 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
 - 規格澄清（審查修正）：補列帳號與公司管理 API 的錯誤碼、HTTP 狀態及觸發條件；四種重複資料回 409，其餘列出的業務規則拒絕回 422 — [#263](https://github.com/speko-tw/inspect-flow/issues/263)
-- 範圍變更（負責人裁定，[#277 留言](https://github.com/speko-tw/inspect-flow/issues/277#issuecomment-5932232205)）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/members`（成員列表，權限同其他成員端點），回應含使用者顯示欄位；供專案與成員管理頁顯示現有成員 — [#277](https://github.com/speko-tw/inspect-flow/issues/277)
+- 範圍變更（負責人裁定）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/members`（成員列表，權限同其他成員端點），回應含使用者顯示欄位；供專案與成員管理頁顯示現有成員；裁定原文：[#277 留言](https://github.com/speko-tw/inspect-flow/issues/277#issuecomment-5932232205) — [#277](https://github.com/speko-tw/inspect-flow/issues/277)

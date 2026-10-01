@@ -398,7 +398,7 @@ describe('admin project members', () => {
     expect(within(bobRow).getByText('—', { selector: 'td' })).toBeVisible()
   })
 
-  it('adds a member with several roles and hides existing, inactive and system users', async () => {
+  it('adds a member; hides existing, inactive, system users', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/admin/projects/project-1')
     await screen.findByText('anna.deng')
