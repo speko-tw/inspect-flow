@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError, ErrorCode
 from app.auth.access import require_admin, require_project_permission
 from app.auth.dependencies import get_db
-from app.models import Project, ProjectMember, Role, User
+from app.models import Company, Project, ProjectMember, Role, User
 from app.services.project_members import (
     add_project_member,
+    list_project_members,
     remove_project_member,
     set_project_member_roles,
 )
@@ -84,6 +85,16 @@ class ProjectMemberResponse(BaseModel):
     role_ids: list[UUID]
 
 
+class ProjectMemberDetailResponse(ProjectMemberResponse):
+    """A listed member with the user fields the management page shows."""
+
+    name_zh: str | None
+    email: str | None
+    company_id: UUID | None
+    company_name: str | None
+    is_active: bool
+
+
 def _get_project(db: Session, project_id: UUID) -> Project:
     project = db.get(Project, project_id)
     if project is None:
@@ -135,6 +146,32 @@ def _member_response(
         role_ids=sorted(
             assignment.role_id for assignment in member.role_assignments
         ),
+    )
+
+
+def _member_detail_response(
+    db: Session, member: ProjectMember
+) -> ProjectMemberDetailResponse:
+    user = db.get(User, member.user_id)
+    if user is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    company = (
+        db.get(Company, user.company_id)
+        if user.company_id is not None
+        else None
+    )
+    return ProjectMemberDetailResponse(
+        id=member.id,
+        user_id=user.id,
+        username=user.username,
+        role_ids=sorted(
+            assignment.role_id for assignment in member.role_assignments
+        ),
+        name_zh=user.name_zh,
+        email=user.email,
+        company_id=user.company_id,
+        company_name=company.name if company is not None else None,
+        is_active=user.is_active,
     )
 
 
@@ -227,6 +264,23 @@ def edit_project(
     except (InvalidProjectFieldError, ProjectUnchangedError) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     return _project_response(db, project)
+
+
+@router.get(
+    "/{project_id}/members",
+    response_model=list[ProjectMemberDetailResponse],
+    dependencies=[_PROJECT_MEMBER_ACCESS],
+)
+def list_members(
+    project_id: UUID,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> list[ProjectMemberDetailResponse]:
+    """List a project's members (not paginated; the count is small)."""
+    _get_project(db, project_id)
+    return [
+        _member_detail_response(db, member)
+        for member in list_project_members(db, project_id)
+    ]
 
 
 @router.post(

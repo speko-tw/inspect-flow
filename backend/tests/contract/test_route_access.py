@@ -131,6 +131,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         ("PATCH", "/api/v1/projects/{project_id}"),
     }
     member_routes = {
+        ("GET", "/api/v1/projects/{project_id}/members"),
         ("POST", "/api/v1/projects/{project_id}/members"),
         (
             "PUT",

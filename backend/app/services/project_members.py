@@ -38,7 +38,8 @@ requires it regardless.
 import uuid
 from collections.abc import Iterable
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import ProjectMember, ProjectMemberRole
 from app.services.audit import record_audit_event
@@ -249,6 +250,24 @@ def set_project_member_roles(
     return member
 
 
+def list_project_members(
+    session: Session, project_id: uuid.UUID
+) -> list[ProjectMember]:
+    """Return ``project_id``'s members, oldest join first.
+
+    Read-only query for the member management page. Ties on
+    ``created_at`` fall back to the UUID so the order is stable.
+    """
+    return list(
+        session.scalars(
+            select(ProjectMember)
+            .options(selectinload(ProjectMember.role_assignments))
+            .where(ProjectMember.project_id == project_id)
+            .order_by(ProjectMember.created_at, ProjectMember.id)
+        )
+    )
+
+
 def remove_project_member(session: Session, member: ProjectMember) -> None:
     """Remove ``member`` from its project (DOM-R36): deletes the
     ``ProjectMember`` row outright, relying on the database's own
@@ -278,6 +297,7 @@ __all__ = [
     "RoleAlreadyAssignedError",
     "RoleNotAssignedError",
     "add_project_member",
+    "list_project_members",
     "assign_role",
     "unassign_role",
     "remove_project_member",
