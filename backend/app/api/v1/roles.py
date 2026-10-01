@@ -23,8 +23,10 @@ from app.models.role import PermissionCodeValidationError
 from app.permission_codes import permission_code_descriptions
 from app.services.roles import (
     RoleUnchangedError,
+    RoleUsage,
     create_role,
     delete_role,
+    role_usages,
     update_role,
 )
 
@@ -58,6 +60,8 @@ class RoleResponse(BaseModel):
     id: UUID
     name: str
     permission_codes: list[str]
+    user_count: int
+    project_count: int
     created_at: str
     updated_at: str
 
@@ -78,14 +82,20 @@ class PermissionCodeListResponse(BaseModel):
     items: list[PermissionCodeResponse]
 
 
-def _role_response(role: Role) -> RoleResponse:
+def _role_response(role: Role, usage: RoleUsage) -> RoleResponse:
     return RoleResponse(
         id=role.id,
         name=role.name,
         permission_codes=sorted(item.code for item in role.permission_codes),
+        user_count=usage.user_count,
+        project_count=usage.project_count,
         created_at=format_utc(role.created_at),
         updated_at=format_utc(role.updated_at),
     )
+
+
+def _single_role_response(db: Session, role: Role) -> RoleResponse:
+    return _role_response(role, role_usages(db, [role.id])[role.id])
 
 
 def _get_role(db: Session, role_id: UUID) -> Role:
@@ -187,8 +197,9 @@ def list_roles(
         next_cursor = _encode_cursor(
             CursorKey(created_at=last.created_at, id=last.id)
         )
+    usages = role_usages(db, [role.id for role in page])
     return RoleListResponse(
-        items=[_role_response(role) for role in page],
+        items=[_role_response(role, usages[role.id]) for role in page],
         next_cursor=next_cursor,
     )
 
@@ -210,7 +221,7 @@ def get_role(
     role_id: UUID,
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
 ) -> RoleResponse:
-    return _role_response(_get_role(db, role_id))
+    return _single_role_response(db, _get_role(db, role_id))
 
 
 @router.post("", response_model=RoleResponse, status_code=201)
@@ -231,7 +242,7 @@ def add_role(
         raise
     except PermissionCodeValidationError as exc:
         raise _translate_permission_error() from exc
-    return _role_response(role)
+    return _single_role_response(db, role)
 
 
 @router.patch("/{role_id}", response_model=RoleResponse)
@@ -257,7 +268,7 @@ def update_role_endpoint(
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     except PermissionCodeValidationError as exc:
         raise _translate_permission_error() from exc
-    return _role_response(role)
+    return _single_role_response(db, role)
 
 
 @router.delete("/{role_id}", status_code=204)

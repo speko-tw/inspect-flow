@@ -353,3 +353,67 @@ def test_unknown_integrity_error_is_not_reported_as_name_conflict(
         "/api/v1/roles", json=_role_payload("Unknown constraint")
     )
     assert response.status_code == 500
+
+
+def test_role_api_reports_user_and_project_counts(
+    role_admin_client, db_session
+):
+    client, admin = role_admin_client
+    held = client.post("/api/v1/roles", json=_role_payload("Held")).json()
+    unused = client.post("/api/v1/roles", json=_role_payload("Unused")).json()
+    assert (held["user_count"], held["project_count"]) == (0, 0)
+
+    projects = []
+    for index in range(2):
+        project = Project(
+            project_code=f"ROLE-COUNT-{index}",
+            name="示範專案",
+            client_name="示範業主",
+            site_location="示範地點",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        db_session.add(project)
+        projects.append(project)
+    db_session.flush()
+    # 三筆成員指派都持有 Held：A、B 在專案 0，A 又在專案 1；
+    # 因此是 2 位不重複使用者、2 個專案（同一人跨專案只算 1 人）。
+    users = {
+        label: create_root_user_with_company(db_session, f"ROLE-COUNT-{label}")
+        for label in ("A", "B")
+    }
+    for project, label in (
+        (projects[0], "A"),
+        (projects[0], "B"),
+        (projects[1], "A"),
+    ):
+        user = users[label]
+        member = ProjectMember(
+            project_id=project.id,
+            user_id=user.id,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        member.role_assignments.append(
+            ProjectMemberRole(role_id=UUID(held["id"]))
+        )
+        db_session.add(member)
+    db_session.commit()
+
+    expected = {"user_count": 2, "project_count": 2}
+    single = client.get(f"/api/v1/roles/{held['id']}").json()
+    assert {key: single[key] for key in expected} == expected
+    listed = {
+        item["id"]: item
+        for item in client.get("/api/v1/roles").json()["items"]
+    }
+    assert {key: listed[held["id"]][key] for key in expected} == expected
+    assert (
+        listed[unused["id"]]["user_count"],
+        listed[unused["id"]]["project_count"],
+    ) == (0, 0)
+
+    renamed = client.patch(
+        f"/api/v1/roles/{held['id']}", json={"name": "Held renamed"}
+    ).json()
+    assert {key: renamed[key] for key in expected} == expected

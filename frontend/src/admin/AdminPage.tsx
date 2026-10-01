@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import CompaniesPage from './CompaniesPage'
+import RolesPage from './roles/RolesPage'
 import ProjectDetailPage from './projects/ProjectDetailPage'
 import ProjectsPage from './projects/ProjectsPage'
 import UsersPage from './UsersPage'
@@ -49,6 +50,10 @@ export default function AdminPage() {
             to="/admin/companies"
           >
             公司
+          </Link>
+          {' · '}
+          <Link onClick={() => setTemporaryPassword(null)} to="/admin/roles">
+            角色
           </Link>
           {' · '}
           <Link
@@ -109,6 +114,7 @@ export default function AdminPage() {
             }
           />
           <Route path="companies" element={<CompaniesPage />} />
+          <Route path="roles" element={<RolesPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
