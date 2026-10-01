@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R54、DOM-AC01～DOM-AC46，已被取代的條目除外）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
+本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-AC01～DOM-AC49，已被取代的條目除外）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
 
 ## 任務
 
@@ -38,6 +38,9 @@
 | F | 前端登入與首次設定頁；驗收涵蓋「設定密碼 → 新增第一個使用者」整段流程（呼叫 E 的 API）；一般管理頁屬 G | C、D、E | （`authentication` 驗收） | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
 | G | 前端管理頁（簡便版：使用者與公司的列表、新增、修改、停用、連結或解除公司） | E | （前端驗收） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者與公司的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
+| I | 角色管理 API：Admin 專用的角色列表、單筆、建立、修改、刪除與權限代碼清單；沿用 T7 的 Service 寫入入口及 audit-log 寫入入口，依 AUT-R20 檢查 Admin，包含游標排序與錯誤碼契約 | T3、T7、`authentication` 的 Admin 驗證（AUT-R20）；`audit-log` T2 已由 T7 依賴 | DOM-AC47～DOM-AC49 | [#274](https://github.com/speko-tw/inspect-flow/issues/274) |
+
+角色管理 API（I）的改動檔案：`backend/app/api/v1/roles.py`、`backend/app/main.py`（註冊 router）、`backend/app/api/errors.py`（錯誤碼）、`backend/app/models/role.py`（權限代碼驗證例外）、`backend/tests/api/test_roles_api.py`；驗證執行 `make check`。
 
 - 簡便版的管理功能屬 0.2.x（E 的 API、G 的頁面）；搜尋、分頁、批次等進階功能仍屬 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）。
 - B 與 E 都改 `backend/app/services/users.py`、`backend/app/services/companies.py` 與 migration 鏈，不同波；C 改初始化指令與 `Makefile`，與 E 檔案不重疊，B 完成後可並行。
@@ -53,6 +56,7 @@
 - 第 4 波：T5（依賴 T3、T4）。
 - 第 5 波：T7（依賴 T3、T4 與 `audit-log` T2 [#216](https://github.com/speko-tw/inspect-flow/issues/216)；改 T4 建立的 `users.py`，因此排在 T4 之後）。
 - 第 6 波：T8（依賴 #59；與 `database-foundation` T5 合併為同一個 PR，不依賴本計畫其他任務，可與前面幾波併行，這裡排在最後只是文件順序）。
+- 第 7 波：I（依賴 T3、T7 與 `authentication` 的 Admin 驗證；只改 API、註冊、錯誤碼與 API 測試，不與 E 的使用者／公司 API 檔案重疊）。
 
 碰到[共用檔案](../README.md#parallel)的地方：
 
@@ -126,6 +130,7 @@
 | DOM-AC44 | `backend/tests/cli/test_init_system.py`（C）：兩種狀態各重跑一次，斷言資料不變、已設密碼者被拒絕；`make check` |
 | DOM-AC45 | `backend/tests/db/test_migration_backfill.py`（B）：建立舊結構資料庫與資料、執行 upgrade head，斷言回填與欄位移除；`make check` |
 | DOM-AC46 | `backend/tests/api/`（E）：以首次登入碼完成首次設定後，用登入狀態呼叫新增使用者 API 建立第一個使用者，斷言 `created_by`、`updated_by` 是內建 `admin`；`make check` |
+| DOM-AC47～DOM-AC49 | `backend/tests/api/test_roles_api.py`（I）：驗證 Admin 角色 CRUD、一般與未登入者對所有角色端點皆被拒絕、錯誤碼、稽核、cursor 與權限代碼清單；`make check` |
 
 ## 考慮過但沒採用的做法
 
