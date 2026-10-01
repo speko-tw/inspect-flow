@@ -23,8 +23,8 @@ function makeRole(
   id: string,
   name: string,
   codes: string[] = [],
-  usage: { member_count: number; project_count: number } = {
-    member_count: 0,
+  usage: { user_count: number; project_count: number } = {
+    user_count: 0,
     project_count: 0,
   },
 ): Role {
@@ -217,7 +217,7 @@ describe('admin role management page', () => {
     const fetchMock = rolesFetch({
       roles: [
         makeRole('r1', 'Viewer', [MANAGE.code], {
-          member_count: 5,
+          user_count: 5,
           project_count: 2,
         }),
       ],
@@ -240,7 +240,7 @@ describe('admin role management page', () => {
       name: '修改「Viewer」',
     })
     expect(confirmation).toHaveTextContent(
-      '此變更會影響 2 個專案中的 5 位成員',
+      '此變更會影響 2 個專案中的 5 位使用者',
     )
     // 影響範圍向後端重新取得，而且確認前不送出修改。
     expect(calls(fetchMock, 'GET').map(([url]) => url)).toContain(
@@ -281,7 +281,7 @@ describe('admin role management page', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
 
     expect(
-      await screen.findByText(/此變更會影響 0 個專案中的 0 位成員/),
+      await screen.findByText(/此變更會影響 0 個專案中的 0 位使用者/),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '確認修改角色' }))
     await waitFor(() => expect(calls(fetchMock, 'PATCH')).toHaveLength(1))
@@ -309,7 +309,8 @@ describe('admin role management page', () => {
   it('shows the impact and asks to confirm before deleting', async () => {
     const fetchMock = rolesFetch({
       roles: [
-        makeRole('r1', 'Viewer', [], { member_count: 3, project_count: 2 }),
+        // 同一人在兩個專案持有此角色：只算 1 位使用者、2 個專案。
+        makeRole('r1', 'Viewer', [], { user_count: 1, project_count: 2 }),
         makeRole('r2', 'Coordinator'),
       ],
     })
@@ -321,7 +322,9 @@ describe('admin role management page', () => {
     const confirmation = await screen.findByRole('region', {
       name: '刪除「Viewer」',
     })
-    expect(confirmation).toHaveTextContent('刪除會影響 2 個專案中的 3 位成員')
+    expect(confirmation).toHaveTextContent(
+      '刪除會影響 2 個專案中的 1 位使用者',
+    )
     expect(confirmation).toHaveTextContent('角色指派都會一併移除')
     expect(calls(fetchMock, 'DELETE')).toHaveLength(0)
 
@@ -353,7 +356,7 @@ describe('admin role management page', () => {
       await screen.findByRole('button', { name: '刪除角色 Viewer' }),
     )
     expect(
-      await screen.findByText(/刪除會影響 0 個專案中的 0 位成員/),
+      await screen.findByText(/刪除會影響 0 個專案中的 0 位使用者/),
     ).toBeInTheDocument()
   })
 

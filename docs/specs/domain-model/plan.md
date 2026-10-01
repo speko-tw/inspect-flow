@@ -40,7 +40,7 @@
 | G | 前端管理頁（簡便版：使用者與公司的列表、新增、修改、停用、連結或解除公司） | E | （前端驗收） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者與公司的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
 | I | 角色管理 API：Admin 專用的角色列表、單筆、建立、修改、刪除與權限代碼清單；沿用 T7 的 Service 寫入入口及 audit-log 寫入入口，依 AUT-R20 檢查 Admin，包含游標排序與錯誤碼契約 | T3、T7、`authentication` 的 Admin 驗證（AUT-R20）；`audit-log` T2 已由 T7 依賴 | DOM-AC47～DOM-AC49 | [#274](https://github.com/speko-tw/inspect-flow/issues/274) |
-| J | 角色管理頁（簡便版）：Admin 的角色列表、新增、改名、改權限、刪除；權限勾選區用權限代碼清單；修改與刪除前顯示影響範圍並確認（PR-18）；為此角色回應加 `member_count`、`project_count`（DOM-R55 澄清） | I、G（沿用其管理頁版面與 API 慣例） | DOM-AC47（`member_count`、`project_count`）；其餘為前端驗收 | [#276](https://github.com/speko-tw/inspect-flow/issues/276) |
+| J | 角色管理頁（簡便版）：Admin 的角色列表、新增、改名、改權限、刪除；權限勾選區用權限代碼清單；修改與刪除前顯示影響範圍並確認（PR-18）；為此角色回應加 `user_count`、`project_count`（DOM-R55 澄清） | I、G（沿用其管理頁版面與 API 慣例） | DOM-AC47（`user_count`、`project_count`）；其餘為前端驗收 | [#276](https://github.com/speko-tw/inspect-flow/issues/276) |
 
 角色管理 API（I）的改動檔案：`backend/app/api/v1/roles.py`、`backend/app/main.py`（註冊 router）、`backend/app/api/errors.py`（錯誤碼）、`backend/app/models/role.py`（權限代碼驗證例外）、`backend/tests/api/test_roles_api.py`；驗證執行 `make check`。
 
@@ -135,7 +135,7 @@
 | DOM-AC45 | `backend/tests/db/test_migration_backfill.py`（B）：建立舊結構資料庫與資料、執行 upgrade head，斷言回填與欄位移除；`make check` |
 | DOM-AC46 | `backend/tests/api/`（E）：以首次登入碼完成首次設定後，用登入狀態呼叫新增使用者 API 建立第一個使用者，斷言 `created_by`、`updated_by` 是內建 `admin`；`make check` |
 | DOM-AC47～DOM-AC49 | `backend/tests/api/test_roles_api.py`（I）：驗證 Admin 角色 CRUD、一般與未登入者對所有角色端點皆被拒絕、錯誤碼、稽核、cursor 與權限代碼清單；`make check` |
-| DOM-AC47（`member_count`、`project_count`） | `backend/tests/api/test_roles_api.py`（J）：三筆成員分屬兩個專案持有同一角色，斷言單筆、列表與修改回應皆為 3 筆、2 個專案，無人持有的角色為 0、0；前端 `frontend/src/admin/roles/RolesPage.test.tsx` 斷言修改與刪除前顯示影響範圍並確認；`make check` |
+| DOM-AC47（`user_count`、`project_count`） | `backend/tests/api/test_roles_api.py`（J）：三筆成員指派分屬兩個專案、其中一人跨兩專案持有同一角色，斷言單筆、列表與修改回應皆為 2 位不重複使用者、2 個專案，無人持有的角色為 0、0；前端 `frontend/src/admin/roles/RolesPage.test.tsx` 斷言修改與刪除前顯示影響範圍（同一人跨兩專案只算 1 位使用者）並確認；`make check` |
 
 ## 考慮過但沒採用的做法
 

@@ -60,7 +60,7 @@ class RoleResponse(BaseModel):
     id: UUID
     name: str
     permission_codes: list[str]
-    member_count: int
+    user_count: int
     project_count: int
     created_at: str
     updated_at: str
@@ -87,7 +87,7 @@ def _role_response(role: Role, usage: RoleUsage) -> RoleResponse:
         id=role.id,
         name=role.name,
         permission_codes=sorted(item.code for item in role.permission_codes),
-        member_count=usage.member_count,
+        user_count=usage.user_count,
         project_count=usage.project_count,
         created_at=format_utc(role.created_at),
         updated_at=format_utc(role.updated_at),

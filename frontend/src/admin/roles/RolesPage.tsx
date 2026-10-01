@@ -108,7 +108,7 @@ export default function RolesPage() {
   }
 
   function describeImpact(role: Role): string {
-    return `會影響 ${role.project_count} 個專案中的 ${role.member_count} 位成員`
+    return `會影響 ${role.project_count} 個專案中的 ${role.user_count} 位使用者`
   }
 
   // 影響範圍以按下按鈕當下的後端數字為準，列表上的數字可能已過時。

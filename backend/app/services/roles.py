@@ -65,12 +65,13 @@ class RoleUnchangedError(ValueError):
 class RoleUsage:
     """How widely a ``Role`` is held right now (PR-18's influence
     range shown before a role is changed or deleted):
-    ``member_count`` is the number of ``ProjectMember`` rows holding
-    it, ``project_count`` the number of distinct ``Project``s those
-    rows belong to. Both are ``0`` when nobody holds the role.
+    ``user_count`` is the number of distinct ``User``s holding it
+    (one person holding it on two projects counts once),
+    ``project_count`` the number of distinct ``Project``s those
+    memberships belong to. Both are ``0`` when nobody holds the role.
     """
 
-    member_count: int
+    user_count: int
     project_count: int
 
 
@@ -89,7 +90,7 @@ def role_usages(
         rows = session.execute(
             select(
                 ProjectMemberRole.role_id,
-                func.count(ProjectMemberRole.project_member_id),
+                func.count(distinct(ProjectMember.user_id)),
                 func.count(distinct(ProjectMember.project_id)),
             )
             .join(
@@ -99,8 +100,8 @@ def role_usages(
             .where(ProjectMemberRole.role_id.in_(list(usages)))
             .group_by(ProjectMemberRole.role_id)
         ).all()
-    for role_id, member_count, project_count in rows:
-        usages[role_id] = RoleUsage(member_count, project_count)
+    for role_id, user_count, project_count in rows:
+        usages[role_id] = RoleUsage(user_count, project_count)
     return usages
 
 
