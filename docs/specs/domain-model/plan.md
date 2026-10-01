@@ -40,7 +40,7 @@
 | G | 前端管理頁（簡便版：使用者與公司的列表、新增、修改、停用、連結或解除公司） | E | （前端驗收） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者與公司的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
 | I | 角色管理 API：Admin 專用的角色列表、單筆、建立、修改、刪除與權限代碼清單；沿用 T7 的 Service 寫入入口及 audit-log 寫入入口，依 AUT-R20 檢查 Admin，包含游標排序與錯誤碼契約 | T3、T7、`authentication` 的 Admin 驗證（AUT-R20）；`audit-log` T2 已由 T7 依賴 | DOM-AC47～DOM-AC49 | [#274](https://github.com/speko-tw/inspect-flow/issues/274) |
-| J | 角色管理頁（簡便版）：Admin 的角色列表、新增、改名、改權限、刪除；權限勾選區用權限代碼清單；修改與刪除前顯示影響範圍並確認（PR-18）；為此角色回應加 `user_count`、`project_count`（DOM-R55 澄清） | I、G（沿用其管理頁版面與 API 慣例） | DOM-AC47（`user_count`、`project_count`）；其餘為前端驗收 | [#276](https://github.com/speko-tw/inspect-flow/issues/276) |
+| J | 角色管理頁（簡便版）：Admin 的角色列表、新增、改名、改權限、刪除；權限勾選區用權限代碼清單；修改與刪除前顯示影響範圍並確認（PR-18）；為此角色回應加 `user_count`、`project_count`（DOM-R55 範圍變更，負責人裁定：[#276 留言](https://github.com/speko-tw/inspect-flow/issues/276#issuecomment-5932231697)） | I、G（沿用其管理頁版面與 API 慣例） | DOM-AC47（`user_count`、`project_count`）；其餘為前端驗收 | [#276](https://github.com/speko-tw/inspect-flow/issues/276) |
 
 角色管理 API（I）的改動檔案：`backend/app/api/v1/roles.py`、`backend/app/main.py`（註冊 router）、`backend/app/api/errors.py`（錯誤碼）、`backend/app/models/role.py`（權限代碼驗證例外）、`backend/tests/api/test_roles_api.py`；驗證執行 `make check`。
 
