@@ -112,7 +112,7 @@ describe('RequireAuth 導向登入頁並保留原路徑（AUT-AC28）', () => {
 
     await screen.findByRole('heading', { name: '登入' })
 
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
       target: { value: 'admin@example.com' },
     })
     fireEvent.change(screen.getByLabelText('密碼'), {

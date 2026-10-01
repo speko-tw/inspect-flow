@@ -1,13 +1,15 @@
-// 登入頁（AUT-R29）。送出 email 與密碼到登入 API；失敗時只顯示
-// 一種通用訊息，不透露是哪種原因（呼應後端 AUT-R06 的一致回應）。
+// 登入頁（AUT-R29）。送出帳號名稱或 email 與密碼到登入 API；失敗
+// 時只顯示一種通用訊息，不透露是哪種原因（呼應後端 AUT-R06 的一
+// 致回應）。
 
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { login } from './api'
+import AuthLayout from './AuthLayout'
 import { isSafeRedirectPath } from './safeRedirect'
 
-const GENERIC_ERROR_MESSAGE = 'Email 或密碼錯誤，請再試一次。'
+const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 
 interface RedirectState {
   from?: unknown
@@ -16,7 +18,7 @@ interface RedirectState {
 export default function LoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -27,7 +29,7 @@ export default function LoginPage() {
     setSubmitting(true)
 
     try {
-      await login(email, password)
+      await login(account, password)
 
       const state = location.state as RedirectState | null
       const from = state?.from
@@ -42,19 +44,18 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
-      <h1>登入</h1>
+    <AuthLayout title="登入" lead="請輸入帳號名稱或 Email 與密碼。">
       <form onSubmit={handleSubmit} noValidate>
         <div>
-          <label htmlFor="login-email">Email</label>
+          <label htmlFor="login-account">帳號名稱或 Email</label>
           <input
-            id="login-email"
-            name="email"
-            type="email"
-            autoComplete="email"
+            id="login-account"
+            name="username"
+            type="text"
+            autoComplete="username"
             required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            value={account}
+            onChange={(event) => setAccount(event.target.value)}
           />
         </div>
         <div>
@@ -74,6 +75,6 @@ export default function LoginPage() {
           登入
         </button>
       </form>
-    </main>
+    </AuthLayout>
   )
 }

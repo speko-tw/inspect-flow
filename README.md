@@ -44,32 +44,15 @@ root.
    - `make run-backend` — API at `http://127.0.0.1:8000`.
    - `make run-frontend` — Vite at `http://localhost:5173`; it
      forwards `/api` to the backend.
-5. **Set the admin password**: until the first-setup page from #264 is
-   available, use the API from a terminal. The code expires after 24
-   hours; if it expires or is locked, run `make init` again to issue a
-   replacement. Read both values without echoing them or adding them to
-   shell history, then send the JSON through standard input:
-
-   ```bash
-   printf 'First-login code: '
-   IFS= read -r -s SETUP_CODE
-   printf '\nAdmin password: '
-   IFS= read -r -s ADMIN_PASSWORD
-   printf '\n'
-   export SETUP_CODE ADMIN_PASSWORD
-   uv run --project backend python -c \
-     'import json, os; print(json.dumps({"code": os.environ["SETUP_CODE"], "password": os.environ["ADMIN_PASSWORD"]}))' |
-     curl --fail-with-body --silent --show-error \
-       -X POST http://127.0.0.1:8000/api/v1/setup/admin-password \
-       -H 'Content-Type: application/json' --data-binary @- \
-       -o /dev/null -w 'HTTP %{http_code}\n'
-   unset SETUP_CODE ADMIN_PASSWORD
-   ```
-
-   This request returns a login Cookie, which this command does not
-   save; sign in through the existing login page with username `admin`
-   and the password you just set. After #264 is complete, use its
-   first-setup page instead.
+5. **Set the admin password**: open the first-setup page at
+   `http://localhost:5173/setup` (opening `/` or `/login` redirects
+   there until setup is done). Enter the first-login code printed by
+   `make init` and the new password twice (8 to 128 characters). The
+   code expires after 24 hours; if it expires or is locked, run
+   `make init` again to issue a replacement. After the password is
+   set you are signed in as `admin`; the page then offers to add the
+   first user (it shows a temporary password once) or to skip to the
+   admin pages.
 6. **Reset the admin password when needed**: run
    `make reset-admin-password` on the server. Enter the new password
    twice; the terminal does not echo it. The command accepts piped

@@ -19,6 +19,7 @@ import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { ApiError, changePassword } from './api'
+import AuthLayout from './AuthLayout'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 
@@ -86,8 +87,7 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <main>
-      <h1>變更密碼</h1>
+    <AuthLayout title="變更密碼" lead="請輸入目前密碼，並設定新的密碼。">
       <form onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="change-password-current">目前密碼</label>
@@ -131,6 +131,6 @@ export default function ChangePasswordPage() {
         </button>
       </form>
       <LogoutButton />
-    </main>
+    </AuthLayout>
   )
 }
