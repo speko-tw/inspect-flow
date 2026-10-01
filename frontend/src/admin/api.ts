@@ -64,7 +64,10 @@ export class ManagementApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: 'same-origin',
@@ -190,6 +193,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'user.email_conflict': 'Email 已被使用。',
   'user.employee_no_conflict': '這家公司已有相同工號。',
   'company.name_conflict': '公司名稱已被使用。',
+  'project.member_conflict': '這位使用者已經是此專案的成員。',
   'auth.password_invalid': '密碼長度不符合要求。',
 }
 

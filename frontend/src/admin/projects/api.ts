@@ -1,0 +1,144 @@
+// 專案與專案成員管理 API（DOM-R40～DOM-R44、專案管理 API 介面段）。
+
+import { request } from '../api'
+
+export interface ProjectWarning {
+  code: string
+}
+
+export interface Project {
+  id: string
+  project_code: string
+  name: string
+  client_name: string
+  site_location: string
+  planned_start_date: string | null
+  planned_completion_date: string | null
+  warnings: ProjectWarning[]
+}
+
+export type ProjectInput = {
+  project_code: string
+  name: string
+  client_name: string
+  site_location: string
+  planned_start_date: string | null
+  planned_completion_date: string | null
+}
+
+export interface ProjectMember {
+  id: string
+  user_id: string
+  username: string
+  role_ids: string[]
+  name_zh: string | null
+  email: string | null
+  company_id: string | null
+  company_name: string | null
+  is_active: boolean
+}
+
+export interface Role {
+  id: string
+  name: string
+  permission_codes: string[]
+}
+
+interface RolePage {
+  items: Role[]
+  next_cursor: string | null
+}
+
+export const DUPLICATE_CODE_WARNING = 'project_code.duplicate'
+
+export function hasDuplicateCodeWarning(project: Project): boolean {
+  return project.warnings.some(
+    (warning) => warning.code === DUPLICATE_CODE_WARNING,
+  )
+}
+
+export function listProjects(): Promise<Project[]> {
+  return request('/projects')
+}
+
+export function getProject(id: string): Promise<Project> {
+  return request(`/projects/${id}`)
+}
+
+export function createProject(input: ProjectInput): Promise<Project> {
+  return request('/projects', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateProject(
+  id: string,
+  input: Partial<ProjectInput>,
+): Promise<Project> {
+  return request(`/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export function listProjectMembers(
+  projectId: string,
+): Promise<ProjectMember[]> {
+  return request(`/projects/${projectId}/members`)
+}
+
+export function addProjectMember(
+  projectId: string,
+  userId: string,
+  roleIds: string[],
+): Promise<ProjectMember> {
+  return request(`/projects/${projectId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, role_ids: roleIds }),
+  })
+}
+
+export function setProjectMemberRoles(
+  projectId: string,
+  userId: string,
+  roleIds: string[],
+): Promise<ProjectMember> {
+  return request(`/projects/${projectId}/members/${userId}/roles`, {
+    method: 'PUT',
+    body: JSON.stringify({ role_ids: roleIds }),
+  })
+}
+
+export function removeProjectMember(
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  return request(`/projects/${projectId}/members/${userId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** 角色 API 是游標分頁；沿著 `next_cursor` 取完所有角色。 */
+export async function listAllRoles(): Promise<Role[]> {
+  const roles: Role[] = []
+  let cursor: string | null = null
+  do {
+    const query: string = cursor
+      ? `?limit=100&cursor=${encodeURIComponent(cursor)}`
+      : '?limit=100'
+    const page: RolePage = await request(`/roles${query}`)
+    roles.push(...page.items)
+    cursor = page.next_cursor
+  } while (cursor)
+  return roles
+}
+
+export function personLabel(person: {
+  username: string
+  name_zh: string | null
+}): string {
+  return person.name_zh
+    ? `${person.name_zh}（${person.username}）`
+    : person.username
+}
