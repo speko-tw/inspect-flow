@@ -70,6 +70,10 @@ _CODE_MAX_LENGTH = 64
 _CODE_PATTERN = re.compile(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*")
 
 
+class PermissionCodeValidationError(ValueError):
+    """A role permission code failed DOM-R30 or DOM-R35 validation."""
+
+
 def _check_name(value: str) -> None:
     if len(value) > _NAME_MAX_LENGTH:
         raise ValueError(
@@ -80,7 +84,7 @@ def _check_name(value: str) -> None:
 
 def _check_code(value: str) -> None:
     if len(value) > _CODE_MAX_LENGTH or not _CODE_PATTERN.fullmatch(value):
-        raise ValueError(
+        raise PermissionCodeValidationError(
             "RolePermission.code must be at most "
             f"{_CODE_MAX_LENGTH} characters, formatted as "
             f"'<data>.<action>' (DOM-R30); got {value!r}"
@@ -88,7 +92,7 @@ def _check_code(value: str) -> None:
     # DOM-R35: a format-valid code is still rejected if no feature
     # spec has registered it (see app/permission_codes.py).
     if not is_permission_code_registered(value):
-        raise ValueError(
+        raise PermissionCodeValidationError(
             f"RolePermission.code {value!r} is not a registered "
             "permission code (DOM-R35)"
         )
@@ -96,10 +100,9 @@ def _check_code(value: str) -> None:
 
 class Role(AuditMixin, TimestampedBase):
     """A system-wide, project-agnostic named set of permission
-    codes (DOM-R19). All roles -- including the three template
-    roles the initialization command creates -- may be renamed,
-    have their permission codes changed, and be deleted (DOM-R20);
-    nothing here marks any row as protected.
+    codes (DOM-R19). All roles may be renamed, have their permission
+    codes changed, and be deleted (DOM-R20); nothing here marks any
+    row as protected. Admins add roles after initialization.
     """
 
     __tablename__ = "roles"
