@@ -131,8 +131,9 @@ export default function ProjectDetailPage() {
   }
 
   const memberIds = new Set(members.map((member) => member.user_id))
+  // 內建 admin 是系統帳號，不屬於任何公司，不該被指派到專案。
   const candidates = users.filter(
-    (user) => user.is_active && !memberIds.has(user.id),
+    (user) => user.is_active && !user.is_system && !memberIds.has(user.id),
   )
   const roleName = (id: string) =>
     roles.find((role) => role.id === id)?.name ?? '（未知角色）'

@@ -70,6 +70,11 @@ const inactive = {
   ...makeUser('user-3', 'old.user', '舊人員'),
   is_active: false,
 }
+const systemAdmin = {
+  ...makeUser('user-0', 'admin', '系統管理員'),
+  is_admin: true,
+  is_system: true,
+}
 
 function renderAt(path: string) {
   return render(
@@ -179,7 +184,7 @@ function projectFetch({
         return new Response(null, { status: 204 })
       }
       if (url.endsWith('/users')) {
-        return Response.json([anna, bob, inactive])
+        return Response.json([systemAdmin, anna, bob, inactive])
       }
       if (url.includes('/roles')) {
         const cursor = new URL(url, 'http://x').searchParams.get('cursor')
@@ -393,7 +398,7 @@ describe('admin project members', () => {
     expect(within(bobRow).getByText('—', { selector: 'td' })).toBeVisible()
   })
 
-  it('adds a member with several roles and hides existing members', async () => {
+  it('adds a member with several roles and hides existing, inactive and system users', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/admin/projects/project-1')
     await screen.findByText('anna.deng')
