@@ -174,9 +174,9 @@
 
 ### OQ-08：角色權限矩陣（誰能做什麼、在什麼專案範圍內）的正式版本？（已裁定）
 
-> **加註**：其中「客戶公司成員的確認提示」已由負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）取消（[KD-28](03-decisions-and-stack.md#kd-28) 已取消，公司不再有類型）；其餘裁定不變。另補充：具 Admin 權限的人可指派、收回他人的 Admin 權限，內建 `admin` 除外（[KD-24](03-decisions-and-stack.md#kd-24)）；範本角色由初始化指令建立、權限為空集合（[KD-26](03-decisions-and-stack.md#kd-26)）。
+> **加註**：其中「客戶公司成員的確認提示」已由負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）取消（[KD-28](03-decisions-and-stack.md#kd-28) 已取消，公司不再有類型）；其餘裁定不變。另補充：具 Admin 權限的人可指派、收回他人的 Admin 權限，內建 `admin` 除外（[KD-24](03-decisions-and-stack.md#kd-24)）；範本角色預建的補充裁定已被負責人裁定（#261，2026-09-29）取代，現由 Admin 之後在系統內新增（[KD-26](03-decisions-and-stack.md#kd-26)）。
 
-**裁定**：不採固定角色矩陣，改為「系統管理者開關（Admin）＋全系統共用、可自訂的角色清單」；權限表示為「資料 × 動作」的權限代碼；角色掛在專案成員（`ProjectMember`）上，同一專案可疊加多個角色；首次安裝預建三個範本角色（內業整理、現場查核、唯讀）。**各範本角色實際勾選哪些權限，改在系統畫面上調整，不寫進本文件。**安全機制（後端預設拒絕、變更寫稽核紀錄、不能拿掉最後一個 Admin）與客戶公司成員的確認提示一併裁定。記錄於 [KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)；討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
+**裁定**：不採固定角色矩陣，改為「系統管理者開關（Admin）＋全系統共用、可自訂的角色清單」；權限表示為「資料 × 動作」的權限代碼；角色掛在專案成員（`ProjectMember`）上，同一專案可疊加多個角色。負責人裁定（#261，2026-09-29）：取消三個範本角色；角色由 Admin 之後自行命名新增，初始化只建立內建 `admin`、不建立角色。安全機制（後端預設拒絕、變更寫稽核紀錄、不能拿掉最後一個 Admin）與客戶公司成員的確認提示一併裁定。記錄於 [KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)；討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
 
 **為什麼要先決定**：影響 [01-overview.md](01-overview.md) 角色定義的落地細節，以及 [PR-01](02-principles.md#pr-01)（伺服器端覆核）如何實作授權檢查。
 

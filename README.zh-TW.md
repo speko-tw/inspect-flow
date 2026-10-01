@@ -31,18 +31,40 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
    ```
 
 2. **套用 migration**：`make migrate`。
-3. **初始化系統**：`make init`。會詢問本公司的代碼與名稱，以及內建
-   `admin` 與負責人個人帳號的必填基本欄位；對已初始化的資料庫再執行
-   一次，會回報已初始化並且不寫入任何資料。
-4. **設定密碼**：`make set-password EMAIL=<email>`（含內建
-   `admin`）。連接終端機時會提示輸入兩次新密碼（不回顯）；也可從
-   標準輸入以管線提供兩行密碼供自動化使用。指令列不接受任何密碼
-   參數。
-5. **啟動後端與前端**，各開一個終端機：
+3. **初始化系統**：`make init`。抄下指令印出的一次性首次登入碼。
+   `admin` 尚未設定密碼時重跑，會讓舊碼失效並印出新碼。初始化只建立
+   內建 `admin`；角色之後由 Admin 在系統內新增。
+4. **啟動後端與前端**，各開一個終端機：
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把
      `/api` 轉給後端。
-6. **登入**：用瀏覽器開 `http://localhost:5173`。
+5. **設定 admin 密碼**：#264 的首次設定頁上線前，先在終端機呼叫
+   API。首次登入碼 24 小時後到期；過期或被鎖時，重跑 `make init`
+   就會換發新碼。以下指令會隱藏輸入內容，也不會把碼或密碼放進
+   shell 歷程；用 `uv` 執行 Python 標準庫產生 JSON，再以管線送出：
+
+   ```bash
+   printf '首次登入碼：'
+   IFS= read -r -s SETUP_CODE
+   printf '\nadmin 密碼：'
+   IFS= read -r -s ADMIN_PASSWORD
+   printf '\n'
+   export SETUP_CODE ADMIN_PASSWORD
+   uv run --project backend python -c \
+     'import json, os; print(json.dumps({"code": os.environ["SETUP_CODE"], "password": os.environ["ADMIN_PASSWORD"]}))' |
+     curl --fail-with-body --silent --show-error \
+       -X POST http://127.0.0.1:8000/api/v1/setup/admin-password \
+       -H 'Content-Type: application/json' --data-binary @- \
+       -o /dev/null -w 'HTTP %{http_code}\n'
+   unset SETUP_CODE ADMIN_PASSWORD
+   ```
+
+   回應會帶登入 Cookie；這個 `curl` 範例不保存 Cookie。設定完成後，
+   用帳號 `admin` 和剛設定的密碼從現有登入頁登入。#264 完成後，
+   改用首次設定網頁操作。
+6. **需要重設 admin 密碼時**：在伺服器執行
+   `make reset-admin-password`，依提示輸入兩次新密碼（不回顯）。指令
+   也接受管線提供的兩行標準輸入供自動化使用，不接受密碼參數。
 
 Safari 限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`，Safari
 在 `http://localhost` 不送，因此無法登入。Chrome、Firefox 可用；

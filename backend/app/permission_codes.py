@@ -7,15 +7,10 @@ kept in code, the same pattern ``app/api/errors.py``'s ``ErrorCode``
 uses for KD-15's error codes (code paired with a human-readable
 description, via the shared ``DescribedStrEnum`` base).
 
-``PermissionCode`` therefore starts with **no members**: no feature
-spec has registered a code yet (DOM-R35's "登記表初始為空，由各功能規
-格登記自己用到的代碼"). A future feature spec adds its own member
-here the same way ``ErrorCode`` grows one per feature -- never a
-placeholder or fake entry; an empty ``Enum`` subclass is valid
-Python (verified: ``list(PermissionCode)`` is simply ``[]``, and a
-further subclass may still add members later, the same relationship
-``app/api/errors.py``'s ``DescribedStrEnum`` base has to ``ErrorCode``
-itself).
+The registry contains only codes registered by frozen feature
+specifications. `domain-model` registers
+``project_member.manage`` for managing project members and their
+roles; future feature specifications add their own codes here.
 
 ``is_permission_code_registered`` is the single query function
 ``app/models/role.py``'s ``RolePermission._check_code`` calls before
@@ -23,13 +18,12 @@ storing any code (DOM-R31's "one check per column, run before every
 write" rule) -- so no write path can store an unregistered code any
 more than it can store an over-length one.
 
-Testing DOM-R35's registered/unregistered behavior needs at least
-one registered code (e.g. ``report.read``), but the production
-``PermissionCode`` must stay empty and an ``Enum``'s member set is
-fixed at class-definition time -- Python has no supported way to add
-a member to an existing ``Enum`` subclass afterwards. Both query
-functions below therefore read ``_active_registry``, a module-level
-reference that always points at ``PermissionCode`` in production;
+Testing DOM-R35's registered/unregistered behavior also uses
+test-only codes. An ``Enum``'s member set is fixed at class-definition
+time -- Python has no supported way to add a member to an existing
+``Enum`` subclass afterwards. Both query functions below therefore
+read ``_active_registry``, a module-level reference that always points
+at ``PermissionCode`` in production;
 ``tests/conftest.py``'s ``registered_permission_codes`` fixture is
 the only thing that ever reassigns it, swapping in a throwaway
 ``DescribedStrEnum`` subclass for the duration of one test -- the
@@ -54,11 +48,12 @@ from app.api.errors import DescribedStrEnum
 
 
 class PermissionCode(DescribedStrEnum):
-    """DOM-R35's registry of every permission code a ``Role`` may
-    store. Starts empty; see the module docstring for why, and for
-    how tests exercise the registered/unregistered behavior without
-    adding a member here.
-    """
+    """DOM-R35 registry of permission codes a ``Role`` may store."""
+
+    PROJECT_MEMBER_MANAGE = (
+        "project_member.manage",
+        "管理專案成員與其角色",
+    )
 
 
 # Always ``PermissionCode`` in production. Only

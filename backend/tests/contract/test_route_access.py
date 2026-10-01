@@ -32,10 +32,9 @@ def test_aut_ac16_every_business_route_has_exactly_one_declaration() -> None:
     assert undeclared_routes(app) == []
 
 
-def test_aut_ac16_public_routes_are_exactly_health_login_and_logout() -> None:
+def test_aut_ac16_public_routes_match_the_registered_allowlist() -> None:
     """AUT-AC16: the routes declared 公開 on the real application are
-    exactly the health check, login and logout -- nothing more,
-    nothing less.
+    exactly the registered health, login, logout and first-setup routes.
     """
     app = create_app()
 
@@ -45,6 +44,8 @@ def test_aut_ac16_public_routes_are_exactly_health_login_and_logout() -> None:
             ("GET", "/api/v1/health"),
             ("POST", "/api/v1/auth/login"),
             ("POST", "/api/v1/auth/logout"),
+            ("GET", "/api/v1/setup/status"),
+            ("POST", "/api/v1/setup/admin-password"),
         }
     )
 
@@ -114,6 +115,40 @@ def test_aut_ac16_include_level_dependency_alone_counts_as_declared() -> None:
     assert len(infos) == 1
     assert infos[0].declaration is not None
     assert infos[0].declaration.level is AccessLevel.ADMIN_REQUIRED
+
+
+def test_issue_275_routes_declare_the_specified_access_levels() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/projects")
+    }
+    admin_routes = {
+        ("GET", "/api/v1/projects"),
+        ("GET", "/api/v1/projects/{project_id}"),
+        ("POST", "/api/v1/projects"),
+        ("PATCH", "/api/v1/projects/{project_id}"),
+    }
+    member_routes = {
+        ("POST", "/api/v1/projects/{project_id}/members"),
+        (
+            "PUT",
+            "/api/v1/projects/{project_id}/members/{user_id}/roles",
+        ),
+        ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
+    }
+
+    assert set(routes) == admin_routes | member_routes
+    for route in admin_routes:
+        declaration = routes[route]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.ADMIN_REQUIRED
+    for route in member_routes:
+        declaration = routes[route]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.PROJECT_PERMISSION
+        assert declaration.permission_code == "project_member.manage"
 
 
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:

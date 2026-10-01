@@ -22,6 +22,7 @@ from app.services.project_members import (
     add_project_member,
     assign_role,
     remove_project_member,
+    set_project_member_roles,
     unassign_role,
 )
 from tests.db.conftest import create_root_user_with_company
@@ -338,3 +339,68 @@ class TestRemoveProjectMember:
         assert len(rows) == 1
         assert rows[0].event_type == "project_member.removed"
         assert _field(rows[0].before, "role_ids") == []
+
+
+class TestSetProjectMemberRoles:
+    def test_replaces_multiple_roles_with_one_audit_event(
+        self, session, operator
+    ):
+        project = _new_project(operator, "P-SET-ROLES")
+        user = create_root_user_with_company(session, "U-SET-ROLES")
+        role_1 = _new_role(operator, "R1-SET-ROLES")
+        role_2 = _new_role(operator, "R2-SET-ROLES")
+        role_3 = _new_role(operator, "R3-SET-ROLES")
+        session.add_all([project, role_1, role_2, role_3])
+        session.flush()
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=user.id,
+            role_ids=[role_1.id, role_2.id],
+        )
+        session.commit()
+        before_count = len(_audit_rows_for(session, member.id))
+
+        set_project_member_roles(session, member, [role_2.id, role_3.id])
+        session.commit()
+
+        assert {a.role_id for a in member.role_assignments} == {
+            role_2.id,
+            role_3.id,
+        }
+        rows = _audit_rows_for(session, member.id)
+        assert len(rows) == before_count + 1
+        changed = rows[-1]
+        assert changed.event_type == "project_member.roles_changed"
+        assert sorted(_field(changed.before, "role_ids")) == sorted(
+            [str(role_1.id), str(role_2.id)]
+        )
+        assert sorted(_field(changed.after, "role_ids")) == sorted(
+            [str(role_2.id), str(role_3.id)]
+        )
+
+    def test_empty_set_is_allowed_and_unchanged_set_is_idempotent(
+        self, session, operator
+    ):
+        project = _new_project(operator, "P-SET-EMPTY")
+        user = create_root_user_with_company(session, "U-SET-EMPTY")
+        role = _new_role(operator, "R-SET-EMPTY")
+        session.add_all([project, role])
+        session.flush()
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=user.id,
+            role_ids=[role.id],
+        )
+        session.commit()
+
+        set_project_member_roles(session, member, [])
+        session.commit()
+        rows = _audit_rows_for(session, member.id)
+        assert len(rows) == 2
+        assert _field(rows[-1].after, "role_ids") == []
+
+        set_project_member_roles(session, member, [])
+        session.commit()
+        assert len(_audit_rows_for(session, member.id)) == 2

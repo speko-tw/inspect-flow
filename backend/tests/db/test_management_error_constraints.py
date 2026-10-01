@@ -15,8 +15,9 @@ from app.api.v1._management_errors import (
     integrity_error_code,
     management_error_status,
 )
+from app.api.v1.projects import _member_conflict
 from app.db.engine import create_engine_from_settings
-from app.models import Company, User
+from app.models import Company, Project, ProjectMember, User
 from tests.db.conftest import build_root_user, create_root_user_with_company
 
 
@@ -74,3 +75,49 @@ def test_postgresql_management_constraints_map_to_conflicts(migrated_engine):
             assert code == expected
             assert management_error_status(code) == 409
             session.rollback()
+
+
+def test_postgresql_project_member_constraint_is_recognized(migrated_engine):
+    if migrated_engine.dialect.name != "postgresql":
+        pytest.skip(
+            "requires the PostgreSQL ProjectMember constraint used by "
+            "check-postgres"
+        )
+
+    with Session(migrated_engine) as session:
+        operator = create_root_user_with_company(session, "PM001")
+        project = Project(
+            project_code="PM001",
+            name="Project Member Constraint",
+            client_name="Example Client",
+            site_location="Example Site",
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        session.add(project)
+        session.flush()
+
+        member = ProjectMember(
+            project_id=project.id,
+            user_id=operator.id,
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        session.add(member)
+        session.flush()
+
+        duplicate = ProjectMember(
+            project_id=project.id,
+            user_id=operator.id,
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        with pytest.raises(IntegrityError) as raised:
+            session.add(duplicate)
+            session.flush()
+
+        diagnostic = getattr(raised.value.orig, "diag", None)
+        assert getattr(diagnostic, "constraint_name", None) == (
+            "uq_project_members_project_id"
+        )
+        assert _member_conflict(raised.value)

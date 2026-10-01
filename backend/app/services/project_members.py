@@ -212,6 +212,43 @@ def unassign_role(
     return member
 
 
+def set_project_member_roles(
+    session: Session,
+    member: ProjectMember,
+    role_ids: Iterable[uuid.UUID],
+) -> ProjectMember:
+    """Replace a member's full role set with one audit event.
+
+    An empty set is valid (DOM-R36). A request that supplies the
+    existing set is idempotent and does not update timestamps or add
+    an audit row.
+    """
+    before_role_ids = _current_role_ids(member)
+    after_role_ids = frozenset(role_ids)
+    if before_role_ids == after_role_ids:
+        return member
+
+    operator = get_current_operator(session)
+    to_remove = before_role_ids - after_role_ids
+    to_add = after_role_ids - before_role_ids
+    for assignment in member.role_assignments:
+        if assignment.role_id in to_remove:
+            session.delete(assignment)
+    member.role_assignments.extend(
+        ProjectMemberRole(role_id=role_id) for role_id in to_add
+    )
+    member.updated_by = operator.id
+    session.flush()
+    session.expire(member, ["role_assignments"])
+    _record_roles_changed(
+        session,
+        member,
+        before_role_ids=before_role_ids,
+        after_role_ids=after_role_ids,
+    )
+    return member
+
+
 def remove_project_member(session: Session, member: ProjectMember) -> None:
     """Remove ``member`` from its project (DOM-R36): deletes the
     ``ProjectMember`` row outright, relying on the database's own
@@ -244,4 +281,5 @@ __all__ = [
     "assign_role",
     "unassign_role",
     "remove_project_member",
+    "set_project_member_roles",
 ]

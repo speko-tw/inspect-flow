@@ -90,6 +90,26 @@ class ErrorCode(DescribedStrEnum):
         "auth.password_unchanged",
         "The new password must differ from the current temporary password.",
     )
+    ROLE_NOT_FOUND = (
+        "role.not_found",
+        "The requested role does not exist.",
+    )
+    ROLE_NAME_CONFLICT = (
+        "role.name_conflict",
+        "A role with this name already exists.",
+    )
+    ROLE_PERMISSION_CODE_INVALID = (
+        "role.permission_code_invalid",
+        "One or more permission codes are invalid or unavailable.",
+    )
+    SETUP_INVALID_CODE = (
+        "setup.invalid_code",
+        "The first-login code is invalid.",
+    )
+    SETUP_ALREADY_COMPLETED = (
+        "setup.already_completed",
+        "Initial setup has already been completed.",
+    )
     USER_BUILTIN_PROTECTED = (
         "user.builtin_protected",
         "The built-in administrator account cannot be changed this way.",
@@ -121,6 +141,10 @@ class ErrorCode(DescribedStrEnum):
     COMPANY_NAME_CONFLICT = (
         "company.name_conflict",
         "The company name is already in use.",
+    )
+    PROJECT_MEMBER_CONFLICT = (
+        "project.member_conflict",
+        "The user is already a member of this project.",
     )
 
 
