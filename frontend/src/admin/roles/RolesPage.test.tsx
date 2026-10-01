@@ -19,11 +19,20 @@ const MANAGE: PermissionCode = {
   description: '管理專案成員與其角色',
 }
 
-function makeRole(id: string, name: string, codes: string[] = []): Role {
+function makeRole(
+  id: string,
+  name: string,
+  codes: string[] = [],
+  usage: { member_count: number; project_count: number } = {
+    member_count: 0,
+    project_count: 0,
+  },
+): Role {
   return {
     id,
     name,
     permission_codes: codes,
+    ...usage,
     created_at: '2026-10-01T00:00:00.000000Z',
     updated_at: '2026-10-01T00:00:00.000000Z',
   }
@@ -115,6 +124,9 @@ function rolesFetch({
           { status: 404 },
         )
       }
+      if (method === 'GET') {
+        return Response.json(row)
+      }
       if (method === 'PATCH') {
         Object.assign(row, body)
         return Response.json(row)
@@ -201,9 +213,14 @@ describe('admin role management page', () => {
     expect(screen.getByLabelText('角色名稱')).toHaveValue('')
   })
 
-  it('sends only the changed fields when editing a role', async () => {
+  it('shows the impact and asks to confirm before saving changes', async () => {
     const fetchMock = rolesFetch({
-      roles: [makeRole('r1', 'Viewer', [MANAGE.code])],
+      roles: [
+        makeRole('r1', 'Viewer', [MANAGE.code], {
+          member_count: 5,
+          project_count: 2,
+        }),
+      ],
     })
     renderRoles()
 
@@ -219,20 +236,56 @@ describe('admin role management page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
 
+    const confirmation = await screen.findByRole('region', {
+      name: '修改「Viewer」',
+    })
+    expect(confirmation).toHaveTextContent(
+      '此變更會影響 2 個專案中的 5 位成員',
+    )
+    // 影響範圍向後端重新取得，而且確認前不送出修改。
+    expect(calls(fetchMock, 'GET').map(([url]) => url)).toContain(
+      '/api/v1/roles/r1',
+    )
+    expect(calls(fetchMock, 'PATCH')).toHaveLength(0)
+    expect(screen.getByLabelText('角色名稱')).toBeDisabled()
+
+    fireEvent.click(within(confirmation).getByRole('button', { name: '取消' }))
+    expect(calls(fetchMock, 'PATCH')).toHaveLength(0)
+    expect(screen.getByLabelText('角色名稱')).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認修改角色' }),
+    )
+
     expect(
       await screen.findByRole('row', { name: /Reader/ }),
     ).toBeInTheDocument()
     const [[url, init]] = calls(fetchMock, 'PATCH')
     expect(url).toBe('/api/v1/roles/r1')
     expect(JSON.parse(String(init?.body))).toEqual({ name: 'Reader' })
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: '修改角色 Reader' }))
+  it('sends changed permissions and shows a zero impact too', async () => {
+    const fetchMock = rolesFetch({
+      roles: [makeRole('r1', 'Viewer', [MANAGE.code])],
+    })
+    renderRoles()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改角色 Viewer' }),
+    )
     fireEvent.click(
       screen.getByRole('checkbox', { name: '管理專案成員與其角色' }),
     )
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
-    await waitFor(() => expect(calls(fetchMock, 'PATCH')).toHaveLength(2))
-    expect(JSON.parse(String(calls(fetchMock, 'PATCH')[1][1]?.body))).toEqual({
+
+    expect(
+      await screen.findByText(/此變更會影響 0 個專案中的 0 位成員/),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '確認修改角色' }))
+    await waitFor(() => expect(calls(fetchMock, 'PATCH')).toHaveLength(1))
+    expect(JSON.parse(String(calls(fetchMock, 'PATCH')[0][1]?.body))).toEqual({
       permission_codes: [],
     })
   })
@@ -250,18 +303,25 @@ describe('admin role management page', () => {
       expect(screen.getByLabelText('角色名稱')).toHaveValue(''),
     )
     expect(calls(fetchMock, 'PATCH')).toHaveLength(0)
+    expect(screen.queryByText('確認修改角色')).not.toBeInTheDocument()
   })
 
-  it('asks for confirmation before deleting a role', async () => {
+  it('shows the impact and asks to confirm before deleting', async () => {
     const fetchMock = rolesFetch({
-      roles: [makeRole('r1', 'Viewer'), makeRole('r2', 'Coordinator')],
+      roles: [
+        makeRole('r1', 'Viewer', [], { member_count: 3, project_count: 2 }),
+        makeRole('r2', 'Coordinator'),
+      ],
     })
     renderRoles()
 
     fireEvent.click(
       await screen.findByRole('button', { name: '刪除角色 Viewer' }),
     )
-    const confirmation = screen.getByRole('region', { name: '刪除「Viewer」' })
+    const confirmation = await screen.findByRole('region', {
+      name: '刪除「Viewer」',
+    })
+    expect(confirmation).toHaveTextContent('刪除會影響 2 個專案中的 3 位成員')
     expect(confirmation).toHaveTextContent('角色指派都會一併移除')
     expect(calls(fetchMock, 'DELETE')).toHaveLength(0)
 
@@ -270,7 +330,9 @@ describe('admin role management page', () => {
     expect(calls(fetchMock, 'DELETE')).toHaveLength(0)
 
     fireEvent.click(screen.getByRole('button', { name: '刪除角色 Viewer' }))
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除角色' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認刪除角色' }),
+    )
 
     await waitFor(() =>
       expect(
@@ -280,6 +342,18 @@ describe('admin role management page', () => {
     expect(calls(fetchMock, 'DELETE')[0][0]).toBe('/api/v1/roles/r1')
     expect(
       screen.getByRole('row', { name: /Coordinator/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a zero impact before deleting an unused role', async () => {
+    rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '刪除角色 Viewer' }),
+    )
+    expect(
+      await screen.findByText(/刪除會影響 0 個專案中的 0 位成員/),
     ).toBeInTheDocument()
   })
 
@@ -335,6 +409,9 @@ describe('admin role management page', () => {
       target: { value: 'Reader' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認修改角色' }),
+    )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '找不到這個角色，可能已被刪除，請重新整理後再試。',

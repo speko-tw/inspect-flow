@@ -36,12 +36,14 @@ audit event a role deletion writes -- no separate
 ``project_member.roles_changed`` per affected member.
 """
 
-from collections.abc import Iterable
+import uuid
+from collections.abc import Collection, Iterable
+from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
-from app.models import ProjectMemberRole, Role, RolePermission
+from app.models import ProjectMember, ProjectMemberRole, Role, RolePermission
 from app.services import UNSET, _Unset
 from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
@@ -57,6 +59,49 @@ class RoleUnchangedError(ValueError):
     (DOM-R20 only requires an update record when something actually
     changed).
     """
+
+
+@dataclass(frozen=True)
+class RoleUsage:
+    """How widely a ``Role`` is held right now (PR-18's influence
+    range shown before a role is changed or deleted):
+    ``member_count`` is the number of ``ProjectMember`` rows holding
+    it, ``project_count`` the number of distinct ``Project``s those
+    rows belong to. Both are ``0`` when nobody holds the role.
+    """
+
+    member_count: int
+    project_count: int
+
+
+def role_usages(
+    session: Session, role_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, RoleUsage]:
+    """Return :class:`RoleUsage` for every id in ``role_ids`` with
+    one grouped query (roles nobody holds map to zeros). Read-only:
+    runs inside ``no_autoflush`` so it never writes a caller's
+    pending changes.
+    """
+    usages = {role_id: RoleUsage(0, 0) for role_id in role_ids}
+    if not usages:
+        return usages
+    with session.no_autoflush:
+        rows = session.execute(
+            select(
+                ProjectMemberRole.role_id,
+                func.count(ProjectMemberRole.project_member_id),
+                func.count(distinct(ProjectMember.project_id)),
+            )
+            .join(
+                ProjectMember,
+                ProjectMember.id == ProjectMemberRole.project_member_id,
+            )
+            .where(ProjectMemberRole.role_id.in_(list(usages)))
+            .group_by(ProjectMemberRole.role_id)
+        ).all()
+    for role_id, member_count, project_count in rows:
+        usages[role_id] = RoleUsage(member_count, project_count)
+    return usages
 
 
 def create_role(
@@ -240,6 +285,8 @@ def delete_role(session: Session, role: Role) -> None:
 
 __all__ = [
     "RoleUnchangedError",
+    "RoleUsage",
+    "role_usages",
     "create_role",
     "update_role",
     "delete_role",

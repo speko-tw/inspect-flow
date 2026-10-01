@@ -4,6 +4,7 @@ import { ManagementApiError } from '../api'
 import {
   createRole,
   deleteRole,
+  getRole,
   listPermissionCodes,
   listRoles,
   roleErrorMessage,
@@ -27,7 +28,12 @@ export default function RolesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
+  // 待確認的刪除與修改；數字是按下按鈕當下向後端重新取得的。
   const [deleting, setDeleting] = useState<Role | null>(null)
+  const [pending, setPending] = useState<{
+    role: Role
+    changes: { name?: string; permission_codes?: string[] }
+  } | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -35,6 +41,8 @@ export default function RolesPage() {
   const descriptions = new Map(
     permissions.map((item) => [item.code, item.description]),
   )
+  // 等待確認修改時鎖住表單，確認的內容才不會和畫面上的欄位不一致。
+  const locked = pending !== null
   const editing = roles.find((role) => role.id === editingId) ?? null
   // 角色上若有已不在登記表的代碼，仍列出來，讓管理者看得到、可取消。
   const unregistered = (editing?.permission_codes ?? []).filter(
@@ -78,6 +86,7 @@ export default function RolesPage() {
   }, [])
 
   function resetForm() {
+    setPending(null)
     setEditingId(null)
     setName('')
     setSelected([])
@@ -86,6 +95,7 @@ export default function RolesPage() {
   function startEditing(role: Role) {
     setError('')
     setDeleting(null)
+    setPending(null)
     setEditingId(role.id)
     setName(role.name)
     setSelected(role.permission_codes)
@@ -95,6 +105,27 @@ export default function RolesPage() {
     setSelected((current) =>
       checked ? [...current, code] : current.filter((item) => item !== code),
     )
+  }
+
+  function describeImpact(role: Role): string {
+    return `會影響 ${role.project_count} 個專案中的 ${role.member_count} 位成員`
+  }
+
+  // 影響範圍以按下按鈕當下的後端數字為準，列表上的數字可能已過時。
+  async function fetchFreshRole(id: string): Promise<Role | null> {
+    try {
+      return await getRole(id)
+    } catch (caught) {
+      setError(roleErrorMessage(caught))
+      if (
+        caught instanceof ManagementApiError &&
+        caught.code === 'role.not_found'
+      ) {
+        resetForm()
+        await reload()
+      }
+      return null
+    }
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -107,25 +138,48 @@ export default function RolesPage() {
     setSaving(true)
     setError('')
     try {
-      if (editing) {
-        // 後端拒絕沒有實際變更的更新，所以只送有變的欄位。
-        const changes: { name?: string; permission_codes?: string[] } = {}
-        if (trimmed !== editing.name) {
-          changes.name = trimmed
-        }
-        if (!sameCodes(selected, editing.permission_codes)) {
-          changes.permission_codes = selected
-        }
-        if (Object.keys(changes).length > 0) {
-          await updateRole(editing.id, changes)
-        }
-      } else {
+      if (!editing) {
         await createRole({ name: trimmed, permission_codes: selected })
+        resetForm()
+        await reload()
+        return
       }
+      // 後端拒絕沒有實際變更的更新，所以只送有變的欄位。
+      const changes: { name?: string; permission_codes?: string[] } = {}
+      if (trimmed !== editing.name) {
+        changes.name = trimmed
+      }
+      if (!sameCodes(selected, editing.permission_codes)) {
+        changes.permission_codes = selected
+      }
+      if (Object.keys(changes).length === 0) {
+        resetForm()
+        return
+      }
+      const fresh = await fetchFreshRole(editing.id)
+      if (fresh) {
+        setPending({ role: fresh, changes })
+      }
+    } catch (caught) {
+      setError(roleErrorMessage(caught))
+      await reload()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmUpdate() {
+    if (!pending) return
+    setSaving(true)
+    setError('')
+    try {
+      await updateRole(pending.role.id, pending.changes)
+      setPending(null)
       resetForm()
       await reload()
     } catch (caught) {
       setError(roleErrorMessage(caught))
+      setPending(null)
       if (
         caught instanceof ManagementApiError &&
         caught.code === 'role.not_found'
@@ -134,6 +188,20 @@ export default function RolesPage() {
         resetForm()
       }
       await reload()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function startDelete(role: Role) {
+    setError('')
+    setPending(null)
+    setSaving(true)
+    try {
+      const fresh = await fetchFreshRole(role.id)
+      if (fresh) {
+        setDeleting(fresh)
+      }
     } finally {
       setSaving(false)
     }
@@ -173,13 +241,32 @@ export default function RolesPage() {
       {deleting && (
         <section aria-labelledby="delete-role-heading">
           <h2 id="delete-role-heading">刪除「{deleting.name}」</h2>
-          <p>刪除後，所有專案成員身上的這個角色指派都會一併移除，無法復原。</p>
+          <p>
+            刪除{describeImpact(deleting)}
+            ：這些成員身上的這個角色指派都會一併移除，無法復原。
+          </p>
           <button disabled={saving} onClick={() => void confirmDelete()}>
             確認刪除角色
           </button>
           <button
             disabled={saving}
             onClick={() => setDeleting(null)}
+            type="button"
+          >
+            取消
+          </button>
+        </section>
+      )}
+      {pending && (
+        <section aria-labelledby="update-role-heading">
+          <h2 id="update-role-heading">修改「{pending.role.name}」</h2>
+          <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
+          <button disabled={saving} onClick={() => void confirmUpdate()}>
+            確認修改角色
+          </button>
+          <button
+            disabled={saving}
+            onClick={() => setPending(null)}
             type="button"
           >
             取消
@@ -214,10 +301,7 @@ export default function RolesPage() {
                   <button
                     aria-label={`刪除角色 ${role.name}`}
                     disabled={saving}
-                    onClick={() => {
-                      setError('')
-                      setDeleting(role)
-                    }}
+                    onClick={() => void startDelete(role)}
                     type="button"
                   >
                     刪除
@@ -233,6 +317,7 @@ export default function RolesPage() {
         <label>
           角色名稱
           <input
+            disabled={locked}
             maxLength={64}
             onChange={(event) => setName(event.target.value)}
             required
@@ -249,6 +334,7 @@ export default function RolesPage() {
                 <label key={item.code}>
                   <input
                     checked={selected.includes(item.code)}
+                    disabled={locked}
                     onChange={(event) =>
                       toggleCode(item.code, event.target.checked)
                     }
@@ -262,6 +348,7 @@ export default function RolesPage() {
                 <label key={code}>
                   <input
                     checked={selected.includes(code)}
+                    disabled={locked}
                     onChange={(event) =>
                       toggleCode(code, event.target.checked)
                     }
@@ -274,7 +361,7 @@ export default function RolesPage() {
             </>
           )}
         </fieldset>
-        <button disabled={saving || loading} type="submit">
+        <button disabled={saving || loading || locked} type="submit">
           {editing ? '儲存角色' : '新增角色'}
         </button>
         {editing && (

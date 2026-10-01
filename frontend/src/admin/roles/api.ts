@@ -14,6 +14,9 @@ export interface Role {
   id: string
   name: string
   permission_codes: string[]
+  // 目前持有此角色的專案成員筆數，以及這些成員涉及的專案數（PR-18）。
+  member_count: number
+  project_count: number
   created_at: string
   updated_at: string
 }
@@ -76,6 +79,10 @@ export async function listRoles(): Promise<Role[]> {
     cursor = page.next_cursor
   } while (cursor)
   return roles
+}
+
+export function getRole(id: string): Promise<Role> {
+  return request(`/roles/${id}`)
 }
 
 export async function listPermissionCodes(): Promise<PermissionCode[]> {
