@@ -100,10 +100,9 @@ def _check_code(value: str) -> None:
 
 class Role(AuditMixin, TimestampedBase):
     """A system-wide, project-agnostic named set of permission
-    codes (DOM-R19). All roles -- including the three template
-    roles the initialization command creates -- may be renamed,
-    have their permission codes changed, and be deleted (DOM-R20);
-    nothing here marks any row as protected.
+    codes (DOM-R19). All roles may be renamed, have their permission
+    codes changed, and be deleted (DOM-R20); nothing here marks any
+    row as protected. Admins add roles after initialization.
     """
 
     __tablename__ = "roles"

@@ -102,6 +102,14 @@ class ErrorCode(DescribedStrEnum):
         "role.permission_code_invalid",
         "One or more permission codes are invalid or unavailable.",
     )
+    SETUP_INVALID_CODE = (
+        "setup.invalid_code",
+        "The first-login code is invalid.",
+    )
+    SETUP_ALREADY_COMPLETED = (
+        "setup.already_completed",
+        "Initial setup has already been completed.",
+    )
     USER_BUILTIN_PROTECTED = (
         "user.builtin_protected",
         "The built-in administrator account cannot be changed this way.",

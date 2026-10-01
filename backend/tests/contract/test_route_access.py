@@ -32,10 +32,9 @@ def test_aut_ac16_every_business_route_has_exactly_one_declaration() -> None:
     assert undeclared_routes(app) == []
 
 
-def test_aut_ac16_public_routes_are_exactly_health_login_and_logout() -> None:
+def test_aut_ac16_public_routes_match_the_registered_allowlist() -> None:
     """AUT-AC16: the routes declared 公開 on the real application are
-    exactly the health check, login and logout -- nothing more,
-    nothing less.
+    exactly the registered health, login, logout and first-setup routes.
     """
     app = create_app()
 
@@ -45,6 +44,8 @@ def test_aut_ac16_public_routes_are_exactly_health_login_and_logout() -> None:
             ("GET", "/api/v1/health"),
             ("POST", "/api/v1/auth/login"),
             ("POST", "/api/v1/auth/logout"),
+            ("GET", "/api/v1/setup/status"),
+            ("POST", "/api/v1/setup/admin-password"),
         }
     )
 

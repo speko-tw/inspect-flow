@@ -155,7 +155,7 @@
 | AUT-AC54 | `backend/tests/cli/test_init_system.py`（C）：對空資料庫執行初始化指令，捕捉輸出，斷言恰一組碼、`SetupCode` 只存雜湊與 24 小時期限、稽核 0 筆、沒有公司與個人帳號 |
 | AUT-AC55 | `backend/tests/cli/test_init_system.py`（C）：重跑後斷言舊碼作廢、新碼有效、其餘資料筆數不變；`admin` 已設定密碼後重跑斷言拒絕且資料不變 |
 | AUT-AC56 | `backend/tests/auth/test_setup_api.py`（C）：`status` 前後、成功設定、Cookie 可呼叫 `me`、`SetupCode` 作廢、恰一筆系統事件的 `user.password_set`、第二次 409 |
-| AUT-AC57 | `backend/tests/auth/test_setup_api.py`（C）：以可控時間製造過期碼，另備作廢碼與隨機錯碼，斷言回應本體逐位元組相同、資料不變 |
+| AUT-AC57 | `backend/tests/auth/test_setup_api.py`（C）：以可控時間製造過期碼，另備作廢碼與隨機錯碼，斷言回應本體逐位元組相同、密碼與碼狀態不變；隨機錯碼的失敗計數／鎖定欄位依 AUT-R45 更新 |
 | AUT-AC58 | `backend/tests/auth/test_setup_api.py`（C）：7 字元密碼回 422 且碼仍有效、失敗計數不變；再設定成功後以帳號名稱 `admin` 登入 |
 | AUT-AC59 | `backend/tests/auth/test_setup_lockout.py`（C）：可控時間下 10 次失敗、鎖定期間正確碼也被拒、15 分鐘後成功；`caplog` 斷言有日誌、稽核 0 筆、日誌不含碼；另斷言與密碼登入的失敗計數互不影響 |
 | AUT-AC60 | `backend/tests/auth/test_setup_lockout.py`（C）：鎖定中重跑初始化，新碼可用 |
