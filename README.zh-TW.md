@@ -38,30 +38,13 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
    - `make run-backend`：API 在 `http://127.0.0.1:8000`。
    - `make run-frontend`：Vite 在 `http://localhost:5173`，會把
      `/api` 轉給後端。
-5. **設定 admin 密碼**：#264 的首次設定頁上線前，先在終端機呼叫
-   API。首次登入碼 24 小時後到期；過期或被鎖時，重跑 `make init`
-   就會換發新碼。以下指令會隱藏輸入內容，也不會把碼或密碼放進
-   shell 歷程；用 `uv` 執行 Python 標準庫產生 JSON，再以管線送出：
-
-   ```bash
-   printf '首次登入碼：'
-   IFS= read -r -s SETUP_CODE
-   printf '\nadmin 密碼：'
-   IFS= read -r -s ADMIN_PASSWORD
-   printf '\n'
-   export SETUP_CODE ADMIN_PASSWORD
-   uv run --project backend python -c \
-     'import json, os; print(json.dumps({"code": os.environ["SETUP_CODE"], "password": os.environ["ADMIN_PASSWORD"]}))' |
-     curl --fail-with-body --silent --show-error \
-       -X POST http://127.0.0.1:8000/api/v1/setup/admin-password \
-       -H 'Content-Type: application/json' --data-binary @- \
-       -o /dev/null -w 'HTTP %{http_code}\n'
-   unset SETUP_CODE ADMIN_PASSWORD
-   ```
-
-   回應會帶登入 Cookie；這個 `curl` 範例不保存 Cookie。設定完成後，
-   用帳號 `admin` 和剛設定的密碼從現有登入頁登入。#264 完成後，
-   改用首次設定網頁操作。
+5. **設定 admin 密碼**：開啟首次設定頁
+   `http://localhost:5173/setup`（設定完成前，開 `/` 或 `/login`
+   都會導向這裡）。輸入 `make init` 印出的首次登入碼，並兩次輸入
+   新密碼（8 到 128 個字元）。首次登入碼 24 小時後到期；過期或被
+   鎖時，重跑 `make init` 就會換發新碼。設定成功後即以 `admin`
+   登入；頁面接著讓你新增第一個使用者（臨時密碼只顯示一次），
+   也可以略過直接進管理頁。
 6. **需要重設 admin 密碼時**：在伺服器執行
    `make reset-admin-password`，依提示輸入兩次新密碼（不回顯）。指令
    也接受管線提供的兩行標準輸入供自動化使用，不接受密碼參數。

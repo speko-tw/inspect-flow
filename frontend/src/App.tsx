@@ -4,9 +4,11 @@ import { Link, Route, Routes } from 'react-router'
 import ChangePasswordPage from './auth/ChangePasswordPage'
 import LoginPage from './auth/LoginPage'
 import RequireAuth from './auth/RequireAuth'
+import SetupGate from './setup/SetupGate'
 
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
+const SetupPage = lazy(() => import('./setup/SetupPage'))
 
 function HomePage() {
   return (
@@ -30,8 +32,23 @@ export default function App() {
   return (
     <Suspense fallback={null}>
       <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <SetupGate>
+              <HomePage />
+            </SetupGate>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <SetupGate>
+              <LoginPage />
+            </SetupGate>
+          }
+        />
+        <Route path="/setup" element={<SetupPage />} />
         <Route
           path="/change-password"
           element={

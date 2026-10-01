@@ -38,7 +38,9 @@ export class ApiError extends Error {
 }
 
 /** 盡力從錯誤回應本體讀出 `error.code`；解析失敗回傳 `undefined`。 */
-async function readErrorCode(response: Response): Promise<string | undefined> {
+export async function readErrorCode(
+  response: Response,
+): Promise<string | undefined> {
   try {
     const body = (await response.json()) as { error?: { code?: string } }
     return body.error?.code

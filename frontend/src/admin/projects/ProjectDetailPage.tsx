@@ -262,6 +262,7 @@ export default function ProjectDetailPage() {
                 移出後這個人在本專案的角色會一併移除；不影響他在其他專案的角色。
               </p>
               <button
+                className="btn-danger"
                 disabled={busy}
                 onClick={() =>
                   void act(() =>
