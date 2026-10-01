@@ -16,7 +16,7 @@ const CURRENT_USER = {
   must_change_password: false,
 }
 
-const GENERIC_ERROR_MESSAGE = 'Email 或密碼錯誤，請再試一次。'
+const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -60,9 +60,9 @@ function TestApp() {
   )
 }
 
-function fillAndSubmit(email: string, password: string) {
-  fireEvent.change(screen.getByLabelText('Email'), {
-    target: { value: email },
+function fillAndSubmit(account: string, password: string) {
+  fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
+    target: { value: account },
   })
   fireEvent.change(screen.getByLabelText('密碼'), {
     target: { value: password },
@@ -142,6 +142,63 @@ describe('LoginPage 失敗時只顯示通用訊息（AUT-AC29）', () => {
 
     expect(screen.getByLabelText('密碼')).toHaveAttribute('type', 'password')
   })
+})
+
+describe('登入欄位為「帳號名稱或 Email」（AUT-R29、AUT-AC65）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('欄位是 text 且 autocomplete 為 username', () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    const input = screen.getByLabelText('帳號名稱或 Email')
+    expect(input).toHaveAttribute('type', 'text')
+    expect(input).toHaveAttribute('autocomplete', 'username')
+  })
+
+  it.each(['anna.deng', 'anna.deng@demo.example'])(
+    '輸入 %s 原樣送出到登入 API',
+    async (account) => {
+      const fetchMock = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = requestUrl(input)
+          if (url.endsWith('/api/v1/auth/login') && init?.method === 'POST') {
+            return jsonResponse(CURRENT_USER)
+          }
+          return new Response(null, { status: 401 })
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      render(
+        <MemoryRouter
+          initialEntries={[
+            { pathname: '/login', state: { from: '/protected' } },
+          ]}
+        >
+          <TestApp />
+        </MemoryRouter>,
+      )
+
+      fillAndSubmit(account, 'correct-password')
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalled()
+      })
+      const loginCall = fetchMock.mock.calls.find(([input]) =>
+        requestUrl(input).endsWith('/api/v1/auth/login'),
+      )
+      expect(JSON.parse(loginCall?.[1]?.body as string)).toEqual({
+        login: account,
+        password: 'correct-password',
+      })
+    },
+  )
 })
 
 describe('登入不碰 token／storage，登出會清狀態並導向 /login（AUT-AC30）', () => {
