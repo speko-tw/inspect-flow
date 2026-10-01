@@ -11,17 +11,21 @@ import App from './App'
 function stubAuthenticatedFetch() {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () =>
-      Response.json({
-        id: 'u1',
-        username: 'user',
-        email: 'user@example.com',
-        name_en: 'Test User',
-        name_zh: '測試使用者',
-        is_admin: true,
-        must_change_password: false,
-      }),
-    ),
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/auth/me')) {
+        return Response.json({
+          id: 'u1',
+          username: 'user',
+          email: 'user@example.com',
+          name_en: 'Test User',
+          name_zh: '測試使用者',
+          is_admin: true,
+          must_change_password: false,
+        })
+      }
+      return Response.json([])
+    }),
   )
 }
 
@@ -34,7 +38,7 @@ describe('App routing', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the Admin placeholder on /admin', async () => {
+  it('renders the admin user management page on /admin', async () => {
     render(
       <MemoryRouter initialEntries={['/admin']}>
         <App />
@@ -42,7 +46,7 @@ describe('App routing', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Admin' }),
+      await screen.findByRole('heading', { name: '使用者管理' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('Field')).not.toBeInTheDocument()
   })
@@ -57,6 +61,6 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: 'Field' }),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+    expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
   })
 })
