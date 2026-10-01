@@ -35,6 +35,7 @@ from app.auth.sessions import (
     create_session,
     delete_session_by_token,
     hash_token,
+    set_session_cookie,
 )
 from app.models import AuthSession, User, UserPassword
 
@@ -87,21 +88,6 @@ def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
     )
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
-    """AUT-R12: ``HttpOnly``, ``Secure``, ``SameSite=Strict``,
-    ``Path=/``, no ``Domain`` -- required for the ``__Host-``
-    prefix to be honored by the browser.
-    """
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path="/",
-    )
-
-
 def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
@@ -134,7 +120,7 @@ def login(
         raise APIError(ErrorCode.AUTH_INVALID_CREDENTIALS, 401)
 
     _session, token = create_session(db, user)
-    _set_session_cookie(response, token)
+    set_session_cookie(response, token)
     return _current_user_response(db, user)
 
 
@@ -277,7 +263,7 @@ def change_password(
     set_password(db, user, body.new_password, is_temporary=False)
 
     _session, token = create_session(db, user)
-    _set_session_cookie(response, token)
+    set_session_cookie(response, token)
 
 
 # AUT-R33: the allowlist's third and final entry (AUT-AC36) -- a

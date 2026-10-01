@@ -35,21 +35,45 @@ root.
    ```
 
 2. **Apply migrations**: `make migrate`.
-3. **Initialize the system**: `make init`. Prompts for the first
-   company's code and name, and the required basic fields of the
-   built-in `admin` account and the owner's personal account;
-   running it again on an already-initialized database reports that
-   and writes nothing.
-4. **Set a password**: `make set-password EMAIL=<email>` (including
-   the built-in `admin`). Prompts twice for the new password (not
-   echoed) at a terminal; also accepts two lines of piped standard
-   input for automation. The command line accepts no password
-   argument of any kind.
-5. **Start the backend and frontend**, each in its own terminal:
+3. **Initialize the system**: `make init`. Copy the one-time
+   first-login code printed by the command. If `admin` has no
+   password yet, running the command again invalidates the old code
+   and prints a new one. Initialization creates only the built-in
+   `admin`; an administrator adds roles later in the system.
+4. **Start the backend and frontend**, each in its own terminal:
    - `make run-backend` — API at `http://127.0.0.1:8000`.
    - `make run-frontend` — Vite at `http://localhost:5173`; it
      forwards `/api` to the backend.
-6. **Sign in**: open `http://localhost:5173` in a browser.
+5. **Set the admin password**: until the first-setup page from #264 is
+   available, use the API from a terminal. The code expires after 24
+   hours; if it expires or is locked, run `make init` again to issue a
+   replacement. Read both values without echoing them or adding them to
+   shell history, then send the JSON through standard input:
+
+   ```bash
+   printf 'First-login code: '
+   IFS= read -r -s SETUP_CODE
+   printf '\nAdmin password: '
+   IFS= read -r -s ADMIN_PASSWORD
+   printf '\n'
+   export SETUP_CODE ADMIN_PASSWORD
+   uv run --project backend python -c \
+     'import json, os; print(json.dumps({"code": os.environ["SETUP_CODE"], "password": os.environ["ADMIN_PASSWORD"]}))' |
+     curl --fail-with-body --silent --show-error \
+       -X POST http://127.0.0.1:8000/api/v1/setup/admin-password \
+       -H 'Content-Type: application/json' --data-binary @- \
+       -o /dev/null -w 'HTTP %{http_code}\n'
+   unset SETUP_CODE ADMIN_PASSWORD
+   ```
+
+   This request returns a login Cookie, which this command does not
+   save; sign in through the existing login page with username `admin`
+   and the password you just set. After #264 is complete, use its
+   first-setup page instead.
+6. **Reset the admin password when needed**: run
+   `make reset-admin-password` on the server. Enter the new password
+   twice; the terminal does not echo it. The command accepts piped
+   standard input for automation and takes no password arguments.
 
 Safari limitation: the session cookie uses the `__Host-` prefix,
 which requires `Secure`. Safari does not send it over

@@ -56,6 +56,7 @@ def set_password(
     password: str,
     *,
     is_temporary: bool,
+    system_event: bool = False,
 ) -> UserPassword:
     """Set or replace ``user``'s password (AUT-R36).
 
@@ -89,7 +90,11 @@ def set_password(
             "Unicode code points, inclusive (AUT-R04)"
         )
 
-    operator = get_current_operator(session)
+    operator = (
+        session.scalars(select(User).where(User.is_system.is_(True))).one()
+        if system_event
+        else get_current_operator(session)
+    )
     password_hash = hash_password(password)
 
     existing = session.scalars(
@@ -130,6 +135,7 @@ def set_password(
         entity_id=user.id,
         before=before,
         after={"is_temporary": is_temporary},
+        system_event=system_event,
     )
 
     return existing
