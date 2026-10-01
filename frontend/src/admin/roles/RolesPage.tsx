@@ -245,7 +245,12 @@ export default function RolesPage() {
             刪除{describeImpact(deleting)}
             ：這些成員身上的這個角色指派都會一併移除，無法復原。
           </p>
-          <button disabled={saving} onClick={() => void confirmDelete()}>
+          <button
+            className="btn-danger"
+            disabled={saving}
+            onClick={() => void confirmDelete()}
+            type="button"
+          >
             確認刪除角色
           </button>
           <button
@@ -261,7 +266,12 @@ export default function RolesPage() {
         <section aria-labelledby="update-role-heading">
           <h2 id="update-role-heading">修改「{pending.role.name}」</h2>
           <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
-          <button disabled={saving} onClick={() => void confirmUpdate()}>
+          <button
+            className="btn-primary"
+            disabled={saving}
+            onClick={() => void confirmUpdate()}
+            type="button"
+          >
             確認修改角色
           </button>
           <button
