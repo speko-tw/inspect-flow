@@ -93,6 +93,7 @@ def test_role_api_permission_catalog_and_crud_with_audit(
             {"code": "evidence.delete", "description": "test"},
             {"code": "evidence.read", "description": "test"},
             {"code": "evidence.update", "description": "test"},
+            {"code": "project_member.manage", "description": "test"},
             {"code": "report.approve", "description": "test"},
             {"code": "report.read", "description": "test"},
         ]
@@ -258,7 +259,14 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
 
     catalog = client.get("/api/v1/roles/permission-codes")
     assert catalog.status_code == 200
-    assert catalog.json() == {"items": []}
+    assert catalog.json() == {
+        "items": [
+            {
+                "code": "project_member.manage",
+                "description": "管理專案成員與其角色",
+            }
+        ]
+    }
 
     first = client.get("/api/v1/roles?limit=2")
     assert first.status_code == 200
