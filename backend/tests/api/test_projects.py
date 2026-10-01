@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import AuditLog, Project, ProjectMember, Role, User
+from app.models import AuditLog, Company, Project, ProjectMember, Role, User
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
@@ -437,3 +437,102 @@ def test_project_patch_null_required_field_and_empty_body_are_422(project_api):
         empty_body.json()["error"]["code"]
         == ErrorCode.REQUEST_VALIDATION_FAILED.value
     )
+
+
+def test_list_members_returns_user_fields_roles_and_join_order(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    actor = project_api["actor"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(other_project, Project)
+    assert isinstance(actor, User)
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+    add_project_member(
+        db_session, project_id=project.id, user_id=target.id, role_ids=[]
+    )
+    add_project_member(
+        db_session,
+        project_id=other_project.id,
+        user_id=project_api["admin"].id,
+        role_ids=[role.id],
+    )
+    db_session.commit()
+
+    for key in ("actor_client", "admin_client"):
+        response = project_api[key].get(
+            f"/api/v1/projects/{project.id}/members"
+        )
+        assert response.status_code == 200
+        rows = response.json()
+        assert [row["user_id"] for row in rows] == [
+            str(actor.id),
+            str(target.id),
+        ]
+        assert rows[0]["username"] == "project.manager"
+        assert rows[0]["name_zh"] == "專案管理者"
+        assert rows[0]["email"] == "manager@demo.example"
+        assert rows[0]["company_id"] is None
+        assert rows[0]["company_name"] is None
+        assert rows[0]["is_active"] is True
+        assert rows[0]["role_ids"] == [str(role.id)]
+        assert rows[1]["role_ids"] == []
+
+    other = project_api["admin_client"].get(
+        f"/api/v1/projects/{other_project.id}/members"
+    )
+    assert [row["user_id"] for row in other.json()] == [
+        str(project_api["admin"].id)
+    ]
+
+
+def test_list_members_includes_company_and_inactive_user(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    target = project_api["target"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    root = create_root_user_with_company(db_session, "CO277")
+    assert root.company_id is not None
+    company = db_session.get(Company, root.company_id)
+    assert company is not None
+    target.company_id = company.id
+    target.is_active = False
+    add_project_member(db_session, project_id=project.id, user_id=target.id)
+    db_session.commit()
+
+    response = project_api["admin_client"].get(
+        f"/api/v1/projects/{project.id}/members"
+    )
+    row = next(r for r in response.json() if r["user_id"] == str(target.id))
+    assert row["company_id"] == str(company.id)
+    assert row["company_name"] == company.name
+    assert row["is_active"] is False
+
+
+def test_list_members_permission_and_missing_project(project_api):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    assert isinstance(project, Project)
+    assert isinstance(other_project, Project)
+    path = f"/api/v1/projects/{project.id}/members"
+
+    assert project_api["plain_client"].get(path).status_code == 403
+    # Holding the permission on one project does not cover another.
+    other = project_api["actor_client"].get(
+        f"/api/v1/projects/{other_project.id}/members"
+    )
+    assert other.status_code == 403
+    anonymous = project_api["anonymous_client"].get(path)
+    assert anonymous.status_code == 401
+
+    missing = project_api["admin_client"].get(
+        "/api/v1/projects/00000000-0000-7000-8000-000000000001/members"
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "resource.not_found"

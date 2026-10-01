@@ -200,6 +200,7 @@
 | `GET /api/v1/projects/{project_id}` | 取得專案 | 需 Admin（AUT-R20） |
 | `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
+| `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，可同時指定零個以上角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；空集合代表不指派角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `DELETE /api/v1/projects/{project_id}/members/{user_id}` | 將人員移出專案 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
@@ -208,7 +209,8 @@
 `project_code`（警告代碼 `project_code.duplicate`），但仍成功儲存；此警告
 不屬於錯誤碼。專案回應包含 UUID、業務欄位與選填日期。
 ProjectMember 回應包含成員 UUID、`user_id`、`username` 與完整的
-`role_ids` 集合。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
+`role_ids` 集合。成員列表的每一筆另含 `name_zh`、`email`、`company_id`、
+`company_name`（沒有公司時為空值）與 `is_active`，供管理頁顯示。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
 回 HTTP 204。重複加入同一人回 HTTP 409、`project.member_conflict`；缺少
 專案、人員或角色回 HTTP 404、`resource.not_found`；其餘無效輸入回 HTTP
 422、`request.validation_failed`。
@@ -394,3 +396,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 負責人裁定（#261，2026-09-29）：`make init` 不再建立三個範本角色，只建立內建 `admin`；同步改寫 DOM-R13、DOM-R53、DOM-AC43～DOM-AC44、DOM-Q4、KD-26 與 OQ-08 對應段，並更新初始化測試 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
 - 規格澄清（審查修正）：補列帳號與公司管理 API 的錯誤碼、HTTP 狀態及觸發條件；四種重複資料回 409，其餘列出的業務規則拒絕回 422 — [#263](https://github.com/speko-tw/inspect-flow/issues/263)
 - 範圍變更（負責人裁定）：DOM-R55 的角色回應新增 `user_count`（不重複使用者數）、`project_count`，供角色管理頁在修改與刪除前顯示影響範圍（PR-18）；不改既有欄位與錯誤碼 — [#276](https://github.com/speko-tw/inspect-flow/issues/276)；裁定紀錄：[#276 留言](https://github.com/speko-tw/inspect-flow/issues/276#issuecomment-5932231697)
+- 範圍變更（負責人裁定）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/members`（成員列表，權限同其他成員端點），回應含使用者顯示欄位；供專案與成員管理頁顯示現有成員；裁定原文：[#277 留言](https://github.com/speko-tw/inspect-flow/issues/277#issuecomment-5932232205) — [#277](https://github.com/speko-tw/inspect-flow/issues/277)
