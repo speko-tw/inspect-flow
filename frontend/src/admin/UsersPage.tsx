@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -146,85 +146,99 @@ export default function UsersPage({
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id}>
-                  <th scope="row">
-                    {user.username}
-                    {user.is_system ? <span>（系統帳號）</span> : null}
-                  </th>
-                  <td>{user.name_zh ?? '—'}</td>
-                  <td>
-                    {companies.find(
-                      (company) => company.id === user.company_id,
-                    )?.name ?? '未連結'}
-                  </td>
-                  <td>{user.is_admin ? '是' : '否'}</td>
-                  <td>{user.is_active ? '啟用' : '停用'}</td>
-                  <td>
-                    <button
-                      disabled={user.is_system || user.auth_source !== 'local'}
-                      onClick={() =>
-                        setEditingUser(
-                          editingUser === user.id ? null : user.id,
-                        )
-                      }
-                      type="button"
-                    >
-                      修改資料
-                    </button>
-                    <button
-                      disabled={user.is_system || user.auth_source !== 'local'}
-                      onClick={() =>
-                        setEditingCompany(
-                          editingCompany === user.id ? null : user.id,
-                        )
-                      }
-                      type="button"
-                    >
-                      公司連結
-                    </button>
-                    <button
-                      disabled={user.is_system || busyUser === user.id}
-                      onClick={() => void toggleAdmin(user)}
-                      type="button"
-                    >
-                      {user.is_admin ? '收回管理者' : '指派管理者'}
-                    </button>
-                    <button
-                      disabled={user.is_system || busyUser === user.id}
-                      onClick={() =>
-                        void act(user.id, () =>
-                          setUserActive(user.id, !user.is_active),
-                        )
-                      }
-                      type="button"
-                    >
-                      {user.is_active ? '停用' : '啟用'}
-                    </button>
-                    {editingUser === user.id && (
-                      <UserDetailsForm
-                        onCancel={() => setEditingUser(null)}
-                        onSave={(fields) =>
-                          void act(user.id, () => updateUser(user.id, fields))
+                <Fragment key={user.id}>
+                  <tr>
+                    <th scope="row">
+                      {user.username}
+                      {user.is_system ? <span>（系統帳號）</span> : null}
+                    </th>
+                    <td>{user.name_zh ?? '—'}</td>
+                    <td>{companyLabel(user, companies)}</td>
+                    <td>{user.is_admin ? '是' : '否'}</td>
+                    <td>{user.is_active ? '啟用' : '停用'}</td>
+                    <td>
+                      <button
+                        disabled={
+                          user.is_system || user.auth_source !== 'local'
                         }
-                        user={user}
-                      />
-                    )}
-                    {editingCompany === user.id && (
-                      <CompanyLinkForm
-                        companies={companies}
-                        onCancel={() => setEditingCompany(null)}
-                        onSave={(companyId, fields) =>
-                          void act(user.id, () =>
-                            companyId === user.company_id
-                              ? updateUser(user.id, fields)
-                              : linkUserCompany(user.id, companyId, fields),
+                        onClick={() =>
+                          setEditingUser(
+                            editingUser === user.id ? null : user.id,
                           )
                         }
-                        user={user}
-                      />
-                    )}
-                  </td>
-                </tr>
+                        type="button"
+                      >
+                        修改資料
+                      </button>
+                      <button
+                        disabled={
+                          user.is_system || user.auth_source !== 'local'
+                        }
+                        onClick={() =>
+                          setEditingCompany(
+                            editingCompany === user.id ? null : user.id,
+                          )
+                        }
+                        type="button"
+                      >
+                        公司連結
+                      </button>
+                      <button
+                        disabled={user.is_system || busyUser === user.id}
+                        onClick={() => void toggleAdmin(user)}
+                        type="button"
+                      >
+                        {user.is_admin ? '收回管理者' : '指派管理者'}
+                      </button>
+                      <button
+                        disabled={user.is_system || busyUser === user.id}
+                        onClick={() =>
+                          void act(user.id, () =>
+                            setUserActive(user.id, !user.is_active),
+                          )
+                        }
+                        type="button"
+                      >
+                        {user.is_active ? '停用' : '啟用'}
+                      </button>
+                    </td>
+                  </tr>
+                  {(editingUser === user.id || editingCompany === user.id) && (
+                    <tr className="row-detail">
+                      <td colSpan={6}>
+                        {editingUser === user.id && (
+                          <UserDetailsForm
+                            onCancel={() => setEditingUser(null)}
+                            onSave={(fields) =>
+                              void act(user.id, () =>
+                                updateUser(user.id, fields),
+                              )
+                            }
+                            user={user}
+                          />
+                        )}
+                        {editingCompany === user.id && (
+                          <CompanyLinkForm
+                            companies={companies}
+                            onCancel={() => setEditingCompany(null)}
+                            onSave={(companyId, fields) =>
+                              void act(user.id, () =>
+                                companyId === user.company_id
+                                  ? updateUser(user.id, fields)
+                                  : linkUserCompany(
+                                      user.id,
+                                      companyId,
+                                      fields,
+                                    ),
+                              )
+                            }
+                            user={user}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -233,6 +247,16 @@ export default function UsersPage({
       <UserForm companies={companies} onCreated={created} />
     </section>
   )
+}
+
+function companyLabel(user: User, companies: Company[]): string {
+  const name = companies.find(
+    (company) => company.id === user.company_id,
+  )?.name
+  if (!name) {
+    return '未連結'
+  }
+  return user.department ? `${name}／${user.department}` : name
 }
 
 function UserDetailsForm({

@@ -2,7 +2,8 @@
  * 全域基礎樣式（簡易版）。以元素選擇器為主，各頁不必加 class 就
  * 會自動整齊；少數需要區分的地方才用 class：
  *   - 按鈕：預設是次要（外框）；`type="submit"` 與 `.btn-primary`
- *     是主要；`.btn-danger` 是危險操作。
+ *     是主要；`.btn-danger` 是危險操作。按鈕依內容寬度、靠左排列；
+ *     只有 `.auth-card` 內的按鈕是全寬。`.button-link` 讓連結長得像按鈕。
  *   - 版面：`.auth-page`／`.auth-card`（登入、變更密碼、首次設定）、
  *     `.app-shell`／`.topbar`（管理頁頂部列）、`.steps`（步驟列）。
  * 不引入 UI 套件與外部字型；中文字型以系統字型為後備。
@@ -149,11 +150,22 @@ section {
 
 /* ---- 表單 ---- */
 
+/*
+ * 表單：每個欄位占一整列，按鈕依內容寬度、靠左排成一列。
+ * （登入、變更密碼、首次設定的卡片版面另在 .auth-card 內改回全寬。）
+ */
 form {
-  display: grid;
-  gap: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4) var(--space-3);
   max-width: 40rem;
   margin-bottom: var(--space-5);
+}
+
+form > :not(button) {
+  flex: 1 0 100%;
+  min-width: 0;
 }
 
 form > div {
@@ -344,6 +356,51 @@ td form {
   background: var(--surface);
 }
 
+/* 整列展開：表單跨全部欄位，欄位並排。 */
+tbody tr.row-detail,
+tbody tr.row-detail:nth-child(even) {
+  background: var(--surface);
+}
+
+.row-detail > td {
+  padding: var(--space-3) var(--space-4);
+}
+
+.row-detail form {
+  margin: 0;
+}
+
+.row-detail form > label {
+  flex: 1 1 11rem;
+}
+
+.row-detail form > button {
+  align-self: flex-end;
+}
+
+/* 看起來像按鈕的連結（與 td button 同尺寸）。 */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-3);
+  margin: 0 var(--space-1) var(--space-1) 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  background: var(--surface-alt);
+  border-color: var(--text-muted);
+  text-decoration: none;
+}
+
 /* ---- 訊息 ---- */
 
 [role='alert'] {
@@ -439,6 +496,7 @@ output {
 }
 
 .auth-card form {
+  display: grid;
   max-width: none;
   margin-bottom: var(--space-4);
 }
@@ -536,7 +594,27 @@ output {
 }
 
 .topbar nav {
+  display: flex;
   flex: 1;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.topbar nav a {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.topbar nav a:hover {
+  background: var(--surface-alt);
+}
+
+/* 目前所在頁面：粗體加底色（由 aria-current 驅動）。 */
+.topbar nav a[aria-current='page'] {
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
 }
 
 .topbar-user {

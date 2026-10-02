@@ -169,7 +169,12 @@ export default function ProjectsPage() {
                   <button onClick={() => startEdit(project)} type="button">
                     編輯
                   </button>
-                  <Link to={`/admin/projects/${project.id}`}>成員</Link>
+                  <Link
+                    className="button-link"
+                    to={`/admin/projects/${project.id}`}
+                  >
+                    成員
+                  </Link>
                 </td>
               </tr>
             ))}

@@ -379,6 +379,58 @@ describe('admin user and company pages', () => {
     expectNoPasswordPersistence('back-navigation-password')
   })
 
+  it('expands edit and company forms in a full-width row', async () => {
+    managementFetch()
+    renderAdmin()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    const columns = screen.getAllByRole('columnheader').length
+
+    fireEvent.click(within(row).getByRole('button', { name: '修改資料' }))
+    const editCell = screen
+      .getByRole('heading', { name: '修改使用者資料' })
+      .closest('td')!
+    expect(editCell).toHaveAttribute('colspan', String(columns))
+    expect(row).not.toContainElement(editCell)
+
+    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    const companyCell = screen
+      .getByRole('heading', { name: '連結公司' })
+      .closest('td')!
+    expect(companyCell).toHaveAttribute('colspan', String(columns))
+    expect(row).not.toContainElement(companyCell)
+  })
+
+  it('shows company and department together in the user list', async () => {
+    managementFetch({
+      userRows: [
+        builtInUser,
+        regularUser,
+        { ...regularUser, id: 'user-2', username: 'bob', department: null },
+      ],
+    })
+    renderAdmin()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    expect(within(row).getByText('示範公司／工程部')).toBeVisible()
+    const noDepartment = screen.getByRole('row', { name: /bob/ })
+    expect(within(noDepartment).getByText('示範公司')).toBeVisible()
+    expect(
+      within(screen.getByRole('row', { name: /admin/ })).getByText('未連結'),
+    ).toBeVisible()
+  })
+
+  it('marks the current page in the navigation', async () => {
+    managementFetch()
+    renderAdmin('/admin/companies')
+    const nav = await screen.findByRole('navigation', { name: '管理功能' })
+    expect(within(nav).getByRole('link', { name: '公司' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(
+      within(nav).getByRole('link', { name: '使用者' }),
+    ).not.toHaveAttribute('aria-current')
+  })
+
   it('clears company fields when switching to another company', async () => {
     const secondCompany = { ...company, id: 'company-2', name: '第二家公司' }
     const fetchMock = managementFetch({
@@ -482,6 +534,11 @@ describe('admin user and company pages', () => {
         name: '儲存資料',
       }),
     )
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: '修改使用者資料' }),
+      ).not.toBeInTheDocument()
+    })
     userRow = await screen.findByRole('row', { name: /anna\.new/ })
 
     fireEvent.click(
