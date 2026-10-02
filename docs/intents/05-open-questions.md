@@ -74,9 +74,16 @@
 
 <a id="oq-04"></a>
 
-### OQ-04：查核對象（工項）如何分類？材料／設備／施工工項的正式分類方式？（部分裁定）
+### OQ-04：查核對象（工項）如何分類？材料／設備／施工工項的正式分類方式？（已裁定）
 
-**裁定**：每個專案的內業人員**必須**依該專案需求設定要查核的工項（查核項目本身是必要設定，不得省略），**不得**套用公司共用的固定工項分類。工項分類（例如空調風管、給排水、電力設備）與分區（例如一樓 A 區、二樓 B 區）這兩層組織方式是否使用，皆是**依專案需求選用**，不強制每個專案都要建立；若建分區，查核工項按分區分開建立與執行，未建分區則工區只是同一查核工項的選項或資訊。記錄於 [KD-40](03-decisions-and-stack.md#kd-40)；討論見 [#74](https://github.com/speko-tw/inspect-flow/issues/74)。**未定**：分類的複製重用、階層深度、名稱唯一性、分類與分區的固定階層、共用範本複製、名稱與代碼規則；分區不強制為分類的子層。
+**裁定**：每個專案的內業人員**必須**依該專案需求設定要查核的工項（查核項目本身是必要設定，不得省略），**不得**套用公司共用的固定工項分類。工項分類（例如空調風管、給排水、電力設備）與分區（例如一樓 A 區、二樓 B 區）這兩層組織方式是否使用，皆是**依專案需求選用**，不強制每個專案都要建立；若建分區，查核工項按分區分開建立與執行，未建分區則工區只是同一查核工項的選項或資訊。記錄於 [KD-40](03-decisions-and-stack.md#kd-40)；討論見 [#74](https://github.com/speko-tw/inspect-flow/issues/74)。
+
+2026-10-02 補足 9/28 未定的部分（[#74 留言](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5956038822)）：
+- **範本庫**：範本庫獨立於專案，所有專案都**得**從中挑項目套用（複製）；範本庫為選用，專案也**得**從零建立。套用後各自獨立，修改範本不回頭改動已套用的專案。見 [KD-47](03-decisions-and-stack.md#kd-47)。
+- **範本內容**：只存結構（分類、查核項目、查核項次、檢查標準、照片要求），不存現場結果與照片。見 [KD-48](03-decisions-and-stack.md#kd-48)。
+- **分類層數**：先固定兩層「工程類別 → 系統」，其下為查核項目（試做，日後調整另開 issue）。見 [KD-48](03-decisions-and-stack.md#kd-48)。
+- **名稱**：同一層之下不得重名，不同層可重名；目前只用名稱、不設代號。見 [KD-48](03-decisions-and-stack.md#kd-48)。
+- 9/28 已定的「分類與分區皆選用、分區不是分類的子層」維持。分區代碼等結構化規則屬 [OQ-03](#oq-03)，仍未定。
 
 **為什麼要先決定**：影響範本（Template）之下的工項分類設計，以及查核規則如何組織。
 
@@ -84,30 +91,37 @@
 
 **目前暫定**：無，僅提出這是需要團隊討論的問題。
 
-**誰決定、何時**：負責人；已於 [#74](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5869623884)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5870106117) 部分裁定（2026-09-28）；未定部分的裁定時間未指定。
+**誰決定、何時**：負責人；已於 [#74](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5869623884)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5870106117) 部分裁定（2026-09-28），並於 [#74 留言](https://github.com/speko-tw/inspect-flow/issues/74#issuecomment-5956038822) 補足其餘部分（2026-10-02）。
 
-**影響的原則**：與 [OQ-20](#oq-20) 同屬「範圍決策治理」缺口；與 [OQ-03](#oq-03) 的分區裁定屬同一組決策。
+**影響的原則**：[KD-40](03-decisions-and-stack.md#kd-40)、[KD-47](03-decisions-and-stack.md#kd-47)、[KD-48](03-decisions-and-stack.md#kd-48)；與 [OQ-03](#oq-03) 的分區裁定屬同一組決策。
 
-**依據**：議題背景為架構基準 §0、§38 Work Item；部分裁定為負責人決定（#74，2026-09-28）。
+**依據**：議題背景為架構基準 §0、§38 Work Item；裁定為負責人決定（#74，2026-09-28）與負責人裁定（#74 留言，2026-10-02）。
 
 
 <a id="oq-05"></a>
 
-### OQ-05：不同工程類型各自需要哪些正式查核範本？每一查核點需要多少張照片？（部分裁定）
+### OQ-05：不同工程類型各自需要哪些正式查核範本？每一查核點需要多少張照片？（已裁定）
 
-**裁定**：查驗系統採共通查核流程；進料／施工／測試等名稱只對應不同輸出報表樣板，不代表要做三套查驗流程。一個查核項目組下**得**有多個查核項次，項次內容由內業事先設定。現場人員自行選擇每張照片要佐證哪些查核項次，一張照片**得**覆蓋多個項次；每個查核項次**必須**至少被一張非總覽照片覆蓋。**得**額外提供「總覽照片」選項，有拍就在該組報表排第一張，且不計入最低覆蓋要求。記錄於 [KD-38](03-decisions-and-stack.md#kd-38)；討論見 [#75](https://github.com/speko-tw/inspect-flow/issues/75)。**未定**：每個項次可否多張照片、照片張數上限、總覽照片的具體拍攝方式。
+**裁定**：查驗系統採共通查核流程；進料／施工／測試等名稱只對應不同輸出報表樣板，不代表要做三套查驗流程。一個查核項目組下**得**有多個查核項次，項次內容由內業事先設定。現場人員自行選擇每張照片要佐證哪些查核項次，一張照片**得**覆蓋多個項次；每個查核項次**必須**至少被一張非總覽照片覆蓋。**得**額外提供「總覽照片」選項，有拍就在該組報表排第一張，且不計入最低覆蓋要求。記錄於 [KD-38](03-decisions-and-stack.md#kd-38)；討論見 [#75](https://github.com/speko-tw/inspect-flow/issues/75)。
 
-**為什麼要先決定**：直接影響 `Template Item` / `Evidence Requirement` 的資料模型完整度，也牽動 [KD-03](03-decisions-and-stack.md#kd-03)（範本版本化＋任務快照）如何落地。查核規則的間距（interval）欄位歸屬，MVP 方向已由 [G-01](#g-01)（部分裁定）確定不需要，其餘歸屬爭議仍未定。
+2026-10-02 補足 9/28 未定的部分（[#75 留言](https://github.com/speko-tw/inspect-flow/issues/75#issuecomment-5956039268)），記錄於 [KD-50](03-decisions-and-stack.md#kd-50)：
+- **每個項次的照片**：可多張，最少 1 張，沒有上限。
+- **總覽照片**：可多張，全部排在該組最前面；仍為選拍，不計入項次最低覆蓋。
+- **照片現場註記**：每一張照片（總覽與佐證項次）都**得**加現場工程師的文字註記；有填寫就呈現在報告，留白不顯示，註記一律保留。這與 [OQ-12](#oq-12)（#81）「在照片上畫標註」不同。
+
+「不同工程類型各自需要哪些正式查核範本」由範本庫回答：範本由範本管理員在範本庫維護，專案挑項目套用，見 [KD-47](03-decisions-and-stack.md#kd-47)、[KD-49](03-decisions-and-stack.md#kd-49)；不預先規定每種工程類型必須有哪些範本。
+
+**為什麼要先決定**：直接影響 `Template Item` / `Evidence Requirement` 的資料模型完整度，也牽動 [KD-03](03-decisions-and-stack.md#kd-03)（範本不版本化、套用即複製）如何落地。查核規則的間距（interval）欄位歸屬，MVP 方向已由 [G-01](#g-01)（部分裁定）確定不需要，其餘歸屬爭議仍未定。
 
 **選項**：架構基準文件只給出「電纜橋架每 10 公尺查核一次，長寬高各一張照片」這類單一範例，未定義正式的每種工程材料／工項查核規則，也未定義每一查核點所需的正式照片張數。
 
 **目前暫定**：無。
 
-**誰決定、何時**：負責人；已於 [#75](https://github.com/speko-tw/inspect-flow/issues/75#issuecomment-5871381243) 部分裁定（2026-09-28）；未定部分的裁定時間未指定。
+**誰決定、何時**：負責人；已於 [#75](https://github.com/speko-tw/inspect-flow/issues/75#issuecomment-5871381243) 部分裁定（2026-09-28），並於 [#75 留言](https://github.com/speko-tw/inspect-flow/issues/75#issuecomment-5956039268) 補足其餘部分（2026-10-02）。
 
-**影響的原則**：[KD-03](03-decisions-and-stack.md#kd-03)、[KD-38](03-decisions-and-stack.md#kd-38)；interval 歸屬另見 [G-01](#g-01)（部分裁定）。
+**影響的原則**：[KD-03](03-decisions-and-stack.md#kd-03)、[KD-38](03-decisions-and-stack.md#kd-38)、[KD-50](03-decisions-and-stack.md#kd-50)；interval 歸屬另見 [G-01](#g-01)（部分裁定）。
 
-**依據**：議題背景為架構基準 §0、§38 Template；部分裁定為負責人決定（#75，2026-09-28）。
+**依據**：議題背景為架構基準 §0、§38 Template；裁定為負責人決定（#75，2026-09-28）與負責人裁定（#75 留言，2026-10-02）。
 
 
 <a id="oq-06"></a>
@@ -152,7 +166,9 @@
 
 <a id="oq-20"></a>
 
-### OQ-20：由誰、何時決定擴大 MVP 的 Evidence Type 範圍？
+### OQ-20：由誰、何時決定擴大 MVP 的 Evidence Type 範圍？（已裁定）
+
+**裁定**：MVP 佐證**只收照片**；佐證類型未來可能擴充（例如文件、量測數值、簽名、影片）。**不設**固定的檢討時點：有需要時開 issue，由負責人裁定後寫入規格再實作。額外文件（出廠證明、試驗報告等）拍照並以照片註記說明；報告功能（0.9.x）提供「補充文件」區可附文件或連結；串接文件管理系統屬未來。記錄於 [KD-53](03-decisions-and-stack.md#kd-53)；討論見 [#88](https://github.com/speko-tw/inspect-flow/issues/88)（[裁定留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956189277)，2026-10-02）。**未定**：原 `TEXT` 是否仍保留為獨立 Evidence 類型，裁定沒有說明，待規格確認。
 
 **為什麼要先決定**：直接影響 [01-overview.md](01-overview.md)「MVP 的證據類型邊界」一節如何落地，以及 `EvidenceRequirement.type` 實際支援哪些值。
 
@@ -160,13 +176,13 @@
 - 維持 MVP 僅 `PHOTO`／`TEXT`。
 - 擴大支援 `NUMBER`／`BOOLEAN`／`SIGNATURE`／`DOCUMENT`。
 
-**目前暫定**：MVP **可**只實作 `PHOTO`／`TEXT`，其餘四種列為資料模型預留欄位，但未指名由誰、在什麼時間點決定是否啟用。
+**目前暫定**：（原暫定已被裁定取代）MVP 佐證只收照片，見上方裁定。
 
-**誰決定、何時**：未指定——這本身就是本題要問的治理缺口。
+**誰決定、何時**：負責人；已於 [#88 留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)（2026-10-02）裁定：不設固定檢討時點，有需要時開 issue，由負責人裁定後寫入規格再實作。
 
-**影響的原則**：與 [OQ-04](#oq-04)（工項分類）、[OQ-06](#oq-06)（Result 語意）同屬「範圍決策治理」缺口的不同面向。
+**影響的原則**：[KD-53](03-decisions-and-stack.md#kd-53)；與 [OQ-06](#oq-06)（Result 語意）同屬範圍決策的不同面向。
 
-**依據**：架構基準 §12.6、§38 Evidence/Result
+**依據**：議題背景為架構基準 §12.6、§38 Evidence/Result；裁定為負責人裁定（#88 留言，2026-10-02）。
 
 ## B. 系統流程與權限待決
 
@@ -193,9 +209,13 @@
 
 <a id="oq-09"></a>
 
-### OQ-09：`Inspection Plan`／`Inspection Task`／`Template Version`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？（部分裁定）
+### OQ-09：`Inspection Plan`／`Inspection Task`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？（部分裁定）
 
-**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；**不開放**人員手動修改計畫狀態（負責人已明確撤回此選項）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。**未定**：Plan／Task／Template Version／Evidence／Report 的其他狀態、作廢、取消、失敗與更正路徑。
+**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；**不開放**人員手動修改計畫狀態（負責人已明確撤回此選項）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
+
+**範本部分已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02）：範本庫的範本修改時直接覆蓋，只保留最新版，不做版本化，因此不再有 `Template Version` 的狀態機；「快照」由套用時複製到專案的那一份負責；專案記錄來源範本名稱與套用時間供追查，範本被覆蓋後不保證能回看當時內容。記錄於 [KD-03](03-decisions-and-stack.md#kd-03)（改寫）。
+
+**未定**：Plan／Task／Evidence／Report 的其他狀態、作廢、取消、失敗與更正路徑，留待 0.4.x 以後討論；專案那份複本與 `Task Requirement Snapshot` 的分工（任務建立時是否仍另外固定一份需求）裁定沒有明說，待 0.4.x 規格確認。
 
 **為什麼要先決定**：影響任務完成判定（[PR-01](02-principles.md#pr-01)）、報告產製失敗重試（見 [G-06](#g-06)）、以及證據刪除與歷史不可變原則（[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)）之間如何協調。
 
@@ -203,11 +223,11 @@
 
 **目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。
 
-**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28）；其餘狀態與例外路徑的裁定時間未指定。
+**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02）；其餘狀態與例外路徑留待 0.4.x 以後討論。
 
-**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-42](03-decisions-and-stack.md#kd-42)；另見 [G-06](#g-06)。
+**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-03](03-decisions-and-stack.md#kd-03)、[KD-42](03-decisions-and-stack.md#kd-42)；另見 [G-06](#g-06)。
 
-**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）。
+**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）與負責人裁定（#78 留言，2026-10-02，範本部分）。
 
 
 <a id="oq-10"></a>
