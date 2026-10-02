@@ -221,6 +221,10 @@ class TestAutAc08CurrentUser:
             "name_zh",
             "is_admin",
             "must_change_password",
+            "company",
+            "department",
+            "location",
+            "employee_no",
         }
         for account in (user, admin):
             account_client = make_client()

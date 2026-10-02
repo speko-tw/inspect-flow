@@ -37,7 +37,7 @@ from app.auth.sessions import (
     hash_token,
     set_session_cookie,
 )
-from app.models import AuthSession, User, UserPassword
+from app.models import AuthSession, Company, User, UserPassword
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,6 +76,26 @@ class CurrentUserResponse(BaseModel):
     must_change_password: bool
 
 
+class CompanyRef(BaseModel):
+    """The linked company shown in ``GET /auth/me`` (AUT-R08)."""
+
+    id: UUID
+    name: str
+
+
+class MeResponse(CurrentUserResponse):
+    """``GET /api/v1/auth/me`` body (AUT-R08): the login body plus
+    the company link and company-related profile fields the personal
+    workspace page shows (#290). ``company`` is ``None`` for an
+    account with no linked company (including the built-in admin).
+    """
+
+    company: CompanyRef | None
+    department: str | None
+    location: str | None
+    employee_no: str | None
+
+
 def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
     return CurrentUserResponse(
         id=user.id,
@@ -85,6 +105,26 @@ def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
         name_zh=user.name_zh,
         is_admin=user.is_admin,
         must_change_password=has_effective_temporary_password_flag(db, user),
+    )
+
+
+def _me_response(db: Session, user: User) -> MeResponse:
+    company = (
+        db.get(Company, user.company_id)
+        if user.company_id is not None
+        else None
+    )
+    base = _current_user_response(db, user)
+    return MeResponse(
+        **base.model_dump(),
+        company=(
+            CompanyRef(id=company.id, name=company.name)
+            if company is not None
+            else None
+        ),
+        department=user.department,
+        location=user.location,
+        employee_no=user.employee_no,
     )
 
 
@@ -169,16 +209,16 @@ def logout(
 register_temporary_password_allowed("POST", logout)
 
 
-@router.get("/me", response_model=CurrentUserResponse)
+@router.get("/me", response_model=MeResponse)
 def get_me(
     user: User = Depends(require_login_access),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
-) -> CurrentUserResponse:
+) -> MeResponse:
     """AUT-R08: the current user, or 401 ``auth.not_authenticated``
     (raised by ``require_login`` underneath ``require_login_access``)
     when not logged in.
     """
-    return _current_user_response(db, user)
+    return _me_response(db, user)
 
 
 register_temporary_password_allowed("GET", get_me)
