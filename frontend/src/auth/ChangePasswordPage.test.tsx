@@ -8,11 +8,12 @@
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import App from '../App'
 import ChangePasswordPage from './ChangePasswordPage'
 import RequireAuth from './RequireAuth'
+import { preloadLazyRoutes } from '../testing/preloadRoutes'
 
 const TEMP_PASSWORD_USER = {
   id: 'u1',
@@ -76,6 +77,9 @@ function fillAndSubmit(current: string, next: string, confirm: string) {
   })
   fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 }
+
+// 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
+beforeAll(preloadLazyRoutes)
 
 describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC42）', () => {
   afterEach(() => {

@@ -3,9 +3,18 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'vitest'
 
 import App from './App'
+import { preloadLazyRoutes } from './testing/preloadRoutes'
 
 const ADMIN = {
   id: 'admin-1',
@@ -105,6 +114,9 @@ async function signIn() {
   })
   fireEvent.click(screen.getByRole('button', { name: '登入' }))
 }
+
+// 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
+beforeAll(preloadLazyRoutes)
 
 afterEach(() => {
   vi.unstubAllGlobals()

@@ -1,8 +1,17 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import App from './App'
+import { preloadLazyRoutes } from './testing/preloadRoutes'
 
 // 加上 RequireAuth 之後，/admin、/field 會先呼叫目前使用者 API
 // （AUT-R08）。這裡只驗證路由本身接得到正確的畫面，所以提供一個
@@ -28,6 +37,9 @@ function stubAuthenticatedFetch() {
     }),
   )
 }
+
+// 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
+beforeAll(preloadLazyRoutes)
 
 describe('App routing', () => {
   beforeEach(() => {
