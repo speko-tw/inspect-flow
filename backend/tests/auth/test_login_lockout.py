@@ -13,7 +13,9 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.api.errors import ErrorCode
 from app.api.v1 import auth as auth_api
+from app.auth import lockout as lockout_module
 from app.auth import login as login_module
 from app.auth.dependencies import get_db
 from app.auth.password_service import set_password
@@ -63,6 +65,51 @@ def _login(client, user, password):
 
 def _fail(client, user, count=1):
     return [_login(client, user, "wrong-password") for _ in range(count)]
+
+
+def test_sqlite_write_lock_timeout_returns_retryable_error(
+    client, db_session, engine, monkeypatch
+):
+    _admin(db_session)
+    user = make_local_user(db_session, "DEMO_LOCK")
+    user_id, email = user.id, user.email
+    monkeypatch.setattr(lockout_module, "_SQLITE_BUSY_TIMEOUT_MS", 50)
+
+    with engine.connect() as holder:
+        holder.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            for password in ("wrong-password", P):
+                response = client.post(
+                    "/api/v1/auth/login",
+                    json={"login": email, "password": password},
+                )
+                assert response.status_code == 503
+                assert response.json() == {
+                    "error": {"code": ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE}
+                }
+                assert "set-cookie" not in response.headers
+        finally:
+            holder.rollback()
+
+    db_session.rollback()
+    assert (
+        db_session.scalar(
+            select(LoginCounter).where(LoginCounter.user_id == user_id)
+        )
+        is None
+    )
+    assert (
+        db_session.query(AuthSession).filter_by(user_id=user_id).count() == 0
+    )
+    db_session.rollback()
+    assert _login(client, user, "wrong-password").status_code == 401
+    db_session.rollback()
+    counter = db_session.scalar(
+        select(LoginCounter).where(LoginCounter.user_id == user_id)
+    )
+    assert counter is not None and counter.failure_count == 1
+    db_session.rollback()
+    assert _login(client, user, P).status_code == 200
 
 
 def test_ac27_ac51_lock_boundary_audit_and_log(

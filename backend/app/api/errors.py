@@ -61,6 +61,10 @@ class ErrorCode(DescribedStrEnum):
         "server.internal_error",
         "An unexpected server error occurred.",
     )
+    SERVER_TEMPORARILY_UNAVAILABLE = (
+        "server.temporarily_unavailable",
+        "The server is temporarily unavailable. Please retry.",
+    )
     AUTH_NOT_AUTHENTICATED = (
         "auth.not_authenticated",
         "Authentication is required for this request.",
