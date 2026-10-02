@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -33,6 +39,17 @@ const CREATED_USER = {
   is_admin: false,
   is_system: false,
   temporary_password: 'Tmp-PassW0rd-123',
+}
+
+/** 以完整標籤文字找步驟列的項目（標籤內部是分段的詞組）。 */
+function stepItem(steps: HTMLElement, label: string): HTMLElement {
+  const item = within(steps)
+    .getAllByRole('listitem')
+    .find((li) => li.querySelector('.steps-label')?.textContent === label)
+  if (item === undefined) {
+    throw new Error(`找不到步驟：${label}`)
+  }
+  return item
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -279,18 +296,16 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
     expect(steps).toHaveTextContent('首次登入碼')
     expect(steps).toHaveTextContent('設定 admin 密碼')
     expect(steps).toHaveTextContent('新增第一個使用者')
-    expect(
-      screen
-        .getByText('首次登入碼', { selector: '.steps-label' })
-        .closest('li'),
-    ).toHaveAttribute('aria-current', 'step')
+    expect(stepItem(steps, '首次登入碼')).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
 
     fillCode('code-123')
-    expect(
-      screen
-        .getByText('設定 admin 密碼', { selector: '.steps-label' })
-        .closest('li'),
-    ).toHaveAttribute('aria-current', 'step')
+    expect(stepItem(steps, '設定 admin 密碼')).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '上一步' }))
     expect(screen.getByLabelText('首次登入碼')).toHaveValue('code-123')

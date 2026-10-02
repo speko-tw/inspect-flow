@@ -11,7 +11,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 - 違反 `02-principles.md` 中「必須」等級原則的變更，須先在 `03-decisions-and-stack.md` 新增決策並經團隊同意。
 - 未定案或來源矛盾的議題查 `05-open-questions.md`，不得把自己的假設當成既定事實。
 - 實作任務前，先讀對應的 `docs/specs/<slug>/spec.md` 與 `plan.md`；流程、變更等級與共用檔案規則見 [`docs/specs/README.md`](docs/specs/README.md)。
-- 實作中發現規格要調整時，依變更等級處理：計畫調整與規格澄清在同一個 PR 內修改文件；範圍變更與意圖變更先開 spec-change issue，不得直接改程式碼繞過規格。
+- 實作中發現規格要調整時，依變更等級處理：計畫調整與規格澄清在同一個 PR 內修改文件；範圍變更與意圖變更先開 spec-change issue，不得直接改程式碼繞過規格；例外是負責人直接指示的範圍變更，依 [`docs/specs/README.md`](docs/specs/README.md#change) 的條件在同一個 PR 落地。
 
 ## 文件
 
@@ -66,6 +66,6 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 - **自動化範圍**：agent 得自行 push 自己的分支、開與更新 PR、開與更新 issue／sub-issue、套用既有 label、留言，不必逐次詢問。
 - **留給人的關卡**（agent 不得代為決定，見 [`docs/specs/README.md`](docs/specs/README.md#human-gates)）：
   - 合併 PR 到 `main`（含規格與計畫的 PR）；agent 不得核准或合併自己的 PR。
-  - `needs-decision` 的議題：範圍變更、意圖變更、裁定 OQ／G。agent 只整理選項與影響，等團隊討論決定。
+  - `needs-decision` 的議題：範圍變更、意圖變更、裁定 OQ／G。agent 只整理選項與影響，等團隊討論決定（負責人已直接指示的範圍變更除外，見 [`docs/specs/README.md`](docs/specs/README.md#change)）。
   - 破壞性或全域操作：force push、刪除他人分支、刪除 issue 或 label、新增 label、變更 repo 設定與分支保護。
   - 建立 Git tag 與 GitHub Release；agent 只準備 Release Notes 草稿（流程見 [`docs/release.md`](docs/release.md)）。

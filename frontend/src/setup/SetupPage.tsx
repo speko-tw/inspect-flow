@@ -9,7 +9,7 @@
 // 進入時只查一次 setup 狀態：設定成功後狀態會變成 false，流程進
 // 行中不能因此被導走。
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 
 import { listCompanies, type Company, type CreatedUser } from '../admin/api'
@@ -22,7 +22,17 @@ import { fetchSetupRequired, setAdminPassword, setupErrorMessage } from './api'
 const MIN_PASSWORD_LENGTH = 8
 const MAX_PASSWORD_LENGTH = 128
 
-const STEP_LABELS = ['首次登入碼', '設定 admin 密碼', '新增第一個使用者']
+/**
+ * 步驟標籤以「詞組」為單位。窄螢幕放不下整句時，只能在詞組之間
+ * 換行（CSS 把每個詞組設成 inline-block），不會把「使用者」拆出
+ * 孤字（#306）。把詞組直接接起來就是完整標籤；詞組尾端的空格會
+ * 留在詞組外，一行放得下時看起來和原本一樣。
+ */
+const STEP_LABELS = [
+  ['首次登入碼'],
+  ['設定 admin ', '密碼'],
+  ['新增第一個', '使用者'],
+]
 
 type Step =
   | { kind: 'checking' }
@@ -37,7 +47,8 @@ type Step =
 function StepIndicator({ current }: { current: number }) {
   return (
     <ol className="steps" aria-label="設定步驟">
-      {STEP_LABELS.map((label, index) => {
+      {STEP_LABELS.map((phrases, index) => {
+        const label = phrases.join('')
         const number = index + 1
         const state =
           number < current ? 'done' : number === current ? 'current' : 'todo'
@@ -50,7 +61,14 @@ function StepIndicator({ current }: { current: number }) {
             <span className="steps-num" aria-hidden="true">
               {state === 'done' ? '✓' : number}
             </span>
-            <span className="steps-label">{label}</span>
+            <span className="steps-label">
+              {phrases.map((phrase) => (
+                <Fragment key={phrase}>
+                  <span className="steps-phrase">{phrase.trimEnd()}</span>
+                  {phrase.endsWith(' ') ? ' ' : null}
+                </Fragment>
+              ))}
+            </span>
           </li>
         )
       })}
