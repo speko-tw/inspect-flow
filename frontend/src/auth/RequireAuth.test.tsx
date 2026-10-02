@@ -277,7 +277,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/field'])
 
-    await screen.findByRole('heading', { name: 'Field' })
+    await screen.findByRole('heading', { name: '我的工作台' })
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
 
@@ -289,7 +289,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/field'])
 
-    await screen.findByRole('heading', { name: 'Field' })
+    await screen.findByRole('heading', { name: '我的工作台' })
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
 
