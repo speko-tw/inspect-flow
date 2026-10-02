@@ -1,18 +1,29 @@
 """Shared, serialized per-account password failure counter (AUT-R28)."""
 
+import logging
 import uuid
 
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.api.errors import APIError, ErrorCode
 from app.auth.settings import get_lockout_settings
 from app.db import clock
 from app.models import LoginCounter, LoginFailure
 from app.services.audit import record_audit_event
 
 _UNKNOWN_USER_ID = uuid.UUID(int=0)
+_SQLITE_BUSY_TIMEOUT_MS = 30000
+_SQLITE_RETRY_AFTER_SECONDS = 5
+logger = logging.getLogger("app.auth")
+
+
+def _is_sqlite_lock_error(exc: OperationalError) -> bool:
+    name = getattr(exc.orig, "sqlite_errorname", "")
+    return name.startswith(("SQLITE_BUSY", "SQLITE_LOCKED"))
 
 
 def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
@@ -28,8 +39,10 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
     if dialect == "sqlite":
         # db-dependency: sqlite; wait for the preceding writer instead
         # of returning a transient "database is locked" as HTTP 500.
-        # db-dependency: sqlite
-        db.connection().exec_driver_sql("PRAGMA busy_timeout=30000")
+        db.connection().exec_driver_sql(
+            # db-dependency: sqlite
+            f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}"
+        )
         insert = sqlite_insert(LoginCounter)
     elif dialect == "postgresql":
         insert = pg_insert(LoginCounter)
@@ -41,7 +54,24 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
         index_elements=[LoginCounter.user_id],
         set_={"revision": LoginCounter.revision + 1},
     )
-    db.execute(statement)
+    try:
+        db.execute(statement)
+    except OperationalError as exc:
+        if dialect != "sqlite" or not _is_sqlite_lock_error(exc):
+            raise
+        db.rollback()
+        logger.warning(
+            "auth.lockout_write_timeout",
+            extra={
+                "event": "auth.lockout_write_timeout",
+                "reason": "sqlite_lock_timeout",
+            },
+        )
+        raise APIError(
+            ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE,
+            503,
+            headers={"Retry-After": str(_SQLITE_RETRY_AFTER_SECONDS)},
+        ) from exc
 
 
 def is_locked(db: Session, user_id: uuid.UUID | None) -> bool:
