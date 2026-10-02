@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router'
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -8,6 +8,14 @@ import RolesPage from './roles/RolesPage'
 import ProjectDetailPage from './projects/ProjectDetailPage'
 import ProjectsPage from './projects/ProjectsPage'
 import UsersPage from './UsersPage'
+
+const NAV_ITEMS = [
+  { to: '/admin/users', label: '使用者' },
+  { to: '/admin/companies', label: '公司' },
+  { to: '/admin/roles', label: '角色' },
+  { to: '/admin/projects', label: '專案' },
+  { to: '/change-password', label: '變更密碼' },
+]
 
 export default function AdminPage() {
   const { user } = useCurrentUser()
@@ -41,34 +49,15 @@ export default function AdminPage() {
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
         <h1>Admin</h1>
         <nav aria-label="管理功能">
-          <Link onClick={() => setTemporaryPassword(null)} to="/admin/users">
-            使用者
-          </Link>
-          {' · '}
-          <Link
-            onClick={() => setTemporaryPassword(null)}
-            to="/admin/companies"
-          >
-            公司
-          </Link>
-          {' · '}
-          <Link onClick={() => setTemporaryPassword(null)} to="/admin/roles">
-            角色
-          </Link>
-          {' · '}
-          <Link
-            onClick={() => setTemporaryPassword(null)}
-            to="/admin/projects"
-          >
-            專案
-          </Link>
-          {' · '}
-          <Link
-            onClick={() => setTemporaryPassword(null)}
-            to="/change-password"
-          >
-            變更密碼
-          </Link>
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              onClick={() => setTemporaryPassword(null)}
+              to={item.to}
+            >
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
         <span className="topbar-user">
           登入者：{user.name_zh ?? user.username}
