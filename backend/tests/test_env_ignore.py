@@ -9,10 +9,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _is_ignored(path: str) -> bool:
+    """Ask git whether ``path`` matches an ignore rule.
+
+    ``--no-index`` makes git check the rules even for files that are
+    already tracked (``.env.example`` is), which it skips by default.
+    Exit code 0 means ignored, 1 means not ignored; anything else
+    (for example 128) is a git error and must fail the test.
+    """
     result = subprocess.run(
-        ["git", "check-ignore", "--quiet", path],
+        ["git", "check-ignore", "--quiet", "--no-index", path],
         cwd=REPO_ROOT,
         check=False,
+    )
+    assert result.returncode in (0, 1), (
+        f"git check-ignore failed with exit code {result.returncode}"
     )
     return result.returncode == 0
 
