@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router'
 
+import { useCurrentUser } from '../auth/useCurrentUser'
 import {
   linkUserCompany,
   listCompanies,
@@ -13,11 +15,17 @@ import {
 } from './api'
 import UserForm from './UserForm'
 
+const SELF_REVOKE_CONFIRM =
+  '你將收回自己的管理者權限，之後無法再進入管理頁，確定嗎？'
+const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
+
 export default function UsersPage({
   onTemporaryPassword,
 }: {
   onTemporaryPassword: (username: string, password: string) => void
 }) {
+  const { user: currentUser } = useCurrentUser()
+  const navigate = useNavigate()
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,6 +89,32 @@ export default function UsersPage({
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      setBusyUser(null)
+    }
+  }
+
+  // 收回「自己」的管理者權限：先確認；成功後不能再重新載入列表
+  // （會被 403 擋下），改為導離管理頁並帶提示，目標頁的守衛會重新
+  // 取得目前使用者。
+  async function toggleAdmin(user: User) {
+    const revokingSelf = user.is_admin && user.id === currentUser.id
+    if (!revokingSelf) {
+      void act(user.id, () => setUserAdmin(user.id, !user.is_admin))
+      return
+    }
+    if (!window.confirm(SELF_REVOKE_CONFIRM)) {
+      return
+    }
+    setError('')
+    setBusyUser(user.id)
+    try {
+      await setUserAdmin(user.id, false)
+      navigate('/field', {
+        replace: true,
+        state: { notice: SELF_REVOKED_NOTICE },
+      })
+    } catch (caught) {
+      setError(managementErrorMessage(caught))
       setBusyUser(null)
     }
   }
@@ -151,11 +185,7 @@ export default function UsersPage({
                       </button>
                       <button
                         disabled={user.is_system || busyUser === user.id}
-                        onClick={() =>
-                          void act(user.id, () =>
-                            setUserAdmin(user.id, !user.is_admin),
-                          )
-                        }
+                        onClick={() => void toggleAdmin(user)}
                         type="button"
                       >
                         {user.is_admin ? '收回管理者' : '指派管理者'}

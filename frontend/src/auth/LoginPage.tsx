@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router'
 
 import { login } from './api'
 import AuthLayout from './AuthLayout'
+import { landingPath } from './landing'
 import { isSafeRedirectPath } from './safeRedirect'
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
@@ -29,11 +30,13 @@ export default function LoginPage() {
     setSubmitting(true)
 
     try {
-      await login(account, password)
+      const user = await login(account, password)
 
       const state = location.state as RedirectState | null
       const from = state?.from
-      navigate(isSafeRedirectPath(from) ? from : '/', { replace: true })
+      navigate(isSafeRedirectPath(from) ? from : landingPath(user), {
+        replace: true,
+      })
     } catch {
       // 401（帳密錯誤）、422（本體不合法）或其他狀態碼一律顯示同
       // 一則訊息，不因原因不同而改變文字。

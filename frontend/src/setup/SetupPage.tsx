@@ -13,6 +13,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 
 import { listCompanies, type Company, type CreatedUser } from '../admin/api'
+import TemporaryPassword from '../admin/TemporaryPassword'
 import UserForm from '../admin/UserForm'
 import { ApiError } from '../auth/api'
 import AuthLayout from '../auth/AuthLayout'
@@ -175,7 +176,7 @@ export default function SetupPage() {
             請將以下臨時密碼交給 {step.user.username}
             。首次登入時必須變更密碼；離開此頁後無法再次查看。
           </p>
-          <output aria-label="臨時密碼">{step.user.temporary_password}</output>
+          <TemporaryPassword password={step.user.temporary_password} />
         </section>
         <button
           className="btn-primary"
@@ -214,7 +215,7 @@ export default function SetupPage() {
     return (
       <AuthLayout
         title="首次設定"
-        lead="請輸入初始化指令（make init）印出的首次登入碼。"
+        lead="請輸入 make init 印出的首次登入碼。"
         progress={<StepIndicator current={1} />}
       >
         <form onSubmit={submitCode} noValidate>

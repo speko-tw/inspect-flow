@@ -402,6 +402,43 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
   })
 })
 
+describe('首次設定第 1 步說明文字（#284 第 8 項）', () => {
+  it('說明文字簡短成一句，避免折行後只剩「碼。」孤字', async () => {
+    stubBackend()
+    renderApp('/setup')
+    await screen.findByLabelText('首次登入碼')
+
+    const lead = screen.getByText('請輸入 make init 印出的首次登入碼。')
+    expect(lead).toBeInTheDocument()
+    // jsdom 不排版，無法直接驗證折行；用長度當代理：一句 24 字內
+    // 在卡片寬度內不會折行（實際畫面由負責人複驗）。
+    expect((lead.textContent ?? '').length).toBeLessThanOrEqual(24)
+  })
+})
+
+describe('首次設定第 3 步完成畫面的臨時密碼（#284 第 7 項）', () => {
+  it('臨時密碼旁有「複製」按鈕', async () => {
+    stubBackend()
+    renderApp('/setup')
+    await screen.findByLabelText('首次登入碼')
+    fillPassword('code-123', VALID_PASSWORD)
+    await screen.findByRole('heading', { name: '新增使用者' })
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
+      target: { value: 'anna.deng' },
+    })
+    fireEvent.change(screen.getByLabelText(/^Email/), {
+      target: { value: 'anna.deng@demo.example' },
+    })
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
+      target: { value: '鄧安娜' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+
+    await screen.findByLabelText('臨時密碼')
+    expect(screen.getByRole('button', { name: '複製' })).toBeInTheDocument()
+  })
+})
+
 describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）', () => {
   it('設定成功後進入新增使用者步驟，送出後顯示一次臨時密碼', async () => {
     const backend = stubBackend()
@@ -421,13 +458,13 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     })
     expect(screen.getByLabelText('指派系統管理者權限')).not.toBeChecked()
 
-    fireEvent.change(screen.getByLabelText('帳號名稱'), {
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
       target: { value: 'anna.deng' },
     })
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText(/^Email/), {
       target: { value: 'anna.deng@demo.example' },
     })
-    fireEvent.change(screen.getByLabelText('中文姓名'), {
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
@@ -487,13 +524,13 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
       }),
     )
 
-    fireEvent.change(screen.getByLabelText('帳號名稱'), {
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
       target: { value: 'anna.deng' },
     })
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText(/^Email/), {
       target: { value: 'anna.deng@demo.example' },
     })
-    fireEvent.change(screen.getByLabelText('中文姓名'), {
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))

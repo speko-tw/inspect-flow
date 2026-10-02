@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
   createUser,
@@ -6,6 +6,18 @@ import {
   type Company,
   type CreatedUser,
 } from './api'
+
+const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ -'
+const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
+
+/** 必填欄位的標示；「*」對讀屏無意義，必填已由 `required` 表達。 */
+function Required({ children }: { children: ReactNode }) {
+  return (
+    <span>
+      {children} <span aria-hidden="true">*</span>
+    </span>
+  )
+}
 
 export default function UserForm({
   companies,
@@ -27,6 +39,8 @@ export default function UserForm({
   const [saving, setSaving] = useState(false)
 
   const fieldsDisabled = companyId === ''
+  const usernameRuleId = useId()
+  const companyHintIds = [useId(), useId(), useId()]
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -74,20 +88,24 @@ export default function UserForm({
     <form onSubmit={submit}>
       <h2>新增使用者</h2>
       {error && <p role="alert">{error}</p>}
+      <div>
+        <label>
+          <Required>帳號名稱</Required>
+          <input
+            aria-describedby={usernameRuleId}
+            autoComplete="username"
+            maxLength={32}
+            minLength={3}
+            onChange={(event) => setUsername(event.target.value)}
+            pattern="[A-Za-z][A-Za-z0-9._-]{2,31}"
+            required
+            value={username}
+          />
+        </label>
+        <small id={usernameRuleId}>{USERNAME_RULE}</small>
+      </div>
       <label>
-        帳號名稱
-        <input
-          autoComplete="username"
-          maxLength={32}
-          minLength={3}
-          onChange={(event) => setUsername(event.target.value)}
-          pattern="[A-Za-z][A-Za-z0-9._-]{2,31}"
-          required
-          value={username}
-        />
-      </label>
-      <label>
-        Email
+        <Required>Email</Required>
         <input
           autoComplete="email"
           onChange={(event) => setEmail(event.target.value)}
@@ -97,7 +115,7 @@ export default function UserForm({
         />
       </label>
       <label>
-        中文姓名
+        <Required>中文姓名</Required>
         <input
           onChange={(event) => setNameZh(event.target.value)}
           required
@@ -127,30 +145,48 @@ export default function UserForm({
             ))}
         </select>
       </label>
-      <label>
-        部門
-        <input
-          disabled={fieldsDisabled}
-          onChange={(event) => setDepartment(event.target.value)}
-          value={department}
-        />
-      </label>
-      <label>
-        地點
-        <input
-          disabled={fieldsDisabled}
-          onChange={(event) => setLocation(event.target.value)}
-          value={location}
-        />
-      </label>
-      <label>
-        工號
-        <input
-          disabled={fieldsDisabled}
-          onChange={(event) => setEmployeeNo(event.target.value)}
-          value={employeeNo}
-        />
-      </label>
+      <div>
+        <label>
+          部門
+          <input
+            aria-describedby={fieldsDisabled ? companyHintIds[0] : undefined}
+            disabled={fieldsDisabled}
+            onChange={(event) => setDepartment(event.target.value)}
+            value={department}
+          />
+        </label>
+        {fieldsDisabled && (
+          <small id={companyHintIds[0]}>{NEEDS_COMPANY_HINT}</small>
+        )}
+      </div>
+      <div>
+        <label>
+          地點
+          <input
+            aria-describedby={fieldsDisabled ? companyHintIds[1] : undefined}
+            disabled={fieldsDisabled}
+            onChange={(event) => setLocation(event.target.value)}
+            value={location}
+          />
+        </label>
+        {fieldsDisabled && (
+          <small id={companyHintIds[1]}>{NEEDS_COMPANY_HINT}</small>
+        )}
+      </div>
+      <div>
+        <label>
+          工號
+          <input
+            aria-describedby={fieldsDisabled ? companyHintIds[2] : undefined}
+            disabled={fieldsDisabled}
+            onChange={(event) => setEmployeeNo(event.target.value)}
+            value={employeeNo}
+          />
+        </label>
+        {fieldsDisabled && (
+          <small id={companyHintIds[2]}>{NEEDS_COMPANY_HINT}</small>
+        )}
+      </div>
       <label>
         <input
           checked={isAdmin}

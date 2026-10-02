@@ -7,7 +7,8 @@
 // 不在別處另外硬寫規則，避免兩處各自維護、互相不同步。
 //
 // 成功後直接導回原路徑（`RequireAuth` 導向這裡時放進
-// `location.state.from`；沒有時回預設頁）；不必在這裡重新查詢目
+// `location.state.from`；沒有時導向 `/`，由 `HomeRedirect` 依身分
+// 決定去管理頁或現場頁）；不必在這裡重新查詢目
 // 前使用者——導回的路由用不同的 `RequireAuth` key（見 `App.tsx`），
 // 會重新掛載並自行查詢，讀到的 `must_change_password` 自然是最新
 // 的。
