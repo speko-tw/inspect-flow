@@ -63,7 +63,8 @@ class ChangePasswordRequest(BaseModel):
 
 
 class CurrentUserResponse(BaseModel):
-    """The login and current-user response body (AUT-R08, AUT-R10)."""
+    """The identity part shared by every current-user body (AUT-R08,
+    AUT-R10)."""
 
     id: UUID
     username: str
@@ -84,10 +85,12 @@ class CompanyRef(BaseModel):
 
 
 class MeResponse(CurrentUserResponse):
-    """``GET /api/v1/auth/me`` body (AUT-R08): the login body plus
-    the company link and company-related profile fields the personal
-    workspace page shows (#290). ``company`` is ``None`` for an
-    account with no linked company (including the built-in admin).
+    """The login and ``GET /api/v1/auth/me`` body (AUT-R05, AUT-R08):
+    identity plus the company link and company-related profile fields
+    the personal workspace page shows (#290). ``company`` is ``None``
+    for an account with no linked company (including the built-in
+    admin). Both endpoints build it with ``_me_response`` so the two
+    bodies can never differ.
     """
 
     company: CompanyRef | None
@@ -138,14 +141,12 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-@router.post(
-    "/login", response_model=CurrentUserResponse, dependencies=[PUBLIC]
-)
+@router.post("/login", response_model=MeResponse, dependencies=[PUBLIC])
 def login(
     body: LoginRequest,
     response: Response,
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
-) -> CurrentUserResponse:
+) -> MeResponse:
     """AUT-R05, AUT-R06: on success, issues a new login state
     (AUT-R13) and returns it as a Cookie plus the current user
     body. On failure, every one of AUT-R06's five scenarios raises
@@ -161,7 +162,7 @@ def login(
 
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
-    return _current_user_response(db, user)
+    return _me_response(db, user)
 
 
 @router.post("/logout", status_code=204, dependencies=[PUBLIC])

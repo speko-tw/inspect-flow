@@ -41,9 +41,9 @@
 | F | 前端登入與首次設定頁：登入頁改為「帳號名稱或 email」、`/setup` 首次設定頁與導向守衛（AUT-R29）；首次設定成功後（已登入）進入「新增第一個使用者」步驟，呼叫 E 的新增使用者 API。首次設定頁與導向守衛放在 `src/setup/`（`SetupGate` 只 import `setup/api`，`SetupPage` 以 lazy 載入，拆包檢查照常通過）；另依負責人要求加上全域樣式 `src/styles.css`（登入、變更密碼與首次設定頁為置中卡片，Admin 頁加最小頂列），不改行為。驗收涵蓋「設定密碼 → 新增第一個使用者」整段流程；一般的使用者與公司管理頁屬 G | C、D、E、T7 | AUT-AC65 | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
 | G | 前端管理頁（簡便版，一般管理頁；首次設定後新增第一個使用者的步驟屬 F）：本規格只要求新增使用者的畫面顯示一次臨時密碼與「給予 admin 權限」勾選框（預設不勾） | E | AUT-AC61（畫面部分） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者、首次登入強制變更的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
-| I | 目前使用者 API 的公司欄位：`GET /api/v1/auth/me` 加 `company`（`{id, name}`，沒有公司時為 `null`）、`department`、`location`、`employee_no`，供「我的工作台」顯示我的公司；登入 API 的回應不變；範圍變更（負責人指示，#290）。工作台頁面與 `GET /api/v1/me/projects` 見 `domain-model` 計畫的 K | D（`me` 的 `username`）、`domain-model` 的 B（`User` 的公司欄位） | AUT-AC08 | [#290](https://github.com/speko-tw/inspect-flow/issues/290) |
+| I | 目前使用者 API 的公司欄位：`GET /api/v1/auth/me` 加 `company`（`{id, name}`，沒有公司時為 `null`）、`department`、`location`、`employee_no`，供「我的工作台」顯示我的公司；登入 API 的成功回應與 `me` 完全相同（共用同一個建構函式，審查第 1 輪裁定）；範圍變更（負責人指示，#290）。工作台頁面與 `GET /api/v1/me/projects` 見 `domain-model` 計畫的 K | D（`me` 的 `username`）、`domain-model` 的 B（`User` 的公司欄位） | AUT-AC05、AUT-AC08 | [#290](https://github.com/speko-tw/inspect-flow/issues/290) |
 
-任務 I 的改動檔案：`backend/app/api/v1/auth.py`（只改 `GET /auth/me` 的回應模型，登入回應不動）、`backend/tests/auth/test_login_api.py`（AUT-AC08 的鍵集合）、`backend/tests/api/test_me.py`（新增，與 `domain-model` K 共用）；驗證執行 `make check`。
+任務 I 的改動檔案：`backend/app/api/v1/auth.py`（`GET /auth/me` 與登入共用 `_me_response` 與 `MeResponse`）、`backend/tests/auth/test_login_api.py`（AUT-AC05 的登入本體含公司欄位、AUT-AC08 的鍵集合與登入本體等於 `me`）、`backend/tests/api/test_me.py`（新增，與 `domain-model` K 共用）；驗證執行 `make check`。
 
 **本次變更對既有任務的影響**（既有任務的內容保持原樣，影響由 B～H 修改）：
 
@@ -106,7 +106,7 @@
 | AUT-AC02 | `backend/tests/auth/test_login_api.py`：以 AUT-R01 清單中與程式設定不同的一組完整參數預先寫入雜湊，登入後讀回 `UserPassword`，斷言參數段已更新且仍可驗證 |
 | AUT-AC03 | `backend/tests/auth/test_login_api.py`：以 pytest 的 `caplog` 擷取日誌，呼叫登入與 `me`，斷言回應本體與日誌不含密碼、雜湊與 token |
 | AUT-AC04 | `backend/tests/cli/test_set_password.py`（T6）：以標準輸入依 AUT-AC04 的五種密碼（7、8、128 含中文字、129、只含小寫字母）各執行一次指令，斷言成功或失敗與 `UserPassword` 的內容；本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）後改以 `admin` 重設指令（C）驗證同樣五種密碼 |
-| AUT-AC05 | `backend/tests/auth/test_login_api.py`：解析 `Set-Cookie` 的屬性，查資料庫比對 `token_hash` 與 Cookie 值的 SHA-256；本次變更後改以帳號名稱與 email 各種大小寫與前後空白登入（D） |
+| AUT-AC05 | `backend/tests/auth/test_login_api.py`：解析 `Set-Cookie` 的屬性，查資料庫比對 `token_hash` 與 Cookie 值的 SHA-256；本次變更後改以帳號名稱與 email 各種大小寫與前後空白登入（D）；登入本體含公司欄位且等於 `me`（I） |
 | AUT-AC06 | `backend/tests/auth/test_login_api.py`：參數化五種情境，斷言狀態碼、回應本體逐位元組相同、無 `Set-Cookie`、`AuthSession` 筆數不變；以 monkeypatch 計數驗證函式的呼叫次數；本次變更後為六種情境（D） |
 | AUT-AC07 | `backend/tests/auth/test_login_api.py`：登出後斷言 204、清除 Cookie 的 `Set-Cookie`、資料庫無該筆，再呼叫 `me` 斷言 401；無 Cookie 登出斷言 204 |
 | AUT-AC08 | `backend/tests/auth/test_password_gate.py`（T9）：斷言 `me` 回應的鍵集合（含 `must_change_password`）與未登入的 401；本次變更後鍵集合含 `username`（D）；再加 `company`、`department`、`location`、`employee_no`（I，鍵集合在 `backend/tests/auth/test_login_api.py`，有公司與沒有公司兩種資料在 `backend/tests/api/test_me.py`） |
