@@ -261,6 +261,58 @@ describe('admin user and company pages', () => {
     expectNoPasswordPersistence(password)
   })
 
+  it('shows 複製 again for the second temporary password', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const passwords = ['first-password-1', 'second-password-2']
+    let created = 0
+    managementFetch({
+      onCreate: (body) => ({
+        ...regularUser,
+        id: `user-new-${created}`,
+        username: String(body.username),
+        email: String(body.email),
+        name_zh: String(body.name_zh),
+        temporary_password: passwords[created++],
+      }),
+    })
+    renderAdmin()
+
+    async function createUser(username: string) {
+      fireEvent.change(await screen.findByLabelText(/^帳號名稱/), {
+        target: { value: username },
+      })
+      fireEvent.change(screen.getByLabelText(/^Email/), {
+        target: { value: `${username}@example.com` },
+      })
+      fireEvent.change(screen.getByLabelText(/^中文姓名/), {
+        target: { value: '測試' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+    }
+
+    await createUser('first.user')
+    await waitFor(() => {
+      expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(passwords[0])
+    })
+    fireEvent.click(screen.getByRole('button', { name: '複製' }))
+    expect(
+      await screen.findByRole('button', { name: '已複製' }),
+    ).toBeInTheDocument()
+
+    // 沒有關閉第一組就再建立第二位使用者。
+    await createUser('second.user')
+    await waitFor(() => {
+      expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(passwords[1])
+    })
+    expect(screen.getByRole('button', { name: '複製' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '已複製' })).toBeNull()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
   it('clears the password after leaving the page', async () => {
     managementFetch({
       onCreate: (body) => ({

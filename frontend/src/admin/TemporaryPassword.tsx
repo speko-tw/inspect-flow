@@ -4,7 +4,13 @@
 
 import { useState } from 'react'
 
+// 以密碼當 key：換成新的一組密碼時重新掛載，複製狀態自然歸零，
+// 不會把上一組的「已複製」沿用到新密碼。
 export default function TemporaryPassword({ password }: { password: string }) {
+  return <CopyablePassword key={password} password={password} />
+}
+
+function CopyablePassword({ password }: { password: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   async function copy() {
