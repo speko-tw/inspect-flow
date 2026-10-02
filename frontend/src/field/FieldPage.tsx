@@ -64,7 +64,7 @@ export default function FieldPage() {
     <div className="app-shell">
       <header className="topbar">
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
-        <h1>Field</h1>
+        <h1>工作台</h1>
         <nav aria-label="我的功能">
           {user.is_admin && <Link to="/admin">進入管理頁</Link>}
           <Link to="/change-password" state={{ from }}>
@@ -82,7 +82,7 @@ export default function FieldPage() {
 
         <section aria-labelledby="my-profile-heading">
           <h3 id="my-profile-heading">我的資料</h3>
-          <table>
+          <table className="key-value">
             <tbody>
               <tr>
                 <th scope="row">帳號名稱</th>
@@ -135,7 +135,7 @@ function CompanyDetails({ profile }: { profile: MyCompanyProfile }) {
     return <p>未連結公司</p>
   }
   return (
-    <table>
+    <table className="key-value">
       <tbody>
         <tr>
           <th scope="row">公司</th>

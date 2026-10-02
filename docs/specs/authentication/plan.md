@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 AUT-AC01～AUT-AC53，以及本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 AUT-AC54～AUT-AC66；已被取代的 AUT-AC23、AUT-AC32 除外。T1～T12 是本次變更之前完成或已排定的任務，內容保持當時的樣子；本次變更對登入、初始化與密碼流程的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。跨規格的依賴：`database-foundation` T4（[#59](https://github.com/speko-tw/inspect-flow/issues/59)，`User`、`Project` 資料表），以及 `domain-model` 計畫的 T2（`User` 業務欄位）、T4（目前操作者與 Service 層）、T5（有效權限計算）、T6（初始化指令）；後者開 task issue 前還沒有編號，下表以「DOM T<n>」表示，開 issue 時換成 issue 編號。
+本計畫涵蓋 AUT-AC01～AUT-AC53，以及本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 AUT-AC54～AUT-AC66；已被取代的 AUT-AC23、AUT-AC32 除外。T1～T12 是本次變更之前完成或已排定的任務，內容保持當時的樣子；本次變更對登入、初始化與密碼流程的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～I 接手。跨規格的依賴：`database-foundation` T4（[#59](https://github.com/speko-tw/inspect-flow/issues/59)，`User`、`Project` 資料表），以及 `domain-model` 計畫的 T2（`User` 業務欄位）、T4（目前操作者與 Service 層）、T5（有效權限計算）、T6（初始化指令）；後者開 task issue 前還沒有編號，下表以「DOM T<n>」表示，開 issue 時換成 issue 編號。
 
 ## 任務
 
@@ -41,6 +41,9 @@
 | F | 前端登入與首次設定頁：登入頁改為「帳號名稱或 email」、`/setup` 首次設定頁與導向守衛（AUT-R29）；首次設定成功後（已登入）進入「新增第一個使用者」步驟，呼叫 E 的新增使用者 API。首次設定頁與導向守衛放在 `src/setup/`（`SetupGate` 只 import `setup/api`，`SetupPage` 以 lazy 載入，拆包檢查照常通過）；另依負責人要求加上全域樣式 `src/styles.css`（登入、變更密碼與首次設定頁為置中卡片，Admin 頁加最小頂列），不改行為。驗收涵蓋「設定密碼 → 新增第一個使用者」整段流程；一般的使用者與公司管理頁屬 G | C、D、E、T7 | AUT-AC65 | [#264](https://github.com/speko-tw/inspect-flow/issues/264) |
 | G | 前端管理頁（簡便版，一般管理頁；首次設定後新增第一個使用者的步驟屬 F）：本規格只要求新增使用者的畫面顯示一次臨時密碼與「給予 admin 權限」勾選框（預設不勾） | E | AUT-AC61（畫面部分） | [#265](https://github.com/speko-tw/inspect-flow/issues/265) |
 | H | 端到端驗收：從 `make init` 到首次設定、登入、新增使用者、首次登入強制變更的完整流程 | C～G | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
+| I | 目前使用者 API 的公司欄位：`GET /api/v1/auth/me` 加 `company`（`{id, name}`，沒有公司時為 `null`）、`department`、`location`、`employee_no`，供「我的工作台」顯示我的公司；登入 API 的回應不變；範圍變更（負責人指示，#290）。工作台頁面與 `GET /api/v1/me/projects` 見 `domain-model` 計畫的 K | D（`me` 的 `username`）、`domain-model` 的 B（`User` 的公司欄位） | AUT-AC08 | [#290](https://github.com/speko-tw/inspect-flow/issues/290) |
+
+任務 I 的改動檔案：`backend/app/api/v1/auth.py`（只改 `GET /auth/me` 的回應模型，登入回應不動）、`backend/tests/auth/test_login_api.py`（AUT-AC08 的鍵集合）、`backend/tests/api/test_me.py`（新增，與 `domain-model` K 共用）；驗證執行 `make check`。
 
 **本次變更對既有任務的影響**（既有任務的內容保持原樣，影響由 B～H 修改）：
 
@@ -106,7 +109,7 @@
 | AUT-AC05 | `backend/tests/auth/test_login_api.py`：解析 `Set-Cookie` 的屬性，查資料庫比對 `token_hash` 與 Cookie 值的 SHA-256；本次變更後改以帳號名稱與 email 各種大小寫與前後空白登入（D） |
 | AUT-AC06 | `backend/tests/auth/test_login_api.py`：參數化五種情境，斷言狀態碼、回應本體逐位元組相同、無 `Set-Cookie`、`AuthSession` 筆數不變；以 monkeypatch 計數驗證函式的呼叫次數；本次變更後為六種情境（D） |
 | AUT-AC07 | `backend/tests/auth/test_login_api.py`：登出後斷言 204、清除 Cookie 的 `Set-Cookie`、資料庫無該筆，再呼叫 `me` 斷言 401；無 Cookie 登出斷言 204 |
-| AUT-AC08 | `backend/tests/auth/test_password_gate.py`（T9）：斷言 `me` 回應的鍵集合（含 `must_change_password`）與未登入的 401；本次變更後鍵集合含 `username`（D） |
+| AUT-AC08 | `backend/tests/auth/test_password_gate.py`（T9）：斷言 `me` 回應的鍵集合（含 `must_change_password`）與未登入的 401；本次變更後鍵集合含 `username`（D）；再加 `company`、`department`、`location`、`employee_no`（I，鍵集合在 `backend/tests/auth/test_login_api.py`，有公司與沒有公司兩種資料在 `backend/tests/api/test_me.py`） |
 | AUT-AC09 | `backend/tests/services/test_operator_auth.py`（T5）：測試專用路由經 Service 層寫入 `Company`，分別以登入、未登入、非請求情境斷言 `created_by` |
 | AUT-AC10 | `backend/tests/auth/test_sessions.py`：兩個用戶端登入，斷言 token 不同、長度、不沿用請求帶來的 token、兩者皆可呼叫 `me` |
 | AUT-AC11 | `backend/tests/auth/test_sessions.py`：直接以 ORM 停用帳號，斷言兩個 Cookie 都 401 且 `AuthSession` 已刪除 |

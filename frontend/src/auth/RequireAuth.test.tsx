@@ -185,7 +185,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
   it.each([
     ['/admin/reports', 'Admin'],
-    ['/field/tasks', 'Field'],
+    ['/field/tasks', '我的工作台'],
   ])('%s 變更密碼成功後回到原本的路徑', async (path, heading) => {
     let mustChangePassword = true
 

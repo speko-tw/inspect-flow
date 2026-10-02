@@ -128,7 +128,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: 'Field' }),
+      await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
   })
 
@@ -138,7 +138,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: 'Field' }),
+      await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
   })
 
@@ -190,7 +190,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 
     expect(
-      await screen.findByRole('heading', { name: 'Field' }),
+      await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
   })
 
@@ -208,7 +208,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     renderApp('/')
 
     expect(
-      await screen.findByRole('heading', { name: 'Field' }),
+      await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
   })
 
@@ -268,7 +268,9 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       '已收回你的管理者權限',
     )
-    expect(screen.getByRole('heading', { name: 'Field' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '我的工作台' }),
+    ).toBeInTheDocument()
     expect(screen.queryByText('你沒有權限執行這項操作')).toBeNull()
     expect(screen.queryByRole('heading', { name: '使用者管理' })).toBeNull()
 

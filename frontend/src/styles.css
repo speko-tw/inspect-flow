@@ -340,6 +340,15 @@ tbody th {
   font-weight: 600;
 }
 
+/* 欄位名稱在左、內容在右的表（例如我的工作台）：左欄等寬。 */
+table.key-value {
+  table-layout: fixed;
+}
+
+table.key-value th {
+  width: 8rem;
+}
+
 td button {
   min-height: 2rem;
   padding: var(--space-1) var(--space-3);
