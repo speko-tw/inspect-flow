@@ -16,8 +16,9 @@ from app.api.v1._management_errors import (
     management_error_status,
 )
 from app.api.v1.projects import _member_conflict
+from app.api.v1.roles import _translate_integrity_error
 from app.db.engine import create_engine_from_settings
-from app.models import Company, Project, ProjectMember, User
+from app.models import Company, Project, ProjectMember, Role, User
 from tests.db.conftest import build_root_user, create_root_user_with_company
 
 
@@ -75,6 +76,43 @@ def test_postgresql_management_constraints_map_to_conflicts(migrated_engine):
             assert code == expected
             assert management_error_status(code) == 409
             session.rollback()
+
+
+def test_postgresql_role_name_constraint_maps_to_conflict(migrated_engine):
+    if migrated_engine.dialect.name != "postgresql":
+        pytest.skip(
+            "requires the PostgreSQL Role index used by check-postgres"
+        )
+
+    with Session(migrated_engine) as session:
+        operator = create_root_user_with_company(session, "RL001")
+        session.add(
+            Role(
+                name="Role Conflict",
+                created_by=operator.id,
+                updated_by=operator.id,
+            )
+        )
+        session.flush()
+
+        with pytest.raises(IntegrityError) as raised:
+            session.add(
+                Role(
+                    name="role conflict",
+                    created_by=operator.id,
+                    updated_by=operator.id,
+                )
+            )
+            session.flush()
+
+        diagnostic = getattr(raised.value.orig, "diag", None)
+        assert getattr(diagnostic, "constraint_name", None) == (
+            "ix_roles_name_lower"
+        )
+        error = _translate_integrity_error(raised.value)
+        assert error is not None
+        assert error.code == ErrorCode.ROLE_NAME_CONFLICT
+        assert error.status_code == 409
 
 
 def test_postgresql_project_member_constraint_is_recognized(migrated_engine):
