@@ -85,9 +85,15 @@ stays on plain HTTP.
 **iPhone or iPad** (same LAN) is still manual (#231):
 
 - Regenerate the certificate with this machine's LAN IP appended:
-  delete `frontend/.cert/`, then run
-  `mkcert -cert-file frontend/.cert/dev.pem -key-file
-  frontend/.cert/dev-key.pem localhost 127.0.0.1 <LAN IP>`.
+
+  ```bash
+  mkdir -p frontend/.cert
+  mkcert -cert-file frontend/.cert/dev.pem \
+    -key-file frontend/.cert/dev-key.pem \
+    localhost 127.0.0.1 <LAN IP>
+  ```
+
+  This overwrites the files `make dev-cert` created.
 - Also `export INSPECTFLOW_DEV_HOST=0.0.0.0` before starting the
   frontend so it listens on the LAN; the variable only works in
   HTTPS mode. The backend still binds 127.0.0.1 only; the frontend

@@ -72,9 +72,16 @@ make run-frontend-https  # 以 HTTPS 啟動前端
 
 **iPhone／iPad**（同一個區網）仍需手動設定（#231）：
 
-- 重新產生含這台電腦區網 IP 的憑證：先刪除 `frontend/.cert/`，再執行
-  `mkcert -cert-file frontend/.cert/dev.pem -key-file
-  frontend/.cert/dev-key.pem localhost 127.0.0.1 <區網 IP>`。
+- 重新產生含這台電腦區網 IP 的憑證：
+
+  ```bash
+  mkdir -p frontend/.cert
+  mkcert -cert-file frontend/.cert/dev.pem \
+    -key-file frontend/.cert/dev-key.pem \
+    localhost 127.0.0.1 <區網 IP>
+  ```
+
+  這會覆寫 `make dev-cert` 產生的檔案。
 - 啟動前端前再 `export INSPECTFLOW_DEV_HOST=0.0.0.0`，讓前端對區網
   開放；這個變數只在 HTTPS 模式有效。後端仍只綁 127.0.0.1，由前端
   轉送 `/api`。
