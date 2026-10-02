@@ -227,13 +227,13 @@ describe('admin user and company pages', () => {
     })
     renderAdmin()
 
-    fireEvent.change(await screen.findByLabelText('帳號名稱'), {
+    fireEvent.change(await screen.findByLabelText(/^帳號名稱/), {
       target: { value: 'bob.lee' },
     })
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText(/^Email/), {
       target: { value: 'bob@example.com' },
     })
-    fireEvent.change(screen.getByLabelText('中文姓名'), {
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
@@ -273,13 +273,13 @@ describe('admin user and company pages', () => {
       }),
     })
     renderAdmin()
-    fireEvent.change(await screen.findByLabelText('帳號名稱'), {
+    fireEvent.change(await screen.findByLabelText(/^帳號名稱/), {
       target: { value: 'bob.lee' },
     })
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText(/^Email/), {
       target: { value: 'bob@example.com' },
     })
-    fireEvent.change(screen.getByLabelText('中文姓名'), {
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
@@ -307,13 +307,13 @@ describe('admin user and company pages', () => {
       }),
     })
     renderAdmin()
-    fireEvent.change(await screen.findByLabelText('帳號名稱'), {
+    fireEvent.change(await screen.findByLabelText(/^帳號名稱/), {
       target: { value: 'bob.lee' },
     })
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText(/^Email/), {
       target: { value: 'bob@example.com' },
     })
-    fireEvent.change(screen.getByLabelText('中文姓名'), {
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
@@ -394,13 +394,13 @@ describe('admin user and company pages', () => {
   it('translates API conflicts to a Traditional Chinese message', async () => {
     managementFetch()
     renderAdmin()
-    fireEvent.change(await screen.findByLabelText('帳號名稱'), {
+    fireEvent.change(await screen.findByLabelText(/^帳號名稱/), {
       target: { value: 'bob.lee' },
     })
-    fireEvent.change(screen.getByLabelText('Email'), {
+    fireEvent.change(screen.getByLabelText(/^Email/), {
       target: { value: 'anna@example.com' },
     })
-    fireEvent.change(screen.getByLabelText('中文姓名'), {
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))

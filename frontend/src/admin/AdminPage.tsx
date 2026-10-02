@@ -7,6 +7,7 @@ import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
 import ProjectDetailPage from './projects/ProjectDetailPage'
 import ProjectsPage from './projects/ProjectsPage'
+import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
 export default function AdminPage() {
@@ -88,9 +89,7 @@ export default function AdminPage() {
                 請將以下臨時密碼交給 {temporaryPassword.username}
                 。首次登入時必須變更密碼；關閉後無法再次查看。
               </p>
-              <output aria-label="臨時密碼">
-                {temporaryPassword.password}
-              </output>
+              <TemporaryPassword password={temporaryPassword.password} />
               <button onClick={() => setTemporaryPassword(null)} type="button">
                 已抄下，關閉
               </button>
