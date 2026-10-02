@@ -55,37 +55,32 @@ Safari 限制：登入 Cookie 用 `__Host-` 前綴，必須帶 `Secure`，Safari
 
 ## 用 Safari／iPhone 測試
 
-改用 HTTPS 開發伺服器。憑證用 [mkcert](https://github.com/FiloSottile/mkcert)
-在本機產生，放在已被 git 忽略的 `frontend/.cert/`，不得提交。
+改用 HTTPS 開發伺服器。需要 [mkcert](https://github.com/FiloSottile/mkcert)
+（只需一次：`brew install mkcert`，再執行 `mkcert -install` 讓本機
+信任它的根憑證）。接著在 `make run-backend` 已啟動的情況下，兩行指令
+即可：
 
-1. **安裝 mkcert**（只需一次）：`brew install mkcert`，再執行
-   `mkcert -install` 讓本機信任它的根憑證。
-2. **產生憑證**：
+```bash
+make dev-cert            # 產生 frontend/.cert/，已存在就跳過
+make run-frontend-https  # 以 HTTPS 啟動前端
+```
 
-   ```bash
-   mkdir -p frontend/.cert
-   mkcert -cert-file frontend/.cert/dev.pem \
-     -key-file frontend/.cert/dev-key.pem localhost 127.0.0.1
-   ```
+用 Safari 開 `https://localhost:5173`。`frontend/.cert/` 已被 git
+忽略，不得提交。沒裝 mkcert 時 `make dev-cert` 會停下並提示安裝方式。
+要換 port，執行 `make run-frontend-https FRONTEND_PORT=<port>`。
+`make run-frontend` 仍是原本的 HTTP。
 
-   要給 iPhone 連，最後再加上這台電腦的區網 IP。
-3. **啟動**：後端照上一節執行 `make run-backend`；前端改成：
+**iPhone／iPad**（同一個區網）仍需手動設定（#231）：
 
-   ```bash
-   export INSPECTFLOW_DEV_HTTPS_CERT="$PWD/frontend/.cert/dev.pem"
-   export INSPECTFLOW_DEV_HTTPS_KEY="$PWD/frontend/.cert/dev-key.pem"
-   make run-frontend
-   ```
-
-   用 Safari 開 `https://localhost:5173`。兩個變數都不設就是原本的
-   HTTP。
-4. **iPhone／iPad**（同一個區網）：
-   - 啟動前端前再 `export INSPECTFLOW_DEV_HOST=0.0.0.0`，讓前端對
-     區網開放；這個變數只在 HTTPS 模式有效。後端仍只綁 127.0.0.1，
-     由前端轉送 `/api`。
-   - 把 `mkcert -CAROOT` 目錄裡的 `rootCA.pem` 傳到 iPhone 安裝，
-     再到「設定 > 一般 > 關於本機 > 憑證信任設定」開啟信任。
-   - 用 `https://<區網 IP>:5173` 開啟。
+- 重新產生含這台電腦區網 IP 的憑證：先刪除 `frontend/.cert/`，再執行
+  `mkcert -cert-file frontend/.cert/dev.pem -key-file
+  frontend/.cert/dev-key.pem localhost 127.0.0.1 <區網 IP>`。
+- 啟動前端前再 `export INSPECTFLOW_DEV_HOST=0.0.0.0`，讓前端對區網
+  開放；這個變數只在 HTTPS 模式有效。後端仍只綁 127.0.0.1，由前端
+  轉送 `/api`。
+- 把 `mkcert -CAROOT` 目錄裡的 `rootCA.pem` 傳到 iPhone 安裝，再到
+  「設定 > 一般 > 關於本機 > 憑證信任設定」開啟信任。
+- 用 `https://<區網 IP>:5173` 開啟。
 
 ## 文件
 

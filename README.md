@@ -65,41 +65,37 @@ for Safari, see the next section.
 
 ## Testing with Safari or iPhone
 
-Use the HTTPS dev server. Generate a local certificate with
-[mkcert](https://github.com/FiloSottile/mkcert) into
-`frontend/.cert/`, which is git-ignored; never commit it.
+Use the HTTPS dev server. It needs
+[mkcert](https://github.com/FiloSottile/mkcert) (once:
+`brew install mkcert`, then `mkcert -install` so this machine trusts
+its root CA). Then, with `make run-backend` already running, two
+commands are enough:
 
-1. **Install mkcert** (once): `brew install mkcert`, then run
-   `mkcert -install` so this machine trusts its root CA.
-2. **Create a certificate**:
+```bash
+make dev-cert            # creates frontend/.cert/, skips if present
+make run-frontend-https  # starts the frontend over HTTPS
+```
 
-   ```bash
-   mkdir -p frontend/.cert
-   mkcert -cert-file frontend/.cert/dev.pem \
-     -key-file frontend/.cert/dev-key.pem localhost 127.0.0.1
-   ```
+Open `https://localhost:5173` in Safari. `frontend/.cert/` is
+git-ignored; never commit it. `make dev-cert` stops with an install
+hint if mkcert is missing. To use another port, run
+`make run-frontend-https FRONTEND_PORT=<port>`. `make run-frontend`
+stays on plain HTTP.
 
-   For an iPhone, also append this machine's LAN IP.
-3. **Start**: run `make run-backend` as above; start the frontend
-   with:
+**iPhone or iPad** (same LAN) is still manual (#231):
 
-   ```bash
-   export INSPECTFLOW_DEV_HTTPS_CERT="$PWD/frontend/.cert/dev.pem"
-   export INSPECTFLOW_DEV_HTTPS_KEY="$PWD/frontend/.cert/dev-key.pem"
-   make run-frontend
-   ```
-
-   Open `https://localhost:5173` in Safari. With neither variable
-   set, the dev server stays on plain HTTP.
-4. **iPhone or iPad** (same LAN):
-   - Also `export INSPECTFLOW_DEV_HOST=0.0.0.0` before starting the
-     frontend so it listens on the LAN; the variable only works in
-     HTTPS mode. The backend still binds 127.0.0.1 only; the
-     frontend forwards `/api` to it.
-   - Copy `rootCA.pem` from the `mkcert -CAROOT` directory to the
-     iPhone, install it, then enable it under Settings > General >
-     About > Certificate Trust Settings.
-   - Open `https://<LAN IP>:5173`.
+- Regenerate the certificate with this machine's LAN IP appended:
+  delete `frontend/.cert/`, then run
+  `mkcert -cert-file frontend/.cert/dev.pem -key-file
+  frontend/.cert/dev-key.pem localhost 127.0.0.1 <LAN IP>`.
+- Also `export INSPECTFLOW_DEV_HOST=0.0.0.0` before starting the
+  frontend so it listens on the LAN; the variable only works in
+  HTTPS mode. The backend still binds 127.0.0.1 only; the frontend
+  forwards `/api` to it.
+- Copy `rootCA.pem` from the `mkcert -CAROOT` directory to the
+  iPhone, install it, then enable it under Settings > General >
+  About > Certificate Trust Settings.
+- Open `https://<LAN IP>:5173`.
 
 ## Documentation
 
