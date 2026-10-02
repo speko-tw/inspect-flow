@@ -6,9 +6,9 @@
 // （見下方 `PASSWORD_MIN_LENGTH`、`PASSWORD_MAX_LENGTH`），
 // 不在別處另外硬寫規則，避免兩處各自維護、互相不同步。
 //
-// 成功後直接導回原路徑（`RequireAuth` 導向這裡時放進
+// 成功後導回原路徑並帶「密碼已變更。」提示（`RequireAuth` 導向這裡時放進
 // `location.state.from`；沒有時導向 `/`，由 `HomeRedirect` 依身分
-// 決定去管理頁或現場頁）；不必在這裡重新查詢目
+// 決定去管理頁或現場頁，並把提示轉給落點頁）；不必在這裡重新查詢目
 // 前使用者——導回的路由用不同的 `RequireAuth` key（見 `App.tsx`），
 // 會重新掛載並自行查詢，讀到的 `must_change_password` 自然是最新
 // 的。
@@ -38,6 +38,9 @@ const PASSWORD_INVALID_MESSAGE =
 const PASSWORD_UNCHANGED_MESSAGE = '新密碼不能與目前密碼相同，請重新輸入。'
 const PERMISSION_DENIED_MESSAGE = '此帳號無法變更密碼，請洽系統管理員。'
 const GENERIC_ERROR_MESSAGE = '變更密碼失敗，請稍後再試。'
+// 成功後帶到落點頁的提示（router state `notice`；工作台與管理頁
+// 都會顯示）。
+const SUCCESS_NOTICE = '密碼已變更。'
 
 const ERROR_MESSAGES_BY_CODE: Record<string, string> = {
   'auth.current_password_incorrect': CURRENT_PASSWORD_INCORRECT_MESSAGE,
@@ -75,7 +78,10 @@ export default function ChangePasswordPage() {
 
       const state = location.state as RedirectState | null
       const from = state?.from
-      navigate(isSafeRedirectPath(from) ? from : '/', { replace: true })
+      navigate(isSafeRedirectPath(from) ? from : '/', {
+        replace: true,
+        state: { notice: SUCCESS_NOTICE },
+      })
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : undefined
       setError(
