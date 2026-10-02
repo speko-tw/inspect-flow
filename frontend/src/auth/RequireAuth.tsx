@@ -20,6 +20,7 @@ const CHANGE_PASSWORD_PATH = '/change-password'
 type Status =
   | { kind: 'loading' }
   | { kind: 'unauthenticated' }
+  | { kind: 'loggedOut' }
   | { kind: 'error' }
   | { kind: 'authenticated'; user: CurrentUser }
 
@@ -72,6 +73,12 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace state={{ from }} />
   }
 
+  if (status.kind === 'loggedOut') {
+    // 主動登出：不帶 `from`。`from` 只留給「未登入直接開深層連結被
+    // 擋」的情況，否則換別的身分登入時會被帶回上一個人的頁面。
+    return <Navigate to="/login" replace />
+  }
+
   if (
     status.user.must_change_password &&
     location.pathname !== CHANGE_PASSWORD_PATH
@@ -84,7 +91,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
     <CurrentUserProvider
       value={{
         user: status.user,
-        clear: () => setStatus({ kind: 'unauthenticated' }),
+        clear: () => setStatus({ kind: 'loggedOut' }),
       }}
     >
       {children}

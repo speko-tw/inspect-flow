@@ -35,6 +35,9 @@ export default function AdminPage() {
     }
   }, [])
 
+  // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
+  const notice = (location.state as { notice?: unknown } | null)?.notice
+
   if (!user.is_admin) {
     return (
       <main>
@@ -66,6 +69,7 @@ export default function AdminPage() {
         <LogoutButton />
       </header>
       <main>
+        {typeof notice === 'string' && <p role="status">{notice}</p>}
         {temporaryPassword &&
           location.pathname === '/admin/users' &&
           location.key === temporaryPassword.locationKey && (
@@ -86,7 +90,12 @@ export default function AdminPage() {
           )}
 
         <Routes>
-          <Route index element={<Navigate replace to="/admin/users" />} />
+          <Route
+            index
+            element={
+              <Navigate replace state={location.state} to="/admin/users" />
+            }
+          />
           <Route
             path="users"
             element={

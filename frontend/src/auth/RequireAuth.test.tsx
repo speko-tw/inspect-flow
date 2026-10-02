@@ -233,3 +233,78 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
     })
   })
 })
+
+describe('主動登出不帶 from，換身分登入依身分導向（#289）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const FIELD_USER = {
+    ...ADMIN_USER,
+    id: 'u2',
+    username: 'field',
+    is_admin: false,
+  }
+
+  function stubSession() {
+    let current: typeof ADMIN_USER | null = FIELD_USER
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        const method = init?.method ?? 'GET'
+
+        if (url.endsWith('/api/v1/auth/me')) {
+          return current === null
+            ? new Response(null, { status: 401 })
+            : jsonResponse(current)
+        }
+        if (url.endsWith('/api/v1/auth/logout') && method === 'POST') {
+          current = null
+          return new Response(null, { status: 204 })
+        }
+        if (url.endsWith('/api/v1/auth/login') && method === 'POST') {
+          current = ADMIN_USER
+          return jsonResponse(ADMIN_USER)
+        }
+        return jsonResponse([])
+      }),
+    )
+  }
+
+  it('在 /field 登出後導向 /login 且不帶 from', async () => {
+    stubSession()
+    renderApp(['/field'])
+
+    await screen.findByRole('heading', { name: 'Field' })
+    fireEvent.click(screen.getByRole('button', { name: '登出' }))
+    await screen.findByRole('heading', { name: '登入' })
+
+    const probe = screen.getByTestId('location-probe').textContent ?? ''
+    expect(probe).toBe('/login|null')
+  })
+
+  it('在 /field 登出後以 admin 登入應進 /admin', async () => {
+    stubSession()
+    renderApp(['/field'])
+
+    await screen.findByRole('heading', { name: 'Field' })
+    fireEvent.click(screen.getByRole('button', { name: '登出' }))
+    await screen.findByRole('heading', { name: '登入' })
+
+    fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
+      target: { value: 'admin' },
+    })
+    fireEvent.change(screen.getByLabelText('密碼'), {
+      target: { value: 'correct-password' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '登入' }))
+
+    await screen.findByRole('heading', { name: 'Admin' })
+    await waitFor(() => {
+      const probe = screen.getByTestId('location-probe').textContent ?? ''
+      expect(probe.startsWith('/admin')).toBe(true)
+    })
+  })
+})

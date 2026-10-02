@@ -10,6 +10,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import App from '../App'
 import ChangePasswordPage from './ChangePasswordPage'
 import RequireAuth from './RequireAuth'
 
@@ -241,5 +242,95 @@ describe('變更密碼頁可登出（AUT-R30、AUT-R33）', () => {
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
 
     await screen.findByRole('heading', { name: '登入' })
+  })
+})
+
+describe('變更密碼成功後帶提示到落點頁（#289）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function stubFetch(user: typeof TEMP_PASSWORD_USER, passwordStatus = 204) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        const method = init?.method ?? 'GET'
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse({ ...user, must_change_password: false })
+        }
+        if (url.endsWith('/api/v1/auth/password') && method === 'POST') {
+          return passwordStatus === 204
+            ? new Response(null, { status: 204 })
+            : jsonResponse(
+                { error: { code: 'auth.current_password_incorrect' } },
+                passwordStatus,
+              )
+        }
+        return jsonResponse([])
+      }),
+    )
+  }
+
+  function renderAt(entry: { pathname: string; state?: unknown }) {
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  async function submitChange() {
+    await screen.findByRole('heading', { name: '變更密碼' })
+    fillAndSubmit('current-pw', 'new-password', 'new-password')
+  }
+
+  it('一般使用者直接進變更密碼頁：落在工作台並顯示提示', async () => {
+    stubFetch(TEMP_PASSWORD_USER)
+    renderAt({ pathname: '/change-password' })
+
+    await submitChange()
+
+    await screen.findByRole('heading', { name: 'Field' })
+    expect((await screen.findByRole('status')).textContent).toBe(
+      '密碼已變更。',
+    )
+  })
+
+  it('管理者直接進變更密碼頁：落在管理頁並顯示提示', async () => {
+    stubFetch({ ...TEMP_PASSWORD_USER, is_admin: true })
+    renderAt({ pathname: '/change-password' })
+
+    await submitChange()
+
+    await screen.findByRole('heading', { name: 'Admin' })
+    expect((await screen.findByRole('status')).textContent).toBe(
+      '密碼已變更。',
+    )
+  })
+
+  it('導回帶來的原路徑（管理頁深層路徑）時也顯示提示', async () => {
+    stubFetch({ ...TEMP_PASSWORD_USER, is_admin: true })
+    renderAt({
+      pathname: '/change-password',
+      state: { from: '/admin/reports' },
+    })
+
+    await submitChange()
+
+    await screen.findByText('這個管理頁面尚未提供。')
+    expect(screen.getByRole('status').textContent).toBe('密碼已變更。')
+  })
+
+  it('變更失敗時維持錯誤訊息，不顯示成功提示', async () => {
+    stubFetch(TEMP_PASSWORD_USER, 403)
+    renderAt({ pathname: '/change-password' })
+
+    await submitChange()
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '目前密碼錯誤，請再試一次。',
+    )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
