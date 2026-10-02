@@ -3,7 +3,7 @@
 // 使用者，讀到的一定是最新狀態（例如剛變更完密碼）。
 
 import { useEffect, useState } from 'react'
-import { Navigate } from 'react-router'
+import { Navigate, useLocation } from 'react-router'
 
 import { fetchCurrentUser } from './api'
 import { landingPath } from './landing'
@@ -12,6 +12,7 @@ type Status =
   { kind: 'loading' } | { kind: 'error' } | { kind: 'redirect'; to: string }
 
 export default function HomeRedirect() {
+  const location = useLocation()
   const [status, setStatus] = useState<Status>({ kind: 'loading' })
 
   useEffect(() => {
@@ -46,5 +47,6 @@ export default function HomeRedirect() {
     return <p role="alert">無法確認登入狀態，請稍後再試。</p>
   }
 
-  return <Navigate to={status.to} replace />
+  // 把進來時帶的 state（例如變更密碼成功的 `notice`）轉給落點頁。
+  return <Navigate to={status.to} replace state={location.state} />
 }
