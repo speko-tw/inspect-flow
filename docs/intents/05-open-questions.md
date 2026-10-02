@@ -155,7 +155,7 @@
 
 **選項**：報表版面、照片排列、簽核欄位內容、業主／標案指定格式有多種可能形式，留待未來團隊與業主／標案規範決定。
 
-**目前暫定**：§30 Phase 9 要求保存文件編號、版次、範本版本、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256，見 [KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06)。§20.6 建議 `status` 欄位；完整簽核與核發流程仍待決。
+**目前暫定**：§30 Phase 9 要求保存文件編號、版次、報告範本版本、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256，見 [KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06)。§20.6 建議 `status` 欄位；完整簽核與核發流程仍待決。
 
 **誰決定、何時**：業主／標案規範與團隊；查驗與報表樣板的流程界線已於 [#77](https://github.com/speko-tw/inspect-flow/issues/77#issuecomment-5871382248) 由負責人部分裁定（2026-09-28）；其餘時間未指定。
 
@@ -652,7 +652,7 @@
 
 **為什麼要先決定**：§20.21 把 Version / Issue Control 排在報告實作 Phase E；§30 Phase 9 卻要求 MVP 保存部分版本與快照資料。需要明確區分最低治理資料和完整簽核流程。
 
-**選項**：§20.21 Phase E 含 Document No、Revision、Status、Snapshot、Approval、Issue；§30 Phase 9 明定範本版本、文件編號、版次、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256。後者沒有要求完整 Approval／Issue 流程，§15 與 §20.12 容許先簡化。
+**選項**：§20.21 Phase E 含 Document No、Revision、Status、Snapshot、Approval、Issue；§30 Phase 9 明定報告範本版本、文件編號、版次、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256。後者沒有要求完整 Approval／Issue 流程，§15 與 §20.12 容許先簡化。
 
 **目前暫定**：[KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06) 採 §30 Phase 9 的最低治理資料；完整簽核與核發流程見 [OQ-07](#oq-07)。
 
