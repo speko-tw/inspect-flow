@@ -48,10 +48,10 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: '使用者管理' }),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Field')).not.toBeInTheDocument()
+    expect(screen.queryByText('我的工作台')).not.toBeInTheDocument()
   })
 
-  it('renders the Field placeholder on /field', async () => {
+  it('renders the personal workspace on /field', async () => {
     render(
       <MemoryRouter initialEntries={['/field']}>
         <App />
@@ -59,7 +59,7 @@ describe('App routing', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Field' }),
+      await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
   })

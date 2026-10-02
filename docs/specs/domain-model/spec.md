@@ -175,7 +175,7 @@
 
 ## 介面
 
-除本節列出的角色管理 API（DOM-R55）及專案管理 API（#275）外，本規格不新增 API 端點。對開發者的程式介面如下；具體模組、函式與指令名稱由計畫決定，不屬於本規格的契約。
+除本節列出的角色管理 API（DOM-R55）、專案管理 API（#275）及我的專案 API（#290）外，本規格不新增 API 端點。對開發者的程式介面如下；具體模組、函式與指令名稱由計畫決定，不屬於本規格的契約。
 | 介面 | 內容 | 對應需求 |
 |---|---|---|
 | 指令 | 初始化指令：不詢問任何資料，建立內建 `admin`，並交由 `authentication` 印出首次登入碼；已初始化時不重複建立 | DOM-R13、DOM-R53 |
@@ -219,6 +219,14 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 覆蓋規格：專案 CRUD 使用 AUT-R20；ProjectMember 加入、角色設定與移出
 使用 AUT-R22 的需專案權限檢查，Admin 依 AUT-R19 放行。未登入仍依 AUT-R18
 回 HTTP 401、`auth.not_authenticated`。
+
+### 我的專案 API（#290）
+
+供「我的工作台」顯示目前使用者參與的專案與自己的角色。
+
+| 方法與路徑 | 行為 | 存取層級 |
+|---|---|---|
+| `GET /api/v1/me/projects` | 回傳 `ProjectMember` 屬於目前使用者的專案陣列，不分頁，依 `project_code`、`name`、`id` 排序。每筆含專案 UUID `id`、`project_code`、`name`、`client_name`、`site_location`、選填的 `planned_start_date`、`planned_completion_date`，以及 `role_names`（只含目前使用者在該專案的角色名稱，依名稱排序；沒有角色時為空陣列，DOM-R36）。不含他人的專案與他人的角色；Admin 也只看到自己參與的專案 | 需登入（AUT-R18）；未登入回 HTTP 401（AUT-R18 的未登入回應） |
 
 角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）。
 ### 管理介面錯誤
@@ -307,6 +315,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 | DOM-AC47 | 已登入的 Admin、一般使用者；資料庫有角色 R；資料庫另有一筆專案成員同時持有 R 與另一角色 R2 | Admin 依序列出角色、取得 R、新增 R3、修改 R3 的名稱與權限集合、刪除 R；一般使用者與未登入者呼叫所有角色端點；再取得已刪除的 R | Admin 的列表/單筆/新增/修改成功；刪除回 204，R 不存在、成員仍存在且只保留 R2；建立、修改、刪除各有恰好一筆對應 `role.*` 稽核事件；一般使用者回 403、未登入回 401、取得已刪除角色回 404；錯誤代碼依角色 API 契約 | DOM-R21、DOM-R22、DOM-R55、AUT-R20 |
 | DOM-AC48 | Admin；已有名稱 `Viewer` 的角色；登記表含 `report.read`，不含 `reprot.read` | 新增或修改角色為重複名稱 `viewer`；分別以未登記碼 `reprot.read`、格式錯誤碼 `Report.read` 設定權限；以未改欄位 PATCH；送出重複碼清單 | 重複名稱回 409；無效代碼與空更新回 422；拒絕的請求不改角色、不新增稽核；重複代碼輸入作為集合去重後成功，資料庫不會出現重複代碼；錯誤代碼依角色 API 契約 | DOM-R30、DOM-R34、DOM-R35、DOM-R55 |
 | DOM-AC49 | Admin；權限代碼登記表為空，再以測試登記 `report.read`、`report.approve` | 呼叫權限代碼清單端點 | 空表回 `{items: []}`；測試登記後回傳各代碼及描述，依代碼排序；權限代碼清單與角色端點皆只允許 Admin | DOM-R35、DOM-R55、AUT-R20 |
+| DOM-AC50 | 使用者 A 參與專案 P1（角色 R1、R2）與 P2（沒有角色）；使用者 B 參與 P3（角色 R3）；A 沒有參與 P3；另有內建 `admin` 未參與任何專案 | 以 A 呼叫 `GET /api/v1/me/projects`；以 B 呼叫；以 `admin` 呼叫；不帶 Cookie 呼叫 | A 得到 P1、P2 兩筆，依 `project_code` 排序，P1 的 `role_names` 為 R1、R2（依名稱排序），P2 為空陣列，且不含 P3 與 R3；B 只得到 P3 與 R3；`admin` 得到空陣列；未登入回 401（AUT-R18 的未登入回應） | DOM-R36、AUT-R18 |
 
 ### `Project`
 
@@ -397,3 +406,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 規格澄清（審查修正）：補列帳號與公司管理 API 的錯誤碼、HTTP 狀態及觸發條件；四種重複資料回 409，其餘列出的業務規則拒絕回 422 — [#263](https://github.com/speko-tw/inspect-flow/issues/263)
 - 範圍變更（負責人裁定）：DOM-R55 的角色回應新增 `user_count`（不重複使用者數）、`project_count`，供角色管理頁在修改與刪除前顯示影響範圍（PR-18）；不改既有欄位與錯誤碼 — [#276](https://github.com/speko-tw/inspect-flow/issues/276)；裁定紀錄：[#276 留言](https://github.com/speko-tw/inspect-flow/issues/276#issuecomment-5932231697)
 - 範圍變更（負責人裁定）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/members`（成員列表，權限同其他成員端點），回應含使用者顯示欄位；供專案與成員管理頁顯示現有成員；裁定原文：[#277 留言](https://github.com/speko-tw/inspect-flow/issues/277#issuecomment-5932232205) — [#277](https://github.com/speko-tw/inspect-flow/issues/277)
+- 範圍變更（負責人指示，#290）：介面新增 `GET /api/v1/me/projects`（我的專案 API）與 DOM-AC50，回傳目前使用者參與的專案與自己的角色名稱，供我的工作台使用；不改既有欄位與錯誤碼 — [#290](https://github.com/speko-tw/inspect-flow/issues/290)

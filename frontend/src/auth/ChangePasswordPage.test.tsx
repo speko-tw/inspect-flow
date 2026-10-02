@@ -291,7 +291,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
     await submitChange()
 
-    await screen.findByRole('heading', { name: 'Field' })
+    await screen.findByRole('heading', { name: '我的工作台' })
     expect((await screen.findByRole('status')).textContent).toBe(
       '密碼已變更。',
     )

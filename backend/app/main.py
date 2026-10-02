@@ -6,6 +6,7 @@ from app.api.errors import register_error_handlers
 from app.api.v1.auth import router as auth_router
 from app.api.v1.companies import router as companies_router
 from app.api.v1.health import router as health_router
+from app.api.v1.me import router as me_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.setup import router as setup_router
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(me_router, prefix="/api/v1")
     app.include_router(projects_router, prefix="/api/v1")
     app.include_router(roles_router, prefix="/api/v1")
     app.include_router(setup_router, prefix="/api/v1")

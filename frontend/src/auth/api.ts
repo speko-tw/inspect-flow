@@ -15,6 +15,12 @@ export interface CurrentUser {
   name_zh: string | null
   is_admin: boolean
   must_change_password: boolean
+  // 登入與 `me` 回傳同一份本體（AUT-R05、AUT-R08）；這四個公司欄位
+  // 由我的工作台讀取，其他呼叫端不需要，所以型別上選填。
+  company?: { id: string; name: string } | null
+  department?: string | null
+  location?: string | null
+  employee_no?: string | null
 }
 
 /**

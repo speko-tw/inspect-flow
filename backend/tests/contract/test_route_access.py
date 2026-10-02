@@ -170,3 +170,17 @@ def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
 
     for code in descriptions:
         assert DOT_NAMESPACE_RE.match(code)
+
+
+def test_issue_290_my_projects_route_requires_login() -> None:
+    app = create_app()
+    declarations = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/me")
+    }
+
+    assert set(declarations) == {("GET", "/api/v1/me/projects")}
+    declaration = declarations[("GET", "/api/v1/me/projects")]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.LOGIN_REQUIRED

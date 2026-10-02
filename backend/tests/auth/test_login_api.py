@@ -15,7 +15,7 @@ from app.auth.passwords import (
     verify_password,
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, hash_token
-from app.models import AuthSession, UserPassword
+from app.models import AuthSession, Company, UserPassword
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 from tests.db.conftest import (
     create_root_user_with_company,
@@ -93,6 +93,8 @@ class TestAutAc05LoginCookieAndBody:
         user.username = "anna.deng"
         user.email = "Anna.Deng@demo.example"
         db_session.commit()
+        company = db_session.get(Company, user.company_id)
+        assert company is not None
 
         login_values = (
             "anna.deng",
@@ -115,7 +117,17 @@ class TestAutAc05LoginCookieAndBody:
                 "name_zh": user.name_zh,
                 "is_admin": user.is_admin,
                 "must_change_password": False,
+                "company": {
+                    "id": str(company.id),
+                    "name": company.name,
+                },
+                "department": user.department,
+                "location": user.location,
+                "employee_no": user.employee_no,
             }
+
+            # AUT-R05: the login body is identical to ``me``'s.
+            assert resp.json() == client.get("/api/v1/auth/me").json()
 
             set_cookie_header = resp.headers["set-cookie"]
             assert set_cookie_header.startswith(f"{SESSION_COOKIE_NAME}=")
@@ -221,6 +233,10 @@ class TestAutAc08CurrentUser:
             "name_zh",
             "is_admin",
             "must_change_password",
+            "company",
+            "department",
+            "location",
+            "employee_no",
         }
         for account in (user, admin):
             account_client = make_client()
@@ -232,6 +248,8 @@ class TestAutAc08CurrentUser:
             resp = account_client.get("/api/v1/auth/me")
             assert resp.status_code == 200
             body = resp.json()
+            # AUT-R05: login returns the very same body as ``me``.
+            assert login_resp.json() == body
             assert set(body) == expected_keys
             assert body["id"] == str(account.id)
             assert body["username"] == account.username

@@ -37,7 +37,7 @@ from app.auth.sessions import (
     hash_token,
     set_session_cookie,
 )
-from app.models import AuthSession, User, UserPassword
+from app.models import AuthSession, Company, User, UserPassword
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -63,7 +63,8 @@ class ChangePasswordRequest(BaseModel):
 
 
 class CurrentUserResponse(BaseModel):
-    """The login and current-user response body (AUT-R08, AUT-R10)."""
+    """The identity part shared by every current-user body (AUT-R08,
+    AUT-R10)."""
 
     id: UUID
     username: str
@@ -74,6 +75,28 @@ class CurrentUserResponse(BaseModel):
     name_zh: str | None
     is_admin: bool
     must_change_password: bool
+
+
+class CompanyRef(BaseModel):
+    """The linked company shown in ``GET /auth/me`` (AUT-R08)."""
+
+    id: UUID
+    name: str
+
+
+class MeResponse(CurrentUserResponse):
+    """The login and ``GET /api/v1/auth/me`` body (AUT-R05, AUT-R08):
+    identity plus the company link and company-related profile fields
+    the personal workspace page shows (#290). ``company`` is ``None``
+    for an account with no linked company (including the built-in
+    admin). Both endpoints build it with ``_me_response`` so the two
+    bodies can never differ.
+    """
+
+    company: CompanyRef | None
+    department: str | None
+    location: str | None
+    employee_no: str | None
 
 
 def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
@@ -88,6 +111,26 @@ def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
     )
 
 
+def _me_response(db: Session, user: User) -> MeResponse:
+    company = (
+        db.get(Company, user.company_id)
+        if user.company_id is not None
+        else None
+    )
+    base = _current_user_response(db, user)
+    return MeResponse(
+        **base.model_dump(),
+        company=(
+            CompanyRef(id=company.id, name=company.name)
+            if company is not None
+            else None
+        ),
+        department=user.department,
+        location=user.location,
+        employee_no=user.employee_no,
+    )
+
+
 def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
@@ -98,14 +141,12 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-@router.post(
-    "/login", response_model=CurrentUserResponse, dependencies=[PUBLIC]
-)
+@router.post("/login", response_model=MeResponse, dependencies=[PUBLIC])
 def login(
     body: LoginRequest,
     response: Response,
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
-) -> CurrentUserResponse:
+) -> MeResponse:
     """AUT-R05, AUT-R06: on success, issues a new login state
     (AUT-R13) and returns it as a Cookie plus the current user
     body. On failure, every one of AUT-R06's five scenarios raises
@@ -121,7 +162,7 @@ def login(
 
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
-    return _current_user_response(db, user)
+    return _me_response(db, user)
 
 
 @router.post("/logout", status_code=204, dependencies=[PUBLIC])
@@ -169,16 +210,16 @@ def logout(
 register_temporary_password_allowed("POST", logout)
 
 
-@router.get("/me", response_model=CurrentUserResponse)
+@router.get("/me", response_model=MeResponse)
 def get_me(
     user: User = Depends(require_login_access),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
-) -> CurrentUserResponse:
+) -> MeResponse:
     """AUT-R08: the current user, or 401 ``auth.not_authenticated``
     (raised by ``require_login`` underneath ``require_login_access``)
     when not logged in.
     """
-    return _current_user_response(db, user)
+    return _me_response(db, user)
 
 
 register_temporary_password_allowed("GET", get_me)
