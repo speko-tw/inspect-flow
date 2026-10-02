@@ -114,12 +114,9 @@ def _get_member(db: Session, project_id: UUID, user_id: UUID) -> ProjectMember:
     return member
 
 
-def _project_response(db: Session, project: Project) -> ProjectResponse:
-    duplicates = find_projects_by_code(db, project.project_code)
+def _project_response(project: Project, is_duplicate: bool) -> ProjectResponse:
     warnings = (
-        [ProjectWarning(code="project_code.duplicate")]
-        if len(duplicates) > 1
-        else []
+        [ProjectWarning(code="project_code.duplicate")] if is_duplicate else []
     )
     return ProjectResponse(
         id=project.id,
@@ -131,6 +128,11 @@ def _project_response(db: Session, project: Project) -> ProjectResponse:
         planned_completion_date=project.planned_completion_date,
         warnings=warnings,
     )
+
+
+def _single_project_response(db: Session, project: Project) -> ProjectResponse:
+    duplicates = find_projects_by_code(db, project.project_code)
+    return _project_response(project, len(duplicates) > 1)
 
 
 def _member_response(
@@ -207,20 +209,7 @@ def list_projects(
         )
     )
     return [
-        ProjectResponse(
-            id=project.id,
-            project_code=project.project_code,
-            name=project.name,
-            client_name=project.client_name,
-            site_location=project.site_location,
-            planned_start_date=project.planned_start_date,
-            planned_completion_date=project.planned_completion_date,
-            warnings=(
-                [ProjectWarning(code="project_code.duplicate")]
-                if project.project_code in duplicate_codes
-                else []
-            ),
-        )
+        _project_response(project, project.project_code in duplicate_codes)
         for project in projects
     ]
 
@@ -234,7 +223,7 @@ def get_project(
     project_id: UUID,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> ProjectResponse:
-    return _project_response(db, _get_project(db, project_id))
+    return _single_project_response(db, _get_project(db, project_id))
 
 
 @router.post(
@@ -251,7 +240,7 @@ def add_project(
         project = create_project(db, **body.model_dump())
     except InvalidProjectFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    return _project_response(db, project)
+    return _single_project_response(db, project)
 
 
 @router.patch(
@@ -280,7 +269,7 @@ def edit_project(
         update_project(db, project, **fields)
     except (InvalidProjectFieldError, ProjectUnchangedError) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    return _project_response(db, project)
+    return _single_project_response(db, project)
 
 
 @router.get(
