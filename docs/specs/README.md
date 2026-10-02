@@ -206,7 +206,7 @@ flowchart TD
 | `area: frontend` | 前端程式碼 | 同上 |
 | `area: infra` | CI、Docker、部署、repo 設定與範本 | 同上 |
 | `blocked` | 在等 OQ／G 裁定或其他 issue | 內文寫明原因；解除後移除 |
-| `needs-decision` | 需要團隊拍板（範圍變更、意圖變更） | 拍板後移除 |
+| `needs-decision` | 需要團隊拍板（範圍變更、意圖變更；負責人已直接指示的範圍變更除外，見[變更規則](#change)） | 拍板後移除 |
 
 **範本預設**：
 
