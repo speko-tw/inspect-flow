@@ -1,15 +1,18 @@
-"""Project and ProjectMember management API checks for issue #275."""
+"""Project and ProjectMember management API checks."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TypedDict
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import Engine, event, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db.engine import get_engine
 from app.models import AuditLog, Company, Project, ProjectMember, Role, User
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
@@ -29,6 +32,21 @@ class ProjectApiContext(TypedDict):
     admin_client: TestClient
     actor_client: TestClient
     anonymous_client: TestClient
+
+
+@contextmanager
+def _select_statements(engine: Engine) -> Iterator[list[str]]:
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
 
 
 def _make_user_client(
@@ -169,6 +187,35 @@ def test_project_crud_duplicate_code_warning_and_dates(project_api):
     fetched = client.get(f"/api/v1/projects/{first_body['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["warnings"] == [{"code": "project_code.duplicate"}]
+
+
+def test_project_list_query_count_does_not_grow(
+    project_api, db_session: Session
+):
+    client = project_api["admin_client"]
+    with _select_statements(get_engine()) as baseline:
+        first = client.get("/api/v1/projects")
+    assert first.status_code == 200
+    assert len(first.json()) == 2
+
+    for index in range(8):
+        create_project(
+            db_session,
+            project_code="DEMO-DUP" if index < 2 else f"DEMO-{index}",
+            name=f"示範工程 {index}",
+            client_name="示範業主",
+            site_location="示範工地",
+        )
+    db_session.commit()
+
+    with _select_statements(get_engine()) as expanded:
+        listed = client.get("/api/v1/projects")
+    assert listed.status_code == 200
+    rows = listed.json()
+    assert len(rows) == 10
+    assert sum(bool(row["warnings"]) for row in rows) == 2
+    assert baseline
+    assert len(expanded) == len(baseline)
 
 
 def test_project_crud_requires_admin(project_api):
@@ -513,6 +560,40 @@ def test_list_members_includes_company_and_inactive_user(
     assert row["company_id"] == str(company.id)
     assert row["company_name"] == company.name
     assert row["is_active"] is False
+
+
+def test_member_list_query_count_does_not_grow(
+    project_api, db_session: Session
+):
+    client = project_api["admin_client"]
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    path = f"/api/v1/projects/{project.id}/members"
+    with _select_statements(get_engine()) as baseline:
+        first = client.get(path)
+    assert first.status_code == 200
+    assert len(first.json()) == 1
+
+    root = create_root_user_with_company(db_session, "PERF299")
+    assert root.company_id is not None
+    for index in range(8):
+        user = create_user(
+            db_session,
+            username=f"member.perf.{index}",
+            email=f"member.perf.{index}@demo.example",
+            name_zh=f"示範成員 {index}",
+        )
+        user.company_id = root.company_id
+        add_project_member(db_session, project_id=project.id, user_id=user.id)
+    db_session.commit()
+
+    with _select_statements(get_engine()) as expanded:
+        listed = client.get(path)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 9
+    assert all(row["company_name"] for row in listed.json()[1:])
+    assert baseline
+    assert len(expanded) == len(baseline)
 
 
 def test_list_members_permission_and_missing_project(project_api):

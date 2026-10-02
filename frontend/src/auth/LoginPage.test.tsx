@@ -17,6 +17,7 @@ const CURRENT_USER = {
 }
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
+const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -70,7 +71,7 @@ function fillAndSubmit(account: string, password: string) {
   fireEvent.click(screen.getByRole('button', { name: '登入' }))
 }
 
-describe('LoginPage 失敗時只顯示通用訊息（AUT-AC29）', () => {
+describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -111,6 +112,30 @@ describe('LoginPage 失敗時只顯示通用訊息（AUT-AC29）', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(GENERIC_ERROR_MESSAGE)
+  })
+
+  it('伺服器忙碌（503）顯示稍後再試而非帳密錯誤', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          { error: { code: 'server.temporarily_unavailable' } },
+          503,
+        ),
+      ),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    fillAndSubmit('user@example.com', 'anything')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(BUSY_ERROR_MESSAGE)
+    expect(alert.textContent).not.toBe(GENERIC_ERROR_MESSAGE)
   })
 
   it('本體不合法（422）時顯示相同的訊息文字', async () => {

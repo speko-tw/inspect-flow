@@ -82,8 +82,8 @@ export async function fetchCurrentUser(): Promise<CurrentUser | null> {
  * 以帳號名稱或 email 與密碼登入（`POST /api/v1/auth/login`）。
  *
  * 失敗（401 `auth.invalid_credentials`、422 或其他狀態碼）一律拋出
- * `ApiError`；呼叫端依 AUT-R29 只顯示一種通用訊息，不依狀態碼分
- * 流程。
+ * 帶狀態碼的 `ApiError`；登入頁對認證失敗顯示通用訊息，503 則提
+ * 示伺服器暫時忙碌。
  */
 export async function login(
   login: string,

@@ -61,6 +61,10 @@ class ErrorCode(DescribedStrEnum):
         "server.internal_error",
         "An unexpected server error occurred.",
     )
+    SERVER_TEMPORARILY_UNAVAILABLE = (
+        "server.temporarily_unavailable",
+        "The server is temporarily unavailable. Please retry.",
+    )
     AUTH_NOT_AUTHENTICATED = (
         "auth.not_authenticated",
         "Authentication is required for this request.",
@@ -177,10 +181,13 @@ class APIError(Exception):
         code: ErrorCode,
         status_code: int,
         message: str = "",
+        *,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.code = code
         self.status_code = status_code
         self.message = message
+        self.headers = headers
         super().__init__(message or code.value)
 
 
@@ -216,6 +223,7 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content={"error": {"code": exc.code.value}},
+            headers=exc.headers,
         )
 
     @app.exception_handler(RequestValidationError)
