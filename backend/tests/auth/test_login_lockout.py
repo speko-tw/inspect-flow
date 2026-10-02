@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -68,12 +70,14 @@ def _fail(client, user, count=1):
 
 
 def test_sqlite_write_lock_timeout_returns_retryable_error(
-    client, db_session, engine, monkeypatch
+    client, db_session, engine, monkeypatch, caplog
 ):
     _admin(db_session)
     user = make_local_user(db_session, "DEMO_LOCK")
     user_id, email = user.id, user.email
+    assert email is not None
     monkeypatch.setattr(lockout_module, "_SQLITE_BUSY_TIMEOUT_MS", 50)
+    caplog.set_level(logging.WARNING, logger="app.auth")
 
     with engine.connect() as holder:
         holder.exec_driver_sql("BEGIN IMMEDIATE")
@@ -87,9 +91,24 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
                 assert response.json() == {
                     "error": {"code": ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE}
                 }
+                assert response.headers["retry-after"] == "5"
                 assert "set-cookie" not in response.headers
         finally:
             holder.rollback()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 2
+    assert all(
+        record.event == "auth.lockout_write_timeout"
+        and record.reason == "sqlite_lock_timeout"
+        and "user_id" not in record.__dict__
+        for record in warnings
+    )
+    _assert_no_secrets(caplog, P, "wrong-password", email)
 
     db_session.rollback()
     assert (
@@ -110,6 +129,23 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     assert counter is not None and counter.failure_count == 1
     db_session.rollback()
     assert _login(client, user, P).status_code == 200
+
+
+def test_non_lock_sqlite_operational_error_is_not_converted(
+    db_session, monkeypatch
+):
+    class OtherSQLiteError(Exception):
+        sqlite_errorname = "SQLITE_IOERR"
+
+    expected = OperationalError("upsert", {}, OtherSQLiteError())
+
+    def fail_execute(_statement):
+        raise expected
+
+    monkeypatch.setattr(db_session, "execute", fail_execute)
+    with pytest.raises(OperationalError) as caught:
+        lockout_module._serialize_account(db_session, uuid.uuid4())
+    assert caught.value is expected
 
 
 def test_ac27_ac51_lock_boundary_audit_and_log(

@@ -1,16 +1,17 @@
-// 登入頁（AUT-R29）。送出帳號名稱或 email 與密碼到登入 API；失敗
-// 時只顯示一種通用訊息，不透露是哪種原因（呼應後端 AUT-R06 的一
-// 致回應）。
+// 登入頁（AUT-R29）。送出帳號名稱或 email 與密碼到登入 API；認證
+// 失敗時顯示通用訊息，不透露是哪種原因（呼應後端 AUT-R06 的一
+// 致回應）；伺服器忙碌時另提示稍後再試。
 
 import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
-import { login } from './api'
+import { ApiError, login } from './api'
 import AuthLayout from './AuthLayout'
 import { landingPath } from './landing'
 import { isSafeRedirectPath } from './safeRedirect'
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
+const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'
 
 interface RedirectState {
   from?: unknown
@@ -37,10 +38,13 @@ export default function LoginPage() {
       navigate(isSafeRedirectPath(from) ? from : landingPath(user), {
         replace: true,
       })
-    } catch {
-      // 401（帳密錯誤）、422（本體不合法）或其他狀態碼一律顯示同
-      // 一則訊息，不因原因不同而改變文字。
-      setError(GENERIC_ERROR_MESSAGE)
+    } catch (caught) {
+      // 503 是伺服器暫時無法寫入，不應誤導成帳密錯誤。
+      setError(
+        caught instanceof ApiError && caught.status === 503
+          ? BUSY_ERROR_MESSAGE
+          : GENERIC_ERROR_MESSAGE,
+      )
     } finally {
       setSubmitting(false)
     }

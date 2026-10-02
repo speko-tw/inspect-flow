@@ -1,5 +1,6 @@
 """Shared, serialized per-account password failure counter (AUT-R28)."""
 
+import logging
 import uuid
 
 from sqlalchemy import case, delete, func, select, update
@@ -16,6 +17,8 @@ from app.services.audit import record_audit_event
 
 _UNKNOWN_USER_ID = uuid.UUID(int=0)
 _SQLITE_BUSY_TIMEOUT_MS = 30000
+_SQLITE_RETRY_AFTER_SECONDS = 5
+logger = logging.getLogger("app.auth")
 
 
 def _is_sqlite_lock_error(exc: OperationalError) -> bool:
@@ -57,7 +60,18 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
         if dialect != "sqlite" or not _is_sqlite_lock_error(exc):
             raise
         db.rollback()
-        raise APIError(ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE, 503) from exc
+        logger.warning(
+            "auth.lockout_write_timeout",
+            extra={
+                "event": "auth.lockout_write_timeout",
+                "reason": "sqlite_lock_timeout",
+            },
+        )
+        raise APIError(
+            ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE,
+            503,
+            headers={"Retry-After": str(_SQLITE_RETRY_AFTER_SECONDS)},
+        ) from exc
 
 
 def is_locked(db: Session, user_id: uuid.UUID | None) -> bool:
