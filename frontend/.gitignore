@@ -4,3 +4,6 @@ coverage
 *.local
 .vite
 .cert
+.env
+.env.*
+!.env.example
