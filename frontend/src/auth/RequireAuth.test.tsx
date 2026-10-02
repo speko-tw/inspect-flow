@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import App from '../App'
+import { preloadLazyRoutes } from '../testing/preloadRoutes'
 
 const ADMIN_USER = {
   id: 'u1',
@@ -49,6 +50,9 @@ function renderApp(initialEntries: string[]) {
     </MemoryRouter>,
   )
 }
+
+// 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
+beforeAll(preloadLazyRoutes)
 
 describe('RequireAuth 導向登入頁並保留原路徑（AUT-AC28）', () => {
   afterEach(() => {
