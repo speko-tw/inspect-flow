@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -114,12 +114,9 @@ def _get_member(db: Session, project_id: UUID, user_id: UUID) -> ProjectMember:
     return member
 
 
-def _project_response(db: Session, project: Project) -> ProjectResponse:
-    duplicates = find_projects_by_code(db, project.project_code)
+def _project_response(project: Project, is_duplicate: bool) -> ProjectResponse:
     warnings = (
-        [ProjectWarning(code="project_code.duplicate")]
-        if len(duplicates) > 1
-        else []
+        [ProjectWarning(code="project_code.duplicate")] if is_duplicate else []
     )
     return ProjectResponse(
         id=project.id,
@@ -131,6 +128,11 @@ def _project_response(db: Session, project: Project) -> ProjectResponse:
         planned_completion_date=project.planned_completion_date,
         warnings=warnings,
     )
+
+
+def _single_project_response(db: Session, project: Project) -> ProjectResponse:
+    duplicates = find_projects_by_code(db, project.project_code)
+    return _project_response(project, len(duplicates) > 1)
 
 
 def _member_response(
@@ -150,16 +152,8 @@ def _member_response(
 
 
 def _member_detail_response(
-    db: Session, member: ProjectMember
+    member: ProjectMember, user: User, company: Company | None
 ) -> ProjectMemberDetailResponse:
-    user = db.get(User, member.user_id)
-    if user is None:
-        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    company = (
-        db.get(Company, user.company_id)
-        if user.company_id is not None
-        else None
-    )
     return ProjectMemberDetailResponse(
         id=member.id,
         user_id=user.id,
@@ -204,8 +198,20 @@ def _member_conflict(exc: IntegrityError) -> bool:
 def list_projects(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[ProjectResponse]:
-    projects = db.scalars(select(Project).order_by(Project.name, Project.id))
-    return [_project_response(db, project) for project in projects]
+    projects = db.scalars(
+        select(Project).order_by(Project.name, Project.id)
+    ).all()
+    duplicate_codes = set(
+        db.scalars(
+            select(Project.project_code)
+            .group_by(Project.project_code)
+            .having(func.count(Project.id) > 1)
+        )
+    )
+    return [
+        _project_response(project, project.project_code in duplicate_codes)
+        for project in projects
+    ]
 
 
 @router.get(
@@ -217,7 +223,7 @@ def get_project(
     project_id: UUID,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> ProjectResponse:
-    return _project_response(db, _get_project(db, project_id))
+    return _single_project_response(db, _get_project(db, project_id))
 
 
 @router.post(
@@ -234,7 +240,7 @@ def add_project(
         project = create_project(db, **body.model_dump())
     except InvalidProjectFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    return _project_response(db, project)
+    return _single_project_response(db, project)
 
 
 @router.patch(
@@ -263,7 +269,7 @@ def edit_project(
         update_project(db, project, **fields)
     except (InvalidProjectFieldError, ProjectUnchangedError) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    return _project_response(db, project)
+    return _single_project_response(db, project)
 
 
 @router.get(
@@ -277,9 +283,20 @@ def list_members(
 ) -> list[ProjectMemberDetailResponse]:
     """List a project's members (not paginated; the count is small)."""
     _get_project(db, project_id)
+    members = list_project_members(db, project_id)
+    if not members:
+        return []
+    user_rows = db.execute(
+        select(User, Company)
+        .outerjoin(Company, Company.id == User.company_id)
+        .where(User.id.in_(member.user_id for member in members))
+    ).all()
+    users = {user.id: (user, company) for user, company in user_rows}
+    if any(member.user_id not in users for member in members):
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return [
-        _member_detail_response(db, member)
-        for member in list_project_members(db, project_id)
+        _member_detail_response(member, *users[member.user_id])
+        for member in members
     ]
 
 
