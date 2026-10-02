@@ -108,7 +108,7 @@ graph LR
 
 **規則**：`Inspection Template` **不**版本化；範本套用到專案時，**必須**複製成專案自己的一份，之後修改範本不影響已套用的專案。建立 `Inspection Task` 時，**必須**把當下的需求固定成 `Task Requirement Snapshot`，之後專案或範本怎麼改，都不影響已建立的任務（依據：架構基準 §2.5、§12.9；範本不版本化見 [KD-03](03-decisions-and-stack.md#kd-03)）。
 
-專案副本與任務快照如何分工，尚未裁定，見 [OQ-09](05-open-questions.md#oq-09)。
+任務需求快照維持必須，不受範本不版本化影響；尚未決定的只有專案副本與任務快照的分工細節，見 [OQ-09](05-open-questions.md#oq-09)。
 
 ```mermaid
 graph LR

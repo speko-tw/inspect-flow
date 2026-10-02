@@ -215,7 +215,7 @@
 
 **範本部分已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02）：範本庫的範本修改時直接覆蓋，只保留最新版，不做版本化，因此不再有 `Template Version` 的狀態機；「快照」由套用時複製到專案的那一份負責；專案記錄來源範本名稱與套用時間供追查，範本被覆蓋後不保證能回看當時內容。記錄於 [KD-03](03-decisions-and-stack.md#kd-03)（改寫）。
 
-**未定**：Plan／Task／Evidence／Report 的其他狀態、作廢、取消、失敗與更正路徑，留待 0.4.x 以後討論；專案那份複本與 `Task Requirement Snapshot` 的分工（任務建立時是否仍另外固定一份需求）裁定沒有明說，待 0.4.x 規格確認。
+**未定**：Plan／Task／Evidence／Report 的其他狀態、作廢、取消、失敗與更正路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）；專案副本與任務快照的分工細節裁定沒有明說，待 0.4.x 規格確認。
 
 **為什麼要先決定**：影響任務完成判定（[PR-01](02-principles.md#pr-01)）、報告產製失敗重試（見 [G-06](#g-06)）、以及證據刪除與歷史不可變原則（[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)）之間如何協調。
 
