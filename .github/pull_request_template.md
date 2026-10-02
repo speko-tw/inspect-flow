@@ -18,7 +18,7 @@
 - 無
 - 計畫調整：本 PR 已更新 plan.md
 - 規格澄清：本 PR 已更新 spec.md，行為與範圍不變
-- 範圍變更：已透過 spec-change issue #<編號> 合併
+- 範圍變更：已透過 spec-change issue #<編號> 合併；或負責人直接指示，附可直達指示的連結（見 docs/specs/README.md#change）
 - 意圖變更：已先更新 docs/intents/
 等級為「無」時，說明可省略。
 -->

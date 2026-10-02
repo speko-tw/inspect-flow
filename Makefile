@@ -1,6 +1,7 @@
 .PHONY: help setup setup-backend setup-frontend check \
 	check-env check-backend check-postgres check-frontend \
-	migrate init reset-admin-password run-backend run-frontend
+	migrate init reset-admin-password run-backend run-frontend \
+	dev-cert run-frontend-https
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -15,6 +16,8 @@ help:
 		'  make reset-admin-password   Reset the built-in admin password' \
 		'  make run-backend            Start the backend development server' \
 		'  make run-frontend           Start the frontend development server' \
+		'  make dev-cert               Create the local HTTPS certificate' \
+		'  make run-frontend-https     Start the frontend over HTTPS' \
 		'  make check                  Run repository checks'
 
 setup-backend:
@@ -61,6 +64,46 @@ run-backend:
 
 run-frontend:
 	cd frontend && npm run dev
+
+# Local HTTPS for Safari (#307), which does not send the `__Host-`
+# session cookie over http://localhost. dev-cert writes a mkcert
+# certificate for localhost into frontend/.cert/ (git-ignored) and
+# skips when both files already exist. It never runs
+# `mkcert -install`, which changes the system trust store; it only
+# prints that hint. run-frontend-https passes the certificate paths
+# to Vite through the INSPECTFLOW_DEV_HTTPS_* variables
+# (frontend/vite.config.ts). FRONTEND_PORT overrides the port; the
+# port is strict, so an occupied one fails instead of moving.
+# LAN access and iPhone trust stay manual (README, #231).
+CERT_DIR := $(CURDIR)/frontend/.cert
+CERT_FILE := $(CERT_DIR)/dev.pem
+KEY_FILE := $(CERT_DIR)/dev-key.pem
+FRONTEND_PORT ?= 5173
+
+dev-cert:
+	@if [ -f "$(CERT_FILE)" ] && [ -f "$(KEY_FILE)" ]; then \
+		echo "dev-cert: certificate exists, skipped ($(CERT_DIR))"; \
+		exit 0; \
+	fi; \
+	if ! command -v mkcert >/dev/null 2>&1; then \
+		echo "dev-cert: mkcert is not installed."; \
+		echo "Install it (macOS: brew install mkcert), run" \
+			"'mkcert -install' once, then rerun 'make dev-cert'."; \
+		exit 1; \
+	fi; \
+	mkdir -p "$(CERT_DIR)" && \
+	mkcert -cert-file "$(CERT_FILE)" -key-file "$(KEY_FILE)" \
+		localhost 127.0.0.1 && \
+	if [ ! -f "$$(mkcert -CAROOT)/rootCA.pem" ]; then \
+		echo "dev-cert: run 'mkcert -install' once so browsers" \
+			"trust this certificate."; \
+	fi
+
+run-frontend-https: dev-cert
+	cd frontend && \
+	INSPECTFLOW_DEV_HTTPS_CERT="$(CERT_FILE)" \
+	INSPECTFLOW_DEV_HTTPS_KEY="$(KEY_FILE)" \
+	npm run dev -- --port $(FRONTEND_PORT) --strictPort
 
 # Single entry point for local and CI checks. Runs format, lint,
 # type-check, test and build for backend and frontend, in order.

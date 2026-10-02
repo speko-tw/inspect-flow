@@ -544,6 +544,15 @@ output {
   text-align: center;
 }
 
+/* 標籤只在詞組之間換行：窄螢幕不會把詞拆出孤字（#306）。 */
+.steps-label {
+  text-wrap: balance;
+}
+
+.steps-phrase {
+  display: inline-block;
+}
+
 .steps-num {
   display: grid;
   place-items: center;

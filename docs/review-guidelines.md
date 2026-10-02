@@ -18,7 +18,7 @@
 
 - **RG-M01**：一個 PR 對應一個 task，不跨兩份規格；改動的檔案都在 `plan.md` 該 task 的「改動的檔案」內，超出時已在同一個 PR 更新 `plan.md`，並調整對應的 task issue（依據：[流程](specs/README.md#流程與-github-對應)、[變更規則](specs/README.md#change)）。
 - **RG-M02**：PR 依範本填寫「規格」「滿足的驗收條件」「規格影響」「驗證」，並以 `Closes #<task issue>` 關聯 issue；不屬於任何規格的工作，「規格」段寫 `N/A`（依據：[流程](specs/README.md#流程與-github-對應)）。
-- **RG-M03**：規格影響等級判斷正確；範圍變更與意圖變更已先透過 spec-change issue 與 PR 合併，未以程式碼繞過規格；拿不準等級時往高一級處理（依據：[變更規則](specs/README.md#change)、[AGENTS.md](../AGENTS.md)）。
+- **RG-M03**：規格影響等級判斷正確；範圍變更與意圖變更已先透過 spec-change issue 與 PR 合併，未以程式碼繞過規格（負責人直接指示的範圍變更例外：核對規格變更紀錄與 PR 附有可直達負責人指示的連結，依[變更規則](specs/README.md#change)）；拿不準等級時往高一級處理（依據：[變更規則](specs/README.md#change)、[AGENTS.md](../AGENTS.md)）。
 - **RG-M04**：改動符合所屬規格中「必須」等級的需求與介面（例如 skeleton 的 SKL-R01 health 回應、SKL-R02 拆包、SKL-R05／R06 工具設定）；要偏離時依 RG-M03 處理（依據：各規格的「需求」表、[AGENTS.md](../AGENTS.md)）。
 - **RG-M05**：不違反 [02-principles.md](intents/02-principles.md) 中「必須」等級的原則；確有需要時，已先在 [03-decisions-and-stack.md](intents/03-decisions-and-stack.md) 新增決策並經團隊同意（依據：[AGENTS.md](../AGENTS.md)）。
 - **RG-M06**：沒有把 [05-open-questions.md](intents/05-open-questions.md) 中未定案或來源矛盾的議題當成既定事實（依據：[AGENTS.md](../AGENTS.md)）。
