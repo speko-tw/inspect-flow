@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -150,16 +150,8 @@ def _member_response(
 
 
 def _member_detail_response(
-    db: Session, member: ProjectMember
+    member: ProjectMember, user: User, company: Company | None
 ) -> ProjectMemberDetailResponse:
-    user = db.get(User, member.user_id)
-    if user is None:
-        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    company = (
-        db.get(Company, user.company_id)
-        if user.company_id is not None
-        else None
-    )
     return ProjectMemberDetailResponse(
         id=member.id,
         user_id=user.id,
@@ -204,8 +196,33 @@ def _member_conflict(exc: IntegrityError) -> bool:
 def list_projects(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[ProjectResponse]:
-    projects = db.scalars(select(Project).order_by(Project.name, Project.id))
-    return [_project_response(db, project) for project in projects]
+    projects = db.scalars(
+        select(Project).order_by(Project.name, Project.id)
+    ).all()
+    duplicate_codes = set(
+        db.scalars(
+            select(Project.project_code)
+            .group_by(Project.project_code)
+            .having(func.count(Project.id) > 1)
+        )
+    )
+    return [
+        ProjectResponse(
+            id=project.id,
+            project_code=project.project_code,
+            name=project.name,
+            client_name=project.client_name,
+            site_location=project.site_location,
+            planned_start_date=project.planned_start_date,
+            planned_completion_date=project.planned_completion_date,
+            warnings=(
+                [ProjectWarning(code="project_code.duplicate")]
+                if project.project_code in duplicate_codes
+                else []
+            ),
+        )
+        for project in projects
+    ]
 
 
 @router.get(
@@ -277,9 +294,20 @@ def list_members(
 ) -> list[ProjectMemberDetailResponse]:
     """List a project's members (not paginated; the count is small)."""
     _get_project(db, project_id)
+    members = list_project_members(db, project_id)
+    if not members:
+        return []
+    user_rows = db.execute(
+        select(User, Company)
+        .outerjoin(Company, Company.id == User.company_id)
+        .where(User.id.in_(member.user_id for member in members))
+    ).all()
+    users = {user.id: (user, company) for user, company in user_rows}
+    if any(member.user_id not in users for member in members):
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return [
-        _member_detail_response(db, member)
-        for member in list_project_members(db, project_id)
+        _member_detail_response(member, *users[member.user_id])
+        for member in members
     ]
 
 
