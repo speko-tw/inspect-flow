@@ -254,6 +254,9 @@ describe('admin projects page', () => {
       'href',
       '/admin/projects/project-1',
     )
+    expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveClass(
+      'button-link',
+    )
   })
 
   it('creates a project with optional dates left empty', async () => {
