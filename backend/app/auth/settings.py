@@ -10,6 +10,13 @@ root's ``.env.example`` (AUT-AC15).
 AUT-R28's three lockout defaults live below as constants. Their
 environment overrides are also resolved on each call, with unset or
 empty values falling back to those defaults (AUT-AC48).
+
+Every value that is set must be a positive integer; ``0``, negative
+numbers, decimals and non-numeric text raise
+``InvalidAuthSettingError`` naming the variable, because such a
+value would silently disable a lockout or log users out at once.
+``create_app`` calls ``validate_auth_settings`` so a bad value stops
+the server at startup instead of failing on the first login.
 """
 
 import os
@@ -39,6 +46,43 @@ _DEFAULT_SETUP_FAILURE_WINDOW = timedelta(minutes=15)
 _DEFAULT_SETUP_LOCKOUT_DURATION = timedelta(minutes=15)
 
 
+class InvalidAuthSettingError(ValueError):
+    """An auth environment variable is set to an unusable value."""
+
+
+def _read_positive_int(name: str, default: int) -> int:
+    """Return ``name`` as a positive integer; unset or empty -> default.
+
+    Decimals, zero, negatives and non-numeric text raise
+    ``InvalidAuthSettingError`` that names the variable and value.
+    """
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        value = 0
+    if value <= 0:
+        raise InvalidAuthSettingError(
+            f"{name} must be a positive integer, got {raw!r}"
+        )
+    return value
+
+
+def _read_duration(name: str, unit: str, default: timedelta) -> timedelta:
+    """Return ``name`` as a ``timedelta`` of ``unit`` (``minutes`` or
+    ``hours``); unset or empty -> default."""
+    default_value = int(default / timedelta(**{unit: 1}))
+    value = _read_positive_int(name, default_value)
+    try:
+        return timedelta(**{unit: value})
+    except OverflowError:
+        raise InvalidAuthSettingError(
+            f"{name} is too large, got {os.environ.get(name)!r}"
+        ) from None
+
+
 @dataclass(frozen=True)
 class LockoutSettings:
     failure_threshold: int
@@ -55,44 +99,34 @@ class SetupLockoutSettings:
 
 def get_setup_lockout_settings() -> SetupLockoutSettings:
     """Read AUT-R45 settings at call time."""
-    threshold = os.environ.get(SETUP_FAILURE_THRESHOLD_ENV_VAR)
-    window = os.environ.get(SETUP_FAILURE_WINDOW_ENV_VAR)
-    duration = os.environ.get(SETUP_LOCKOUT_DURATION_ENV_VAR)
     return SetupLockoutSettings(
-        failure_threshold=(
-            int(threshold) if threshold else _DEFAULT_SETUP_FAILURE_THRESHOLD
+        failure_threshold=_read_positive_int(
+            SETUP_FAILURE_THRESHOLD_ENV_VAR, _DEFAULT_SETUP_FAILURE_THRESHOLD
         ),
-        failure_window=(
-            timedelta(minutes=float(window))
-            if window
-            else _DEFAULT_SETUP_FAILURE_WINDOW
+        failure_window=_read_duration(
+            SETUP_FAILURE_WINDOW_ENV_VAR,
+            "minutes",
+            _DEFAULT_SETUP_FAILURE_WINDOW,
         ),
-        lockout_duration=(
-            timedelta(minutes=float(duration))
-            if duration
-            else _DEFAULT_SETUP_LOCKOUT_DURATION
+        lockout_duration=_read_duration(
+            SETUP_LOCKOUT_DURATION_ENV_VAR,
+            "minutes",
+            _DEFAULT_SETUP_LOCKOUT_DURATION,
         ),
     )
 
 
 def get_lockout_settings() -> LockoutSettings:
     """Read AUT-R28 values at call time so env overrides take effect."""
-    threshold = os.environ.get(FAILURE_THRESHOLD_ENV_VAR)
-    window = os.environ.get(FAILURE_WINDOW_ENV_VAR)
-    duration = os.environ.get(LOCKOUT_DURATION_ENV_VAR)
     return LockoutSettings(
-        failure_threshold=(
-            int(threshold) if threshold else _DEFAULT_FAILURE_THRESHOLD
+        failure_threshold=_read_positive_int(
+            FAILURE_THRESHOLD_ENV_VAR, _DEFAULT_FAILURE_THRESHOLD
         ),
-        failure_window=(
-            timedelta(minutes=float(window))
-            if window
-            else _DEFAULT_FAILURE_WINDOW
+        failure_window=_read_duration(
+            FAILURE_WINDOW_ENV_VAR, "minutes", _DEFAULT_FAILURE_WINDOW
         ),
-        lockout_duration=(
-            timedelta(minutes=float(duration))
-            if duration
-            else _DEFAULT_LOCKOUT_DURATION
+        lockout_duration=_read_duration(
+            LOCKOUT_DURATION_ENV_VAR, "minutes", _DEFAULT_LOCKOUT_DURATION
         ),
     )
 
@@ -114,18 +148,21 @@ def get_session_timeouts() -> SessionTimeouts:
     ``monkeypatch`` -- takes effect on the next call instead of
     only at import time.
     """
-    idle_raw = os.environ.get(IDLE_TIMEOUT_ENV_VAR, "")
-    absolute_raw = os.environ.get(ABSOLUTE_TIMEOUT_ENV_VAR, "")
-    idle_timeout = (
-        timedelta(minutes=float(idle_raw))
-        if idle_raw
-        else _DEFAULT_IDLE_TIMEOUT
-    )
-    absolute_timeout = (
-        timedelta(hours=float(absolute_raw))
-        if absolute_raw
-        else _DEFAULT_ABSOLUTE_TIMEOUT
-    )
     return SessionTimeouts(
-        idle_timeout=idle_timeout, absolute_timeout=absolute_timeout
+        idle_timeout=_read_duration(
+            IDLE_TIMEOUT_ENV_VAR, "minutes", _DEFAULT_IDLE_TIMEOUT
+        ),
+        absolute_timeout=_read_duration(
+            ABSOLUTE_TIMEOUT_ENV_VAR, "hours", _DEFAULT_ABSOLUTE_TIMEOUT
+        ),
     )
+
+
+def validate_auth_settings() -> None:
+    """Resolve every auth setting once so a bad value fails fast.
+
+    Raises ``InvalidAuthSettingError`` for the first invalid variable.
+    """
+    get_session_timeouts()
+    get_lockout_settings()
+    get_setup_lockout_settings()

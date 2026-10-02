@@ -12,6 +12,7 @@ from app.api.v1.roles import router as roles_router
 from app.api.v1.setup import router as setup_router
 from app.api.v1.users import router as users_router
 from app.auth.dependencies import bind_request_scope
+from app.auth.settings import validate_auth_settings
 
 
 def create_app() -> FastAPI:
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     back to the built-in ``admin`` instead of rejecting an
     unauthenticated write (AUT-R09).
     """
+    validate_auth_settings()
     app = FastAPI(dependencies=[Depends(bind_request_scope)])
     register_error_handlers(app)
     app.include_router(health_router, prefix="/api/v1")
