@@ -217,7 +217,7 @@
 
 ### OQ-09：`Inspection Plan`／`Inspection Task`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？（部分裁定）
 
-**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；**不開放**人員手動修改計畫狀態（負責人已明確撤回此選項）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
+**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；人員**不得**手動將計畫改為已完成（負責人已明確撤回此選項）。「封存」與取消封存由內業手動操作；其他狀態轉換待規格決定（見下與 [KD-56](03-decisions-and-stack.md#kd-56)）；此措辭由負責人確認（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5968037640)，2026-10-03）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
 
 **範本部分已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02）：範本庫的範本修改時直接覆蓋，只保留最新版，不做版本化，因此不再有 `Template Version` 的狀態機；「快照」由套用時複製到專案的那一份負責；專案記錄來源範本名稱與套用時間供追查，範本被覆蓋後不保證能回看當時內容。記錄於 [KD-03](03-decisions-and-stack.md#kd-03)（改寫）。
 
@@ -233,19 +233,32 @@
 
 **補充裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，2026-10-03）：內業修改專案查核項目後選「不要」重新查核時，用到該項次的已建立任務（未開始、進行中、已完成）**一併更正**為修改後的內容；只更正文字，不動結果與照片，任務狀態不變；已發出的報告存在報告系統，不受影響。精神與 [KD-42](03-decisions-and-stack.md#kd-42) 一致；這是 [PR-04](02-principles.md#pr-04)「任務需求快照不改寫」的明確例外，僅限內業選擇「不要」重新查核的更正；系統記錄誰、何時、改了什麼。同樣記錄於 [KD-55](03-decisions-and-stack.md#kd-55)。
 
-**未定**：作廢後重新查核是讓同一任務重來，還是另開新任務，屬 0.4.x 規格設計；Plan／Task／Evidence／Report 的其他狀態、其他原因的作廢、取消、失敗與更正路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）。「尚未查核」對應哪個任務狀態，裁定沒有說明，待 0.4.x 規格確認。
+**計畫、任務、報告的狀態規則已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)，[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，2026-10-03；情境對答與沒選的選項見[對答紀錄](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967478534)）：
+
+| # | 主題 | 裁定 |
+|---|---|---|
+| 1 | 計畫狀態 | 計畫有任務派出後由系統自動改為「進行中」；任務全部完成時系統自動改為「已完成」，**不得**手動改為已完成（[KD-42](03-decisions-and-stack.md#kd-42)）；「封存」由內業手動操作。 |
+| 2 | 任務取消 | 內業**得**取消任務，**必須**填原因；取消的任務保留、顯示「已取消」，不計入計畫完成判斷。 |
+| 2 補 | 完成後重開 | 已完成任務**不開放**重新打開；要重查走 [KD-55](03-decisions-and-stack.md#kd-55)（改標準、作廢重查）；錯字與照片依 KD-42 修正。 |
+| 3 | 完成計畫遇改標準 | 計畫已完成後若有任務因 KD-55 作廢，計畫自動退回「進行中」，重查完再自動改回「已完成」；已封存的計畫**必須**先取消封存才能改標準。 |
+| 4 | 報告核發 | 產生報告後，有權限者直接核發，**不需**送審（審核流程之後再加）；已核發報告有錯時出新版取代，舊版保留並標示「已被新版取代」。「有權限者」依 [OQ-08](#oq-08)、[KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)，不寫固定職稱。 |
+| 5 | 有不符合的任務 | 資料齊全即可完成，計畫照常自動完成；任務清單與報告明顯標示「有缺失」。改善追蹤屬 0.7.x。 |
+
+計畫與任務部分記錄於 [KD-56](03-decisions-and-stack.md#kd-56)，報告核發與新版取代記錄於 [KD-57](03-decisions-and-stack.md#kd-57)；結果三種與不符合的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。報告狀態只部分裁定，見 [G-06](#g-06)；照片刪除與保留（[G-05](#g-05)）不在本次，留到 0.6.x `field-evidence`。
+
+**未定**：作廢後重新查核是讓同一任務重來，還是另開新任務，屬 0.4.x 規格設計；計畫「草稿」「已就緒」等其他狀態、取消任務的細節（已完成或進行中的任務能否取消、取消後能否恢復、任務全部取消時計畫的狀態）、取消封存的操作、「有缺失」是否為獨立狀態值，裁定沒有說明，待 0.4.x 規格；Evidence 與 Report 的其他狀態（含產製中、產製失敗）、其他原因的作廢與失敗路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）。「尚未查核」對應哪個任務狀態，裁定沒有說明，待 0.4.x 規格確認。
 
 **為什麼要先決定**：影響任務完成判定（[PR-01](02-principles.md#pr-01)）、報告產製失敗重試（見 [G-06](#g-06)）、以及證據刪除與歷史不可變原則（[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)）之間如何協調。
 
 **選項**：架構基準文件給出各實體「主要狀態」的骨架，例外路徑（刪除、更正、產生失敗）未完整定義。
 
-**目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。
+**目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。其中 CANCELLED（已取消）、IN_PROGRESS、COMPLETED、ARCHIVED 已由 [KD-56](03-decisions-and-stack.md#kd-56) 的裁定採用；REOPENED 依裁定（已完成任務不開放重新打開）**不採用**；DRAFT、READY 仍是暫定。
 
-**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02），專案副本與任務快照分工於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670) 裁定（2026-10-03），選「不要」時一併更正於[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)（同日）；其餘狀態與例外路徑留待 0.4.x 以後討論。
+**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02），專案副本與任務快照分工於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670) 裁定（2026-10-03），選「不要」時一併更正於[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)（同日），計畫、任務、報告的狀態規則於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330) 裁定（同日）；其餘狀態與例外路徑留待 0.4.x 以後討論。
 
-**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-03](03-decisions-and-stack.md#kd-03)、[KD-42](03-decisions-and-stack.md#kd-42)、[KD-55](03-decisions-and-stack.md#kd-55)；另見 [G-05](#g-05)、[G-06](#g-06)、[G-07](#g-07)。
+**影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-03](03-decisions-and-stack.md#kd-03)、[KD-42](03-decisions-and-stack.md#kd-42)、[KD-54](03-decisions-and-stack.md#kd-54)、[KD-55](03-decisions-and-stack.md#kd-55)、[KD-56](03-decisions-and-stack.md#kd-56)、[KD-57](03-decisions-and-stack.md#kd-57)；另見 [G-05](#g-05)、[G-06](#g-06)、[G-07](#g-07)。
 
-**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）、負責人裁定（#78 留言，2026-10-02，範本部分）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03，專案副本與任務快照分工；[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，同日，選「不要」時一併更正）。
+**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）、負責人裁定（#78 留言，2026-10-02，範本部分）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03，專案副本與任務快照分工；[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，同日，選「不要」時一併更正）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，2026-10-03，計畫、任務、報告的狀態規則）。
 
 
 <a id="oq-10"></a>
@@ -574,7 +587,9 @@
 
 <a id="g-06"></a>
 
-### G-06：`Report` 的狀態清單，在不同章節列出的內容不完全一致
+### G-06：`Report` 的狀態清單，在不同章節列出的內容不完全一致（部分裁定）
+
+**裁定**：**已定**——報告產生後，有權限者直接核發，**不需**送審（審核流程之後再加）；已核發報告有錯時出新版取代，舊版保留並標示「已被新版取代」。記錄於 [KD-57](03-decisions-and-stack.md#kd-57)；討論見 [#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，完整裁定表見 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)。**未定**——其他報告狀態（產製中、產製失敗等）、完整的唯一 `Report` 狀態機，仍待規格整合；審核流程加入前，立場 A 列舉中的 `UNDER_REVIEW`、`APPROVED` 是否保留，裁定沒有說明。
 
 **為什麼要先決定**：需要團隊合併出一份唯一、完整的 `Report` 狀態機，否則交易安全（§20.17 的訴求）與版次治理（§20.6–20.8 的訴求）會各自實作出不相容的狀態欄位。
 
@@ -582,13 +597,13 @@
 - **立場 A**：§20.6 給出的 `Report Status` 列舉為：DRAFT／GENERATED／UNDER_REVIEW／APPROVED／ ISSUED／SUPERSEDED／VOID；同一節的 `reports` 資料表範例也沒有列出 `issue_date` 或 `document_status` 欄位，即使 §20.8 的文字敘述提到這兩個概念。
 - **立場 B**：§20.17（Transaction Boundary）為避免「DB 已寫成 GENERATED 但 PDF 實際產生失敗」，另外 要求 DRAFT → GENERATING → GENERATED 的中間狀態，以及失敗時的 GENERATION_FAILED 狀態，這兩個狀態並未出現在 §20.6 的列舉中。
 
-**目前暫定**：無。
+**目前暫定**：核發與新版取代已定（見上）；其餘狀態無暫定。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：負責人；核發與新版取代已於 [#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330) 部分裁定（2026-10-03）；其餘未指定。
 
-**影響的原則**：[PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)；另見 [OQ-09](#oq-09)。
+**影響的原則**：[PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)、[KD-57](03-decisions-and-stack.md#kd-57)；另見 [OQ-09](#oq-09)。
 
-**依據**：架構基準 §20.6–20.8、§20.17
+**依據**：議題背景為架構基準 §20.6–20.8、§20.17；部分裁定為負責人裁定（[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，2026-10-03）
 
 
 <a id="g-07"></a>
@@ -701,7 +716,7 @@
 
 - **[G-03](#g-03)**（原圖上傳與編輯時序，部分裁定）：現場版、內業版的保存時點已定（見 [G-03](#g-03)）；裝置離線暫存與傳送時點、前後端分工、失敗重試的行為仍未定，繼續擋 `field-evidence` 規格凍結。
 - **[G-05](#g-05)**（刪除與保留）：`Evidence` 的 `DELETE` API 與「照片只保存現場版、內業版兩張」如何共存，是否為軟刪除、是否禁止刪除已被報告引用的證據；本題未受本次裁定影響，仍待決。
-- **[G-06](#g-06)／[G-07](#g-07)**（報告狀態與版次快照邊界）：合併出一份唯一、完整的 `Report` 狀態機 （含 `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
+- **[G-06](#g-06)（部分裁定）／[G-07](#g-07)**（報告狀態與版次快照邊界）：核發不需送審、新版取代舊版已定（[KD-57](03-decisions-and-stack.md#kd-57)）；仍需合併出一份唯一、完整的 `Report` 狀態機 （含 `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
 
 [README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態，以及「部分凍結」規格標頭列出的凍結範圍（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](#oq-22) 的裁定；做法見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)）。
 
