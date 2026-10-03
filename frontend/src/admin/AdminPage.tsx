@@ -7,6 +7,7 @@ import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
 import ProjectDetailPage from './projects/ProjectDetailPage'
 import ProjectsPage from './projects/ProjectsPage'
+import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { to: '/admin/companies', label: '公司' },
   { to: '/admin/roles', label: '角色' },
   { to: '/admin/projects', label: '專案' },
+  { to: '/admin/templates', label: '範本管理' },
   { to: '/change-password', label: '變更密碼' },
 ]
 
@@ -37,6 +39,14 @@ export default function AdminPage() {
 
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
+
+  if (!user.is_admin && location.pathname.startsWith('/admin/templates')) {
+    return (
+      <main>
+        <TemplatesPage />
+      </main>
+    )
+  }
 
   if (!user.is_admin) {
     return (
@@ -114,6 +124,7 @@ export default function AdminPage() {
           <Route path="roles" element={<RolesPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="templates" element={<TemplatesPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
         </Routes>
       </main>

@@ -1,5 +1,5 @@
 // 一般使用者的「我的工作台」（#290）：我的資料、我的公司、我參與的
-// 專案與角色、變更密碼、登出；系統管理者另有「進入管理頁」連結。
+// 專案與角色、範本瀏覽、變更密碼、登出；系統管理者另有管理頁連結。
 // 只顯示資料；各 API 的權限由後端把關。
 
 import { useEffect, useState } from 'react'
@@ -67,6 +67,7 @@ export default function FieldPage() {
         <h1>工作台</h1>
         <nav aria-label="我的功能">
           {user.is_admin && <Link to="/admin">進入管理頁</Link>}
+          <Link to="/admin/templates">瀏覽範本庫</Link>
           <Link to="/change-password" state={{ from }}>
             變更密碼
           </Link>
