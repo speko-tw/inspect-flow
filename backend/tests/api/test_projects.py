@@ -10,10 +10,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, select
 from sqlalchemy.orm import Session
 
-from app.api.errors import ErrorCode
+from app.api.errors import APIError, ErrorCode
+from app.auth.access import require_system_role
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.engine import get_engine
-from app.models import AuditLog, Company, Project, ProjectMember, Role, User
+from app.models import (
+    AuditLog,
+    Company,
+    Project,
+    ProjectMember,
+    Role,
+    SystemRoleCode,
+    User,
+)
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
@@ -238,6 +247,106 @@ def test_project_crud_requires_admin(project_api):
             f"/api/v1/projects/{project_id}", json={"name": "不得修改"}
         ).status_code
         == 403
+    )
+
+
+def test_template_admin_can_list_projects_but_project_members_cannot(
+    project_api, db_session: Session, make_client
+):
+    admin_client = project_api["admin_client"]
+    actor_client = project_api["actor_client"]
+    plain_client = project_api["plain_client"]
+    target = project_api["target"]
+    assert isinstance(target, User)
+    add_project_member(
+        db_session,
+        project_id=project_api["project"].id,
+        user_id=target.id,
+        role_ids=[],
+    )
+    db_session.commit()
+    target_client = _make_user_client(db_session, make_client, target)
+    assert target_client.get("/api/v1/projects").status_code == 403
+
+    assigned = admin_client.put(
+        f"/api/v1/system-role-assignments/template_admin/{target.id}"
+    )
+    assert assigned.status_code == 204
+
+    admin_projects = admin_client.get("/api/v1/projects")
+    template_admin_projects = target_client.get("/api/v1/projects")
+    assert admin_projects.status_code == 200
+    assert template_admin_projects.status_code == 200
+    assert admin_projects.json() == template_admin_projects.json()
+    assert actor_client.get("/api/v1/projects").status_code == 403
+    assert plain_client.get("/api/v1/projects").status_code == 403
+
+
+def test_template_admin_guard_requires_assignment_not_project_permissions(
+    project_api, db_session: Session
+):
+    admin_client = project_api["admin_client"]
+    actor = project_api["actor"]
+    target = project_api["target"]
+    assert isinstance(actor, User)
+    assert isinstance(target, User)
+
+    assigned = admin_client.put(
+        f"/api/v1/system-role-assignments/template_admin/{target.id}"
+    )
+    assert assigned.status_code == 204
+
+    check_template_admin = require_system_role(SystemRoleCode.TEMPLATE_ADMIN)
+    assert check_template_admin(user=target, db=db_session) is target
+    with pytest.raises(APIError) as denied:
+        check_template_admin(user=actor, db=db_session)
+    assert denied.value.status_code == 403
+    assert denied.value.code is ErrorCode.PERMISSION_DENIED
+
+
+def test_system_role_assignment_endpoints_are_admin_only_and_audited(
+    project_api, db_session: Session
+):
+    admin_client = project_api["admin_client"]
+    actor_client = project_api["actor_client"]
+    target = project_api["target"]
+    assert isinstance(target, User)
+    assign_url = f"/api/v1/system-role-assignments/template_admin/{target.id}"
+
+    assert actor_client.put(assign_url).status_code == 403
+    assert actor_client.delete(assign_url).status_code == 403
+
+    assigned = admin_client.put(assign_url)
+    assert assigned.status_code == 204
+    repeated = admin_client.put(assign_url)
+    assert repeated.status_code == 204
+    db_session.expire_all()
+    events = list(
+        db_session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "system_role_assignment.created"
+            )
+        )
+    )
+    assert len(events) == 1
+    assert events[0].entity_type == "system_role_assignment"
+    assert _audit_field(events[0].after, "user_id") == str(target.id)
+    assert _audit_field(events[0].after, "role_code") == "template_admin"
+
+    revoked = admin_client.delete(assign_url)
+    assert revoked.status_code == 204
+    db_session.expire_all()
+    deleted_events = list(
+        db_session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "system_role_assignment.deleted"
+            )
+        )
+    )
+    assert len(deleted_events) == 1
+    assert _audit_field(deleted_events[0].before, "user_id") == str(target.id)
+    assert (
+        _audit_field(deleted_events[0].before, "role_code") == "template_admin"
     )
 
 

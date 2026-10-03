@@ -262,9 +262,13 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
     assert catalog.json() == {
         "items": [
             {
+                "code": "project_inspection_item.edit",
+                "description": "編輯專案查核項目",
+            },
+            {
                 "code": "project_member.manage",
                 "description": "管理專案成員與其角色",
-            }
+            },
         ]
     }
 

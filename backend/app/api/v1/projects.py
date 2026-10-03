@@ -11,9 +11,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.auth.access import require_admin, require_project_permission
+from app.auth.access import (
+    require_admin,
+    require_admin_or_system_role,
+    require_project_permission,
+)
 from app.auth.dependencies import get_db
-from app.models import Company, Project, ProjectMember, Role, User
+from app.models import (
+    Company,
+    Project,
+    ProjectMember,
+    Role,
+    SystemRoleCode,
+    User,
+)
 from app.services.project_members import (
     add_project_member,
     list_project_members,
@@ -193,7 +204,9 @@ def _member_conflict(exc: IntegrityError) -> bool:
 @router.get(
     "",
     response_model=list[ProjectResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[
+        Depends(require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN))
+    ],
 )
 def list_projects(
     db: Session = Depends(get_db),  # noqa: B008

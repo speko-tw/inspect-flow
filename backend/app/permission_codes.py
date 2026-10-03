@@ -10,7 +10,9 @@ description, via the shared ``DescribedStrEnum`` base).
 The registry contains only codes registered by frozen feature
 specifications. `domain-model` registers
 ``project_member.manage`` for managing project members and their
-roles; future feature specifications add their own codes here.
+roles; `template-system` registers
+``project_inspection_item.edit`` for editing a project's inspection
+items.
 
 ``is_permission_code_registered`` is the single query function
 ``app/models/role.py``'s ``RolePermission._check_code`` calls before
@@ -53,6 +55,10 @@ class PermissionCode(DescribedStrEnum):
     PROJECT_MEMBER_MANAGE = (
         "project_member.manage",
         "管理專案成員與其角色",
+    )
+    PROJECT_INSPECTION_ITEM_EDIT = (
+        "project_inspection_item.edit",
+        "編輯專案查核項目",
     )
 
 

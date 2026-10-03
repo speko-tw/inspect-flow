@@ -125,11 +125,11 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         if info.path.startswith("/api/v1/projects")
     }
     admin_routes = {
-        ("GET", "/api/v1/projects"),
         ("GET", "/api/v1/projects/{project_id}"),
         ("POST", "/api/v1/projects"),
         ("PATCH", "/api/v1/projects/{project_id}"),
     }
+    template_admin_list = ("GET", "/api/v1/projects")
     member_routes = {
         ("GET", "/api/v1/projects/{project_id}/members"),
         ("POST", "/api/v1/projects/{project_id}/members"),
@@ -140,11 +140,15 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
     }
 
-    assert set(routes) == admin_routes | member_routes
+    assert set(routes) == admin_routes | member_routes | {template_admin_list}
     for route in admin_routes:
         declaration = routes[route]
         assert declaration is not None
         assert declaration.level is AccessLevel.ADMIN_REQUIRED
+    declaration = routes[template_admin_list]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
+    assert declaration.permission_code == "template_admin"
     for route in member_routes:
         declaration = routes[route]
         assert declaration is not None
