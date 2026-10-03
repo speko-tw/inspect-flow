@@ -142,7 +142,7 @@
 - 定義 PASS/FAIL/N/A ＋ Measurement ＋ Severity ＋ Defect 欄位。
 - 維持目前簡化、不擴充欄位。
 
-**目前暫定**：已由上方裁定取代。仍未定的只有缺失（Defect）實體、缺失欄位與不符合後的改善追蹤（0.7.x）；報告章節使用 PASS／FAIL 措辭（依據：架構基準 §20.10）的落差，另見 [G-08](#g-08)。
+**目前暫定**：已由上方裁定取代。仍未定的包括：缺失（Defect）實體與缺失欄位、不符合後的改善追蹤與限期複查、嚴重度對任務完成與報告的影響、自動判定（0.7.x）；報告章節使用 PASS／FAIL 措辭（依據：架構基準 §20.10）的落差，另見 [G-08](#g-08)。
 
 **誰決定、何時**：負責人；已於 [#76](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5867495484)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5871381768) 部分裁定（2026-09-28）；其餘部分（`N/A`、不符合時的嚴重度與註解、不適用的原因、欄位型別與必填）已於 [#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965076758) 裁定（2026-10-03）；缺失（Defect）實體、缺失欄位與不符合後的改善追蹤仍屬 0.7.x，尚未裁定。
 
