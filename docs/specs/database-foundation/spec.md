@@ -20,7 +20,7 @@
   - SQLite 作為 MVP 資料庫，連線初始化的 PRAGMA 設定。
   - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（範圍見 DBF-R10，依 [DBF-Q1](#dbf-q1) 裁定）。
   - `User`、`Project` 的共通結構：UUID 主鍵、與 UUID 分開的業務編號、建立與修改紀錄欄位。
-- Phase 3 範本資料表（草稿，G-01 裁定後擴大凍結範圍）：`Inspection Template`、`Template Version`，見[範本資料表草稿](#template-tables)。
+- Phase 3 範本資料表（草稿，OQ-06 裁定後再評估凍結範圍）：`Inspection Template`，見[範本資料表草稿](#template-tables)。查核範本直接覆蓋、不建立 `Template Version`，依 [KD-03](../../intents/03-decisions-and-stack.md#kd-03)；本段不因 G-01 的 interval 部分裁定而凍結。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
