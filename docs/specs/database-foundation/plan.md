@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 spec 標頭「凍結範圍」內的第一段（DBF-R01～DBF-R14、DBF-AC01～DBF-AC11）；T5 是依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）對 T4 已完成範圍的修訂，不新增需求或驗收條件編號。第二段（`Inspection Template`）依 DBF-R20～R21 維持草稿，template-system 的 TPL-Q 設計細節確認並擴大凍結範圍後，再於同一份計畫補任務；`Template Version` 依 KD-03 不建立。
+本計畫涵蓋 DBF-R01～DBF-R14、DBF-AC01～DBF-AC11，以及 Phase 3 範本資料表的 DBF-R20～DBF-R21、DBF-AC12～DBF-AC13。T5 是依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）對 T4 已完成範圍的修訂，不新增需求或驗收條件編號。Phase 3 schema 與約束由 `template-system` T1（[#325](https://github.com/speko-tw/inspect-flow/issues/325)）實作並同時滿足 DBF-AC12、DBF-AC13；專案副本欄位及後續作廢／重查／更正流程由 P4 `inspection-planning` 定義。`Template Version` 依 KD-03 不建立。
 
 ## 任務
 
@@ -20,7 +20,8 @@
 - 每個任務至少對應一條 AC；DBF-AC01～DBF-AC11 每條都被一個任務涵蓋。
 - T3、T4 開 task issue 時，若依賴的裁定或 `domain-model` 尚未完成，issue 標 `blocked` 並寫明原因。
 - 依 plan 開 task issue 時才建立上表的 issue 編號；本 PR 只寫文件，不開 task issue。
-- 第一段所有任務合併、且 DBF-AC01～DBF-AC11 都有對應驗證後，規格仍是「部分凍結」（第二段未凍結），不改為「已完成」；第二段也完成後才改。
+- 本規格目前所有列出的資料模型與資料庫基礎 AC 均已凍結；`已凍結` 不代表各實作任務已完成，所有任務合併且 AC 驗證完成後才改為「已完成」。
+- Phase 3 的 DBF-AC12、DBF-AC13 由範本資料模型任務 #325 的資料庫/API 測試驗收。
 
 ## 並行分組
 
