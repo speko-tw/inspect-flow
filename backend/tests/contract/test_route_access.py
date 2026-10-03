@@ -125,11 +125,11 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         if info.path.startswith("/api/v1/projects")
     }
     admin_routes = {
-        ("GET", "/api/v1/projects"),
         ("GET", "/api/v1/projects/{project_id}"),
         ("POST", "/api/v1/projects"),
         ("PATCH", "/api/v1/projects/{project_id}"),
     }
+    template_admin_list = ("GET", "/api/v1/projects")
     member_routes = {
         ("GET", "/api/v1/projects/{project_id}/members"),
         ("POST", "/api/v1/projects/{project_id}/members"),
@@ -140,16 +140,45 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
     }
 
-    assert set(routes) == admin_routes | member_routes
+    assert set(routes) == admin_routes | member_routes | {template_admin_list}
     for route in admin_routes:
         declaration = routes[route]
         assert declaration is not None
         assert declaration.level is AccessLevel.ADMIN_REQUIRED
+    declaration = routes[template_admin_list]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
+    assert declaration.permission_code == "template_admin"
     for route in member_routes:
         declaration = routes[route]
         assert declaration is not None
         assert declaration.level is AccessLevel.PROJECT_PERMISSION
         assert declaration.permission_code == "project_member.manage"
+
+
+def test_system_role_assignment_routes_require_admin() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/system-role-assignments/")
+    }
+    expected = {
+        (
+            "PUT",
+            "/api/v1/system-role-assignments/template_admin/{user_id}",
+        ),
+        (
+            "DELETE",
+            "/api/v1/system-role-assignments/template_admin/{user_id}",
+        ),
+    }
+
+    assert set(routes) == expected
+    for route in expected:
+        declaration = routes[route]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.ADMIN_REQUIRED
 
 
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
