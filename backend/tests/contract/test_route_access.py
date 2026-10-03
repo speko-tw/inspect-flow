@@ -181,6 +181,35 @@ def test_system_role_assignment_routes_require_admin() -> None:
         assert declaration.level is AccessLevel.ADMIN_REQUIRED
 
 
+def test_template_library_routes_declare_read_and_write_access() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith(
+            (
+                "/api/v1/template-categories",
+                "/api/v1/template-systems",
+                "/api/v1/templates",
+            )
+        )
+    }
+    assert len(routes) == 15
+    for (method, _path), declaration in routes.items():
+        assert declaration is not None
+        if method == "GET":
+            assert declaration.level is (
+                AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION
+            )
+            assert declaration.system_role_code == "template_admin"
+            assert (
+                declaration.permission_code == "project_inspection_item.edit"
+            )
+        else:
+            assert declaration.level is AccessLevel.SYSTEM_ROLE_REQUIRED
+            assert declaration.permission_code == "template_admin"
+
+
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
     """AUT-AC22: ``auth.not_authenticated``,
     ``auth.invalid_credentials`` and ``permission.denied`` are all
