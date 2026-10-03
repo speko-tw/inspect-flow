@@ -217,7 +217,7 @@
 
 ### OQ-09：`Inspection Plan`／`Inspection Task`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？（部分裁定）
 
-**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；人員**不得**手動將計畫改為已完成（負責人已明確撤回此選項）。「封存」與取消封存由內業手動操作；其他狀態轉換待規格決定（見下與 [KD-56](03-decisions-and-stack.md#kd-56)）；此措辭由負責人確認（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5968037640)，2026-10-03）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
+**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；人員**不得**手動將計畫改為已完成（負責人已明確撤回此選項）。「封存」與取消封存由內業手動操作；其他狀態轉換見下與 [KD-56](03-decisions-and-stack.md#kd-56)；此措辭由負責人確認（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5968037640)，2026-10-03）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
 
 **範本部分已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02）：範本庫的範本修改時直接覆蓋，只保留最新版，不做版本化，因此不再有 `Template Version` 的狀態機；「快照」由套用時複製到專案的那一份負責；專案記錄來源範本名稱與套用時間供追查，範本被覆蓋後不保證能回看當時內容。記錄於 [KD-03](03-decisions-and-stack.md#kd-03)（改寫）。
 
@@ -246,19 +246,32 @@
 
 計畫與任務部分記錄於 [KD-56](03-decisions-and-stack.md#kd-56)，報告核發與新版取代記錄於 [KD-57](03-decisions-and-stack.md#kd-57)；結果三種與不符合的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。報告狀態只部分裁定，見 [G-06](#g-06)；照片刪除與保留（[G-05](#g-05)）不在本次，留到 0.6.x `field-evidence`。
 
-**未定**：作廢後重新查核是讓同一任務重來，還是另開新任務，屬 0.4.x 規格設計；計畫「草稿」「已就緒」等其他狀態、取消任務的細節（已完成或進行中的任務能否取消、取消後能否恢復、任務全部取消時計畫的狀態）、取消封存的操作、「有缺失」是否為獨立狀態值，裁定沒有說明，待 0.4.x 規格；Evidence 與 Report 的其他狀態（含產製中、產製失敗）、其他原因的作廢與失敗路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）。「尚未查核」對應哪個任務狀態，裁定沒有說明，待 0.4.x 規格確認。
+**查核計畫的任務組成、取消、恢復與派出已裁定**（[#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262)，2026-10-03；情境對答與沒選的選項見同一則留言）。整體原則：先簡單做，實際用過再調整。
+
+| # | 主題 | 裁定 |
+|---|---|---|
+| 1 | 任務組成 | 一個任務**得**包含多個查核項目（像一張抽查紀錄表）；只查一項就建只含一項的任務。 |
+| 2 | 取消範圍 | 未完成的任務（未開始、進行中）都**得**取消，已記錄的照片與結果保留，任務標示「已取消」；**已完成的任務不得取消**。取消須填原因（上一輪裁定，不變）。 |
+| 2 補 | 恢復 | 取消的任務**得**恢復，回到取消前的狀態繼續查核。 |
+| 3 | 全部取消 | 計畫底下的任務全部取消時，計畫自動變為「已取消」（新增計畫狀態）。底下有任務完成、其餘取消時為「已完成」（依上表第 1 題與「取消不計入完成判斷」整理，裁定沒有逐字說明）。 |
+| 3 補 | 封存 | **任何狀態**的計畫（進行中、已完成、已取消）都**得**封存。 |
+| 4 | 派出 | 任務建立後先為「草稿」，現場看不到；內業按「派出」後現場才看得到；第一個任務派出時計畫自動變為進行中。 |
+
+記錄於 [KD-56](03-decisions-and-stack.md#kd-56)（更新原有決策，不另立新編號，讓計畫與任務的狀態規則只有一份說法）。「一個任務得含多個查核項目」只影響任務的組成，沒有對應的決策編號，記在[詞彙表](04-glossary.md)的「查核任務」，細節由 `inspection-planning` 規格處理。
+
+**未定**：作廢後重新查核是讓同一任務重來，還是另開新任務，屬 0.4.x 規格設計；計畫在第一個任務派出前的狀態名稱與「就緒」是否保留、草稿任務能否取消或刪除與派出後能否收回、草稿任務與沒有任務的計畫在完成與全部取消判斷中怎麼算、恢復任務是否須填原因、恢復後計畫若已「已完成」或「已取消」是否自動退回進行中、[KD-55](03-decisions-and-stack.md#kd-55) 作廢對草稿與已取消任務的影響、取消封存後計畫回到哪個狀態與其操作、「有缺失」是否為獨立狀態值，裁定沒有說明，待 0.4.x 規格；Evidence 與 Report 的其他狀態（含產製中、產製失敗）、其他原因的作廢與失敗路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）。「尚未查核」對應哪個任務狀態，裁定沒有說明，待 0.4.x 規格確認。
 
 **為什麼要先決定**：影響任務完成判定（[PR-01](02-principles.md#pr-01)）、報告產製失敗重試（見 [G-06](#g-06)）、以及證據刪除與歷史不可變原則（[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)）之間如何協調。
 
 **選項**：架構基準文件給出各實體「主要狀態」的骨架，例外路徑（刪除、更正、產生失敗）未完整定義。
 
-**目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。其中 CANCELLED（已取消）、IN_PROGRESS、COMPLETED、ARCHIVED 已由 [KD-56](03-decisions-and-stack.md#kd-56) 的裁定採用；REOPENED 依裁定（已完成任務不開放重新打開）**不採用**；DRAFT、READY 仍是暫定。
+**目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。其中 Task 的 CANCELLED（已取消）、Plan 的 IN_PROGRESS、COMPLETED、ARCHIVED 已由 [KD-56](03-decisions-and-stack.md#kd-56) 的裁定採用；Plan 另新增「已取消」狀態（2026-10-03 第二輪裁定，英文列舉值待規格）；Task 新增「草稿」狀態，派出後離開草稿（原暫定 PENDING 是否即派出後的「未開始」，待規格）；REOPENED 依裁定（已完成任務不開放重新打開）**不採用**；Plan 的 DRAFT、READY：進入進行中的條件（第一個任務派出）已定，但派出前的狀態名稱與 READY 是否保留仍是暫定。
 
-**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02），專案副本與任務快照分工於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670) 裁定（2026-10-03），選「不要」時一併更正於[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)（同日），計畫、任務、報告的狀態規則於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330) 裁定（同日）；其餘狀態與例外路徑留待 0.4.x 以後討論。
+**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02），專案副本與任務快照分工於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670) 裁定（2026-10-03），選「不要」時一併更正於[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)（同日），計畫、任務、報告的狀態規則於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330) 裁定（同日）；查核計畫的任務組成、取消、恢復與派出於 [#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262) 裁定（同日）；其餘狀態與例外路徑留待 0.4.x 以後討論。
 
 **影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-03](03-decisions-and-stack.md#kd-03)、[KD-42](03-decisions-and-stack.md#kd-42)、[KD-54](03-decisions-and-stack.md#kd-54)、[KD-55](03-decisions-and-stack.md#kd-55)、[KD-56](03-decisions-and-stack.md#kd-56)、[KD-57](03-decisions-and-stack.md#kd-57)；另見 [G-05](#g-05)、[G-06](#g-06)、[G-07](#g-07)。
 
-**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）、負責人裁定（#78 留言，2026-10-02，範本部分）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03，專案副本與任務快照分工；[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，同日，選「不要」時一併更正）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，2026-10-03，計畫、任務、報告的狀態規則）。
+**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）、負責人裁定（#78 留言，2026-10-02，範本部分）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03，專案副本與任務快照分工；[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，同日，選「不要」時一併更正）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，2026-10-03，計畫、任務、報告的狀態規則）與負責人裁定（[#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262)，2026-10-03，查核計畫的任務組成、取消、恢復與派出）。
 
 
 <a id="oq-10"></a>
