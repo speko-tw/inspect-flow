@@ -109,7 +109,6 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 | `inspection_task.inspect` | 開始與完成任務 |
 | `inspection_task.delete_draft` | 刪除尚未派出的草稿 Task |
 | `inspection_task.cancel` | 取消或恢復任務；恢復沿用此代碼，無獨立 `inspection_task.restore`（規格設計，非負責人裁定） |
-
 | `project_inspection_item.edit` | 修改專案查核項目；沿用 `template-system` TPL-R09，不重複新增代碼 |
 
 修改專案查核項目的 PATCH body 可帶項目欄位及完整子表集合；未提供的頂層欄位不變，若提供查核項次、標準、實測欄位或照片需求集合，該集合以完整取代方式處理。若有 Task 使用此專案查核項目，body **必須**帶布林值 `reinspect`；未提供時回 422 `project_inspection_item.reinspection_choice_required`。沒有任何 Task 使用時可省略，由後端判斷。整次修改、KD-55 選擇、Snapshot 更新／項目級結果及照片作廢須在同一交易內完成；任何一步失敗則全部回滾。「要」時只將相關 Task 明細中的受影響項目標示「標準變更作廢」，保留可搜尋的舊 Snapshot、結果與照片；`COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀，僅將受影響項目標記待重查；原 Task 為 `DRAFT` 則更新同一 Task 的標準與 Snapshot，不作廢、不改狀態。「不要」時更新相關 Task 的 Snapshot 文字，結果、照片、狀態不變。已取消 Task 遇標準變更時，在恢復操作依目前標準處理，規則見 IP-R07。
