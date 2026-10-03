@@ -47,7 +47,7 @@ docs/specs/
 | [`api-conventions`](api-conventions/spec.md) | 全部 | 共用 | 已完成 | — |
 | [`database-foundation`](database-foundation/spec.md) | P1、P3 | 功能 | 已凍結 | 無；範本與最小專案副本 schema 依 `template-system` 凍結，P4 擴充副本欄位及流程；MVP 不設 interval，未來選用功能依 [G-01](../intents/05-open-questions.md#g-01) 另行處理 |
 | [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P9 | 共用 | 部分凍結 | 凍結範圍（`User` 與帳號名稱、`Company`（名稱與啟用狀態）、`Role`、`ProjectMember`、`Project` 業務欄位、初始化指令與內建 `admin`）無；範圍已依 [#259](https://github.com/speko-tw/inspect-flow/issues/259) 變更，[DOM-Q9](domain-model/spec.md#dom-q9) 已裁定；其餘實體受 [G-01](../intents/05-open-questions.md#g-01)、[G-02](../intents/05-open-questions.md#g-02) 等開工門檻擋（依 [OQ-22](../intents/05-open-questions.md#oq-22)） |
-| `state-machines` | P4、P6、P7、P9 | 共用 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-06](../intents/05-open-questions.md#g-06) |
+| [`state-machines`](state-machines/spec.md) | P4、P6、P7、P9 | 共用 | 草稿 | [OQ-09](../intents/05-open-questions.md#oq-09)、[G-05](../intents/05-open-questions.md#g-05)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07) |
 | [`authentication`](authentication/spec.md) | P2 | 功能 | 已凍結 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定）；首次登入碼與帳號名稱登入依 [#259](https://github.com/speko-tw/inspect-flow/issues/259) 變更，[AUT-Q7](authentication/spec.md#aut-q7) 已裁定 |
 | [`audit-log`](audit-log/spec.md) | P2 | 共用 | 已凍結 | 無；[ALG-Q1](audit-log/spec.md#alg-q1)～[ALG-Q5](audit-log/spec.md#alg-q5) 待負責人決定，不擋凍結（ALG-Q5 若選 B，另加一支 migration 新增可空值欄位）；[ALG-Q6](audit-log/spec.md#alg-q6) 已裁定 |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
