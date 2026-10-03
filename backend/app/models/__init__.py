@@ -15,6 +15,24 @@ from app.models.project import Project
 from app.models.project_member import ProjectMember, ProjectMemberRole
 from app.models.role import Role, RolePermission
 from app.models.setup_code import SetupCode
+from app.models.template_system import (
+    ProjectEvidenceRequirement,
+    ProjectInspectionItem,
+    ProjectInspectionPoint,
+    ProjectMeasurementField,
+    ProjectNumericStandard,
+    ProjectTextStandard,
+    SystemRoleAssignment,
+    SystemRoleCode,
+    TemplateCategory,
+    TemplateEvidenceRequirement,
+    TemplateInspectionPoint,
+    TemplateItem,
+    TemplateMeasurementField,
+    TemplateNumericStandard,
+    TemplateSystem,
+    TemplateTextStandard,
+)
 from app.models.user import User
 from app.models.user_password import UserPassword
 
@@ -32,4 +50,20 @@ __all__ = [
     "SetupCode",
     "User",
     "UserPassword",
+    "ProjectEvidenceRequirement",
+    "ProjectInspectionItem",
+    "ProjectInspectionPoint",
+    "ProjectMeasurementField",
+    "ProjectNumericStandard",
+    "ProjectTextStandard",
+    "SystemRoleAssignment",
+    "SystemRoleCode",
+    "TemplateCategory",
+    "TemplateEvidenceRequirement",
+    "TemplateInspectionPoint",
+    "TemplateItem",
+    "TemplateMeasurementField",
+    "TemplateNumericStandard",
+    "TemplateSystem",
+    "TemplateTextStandard",
 ]
