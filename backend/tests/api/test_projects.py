@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TypedDict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +11,7 @@ from sqlalchemy import Engine, event, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.v1 import system_role_assignments
 from app.auth.access import require_system_role
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.engine import get_engine
@@ -20,6 +21,7 @@ from app.models import (
     Project,
     ProjectMember,
     Role,
+    SystemRoleAssignment,
     SystemRoleCode,
     User,
 )
@@ -256,7 +258,9 @@ def test_template_admin_can_list_projects_but_project_members_cannot(
     admin_client = project_api["admin_client"]
     actor_client = project_api["actor_client"]
     plain_client = project_api["plain_client"]
+    actor = project_api["actor"]
     target = project_api["target"]
+    assert isinstance(actor, User)
     assert isinstance(target, User)
     add_project_member(
         db_session,
@@ -272,6 +276,26 @@ def test_template_admin_can_list_projects_but_project_members_cannot(
         f"/api/v1/system-role-assignments/template_admin/{target.id}"
     )
     assert assigned.status_code == 204
+    db_session.refresh(target)
+    assert target.is_admin is False
+    assert (
+        target_client.get(
+            f"/api/v1/projects/{project_api['project'].id}"
+        ).status_code
+        == 403
+    )
+    assert (
+        target_client.put(
+            f"/api/v1/system-role-assignments/template_admin/{target.id}"
+        ).status_code
+        == 403
+    )
+    assert (
+        target_client.delete(
+            f"/api/v1/system-role-assignments/template_admin/{target.id}"
+        ).status_code
+        == 403
+    )
 
     admin_projects = admin_client.get("/api/v1/projects")
     template_admin_projects = target_client.get("/api/v1/projects")
@@ -280,6 +304,34 @@ def test_template_admin_can_list_projects_but_project_members_cannot(
     assert admin_projects.json() == template_admin_projects.json()
     assert actor_client.get("/api/v1/projects").status_code == 403
     assert plain_client.get("/api/v1/projects").status_code == 403
+
+    assert (
+        admin_client.delete(
+            f"/api/v1/system-role-assignments/template_admin/{actor.id}"
+        ).status_code
+        == 404
+    )
+    missing_user_id = uuid4()
+    assert (
+        admin_client.delete(
+            f"/api/v1/system-role-assignments/template_admin/{missing_user_id}"
+        ).status_code
+        == 404
+    )
+    assert (
+        admin_client.put(
+            f"/api/v1/system-role-assignments/template_admin/{missing_user_id}"
+        ).status_code
+        == 404
+    )
+
+    assert (
+        admin_client.delete(
+            f"/api/v1/system-role-assignments/template_admin/{target.id}"
+        ).status_code
+        == 204
+    )
+    assert target_client.get("/api/v1/projects").status_code == 403
 
 
 def test_template_admin_guard_requires_assignment_not_project_permissions(
@@ -348,6 +400,52 @@ def test_system_role_assignment_endpoints_are_admin_only_and_audited(
     assert (
         _audit_field(deleted_events[0].before, "role_code") == "template_admin"
     )
+
+
+def test_concurrent_duplicate_template_admin_assignment_is_idempotent(
+    project_api, db_session: Session, monkeypatch
+):
+    admin_client = project_api["admin_client"]
+    admin = project_api["admin"]
+    target = project_api["target"]
+    assert isinstance(admin, User)
+    assert isinstance(target, User)
+    assign_url = f"/api/v1/system-role-assignments/template_admin/{target.id}"
+    assert admin_client.put(assign_url).status_code == 204
+
+    def insert_racing_assignment(session, user_id, role_code):
+        session.add(
+            SystemRoleAssignment(
+                user_id=user_id,
+                role_code=role_code.value,
+                created_by=admin.id,
+                updated_by=admin.id,
+            )
+        )
+        session.flush()
+
+    monkeypatch.setattr(
+        system_role_assignments,
+        "assign_system_role",
+        insert_racing_assignment,
+    )
+    before_events = db_session.scalar(
+        select(AuditLog.id).where(
+            AuditLog.event_type == "system_role_assignment.created"
+        )
+    )
+    response = admin_client.put(assign_url)
+    assert response.status_code == 204
+    db_session.expire_all()
+    events = list(
+        db_session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "system_role_assignment.created"
+            )
+        )
+    )
+    assert len(events) == 1
+    assert events[0].id == before_events
 
 
 def test_member_operations_require_project_permission_and_audit(

@@ -156,6 +156,31 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         assert declaration.permission_code == "project_member.manage"
 
 
+def test_system_role_assignment_routes_require_admin() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/system-role-assignments/")
+    }
+    expected = {
+        (
+            "PUT",
+            "/api/v1/system-role-assignments/template_admin/{user_id}",
+        ),
+        (
+            "DELETE",
+            "/api/v1/system-role-assignments/template_admin/{user_id}",
+        ),
+    }
+
+    assert set(routes) == expected
+    for route in expected:
+        declaration = routes[route]
+        assert declaration is not None
+        assert declaration.level is AccessLevel.ADMIN_REQUIRED
+
+
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
     """AUT-AC22: ``auth.not_authenticated``,
     ``auth.invalid_credentials`` and ``permission.denied`` are all

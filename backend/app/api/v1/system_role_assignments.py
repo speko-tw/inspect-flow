@@ -3,12 +3,14 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
-from app.models import SystemRoleCode, User
+from app.models import SystemRoleAssignment, SystemRoleCode, User
 from app.services.system_roles import (
     SystemRoleAlreadyAssignedError,
     SystemRoleNotAssignedError,
@@ -30,6 +32,20 @@ def _get_user(db: Session, user_id: UUID) -> User:
     return user
 
 
+def _is_duplicate_assignment_error(exc: IntegrityError) -> bool:
+    """Recognize only the role assignment's user/role unique constraint."""
+    diagnostic = getattr(exc.orig, "diag", None)
+    if (
+        getattr(diagnostic, "constraint_name", None)
+        == "uq_system_role_assignments_user_id"
+    ):
+        return True
+    return (
+        "unique constraint failed: system_role_assignments.user_id, "
+        "system_role_assignments.role_code"
+    ) in str(exc.orig).lower()
+
+
 @router.put("/template_admin/{user_id}", status_code=204)
 def assign_template_admin(
     user_id: UUID,
@@ -41,6 +57,19 @@ def assign_template_admin(
         assign_system_role(db, user_id, SystemRoleCode.TEMPLATE_ADMIN)
     except SystemRoleAlreadyAssignedError:
         pass
+    except IntegrityError as exc:
+        if not _is_duplicate_assignment_error(exc):
+            raise
+        db.rollback()
+        existing = db.scalar(
+            select(SystemRoleAssignment.id).where(
+                SystemRoleAssignment.user_id == user_id,
+                SystemRoleAssignment.role_code
+                == SystemRoleCode.TEMPLATE_ADMIN.value,
+            )
+        )
+        if existing is None:
+            raise
     return Response(status_code=204)
 
 
