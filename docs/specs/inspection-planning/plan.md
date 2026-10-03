@@ -2,14 +2,14 @@
 
 **規格**：[spec.md](spec.md)
 
-本計畫依草稿拆分工作。2026-10-03 業務裁定已納入合併的 KD-55／KD-56；多項目 Task 的 KD-55 項目級重查補充裁定見[負責人留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)。`state-machines` 的 SM-Q03 須在其責任範圍內同步；本計畫不代表規格凍結。實作 task 開立前仍須核對最新來源及責任檔案。
+本計畫依草稿拆分工作。取消 Task 恢復時套用目前標準依[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，intents 後續由 PR #351 同步；PR #351 與 state-machines PR #349 尚未合併。本計畫不代表規格凍結。OQ-09 仍直接涉及 Plan／Task 的標準套用與完成判定，且 PR #349 的 STM-R12 列出未開始 Task 標準套用及新舊標準並存等未決邊界；依 README 部分凍結流程，Plan／Task 尚不符合部分凍結條件。實作 task 開立前須再核對最新來源及責任檔案。
 
 ## 任務
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
 | T1 | 定義 P4 `ProjectInspectionItem` 擴充欄位、Plan、Task、多項目關聯、每項 Snapshot／狀態／歷史及 KD-55 修改紀錄資料結構；建立 migration 與資料庫約束 | `backend/app/models/`、`backend/alembic/versions/`、`backend/tests/db/` | `template-system`、`domain-model`、`database-foundation`；核對合併的 KD-55／KD-56 與 `state-machines` 的 SM-Q03 項目級行為同步 | IP-AC02～IP-AC05 | 待開 |
-| T2 | 實作 Plan／Task／Snapshot 服務層、派出／草稿刪除／取消／恢復、KD-55 項目級重新查核及衍生狀態；僅受影響的 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀並標記項目待重查；草稿 Task 原位更新；封存期間 Task 唯讀、取消封存後重算 Plan 狀態。集中登記權限代碼與稽核事件 | `backend/app/services/`、`backend/tests/services/`、`backend/app/permission_codes.py`、`docs/specs/audit-log/spec.md` | T1、`authentication`、`state-machines`；依 KD-55／KD-56 及負責人補充裁定實作，並同步 `state-machines`；TPL 已登記的權限沿用 | IP-AC03～IP-AC09 | 待開 |
+| T2 | 實作 Plan／Task／Snapshot 服務層、派出／草稿刪除／取消／恢復（恢復沿用取消權限且不要求原因）、KD-55 項目級重新查核及衍生狀態；僅受影響的 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀並標記項目待重查；草稿 Task 原位更新；封存期間 Task 唯讀、取消封存後重算 Plan 狀態。集中登記權限代碼與稽核事件 | `backend/app/services/`、`backend/tests/services/`、`backend/app/permission_codes.py`、`docs/specs/audit-log/spec.md` | T1、`authentication`、`state-machines`；依 KD-55／KD-56 及負責人補充裁定實作，並同步 `state-machines`；TPL 已登記的權限沿用 | IP-AC03～IP-AC09 | 待開 |
 | T3 | 實作 Plan／Task／專案項目修改 API，含權限檢查、UUID、分頁、錯誤契約及快照讀寫 | `backend/app/api/`、`backend/app/schemas/`、`backend/tests/api/` | T1、T2、`api-conventions` | IP-AC01～IP-AC10 | 待開 |
 | T4 | 建立內業 Plan 管理、手動建立多項目 Task、派出／草稿刪除／取消／恢復操作與任務建議指派 UI；草稿 Task 僅內業可見；封存 Plan 的 Task 唯讀 | `frontend/src/features/`、`frontend/src/routes/`、`frontend/tests/` | T3；核對 KD-55／KD-56 及 `state-machines` 同步後的契約 | IP-AC01、IP-AC02、IP-AC06～IP-AC08 | 待開 |
 | T5 | 建立專案查核項目修改確認介面，說明重新查核後果；呈現受影響項目作廢歷史、其他項目保留及來源 Task 為 `DRAFT` 時原位更新 | `frontend/src/features/`、`frontend/tests/` | T3；依 IP-Q07／IP-Q08 的項目級技術設計及已合併的補充裁定 | IP-AC04、IP-AC05、IP-AC08 | 待開 |
@@ -31,12 +31,12 @@
 
 ## 風險
 
-- **KD-55 與項目級補充的文字需一併理解**：依負責人補充裁定 5970063986，只作廢受影響項目的舊 Snapshot、結果與照片，保留同 Task 其他項目；符合條件的 `COMPLETED` Task 回到 `IN_PROGRESS`、`PENDING`／`IN_PROGRESS` Task 保持原狀，來源為 `DRAFT` 時原位更新。#346 是追蹤 issue，其對應 PR #347 已合併；`state-machines` 的 SM-Q03 仍須由該規格責任人同步。
-- **狀態機規格同步**：依 KD-56，Plan 任意狀態可封存；本規格採封存時 Task 唯讀、取消封存後依現況重算，且草稿 Task 阻止完成。`state-machines` 的 SM-Q03 仍需同步項目級重新查核行為及封存語義；此工作屬該規格責任範圍，本規格不宣稱其已更新或凍結。
+- **KD-55 與項目級補充的文字需一併理解**：依負責人補充裁定 5970063986，只作廢受影響項目的舊 Snapshot、結果與照片，保留同 Task 其他項目；符合條件的 `COMPLETED` Task 回到 `IN_PROGRESS`、`PENDING`／`IN_PROGRESS` Task 保持原狀，來源為 `DRAFT` 時原位更新。#346 的 PR #347 已合併；state-machines PR #349 尚未合併，須由該規格責任人同步。
+- **狀態機規格同步與凍結門檻**：依 KD-56，Plan 任意狀態可封存；本規格採封存時 Task 唯讀、取消封存後依現況重算，且草稿 Task 阻止完成。`state-machines` 的 PR #349 尚未合併。OQ-09 仍直接點名 Plan／Task，PR #349 的 STM-R12 仍列未開始 Task 新標準套用及新舊標準並存等未決邊界；README 部分凍結規則第 1 點將點名實體視為相關，所以目前不部分凍結 Plan／Task。
 - **Task 組成**：負責人已裁定一個 Task 得含多個項目；關聯表／明細表、各項 Snapshot／狀態／歷史結構仍為規格設計，需涵蓋 KD-55 只作廢受影響項目且 Task 重回 `IN_PROGRESS`。
 - **快照結構與更正**：Snapshot 必須保存建立時需求；KD-55 的「不要」重新查核是明確更正例外，需確保結果、照片與狀態不變且有可追溯紀錄。欄位採明確欄位或關聯子表為**規格設計（非負責人裁定）**，實作前確認不破壞歷史追溯。
 - **專案項目修改範圍**：KD-55 只影響同專案使用該項次的任務；若跨 Plan，必須確保查全所有關聯，而不是只查目前頁面或目前 Plan。
-- **取消與完成判定**：未派出的 `DRAFT` Task 可刪除、不可取消；派出後未完成 Task 可取消及恢復，完成 Task 不可取消。草稿 Task 阻止 Plan 完成；零 Task 維持 `DRAFT`，全取消且至少一筆為 `CANCELLED`，有完成且其餘取消為 `COMPLETED`。取消封存後依當前 Task 重算 Plan。
+- **取消與完成判定**：未派出的 `DRAFT` Task 可刪除、不可取消；派出後未完成 Task 可取消及恢復，完成 Task 不可取消。恢復時若標準變更，改用目前標準並將被修改項目的舊結果標示待重查；此行為依裁定 5970733042。恢復沿用取消權限、不要求恢復原因為規格設計。草稿 Task 阻止 Plan 完成且不算已取消；零 Task 維持 `DRAFT`，全取消且至少一筆為 `CANCELLED`，有完成且其餘取消為 `COMPLETED`。取消封存後依當前 Task 重算 Plan。
 - **報告與 Evidence 範圍**：KD-55 對作廢資料保存與已發出報告的要求，不等於 G-05／G-06／G-07 已裁定；不可在本規格自行補足 Evidence 刪除或 Report 狀態政策。
 - **共用檔案競爭**：Plan／Task models、router 註冊、權限表及 migration 都可能與其他 P4 工作重疊；開 task 時需依最新 main 及 issue 狀態確認，不以本草稿推定可同波。
 
@@ -52,7 +52,7 @@
 | IP-AC04 | 服務／API 測試：驗證跨 Plan 多項目 Task 僅作廢受影響項目、舊 Snapshot／結果／照片可查找、其他項目保持有效；僅 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 狀態不變並標記項目待重查；DRAFT Task 原位更新；封存中拒絕修改且唯讀，取消封存後重算狀態再成功。 |
 | IP-AC05 | 服務／API 測試：選「不要」後比對 Snapshot 文字更新且 Task 狀態、結果與照片不變，稽核含選擇者及時間。 |
 | IP-AC06 | 權限整合測試：非指派但有專案現場權限的成員可操作；實際操作者欄位記錄該成員。 |
-| IP-AC07 | 狀態機整合測試：零 Task 維持 `DRAFT`；`DRAFT` Task 阻止 Plan 完成，可硬刪除但不可取消且現場不可見，刪除另寫 `inspection_task.deleted` 稽核事件；已完成 Plan 新增草稿 Task 後回 `IN_PROGRESS`；派出後才可取消，取消保留結果／照片與取消前狀態，恢復原狀態；完成不可取消；全取消且至少一筆成為 `CANCELLED`，已有完成且其餘取消則 `COMPLETED`。 |
+| IP-AC07 | 狀態機整合測試：零 Task 維持 `DRAFT`；`DRAFT` Task 阻止 Plan 完成，可硬刪除但不可取消且不計入全取消判定，刪除另寫 `inspection_task.deleted` 稽核事件；已完成 Plan 新增草稿 Task 後回 `IN_PROGRESS`；派出後才可取消，取消保留結果／照片與取消前狀態；恢復沿用取消權限、不要求原因，且還原至取消前狀態；若取消期間標準變更，恢復採目前標準並將被修改項目的舊結果標示待重查，其他項目不變；完成不可取消；全取消且至少一筆成為 `CANCELLED`，已有完成且其餘取消則 `COMPLETED`。 |
 | IP-AC08 | 狀態機整合測試：封存各有效 Plan 狀態後確認所屬 Task 唯讀；取消封存後依目前 Task 狀態重算有效狀態，不直接還原封存前狀態。核對 KD-56 與 `state-machines` 同步後的狀態轉換。 |
 | IP-AC09 | API／服務測試：P4 不存在結果或照片新增／更正端點，也不提供一般人工將 Task 從 `COMPLETED` 重開的端點；KD-55「不要」只更新 Snapshot 文字且狀態、結果、照片不變；KD-55「要」是明確系統例外，可使受影響的 `COMPLETED` Task 自動回 `IN_PROGRESS`；`PENDING`／`IN_PROGRESS` Task 保持狀態但項目標記待重查，待重查完成前 Task 與 Plan 均不得完成。 |
 | IP-AC10 | API 整合測試：權限、專案邊界、非法狀態輸入與共用錯誤格式。 |
