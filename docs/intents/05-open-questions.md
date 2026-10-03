@@ -217,7 +217,7 @@
 
 ### OQ-09：`Inspection Plan`／`Inspection Task`／`Evidence`／`Report` 各自的完整狀態機，刪除／更正／產生失敗如何表示？（部分裁定）
 
-**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；**不開放**人員手動修改計畫狀態（負責人已明確撤回此選項）。**加註**：依 2026-10-03 對答（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)），此限制指「不得手動將計畫改為已完成」；「封存」與取消封存為手動，草稿、就緒等其他轉換未定，見下與 [KD-56](03-decisions-and-stack.md#kd-56)。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
+**裁定**：`Inspection Task` 標記完成後，若資料有錯字、文字或圖片需要修正，現場人員與內業人員皆得修改；這是已完成查核後的資料修正，**不要求**重新查核，也**不**因修正而改回待確認或要求再按一次完成，任務維持「已完成」。`Inspection Plan` 底下所有任務都完成時，系統**必須**自動將計畫設為「已完成」；人員**不得**手動將計畫改為已完成（負責人已明確撤回此選項）。「封存」與取消封存由內業手動操作；其他狀態轉換待規格決定（見下與 [KD-56](03-decisions-and-stack.md#kd-56)）；此措辭由負責人確認（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5968037640)，2026-10-03）。記錄於 [KD-42](03-decisions-and-stack.md#kd-42)；討論見 [#78](https://github.com/speko-tw/inspect-flow/issues/78)。
 
 **範本部分已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02）：範本庫的範本修改時直接覆蓋，只保留最新版，不做版本化，因此不再有 `Template Version` 的狀態機；「快照」由套用時複製到專案的那一份負責；專案記錄來源範本名稱與套用時間供追查，範本被覆蓋後不保證能回看當時內容。記錄於 [KD-03](03-decisions-and-stack.md#kd-03)（改寫）。
 
