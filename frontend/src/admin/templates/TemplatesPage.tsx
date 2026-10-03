@@ -109,6 +109,13 @@ function readErrorMessage(error: unknown): string {
   return apiMessage(error)
 }
 
+function isForbidden(error: unknown): boolean {
+  return (
+    error instanceof ManagementApiError &&
+    (error.status === 403 || error.code === 'permission.denied')
+  )
+}
+
 export default function TemplatesPage() {
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
@@ -121,6 +128,12 @@ export default function TemplatesPage() {
   const [creatingSystem, setCreatingSystem] = useState(false)
   const [editingItem, setEditingItem] = useState<TemplateItem | null>(null)
   const [preview, setPreview] = useState<TemplateItem | null>(null)
+  const [previewGroups, setPreviewGroups] = useState<TemplateItem[] | null>(
+    null,
+  )
+  const [confirmDeleteId, setConfirmDeleteId] = useState('')
+  const [confirmDeleteCategory, setConfirmDeleteCategory] = useState(false)
+  const [confirmDeleteSystem, setConfirmDeleteSystem] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -136,7 +149,10 @@ export default function TemplatesPage() {
         }
       })
       .catch((caught: unknown) => {
-        if (active) setError(readErrorMessage(caught))
+        if (active) {
+          if (isForbidden(caught)) setReadOnly(true)
+          setError(readErrorMessage(caught))
+        }
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -157,7 +173,10 @@ export default function TemplatesPage() {
         }
       })
       .catch((caught: unknown) => {
-        if (active) setError(readErrorMessage(caught))
+        if (active) {
+          if (isForbidden(caught)) setReadOnly(true)
+          setError(readErrorMessage(caught))
+        }
       })
     return () => {
       active = false
@@ -172,7 +191,10 @@ export default function TemplatesPage() {
         if (active) setItems(result.items)
       })
       .catch((caught: unknown) => {
-        if (active) setError(readErrorMessage(caught))
+        if (active) {
+          if (isForbidden(caught)) setReadOnly(true)
+          setError(readErrorMessage(caught))
+        }
       })
     return () => {
       active = false
@@ -192,7 +214,6 @@ export default function TemplatesPage() {
       setReadOnly(true)
       setEditingCategory('')
       setEditingSystem('')
-      setEditingItem(null)
     }
   }
 
@@ -281,6 +302,7 @@ export default function TemplatesPage() {
 
   async function removeCategory() {
     if (!categoryId) return
+    setConfirmDeleteCategory(false)
     try {
       await deleteTemplateCategory(categoryId)
       setNotice('工程類別已刪除。')
@@ -293,6 +315,7 @@ export default function TemplatesPage() {
 
   async function removeSystem() {
     if (!systemId) return
+    setConfirmDeleteSystem(false)
     try {
       await deleteTemplateSystem(systemId)
       setNotice('系統已刪除。')
@@ -327,9 +350,10 @@ export default function TemplatesPage() {
     try {
       const result = await putSystemTemplates(
         systemId,
-        items.filter((row) => row.id !== item.id),
+        items.filter((row) => row.id !== item.id).map(forWire),
       )
       setItems(result.items)
+      setConfirmDeleteId('')
       setNotice('查核項目範本已刪除。')
       setError('')
     } catch (caught) {
@@ -470,6 +494,21 @@ export default function TemplatesPage() {
                 }
                 required
                 value={numeric.value}
+              />
+            </label>
+            <label>
+              容許誤差
+              <input
+                inputMode="decimal"
+                onChange={(event) =>
+                  updatePoint(index, {
+                    numeric_standard: {
+                      ...numeric,
+                      tolerance: event.target.value || null,
+                    },
+                  })
+                }
+                value={numeric.tolerance ?? ''}
               />
             </label>
             <label>
@@ -646,6 +685,12 @@ export default function TemplatesPage() {
                 setCategoryId(event.target.value)
                 setCreatingCategory(false)
                 setCreatingSystem(false)
+                setEditingCategory('')
+                setEditingSystem('')
+                setEditingItem(null)
+                setConfirmDeleteCategory(false)
+                setConfirmDeleteSystem(false)
+                setConfirmDeleteId('')
                 setSystemId('')
                 setItems([])
               }}
@@ -690,13 +735,32 @@ export default function TemplatesPage() {
                 </button>
               </form>
               {selectedCategory && (
-                <button
-                  className="btn-danger"
-                  onClick={() => void removeCategory()}
-                  type="button"
-                >
-                  刪除工程類別
-                </button>
+                <>
+                  <button
+                    className="btn-danger"
+                    onClick={() => setConfirmDeleteCategory(true)}
+                    type="button"
+                  >
+                    刪除工程類別
+                  </button>
+                  {confirmDeleteCategory && (
+                    <div role="group" aria-label="確認刪除工程類別">
+                      <p>確定刪除工程類別「{selectedCategory.name}」？</p>
+                      <button
+                        onClick={() => void removeCategory()}
+                        type="button"
+                      >
+                        確認刪除工程類別
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteCategory(false)}
+                        type="button"
+                      >
+                        取消刪除工程類別
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -709,6 +773,11 @@ export default function TemplatesPage() {
               onChange={(event) => {
                 setSystemId(event.target.value)
                 setCreatingSystem(false)
+                setEditingSystem('')
+                setEditingItem(null)
+                setConfirmDeleteSystem(false)
+                setConfirmDeleteId('')
+                setItems([])
               }}
               value={systemId}
             >
@@ -751,13 +820,32 @@ export default function TemplatesPage() {
                 </button>
               </form>
               {selectedSystem && (
-                <button
-                  className="btn-danger"
-                  onClick={() => void removeSystem()}
-                  type="button"
-                >
-                  刪除系統
-                </button>
+                <>
+                  <button
+                    className="btn-danger"
+                    onClick={() => setConfirmDeleteSystem(true)}
+                    type="button"
+                  >
+                    刪除系統
+                  </button>
+                  {confirmDeleteSystem && (
+                    <div role="group" aria-label="確認刪除系統">
+                      <p>確定刪除系統「{selectedSystem.name}」？</p>
+                      <button
+                        onClick={() => void removeSystem()}
+                        type="button"
+                      >
+                        確認刪除系統
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteSystem(false)}
+                        type="button"
+                      >
+                        取消刪除系統
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -778,20 +866,52 @@ export default function TemplatesPage() {
             {items.map((item) => (
               <li key={item.id}>
                 {item.sequence}. {item.title}{' '}
-                <button onClick={() => setPreview(item)} type="button">
+                <button
+                  aria-label={`預覽：${item.title}`}
+                  onClick={() => {
+                    setPreview(item)
+                    setPreviewGroups(null)
+                  }}
+                  type="button"
+                >
                   預覽單項
                 </button>{' '}
                 {editable && (
                   <>
-                    <button onClick={() => setEditingItem(item)} type="button">
+                    <button
+                      aria-label={`編輯：${item.title}`}
+                      onClick={() => setEditingItem(item)}
+                      type="button"
+                    >
                       編輯
                     </button>{' '}
                     <button
-                      onClick={() => void removeItem(item)}
+                      aria-label={`刪除：${item.title}`}
+                      onClick={() => setConfirmDeleteId(item.id ?? '')}
                       type="button"
                     >
                       刪除
                     </button>
+                    {confirmDeleteId === item.id && (
+                      <span
+                        role="group"
+                        aria-label={`確認刪除：${item.title}`}
+                      >
+                        <span>確定刪除「{item.title}」？</span>
+                        <button
+                          onClick={() => void removeItem(item)}
+                          type="button"
+                        >
+                          確認刪除
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId('')}
+                          type="button"
+                        >
+                          取消刪除
+                        </button>
+                      </span>
+                    )}
                   </>
                 )}
               </li>
@@ -800,15 +920,16 @@ export default function TemplatesPage() {
           {items.length > 0 && (
             <button
               onClick={() =>
-                setPreview({
-                  system_id: systemId,
-                  sequence: 1,
-                  title: selectedSystem?.name ?? '系統範本',
-                  instruction: '',
-                  inspection_points: items.flatMap(
-                    (item) => item.inspection_points,
-                  ),
-                })
+                (() => {
+                  setPreview({
+                    system_id: systemId,
+                    sequence: 1,
+                    title: selectedSystem?.name ?? '系統範本',
+                    instruction: '',
+                    inspection_points: [],
+                  })
+                  setPreviewGroups(items)
+                })()
               }
               type="button"
             >
@@ -817,106 +938,144 @@ export default function TemplatesPage() {
           )}
         </section>
       </div>
-      {editingItem && editable && (
-        <form aria-label="查核項目編輯器" onSubmit={saveItem}>
-          <h2>{editingItem.id ? '編輯查核項目' : '新增查核項目'}</h2>
-          <label>
-            項目名稱
-            <input
-              onChange={(event) =>
-                setEditingItem({ ...editingItem, title: event.target.value })
-              }
-              required
-              value={editingItem.title}
-            />
-          </label>
-          <label>
-            項目說明
-            <textarea
-              onChange={(event) =>
-                setEditingItem({
-                  ...editingItem,
-                  instruction: event.target.value,
-                })
-              }
-              value={editingItem.instruction}
-            />
-          </label>
-          <label>
-            項目順序
-            <input
-              max={32767}
-              min={1}
-              onChange={(event) =>
-                setEditingItem({
-                  ...editingItem,
-                  sequence: Number(event.target.value),
-                })
-              }
-              type="number"
-              value={editingItem.sequence}
-            />
-          </label>
-          {editingItem.inspection_points.map(renderPoint)}
-          <button
-            onClick={() =>
-              setEditingItem({
-                ...editingItem,
-                inspection_points: [
-                  ...editingItem.inspection_points,
-                  blankPoint(editingItem.inspection_points.length + 1),
-                ],
-              })
+      {editingItem && (
+        <form
+          aria-label="查核項目編輯器"
+          onSubmit={(event) => {
+            if (!editable) {
+              event.preventDefault()
+              return
             }
-            type="button"
-          >
-            新增查核項次
-          </button>
-          <button type="submit">儲存範本</button>
-          <button onClick={() => setEditingItem(null)} type="button">
-            取消
-          </button>
+            void saveItem(event)
+          }}
+        >
+          <h2>{editingItem.id ? '編輯查核項目' : '新增查核項目'}</h2>
+          {!editable && <p>以下內容是尚未儲存的草稿，僅供唯讀檢視。</p>}
+          <fieldset disabled={!editable}>
+            <label>
+              項目名稱
+              <input
+                onChange={(event) =>
+                  setEditingItem({ ...editingItem, title: event.target.value })
+                }
+                required
+                value={editingItem.title}
+              />
+            </label>
+            <label>
+              項目說明
+              <textarea
+                onChange={(event) =>
+                  setEditingItem({
+                    ...editingItem,
+                    instruction: event.target.value,
+                  })
+                }
+                value={editingItem.instruction}
+              />
+            </label>
+            <label>
+              項目順序
+              <input
+                max={32767}
+                min={1}
+                onChange={(event) =>
+                  setEditingItem({
+                    ...editingItem,
+                    sequence: Number(event.target.value),
+                  })
+                }
+                type="number"
+                value={editingItem.sequence}
+              />
+            </label>
+            {editingItem.inspection_points.map(renderPoint)}
+            {editable && (
+              <button
+                onClick={() =>
+                  setEditingItem({
+                    ...editingItem,
+                    inspection_points: [
+                      ...editingItem.inspection_points,
+                      blankPoint(editingItem.inspection_points.length + 1),
+                    ],
+                  })
+                }
+                type="button"
+              >
+                新增查核項次
+              </button>
+            )}
+            {editable && <button type="submit">儲存範本</button>}
+            {editable && (
+              <button onClick={() => setEditingItem(null)} type="button">
+                取消
+              </button>
+            )}
+          </fieldset>
         </form>
       )}
       {preview && (
         <section aria-label="範本預覽" role="dialog">
           <h2>{preview.title}</h2>
           <p>{preview.instruction || '沒有項目說明。'}</p>
-          {preview.inspection_points.map((point, index) => (
-            <article key={point.id ?? `${point.sequence}-${index}`}>
-              <h3>
-                {point.sequence}. {point.title}
-              </h3>
-              <p>{point.instruction || '沒有項次說明。'}</p>
-              {point.text_standard && (
-                <p>文字標準：{point.text_standard.text}</p>
+          {(previewGroups ?? [preview]).map((group) => (
+            <section key={group.id ?? group.title}>
+              {previewGroups && (
+                <h3>
+                  {group.sequence}. {group.title}
+                </h3>
               )}
-              {point.numeric_standard && (
-                <p>
-                  數值標準：
-                  {
-                    { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }[
-                      point.numeric_standard.condition
-                    ]
-                  }{' '}
-                  {point.numeric_standard.value} {point.numeric_standard.unit}
-                </p>
-              )}
-              <p>
-                實測欄位：
-                {point.measurement_fields
-                  .map(
-                    (field) =>
-                      `${field.name}${field.unit ? `（${field.unit}）` : ''}`,
-                  )
-                  .join('、') || '無'}
-              </p>
-              <p>
-                至少照片數：{point.evidence_requirements[0]?.min_count ?? 1}
-              </p>
-            </article>
+              {group.inspection_points.map((point, index) => (
+                <article key={point.id ?? `${point.sequence}-${index}`}>
+                  <h3>
+                    {previewGroups
+                      ? `項次 ${point.sequence}. `
+                      : `${point.sequence}. `}
+                    {point.title}
+                  </h3>
+                  <p>{point.instruction || '沒有項次說明。'}</p>
+                  {point.text_standard && (
+                    <p>文字標準：{point.text_standard.text}</p>
+                  )}
+                  {point.numeric_standard && (
+                    <p>
+                      數值標準：
+                      {
+                        { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }[
+                          point.numeric_standard.condition
+                        ]
+                      }{' '}
+                      {point.numeric_standard.value}{' '}
+                      {point.numeric_standard.unit}
+                      {point.numeric_standard.tolerance !== null &&
+                        `；容許誤差：${point.numeric_standard.tolerance}`}
+                    </p>
+                  )}
+                  <p>
+                    實測欄位：
+                    {point.measurement_fields
+                      .map(
+                        (field) =>
+                          `${field.name}${field.unit ? `（${field.unit}）` : ''}`,
+                      )
+                      .join('、') || '無'}
+                  </p>
+                  <p>
+                    至少照片數：
+                    {point.evidence_requirements[0]?.min_count ?? 1}
+                  </p>
+                </article>
+              ))}
+            </section>
           ))}
-          <button onClick={() => setPreview(null)} type="button">
+          <button
+            onClick={() => {
+              setPreview(null)
+              setPreviewGroups(null)
+            }}
+            type="button"
+          >
             關閉預覽
           </button>
         </section>

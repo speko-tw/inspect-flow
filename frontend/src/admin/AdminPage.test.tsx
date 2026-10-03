@@ -644,6 +644,10 @@ describe('admin user and company pages', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '你沒有權限瀏覽範本庫。',
     )
+    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
+      'href',
+      '/',
+    )
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
   })
 

@@ -44,6 +44,7 @@ export default function AdminPage() {
     return (
       <main>
         <TemplatesPage />
+        <NavLink to="/">返回工作台</NavLink>
       </main>
     )
   }
