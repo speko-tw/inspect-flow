@@ -631,6 +631,26 @@ describe('admin user and company pages', () => {
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
   })
 
+  it('lets non-admin users reach template browsing and displays API 403', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderAdmin('/admin/templates', false)
+
+    expect(
+      await screen.findByRole('heading', { name: '範本管理' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '你沒有權限瀏覽範本庫。',
+    )
+    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
+      'href',
+      '/',
+    )
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+  })
+
   it('supports creating, renaming, and deactivating a company', async () => {
     const rows = [{ ...company }]
     let nextId = 2
