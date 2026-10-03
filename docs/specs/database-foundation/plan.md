@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 spec 標頭「凍結範圍」內的第一段（DBF-R01～DBF-R14、DBF-AC01～DBF-AC11）；T5 是依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）對 T4 已完成範圍的修訂，不新增需求或驗收條件編號。第二段（`Inspection Template`、`Template Version`）在 G-01 裁定、擴大凍結範圍後，再於同一份計畫補任務。
+本計畫涵蓋 spec 標頭「凍結範圍」內的第一段（DBF-R01～DBF-R14、DBF-AC01～DBF-AC11）；T5 是依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）對 T4 已完成範圍的修訂，不新增需求或驗收條件編號。第二段（`Inspection Template`）依 DBF-R20～R21 維持草稿，template-system 的 TPL-Q 設計細節確認並擴大凍結範圍後，再於同一份計畫補任務；`Template Version` 依 KD-03 不建立。
 
 ## 任務
 
