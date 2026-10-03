@@ -20,7 +20,7 @@
   - SQLite 作為 MVP 資料庫，連線初始化的 PRAGMA 設定。
   - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（範圍見 DBF-R10，依 [DBF-Q1](#dbf-q1) 裁定）。
   - `User`、`Project` 的共通結構：UUID 主鍵、與 UUID 分開的業務編號、建立與修改紀錄欄位。
-- Phase 3 範本資料表（草稿，G-01 裁定後擴大凍結範圍）：`Inspection Template`、`Template Version`，見[範本資料表草稿](#template-tables)。
+- Phase 3 範本資料表（草稿，待 template-system 設計細節確認後再評估凍結範圍）：`Inspection Template`，見[範本資料表草稿](#template-tables)。查核範本直接覆蓋、不建立 `Template Version`，依 [KD-03](../../intents/03-decisions-and-stack.md#kd-03)；本段不因 G-01 的 interval 部分裁定而凍結。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
@@ -67,14 +67,14 @@
 | DBF-R14 | `User`、`Project` **必須**保留建立與最後修改的時間與操作者；欄位**應**命名為 `created_at`、`updated_at`、`created_by`、`updated_by`。`created_at`、`updated_at` 由後端自動填寫。`created_by`、`updated_by` **不得**為空值，**必須**是指向 `User` 主鍵的外鍵，由資料庫約束保證；外鍵**必須**允許指向同一筆 `User` 自己（內建 `admin` 的 `created_by` 指向自己）。建立初始帳號的初始化指令，以及 `is_admin`、`is_system` 欄位，由 `domain-model` 定義 | 必須（保留、不得為空、外鍵）；應（欄位名） | [PR-08](../../intents/02-principles.md#pr-08)；[DBF-Q2](#dbf-q2) 裁定（負責人，[#54](https://github.com/speko-tw/inspect-flow/issues/54)，2026-09-26；決策見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)）；架構基準無對應章節 |
 
 <a id="template-tables"></a>
-### Phase 3：`Inspection Template`、`Template Version`（草稿）
+### Phase 3：`Inspection Template`（草稿）
 
-本段在 [G-01](../../intents/05-open-questions.md#g-01) 裁定、並說清楚立場 A 的 `Template` 指哪一層之前維持草稿，不拆任務（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）。驗收條件等凍結時再補。
+本段的 MVP interval 欄位已依 [G-01](../../intents/05-open-questions.md#g-01) 部分裁定為不需要；範本資料維持草稿，待 `template-system` 的 TPL-Q 設計細節確認後再評估凍結、不拆實作任務。OQ-06 已裁定；現場結果、嚴重度與註解屬 0.7.x，不是本草稿的前置條件。驗收條件等凍結時再補（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）。
 
 | 編號 | 需求（草稿） | 強度 | 依據 |
 |---|---|---|---|
-| DBF-R20 | `Inspection Template`、`Template Version` 的資料表沿用 DBF-R11、DBF-R14 的共通結構；`interval` 欄位的歸屬等 G-01 裁定，裁定前不放進任何一張表 | 必須（共通結構）；待 G-01（interval） | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-09](../../intents/02-principles.md#pr-09) |
-| DBF-R21 | `Inspection Template` **必須**版本化；`Template Version` 發行後**不應**再改寫語意 | 必須（版本化）；不應（改寫） | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[PR-04](../../intents/02-principles.md#pr-04)；[04-glossary](../../intents/04-glossary.md)「範本版本」 |
+| DBF-R20 | `Inspection Template` 資料表沿用 DBF-R11、DBF-R14 的 UUID 主鍵與建立／修改紀錄共通結構；MVP 不設 `interval` 欄位。G-01 未定的未來選用 interval 功能，不屬於本草稿的凍結範圍 | 必須（共通結構）；MVP 不設 interval | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-09](../../intents/02-principles.md#pr-09)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01) |
+| DBF-R21 | `Inspection Template` 修改時**必須**直接覆蓋，只保留最新內容；本資料模型**不得**建立 `Template Version` 或其他查核範本版本實體。套用至專案的副本及任務需求快照分工另見 [OQ-09](../../intents/05-open-questions.md#oq-09) | 必須；不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[PR-04](../../intents/02-principles.md#pr-04)、[OQ-09](../../intents/05-open-questions.md#oq-09) |
 
 ## 資料
 
@@ -84,7 +84,7 @@
 |---|---|---|
 | `User` | UUID 主鍵、`employee_no`（得為空值，同公司內唯一）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model`（含 `is_admin`、`is_system` 與初始化指令）；認證欄位歸 `authentication` |
 | `Project` | UUID 主鍵、`project_code`（得重複，見 DBF-R13）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model` |
-| `Inspection Template`、`Template Version` | 草稿，見 DBF-R20、DBF-R21 | `domain-model`、`template-system` |
+| `Inspection Template` | 草稿，見 DBF-R20、DBF-R21；查核範本不版本化，MVP 不設 interval | `domain-model`、`template-system` |
 
 **門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-01～G-07、OQ-06 的「為什麼要先決定」與選項原文。
 
@@ -92,8 +92,7 @@
 |---|---|---|---|---|
 | `User` | G-01～G-07、OQ-06 | G-03「**使用者**何時看到編輯結果」；G-04「Variant 核可紀錄、**核可者**」 | 無關，凍結共通結構 | G-03 的「使用者」是泛稱，談的是編輯與上傳的時序，不涉及任何 `User` 欄位。G-04 的「核可者」若日後要記錄，是在 Variant 或核可紀錄那一側加指向 `User` 的 UUID 外鍵；`User` 自己的主鍵、業務編號、紀錄欄位都不會因此改變。其餘議題沒有點名 `User` |
 | `Project` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/<task_id>/<evidence_id>.<ext>` | 無關，凍結共通結構 | 這條路徑只用到 `Project` 的 UUID，而 UUID 主鍵已由 [KD-07](../../intents/03-decisions-and-stack.md#kd-07) 固定；G-02 不論選哪個立場，都只影響 `Evidence`／`Evidence Variant` 與儲存鍵格式，不會改到 `Project` 的資料表。其餘議題沒有點名 `Project`（G-01 點名的是 `Inspection Plan`，不是 `Project`） |
-| `Inspection Template` | G-01～G-07、OQ-06 | G-01 立場 A「`Interval` 是 `Template` 本身的一部分」 | 有關，維持草稿 | 立場 A 的 `Template` 可能指頂層實體，也可能泛指範本層級，字面無法分辨；若指頂層，這張表就要多一個 `interval` 欄位（見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)） |
-| `Template Version` | G-01～G-07、OQ-06 | G-01 立場 A（同上，程度較低） | 有關，維持草稿 | 同上；`interval` 也可能落在版本層（見 [#46](https://github.com/speko-tw/inspect-flow/issues/46)） |
+| `Inspection Template` | G-01～G-07、OQ-06 | OQ-06 的結果語意（已裁定） | 有關，維持草稿 | OQ-06 已裁定；範本資料仍待 `template-system` 的 TPL-Q 設計細節確認後再評估凍結。現場結果、嚴重度與註解屬 0.7.x，不是本資料表草稿的前置條件。G-01 的 MVP interval 部分已裁定不需要 `interval` 欄位，未來選用功能不擋目前草稿（見 [KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01)、[OQ-06](../../intents/05-open-questions.md#oq-06)） |
 
 `User`、`Project` 判為無關的依據分兩種：G-02 的 `<project_id>` 與 G-04 的「核可者」只是其他實體用 UUID 引用它，適用規則 1 的「只用 ID 引用」例外；G-03 的「使用者」是泛稱，談的是編輯結果的可見時序，沒有指向 `User` 或它的任何欄位。#55 的裁定把這三處判讀都列為該例外的先例（見 [DBF-Q3](#dbf-q3)）。
 

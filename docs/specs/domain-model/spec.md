@@ -22,7 +22,7 @@
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
   - `Project` 的業務欄位：依 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定）與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，見 [`Project` 業務欄位](#project-business-fields)。
 - 草稿（本次不凍結，不拆任務）：
-  - `Inspection Template`、`Template Version`、`Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體：受開工門檻擋，尚未撰寫，見[其他實體](#draft-others)。
+  - `Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體：受開工門檻擋，尚未撰寫，見[其他實體](#draft-others)；`Inspection Template` 由 `template-system` 定義。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
@@ -144,7 +144,7 @@
 <a id="draft-others"></a>
 ### 其他實體（草稿）
 
-`Inspection Template`、`Template Version`、`Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 受[開工門檻](../../intents/05-open-questions.md#gate)（G-01～G-07、OQ-06）擋，本次不撰寫。門檻逐一裁定後，依[部分凍結](../README.md#partial-freeze)規則擴大凍結範圍，需求編號從 DOM-R56 起接續。
+`Template Item`、`Evidence Requirement`、`Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot`、`Evidence`、`Evidence Variant`、`Result`、`Report` 受[開工門檻](../../intents/05-open-questions.md#gate)（G-01～G-07、OQ-06）擋，本次不撰寫；`Inspection Template` 由 `template-system` 定義且不版本化（KD-03）。門檻逐一裁定後，依[部分凍結](../README.md#partial-freeze)規則擴大凍結範圍，需求編號從 DOM-R56 起接續。
 
 ## 資料
 
