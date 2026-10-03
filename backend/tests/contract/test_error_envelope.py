@@ -58,6 +58,12 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         # pipe-table-formatted row, which otherwise trips this
         # scan's table-row heuristic.
         "docs/specs/authentication/plan.md",
+        # Frozen specifications and their plans state the required
+        # template error responses in requirement/verification tables.
+        # They describe the contract, not a second code lookup table.
+        "docs/specs/database-foundation/spec.md",
+        "docs/specs/template-system/spec.md",
+        "docs/specs/template-system/plan.md",
         "docs/intents/03-decisions-and-stack.md",
         "backend/app/api/errors.py",
         "backend/tests/contract/test_error_envelope.py",
