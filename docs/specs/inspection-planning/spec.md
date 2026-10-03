@@ -3,7 +3,7 @@
 **代碼**：`IP`　**Phase**：P4　**狀態**：草稿<br>
 **前置規格**：`template-system`、`state-machines`、`domain-model`、`authentication`、`audit-log`、`api-conventions`<br>
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)<br>
-**引用意圖**：引用 main 已更新的 [KD-55](../../intents/03-decisions-and-stack.md#kd-55)／[KD-56](../../intents/03-decisions-and-stack.md#kd-56)。恢復時套用目前標準依負責人[裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，intents 後續由 PR #351 同步。<br>**被擋議題**：[OQ-09](../../intents/05-open-questions.md#oq-09) 中 Plan／Task 尚未裁定的標準套用與狀態邊界。README 部分凍結流程逐條比對後仍判定直接相關，因此本規格維持草稿，不標部分凍結。
+**意圖同步**：引用 main 已更新的 [KD-55](../../intents/03-decisions-and-stack.md#kd-55)／[KD-56](../../intents/03-decisions-and-stack.md#kd-56)。恢復時套用目前標準依負責人[裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，intents 後續由 PR #351 同步。<br>**被擋議題**：[OQ-09](../../intents/05-open-questions.md#oq-09) 不在開工門檻清單；Plan／Task 待 PR #349 與 #351 合併並完成 OQ-09 同步。之後另開規格凍結 PR，加入實體比對表並決定凍結範圍；本 PR 維持草稿。
 
 ## 目的
 
@@ -38,7 +38,7 @@
 
 ## 需求
 
-以下技術欄位、端點與表示法若沒有直接的已裁定來源，均屬**規格設計（非負責人裁定）**。業務依據為 main 的 [KD-55](../../intents/03-decisions-and-stack.md#kd-55)／[KD-56](../../intents/03-decisions-and-stack.md#kd-56) 及負責人補充情境裁定。本規格維持草稿；已取消 Task 恢復時的標準已依負責人裁定。仍待釐清的 OQ-09 Plan／Task 邊界及未部分凍結理由見「資料」與「被擋議題」。
+以下技術欄位、端點與表示法若沒有直接的已裁定來源，均屬**規格設計（非負責人裁定）**。業務依據為 main 的 [KD-55](../../intents/03-decisions-and-stack.md#kd-55)／[KD-56](../../intents/03-decisions-and-stack.md#kd-56) 及負責人補充情境裁定。本規格維持草稿；已取消 Task 恢復時的標準已依負責人裁定。OQ-09 不在開工門檻清單；Plan／Task 待 PR #349 與 #351 合併並完成 OQ-09 同步，之後另開規格凍結 PR 加入實體比對表並決定凍結範圍；本 PR 維持草稿。
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
@@ -119,7 +119,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 ## 驗收條件
 
-本表區分已裁定行為與仍待釐清的 OQ-09 邊界。Plan／Task 尚未達部分凍結條件，依 README 部分凍結程序維持草稿；PR #349 的 STM-R12 將未開始 Task 套用新標準及新舊標準並存列為未決。
+本表區分已裁定行為與仍待釐清的 OQ-09 邊界。OQ-09 不在開工門檻清單；Plan／Task 待 PR #349 與 #351 合併並完成 OQ-09 同步。之後另開規格凍結 PR，加入實體比對表並決定凍結範圍；本 PR 維持草稿。
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
@@ -136,7 +136,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 ## 決議追蹤
 
-以下記錄 IP-Q01～IP-Q11 的處理狀態，供既有錨點連結使用。IP-Q02/Q05/Q06/Q09/Q10 已依 KD-55／KD-56 裁定更新；IP-Q11 已依負責人裁定改為恢復需求。OQ-09 仍列有未開始 Task 套用新標準及新舊標準並存等未決邊界，且其標題及「為什麼要先決定」直接點名 Plan／Task 與完成判定。依 README 部分凍結第 1 點，只要議題點名實體即視為相關；因此 Plan／Task 不符合部分凍結條件，維持草稿。
+以下記錄 IP-Q01～IP-Q11 的處理狀態，供既有錨點連結使用。IP-Q02/Q05/Q06/Q09/Q10 已依 KD-55／KD-56 裁定更新；IP-Q11 已依負責人裁定改為恢復需求。OQ-09 不在開工門檻清單；Plan／Task 待 PR #349 與 #351 合併並完成 OQ-09 同步。之後另開規格凍結 PR，加入實體比對表並決定凍結範圍；本 PR 維持草稿。
 
 <a id="ip-q01"></a>
 - **IP-Q01：已併入 IP-Q09，不再是獨立待決題。** 原情境是 Plan 從建立至派出前的狀態與操作；其業務問題與「建立 Task 何時算派出」同屬 IP-Q09。保留本錨點供既有連結使用。
