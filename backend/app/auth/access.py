@@ -74,7 +74,14 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.dependencies import bind_request_scope, get_db, require_login
-from app.models import SystemRoleAssignment, SystemRoleCode, User
+from app.models import (
+    ProjectMember,
+    ProjectMemberRole,
+    RolePermission,
+    SystemRoleAssignment,
+    SystemRoleCode,
+    User,
+)
 from app.permission_codes import is_permission_code_registered
 from app.services.permissions import effective_permissions
 
@@ -89,19 +96,21 @@ class AccessLevel(Enum):
     SELF_OR_ADMIN = auto()
     SYSTEM_ROLE_REQUIRED = auto()
     ADMIN_OR_SYSTEM_ROLE = auto()
+    SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION = auto()
 
 
 @dataclass(frozen=True)
 class RouteAccessDeclaration:
     """One route's declared access level, plus whichever extra
-    detail that level carries: the required project permission or
-    system-role code and path-parameter name where applicable. Both
+    detail that level carries: the required project permission,
+    system-role code, or path-parameter name where applicable. These
     are ``None`` for levels without extra detail.
     """
 
     level: AccessLevel
     permission_code: str | None = None
     param_name: str | None = None
+    system_role_code: str | None = None
 
 
 def _mark(
@@ -272,6 +281,49 @@ def require_admin_or_system_role(
         RouteAccessDeclaration(
             level=AccessLevel.ADMIN_OR_SYSTEM_ROLE,
             permission_code=role_code.value,
+        ),
+    )
+
+
+def require_system_role_or_any_project_permission(
+    role_code: SystemRoleCode, permission_code: str
+) -> Callable[..., User]:
+    """Allow Admin, the fixed role, or permission in any project."""
+    if not is_permission_code_registered(permission_code):
+        raise ValueError(f"unregistered permission code: {permission_code}")
+
+    def _check(
+        user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db),  # noqa: B008
+    ) -> User:
+        if user.is_admin or _has_system_role(db, user, role_code):
+            return user
+        allowed = db.scalar(
+            select(ProjectMember.id)
+            .join(
+                ProjectMemberRole,
+                ProjectMemberRole.project_member_id == ProjectMember.id,
+            )
+            .join(
+                RolePermission,
+                RolePermission.role_id == ProjectMemberRole.role_id,
+            )
+            .where(
+                ProjectMember.user_id == user.id,
+                RolePermission.code == permission_code,
+            )
+            .limit(1)
+        )
+        if allowed is None:
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        return user
+
+    return _mark(
+        _check,
+        RouteAccessDeclaration(
+            level=AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION,
+            permission_code=permission_code,
+            system_role_code=role_code.value,
         ),
     )
 
