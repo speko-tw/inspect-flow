@@ -158,7 +158,7 @@ Corporate SSO                            檢查時機／停留點
 
 ## 架構占位（placeholder）與業務決策的界線
 
-專案、人員、地點、工項欄位，以及查核規則、Result、報表版面與簽核流程仍待決議。來源範例不是定案規格；完整清單見 [05-open-questions.md](05-open-questions.md)（依據：架構基準 §0、§12、§38–39）。
+專案、人員、地點、工項欄位，以及查核規則、報表版面與簽核流程仍待決議；Result 的三種結果與必填內容已裁定（見 [KD-54](03-decisions-and-stack.md#kd-54)），只有缺失（Defect）管理與不符合後的改善追蹤尚未裁定。來源範例不是定案規格；完整清單見 [05-open-questions.md](05-open-questions.md)（依據：架構基準 §0、§12、§38–39）。
 
 ## 架構總圖
 
