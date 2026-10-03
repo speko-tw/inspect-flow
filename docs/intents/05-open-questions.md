@@ -223,7 +223,7 @@
 
 **專案副本與任務快照分工已裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03）：
 - 內業修改專案查核項目並存檔時，系統**必須**跳出選單詢問「這次修改要讓現場重新查核嗎？」，並清楚警告：選「要」時，過去的查核會作廢、任務改為「尚未查核」。
-- 選「要」：同一專案內用到被修改項次的任務，不論未開始、進行中或已完成，**全部作廢**，以新標準重新查核；選「不要」：只更正內容（例如錯字），不重查。
+- 選「要」：同一專案內用到被修改項次的任務，不論未開始、進行中或已完成，**全部作廢**，以新標準重新查核；選「不要」：只更正內容（例如錯字），不重查；用到該項次的已建立任務（未開始、進行中、已完成）一併更正為修改後的內容，只更正文字，不動結果與照片，任務狀態不變，已發出的報告不受影響（補充裁定，見下）。
 - 系統**必須**記錄是誰、何時、選了什麼。
 - 作廢的照片、結果與當時標準**不刪除**，標示「標準變更作廢」存檔，內業人員**必須**找得到；報告不使用作廢資料。舊任務紀錄整份保留、只標示作廢，不改寫，符合 [PR-04](02-principles.md#pr-04)。
 - 系統資料與報告分開：已發出的報告存在報告系統，不受影響；之後產生報告一律從系統資料即時撈取。
@@ -231,7 +231,9 @@
 
 記錄於 [KD-55](03-decisions-and-stack.md#kd-55)。作廢資料不刪除與 [G-05](#g-05) 有關，已發出報告不受影響與從系統資料即時撈取和 [G-06](#g-06)／[G-07](#g-07) 有關，但這三題仍未裁定，本次裁定不代為回答。
 
-**未定**：作廢後重新查核是讓同一任務重來，還是另開新任務，屬 0.4.x 規格設計；Plan／Task／Evidence／Report 的其他狀態、其他原因的作廢、取消、失敗與更正路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）。「尚未查核」對應哪個任務狀態、選「不要」時已建立任務的快照是否同步更正內容，裁定沒有說明，待 0.4.x 規格確認。
+**補充裁定**（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，2026-10-03）：內業修改專案查核項目後選「不要」重新查核時，用到該項次的已建立任務（未開始、進行中、已完成）**一併更正**為修改後的內容；只更正文字，不動結果與照片，任務狀態不變；已發出的報告存在報告系統，不受影響。精神與 [KD-42](03-decisions-and-stack.md#kd-42) 一致；這是 [PR-04](02-principles.md#pr-04)「任務需求快照不改寫」的明確例外，僅限內業選擇「不要」重新查核的更正；系統記錄誰、何時、改了什麼。同樣記錄於 [KD-55](03-decisions-and-stack.md#kd-55)。
+
+**未定**：作廢後重新查核是讓同一任務重來，還是另開新任務，屬 0.4.x 規格設計；Plan／Task／Evidence／Report 的其他狀態、其他原因的作廢、取消、失敗與更正路徑，留待 0.4.x 以後討論；任務需求快照維持必須（建立任務時必須產生 `Task Requirement Snapshot`，見 [PR-04](02-principles.md#pr-04)）。「尚未查核」對應哪個任務狀態，裁定沒有說明，待 0.4.x 規格確認。
 
 **為什麼要先決定**：影響任務完成判定（[PR-01](02-principles.md#pr-01)）、報告產製失敗重試（見 [G-06](#g-06)）、以及證據刪除與歷史不可變原則（[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)）之間如何協調。
 
@@ -239,11 +241,11 @@
 
 **目前暫定**：Task：PENDING/IN_PROGRESS/COMPLETED，選配 CANCELLED/REOPENED；Plan： DRAFT/READY/IN_PROGRESS/COMPLETED/ARCHIVED。
 
-**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02），專案副本與任務快照分工於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670) 裁定（2026-10-03）；其餘狀態與例外路徑留待 0.4.x 以後討論。
+**誰決定、何時**：負責人；已於 [#78](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5869624405) 部分裁定（2026-09-28），範本部分於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701) 裁定（2026-10-02），專案副本與任務快照分工於 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670) 裁定（2026-10-03），選「不要」時一併更正於[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)（同日）；其餘狀態與例外路徑留待 0.4.x 以後討論。
 
 **影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04)、 [PR-05](02-principles.md#pr-05)、[KD-03](03-decisions-and-stack.md#kd-03)、[KD-42](03-decisions-and-stack.md#kd-42)、[KD-55](03-decisions-and-stack.md#kd-55)；另見 [G-05](#g-05)、[G-06](#g-06)、[G-07](#g-07)。
 
-**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）、負責人裁定（#78 留言，2026-10-02，範本部分）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03，專案副本與任務快照分工）。
+**依據**：議題背景為架構基準 §18、§20.6、§20.17；部分裁定為負責人決定（#78，2026-09-28）、負責人裁定（#78 留言，2026-10-02，範本部分）與負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)，2026-10-03，專案副本與任務快照分工；[補充裁定](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)，同日，選「不要」時一併更正）。
 
 
 <a id="oq-10"></a>
