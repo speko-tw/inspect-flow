@@ -2,8 +2,8 @@
 
 **代碼**：`IP`　**Phase**：P4　**狀態**：草稿<br>
 **前置規格**：`template-system`、`state-machines`、`domain-model`、`authentication`、`audit-log`、`api-conventions`<br>
-**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)<br>
-**意圖同步**：引用 main 已更新的 [KD-55](../../intents/03-decisions-and-stack.md#kd-55)／[KD-56](../../intents/03-decisions-and-stack.md#kd-56)。恢復時套用目前標準依負責人[裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，intents 後續由 PR #351 同步。<br>**被擋議題**：[OQ-09](../../intents/05-open-questions.md#oq-09) 不在開工門檻清單；Plan／Task 待 PR #349 與 #351 合併並完成 OQ-09 同步。之後另開規格凍結 PR，加入實體比對表並決定凍結範圍；本 PR 維持草稿。
+**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)；恢復時套用目前標準依負責人[裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，intents 後續由 PR #351 同步。<br>
+**被擋議題**：[OQ-09](../../intents/05-open-questions.md#oq-09) 不在開工門檻清單；Plan／Task 待 PR #349 與 #351 合併並完成 OQ-09 同步。之後另開規格凍結 PR，加入實體比對表並決定凍結範圍；本 PR 維持草稿。
 
 ## 目的
 
