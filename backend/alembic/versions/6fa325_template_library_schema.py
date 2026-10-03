@@ -48,7 +48,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_template_categories_name",
         "template_categories",
-        [sa.text("lower(trim(name))")],
+        [sa.func.lower(sa.func.trim(sa.column("name")))],
         unique=True,
     )
     op.create_table(
@@ -65,7 +65,10 @@ def upgrade() -> None:
     op.create_index(
         "ix_template_systems_category_name",
         "template_systems",
-        ["category_id", sa.text("lower(trim(name))")],
+        [
+            "category_id",
+            sa.func.lower(sa.func.trim(sa.column("name"))),
+        ],
         unique=True,
     )
     op.create_table(
@@ -84,7 +87,10 @@ def upgrade() -> None:
     op.create_index(
         "ix_template_items_system_title",
         "template_items",
-        ["system_id", sa.text("lower(trim(title))")],
+        [
+            "system_id",
+            sa.func.lower(sa.func.trim(sa.column("title"))),
+        ],
         unique=True,
     )
     op.create_table(
