@@ -1,13 +1,14 @@
 # 狀態機（State Machines）
 
-**代碼**：`STM`　**Phase**：P4、P6、P7、P9　**狀態**：草稿
+**代碼**：`STM`　**Phase**：P4、P6、P7、P9　**狀態**：部分凍結
 **前置規格**：[domain-model](../domain-model/spec.md)、[api-conventions](../api-conventions/spec.md)
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[PR-05](../../intents/02-principles.md#pr-05)、[PR-06](../../intents/02-principles.md#pr-06)、[PR-15](../../intents/02-principles.md#pr-15)、[PR-16](../../intents/02-principles.md#pr-16)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)
-**被擋議題**：[OQ-09](../../intents/05-open-questions.md#oq-09)、[G-01](../../intents/05-open-questions.md#g-01)、[G-05](../../intents/05-open-questions.md#g-05)、[G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)
+**被擋議題**：[G-05](../../intents/05-open-questions.md#g-05)、[G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)
+**凍結範圍**：Plan／Task 的 STM-R01～R06、STM-R09～R11、STM-R13～R18 中適用於 Plan／Task 的內容，以及 STM-AC01～AC05、STM-AC08～AC15；Evidence／Report 的需求與 AC 維持草稿。
 
 ## 目的
 
-定義 `Inspection Plan`、`Inspection Task`、`Evidence` 與 `Report` 的狀態和轉換邊界，讓後端能一致地驗證業務動作並保留可追溯紀錄（依據：架構基準 §18、§20.6–20.8、§20.17；[PR-16](../../intents/02-principles.md#pr-16)）。Plan／Task 的狀態行為已對齊已裁定規則，但 OQ-09/G-01 開工門檻尚未解除，Plan／Task、Evidence 與 Report 均維持草稿，不得視為凍結的實作基準。
+定義 `Inspection Plan`、`Inspection Task`、`Evidence` 與 `Report` 的狀態和轉換邊界，讓後端能一致地驗證業務動作並保留可追溯紀錄（依據：架構基準 §18、§20.6–20.8、§20.17；[PR-16](../../intents/02-principles.md#pr-16)）。Plan／Task 已裁定的狀態行為依部分凍結規則凍結；Evidence 與 Report 仍受各自待決議題阻擋，維持草稿。
 
 ## 範圍
 
@@ -29,7 +30,7 @@
 
 - 系統於第一個任務派出時將計畫轉為進行中；草稿任務阻擋計畫完成。計畫狀態依任務完成、取消及 KD-55 項目補查自動更新；KD-55 只令已完成任務回到進行中，未完成任務維持原狀態；任何狀態的計畫均得封存，封存後任務唯讀。
 - 同專案具現場查核權限的成員可開始、完成任務並提交查核資料；完成後若只需修正資料，任務仍維持完成。
-- 具專案查核項目管理權限代碼的使用者修改查核項目時選擇是否重查；選擇重查時只作廢該項目的舊結果與照片，同 Task 其他項目保留，Task 回到進行中補查。Report 使用作廢資料的規則依 KD-55 記錄於草稿段，快照邊界仍待 G-06／G-07。
+- 具專案查核項目管理權限代碼的使用者修改查核項目時選擇是否重查；選擇重查時只作廢該項目的舊結果與照片，同 Task 其他項目保留，只有原已完成的 Task 回到進行中補查，未完成 Task 維持原狀態。Report 使用作廢資料的規則依 KD-55 記錄於草稿段，快照邊界仍待 G-06／G-07。
 - 具報告產製／核發權限代碼的使用者產製及核發報告；產製失敗時可辨認失敗並依裁定流程重試，已核發版次不被後續異動覆蓋。
 - 使用者透過明確的業務動作要求狀態轉換，後端拒絕不合法的轉換。
 
@@ -54,8 +55,8 @@
 | STM-R14 | 已取消 Task 得由沿用取消權限代碼的內業恢復至取消前狀態；不要求恢復原因。恢復後 Plan 狀態依目前 Task 集合重新推導。 | 得；權限與原因屬規格設計 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262) |
 | STM-R15 | 未派出的草稿 Task 得直接刪除；已派出的 Task 不得刪除，只能依 STM-R13 取消。 | 得 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986) |
 | STM-R16 | 任一狀態的 Plan 得由內業封存；封存後其 Task 必須唯讀，不得查核、取消或恢復。須先取消封存才能修改標準或執行 Task 動作。 | 得封存；唯讀與限制動作：必須 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262)、[#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986) |
-| STM-R17 | Plan 派出前與空 Plan 使用 `DRAFT`，不設 `READY`；Plan 狀態由目前 Task 集合重新推導，新增草稿、刪除草稿、恢復 Task 或取消封存後重新判定。草稿存在時不得判為已完成或已取消。 | 規格設計（非負責人裁定） | OQ-09；本規格設計選擇。Plan／Task 實體凍結仍受 G-01 阻擋 |
-| STM-R18 | Task 因 KD-55 標準修改而取消時，恢復後依目前標準繼續；受修改項目的既有結果標記待重查。 | 必須 | [#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)；KD-56 補寫見 PR #351 |
+| STM-R17 | Plan 派出前與空 Plan 使用 `DRAFT`，不設 `READY`；Plan 狀態由目前 Task 集合重新推導，新增草稿、刪除草稿、恢復 Task 或取消封存後重新判定。草稿存在時不得判為已完成或已取消。 | 規格設計（非負責人裁定） | [OQ-09](../../intents/05-open-questions.md#oq-09) 已裁定邊界；本規格設計選擇 |
+| STM-R18 | Task 取消期間，若專案查核項目標準被修改，恢復該 Task 時改用目前標準；原本已有結果的被修改項目標示待重查。 | 必須 | [#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)；KD-56 補寫見 [PR #351](https://github.com/speko-tw/inspect-flow/pull/351) |
 
 ## 資料
 
@@ -64,9 +65,22 @@
 - `Evidence` 的照片內容依 [PR-05](../../intents/02-principles.md#pr-05) 保存為現場版與內業版；證據刪除與保留政策尚受 G-05 阻擋。
 - `Report` 作為持久化版本實體保存資料快照；具體快照時間點和草稿版次邊界待 G-07 裁定（[PR-06](../../intents/02-principles.md#pr-06)）。
 
-### 凍結門檻
+**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，比對開工門檻內 G-01～G-07、OQ-06 的「為什麼要先決定」及選項原文；結論只判斷是否阻擋本次 Plan／Task 狀態行為凍結）：
 
-Plan／Task 狀態行為已依已裁定來源及明確標示的規格設計整理，但不能凍結：G-01 明文點名 `Inspection Plan`／`Inspection Task` 的 interval 欄位歸屬，且未決是否納入 `Task Requirement Snapshot`；依部分凍結規則，此議題可能影響實體欄位／規則，故 Plan／Task 維持草稿，待 G-01 裁定。Evidence 的刪除與保留規則受 G-05 阻擋；Report 的完整狀態、快照與版次規則受 G-06、G-07 阻擋，均維持草稿。`inspection-planning` 負責 Plan／Task 建立、組成、派出操作與現場可見性及操作契約；本規格負責派出後的狀態效果、狀態轉換及 Plan 狀態彙總。
+| 議題 | 字面是否指到 Plan／Task | 結論 | 理由 |
+|---|---|---|---|
+| G-01 | 是，點名 `Inspection Plan`、`Inspection Task` 與 `Task Requirement Snapshot` | 不阻擋本次 MVP 凍結 | MVP 已裁定不需要 interval；未決歸屬與快照只適用未來選用的自動切分功能。本次凍結範圍不含該功能，開工門檻明定未定部分不擋 MVP 凍結。 |
+| G-02 | 選項範例路徑含 `task_id` | 不相關 | 只以 Task ID 作證據儲存路徑的一段，不影響 Task 欄位、狀態或規則，適用只用 ID 引用例外；原圖模型已裁定。 |
+| G-03 | 否 | 不阻擋本次凍結 | 未決內容是 Evidence 編輯／上傳時序、離線暫存、前後端分工與重試，不改變本次 Plan／Task 狀態行為。 |
+| G-04 | 否 | 不相關 | 議題討論 Evidence Variant 核可機制，且已裁定不另設核可流程；不影響 Plan／Task 狀態行為。 |
+| G-05 | 否 | 不阻擋本次凍結 | 未決內容是 Evidence 獨立刪除 API、保留期限及已被 Report 引用證據的處理；Evidence 範圍維持草稿。 |
+| G-06 | 否 | 不阻擋本次凍結 | 未決內容是 Report 完整狀態機；Report 範圍維持草稿。 |
+| G-07 | 否 | 不阻擋本次凍結 | 未決內容是 Report 快照時點與草稿版次邊界；Report 範圍維持草稿。 |
+| OQ-06 | 是，提到任務完成判定 | 不阻擋本次凍結 | Result 語意與完成必要資料已由 KD-54 裁定；尚未定的 Defect／改善追蹤在 0.7.x，報告呈現不屬 Plan／Task 凍結範圍。 |
+
+### 凍結範圍與阻擋議題
+
+Plan／Task 狀態行為依標頭所列需求與 AC 凍結。STM-AC07、Evidence／Report 的 STM-R07、STM-R08、STM-AC06，以及 Evidence／Report 表格、需求與議題段落均維持草稿；G-05、G-06、G-07 仍阻擋各自範圍。G-01 未決 interval 歸屬與快照規則只屬未來選用功能，不阻擋 MVP 狀態行為凍結。`inspection-planning` 負責 Plan／Task 建立、組成、派出操作與現場可見性及操作契約；本規格負責派出後的狀態效果、狀態轉換及 Plan 狀態彙總。資料模型仍由 `domain-model` 負責；該規格尚未凍結 Plan／Task 實體，因此相關模型實作須等其凍結，本次只凍結狀態行為。
 
 ## 狀態與轉換
 
@@ -98,17 +112,17 @@ Task 建立後為草稿，派出後現場才看得到，進入未開始查核階
 | `PENDING`（已派出、未開始；英文值屬規格設計） | 開始查核 → `IN_PROGRESS` | 同專案具現場查核權限的成員 | 已裁定：不限受指派者；開始時記錄實際操作者。 |
 | `IN_PROGRESS` | 完成查核 → `COMPLETED` | 同專案具現場查核權限的成員 | 已裁定：完成時伺服器覆核並記錄實際操作者。必要資料完整即可完成，即使有「不符合」；任務清單與報告標示「有缺失」，改善追蹤屬 0.7.x。 |
 | `COMPLETED` | 更正內容 → `COMPLETED` | 具備任務資料更正權限代碼的使用者（現場與內業皆得） | 已裁定：更正不重新查核、不退回待確認；留下修正紀錄（KD-42）。 |
-| 使用被修改項次的 Task | 選擇「要」重新查核 → 僅該項目的舊結果與照片標記作廢；完成 Task 回到 `IN_PROGRESS`，未完成 Task 維持原狀態 | 具專案查核項目管理權限代碼的使用者 | 已裁定：只作廢被改項目，其他項目資料保留；作廢資料標示「標準變更作廢」並供內業查找。無結果 Task 套用新標準；已取消 Task 恢復時用目前標準且受影響項目待重查。 |
+| 使用被修改項次的 Task | 選擇「要」重新查核 → 僅該項目的舊結果與照片標記作廢；完成 Task 回到 `IN_PROGRESS`，未完成 Task 維持原狀態 | 具專案查核項目管理權限代碼的使用者 | 已裁定：只作廢被改項目，其他項目資料保留；作廢資料標示「標準變更作廢」並供內業查找。Task 取消期間標準被修改時，恢復用目前標準且受影響項目待重查（[#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)；KD-56 補寫見 [PR #351](https://github.com/speko-tw/inspect-flow/pull/351)）。無結果 Task 套用新標準屬規格設計。 |
 | 任一使用被修改項次的任務 | 選擇「不要」重新查核 → 狀態不變 | 具備專案查核項目管理權限代碼的使用者 | 已裁定：只更正文字，不動結果、照片；記錄更正（KD-55）。 |
 | `PENDING`／`IN_PROGRESS` | 取消並填寫原因 → `CANCELLED` | 內業（具體權限代碼依權限規格） | 已裁定未完成 Task 得取消；保留照片與結果，不計入 Plan 完成判定。 |
 | `CANCELLED` | 恢復 → 取消前狀態 | 內業（沿用取消權限代碼） | 已裁定得恢復；不要求原因。Plan 狀態依目前 Task 集合重新推導（規格設計）。 |
 | 草稿 | 刪除 → 不再存在 | 內業 | 已裁定未派出的草稿得直接刪除；KD-55 作廢不適用於尚無結果與照片的草稿。 |
 
-**規格設計（非負責人裁定）**：KD-55 的作廢標記記在被修改項目的結果與照片紀錄上，不把整個 Task 標成作廢，也不連帶作廢同一 Task 的其他項目。無結果 Task 套用新標準；已取消 Task 恢復後使用目前標準、受影響項目待重查；取消沿用現有權限代碼、不要求原因；Plan 依目前 Task 集合重新推導。項目記錄如何與新標準並存及資料欄位由 `domain-model`／`inspection-planning` 依各自責任定義。這些是技術選擇，不增加業務規則。
+**規格設計（非負責人裁定）**：KD-55 的作廢標記如何在資料上表示，不把整個 Task 標成作廢，也不連帶作廢同一 Task 的其他項目；無結果 Task 套用新標準；取消沿用現有權限代碼、不要求原因；Plan 依目前 Task 集合重新推導。項目記錄如何與新標準並存及資料欄位由 `domain-model`／`inspection-planning` 依各自責任定義。已取消 Task 恢復後使用目前標準、受影響項目待重查是負責人裁定，見 STM-R18。
 
 ### Evidence
 
-MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原圖或編輯中間圖（[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[PR-05](../../intents/02-principles.md#pr-05)）。來源尚未裁定 Evidence 的狀態集合、刪除及保留期限（[OQ-09](../../intents/05-open-questions.md#oq-09)、[G-05](../../intents/05-open-questions.md#g-05)）。
+MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原圖或編輯中間圖（[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[PR-05](../../intents/02-principles.md#pr-05)）。來源尚未裁定 Evidence 的狀態集合、刪除及保留期限（[G-05](../../intents/05-open-questions.md#g-05)）。
 
 | 階段／狀態 | 動作與後續階段 | 觸發者 | 裁定／提案及說明 |
 |---|---|---|---|
@@ -174,7 +188,7 @@ MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原
 | STM-AC04 | 專案查核項目被修改，且 Task 使用該項次 | 具專案查核項目管理權限代碼的使用者選擇重新查核 | 系統警告過去該項結果與照片將作廢；只標記該項資料為作廢並保留供查找，同 Task 其他項目資料不變；只有已完成 Task 回到進行中，未完成 Task 維持狀態；有待重查項目的 Task 不得完成；已完成 Plan 退回進行中並於補查完成後自動完成 | STM-R04、STM-R10 |
 | STM-AC05 | 專案查核項目被修改，且已建立任務使用該項次 | 具專案查核項目管理權限代碼的使用者選擇不要重新查核 | 僅更正文字，結果、照片與狀態不變；更正可追溯 | STM-R05、STM-R06 |
 | STM-AC06 | Report 已產製完成、正在產製或產製失敗 | 有權限者核發、產製成功／失敗，或以新版更正錯誤已核發內容 | 產製完成後可直接核發、不送審；錯誤已核發內容以新版取代，舊版保留並標示已取代；產製中／失敗狀態細節依 G-06、快照及版次邊界依 G-07 裁定 | STM-R07、STM-R08 |
-| STM-AC07 | Plan 或 Task 的轉換尚未有來源裁定 | 規格審查或實作規劃時遇到該轉換 | 先列入對應待決題；不得把草案提案當成核准的業務規則。Evidence 與 Report 的同項審查仍屬草稿 | STM-R09 |
+| STM-AC07 | Evidence／Report 狀態或轉換尚未有來源裁定 | 規格審查或實作規劃時遇到該轉換 | 先列入對應待決題；不得把 Evidence／Report 草案提案當成核准的業務規則 | STM-R09 |
 | STM-AC08 | Task 提交完成請求；Result 欄位驗證與寫入及改善追蹤屬 0.7.x | 後端覆核完成條件 | 伺服器覆核必要資料完整且沒有待重查項目；含「不符合」仍可完成，任務清單標示「有缺失」旗標（非狀態）。本規格不定義 Result 欄位驗證與寫入；項次設有數值標準時，對應實測欄位的單位須與數值標準相同，由系統自動帶入、不得另設（KD-54）；不得依標準值自動判定結果（KD-37） | STM-R10 |
 | STM-AC09 | 任務已指派或未指派；操作者為同專案且具現場查核權限的成員 | 成員開始或完成查核 | 成員均可開始／完成；系統記錄實際操作者，稽核及後續報告歸屬使用實際查核人 | STM-R11 |
 | STM-AC10 | Plan／Task 有已裁定取消、恢復及封存動作 | 內業取消／恢復 Task，或封存 Plan | 未完成 Task 可取消、已完成 Task 不可取消；取消須填原因並保留資料，恢復回到取消前狀態；任何狀態 Plan 得封存，封存後 Task 不得查核、取消或恢復，須先取消封存才能操作 | STM-R13、STM-R14、STM-R16 |
@@ -182,9 +196,9 @@ MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原
 | STM-AC12 | Task 為 `CANCELLED`，其 Plan 未封存 | 內業恢復 Task | Task 回到取消前狀態；沿用取消權限代碼、不要求恢復原因；Plan 狀態依目前 Task 集合重新推導 | STM-R14 |
 | STM-AC13 | Plan 處於任何狀態 | 內業封存 Plan，或在封存後請求 Task 動作 | Plan 進入 `ARCHIVED`；Task 查核、取消及恢復請求遭拒；取消封存後狀態依目前 Task 集合重新推導 | STM-R16、STM-R17 |
 | STM-AC14 | Task 為未派出的草稿 | 內業刪除；或嘗試刪除已派出 Task | 草稿刪除成功且 Plan 狀態重新推導；已派出 Task 刪除遭拒，須使用取消動作 | STM-R15、STM-R17 |
-| STM-AC15 | KD-55 標準修改發生於已取消 Task | 恢復 Task | 恢復後使用目前標準，受修改項目的既有結果標示待重查；Task 在完成待重查前不得完成 | STM-R18、STM-R10 |
+| STM-AC15 | Task 取消期間專案查核項目標準被修改，且 Task 已取消 | 恢復 Task | 恢復後使用目前標準，原本已有結果的受修改項目標示待重查；Task 在完成待重查前不得完成 | STM-R18、STM-R10 |
 
-STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作範圍；只保留完成時伺服器覆核的介面責任。Plan／Task 尚未凍結，待 G-01 裁定後依部分凍結規則重新檢查；Evidence／Report 仍受各自議題阻擋。
+STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作範圍；只保留完成時伺服器覆核的介面責任。Plan／Task 凍結範圍如標頭所列；STM-AC07 及 Evidence／Report 仍維持草稿並受各自議題阻擋。
 
 ## 議題紀錄
 
@@ -204,7 +218,8 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 
 - **裁定**：不作廢整個 Task，不另建替代 Task；只標記被修改項目的舊結果與照片為「標準變更作廢」，保留供查找。同 Task 其他項目及其資料維持有效。只有原已完成 Task 回到 `IN_PROGRESS`；未完成 Task 維持狀態。有待重查項目的 Task 不得完成。依據 [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)。
 - **規格設計（非負責人裁定）**：項目層級作廢如何在資料上表示，由 `domain-model`／`inspection-planning` 依各自責任定義。
-- **規格設計（非負責人裁定）**：無結果 Task 套用新標準；已取消 Task 恢復時使用目前標準，受影響項目待重查。新舊標準的資料表示由 `domain-model`／`inspection-planning` 定義。
+- **裁定**：Task 取消期間，若專案查核項目標準被修改，恢復該 Task 時使用目前標準；原本已有結果的被修改項目標示待重查。依據 [#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)；KD-56 補寫見 [PR #351](https://github.com/speko-tw/inspect-flow/pull/351)。
+- **規格設計（非負責人裁定）**：無結果 Task 套用新標準；新舊標準的資料表示由 `domain-model`／`inspection-planning` 定義。
 - G-05 的獨立 Evidence 刪除問題不受本題決定。
 
 <a id="sm-q04"></a>
@@ -216,7 +231,7 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 <a id="sm-q05"></a>
 ### SM-Q05：已完成任務是否開放重開？（已裁定）
 
-- **裁定**：已完成 Task 不重開。資料更正依 KD-42 維持完成；需要重新查核時依 KD-55 只作廢被修改項目的舊結果與照片，保留同 Task 其他項目，Task 回到進行中補查。
+- **裁定**：已完成 Task 不重開。資料更正依 KD-42 維持完成；需要重新查核時依 KD-55 只作廢被修改項目的舊結果與照片，保留同 Task 其他項目，只有原已完成 Task 回到進行中補查，未完成 Task 維持原狀態。
 - **依據**：負責人裁定 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)。原 SM-Q05 選項題保留編號與錨點（RG-M08）。
 
 <a id="sm-q06"></a>
@@ -291,11 +306,11 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 
 ## 待決議題來源對照
 
-- **OQ-09 部分裁定**：KD-42 已確定完成後更正仍維持完成、Plan 自動完成；KD-56 裁定派出、取消、恢復、封存、草稿完成條件及 Plan／Task 狀態連動。KD-03 已確定 `Inspection Template` 不版本化；KD-55 已確定項目層級作廢與文字更正例外。SM-Q12 已裁定：同專案具現場查核權限的成員都可開始／完成；指派僅供參考，記錄實際查核人。Plan／Task 資料模型仍由 domain-model 規格依其開工門檻處理；Evidence／Report 狀態分別受 G-05、G-06、G-07 阻擋。
+- **OQ-09 部分裁定**：KD-42 已確定完成後更正仍維持完成、Plan 自動完成；KD-56 裁定派出、取消、恢復、封存、草稿完成條件及 Plan／Task 狀態連動。KD-03 已確定 `Inspection Template` 不版本化；KD-55 已確定項目層級作廢與文字更正例外。SM-Q12 已裁定：同專案具現場查核權限的成員都可開始／完成；指派僅供參考，記錄實際查核人。Plan／Task 欄位與關聯由 domain-model 規格負責；該規格尚未凍結相關實體，所以資料模型實作仍依賴其凍結，不影響本規格狀態行為凍結。Evidence／Report 狀態分別受 G-05、G-06、G-07 阻擋。
 - **G-05**：獨立 Evidence 刪除 API、軟／硬刪除、被報告引用的處理及保留期限未定，排入 0.6.x。
 - **G-06**：Report 其他產製狀態清單在 §20.6 和 §20.17 不一致，仍待裁定；直接核發及錯誤版次取代已依負責人裁定記錄。
 - **G-07**：Report Snapshot 時點、Preview／草稿重產是否覆寫及新版本何時取得新 ID 未定。
 
 ## 變更紀錄
 
-- 依 #100／#103 裁定及補充裁定對齊 Plan／Task 狀態規則，並標示規格設計。Plan／Task 凍結仍受 G-01 阻擋；Evidence／Report 分別受 G-05／G-06／G-07 阻擋。本 PR 不修改 intents — #348。依據：[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57) 已由主線合併。
+- 依 #100／#103 裁定及補充裁定對齊 Plan／Task 狀態規則，並依部分凍結規則凍結標頭列出的狀態行為範圍；Evidence／Report 分別受 G-05／G-06／G-07 阻擋。本 PR 不修改 intents — #348。依據：[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57) 已由主線合併。
