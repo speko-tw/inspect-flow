@@ -72,7 +72,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| DBF-R20 | 範本及最小專案副本資料表（工程類別、系統、單項查核項目範本、查核項次、文字／數值標準、實測欄位定義、`Evidence Requirement`、`ProjectInspectionItem`、`SystemRoleAssignment`）**必須**沿用 DBF-R11、DBF-R14 的 UUID 主鍵及建立／修改紀錄共通結構，並以外鍵表達父子、專案與使用者關係。`ProjectInspectionItem` 複製範本項目結構並帶 `project_id`、來源範本名稱、套用時間；全系統角色代碼固定於程式 enum／常數，不建立角色定義表或 seed。範本項目歸屬系統；MVP 不設 `interval` 欄位。 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-09](../../intents/02-principles.md#pr-09)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[G-01](../../intents/05-open-questions.md#g-01) |
+| DBF-R20 | 範本及最小專案副本資料表（工程類別、系統、單項查核項目範本、查核項次、文字／數值標準、實測欄位定義、`Evidence Requirement`、`ProjectInspectionItem`、專案端查核項次／標準／實測欄位／照片需求子表、`SystemRoleAssignment`）**必須**沿用 DBF-R11、DBF-R14 的 UUID 主鍵及建立／修改紀錄共通結構，並以外鍵表達父子、專案與使用者關係。`ProjectInspectionItem` 複製範本項目結構並帶 `project_id`、來源範本名稱、套用時間；其項次、標準、實測欄位及照片需求分別存入專案端子表，並以 `project_inspection_item_id` 外鍵連至副本，不以 JSON 欄位保存。全系統角色代碼固定於程式 enum／常數，不建立角色定義表或 seed。範本項目歸屬系統；MVP 不設 `interval` 欄位。 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-09](../../intents/02-principles.md#pr-09)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[G-01](../../intents/05-open-questions.md#g-01) |
 | DBF-R21 | 工程類別名稱在根層、系統名稱在所屬工程類別內、查核項目 `title` 在所屬系統內，去除前後空白並忽略大小寫後**必須**唯一；衝突回 409 `template.name_conflict`。每個數值標準**必須**綁定同一項次的一個數字實測欄位；有數值標準時**必須**有此欄位，一個數字欄位最多綁一個數值標準。`Evidence Requirement` 僅允許照片；範本修改**必須**直接覆蓋，資料模型**不得**建立 `Template Version` 或其他範本版本實體。 | 必須；不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)；上述唯一性、錯誤碼與欄位綁定為 `template-system` 規格設計。 |
 
 ## 資料
@@ -134,7 +134,9 @@
 
 ### Phase 3：範本與最小專案副本
 
-| DBF-AC12 | 已套用全部 migration 的資料庫 | 以資料庫 inspector 檢查範本及專案副本相關 schema | 存在 DBF-R20 列出的各表；範本與專案副本資料表都有 UUID 主鍵及建立／修改時間與操作者欄位；系統外鍵指向工程類別、範本項目指向系統、專案副本指向 `Project`，副本結構與範本項目相同並另有來源名稱與套用時間；項次與標準／實測欄位／照片需求指向其父項次；`SystemRoleAssignment` 外鍵指向 `User`，同一使用者／角色代碼組合唯一；角色代碼不以資料表或 seed 保存；不存在 `Template Version`、interval、現場結果、實測值或 Evidence `TEXT` 類型欄位 | DBF-R20、DBF-R21 |
+| 編號 | Given | When | Then | 對應需求 |
+|---|---|---|---|---|
+| DBF-AC12 | 已套用全部 migration 的資料庫 | 以資料庫 inspector 檢查範本及專案副本相關 schema | 存在 DBF-R20 列出的各表；範本與專案副本資料表都有 UUID 主鍵及建立／修改時間與操作者欄位；系統外鍵指向工程類別、範本項目指向系統、專案副本指向 `Project`，副本結構與範本項目相同並另有來源名稱與套用時間；專案端查核項次、標準、實測欄位及照片需求各自存於對應子表，且每張專案端子表都有 `project_inspection_item_id` 外鍵指向 `ProjectInspectionItem`，沒有以 JSON 欄位保存巢狀結構；範本端項次及標準／實測欄位／照片需求依其父項次或項目建立外鍵；`SystemRoleAssignment` 外鍵指向 `User`，同一使用者／角色代碼組合唯一；角色代碼不以資料表或 seed 保存；不存在 `Template Version`、interval、現場結果、實測值或 Evidence `TEXT` 類型欄位 | DBF-R20、DBF-R21 |
 | DBF-AC13 | 資料庫中已有工程類別、系統、查核項目、數值標準與數字實測欄位 | 嘗試建立正規化後同名資料、建立數值標準但不綁欄位、綁定文字欄位或為同一數字欄位綁第二個數值標準 | 根層工程類別、同工程類別系統、同系統 `Template Item.title` 在去除前後空白且忽略大小寫後唯一，衝突錯誤契約為 409 `template.name_conflict`；不同父層可重用名稱；各非法數值標準關聯被資料庫約束拒絕；每個有效數值標準恰綁一個同項次數字欄位，每個數字欄位至多供一個數值標準使用 | DBF-R21 |
 
 ## 待釐清
