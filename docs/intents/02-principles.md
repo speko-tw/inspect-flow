@@ -106,7 +106,7 @@ graph LR
 
 **狀態**：已決定
 
-**規則**：`Inspection Template` **不**版本化；範本套用到專案時，**必須**複製成專案自己的一份，之後修改範本不影響已套用的專案。建立 `Inspection Task` 時，**必須**把當下的需求固定成 `Task Requirement Snapshot`，之後專案或範本怎麼改，都不影響已建立的任務（依據：架構基準 §2.5、§12.9；範本不版本化見 [KD-03](03-decisions-and-stack.md#kd-03)）。
+**規則**：`Inspection Template` **不**版本化；範本套用到專案時，**必須**複製成專案自己的一份，之後修改範本不影響已套用的專案。建立 `Inspection Task` 時，**必須**把當下的需求固定成 `Task Requirement Snapshot`，已建立任務的 `Task Requirement Snapshot` 不改寫，之後專案或範本怎麼改，都不影響已建立任務的快照；專案查核項目被修改且內業選擇重新查核時，依 [KD-55](03-decisions-and-stack.md#kd-55) 將受影響的任務作廢並重查（舊紀錄保留）（依據：架構基準 §2.5、§12.9；範本不版本化見 [KD-03](03-decisions-and-stack.md#kd-03)；作廢重查見 [KD-55](03-decisions-and-stack.md#kd-55)）。
 
 任務需求快照維持必須，不受範本不版本化影響；專案副本與任務快照的分工已裁定，見 [KD-55](03-decisions-and-stack.md#kd-55)：內業修改專案查核項目時，詢問是否讓現場重新查核；選「要」則同專案內用到該項次的任務全部作廢，舊任務紀錄整份保留、只標示作廢，不改寫；選「不要」只更正內容。作廢後重來或另開新任務屬 0.4.x 規格設計，其餘狀態與例外路徑仍未定，見 [OQ-09](05-open-questions.md#oq-09)。
 
