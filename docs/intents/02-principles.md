@@ -115,9 +115,9 @@ graph LR
   T["範本庫的範本<br/>(不版本化，可隨時修改)"] -.->|"套用時複製"| PA["專案 A 的範本副本"]
   T -.->|"套用時複製"| PB["專案 B 的範本副本"]
   PA --> TaskA["Inspection Task A"]
-  TaskA --> SnapA["Task Requirement Snapshot A<br/>(固定不變)"]
+  TaskA --> SnapA["Task Requirement Snapshot A<br/>(不改寫；例外見 KD-55)"]
   PB --> TaskB["Inspection Task B"]
-  TaskB --> SnapB["Task Requirement Snapshot B<br/>(固定不變)"]
+  TaskB --> SnapB["Task Requirement Snapshot B<br/>(不改寫；例外見 KD-55)"]
 ```
 
 依據：架構基準 §2.5、§12.9
