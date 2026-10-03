@@ -106,18 +106,18 @@ graph LR
 
 **狀態**：已決定
 
-**規則**：`Inspection Template` **不**版本化；範本套用到專案時，**必須**複製成專案自己的一份，之後修改範本不影響已套用的專案。建立 `Inspection Task` 時，**必須**把當下的需求固定成 `Task Requirement Snapshot`，之後專案或範本怎麼改，都不影響已建立的任務（依據：架構基準 §2.5、§12.9；範本不版本化見 [KD-03](03-decisions-and-stack.md#kd-03)）。
+**規則**：`Inspection Template` **不**版本化；範本套用到專案時，**必須**複製成專案自己的一份，之後修改範本不影響已套用的專案。建立 `Inspection Task` 時，**必須**把當下的需求固定成 `Task Requirement Snapshot`，已建立任務的 `Task Requirement Snapshot` 不改寫，之後專案或範本怎麼改，都不影響已建立任務的快照；有兩項例外，都由內業修改專案查核項目時選擇：選擇重新查核時，依 [KD-55](03-decisions-and-stack.md#kd-55) 將受影響的任務作廢並重查（舊紀錄保留）；選「不要」重新查核時，用到該項次的已建立任務一併更正為修改後的文字內容，只更正文字、不動結果與照片、狀態不變，系統記錄誰、何時、改了什麼（依據：架構基準 §2.5、§12.9；範本不版本化見 [KD-03](03-decisions-and-stack.md#kd-03)；例外見 [KD-55](03-decisions-and-stack.md#kd-55)、[負責人裁定（#78 留言，2026-10-03）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966446983)）。
 
-任務需求快照維持必須，不受範本不版本化影響；尚未決定的只有專案副本與任務快照的分工細節，見 [OQ-09](05-open-questions.md#oq-09)。
+任務需求快照維持必須，不受範本不版本化影響；專案副本與任務快照的分工已裁定，見 [KD-55](03-decisions-and-stack.md#kd-55)：內業修改專案查核項目時，詢問是否讓現場重新查核；選「要」則同專案內用到該項次的任務全部作廢，舊任務紀錄整份保留、只標示作廢，不改寫；選「不要」則用到該項次的已建立任務一併更正文字內容（快照不改寫的明確例外，不動結果與照片、狀態不變）。作廢後重來或另開新任務屬 0.4.x 規格設計，其餘狀態與例外路徑仍未定，見 [OQ-09](05-open-questions.md#oq-09)。
 
 ```mermaid
 graph LR
   T["範本庫的範本<br/>(不版本化，可隨時修改)"] -.->|"套用時複製"| PA["專案 A 的範本副本"]
   T -.->|"套用時複製"| PB["專案 B 的範本副本"]
   PA --> TaskA["Inspection Task A"]
-  TaskA --> SnapA["Task Requirement Snapshot A<br/>(固定不變)"]
+  TaskA --> SnapA["Task Requirement Snapshot A<br/>(不改寫；例外見 KD-55)"]
   PB --> TaskB["Inspection Task B"]
-  TaskB --> SnapB["Task Requirement Snapshot B<br/>(固定不變)"]
+  TaskB --> SnapB["Task Requirement Snapshot B<br/>(不改寫；例外見 KD-55)"]
 ```
 
 依據：架構基準 §2.5、§12.9
@@ -135,7 +135,7 @@ graph LR
 
 **怎麼檢查**：修改範本後，已套用專案的副本與舊任務的完成度、報表內容都不變（可寫成測試）。
 
-**依據**：架構基準 §2.5、§12.9；[負責人裁定（#78 留言，2026-10-02）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)、[KD-03](03-decisions-and-stack.md#kd-03)
+**依據**：架構基準 §2.5、§12.9；[負責人裁定（#78 留言，2026-10-02）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)、[KD-03](03-decisions-and-stack.md#kd-03)；專案副本與任務快照的分工依[負責人裁定（#78 留言，2026-10-03）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)、[KD-55](03-decisions-and-stack.md#kd-55)
 
 
 <a id="pr-05"></a>

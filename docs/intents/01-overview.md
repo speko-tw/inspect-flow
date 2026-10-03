@@ -250,7 +250,7 @@ flowchart TB
 依據：架構基準 §12；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
 
 - 範本庫獨立於專案；範本修改時直接覆蓋，沒有 `Template Version`。專案套用範本時複製成自己的查核項目，並記錄來源範本名稱與套用時間，之後範本改動不影響已套用的專案。
-- `Inspection Task` 建立時把當時的 `Evidence Requirement` 複製成自己的 `Task Requirement Snapshot`（見 [PR-04](02-principles.md#pr-04)）；專案複本與任務快照的分工待 0.4.x 規格確認（見 [OQ-09](05-open-questions.md#oq-09)）。
+- `Inspection Task` 建立時把當時的 `Evidence Requirement` 複製成自己的 `Task Requirement Snapshot`（見 [PR-04](02-principles.md#pr-04)）；專案查核項目修改後，內業選擇是否讓現場重新查核，選「要」則用到該項次的任務作廢、舊紀錄整份保留（見 [KD-55](03-decisions-and-stack.md#kd-55)）；作廢後重來或另開新任務待 0.4.x 規格確認（見 [OQ-09](05-open-questions.md#oq-09)）。
 - 完成度檢查與報告都應讀 `Task` 自己的 Snapshot，不直接查目前的 `Template Item` / `Evidence Requirement`。
 - `Evidence` 隸屬於某個 `Task` 與其 `Task Requirement Snapshot`，可再往上追溯到 `Plan` 與 `Project`（見 [PR-07](02-principles.md#pr-07)）。
 
