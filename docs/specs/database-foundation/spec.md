@@ -20,7 +20,7 @@
   - SQLite 作為 MVP 資料庫，連線初始化的 PRAGMA 設定。
   - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（範圍見 DBF-R10，依 [DBF-Q1](#dbf-q1) 裁定）。
   - `User`、`Project` 的共通結構：UUID 主鍵、與 UUID 分開的業務編號、建立與修改紀錄欄位。
-- Phase 3 範本資料表（草稿，OQ-06 裁定後再評估凍結範圍）：`Inspection Template`，見[範本資料表草稿](#template-tables)。查核範本直接覆蓋、不建立 `Template Version`，依 [KD-03](../../intents/03-decisions-and-stack.md#kd-03)；本段不因 G-01 的 interval 部分裁定而凍結。
+- Phase 3 範本資料表（草稿，待 template-system 設計細節確認後再評估凍結範圍）：`Inspection Template`，見[範本資料表草稿](#template-tables)。查核範本直接覆蓋、不建立 `Template Version`，依 [KD-03](../../intents/03-decisions-and-stack.md#kd-03)；本段不因 G-01 的 interval 部分裁定而凍結。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
@@ -69,7 +69,7 @@
 <a id="template-tables"></a>
 ### Phase 3：`Inspection Template`（草稿）
 
-本段的 MVP interval 欄位已依 [G-01](../../intents/05-open-questions.md#g-01) 部分裁定為不需要；範本資料仍因 [OQ-06](../../intents/05-open-questions.md#oq-06) 未決的結果語意維持草稿、不拆實作任務。驗收條件等凍結時再補（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）。
+本段的 MVP interval 欄位已依 [G-01](../../intents/05-open-questions.md#g-01) 部分裁定為不需要；範本資料維持草稿，待 `template-system` 的 TPL-Q 設計細節確認後再評估凍結、不拆實作任務。OQ-06 已裁定；現場結果、嚴重度與註解屬 0.7.x，不是本草稿的前置條件。驗收條件等凍結時再補（依 [OQ-22](../../intents/05-open-questions.md#oq-22)）。
 
 | 編號 | 需求（草稿） | 強度 | 依據 |
 |---|---|---|---|
@@ -92,7 +92,7 @@
 |---|---|---|---|---|
 | `User` | G-01～G-07、OQ-06 | G-03「**使用者**何時看到編輯結果」；G-04「Variant 核可紀錄、**核可者**」 | 無關，凍結共通結構 | G-03 的「使用者」是泛稱，談的是編輯與上傳的時序，不涉及任何 `User` 欄位。G-04 的「核可者」若日後要記錄，是在 Variant 或核可紀錄那一側加指向 `User` 的 UUID 外鍵；`User` 自己的主鍵、業務編號、紀錄欄位都不會因此改變。其餘議題沒有點名 `User` |
 | `Project` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/<task_id>/<evidence_id>.<ext>` | 無關，凍結共通結構 | 這條路徑只用到 `Project` 的 UUID，而 UUID 主鍵已由 [KD-07](../../intents/03-decisions-and-stack.md#kd-07) 固定；G-02 不論選哪個立場，都只影響 `Evidence`／`Evidence Variant` 與儲存鍵格式，不會改到 `Project` 的資料表。其餘議題沒有點名 `Project`（G-01 點名的是 `Inspection Plan`，不是 `Project`） |
-| `Inspection Template` | G-01～G-07、OQ-06 | OQ-06 未決的 `N/A`、嚴重度與缺失語意 | 有關，維持草稿 | OQ-06 仍是 template-system 規格凍結門檻；G-01 的 MVP interval 部分已裁定，MVP 不需要 `interval` 欄位，未來選用功能不擋目前草稿（見 [KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01)） |
+| `Inspection Template` | G-01～G-07、OQ-06 | OQ-06 的結果語意（已裁定） | 有關，維持草稿 | OQ-06 已裁定；範本資料仍待 `template-system` 的 TPL-Q 設計細節確認後再評估凍結。現場結果、嚴重度與註解屬 0.7.x，不是本資料表草稿的前置條件。G-01 的 MVP interval 部分已裁定不需要 `interval` 欄位，未來選用功能不擋目前草稿（見 [KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01)、[OQ-06](../../intents/05-open-questions.md#oq-06)） |
 
 `User`、`Project` 判為無關的依據分兩種：G-02 的 `<project_id>` 與 G-04 的「核可者」只是其他實體用 UUID 引用它，適用規則 1 的「只用 ID 引用」例外；G-03 的「使用者」是泛稱，談的是編輯結果的可見時序，沒有指向 `User` 或它的任何欄位。#55 的裁定把這三處判讀都列為該例外的先例（見 [DBF-Q3](#dbf-q3)）。
 
