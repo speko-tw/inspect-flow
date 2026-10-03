@@ -8,14 +8,14 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1 | 定義共用狀態轉換服務與 Plan／Task 轉換；實作前須先裁定 SM-Q01～SM-Q06，並確認資料模型/API 契約 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | #78、#94；本規格凍結 | STM-AC01～STM-AC03、STM-AC07 | 待開 |
-| T2 | 定義 Evidence 可用性、作廢關聯及刪除／保留流程；實作前須裁定 SM-Q07 與 G-05 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/storage/`、對應測試與 Alembic migration | T1、#70、G-05 裁定；本規格凍結 | STM-AC01、STM-AC04、STM-AC07 | 待開 |
-| T3 | 定義 Report 完整狀態機、快照與產製重試；實作前須裁定 SM-Q08～SM-Q10、G-06、G-07 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/reports/`、對應測試與 Alembic migration | T1、T2、G-06／G-07 裁定；本規格凍結 | STM-AC01、STM-AC06、STM-AC07 | 待開 |
+| T1 | 定義共用狀態轉換服務與 Plan／Task 轉換；實作前須先裁定 SM-Q01～SM-Q06、SM-Q11～SM-Q12，並確認資料模型/API 契約 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | #78、#70 相關實體部分或完全凍結；本規格凍結 | STM-AC01～STM-AC03、STM-AC07 | 待開 |
+| T2 | 定義 Evidence 上傳、照片更正、產製失敗、可用性、作廢關聯及刪除／保留流程；實作前須裁定 SM-Q07、SM-Q13 與 G-05 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/storage/`、對應測試與 Alembic migration | T1、#70 相關實體部分或完全凍結、G-05 裁定；本規格凍結 | STM-AC01、STM-AC04、STM-AC07 | 待開 |
+| T3 | 定義 Report 完整轉換、快照、送審／退回／核准／核發／作廢及產製重試；實作前須裁定 SM-Q08～SM-Q10、SM-Q14、G-06、G-07 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/reports/`、對應測試與 Alembic migration | T1、T2、#94（G-06 裁定）、G-07 裁定；本規格凍結 | STM-AC01、STM-AC06、STM-AC07 | 待開 |
 | T4 | 完成各狀態業務動作的前端互動與狀態顯示 | `frontend/src/`、對應前端測試 | T1～T3、API 契約凍結 | STM-AC01～STM-AC06 | 待開 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
 - 每個任務至少對應一條 AC；每條 AC 至少被一個任務涵蓋。
-- 跨規格依賴依實際 issue「依賴」欄確認；上表 `#78`、`#94`、`#70` 為本工作單所列關聯 issue，開任務前須核實其交付範圍與先後關係。
+- 跨規格依賴依實際 issue「依賴」欄確認；上表 `#78`、`#94`、`#70` 為本工作單所列關聯 issue，開任務前須核實其交付範圍與先後關係。涉及 Plan／Task／Evidence 資料模型的 T1、T2，必須等 `domain-model`（#70）先部分或完全凍結相關實體。
 - 若裁定顯示任務檔案範圍重疊，需按共用檔案規則重新分波；不以本草案預先授權同時修改共用 model、migration 或服務檔案。
 
 ## 並行分組
