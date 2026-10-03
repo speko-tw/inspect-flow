@@ -19,7 +19,7 @@
   - SQLite 作為 MVP 資料庫，連線初始化的 PRAGMA 設定。
   - 由 `skeleton` 移交的 CI PostgreSQL 相容性測試（範圍見 DBF-R10，依 [DBF-Q1](#dbf-q1) 裁定）。
   - `User`、`Project` 的共通結構：UUID 主鍵、與 UUID 分開的業務編號、建立與修改紀錄欄位。
-- Phase 3 範本資料表（凍結）：`Inspection Template`、工程類別、系統、查核項目、查核項次、檢查標準、實測欄位定義、`Evidence Requirement`、`SystemRole` 與 `SystemRoleAssignment`，見[範本資料表](#template-tables)。查核範本直接覆蓋、不建立 `Template Version`，依 [KD-03](../../intents/03-decisions-and-stack.md#kd-03)；MVP 不設 interval，依 [G-01](../../intents/05-open-questions.md#g-01) 部分裁定。
+- Phase 3 範本與專案副本資料表（凍結）：工程類別、系統、單項 `Inspection Template`、查核項次、檢查標準、實測欄位定義、`Evidence Requirement`、最小 `ProjectInspectionItem` 與 `SystemRoleAssignment`，見[範本資料表](#template-tables)。全系統角色代碼固定並以程式 enum／常數表示，不建角色定義表。查核範本直接覆蓋、不建立 `Template Version`，依 [KD-03](../../intents/03-decisions-and-stack.md#kd-03)；MVP 不設 interval，依 [G-01](../../intents/05-open-questions.md#g-01) 部分裁定。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
@@ -68,22 +68,22 @@
 <a id="template-tables"></a>
 ### Phase 3：`Inspection Template`（凍結）
 
-本段 schema 與約束依 `template-system` 定案；套用後專案副本的欄位及作廢／重查／更正流程由 P4 `inspection-planning` 定義。MVP 不設 interval，未來選用功能不在本次凍結範圍。現場結果、嚴重度與註解屬 0.7.x，不是本段的前置條件。
+本段範本 schema 與約束、以及最小專案查核項目副本 schema 依 `template-system` 定案；P4 `inspection-planning` 得擴充副本欄位，並定義作廢／重查／更正流程。MVP 不設 interval，未來選用功能不在本次凍結範圍。現場結果、嚴重度與註解屬 0.7.x，不是本段的前置條件。
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| DBF-R20 | 範本資料表（工程類別、系統、查核項目、查核項次、文字／數值標準、實測欄位定義、`Evidence Requirement`、`SystemRole`、`SystemRoleAssignment`）**必須**沿用 DBF-R11、DBF-R14 的 UUID 主鍵及建立／修改紀錄共通結構，並以外鍵表達父子與指派關係。範本項目歸屬系統；MVP 不設 `interval` 欄位。 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-09](../../intents/02-principles.md#pr-09)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[G-01](../../intents/05-open-questions.md#g-01) |
-| DBF-R21 | 工程類別名稱在根層、系統名稱在所屬工程類別內、查核項目名稱在所屬系統內，去除前後空白並忽略大小寫後**必須**唯一。每個數值標準**必須**綁定同一項次的一個數字實測欄位；有數值標準時**必須**有此欄位，一個數字欄位最多綁一個數值標準。`Evidence Requirement` 僅允許照片；範本修改**必須**直接覆蓋，資料模型**不得**建立 `Template Version` 或其他範本版本實體。 | 必須；不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)；上述唯一性與欄位綁定為 `template-system` 規格設計。 |
+| DBF-R20 | 範本及最小專案副本資料表（工程類別、系統、單項查核項目範本、查核項次、文字／數值標準、實測欄位定義、`Evidence Requirement`、`ProjectInspectionItem`、`SystemRoleAssignment`）**必須**沿用 DBF-R11、DBF-R14 的 UUID 主鍵及建立／修改紀錄共通結構，並以外鍵表達父子、專案與使用者關係。`ProjectInspectionItem` 複製範本項目結構並帶 `project_id`、來源範本名稱、套用時間；全系統角色代碼固定於程式 enum／常數，不建立角色定義表或 seed。範本項目歸屬系統；MVP 不設 `interval` 欄位。 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-09](../../intents/02-principles.md#pr-09)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[G-01](../../intents/05-open-questions.md#g-01) |
+| DBF-R21 | 工程類別名稱在根層、系統名稱在所屬工程類別內、查核項目 `title` 在所屬系統內，去除前後空白並忽略大小寫後**必須**唯一；衝突回 409 `template.name_conflict`。每個數值標準**必須**綁定同一項次的一個數字實測欄位；有數值標準時**必須**有此欄位，一個數字欄位最多綁一個數值標準。`Evidence Requirement` 僅允許照片；範本修改**必須**直接覆蓋，資料模型**不得**建立 `Template Version` 或其他範本版本實體。 | 必須；不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)；上述唯一性、錯誤碼與欄位綁定為 `template-system` 規格設計。 |
 
 ## 資料
 
-本規格只定義 `User`、`Project` 的共通結構（主鍵、業務編號、建立與修改紀錄），業務欄位與完整定義寫在 `domain-model`。建立這兩張資料表的 migration 要等 `domain-model` 部分凍結 `User`、`Project` 後才開工（見 [plan.md](plan.md)）。
+本規格定義 `User`、`Project` 的共通結構（主鍵、業務編號、建立與修改紀錄），以及 Phase 3 範本與最小專案副本資料表的共通鍵、稽核欄位和資料庫約束；業務欄位與完整定義分別由 `domain-model`、`template-system` 負責。建立 `User`、`Project` 資料表的 migration 要等 `domain-model` 部分凍結兩者後才開工（見 [plan.md](plan.md)）。
 
 | 實體 | 本規格負責 | 其餘欄位 |
 |---|---|---|
 | `User` | UUID 主鍵、`employee_no`（得為空值，同公司內唯一）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model`（含 `is_admin`、`is_system` 與初始化指令）；認證欄位歸 `authentication` |
 | `Project` | UUID 主鍵、`project_code`（得重複，見 DBF-R13）、`created_at`、`updated_at`、`created_by`、`updated_by` | `domain-model` |
-| 範本資料表 | DBF-R20、DBF-R21；本規格凍結共通鍵、稽核欄位與資料庫約束；範本領域欄位由 `template-system` 定義，專案副本由 P4 `inspection-planning` 定義 | `template-system`；專案副本由 `inspection-planning` |
+| 範本及專案副本資料表 | DBF-R20、DBF-R21；本規格凍結共通鍵、稽核欄位與資料庫約束；範本領域欄位及最小 `ProjectInspectionItem` 副本由 `template-system` 定義，後續副本擴充與作廢／重查／更正流程由 P4 `inspection-planning` 定義 | `template-system`；後續擴充與流程由 `inspection-planning` |
 
 **門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-01～G-07、OQ-06 的「為什麼要先決定」與選項原文。
 
@@ -91,7 +91,7 @@
 |---|---|---|---|---|
 | `User` | G-01～G-07、OQ-06 | G-03「**使用者**何時看到編輯結果」；G-04「Variant 核可紀錄、**核可者**」 | 無關，凍結共通結構 | G-03 的「使用者」是泛稱，談的是編輯與上傳的時序，不涉及任何 `User` 欄位。G-04 的「核可者」若日後要記錄，是在 Variant 或核可紀錄那一側加指向 `User` 的 UUID 外鍵；`User` 自己的主鍵、業務編號、紀錄欄位都不會因此改變。其餘議題沒有點名 `User` |
 | `Project` | G-01～G-07、OQ-06 | G-02 立場 A 的範例路徑 `photos/<project_id>/<task_id>/<evidence_id>.<ext>` | 無關，凍結共通結構 | 這條路徑只用到 `Project` 的 UUID，而 UUID 主鍵已由 [KD-07](../../intents/03-decisions-and-stack.md#kd-07) 固定；G-02 不論選哪個立場，都只影響 `Evidence`／`Evidence Variant` 與儲存鍵格式，不會改到 `Project` 的資料表。其餘議題沒有點名 `Project`（G-01 點名的是 `Inspection Plan`，不是 `Project`） |
-| 範本資料表 | G-01～G-07、OQ-06、OQ-09 | OQ-06 結果語意；OQ-09 專案副本流程 | 無關於本次凍結的範本資料表 | OQ-06 已裁定且只影響 0.7.x 現場結果；G-01 的 MVP interval 已裁定不需要，未來選用不納入本次資料模型。KD-55／PR #335 將專案副本欄位及作廢、重查、更正流程交給 P4 `inspection-planning`；本次只凍結範本資料表及套用時來源名稱、時間所需資料，不定義專案副本欄位。 |
+| 範本及專案副本資料表 | G-01～G-07、OQ-06、OQ-09 | G-01 的 `Template`、`Template Item`、`Evidence Requirement`；OQ-06 結果語意；OQ-09 專案副本後續流程 | 無關於本次凍結的範本／最小副本資料表 | [開工門檻](../../intents/05-open-questions.md#gate)明定 G-01 未定部分不擋 MVP 凍結；其未定的未來 interval 選用功能不納入本次 schema。OQ-06 已裁定且只影響 0.7.x 現場結果。KD-55／PR #335 將副本後續擴充與作廢、重查、更正流程交給 P4；本次由 `template-system` 凍結並建立最小副本資料表，記錄套用所需來源名稱與時間。 |
 
 `User`、`Project` 判為無關的依據分兩種：G-02 的 `<project_id>` 與 G-04 的「核可者」只是其他實體用 UUID 引用它，適用規則 1 的「只用 ID 引用」例外；G-03 的「使用者」是泛稱，談的是編輯結果的可見時序，沒有指向 `User` 或它的任何欄位。#55 的裁定把這三處判讀都列為該例外的先例（見 [DBF-Q3](#dbf-q3)）。
 
@@ -131,8 +131,11 @@
 | DBF-AC09 | 對空資料庫執行 `alembic upgrade head` 之後 | 用 SQLAlchemy inspector 檢查 `User`、`Project` 的資料表，並各新增一筆資料 | 主鍵是單一欄位、型別對應 UUID、不是自增整數；新增的資料取得可被 `uuid.UUID(...)` 解析的主鍵 | DBF-R07、DBF-R11 |
 | DBF-AC10 | 已有一筆 `project_code = "P001"` 的 `Project`；公司 A、B；A 已有一筆 `employee_no = "E001"` 的 `User` | 再新增一筆相同 `project_code` 的 `Project`；在 A 新增一筆 `employee_no = "E001"` 的 `User`；在 B 新增一筆 `employee_no = "E001"` 的 `User`；再新增兩筆沒有公司、沒有工號的 `User` | `Project` 的新增成功，資料庫有兩筆 `project_code = "P001"` 的 `Project`，UUID 主鍵不同；A 的新增因唯一約束失敗，A 仍只有一筆 `employee_no = "E001"`；B 的新增成功；沒有公司、沒有工號的兩筆都成功；業務編號與主鍵是不同欄位 | DBF-R12、DBF-R13 |
 | DBF-AC11 | 新增一筆 `created_by`、`updated_by` 都指向自己的 `User`，再新增一筆 `created_by`、`updated_by` 指向該 `User` 的 `Project` | 檢查欄位後修改該筆資料；另對兩張表各嘗試寫入 `created_by` 為空值、`updated_by` 為空值、`created_by` 指向不存在的 UUID 的資料 | 兩張表都有 `created_at`、`updated_at`、`created_by`、`updated_by`，其中 `created_by`、`updated_by` 為不可空值、外鍵指向 `User` 主鍵；兩筆新增都成功，`created_at`、`updated_at` 自動有值，`created_by`、`updated_by` 有值且指向存在的 `User`；以可控時間讓修改發生在新增的至少一秒之後，修改後 `updated_at` 嚴格晚於修改前、等於修改當下的時間，`created_at` 不變；每一次錯誤寫入都被資料庫拒絕，資料筆數不變 | DBF-R14 |
-| DBF-AC12 | 已套用全部 migration 的資料庫 | 以資料庫 inspector 檢查範本相關 schema | 存在 DBF-R20 列出的各表；所有範本資料表都有 UUID 主鍵、建立／修改時間與操作者欄位；系統外鍵指向工程類別、查核項目指向系統、項次與標準／實測欄位／照片需求指向其父項次；`SystemRoleAssignment` 外鍵指向 `SystemRole` 與 `User` 且同一角色／使用者組合唯一；不存在 `Template Version`、interval、現場結果、實測值或 Evidence `TEXT` 類型欄位 | DBF-R20、DBF-R21 |
-| DBF-AC13 | 資料庫中已有工程類別、系統、查核項目、數值標準與數字實測欄位 | 嘗試建立正規化後同名資料、建立數值標準但不綁欄位、綁定文字欄位或為同一數字欄位綁第二個數值標準 | 根層工程類別、同工程類別系統、同系統查核項目在去除前後空白且忽略大小寫後唯一；不同父層可重用名稱；各非法數值標準關聯被資料庫約束拒絕；每個有效數值標準恰綁一個同項次數字欄位，每個數字欄位至多供一個數值標準使用 | DBF-R21 |
+
+### Phase 3：範本與最小專案副本
+
+| DBF-AC12 | 已套用全部 migration 的資料庫 | 以資料庫 inspector 檢查範本及專案副本相關 schema | 存在 DBF-R20 列出的各表；範本與專案副本資料表都有 UUID 主鍵及建立／修改時間與操作者欄位；系統外鍵指向工程類別、範本項目指向系統、專案副本指向 `Project`，副本結構與範本項目相同並另有來源名稱與套用時間；項次與標準／實測欄位／照片需求指向其父項次；`SystemRoleAssignment` 外鍵指向 `User`，同一使用者／角色代碼組合唯一；角色代碼不以資料表或 seed 保存；不存在 `Template Version`、interval、現場結果、實測值或 Evidence `TEXT` 類型欄位 | DBF-R20、DBF-R21 |
+| DBF-AC13 | 資料庫中已有工程類別、系統、查核項目、數值標準與數字實測欄位 | 嘗試建立正規化後同名資料、建立數值標準但不綁欄位、綁定文字欄位或為同一數字欄位綁第二個數值標準 | 根層工程類別、同工程類別系統、同系統 `Template Item.title` 在去除前後空白且忽略大小寫後唯一，衝突錯誤契約為 409 `template.name_conflict`；不同父層可重用名稱；各非法數值標準關聯被資料庫約束拒絕；每個有效數值標準恰綁一個同項次數字欄位，每個數字欄位至多供一個數值標準使用 | DBF-R21 |
 
 ## 待釐清
 
