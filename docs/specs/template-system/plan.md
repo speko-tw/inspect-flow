@@ -14,10 +14,10 @@
 | T4 | 專案套用範本：依專案編輯權限複製單項或完整系統結構，保存來源範本名稱與套用時間；驗證覆蓋或刪除來源不影響專案副本 | `backend/app/` 專案服務/API 與測試（依 domain-model、inspection-planning 分工調整） | T1、T2、`domain-model` #70、P4 OQ-09 決議 | TPL-AC05、TPL-AC08 | 建立任務時填 |
 | T5 | 範本管理 UI：管理兩層分類、編輯範本結構與標準、管理照片需求、預覽單項與整個系統範本 | `frontend/src/features/templates/`、`frontend/src/routes/`、`frontend/tests/` | T2、T3 | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07 | 建立任務時填 |
 | T6 | 專案套用與存為範本 UI：由具專案查核項目編輯權限者套用；範本管理員可跨專案瀏覽並存成範本；顯示套用來源名稱與時間 | `frontend/src/features/projects/`、`frontend/src/routes/`、`frontend/tests/` | T3、T4、P4 專案副本與任務快照分工決議 | TPL-AC05、TPL-AC06、TPL-AC08 | 建立任務時填 |
-| T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片覆蓋規則與不版本化；OQ-06 裁定後更新規格並擴大凍結範圍，確保各 AC 都有證據 | `backend/tests/`、`frontend/tests/`、`docs/specs/template-system/spec.md`、`docs/specs/README.md` | T1～T6；OQ-06 裁定 | TPL-AC01～TPL-AC08 | 建立任務時填 |
+| T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片覆蓋規則、不版本化及抽查資料欄位；OQ-06 裁定後更新規格並擴大凍結範圍，確保各 AC 都有證據 | `backend/tests/`、`frontend/tests/`、`docs/specs/template-system/spec.md`、`docs/specs/README.md` | T1～T6；OQ-06 裁定 | TPL-AC01～TPL-AC09 | 建立任務時填 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；任務 issue 開立前應把表內概略檔案責任換成實際檔案清單。
-- 每條 AC 至少由一個任務涵蓋；TPL-AC01、AC08 涵蓋權限，AC02～AC04 涵蓋結構與不版本化，AC05～AC06 涵蓋複製與權限，AC07 涵蓋標準及照片需求。
+- 每條 AC 至少由一個任務涵蓋；TPL-AC01、AC08 涵蓋權限，AC02～AC04 涵蓋結構與不版本化，AC05～AC06 涵蓋複製與權限，AC07 涵蓋標準及照片需求，AC09 涵蓋抽查類型與檢查者欄位。
 - 不在本計畫建立報告範本、現場證據上傳、實測值、自動判定、interval 自動切分或範本審核流程。
 - 任務編號在開立 issue 時填入；本規格／計畫 PR 不建立實作 task issue。
 
@@ -52,6 +52,7 @@
 | TPL-AC06 | 權限與整合測試：範本管理員可跨專案讀取並存成範本；專案副本在來源刪改後保持不變。 |
 | TPL-AC07 | model/UI/API 測試：文字與數值標準欄位完整、沒有量測值或自動判定；項次至少一張非總覽照片、無上限，總覽照選用且不抵最低張數。 |
 | TPL-AC08 | API 契約測試：角色與專案權限矩陣逐端點驗證；路徑、UUID、內容型別、錯誤 envelope 依 `api-conventions`。 |
+| TPL-AC09 | 資料模型測試：建立抽查紀錄後讀回檢查類型與檢查者欄位；不驗收檢查時機、停留點或自主檢查流程。 |
 
 ## 考慮過但沒採用的做法
 
