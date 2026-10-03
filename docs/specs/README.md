@@ -51,11 +51,11 @@ docs/specs/
 | [`authentication`](authentication/spec.md) | P2 | 功能 | 已凍結 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定）；首次登入碼與帳號名稱登入依 [#259](https://github.com/speko-tw/inspect-flow/issues/259) 變更，[AUT-Q7](authentication/spec.md#aut-q7) 已裁定 |
 | [`audit-log`](audit-log/spec.md) | P2 | 共用 | 已凍結 | 無；[ALG-Q1](audit-log/spec.md#alg-q1)～[ALG-Q5](audit-log/spec.md#alg-q5) 待負責人決定，不擋凍結（ALG-Q5 若選 B，另加一支 migration 新增可空值欄位）；[ALG-Q6](audit-log/spec.md#alg-q6) 已裁定 |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
-| `template-system` | P3 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01)、[OQ-06](../intents/05-open-questions.md#oq-06) |
+| `template-system` | P3 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01) |
 | `inspection-planning` | P4 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01) |
 | `field-ui` | P5 | 功能 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09) |
 | `field-evidence` | P6 | 功能 | 未開始 | [G-02](../intents/05-open-questions.md#g-02)、[G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
-| `completion-validation` | P7 | 功能 | 未開始 | [OQ-06](../intents/05-open-questions.md#oq-06) |
+| `completion-validation` | P7 | 功能 | 未開始 | — |
 | `admin-dashboard` | P8 | 功能 | 未開始 | — |
 | `report-delivery` | P9 | 功能 | 未開始 | [G-04](../intents/05-open-questions.md#g-04)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
 | `pilot-deployment` | P10 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
