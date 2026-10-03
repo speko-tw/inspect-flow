@@ -227,7 +227,8 @@ def _invalid_structure_constraint(exc: IntegrityError) -> bool:
         "uq_template_measurement_fields_point_id",
         "uq_template_measurement_fields_point_id_type_unit",
         "uq_template_numeric_standards_measurement_field_id",
-        "ck_template_measurement_fields_numeric_measurement_field_requires_unit",
+        "ck_template_measurement_fields_"
+        "numeric_measurement_field_requires_unit",
     )
     detail = str(exc.orig).lower()
     sqlite_columns = (
