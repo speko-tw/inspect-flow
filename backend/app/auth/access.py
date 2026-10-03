@@ -6,8 +6,8 @@ one access level -- 公開 (public), 需登入 (login required), 需 Admin
 (self or admin) -- and an automated test to fail for any route that
 does not. This module provides:
 
-- One FastAPI dependency (or dependency *factory*, for the two
-  levels that need a parameter) per access level. Each dependency
+- One FastAPI dependency (or dependency *factory* when it needs a
+  parameter) per access level. Each dependency
   callable carries a :class:`RouteAccessDeclaration` on a
   ``__route_access__`` attribute, so :func:`iter_route_access` can
   read a route's declared level back off its resolved dependency
@@ -69,32 +69,34 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.routing import APIRoute
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.dependencies import bind_request_scope, get_db, require_login
-from app.models import User
+from app.models import SystemRoleAssignment, SystemRoleCode, User
 from app.permission_codes import is_permission_code_registered
 from app.services.permissions import effective_permissions
 
 
 class AccessLevel(Enum):
-    """The five access levels AUT-R18 recognizes."""
+    """Access levels used by routes under AUT-R18."""
 
     PUBLIC = auto()
     LOGIN_REQUIRED = auto()
     ADMIN_REQUIRED = auto()
     PROJECT_PERMISSION = auto()
     SELF_OR_ADMIN = auto()
+    SYSTEM_ROLE_REQUIRED = auto()
+    ADMIN_OR_SYSTEM_ROLE = auto()
 
 
 @dataclass(frozen=True)
 class RouteAccessDeclaration:
     """One route's declared access level, plus whichever extra
-    detail that level carries: the required permission code and the
-    path-parameter name for 需專案權限, or the path-parameter name
-    alone for 本人或 Admin. Both are ``None`` for the other three
-    levels.
+    detail that level carries: the required project permission or
+    system-role code and path-parameter name where applicable. Both
+    are ``None`` for levels without extra detail.
     """
 
     level: AccessLevel
@@ -138,6 +140,18 @@ def _parse_uuid(raw: object) -> uuid.UUID | None:
         return uuid.UUID(raw)
     except ValueError:
         return None
+
+
+def _has_system_role(
+    db: Session, user: User, role_code: SystemRoleCode
+) -> bool:
+    assignment_id = db.scalar(
+        select(SystemRoleAssignment.id).where(
+            SystemRoleAssignment.user_id == user.id,
+            SystemRoleAssignment.role_code == role_code.value,
+        )
+    )
+    return assignment_id is not None
 
 
 # -- 公開 (AUT-R18) -----------------------------------------------
@@ -214,6 +228,52 @@ def require_admin(
 
 
 _mark(require_admin, RouteAccessDeclaration(level=AccessLevel.ADMIN_REQUIRED))
+
+
+def require_system_role(
+    role_code: SystemRoleCode,
+) -> Callable[..., User]:
+    """Build a login-gated dependency for one fixed system role."""
+
+    def _check(
+        user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db),  # noqa: B008
+    ) -> User:
+        if not _has_system_role(db, user, role_code):
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        return user
+
+    return _mark(
+        _check,
+        RouteAccessDeclaration(
+            level=AccessLevel.SYSTEM_ROLE_REQUIRED,
+            permission_code=role_code.value,
+        ),
+    )
+
+
+def require_admin_or_system_role(
+    role_code: SystemRoleCode,
+) -> Callable[..., User]:
+    """Allow Admins and users assigned the selected fixed system role."""
+
+    def _check(
+        user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db),  # noqa: B008
+    ) -> User:
+        if user.is_admin:
+            return user
+        if not _has_system_role(db, user, role_code):
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        return user
+
+    return _mark(
+        _check,
+        RouteAccessDeclaration(
+            level=AccessLevel.ADMIN_OR_SYSTEM_ROLE,
+            permission_code=role_code.value,
+        ),
+    )
 
 
 # -- 需專案權限 (AUT-R19) --------------------------------------------
