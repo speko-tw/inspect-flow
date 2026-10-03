@@ -2,6 +2,7 @@
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -20,6 +21,7 @@ from app.models import (
     RolePermission,
     SystemRoleAssignment,
 )
+from app.services import project_templates
 from tests.db.conftest import create_root_user_with_company
 
 
@@ -42,11 +44,19 @@ def _world(db_session, make_client):
         created_by=admin.id,
         updated_by=admin.id,
     )
+    other_project = Project(
+        project_code="APPLY-2",
+        name="Other apply project",
+        client_name="Client",
+        site_location="Site",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
     role = Role(name="Apply editor", created_by=admin.id, updated_by=admin.id)
     role.permission_codes.append(
         RolePermission(code="project_inspection_item.edit")
     )
-    db_session.add_all([project, role])
+    db_session.add_all([project, other_project, role])
     db_session.flush()
     member = ProjectMember(
         project_id=project.id,
@@ -64,18 +74,32 @@ def _world(db_session, make_client):
             updated_by=admin.id,
         )
     )
+    template_admin = create_root_user_with_company(
+        db_session, "APPLY-TPL-ADMIN"
+    )
+    db_session.add(
+        SystemRoleAssignment(
+            user_id=template_admin.id,
+            role_code="template_admin",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+    )
     db_session.commit()
     tokens = {
         "admin": create_session(db_session, admin)[1],
         "editor": create_session(db_session, editor)[1],
         "outsider": create_session(db_session, outsider)[1],
+        "template_admin": create_session(db_session, template_admin)[1],
     }
     db_session.commit()
     return {
         "project": project,
+        "other_project": other_project,
         "admin": _client_for(make_client, tokens["admin"]),
         "editor": _client_for(make_client, tokens["editor"]),
         "outsider": _client_for(make_client, tokens["outsider"]),
+        "template_admin": _client_for(make_client, tokens["template_admin"]),
     }
 
 
@@ -108,6 +132,7 @@ def _create_templates(manager: TestClient) -> tuple[str, list[str]]:
                         "numeric_standard": {
                             "value": "10",
                             "condition": ">=",
+                            "tolerance": "0.5",
                             "unit": "mm",
                             "measurement_field_client_id": field_client_id,
                         },
@@ -201,11 +226,15 @@ def test_apply_system_copies_nested_data_and_detaches_source(
     assert len(fields) == len(standards) == len(text_standards) == 2
     assert len(evidence) == 4
     assert {row.text for row in text_standards} == {"As approved"}
-    assert {field.unit for field in fields} == {"mm"}
-    assert all(
-        standard.measurement_field_id in {field.id for field in fields}
-        for standard in standards
-    )
+    fields_by_id = {field.id: field for field in fields}
+    for standard in standards:
+        field = fields_by_id[standard.measurement_field_id]
+        assert standard.value == "10"
+        assert standard.condition == ">="
+        assert standard.tolerance == "0.5"
+        assert field.field_type == "number"
+        assert field.unit == "mm"
+        assert standard.unit == "mm"
     assert sorted(row.min_count for row in evidence) == [1, 1, 2, 2]
 
     replaced = world["admin"].put(
@@ -285,6 +314,13 @@ def test_apply_single_uses_title_and_requires_exactly_one_source(
     applied = world["editor"].post(url, json={"template_id": template_ids[0]})
     assert applied.status_code == 201, applied.text
     assert applied.json()[0]["source_template_name"] == "First item"
+    existing_ids = set(
+        db_session.scalars(
+            select(ProjectInspectionItem.id).where(
+                ProjectInspectionItem.project_id == world["project"].id
+            )
+        )
+    )
     assert world["editor"].post(url, json={}).status_code == 422
     assert (
         world["editor"]
@@ -298,6 +334,37 @@ def test_apply_single_uses_title_and_requires_exactly_one_source(
     missing = world["editor"].post(url, json={"template_id": str(uuid4())})
     assert missing.status_code == 404
     assert missing.json() == {"error": {"code": "resource.not_found"}}
+    missing_system = world["editor"].post(
+        url, json={"system_id": str(uuid4())}
+    )
+    assert missing_system.status_code == 404
+    assert missing_system.json() == {"error": {"code": "resource.not_found"}}
+    assert (
+        set(
+            db_session.scalars(
+                select(ProjectInspectionItem.id).where(
+                    ProjectInspectionItem.project_id == world["project"].id
+                )
+            )
+        )
+        == existing_ids
+    )
+    missing_project = world["admin"].post(
+        f"/api/v1/projects/{uuid4()}/inspection-items:apply-template",
+        json={"template_id": template_ids[0]},
+    )
+    assert missing_project.status_code == 404
+    assert missing_project.json() == {"error": {"code": "resource.not_found"}}
+    assert (
+        set(
+            db_session.scalars(
+                select(ProjectInspectionItem.id).where(
+                    ProjectInspectionItem.project_id == world["project"].id
+                )
+            )
+        )
+        == existing_ids
+    )
 
 
 def test_apply_empty_system_returns_successful_empty_list(
@@ -344,3 +411,65 @@ def test_apply_requires_project_edit_permission(db_session, make_client):
     )
     assert response.status_code == 403
     assert response.json() == {"error": {"code": "permission.denied"}}
+    cross_project = world["editor"].post(
+        f"/api/v1/projects/{world['other_project'].id}"
+        "/inspection-items:apply-template",
+        json={"template_id": template_ids[0]},
+    )
+    assert cross_project.status_code == 403
+    template_admin_only = world["template_admin"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"template_id": template_ids[0]},
+    )
+    assert template_admin_only.status_code == 403
+    admin_apply = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"template_id": template_ids[0]},
+    )
+    assert admin_apply.status_code == 201, admin_apply.text
+
+
+def test_apply_system_rolls_back_all_copies_after_mid_request_failure(
+    db_session, make_client, monkeypatch
+):
+    world = _world(db_session, make_client)
+    system_id, _ = _create_templates(world["admin"])
+    original_copy = project_templates._copy_template_item
+    calls = 0
+
+    def fail_after_first_copy(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("injected copy failure")
+        return original_copy(*args, **kwargs)
+
+    monkeypatch.setattr(
+        project_templates, "_copy_template_item", fail_after_first_copy
+    )
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    with pytest.raises(RuntimeError, match="injected copy failure"):
+        world["editor"].post(url, json={"system_id": system_id})
+
+    assert calls == 2
+    assert (
+        db_session.scalar(
+            select(ProjectInspectionItem).where(
+                ProjectInspectionItem.project_id == world["project"].id
+            )
+        )
+        is None
+    )
+    for child_model in (
+        ProjectInspectionPoint,
+        ProjectMeasurementField,
+        ProjectNumericStandard,
+        ProjectTextStandard,
+        ProjectEvidenceRequirement,
+    ):
+        assert db_session.scalar(select(child_model)) is None
