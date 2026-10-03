@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import JSON, Engine, inspect, select
+from sqlalchemy import JSON, Engine, func, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -142,9 +142,22 @@ def _point(session: Session, actor: User, item: TemplateItem):
     return result
 
 
+def _assert_integrity_error(session: Session, row: object) -> None:
+    session.add(row)
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
 def test_tpl_ac02_and_dbf_ac13_names_are_unique_per_parent(
     session: Session, creator: User
 ) -> None:
+    _category(session, creator, "HVAC")
+    session.commit()
+    _assert_integrity_error(
+        session, TemplateCategory(name=" hvac ", **_audit(creator))
+    )
+
     left = _category(session, creator, " 電氣工程 ")
     right = _category(session, creator, "給排水工程")
     assert left.name == "電氣工程"
@@ -154,6 +167,27 @@ def test_tpl_ac02_and_dbf_ac13_names_are_unique_per_parent(
     with pytest.raises(IntegrityError):
         session.flush()
     session.rollback()
+
+    left = session.scalar(
+        select(TemplateCategory).where(TemplateCategory.name == "電氣工程")
+    )
+    right = session.scalar(
+        select(TemplateCategory).where(TemplateCategory.name == "給排水工程")
+    )
+    assert left is not None and right is not None
+    _system(session, creator, left, "HVAC System")
+    _system(session, creator, right, "HVAC System")
+    session.flush()
+    left_system = session.scalar(
+        select(TemplateSystem).where(TemplateSystem.category_id == left.id)
+    )
+    assert left_system is not None
+    _assert_integrity_error(
+        session,
+        TemplateSystem(
+            category_id=left.id, name=" hvac system ", **_audit(creator)
+        ),
+    )
 
     left = session.scalar(
         select(TemplateCategory).where(TemplateCategory.name == "電氣工程")
@@ -182,21 +216,22 @@ def test_tpl_ac02_and_dbf_ac13_names_are_unique_per_parent(
         select(TemplateSystem).where(TemplateSystem.category_id == left.id)
     )
     assert sys_a is not None
+    sys_b = _system(session, creator, left, "通風系統")
     _item(session, creator, sys_a, "接地檢查")
     _item(session, creator, sys_a, "絕緣檢查")
+    _item(session, creator, sys_a, "HVAC Check")
+    _item(session, creator, sys_b, "HVAC Check")
     session.commit()
-    session.add(
+    _assert_integrity_error(
+        session,
         TemplateItem(
             system_id=sys_a.id,
             sequence=2,
-            title=" 接地檢查 ",
+            title=" hvac check ",
             instruction="檢查",
             **_audit(creator),
-        )
+        ),
     )
-    with pytest.raises(IntegrityError):
-        session.flush()
-    session.rollback()
     assert not hasattr(TemplateCategory, "code")
 
 
@@ -307,7 +342,23 @@ def test_tpl_ac09_numeric_standard_binding_constraints(
         unit=None,
         **_audit(creator),
     )
-    session.add_all([numeric, text])
+    other_point = TemplateInspectionPoint(
+        template_item_id=item.id,
+        sequence=2,
+        title="檢查接口",
+        instruction="檢查接口",
+        **_audit(creator),
+    )
+    session.add(other_point)
+    session.flush()
+    other_numeric = TemplateMeasurementField(
+        inspection_point_id=other_point.id,
+        name="外側厚度",
+        field_type="number",
+        unit="mm",
+        **_audit(creator),
+    )
+    session.add_all([numeric, text, other_numeric])
     session.flush()
     valid = TemplateNumericStandard(
         inspection_point_id=point.id,
@@ -377,8 +428,36 @@ def test_tpl_ac09_numeric_standard_binding_constraints(
         session.flush()
     session.rollback()
 
+    cross_point = TemplateNumericStandard(
+        inspection_point_id=point.id,
+        value="1.2",
+        condition=">=",
+        unit="mm",
+        measurement_field_id=other_numeric.id,
+        measurement_field_unit="mm",
+        **_audit(creator),
+    )
+    session.add(cross_point)
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
 
-def test_tpl_ac08_system_role_assignment_is_audited_atomically(
+    numeric = session.get(TemplateMeasurementField, numeric.id)
+    assert numeric is not None
+    numeric.unit = "cm"
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+    numeric = session.get(TemplateMeasurementField, numeric.id)
+    assert numeric is not None
+    numeric.field_type = "text"
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_tpl_ac08_system_role_assignment_and_audit_share_transaction(
     session: Session, creator: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -391,13 +470,32 @@ def test_tpl_ac08_system_role_assignment_is_audited_atomically(
         session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
     )
     assert assignment.role_code == "template_admin"
+    created_event = session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "system_role_assignment.created"
+        )
+    )
+    assert created_event is not None
+    assert created_event.entity_id == assignment.id
+    assert created_event.created_by == creator.id
+    assert created_event.before is None
+    assert created_event.after == {
+        "user_id": str(creator.id),
+        "role_code": "template_admin",
+    }
+    session.rollback()
+    assert session.get(SystemRoleAssignment, assignment.id) is None
     assert (
         session.scalar(
-            select(AuditLog).where(
+            select(AuditLog.id).where(
                 AuditLog.event_type == "system_role_assignment.created"
             )
         )
-        is not None
+        is None
+    )
+
+    assignment = system_roles.assign_system_role(
+        session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
     )
     session.commit()
 
@@ -405,20 +503,31 @@ def test_tpl_ac08_system_role_assignment_is_audited_atomically(
         system_roles.assign_system_role(
             session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
         )
+    created_count = session.scalar(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.event_type == "system_role_assignment.created"
+        )
+    )
+    assert created_count == 1
 
     deleted = system_roles.revoke_system_role(
         session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
     )
     assert deleted.id == assignment.id
     assert session.get(SystemRoleAssignment, assignment.id) is None
-    assert (
-        session.scalar(
-            select(AuditLog).where(
-                AuditLog.event_type == "system_role_assignment.deleted"
-            )
+    deleted_event = session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "system_role_assignment.deleted"
         )
-        is not None
     )
+    assert deleted_event is not None
+    assert deleted_event.entity_id == assignment.id
+    assert deleted_event.created_by == creator.id
+    assert deleted_event.before == {
+        "user_id": str(creator.id),
+        "role_code": "template_admin",
+    }
+    assert deleted_event.after is None
     session.commit()
 
 
@@ -545,3 +654,111 @@ def test_dbf_ac12_schema_shape(
     assert ("user_id", "role_code") in unique_columns
     assert project.id is not None
     assert session.get(ProjectInspectionItem, snapshot.id) is not None
+
+
+def test_dbf_ac12_rejects_invalid_evidence_roles_and_snapshot_links(
+    session: Session,
+    creator: User,
+    project: Project,
+) -> None:
+    category = _category(session, creator, "機電")
+    system = _system(session, creator, category, "空調")
+    template_item = _item(session, creator, system, "風管檢查")
+    template_point = _point(session, creator, template_item)
+    snapshot_a = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=1,
+        title="送風管",
+        instruction="檢查",
+        source_template_name="空調",
+        applied_at=datetime.now(UTC),
+        **_audit(creator),
+    )
+    snapshot_b = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=2,
+        title="回風管",
+        instruction="檢查",
+        source_template_name="空調",
+        applied_at=datetime.now(UTC),
+        **_audit(creator),
+    )
+    session.add_all([snapshot_a, snapshot_b])
+    session.flush()
+    point_a = ProjectInspectionPoint(
+        project_inspection_item_id=snapshot_a.id,
+        sequence=1,
+        title="壁厚",
+        instruction="量測",
+        **_audit(creator),
+    )
+    point_b = ProjectInspectionPoint(
+        project_inspection_item_id=snapshot_b.id,
+        sequence=1,
+        title="尺寸",
+        instruction="量測",
+        **_audit(creator),
+    )
+    session.add_all([point_a, point_b])
+    session.commit()
+
+    invalid_template_evidence = (
+        TemplateEvidenceRequirement(
+            inspection_point_id=template_point.id,
+            evidence_type="text",
+            **_audit(creator),
+        ),
+        TemplateEvidenceRequirement(
+            inspection_point_id=template_point.id,
+            min_count=0,
+            **_audit(creator),
+        ),
+        TemplateEvidenceRequirement(
+            inspection_point_id=template_point.id,
+            max_count=2,
+            **_audit(creator),
+        ),
+    )
+    for row in invalid_template_evidence:
+        _assert_integrity_error(session, row)
+
+    invalid_project_evidence = (
+        ProjectEvidenceRequirement(
+            inspection_point_id=point_a.id,
+            project_inspection_item_id=snapshot_a.id,
+            evidence_type="text",
+            **_audit(creator),
+        ),
+        ProjectEvidenceRequirement(
+            inspection_point_id=point_a.id,
+            project_inspection_item_id=snapshot_a.id,
+            min_count=0,
+            **_audit(creator),
+        ),
+        ProjectEvidenceRequirement(
+            inspection_point_id=point_a.id,
+            project_inspection_item_id=snapshot_a.id,
+            max_count=2,
+            **_audit(creator),
+        ),
+    )
+    for row in invalid_project_evidence:
+        _assert_integrity_error(session, row)
+
+    _assert_integrity_error(
+        session,
+        SystemRoleAssignment(
+            user_id=creator.id,
+            role_code="project_admin",
+            **_audit(creator),
+        ),
+    )
+    _assert_integrity_error(
+        session,
+        ProjectTextStandard(
+            inspection_point_id=point_a.id,
+            project_inspection_item_id=snapshot_b.id,
+            text="跨副本項次",
+            **_audit(creator),
+        ),
+    )

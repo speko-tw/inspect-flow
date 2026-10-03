@@ -272,9 +272,7 @@ class TemplateEvidenceRequirement(AuditMixin, TimestampedBase):
         CheckConstraint(
             "evidence_type = 'photo'", name="evidence_type_photo_only"
         ),
-        CheckConstraint(
-            "min_count >= 0", name="evidence_min_count_nonnegative"
-        ),
+        CheckConstraint("min_count >= 1", name="evidence_min_count_positive"),
         CheckConstraint(
             "max_count IS NULL", name="evidence_unbounded_max_count"
         ),
@@ -475,7 +473,7 @@ class ProjectEvidenceRequirement(AuditMixin, TimestampedBase):
             name="project_evidence_photo_only",
         ),
         CheckConstraint(
-            "min_count >= 0", name="project_evidence_min_nonnegative"
+            "min_count >= 1", name="project_evidence_min_positive"
         ),
         CheckConstraint(
             "max_count IS NULL", name="project_evidence_unbounded"

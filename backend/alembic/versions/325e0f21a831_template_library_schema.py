@@ -239,7 +239,7 @@ def upgrade() -> None:
             "evidence_type = 'photo'", name="evidence_type_photo_only"
         ),
         sa.CheckConstraint(
-            "min_count >= 0", name="evidence_min_count_nonnegative"
+            "min_count >= 1", name="evidence_min_count_positive"
         ),
         sa.CheckConstraint(
             "max_count IS NULL", name="evidence_unbounded_max_count"
@@ -453,7 +453,7 @@ def upgrade() -> None:
             "evidence_type = 'photo'", name="project_evidence_photo_only"
         ),
         sa.CheckConstraint(
-            "min_count >= 0", name="project_evidence_min_nonnegative"
+            "min_count >= 1", name="project_evidence_min_positive"
         ),
         sa.CheckConstraint(
             "max_count IS NULL", name="project_evidence_unbounded"
