@@ -194,11 +194,17 @@ def test_template_library_routes_declare_read_and_write_access() -> None:
             )
         )
     }
-    assert len(routes) == 14
+    assert len(routes) == 15
     for (method, _path), declaration in routes.items():
         assert declaration is not None
         if method == "GET":
-            assert declaration.level is AccessLevel.LOGIN_REQUIRED
+            assert declaration.level is (
+                AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION
+            )
+            assert declaration.system_role_code == "template_admin"
+            assert (
+                declaration.permission_code == "project_inspection_item.edit"
+            )
         else:
             assert declaration.level is AccessLevel.SYSTEM_ROLE_REQUIRED
             assert declaration.permission_code == "template_admin"

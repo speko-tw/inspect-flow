@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.base import uuid7
 from app.models import (
     TemplateCategory,
     TemplateEvidenceRequirement,
@@ -21,6 +22,57 @@ from app.services.operator import get_current_operator
 
 class InvalidTemplateError(ValueError):
     """The supplied nested structure violates template rules."""
+
+
+def validate_template_structure(data: dict) -> None:
+    """Reject duplicate point positions and request-local field keys."""
+    sequences: set[int] = set()
+    client_ids: set[UUID] = set()
+    for point in data["inspection_points"]:
+        sequence = point["sequence"]
+        if sequence in sequences:
+            raise InvalidTemplateError("inspection point sequence repeats")
+        sequences.add(sequence)
+        numeric = point["numeric_standard"]
+        fields = point["measurement_fields"]
+        for field in fields:
+            client_id = field["client_id"]
+            if client_id in client_ids:
+                raise InvalidTemplateError("measurement client_id repeats")
+            client_ids.add(client_id)
+        if numeric is None:
+            continue
+        bound = [
+            field
+            for field in fields
+            if field["client_id"] == numeric["measurement_field_client_id"]
+        ]
+        if len(bound) != 1 or bound[0]["field_type"] != "number":
+            raise InvalidTemplateError(
+                "numeric standard needs one numeric field"
+            )
+
+
+def validate_system_structures(items: Iterable[dict]) -> None:
+    """Check every item before a system-wide replacement mutates rows."""
+    seen_client_ids: set[UUID] = set()
+    for item in items:
+        validate_template_structure(item)
+        for point in item["inspection_points"]:
+            for field in point["measurement_fields"]:
+                client_id = field["client_id"]
+                if client_id in seen_client_ids:
+                    raise InvalidTemplateError(
+                        "measurement client_id repeats across items"
+                    )
+                seen_client_ids.add(client_id)
+
+
+def park_template_names(db: Session, items: Iterable[TemplateItem]) -> None:
+    """Free all old names so a single transaction can swap titles."""
+    for item in items:
+        item.title = f"__template_replacement_{uuid7()}"
+    db.flush()
 
 
 def create_category(db: Session, name: str) -> TemplateCategory:
@@ -97,21 +149,15 @@ def _add_points(
         db.flush()
         fields = point_data["measurement_fields"]
         numeric = point_data["numeric_standard"]
-        bound_id = (
-            numeric["measurement_field_id"] if numeric is not None else None
+        bound_client_id = (
+            numeric["measurement_field_client_id"]
+            if numeric is not None
+            else None
         )
-        bound = [field for field in fields if field["id"] == bound_id]
-        if numeric is not None and (
-            len(bound) != 1 or bound[0]["field_type"] != "number"
-        ):
-            raise InvalidTemplateError(
-                "numeric standard needs one numeric field"
-            )
-        if len({field["id"] for field in fields}) != len(fields):
-            raise InvalidTemplateError("measurement field ids must be unique")
+        field_ids = {field["client_id"]: uuid7() for field in fields}
         for field in fields:
             unit = field["unit"]
-            if field["id"] == bound_id:
+            if field["client_id"] == bound_client_id:
                 if unit is not None:
                     raise InvalidTemplateError(
                         "bound field unit must be omitted"
@@ -124,7 +170,7 @@ def _add_points(
                 raise InvalidTemplateError("text fields cannot have a unit")
             db.add(
                 TemplateMeasurementField(
-                    id=field["id"],
+                    id=field_ids[field["client_id"]],
                     inspection_point_id=point.id,
                     name=field["name"],
                     field_type=field["field_type"],
@@ -145,6 +191,7 @@ def _add_points(
                 )
             )
         if numeric is not None:
+            assert bound_client_id is not None
             db.add(
                 TemplateNumericStandard(
                     inspection_point_id=point.id,
@@ -152,7 +199,7 @@ def _add_points(
                     condition=numeric["condition"],
                     unit=numeric["unit"],
                     tolerance=numeric["tolerance"],
-                    measurement_field_id=bound_id,
+                    measurement_field_id=field_ids[bound_client_id],
                     measurement_field_type="number",
                     measurement_field_unit=numeric["unit"],
                     created_by=operator_id,
@@ -175,6 +222,7 @@ def _add_points(
 
 
 def create_template(db: Session, data: dict) -> TemplateItem:
+    validate_template_structure(data)
     operator_id = get_current_operator(db).id
     item = TemplateItem(
         system_id=data["system_id"],
@@ -193,6 +241,7 @@ def create_template(db: Session, data: dict) -> TemplateItem:
 def replace_template(
     db: Session, item: TemplateItem, data: dict
 ) -> TemplateItem:
+    validate_template_structure(data)
     operator_id = get_current_operator(db).id
     old_points = db.scalars(
         select(TemplateInspectionPoint).where(

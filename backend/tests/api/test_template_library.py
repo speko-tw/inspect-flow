@@ -1,9 +1,11 @@
 """Template library HTTP contract (TPL-AC01/02/03/04/07/08/09)."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
@@ -13,7 +15,12 @@ from app.models import (
     Role,
     RolePermission,
     SystemRoleAssignment,
+    TemplateEvidenceRequirement,
+    TemplateInspectionPoint,
     TemplateItem,
+    TemplateMeasurementField,
+    TemplateNumericStandard,
+    TemplateTextStandard,
 )
 from tests.db.conftest import create_root_user_with_company
 
@@ -109,21 +116,21 @@ def _template(system_id, title="Foundation"):
                     "condition": ">=",
                     "unit": "mm",
                     "tolerance": "1",
-                    "measurement_field_id": field_id,
+                    "measurement_field_client_id": field_id,
                 },
                 "measurement_fields": [
                     {
-                        "id": field_id,
+                        "client_id": field_id,
                         "name": "Thickness",
                         "field_type": "number",
                     },
                     {
-                        "id": str(uuid4()),
+                        "client_id": str(uuid4()),
                         "name": "Comment",
                         "field_type": "text",
                     },
                     {
-                        "id": str(uuid4()),
+                        "client_id": str(uuid4()),
                         "name": "Width",
                         "field_type": "number",
                         "unit": "cm",
@@ -253,7 +260,11 @@ def test_structure_replace_and_validation(clients, db_session):
     }
     assert (
         point["numeric_standard"]["measurement_field_id"]
-        == (body["inspection_points"][0]["measurement_fields"][0]["id"])
+        == (point["measurement_fields"][0]["id"])
+    )
+    assert (
+        point["measurement_fields"][0]["id"]
+        != (body["inspection_points"][0]["measurement_fields"][0]["client_id"])
     )
     assert [field["unit"] for field in point["measurement_fields"]] == [
         "mm",
@@ -265,6 +276,29 @@ def test_structure_replace_and_validation(clients, db_session):
     assert "interval" not in response.json()
     assert "photo" not in response.json()
 
+    old_points = response.json()["inspection_points"]
+    old_point_ids = [UUID(point["id"]) for point in old_points]
+    old_field_ids = [
+        UUID(field["id"])
+        for point in old_points
+        for field in point["measurement_fields"]
+    ]
+    old_requirement_ids = [
+        UUID(req["id"])
+        for point in old_points
+        for req in point["evidence_requirements"]
+    ]
+    old_standard_ids = db_session.scalars(
+        select(TemplateNumericStandard.id).where(
+            TemplateNumericStandard.inspection_point_id.in_(old_point_ids)
+        )
+    ).all()
+    old_text_ids = db_session.scalars(
+        select(TemplateTextStandard.id).where(
+            TemplateTextStandard.inspection_point_id.in_(old_point_ids)
+        )
+    ).all()
+
     body["title"] = "Replacement"
     body["inspection_points"][0]["title"] = "New point"
     replaced = manager.put(f"/api/v1/templates/{template_id}", json=body)
@@ -272,6 +306,18 @@ def test_structure_replace_and_validation(clients, db_session):
     fetched = manager.get(f"/api/v1/templates/{template_id}")
     assert fetched.json() == replaced.json()
     assert fetched.json()["inspection_points"][0]["title"] == "New point"
+    db_session.expire_all()
+    for model, identifiers in (
+        (TemplateInspectionPoint, old_point_ids),
+        (TemplateMeasurementField, old_field_ids),
+        (TemplateEvidenceRequirement, old_requirement_ids),
+        (TemplateNumericStandard, old_standard_ids),
+        (TemplateTextStandard, old_text_ids),
+    ):
+        assert all(
+            db_session.get(model, identifier) is None
+            for identifier in identifiers
+        )
     assert (
         db_session.scalar(select(func.count()).select_from(TemplateItem)) == 1
     )
@@ -281,15 +327,17 @@ def test_structure_replace_and_validation(clients, db_session):
     point_input["measurement_fields"][0]["unit"] = "mm"
     assert manager.post("/api/v1/templates", json=invalid).status_code == 422
     point_input["measurement_fields"][0].pop("unit")
-    point_input["numeric_standard"]["measurement_field_id"] = point_input[
-        "measurement_fields"
-    ][1]["id"]
+    point_input["numeric_standard"]["measurement_field_client_id"] = (
+        point_input["measurement_fields"][1]["client_id"]
+    )
     assert manager.post("/api/v1/templates", json=invalid).status_code == 422
-    point_input["numeric_standard"]["measurement_field_id"] = str(uuid4())
+    point_input["numeric_standard"]["measurement_field_client_id"] = str(
+        uuid4()
+    )
     assert manager.post("/api/v1/templates", json=invalid).status_code == 422
-    point_input["numeric_standard"]["measurement_field_id"] = point_input[
-        "measurement_fields"
-    ][0]["id"]
+    point_input["numeric_standard"]["measurement_field_client_id"] = (
+        point_input["measurement_fields"][0]["client_id"]
+    )
     point_input["evidence_requirements"] = []
     assert manager.post("/api/v1/templates", json=invalid).status_code == 422
     point_input["evidence_requirements"] = [{"min_count": 1}]
@@ -355,3 +403,217 @@ def test_system_scope_pagination_and_deletion(clients):
         ).status_code
         == 204
     )
+
+
+def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    original = manager.post(
+        "/api/v1/templates", json=_template(system_id, "Original")
+    )
+    assert original.status_code == 201
+    stored_field_id = original.json()["inspection_points"][0][
+        "measurement_fields"
+    ][0]["id"]
+
+    def reject(change):
+        body = _template(system_id, "Rejected")
+        change(body)
+        response = manager.post("/api/v1/templates", json=body)
+        assert response.status_code == 422, response.text
+        assert response.json() == {
+            "error": {"code": "request.validation_failed"}
+        }
+        db_session.expire_all()
+        assert (
+            db_session.scalar(select(func.count()).select_from(TemplateItem))
+            == 1
+        )
+
+    reject(lambda body: body["inspection_points"][1].update(sequence=1))
+    reject(
+        lambda body: body["inspection_points"][1].update(
+            measurement_fields=[
+                {
+                    "client_id": body["inspection_points"][0][
+                        "measurement_fields"
+                    ][0]["client_id"],
+                    "name": "Repeated",
+                    "field_type": "text",
+                }
+            ]
+        )
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][
+            1
+        ].update(
+            client_id=body["inspection_points"][0]["measurement_fields"][0][
+                "client_id"
+            ]
+        )
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][
+            0
+        ].update(id=stored_field_id)
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][2].pop(
+            "unit"
+        )
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][
+            2
+        ].update(unit="   ")
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][
+            1
+        ].update(unit="cm")
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["numeric_standard"].update(
+            unit="  "
+        )
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["numeric_standard"].update(
+            value="abc"
+        )
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["numeric_standard"].update(
+            value="NaN"
+        )
+    )
+    reject(lambda body: body.update(sequence=10**12))
+    reject(lambda body: body["inspection_points"][0].update(sequence=0))
+
+    another = _template(system_id, "Another")
+    another["inspection_points"][0]["measurement_fields"][0]["client_id"] = (
+        stored_field_id
+    )
+    another["inspection_points"][0]["numeric_standard"][
+        "measurement_field_client_id"
+    ] = stored_field_id
+    created = manager.post("/api/v1/templates", json=another)
+    assert created.status_code == 201, created.text
+    assert (
+        created.json()["inspection_points"][0]["measurement_fields"][0]["id"]
+        != stored_field_id
+    )
+
+
+def test_system_nested_read_swap_and_clear(clients, db_session):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    originals = []
+    for title in ("A", "B"):
+        response = manager.post(
+            "/api/v1/templates", json=_template(system_id, title)
+        )
+        assert response.status_code == 201, response.text
+        originals.append(response.json())
+
+    path = f"/api/v1/template-systems/{system_id}/templates"
+    first = clients["editor"].get(path, params={"limit": 1})
+    assert first.status_code == 200
+    assert first.json()["items"][0]["inspection_points"]
+    second = clients["admin"].get(
+        path, params={"limit": 1, "cursor": first.json()["next_cursor"]}
+    )
+    assert second.status_code == 200
+    assert second.json()["items"][0]["id"] == originals[1]["id"]
+    assert second.json()["next_cursor"] is None
+    assert clients["outsider"].get(path).status_code == 403
+
+    a = _template(system_id, "B")
+    a["id"] = originals[0]["id"]
+    b = _template(system_id, "A")
+    b["id"] = originals[1]["id"]
+    swapped = manager.put(path, json={"items": [a, b]})
+    assert swapped.status_code == 200, swapped.text
+    assert [
+        (item["id"], item["title"]) for item in swapped.json()["items"]
+    ] == [
+        (originals[0]["id"], "B"),
+        (originals[1]["id"], "A"),
+    ]
+    assert manager.get(path).json()["items"] == swapped.json()["items"]
+
+    duplicate = _template(system_id, "C")
+    duplicate["inspection_points"][0]["measurement_fields"][0]["client_id"] = (
+        a["inspection_points"][0]["measurement_fields"][0]["client_id"]
+    )
+    duplicate["inspection_points"][0]["numeric_standard"][
+        "measurement_field_client_id"
+    ] = duplicate["inspection_points"][0]["measurement_fields"][0]["client_id"]
+    invalid = manager.put(path, json={"items": [a, duplicate]})
+    assert invalid.status_code == 422
+    assert invalid.json() == {"error": {"code": "request.validation_failed"}}
+    assert manager.get(path).json()["items"] == swapped.json()["items"]
+
+    cleared = manager.put(path, json={"items": []})
+    assert cleared.status_code == 200
+    assert cleared.json() == {"items": []}
+    db_session.expire_all()
+    for model in (
+        TemplateItem,
+        TemplateInspectionPoint,
+        TemplateMeasurementField,
+        TemplateNumericStandard,
+        TemplateTextStandard,
+        TemplateEvidenceRequirement,
+    ):
+        assert db_session.scalar(select(func.count()).select_from(model)) == 0
+
+
+def test_known_nested_constraint_is_422_and_unknown_error_stays_500(
+    clients, monkeypatch
+):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+
+    def known_error(*_args, **_kwargs):
+        raise IntegrityError(
+            "INSERT INTO template_inspection_points",
+            {},
+            Exception(
+                "UNIQUE constraint failed: "
+                "template_inspection_points.template_item_id, "
+                "template_inspection_points.sequence"
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.template_library.create_template", known_error
+    )
+    response = manager.post(
+        "/api/v1/templates", json=_template(system_id, "Known error")
+    )
+    assert response.status_code == 422
+    assert response.json() == {"error": {"code": "request.validation_failed"}}
+
+    def unknown_error(*_args, **_kwargs):
+        raise IntegrityError(
+            "INSERT INTO template_items", {}, Exception("unknown constraint")
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.template_library.create_template", unknown_error
+    )
+    no_raise_client = TestClient(
+        manager.app,
+        base_url="https://testserver",
+        raise_server_exceptions=False,
+    )
+    no_raise_client.cookies.set(
+        SESSION_COOKIE_NAME, manager.cookies.get(SESSION_COOKIE_NAME)
+    )
+    response = no_raise_client.post(
+        "/api/v1/templates", json=_template(system_id, "Unknown error")
+    )
+    assert response.status_code == 500
+    assert response.json() == {"error": {"code": "server.internal_error"}}
