@@ -8,10 +8,10 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1 | 定義共用狀態轉換服務與 Plan／Task 轉換；實作前須先裁定 SM-Q01～SM-Q06、SM-Q11～SM-Q12、SM-Q15，並確認資料模型/API 契約 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | #78、#70 相關實體部分或完全凍結；本規格凍結 | STM-AC01～STM-AC03、STM-AC07～STM-AC08 | 待開 |
-| T2 | 定義 Evidence 上傳、照片更正、產製失敗、可用性、作廢關聯及刪除／保留流程；實作前須裁定 SM-Q07、SM-Q13 與 G-05 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/storage/`、對應測試與 Alembic migration | T1、#70 相關實體部分或完全凍結、G-05 裁定；本規格凍結 | STM-AC01、STM-AC04、STM-AC07 | 待開 |
-| T3 | 定義 Report 完整轉換、快照、送審／退回／核准／核發／作廢及產製重試；實作前須裁定 SM-Q08～SM-Q10、SM-Q14、G-06、G-07 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/reports/`、對應測試與 Alembic migration | T1、T2、#94（G-06 裁定）、G-07 裁定；本規格凍結 | STM-AC01、STM-AC06、STM-AC07 | 待開 |
-| T4 | 完成各狀態業務動作的前端互動與狀態顯示 | `frontend/src/`、對應前端測試 | T1～T3、API 契約凍結 | STM-AC01～STM-AC06 | 待開 |
+| T1 | 定義共用狀態轉換服務與 Plan／Task 轉換；實作前須先裁定 SM-Q01、SM-Q04、SM-Q12、SM-Q15、SM-Q16，並處理 KD-55 作廢後重查、完成 Plan 的判定；結果欄位驗證與寫入屬 0.7.x，僅保留完成時伺服器覆核；依賴 Result 資料模型及 API 契約 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | #78、#70 相關實體部分或完全凍結；本規格凍結 | STM-AC01～STM-AC03、STM-AC07～STM-AC08 | 待開 |
+| T2 | 定義照片 Evidence 上傳、更正、產製失敗、可用性、作廢關聯及刪除／保留流程；負責 KD-55 作廢／文字更正的後端行為並涵蓋 AC04／AC05；實作前須裁定 SM-Q07 與 G-05；照片更正依 KD-42，MVP 不含非照片 Evidence（KD-53） | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/storage/`、對應測試與 Alembic migration | T1、#70 相關實體部分或完全凍結、G-05 裁定；本規格凍結 | STM-AC01、STM-AC04、STM-AC05、STM-AC07 | 待開 |
+| T3 | 定義 Report 完整轉換、快照、送審／退回／核准／核發／作廢及產製重試；實作前須裁定 SM-Q09、SM-Q14、G-06、G-07；SM-Q08 業務內容已併入 SM-Q14 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、`backend/app/reports/`、對應測試與 Alembic migration | T1、T2、#94（G-06 裁定）、G-07 裁定；本規格凍結 | STM-AC01、STM-AC06、STM-AC07 | 待開 |
+| T4 | 完成各狀態業務動作的前端互動與狀態顯示；KD-55 的警告與確認對話框由此功能規格定義，後端 T1/T2 實作作廢與更正 | `frontend/src/`、對應前端測試 | T1～T3、API 契約凍結 | STM-AC01～STM-AC06 | 待開 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
 - 每個任務至少對應一條 AC；每條 AC 至少被一個任務涵蓋。
@@ -26,9 +26,9 @@
 
 ## 風險
 
-- **裁定未完成即實作**：取消、重開、Evidence 刪除與 Report 版次會影響現場作業或正式交付。以 OQ-09、G-05、G-06、G-07 及 SM-Q01～SM-Q10 的裁定作開工門檻，未決範圍維持 blocked。
+- **裁定未完成即實作**：取消、重開、Evidence 刪除與 Report 版次會影響現場作業或正式交付。以 OQ-09、G-05、G-06、G-07 及待裁定業務題 SM-Q01、SM-Q04、SM-Q07、SM-Q12、SM-Q14～SM-Q16 作開工門檻，未決範圍維持 blocked。
 - **混淆技術提案與決策**：英文狀態名和候選轉換表不是負責人裁定。任務 issue 必須引用裁定後的 spec 版本，不可直接照草案落地。
-- **任務作廢與新任務關聯遺失**：KD-55 要求完整保留舊任務和其查核資料；依 SM-Q03 選定同任務重來或新建任務後，再在 domain model 中定義追溯關聯。
+- **任務作廢與新任務關聯遺失**：KD-55 要求完整保留舊任務和其查核資料；依 SM-Q03 規格設計保留舊任務並建立新任務後，在 domain model 中定義追溯關聯；此技術方案可由負責人推翻。
 - **報告來源差異**：G-06 的狀態清單衝突與 G-07 的快照時點缺漏，可能改變資料表、重試策略與產物儲存；須先裁定並更新本規格。
 - **多資料資源一致性**：Report 產製會同時處理資料庫與檔案，須依 PR-15 設計失敗回復、重試與錯誤追蹤，不得只驗成功路徑。
 - **作廢 Evidence 的歷史保存**：KD-55 只決定任務作廢時證據保留並供內業查找，不裁定獨立 Evidence 的刪除 API 與保留期限；不可藉狀態實作替 G-05 拍板。
@@ -40,11 +40,11 @@
 | STM-AC01 | 後端 Service/API 測試涵蓋允許與拒絕的轉換；確認用戶端無法任意指定狀態。 |
 | STM-AC02 | 整合測試：全部 Task 完成時 Plan 自動完成；未全部完成時不完成；手動狀態寫入遭拒。 |
 | STM-AC03 | 整合測試：已完成 Task 更正資料後仍為完成，並查核操作者、時間、修改內容紀錄。 |
-| STM-AC04 | 整合測試：KD-55 選「要」只作廢用到該項次的任務，舊資料可查，報告查詢排除作廢資料。 |
-| STM-AC05 | 整合測試：選「不要」只改文字，結果、照片、狀態與已發行報告保持不變，並有修改紀錄。 |
+| STM-AC04 | 整合測試：KD-55 選「要」只作廢用到該項次的任務，舊資料可查，報告查詢排除作廢資料；後端作廢由 T2 實作，警告與確認對話框由 KD-55 所屬功能規格定義。 |
+| STM-AC05 | 整合測試：選「不要」由 T2 後端只更正文字，結果、照片、狀態與已發行報告保持不變，並有修改紀錄；使用者互動由 KD-55 所屬功能規格定義。 |
 | STM-AC06 | Report 整合測試注入產製失敗，確認產製中／失敗狀態與錯誤資訊；已核發版次檔案及快照不被覆蓋。G-06／G-07 裁定後補齊其他狀態轉換。 |
 | STM-AC07 | 規格審查逐題核對所有未裁定動作仍連到 SM-Q／OQ／G；task issue 僅涵蓋已裁定且已凍結需求。 |
-| STM-AC08 | Service/API 測試覆蓋三種結果各自的必填資料、不完整資料遭拒及完整資料通過結果欄位覆核；實測欄位需驗證全部填寫、欄位型別與單位符合 KD-54。Task 層級是否允許含「不符合」結果的完成仍待 SM-Q15，測試不得預先假定答案；不得自動依標準值判定結果（KD-37、KD-54）。 |
+| STM-AC08 | 此規格驗證完成請求由伺服器覆核完成條件；Result 欄位驗證與寫入屬 0.7.x，不在本規格實作。單位由系統帶入，不新增單位系統（KD-54）；Task 層級是否允許含「不符合」仍待 SM-Q15。 |
 
 在各議題裁定、規格凍結與對應任務建立前，上述測試與執行驗證均為規劃內容，未執行。
 
