@@ -108,7 +108,7 @@ graph LR
 
 **規則**：`Inspection Template` **不**版本化；範本套用到專案時，**必須**複製成專案自己的一份，之後修改範本不影響已套用的專案。建立 `Inspection Task` 時，**必須**把當下的需求固定成 `Task Requirement Snapshot`，之後專案或範本怎麼改，都不影響已建立的任務（依據：架構基準 §2.5、§12.9；範本不版本化見 [KD-03](03-decisions-and-stack.md#kd-03)）。
 
-任務需求快照維持必須，不受範本不版本化影響；尚未決定的只有專案副本與任務快照的分工細節，見 [OQ-09](05-open-questions.md#oq-09)。
+任務需求快照維持必須，不受範本不版本化影響；專案副本與任務快照的分工已裁定，見 [KD-55](03-decisions-and-stack.md#kd-55)：內業修改專案查核項目時，詢問是否讓現場重新查核；選「要」則同專案內用到該項次的任務全部作廢，舊任務紀錄整份保留、只標示作廢，不改寫；選「不要」只更正內容。作廢後重來或另開新任務屬 0.4.x 規格設計，其餘狀態與例外路徑仍未定，見 [OQ-09](05-open-questions.md#oq-09)。
 
 ```mermaid
 graph LR
@@ -135,7 +135,7 @@ graph LR
 
 **怎麼檢查**：修改範本後，已套用專案的副本與舊任務的完成度、報表內容都不變（可寫成測試）。
 
-**依據**：架構基準 §2.5、§12.9；[負責人裁定（#78 留言，2026-10-02）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)、[KD-03](03-decisions-and-stack.md#kd-03)
+**依據**：架構基準 §2.5、§12.9；[負責人裁定（#78 留言，2026-10-02）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)、[KD-03](03-decisions-and-stack.md#kd-03)；專案副本與任務快照的分工依[負責人裁定（#78 留言，2026-10-03）](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5966290670)、[KD-55](03-decisions-and-stack.md#kd-55)
 
 
 <a id="pr-05"></a>
