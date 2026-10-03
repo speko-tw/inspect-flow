@@ -2,13 +2,13 @@
 
 **規格**：[spec.md](spec.md)
 
-本規格整體仍為草稿；以下任務分解僅供規劃，所有實作任務均須等規格凍結後才能開工。OQ-09 尚未裁定取消來源狀態、已完成 Task 是否可取消、取消後能否恢復、全數 Task 取消時的 Plan 終態，以及「尚未查核」的 Task 狀態，故目前 Plan／Task 尚不符合凍結條件。Evidence 受 G-05 阻擋，Report 受 G-06（其他產製狀態）與 G-07 阻擋。需求與 AC 編號見 [spec.md](spec.md)。
+本規格整體仍為草稿；以下任務分解僅供規劃，所有實作任務均須等規格凍結後才能開工。OQ-09 尚未裁定取消來源狀態、已完成 Task 是否可取消、取消後能否恢復及全數 Task 取消時的 Plan 終態；KD-56 的「任務派出」定義尚未裁定，須由 `inspection-planning` 規格處理，故目前 Plan／Task 尚不符合凍結條件。Evidence 受 G-05 阻擋，Report 受 G-06（其他產製狀態）與 G-07 阻擋。需求與 AC 編號見 [spec.md](spec.md)。
 
 ## 任務
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1（待凍結） | 實作 Plan／Task 後端狀態轉換、完成時伺服器覆核、KD-55 作廢／更正、實際查核人紀錄與 Service 層狀態驗證。Result 欄位驗證與寫入及改善追蹤屬 0.7.x，不納入。此任務須待 OQ-09 未決邊界裁定且本規格凍結後拆分。 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | OQ-09 邊界裁定；`domain-model` 相關實體凍結；API 契約；本規格凍結 | STM-AC01～STM-AC05、STM-AC07～STM-AC11（均為草稿） | 待開 |
+| T1（待凍結） | 實作 Plan／Task 後端狀態轉換、完成時伺服器覆核、KD-55 作廢／更正、實際查核人紀錄與 Service 層狀態驗證。Result 欄位驗證與寫入及改善追蹤屬 0.7.x，不納入。此任務須待 OQ-09 未決邊界、KD-56 任務派出定義（由 `inspection-planning` 規格處理）釐清且本規格凍結後拆分。 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | OQ-09 邊界裁定；KD-56 任務派出定義由 `inspection-planning` 規格處理；`domain-model` 相關實體凍結；API 契約；本規格凍結 | STM-AC01～STM-AC05、STM-AC07～STM-AC11（均為草稿） | 待開 |
 | T2（待凍結） | 實作 Plan／Task 動作的前端狀態顯示與互動，包含 KD-55 確認對話框（由功能規格定義）、取消原因及「有缺失」任務標示。須待 T1 範圍及本規格凍結後拆分。 | `frontend/src/`、對應前端測試 | T1；API 契約；本規格凍結 | STM-AC02～STM-AC05、STM-AC08～STM-AC09（均為草稿） | 待開 |
 | T3（待凍結） | Evidence 照片流程、獨立刪除與保留政策；未達凍結條件，不可開工。 | G-05 裁定後拆分 | G-05；Evidence 凍結 | 待凍結 | 待開 |
 | T4（待凍結） | Report 狀態、快照、版次、核發與產製失敗流程；未達凍結條件，不可開工。 | G-06／G-07 裁定後拆分 | G-06 其他狀態、G-07；Report 凍結 | STM-AC06（草稿） | 待開 |
@@ -20,12 +20,12 @@
 
 ## 並行分組
 
-- 待凍結：T1、T2，須待 OQ-09 未決邊界裁定及本規格凍結；其後按依賴先後分波。
+- 待凍結：T1、T2，須待 OQ-09 未決邊界裁定、KD-56 任務派出定義由 `inspection-planning` 規格處理，及本規格凍結；其後按依賴先後分波。
 - 待凍結：T3、T4；分別待 G-05 與 G-06／G-07 裁定及對應範圍凍結。
 
 ## 風險
 
-- **把待決範圍當成凍結**：SM-Q04 尚有取消狀態邊界待補；G-05、G-06、G-07 阻擋 Evidence／Report。所有任務 issue 均須待本規格凍結後建立，並只引用凍結後明列的需求與 AC。
+- **把待決範圍當成凍結**：SM-Q04 尚有取消狀態邊界待補，KD-56 的任務派出定義待 `inspection-planning` 規格處理；G-05、G-06、G-07 阻擋 Evidence／Report。所有任務 issue 均須待本規格凍結後建立，並只引用凍結後明列的需求與 AC。
 - **混淆技術提案與決策**：英文狀態名稱、作廢後保留舊 Task 並建立新 Task 等內容如標示為規格設計，仍不得視為已裁定要求。
 - **任務作廢與追溯關聯遺失**：KD-55 要求保留舊任務及當時標準；追溯欄位由 `domain-model` 定義。
 - **Report 來源差異**：其他產製狀態、快照與版次邊界未定，T4 不得提前實作。

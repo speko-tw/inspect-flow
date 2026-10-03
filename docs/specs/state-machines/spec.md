@@ -40,7 +40,7 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | STM-R01 | `Inspection Plan` 與 `Inspection Task` 的狀態轉換必須由後端 Service 層驗證；用戶端不得直接寫入任意狀態值。Evidence 與 Report 的同項需求仍屬草稿。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[PR-16](../../intents/02-principles.md#pr-16)；架構基準 §18 |
-| STM-R02 | 有任務派出時，系統必須自動將 `Inspection Plan` 標記為進行中；底下任務全部完成時，系統必須自動標記為完成，人員不得手動將計畫改為完成。具計畫封存／取消封存權限代碼的使用者得手動封存及取消封存。已完成計畫因 KD-55 作廢任務須自動退回進行中。任務取消的允許來源狀態與全數任務取消時的計畫狀態屬 STM-R12 草稿。 | 必須 | 負責人裁定：[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；架構基準 §18、§20.6、§20.17 |
+| STM-R02 | 有任務派出時，系統必須自動將 `Inspection Plan` 標記為進行中；「任務派出」的定義由 `inspection-planning` 規格處理，KD-56 尚未裁定。底下任務全部完成時，系統必須自動標記為完成，人員不得手動將計畫改為完成。具計畫封存／取消封存權限代碼的使用者得手動封存及取消封存。已完成計畫因 KD-55 作廢任務須自動退回進行中。任務取消的允許來源狀態與全數任務取消時的計畫狀態屬 STM-R12 草稿。 | 必須 | 負責人裁定：[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；架構基準 §18、§20.6、§20.17 |
 | STM-R03 | 已完成的 `Inspection Task` 可由具任務資料更正權限代碼的使用者（現場與內業皆得）修正資料；此類修正不得令任務離開完成狀態或要求重新完成。系統須記錄修正者、時間與內容。 | 必須 | [KD-42](../../intents/03-decisions-and-stack.md#kd-42)；[PR-08](../../intents/02-principles.md#pr-08) |
 | STM-R04 | 修改專案查核項目並存檔時，系統必須詢問是否重新查核；警告與選擇對話框由功能規格定義。選「要」時須警告過去查核將作廢，並記錄操作者、時間與選擇。選「要」後，僅作廢同專案內使用該項次的任務，保留舊任務與當時標準，標示「標準變更作廢」供查找；若原計畫已完成，系統須自動退回進行中，待重查任務完成後再自動完成。封存計畫須先取消封存才能修改查核標準。 | 必須 | 負責人裁定：[同一留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[PR-04](../../intents/02-principles.md#pr-04) |
 | STM-R05 | 上述修改選「不要」重新查核時，使用該項次的既有任務只更正文字，不改結果、照片或狀態；系統須記錄誰、何時、改了什麼。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[PR-04](../../intents/02-principles.md#pr-04) |
@@ -48,7 +48,7 @@
 | STM-R07 | 正式 `Report` 必須作為持久化、版本化實體保存產製時的資料快照；具備相應權限代碼的使用者可在產製完成後直接核發，不須送審；錯誤的已核發報告以新版取代，保留舊版並標示已被取代。 | 必須／應 | 負責人裁定：[報告裁定留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)；[PR-06](../../intents/02-principles.md#pr-06)；持久化與快照為必須，版本取代為裁定規則 |
 | STM-R08 | `Report` 產製失敗時不得誤標為產製完成；產製中／失敗狀態及錯誤資訊保留方式應依 PR-15 設計，具體狀態集合須待 G-06 裁定後凍結。 | 「不得誤標為產製完成」必須；其餘應 | [PR-15](../../intents/02-principles.md#pr-15)；架構基準 §20.17；[G-06](../../intents/05-open-questions.md#g-06) |
 | STM-R09 | `Inspection Plan` 與 `Inspection Task` 各狀態的進入條件、允許動作及操作者範圍，須依本規格明確列出；未裁定的轉換標示為草稿，不得由技術提案推定。Evidence 與 Report 的同項整理亦屬草稿。 | 必須 | [OQ-09](../../intents/05-open-questions.md#oq-09)；本規格之可追溯需求 |
-| STM-R10 | Task 完成時，伺服器必須覆核完成條件；查核結果欄位驗證與寫入屬 0.7.x。本規格不另設單位欄位或單位系統，單位由系統帶入；不得依標準值自動判定結果。含「不符合」結果時，只要必要資料完整仍可完成，並於任務清單標示「有缺失」；改善追蹤屬 0.7.x。 | 完成時伺服器覆核：依 PR-01 必須；單位系統不得另設：必須；其他依裁定與 0.7.x 範圍 | 負責人裁定：[同一留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；[PR-01](../../intents/02-principles.md#pr-01)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37) |
+| STM-R10 | Task 完成時，伺服器必須覆核完成條件；查核結果欄位驗證與寫入屬 0.7.x。本規格不另設單位欄位或單位系統；項次設有數值標準時，對應實測欄位的單位須與數值標準相同，由系統自動帶入、不得另設，現場自行換算且單位換算不在本次範圍。實測欄位定義（型別、單位）屬 0.3.x，現場填值屬 0.7.x。不得依標準值自動判定結果。含「不符合」結果時，只要必要資料完整仍可完成，並於任務清單標示「有缺失」；改善追蹤屬 0.7.x。 | 完成時伺服器覆核、數值標準對應單位相同且由系統帶入不得另設：必須；其他依裁定與 0.7.x 範圍 | 負責人裁定：[同一留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；[PR-01](../../intents/02-principles.md#pr-01)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37) |
 | STM-R11 | 同專案且具現場查核權限的成員皆得開始與完成任務，指派僅供參考；系統必須記錄實際操作者，報告與稽核以實際查核人為準。 | 必須 | 負責人裁定：[SM-Q12 裁定](https://github.com/speko-tw/inspect-flow/issues/100#issuecomment-5968301878)；權限代碼依 [OQ-08](../../intents/05-open-questions.md#oq-08)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29) |
 | STM-R12 | Task 取消允許的來源狀態、已完成 Task 能否取消、取消後能否恢復，以及 Plan 底下所有 Task 均取消時的 Plan 狀態，須在凍結取消轉換前明確裁定。 | 草稿 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56) 未定邊界；[OQ-09](../../intents/05-open-questions.md#oq-09) |
 | STM-R13 | Task 若依已裁定的適用條件取消，必須記錄原因、保留並顯示取消紀錄，且不計入 Plan 完成判定。此需求不裁定允許取消的來源狀態。 | 必須 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56) |
@@ -62,7 +62,7 @@
 
 ### 凍結門檻
 
-本規格整體維持草稿。依 [部分凍結規則](../README.md#partial-freeze)，OQ-09 直接點名 `Inspection Plan` 與 `Inspection Task` 的完整狀態機，且尚未裁定取消來源狀態、已完成任務能否取消、取消後能否恢復、全數任務取消時 Plan 終態，以及「尚未查核」對應狀態。因此，即使 SM-Q12 等個別題目已裁定，也不能據此凍結 Plan／Task 的部分需求或 AC。G-05 阻擋 Evidence 的刪除與保留規則；G-06、G-07 阻擋 Report 的完整狀態、快照與版次規則。
+本規格整體維持草稿。依 [部分凍結規則](../README.md#partial-freeze)，OQ-09 直接點名 `Inspection Plan` 與 `Inspection Task` 的完整狀態機；任務取消的來源狀態、已完成任務能否取消、取消後能否恢復及全數任務取消時 Plan 終態仍未裁定。KD-56 也未定義「任務派出」，該定義由 `inspection-planning` 規格處理。因此，即使 SM-Q12 等個別題目已裁定，也不能據此凍結 Plan／Task 的部分需求或 AC。G-05 阻擋 Evidence 的刪除與保留規則；G-06、G-07 阻擋 Report 的完整狀態、快照與版次規則。
 
 ## 狀態與轉換
 
@@ -91,7 +91,7 @@ Task 採 `PENDING`、`IN_PROGRESS`、`COMPLETED`，另含裁定的 `CANCELLED` �
 | `PENDING` | 開始查核 → `IN_PROGRESS` | 同專案具現場查核權限的成員 | 已裁定：指派僅供參考；開始時記錄實際操作者。
 | `IN_PROGRESS` | 完成查核 → `COMPLETED` | 同專案具現場查核權限的成員 | 已裁定：指派僅供參考；完成時由伺服器覆核並記錄實際操作者。必要資料完整即可完成，即使有「不符合」，任務清單標示「有缺失」；改善追蹤屬 0.7.x。不得依標準值自動判定結果（KD-37、KD-54；負責人裁定[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)）。 |
 | `COMPLETED` | 更正內容 → `COMPLETED` | 具備任務資料更正權限代碼的使用者（現場與內業皆得） | 已裁定：更正不重新查核、不退回待確認；留下修正紀錄（KD-42）。 |
-| 任一使用被修改項次的任務 | 選擇「要」重新查核 → 作廢舊任務 | 具備專案查核項目管理權限代碼的使用者 | 已裁定；須先詢問並警告舊查核作廢。警告及確認對話框由功能規格定義。舊任務保留並標示「標準變更作廢」；後續重查採同一任務重來或另開新任務見 SM-Q03 規格設計（KD-55、OQ-09）。 |
+| 任一使用被修改項次的任務 | 選擇「要」重新查核 → 作廢舊任務 | 具備專案查核項目管理權限代碼的使用者 | 已裁定；須先詢問並警告舊查核作廢。警告及確認對話框由功能規格定義。舊任務保留並標示「標準變更作廢」；後續重查依 SM-Q03 規格設計保留舊任務並建立新任務（KD-55）。 |
 | 任一使用被修改項次的任務 | 選擇「不要」重新查核 → 狀態不變 | 具備專案查核項目管理權限代碼的使用者 | 已裁定：只更正文字，不動結果、照片；記錄更正（KD-55）。 |
 | 狀態待裁定 | 取消並填寫原因 → `CANCELLED` | 具任務取消權限代碼的使用者 | 取消原因、保留與不計入 Plan 完成判定已依 KD-56 裁定；允許取消的來源狀態、可否恢復等邊界屬 STM-R12 草稿。 |
 
@@ -126,7 +126,7 @@ KD-55 裁定的「Report 不使用作廢任務資料」保留為 Report 草稿�
 
 | 來源 | 狀態／流程 | 來源所述 |
 |---|---|---|
-| 架構基準 §20.6（G-06 立場 A） | `DRAFT`、`GENERATED`、`UNDER_REVIEW`、`APPROVED`、`ISSUED`、`SUPERSEDED`、`VOID` | `Report Status` 列舉；表格未列 `issue_date` 或 `document_status` 欄位。 |
+| 架構基準 §20.6（G-06 立場 A） | `DRAFT`、`GENERATED`、`UNDER_REVIEW`、`APPROVED`、`ISSUED`、`SUPERSEDED`、`VOID` | `Report Status` 列舉；`UNDER_REVIEW`／`APPROVED` 本期不使用，審核流程之後再加時另定（KD-57）；表格未列 `issue_date` 或 `document_status` 欄位。 |
 | 架構基準 §20.17（G-06 立場 B） | `DRAFT → GENERATING → GENERATED`；失敗為 `GENERATION_FAILED` | 以中間及失敗狀態表達產製交易邊界。 |
 | 架構基準 §20.7／§20.13／§20.16–20.18（G-07） | 產製時取得快照、Preview 與草稿可重產的邊界未明 | 已核發版次不因現場資料異動而改變；後續應產生新版次。 |
 
@@ -139,13 +139,12 @@ KD-55 裁定的「Report 不使用作廢任務資料」保留為 Report 草稿�
 | `GENERATING` | 任一步驟失敗 → `GENERATION_FAILED` | 系統 | PR-15 要求不得誤標為完成；依 SM-Q10 規格設計記錄本次錯誤並清理或標記未完成產物，以支援安全重試。 |
 | `GENERATION_FAILED` | 重試 → `GENERATING` | 具備報告產製權限代碼的使用者（提案） | 依 SM-Q10 規格設計沿用同一草稿，另記產製嘗試與錯誤資訊；正式狀態集合仍待 G-06／SM-Q14。 |
 | `GENERATED` | 直接核發 → `ISSUED` | 具備報告核發權限代碼的使用者 | 已裁定：不經送審或核准，依[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)。 |
-| `ISSUED` | 錯誤報告以新版取代 → 新版 `ISSUED`，舊版標示已取代 | 具備報告核發權限代碼的使用者 | 已裁定：保留舊版並標示已被取代；版次與快照細節仍依 G-07。依 PR-06 及[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)。 |
-| `GENERATED` | 送審 → `UNDER_REVIEW` → `APPROVED` | 不適用 | 此舊提案與直接核發裁定不符，撤回；G-06 其餘正式產製狀態仍待裁定。 |
-| `DRAFT`／`GENERATED`／`UNDER_REVIEW`／`APPROVED` | 作廢 → `VOID` | 具備報告作廢權限代碼的使用者（提案） | 狀態取自 §20.6；適用條件、權限、原因及可否恢復待 G-06、SM-Q14。 |
-| `ISSUED` | 撤銷／作廢 → `VOID` | 具備報告撤銷權限代碼的使用者（提案） | 是否允許核發後作廢，以及如何保留交付紀錄，待 G-06、SM-Q14；不得藉狀態轉換覆蓋已核發檔案（PR-06）。 |
+| `GENERATED` | 送審 → `UNDER_REVIEW` → `APPROVED` | 不適用 | 本期不使用；審核流程之後再加時另定（KD-57）。G-06 其餘正式產製狀態仍待裁定。 |
+| `DRAFT`／`GENERATED` | 作廢 → `VOID` | 具備報告作廢權限代碼的使用者（提案） | 狀態取自 §20.6；適用條件、權限、原因及可否恢復待 G-06、SM-Q14。`UNDER_REVIEW`／`APPROVED` 本期不使用，審核流程之後再加時另定（KD-57）。 |
+| `ISSUED` | 錯誤 → 出新版取代，舊版標示已被新版取代 | 具備報告核發權限代碼的使用者 | 依 KD-57 已裁定出新版取代並保留舊版；版次與快照細節仍待 G-07。不得以作廢或覆寫已核發版次取代此流程（PR-06）。 |
 | `SUPERSEDED`／`VOID` | 無後續轉換（終止狀態提案） | 不適用 | 是否允許恢復或撤銷終止狀態待 G-06、SM-Q14。 |
 
-**狀態提案（待 G-06／G-07 裁定）**：產製中與失敗狀態、錯誤資訊保存與重試仍須依 PR-15 設計；正式狀態集合與 Report ID／版次邊界未定。直接核發及錯誤版本取代規則已依負責人裁定更新；SM-Q09／SM-Q10 的快照與重試技術設計另有說明。原送審／核准轉換提案已撤回，SM-Q14 保留 G-06 尚未裁定的狀態集合問題。
+**狀態提案（待 G-06／G-07 裁定）**：產製中與失敗狀態、錯誤資訊保存與重試仍須依 PR-15 設計；正式狀態集合與 Report ID／版次邊界未定。直接核發及錯誤版本取代規則已依負責人裁定更新；SM-Q09／SM-Q10 的快照與重試技術設計另有說明。本期不使用送審／核准狀態，審核流程之後再加時另定（KD-57）；SM-Q14 保留 G-06 尚未裁定的狀態集合問題。
 
 ## 介面
 
@@ -167,7 +166,7 @@ KD-55 裁定的「Report 不使用作廢任務資料」保留為 Report 草稿�
 | STM-AC05 | 專案查核項目被修改，且已建立任務使用該項次 | 具專案查核項目管理權限代碼的使用者選擇不要重新查核 | 僅更正文字，結果、照片與狀態不變；更正可追溯 | STM-R05、STM-R06 |
 | STM-AC06 | Report 已產製完成、正在產製或產製失敗 | 有權限者核發、產製成功／失敗，或以新版更正錯誤已核發內容 | 產製完成後可直接核發、不送審；錯誤已核發內容以新版取代，舊版保留並標示已取代；產製中／失敗狀態細節依 G-06、快照及版次邊界依 G-07 裁定 | STM-R07、STM-R08 |
 | STM-AC07 | Plan 或 Task 的轉換尚未有來源裁定 | 規格審查或實作規劃時遇到該轉換 | 先列入對應待決題；不得把草案提案當成核准的業務規則。Evidence 與 Report 的同項審查仍屬草稿 | STM-R09 |
-| STM-AC08 | Task 提交完成請求；Result 欄位驗證與寫入及改善追蹤屬 0.7.x | 後端覆核完成條件 | 伺服器覆核必要資料完整；含「不符合」仍可完成，任務清單標示「有缺失」。本規格不定義 Result 欄位驗證與寫入；單位由系統帶入，不另設單位系統（KD-54），不得依標準值自動判定結果（KD-37） | STM-R10 |
+| STM-AC08 | Task 提交完成請求；Result 欄位驗證與寫入及改善追蹤屬 0.7.x | 後端覆核完成條件 | 伺服器覆核必要資料完整；含「不符合」仍可完成，任務清單標示「有缺失」。本規格不定義 Result 欄位驗證與寫入；項次設有數值標準時，對應實測欄位的單位須與數值標準相同，由系統自動帶入、不得另設（KD-54）；不得依標準值自動判定結果（KD-37） | STM-R10 |
 | STM-AC09 | 任務已指派或未指派；操作者為同專案且具現場查核權限的成員 | 成員開始或完成查核 | 成員均可開始／完成；系統記錄實際操作者，稽核及後續報告歸屬使用實際查核人 | STM-R11 |
 | STM-AC10 | 有取消需求，或一個 Plan 底下所有 Task 均已取消 | 規格凍結或實作取消轉換前 | 先裁定可取消的 Task 狀態、取消後能否恢復及 Plan 終態；在此之前取消轉換仍屬草稿 | STM-R12 |
 | STM-AC11 | Task 已依另行裁定的允許狀態取消 | 取消動作完成 | 系統記錄原因，保留並顯示取消紀錄，且不計入 Plan 完成判定；此 AC 不測試來源狀態或可恢復性 | STM-R13 |
