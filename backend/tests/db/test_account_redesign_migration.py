@@ -25,7 +25,8 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 
 _OLD_HEAD = "c1a8e5d13f62"
-_NEW_HEAD = "e4b7a1c95d20"
+_NEW_HEAD = "325e0f21a831"
+_NEW_PARENT = "e4b7a1c95d20"
 
 _USERNAME_FORMAT = re.compile(r"[a-z][a-z0-9._-]{2,31}")
 
@@ -218,7 +219,7 @@ class TestRoundTrip:
         assert script.get_heads() == [_NEW_HEAD]
         revision = script.get_revision(_NEW_HEAD)
         assert revision is not None
-        assert revision.down_revision == _OLD_HEAD
+        assert revision.down_revision == _NEW_PARENT
 
     def test_rows_survive_the_round_trip(self, db_url, engine):
         _seed(

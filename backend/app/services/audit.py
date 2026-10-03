@@ -634,6 +634,18 @@ register_audit_event(
     always_recorded=("company_id", "employee_no", "department", "location"),
     nullable_fields=("company_id", "employee_no", "department", "location"),
 )
+register_audit_event(
+    "system_role_assignment.created",
+    entity_type="system_role_assignment",
+    kind=AuditEventKind.CREATED,
+    fields=("user_id", "role_code"),
+)
+register_audit_event(
+    "system_role_assignment.deleted",
+    entity_type="system_role_assignment",
+    kind=AuditEventKind.DELETED,
+    fields=("user_id", "role_code"),
+)
 
 # `authentication` 事件 (docs/specs/audit-log/spec.md#authentication-事件,
 # ALG-R17). Registered here per ALG-R13; written at the actual
