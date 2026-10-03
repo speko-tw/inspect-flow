@@ -150,6 +150,18 @@ class ErrorCode(DescribedStrEnum):
         "project.member_conflict",
         "The user is already a member of this project.",
     )
+    TEMPLATE_NAME_CONFLICT = (
+        "template.name_conflict",
+        "A template library name is already in use at this level.",
+    )
+    TEMPLATE_CATEGORY_NOT_EMPTY = (
+        "template.category_not_empty",
+        "The category still contains systems.",
+    )
+    TEMPLATE_SYSTEM_NOT_EMPTY = (
+        "template.system_not_empty",
+        "The system still contains template items.",
+    )
 
 
 def build_error_code_descriptions(

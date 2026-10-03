@@ -68,17 +68,19 @@
 
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
-| GET | `/api/v1/template-categories` | 列出工程類別 | 範本管理員或具任一專案查核項目編輯權限者 |
+| GET | `/api/v1/template-categories` | 列出工程類別 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | POST | `/api/v1/template-categories` | 建立工程類別 | 範本管理員 |
 | PATCH | `/api/v1/template-categories/{category_id}` | 改名工程類別 | 範本管理員 |
 | DELETE | `/api/v1/template-categories/{category_id}` | 刪除工程類別；其下仍有系統時回 409 `template.category_not_empty` | 範本管理員 |
-| GET | `/api/v1/template-categories/{category_id}/systems` | 列出類別下系統 | 範本管理員或具任一專案查核項目編輯權限者 |
+| GET | `/api/v1/template-categories/{category_id}/systems` | 列出類別下系統 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | POST | `/api/v1/template-categories/{category_id}/systems` | 建立系統 | 範本管理員 |
 | PATCH | `/api/v1/template-systems/{system_id}` | 改名系統 | 範本管理員 |
 | DELETE | `/api/v1/template-systems/{system_id}` | 刪除系統；其下仍有查核項目時回 409 `template.system_not_empty` | 範本管理員 |
-| GET | `/api/v1/templates` | 查詢範本與查核項目 | 範本管理員或具任一專案查核項目編輯權限者 |
+| GET | `/api/v1/template-systems/{system_id}/templates` | 依 cursor 分頁讀取系統下的範本，每筆含完整項次、標準、實測欄位及照片需求 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
+| PUT | `/api/v1/template-systems/{system_id}/templates` | 在單一交易中覆蓋系統下的範本集合；保留 body 中有既有 `id` 的項目，刪除未列出的項目並建立沒有 `id` 的項目 | 範本管理員 |
+| GET | `/api/v1/templates` | 查詢範本與查核項目 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | POST | `/api/v1/templates` | 建立一筆查核項目範本；body 必含 `system_id` | 範本管理員 |
-| GET | `/api/v1/templates/{template_id}` | 讀取範本結構 | 範本管理員或具任一專案查核項目編輯權限者 |
+| GET | `/api/v1/templates/{template_id}` | 讀取範本結構 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | PUT | `/api/v1/templates/{template_id}` | 覆蓋目前範本內容 | 範本管理員 |
 | DELETE | `/api/v1/templates/{template_id}` | 刪除範本 | 範本管理員 |
 | POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目） | 具該專案 `project_inspection_item.edit` 權限者 |
@@ -88,6 +90,8 @@
 | DELETE | `/api/v1/system-role-assignments/template_admin/{user_id}` | 收回使用者的 `template_admin` 指派；尚未指派時回 404 | Admin |
 
 `GET /api/v1/projects` 維持 AUT-R20 的 Admin 存取；新增範本管理員可列出全部專案，其他非 Admin（包括一般專案成員及無專案權限者）仍回 403，不提供過濾列表。回歸驗收確認 Admin 與範本管理員可取得全部專案，其他非 Admin 拒絕。名稱衝突回 `template.name_conflict`（409）；分類有系統時回 `template.category_not_empty`（409）；系統有查核項目時回 `template.system_not_empty`（409）。
+
+範本結構寫入時，每個實測欄位以請求內的 `client_id`（UUID）供同項次的數值標準用 `measurement_field_client_id` 綁定；此識別只用於一次請求，資料表 `id` 由後端產生，回應以 `id` 與 `measurement_field_id` 表示持久識別。整份範本及整系統覆蓋請求內的 `client_id` 不得重複。項目與項次的 `sequence` 限 1～32767；數值標準的 `value` 必須是有限數字，所有數字單位去除前後空白後不得為空。這些輸入不合法時回 422 與共用驗證錯誤格式。Admin 讀取範本庫沿用 [AUT-Q2](../authentication/spec.md#aut-q2) 的所有專案權限放行裁定，不授予範本寫入權限。
 
 指派 `template_admin` 的 PUT 是冪等操作：使用者已被指派時回 204，不新增稽核紀錄；並行重複指派遇到相同唯一鍵衝突時，確認指派已存在後亦回 204，不重複寫稽核。收回尚未指派的角色回 404。
 
@@ -128,3 +132,4 @@
 - 單位規則的意圖已由 [#332](https://github.com/speko-tw/inspect-flow/issues/332)／[PR #333](https://github.com/speko-tw/inspect-flow/pull/333) 記錄（KD-54 已合併；原始來源為負責人[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)）。本規格依此將數值標準綁定一個數字欄位，並在 TPL-Q8 定案具體欄位關聯；單位換算仍由現場處理且不在本規格範圍。
 - TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 定案並凍結規格；模板管理、API、資料模型與套用責任依本規格明確分界 — #110（PR #335 後續）。
 - 登記範本管理員角色指派／收回的稽核事件代碼與欄位，並引用 `audit-log` 事件目錄 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
+- 澄清範本庫 Admin 讀取、整系統巢狀讀寫路徑、請求內實測欄位識別與驗證邊界 — [PR #345 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/345#pullrequestreview-5401219325)。
