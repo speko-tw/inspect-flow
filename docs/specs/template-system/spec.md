@@ -2,8 +2,8 @@
 
 **代碼**：`TPL`　**Phase**：P3　**狀態**：草稿<br>
 **前置規格**：`database-foundation`（UUID 與稽核欄位）、`domain-model`（`User`、`Project`、`ProjectMember` 與專案權限）、`authentication`（登入者與權限檢查）、`api-conventions`（API 共用契約）<br>
-**引用意圖**：[PR-04](../../intents/02-principles.md#pr-04)、[PR-09](../../intents/02-principles.md#pr-09)、[PR-10](../../intents/02-principles.md#pr-10)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-47](../../intents/03-decisions-and-stack.md#kd-47)～[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[OQ-04](../../intents/05-open-questions.md#oq-04)、[OQ-05](../../intents/05-open-questions.md#oq-05)、[OQ-06](../../intents/05-open-questions.md#oq-06)、[OQ-09](../../intents/05-open-questions.md#oq-09)、[OQ-20](../../intents/05-open-questions.md#oq-20)<br>
-**被擋議題**：[OQ-06](../../intents/05-open-questions.md#oq-06) 尚未裁定的 `N/A`、嚴重度與缺失語意，依[開工門檻](../../intents/05-open-questions.md#gate)維持本規格草稿；不影響本文明確標示為已裁定的範本結構。
+**引用意圖**：[PR-04](../../intents/02-principles.md#pr-04)、[PR-09](../../intents/02-principles.md#pr-09)、[PR-10](../../intents/02-principles.md#pr-10)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-47](../../intents/03-decisions-and-stack.md#kd-47)～[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[OQ-04](../../intents/05-open-questions.md#oq-04)、[OQ-05](../../intents/05-open-questions.md#oq-05)、[OQ-06](../../intents/05-open-questions.md#oq-06)、[OQ-09](../../intents/05-open-questions.md#oq-09)、[OQ-20](../../intents/05-open-questions.md#oq-20)<br>
+**凍結狀態**：OQ-06 已裁定，不再阻擋本規格凍結；本規格目前仍為草稿，待 TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q7 等設計細節確認。
 
 ## 目的
 
@@ -15,7 +15,7 @@
 
 - 範本庫及 `Inspection Template` 的新增、讀取、修改與刪除。
 - 兩層分類「工程類別 → 系統」，及其下的查核項目與查核項次結構。
-- 文字標準、數值標準及照片需求的範本定義。
+- 文字標準、數值標準、實測欄位定義及照片需求的範本定義。
 - 單一查核項目或整個系統的範本儲存與套用。
 - 範本管理員這個全系統角色及其指派模型，以及本功能中的權限；此角色與 `domain-model` 既有專案 `Role` 分開。
 
@@ -24,7 +24,7 @@
 - 專案副本的完整資料模型與欄位：由 `domain-model` 定義；目前與 `Task Requirement Snapshot` 的分工仍待 [OQ-09](../../intents/05-open-questions.md#oq-09) 於 0.4.x 確認。
 - `Inspection Plan`、`Inspection Task`、任務快照與任務狀態：移至 `inspection-planning`（P4）。
 - 自主檢查／抽查的檢查層級與檢查者欄位：屬 P4 `inspection-planning`（0.4.x；依 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)），不屬本規格範圍。
-- 現場結果、實測值輸入、自動判定、`N/A`、嚴重度與缺失流程：移至後續規格；其中未定語意見 [OQ-06](../../intents/05-open-questions.md#oq-06)，實測值與自動判定依 [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52) 屬 0.7.x。
+- 現場選擇符合／不符合／不適用、填寫實測值、嚴重度、註解與原因，以及自動判定、缺失流程：屬 0.7.x 現場規格；本規格只定義範本的實測欄位結構，不定義現場填值或結果行為（依 [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)）。
 - Evidence 上傳與照片檔案儲存：移至 `field-evidence`（P6）；本規格只定義範本中的照片需求。
 - 報告版面與 `Report Template`：移至 `report-delivery`（P9）。查核範本不等於報告範本，報告範本的版本規則不受本規格影響。
 - 範本建議、審核與核准流程：移至後續版本（#314，0.8.x）。
@@ -46,9 +46,10 @@
 | TPL-R01 | 系統**必須**提供獨立於專案的查核範本庫；專案**得**套用範本，也**得**從零建立自己的查核項目。 | 必須／得 | [KD-47](../../intents/03-decisions-and-stack.md#kd-47) |
 | TPL-R02 | `Inspection Template` 修改時**必須**直接覆蓋，只保留最新內容；不得建立或使用 `Template Version`。 | 必須／不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[PR-04](../../intents/02-principles.md#pr-04) |
 | TPL-R03 | 範本管理**必須**支援兩層分類「工程類別 → 系統」，其下為查核項目；分類同一層的名稱**不得**重複，不同層的名稱**得**重複。目前使用名稱，不設代號。 | 必須／得 | [KD-48](../../intents/03-decisions-and-stack.md#kd-48)；名稱空白與大小寫比對細節由本規格決定，見 [TPL-Q1](#tpl-q1)。 |
-| TPL-R04 | 查核範本**必須**只保存結構資料：分類、查核項目、查核項次、檢查標準與照片需求；**不得**保存現場結果或照片。`Inspection Template` 的單位是單一查核項目，或一個系統連同其下所有查核項目。 | 必須 | [KD-47](../../intents/03-decisions-and-stack.md#kd-47)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48) |
+| TPL-R04 | 查核範本**必須**只保存結構資料：分類、查核項目、查核項次、檢查標準、實測欄位定義與照片需求；**不得**保存現場結果、實測值或照片。`Inspection Template` 的單位是單一查核項目，或一個系統連同其下所有查核項目。 | 必須 | [KD-47](../../intents/03-decisions-and-stack.md#kd-47)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48) |
 | TPL-R05 | `Template Item` **必須**有 `sequence`、`title`、`instruction`；其下**得**有多個查核項次，每個查核項次由內業預先設定。MVP 不要求 interval，也不依 interval 自動產生查核點。 | 必須／得 | 架構基準 §12.5；[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[G-01](../../intents/05-open-questions.md#g-01) |
-| TPL-R06 | 每個查核項次**得**選擇文字標準或數值標準。文字標準按計畫書原文記錄，不解析條件；數值標準包含標準值、條件（`≤`、`≥`、`＝` 或範圍）、單位與容許誤差。範本只定義標準，不記錄實測值或自動判定結果。 | 得 | [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52) |
+| TPL-R06 | 每個查核項次**得**選擇文字標準或數值標準。文字標準按計畫書原文記錄，不解析條件；數值標準包含標準值、條件（`≤`、`≥`、`＝` 或範圍）、單位與容許誤差。範本只定義標準與實測欄位，不記錄實測值或自動判定結果。 | 得 | [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52) |
+| TPL-R11 | 每個查核項次**得**設定多個實測欄位；每欄由內業設定為文字或數字。數字欄位**必須**有單位；若項次有數值標準，實測欄位單位**必須**與標準單位相同並由系統帶入，不得另設。範本只定義欄位，不保存現場填值；單位換算由現場自行處理。 | 得／必須／不得 | [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54) |
 | TPL-R07 | MVP 的 `Evidence Requirement` **必須**支援照片需求；MVP 佐證僅收照片。每個查核項次**必須**至少被一張非總覽照片覆蓋，照片可多張且不設上限；一張照片**得**覆蓋多個查核項次。範本**不得**設定總覽照片必拍規則；總覽照片是現場人員選擇是否拍攝的額外選項，可有多張、排在查核項目組最前面，且不計入最低覆蓋。照片需求**不得**在程式中針對特定項目寫死。 | 必須／得／不得 | [PR-09](../../intents/02-principles.md#pr-09)、[KD-38](../../intents/03-decisions-and-stack.md#kd-38)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48)、[KD-50](../../intents/03-decisions-and-stack.md#kd-50)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[OQ-05](../../intents/05-open-questions.md#oq-05) |
 | TPL-R08 | 套用範本時**必須**複製所選單一查核項目或整個系統的範本結構，建立專案自己的查核項目；此後修改或刪除來源範本**不得**改動已套用的專案內容。專案**必須**記錄來源查核範本名稱與套用時間。 | 必須／不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-47](../../intents/03-decisions-and-stack.md#kd-47)；專案副本和任務快照分工依 [OQ-09](../../intents/05-open-questions.md#oq-09) 留待 P4。 |
 | TPL-R09 | 系統**必須**有全系統角色機制；Admin 直接指派角色，指派及收回**必須**寫稽核紀錄。首個角色為範本管理員，可新增、修改、刪除查核範本，查看所有專案並將任一專案查核項目存成範本。此角色與 `is_admin`、專案角色並存且互相獨立；套用範本由具目標專案查核項目編輯權限者執行，不要求範本管理員身分。 | 必須／得 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)；全系統角色及指派模型由本規格定義，`domain-model` 目前未定義此實體。 |
@@ -56,7 +57,7 @@
 
 ## 資料
 
-`Inspection Template`、兩層分類、`Template Item`、查核項次、檢查標準、`Evidence Requirement` 及全系統角色／指派模型由本規格定義；其他共用實體欄位由 `domain-model` 定義。不新增 `Template Version`。套用後的專案副本由 `domain-model` 定義；其與 P4 `Task Requirement Snapshot` 的細節依 OQ-09 保留未定。
+`Inspection Template`、兩層分類、`Template Item`、查核項次、檢查標準、實測欄位定義、`Evidence Requirement` 及全系統角色／指派模型由本規格定義；其他共用實體欄位由 `domain-model` 定義。不新增 `Template Version`。套用後的專案副本由 `domain-model` 定義；其與 P4 `Task Requirement Snapshot` 的細節依 OQ-09 保留未定。
 
 `Evidence Requirement` 依架構基準 §12.6 含 `type`、`required`、`min_count`、`max_count`；照片的實際規則由 KD-50 覆蓋：每項次最少一張、沒有張數上限，故照片不設有效的 `max_count` 上限。MVP 不建立非照片 Evidence 類型；原 `TEXT` 是否保留為 Evidence 類型尚待規格確認（[KD-53](../../intents/03-decisions-and-stack.md#kd-53)）。
 
@@ -83,7 +84,7 @@
 
 ## 驗收條件
 
-本規格仍為草稿；以下條件覆蓋已裁定的範本範圍，涉及 OQ-06 未定結果語意的部分不納入驗收。
+本規格仍為草稿；以下條件覆蓋已裁定的範本範圍。OQ-06 已裁定的現場結果語意屬 0.7.x，本規格只驗收實測欄位定義。
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
@@ -102,10 +103,9 @@
 - <a id="tpl-q2"></a>**TPL-Q2：全系統角色的模型與稽核**。本規格定義範本管理員及全系統角色與指派資料模型；`domain-model` 目前沒有此實體。本規格須釐清它與現有 `Role`、`ProjectMember`、`is_admin` 的關係。依 KD-49，三者並存且不互相混用；Admin 指派或收回時依 KD-29 留稽核紀錄。
 - <a id="tpl-q3"></a>**TPL-Q3：專案副本與任務需求快照的分工**。由 `inspection-planning` 依 OQ-09 於 P4 確認；查核範本不版本化的裁定不因此改變。
 - <a id="tpl-q4"></a>**TPL-Q4：`TEXT` 是否仍為獨立 Evidence 類型**。OQ-20 已裁定 MVP 只收照片，但 KD-53 明確保留原 `TEXT` 類型是否續存待規格確認；此規格先不將它列為 MVP 可用類型。
-- <a id="tpl-q5"></a>**TPL-Q5：OQ-06 未決語意**。`N/A`、嚴重度、缺失欄位及不符合後續流程仍未定，繼續阻擋本規格凍結；本規格不自行裁定。這些結果語意可能影響範本欄位，例如查核項次是否能設定為允許 `N/A`、相關欄位是否必填，以及缺失資料如何關聯；須待裁定後再決定，本文不預設欄位或行為。
 - <a id="tpl-q6"></a>**TPL-Q6：專案查核項目模型責任**。專案副本欄位與建立流程由 `domain-model`／P4 `inspection-planning` 協作定義，並以 OQ-09 決定與 `Task Requirement Snapshot` 的責任界線；不得在本規格假設快照欄位。
-- <a id="tpl-q7"></a>**TPL-Q7：API 路徑與分類維護**。表列路徑是提案；實作前需確認 API convention 與資源命名。範本管理員的全專案瀏覽沿用既有專案列表 API；分類與系統目前只列新增及讀取端點，是否需改名、刪除端點及其影響須在實作前決定。這些待定細節不改變已裁定的可存／可套用單項或整個系統能力。
+- <a id="tpl-q7"></a>**TPL-Q7：API 路徑、分類維護與專案列表授權**。範本管理員新增 `/api/v1/projects` 的跨專案瀏覽授權分支，由 T2 一併處理，並與 `domain-model`／projects 既有契約對齊；此既有端點的授權變更可能影響其他呼叫者，需在實作前核對其授權與回歸範圍。表列路徑是提案；實作前需確認 API convention 與資源命名。範本管理員的全專案瀏覽沿用既有專案列表 API；分類與系統目前只列新增及讀取端點，是否需改名、刪除端點及其影響須在實作前決定。這些待定細節不改變已裁定的可存／可套用單項或整個系統能力。
 
 ## 變更紀錄
 
-- 無。
+- 依負責人直接指示（[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)），將數值標準與對應實測欄位的單位關係納入 TPL-R11／TPL-AC09；單位換算仍由現場處理且不在本規格範圍。
