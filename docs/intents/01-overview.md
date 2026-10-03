@@ -9,6 +9,17 @@ InspectFlow 要避免照片、查核項目與說明分散，造成證據難核�
 
 `InspectFlow` 這個名稱由 `Inspection`（查核）與 `Flow`（流程）組合而成，代表本系統管理的是完整的工程查核流程，而非單純的拍照工具（依據：架構基準 §0.1）。
 
+### 系統定位與使用對象
+
+InspectFlow 是**工程查核系統**，涵蓋公共與私人工程的施工查驗、材料設備（進料）查驗等（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313) 追加裁定第 15～18 題，2026-10-02），見 [KD-51](03-decisions-and-stack.md#kd-51)）。品管分兩級，長期都用本系統，並在同一系統串起來：
+
+| 層級 | 誰檢查 | 本系統的位置 |
+|---|---|---|
+| 一級：自主檢查 | 廠商 | 長期目標；資料結構預留「自主檢查／抽查」的區分與「由誰檢查」，MVP 不以此為核心。 |
+| 二級：抽查 | 甲方的監造／PCM | 目前的主要使用情境；MVP 以抽查紀錄表為核心。 |
+
+檢查時機與停留點，MVP 不做，之後再加；缺失改善追蹤（[#76](https://github.com/speko-tw/inspect-flow/issues/76)，0.7.x）與簽認（[#77](https://github.com/speko-tw/inspect-flow/issues/77)，0.9.x）另有版本處理。
+
 `Dashboard` 用來監控；DOCX／PDF 才是正式交付與歸檔產物（依據：架構基準 §20.1、§20.22）。Pilot 還要驗證現場操作、排程、網路、容量、備份與報告產製時間（依據：架構基準 §31）。
 
 現場流程**應**在手機與平板上容易操作；Pilot 要實測現場裝置與網路（依據：架構基準 §5.3、§13A.13、§31）。
@@ -32,9 +43,10 @@ InspectFlow 要避免照片、查核項目與說明分散，造成證據難核�
 |---|---|
 | 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
 | 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立查核計畫、指派工程師、批次產生任務、監看完成度、審閱照片並產生報告，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
+| 範本管理員（全系統角色，不屬於任何專案） | 由 Admin 直接指派；新增、修改、刪除範本庫的範本，可查看所有專案並把任何專案的查核項目存成範本；範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313)，2026-10-02），見 [KD-49](03-decisions-and-stack.md#kd-49)）。 |
 | 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
-系統採「系統管理者開關＋可自訂的專案角色」模式，取代原本架構基準 §17 例示的四個固定角色 `ADMIN`、`COORDINATOR`、`INSPECTOR`、`VIEWER`；角色清單全系統共用，由 Admin 之後在系統內新增與維護，初始化不預建範本角色（依據：負責人決定（#63，2026-09-26）、負責人裁定（#261，2026-09-29）；取代架構基準 §17，見 [KD-24](03-decisions-and-stack.md#kd-24)、[KD-26](03-decisions-and-stack.md#kd-26)）。權限機制的細節（權限＝資料 × 動作、角色掛在專案成員上、安全機制）已裁定，見 [05-open-questions.md](05-open-questions.md) [OQ-08](05-open-questions.md#oq-08)（已裁定）。
+系統採「系統管理者開關＋可自訂的專案角色」模式，取代原本架構基準 §17 例示的四個固定角色 `ADMIN`、`COORDINATOR`、`INSPECTOR`、`VIEWER`；另新增「全系統角色」機制（第一個是範本管理員，見上表與 [KD-49](03-decisions-and-stack.md#kd-49)），三者並存、不互相混用。專案角色清單全系統共用，由 Admin 之後在系統內新增與維護，初始化不預建範本角色（依據：負責人決定（#63，2026-09-26）、負責人裁定（#261，2026-09-29）；取代架構基準 §17，見 [KD-24](03-decisions-and-stack.md#kd-24)、[KD-26](03-decisions-and-stack.md#kd-26)）。權限機制的細節（權限＝資料 × 動作、角色掛在專案成員上、安全機制）已裁定，見 [05-open-questions.md](05-open-questions.md) [OQ-08](05-open-questions.md#oq-08)（已裁定）。
 
 ### 人員、公司與權限的實體關係
 
@@ -80,13 +92,13 @@ flowchart LR
 
 - **Phase 1 — Core Foundation（核心基礎）**：Repository 骨架、健康檢查、CI、後端／前端基礎、API 慣例、SQLAlchemy + Alembic + SQLite、`User`、`Company`、`Project` 與共用基礎。
 - **Phase 2 — Identity & Access（身分與存取）**：登入 / 登出 / 目前使用者、角色、權限與存取檢查。
-- **Phase 3 — Template System**：`Template`、`TemplateVersion`、`TemplateItem`、`EvidenceRequirement`。
+- **Phase 3 — Template System**：範本庫（獨立於專案、套用即複製、範本不版本化，見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)）、`Template`、`TemplateItem`、`EvidenceRequirement`；範本只存結構、分類固定兩層（[KD-48](03-decisions-and-stack.md#kd-48)）、檢查標準分文字與數值兩種（[KD-52](03-decisions-and-stack.md#kd-52)）。
 - **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照；查驗項目與查驗點由內業事先給定，MVP 不以間距（interval）自動切分任務為必要流程（依 [G-01](05-open-questions.md#g-01) 裁定）。
 - **Phase 5 — Field UI**：今日任務、任務詳情、證據檢查清單、狀態。
 - **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）。
 - **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證。
 - **Phase 8 — Admin Dashboard**：今日工作量、完成數／完成率、工程師與專案進度。
-- **Phase 9 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存範本版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
+- **Phase 9 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
 - **Phase 10 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
 - **Phase 11 — Pilot Hardening & Release Readiness（試營運強化與發布整備）**：依試營運回饋修正問題，強化效能、資安與維運，驗證相容性、備份／還原及報告正確性，完成發布整備。
 
@@ -98,7 +110,7 @@ Phase N 對應 Milestone 0.N.x，見 [06-versioning-and-milestone-governance.md]
 
 ### MVP 的證據類型邊界
 
-MVP **得**只實作 `PHOTO` 與 `TEXT`；`NUMBER`、`BOOLEAN`、`SIGNATURE`、`DOCUMENT` 只是可擴充類型（依據：架構基準 §12.6）。正式支援範圍見 [OQ-20](05-open-questions.md#oq-20)；來源 §38 Evidence 仍要求團隊決定。
+MVP 的佐證**只收照片**；額外文件拍照並以照片註記說明，報告功能（0.9.x）再提供「補充文件」區；文件、量測數值、簽名、影片等類型未來可能擴充，由負責人在有需要時裁定（依據：負責人裁定（[#88 留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)，2026-10-02），見 [OQ-20](05-open-questions.md#oq-20)（已裁定）、[KD-53](03-decisions-and-stack.md#kd-53)；取代架構基準 §12.6 的 `PHOTO`／`TEXT` 暫定）。原 `TEXT` 類型是否保留為獨立佐證類型，裁定沒有說明，待規格確認。
 
 ### 目前的運作前提（屬第一階段基準，非永久限制）
 
@@ -138,7 +150,8 @@ Voice Note（語音備註）                    WBS 整合
 文件上傳                                  Drawing Linkage（圖說關聯）
 影片                                      Material / Equipment Linkage
 PostgreSQL（取代 SQLite）                 MinIO / S3 / NAS（取代本機儲存）
-Corporate SSO
+Corporate SSO                            檢查時機／停留點
+                                         串接文件管理系統
 ```
 
 資料庫與儲存體遷移**應**維持 API 契約，見 [KD-08](03-decisions-and-stack.md#kd-08)、[KD-02](03-decisions-and-stack.md#kd-02)（依據：架構基準 §10、§32–33）。
@@ -228,16 +241,16 @@ flowchart TB
   Plan --> Task["Inspection Task（查核任務）"]
   Task --> Snapshot["Task Requirement Snapshot（需求快照）"]
   Snapshot --> Evidence["Evidence（證據）"]
-  Template["Inspection Template（範本）"] --> Version["Template Version（範本版本）"]
-  Version --> Item["Template Item（範本項目）"]
+  Template["Inspection Template（範本庫的範本）"] --> Item["Template Item（範本項目）"]
   Item --> Requirement["Evidence Requirement（證據需求）"]
+  Template -.->|套用即複製，記錄來源名稱與時間| Project
   Requirement -.->|建立任務時複製為| Snapshot
-  Version -.->|建立任務時鎖定| Task
 ```
 
-依據：架構基準 §12
+依據：架構基準 §12；範本不版本化、套用即複製依負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5956039701)，2026-10-02），見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)
 
-- `Inspection Task` 建立時鎖定某個 `Template Version`，並把當時的 `Evidence Requirement` 複製成自 己的 `Task Requirement Snapshot`（見 [PR-04](02-principles.md#pr-04)）。
+- 範本庫獨立於專案；範本修改時直接覆蓋，沒有 `Template Version`。專案套用範本時複製成自己的查核項目，並記錄來源範本名稱與套用時間，之後範本改動不影響已套用的專案。
+- `Inspection Task` 建立時把當時的 `Evidence Requirement` 複製成自己的 `Task Requirement Snapshot`（見 [PR-04](02-principles.md#pr-04)）；專案複本與任務快照的分工待 0.4.x 規格確認（見 [OQ-09](05-open-questions.md#oq-09)）。
 - 完成度檢查與報告都應讀 `Task` 自己的 Snapshot，不直接查目前的 `Template Item` / `Evidence Requirement`。
 - `Evidence` 隸屬於某個 `Task` 與其 `Task Requirement Snapshot`，可再往上追溯到 `Plan` 與 `Project`（見 [PR-07](02-principles.md#pr-07)）。
 
