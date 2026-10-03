@@ -13,11 +13,32 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column, validates
+from sqlalchemy.sql.functions import FunctionElement
 from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase, UTCDateTime
 from app.models._audit import AuditMixin
+
+
+class _TrimForIndex(FunctionElement[str]):
+    """Compile TRIM using PostgreSQL's catalog-preserved syntax."""
+
+    type = String()
+    inherit_cache = True
+
+
+@compiles(_TrimForIndex)
+def _compile_trim_for_index(element, compiler, **kwargs):
+    argument = compiler.process(list(element.clauses)[0], **kwargs)
+    return f"trim({argument})"
+
+
+@compiles(_TrimForIndex, "postgresql")
+def _compile_postgres_trim_for_index(element, compiler, **kwargs):
+    argument = compiler.process(list(element.clauses)[0], **kwargs)
+    return f"trim(BOTH FROM {argument})"
 
 
 class SystemRoleCode(StrEnum):
@@ -53,7 +74,7 @@ class TemplateCategory(AuditMixin, TimestampedBase):
     __table_args__ = (
         Index(
             "ix_template_categories_name",
-            func.lower(func.trim(name)),
+            func.lower(_TrimForIndex(name)),
             unique=True,
         ),
     )
@@ -81,7 +102,7 @@ class TemplateSystem(AuditMixin, TimestampedBase):
         Index(
             "ix_template_systems_category_name",
             category_id,
-            func.lower(func.trim(name)),
+            func.lower(_TrimForIndex(name)),
             unique=True,
         ),
     )
@@ -111,7 +132,7 @@ class TemplateItem(AuditMixin, TimestampedBase):
         Index(
             "ix_template_items_system_title",
             system_id,
-            func.lower(func.trim(title)),
+            func.lower(_TrimForIndex(title)),
             unique=True,
         ),
     )

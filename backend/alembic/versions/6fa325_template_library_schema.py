@@ -37,6 +37,12 @@ def _audit_foreign_keys(table: str) -> list[sa.ForeignKeyConstraint]:
     ]
 
 
+def _normalized_name_expression(column: str):
+    if op.get_bind().dialect.name == "postgresql":
+        return sa.text(f"lower(trim(BOTH FROM {column}))")
+    return sa.func.lower(sa.func.trim(sa.column(column)))
+
+
 def upgrade() -> None:
     op.create_table(
         "template_categories",
@@ -48,7 +54,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_template_categories_name",
         "template_categories",
-        [sa.func.lower(sa.func.trim(sa.column("name")))],
+        [_normalized_name_expression("name")],
         unique=True,
     )
     op.create_table(
@@ -67,7 +73,7 @@ def upgrade() -> None:
         "template_systems",
         [
             "category_id",
-            sa.func.lower(sa.func.trim(sa.column("name"))),
+            _normalized_name_expression("name"),
         ],
         unique=True,
     )
@@ -89,7 +95,7 @@ def upgrade() -> None:
         "template_items",
         [
             "system_id",
-            sa.func.lower(sa.func.trim(sa.column("title"))),
+            _normalized_name_expression("title"),
         ],
         unique=True,
     )
