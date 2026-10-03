@@ -23,7 +23,7 @@
 
 - 專案副本的完整資料模型與欄位：由 `domain-model` 定義；目前與 `Task Requirement Snapshot` 的分工仍待 [OQ-09](../../intents/05-open-questions.md#oq-09) 於 0.4.x 確認。
 - `Inspection Plan`、`Inspection Task`、任務快照與任務狀態：移至 `inspection-planning`（P4）。
-- 自主檢查／抽查的檢查層級與檢查者欄位：移至 `inspection-planning`（P4；依 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)）。
+- 自主檢查／抽查的檢查層級與檢查者欄位：屬 P4 `inspection-planning`（0.4.x；依 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)），不屬本規格範圍。
 - 現場結果、實測值輸入、自動判定、`N/A`、嚴重度與缺失流程：移至後續規格；其中未定語意見 [OQ-06](../../intents/05-open-questions.md#oq-06)，實測值與自動判定依 [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52) 屬 0.7.x。
 - Evidence 上傳與照片檔案儲存：移至 `field-evidence`（P6）；本規格只定義範本中的照片需求。
 - 報告版面與 `Report Template`：移至 `report-delivery`（P9）。查核範本不等於報告範本，報告範本的版本規則不受本規格影響。
@@ -53,7 +53,6 @@
 | TPL-R08 | 套用範本時**必須**複製所選單一查核項目或整個系統的範本結構，建立專案自己的查核項目；此後修改或刪除來源範本**不得**改動已套用的專案內容。專案**必須**記錄來源查核範本名稱與套用時間。 | 必須／不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-47](../../intents/03-decisions-and-stack.md#kd-47)；專案副本和任務快照分工依 [OQ-09](../../intents/05-open-questions.md#oq-09) 留待 P4。 |
 | TPL-R09 | 系統**必須**有全系統角色機制；Admin 直接指派角色，指派及收回**必須**寫稽核紀錄。首個角色為範本管理員，可新增、修改、刪除查核範本，查看所有專案並將任一專案查核項目存成範本。此角色與 `is_admin`、專案角色並存且互相獨立；套用範本由具目標專案查核項目編輯權限者執行，不要求範本管理員身分。 | 必須／得 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)；全系統角色及指派模型由本規格定義，`domain-model` 目前未定義此實體。 |
 | TPL-R10 | 所有本規格 API **必須**遵守 `api-conventions`，路徑以 `/api/v1/` 開頭，使用 UUID 資源識別，並由後端依 TPL-R09 執行授權。 | 必須 | [KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[API-R01](../api-conventions/spec.md#需求)、[API-R06](../api-conventions/spec.md#需求) |
-| TPL-R11 | **移至 `inspection-planning`（P4）**：自主檢查／抽查的檢查層級與檢查者欄位（依據：[KD-51](../../intents/03-decisions-and-stack.md#kd-51)）。本規格不負責其需求或驗收。 | 移至 | [KD-51](../../intents/03-decisions-and-stack.md#kd-51) |
 
 ## 資料
 
@@ -96,7 +95,6 @@
 | TPL-AC06 | 專案已套用範本，另有範本管理員 | 覆蓋或刪除來源範本，檢查專案副本；範本管理員再讀取及存成範本 | 專案副本不變；範本管理員能查看所有專案並把任一專案項目存成範本 | TPL-R08、TPL-R09 |
 | TPL-AC07 | 項次含文字標準、數值標準及照片需求 | 讀取定義並對照系統行為 | 文字標準不解析；數值標準具四類定義欄位但不接受實測值或自動判定；每項次至少被一張非總覽照片覆蓋，一張照片可覆蓋多個項次且照片數無上限；總覽照由現場選擇且不計入最低覆蓋 | TPL-R05、TPL-R06、TPL-R07 |
 | TPL-AC08 | 已登入的範本管理員、非管理員、具任一專案查核項目編輯權限者、無該權限者 | 瀏覽分類／系統／範本、呼叫範本寫入、跨專案讀取／存範本與套用 API | 專案編輯者可瀏覽及套用但不能寫入範本；管理員可寫入範本並查看所有專案、存成範本；其他端點依 TPL-R09 權限拒絕；API 路徑及 ID 符合共用慣例 | TPL-R09、TPL-R10 |
-| TPL-AC09 | **移至 `inspection-planning`（P4）**（依據：[KD-51](../../intents/03-decisions-and-stack.md#kd-51)）；本規格不負責此驗收。 | 移至 | TPL-R11 |
 
 ## 待釐清
 
