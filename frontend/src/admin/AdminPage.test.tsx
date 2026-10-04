@@ -631,6 +631,16 @@ describe('admin user and company pages', () => {
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
   })
 
+  it.each([
+    '/admin/projects/project-demo-1',
+    '/admin/companies',
+    '/admin/projects/project-demo-1/planning/extra',
+  ])('denies non-admin access to protected route %s', (path) => {
+    managementFetch()
+    renderAdmin(path, false)
+    expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
+  })
+
   it('allows non-admin users to open project planning routes', async () => {
     managementFetch()
     renderAdmin('/admin/projects/project-demo-1/planning', false)

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react'
 
 import { ManagementApiError } from '../api'
 import { planningClient, planningErrorMessage } from './api'
@@ -50,6 +56,9 @@ export default function PlanningPage({
   const [busy, setBusy] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [projectNotFound, setProjectNotFound] = useState(false)
+  const [zonesDenied, setZonesDenied] = useState(false)
+  const [membersDenied, setMembersDenied] = useState(false)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [planName, setPlanName] = useState('')
@@ -81,8 +90,10 @@ export default function PlanningPage({
   const cancelTrigger = useRef<HTMLElement | null>(null)
   const cancelHeading = useRef<HTMLHeadingElement | null>(null)
   const pageHeading = useRef<HTMLHeadingElement | null>(null)
+  const pageContent = useRef<HTMLElement | null>(null)
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
+  const dialogOpen = Boolean(confirmation || cancelTask)
 
   useEffect(() => {
     if (confirmation) confirmationHeading.current?.focus()
@@ -108,19 +119,38 @@ export default function PlanningPage({
   }, [cancelTask])
 
   useEffect(() => {
+    const content = pageContent.current
+    if (!content) return
+    Array.from(content.children).forEach((child) => {
+      const element = child as HTMLElement
+      if (element.getAttribute('role') !== 'dialog') {
+        element.inert = dialogOpen
+        if (dialogOpen) element.setAttribute('inert', '')
+        else element.removeAttribute('inert')
+      }
+    })
+  }, [dialogOpen])
+
+  useEffect(() => {
     let active = true
     async function loadProjects() {
       setLoading(true)
       setError('')
+      setAccessDenied(false)
+      setProjectNotFound(false)
       try {
+        if (initialProjectId) {
+          const project = await client.getProject(initialProjectId)
+          if (active) {
+            setProjects([project])
+            setProjectId(initialProjectId)
+          }
+          return
+        }
         const nextProjects = await client.listProjects()
         if (active) {
           setProjects(nextProjects)
-          const firstProjectId = nextProjects.some(
-            (entry) => entry.id === initialProjectId,
-          )
-            ? initialProjectId
-            : (nextProjects[0]?.id ?? '')
+          const firstProjectId = nextProjects[0]?.id ?? ''
           setProjectId(firstProjectId)
           if (!firstProjectId) setLoading(false)
         }
@@ -128,6 +158,11 @@ export default function PlanningPage({
         if (active) {
           if (caught instanceof ManagementApiError && caught.status === 403) {
             setAccessDenied(true)
+          } else if (
+            caught instanceof ManagementApiError &&
+            caught.status === 404
+          ) {
+            setProjectNotFound(true)
           }
           setError(planningErrorMessage(caught))
           setLoading(false)
@@ -146,38 +181,72 @@ export default function PlanningPage({
     async function loadProjectData() {
       setLoading(true)
       setError('')
-      try {
-        const [nextItems, nextZones, nextMembers, nextPlans] =
-          await Promise.all([
-            client.listProjectItems(projectId),
-            client.listProjectZones(projectId),
-            client.listProjectMembers(projectId),
-            (async () => {
-              const all: InspectionPlan[] = []
-              let cursor: string | null = null
-              do {
-                const page = await client.listPlans(projectId, cursor)
-                all.push(...page.items)
-                cursor = page.next_cursor
-              } while (cursor)
-              return all
-            })(),
-          ])
-        if (active) {
-          setItems(nextItems)
-          setZones(nextZones)
-          setMembers(nextMembers)
-          setPlans(nextPlans)
+      setZonesDenied(false)
+      setMembersDenied(false)
+      const allPlans = async () => {
+        const all: InspectionPlan[] = []
+        let cursor: string | null = null
+        do {
+          const page = await client.listPlans(projectId, cursor)
+          all.push(...page.items)
+          cursor = page.next_cursor
+        } while (cursor)
+        return all
+      }
+      const results = await Promise.allSettled([
+        client.listProjectItems(projectId),
+        client.listProjectZones(projectId),
+        client.listProjectMembers(projectId),
+        allPlans(),
+      ])
+      if (active) {
+        const [itemsResult, zonesResult, membersResult, plansResult] = results
+        if (itemsResult.status === 'fulfilled') {
+          setItems(itemsResult.value)
+        } else {
+          setItems([])
+          setError(planningErrorMessage(itemsResult.reason))
         }
-      } catch (caught) {
-        if (active) {
-          if (caught instanceof ManagementApiError && caught.status === 403) {
-            setAccessDenied(true)
+        if (zonesResult.status === 'fulfilled') {
+          setZones(zonesResult.value)
+        } else {
+          setZones([])
+          if (
+            zonesResult.reason instanceof ManagementApiError &&
+            zonesResult.reason.status === 403
+          ) {
+            setZonesDenied(true)
+          } else {
+            setError(planningErrorMessage(zonesResult.reason))
           }
-          setError(planningErrorMessage(caught))
         }
-      } finally {
-        if (active) setLoading(false)
+        if (membersResult.status === 'fulfilled') {
+          setMembers(membersResult.value)
+        } else {
+          setMembers([])
+          if (
+            membersResult.reason instanceof ManagementApiError &&
+            membersResult.reason.status === 403
+          ) {
+            setMembersDenied(true)
+          } else {
+            setError(planningErrorMessage(membersResult.reason))
+          }
+        }
+        if (plansResult.status === 'fulfilled') {
+          setPlans(plansResult.value)
+        } else {
+          setPlans([])
+          if (
+            plansResult.reason instanceof ManagementApiError &&
+            plansResult.reason.status === 403
+          ) {
+            setAccessDenied(true)
+          } else {
+            setError(planningErrorMessage(plansResult.reason))
+          }
+        }
+        setLoading(false)
       }
     }
     void loadProjectData()
@@ -200,8 +269,9 @@ export default function PlanningPage({
         if (active) {
           if (caught instanceof ManagementApiError && caught.status === 403) {
             setAccessDenied(true)
+          } else {
+            setError(planningErrorMessage(caught))
           }
-          setError(planningErrorMessage(caught))
         }
       },
     )
@@ -218,6 +288,19 @@ export default function PlanningPage({
   function confirm(title: string, action: () => Promise<unknown>): void {
     confirmationTrigger.current = document.activeElement as HTMLElement
     setConfirmation({ title, action })
+  }
+
+  function closeDialogs(): void {
+    setConfirmation(null)
+    setCancelTask(null)
+    setCancelReason('')
+  }
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>): void {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeDialogs()
+    }
   }
 
   async function act(operation: () => Promise<unknown>): Promise<boolean> {
@@ -321,36 +404,57 @@ export default function PlanningPage({
       <section>
         <h1>無權限</h1>
         <p role="alert">你沒有這個專案的查核計畫讀取權限。</p>
+        <p>
+          <a href="/">返回工作台</a>
+        </p>
+      </section>
+    )
+  }
+
+  if (projectNotFound) {
+    return (
+      <section>
+        <h1>找不到專案</h1>
+        <p role="alert">網址中的專案不存在或已刪除。</p>
+        <p>
+          <a href="/">返回工作台</a>
+        </p>
       </section>
     )
   }
 
   return (
-    <section aria-labelledby="planning-heading">
+    <section aria-labelledby="planning-heading" ref={pageContent}>
       <h1 id="planning-heading" ref={pageHeading} tabIndex={-1}>
         計畫與任務
       </h1>
       <p>計畫狀態由任務狀態自動推導；任務派出後才會提供給現場。</p>
+      {projects[0] && <p>專案：{projects[0].name}</p>}
       {readOnly && <p role="status">目前為唯讀模式。</p>}
+      {membersDenied && (
+        <p role="status">沒有讀取成員清單的權限；可略過建議指派。</p>
+      )}
       {error && <p role="alert">{error}</p>}
       {loading ? <p>載入中…</p> : null}
 
       {projects.length > 0 && (
         <>
-          <label>
-            專案
-            <select
-              disabled={busy}
-              onChange={(event) => void changeProject(event.target.value)}
-              value={projectId}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!initialProjectId && (
+            <label>
+              專案
+              <select
+                disabled={busy}
+                onChange={(event) => void changeProject(event.target.value)}
+                value={projectId}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {projects.length === 0 ? (
             <p>目前沒有可管理的專案。</p>
@@ -358,6 +462,11 @@ export default function PlanningPage({
             <>
               <section aria-labelledby="zones-heading">
                 <h2 id="zones-heading">專案分區</h2>
+                {zonesDenied && (
+                  <p role="status">
+                    沒有讀取分區的權限；其他計畫功能仍可使用。
+                  </p>
+                )}
                 {zones.length === 0 ? <p>尚未設定分區。</p> : null}
                 {zones.map((zone) => (
                   <p key={zone.id}>
@@ -385,7 +494,7 @@ export default function PlanningPage({
                     </button>
                   </p>
                 ))}
-                {!readOnly && (
+                {!readOnly && !zonesDenied && (
                   <form onSubmit={(event) => void saveZone(event)}>
                     <h3>{renamingZone ? '修改分區名稱' : '新增分區'}</h3>
                     <label>
@@ -654,7 +763,7 @@ export default function PlanningPage({
                                 )
                               }}
                             >
-                              {zones.length > 0 && (
+                              {zones.length > 0 && !zonesDenied && (
                                 <label>
                                   分區
                                   <select
@@ -754,7 +863,7 @@ export default function PlanningPage({
                           </label>
                         ))}
                       </fieldset>
-                      {zones.length > 0 && (
+                      {zones.length > 0 && !zonesDenied && (
                         <label>
                           任務分區
                           <select
@@ -813,12 +922,12 @@ export default function PlanningPage({
           )}
         </>
       )}
-
       {cancelTask && (
         <section
           aria-labelledby="cancel-task-heading"
           aria-modal="true"
           className="planning-dialog"
+          onKeyDown={handleDialogKeyDown}
           role="dialog"
         >
           <h2 id="cancel-task-heading" ref={cancelHeading} tabIndex={-1}>
@@ -842,14 +951,7 @@ export default function PlanningPage({
             <button disabled={busy || !cancelReason.trim()} type="submit">
               確認取消
             </button>{' '}
-            <button
-              disabled={busy}
-              onClick={() => {
-                setCancelTask(null)
-                setCancelReason('')
-              }}
-              type="button"
-            >
+            <button disabled={busy} onClick={closeDialogs} type="button">
               返回
             </button>
           </form>
@@ -861,6 +963,7 @@ export default function PlanningPage({
           aria-labelledby="confirm-action-heading"
           aria-modal="true"
           className="planning-dialog"
+          onKeyDown={handleDialogKeyDown}
           role="dialog"
         >
           <h2
@@ -878,11 +981,7 @@ export default function PlanningPage({
           >
             確認
           </button>{' '}
-          <button
-            disabled={busy}
-            onClick={() => setConfirmation(null)}
-            type="button"
-          >
+          <button disabled={busy} onClick={closeDialogs} type="button">
             返回
           </button>
         </section>

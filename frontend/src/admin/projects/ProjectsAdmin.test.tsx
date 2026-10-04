@@ -259,6 +259,19 @@ describe('admin projects page', () => {
     )
   })
 
+  it('links project details to planning and task management', async () => {
+    projectFetch()
+    renderAt('/admin/projects/project-1')
+
+    expect(
+      await screen.findByRole('heading', { name: '專案成員：示範工程' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '計畫與任務' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/planning',
+    )
+  })
+
   it('creates a project with optional dates left empty', async () => {
     const fetchMock = projectFetch()
     renderAt('/admin/projects')

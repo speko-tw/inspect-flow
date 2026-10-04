@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { ManagementApiError } from '../api'
 import { PlanningApiError } from './api'
 import { createMockPlanningClient } from './api.mock'
 import PlanningPage from './PlanningPage'
@@ -104,9 +105,9 @@ describe('planning management page', () => {
       )
       const cancelDialog = screen.getByRole('dialog')
       expect(cancelDialog).toHaveAttribute('aria-modal', 'true')
-      expect(document.activeElement).toBe(
+      expect(
         within(cancelDialog).getByRole('heading', { name: '取消任務' }),
-      )
+      ).toHaveFocus()
       fireEvent.change(screen.getByLabelText('取消原因'), {
         target: { value: '現場順序調整' },
       })
@@ -157,10 +158,10 @@ describe('planning management page', () => {
 
   it('shows a permission page when planning reads return 403', async () => {
     const client = createMockPlanningClient()
-    client.listProjects = async () => {
-      throw new PlanningApiError(403, 'permission.denied')
+    client.listPlans = async () => {
+      throw new ManagementApiError(403, 'permission.denied')
     }
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
 
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
@@ -168,6 +169,54 @@ describe('planning management page', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       '沒有這個專案的查核計畫讀取權限',
     )
+    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
+      'href',
+      '/',
+    )
+  })
+
+  it('loads project from route ID without listing or fallback', async () => {
+    const client = createMockPlanningClient()
+    const listProjects = vi
+      .spyOn(client, 'listProjects')
+      .mockResolvedValue([{ id: 'project-demo-1', name: '示範工程 A' }])
+    render(<PlanningPage client={client} initialProjectId="project-demo-2" />)
+
+    expect(await screen.findByText('專案：示範工程 B')).toBeInTheDocument()
+    expect(listProjects).not.toHaveBeenCalled()
+    expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
+  })
+
+  it('shows missing project without fallback', async () => {
+    const client = createMockPlanningClient()
+    vi.spyOn(client, 'getProject').mockRejectedValue(
+      new ManagementApiError(404, 'project.not_found'),
+    )
+    const listProjects = vi.spyOn(client, 'listProjects')
+    render(<PlanningPage client={client} initialProjectId="missing-project" />)
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到專案' }),
+    ).toBeInTheDocument()
+    expect(listProjects).not.toHaveBeenCalled()
+    expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
+  })
+
+  it('keeps plans usable when zones and members return 403', async () => {
+    const client = createMockPlanningClient()
+    client.listProjectZones = async () => {
+      throw new ManagementApiError(403, 'permission.denied')
+    }
+    client.listProjectMembers = async () => {
+      throw new ManagementApiError(403, 'permission.denied')
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+
+    expect(
+      await screen.findByRole('heading', { name: '查核計畫' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+    expect(await screen.findAllByRole('status')).toHaveLength(2)
   })
 
   it('deletes draft tasks through a confirmation dialog', async () => {
@@ -190,11 +239,39 @@ describe('planning management page', () => {
     fireEvent.click(within(article).getByRole('button', { name: '刪除草稿' }))
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
-    expect(document.activeElement).toBe(
+    expect(
       within(dialog).getByRole('heading', { name: '請確認操作' }),
-    )
+    ).toHaveFocus()
     fireEvent.click(within(dialog).getByRole('button', { name: '確認' }))
     expect(await screen.findByText('尚未建立任務。')).toBeInTheDocument()
+  })
+
+  it('closes dialogs on Escape and returns focus to the trigger', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.change(screen.getByLabelText('分區名稱'), {
+      target: { value: '待取消分區' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+    const zone = await screen.findByText('待取消分區')
+    const trigger = within(zone.parentElement as HTMLElement).getByRole(
+      'button',
+      { name: '刪除' },
+    )
+    trigger.focus()
+    fireEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog')
+    expect(
+      within(dialog).getByRole('heading', { name: '請確認操作' }),
+    ).toHaveFocus()
+    expect(document.querySelector('[inert]')).not.toBeNull()
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(trigger).toHaveFocus()
+    expect(document.querySelector('[inert]')).toBeNull()
   })
 
   it('hides task actions on archived plans and restores them on unarchive', async () => {

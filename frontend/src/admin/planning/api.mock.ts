@@ -181,6 +181,9 @@ export function createMockPlanningClient(options?: {
   }
 
   return {
+    async getProject(projectId) {
+      return clone(project(projectId))
+    },
     async listProjects() {
       return clone(PROJECTS)
     },

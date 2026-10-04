@@ -92,7 +92,11 @@ export class PlanningApiError extends ManagementApiError {
  * update operation.
  */
 export interface PlanningClient {
-  /** GET /api/v1/projects; only projects visible to the current user. */
+  /**
+   * GET /api/v1/projects/{project_id}; TODO(#361): allow project inspectors.
+   */
+  getProject(projectId: string): Promise<PlanningProject>
+  /** GET /api/v1/projects; used by the development-only project picker. */
   listProjects(): Promise<PlanningProject[]>
   /** GET /api/v1/projects/{project_id}/inspection-items. */
   listProjectItems(projectId: string): Promise<ProjectInspectionItem[]>
