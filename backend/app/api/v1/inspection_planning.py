@@ -110,67 +110,42 @@ def _call(function, *args, **kwargs):
     try:
         return function(*args, **kwargs)
     except PlanningError as exc:
-        code = _ERRORS.get(exc.code)
-        if code is None:
+        response = _planning_error_response(exc.code)
+        if response is None:
             raise
-        raise APIError(code[0], code[1]) from exc
+        raise APIError(response[0], response[1]) from exc
 
 
-_ERRORS: dict[str, tuple[ErrorCode, int]] = {
-    "authorization.forbidden": (ErrorCode.PERMISSION_DENIED, 403),
-    "project.not_found": (ErrorCode.RESOURCE_NOT_FOUND, 404),
-    "inspection_plan.not_found": (ErrorCode.INSPECTION_PLAN_NOT_FOUND, 404),
-    "inspection_task.not_found": (ErrorCode.INSPECTION_TASK_NOT_FOUND, 404),
-    "project_zone.not_found": (ErrorCode.PROJECT_ZONE_NOT_FOUND, 404),
-    "inspection_plan.invalid_name": (
-        ErrorCode.INSPECTION_PLAN_INVALID_NAME,
-        422,
-    ),
-    "inspection_plan.archived": (ErrorCode.INSPECTION_PLAN_ARCHIVED, 409),
-    "inspection_task.invalid_transition": (
-        ErrorCode.INSPECTION_TASK_INVALID_TRANSITION,
-        409,
-    ),
-    "inspection_task.reason_required": (
-        ErrorCode.INSPECTION_TASK_REASON_REQUIRED,
-        422,
-    ),
-    "project_inspection_item.revision_not_increased": (
-        ErrorCode.REQUEST_VALIDATION_FAILED,
-        422,
-    ),
-    "inspection_task.location_locked": (
-        ErrorCode.INSPECTION_TASK_LOCATION_LOCKED,
-        409,
-    ),
-    "inspection_task.items_required": (
-        ErrorCode.INSPECTION_TASK_ITEMS_REQUIRED,
-        422,
-    ),
-    "inspection_task.invalid_project_item": (
-        ErrorCode.INSPECTION_TASK_INVALID_ITEM,
-        422,
-    ),
-    "inspection_task.invalid_zone": (
-        ErrorCode.INSPECTION_TASK_INVALID_ZONE,
-        422,
-    ),
-    "inspection_task.invalid_assignee": (
-        ErrorCode.INSPECTION_TASK_INVALID_ASSIGNEE,
-        422,
-    ),
-    "inspection_task.invalid_location": (
-        ErrorCode.INSPECTION_TASK_INVALID_LOCATION,
-        422,
-    ),
-    "inspection_task.items_incomplete": (
-        ErrorCode.INSPECTION_TASK_ITEMS_INCOMPLETE,
-        422,
-    ),
-    "project_zone.invalid_name": (ErrorCode.PROJECT_ZONE_INVALID_NAME, 422),
-    "project_zone.name_conflict": (ErrorCode.PROJECT_ZONE_NAME_CONFLICT, 409),
-    "project_zone.in_use": (ErrorCode.PROJECT_ZONE_IN_USE, 409),
-}
+def _planning_error_response(
+    error_code: str,
+) -> tuple[ErrorCode, int] | None:
+    namespace, separator, detail = error_code.partition(".")
+    if not separator:
+        return None
+    if namespace == "authorization" and detail == "forbidden":
+        return ErrorCode.PERMISSION_DENIED, 403
+    if namespace == "project_inspection_item":
+        if detail == "revision_not_increased":
+            return ErrorCode.REQUEST_VALIDATION_FAILED, 422
+        if detail == "not_found":
+            return ErrorCode.RESOURCE_NOT_FOUND, 404
+    try:
+        code = ErrorCode(error_code)
+    except ValueError:
+        return None
+    if detail == "not_found":
+        status_code = 404
+    elif detail in {
+        "archived",
+        "invalid_transition",
+        "location_locked",
+        "name_conflict",
+        "in_use",
+    }:
+        status_code = 409
+    else:
+        status_code = 422
+    return code, status_code
 
 
 def _zone(db: Session, zone_id: UUID | None) -> dict[str, Any] | None:
