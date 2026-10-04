@@ -176,7 +176,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     assert declaration.permission_code == "project_inspection_item.edit"
     declaration = routes[save_template]
     assert declaration is not None
-    assert declaration.level is AccessLevel.SYSTEM_ROLE_REQUIRED
+    assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
     assert declaration.permission_code == "template_admin"
     declaration = routes[list_inspection_items]
     assert declaration is not None
@@ -233,7 +233,7 @@ def test_template_library_routes_declare_read_and_write_access() -> None:
                 declaration.permission_code == "project_inspection_item.edit"
             )
         else:
-            assert declaration.level is AccessLevel.SYSTEM_ROLE_REQUIRED
+            assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
             assert declaration.permission_code == "template_admin"
 
 
