@@ -5,7 +5,7 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import {
   linkUserCompany,
   listCompanies,
-  listUsers,
+  listUsersPage,
   managementErrorMessage,
   setUserActive,
   setUserAdmin,
@@ -33,15 +33,27 @@ export default function UsersPage({
   const [editingUser, setEditingUser] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState<string | null>(null)
   const [busyUser, setBusyUser] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  async function loadUserPage(
+    search: string,
+    cursor: string | null = null,
+    append = false,
+  ) {
+    const page = await listUsersPage({ q: search, cursor, limit: 50 })
+    setUsers((current) => (append ? [...current, ...page.items] : page.items))
+    setNextCursor(page.next_cursor)
+  }
 
   async function reload() {
     setError('')
     try {
-      const [nextUsers, nextCompanies] = await Promise.all([
-        listUsers(),
+      const [, nextCompanies] = await Promise.all([
+        loadUserPage(query),
         listCompanies(),
       ])
-      setUsers(nextUsers)
       setCompanies(nextCompanies)
     } catch (caught) {
       setError(managementErrorMessage(caught))
@@ -54,12 +66,11 @@ export default function UsersPage({
     let active = true
     async function load() {
       try {
-        const [nextUsers, nextCompanies] = await Promise.all([
-          listUsers(),
+        const [, nextCompanies] = await Promise.all([
+          loadUserPage(''),
           listCompanies(),
         ])
         if (active) {
-          setUsers(nextUsers)
           setCompanies(nextCompanies)
         }
       } catch (caught) {
@@ -77,6 +88,32 @@ export default function UsersPage({
       active = false
     }
   }, [])
+
+  async function searchUsers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      await loadUserPage(query.trim())
+    } catch (caught) {
+      setError(managementErrorMessage(caught))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadMoreUsers() {
+    if (!nextCursor) return
+    setLoadingMore(true)
+    setError('')
+    try {
+      await loadUserPage(query, nextCursor, true)
+    } catch (caught) {
+      setError(managementErrorMessage(caught))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   async function act(userId: string, operation: () => Promise<User>) {
     setError('')
@@ -131,6 +168,18 @@ export default function UsersPage({
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
+        <form onSubmit={searchUsers}>
+          <label>
+            搜尋使用者
+            <input
+              onChange={(event) => setQuery(event.target.value)}
+              value={query}
+            />
+          </label>
+          <button disabled={loading} type="submit">
+            搜尋
+          </button>
+        </form>
         {!loading && users.length === 0 ? <p>目前沒有使用者。</p> : null}
         {users.length > 0 && (
           <table>
@@ -242,6 +291,15 @@ export default function UsersPage({
               ))}
             </tbody>
           </table>
+        )}
+        {nextCursor && (
+          <button
+            disabled={loadingMore}
+            onClick={() => void loadMoreUsers()}
+            type="button"
+          >
+            {loadingMore ? '載入中…' : '載入更多'}
+          </button>
         )}
       </div>
       <UserForm companies={companies} onCreated={created} />

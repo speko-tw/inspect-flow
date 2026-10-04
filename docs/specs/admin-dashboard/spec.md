@@ -90,7 +90,7 @@
 
 ## 介面
 
-本節列出具體 API 契約。既有 `GET /api/v1/users`、`/api/v1/companies`、`/api/v1/projects` 目前的凍結回應仍為陣列；下列 cursor 回應為待 T0「既有列表端點 cursor 契約規格變更」合併後才可實作的提案，T0 依規格變更流程更新 `authentication`／`domain-model` 介面並同步前端呼叫端。清單端點遵守 API-R08：`cursor` 是不透明字串，`limit` 預設 50、範圍 1–100，回應 `{items, next_cursor}`；排序鍵均含 UUID。這組 page-size 預設及新端點路徑是規格設計（非負責人裁定），沿用既有 `GET /api/v1/roles` 慣例。所有端點使用 API-R01 前綴 `/api/v1`、API-R02 HTTP 狀態及 API-R05 錯誤 envelope；錯誤代碼由共用 ErrorCode 列舉提供，不在本規格另列代碼對照表。
+本節列出具體 API 契約。`GET /api/v1/users`、`/api/v1/companies`、`/api/v1/projects` 依 #407 同 PR 範圍變更採用 cursor 回應；`authentication`／`domain-model` 介面同步列出契約。清單端點遵守 API-R08：`cursor` 是不透明字串，`limit` 預設 50、範圍 1–100，回應 `{items, next_cursor}`；排序鍵均含 UUID。這組 page-size 預設是規格設計，沿用既有 `GET /api/v1/roles` 慣例。所有端點使用 API-R01 前綴 `/api/v1`、API-R02 HTTP 狀態及 API-R05 錯誤 envelope；錯誤代碼由共用 ErrorCode 列舉提供，不在本規格另列代碼對照表。
 
 | 方法與路徑 | 契約與回應 | 權限與錯誤 |
 |---|---|---|
@@ -103,7 +103,7 @@
 | `POST /api/v1/users/{user_id}/temporary-password` | 空本體；經 AUT-R36 設定系統產生的臨時密碼並標 `must_change_password=true`；回 `{user_id,username,temporary_password,must_change_password:true}` 一次，回應設 `Cache-Control: no-store`；呼叫 AUT-R36 的工作階段撤銷、失敗計數重設與稽核行為 | Admin；401／403；未知使用者 404；不得重設內建 `admin` 或外部身分帳號，回 422；成功後舊 session 失效 |
 | `GET /api/v1/companies?q=&cursor=&limit=` | `{items:[既有 Company 欄位],next_cursor}`；依 `(name,id)` 升冪；`q` 不分大小寫搜尋名稱 | Admin；401／403／422 如上；保留既有單筆及寫入端點 |
 | `POST /api/v1/companies:batch-status` | 本體 `{items:[{company_id,is_active,disable_user_ids:[uuid]}]}`；逐公司套用既有停用語意，成功回 `{items:[Company]}`；整批原子提交，避免部分公司更新 | Admin；401／403；未知 ID、重複項目或不屬於該公司的 `disable_user_ids` 回 422 且整批不變 |
-| `GET /api/v1/projects?q=&cursor=&limit=` | 將既有列表回應改為 `{items:[既有 Project 欄位加 member_count],next_cursor}`；依 `(name,id)` 升冪；`q` 搜尋專案名稱／代碼；成員數依先行完成的 #286 `domain-model` 契約 | 沿用既有 Admin／SystemRole 檢查；401／403／422；不得以 UI 推算 member_count |
+| `GET /api/v1/projects?q=&cursor=&limit=` | 將既有列表回應改為 `{items:[既有 Project 欄位],next_cursor}`；依 `(name,id)` 升冪；`q` 搜尋專案名稱／代碼；`member_count` 仍待 #286 `domain-model` 契約完成後另行加入 | 沿用既有 Admin／SystemRole 檢查；401／403／422 |
 | `POST /api/v1/projects/{project_id}/members:batch-roles` | 本體 `{items:[{user_id,role_ids:[uuid]}]}`，在同一專案批次替換各成員角色集合；成功回 `{items:[既有 ProjectMember 欄位]}`；全批原子提交 | Admin；401／403；未知使用者／角色、重複使用者或跨專案角色回 422；不得更改公司角色 |
 | `POST /api/v1/company-roles/impact-preview` | 本體指定 `{operation: "update"|"delete"|"assign"|"revoke",role_id,user_id?,permission_codes?}`；回 `{affected_user_count,affected_users:[{user_id,username,name,permissions_before,permissions_after,permissions_added,permissions_removed}]}`；update/delete 涵蓋該角色全體持有人，assign/revoke 涵蓋指定使用者 | Admin；401／403；未知 ID 404；非法權限代碼／本體 422；角色與權限 schema 依 #387／#390 前置規格 |
 | `GET /api/v1/company-roles?cursor=&limit=`、`GET /api/v1/company-roles/{role_id}`、`GET /api/v1/company-roles/permission-codes` | 角色清單使用 `{items,next_cursor}`、依 `(created_at,id)` 升冪；單筆及權限代碼清單沿用更新後 `domain-model` 回應 schema | Admin；401／403；未知角色 404；錯誤 envelope 依 API-R05 |

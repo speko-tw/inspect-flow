@@ -8,7 +8,7 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T0 | 跨規格 spec-change task：修改既有 users、companies、projects 清單端點契約，加入 `q` 與 cursor paging，將陣列回應改為 `{items,next_cursor}`；同步前端呼叫端及測試；按 README 變更流程更新受影響規格 | `docs/specs/authentication/spec.md`、`docs/specs/domain-model/spec.md`（介面表及必要計畫）、`frontend/src/admin/api.ts`、`frontend/src/admin/UsersPage.tsx`、`frontend/src/admin/CompaniesPage.tsx`、`frontend/src/admin/projects/api.ts`、`frontend/src/admin/projects/ProjectsPage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx` 與相關測試 | `docs/specs/README.md#change` 的範圍變更流程；T0 issue／PR 合併前不得實作這些既有端點的破壞性契約變更 | ADM-AC10、13 的前置 | 待開跨規格 spec-change issue |
+| T0 | 跨規格範圍變更與同步實作：修改既有 users、companies、projects 清單端點契約，加入 `q` 與 cursor paging，將陣列回應改為 `{items,next_cursor}`；同一 PR 更新後端、前端呼叫端、測試與受影響規格。`member_count` 依 T6a／#286 另行處理 | `docs/specs/authentication/spec.md`、`docs/specs/domain-model/spec.md`（介面表）、`docs/specs/admin-dashboard/spec.md`、`backend/app/api/pagination.py`、`backend/app/api/v1/users.py`、`companies.py`、`projects.py`、相關 API tests、`frontend/src/admin/api.ts`、`UsersPage.tsx`、`CompaniesPage.tsx`、`projects/api.ts`、`ProjectsPage.tsx`、`ProjectDetailPage.tsx` 與相關測試 | #407 原內文的合併前 gate 與後續維護者留言、工作單範圍不一致；依較新的明確範圍，本任務同一 PR 更新規格與實作，並在規格／PR 附留言連結及衝突說明 | ADM-AC10、13 的前置 | #407 |
 | T1 | Dashboard summary、projects、engineers API；落實狀態計數、權限範圍、游標分頁、錯誤及工程師三種歸屬數 | `backend/app/api/v1/`、`backend/app/services/`、`backend/tests/api/`、`backend/tests/services/` | #361（Plan／Task API）；`inspection-planning`、`state-machines` | ADM-AC01～05、13 | 待開 task |
 | T2 | Dashboard 總覽 UI；依授權呈現單專案或全公司範圍，完成率與零資料狀態沿用 T1 契約 | `frontend/src/admin/dashboard/`（新增）、`frontend/src/admin/AdminPage.tsx`（僅新增入口）、`frontend/tests/` | T1；#361；與 #104 Field UI 分開路由及檔案；先以 mock 接版型，再替換為 API | ADM-AC01～05、12 | 待開 task |
 | T3 | 工程師工作量視圖，分別顯示 assignee、started_by、completed_by 統計，不混用人員歸屬 | `backend/app/services/`、`backend/tests/services/`、`frontend/src/admin/dashboard/`、`frontend/tests/` | T1；`inspection-planning` 的指派及實際操作者欄位 | ADM-AC03、12 | 待開 task |
@@ -22,7 +22,7 @@
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
-- T0 是改動已凍結 user/company/project 清單契約的先行跨規格 spec-change issue／PR，必須依 README 變更流程先合併；它同步更新既有前端呼叫端。T6a（#286）依賴 T0；T6b 依賴 T0 與 T6a；T7 依賴 T0。T0 未合併前，相關 API 契約欄位不得開始實作。
+- T0 是改動已凍結 user/company/project 清單契約的跨規格範圍變更，依 #407 後續維護者留言及工作單在同一 PR 同步規格、後端與前端。T6a（#286）依賴 T0；T6b 依賴 T0 與 T6a；T7 依賴 T0。此 T0 不包含 #286 的 `member_count`。
 - T6a 先完成規格變更，再開 T6b；不得直接在本規格或實作 PR 修改已凍結的 `domain-model`。
 - T7 根據本規格的 0.2.x 現況表執行；實作前若現況改變，更新該表及對應 task。已交付基本管理不得重做。
 

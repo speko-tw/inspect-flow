@@ -4,13 +4,14 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.pagination import ilike_contains, page_by_text_key
 from app.auth.access import (
     require_admin,
     require_admin_or_system_role,
@@ -60,6 +61,11 @@ class ProjectResponse(BaseModel):
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
+
+
+class ProjectListResponse(BaseModel):
+    items: list[ProjectResponse]
+    next_cursor: str | None
 
 
 class CreateProjectRequest(BaseModel):
@@ -203,17 +209,26 @@ def _member_conflict(exc: IntegrityError) -> bool:
 
 @router.get(
     "",
-    response_model=list[ProjectResponse],
+    response_model=ProjectListResponse,
     dependencies=[
         Depends(require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN))
     ],
 )
 def list_projects(
+    q: str | None = Query(default=None, max_length=256),
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),  # noqa: B008
-) -> list[ProjectResponse]:
-    projects = db.scalars(
-        select(Project).order_by(Project.name, Project.id)
-    ).all()
+) -> ProjectListResponse:
+    filters = []
+    query = (q or "").strip()
+    if query:
+        filters.append(
+            or_(
+                ilike_contains(Project.name, query),
+                ilike_contains(Project.project_code, query),
+            )
+        )
     duplicate_codes = set(
         db.scalars(
             select(Project.project_code)
@@ -221,10 +236,19 @@ def list_projects(
             .having(func.count(Project.id) > 1)
         )
     )
-    return [
-        _project_response(project, project.project_code in duplicate_codes)
-        for project in projects
-    ]
+    result = page_by_text_key(
+        db,
+        Project,
+        sort_key=Project.name,
+        key_name="name",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda project: _project_response(
+            project, project.project_code in duplicate_codes
+        ),
+        filters=filters,
+    )
+    return ProjectListResponse(**result)
 
 
 @router.get(

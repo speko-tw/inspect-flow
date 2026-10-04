@@ -139,7 +139,7 @@ def test_admin_access_and_company_lifecycle(admin_client, db_session):
     company_id = company.json()["id"]
     assert company.json()["name"] == "示範公司"
     assert company_id in {
-        item["id"] for item in client.get("/api/v1/companies").json()
+        item["id"] for item in client.get("/api/v1/companies").json()["items"]
     }
     duplicate_company = client.post(
         "/api/v1/companies", json={"name": "示範公司"}
@@ -221,6 +221,103 @@ def test_admin_access_and_company_lifecycle(admin_client, db_session):
     )
     db_session.expire_all()
     assert db_session.get(User, UUID(user_id)).is_active is False
+
+
+def test_user_company_lists_search_cursor_and_validation(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    first_company = client.post(
+        "/api/v1/companies", json={"name": "示範甲公司"}
+    )
+    assert first_company.status_code == 201
+    for name in ("示範乙公司", "其他公司"):
+        assert (
+            client.post("/api/v1/companies", json={"name": name}).status_code
+            == 201
+        )
+    for username, name, employee_no in (
+        ("alpha.user", "阿爾法", "E-101"),
+        ("bravo.user", "布拉沃", "E-202"),
+        ("charlie.user", "查理", "E-303"),
+    ):
+        create_user(
+            db_session,
+            username=username,
+            email=f"{username}@demo.example",
+            name_zh=name,
+            employee_no=employee_no,
+            company_id=UUID(first_company.json()["id"]),
+        )
+    db_session.commit()
+
+    first = client.get("/api/v1/users", params={"limit": 1, "q": "user"})
+    assert first.status_code == 200
+    first_body = first.json()
+    assert [item["username"] for item in first_body["items"]] == ["alpha.user"]
+    assert first_body["next_cursor"]
+    second = client.get(
+        "/api/v1/users",
+        params={
+            "limit": 1,
+            "q": "user",
+            "cursor": first_body["next_cursor"],
+        },
+    )
+    assert [item["username"] for item in second.json()["items"]] == [
+        "bravo.user"
+    ]
+    last = client.get(
+        "/api/v1/users",
+        params={
+            "limit": 1,
+            "q": "user",
+            "cursor": second.json()["next_cursor"],
+        },
+    )
+    assert [item["username"] for item in last.json()["items"]] == [
+        "charlie.user"
+    ]
+    assert last.json()["next_cursor"] is None
+    assert (
+        client.get("/api/v1/users", params={"q": "E-303"}).json()["items"][0][
+            "username"
+        ]
+        == "charlie.user"
+    )
+    assert (
+        client.get("/api/v1/users", params={"q": "ALPHA"}).json()["items"][0][
+            "username"
+        ]
+        == "alpha.user"
+    )
+
+    companies = client.get("/api/v1/companies", params={"limit": 1})
+    assert companies.status_code == 200
+    assert companies.json()["next_cursor"]
+    next_company = client.get(
+        "/api/v1/companies",
+        params={
+            "limit": 1,
+            "cursor": companies.json()["next_cursor"],
+        },
+    )
+    assert len(next_company.json()["items"]) == 1
+    assert next_company.json()["next_cursor"]
+    assert (
+        client.get("/api/v1/companies", params={"q": "乙公"}).json()["items"][
+            0
+        ]["name"]
+        == "示範乙公司"
+    )
+
+    for path in ("/api/v1/users", "/api/v1/companies"):
+        assert client.get(path, params={"limit": 0}).status_code == 422
+        assert client.get(path, params={"limit": 101}).status_code == 422
+        assert client.get(path, params={"limit": 100}).status_code == 200
+        invalid_cursor = client.get(path, params={"cursor": "invalid!"})
+        assert invalid_cursor.status_code == 422
+        assert client.get(path, params={"q": "x" * 257}).status_code == 422
 
 
 def test_non_admin_cannot_manage(admin_client, db_session, make_client):

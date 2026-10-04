@@ -106,17 +106,67 @@ function managementFetch({
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
-      if (url.endsWith('/users') && (!init?.method || init.method === 'GET')) {
-        return Response.json(rows)
+      const parsed = new URL(url, 'http://testserver')
+      const method = init?.method ?? 'GET'
+      if (parsed.pathname === '/api/v1/users' && method === 'GET') {
+        const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
+        const filtered = rows.filter((user) =>
+          [
+            user.username,
+            user.name_zh,
+            user.name_en,
+            user.email,
+            user.employee_no,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(query),
+        )
+        const start = Number(parsed.searchParams.get('cursor') ?? 0)
+        const limit = Number(parsed.searchParams.get('limit') ?? 50)
+        return Response.json({
+          items: filtered.slice(start, start + limit),
+          next_cursor:
+            start + limit < filtered.length ? String(start + limit) : null,
+        })
       }
-      if (
-        url.endsWith('/companies') &&
-        (!init?.method || init.method === 'GET')
-      ) {
-        return Response.json(companies)
+      if (parsed.pathname === '/api/v1/companies' && method === 'GET') {
+        const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
+        const filtered = companies.filter((row) =>
+          row.name.toLowerCase().includes(query),
+        )
+        const start = Number(parsed.searchParams.get('cursor') ?? 0)
+        const limit = Number(parsed.searchParams.get('limit') ?? 50)
+        return Response.json({
+          items: filtered.slice(start, start + limit),
+          next_cursor:
+            start + limit < filtered.length ? String(start + limit) : null,
+        })
       }
-      if (url.endsWith('/users') && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as Record<string, unknown>
+      if (parsed.pathname === '/api/v1/companies' && method === 'POST') {
+        const body = JSON.parse(String(init?.body)) as { name: string }
+        const created = {
+          id: `company-${companies.length + 1}`,
+          name: body.name,
+          is_active: true,
+        }
+        companies.push(created)
+        return Response.json(created, { status: 201 })
+      }
+      const companyMatch = /\/companies\/([^/]+)$/.exec(parsed.pathname)
+      if (companyMatch && method === 'PATCH') {
+        const row = companies.find((item) => item.id === companyMatch[1])
+        if (row) {
+          Object.assign(
+            row,
+            JSON.parse(String(init?.body)) as Partial<Company>,
+          )
+        }
+        return Response.json(row)
+      }
+      if (parsed.pathname === '/api/v1/users' && method === 'POST') {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
         if (onCreate) {
           const createdUser = onCreate(body)
           rows.push(createdUser)
@@ -210,6 +260,52 @@ describe('admin user and company pages', () => {
     expect(
       within(adminRow).getByRole('button', { name: '停用' }),
     ).toBeDisabled()
+  })
+
+  it('searches users and loads the next cursor page', async () => {
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      ...regularUser,
+      id: `paging-${index}`,
+      username: `paging.user.${index}`,
+      email: `paging.${index}@demo.example`,
+      name_zh: index === 50 ? '目標人員' : `人員${index}`,
+    }))
+    managementFetch({ userRows: rows })
+    renderAdmin()
+
+    expect(await screen.findByText('paging.user.0')).toBeInTheDocument()
+    expect(screen.queryByText('paging.user.50')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    expect(await screen.findByText('paging.user.50')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('搜尋使用者'), {
+      target: { value: '目標人員' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    expect(await screen.findByText('paging.user.50')).toBeInTheDocument()
+    expect(screen.queryByText('paging.user.0')).not.toBeInTheDocument()
+  })
+
+  it('searches companies and loads the next cursor page', async () => {
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      id: `company-${index}`,
+      name: index === 50 ? '目標公司' : `示範公司${index}`,
+      is_active: true,
+    }))
+    managementFetch({ companyRows: rows })
+    renderAdmin('/admin/companies')
+
+    expect(await screen.findByText('示範公司0')).toBeInTheDocument()
+    expect(screen.queryByText('目標公司')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    expect(await screen.findByText('目標公司')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('搜尋公司'), {
+      target: { value: '目標' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    expect(await screen.findByText('目標公司')).toBeInTheDocument()
+    expect(screen.queryByText('示範公司0')).not.toBeInTheDocument()
   })
 
   it('shows and clears a temporary password', async () => {
@@ -657,14 +753,13 @@ describe('admin user and company pages', () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input)
-        if (
-          url.endsWith('/companies') &&
-          (!init?.method || init.method === 'GET')
-        ) {
-          return Response.json(rows)
+        const parsed = new URL(url, 'http://testserver')
+        const method = init?.method ?? 'GET'
+        if (parsed.pathname === '/api/v1/companies' && method === 'GET') {
+          return Response.json({ items: rows, next_cursor: null })
         }
-        if (url.endsWith('/companies') && init?.method === 'POST') {
-          const body = JSON.parse(String(init.body)) as { name: string }
+        if (parsed.pathname === '/api/v1/companies' && method === 'POST') {
+          const body = JSON.parse(String(init?.body)) as { name: string }
           rows.push({
             id: `company-${nextId++}`,
             name: body.name,
@@ -743,8 +838,9 @@ describe('admin user and company pages', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input)
-        if (url.endsWith('/companies') && !init?.method) {
-          return Response.json([company])
+        const parsed = new URL(url, 'http://testserver')
+        if (parsed.pathname === '/api/v1/companies' && !init?.method) {
+          return Response.json({ items: [company], next_cursor: null })
         }
         if (url.endsWith('/companies/company-1/active-users')) {
           return Response.json({

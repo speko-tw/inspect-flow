@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   createCompany,
   listActiveCompanyUsers,
-  listCompanies,
+  listCompaniesPage,
   managementErrorMessage,
   renameCompany,
   setCompanyActive,
@@ -18,6 +18,9 @@ export default function CompaniesPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [query, setQuery] = useState('')
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [deactivating, setDeactivating] = useState<{
     company: Company
     users: Array<{ id: string; username: string; name_zh: string | null }>
@@ -28,7 +31,9 @@ export default function CompaniesPage() {
   async function reload() {
     setError('')
     try {
-      setCompanies(await listCompanies())
+      const page = await listCompaniesPage({ q: query, limit: 50 })
+      setCompanies(page.items)
+      setNextCursor(page.next_cursor)
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
@@ -40,9 +45,10 @@ export default function CompaniesPage() {
     let active = true
     async function load() {
       try {
-        const rows = await listCompanies()
+        const page = await listCompaniesPage({ limit: 50 })
         if (active) {
-          setCompanies(rows)
+          setCompanies(page.items)
+          setNextCursor(page.next_cursor)
         }
       } catch (caught) {
         if (active) {
@@ -59,6 +65,40 @@ export default function CompaniesPage() {
       active = false
     }
   }, [])
+
+  async function searchCompanies(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const page = await listCompaniesPage({ q: query.trim(), limit: 50 })
+      setCompanies(page.items)
+      setNextCursor(page.next_cursor)
+    } catch (caught) {
+      setError(managementErrorMessage(caught))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadMoreCompanies() {
+    if (!nextCursor) return
+    setLoadingMore(true)
+    setError('')
+    try {
+      const page = await listCompaniesPage({
+        q: query,
+        cursor: nextCursor,
+        limit: 50,
+      })
+      setCompanies((current) => [...current, ...page.items])
+      setNextCursor(page.next_cursor)
+    } catch (caught) {
+      setError(managementErrorMessage(caught))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -175,6 +215,18 @@ export default function CompaniesPage() {
         </section>
       )}
       {loading ? <p>載入中…</p> : null}
+      <form onSubmit={searchCompanies}>
+        <label>
+          搜尋公司
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            value={query}
+          />
+        </label>
+        <button disabled={loading} type="submit">
+          搜尋
+        </button>
+      </form>
       {!loading && companies.length === 0 ? <p>目前沒有公司。</p> : null}
       {companies.length > 0 && (
         <table>
@@ -212,6 +264,15 @@ export default function CompaniesPage() {
             ))}
           </tbody>
         </table>
+      )}
+      {nextCursor && (
+        <button
+          disabled={loadingMore}
+          onClick={() => void loadMoreCompanies()}
+          type="button"
+        >
+          {loadingMore ? '載入中…' : '載入更多'}
+        </button>
       )}
       <form onSubmit={save}>
         <h2>{renamingId ? '修改公司名稱' : '新增公司'}</h2>
