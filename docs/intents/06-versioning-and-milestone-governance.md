@@ -53,16 +53,7 @@ Milestone 用 `0.MINOR.x`（`x` 是系列 wildcard，例：`0.2.x`）；Git tag�
 
 **理由**：Milestone 是版本系列的規劃單位，Release 才是實際發布的版本。（依據：負責人決定（2026-09-26））
 
-發布步驟（發版前檢查、建立 tag 與 Release、Release Notes）見 [`docs/release.md`](../release.md)。重大畫面的實作前關卡見[原型與試用流程](#vg-ui-prototype)。
-
-<a id="vg-ui-prototype"></a>
-### 重大畫面先原型後實作
-
-重大新畫面或既有畫面改版，**必須**先由維護者與顧問討論設計方案，以「好用、業界常見、不易犯錯」評選，再提供可點的互動原型與具體試用腳本；**必須**由負責人親手操作並核可，才開始實作。原型與腳本應涵蓋主要任務、錯誤修正與手機操作，讓使用者能在投入程式碼前發現難用處。一般小型文案或欄位修正不屬於「重大新畫面或改版」；介面共同要求見 [PR-19](02-principles.md#pr-19)。
-
-每次發版前安排負責人實機試用；試用中發現難以完成任務或容易誤操作的問題，列為該版必修，修正後重試相關流程。具體發版步驟見[發布流程](../release.md#步驟)。理由：v0.3.0 範本頁在實機試用時才暴露誤改與無法儲存問題，先原型核可、發版前再實機操作可及早攔下相同問題。
-
-依據：架構基準 §5.3、§6.1–6.2、§31（介面與行動操作）；原型關卡及每版試用必修為[負責人指示（2026-10-04，#431）](https://github.com/speko-tw/inspect-flow/issues/431)，v0.3.0 試用紀錄見[#378](https://github.com/speko-tw/inspect-flow/issues/378#issuecomment-5981240999)。
+發布步驟（發版前檢查、建立 tag 與 Release、Release Notes）見 [`docs/release.md`](../release.md)。
 
 ---
 
@@ -226,9 +217,10 @@ Issue 涵蓋多個版本系列時，先判斷能否作為單一工作完成；�
 | 文件 | 負責 |
 |---|---|
 | 本文件 | 版本、Release 系列、Milestone、Issue／PR 版本歸屬、歷史 metadata migration |
-| [`docs/specs/README.md`](../specs/README.md) | Spec、Plan、Task、Phase、Issue／PR 流程 |
+| [`docs/specs/README.md`](../specs/README.md) | Spec、Plan、Task、Phase、Issue／PR 流程；[重大畫面的實作前原型關卡](../specs/README.md#ui-prototype-gate) |
+| [`docs/release.md`](../release.md) | 發版前實機試用、發版前檢查、tag 與 Release 步驟 |
 | [`AGENTS.md`](../../AGENTS.md) | Agent 操作規則、Git workflow、人的關卡 |
 
-三者**不得**重複定義彼此的完整規則；其他文件需要使用版本治理時，**應**連結本文件，而不是複製一份規則。
+各文件**不得**重複定義彼此的完整規則；其他文件需要使用版本治理時，**應**連結本文件，而不是複製一份規則。
 
 **依據**：負責人決定（2026-09-26）。
