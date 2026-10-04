@@ -80,7 +80,7 @@
 
 ### 凍結範圍與阻擋議題
 
-Plan／Task 狀態行為依標頭所列需求與 AC 凍結。STM-AC07、Evidence／Report 的 STM-R07、STM-R08、STM-AC06，以及 Evidence／Report 表格、需求與議題段落均維持草稿；G-05、G-06、G-07 仍阻擋各自範圍。G-01 未決 interval 歸屬與快照規則只屬未來選用功能，不阻擋 MVP 狀態行為凍結。`inspection-planning` 負責 Plan／Task 建立、組成、派出操作與現場可見性及操作契約；本規格負責派出後的狀態效果、狀態轉換及 Plan 狀態彙總。資料模型仍由 `domain-model` 負責；該規格尚未凍結 Plan／Task 實體，因此相關模型實作須等其凍結，本次只凍結狀態行為。
+Plan／Task 狀態行為依標頭所列需求與 AC 凍結。STM-AC07、Evidence／Report 的 STM-R07、STM-R08、STM-AC06，以及 Evidence／Report 表格、需求與議題段落均維持草稿；G-05、G-06、G-07 仍阻擋各自範圍。G-01 未決 interval 歸屬與快照規則只屬未來選用功能，不阻擋 MVP 狀態行為凍結。`inspection-planning` 負責 Plan／Task 建立、組成、派出操作與現場可見性及操作契約；本規格負責派出後的狀態效果、狀態轉換及 Plan 狀態彙總。資料模型仍由 `domain-model` 負責；Plan／Task、Task 項目關聯與 Snapshot 已由 DOM-R56～DOM-R57 凍結，本規格本次只凍結狀態行為。
 
 ## 狀態與轉換
 
@@ -306,7 +306,7 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 
 ## 待決議題來源對照
 
-- **OQ-09 部分裁定**：KD-42 已確定完成後更正仍維持完成、Plan 自動完成；KD-56 裁定派出、取消、恢復、封存、草稿完成條件及 Plan／Task 狀態連動。KD-03 已確定 `Inspection Template` 不版本化；KD-55 已確定項目層級作廢與文字更正例外。SM-Q12 已裁定：同專案具現場查核權限的成員都可開始／完成；指派僅供參考，記錄實際查核人。Plan／Task 欄位與關聯由 domain-model 規格負責；該規格尚未凍結相關實體，所以資料模型實作仍依賴其凍結，不影響本規格狀態行為凍結。Evidence／Report 狀態分別受 G-05、G-06、G-07 阻擋。
+- **OQ-09 部分裁定**：KD-42 已確定完成後更正仍維持完成、Plan 自動完成；KD-56 裁定派出、取消、恢復、封存、草稿完成條件及 Plan／Task 狀態連動。KD-03 已確定 `Inspection Template` 不版本化；KD-55 已確定項目層級作廢與文字更正例外。SM-Q12 已裁定：同專案具現場查核權限的成員都可開始／完成；指派僅供參考，記錄實際查核人。Plan／Task 欄位與關聯由 domain-model 規格負責；Plan／Task、Task 項目關聯與 Snapshot 已由 DOM-R56～DOM-R57 凍結，不影響本規格狀態行為凍結。Evidence／Report 狀態分別受 G-05、G-06、G-07 阻擋。
 - **G-05**：獨立 Evidence 刪除 API、軟／硬刪除、被報告引用的處理及保留期限未定，排入 0.6.x。
 - **G-06**：Report 其他產製狀態清單在 §20.6 和 §20.17 不一致，仍待裁定；直接核發及錯誤版次取代已依負責人裁定記錄。
 - **G-07**：Report Snapshot 時點、Preview／草稿重產是否覆寫及新版本何時取得新 ID 未定。
