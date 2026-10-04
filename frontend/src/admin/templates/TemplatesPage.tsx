@@ -90,6 +90,27 @@ function forWire(item: TemplateItem): TemplateItem {
   }
 }
 
+function numericStandardPreview(
+  standard: NonNullable<InspectionPoint['numeric_standard']>,
+): string {
+  if (standard.condition === 'range') {
+    if ((standard.range_form ?? 'tolerance') === 'interval') {
+      return (
+        `${standard.lower_bound ?? ''}～${standard.upper_bound ?? ''} ` +
+        standard.unit
+      )
+    }
+    return `${standard.value} ± ${standard.tolerance} ${standard.unit}`
+  }
+  const symbols = { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }
+  const tolerance =
+    standard.tolerance === null ? '' : `；容許誤差：${standard.tolerance}`
+  return (
+    `${symbols[standard.condition]} ${standard.value} ${standard.unit}` +
+    tolerance
+  )
+}
+
 function apiMessage(error: unknown): string {
   if (error instanceof ManagementApiError) {
     const messages: Record<string, string> = {
@@ -1197,25 +1218,7 @@ export default function TemplatesPage() {
                   {point.numeric_standard && (
                     <p>
                       數值標準：
-                      {point.numeric_standard.condition === 'range' &&
-                      (point.numeric_standard.range_form ?? 'tolerance') ===
-                        'interval' ? (
-                        `${point.numeric_standard.lower_bound}～${point.numeric_standard.upper_bound} ${point.numeric_standard.unit}`
-                      ) : point.numeric_standard.condition === 'range' ? (
-                        `${point.numeric_standard.value} ± ${point.numeric_standard.tolerance} ${point.numeric_standard.unit}`
-                      ) : (
-                        <>
-                          {
-                            { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }[
-                              point.numeric_standard.condition
-                            ]
-                          }{' '}
-                          {point.numeric_standard.value}{' '}
-                          {point.numeric_standard.unit}
-                          {point.numeric_standard.tolerance !== null &&
-                            `；容許誤差：${point.numeric_standard.tolerance}`}
-                        </>
-                      )}
+                      {numericStandardPreview(point.numeric_standard)}
                     </p>
                   )}
                   <p>
