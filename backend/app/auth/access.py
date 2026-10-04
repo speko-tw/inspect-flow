@@ -188,12 +188,12 @@ _mark(_public_marker, RouteAccessDeclaration(level=AccessLevel.PUBLIC))
 PUBLIC: Any = Depends(_public_marker)
 
 # AUT-R18/plan.md's risk section: the single, centralized list of
-# routes allowed to declare 公開. Currently exactly the health check,
-# login and logout -- a new public route must be added here too, or
-# AUT-AC16 fails and the addition is visible in review.
+# routes allowed to declare 公開. A new public route must be added
+# here too, or AUT-AC16 fails and the addition is visible in review.
 PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         ("GET", "/api/v1/health"),
+        ("GET", "/api/v1/version"),
         ("POST", "/api/v1/auth/login"),
         ("POST", "/api/v1/auth/logout"),
         ("GET", "/api/v1/setup/status"),
