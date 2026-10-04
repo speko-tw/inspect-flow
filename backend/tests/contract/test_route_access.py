@@ -127,11 +127,11 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         if info.path.startswith("/api/v1/projects")
     }
     admin_routes = {
-        ("GET", "/api/v1/projects/{project_id}"),
         ("POST", "/api/v1/projects"),
         ("PATCH", "/api/v1/projects/{project_id}"),
     }
     template_admin_list = ("GET", "/api/v1/projects")
+    planning_project_get = ("GET", "/api/v1/projects/{project_id}")
     member_routes = {
         ("GET", "/api/v1/projects/{project_id}/members"),
         ("POST", "/api/v1/projects/{project_id}/members"),
@@ -180,6 +180,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         | member_routes
         | {
             template_admin_list,
+            planning_project_get,
             apply_template,
             save_template,
             list_inspection_items,
@@ -194,6 +195,10 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     assert declaration is not None
     assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
     assert declaration.permission_code == "template_admin"
+    declaration = routes[planning_project_get]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.PROJECT_PERMISSION
+    assert declaration.permission_code == "inspection_plan.read"
     for route in member_routes:
         declaration = routes[route]
         assert declaration is not None
@@ -213,7 +218,14 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     for route in planning_routes:
         declaration = routes[route]
         assert declaration is not None
-        if route[0] in {"POST", "PATCH", "DELETE"} and "/zones" in route[1]:
+        if route[1].endswith("/inspection-plans"):
+            assert declaration.level is AccessLevel.PROJECT_PERMISSION
+            assert declaration.permission_code == (
+                "inspection_plan.read"
+                if route[0] == "GET"
+                else "inspection_plan.create"
+            )
+        elif route[0] in {"POST", "PATCH", "DELETE"} and "/zones" in route[1]:
             assert declaration.level is AccessLevel.PROJECT_PERMISSION
             assert declaration.permission_code == "project_zone.manage"
         elif route[0] == "GET" and "/inspection-items/" in route[1]:

@@ -239,7 +239,7 @@
 | 方法與路徑 | 行為 | 存取層級 |
 |---|---|---|
 | `GET /api/v1/projects` | 列出專案 | 需 Admin（AUT-R20） |
-| `GET /api/v1/projects/{project_id}` | 取得專案 | 需 Admin（AUT-R20） |
+| `GET /api/v1/projects/{project_id}` | `inspection_plan.read` 專案成員讀取基本欄位；Admin 取得完整資料；Project 不設狀態欄位（DOM-R43） | 需專案權限 `inspection_plan.read`；Admin 依 AUT-R19 放行 |
 | `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
 | `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |

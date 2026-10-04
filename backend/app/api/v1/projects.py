@@ -40,6 +40,9 @@ from app.services.projects import (
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+_PROJECT_PLANNING_READ_ACCESS = Depends(
+    require_project_permission("inspection_plan.read")
+)
 _PROJECT_MEMBER_ACCESS = Depends(
     require_project_permission("project_member.manage")
 )
@@ -60,6 +63,14 @@ class ProjectResponse(BaseModel):
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
+
+
+class ProjectPlanningResponse(BaseModel):
+    id: UUID
+    project_code: str
+    name: str
+    planned_start_date: date | None
+    planned_completion_date: date | None
 
 
 class CreateProjectRequest(BaseModel):
@@ -227,16 +238,22 @@ def list_projects(
     ]
 
 
-@router.get(
-    "/{project_id}",
-    response_model=ProjectResponse,
-    dependencies=[Depends(require_admin)],
-)
+@router.get("/{project_id}")
 def get_project(
     project_id: UUID,
     db: Session = Depends(get_db),  # noqa: B008
-) -> ProjectResponse:
-    return _single_project_response(db, _get_project(db, project_id))
+    user: User = _PROJECT_PLANNING_READ_ACCESS,
+) -> ProjectResponse | ProjectPlanningResponse:
+    project = _get_project(db, project_id)
+    if user.is_admin:
+        return _single_project_response(db, project)
+    return ProjectPlanningResponse(
+        id=project.id,
+        project_code=project.project_code,
+        name=project.name,
+        planned_start_date=project.planned_start_date,
+        planned_completion_date=project.planned_completion_date,
+    )
 
 
 @router.post(

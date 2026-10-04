@@ -5,6 +5,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.clock import utc_now
 from app.models import (
@@ -16,7 +17,9 @@ from app.models import (
     ProjectZone,
     TaskInspectionItem,
     TaskRequirementSnapshot,
+    User,
 )
+from app.permission_codes import PermissionCode
 from app.services.audit import (
     AuditEventKind,
     record_audit_event,
@@ -104,9 +107,7 @@ def _require_permission(
     session: Session, project_id: uuid.UUID, permission: str
 ) -> uuid.UUID:
     operator = get_current_operator(session)
-    permissions = effective_permissions(
-        session, user_id=operator.id, project_id=project_id
-    )
+    permissions = _project_permissions(session, project_id)
     if permission not in permissions:
         raise PlanningError("authorization.forbidden")
     return operator.id
@@ -116,6 +117,8 @@ def _project_permissions(
     session: Session, project_id: uuid.UUID
 ) -> frozenset[str]:
     operator = get_current_operator(session)
+    if operator.is_admin:
+        return frozenset(code.value for code in PermissionCode)
     return effective_permissions(
         session, user_id=operator.id, project_id=project_id
     )
@@ -375,7 +378,16 @@ def _validate_assignee(
             ProjectMember.user_id == assignee_id,
         )
     )
-    if member is None:
+    permissions = effective_permissions(
+        session, user_id=assignee_id, project_id=project_id
+    )
+    assignee = session.get(User, assignee_id)
+    if (
+        member is None
+        or assignee is None
+        or assignee.is_admin
+        or "inspection_task.inspect" not in permissions
+    ):
         raise PlanningError("inspection_task.invalid_assignee")
 
 
@@ -463,21 +475,38 @@ def list_inspection_tasks(
     project_id: uuid.UUID,
     plan_id: uuid.UUID | None = None,
 ) -> list[InspectionTask]:
-    permissions = _project_permissions(session, project_id)
-    if not {"inspection_task.read", "inspection_task.inspect"} & permissions:
-        raise PlanningError("authorization.forbidden")
-    statement = select(InspectionTask).where(
-        InspectionTask.project_id == project_id
-    )
+    filters = inspection_task_list_filters(session, project_id=project_id)
+    statement = select(InspectionTask).where(*filters)
     if plan_id is not None:
         statement = statement.where(InspectionTask.plan_id == plan_id)
-    if "inspection_task.read" not in permissions:
-        statement = statement.where(InspectionTask.status != "DRAFT")
     return list(
         session.scalars(
             statement.order_by(InspectionTask.created_at, InspectionTask.id)
         ).all()
     )
+
+
+def inspection_task_visibility_filters(
+    session: Session, *, project_id: uuid.UUID
+) -> tuple[ColumnElement[bool], ...]:
+    """Return database filters that hide DRAFT Tasks without read access."""
+    permissions = _project_permissions(session, project_id)
+    filters: list[ColumnElement[bool]] = [
+        InspectionTask.project_id == project_id
+    ]
+    if "inspection_task.read" not in permissions:
+        filters.append(InspectionTask.status != "DRAFT")
+    return tuple(filters)
+
+
+def inspection_task_list_filters(
+    session: Session, *, project_id: uuid.UUID
+) -> tuple[ColumnElement[bool], ...]:
+    """Return visible project Task filters after checking list permission."""
+    permissions = _project_permissions(session, project_id)
+    if not {"inspection_task.read", "inspection_task.inspect"} & permissions:
+        raise PlanningError("authorization.forbidden")
+    return inspection_task_visibility_filters(session, project_id=project_id)
 
 
 def get_inspection_task(
@@ -528,11 +557,9 @@ def update_task_location(
         session, task.project_id, "inspection_task.manage"
     )
     plan, task = _lock_plan_and_task(session, task.id)
-    if (
-        plan is None
-        or plan.is_archived
-        or task.status not in {"DRAFT", "PENDING", "IN_PROGRESS"}
-    ):
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status not in {"DRAFT", "PENDING", "IN_PROGRESS"}:
         raise PlanningError("inspection_task.location_locked")
     normalized = _validate_location(
         session,
@@ -570,7 +597,9 @@ def dispatch_inspection_task(
         session, task.project_id, "inspection_task.dispatch"
     )
     plan, task = _lock_plan_and_task(session, task.id)
-    if plan is None or plan.is_archived or task.status != "DRAFT":
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status != "DRAFT":
         raise PlanningError("inspection_task.invalid_transition")
     task.status = "PENDING"
     task.updated_by = operator_id
@@ -626,9 +655,10 @@ def cancel_inspection_task(
         plan is None
         or plan.is_archived
         or task.status not in {"PENDING", "IN_PROGRESS"}
-        or not normalized
     ):
         raise PlanningError("inspection_task.invalid_transition")
+    if not normalized:
+        raise PlanningError("inspection_task.reason_required")
     before_status = task.status
     task.cancelled_from_status = before_status
     task.cancellation_reason = normalized

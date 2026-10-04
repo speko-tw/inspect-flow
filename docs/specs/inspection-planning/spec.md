@@ -91,6 +91,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
+| GET | `/api/v1/projects/{project_id}` | 讀取單一專案基本資料（`id`、`project_code`、`name`、預計起訖日）；Project 不設狀態欄位（DOM-R43） | `inspection_plan.read`；Admin 回完整欄位 |
 | GET | `/api/v1/projects/{project_id}/inspection-plans` | 列出專案計畫 | `inspection_plan.read` |
 | POST | `/api/v1/projects/{project_id}/inspection-plans` | 建立計畫，初始為 `DRAFT` | `inspection_plan.create` |
 | GET | `/api/v1/projects/{project_id}/zones` | 列出專案分區 | `project_zone.read` |
@@ -146,14 +147,14 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 ### API 表示與請求契約（規格設計，非負責人裁定）
 
-- Plan 建立 body 為 `{ "name": string }`；修改 Plan 使用相同欄位的 PATCH，禁止提交狀態。Plan 回應含 `id`、`project_id`、`name`、`status`、`archived`、`created_at`、`updated_at`。計畫列表為 `{items, next_cursor}`，不內嵌 Tasks；單筆 Plan 詳情可內嵌 Tasks。
+- 單一專案 GET 對具 `inspection_plan.read` 的專案成員只回 `id`、`project_code`、`name`、`planned_start_date`、`planned_completion_date`。Admin 回傳 `client_name`、`site_location` 與 `warnings` 等完整欄位。Project 沒有狀態欄位（DOM-R43），因此回應不含 `status`；依 #361 審查裁決不新增衍生狀態。Plan 建立 body 為 `{ "name": string }`；修改 Plan 使用相同欄位的 PATCH，禁止提交狀態。Plan 回應含 `id`、`project_id`、`name`、`status`、`archived`、`created_at`、`updated_at`。計畫列表為 `{items, next_cursor}`，不內嵌 Tasks；單筆 Plan 詳情可內嵌 Tasks。
 - 建立 Task body 為 `{ "item_ids": UUID[], "zone_id": UUID|null, "location_text": string|null, "suggested_assignee_id": UUID|null }`。Task 回應含 `id`、`project_id`、`plan_id`、`status`、`zone_id`、`zone: {id,name}|null`、`location_text`、`assignee_id`、`assignee: {id,username,name_zh}|null`、`started_by`、`completed_by`、`cancellation_reason`、`cancelled_from`、`items`、建立與修改時間。`items` 含項目 ID、明細狀態、`needs_reinspection`、目前及歷史 Snapshot；Snapshot 含修訂、來源標準修訂、項目名稱／指示、來源範本名稱、有效性、作廢原因／時間與完整查核項次。
 - `:assign` body 為 `{ "assignee_id": UUID|null }`；`:cancel` body 為 `{ "reason": string }`；`:restore`、`:dispatch`、`:start`、`:complete`、`:archive`、`:unarchive` 不收 body。Task 地點 PATCH body 必含 `zone_id` 與 `location_text`，成功回應為完整 Task 表示，含分區 ID／名稱。
-- Task 清單端點包含 Plan 下的 `/inspection-plans/{plan_id}/tasks`、專案下的 `/projects/{project_id}/inspection-tasks`，以及按專案查核項目列出的 `/projects/{project_id}/inspection-items/{project_inspection_item_id}/tasks`；三者均回 `{items, next_cursor}`。專案計畫列表不得內嵌 Task。項目影響列表的每筆回應另含 `plan_name`、`plan_archived`、`has_result`。
+- Task 清單端點包含 Plan 下的 `/inspection-plans/{plan_id}/tasks`、專案下的 `/projects/{project_id}/inspection-tasks`，以及按專案查核項目列出的 `/projects/{project_id}/inspection-items/{project_inspection_item_id}/tasks`；三者均回 `{items, next_cursor}`。專案計畫列表不得內嵌 Task。項目影響列表的每筆回應另含 `plan_name`、`plan_archived`、`has_result`；結果 API 上線前（0.7.x）`has_result` 恆為 `false`。
 - 可指派候選人端點只回同專案成員中具 `inspection_task.inspect` 權限者；列表外型為 `{items, next_cursor}`。項目影響列表需 `project_inspection_item.edit`；候選人列表需 `inspection_task.create` 或 `inspection_task.assign`。
 - `inspection_plan.read` 同時允許讀取 Plan 顯示所需的專案分區名稱；`project_zone.read` 仍是獨立分區列表權限。Task 回應內嵌 `zone` 不額外要求 `project_zone.read`。
-- 具 `inspection_task.inspect` 而無 `inspection_plan.read`／`inspection_task.read` 的使用者，讀取 `DRAFT` Task（列表或詳情）一律回 404 `inspection_task.not_found`。
-- 具體錯誤：非法狀態轉換為 409 `inspection_task.invalid_transition`；封存中修改為 409 `inspection_plan.archived`；地點不可改為 409 `inspection_task.location_locked`；缺少取消原因為 422 `inspection_task.reason_required`；分區缺少、不允許或跨專案為 422 `inspection_task.invalid_zone`；不可用的建議指派人為 422 `inspection_task.invalid_assignee`；必須選擇重新查核時缺少 `reinspect` 為 422 `project_inspection_item.reinspection_choice_required`；未知或不屬於該專案的 Plan、Task、分區與項目均以對應 `*.not_found` 回 404。
+- 具 `inspection_task.inspect` 而無 `inspection_task.read` 的使用者，讀取 `DRAFT` Task（Plan 詳情、Plan 任務列表、專案任務列表或 Task 詳情）一律隱藏；Task 詳情回 404 `resource.not_found`，列表不包含該 Task。
+- 具體錯誤：不存在的資源回 404 `resource.not_found`。Plan／Task 是 global ID 路徑；資源存在但呼叫者對所屬專案沒有有效權限時，依 AUT-R19 回 403 `permission.denied`。Zone／項目以 `project_id` 為路徑範圍；資源屬於另一專案時回 404 `resource.not_found`，不洩漏跨專案存在性。非法狀態轉換、封存中修改、地點不可修改、分區名稱重複或分區仍被引用分別回 409 `inspection_task.invalid_transition`、`inspection_plan.archived`、`inspection_task.location_locked`、`project_zone.name_conflict`、`project_zone.in_use`。取消原因 trim 後為空回 422 `inspection_task.reason_required`；Task 缺少項目、項目不屬於專案、分區缺少／不允許／跨專案、地點文字超過 256 字元、指派人不是同專案且具 `inspection_task.inspect` 的非 Admin 成員、項目重查選擇未提供，分別回 422 `inspection_task.items_required`、`inspection_task.invalid_project_item`、`inspection_task.invalid_zone`、`inspection_task.invalid_location`、`inspection_task.invalid_assignee`、`project_inspection_item.reinspection_choice_required`。Plan／分區名稱 trim 後為空或超過 128 字元，分別回 422 `inspection_plan.invalid_name`／`project_zone.invalid_name`；更新項目修訂未增加回 422 `project_inspection_item.revision_not_increased`；Task 有待重查項目未完成時回 422 `inspection_task.items_incomplete`。所有 404 使用共用 `resource.not_found`。
 - 專案查核項目 PATCH 成功回應包含修改後完整項目、`reinspection_selected`，以及 `affected_tasks`。每筆 Task 記錄 `task_id`、`prior_status`、目前 `status`、`needs_reinspection` 與處理動作 `draft_updated`、`returned_to_in_progress`、`needs_reinspection`、`updated` 或 `apply_current_standard_on_restore`。
 
 若被修改項目關聯的 Task 位於已封存 Plan，請求須先被拒絕；內業取消相關 Plan 封存後才可重送修改。封存 Plan 的 Task 全部唯讀，取消封存後依目前 Task 狀態重算 Plan 狀態。任何狀態皆可封存依 KD-56；取消封存後重算為本規格規則。已合併的 `state-machines` SM-Q03 已反映 KD-55 項目級行為。

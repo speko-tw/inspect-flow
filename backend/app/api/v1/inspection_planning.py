@@ -5,17 +5,16 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import page
-from app.api.v1.project_inspection_items import _project_item_detail
 from app.api.v1.template_library import PointBody
 from app.auth.access import require_login_access, require_project_permission
-from app.auth.dependencies import get_db
+from app.auth.dependencies import get_db, require_login
 from app.db.base import uuid7
 from app.models import (
     InspectionPlan,
@@ -38,6 +37,7 @@ from app.models import (
     TaskSnapshotTextStandard,
     User,
 )
+from app.services.inspection_details import project_inspection_item_detail
 from app.services.inspection_planning import (
     PlanningError,
     archive_inspection_plan,
@@ -52,8 +52,9 @@ from app.services.inspection_planning import (
     dispatch_inspection_task,
     get_inspection_plan,
     get_inspection_task,
+    inspection_task_list_filters,
+    inspection_task_visibility_filters,
     list_inspection_plans,
-    list_inspection_tasks,
     rename_inspection_plan,
     rename_project_zone,
     restore_inspection_task,
@@ -76,13 +77,13 @@ class StrictBody(BaseModel):
 
 
 class NameBody(StrictBody):
-    name: str = Field(min_length=1, max_length=128)
+    name: str
 
 
 class TaskCreateBody(StrictBody):
-    item_ids: list[UUID] = Field(min_length=1)
+    item_ids: list[UUID]
     zone_id: UUID | None = None
-    location_text: str | None = Field(default=None, max_length=256)
+    location_text: str | None = None
     suggested_assignee_id: UUID | None = None
 
 
@@ -96,7 +97,7 @@ class CancelBody(StrictBody):
 
 class LocationBody(StrictBody):
     zone_id: UUID | None
-    location_text: str | None = Field(max_length=256)
+    location_text: str | None
 
 
 class ProjectItemPatchBody(StrictBody):
@@ -122,13 +123,13 @@ def _planning_error_response(
     namespace, separator, detail = error_code.partition(".")
     if not separator:
         return None
+    if detail == "not_found":
+        return ErrorCode.RESOURCE_NOT_FOUND, 404
     if namespace == "authorization" and detail == "forbidden":
         return ErrorCode.PERMISSION_DENIED, 403
     if namespace == "project_inspection_item":
         if detail == "revision_not_increased":
             return ErrorCode.REQUEST_VALIDATION_FAILED, 422
-        if detail == "not_found":
-            return ErrorCode.RESOURCE_NOT_FOUND, 404
     try:
         code = ErrorCode(error_code)
     except ValueError:
@@ -146,6 +147,66 @@ def _planning_error_response(
     else:
         status_code = 422
     return code, status_code
+
+
+def _resource_permission(resource_type: str, permission: str):
+    def check(
+        request: Request,
+        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login),  # noqa: B008
+    ) -> User:
+        model = InspectionPlan if resource_type == "plan" else InspectionTask
+        parameter = "plan_id" if resource_type == "plan" else "task_id"
+        resource_id = request.path_params.get(parameter)
+        try:
+            parsed_id = UUID(str(resource_id))
+        except ValueError as exc:
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
+        resource = db.get(model, parsed_id)
+        if resource is None:
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+        if user.is_admin:
+            return user
+        permissions = effective_permissions(
+            db, user_id=user.id, project_id=resource.project_id
+        )
+        if permission not in permissions:
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        return user
+
+    return check
+
+
+def _task_read_permission():
+    def check(
+        task_id: UUID,
+        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login),  # noqa: B008
+    ) -> User:
+        task = db.get(InspectionTask, task_id)
+        if task is None:
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+        permissions = effective_permissions(
+            db, user_id=user.id, project_id=task.project_id
+        )
+        if (
+            not user.is_admin
+            and not {
+                "inspection_task.read",
+                "inspection_task.inspect",
+            }
+            & permissions
+        ):
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        if (
+            not user.is_admin
+            and task.status == "DRAFT"
+            and "inspection_task.read" not in permissions
+        ):
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+        return user
+
+    return check
 
 
 def _zone(db: Session, zone_id: UUID | None) -> dict[str, Any] | None:
@@ -309,7 +370,12 @@ def _plan_summary(
         tasks = list(
             db.scalars(
                 select(InspectionTask)
-                .where(InspectionTask.plan_id == plan.id)
+                .where(
+                    InspectionTask.plan_id == plan.id,
+                    *inspection_task_visibility_filters(
+                        db, project_id=plan.project_id
+                    ),
+                )
                 .order_by(InspectionTask.created_at, InspectionTask.id)
             ).all()
         )
@@ -321,7 +387,7 @@ def _one_plan(db: Session, plan_id: UUID) -> InspectionPlan:
     plan = db.get(InspectionPlan, plan_id)
     if plan is None:
         _call(get_inspection_plan, db, plan_id=plan_id)
-        raise APIError(ErrorCode.INSPECTION_PLAN_NOT_FOUND, 404)
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return plan
 
 
@@ -329,13 +395,15 @@ def _one_task(db: Session, task_id: UUID) -> InspectionTask:
     task = db.get(InspectionTask, task_id)
     if task is None:
         _call(get_inspection_task, db, task_id=task_id)
-        raise APIError(ErrorCode.INSPECTION_TASK_NOT_FOUND, 404)
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return task
 
 
 @router.get(
     "/projects/{project_id}/inspection-plans",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_project_permission("inspection_plan.read")),
+    ],
 )
 def plans(
     project_id: UUID,
@@ -343,7 +411,6 @@ def plans(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
-    _project_exists(db, project_id)
     _call(list_inspection_plans, db, project_id=project_id)
     return page(
         db,
@@ -358,12 +425,13 @@ def plans(
 @router.post(
     "/projects/{project_id}/inspection-plans",
     status_code=201,
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_project_permission("inspection_plan.create")),
+    ],
 )
 def create_plan(
     project_id: UUID, body: NameBody, db: Session = _db_dependency
 ):
-    _project_exists(db, project_id)
     row = _call(
         create_inspection_plan, db, project_id=project_id, name=body.name
     )
@@ -378,8 +446,6 @@ def zones(
     db: Session = _db_dependency,
     _user: User = _login_dependency,
 ):
-    if db.get(Project, project_id) is None:
-        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     # inspection_plan.read also grants names needed to display its Plans.
     permissions = effective_permissions(
         db, user_id=_user.id, project_id=project_id
@@ -389,6 +455,7 @@ def zones(
         and not {"project_zone.read", "inspection_plan.read"} & permissions
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    _project_exists(db, project_id)
     return page(
         db,
         ProjectZone,
@@ -431,7 +498,7 @@ def patch_zone(
         )
     )
     if zone is None:
-        raise APIError(ErrorCode.PROJECT_ZONE_NOT_FOUND, 404)
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return _zone_response(
         _call(rename_project_zone, db, zone, name=body.name),
         include_project=True,
@@ -457,13 +524,16 @@ def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
         )
     )
     if zone is None:
-        raise APIError(ErrorCode.PROJECT_ZONE_NOT_FOUND, 404)
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     _call(delete_project_zone, db, zone)
 
 
 @router.get(
     "/inspection-plans/{plan_id}",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.read")),
+    ],
 )
 def get_plan(plan_id: UUID, db: Session = _db_dependency):
     row = _call(get_inspection_plan, db, plan_id=plan_id)
@@ -472,7 +542,10 @@ def get_plan(plan_id: UUID, db: Session = _db_dependency):
 
 @router.patch(
     "/inspection-plans/{plan_id}",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.manage")),
+    ],
 )
 def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
     row = _one_plan(db, plan_id)
@@ -484,7 +557,10 @@ def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
 @router.post(
     "/inspection-plans/{plan_id}/tasks",
     status_code=201,
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_task.create")),
+    ],
 )
 def add_task(
     plan_id: UUID, body: TaskCreateBody, db: Session = _db_dependency
@@ -504,7 +580,10 @@ def add_task(
 
 @router.get(
     "/inspection-plans/{plan_id}/tasks",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.read")),
+    ],
 )
 def plan_tasks(
     plan_id: UUID,
@@ -518,7 +597,12 @@ def plan_tasks(
         InspectionTask,
         cursor=cursor,
         limit=limit,
-        filters=(InspectionTask.plan_id == plan.id,),
+        filters=(
+            InspectionTask.plan_id == plan.id,
+            *inspection_task_visibility_filters(
+                db, project_id=plan.project_id
+            ),
+        ),
         serialize=lambda row: _task_summary(db, row),
     )
 
@@ -533,21 +617,21 @@ def project_tasks(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
+    filters = _call(inspection_task_list_filters, db, project_id=project_id)
     _project_exists(db, project_id)
-    tasks = _call(list_inspection_tasks, db, project_id=project_id)
-    ids = [task.id for task in tasks]
     return page(
         db,
         InspectionTask,
         cursor=cursor,
         limit=limit,
-        filters=(InspectionTask.id.in_(ids),),
+        filters=filters,
         serialize=lambda row: _task_summary(db, row),
     )
 
 
 @router.get(
-    "/projects/{project_id}/inspection-items/{project_inspection_item_id}/tasks",
+    "/projects/{project_id}/inspection-items/"
+    "{project_inspection_item_id}/tasks",
     dependencies=[
         Depends(
             require_project_permission(
@@ -595,6 +679,8 @@ def _impact_summary(db: Session, task: InspectionTask):
         {
             "plan_name": plan.name if plan else None,
             "plan_archived": bool(plan and plan.is_archived),
+            # Results are not part of the inspection-planning API before
+            # the 0.7.x result endpoints are introduced.
             "has_result": False,
         }
     )
@@ -644,7 +730,10 @@ def assignees(
 
 @router.post(
     "/inspection-tasks/{task_id}:dispatch",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.dispatch")),
+    ],
 )
 def dispatch(task_id: UUID, db: Session = _db_dependency):
     task = _one_task(db, task_id)
@@ -653,7 +742,10 @@ def dispatch(task_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-tasks/{task_id}:assign",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.assign")),
+    ],
 )
 def assign(task_id: UUID, body: AssignBody, db: Session = _db_dependency):
     task = _one_task(db, task_id)
@@ -665,7 +757,10 @@ def assign(task_id: UUID, body: AssignBody, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-tasks/{task_id}:start",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.inspect")),
+    ],
 )
 def start(task_id: UUID, db: Session = _db_dependency):
     task = _one_task(db, task_id)
@@ -674,7 +769,10 @@ def start(task_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-tasks/{task_id}:complete",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.inspect")),
+    ],
 )
 def complete(task_id: UUID, db: Session = _db_dependency):
     task = _one_task(db, task_id)
@@ -684,7 +782,10 @@ def complete(task_id: UUID, db: Session = _db_dependency):
 @router.delete(
     "/inspection-tasks/{task_id}",
     status_code=204,
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.delete_draft")),
+    ],
 )
 def delete_task(task_id: UUID, db: Session = _db_dependency):
     task = _one_task(db, task_id)
@@ -693,30 +794,35 @@ def delete_task(task_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-tasks/{task_id}:cancel",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.cancel")),
+    ],
 )
 def cancel(
     task_id: UUID,
     body: CancelBody | None = None,
     db: Session = _db_dependency,
 ):
-    if body is None or not body.reason.strip():
-        raise APIError(ErrorCode.INSPECTION_TASK_REASON_REQUIRED, 422)
     task = _one_task(db, task_id)
+    reason = body.reason if body is not None else ""
     return _task_summary(
         db,
         _call(
             cancel_inspection_task,
             db,
             task,
-            reason=body.reason,
+            reason=reason,
         ),
     )
 
 
 @router.post(
     "/inspection-tasks/{task_id}:restore",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.cancel")),
+    ],
 )
 def restore(task_id: UUID, db: Session = _db_dependency):
     task = _one_task(db, task_id)
@@ -725,7 +831,10 @@ def restore(task_id: UUID, db: Session = _db_dependency):
 
 @router.patch(
     "/inspection-tasks/{task_id}",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.manage")),
+    ],
 )
 def patch_task(
     task_id: UUID, body: LocationBody, db: Session = _db_dependency
@@ -745,7 +854,10 @@ def patch_task(
 
 @router.get(
     "/inspection-tasks/{task_id}",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_task_read_permission()),
+    ],
 )
 def get_task(task_id: UUID, db: Session = _db_dependency):
     return _task_summary(db, _call(get_inspection_task, db, task_id=task_id))
@@ -846,7 +958,7 @@ def patch_project_item(
         },
     )
     db.flush()
-    result = _project_item_detail(db, item)
+    result = project_inspection_item_detail(db, item)
     affected = []
     for association in associations:
         task = db.get(InspectionTask, association.task_id)
