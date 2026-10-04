@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -10,12 +11,13 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import QueuePool
 
 from alembic import command
-from app.api.errors import ErrorCode
+from app.api.errors import APIError, ErrorCode
 from app.api.v1 import auth as auth_api
 from app.auth import lockout as lockout_module
 from app.auth import login as login_module
@@ -24,6 +26,7 @@ from app.auth.password_service import set_password
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.auth.settings import get_lockout_settings
 from app.db import clock
+from app.db.engine import get_engine
 from app.main import create_app
 from app.models import (
     AuditLog,
@@ -69,6 +72,11 @@ def _fail(client, user, count=1):
     return [_login(client, user, "wrong-password") for _ in range(count)]
 
 
+def _read_busy_timeout():
+    with get_engine().connect() as connection:
+        return connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+
+
 def test_sqlite_write_lock_timeout_returns_retryable_error(
     client, db_session, engine, monkeypatch, caplog
 ):
@@ -76,23 +84,41 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     user = make_local_user(db_session, "DEMO_LOCK")
     user_id, email = user.id, user.email
     assert email is not None
-    monkeypatch.setattr(lockout_module, "_SQLITE_BUSY_TIMEOUT_MS", 50)
-    caplog.set_level(logging.WARNING, logger="app.auth")
+    original_busy_timeout = _read_busy_timeout()
+    monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
+    caplog.set_level(logging.INFO, logger="app.auth")
 
     with engine.connect() as holder:
         holder.exec_driver_sql("BEGIN IMMEDIATE")
         try:
-            for password in ("wrong-password", P):
+            responses = []
+            durations = []
+            for login, password in (
+                (email, "wrong-password"),
+                (email, P),
+                ("missing-user", "wrong-password"),
+            ):
+                started = time.monotonic()
                 response = client.post(
                     "/api/v1/auth/login",
-                    json={"login": email, "password": password},
+                    json={"login": login, "password": password},
                 )
+                durations.append(time.monotonic() - started)
+                responses.append(response)
                 assert response.status_code == 503
                 assert response.json() == {
                     "error": {"code": ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE}
                 }
                 assert response.headers["retry-after"] == "5"
                 assert "set-cookie" not in response.headers
+                assert _read_busy_timeout() == original_busy_timeout
+            assert max(durations) - min(durations) < 0.5
+            assert responses[0].content == responses[1].content
+            assert responses[1].content == responses[2].content
+            assert not any(
+                getattr(record, "event", None) == "auth.login_failed"
+                for record in caplog.records
+            )
         finally:
             holder.rollback()
 
@@ -101,7 +127,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         for record in caplog.records
         if record.levelno == logging.WARNING
     ]
-    assert len(warnings) == 2
+    assert len(warnings) == 3
     assert all(
         record.event == "auth.lockout_write_timeout"
         and record.reason == "sqlite_lock_timeout"
@@ -121,7 +147,20 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         db_session.query(AuthSession).filter_by(user_id=user_id).count() == 0
     )
     db_session.rollback()
+    unknown = client.post(
+        "/api/v1/auth/login",
+        json={"login": "missing-user", "password": "wrong-password"},
+    )
+    assert unknown.status_code == 401
+    assert any(
+        getattr(record, "event", None) == "auth.login_failed"
+        and record.user_id is None
+        for record in caplog.records
+    )
+    assert _read_busy_timeout() == original_busy_timeout
+    db_session.rollback()
     assert _login(client, user, "wrong-password").status_code == 401
+    assert _read_busy_timeout() == original_busy_timeout
     db_session.rollback()
     counter = db_session.scalar(
         select(LoginCounter).where(LoginCounter.user_id == user_id)
@@ -129,6 +168,76 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     assert counter is not None and counter.failure_count == 1
     db_session.rollback()
     assert _login(client, user, P).status_code == 200
+    assert _read_busy_timeout() == original_busy_timeout
+
+
+def test_locked_account_and_unknown_login_share_sqlite_timeout(
+    client, db_session, engine, now, monkeypatch, caplog
+):
+    _admin(db_session)
+    user = make_local_user(db_session, "DEMO_LOCKED")
+    assert user.email is not None
+    db_session.add(
+        LoginCounter(
+            user_id=user.id,
+            failure_count=10,
+            locked_until=now[0] + timedelta(minutes=15),
+        )
+    )
+    db_session.commit()
+    monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
+    caplog.set_level(logging.INFO, logger="app.auth")
+
+    with engine.connect() as holder:
+        holder.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            responses = []
+            durations = []
+            for login, password in (
+                (user.email, P),
+                ("missing-user", "wrong-password"),
+            ):
+                started = time.monotonic()
+                response = client.post(
+                    "/api/v1/auth/login",
+                    json={"login": login, "password": password},
+                )
+                durations.append(time.monotonic() - started)
+                responses.append(response)
+            assert all(response.status_code == 503 for response in responses)
+            assert responses[0].content == responses[1].content
+            assert abs(durations[0] - durations[1]) < 0.5
+            assert all(
+                response.headers["retry-after"] == "5"
+                for response in responses
+            )
+            assert all(
+                "set-cookie" not in response.headers for response in responses
+            )
+            assert not any(
+                getattr(record, "event", None) == "auth.login_failed"
+                for record in caplog.records
+            )
+        finally:
+            holder.rollback()
+
+    locked = _login(client, user, P)
+    unknown = client.post(
+        "/api/v1/auth/login",
+        json={"login": "missing-user", "password": "wrong-password"},
+    )
+    assert locked.status_code == unknown.status_code == 401
+    assert locked.content == unknown.content
+    failures = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "auth.login_failed"
+    ]
+    assert len(failures) == 2
+    assert {record.reason for record in failures} == {
+        "locked",
+        "invalid_credentials",
+    }
 
 
 def test_non_lock_sqlite_operational_error_is_not_converted(
@@ -138,6 +247,10 @@ def test_non_lock_sqlite_operational_error_is_not_converted(
         sqlite_errorname = "SQLITE_IOERR"
 
     expected = OperationalError("upsert", {}, OtherSQLiteError())
+    connection = db_session.connection()
+    original_busy_timeout = connection.exec_driver_sql(
+        "PRAGMA busy_timeout"
+    ).scalar_one()
 
     def fail_execute(_statement):
         raise expected
@@ -146,6 +259,77 @@ def test_non_lock_sqlite_operational_error_is_not_converted(
     with pytest.raises(OperationalError) as caught:
         lockout_module._serialize_account(db_session, uuid.uuid4())
     assert caught.value is expected
+    assert (
+        connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+        == original_busy_timeout
+    )
+
+
+@pytest.mark.parametrize("outcome", ["success", "busy", "other_error"])
+def test_sqlite_timeout_restores_all_queue_pool_connections(
+    tmp_path, monkeypatch, outcome
+):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'busy-timeout-pool.db'}",
+        poolclass=QueuePool,
+        pool_size=3,
+        max_overflow=0,
+    )
+    monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
+    connections = [engine.connect() for _ in range(3)]
+    for connection in connections:
+        connection.exec_driver_sql("PRAGMA busy_timeout=123")
+        connection.commit()
+    connections[0].exec_driver_sql("CREATE TABLE writes (id integer)")
+    connections[0].commit()
+    if outcome == "busy":
+        connections[0].exec_driver_sql("BEGIN IMMEDIATE")
+    connections[1].close()
+    connections[2].close()
+
+    try:
+        with Session(engine) as session:
+            connection = session.connection()
+
+            def write() -> None:
+                assert (
+                    connection.exec_driver_sql(
+                        "PRAGMA busy_timeout"
+                    ).scalar_one()
+                    == 50
+                )
+                if outcome == "other_error":
+
+                    class OtherSQLiteError(Exception):
+                        sqlite_errorname = "SQLITE_IOERR"
+
+                    raise OperationalError("write", {}, OtherSQLiteError())
+                session.execute(text("INSERT INTO writes VALUES (1)"))
+
+            if outcome == "busy":
+                with pytest.raises(APIError) as caught:
+                    lockout_module._execute_sqlite_write(session, write)
+                assert caught.value.status_code == 503
+            elif outcome == "other_error":
+                with pytest.raises(OperationalError):
+                    lockout_module._execute_sqlite_write(session, write)
+            else:
+                lockout_module._execute_sqlite_write(session, write)
+
+        with engine.connect() as first_idle, engine.connect() as second_idle:
+            assert (
+                first_idle.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+                == 123
+            )
+            assert (
+                second_idle.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+                == 123
+            )
+    finally:
+        if outcome == "busy":
+            connections[0].rollback()
+        connections[0].close()
+        engine.dispose()
 
 
 def test_ac27_ac51_lock_boundary_audit_and_log(

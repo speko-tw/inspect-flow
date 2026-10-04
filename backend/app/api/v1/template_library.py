@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import page, write_call
 from app.auth.access import (
-    require_system_role,
+    require_admin_or_system_role,
     require_system_role_or_any_project_permission,
 )
 from app.auth.dependencies import get_db
@@ -58,7 +58,7 @@ system_router = APIRouter(
     prefix="/template-systems", tags=["template-library"]
 )
 template_router = APIRouter(prefix="/templates", tags=["template-library"])
-_write = Depends(require_system_role(SystemRoleCode.TEMPLATE_ADMIN))
+_write = Depends(require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN))
 _read = Depends(
     require_system_role_or_any_project_permission(
         SystemRoleCode.TEMPLATE_ADMIN,

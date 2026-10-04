@@ -103,11 +103,43 @@ function managementFetch({
 } = {}) {
   const rows = userRows.map((user) => ({ ...user }))
   const companies = companyRows.map((row) => ({ ...row }))
+  const templateCategories = [{ id: 'category-1', name: '土木工程' }]
+  const templateSystems = [
+    { id: 'system-1', category_id: 'category-1', name: '護欄' },
+  ]
+  const templateItems = [
+    {
+      id: 'template-1',
+      system_id: 'system-1',
+      sequence: 1,
+      title: '欄杆尺寸',
+      instruction: '確認尺寸',
+      inspection_points: [],
+    },
+  ]
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const parsed = new URL(url, 'http://testserver')
       const method = init?.method ?? 'GET'
+      if (url.includes('/template-categories?')) {
+        return Response.json({
+          items: templateCategories,
+          next_cursor: null,
+        })
+      }
+      if (url.includes('/template-categories/category-1/systems?')) {
+        return Response.json({
+          items: templateSystems,
+          next_cursor: null,
+        })
+      }
+      if (url.includes('/template-systems/system-1/templates?')) {
+        return Response.json({
+          items: templateItems,
+          next_cursor: null,
+        })
+      }
       if (parsed.pathname === '/api/v1/users' && method === 'GET') {
         const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
         const filtered = rows.filter((user) =>
@@ -130,6 +162,7 @@ function managementFetch({
           next_cursor:
             start + limit < filtered.length ? String(start + limit) : null,
         })
+      }
       }
       if (parsed.pathname === '/api/v1/companies' && method === 'GET') {
         const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
@@ -240,6 +273,21 @@ afterEach(() => {
 })
 
 describe('admin user and company pages', () => {
+  it('lets Admin edit templates from the management page', async () => {
+    managementFetch()
+    renderAdmin('/admin/templates')
+
+    expect(
+      await screen.findByRole('button', { name: '新增工程類別' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: '新增系統…' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+    ).toBeInTheDocument()
+  })
+
   it('lists users and protects the built-in admin controls', async () => {
     managementFetch()
     renderAdmin()
