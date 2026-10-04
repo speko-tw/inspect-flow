@@ -60,10 +60,11 @@
 **為什麼要先決定**：影響 `Inspection Task` 的 `location_text` 欄位是否需要拆成結構化編碼，以及未來與 WBS 系統整合的可行性。
 
 **選項**：
-- 維持自由文字 `location_text`。
-- 改為正式的棟別／樓層／區域／座標／WBS 編碼。
+- **採用**：專案有分區時選一個分區並可填補充文字；沒有分區時只填補充文字。
+- **未選**：任務地點只使用自由文字 `location_text`，或改採棟別／樓層／區域／座標四欄結構化編碼。
+- **不納入 MVP**：整合 WBS；有對接需求時另開規格。
 
-**目前暫定**：無。任務地點決策記錄於 [KD-58](03-decisions-and-stack.md#kd-58)。
+**目前暫定**：無待裁定事項；任務地點決策記錄於 [KD-58](03-decisions-and-stack.md#kd-58)。
 
 **誰決定、何時**：負責人；分區與工區關係於 [#73](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5870106674) 裁定（2026-09-28），任務地點欄位於 [#73](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5976192382) 裁定（2026-10-04）。分區名稱規則為依業界慣例整理的技術預設。
 
