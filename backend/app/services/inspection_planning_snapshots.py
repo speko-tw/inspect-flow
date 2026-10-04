@@ -163,20 +163,24 @@ def create_task_items(
     project_inspection_item_ids: list[uuid.UUID],
     operator_id: uuid.UUID,
 ) -> list[TaskInspectionItem]:
+    from app.services.inspection_planning import PlanningError
+
     items: list[TaskInspectionItem] = []
-    seen: set[uuid.UUID] = set()
-    for item_id in project_inspection_item_ids:
-        if item_id in seen:
-            continue
-        seen.add(item_id)
-        source = session.scalar(
-            select(ProjectInspectionItem).where(
-                ProjectInspectionItem.id == item_id,
-                ProjectInspectionItem.project_id == task.project_id,
-            )
+    unique_ids = list(dict.fromkeys(project_inspection_item_ids))
+    if not unique_ids:
+        raise PlanningError("inspection_task.items_required")
+    sources = session.scalars(
+        select(ProjectInspectionItem).where(
+            ProjectInspectionItem.id.in_(unique_ids),
+            ProjectInspectionItem.project_id == task.project_id,
         )
-        if source is None:
-            raise ValueError("inspection_task.invalid_project_item")
+    ).all()
+    sources_by_id = {source.id: source for source in sources}
+    if set(sources_by_id) != set(unique_ids):
+        raise PlanningError("inspection_task.invalid_project_item")
+
+    for item_id in unique_ids:
+        source = sources_by_id[item_id]
         task_item = TaskInspectionItem(
             task_id=task.id,
             project_id=task.project_id,
@@ -194,8 +198,6 @@ def create_task_items(
             revision=1,
         )
         items.append(task_item)
-    if not items:
-        raise ValueError("inspection_task.items_required")
     return items
 
 

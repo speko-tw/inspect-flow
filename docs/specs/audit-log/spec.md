@@ -116,7 +116,7 @@
 <a id="inspection-planning-事件"></a>
 ## `inspection-planning` 事件
 
-依 `inspection-planning` IP-R10 登記 `ProjectZone` 管理事件。每次成功新增、改名或刪除各寫一筆；失敗或回滾不得留紀錄。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
+依 `inspection-planning` IP-R03、IP-R04、IP-R10 登記 Plan／Task 與專案查核項目變更事件，包括 ProjectZone 管理、Task 地點、刪除、取消、恢復，以及 KD-55 選擇與修改內容。每次成功變更依下表記錄；失敗或回滾不得留紀錄，且事件須與領域變更在同一交易內寫入。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
