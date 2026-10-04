@@ -29,6 +29,14 @@
 | E | 使用者 Service（帳號名稱修改、公司連結變更）在同一個交易寫 `user.username_changed`、`user.company_changed`；換公司或解除連結時清空的欄位一併記下（ALG-R20） | C、`domain-model` 計畫的 E | ALG-AC14、ALG-AC15 | [#263](https://github.com/speko-tw/inspect-flow/issues/263) |
 | H | 端到端：首次設定的系統事件、新增使用者、改帳號名稱、換公司，最後讀稽核紀錄核對筆數與操作者 | C、E | 上列各 AC 的端到端串接 | [#266](https://github.com/speko-tw/inspect-flow/issues/266) |
 
+## Admin 唯讀查詢後續實作
+
+依據：[ALG-Q2 負責人裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)。本次 #411 只同步規格與計畫，不實作 API 或畫面；待 #411 合併後，由下列任務依 [admin-dashboard 計畫 T5b](../admin-dashboard/plan.md#任務) 落地，避免兩份計畫定出不同契約。
+
+| 任務 | 稽核相關的內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| T5b | Admin 唯讀稽核查詢 API 與管理後台頁面；依專案、操作者、時間及事件類型篩選，採穩定 cursor 分頁；合法但不存在的 `project_id` 回 200 空頁。檔案範圍依 [admin-dashboard T5b](../admin-dashboard/plan.md#任務) | #411 合併；`authentication` Admin 存取檢查 | ALG-AC17、ALG-AC18；ADM-AC06、ADM-AC07、ADM-AC13 | [#412](https://github.com/speko-tw/inspect-flow/issues/412) |
+
 **對既有任務的影響**：
 
 | 既有任務 | 影響 | 由誰接手 |
@@ -80,6 +88,8 @@
 | ALG-AC14 | `backend/tests/services/test_audit_user_events.py`（E，新增）：改名（含大小寫）、相同值、重名被拒絕三種，斷言筆數、`created_by` 與小寫的 `before`、`after`；掃描目錄的宣告欄位 |
 | ALG-AC15 | 同上：換公司、單獨改部門、清空後解除連結、連結公司、工號重複被拒絕，斷言筆數與四欄內容 |
 | ALG-AC16 | `backend/tests/cli/test_reset_admin_password_audit.py`（C，新增）：執行重設指令兩次（一次成功、一次輸入不同），斷言一筆 `user.password_set` 與目錄沒有新增事件代碼 |
+| ALG-AC17 | #412（T5b）：以未登入、非 Admin、Admin 呼叫查詢 API 並操作頁面；核對 401／403 與成功查詢前後 `audit_logs` 不變 |
+| ALG-AC18 | #412（T5b）：建立跨專案、操作者、時間及事件類型且同時刻的資料；組合篩選與跨 cursor 翻頁，核對 AND、降冪排序、無重複遺漏、不存在專案 200 空頁及無效輸入 422；與 ADM-AC07、ADM-AC13 共用驗證 |
 
 ## 考慮過但沒採用的做法
 

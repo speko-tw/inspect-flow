@@ -3,7 +3,7 @@
 **代碼**：`ALG`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`database-foundation`（UUID 主鍵、UTC 時間、`created_by` 外鍵，見 DBF-R08、DBF-R11、DBF-R14）、`domain-model`（`User`、`Role`、`ProjectMember`、目前操作者，見 DOM-R05、DOM-R14、DOM-R19～DOM-R25；帳號名稱與公司連結見 DOM-R45、DOM-R47、DOM-R53）、`api-conventions`（UUID 字串、時間格式，見 API-R06、API-R09）
 **引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)、[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-46](../../intents/03-decisions-and-stack.md#kd-46)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」
-**被擋議題**：無（[ALG-Q1](#alg-q1)～[ALG-Q5](#alg-q5) 不擋凍結：Q1～Q4 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變；[ALG-Q6](#alg-q6) 已裁定）
+**被擋議題**：無（[ALG-Q1](#alg-q1)、[ALG-Q3](#alg-q3)～[ALG-Q5](#alg-q5) 不擋凍結：Q1、Q3、Q4 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變；[ALG-Q2](#alg-q2)、[ALG-Q6](#alg-q6) 已裁定）
 
 ## 目的
 
@@ -21,6 +21,7 @@
 - `ProjectZone` 新增、改名與刪除事件，依 `inspection-planning` IP-R10 登記，見[`inspection-planning` 事件](#inspection-planning-事件)。
 - 寫入時機的驗收：DOM-R22 列出的每一種變更是否寫出正確的紀錄（DOM-R22 寫明由本規格驗收）。
 - 預留：外部身分同步覆蓋基本欄位的事件（[KD-20](../../intents/03-decisions-and-stack.md#kd-20)），只保證之後不用改資料表就能套用。
+- 0.5.x 的 Admin 唯讀稽核查詢 API 與管理後台頁面，依[ALG-Q2](#alg-q2) 裁定及 [admin-dashboard](../admin-dashboard/spec.md#介面)契約實作。
 
 **不包含**：
 
@@ -29,7 +30,7 @@
 - 外部身分同步的事件代碼與欄位：由 `external-identity-sync` 登記（ALG-R13）。
 - 登入成功、登入失敗、登出：只寫應用程式日誌，不寫稽核紀錄（AUT-R40，[AUT-Q6](../authentication/spec.md#aut-q6) 裁定）。
 - `authentication` 事件的寫入入口與寫入時機的驗收：由 `authentication` 實作與驗收（AUT-R39、AUT-AC49～AUT-AC51、AUT-AC62）。
-- 查詢 API 與畫面、保存期限、讀取紀錄、請求來源資訊：intents 沒有依據，見[待釐清](#待釐清)。
+- 保存期限、讀取紀錄是否另寫稽核、請求來源資訊：見[待釐清](#待釐清)；查詢 API 與畫面已依 [ALG-Q2](#alg-q2) 裁定納入範圍。
 - 其他資料（`Company`、`User` 基本欄位的人工修改等）的完整操作歷史：屬「延後但不排除」的 Audit Trail（[01-overview](../../intents/01-overview.md#延後但不排除的能力)，架構基準 §35）；這些資料目前只靠 [PR-08](../../intents/02-principles.md#pr-08) 的建立與修改紀錄。
   - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；`User` 的姓名、email、`is_active` 與 `Company` 的修改，以及單獨修改工號、部門、地點，仍不寫（`is_active` 待 [ALG-Q4](#alg-q4)）。
 - 資料庫層的防竄改（trigger、權限控管、雜湊鏈）：見[考慮過但沒採用的做法](plan.md#考慮過但沒採用的做法)。
@@ -83,6 +84,13 @@
 | ALG-R19 | 事件目錄**必須**包含[帳號與公司連結事件](#帳號與公司連結事件)，欄位依該表 | 必須 | 負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）（帳號名稱修改與公司連結變更要寫稽核，DOM-R22）；依 ALG-R13 只登記事件，不改資料表 | ALG-AC14、ALG-AC15 |
 | ALG-R20 | `user.company_changed` 只在 `User.company_id` 改變（換公司、連結、解除連結）時寫；`before`、`after` **必須**一律記錄 `company_id`、`employee_no`、`department`、`location` 四個欄位，讓被清空與被重新填入的值看得出來。單獨修改工號、部門或地點（`company_id` 不變）不寫 | 必須（欄位與觸發）；應（一律記錄四欄） | 負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：換公司或解除連結時清空欄位要寫稽核；「四欄一律記錄」與「單獨改工號不寫」是本規格的判讀（見 [ALG-Q6](#alg-q6)），理由：讀紀錄的人一眼看出清掉了什麼；沿用 `project_member.roles_changed` 一律記錄識別欄位的做法 | ALG-AC15 |
 | ALG-R21 | `admin` 重設指令（[AUT-R47](../authentication/spec.md)）沿用 `user.password_set`，**不得**新增事件代碼；因為指令不在 HTTP 請求中，操作者依 DOM-R14 是內建 `admin`，`is_temporary` 記為 `false`（重設後的密碼不是臨時密碼） | 必須 | 負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：重設指令沿用 `user.password_set`；`is_temporary` 為 `false` 依 AUT-R47 重設後不標臨時 | ALG-AC16 |
+
+### 查詢
+
+| 編號 | 需求 | 強度 | 依據 | 驗收 |
+|---|---|---|---|---|
+| ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
+| ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；不存在專案回空頁為 admin-dashboard 規格設計，非負責人裁定 | ALG-AC18；ADM-AC07、ADM-AC13 |
 
 ## 第一批事件
 
@@ -177,12 +185,21 @@
 
 ## 介面
 
-本規格不新增 API 端點與畫面（查詢介面見 [ALG-Q2](#alg-q2)）。對開發者的介面如下；模組與函式名稱由計畫決定。
+本規格的寫入部分不新增 API 端點；依 [ALG-Q2](#alg-q2) 裁定，查詢部分新增下列唯讀 API 與 Admin 頁面。對開發者的寫入介面如下；模組與函式名稱由計畫決定。
 
 | 介面 | 內容 | 對應需求 |
 |---|---|---|
 | 程式介面 | 寫入稽核紀錄的單一入口：傳入事件代碼、被記錄的資料與 `before`、`after`；操作者與時間由入口填寫 | ALG-R05～ALG-R10 |
 | 程式介面 | 事件目錄：事件代碼與各自宣告的欄位；其他規格在這裡登記自己的事件 | ALG-R07、ALG-R08、ALG-R11、ALG-R13 |
+
+### 查詢 API
+
+| 介面 | 契約 | 權限與錯誤 | 對應需求 |
+|---|---|---|---|
+| `GET /api/v1/audit-logs?project_id=&actor_id=&from=&to=&event_type=&cursor=&limit=` | 回 `{items:[既有 AuditLog 欄位],next_cursor}`；依 `(created_at,id)` 降冪；`from`、`to` 為 UTC ISO-8601，含起不含迄；多條件 AND 篩選。`cursor` 為不透明字串，`limit` 預設 50、範圍 1–100。合法但不存在的 `project_id` 回 `{items:[],next_cursor:null}` | Admin 專用；未登入 401、非 Admin 403、格式錯誤 422；不存在專案為 200 空頁；錯誤 envelope 依 API-R05 | ALG-R22、ALG-R23 |
+| Admin 稽核查詢頁 | 呈現上述紀錄與專案、操作者、時間、事件類型篩選及 cursor 翻頁；只讀 | 僅 Admin 可進入 | ALG-R22、ALG-R23 |
+
+以上查詢契約與 [admin-dashboard 介面](../admin-dashboard/spec.md#介面)一致；該規格的 ADM-R07、ADM-R08 與 ADM-AC06、ADM-AC07、ADM-AC13 共同約束實作，不另建立不同的查詢語意。時間欄位輸出依 API-R09。
 
 ## 驗收條件
 
@@ -206,15 +223,17 @@
 | ALG-AC14 | 初始化後的資料庫；具 Admin 權限的操作者 A、本系統帳號 U（`username = anna.deng`）；`domain-model` 的使用者 Service 可用 | 以 A 把 U 的 `username` 改為 `Anna.D`；再改為 `anna.d`（與上一次存放的值相同）；以 A 嘗試改成已被使用的名稱；掃描事件目錄中這兩種事件的宣告欄位 | 第一次恰有一筆 `user.username_changed`，`entity_id` 是 U，`created_by` 是 A，`before.username` 為 `anna.deng`、`after.username` 為 `anna.d`（小寫）；第二次、被拒絕的那次都沒有紀錄；事件代碼符合 ALG-R07 格式，宣告欄位沒有 `password`、`secret`、`token`、`session` 字樣 | ALG-R14、ALG-R19 |
 | ALG-AC15 | 公司 A、B；具 Admin 權限的操作者 A0；本系統帳號 U 屬於公司 A，`employee_no`、`department`、`location` 都有值；沒有公司的帳號 V | 以 A0 依序：把 U 的 `company_id` 改為 B；把 U 的 `department` 單獨改成新值（`company_id` 不變）；為 U 重新填入三個欄位後把 `company_id` 改為空值；把 V 的 `company_id` 設為 A；以會使工號重複的值把 U 改到 A（被資料庫拒絕） | 第一次恰有一筆 `user.company_changed`，`before` 是 A 與三個欄位的原值，`after` 是 B 與三個空值；第二次沒有紀錄；第三次一筆，`after.company_id` 為空值、三欄為空值；第四次一筆，`before.company_id` 為空值；被拒絕的那次沒有紀錄；`created_by` 都是 A0 | ALG-R14、ALG-R19、ALG-R20 |
 | ALG-AC16 | 初始化後的資料庫；`admin` 已設定過一次密碼 | 執行 `admin` 重設指令一次（兩次輸入相同的有效密碼）；再執行一次兩次輸入不同的指令 | 第一次恰有一筆 `user.password_set`，`entity_id` 是內建 `admin`，`created_by` 是內建 `admin`，`after.is_temporary` 為 `false`；事件目錄沒有為重設指令新增的事件代碼；第二次沒有紀錄 | ALG-R21 |
+| ALG-AC17 | 已有稽核紀錄；Admin、非 Admin 及未登入者 | 分別開啟稽核查詢頁並呼叫查詢 API，再比對查詢前後的紀錄 | Admin 可唯讀查詢；未登入回 401、非 Admin 回 403，均不回稽核內容；查詢不新增、修改或刪除紀錄 | ALG-R22；ADM-AC06 |
+| ALG-AC18 | 多筆跨專案、不同操作者與事件類型的紀錄，含相同事件時間；另有不存在的合法專案 UUID | 組合專案、操作者、時間、事件類型篩選並跨 cursor 翻頁；以不存在的 `project_id` 查詢；送無效篩選或 cursor／limit | 結果符合 AND 篩選、`(created_at,id)` 降冪且跨頁無重複遺漏；不存在的專案回 200、`items: []`、`next_cursor: null`；無效格式回 422 並符合 API-R05 錯誤 envelope | ALG-R23；ADM-AC07、ADM-AC13 |
 
 ## 待釐清
 
-以下 intents 沒有依據，本規格不自行拍板；需要團隊裁定時另開 issue 移到 `05-open-questions.md`。ALG-Q1～Q4 不影響資料表；ALG-Q5 若選 B，要另加一支 migration 新增可空值的來源欄位，本規格已凍結的欄位不變。都不擋凍結。
+以下未裁定議題沒有 intents 依據，本規格不自行拍板；需要團隊裁定時另開 issue 移到 `05-open-questions.md`。ALG-Q1、Q3、Q4 不影響資料表；ALG-Q5 若選 B，要另加一支 migration 新增可空值的來源欄位，本規格已凍結的欄位不變。ALG-Q2、Q6 已裁定；都不擋凍結。
 
 <a id="alg-q1"></a>
 - **ALG-Q1：保存期限**。選項：（A）永久保存，不提供清除；（B）保存固定年限後清除或封存；（C）可設定。業界：OWASP Logging Cheat Sheet 要求依法規與內部政策訂保存期限；ISO 27001、SOC 2 的稽核常見要求至少保存一年。**建議 A**：第一批事件只有權限變更，量很小，也和「不能刪除」一致；真要清除時另開規格。
 <a id="alg-q2"></a>
-- **ALG-Q2：查詢介面**。選項：（A）MVP 不提供，需要時由維運人員查資料庫；（B）Admin 專用的唯讀 API，可依資料、事件、時間篩選，cursor 分頁（KD-13）；（C）另做 `admin-dashboard` 畫面。業界：稽核紀錄通常只給系統管理者或稽核人員看，不給一般使用者。**建議 A**，到 `admin-dashboard`（0.5.x）再決定 B、C；誰能看，建議只限 Admin（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)）。
+- **ALG-Q2：查詢介面（已裁定）**。負責人於 2026-10-04 [裁定選 C](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)：0.5.x 管理後台提供 Admin 專用、唯讀的稽核紀錄查詢頁，可依專案、操作者、時間與事件類型篩選；查詢 API 與 cursor 契約見 [ALG-R22～ALG-R23](#查詢)、[查詢 API](#查詢-api)，由 [admin-dashboard](../admin-dashboard/spec.md#介面) 的 T5b（[#412](https://github.com/speko-tw/inspect-flow/issues/412)）實作。
 <a id="alg-q3"></a>
 - **ALG-Q3：要不要記錄讀取**。選項：（A）不記錄；（B）只記錄敏感資料的讀取或匯出（例如報告匯出）。業界：OWASP 建議視需要記錄敏感資料的存取，但讀取量大，一般不全記。**建議 A**：intents 沒有敏感讀取的要求；日後報告匯出若要記錄，再登記事件（ALG-R13）。
 <a id="alg-q4"></a>
@@ -227,6 +246,7 @@
 
 ## 變更紀錄
 
+- 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收 — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
 - 對齊 #375 路線圖，將 Admin Dashboard 的 milestone 引用更新為 0.5.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
