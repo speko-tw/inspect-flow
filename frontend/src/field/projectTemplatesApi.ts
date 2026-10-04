@@ -68,14 +68,17 @@ interface Page<T> {
   next_cursor: string | null
 }
 
-async function allPages<T>(path: string): Promise<T[]> {
+async function allPages<T>(
+  path: string,
+  baseParams = new URLSearchParams(),
+): Promise<T[]> {
   const items: T[] = []
   let cursor: string | null = null
   do {
-    const query: string = cursor
-      ? `?limit=100&cursor=${encodeURIComponent(cursor)}`
-      : '?limit=100'
-    const page: Page<T> = await request(`${path}${query}`)
+    const params = new URLSearchParams(baseParams)
+    params.set('limit', '100')
+    if (cursor) params.set('cursor', cursor)
+    const page: Page<T> = await request(`${path}?${params.toString()}`)
     items.push(...page.items)
     cursor = page.next_cursor
   } while (cursor)
@@ -93,7 +96,7 @@ export function listTemplateSystems(
 }
 
 export function listTemplateItems(systemId: string): Promise<TemplateItem[]> {
-  return allPages(`/template-systems/${systemId}/templates`)
+  return allPages('/templates', new URLSearchParams({ system_id: systemId }))
 }
 
 export function listAllProjects(): Promise<ProjectSummary[]> {
