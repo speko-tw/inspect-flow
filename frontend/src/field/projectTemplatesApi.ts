@@ -139,7 +139,7 @@ export function templateErrorMessage(error: unknown): string {
       return '選擇的範本資料無效，請檢查後再試。'
     }
     if (error.status === 404) {
-      return '找不到所選範本，請重新整理後再試。'
+      return '找不到指定的資料，請重新整理後再試。'
     }
     if (error.status === 403) {
       return '你沒有權限執行這項操作。'

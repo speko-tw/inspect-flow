@@ -45,6 +45,7 @@ export default function ProjectTemplatesPage() {
   const [itemsError, setItemsError] = useState('')
   const [itemsDenied, setItemsDenied] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [templateReloadKey, setTemplateReloadKey] = useState(0)
   const [canSave, setCanSave] = useState(false)
   const [saveDenied, setSaveDenied] = useState(false)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
@@ -115,7 +116,7 @@ export default function ProjectTemplatesPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [templateReloadKey])
 
   useEffect(() => {
     if (!categoryId) return
@@ -135,7 +136,7 @@ export default function ProjectTemplatesPage() {
     return () => {
       active = false
     }
-  }, [categoryId])
+  }, [categoryId, templateReloadKey])
 
   useEffect(() => {
     if (!systemId) return
@@ -155,7 +156,7 @@ export default function ProjectTemplatesPage() {
     return () => {
       active = false
     }
-  }, [systemId])
+  }, [systemId, templateReloadKey])
 
   useEffect(() => {
     if (!saveCategoryId) return
@@ -205,6 +206,7 @@ export default function ProjectTemplatesPage() {
     setSaveNotice('')
     try {
       await saveProjectItemAsTemplate(projectId, savingItemId, saveSystemId)
+      setTemplateReloadKey((key) => key + 1)
       setSaveNotice('已存為範本。')
       setSavingItemId(null)
       setSaveCategoryId('')

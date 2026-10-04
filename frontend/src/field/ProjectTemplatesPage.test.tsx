@@ -11,7 +11,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
-import type { ProjectInspectionItem } from './projectTemplatesApi'
+import {
+  ProjectTemplatesApiError,
+  templateErrorMessage,
+  type ProjectInspectionItem,
+} from './projectTemplatesApi'
 
 const USER: CurrentUser = {
   id: 'user-1',
@@ -43,9 +47,11 @@ function mockApi(
     saveResponse?: Response
     denyItems?: boolean
     paginatedItems?: ProjectInspectionItem[]
+    afterSaveTemplates?: boolean
   } = {},
 ) {
   let applied = false
+  let saved = false
   const calls = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/projects')) {
@@ -97,7 +103,12 @@ function mockApi(
     }
     if (url.includes('/system-1/templates')) {
       return Response.json({
-        items: [{ id: 'template-1', title: '風管檢查' }],
+        items: [
+          { id: 'template-1', title: '風管檢查' },
+          ...(saved && options.afterSaveTemplates
+            ? [{ id: 'new-template-1', title: '新增的範本' }]
+            : []),
+        ],
         next_cursor: null,
       })
     }
@@ -112,7 +123,7 @@ function mockApi(
       url.endsWith('/projects/project-1/templates') &&
       init?.method === 'POST'
     ) {
-      return (
+      const response =
         options.saveResponse ??
         Response.json(
           {
@@ -121,7 +132,8 @@ function mockApi(
           },
           { status: 201 },
         )
-      )
+      if (response.ok) saved = true
+      return response
     }
     return Response.json(
       { error: { code: 'resource.not_found' } },
@@ -162,6 +174,12 @@ afterEach(() => {
 })
 
 describe('專案範本套用（TPL-AC05、AC08）', () => {
+  it('404 對套用、列表與存為範本使用中性訊息', () => {
+    expect(templateErrorMessage(new ProjectTemplatesApiError(404))).toBe(
+      '找不到指定的資料，請重新整理後再試。',
+    )
+  })
+
   it('單項套用顯示副本來源與時間', async () => {
     const calls = mockApi(
       Response.json(
@@ -205,6 +223,56 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
         body: JSON.stringify({ template_id: 'template-1' }),
       }),
     )
+  })
+
+  it('整系統套用並重載多筆副本', async () => {
+    const second = {
+      ...SAVED_ITEM,
+      id: 'copy-2',
+      sequence: 2,
+      title: '水管檢查',
+      applied_at: '2026-10-04T02:00:00Z',
+    }
+    const applied = [SAVED_ITEM, second].map((item) => ({
+      id: item.id,
+      project_id: item.project_id,
+      source_template_name: item.source_template_name,
+      applied_at: item.applied_at,
+    }))
+    const calls = mockApi(Response.json(applied, { status: 201 }), false, {
+      afterApplyItems: [SAVED_ITEM, second],
+    })
+    renderPage()
+    await selectSystem()
+    await screen.findByText('目前沒有查核項目。')
+    fireEvent.click(screen.getByLabelText('整個系統'))
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+
+    const result = await screen.findByRole('status')
+    const entries = within(result).getAllByRole('listitem')
+    expect(entries).toHaveLength(2)
+    for (const entry of entries) {
+      expect(entry).toHaveTextContent('來源：空調')
+      expect(within(entry).getByText(/2026/)).toBeInTheDocument()
+    }
+    expect(calls).toHaveBeenCalledWith(
+      '/api/v1/projects/project-1/inspection-items:apply-template',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ system_id: 'system-1' }),
+      }),
+    )
+    expect(
+      await screen.findByRole('rowheader', { name: second.title }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('rowheader', { name: SAVED_ITEM.title }),
+    ).toBeInTheDocument()
+    expect(
+      calls.mock.calls.filter(([url]) =>
+        String(url).includes('/inspection-items?limit=100'),
+      ),
+    ).toHaveLength(2)
   })
 
   it('以 system_id 套用空系統時顯示空結果', async () => {
@@ -312,8 +380,10 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     const calls = mockApi(Response.json([]), false, {
       projectItems: [SAVED_ITEM],
       canSave: true,
+      afterSaveTemplates: true,
     })
     renderPage()
+    await selectSystem()
     fireEvent.click(
       await screen.findByRole('button', {
         name: '存為範本',
@@ -325,6 +395,14 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     fireEvent.change(await screen.findByLabelText('目標系統'), {
       target: { value: 'system-1' },
     })
+    const paths = [
+      '/template-categories?limit=100',
+      '/template-categories/category-1/systems?limit=100',
+      '/template-systems/system-1/templates?limit=100',
+    ]
+    const requestCount = (path: string) =>
+      calls.mock.calls.filter(([url]) => String(url).endsWith(path)).length
+    const beforeSave = paths.map(requestCount)
     fireEvent.click(
       screen.getByRole('button', {
         name: '確認存為範本',
@@ -346,6 +424,13 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
         }),
       }),
     )
+    expect(
+      await screen.findByRole('option', { name: '新增的範本' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('系統')).toHaveValue('system-1')
+    paths.forEach((path, index) => {
+      expect(requestCount(path)).toBe(beforeSave[index] + 1)
+    })
   })
 
   it('存為範本 409 顯示同名訊息並保留選擇', async () => {
