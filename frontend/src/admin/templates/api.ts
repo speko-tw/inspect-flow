@@ -31,10 +31,13 @@ export interface InspectionPoint {
   instruction: string
   text_standard: { text: string } | null
   numeric_standard: {
-    value: string
+    value: string | null
     condition: '<=' | '>=' | '=' | 'range'
     unit: string
     tolerance: string | null
+    range_form?: 'interval' | 'tolerance' | null
+    lower_bound?: string | null
+    upper_bound?: string | null
     measurement_field_id?: string
     measurement_field_client_id?: string
   } | null

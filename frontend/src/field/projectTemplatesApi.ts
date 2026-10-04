@@ -8,6 +8,7 @@ export class ProjectTemplatesApiError extends Error {
   constructor(
     readonly status: number,
     readonly code?: string,
+    readonly details?: unknown,
   ) {
     super(`API 錯誤（狀態碼 ${status}）`)
   }
@@ -24,15 +25,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     let code: string | undefined
+    let details: unknown
     try {
       const body = (await response.json()) as {
-        error?: { code?: string }
+        error?: { code?: string; details?: unknown }
       }
       code = body.error?.code
+      details = body.error?.details
     } catch {
       // 非 JSON 錯誤回應以狀態碼處理。
     }
-    throw new ProjectTemplatesApiError(response.status, code)
+    throw new ProjectTemplatesApiError(response.status, code, details)
   }
   return (await response.json()) as T
 }
@@ -129,6 +132,19 @@ export function saveProjectItemAsTemplate(
 
 export function templateErrorMessage(error: unknown): string {
   if (error instanceof ProjectTemplatesApiError) {
+    if (
+      error.status === 409 &&
+      error.code === 'project_inspection_item.duplicate_name'
+    ) {
+      const names = Array.isArray(error.details)
+        ? error.details.filter(
+            (name): name is string => typeof name === 'string',
+          )
+        : []
+      return names.length
+        ? `專案已有同名查核項目：${names.join('、')}，請先改名再套用`
+        : '專案已有同名查核項目，請先改名再套用。'
+    }
     if (error.status === 409) {
       if (error.code === 'template.name_conflict') {
         return '該系統已有同名範本。'

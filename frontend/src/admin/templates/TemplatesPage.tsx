@@ -49,6 +49,8 @@ function forWire(item: TemplateItem): TemplateItem {
         client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
       }))
       const numeric = point.numeric_standard
+      const interval =
+        numeric?.condition === 'range' && numeric.range_form === 'interval'
       const bound =
         fields.find(
           (field) =>
@@ -66,10 +68,16 @@ function forWire(item: TemplateItem): TemplateItem {
         })),
         numeric_standard: numeric
           ? {
-              value: String(numeric.value),
+              value: interval ? null : String(numeric.value ?? ''),
               condition: numeric.condition,
               unit: bound?.unit ?? numeric.unit,
-              tolerance: numeric.tolerance,
+              tolerance: interval ? null : numeric.tolerance,
+              range_form:
+                numeric.condition === 'range'
+                  ? (numeric.range_form ?? 'tolerance')
+                  : null,
+              lower_bound: interval ? (numeric.lower_bound ?? null) : null,
+              upper_bound: interval ? (numeric.upper_bound ?? null) : null,
               measurement_field_client_id:
                 bound?.client_id ?? numeric.measurement_field_client_id,
             }
@@ -329,6 +337,33 @@ export default function TemplatesPage() {
   async function saveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!systemId || !editingItem) return
+    const invalid = editingItem.inspection_points.some((point) => {
+      const standard = point.numeric_standard
+      if (!standard || standard.condition !== 'range') return false
+      if ((standard.range_form ?? 'tolerance') === 'interval') {
+        const lower = Number(standard.lower_bound)
+        const upper = Number(standard.upper_bound)
+        return (
+          !standard.lower_bound?.trim() ||
+          !standard.upper_bound?.trim() ||
+          !Number.isFinite(lower) ||
+          !Number.isFinite(upper) ||
+          lower > upper
+        )
+      }
+      const tolerance = Number(standard.tolerance)
+      return (
+        !standard.value?.trim() ||
+        !standard.tolerance?.trim() ||
+        !Number.isFinite(Number(standard.value)) ||
+        !Number.isFinite(tolerance) ||
+        tolerance < 0
+      )
+    })
+    if (invalid) {
+      setError('範圍標準欄位無效，請檢查上下限或容許誤差。')
+      return
+    }
     try {
       const input = forWire({ ...editingItem, system_id: systemId })
       const next = editingItem.id
@@ -413,6 +448,9 @@ export default function TemplatesPage() {
                         condition: '<=',
                         unit: '',
                         tolerance: null,
+                        range_form: null,
+                        lower_bound: null,
+                        upper_bound: null,
                         measurement_field_client_id: '',
                       }
                     : null,
@@ -481,48 +519,24 @@ export default function TemplatesPage() {
               </select>
             </label>
             <label>
-              標準值
-              <input
-                inputMode="decimal"
-                onChange={(event) =>
-                  updatePoint(index, {
-                    numeric_standard: {
-                      ...numeric,
-                      value: event.target.value,
-                    },
-                  })
-                }
-                required
-                value={numeric.value}
-              />
-            </label>
-            <label>
-              容許誤差
-              <input
-                inputMode="decimal"
-                onChange={(event) =>
-                  updatePoint(index, {
-                    numeric_standard: {
-                      ...numeric,
-                      tolerance: event.target.value || null,
-                    },
-                  })
-                }
-                value={numeric.tolerance ?? ''}
-              />
-            </label>
-            <label>
               條件
               <select
-                onChange={(event) =>
+                onChange={(event) => {
+                  const condition = event.target.value as
+                    '<=' | '>=' | '=' | 'range'
                   updatePoint(index, {
                     numeric_standard: {
                       ...numeric,
-                      condition: event.target.value as
-                        '<=' | '>=' | '=' | 'range',
+                      condition,
+                      range_form:
+                        condition === 'range'
+                          ? (numeric.range_form ?? 'tolerance')
+                          : null,
+                      lower_bound: null,
+                      upper_bound: null,
                     },
                   })
-                }
+                }}
                 value={numeric.condition}
               >
                 <option value="<=">≤</option>
@@ -531,6 +545,148 @@ export default function TemplatesPage() {
                 <option value="range">範圍</option>
               </select>
             </label>
+            {numeric.condition === 'range' && (
+              <>
+                <label>
+                  範圍形式
+                  <select
+                    onChange={(event) => {
+                      const rangeForm = event.target.value as
+                        'interval' | 'tolerance'
+                      updatePoint(index, {
+                        numeric_standard: {
+                          ...numeric,
+                          range_form: rangeForm,
+                          value: rangeForm === 'interval' ? '' : numeric.value,
+                          tolerance:
+                            rangeForm === 'interval'
+                              ? null
+                              : numeric.tolerance,
+                          lower_bound:
+                            rangeForm === 'tolerance'
+                              ? null
+                              : numeric.lower_bound,
+                          upper_bound:
+                            rangeForm === 'tolerance'
+                              ? null
+                              : numeric.upper_bound,
+                        },
+                      })
+                    }}
+                    value={numeric.range_form ?? 'tolerance'}
+                  >
+                    <option value="interval">區間（下限～上限）</option>
+                    <option value="tolerance">標準值 ± 容許誤差</option>
+                  </select>
+                </label>
+                {(numeric.range_form ?? 'tolerance') === 'interval' ? (
+                  <>
+                    <label>
+                      下限
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updatePoint(index, {
+                            numeric_standard: {
+                              ...numeric,
+                              lower_bound: event.target.value,
+                            },
+                          })
+                        }
+                        required
+                        value={numeric.lower_bound ?? ''}
+                      />
+                    </label>
+                    <label>
+                      上限
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updatePoint(index, {
+                            numeric_standard: {
+                              ...numeric,
+                              upper_bound: event.target.value,
+                            },
+                          })
+                        }
+                        required
+                        value={numeric.upper_bound ?? ''}
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      標準值
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updatePoint(index, {
+                            numeric_standard: {
+                              ...numeric,
+                              value: event.target.value,
+                            },
+                          })
+                        }
+                        required
+                        value={numeric.value ?? ''}
+                      />
+                    </label>
+                    <label>
+                      容許誤差
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updatePoint(index, {
+                            numeric_standard: {
+                              ...numeric,
+                              tolerance: event.target.value || null,
+                            },
+                          })
+                        }
+                        required
+                        value={numeric.tolerance ?? ''}
+                      />
+                    </label>
+                  </>
+                )}
+              </>
+            )}
+            {numeric.condition !== 'range' && (
+              <>
+                <label>
+                  標準值
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updatePoint(index, {
+                        numeric_standard: {
+                          ...numeric,
+                          value: event.target.value,
+                        },
+                      })
+                    }
+                    required
+                    value={numeric.value ?? ''}
+                  />
+                </label>
+                <label>
+                  容許誤差
+                  <input
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updatePoint(index, {
+                        numeric_standard: {
+                          ...numeric,
+                          tolerance: event.target.value || null,
+                        },
+                      })
+                    }
+                    value={numeric.tolerance ?? ''}
+                  />
+                </label>
+              </>
+            )}
             <label>
               單位（由綁定欄位帶入）
               <input disabled value={numeric.unit} />
@@ -1041,15 +1197,25 @@ export default function TemplatesPage() {
                   {point.numeric_standard && (
                     <p>
                       數值標準：
-                      {
-                        { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }[
-                          point.numeric_standard.condition
-                        ]
-                      }{' '}
-                      {point.numeric_standard.value}{' '}
-                      {point.numeric_standard.unit}
-                      {point.numeric_standard.tolerance !== null &&
-                        `；容許誤差：${point.numeric_standard.tolerance}`}
+                      {point.numeric_standard.condition === 'range' &&
+                      (point.numeric_standard.range_form ?? 'tolerance') ===
+                        'interval' ? (
+                        `${point.numeric_standard.lower_bound}～${point.numeric_standard.upper_bound} ${point.numeric_standard.unit}`
+                      ) : point.numeric_standard.condition === 'range' ? (
+                        `${point.numeric_standard.value} ± ${point.numeric_standard.tolerance} ${point.numeric_standard.unit}`
+                      ) : (
+                        <>
+                          {
+                            { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }[
+                              point.numeric_standard.condition
+                            ]
+                          }{' '}
+                          {point.numeric_standard.value}{' '}
+                          {point.numeric_standard.unit}
+                          {point.numeric_standard.tolerance !== null &&
+                            `；容許誤差：${point.numeric_standard.tolerance}`}
+                        </>
+                      )}
                     </p>
                   )}
                   <p>
