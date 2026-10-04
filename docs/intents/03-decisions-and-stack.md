@@ -695,6 +695,7 @@
 - **代價**：核發前沒有第二個人把關，錯誤要靠事後出新版更正；舊版要長期保存並在介面上標示，報告列表要能分辨現行版與被取代的版本。
 - **什麼情況要重新討論**：加入審核流程時（須另行裁定送審與核准的規則，不得逕自實作）；G-06、G-07 裁定後，一併檢視本決策是否相容。
 - **依據**：議題背景為架構基準 §20.6–20.8（Report 狀態與版次）、§18（狀態機）；裁定為負責人裁定（[#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)，[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)，2026-10-03，第 4 題）；部分裁定 [G-06](05-open-questions.md#g-06)；與 [KD-55](#kd-55)、[PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15) 並用。
+
 <a id="kd-58"></a>
 ## KD-58：任務地點選用專案分區並可補充文字
 
