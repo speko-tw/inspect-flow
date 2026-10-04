@@ -84,7 +84,7 @@
 |---|---|---|---|---|
 | FUI-AC01 | 真實後端有兩個具 `inspection_task.inspect` 權限的專案，含本人／他人／未指派及各種狀態任務；另有無權限專案 | 讀取今日清單並切換全部可查核任務 | 預設只見本人建議指派的未完成任務；切換後見所有有權限專案的未完成任務；只具 `inspection_task.read` 者看不到任務；`DRAFT`、`COMPLETED`、`CANCELLED` 及無權限專案資料均不可見 | FUI-R02、R05、R06 |
 | FUI-AC02 | 真實 API 中，非 Admin 對任何專案皆無 `inspection_task.inspect` 權限；另有有權限但無符合資料的使用者 | 呼叫跨專案列表；再以無權限及有權限的 `project_id` 篩選 | 無任何專案權限回 403；有權限但無符合資料回 200 空清單；指定專案無成員資格或無權限回 403；有權限的跨專案清單逐筆過濾 | FUI-R05、R06 |
-| FUI-AC03 | 真實 Task 回應含分區名稱及補充位置文字；另有僅 `location_text` 的 Task，且快照含照片／量測要求 | 開啟現場任務詳情 | 顯示內嵌分區名稱與補充文字，無分區時只顯示補充文字；不呼叫分區列表 API；完整唯讀呈現需求；不寫入 Evidence、Result 或修改快照 | FUI-R03、R06 |
+| FUI-AC03 | 真實 Task API 回應含分區名稱及補充位置文字；另有僅 `location_text` 的 Task；需求快照含照片／量測要求，其中一筆已依 KD-55 更正文字 | 開啟現場任務詳情 | 顯示內嵌分區名稱與補充文字，無分區時只顯示補充文字；不呼叫分區列表 API；唯讀呈現 API 回傳的當前需求文字（含 KD-55 授權更正）及其要求；不寫入 Evidence、Result 或自行修改快照 | FUI-R03、R06 |
 | FUI-AC04 | 真實後端有 `DRAFT` Task；使用者僅有 `inspection_task.inspect`，沒有計畫管理權限 | 以列表與詳情 API 直接請求該 Task ID | 列表排除該 Task，詳情回 `404 task.not_found`；直接知道 ID 不會繞過 Field 隱藏規則 | FUI-R03、R06 |
 | FUI-AC05 | 真實後端有未封存專案中的 `PENDING` Task，登入者具 `inspection_task.inspect` 但不是建議指派人 | 使用者按開始查核 | 後端接受合法動作，變為 `IN_PROGRESS` 並記錄實際使用者；介面顯示伺服器最新狀態 | FUI-R04 |
 | FUI-AC06 | 真實後端有 `IN_PROGRESS`、`COMPLETED`、`CANCELLED` 及封存 Plan 的 Task | 查看操作並直接重送開始請求 | UI 不提供非法開始操作；後端拒絕非法狀態或權限請求且 Task 不變；封存 Task 唯讀 | FUI-R04 |

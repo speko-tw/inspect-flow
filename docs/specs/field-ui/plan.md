@@ -61,7 +61,7 @@
 |---|---|
 | FUI-AC01 | 真實 API 整合測試涵蓋多專案、assigned/unassigned、各 Task 狀態與無權限專案；驗證預設及全部範圍。 |
 | FUI-AC02 | 真實 API 測試驗證無任一專案權限回 403、有權限但空結果回 200，及指定專案無權限回 403。 |
-| FUI-AC03 | 以真實 Task 詳情 response 驗證分區名稱、補充文字／純文字位置、快照呈現；確認不呼叫 zone list、不寫 Evidence／Result。 |
+| FUI-AC03 | 以真實 Task 詳情 response 驗證分區名稱、補充文字／純文字位置、正常快照與 KD-55 核准文字更正後的權威內容；確認不呼叫 zone list、不寫 Evidence／Result。 |
 | FUI-AC04 | 後端直接以 inspect-only 使用者請求 DRAFT ID，驗證清單排除且安全詳情回 `404 task.not_found`。 |
 | FUI-AC05 | 使用非建議指派但有權限的使用者呼叫真實開始 API，驗證狀態及實際操作者。 |
 | FUI-AC06 | 真實 API 測試對進行中、完成、取消、封存 Task 執行開始請求；前端驗證控制項顯示。 |
