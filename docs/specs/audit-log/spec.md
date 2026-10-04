@@ -214,7 +214,7 @@
 <a id="alg-q1"></a>
 - **ALG-Q1：保存期限**。選項：（A）永久保存，不提供清除；（B）保存固定年限後清除或封存；（C）可設定。業界：OWASP Logging Cheat Sheet 要求依法規與內部政策訂保存期限；ISO 27001、SOC 2 的稽核常見要求至少保存一年。**建議 A**：第一批事件只有權限變更，量很小，也和「不能刪除」一致；真要清除時另開規格。
 <a id="alg-q2"></a>
-- **ALG-Q2：查詢介面**。選項：（A）MVP 不提供，需要時由維運人員查資料庫；（B）Admin 專用的唯讀 API，可依資料、事件、時間篩選，cursor 分頁（KD-13）；（C）另做 `admin-dashboard` 畫面。業界：稽核紀錄通常只給系統管理者或稽核人員看，不給一般使用者。**建議 A**，到 `admin-dashboard`（0.8.x）再決定 B、C；誰能看，建議只限 Admin（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)）。
+- **ALG-Q2：查詢介面**。選項：（A）MVP 不提供，需要時由維運人員查資料庫；（B）Admin 專用的唯讀 API，可依資料、事件、時間篩選，cursor 分頁（KD-13）；（C）另做 `admin-dashboard` 畫面。業界：稽核紀錄通常只給系統管理者或稽核人員看，不給一般使用者。**建議 A**，到 `admin-dashboard`（0.5.x）再決定 B、C；誰能看，建議只限 Admin（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)）。
 <a id="alg-q3"></a>
 - **ALG-Q3：要不要記錄讀取**。選項：（A）不記錄；（B）只記錄敏感資料的讀取或匯出（例如報告匯出）。業界：OWASP 建議視需要記錄敏感資料的存取，但讀取量大，一般不全記。**建議 A**：intents 沒有敏感讀取的要求；日後報告匯出若要記錄，再登記事件（ALG-R13）。
 <a id="alg-q4"></a>
@@ -226,6 +226,8 @@
 - **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.username_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
 
 ## 變更紀錄
+
+- 對齊 #375 路線圖，將 Admin Dashboard 的 milestone 引用更新為 0.5.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 

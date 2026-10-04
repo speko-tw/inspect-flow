@@ -1,6 +1,6 @@
 # 狀態機（State Machines）
 
-**代碼**：`STM`　**Phase**：P4、P6、P7、P9　**狀態**：部分凍結
+**代碼**：`STM`　**Phase**：P4、P6、P7、P8　**狀態**：部分凍結
 **前置規格**：[domain-model](../domain-model/spec.md)、[api-conventions](../api-conventions/spec.md)
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[PR-05](../../intents/02-principles.md#pr-05)、[PR-06](../../intents/02-principles.md#pr-06)、[PR-15](../../intents/02-principles.md#pr-15)、[PR-16](../../intents/02-principles.md#pr-16)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)
 **被擋議題**：[G-05](../../intents/05-open-questions.md#g-05)、[G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)
@@ -312,5 +312,7 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 - **G-07**：Report Snapshot 時點、Preview／草稿重產是否覆寫及新版本何時取得新 ID 未定。
 
 ## 變更紀錄
+
+- 對齊 #375 路線圖，將本規格涵蓋的 Report Phase 由 P9 更新為 P8 — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 - 依 #100／#103 裁定及補充裁定對齊 Plan／Task 狀態規則，並依部分凍結規則凍結標頭列出的狀態行為範圍；Evidence／Report 分別受 G-05／G-06／G-07 阻擋。本 PR 不修改 intents — #348。依據：[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57) 已由主線合併。
