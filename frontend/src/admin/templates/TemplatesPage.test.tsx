@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import TemplatesPage from './TemplatesPage'
+import type { TemplateItem } from './api'
 
 const category = { id: 'category-1', name: '土木工程' }
 const system = {
@@ -93,6 +94,7 @@ function templateFetch({
   writeError,
   writeConflict = false,
   writeSuccess = false,
+  deleteSuccess = false,
   categoryItems = [category],
   systemItems = [system],
   templateItems = templates,
@@ -101,6 +103,7 @@ function templateFetch({
   writeError?: number
   writeConflict?: boolean
   writeSuccess?: boolean
+  deleteSuccess?: boolean
   categoryItems?: Array<{ id: string; name: string }>
   systemItems?: Array<{
     id: string
@@ -127,7 +130,11 @@ function templateFetch({
         path.endsWith('/systems') &&
         path.includes('/template-categories/')
       ) {
-        return Response.json({ items: systemItems, next_cursor: null })
+        const categoryId = path.split('/').at(-2)
+        return Response.json({
+          items: systemItems.filter((item) => item.category_id === categoryId),
+          next_cursor: null,
+        })
       }
       if (path.endsWith('/templates') && path.includes('/template-systems/')) {
         if (method === 'GET') {
@@ -167,27 +174,46 @@ function templateFetch({
         path.endsWith('/template-categories/category-1') &&
         method === 'PATCH'
       ) {
+        if (writeSuccess) {
+          const body = JSON.parse(String(init?.body)) as { name: string }
+          const updatedCategory = { ...categoryItems[0], ...body }
+          categoryItems[0] = updatedCategory
+          return Response.json(updatedCategory)
+        }
         return Response.json(
           { error: { code: 'template.name_conflict' } },
           { status: 409 },
         )
       }
       if (path.endsWith('/template-systems/system-1') && method === 'PATCH') {
+        if (writeSuccess) {
+          const body = JSON.parse(String(init?.body)) as { name: string }
+          const updatedSystem = { ...systemItems[0], ...body }
+          systemItems[0] = updatedSystem
+          return Response.json(updatedSystem)
+        }
         return Response.json(
           { error: { code: 'template.name_conflict' } },
           { status: 409 },
         )
       }
-      if (
-        path.endsWith('/template-categories/category-1') &&
-        method === 'DELETE'
-      ) {
+      if (path.includes('/template-categories/') && method === 'DELETE') {
+        if (path.endsWith('/category-2') && deleteSuccess) {
+          categoryItems.splice(1, 1)
+          return new Response(null, { status: 204 })
+        }
         return Response.json(
           { error: { code: 'template.category_not_empty' } },
           { status: 409 },
         )
       }
-      if (path.endsWith('/template-systems/system-1') && method === 'DELETE') {
+      if (path.includes('/template-systems/') && method === 'DELETE') {
+        if (deleteSuccess) {
+          const deletedId = path.split('/').at(-1)
+          const index = systemItems.findIndex((item) => item.id === deletedId)
+          if (index >= 0) systemItems.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
         return Response.json(
           { error: { code: 'template.system_not_empty' } },
           { status: 409 },
@@ -326,6 +352,68 @@ describe('TemplatesPage', () => {
         }),
       ])
     })
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯：伸縮縫外觀' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    const pointEditor = screen.getByRole('form', { name: '查核項目編輯器' })
+    const numericPoint = within(
+      within(pointEditor).getByRole('group', { name: '查核項次 2' }),
+    )
+    fireEvent.change(numericPoint.getByLabelText('項次標題'), {
+      target: { value: '伸縮縫寬度' },
+    })
+    fireEvent.click(numericPoint.getByRole('button', { name: '新增實測欄位' }))
+    fireEvent.change(numericPoint.getByLabelText('欄位名稱'), {
+      target: { value: '實際寬度' },
+    })
+    fireEvent.change(numericPoint.getByLabelText('欄位型別'), {
+      target: { value: 'number' },
+    })
+    const fieldUnit = numericPoint.getByLabelText('單位')
+    expect(fieldUnit).not.toBeDisabled()
+    fireEvent.change(fieldUnit, { target: { value: 'mm' } })
+    fireEvent.change(numericPoint.getByLabelText('標準類型'), {
+      target: { value: 'number' },
+    })
+    fireEvent.change(numericPoint.getByLabelText('標準值'), {
+      target: { value: '20' },
+    })
+    const binding = numericPoint.getByLabelText('綁定數字實測欄位')
+    fireEvent.change(binding, {
+      target: {
+        value: numericPoint
+          .getByRole('option', {
+            name: '實際寬度（mm）',
+          })
+          .getAttribute('value'),
+      },
+    })
+    expect(fieldUnit).not.toBeDisabled()
+    expect(numericPoint.getByLabelText('單位（由綁定欄位帶入）')).toHaveValue(
+      'mm',
+    )
+    fireEvent.click(
+      within(pointEditor).getByRole('button', { name: '儲存範本' }),
+    )
+
+    await waitFor(() => {
+      expect(items[0].inspection_points).toHaveLength(2)
+    })
+    const latestPut = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'PUT')
+      .at(-1)
+    const body = JSON.parse(String(latestPut?.[1]?.body)) as {
+      items: Array<{
+        inspection_points: Array<{
+          numeric_standard: { unit: string }
+          measurement_fields: Array<{ unit: string | null }>
+        }>
+      }>
+    }
+    expect(body.items[0].inspection_points[1]).toMatchObject({
+      numeric_standard: { unit: 'mm' },
+      measurement_fields: [{ unit: null }],
+    })
   })
 
   it('shows the library denial when the read API returns 403', async () => {
@@ -438,7 +526,7 @@ describe('TemplatesPage', () => {
     expect(
       within(editor).getByLabelText('單位（由綁定欄位帶入）'),
     ).toBeDisabled()
-    expect(within(editor).getAllByLabelText('單位')[0]).toBeDisabled()
+    expect(within(editor).getAllByLabelText('單位')[0]).not.toBeDisabled()
 
     fireEvent.change(within(editor).getByLabelText('項目名稱'), {
       target: { value: '保留中的範本草稿' },
@@ -473,7 +561,10 @@ describe('TemplatesPage', () => {
     const body = JSON.parse(String(putCall?.[1]?.body)) as {
       items: Array<{
         inspection_points: Array<{
-          measurement_fields: Array<{ client_id: string; unit: string }>
+          measurement_fields: Array<{
+            client_id: string
+            unit: string | null
+          }>
           numeric_standard: {
             measurement_field_client_id: string
             unit: string
@@ -483,6 +574,8 @@ describe('TemplatesPage', () => {
     }
     const savedPoint = body.items[0].inspection_points[0]
     expect(savedPoint.numeric_standard.unit).toBe('cm')
+    expect(savedPoint.measurement_fields[0].unit).toBeNull()
+    expect(savedPoint.measurement_fields[1].unit).toBe('mm')
     expect(savedPoint.numeric_standard.measurement_field_client_id).toBe(
       savedPoint.measurement_fields[0].client_id,
     )
@@ -506,7 +599,11 @@ describe('TemplatesPage', () => {
     ).toHaveValue('mm')
     const fieldUnits = within(editor).getAllByLabelText('單位')
     expect(fieldUnits[0]).not.toBeDisabled()
-    expect(fieldUnits[1]).toBeDisabled()
+    expect(fieldUnits[1]).not.toBeDisabled()
+    fireEvent.change(fieldUnits[1], { target: { value: 'µm' } })
+    expect(
+      within(editor).getByLabelText('單位（由綁定欄位帶入）'),
+    ).toHaveValue('µm')
 
     fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -520,7 +617,10 @@ describe('TemplatesPage', () => {
     const body = JSON.parse(String(putCall?.[1]?.body)) as {
       items: Array<{
         inspection_points: Array<{
-          measurement_fields: Array<{ client_id: string; unit: string }>
+          measurement_fields: Array<{
+            client_id: string
+            unit: string | null
+          }>
           numeric_standard: {
             measurement_field_client_id: string
             unit: string
@@ -529,10 +629,119 @@ describe('TemplatesPage', () => {
       }>
     }
     const savedPoint = body.items[0].inspection_points[0]
-    expect(savedPoint.numeric_standard.unit).toBe('mm')
+    expect(savedPoint.numeric_standard.unit).toBe('µm')
+    expect(savedPoint.measurement_fields[0].unit).toBe('cm')
+    expect(savedPoint.measurement_fields[1].unit).toBeNull()
     expect(savedPoint.numeric_standard.measurement_field_client_id).toBe(
       savedPoint.measurement_fields[1].client_id,
     )
+  })
+
+  it('preserves units when a new numeric field is not bound', async () => {
+    const item = structuredClone(templates[0]) as TemplateItem
+    item.inspection_points[0].numeric_standard = null
+    item.inspection_points[0].measurement_fields = [
+      {
+        name: '新實測欄位',
+        field_type: 'number',
+        unit: 'm',
+      },
+    ]
+    const fetchMock = templateFetch({ templateItems: [item] })
+    render(<TemplatesPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+    )
+
+    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
+    fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith('/template-systems/system-1/templates') &&
+            init?.method === 'PUT',
+        ),
+      ).toBe(true)
+    })
+
+    const putCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-systems/system-1/templates') &&
+        init?.method === 'PUT',
+    )
+    const body = JSON.parse(String(putCall?.[1]?.body)) as {
+      items: Array<{
+        inspection_points: Array<{
+          measurement_fields: Array<{ unit: string | null }>
+          numeric_standard: null
+        }>
+      }>
+    }
+    const savedPoint = body.items[0].inspection_points[0]
+    expect(savedPoint.measurement_fields[0].unit).toBe('m')
+    expect(savedPoint.numeric_standard).toBeNull()
+  })
+
+  it('does not bind an earlier new field before a persisted field id', async () => {
+    const item = structuredClone(templates[0]) as TemplateItem
+    item.inspection_points[0].numeric_standard = {
+      ...item.inspection_points[0].numeric_standard!,
+      measurement_field_id: 'field-2',
+      measurement_field_client_id: undefined,
+      unit: 'mm',
+    }
+    item.inspection_points[0].measurement_fields = [
+      {
+        name: '新實測欄位',
+        field_type: 'number',
+        unit: 'cm',
+      },
+      {
+        id: 'field-2',
+        name: '既有目標欄位',
+        field_type: 'number',
+        unit: 'mm',
+      },
+    ]
+    const fetchMock = templateFetch({ templateItems: [item] })
+    render(<TemplatesPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+    )
+
+    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
+    expect(
+      within(editor).getByLabelText('單位（由綁定欄位帶入）'),
+    ).toHaveValue('mm')
+    fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith('/template-systems/system-1/templates') &&
+            init?.method === 'PUT',
+        ),
+      ).toBe(true)
+    })
+
+    const putCall = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-systems/system-1/templates') &&
+        init?.method === 'PUT',
+    )
+    const body = JSON.parse(String(putCall?.[1]?.body)) as {
+      items: Array<{
+        inspection_points: Array<{
+          measurement_fields: Array<{ unit: string | null }>
+          numeric_standard: { unit: string }
+        }>
+      }>
+    }
+    const savedPoint = body.items[0].inspection_points[0]
+    expect(savedPoint.measurement_fields[0].unit).toBe('cm')
+    expect(savedPoint.measurement_fields[1].unit).toBeNull()
+    expect(savedPoint.numeric_standard.unit).toBe('mm')
   })
 
   it('saves and reloads tolerance for a range numeric standard', async () => {
@@ -734,19 +943,49 @@ describe('TemplatesPage', () => {
     ).toBe(false)
   })
 
-  it('clears category and system editors when their selection changes', async () => {
+  it('shows the remaining category and system names after deleting selections', async () => {
     const secondCategory = { id: 'category-2', name: '道路工程' }
     const secondSystem = {
       id: 'system-2',
-      category_id: secondCategory.id,
+      category_id: category.id,
       name: '路面',
     }
-    templateFetch({
+    const fetchMock = templateFetch({
       categoryItems: [category, secondCategory],
       systemItems: [system, secondSystem],
+      deleteSuccess: true,
     })
     render(<TemplatesPage />)
-    await screen.findByRole('option', { name: '道路工程' })
+    await screen.findByRole('option', { name: '路面' })
+    fireEvent.change(screen.getByLabelText('系統名稱'), {
+      target: { value: '未儲存系統草稿' },
+    })
+    fireEvent.change(screen.getByLabelText('選擇系統'), {
+      target: { value: secondSystem.id },
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
+    })
+
+    fireEvent.change(screen.getByLabelText('選擇系統'), {
+      target: { value: secondSystem.id },
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '刪除系統' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除系統' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('系統名稱')).toHaveValue('護欄')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
 
     fireEvent.change(screen.getByLabelText('工程類別名稱'), {
       target: { value: '未儲存分類草稿' },
@@ -757,16 +996,86 @@ describe('TemplatesPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('工程類別名稱')).toHaveValue('道路工程')
     })
-
-    await screen.findByRole('option', { name: '路面' })
-    fireEvent.change(screen.getByLabelText('系統名稱'), {
-      target: { value: '未儲存系統草稿' },
-    })
-    fireEvent.change(screen.getByLabelText('選擇系統'), {
-      target: { value: secondSystem.id },
-    })
+    fireEvent.click(screen.getByRole('button', { name: '刪除工程類別' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除工程類別' }))
     await waitFor(() => {
-      expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
+      expect(screen.getByLabelText('工程類別名稱')).toHaveValue('土木工程')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+  })
+
+  it('keeps cleared names blank and saves retyped category and system names', async () => {
+    const fetchMock = templateFetch({ writeSuccess: true })
+    render(<TemplatesPage />)
+
+    const categoryInput = await screen.findByLabelText('工程類別名稱')
+    fireEvent.change(categoryInput, { target: { value: '' } })
+    expect(categoryInput).toHaveValue('')
+    expect(categoryInput).toBeRequired()
+    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
+    expect(categoryInput).toHaveValue('')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+
+    fireEvent.change(categoryInput, {
+      target: { value: 'Civil Engineering' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '工程類別已更新。',
+    )
+    await waitFor(() => {
+      expect(categoryInput).toHaveValue('Civil Engineering')
+    })
+
+    const systemInput = screen.getByLabelText('系統名稱')
+    fireEvent.change(systemInput, { target: { value: '' } })
+    expect(systemInput).toHaveValue('')
+    expect(systemInput).toBeRequired()
+    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
+    expect(systemInput).toHaveValue('')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+
+    fireEvent.change(systemInput, { target: { value: 'Guard Rail' } })
+    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('系統已更新。')
+    await waitFor(() => {
+      expect(systemInput).toHaveValue('Guard Rail')
+    })
+
+    const categoryUpdate = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-categories/category-1') &&
+        init?.method === 'PATCH',
+    )
+    const systemUpdate = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-systems/system-1') &&
+        init?.method === 'PATCH',
+    )
+    expect(JSON.parse(String(categoryUpdate?.[1]?.body))).toEqual({
+      name: 'Civil Engineering',
+    })
+    expect(JSON.parse(String(systemUpdate?.[1]?.body))).toEqual({
+      name: 'Guard Rail',
     })
   })
 
