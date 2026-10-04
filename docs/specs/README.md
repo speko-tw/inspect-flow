@@ -52,7 +52,7 @@ docs/specs/
 | [`audit-log`](audit-log/spec.md) | P2 | 共用 | 已凍結 | 無；[ALG-Q1](audit-log/spec.md#alg-q1)～[ALG-Q5](audit-log/spec.md#alg-q5) 待負責人決定，不擋凍結（ALG-Q5 若選 B，另加一支 migration 新增可空值欄位）；[ALG-Q6](audit-log/spec.md#alg-q6) 已裁定 |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
 | [`template-system`](template-system/spec.md) | P3 | 功能 | 已凍結 | 無；TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 已依規格設計定案，含最小專案查核項目副本表；OQ-06、OQ-20 已裁定，副本後續欄位及作廢／重查／更正流程由 P4 `inspection-planning` 定義 |
-| `inspection-planning` | P4 | 功能 | 未開始 | [G-01](../intents/05-open-questions.md#g-01) |
+| [`inspection-planning`](inspection-planning/spec.md) | P4 | 功能 | 草稿 | [OQ-09](../intents/05-open-questions.md#oq-09)（未定的 Plan／Task 轉換） |
 | `field-ui` | P5 | 功能 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09) |
 | `field-evidence` | P6 | 功能 | 未開始 | [G-02](../intents/05-open-questions.md#g-02)、[G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
 | `completion-validation` | P7 | 功能 | 未開始 | — |
