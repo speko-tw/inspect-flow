@@ -42,7 +42,7 @@ _DEFAULT_FAILURE_THRESHOLD = 10
 _DEFAULT_FAILURE_WINDOW = timedelta(minutes=15)
 _DEFAULT_LOCKOUT_DURATION = timedelta(minutes=15)
 _DEFAULT_SQLITE_BUSY_TIMEOUT_MS = 5_000
-_MAX_SQLITE_BUSY_TIMEOUT_MS = 2_147_483_647
+_MAX_SQLITE_BUSY_TIMEOUT_MS = 60_000
 
 _DEFAULT_SETUP_FAILURE_THRESHOLD = 10
 _DEFAULT_SETUP_FAILURE_WINDOW = timedelta(minutes=15)
@@ -127,7 +127,8 @@ def get_lockout_settings() -> LockoutSettings:
     )
     if sqlite_busy_timeout_ms > _MAX_SQLITE_BUSY_TIMEOUT_MS:
         raise InvalidAuthSettingError(
-            f"{SQLITE_BUSY_TIMEOUT_ENV_VAR} exceeds SQLite's integer limit"
+            f"{SQLITE_BUSY_TIMEOUT_ENV_VAR} must not exceed "
+            f"{_MAX_SQLITE_BUSY_TIMEOUT_MS} milliseconds"
         )
     return LockoutSettings(
         failure_threshold=_read_positive_int(

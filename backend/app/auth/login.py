@@ -108,16 +108,16 @@ def authenticate(db: Session, login: str, password: str) -> User | None:
     # using a fixed absent ID; neither path reveals the login.
     locked = is_locked(db, user_id)
     if user is None:
-        _log_failed(None, "invalid_credentials")
         db.commit()
         wait_for_sqlite_login_write_lock(db)
+        _log_failed(None, "invalid_credentials")
         db.commit()
         return None
     assert user_id is not None
     if locked:
-        _log_failed(str(user_id), "locked")
         db.commit()
         wait_for_sqlite_login_write_lock(db)
+        _log_failed(str(user_id), "locked")
         db.commit()
         return None
     if user_password is None:

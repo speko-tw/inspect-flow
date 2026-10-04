@@ -85,7 +85,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     assert email is not None
     original_busy_timeout = _read_busy_timeout()
     monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
-    caplog.set_level(logging.WARNING, logger="app.auth")
+    caplog.set_level(logging.INFO, logger="app.auth")
 
     with engine.connect() as holder:
         holder.exec_driver_sql("BEGIN IMMEDIATE")
@@ -114,6 +114,10 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
             assert max(durations) - min(durations) < 0.5
             assert responses[0].content == responses[1].content
             assert responses[1].content == responses[2].content
+            assert not any(
+                getattr(record, "event", None) == "auth.login_failed"
+                for record in caplog.records
+            )
         finally:
             holder.rollback()
 
@@ -147,6 +151,11 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         json={"login": "missing-user", "password": "wrong-password"},
     )
     assert unknown.status_code == 401
+    assert any(
+        getattr(record, "event", None) == "auth.login_failed"
+        and record.user_id is None
+        for record in caplog.records
+    )
     assert _read_busy_timeout() == original_busy_timeout
     db_session.rollback()
     assert _login(client, user, "wrong-password").status_code == 401
@@ -162,7 +171,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
 
 
 def test_locked_account_and_unknown_login_share_sqlite_timeout(
-    client, db_session, engine, now, monkeypatch
+    client, db_session, engine, now, monkeypatch, caplog
 ):
     _admin(db_session)
     user = make_local_user(db_session, "DEMO_LOCKED")
@@ -176,6 +185,7 @@ def test_locked_account_and_unknown_login_share_sqlite_timeout(
     )
     db_session.commit()
     monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
+    caplog.set_level(logging.INFO, logger="app.auth")
 
     with engine.connect() as holder:
         holder.exec_driver_sql("BEGIN IMMEDIATE")
@@ -196,6 +206,17 @@ def test_locked_account_and_unknown_login_share_sqlite_timeout(
             assert all(response.status_code == 503 for response in responses)
             assert responses[0].content == responses[1].content
             assert abs(durations[0] - durations[1]) < 0.5
+            assert all(
+                response.headers["retry-after"] == "5"
+                for response in responses
+            )
+            assert all(
+                "set-cookie" not in response.headers for response in responses
+            )
+            assert not any(
+                getattr(record, "event", None) == "auth.login_failed"
+                for record in caplog.records
+            )
         finally:
             holder.rollback()
 
@@ -206,6 +227,16 @@ def test_locked_account_and_unknown_login_share_sqlite_timeout(
     )
     assert locked.status_code == unknown.status_code == 401
     assert locked.content == unknown.content
+    failures = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "auth.login_failed"
+    ]
+    assert len(failures) == 2
+    assert {record.reason for record in failures} == {
+        "locked",
+        "invalid_credentials",
+    }
 
 
 def test_non_lock_sqlite_operational_error_is_not_converted(

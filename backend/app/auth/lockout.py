@@ -3,6 +3,7 @@
 import logging
 import sys
 import uuid
+from collections.abc import Callable
 
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -36,9 +37,7 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
     here, since WAL cannot upgrade a stale SQLite read snapshot.
     """
     dialect = db.get_bind().dialect.name
-    previous_busy_timeout_ms = None
     if dialect == "sqlite":
-        previous_busy_timeout_ms = _set_sqlite_busy_timeout(db)
         # db-dependency: sqlite; wait for the preceding writer instead
         # of returning a transient "database is locked" as HTTP 500.
         insert = sqlite_insert(LoginCounter)
@@ -52,10 +51,20 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
         index_elements=[LoginCounter.user_id],
         set_={"revision": LoginCounter.revision + 1},
     )
-    try:
+    if dialect == "sqlite":
+        _execute_sqlite_write(db, lambda: db.execute(statement))
+    else:
         db.execute(statement)
+
+
+def _execute_sqlite_write(
+    db: Session, operation: Callable[[], object]
+) -> None:
+    previous_busy_timeout_ms = _set_sqlite_busy_timeout(db)
+    try:
+        operation()
     except OperationalError as exc:
-        if dialect != "sqlite" or not _is_sqlite_lock_error(exc):
+        if not _is_sqlite_lock_error(exc):
             raise
         db.rollback()
         logger.warning(
@@ -71,8 +80,7 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
             headers={"Retry-After": str(_SQLITE_RETRY_AFTER_SECONDS)},
         ) from exc
     finally:
-        if previous_busy_timeout_ms is not None:
-            _restore_sqlite_busy_timeout(db, previous_busy_timeout_ms)
+        _restore_sqlite_busy_timeout(db, previous_busy_timeout_ms)
 
 
 def _set_sqlite_busy_timeout(db: Session) -> int:
@@ -118,28 +126,10 @@ def wait_for_sqlite_login_write_lock(db: Session) -> None:
     SQLite's database-wide writer contention.
     """
     if db.get_bind().dialect.name == "sqlite":
-        previous_busy_timeout_ms = _set_sqlite_busy_timeout(db)
-        try:
-            # db-dependency: sqlite
-            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
-        except OperationalError as exc:
-            if not _is_sqlite_lock_error(exc):
-                raise
-            db.rollback()
-            logger.warning(
-                "auth.lockout_write_timeout",
-                extra={
-                    "event": "auth.lockout_write_timeout",
-                    "reason": "sqlite_lock_timeout",
-                },
-            )
-            raise APIError(
-                ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE,
-                503,
-                headers={"Retry-After": str(_SQLITE_RETRY_AFTER_SECONDS)},
-            ) from exc
-        finally:
-            _restore_sqlite_busy_timeout(db, previous_busy_timeout_ms)
+        _execute_sqlite_write(
+            db,
+            lambda: db.connection().exec_driver_sql("BEGIN IMMEDIATE"),
+        )
 
 
 def is_locked(db: Session, user_id: uuid.UUID | None) -> bool:
