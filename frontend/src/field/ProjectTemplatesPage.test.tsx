@@ -454,7 +454,7 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     })
   })
 
-  it('Admin 可存成範本', async () => {
+  it('後端允許時顯示存成範本', async () => {
     mockApi(Response.json([]), false, {
       projectItems: [SAVED_ITEM],
       canSave: true,
@@ -464,6 +464,21 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     expect(
       await screen.findByRole('button', { name: '存為範本' }),
     ).toBeInTheDocument()
+  })
+
+  it('後端拒絕跨專案瀏覽時隱藏存為範本操作', async () => {
+    mockApi(Response.json([]), false, {
+      projectItems: [SAVED_ITEM],
+      canSave: false,
+    })
+    renderPage({ ...USER, is_admin: true })
+
+    expect(
+      await screen.findByRole('rowheader', { name: SAVED_ITEM.title }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '存為範本' }),
+    ).not.toBeInTheDocument()
   })
 
   it('存為範本 409 顯示同名訊息並保留選擇', async () => {
