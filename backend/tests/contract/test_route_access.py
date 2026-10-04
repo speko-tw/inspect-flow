@@ -143,10 +143,17 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         "POST",
         "/api/v1/projects/{project_id}/inspection-items:apply-template",
     )
+    save_template = ("POST", "/api/v1/projects/{project_id}/templates")
+    list_inspection_items = (
+        "GET",
+        "/api/v1/projects/{project_id}/inspection-items",
+    )
 
     assert set(routes) == admin_routes | member_routes | {
         template_admin_list,
         apply_template,
+        save_template,
+        list_inspection_items,
     }
     for route in admin_routes:
         declaration = routes[route]
@@ -165,6 +172,13 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     assert declaration is not None
     assert declaration.level is AccessLevel.PROJECT_PERMISSION
     assert declaration.permission_code == "project_inspection_item.edit"
+    declaration = routes[save_template]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.SYSTEM_ROLE_REQUIRED
+    assert declaration.permission_code == "template_admin"
+    declaration = routes[list_inspection_items]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
 def test_system_role_assignment_routes_require_admin() -> None:

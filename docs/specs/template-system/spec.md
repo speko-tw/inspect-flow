@@ -84,12 +84,15 @@
 | PUT | `/api/v1/templates/{template_id}` | 覆蓋目前範本內容 | 範本管理員 |
 | DELETE | `/api/v1/templates/{template_id}` | 刪除範本 | 範本管理員 |
 | POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目）；有效但沒有項目的系統回 `200` 與空清單 | 具該專案 `project_inspection_item.edit` 權限者 |
-| POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含目標 `system_id` | 範本管理員 |
+| POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | 範本管理員 |
+| GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 專案成員、Admin 或範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
 | PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204 | Admin |
 | DELETE | `/api/v1/system-role-assignments/template_admin/{user_id}` | 收回使用者的 `template_admin` 指派；尚未指派時回 404 | Admin |
 
 `GET /api/v1/projects` 維持 AUT-R20 的 Admin 存取；新增範本管理員可列出全部專案，其他非 Admin（包括一般專案成員及無專案權限者）仍回 403，不提供過濾列表。回歸驗收確認 Admin 與範本管理員可取得全部專案，其他非 Admin 拒絕。名稱衝突回 `template.name_conflict`（409）；分類有系統時回 `template.category_not_empty`（409）；系統有查核項目時回 `template.system_not_empty`（409）。
+
+`POST /api/v1/projects/{project_id}/templates` 的 body 必含 `project_inspection_item_id` 與目標 `system_id`；來源項目必須屬於路徑指定的專案。系統以專案副本的結構欄位建立獨立範本；目標系統中去除前後空白且不分大小寫後同名的項目回 `409 template.name_conflict`。成功建立時寫入 `template_item.created_from_project` 稽核事件。專案查核項目列表以 `created_at`、`id` 升冪分頁，回 `{items, next_cursor}`，無下一頁時 `next_cursor` 為 `null`。一般登入者依 `require_project_permission` 檢查專案成員權限；非成員或不存在的專案都回 `403 permission.denied`。Admin 與範本管理員可讀取全部專案，指定的專案不存在時回 `404 resource.not_found`。
 
 範本結構寫入時，每個實測欄位以請求內的 `client_id`（UUID）供同項次的數值標準用 `measurement_field_client_id` 綁定；此識別只用於一次請求，資料表 `id` 由後端產生，回應以 `id` 與 `measurement_field_id` 表示持久識別。整份範本及整系統覆蓋請求內的 `client_id` 不得重複。項目與項次的 `sequence` 限 1～32767；數值標準的 `value` 必須是有限數字，所有數字單位去除前後空白後不得為空。這些輸入不合法時回 422 與共用驗證錯誤格式。Admin 讀取範本庫沿用 [AUT-Q2](../authentication/spec.md#aut-q2) 的所有專案權限放行裁定，不授予範本寫入權限。
 
@@ -134,3 +137,4 @@
 - 登記範本管理員角色指派／收回的稽核事件代碼與欄位，並引用 `audit-log` 事件目錄 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
 - 澄清範本庫 Admin 讀取、整系統巢狀讀寫路徑、請求內實測欄位識別與驗證邊界 — [PR #345 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/345#pullrequestreview-5401219325)。
 - 範圍變更（負責人指示，#328）：有效但沒有查核項目的 system 套用回 HTTP 200 與空清單 — [#328 留言](https://github.com/speko-tw/inspect-flow/issues/328#issuecomment-5970915340)。
+- 澄清專案查核項目列表的授權順序與不存在專案的回應，補足存成範本的結構複製與隔離驗收 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)。
