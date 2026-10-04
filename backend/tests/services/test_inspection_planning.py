@@ -462,6 +462,64 @@ def test_task_creation_requires_zone_only_when_project_has_zones(
     assert required.value.code == "inspection_task.invalid_zone"
 
 
+def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
+    session, operator
+):
+    project = _project(session, operator, "LOCLOCK")
+    _grant(session, operator, project, *_planning_codes())
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="地點狀態限制"
+    )
+    source = _source_item(session, operator, project)
+    completed = create_inspection_task(
+        session,
+        plan=plan,
+        project_inspection_item_ids=[source.id],
+        location_text="  ",
+    )
+    assert completed.location_text is None
+    with pytest.raises(PlanningError) as draft_cancel:
+        cancel_inspection_task(session, completed, reason="草稿不可取消")
+    assert draft_cancel.value.code == "inspection_task.invalid_transition"
+    with pytest.raises(PlanningError) as empty_reason:
+        cancel_inspection_task(session, completed, reason="   ")
+    assert empty_reason.value.code == "inspection_task.invalid_transition"
+
+    dispatch_inspection_task(session, completed)
+    start_inspection_task(session, completed)
+    complete_inspection_task(session, completed)
+    with pytest.raises(PlanningError) as completed_location:
+        update_task_location(
+            session, completed, zone_id=None, location_text="完成後不可改"
+        )
+    assert completed_location.value.code == "inspection_task.location_locked"
+    with pytest.raises(PlanningError) as completed_cancel:
+        cancel_inspection_task(session, completed, reason="已完成")
+    assert completed_cancel.value.code == "inspection_task.invalid_transition"
+
+    cancelled = create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[source.id]
+    )
+    dispatch_inspection_task(session, cancelled)
+    cancel_inspection_task(session, cancelled, reason="取消驗證")
+    with pytest.raises(PlanningError) as cancelled_location:
+        update_task_location(
+            session, cancelled, zone_id=None, location_text="取消後不可改"
+        )
+    assert cancelled_location.value.code == "inspection_task.location_locked"
+    restore_inspection_task(session, cancelled)
+
+    archived = create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[source.id]
+    )
+    archive_inspection_plan(session, plan, archived=True)
+    with pytest.raises(PlanningError) as archived_location:
+        update_task_location(
+            session, archived, zone_id=None, location_text="封存後不可改"
+        )
+    assert archived_location.value.code == "inspection_task.location_locked"
+
+
 def test_cross_project_zone_is_rejected(session, operator):
     project_a = _project(session, operator, "CROSSA")
     project_b = _project(session, operator, "CROSSB")
