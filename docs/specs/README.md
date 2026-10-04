@@ -56,7 +56,7 @@ docs/specs/
 | `field-ui` | P5 | 功能 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09) |
 | `field-evidence` | P6 | 功能 | 未開始 | [G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
 | `completion-validation` | P7 | 功能 | 未開始 | — |
-| [`admin-dashboard`](admin-dashboard/spec.md) | P5 | 功能 | 草稿 | 無 OQ／G；全公司角色與權限畫面依賴 [#387](https://github.com/speko-tw/inspect-flow/issues/387)、[#390](https://github.com/speko-tw/inspect-flow/issues/390) 與前置規格更新 |
+| [`admin-dashboard`](admin-dashboard/spec.md) | P5 | 功能 | 草稿 | 無 OQ／G；全公司角色與權限畫面依賴 [#387](https://github.com/speko-tw/inspect-flow/issues/387)、[#390](https://github.com/speko-tw/inspect-flow/issues/390) 與前置規格更新；ALG-Q2 查詢介面須先裁定並同步 `audit-log` |
 | `report-delivery` | P8 | 功能 | 未開始 | [G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
 | `pilot-deployment` | P9 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
 | （尚無專屬規格） | P10 | 功能 | 未開始 | — |
