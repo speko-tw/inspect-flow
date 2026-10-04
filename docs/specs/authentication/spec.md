@@ -181,6 +181,8 @@
 | `POST` | `/api/v1/auth/password` | 本人變更密碼，本體 `{"current_password": "…", "new_password": "…"}`；成功 204，並以 `Set-Cookie` 換發新的登入 Cookie；目前密碼錯誤 400 `auth.current_password_incorrect`；新密碼不符規則 422 `auth.password_invalid`；臨時密碼改成同一組 422 `auth.password_unchanged`；外部帳號 403 `permission.denied` | 需登入（臨時密碼未變更時仍放行） |
 | `GET` | `/api/v1/setup/status` | 回傳 `{"setup_required": true \| false}`；`admin` 尚未設定密碼時為 `true` | 公開（AUT-R44） |
 | `POST` | `/api/v1/setup/admin-password` | 本體 `{"code": "…", "password": "…"}`；成功 204，設定 `admin` 密碼、作廢首次登入碼、設定登入 Cookie；碼錯誤、過期、作廢或被鎖 401 `setup.invalid_code`；已設定過密碼 409 `setup.already_completed`；密碼不符規則 422 `auth.password_invalid` | 公開（AUT-R44） |
+| `GET` | `/api/v1/users?q=&cursor=&limit=` | `{items: [既有 User 欄位], next_cursor}`；依 `(username,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `username`、`name_zh`、`name_en`、`email`、`employee_no`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | 需 Admin（AUT-R20） |
+| `GET` | `/api/v1/companies?q=&cursor=&limit=` | `{items: [既有 Company 欄位], next_cursor}`；依 `(name,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `name`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | 需 Admin（AUT-R20） |
 
 | 其他介面 | 內容 | 對應需求 |
 |---|---|---|
@@ -390,6 +392,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 依 AUT-Q4 裁定，AUT-R24 可指定內建 `admin`，新增臨時密碼與首次登入強制變更（AUT-R32～AUT-R38、AUT-AC32～AUT-AC43），AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`，「不包含」改寫 Admin 設定臨時密碼的歸屬並排除臨時密碼的有效期限 — [#146](https://github.com/speko-tw/inspect-flow/issues/146)
 - 依 AUT-Q2 裁定，AUT-R19 改為 Admin 通過所有專案權限代碼（含新增、刪除與特殊動作），AUT-R22 改引用 AUT-R19，新增 AUT-AC44 — [#144](https://github.com/speko-tw/inspect-flow/issues/144)
 - 依 AUT-Q5 裁定，AUT-R28 定為依帳號 15 分鐘內失敗 10 次鎖定 15 分鐘、自動解鎖，登入與變更密碼共用計數；AUT-AC27 改為具體邊界，新增 AUT-AC45～AUT-AC48 — [#147](https://github.com/speko-tw/inspect-flow/issues/147)
+- 範圍變更（負責人指示，#407）：既有使用者與公司列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依各自欄位與 UUID 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。
 - 依 AUT-Q6 裁定，新增 AUT-R39～AUT-R41（設定密碼與帳號被鎖寫稽核紀錄；登入、登出寫應用程式日誌；紀錄不得含密碼或 token）與 AUT-AC49～AUT-AC52，「範圍」的稽核紀錄段改寫 — [#148](https://github.com/speko-tw/inspect-flow/issues/148)
 - 負責人裁定：AUT-R28 補上細節（6），經設定密碼的 Service 入口重設密碼（指令、Admin 設定臨時密碼）時一併清除失敗計數並解鎖；新增 AUT-AC53；落地由 T11 的 Service 入口留呼叫點，實際計數、解鎖與測試由 T8 接上 — [#192](https://github.com/speko-tw/inspect-flow/issues/192#issuecomment-5853201917) 裁定
 - 範圍變更（admin 與帳號重新設計）：新增首次登入碼、首次設定公開路由、首次登入碼失敗鎖定、新增使用者的臨時密碼與勾選框、`admin` 重設指令（AUT-R42～AUT-R47、AUT-AC54～AUT-AC66、`SetupCode`、AUT-Q7）；AUT-R24、AUT-AC23、AUT-AC32 已被取代（一般使用者的設定密碼指令移除）；改寫 AUT-R04～AUT-R06、AUT-R08、AUT-R09、AUT-R18、AUT-R20、AUT-R26、AUT-R28、AUT-R29、AUT-R36、AUT-R37、AUT-R39、AUT-R41 與對應驗收；AUT-Q4 第二題標為已被取代；目的、範圍、不包含、使用情境與介面同步改寫；人員與公司的簡易管理改屬 0.2.x（#263、#265） — [#259](https://github.com/speko-tw/inspect-flow/issues/259)

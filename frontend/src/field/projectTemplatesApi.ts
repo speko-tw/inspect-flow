@@ -100,7 +100,7 @@ export function listTemplateItems(systemId: string): Promise<TemplateItem[]> {
 }
 
 export function listAllProjects(): Promise<ProjectSummary[]> {
-  return request('/projects')
+  return allPages('/projects')
 }
 
 export function listProjectInspectionItems(

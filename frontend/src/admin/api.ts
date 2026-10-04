@@ -30,6 +30,17 @@ export interface Company {
   is_active: boolean
 }
 
+export interface Page<T> {
+  items: T[]
+  next_cursor: string | null
+}
+
+export interface ListPageOptions {
+  q?: string
+  cursor?: string | null
+  limit?: number
+}
+
 export interface ActiveCompanyUsers {
   count: number
   users: Array<Pick<User, 'id' | 'username' | 'name_zh'>>
@@ -96,8 +107,23 @@ export async function request<T>(
   return (await response.json()) as T
 }
 
-export function listUsers(): Promise<User[]> {
-  return request('/users')
+function listPath(path: string, options: ListPageOptions = {}): string {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? 50),
+  })
+  if (options.q?.trim()) params.set('q', options.q.trim())
+  if (options.cursor) params.set('cursor', options.cursor)
+  return `${path}?${params.toString()}`
+}
+
+export function listUsersPage(
+  options: ListPageOptions = {},
+): Promise<Page<User>> {
+  return request(listPath('/users', options))
+}
+
+export async function listUsers(): Promise<User[]> {
+  return listAllPages((options) => listUsersPage(options))
 }
 
 export function createUser(input: UserInput): Promise<CreatedUser> {
@@ -142,8 +168,27 @@ export function setUserActive(id: string, isActive: boolean): Promise<User> {
   })
 }
 
-export function listCompanies(): Promise<Company[]> {
-  return request('/companies')
+export function listCompaniesPage(
+  options: ListPageOptions = {},
+): Promise<Page<Company>> {
+  return request(listPath('/companies', options))
+}
+
+export async function listCompanies(): Promise<Company[]> {
+  return listAllPages((options) => listCompaniesPage(options))
+}
+
+async function listAllPages<T>(
+  fetchPage: (options: ListPageOptions) => Promise<Page<T>>,
+): Promise<T[]> {
+  const items: T[] = []
+  let cursor: string | null = null
+  do {
+    const page = await fetchPage({ cursor, limit: 100 })
+    items.push(...page.items)
+    cursor = page.next_cursor
+  } while (cursor)
+  return items
 }
 
 export function createCompany(name: string): Promise<Company> {

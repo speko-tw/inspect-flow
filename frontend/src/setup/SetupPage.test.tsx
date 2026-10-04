@@ -104,7 +104,10 @@ function stubBackend(overrides: Partial<Backend> = {}): Backend {
         return response
       }
       if (url.endsWith('/api/v1/companies')) {
-        return jsonResponse([])
+        return jsonResponse({ items: [], next_cursor: null })
+      }
+      if (url.startsWith('/api/v1/companies?')) {
+        return jsonResponse({ items: [], next_cursor: null })
       }
       if (url.endsWith('/api/v1/users') && method === 'POST') {
         return jsonResponse(CREATED_USER, 201)

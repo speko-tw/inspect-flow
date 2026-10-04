@@ -33,6 +33,9 @@ function stubAuthenticatedFetch() {
           must_change_password: false,
         })
       }
+      if (/\/(users|companies|projects)\?/.test(url)) {
+        return Response.json({ items: [], next_cursor: null })
+      }
       return Response.json([])
     }),
   )
