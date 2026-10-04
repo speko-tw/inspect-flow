@@ -77,7 +77,8 @@ def _copy_standard(
                 ProjectMeasurementField.inspection_point_id == source_point.id
             )
             .order_by(
-                ProjectMeasurementField.created_at, ProjectMeasurementField.id
+                ProjectMeasurementField.sort_order,
+                ProjectMeasurementField.id,
             )
         ).all()
         for field in fields:
@@ -88,6 +89,7 @@ def _copy_standard(
                     name=field.name,
                     field_type=field.field_type,
                     unit=field.unit,
+                    sort_order=field.sort_order,
                     created_by=operator_id,
                     updated_by=operator_id,
                 )

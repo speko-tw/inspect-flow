@@ -531,10 +531,12 @@ def test_structure_replace_and_validation(clients, db_session):
         point["measurement_fields"][0]["id"]
         != (body["inspection_points"][0]["measurement_fields"][0]["client_id"])
     )
-    assert [field["unit"] for field in point["measurement_fields"]] == [
-        "mm",
-        None,
-        "cm",
+    assert [
+        (field["name"], field["unit"]) for field in point["measurement_fields"]
+    ] == [
+        ("Thickness", "mm"),
+        ("Comment", None),
+        ("Width", "cm"),
     ]
     assert len(point["evidence_requirements"]) == 2
     assert "result" not in response.json()
