@@ -207,6 +207,8 @@ def apply_template(
     The caller owns the request transaction. A missing source returns
     ``None`` so the API can expose the common 404 envelope.
     """
+    if template_id is None and system_id is None:
+        raise ValueError("template_id or system_id is required")
     operator: User = get_current_operator(db)
     applied_at = datetime.now(UTC)
     if template_id is not None:
@@ -225,7 +227,6 @@ def apply_template(
             )
         ]
 
-    assert system_id is not None
     system = db.get(TemplateSystem, system_id)
     if system is None:
         return None
