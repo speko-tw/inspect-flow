@@ -10,6 +10,8 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node.js (version from
 `frontend/.nvmrc`), and `make`.
 
 - `make setup` installs backend and frontend dependencies.
+- `make version` prints the release version and the short commit SHA
+  when Git information is available.
 - `make check` runs, for backend and frontend, format checks, lint,
   type checks, tests, and build, plus the frontend bundle-split
   check.
@@ -23,12 +25,19 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node.js (version from
 Run `make setup` first. Each step below runs from the repository
 root.
 
+Run `make version` to check the release version and source commit.
+
 1. **Environment variables** (optional). The backend reads them
    from the shell environment; `.env` is not loaded automatically.
    With `INSPECTFLOW_DATABASE_URL` unset, the database is the SQLite
    file `backend/data/inspectflow.db` (git-ignored). To change it or
    other settings, copy `.env.example` to `.env`, edit it, then load
    it into the current shell:
+
+   `INSPECTFLOW_VERSION` and `INSPECTFLOW_COMMIT` can override the
+   release version and short commit displayed by the backend and
+   frontend. When unset, the version comes from `VERSION` and the
+   commit is read from Git when available.
 
    ```bash
    set -a; . ./.env; set +a

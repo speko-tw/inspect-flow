@@ -503,6 +503,45 @@ def test_structure_replace_and_validation(clients, db_session):
     assert manager.get(f"/api/v1/templates/{template_id}").status_code == 200
 
 
+def test_photo_requirements_are_required_unbounded_and_photo_only(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    response = manager.post(
+        "/api/v1/templates", json=_template(system_id, "Photo coverage")
+    )
+    assert response.status_code == 201, response.text
+
+    fetched = manager.get(f"/api/v1/templates/{response.json()['id']}")
+    assert fetched.status_code == 200, fetched.text
+    points = fetched.json()["inspection_points"]
+    assert len(points) == 2
+    for point in points:
+        requirements = point["evidence_requirements"]
+        assert requirements
+        assert all(
+            requirement["evidence_type"] == "photo"
+            and requirement["required"] is True
+            and requirement["min_count"] >= 1
+            and requirement["max_count"] is None
+            for requirement in requirements
+        )
+
+    for invalid_requirement in (
+        {"min_count": 0},
+        {"required": False, "min_count": 1},
+        {"min_count": 1, "evidence_type": "text"},
+        {"min_count": 1, "max_count": 1},
+        {"min_count": 1, "overview": True},
+        {"min_count": 1, "is_overview": True},
+    ):
+        invalid = _template(system_id, "Invalid photo requirement")
+        invalid["inspection_points"][0]["evidence_requirements"] = [
+            invalid_requirement
+        ]
+        rejected = manager.post("/api/v1/templates", json=invalid)
+        assert rejected.status_code == 422, rejected.text
+
+
 def test_system_scope_pagination_and_deletion(clients):
     manager = clients["manager"]
     category_id, system_id = _tree(manager)
