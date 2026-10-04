@@ -103,33 +103,38 @@ function managementFetch({
 } = {}) {
   const rows = userRows.map((user) => ({ ...user }))
   const companies = companyRows.map((row) => ({ ...row }))
+  const templateCategories = [{ id: 'category-1', name: '土木工程' }]
+  const templateSystems = [
+    { id: 'system-1', category_id: 'category-1', name: '護欄' },
+  ]
+  const templateItems = [
+    {
+      id: 'template-1',
+      system_id: 'system-1',
+      sequence: 1,
+      title: '欄杆尺寸',
+      instruction: '確認尺寸',
+      inspection_points: [],
+    },
+  ]
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/template-categories?')) {
         return Response.json({
-          items: [{ id: 'category-1', name: '土木工程' }],
+          items: templateCategories,
           next_cursor: null,
         })
       }
       if (url.includes('/template-categories/category-1/systems?')) {
         return Response.json({
-          items: [{ id: 'system-1', category_id: 'category-1', name: '護欄' }],
+          items: templateSystems,
           next_cursor: null,
         })
       }
       if (url.includes('/template-systems/system-1/templates?')) {
         return Response.json({
-          items: [
-            {
-              id: 'template-1',
-              system_id: 'system-1',
-              sequence: 1,
-              title: '欄杆尺寸',
-              instruction: '確認尺寸',
-              inspection_points: [],
-            },
-          ],
+          items: templateItems,
           next_cursor: null,
         })
       }
