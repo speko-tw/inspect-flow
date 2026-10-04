@@ -52,7 +52,7 @@ GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件�
 | 原始檔名 | `original_filename` | 使用者裝置上傳照片時的原始檔名（例如 `IMG_1234.jpg`），僅作為附帶 metadata 保存，不作為識別依據（依據：架構基準 §13.2）。 | 與 `storage_key` 是兩個不同欄位，不可混用。 |
 | 業務編號 | 例如 `project_code`、`employee_no`、`document_no` | 給人看、可讀的業務識別碼，與系統內部的 `UUID` 是兩件不同的事（依據：架構基準 §11）。 | 一個實體（如 `Project`）同時擁有內部 `UUID` 與對外業務編號；兩者用途不可互相取代。 |
 | SHA-256 | `sha256` / `content_sha256` | 檔案或文件內容的雜湊值，用於完整性檢查、重複檔案偵測、備份驗證與歷史追蹤，**不用於**授權判斷（依據：架構基準 §13.3、§20.14）。 | 出現在 `Evidence`（現場版、內業版）、`Report` 等多處實體上。 |
-| 查核報告 / 報表 | `Report` | 一份正式、持久化的產出實體，帶有 `document_no`、`revision`、DOCX／PDF 儲存鍵與資料快照；`status` 欄位為來源建議（依據：架構基準 §20.6、§30 Phase 9）。 | 由某個 `Inspection Plan`（及其底下的 `Inspection Task` / `Evidence`）產製；使用某個 `Report Template Version` 渲染。 |
+| 查核報告 / 報表 | `Report` | 一份正式、持久化的產出實體，帶有 `document_no`、`revision`、DOCX／PDF 儲存鍵與資料快照；`status` 欄位為來源建議（依據：架構基準 §20.6、§30 Phase 9；架構基準原 Phase 9、現行路線圖 Phase 8）。 | 由某個 `Inspection Plan`（及其底下的 `Inspection Task` / `Evidence`）產製；使用某個 `Report Template Version` 渲染。 |
 | 報告範本 | `Report Template` | 報告系統裡業主／標案特定的正式文件版面邏輯名稱（例如「Owner A Inspection Report」）（依據：架構基準 §20.5）。**報告範本不等於查核範本**：它決定報告怎麼排版，不用來建立查核項目；版本與快照規則維持原設計，不受查核範本不版本化的影響（依據：[負責人確認（#313，2026-10-02）](https://github.com/speko-tw/inspect-flow/issues/313)）。 | 底下有多個 `Report Template Version`；與查核範本（`Inspection Template`，不版本化）是兩種不同的東西，不可混淆。 |
 | 報告範本版本 | `Report Template Version` | `Report Template` 在特定時間點的固定版面／樣板檔案版本（依據：架構基準 §20.5）。 | 每一份 `Report` 都必須記錄自己使用的是哪一個 `Report Template Version`，確保舊文件不因樣板更新而被重新解釋。 |
 | 報告資料快照 | `Data Snapshot`（`data_snapshot_json`） | 產生 `Report` 當下，把所用到的核心查核資料固定下來的紀錄；即使之後現場資料變動，已核發的版次也不受影響（依據：架構基準 §20.7）。 | 是 [PR-06](02-principles.md#pr-06)（報告即快照實體）的核心資料結構。 |
@@ -71,7 +71,7 @@ GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件�
 | 專案成員 | `ProjectMember` | 人員與專案的關聯實體，承載這個人在這個專案掛的角色；同一人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣（§17 未區分專案範圍），見 [KD-27](03-decisions-and-stack.md#kd-27)）。 | 是 `User`、`Project`、`Role` 三者的關聯點；角色由有權限的人設定，之後可再修改。 |
 | 全系統角色 | 具體資料表／欄位由 `domain-model`、`authentication` 規格制定 | 權限不屬於任何專案、由 Admin 直接指派給人員的角色；與專案角色、Admin 開關並存、不互相混用（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313)，2026-10-02），見 [KD-49](03-decisions-and-stack.md#kd-49)）。 | 第一個全系統角色是「範本管理員」；全系統角色清單是否可自訂、還有哪些角色，待規格確認。 |
 | 範本管理員 | 全系統角色之一 | 可新增、修改、刪除範本庫的範本，可查看所有專案並把任何專案的查核項目存成範本；範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313)，2026-10-02），見 [KD-49](03-decisions-and-stack.md#kd-49)）。 | 不負責把範本套用到專案：套用由有權限編輯該專案查核項目的人（專案角色）進行。 |
-| 一級自主檢查、二級抽查 | 資料結構預留「自主檢查／抽查」區分與「由誰檢查」，具體欄位由規格制定 | 一級：廠商自己做的自主檢查；二級：甲方的監造／PCM 抽查。長期兩者都用本系統並串起來，MVP 以抽查紀錄表為核心（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313) 追加裁定，2026-10-02），見 [KD-51](03-decisions-and-stack.md#kd-51)）。 | 檢查時機與停留點 MVP 不做；缺失改善追蹤屬 #76（0.7.x）、簽認屬 #77（0.9.x）。 |
+| 一級自主檢查、二級抽查 | 資料結構預留「自主檢查／抽查」區分與「由誰檢查」，具體欄位由規格制定 | 一級：廠商自己做的自主檢查；二級：甲方的監造／PCM 抽查。長期兩者都用本系統並串起來，MVP 以抽查紀錄表為核心（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313) 追加裁定，2026-10-02），見 [KD-51](03-decisions-and-stack.md#kd-51)）。 | 檢查時機與停留點 MVP 不做；缺失改善追蹤屬 #76（0.7.x）、簽認屬 #77（0.8.x）。 |
 | 外部身分來源 | `User.auth_source`（`local`／`external`）、`external_source`、`external_id`、`external_synced_at` | 人員帳號是本系統建立還是由外部身分來源（例如 ldap、ad、entra、erp）匯入的標記欄位與同步比對鍵；外部來源怎麼串接屬另開的規格，現階段由開發人員手動建立帳號（依據：負責人決定（#63，2026-09-26）；架構基準無對應章節，見 [KD-20](03-decisions-and-stack.md#kd-20)）。 | 同步時先用「來源＋`external_id`」比對，找不到再用 email 比對本系統建立的帳號並轉換身分來源，保留原本 UUID；外部值覆蓋基本欄位時寫稽核紀錄。 |
 
 ## 相關文件

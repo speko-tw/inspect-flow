@@ -18,7 +18,7 @@ InspectFlow 是**工程查核系統**，涵蓋公共與私人工程的施工查�
 | 一級：自主檢查 | 廠商 | 長期目標；資料結構預留「自主檢查／抽查」的區分與「由誰檢查」，MVP 不以此為核心。 |
 | 二級：抽查 | 甲方的監造／PCM | 目前的主要使用情境；MVP 以抽查紀錄表為核心。 |
 
-檢查時機與停留點，MVP 不做，之後再加；缺失改善追蹤（[#76](https://github.com/speko-tw/inspect-flow/issues/76)，0.7.x）與簽認（[#77](https://github.com/speko-tw/inspect-flow/issues/77)，0.9.x）另有版本處理。
+檢查時機與停留點，MVP 不做，之後再加；缺失改善追蹤（[#76](https://github.com/speko-tw/inspect-flow/issues/76)，0.7.x）與簽認（[#77](https://github.com/speko-tw/inspect-flow/issues/77)，0.8.x）另有版本處理。
 
 `Dashboard` 用來監控；DOCX／PDF 才是正式交付與歸檔產物（依據：架構基準 §20.1、§20.22）。Pilot 還要驗證現場操作、排程、網路、容量、備份與報告產製時間（依據：架構基準 §31）。
 
@@ -88,29 +88,31 @@ flowchart LR
 
 ## 第一階段（MVP）範圍
 
-第一階段的目標是完成一個完整閉環，不是打造大平台（依據：架構基準 §1）。下列 Phase 1～11 依 Milestone 路線圖與負責人裁定對齊；架構基準 §30 提供 MVP 功能範圍與原開發階段的參考：
+第一階段的目標是完成一個完整閉環，不是打造大平台（依據：架構基準 §1）。下列 Phase 1～10 依 Milestone 路線圖與負責人裁定對齊；架構基準 §30 提供 MVP 功能範圍與原開發階段的參考：
 
 - **Phase 1 — Core Foundation（核心基礎）**：Repository 骨架、健康檢查、CI、後端／前端基礎、API 慣例、SQLAlchemy + Alembic + SQLite、`User`、`Company`、`Project` 與共用基礎。
 - **Phase 2 — Identity & Access（身分與存取）**：登入 / 登出 / 目前使用者、角色、權限與存取檢查。
 - **Phase 3 — Template System**：範本庫（獨立於專案、套用即複製、範本不版本化，見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)）、`Template`、`TemplateItem`、`EvidenceRequirement`；範本只存結構、分類固定兩層（[KD-48](03-decisions-and-stack.md#kd-48)）、檢查標準分文字與數值兩種（[KD-52](03-decisions-and-stack.md#kd-52)）。
 - **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照；查驗項目與查驗點由內業事先給定，MVP 不以間距（interval）自動切分任務為必要流程（依 [G-01](05-open-questions.md#g-01) 裁定）。
-- **Phase 5 — Field UI**：今日任務、任務詳情、證據檢查清單、狀態。
+- **Phase 5 — Field UI & Admin Dashboard（現場介面與管理後台）**：今日任務、任務詳情、證據檢查清單、狀態；後台交付原定的今日工作量、完成數、完成率、專案進度、工程師進度、唯讀總覽、管理畫面及 Dashboard 查詢 API；其餘不依賴證據或伺服器完成驗證的項目於 0.5.x 交付，須依賴者分別於 0.6.x、0.7.x 補齊。
 - **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）。
 - **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。
-- **Phase 8 — Admin Dashboard**：今日工作量、完成數／完成率、工程師與專案進度。
-- **Phase 9 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
-- **Phase 10 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
-- **Phase 11 — Pilot Hardening & Release Readiness（試營運強化與發布整備）**：依試營運回饋修正問題，強化效能、資安與維運，驗證相容性、備份／還原及報告正確性，完成發布整備。
+- **Phase 8 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9；架構基準原 Phase 9，現行路線圖為 Phase 8）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
+
+- **Phase 9 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
+- **Phase 10 — Pilot Hardening & Release Readiness（試營運強化與發布整備）**：依試營運回饋修正問題，強化效能、資安與維運，驗證相容性、備份／還原及報告正確性，完成發布整備。
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
 
-Phase N 對應 Milestone 0.N.x，見 [06-versioning-and-milestone-governance.md](06-versioning-and-milestone-governance.md#vg-05)。
+Phase N 對應哪個 Milestone、各 Phase 的能力範圍以[版本路線圖](06-versioning-and-milestone-governance.md#vg-05)為準；Phase 5 合併 Field UI 與 Admin Dashboard；依賴 Evidence 或 Completion Validation 才能計算的原有儀表板指標分別於 Phase 6、Phase 7 補齊，屬規格設計，非負責人另行裁定。
+
+0.5.x 與 0.4.x 可並行：規格立即開寫，實作依 0.4.x API 進度開工（依據：負責人裁定 [#375](https://github.com/speko-tw/inspect-flow/issues/375)，2026-10-04）。
 
 一個版本要視為「可部署」，**必須**滿足 §22A.20 的完整 Deployment Definition of Done，包括 DOCX／PDF 可產出、重啟後資料不消失等條件（依據：架構基準 §22A.20）。
 
 ### MVP 的證據類型邊界
 
-MVP 的佐證**只收照片**；額外文件拍照並以照片註記說明，報告功能（0.9.x）再提供「補充文件」區；文件、量測數值、簽名、影片等類型未來可能擴充，由負責人在有需要時裁定（依據：負責人裁定（[#88 留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)，2026-10-02），見 [OQ-20](05-open-questions.md#oq-20)（已裁定）、[KD-53](03-decisions-and-stack.md#kd-53)；取代架構基準 §12.6 的 `PHOTO`／`TEXT` 暫定）。原 `TEXT` 類型是否保留為獨立佐證類型，裁定沒有說明，待規格確認。
+MVP 的佐證**只收照片**；額外文件拍照並以照片註記說明，報告功能（0.8.x）再提供「補充文件」區；文件、量測數值、簽名、影片等類型未來可能擴充，由負責人在有需要時裁定（依據：負責人裁定（[#88 留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)，2026-10-02），見 [OQ-20](05-open-questions.md#oq-20)（已裁定）、[KD-53](03-decisions-and-stack.md#kd-53)；取代架構基準 §12.6 的 `PHOTO`／`TEXT` 暫定）。原 `TEXT` 類型是否保留為獨立佐證類型，裁定沒有說明，待規格確認。
 
 ### 目前的運作前提（屬第一階段基準，非永久限制）
 
