@@ -21,7 +21,7 @@
   - 建立內建 `admin` 的初始化指令，以及既有資料的回填規則。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
   - `Project` 的業務欄位：依 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定）與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，見 [`Project` 業務欄位](#project-business-fields)。
-  - `Inspection Plan`、`Inspection Task`、Task 項目關聯與 `Task Requirement Snapshot`（DOM-R56～DOM-R57、DOM-AC51～DOM-AC52）。
+  - `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯與 `Task Requirement Snapshot`（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）。
 - 草稿（本次不凍結，不拆任務）：
   - `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體依各自開工門檻維持草稿，見[其他實體](#draft-others)；`Inspection Template` 由 `template-system` 定義。
 
@@ -150,7 +150,7 @@
 |---|---|---|---|---|
 | DOM-R56 | `Inspection Plan` **必須**關聯一個 `Project`；`Inspection Task` **必須**關聯一個 Plan。Plan 與 Task 各自以 UUID 識別並沿用 `database-foundation` 的共通建立、修改欄位。Task 的狀態與 Plan 衍生狀態依 [state-machines](../state-machines/spec.md#凍結範圍與阻擋議題)；關聯欄位、外鍵與刪除約束為規格設計（非負責人裁定） | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；欄位與約束為規格設計（非負責人裁定） | DOM-AC51 |
 | DOM-R57 | 一筆 Task **得**包含一筆以上的專案查核項目；系統**必須**以明確的 Task 項目關聯保存每筆項目對應的 `ProjectInspectionItem`，並為每筆關聯保存建立任務當時的 `Task Requirement Snapshot`。Snapshot 必須能保留當時需求並可追溯標準變更；KD-55 的作廢與文字更正依 `inspection-planning`，不得以目前項目內容靜默覆寫既有歷史。關聯與 Snapshot 的表格／子表及精確欄位為規格設計（非負責人裁定） | 必須；得（多項目） | [PR-04](../../intents/02-principles.md#pr-04)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；表示法為規格設計（非負責人裁定） | DOM-AC52 |
-| DOM-R58 | `ProjectZone` **必須**屬於一個 `Project`，名稱最多 128 字元（沿用 `Project.name` 的暫定上限），先去除名稱前後空白並保存，trim 後不得為空，再以 Unicode casefold 比對，於專案內唯一；空名稱拒絕、名稱長度與正規化算法是**規格設計（非負責人裁定）**。`Inspection Task` **得**關聯一個 `ProjectZone` 並**得**保存補充地點文字；分區與 Task 所屬 Project 必須相同。專案已有分區時建立 Task 必須選一區；無分區時 Task 不得有 `zone_id`。Task 引用中的分區不得刪除。分區管理 API 與細節由 `inspection-planning` 定義。 | 必須／得／不得 | [KD-40](../../intents/03-decisions-and-stack.md#kd-40)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[OQ-03](../../intents/05-open-questions.md#oq-03)；技術細節為規格設計（非負責人裁定） | DOM-AC53 |
+| DOM-R58 | `ProjectZone` **必須**屬於一個 `Project`，名稱最多 128 字元（沿用 `Project.name` 的暫定上限），先去除名稱前後空白並保存，trim 後不得為空，再以 Unicode casefold 比對，於專案內唯一；空名稱拒絕、名稱長度與正規化算法是**規格設計（非負責人裁定）**。`Inspection Task` **得**關聯一個 `ProjectZone` 並**得**保存補充地點文字；分區與 Task 所屬 Project 必須相同。專案已有分區時建立 Task 必須選一區；無分區時 Task 不得有 `zone_id`。Task 引用中的分區不得刪除。名稱的資料庫唯一約束作法由 T1 選擇，並受 DOM-R34 的 SQLite ASCII 限制；Service 層仍**必須**執行名稱正規化及唯一性檢查。分區管理 API 與細節由 `inspection-planning` 定義。 | 必須／得／不得 | [KD-40](../../intents/03-decisions-and-stack.md#kd-40)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[OQ-03](../../intents/05-open-questions.md#oq-03)；技術細節為規格設計（非負責人裁定） | DOM-AC53 |
 
 <a id="draft-others"></a>
 ### 其他實體（草稿）

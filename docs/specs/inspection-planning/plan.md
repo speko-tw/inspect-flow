@@ -9,9 +9,9 @@
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
 | T1 | 定義 P4 `ProjectInspectionItem` 擴充欄位、`ProjectZone`、Plan、Task、多項目關聯、Task 地點、每項 Snapshot／狀態／歷史及 KD-55 修改紀錄資料結構；建立 migration 與資料庫約束 | `backend/app/models/`、`backend/alembic/versions/`、`backend/tests/db/` | `template-system`、`domain-model`、`database-foundation`；核對已合併的 KD-55／KD-56 與 `state-machines` SM-Q03 凍結規則 | IP-AC02～IP-AC05、IP-AC11 | #359 |
-| T2 | 實作 ProjectZone CRUD 與稽核、Plan／Task／Snapshot 服務層、派出／草稿刪除／取消／恢復（恢復沿用取消權限且不要求原因）、KD-55 項目級重新查核及衍生狀態；僅受影響的 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀並標記項目待重查；草稿 Task 原位更新；封存期間 Task 唯讀、取消封存後重算 Plan 狀態。集中登記權限代碼與稽核事件 | `backend/app/services/`、`backend/tests/services/`、`backend/app/permission_codes.py`、`docs/specs/audit-log/spec.md` | T1、`authentication`、`state-machines`；依 KD-55／KD-56 與已合併的 `state-machines` 規則實作；TPL 已登記的權限沿用 | IP-AC03～IP-AC09、IP-AC11 | #360 |
-| T3 | 實作 ProjectZone 與 Plan／Task／專案項目修改 API，含 Task 地點欄位與同專案檢查、權限檢查、UUID、分頁、錯誤契約及快照讀寫 | `backend/app/api/`、`backend/app/schemas/`、`backend/tests/api/` | T1、T2、`api-conventions` | IP-AC01～IP-AC11 | #361 |
-| T4 | 建立內業 ProjectZone 管理、Plan 管理、手動建立多項目 Task 與地點輸入、派出／草稿刪除／取消／恢復操作與任務建議指派 UI；草稿 Task 僅內業可見；封存 Plan 的 Task 唯讀 | `frontend/src/features/`、`frontend/src/routes/`、`frontend/tests/` | T3；核對 KD-55／KD-56 及已合併的 `state-machines` 契約 | IP-AC01、IP-AC02、IP-AC06～IP-AC08、IP-AC11 | #363 |
+| T2 | 實作 ProjectZone CRUD 與稽核、Plan／Task／Snapshot 服務層、Task 地點修改與稽核、派出／草稿刪除／取消／恢復、KD-55 項目級重新查核及衍生狀態；地點只允許在 `DRAFT`、`PENDING`、`IN_PROGRESS` 修改；封存期間 Task 唯讀。集中登記權限代碼與稽核事件 | `backend/app/services/`、`backend/tests/services/`、`backend/app/permission_codes.py`、`docs/specs/audit-log/spec.md` | T1、`authentication`、`state-machines`；依 KD-55／KD-56 與已合併的 `state-machines` 規則實作；TPL 已登記的權限沿用 | IP-AC03～IP-AC09、IP-AC11 | #360 |
+| T3 | 實作 ProjectZone 與 Plan／Task／專案項目修改 API，含 Task 地點建立與修改端點、回應內嵌分區 ID／名稱、同專案檢查、狀態與權限檢查、UUID、分頁、錯誤契約及快照讀寫 | `backend/app/api/`、`backend/app/schemas/`、`backend/tests/api/` | T1、T2、`api-conventions` | IP-AC01～IP-AC11 | #361 |
+| T4 | 建立內業 ProjectZone 管理、Plan 管理、手動建立多項目 Task 與地點輸入／修改、派出／草稿刪除／取消／恢復操作與任務建議指派 UI；草稿 Task 僅內業可見；封存 Plan 的 Task 唯讀 | `frontend/src/features/`、`frontend/src/routes/`、`frontend/tests/` | T3；核對 KD-55／KD-56 及已合併的 `state-machines` 契約 | IP-AC01、IP-AC02、IP-AC06～IP-AC08、IP-AC11 | #363 |
 | T5 | 建立專案查核項目修改確認介面，說明重新查核後果；呈現受影響項目作廢歷史、其他項目保留及來源 Task 為 `DRAFT` 時原位更新 | `frontend/src/features/`、`frontend/tests/` | T3；依 IP-Q07／IP-Q08 的項目級技術設計及已合併的補充裁定 | IP-AC04、IP-AC05、IP-AC08 | #362 |
 | T6 | 端到端驗收快照隔離、修改影響範圍、權限、指派非排他性、自動 Plan 狀態與歷史保存，補文件及索引收尾 | `backend/tests/`、`frontend/tests/`、`docs/specs/inspection-planning/`、`docs/specs/README.md` | T1～T5；業務行為依已裁定來源，規格設計項依 spec 明示範圍驗收 | IP-AC01～IP-AC11 | #364 |
 
@@ -56,7 +56,7 @@
 | IP-AC08 | 狀態機整合測試：封存各有效 Plan 狀態後確認所屬 Task 唯讀；取消封存後依目前 Task 狀態重算有效狀態，不直接還原封存前狀態。核對 KD-56 與 `state-machines` 同步後的狀態轉換。 |
 | IP-AC09 | API／服務測試：P4 不存在結果或照片新增／更正端點，也不提供一般人工將 Task 從 `COMPLETED` 重開的端點；KD-55「不要」只更新 Snapshot 文字且狀態、結果、照片不變；KD-55「要」是明確系統例外，可使受影響的 `COMPLETED` Task 自動回 `IN_PROGRESS`；`PENDING`／`IN_PROGRESS` Task 保持狀態但項目標記待重查，待重查完成前 Task 與 Plan 均不得完成。 |
 | IP-AC10 | API 整合測試：權限、專案邊界、非法狀態輸入與共用錯誤格式。 |
-| IP-AC11 | API／服務／前端測試：分區 CRUD 權限、名稱唯一性、Task 同專案地點欄位、專案有／無分區的建立規則、引用分區不可刪除、稽核事件與 Snapshot 排除地點欄位。 |
+| IP-AC11 | API／服務／前端測試：分區 CRUD 權限、名稱唯一性、Task 同專案地點欄位與有／無分區的建立規則；地點可修改狀態、已完成／取消及封存時拒絕、地點修改稽核；Task 讀取回應含分區 ID／名稱且不要求 `project_zone.read`；引用分區不可刪除，Snapshot 排除地點欄位。 |
 
 ## 考慮過但沒採用的做法
 
