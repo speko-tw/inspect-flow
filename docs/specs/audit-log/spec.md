@@ -189,7 +189,7 @@
 
 | 實體 | 字面命中 | 結論 | 理由 |
 |---|---|---|---|
-| `AuditLog` | G-04「核可紀錄」；G-05「刪除與保留」 | 無關 | G-04 的核可紀錄是 Variant 那一側的欄位；日後若要把核可寫進稽核紀錄，只是在事件目錄多登記一種事件，不改資料表（ALG-R13）。G-05 談的是 `Evidence` 的刪除，與稽核紀錄的保留無關 |
+| `AuditLog` | G-04「核可紀錄」；G-05「刪除與保留」 | 無關 | G-04 的核可紀錄是 Variant 那一側的欄位；日後若要把核可寫進稽核紀錄，只是在事件目錄多登記一種事件，不改資料表（ALG-R13）。Evidence 刪除與保留政策已由維護者依負責人授權決定（#388），見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)；這項政策與稽核紀錄的保留無關 |
 
 ## 介面
 
@@ -255,6 +255,7 @@
 ## 變更紀錄
 
 - 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收；`project_id` 可空欄位、索引及篩選語意為規格設計（非負責人裁定） — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
+- 同步 G-05 已決定狀態與 KD-62 引用；不影響本規格或稽核紀錄保留範圍 — [#404](https://github.com/speko-tw/inspect-flow/issues/404)
 - 對齊 #375 路線圖，將 Admin Dashboard 的 milestone 引用更新為 0.5.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
