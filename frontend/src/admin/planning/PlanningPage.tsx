@@ -60,11 +60,13 @@ export default function PlanningPage({
   const [zonesDenied, setZonesDenied] = useState(false)
   const [membersDenied, setMembersDenied] = useState(false)
   const [error, setError] = useState('')
+  const [errorContext, setErrorContext] = useState('page')
   const [reloadKey, setReloadKey] = useState(0)
   const [planName, setPlanName] = useState('')
   const [editingPlanName, setEditingPlanName] = useState(false)
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [zoneName, setZoneName] = useState('')
+  const [addingZone, setAddingZone] = useState(false)
   const [renamingZone, setRenamingZone] = useState<ProjectZone | null>(null)
   const [taskItems, setTaskItems] = useState<string[]>([])
   const [taskZoneId, setTaskZoneId] = useState('')
@@ -91,9 +93,29 @@ export default function PlanningPage({
   const cancelHeading = useRef<HTMLHeadingElement | null>(null)
   const pageHeading = useRef<HTMLHeadingElement | null>(null)
   const pageContent = useRef<HTMLElement | null>(null)
+  const errorMessage = useRef<HTMLParagraphElement | null>(null)
+  const addZoneTrigger = useRef<HTMLButtonElement | null>(null)
+  const renameZoneTrigger = useRef<HTMLButtonElement | null>(null)
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
+  const previousAddingZone = useRef(false)
+  const previousRenamingZone = useRef(false)
   const dialogOpen = Boolean(confirmation || cancelTask)
+
+  useEffect(() => {
+    if (error) errorMessage.current?.focus()
+  }, [error, errorContext])
+
+  useEffect(() => {
+    if (previousAddingZone.current && !addingZone) {
+      addZoneTrigger.current?.focus()
+    }
+    if (previousRenamingZone.current && !renamingZone) {
+      renameZoneTrigger.current?.focus()
+    }
+    previousAddingZone.current = addingZone
+    previousRenamingZone.current = Boolean(renamingZone)
+  }, [addingZone, renamingZone])
 
   useEffect(() => {
     if (confirmation) confirmationHeading.current?.focus()
@@ -140,7 +162,20 @@ export default function PlanningPage({
       setProjectNotFound(false)
       try {
         if (initialProjectId) {
-          const project = await client.getProject(initialProjectId)
+          let project: PlanningProject
+          try {
+            project = await client.getProject(initialProjectId)
+          } catch (caught) {
+            if (
+              caught instanceof ManagementApiError &&
+              caught.status === 403
+            ) {
+              // TODO(#361): project inspectors need a readable project name.
+              project = { id: initialProjectId, name: initialProjectId }
+            } else {
+              throw caught
+            }
+          }
           if (active) {
             setProjects([project])
             setProjectId(initialProjectId)
@@ -181,6 +216,7 @@ export default function PlanningPage({
     async function loadProjectData() {
       setLoading(true)
       setError('')
+      setErrorContext('page')
       setZonesDenied(false)
       setMembersDenied(false)
       const allPlans = async () => {
@@ -286,6 +322,8 @@ export default function PlanningPage({
   )
 
   function confirm(title: string, action: () => Promise<unknown>): void {
+    setError('')
+    setErrorContext('dialog')
     confirmationTrigger.current = document.activeElement as HTMLElement
     setConfirmation({ title, action })
   }
@@ -303,8 +341,19 @@ export default function PlanningPage({
     }
   }
 
-  async function act(operation: () => Promise<unknown>): Promise<boolean> {
+  async function act(
+    operation: () => Promise<unknown>,
+    context?: string,
+  ): Promise<boolean> {
     setError('')
+    setErrorContext(
+      context ??
+        (document.activeElement?.closest('[role="dialog"]')
+          ? 'dialog'
+          : (document.activeElement
+              ?.closest('[data-error-context]')
+              ?.getAttribute('data-error-context') ?? 'page')),
+    )
     setBusy(true)
     try {
       await operation()
@@ -346,6 +395,7 @@ export default function PlanningPage({
     setEditingPlanName(false)
     setUpdatedPlanName('')
     setZoneName('')
+    setAddingZone(false)
     setRenamingZone(null)
     setEditingLocation(null)
     setEditingAssignee(null)
@@ -358,32 +408,50 @@ export default function PlanningPage({
 
   async function createPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const created = await act(() =>
-      client.createPlan(projectId, { name: planName }),
+    const created = await act(
+      () => client.createPlan(projectId, { name: planName }),
+      'plan',
     )
     if (created) setPlanName('')
   }
 
   async function saveZone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const saved = await act(() =>
-      renamingZone
-        ? client.renameZone(projectId, renamingZone.id, zoneName)
-        : client.createZone(projectId, zoneName),
+    const saved = await act(
+      () => client.createZone(projectId, zoneName),
+      'zone',
     )
-    if (saved) setZoneName('')
+    if (saved) {
+      setZoneName('')
+      setAddingZone(false)
+    }
+  }
+
+  async function renameZone(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!renamingZone) return
+    const saved = await act(
+      () => client.renameZone(projectId, renamingZone.id, zoneName),
+      'zone',
+    )
+    if (saved) {
+      setZoneName('')
+      setRenamingZone(null)
+    }
   }
 
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedPlan) return
-    const created = await act(() =>
-      client.createTask(selectedPlan.id, {
-        item_ids: taskItems,
-        suggested_assignee_id: assigneeId || null,
-        zone_id: zones.length ? taskZoneId || null : null,
-        location_text: taskLocation.trim() || null,
-      }),
+    const created = await act(
+      () =>
+        client.createTask(selectedPlan.id, {
+          item_ids: taskItems,
+          suggested_assignee_id: assigneeId || null,
+          zone_id: zones.length ? taskZoneId || null : null,
+          location_text: taskLocation.trim() || null,
+        }),
+      'task',
     )
     if (created) {
       setTaskItems([])
@@ -434,7 +502,11 @@ export default function PlanningPage({
       {membersDenied && (
         <p role="status">沒有讀取成員清單的權限；可略過建議指派。</p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && errorContext === 'page' && (
+        <p ref={errorMessage} role="alert" tabIndex={-1}>
+          {error}
+        </p>
+      )}
       {loading ? <p>載入中…</p> : null}
 
       {projects.length > 0 && (
@@ -469,18 +541,74 @@ export default function PlanningPage({
                 )}
                 {zones.length === 0 ? <p>尚未設定分區。</p> : null}
                 {zones.map((zone) => (
-                  <p key={zone.id}>
-                    {zone.name}{' '}
-                    <button
-                      disabled={busy || readOnly}
-                      onClick={() => {
-                        setRenamingZone(zone)
-                        setZoneName(zone.name)
-                      }}
-                      type="button"
-                    >
-                      改名
-                    </button>{' '}
+                  <div key={zone.id}>
+                    {renamingZone?.id === zone.id ? (
+                      <form
+                        data-error-context="zone"
+                        onSubmit={(event) => void renameZone(event)}
+                      >
+                        <label>
+                          分區名稱 <span aria-hidden="true">*</span>
+                          <input
+                            aria-describedby="zone-name-hint"
+                            autoFocus
+                            maxLength={128}
+                            onChange={(event) =>
+                              setZoneName(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === 'Escape') {
+                                event.preventDefault()
+                                setRenamingZone(null)
+                                setZoneName('')
+                                setError('')
+                              } else if (event.key === 'Enter') {
+                                event.preventDefault()
+                                event.currentTarget.form?.requestSubmit()
+                              }
+                            }}
+                            required
+                            value={zoneName}
+                          />
+                        </label>
+                        <span id="zone-name-hint">請輸入分區名稱。</span>
+                        {error && errorContext === 'zone' && (
+                          <p ref={errorMessage} role="alert" tabIndex={-1}>
+                            {error}
+                          </p>
+                        )}
+                        <button disabled={busy} type="submit">
+                          儲存名稱
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRenamingZone(null)
+                            setZoneName('')
+                            setError('')
+                          }}
+                          type="button"
+                        >
+                          取消編輯
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        {zone.name}{' '}
+                        <button
+                          disabled={busy || readOnly}
+                          onClick={() => {
+                            setError('')
+                            renameZoneTrigger.current =
+                              document.activeElement as HTMLButtonElement
+                            setZoneName(zone.name)
+                            setRenamingZone(zone)
+                          }}
+                          type="button"
+                        >
+                          重新命名
+                        </button>{' '}
+                      </>
+                    )}
                     <button
                       disabled={busy || readOnly}
                       onClick={() =>
@@ -492,35 +620,72 @@ export default function PlanningPage({
                     >
                       刪除
                     </button>
-                  </p>
+                  </div>
                 ))}
-                {!readOnly && !zonesDenied && (
-                  <form onSubmit={(event) => void saveZone(event)}>
-                    <h3>{renamingZone ? '修改分區名稱' : '新增分區'}</h3>
-                    <label>
-                      分區名稱
-                      <input
-                        maxLength={128}
-                        onChange={(event) => setZoneName(event.target.value)}
-                        required
-                        value={zoneName}
-                      />
-                    </label>
-                    <button disabled={busy} type="submit">
-                      {renamingZone ? '儲存名稱' : '新增分區'}
+                {!readOnly && !zonesDenied && !renamingZone && (
+                  <>
+                    <button
+                      ref={addZoneTrigger}
+                      onClick={() => {
+                        setError('')
+                        setAddingZone(true)
+                        setZoneName('')
+                      }}
+                      type="button"
+                    >
+                      ＋ 新增分區
                     </button>
-                    {renamingZone && (
-                      <button
-                        onClick={() => {
-                          setRenamingZone(null)
-                          setZoneName('')
-                        }}
-                        type="button"
+                    {addingZone && (
+                      <form
+                        data-error-context="zone"
+                        onSubmit={(event) => void saveZone(event)}
                       >
-                        取消編輯
-                      </button>
+                        <label>
+                          分區名稱 <span aria-hidden="true">*</span>
+                          <input
+                            aria-describedby="zone-name-hint"
+                            autoFocus
+                            maxLength={128}
+                            onChange={(event) =>
+                              setZoneName(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === 'Escape') {
+                                event.preventDefault()
+                                setAddingZone(false)
+                                setZoneName('')
+                                setError('')
+                              } else if (event.key === 'Enter') {
+                                event.preventDefault()
+                                event.currentTarget.form?.requestSubmit()
+                              }
+                            }}
+                            required
+                            value={zoneName}
+                          />
+                        </label>
+                        <span id="zone-name-hint">請輸入分區名稱。</span>
+                        {error && errorContext === 'zone' && (
+                          <p ref={errorMessage} role="alert" tabIndex={-1}>
+                            {error}
+                          </p>
+                        )}
+                        <button disabled={busy} type="submit">
+                          新增分區
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAddingZone(false)
+                            setZoneName('')
+                            setError('')
+                          }}
+                          type="button"
+                        >
+                          取消
+                        </button>
+                      </form>
                     )}
-                  </form>
+                  </>
                 )}
               </section>
 
@@ -541,17 +706,27 @@ export default function PlanningPage({
                   ))}
                 </ul>
                 {!readOnly && (
-                  <form onSubmit={(event) => void createPlan(event)}>
+                  <form
+                    data-error-context="plan"
+                    onSubmit={(event) => void createPlan(event)}
+                  >
                     <h3>建立計畫</h3>
                     <label>
-                      計畫名稱
+                      計畫名稱 <span aria-hidden="true">*</span>
                       <input
+                        aria-describedby="plan-name-hint"
                         maxLength={128}
                         onChange={(event) => setPlanName(event.target.value)}
                         required
                         value={planName}
                       />
                     </label>
+                    <span id="plan-name-hint">請輸入計畫名稱。</span>
+                    {error && errorContext === 'plan' && (
+                      <p ref={errorMessage} role="alert" tabIndex={-1}>
+                        {error}
+                      </p>
+                    )}
                     <button disabled={busy} type="submit">
                       建立計畫
                     </button>
@@ -568,6 +743,7 @@ export default function PlanningPage({
                       <button
                         disabled={busy || selectedPlan.status === 'ARCHIVED'}
                         onClick={() => {
+                          setError('')
                           setEditingPlanName(true)
                           setUpdatedPlanName(selectedPlan.name)
                         }}
@@ -598,18 +774,22 @@ export default function PlanningPage({
                   )}
                   {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
                     <form
+                      data-error-context="plan"
                       onSubmit={(event) => {
                         event.preventDefault()
-                        void act(() =>
-                          client.updatePlan(selectedPlan.id, {
-                            name: updatedPlanName,
-                          }),
+                        void act(
+                          () =>
+                            client.updatePlan(selectedPlan.id, {
+                              name: updatedPlanName,
+                            }),
+                          'plan',
                         )
                       }}
                     >
                       <label>
-                        計畫名稱
+                        計畫名稱 <span aria-hidden="true">*</span>
                         <input
+                          aria-describedby="updated-plan-name-hint"
                           maxLength={128}
                           onChange={(event) =>
                             setUpdatedPlanName(event.target.value)
@@ -618,6 +798,12 @@ export default function PlanningPage({
                           value={updatedPlanName}
                         />
                       </label>
+                      <span id="updated-plan-name-hint">請輸入計畫名稱。</span>
+                      {error && errorContext === 'plan' && (
+                        <p ref={errorMessage} role="alert" tabIndex={-1}>
+                          {error}
+                        </p>
+                      )}
                       <button disabled={busy} type="submit">
                         儲存計畫名稱
                       </button>
@@ -749,24 +935,28 @@ export default function PlanningPage({
                           )}
                           {editingLocation?.task.id === task.id && (
                             <form
+                              data-error-context="location"
                               onSubmit={(event) => {
                                 event.preventDefault()
-                                void act(() =>
-                                  client.updateLocation(task.id, {
-                                    zone_id: zones.length
-                                      ? editingLocation.zoneId || null
-                                      : null,
-                                    location_text:
-                                      editingLocation.locationText.trim() ||
-                                      null,
-                                  }),
+                                void act(
+                                  () =>
+                                    client.updateLocation(task.id, {
+                                      zone_id: zones.length
+                                        ? editingLocation.zoneId || null
+                                        : null,
+                                      location_text:
+                                        editingLocation.locationText.trim() ||
+                                        null,
+                                    }),
+                                  'location',
                                 )
                               }}
                             >
                               {zones.length > 0 && !zonesDenied && (
                                 <label>
-                                  分區
+                                  分區 <span aria-hidden="true">*</span>
                                   <select
+                                    aria-describedby="location-zone-hint"
                                     onChange={(event) =>
                                       setEditingLocation({
                                         ...editingLocation,
@@ -783,6 +973,9 @@ export default function PlanningPage({
                                       </option>
                                     ))}
                                   </select>
+                                  <span id="location-zone-hint">
+                                    請選擇任務分區。
+                                  </span>
                                 </label>
                               )}
                               <label>
@@ -801,6 +994,15 @@ export default function PlanningPage({
                               <button disabled={busy} type="submit">
                                 儲存地點
                               </button>
+                              {error && errorContext === 'location' && (
+                                <p
+                                  ref={errorMessage}
+                                  role="alert"
+                                  tabIndex={-1}
+                                >
+                                  {error}
+                                </p>
+                              )}
                             </form>
                           )}
                           {editingAssignee?.task.id === task.id && (
@@ -845,10 +1047,17 @@ export default function PlanningPage({
                   </ul>
 
                   {canEditPlan && !readOnly && (
-                    <form onSubmit={(event) => void createTask(event)}>
+                    <form
+                      data-error-context="task"
+                      onSubmit={(event) => void createTask(event)}
+                    >
                       <h3>建立任務</h3>
                       <fieldset>
-                        <legend>選擇一筆以上查核項目</legend>
+                        <legend>
+                          選擇一筆以上查核項目{' '}
+                          <span aria-hidden="true">*</span>
+                        </legend>
+                        <p>至少選擇一筆查核項目。</p>
                         {items.map((item) => (
                           <label key={item.id}>
                             <input
@@ -865,8 +1074,9 @@ export default function PlanningPage({
                       </fieldset>
                       {zones.length > 0 && !zonesDenied && (
                         <label>
-                          任務分區
+                          任務分區 <span aria-hidden="true">*</span>
                           <select
+                            aria-describedby="task-zone-hint"
                             onChange={(event) =>
                               setTaskZoneId(event.target.value)
                             }
@@ -880,7 +1090,13 @@ export default function PlanningPage({
                               </option>
                             ))}
                           </select>
+                          <span id="task-zone-hint">請選擇任務分區。</span>
                         </label>
+                      )}
+                      {error && errorContext === 'task' && (
+                        <p ref={errorMessage} role="alert" tabIndex={-1}>
+                          {error}
+                        </p>
                       )}
                       <label>
                         補充地點
@@ -934,20 +1150,30 @@ export default function PlanningPage({
             取消任務
           </h2>
           <p>取消後會保留任務資料；之後可以恢復到取消前狀態。</p>
+          {error && errorContext === 'dialog' && (
+            <p ref={errorMessage} role="alert" tabIndex={-1}>
+              {error}
+            </p>
+          )}
           <form
             onSubmit={(event) => {
               event.preventDefault()
-              void act(() => client.cancelTask(cancelTask.id, cancelReason))
+              void act(
+                () => client.cancelTask(cancelTask.id, cancelReason),
+                'dialog',
+              )
             }}
           >
             <label>
-              取消原因
+              取消原因 <span aria-hidden="true">*</span>
               <textarea
+                aria-describedby="cancel-reason-hint"
                 onChange={(event) => setCancelReason(event.target.value)}
                 required
                 value={cancelReason}
               />
             </label>
+            <span id="cancel-reason-hint">請填寫取消原因。</span>
             <button disabled={busy || !cancelReason.trim()} type="submit">
               確認取消
             </button>{' '}
@@ -974,6 +1200,11 @@ export default function PlanningPage({
             請確認操作
           </h2>
           <p>{confirmation.title}</p>
+          {error && errorContext === 'dialog' && (
+            <p ref={errorMessage} role="alert" tabIndex={-1}>
+              {error}
+            </p>
+          )}
           <button
             disabled={busy || readOnly}
             onClick={() => void act(confirmation.action)}

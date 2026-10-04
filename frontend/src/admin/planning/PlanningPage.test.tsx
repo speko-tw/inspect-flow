@@ -21,13 +21,14 @@ describe('planning management page', () => {
       render(<PlanningPage client={client} />)
 
       await screen.findByRole('heading', { name: '專案分區' })
-      fireEvent.change(screen.getByLabelText('分區名稱'), {
+      fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+      fireEvent.change(screen.getByLabelText(/分區名稱/), {
         target: { value: '北區' },
       })
       fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
       await screen.findByText('北區')
 
-      fireEvent.change(screen.getByLabelText('計畫名稱'), {
+      fireEvent.change(screen.getByLabelText(/計畫名稱/), {
         target: { value: '橋梁查核' },
       })
       fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -38,7 +39,7 @@ describe('planning management page', () => {
 
       fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
       fireEvent.click(await screen.findByLabelText(/鋼筋保護層/))
-      fireEvent.change(screen.getByLabelText('任務分區'), {
+      fireEvent.change(screen.getByLabelText(/任務分區/), {
         target: {
           value: (await client.listProjectZones('project-demo-1'))[0].id,
         },
@@ -108,7 +109,7 @@ describe('planning management page', () => {
       expect(
         within(cancelDialog).getByRole('heading', { name: '取消任務' }),
       ).toHaveFocus()
-      fireEvent.change(screen.getByLabelText('取消原因'), {
+      fireEvent.change(screen.getByLabelText(/取消原因/), {
         target: { value: '現場順序調整' },
       })
       fireEvent.click(screen.getByRole('button', { name: '確認取消' }))
@@ -140,7 +141,7 @@ describe('planning management page', () => {
     render(<PlanningPage client={client} />)
 
     await screen.findByRole('heading', { name: '查核計畫' })
-    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '拒絕的計畫' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -202,6 +203,63 @@ describe('planning management page', () => {
     expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
   })
 
+  it('uses the route project ID when its name is forbidden', async () => {
+    const client = createMockPlanningClient()
+    vi.spyOn(client, 'getProject').mockRejectedValue(
+      new ManagementApiError(403, 'permission.denied'),
+    )
+    const listProjects = vi.spyOn(client, 'listProjects')
+    render(<PlanningPage client={client} initialProjectId="project-locked" />)
+
+    expect(await screen.findByText('專案：project-locked')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: '查核計畫' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+    expect(listProjects).not.toHaveBeenCalled()
+  })
+
+  it('shows and focuses a create-plan error inside its form', async () => {
+    const client = createMockPlanningClient()
+    client.createPlan = async () => {
+      throw new PlanningApiError(422, 'validation.invalid')
+    }
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '查核計畫' })
+
+    const form = screen.getByLabelText(/計畫名稱/).closest('form')
+    expect(screen.getByLabelText(/計畫名稱/)).toHaveAttribute('required')
+    expect(screen.getByLabelText(/計畫名稱/)).toHaveAttribute(
+      'aria-describedby',
+      'plan-name-hint',
+    )
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '錯誤計畫' },
+    })
+    fireEvent.submit(form as HTMLFormElement)
+
+    const alert = await within(form as HTMLElement).findByRole('alert')
+    expect(alert).toHaveFocus()
+    expect(alert).toHaveTextContent('輸入資料不符合規格')
+  })
+
+  it('adds zones in a separate inline row and cancels with Escape', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '專案分區' })
+
+    const addButton = screen.getByRole('button', { name: '＋ 新增分區' })
+    fireEvent.click(addButton)
+    const input = screen.getByLabelText(/分區名稱/)
+    expect(input).toHaveFocus()
+    expect(input).toHaveAttribute('aria-describedby', 'zone-name-hint')
+    fireEvent.change(input, { target: { value: '暫存分區' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(screen.queryByLabelText('分區名稱')).toBeNull()
+    expect(screen.queryByText('暫存分區')).toBeNull()
+    expect(addButton).toHaveFocus()
+  })
+
   it('keeps plans usable when zones and members return 403', async () => {
     const client = createMockPlanningClient()
     client.listProjectZones = async () => {
@@ -223,7 +281,7 @@ describe('planning management page', () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} />)
     await screen.findByRole('heading', { name: '專案分區' })
-    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '草稿刪除' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -250,7 +308,8 @@ describe('planning management page', () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} />)
     await screen.findByRole('heading', { name: '專案分區' })
-    fireEvent.change(screen.getByLabelText('分區名稱'), {
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
       target: { value: '待取消分區' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
@@ -328,13 +387,14 @@ describe('planning management page', () => {
     render(<PlanningPage client={client} />)
 
     await screen.findByRole('heading', { name: '專案分區' })
-    fireEvent.change(screen.getByLabelText('分區名稱'), {
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
       target: { value: 'A 專用分區' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
     await screen.findByText('A 專用分區')
 
-    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: 'A 專用計畫' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -361,7 +421,8 @@ describe('planning management page', () => {
       render(<PlanningPage client={client} />)
 
       await screen.findByRole('heading', { name: '專案分區' })
-      fireEvent.change(screen.getByLabelText('分區名稱'), {
+      fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+      fireEvent.change(screen.getByLabelText(/分區名稱/), {
         target: { value: '待刪除分區' },
       })
       fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
@@ -391,7 +452,7 @@ describe('planning management page', () => {
       target: { value: 'project-demo-2' },
     })
     await screen.findByRole('heading', { name: '查核計畫' })
-    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: 'B 專案計畫' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -412,23 +473,35 @@ describe('planning management page', () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} />)
     await screen.findByRole('heading', { name: '專案分區' })
-    fireEvent.change(screen.getByLabelText('分區名稱'), {
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
       target: { value: '北區' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
     const zone = await screen.findByText('北區')
     fireEvent.click(
       within(zone.parentElement as HTMLElement).getByRole('button', {
-        name: '改名',
+        name: '重新命名',
       }),
     )
-    fireEvent.change(screen.getByLabelText('分區名稱'), {
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
       target: { value: '北側' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
+    fireEvent.keyDown(screen.getByLabelText(/分區名稱/), { key: 'Enter' })
     const renamed = await screen.findByText('北側')
+    fireEvent.click(
+      within(renamed.parentElement as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    )
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
+      target: { value: '取消的名稱' },
+    })
+    fireEvent.keyDown(screen.getByLabelText(/分區名稱/), { key: 'Escape' })
+    expect(await screen.findByText('北側')).toBeInTheDocument()
+    expect(screen.queryByText('取消的名稱')).toBeNull()
 
-    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '分區引用' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -436,7 +509,7 @@ describe('planning management page', () => {
       await screen.findByRole('button', { name: '分區引用（草稿）' }),
     )
     fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
-    fireEvent.change(screen.getByLabelText('任務分區'), {
+    fireEvent.change(screen.getByLabelText(/任務分區/), {
       target: {
         value: (await client.listProjectZones('project-demo-1'))[0].id,
       },
@@ -463,7 +536,7 @@ describe('planning management page', () => {
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-demo-2' },
     })
-    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '無分區計畫' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
