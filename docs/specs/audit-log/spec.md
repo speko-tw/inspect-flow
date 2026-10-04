@@ -124,13 +124,20 @@
 <a id="inspection-planning-事件"></a>
 ## `inspection-planning` 事件
 
-依 `inspection-planning` IP-R10 登記 `ProjectZone` 管理事件。每次成功新增、改名或刪除各寫一筆；失敗或回滾不得留紀錄。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
+依 `inspection-planning` IP-R03、IP-R04、IP-R10 登記 Plan／Task 與專案查核項目變更事件，包括 ProjectZone 管理、Task 地點、刪除、取消、恢復，以及 KD-55 選擇與修改內容。每次成功變更依下表記錄；失敗或回滾不得留紀錄，且事件須與領域變更在同一交易內寫入。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
 | `project_zone.created` | 新增專案分區 | `project_zone` | 空值 | `project_id`、`name` |
 | `project_zone.updated` | 修改分區名稱 | `project_zone` | 有變動的 `name` | 同左 |
 | `project_zone.deleted` | 刪除未被 Task 引用的專案分區 | `project_zone` | `project_id`、`name` | 空值 |
+| `inspection_task.deleted` | 硬刪除 DRAFT Task | `inspection_task` | `project_id`、`status`、`item_count` | 空值 |
+| `inspection_task.cancelled` | 取消 PENDING／IN_PROGRESS Task | `inspection_task` | 變更前 `status` | `CANCELLED`、取消原因 |
+| `inspection_task.restored` | 恢復已取消 Task | `inspection_task` | `CANCELLED` | 恢復後 `status` |
+| `inspection_task.location_updated` | 修改 Task 地點 | `inspection_task` | 有變動的 `zone_id`、`location_text` | 同左 |
+| `project_inspection_item.updated` | 修改專案查核項目並選擇是否重新查核 | `project_inspection_item` | 有變動的 `title`／`instruction`，以及重新查核選擇 | 修改後欄位與重新查核選擇 |
+
+`inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。Task 刪除、取消、恢復、地點修改及專案查核項目修改事件，均須與對應資料變更在同一交易內寫入。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
 
 <a id="authentication-事件"></a>
 ## `authentication` 事件
