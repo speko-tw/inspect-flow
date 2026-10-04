@@ -173,6 +173,25 @@ form > div {
   gap: var(--space-1);
 }
 
+.template-browser {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.template-browser > section {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.template-browser li {
+  margin-bottom: var(--space-2);
+}
+
 label {
   display: grid;
   gap: var(--space-1);

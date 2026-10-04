@@ -164,6 +164,10 @@ describe('我的工作台', () => {
     expect(
       screen.queryByRole('link', { name: '進入管理頁' }),
     ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '瀏覽範本庫' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
     expect(screen.getByText('一般使用者')).toBeInTheDocument()
     unmount()
 
