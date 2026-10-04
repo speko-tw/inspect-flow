@@ -2,32 +2,32 @@
 
 **規格**：[spec.md](spec.md)
 
-本規格整體仍為草稿；以下任務分解僅供規劃，所有實作任務均須等規格凍結後才能開工。OQ-09 尚未裁定取消來源狀態、已完成 Task 是否可取消、取消後能否恢復及全數 Task 取消時的 Plan 終態；KD-56 的「任務派出」定義尚未裁定，須由 `inspection-planning` 規格處理，故目前 Plan／Task 尚不符合凍結條件。Evidence 受 G-05 阻擋，Report 受 G-06（其他產製狀態）與 G-07 阻擋。需求與 AC 編號見 [spec.md](spec.md)。
+Plan／Task 已裁定的狀態行為依部分凍結規則於 spec 中凍結；Evidence／Report 仍為草稿。G-01 未定的 interval 歸屬及快照規則只涉及未來選用功能，不阻擋 MVP 範圍。資料模型仍須等 `domain-model` 凍結 Plan／Task 實體後才能實作；`inspection-planning` 負責 Plan／Task 建立、任務組成、派出操作與現場可見性及操作契約，本規格負責派出後的狀態轉換、KD-55 項目結果狀態及 Plan 狀態彙總。技術選擇均在 spec 中標為「規格設計（非負責人裁定）」，不增補業務規則。Evidence 受 G-05 阻擋，Report 受 G-06（其他產製狀態）與 G-07 阻擋。需求與 AC 編號見 [spec.md](spec.md)。
 
 ## 任務
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1（待凍結） | 實作 Plan／Task 後端狀態轉換、完成時伺服器覆核、KD-55 作廢／更正、實際查核人紀錄與 Service 層狀態驗證。Result 欄位驗證與寫入及改善追蹤屬 0.7.x，不納入。此任務須待 OQ-09 未決邊界、KD-56 任務派出定義（由 `inspection-planning` 規格處理）釐清且本規格凍結後拆分。 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | OQ-09 邊界裁定；KD-56 任務派出定義由 `inspection-planning` 規格處理；`domain-model` 相關實體凍結；API 契約；本規格凍結 | STM-AC01～STM-AC05、STM-AC07～STM-AC11（均為草稿） | 待開 |
-| T2（待凍結） | 實作 Plan／Task 動作的前端狀態顯示與互動，包含 KD-55 確認對話框（由功能規格定義）、取消原因及「有缺失」任務標示。須待 T1 範圍及本規格凍結後拆分。 | `frontend/src/`、對應前端測試 | T1；API 契約；本規格凍結 | STM-AC02～STM-AC05、STM-AC08～STM-AC09（均為草稿） | 待開 |
+| T1（待依賴） | 實作凍結範圍內的 Plan／Task 後端狀態轉換、完成時伺服器覆核、KD-55 項目層級作廢／更正、實際查核人紀錄與 Service 層狀態驗證。Result 欄位驗證與寫入及改善追蹤屬 0.7.x，不納入。拆分前須有 `inspection-planning` API／流程契約及 `domain-model` Plan／Task 實體凍結。 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | `inspection-planning` API／流程契約；`domain-model` Plan／Task 實體凍結；本規格凍結範圍 | STM-AC01～STM-AC05、STM-AC08～STM-AC15 | 待開 |
+| T2（待依賴） | 實作凍結範圍內的 Plan／Task 動作之前端狀態顯示與互動，包含 KD-55 確認對話框（由功能規格定義）、取消原因及「有缺失」任務標示。須待 T1 與 API 契約確認後拆分。 | `frontend/src/`、對應前端測試 | T1；API 契約；本規格凍結範圍 | STM-AC02～STM-AC05、STM-AC08～STM-AC15 | 待開 |
 | T3（待凍結） | Evidence 照片流程、獨立刪除與保留政策；未達凍結條件，不可開工。 | G-05 裁定後拆分 | G-05；Evidence 凍結 | 待凍結 | 待開 |
 | T4（待凍結） | Report 狀態、快照、版次、核發與產製失敗流程；未達凍結條件，不可開工。 | G-06／G-07 裁定後拆分 | G-06 其他狀態、G-07；Report 凍結 | STM-AC06（草稿） | 待開 |
 
 - 規格凍結後，每個實作任務應能以一個 PR 完成並單獨驗收；任務須待其範圍凍結後拆分。
-- 所有需求／AC 目前均為草稿；T1～T4 均不得開工，須待各自範圍的阻擋議題裁定並完成規格凍結。
+- 本規格 Plan／Task 範圍依標頭已凍結；T1、T2 只涵蓋列出的需求／AC，仍待 `domain-model` 凍結 Plan／Task 實體與 `inspection-planning` 契約後拆分。T3、T4 須待各自範圍阻擋議題裁定並凍結。
 - 涉及資料模型的任務須等 `domain-model` 凍結相關實體；跨規格依賴由後續 issue 確認。
 - 若任務檔案範圍重疊，依共用檔案規則重新分波；本計畫不預先授權同時修改共用 model、migration 或服務檔案。
 
 ## 並行分組
 
-- 待凍結：T1、T2，須待 OQ-09 未決邊界裁定、KD-56 任務派出定義由 `inspection-planning` 規格處理，及本規格凍結；其後按依賴先後分波。
+- 待依賴：T1、T2 僅涵蓋本規格已凍結範圍；拆分前須有 `inspection-planning` 契約及 `domain-model` Plan／Task 實體凍結。
 - 待凍結：T3、T4；分別待 G-05 與 G-06／G-07 裁定及對應範圍凍結。
 
 ## 風險
 
-- **把待決範圍當成凍結**：SM-Q04 尚有取消狀態邊界待補，KD-56 的任務派出定義待 `inspection-planning` 規格處理；G-05、G-06、G-07 阻擋 Evidence／Report。所有任務 issue 均須待本規格凍結後建立，並只引用凍結後明列的需求與 AC。
-- **混淆技術提案與決策**：英文狀態名稱、作廢後保留舊 Task 並建立新 Task 等內容如標示為規格設計，仍不得視為已裁定要求。
-- **任務作廢與追溯關聯遺失**：KD-55 要求保留舊任務及當時標準；追溯欄位由 `domain-model` 定義。
+- **把待決範圍當成凍結**：只實作 spec 標頭列出的 Plan／Task 凍結範圍；`inspection-planning` 負責派出操作，不負責本規格的 Plan 狀態彙總。雖本規格狀態行為已凍結，`domain-model` 尚未凍結 Plan／Task 實體，相關資料模型工作不可提前；G-05、G-06、G-07 仍阻擋 Evidence／Report。
+- **混淆技術提案與決策**：英文狀態名稱及項目層級作廢資料表示等內容如標示為規格設計，仍不得視為額外業務規則。
+- **項目作廢範圍錯誤或追溯關聯遺失**：KD-55 只作廢被修改項目的舊結果與照片，保留同 Task 其他項目；項目層級追溯表示由 `domain-model` 定義，不得把整個 Task 作廢。
 - **Report 來源差異**：其他產製狀態、快照與版次邊界未定，T4 不得提前實作。
 
 ## 驗證（Proof）
@@ -35,15 +35,15 @@
 | AC | 驗證方式 |
 |---|---|
 | STM-AC01 | 後端 Service/API 測試涵蓋 Plan／Task 允許及拒絕的轉換，確認用戶端無法任意指定狀態。 |
-| STM-AC02 | 整合測試：派發任務令 Plan 自動進行；所有應計入完成判定的 Task 完成後 Plan 自動完成；手動完成狀態寫入遭拒。取消邊界依 STM-AC10 待裁定。 |
+| STM-AC02 | 整合測試：第一個 Task 派出令 Plan 自動進行；草稿阻擋完成與取消；全部完成且無草稿時 Plan 自動完成；全數取消且無完成 Task 時 Plan 自動取消；手動完成狀態寫入遭拒。 |
 | STM-AC03 | 整合測試：已完成 Task 修正後仍為完成，並查核修正者、時間及內容紀錄。 |
-| STM-AC04 | 整合測試：KD-55 選「要」只作廢使用該項次的 Task；舊 Task 保留作廢標示；原已完成 Plan 退回進行中，重查完成後自動完成。 |
+| STM-AC04 | 整合測試：KD-55 選「要」只作廢該項目的舊結果與照片，同 Task 其他項目保留；僅已完成 Task 回到進行中補查，未完成 Task 維持狀態；原已完成 Plan 退回進行中，補查完成後依完成判定更新。 |
 | STM-AC05 | 整合測試：選「不要」只更正文字，結果、照片及狀態不變，且更正可追溯；互動依 KD-55 功能規格。 |
-| STM-AC07 | 規格審查確認 Plan／Task 未決轉換仍標記草稿，task issue 僅涵蓋凍結範圍。 |
-| STM-AC08 | 完成請求由伺服器覆核必要資料；含「不符合」仍可完成並於任務清單標示「有缺失」。不驗證 Result 欄位寫入或改善追蹤。 |
+| STM-AC07 | 規格審查確認未凍結的 Evidence／Report 行為仍標記草稿，實作 issue 僅涵蓋已凍結範圍。 |
+| STM-AC08 | 完成請求由伺服器覆核必要資料且沒有待重查項目；含「不符合」仍可完成並於任務清單標示「有缺失」。不驗證 Result 欄位寫入或改善追蹤。 |
 | STM-AC09 | 整合測試：未指派及已指派 Task 均可由具權限的同專案成員開始／完成；實際操作者紀錄與稽核／報告使用的查核人一致。 |
-| STM-AC10（草稿） | 取消轉換的來源狀態、恢復規則及 Plan 空集合終態裁定後補驗。 |
-| STM-AC11 | 測試適用取消轉換的原因紀錄、保留顯示與完成判定排除，不推定來源狀態。 |
+| STM-AC10 | 整合測試：未完成 Task 可取消、已完成 Task 不可取消；取消保留原因與資料、不計入完成判定；可恢復至取消前狀態；Plan 任一狀態可封存且封存後 Task 不得查核、取消或恢復。 |
+| STM-AC11～STM-AC15 | 整合測試：來源狀態取消限制、恢復權限與 Plan 狀態重算、封存後唯讀、草稿刪除限制，以及取消 Task 遇 KD-55 標準變更後以目前標準恢復並標示待重查。 |
 
 本輪只更新規格與計畫文件，以上測試未執行（NOT_RUN）。
 
