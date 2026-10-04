@@ -39,7 +39,9 @@ class DuplicateProjectItemError(ValueError):
 def _reject_duplicate_names(
     db: Session, project_id: UUID, templates: Sequence[TemplateItem]
 ) -> None:
-    # Lock the parent on PostgreSQL so concurrent applies serialize.
+    # Every path creating ProjectInspectionItem must take this same
+    # project-row lock before checking names and writing copies.
+    # PostgreSQL serializes applies here; SQLite does not row-lock.
     db.scalar(
         select(Project.id).where(Project.id == project_id).with_for_update()
     )

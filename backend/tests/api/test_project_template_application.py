@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, inspect, select, text
 
 from alembic import command
 from app.api.errors import ErrorCode
@@ -288,9 +288,21 @@ def test_migration_marks_existing_ranges_as_tolerance(
     )
     assert template_standard is not None
     assert project_standard is not None
+    other_standard = db_session.scalar(
+        select(TemplateNumericStandard)
+        .join(TemplateInspectionPoint)
+        .where(
+            TemplateInspectionPoint.template_item_id == UUID(template_ids[1])
+        )
+    )
+    assert other_standard is not None
     for standard in (template_standard, project_standard):
         standard.condition = "range"
         standard.range_form = "tolerance"
+    template_standard.tolerance = None
+    project_standard.tolerance = ""
+    other_standard.condition = "range"
+    other_standard.range_form = "tolerance"
     db_session.commit()
     db_session.close()
     engine.dispose()
@@ -305,13 +317,68 @@ def test_migration_marks_existing_ranges_as_tolerance(
                 "template_numeric_standards",
                 "project_numeric_standards",
             ):
-                row = connection.execute(
+                rows = connection.execute(
                     text(
                         "SELECT value, tolerance, range_form, lower_bound, "
-                        f"upper_bound FROM {table} WHERE condition='range'"
+                        f"upper_bound FROM {table} WHERE condition='range' "
+                        "ORDER BY tolerance"
                     )
-                ).one()
-                assert row == ("10", "0.5", "tolerance", None, None)
+                ).all()
+                expected = [("10", "0", "tolerance", None, None)]
+                if table == "template_numeric_standards":
+                    expected.append(("10", "0.5", "tolerance", None, None))
+                assert rows == expected
+    finally:
+        probe.dispose()
+
+
+def test_interval_downgrade_keeps_both_tables_intact(
+    db_session, engine, migrated_url, make_client
+):
+    world = _world(db_session, make_client)
+    _, template_ids = _create_templates(world["admin"])
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    applied = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert applied.status_code == 201, applied.text
+    standard = db_session.scalar(
+        select(ProjectNumericStandard).where(
+            ProjectNumericStandard.project_inspection_item_id
+            == UUID(applied.json()[0]["id"])
+        )
+    )
+    assert standard is not None
+    standard.condition = "range"
+    standard.range_form = "interval"
+    standard.value = None
+    standard.tolerance = None
+    standard.lower_bound = "3.0"
+    standard.upper_bound = "3.6"
+    db_session.commit()
+    db_session.close()
+    engine.dispose()
+    dispose_engine()
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    with pytest.raises(RuntimeError, match="interval standards"):
+        command.downgrade(config, "325e0f21a831")
+    probe = create_engine(migrated_url)
+    try:
+        with probe.connect() as connection:
+            version = connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            assert version == "a8356e4c12b0"
+            for table in (
+                "template_numeric_standards",
+                "project_numeric_standards",
+            ):
+                fields = {
+                    column["name"]
+                    for column in inspect(connection).get_columns(table)
+                }
+                assert {"range_form", "lower_bound", "upper_bound"} <= fields
     finally:
         probe.dispose()
 

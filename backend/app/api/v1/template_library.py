@@ -117,6 +117,11 @@ class NumericStandardBody(StrictBody):
 
     @model_validator(mode="after")
     def matching_fields(self):
+        if (
+            self.condition == "range"
+            and "range_form" not in self.model_fields_set
+        ):
+            self.range_form = "tolerance"
         bounds = (self.lower_bound, self.upper_bound)
         if self.condition != "range":
             if (

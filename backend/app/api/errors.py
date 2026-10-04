@@ -229,9 +229,9 @@ def _http_exception_code(exc: StarletteHTTPException) -> ErrorCode:
 def register_error_handlers(app: FastAPI) -> None:
     """Register the shared exception handlers on ``app``.
 
-    Every handler responds with
-    ``{"error": {"code": "<dot.namespace>"}}`` only -- no message
-    or exception detail is included in the response body.
+    Every handler includes ``error.code``. Only an ``APIError``
+    explicitly given details also includes ``error.details``;
+    messages and raw exception data are never returned.
     """
 
     @app.exception_handler(APIError)

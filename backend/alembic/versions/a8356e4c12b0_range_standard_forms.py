@@ -25,15 +25,16 @@ def upgrade() -> None:
             batch.add_column(sa.Column("upper_bound", sa.String()))
         op.execute(
             sa.text(
-                f"UPDATE {table} SET range_form = 'tolerance' "
+                f"UPDATE {table} SET range_form = 'tolerance', "
+                "tolerance = COALESCE(NULLIF(TRIM(tolerance), ''), '0') "
                 "WHERE condition = 'range'"
             )
         )
 
 
 def downgrade() -> None:
+    connection = op.get_bind()
     for table in _TABLES:
-        connection = op.get_bind()
         interval_count = connection.execute(
             sa.text(
                 f"SELECT count(*) FROM {table} "
@@ -42,6 +43,7 @@ def downgrade() -> None:
         ).scalar_one()
         if interval_count:
             raise RuntimeError("interval standards cannot be downgraded")
+    for table in _TABLES:
         with op.batch_alter_table(table) as batch:
             batch.drop_column("upper_bound")
             batch.drop_column("lower_bound")

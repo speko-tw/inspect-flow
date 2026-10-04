@@ -152,6 +152,7 @@ def _template(system_id, title="Foundation"):
 @pytest.mark.parametrize(
     ("standard", "valid"),
     [
+        ({"value": "3.3", "tolerance": "0.3"}, True),
         (
             {
                 "range_form": "interval",
@@ -178,6 +179,32 @@ def _template(system_id, title="Foundation"):
         ),
         (
             {"range_form": "tolerance", "value": "3.3", "tolerance": "-0.3"},
+            False,
+        ),
+        (
+            {"range_form": "tolerance", "value": None, "tolerance": "0.3"},
+            False,
+        ),
+        (
+            {"range_form": "tolerance", "value": "3.3", "tolerance": None},
+            False,
+        ),
+        (
+            {
+                "range_form": "interval",
+                "value": None,
+                "tolerance": None,
+                "lower_bound": "3.0",
+            },
+            False,
+        ),
+        (
+            {
+                "range_form": "interval",
+                "value": None,
+                "tolerance": None,
+                "upper_bound": "3.6",
+            },
             False,
         ),
         (
@@ -211,12 +238,9 @@ def test_range_forms_validate_on_create_and_update(clients, standard, valid):
     assert created.status_code == (201 if valid else 422), created.text
     if not valid:
         return
-    assert (
-        created.json()["inspection_points"][0]["numeric_standard"][
-            "range_form"
-        ]
-        == standard["range_form"]
-    )
+    assert created.json()["inspection_points"][0]["numeric_standard"][
+        "range_form"
+    ] == standard.get("range_form", "tolerance")
     changed = manager.put(
         f"/api/v1/templates/{created.json()['id']}", json=body
     )
@@ -226,6 +250,23 @@ def test_range_forms_validate_on_create_and_update(clients, standard, valid):
         f"/api/v1/templates/{created.json()['id']}", json=body
     )
     assert invalid.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"range_form": "tolerance"},
+        {"lower_bound": "3.0", "upper_bound": "3.6"},
+        {"value": None},
+    ],
+)
+def test_non_range_rejects_range_only_fields(clients, changes):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id)
+    body["inspection_points"][0]["numeric_standard"].update(changes)
+    response = manager.post("/api/v1/templates", json=body)
+    assert response.status_code == 422, response.text
 
 
 def test_access_and_name_conflicts(clients):
