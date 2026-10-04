@@ -1,6 +1,6 @@
 """Project template application API (TPL-AC05/08, T4)."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
+    AuditLog,
     Project,
     ProjectEvidenceRequirement,
     ProjectInspectionItem,
@@ -20,6 +21,11 @@ from app.models import (
     Role,
     RolePermission,
     SystemRoleAssignment,
+    TemplateEvidenceRequirement,
+    TemplateInspectionPoint,
+    TemplateMeasurementField,
+    TemplateNumericStandard,
+    TemplateTextStandard,
 )
 from app.services import project_templates
 from tests.db.conftest import create_root_user_with_company
@@ -429,6 +435,303 @@ def test_apply_requires_project_edit_permission(db_session, make_client):
         json={"template_id": template_ids[0]},
     )
     assert admin_apply.status_code == 201, admin_apply.text
+
+
+def test_project_item_can_be_saved_as_template_and_audited(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    system_id, _ = _create_templates(world["admin"])
+    apply_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    applied = world["editor"].post(apply_url, json={"system_id": system_id})
+    assert applied.status_code == 201, applied.text
+    project_item_id = applied.json()[0]["id"]
+
+    target_category = world["template_admin"].post(
+        "/api/v1/template-categories", json={"name": "Saved category"}
+    )
+    assert target_category.status_code == 201, target_category.text
+    target_system = world["template_admin"].post(
+        f"/api/v1/template-categories/{target_category.json()['id']}/systems",
+        json={"name": "Saved system"},
+    )
+    assert target_system.status_code == 201, target_system.text
+    url = f"/api/v1/projects/{world['project'].id}/templates"
+    body = {
+        "project_inspection_item_id": project_item_id,
+        "system_id": target_system.json()["id"],
+    }
+    saved = world["template_admin"].post(url, json=body)
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["title"] == "First item"
+    saved_item_id = UUID(saved.json()["id"])
+    assert saved_item_id != UUID(project_item_id)
+    assert len(saved.json()["inspection_points"]) == 2
+    numeric = saved.json()["inspection_points"][0]
+    assert numeric["numeric_standard"]["value"] == "10"
+    assert numeric["measurement_fields"][0]["unit"] == "mm"
+    assert numeric["evidence_requirements"][0]["min_count"] == 2
+    saved_field_id = UUID(numeric["measurement_fields"][0]["id"])
+    assert UUID(numeric["numeric_standard"]["measurement_field_id"]) == (
+        saved_field_id
+    )
+    assert saved.json()["inspection_points"][1]["text_standard"] == {
+        "text": "As approved"
+    }
+    project_points = db_session.scalars(
+        select(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id
+            == UUID(project_item_id)
+        )
+    ).all()
+    project_point_ids = {point.id for point in project_points}
+    saved_point_ids = {
+        UUID(point["id"]) for point in saved.json()["inspection_points"]
+    }
+    assert saved_point_ids.isdisjoint(project_point_ids)
+    project_field_ids = set(
+        db_session.scalars(
+            select(ProjectMeasurementField.id).where(
+                ProjectMeasurementField.project_inspection_item_id
+                == UUID(project_item_id)
+            )
+        )
+    )
+    assert saved_field_id not in project_field_ids
+    template_point_ids = set(
+        db_session.scalars(
+            select(TemplateInspectionPoint.id).where(
+                TemplateInspectionPoint.template_item_id == saved_item_id
+            )
+        )
+    )
+    assert template_point_ids.isdisjoint(project_point_ids)
+    template_field_ids = set(
+        db_session.scalars(
+            select(TemplateMeasurementField.id).where(
+                TemplateMeasurementField.inspection_point_id.in_(
+                    template_point_ids
+                )
+            )
+        )
+    )
+    assert template_field_ids.isdisjoint(project_field_ids)
+    template_numeric_ids = set(
+        db_session.scalars(
+            select(TemplateNumericStandard.id).where(
+                TemplateNumericStandard.inspection_point_id.in_(
+                    template_point_ids
+                )
+            )
+        )
+    )
+    project_numeric_ids = set(
+        db_session.scalars(
+            select(ProjectNumericStandard.id).where(
+                ProjectNumericStandard.project_inspection_item_id
+                == UUID(project_item_id)
+            )
+        )
+    )
+    assert template_numeric_ids.isdisjoint(project_numeric_ids)
+    template_text_ids = set(
+        db_session.scalars(
+            select(TemplateTextStandard.id).where(
+                TemplateTextStandard.inspection_point_id.in_(
+                    template_point_ids
+                )
+            )
+        )
+    )
+    project_text_ids = set(
+        db_session.scalars(
+            select(ProjectTextStandard.id).where(
+                ProjectTextStandard.project_inspection_item_id
+                == UUID(project_item_id)
+            )
+        )
+    )
+    assert template_text_ids.isdisjoint(project_text_ids)
+    template_evidence_ids = set(
+        db_session.scalars(
+            select(TemplateEvidenceRequirement.id).where(
+                TemplateEvidenceRequirement.inspection_point_id.in_(
+                    template_point_ids
+                )
+            )
+        )
+    )
+    project_evidence_ids = set(
+        db_session.scalars(
+            select(ProjectEvidenceRequirement.id).where(
+                ProjectEvidenceRequirement.project_inspection_item_id
+                == UUID(project_item_id)
+            )
+        )
+    )
+    assert template_evidence_ids.isdisjoint(project_evidence_ids)
+    project_numeric = db_session.scalar(
+        select(ProjectNumericStandard).where(
+            ProjectNumericStandard.project_inspection_item_id
+            == UUID(project_item_id)
+        )
+    )
+    assert project_numeric is not None
+    assert project_numeric.measurement_field_id in project_field_ids
+    assert project_numeric.measurement_field_id != saved_field_id
+    event = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "template_item.created_from_project",
+            AuditLog.entity_id == UUID(saved.json()["id"]),
+        )
+    )
+    assert event is not None
+    assert event.after == {
+        "project_id": str(world["project"].id),
+        "project_inspection_item_id": project_item_id,
+        "system_id": target_system.json()["id"],
+    }
+
+    conflict = world["template_admin"].post(url, json=body)
+    assert conflict.status_code == 409
+    assert conflict.json() == {"error": {"code": "template.name_conflict"}}
+
+    normalized_system = world["template_admin"].post(
+        f"/api/v1/template-categories/{target_category.json()['id']}/systems",
+        json={"name": "Normalized conflict system"},
+    )
+    assert normalized_system.status_code == 201, normalized_system.text
+    existing = world["template_admin"].post(
+        "/api/v1/templates",
+        json={
+            "system_id": normalized_system.json()["id"],
+            "sequence": 1,
+            "title": "  fIrSt ItEm  ",
+            "instruction": "Existing normalized name",
+            "inspection_points": [],
+        },
+    )
+    assert existing.status_code == 201, existing.text
+    normalized_conflict = world["template_admin"].post(
+        url,
+        json={**body, "system_id": normalized_system.json()["id"]},
+    )
+    assert normalized_conflict.status_code == 409
+    assert normalized_conflict.json() == {
+        "error": {"code": "template.name_conflict"}
+    }
+    forbidden = world["editor"].post(url, json=body)
+    assert forbidden.status_code == 403
+    invalid = world["template_admin"].post(
+        url, json={**body, "unexpected": "field"}
+    )
+    assert invalid.status_code == 422
+
+    replaced = world["template_admin"].put(
+        f"/api/v1/templates/{saved.json()['id']}",
+        json={
+            "system_id": target_system.json()["id"],
+            "sequence": saved.json()["sequence"],
+            "title": "Edited saved item",
+            "instruction": "Edited saved instruction",
+            "inspection_points": [],
+        },
+    )
+    assert replaced.status_code == 200, replaced.text
+    db_session.expire_all()
+    unchanged = db_session.get(ProjectInspectionItem, UUID(project_item_id))
+    assert unchanged is not None
+    assert unchanged.title == "First item"
+    assert unchanged.instruction == "Check First item"
+    assert (
+        db_session.scalar(
+            select(ProjectNumericStandard).where(
+                ProjectNumericStandard.project_inspection_item_id
+                == unchanged.id
+            )
+        )
+        is not None
+    )
+    removed = world["template_admin"].delete(
+        f"/api/v1/templates/{saved.json()['id']}"
+    )
+    assert removed.status_code == 204, removed.text
+    db_session.expire_all()
+    unchanged = db_session.get(ProjectInspectionItem, UUID(project_item_id))
+    assert unchanged is not None
+    assert unchanged.title == "First item"
+    project_text = db_session.scalar(
+        select(ProjectTextStandard).where(
+            ProjectTextStandard.project_inspection_item_id == unchanged.id
+        )
+    )
+    assert project_text is not None
+    assert project_text.text == "As approved"
+
+
+def test_project_item_list_authorization_and_cursor_pagination(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    system_id, _ = _create_templates(world["admin"])
+    apply_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    applied = world["editor"].post(apply_url, json={"system_id": system_id})
+    assert applied.status_code == 201, applied.text
+    url = f"/api/v1/projects/{world['project'].id}/inspection-items"
+    first = world["editor"].get(url, params={"limit": 1})
+    assert first.status_code == 200, first.text
+    first_page = first.json()
+    assert len(first_page["items"]) == 1
+    item = first_page["items"][0]
+    assert item["source_template_name"] == "Apply system"
+    assert item["applied_at"]
+    assert len(item["inspection_points"]) == 2
+    assert first_page["next_cursor"]
+
+    second = world["template_admin"].get(
+        url, params={"limit": 1, "cursor": first_page["next_cursor"]}
+    )
+    assert second.status_code == 200, second.text
+    assert len(second.json()["items"]) == 1
+    assert second.json()["next_cursor"] is None
+    assert first_page["items"][0]["id"] != second.json()["items"][0]["id"]
+    assert world["outsider"].get(url).status_code == 403
+    missing_project_id = uuid4()
+    assert (
+        world["outsider"]
+        .get(f"/api/v1/projects/{missing_project_id}/inspection-items")
+        .status_code
+        == 403
+    )
+    admin_missing = world["admin"].get(
+        f"/api/v1/projects/{missing_project_id}/inspection-items"
+    )
+    assert admin_missing.status_code == 404
+    assert admin_missing.json() == {"error": {"code": "resource.not_found"}}
+    missing = world["template_admin"].get(
+        f"/api/v1/projects/{uuid4()}/inspection-items"
+    )
+    assert missing.status_code == 404
+
+    other_project = world["other_project"]
+    cross_url = f"/api/v1/projects/{other_project.id}/templates"
+    cross_copy = world["template_admin"].post(
+        cross_url,
+        json={
+            "project_inspection_item_id": first_page["items"][0]["id"],
+            "system_id": system_id,
+        },
+    )
+    assert cross_copy.status_code == 404
+    cross_list_url = f"/api/v1/projects/{other_project.id}/inspection-items"
+    assert world["template_admin"].get(cross_list_url).status_code == 200
+    assert world["admin"].get(cross_list_url).status_code == 200
 
 
 def test_apply_system_rolls_back_all_copies_after_mid_request_failure(

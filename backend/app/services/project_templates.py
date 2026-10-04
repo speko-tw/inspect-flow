@@ -23,7 +23,9 @@ from app.models import (
     TemplateTextStandard,
     User,
 )
+from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
+from app.services.template_library import create_template
 
 
 def _copy_template_item(
@@ -205,3 +207,119 @@ def apply_template(
         )
         for template in templates
     ]
+
+
+def create_template_from_project_item(
+    db: Session,
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+    system_id: UUID,
+) -> TemplateItem | None:
+    """Copy one project-owned inspection item into a template system.
+
+    A source outside ``project_id`` is indistinguishable from a missing
+    source, so callers cannot use this operation to copy across projects.
+    """
+    source = db.scalar(
+        select(ProjectInspectionItem).where(
+            ProjectInspectionItem.id == project_inspection_item_id,
+            ProjectInspectionItem.project_id == project_id,
+        )
+    )
+    system = db.get(TemplateSystem, system_id)
+    if source is None or system is None:
+        return None
+
+    points_data: list[dict[str, object]] = []
+    points = db.scalars(
+        select(ProjectInspectionPoint)
+        .where(ProjectInspectionPoint.project_inspection_item_id == source.id)
+        .order_by(ProjectInspectionPoint.sequence, ProjectInspectionPoint.id)
+    ).all()
+    for point in points:
+        fields = db.scalars(
+            select(ProjectMeasurementField)
+            .where(ProjectMeasurementField.inspection_point_id == point.id)
+            .order_by(
+                ProjectMeasurementField.created_at, ProjectMeasurementField.id
+            )
+        ).all()
+        client_ids = {field.id: uuid7() for field in fields}
+        text = db.scalar(
+            select(ProjectTextStandard).where(
+                ProjectTextStandard.inspection_point_id == point.id
+            )
+        )
+        numeric = db.scalar(
+            select(ProjectNumericStandard).where(
+                ProjectNumericStandard.inspection_point_id == point.id
+            )
+        )
+        requirements = db.scalars(
+            select(ProjectEvidenceRequirement)
+            .where(ProjectEvidenceRequirement.inspection_point_id == point.id)
+            .order_by(
+                ProjectEvidenceRequirement.created_at,
+                ProjectEvidenceRequirement.id,
+            )
+        ).all()
+        points_data.append(
+            {
+                "sequence": point.sequence,
+                "title": point.title,
+                "instruction": point.instruction,
+                "text_standard": {"text": text.text} if text else None,
+                "numeric_standard": {
+                    "value": numeric.value,
+                    "condition": numeric.condition,
+                    "unit": numeric.unit,
+                    "tolerance": numeric.tolerance,
+                    "measurement_field_client_id": client_ids[
+                        numeric.measurement_field_id
+                    ],
+                }
+                if numeric
+                else None,
+                "measurement_fields": [
+                    {
+                        "client_id": client_ids[field.id],
+                        "name": field.name,
+                        "field_type": field.field_type,
+                        "unit": (
+                            None
+                            if numeric is not None
+                            and numeric.measurement_field_id == field.id
+                            else field.unit
+                        ),
+                    }
+                    for field in fields
+                ],
+                "evidence_requirements": [
+                    {"min_count": requirement.min_count}
+                    for requirement in requirements
+                ],
+            }
+        )
+
+    template = create_template(
+        db,
+        {
+            "system_id": system_id,
+            "sequence": source.sequence,
+            "title": source.title,
+            "instruction": source.instruction,
+            "inspection_points": points_data,
+        },
+    )
+    record_audit_event(
+        db,
+        "template_item.created_from_project",
+        entity_id=template.id,
+        before=None,
+        after={
+            "project_id": project_id,
+            "project_inspection_item_id": project_inspection_item_id,
+            "system_id": system_id,
+        },
+    )
+    return template
