@@ -11,12 +11,13 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import QueuePool
 
 from alembic import command
-from app.api.errors import ErrorCode
+from app.api.errors import APIError, ErrorCode
 from app.api.v1 import auth as auth_api
 from app.auth import lockout as lockout_module
 from app.auth import login as login_module
@@ -262,6 +263,73 @@ def test_non_lock_sqlite_operational_error_is_not_converted(
         connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
         == original_busy_timeout
     )
+
+
+@pytest.mark.parametrize("outcome", ["success", "busy", "other_error"])
+def test_sqlite_timeout_restores_all_queue_pool_connections(
+    tmp_path, monkeypatch, outcome
+):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'busy-timeout-pool.db'}",
+        poolclass=QueuePool,
+        pool_size=3,
+        max_overflow=0,
+    )
+    monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
+    connections = [engine.connect() for _ in range(3)]
+    for connection in connections:
+        connection.exec_driver_sql("PRAGMA busy_timeout=123")
+        connection.commit()
+    connections[0].exec_driver_sql("CREATE TABLE writes (id integer)")
+    connections[0].commit()
+    if outcome == "busy":
+        connections[0].exec_driver_sql("BEGIN IMMEDIATE")
+    connections[1].close()
+    connections[2].close()
+
+    try:
+        with Session(engine) as session:
+            connection = session.connection()
+
+            def write() -> None:
+                assert (
+                    connection.exec_driver_sql(
+                        "PRAGMA busy_timeout"
+                    ).scalar_one()
+                    == 50
+                )
+                if outcome == "other_error":
+
+                    class OtherSQLiteError(Exception):
+                        sqlite_errorname = "SQLITE_IOERR"
+
+                    raise OperationalError("write", {}, OtherSQLiteError())
+                session.execute(text("INSERT INTO writes VALUES (1)"))
+
+            if outcome == "busy":
+                with pytest.raises(APIError) as caught:
+                    lockout_module._execute_sqlite_write(session, write)
+                assert caught.value.status_code == 503
+            elif outcome == "other_error":
+                with pytest.raises(OperationalError):
+                    lockout_module._execute_sqlite_write(session, write)
+            else:
+                lockout_module._execute_sqlite_write(session, write)
+
+        with engine.connect() as first_idle, engine.connect() as second_idle:
+            assert (
+                first_idle.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+                == 123
+            )
+            assert (
+                second_idle.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+                == 123
+            )
+    finally:
+        if outcome == "busy":
+            connections[0].rollback()
+        connections[0].close()
+        engine.dispose()
 
 
 def test_ac27_ac51_lock_boundary_audit_and_log(

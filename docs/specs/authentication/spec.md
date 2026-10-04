@@ -292,12 +292,13 @@
 |---|---|---|---|---|
 | AUT-AC26 | 一個 `local` 帳號，不經過登入 API，由測試直接呼叫「建立登入狀態」的函式 | 以回傳的 Cookie 呼叫 `me` | 200；建立登入狀態的函式簽章不含密碼參數 | AUT-R27 |
 | AUT-AC27 | 一個 `local` 帳號 U，密碼為 P；以可控時間測試；未設定鎖定相關環境變數 | 在時間 T0 起 1 分鐘內以錯誤密碼登入 10 次（第 10 次在時間 L）；接著以 P 登入；在 L 加 14 分鐘以錯誤密碼再登入一次；在 L 加 15 分鐘減 1 秒、L 加 15 分鐘各以 P 登入一次 | 前 10 次都回 401 `auth.invalid_credentials`；L 之後、L 加 15 分鐘之前的三次（含 P）都回 401，狀態碼與回應本體和一般失敗完全相同，沒有 `Set-Cookie`；L 加 15 分鐘以 P 登入回 200 | AUT-R28 |
-| AUT-AC67 | SQLite 資料庫；一個已知帳號（含密碼錯誤與正確密碼）、一個已鎖定帳號，以及一個未知帳號；以較短的 `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 設定重現另一連線持有寫鎖 | 寫鎖仍被持有時分別呼叫三種登入情境；釋放寫鎖後再次登入未知與已鎖定帳號 | 寫鎖等待逾時的所有情境都回 503 `server.temporarily_unavailable`、`Retry-After: 5`，回應本體相同且沒有 `Set-Cookie`；逾時沒有新增或改變失敗計數、沒有建立 `AuthSession`，也沒有 `auth.login_failed` 日誌；鎖釋放後，未知與已鎖定帳號都回 401 `auth.invalid_credentials`、沒有 Cookie，且各記一筆對應的失敗日誌 | AUT-R28；`test_sqlite_write_lock_timeout_returns_retryable_error`、`test_locked_account_and_unknown_login_share_sqlite_timeout` |
 | AUT-AC45 | 同 AUT-AC27 的 U；可控時間 | 情境一：在時間 T0 以錯誤密碼登入 9 次，在 T0 加 15 分鐘減 1 秒再錯 1 次，接著以 P 登入。情境二（新帳號）：在 T0 錯 9 次，在 T0 加 15 分鐘再錯 1 次，接著以 P 登入 | 情境一以 P 登入回 401（第 10 次在 15 分鐘內，已鎖定）；情境二以 P 登入回 200（前 9 次經過剛好 15 分鐘，不再計入） | AUT-R28 |
 | AUT-AC46 | 同 AUT-AC27 的 U；可控時間 | 在 1 分鐘內依序：錯 9 次、以 P 登入、再錯 9 次、以 P 登入、再錯 10 次、以 P 登入 | 前兩次以 P 登入都回 200（成功會清零，所以 18 次失敗沒有觸發鎖定）；連續錯 10 次後以 P 登入回 401 | AUT-R28 |
 | AUT-AC47 | 同 AUT-AC27 的 U，已登入；可控時間 | 以錯誤的目前密碼呼叫變更密碼 API 5 次，再以錯誤密碼登入 5 次；接著以 P 登入，並以正確的目前密碼 P 與有效新密碼呼叫變更密碼 API | 以 P 登入回 401；變更密碼回 400 `auth.current_password_incorrect`，回應與一般的目前密碼錯誤相同；`UserPassword` 與登入狀態筆數不變 | AUT-R28、AUT-R34 |
 | AUT-AC48 | 預設的環境（未設定鎖定相關環境變數），以及分別設定這三個環境變數的環境 | 讀取後端的鎖定設定 | 未設定時為 10 次、15 分鐘、15 分鐘；有設定時等於設定值；`.env.example` 列出這三個變數 | AUT-R28 |
 | AUT-AC53 | 同 AUT-AC27 的 U；依 AUT-AC27 觸發鎖定（第 10 次在時間 L），鎖定仍在生效中 | 在鎖定期間，經設定密碼的 Service 入口（Admin 設定臨時密碼的畫面，或以測試直接呼叫入口）替 U 重設密碼 | 重設後立即以新密碼登入回 200（鎖定已解除、失敗計數已歸零）；重設前後 `AuthSession` 與 `UserPassword` 的筆數、`updated_by` 符合 AUT-R36 的一般寫入行為 | AUT-R28、AUT-R36 |
+| AUT-AC67 | SQLite 資料庫；一個已知帳號（含密碼錯誤與正確密碼）、一個已鎖定帳號，以及一個未知帳號；以較短的 `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 設定重現另一連線持有寫鎖 | 寫鎖仍被持有時分別呼叫三種登入情境；釋放寫鎖後再次登入未知與已鎖定帳號 | 寫鎖等待逾時的所有情境都回 503 `server.temporarily_unavailable`、`Retry-After: 5`，回應本體相同且沒有 `Set-Cookie`；逾時沒有新增或改變失敗計數、沒有建立 `AuthSession`，也沒有 `auth.login_failed` 日誌；鎖釋放後，未知與已鎖定帳號都回 401 `auth.invalid_credentials`、沒有 Cookie，且各記一筆對應的失敗日誌 | AUT-R28；`test_sqlite_write_lock_timeout_returns_retryable_error`、`test_locked_account_and_unknown_login_share_sqlite_timeout` |
+| AUT-AC68 | `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 分別設為 `1`、`60000`、`60001` 毫秒 | 啟動後端應用程式 | 1 與 60000 毫秒可啟動；60001 毫秒啟動失敗並指出變數名稱 | AUT-R28；`test_sqlite_busy_timeout_accepts_bounds`、`test_sqlite_busy_timeout_rejects_above_maximum` |
 
 ### 稽核紀錄與日誌
 

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -60,12 +61,16 @@ def _serialize_account(db: Session, user_id: uuid.UUID) -> None:
 def _execute_sqlite_write(
     db: Session, operation: Callable[[], object]
 ) -> None:
-    previous_busy_timeout_ms = _set_sqlite_busy_timeout(db)
+    connection = db.connection()
+    previous_busy_timeout_ms = _set_sqlite_busy_timeout(connection)
+    timeout_restored = False
     try:
         operation()
     except OperationalError as exc:
         if not _is_sqlite_lock_error(exc):
             raise
+        _restore_sqlite_busy_timeout(connection, previous_busy_timeout_ms)
+        timeout_restored = True
         db.rollback()
         logger.warning(
             "auth.lockout_write_timeout",
@@ -80,11 +85,11 @@ def _execute_sqlite_write(
             headers={"Retry-After": str(_SQLITE_RETRY_AFTER_SECONDS)},
         ) from exc
     finally:
-        _restore_sqlite_busy_timeout(db, previous_busy_timeout_ms)
+        if not timeout_restored:
+            _restore_sqlite_busy_timeout(connection, previous_busy_timeout_ms)
 
 
-def _set_sqlite_busy_timeout(db: Session) -> int:
-    connection = db.connection()
+def _set_sqlite_busy_timeout(connection: Connection) -> int:
     previous_timeout_ms = int(
         # db-dependency: sqlite
         connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
@@ -95,9 +100,10 @@ def _set_sqlite_busy_timeout(db: Session) -> int:
     return previous_timeout_ms
 
 
-def _restore_sqlite_busy_timeout(db: Session, timeout_ms: int) -> None:
+def _restore_sqlite_busy_timeout(
+    connection: Connection, timeout_ms: int
+) -> None:
     pending_error = sys.exc_info()[1]
-    connection = db.connection()
     try:
         # db-dependency: sqlite
         connection.exec_driver_sql(f"PRAGMA busy_timeout={timeout_ms}")

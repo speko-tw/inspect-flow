@@ -108,7 +108,7 @@ def test_positive_integers_are_accepted(monkeypatch):
 def test_sqlite_busy_timeout_accepts_bounds(monkeypatch, raw, expected):
     monkeypatch.setenv(SQLITE_BUSY_TIMEOUT_ENV_VAR, raw)
 
-    validate_auth_settings()
+    create_app()
 
     assert get_lockout_settings().sqlite_busy_timeout_ms == expected
 
@@ -119,4 +119,4 @@ def test_sqlite_busy_timeout_rejects_above_maximum(monkeypatch):
     with pytest.raises(
         InvalidAuthSettingError, match=SQLITE_BUSY_TIMEOUT_ENV_VAR
     ):
-        validate_auth_settings()
+        create_app()
