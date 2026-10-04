@@ -123,6 +123,9 @@ export default function TemplatesPage() {
   const [loadedSystemIds, setLoadedSystemIds] = useState<Set<string>>(
     new Set(),
   )
+  const [loadedCategoryIds, setLoadedCategoryIds] = useState<Set<string>>(
+    new Set(),
+  )
   const [selected, setSelected] = useState<Selection | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [mode, setMode] = useState<Mode>('view')
@@ -230,6 +233,7 @@ export default function TemplatesPage() {
           ...current.filter((row) => row.category_id !== categoryId),
           ...rows,
         ])
+        setLoadedCategoryIds((current) => new Set([...current, categoryId]))
       })
       .catch((caught: unknown) => {
         if (active)
@@ -1151,6 +1155,7 @@ export default function TemplatesPage() {
               categories={categories}
               expanded={expanded}
               items={items}
+              loadedCategoryIds={loadedCategoryIds}
               loadedSystemIds={loadedSystemIds}
               mobile={isMobile}
               onAddCategory={() => beginName('create-category')}

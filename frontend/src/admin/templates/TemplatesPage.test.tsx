@@ -603,6 +603,33 @@ describe('TemplatesPage', () => {
     )
   })
 
+  it('replaces a blocked type-change message with the remove message', async () => {
+    templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', {
+        name: '欄杆尺寸',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
+
+    const typeMessage = '這個欄位用於數值標準；請先改綁其他欄位或移除標準。'
+    fireEvent.change(screen.getAllByLabelText('欄位型別')[0], {
+      target: { value: 'text' },
+    })
+    expect(screen.getByText(typeMessage)).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '移除欄位' })[0])
+    expect(screen.queryByText(typeMessage)).not.toBeInTheDocument()
+    expect(
+      screen.getByText('這個欄位仍綁定數值標準，請先解除綁定後再移除。'),
+    ).toBeInTheDocument()
+  })
+
   it('blocks deletion while a system has children', async () => {
     templateFetch()
     render(<TemplatesPage />)

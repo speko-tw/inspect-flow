@@ -7,6 +7,7 @@ export function TemplateLibraryNav({
   systems,
   items,
   loadedSystemIds,
+  loadedCategoryIds,
   selected,
   expanded,
   onSelect,
@@ -20,6 +21,7 @@ export function TemplateLibraryNav({
   systems: TemplateSystem[]
   items: TemplateItem[]
   loadedSystemIds: Set<string>
+  loadedCategoryIds: Set<string>
   selected: Selection | null
   expanded: Set<string>
   onSelect: (selection: Selection) => void
@@ -72,13 +74,16 @@ export function TemplateLibraryNav({
                 >
                   <span aria-hidden="true">{categoryOpen ? '▾' : '▸'}</span>
                   <span>{category.name}</span>
-                  <span aria-hidden="true" className="tpl-tree-count">
-                    {
-                      systems.filter((row) => row.category_id === category.id)
-                        .length
-                    }{' '}
-                    個系統
-                  </span>
+                  {loadedCategoryIds.has(category.id) && (
+                    <span aria-hidden="true" className="tpl-tree-count">
+                      {
+                        systems.filter(
+                          (row) => row.category_id === category.id,
+                        ).length
+                      }{' '}
+                      個系統
+                    </span>
+                  )}
                 </button>
                 {categoryOpen && (
                   <ul>
@@ -107,17 +112,19 @@ export function TemplateLibraryNav({
                               {systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
-                            <span
-                              aria-hidden="true"
-                              className="tpl-tree-count"
-                            >
-                              {
-                                items.filter(
-                                  (item) => item.system_id === system.id,
-                                ).length
-                              }{' '}
-                              個查核項目
-                            </span>
+                            {loadedSystemIds.has(system.id) && (
+                              <span
+                                aria-hidden="true"
+                                className="tpl-tree-count"
+                              >
+                                {
+                                  items.filter(
+                                    (item) => item.system_id === system.id,
+                                  ).length
+                                }{' '}
+                                個查核項目
+                              </span>
+                            )}
                           </button>
                           {systemOpen && (
                             <ul>

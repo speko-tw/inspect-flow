@@ -75,11 +75,10 @@ export function MeasurementFieldEditor({
               id={`field-${pointIndex}-${fieldIndex}-type`}
               onChange={(event) => {
                 if (bound && event.target.value !== 'number') {
-                  setActionErrors((current) => ({
-                    ...current,
+                  setActionErrors({
                     [`${base}:type`]:
                       '這個欄位用於數值標準；請先改綁其他欄位或移除標準。',
-                  }))
+                  })
                   return
                 }
                 setActionErrors((current) => {
@@ -139,11 +138,10 @@ export function MeasurementFieldEditor({
               <button
                 onClick={() => {
                   if (bound) {
-                    setActionErrors((current) => ({
-                      ...current,
+                    setActionErrors({
                       [`${base}:remove`]:
-                        '這個欄位用於數值標準；請先改綁其他欄位或移除標準。',
-                    }))
+                        '這個欄位仍綁定數值標準，請先解除綁定後再移除。',
+                    })
                   } else if (field.name || field.unit) {
                     setConfirmField(`${pointIndex}:${fieldIndex}`)
                   } else {
