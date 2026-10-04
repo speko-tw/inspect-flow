@@ -16,12 +16,14 @@
 | T6 | 專案套用與存為範本 UI：由具 `project_inspection_item.edit` 權限者以 `template_id` 套用單項，或以 `system_id` 套用整個系統；Admin 與範本管理員可跨專案瀏覽並把專案項目存至指定系統；顯示副本記錄的來源名稱與時間 | `frontend/src/features/projects/`、`frontend/src/routes/`、`frontend/src/field/ProjectTemplatesPage.test.tsx`、`frontend/tests/` | T2、T3、T4 | TPL-AC05、TPL-AC06、TPL-AC08 | #330、#389 |
 | T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片需求結構及不版本化；依規格確認範圍並更新索引，確保 TPL-AC01～TPL-AC12 都有證據 | `backend/tests/api/`、`backend/tests/contract/`、`frontend/` 範本相關測試、`docs/specs/template-system/spec.md`、`docs/specs/template-system/plan.md`、`docs/specs/README.md` | T1～T6、T8（#356）、#357、#365 | TPL-AC01～TPL-AC12 | #331 |
 | T8 | 範圍條件兩種形式與套用同名拒絕：更新數值標準欄位、驗證、遷移、複製與重複名稱檢查 | `backend/`、`docs/specs/template-system/`、必要的 `docs/specs/database-foundation/` | T1、T3、T4 | TPL-AC11、TPL-AC12 | #356 |
+| T9 | 依核可原型重設範本管理 UI：階層導覽與詳情、手機單欄往返、分開新增與改名、單頁項次卡片與即時預覽、欄位錯誤及草稿保留；項目寫入使用既有單項端點，並驗證綁定欄位的 `unit: null` 契約，不變更後端 API | `frontend/src/admin/templates/api.ts`、`api.test.ts`、`TemplatesPage.tsx`、`TemplatesPage.test.tsx`、`TemplateLibraryNav.tsx`、`TemplateItemEditor.tsx`、`InspectionPointCard.tsx`、`MeasurementFieldEditor.tsx`、`NumericStandardEditor.tsx`、`InlineConfirm.tsx`、`templateEditorUtils.ts`（本格省略相同目錄前綴）；`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/styles.css`、`backend/tests/api/test_template_library.py`、`docs/specs/template-system/spec.md`、`docs/specs/template-system/plan.md` | T3、T5、T8 | TPL-AC13～TPL-AC16 | #427 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；任務 issue 開立前應把表內概略檔案責任換成實際檔案清單。
 - 每條本規格 AC 至少由一個任務涵蓋；TPL-AC01、AC08 涵蓋權限及管理員指派稽核，AC02～AC04 涵蓋結構與不版本化，AC05～AC06 涵蓋複製與權限，AC07 涵蓋標準及照片需求，AC09 涵蓋實測欄位結構與單位。
 - 不在本計畫建立報告範本、自主檢查／抽查欄位、現場證據上傳、實測值、自動判定、interval 自動切分或範本審核流程。
 - 任務 issue 已開立，依表格 T1～T7 對應 #325～#331。
 - T8 依負責人追加裁定由 #356 落地；範圍兩種形式與同名拒絕分別對應 TPL-AC11、TPL-AC12。
+- T9 依負責人 [#427 定案留言](https://github.com/speko-tw/inspect-flow/issues/427#issuecomment-5981195507) 與核可原型調整既有 T5 介面；單項 API 沿用 T3，不修改後端產品程式碼。
 - #365（PR #370）補上專案查核項目列表與存成範本 API；#357（PR #376）補上畫面，納入 T7 收尾驗收。
 - #389（負責人依 #387 指示）：Admin 與範本管理員可管理範本庫、存成範本及跨專案瀏覽；一般專案成員維持 403。此變更採用 `backend/app/auth/access.py` 的共用授權判斷，並由 TPL-AC08 API／契約測試及前端 Admin 控制項測試驗證。
 - TPL-AC07 在本規格只驗收範本端每項次至少一筆必填照片需求、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
