@@ -34,7 +34,8 @@ def test_aut_ac16_every_business_route_has_exactly_one_declaration() -> None:
 
 def test_aut_ac16_public_routes_match_the_registered_allowlist() -> None:
     """AUT-AC16: the routes declared 公開 on the real application are
-    exactly the registered health, login, logout and first-setup routes.
+    exactly the registered public health, version, login, logout and
+    first-setup routes.
     """
     app = create_app()
 
@@ -42,6 +43,7 @@ def test_aut_ac16_public_routes_match_the_registered_allowlist() -> None:
     assert PUBLIC_ROUTES == frozenset(
         {
             ("GET", "/api/v1/health"),
+            ("GET", "/api/v1/version"),
             ("POST", "/api/v1/auth/login"),
             ("POST", "/api/v1/auth/logout"),
             ("GET", "/api/v1/setup/status"),
