@@ -157,7 +157,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 - 具體錯誤：不存在的資源回 404 `resource.not_found`。Plan／Task 是 global ID 路徑；資源存在但呼叫者對所屬專案沒有有效權限時，依 AUT-R19 回 403 `permission.denied`。Zone／項目以 `project_id` 為路徑範圍；資源屬於另一專案時回 404 `resource.not_found`，不洩漏跨專案存在性。非法狀態轉換、封存中修改、地點不可修改、分區名稱重複或分區仍被引用分別回 409 `inspection_task.invalid_transition`、`inspection_plan.archived`、`inspection_task.location_locked`、`project_zone.name_conflict`、`project_zone.in_use`。取消原因 trim 後為空回 422 `inspection_task.reason_required`；Task 缺少項目、項目不屬於專案、分區缺少／不允許／跨專案、地點文字超過 256 字元、指派人不是同專案且具 `inspection_task.inspect` 的非 Admin 成員、項目重查選擇未提供，分別回 422 `inspection_task.items_required`、`inspection_task.invalid_project_item`、`inspection_task.invalid_zone`、`inspection_task.invalid_location`、`inspection_task.invalid_assignee`、`project_inspection_item.reinspection_choice_required`。Plan／分區名稱 trim 後為空或超過 128 字元，分別回 422 `inspection_plan.invalid_name`／`project_zone.invalid_name`；更新項目修訂未增加回 422 `project_inspection_item.revision_not_increased`；Task 有待重查項目未完成時回 422 `inspection_task.items_incomplete`。所有 404 使用共用 `resource.not_found`。
 - 專案查核項目 PATCH 成功回應包含修改後完整項目、`reinspection_selected`，以及 `affected_tasks`。每筆 Task 記錄 `task_id`、`prior_status`、目前 `status`、`needs_reinspection` 與處理動作 `draft_updated`、`returned_to_in_progress`、`needs_reinspection`、`updated` 或 `apply_current_standard_on_restore`。
 
-若被修改項目關聯的 Task 位於已封存 Plan，請求須先被拒絕；內業取消相關 Plan 封存後才可重送修改。封存 Plan 的 Task 全部唯讀，取消封存後依目前 Task 狀態重算 Plan 狀態。任何狀態皆可封存依 KD-56；取消封存後重算為本規格規則。已合併的 `state-machines` SM-Q03 已反映 KD-55 項目級行為。
+若被修改項目關聯的 Task 位於已封存 Plan，請求須先被拒絕；內業取消相關 Plan 封存後才可重送修改。封存 Plan 的 Task 全部唯讀：`:start`、`:complete`、`:cancel`、`:restore`、DELETE 草稿及其他 Task 修改，均須先檢查所屬 Plan 是否封存；若已封存，一律回 409 `inspection_plan.archived`，再檢查 Task 狀態轉換。取消封存後依目前 Task 狀態重算 Plan 狀態。任何狀態皆可封存依 KD-56；取消封存後重算為本規格規則。已合併的 `state-machines` SM-Q03 已反映 KD-55 項目級行為。
 
 `project_inspection_item.updated` 稽核事件採 ALG-R07～ALG-R10 欄位規則，由實作 task 登記至 [audit-log 事件目錄](../audit-log/spec.md#template-system-事件)的本規格專屬區段。此事件至少包含變更內容與 `reinspect` 選擇，並與項目、快照及任務變更同一交易寫入。其他實際查核者資料寫在 Task 欄位，不新增替代稽核事件。其餘成功回應、分頁與錯誤格式沿用 API 共用契約。
 
@@ -209,7 +209,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 - 範圍變更（負責人指示，#369）：新增 `ProjectZone` 管理、Task 分區與補充地點欄位及其規則（IP-R10、IP-AC11）— [#73 裁定](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5976192382)、[#369](https://github.com/speko-tw/inspect-flow/issues/369)
 - 規格澄清（#369 留言，非負責人裁定）：分開說明 KD-55 選「要」與「不要」重新查核時對目前 Snapshot 的更新方式 — [#369](https://github.com/speko-tw/inspect-flow/issues/369)
 - 凍結 Plan／Task、Task 項目關聯及 Snapshot 的 IP-R01～IP-R09、IP-AC01～IP-AC10；逐項核對開工門檻並更正 SM-Q12 的引用錨點 — #358
-- 規格澄清：補充 Plan／Task 回應與動作 body、cursor 列表、項目使用 Task 清單、可指派候選人及錯誤碼；`inspection_plan.read` 可讀分區名稱，現場人員讀取 DRAFT Task 回 404 — #361
+- 規格澄清：補充 Plan／Task 回應與動作 body、cursor 列表、項目使用 Task 清單、可指派候選人及錯誤碼；`inspection_plan.read` 可讀分區名稱，現場人員讀取 DRAFT Task 回 404；封存 Plan 下的 Task 動作一律先回 `inspection_plan.archived` — #361
 
 
 <a id="ip-q11"></a>

@@ -615,7 +615,9 @@ def delete_draft_inspection_task(
         session, task.project_id, "inspection_task.delete_draft"
     )
     plan, task = _lock_plan_and_task(session, task.id)
-    if plan is None or plan.is_archived or task.status != "DRAFT":
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status != "DRAFT":
         raise PlanningError("inspection_task.invalid_transition")
     item_count = (
         session.scalar(
@@ -651,11 +653,9 @@ def cancel_inspection_task(
     )
     plan, task = _lock_plan_and_task(session, task.id)
     normalized = reason.strip()
-    if (
-        plan is None
-        or plan.is_archived
-        or task.status not in {"PENDING", "IN_PROGRESS"}
-    ):
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status not in {"PENDING", "IN_PROGRESS"}:
         raise PlanningError("inspection_task.invalid_transition")
     if not normalized:
         raise PlanningError("inspection_task.reason_required")
@@ -683,7 +683,9 @@ def restore_inspection_task(
         session, task.project_id, "inspection_task.cancel"
     )
     plan, task = _lock_plan_and_task(session, task.id)
-    if plan is None or plan.is_archived or task.status != "CANCELLED":
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status != "CANCELLED":
         raise PlanningError("inspection_task.invalid_transition")
     restored = task.cancelled_from_status
     if restored not in {"PENDING", "IN_PROGRESS"}:
@@ -767,7 +769,9 @@ def start_inspection_task(
     if "inspection_task.inspect" not in permissions:
         raise PlanningError("authorization.forbidden")
     plan, task = _lock_plan_and_task(session, task.id)
-    if plan is None or plan.is_archived or task.status != "PENDING":
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status != "PENDING":
         raise PlanningError("inspection_task.invalid_transition")
     task.status = "IN_PROGRESS"
     task.started_by = operator.id
@@ -788,7 +792,9 @@ def complete_inspection_task(
     if "inspection_task.inspect" not in permissions:
         raise PlanningError("authorization.forbidden")
     plan, task = _lock_plan_and_task(session, task.id)
-    if plan is None or plan.is_archived or task.status != "IN_PROGRESS":
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or task.status != "IN_PROGRESS":
         raise PlanningError("inspection_task.invalid_transition")
     items = session.scalars(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)

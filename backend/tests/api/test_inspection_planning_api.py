@@ -275,6 +275,15 @@ def test_plan_task_authorization_cursor_and_draft_visibility(
         world["outsider"].post(base, json={"name": "無權限"}).status_code
         == 403
     )
+    denied_assignees = world["plain"].get(
+        f"/api/v1/projects/{project.id}/inspection-task-assignees"
+    )
+    assert denied_assignees.status_code == 403
+    missing_project_assignees = world["plain"].get(
+        "/api/v1/projects/00000000-0000-7000-8000-000000000000"
+        "/inspection-task-assignees"
+    )
+    assert missing_project_assignees.status_code == 403
 
     zone_response = admin.post(
         f"/api/v1/projects/{project.id}/zones", json={"name": "北區"}
@@ -1026,6 +1035,11 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     assert archived.status_code == 200
     archived_task_path = f"/api/v1/inspection-tasks/{draft_task.json()['id']}"
     archived_operations = (
+        admin.post(f"{archived_task_path}:start"),
+        admin.post(f"{archived_task_path}:complete"),
+        admin.post(f"{archived_task_path}:cancel", json={"reason": "封存中"}),
+        admin.post(f"{archived_task_path}:restore"),
+        admin.delete(archived_task_path),
         admin.post(f"{archived_task_path}:dispatch"),
         admin.post(
             f"{archived_task_path}:assign",

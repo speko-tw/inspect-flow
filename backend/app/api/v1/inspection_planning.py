@@ -695,7 +695,6 @@ def assignees(
     db: Session = _db_dependency,
     _user: User = _login_dependency,
 ):
-    _project_exists(db, project_id)
     permissions = effective_permissions(
         db, user_id=_user.id, project_id=project_id
     )
@@ -705,6 +704,7 @@ def assignees(
         & permissions
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    _project_exists(db, project_id)
     members = db.scalars(
         select(ProjectMember).where(ProjectMember.project_id == project_id)
     ).all()
