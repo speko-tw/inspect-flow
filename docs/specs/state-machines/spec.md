@@ -2,28 +2,28 @@
 
 **代碼**：`STM`　**Phase**：P4、P6、P7、P8　**狀態**：部分凍結
 **前置規格**：[domain-model](../domain-model/spec.md)、[api-conventions](../api-conventions/spec.md)
-**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[PR-05](../../intents/02-principles.md#pr-05)、[PR-06](../../intents/02-principles.md#pr-06)、[PR-15](../../intents/02-principles.md#pr-15)、[PR-16](../../intents/02-principles.md#pr-16)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)
-**被擋議題**：[G-05](../../intents/05-open-questions.md#g-05)、[G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)
+**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[PR-05](../../intents/02-principles.md#pr-05)、[PR-06](../../intents/02-principles.md#pr-06)、[PR-15](../../intents/02-principles.md#pr-15)、[PR-16](../../intents/02-principles.md#pr-16)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-25](../../intents/03-decisions-and-stack.md#kd-25)、[KD-26](../../intents/03-decisions-and-stack.md#kd-26)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64)、[KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[KD-67](../../intents/03-decisions-and-stack.md#kd-67)
+**被擋議題**：[G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07)
 **凍結範圍**：Plan／Task 的 STM-R01～R06、STM-R09～R11、STM-R13～R18 中適用於 Plan／Task 的內容，以及 STM-AC01～AC05、STM-AC08～AC15；Evidence／Report 的需求與 AC 維持草稿。
 
 ## 目的
 
-定義 `Inspection Plan`、`Inspection Task`、`Evidence` 與 `Report` 的狀態和轉換邊界，讓後端能一致地驗證業務動作並保留可追溯紀錄（依據：架構基準 §18、§20.6–20.8、§20.17；[PR-16](../../intents/02-principles.md#pr-16)）。Plan／Task 已裁定的狀態行為依部分凍結規則凍結；Evidence 與 Report 仍受各自待決議題阻擋，維持草稿。
+定義 `Inspection Plan`、`Inspection Task`、`Evidence` 與 `Report` 的狀態和轉換邊界，讓後端能一致地驗證業務動作並保留可追溯紀錄（依據：架構基準 §18、§20.6–20.8、§20.17；[PR-16](../../intents/02-principles.md#pr-16)）。Plan／Task 已裁定的狀態行為依部分凍結規則凍結；Evidence 政策依 KD-61～KD-64 已決定，但 Evidence 的需求與 AC 仍維持草稿；Report 仍受 G-06／G-07 阻擋並維持草稿。
 
 ## 範圍
 
 **包含**：
 
-- `Inspection Plan` 與 `Inspection Task` 的已裁定狀態轉換及明確標示的規格設計；Evidence 與 Report 的草稿狀態提案。
+- `Inspection Plan` 與 `Inspection Task` 的已裁定狀態轉換及明確標示的規格設計；Evidence 與 Report 的草稿狀態提案。Evidence 的照片流程與刪除／保留政策依 KD-61～KD-64 已決定，狀態整理及本規格凍結範圍仍維持草稿。
 - 狀態轉換由後端 Service 層控制的介面邊界。
-- 四種實體狀態機之間已確定的關係；Evidence 與 Report 的狀態機仍受各自待決議題阻擋。
+- 四種實體狀態機之間已確定的關係；Report 狀態機仍受 G-06／G-07 阻擋。Evidence 已決定的照片與刪除政策見 KD-61～KD-64；本規格不因此擴大凍結範圍。
 
 **不包含**：
 
 - 實體欄位、關聯與完整資料模型（由 [domain-model](../domain-model/spec.md) 負責）。
 - API 的共通格式（由 [api-conventions](../api-conventions/spec.md) 負責）。
 - 計畫與任務的建立、組成、指派、派出操作及任務產生規則（由 `inspection-planning` 規格負責）；本規格定義派出後的狀態效果及計畫狀態彙總。`inspection-planning` 亦負責計畫登記及相關操作契約。
-- 證據上傳、刪除 API、保留期限及實體刪除政策（受 [G-05](../../intents/05-open-questions.md#g-05) 阻擋，獨立照片刪除與保留政策排入 0.6.x；相關功能由 `field-evidence` 規格負責）。
+- 證據上傳、刪除 API、保留期限及實體刪除政策（政策已由 [KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62) 決定；相關功能由 0.6.x `field-evidence` 規格負責，本規格不判定 Evidence 是否可凍結）。
 - 報告欄位、版次治理與輸出內容（由 `report-delivery` 規格負責；其中狀態和快照邊界受 [G-06](../../intents/05-open-questions.md#g-06)、[G-07](../../intents/05-open-questions.md#g-07) 阻擋）。
 
 ## 使用情境
@@ -49,8 +49,8 @@
 | STM-R07 | 正式 `Report` 必須作為持久化、版本化實體保存產製時的資料快照；具備相應權限代碼的使用者可在產製完成後直接核發，不須送審；錯誤的已核發報告以新版取代，保留舊版並標示已被取代。 | 必須／應 | 負責人裁定：[報告裁定留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)；[PR-06](../../intents/02-principles.md#pr-06)；持久化與快照為必須，版本取代為裁定規則 |
 | STM-R08 | `Report` 產製失敗時不得誤標為產製完成；產製中／失敗狀態及錯誤資訊保留方式應依 PR-15 設計，具體狀態集合須待 G-06 裁定後凍結。 | 「不得誤標為產製完成」必須；其餘應 | [PR-15](../../intents/02-principles.md#pr-15)；架構基準 §20.17；[G-06](../../intents/05-open-questions.md#g-06) |
 | STM-R09 | `Inspection Plan` 與 `Inspection Task` 各狀態的進入條件、允許動作及操作者範圍，須依本規格明確列出；未裁定的轉換標示為草稿，不得由技術提案推定。Evidence 與 Report 的同項整理亦屬草稿。 | 必須 | [OQ-09](../../intents/05-open-questions.md#oq-09)；本規格之可追溯需求 |
-| STM-R10 | Task 完成時，伺服器必須覆核完成條件；有待重查項目的 Task 不得完成。查核結果欄位驗證與寫入屬 0.7.x。本規格不另設單位欄位或單位系統；項次設有數值標準時，對應實測欄位的單位須與數值標準相同，由系統自動帶入、不得另設，現場自行換算且單位換算不在本次範圍。實測欄位定義（型別、單位）屬 0.3.x，現場填值屬 0.7.x。不得依標準值自動判定結果。含「不符合」結果時，只要必要資料完整仍可完成，並於任務清單標示「有缺失」旗標（非狀態）；改善追蹤屬 0.7.x。 | 完成時伺服器覆核、數值標準對應單位相同且由系統帶入不得另設：必須；其他依裁定與 0.7.x 範圍 | 負責人裁定：[同一留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；[PR-01](../../intents/02-principles.md#pr-01)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37) |
-| STM-R11 | 同專案且具現場查核權限的成員皆得開始與完成任務，指派僅供參考；系統必須記錄實際操作者，報告與稽核以實際查核人為準。 | 必須 | 負責人裁定：[SM-Q12 裁定](https://github.com/speko-tw/inspect-flow/issues/100#issuecomment-5968301878)；權限代碼依 [OQ-08](../../intents/05-open-questions.md#oq-08)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29) |
+| STM-R10 | Task 完成時，伺服器必須覆核完成條件；有待重查項目的 Task 不得完成。查核結果欄位驗證與寫入屬 0.7.x。本規格不另設單位欄位或單位系統；項次設有數值標準時，對應實測欄位的單位須與數值標準相同，由系統自動帶入、不得另設，現場自行換算且單位換算不在本次範圍。實測欄位定義（型別、單位）屬 0.3.x，現場填值屬 0.7.x。不得依標準值自動判定結果。含「不符合」結果時，只要必要資料完整仍可完成，並於任務清單標示「有缺失」旗標（非狀態）；改善追蹤屬 0.7.x。 | 完成時伺服器覆核、數值標準對應單位相同且由系統帶入不得另設：必須；其他依裁定與 0.7.x 範圍 | 負責人裁定：[同一留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；簡易改善追蹤排程由維護者依負責人授權決定（#388），見 [KD-65](../../intents/03-decisions-and-stack.md#kd-65)；[PR-01](../../intents/02-principles.md#pr-01)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37) |
+| STM-R11 | 同專案且具現場查核權限的成員皆得開始與完成任務，指派僅供參考；系統必須記錄實際操作者，報告與稽核以實際查核人為準。 | 必須 | 負責人裁定：[SM-Q12 裁定](https://github.com/speko-tw/inspect-flow/issues/100#issuecomment-5968301878)；權限模型依負責人裁定（#387），見 [OQ-08](../../intents/05-open-questions.md#oq-08)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-67](../../intents/03-decisions-and-stack.md#kd-67) |
 | STM-R13 | 未完成的 Task（`PENDING` 或 `IN_PROGRESS`）得由內業取消，必須填原因；取消後保留照片與結果、顯示取消紀錄且不計入 Plan 完成判定。`COMPLETED` Task 不得取消。 | 必須 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262) |
 | STM-R14 | 已取消 Task 得由沿用取消權限代碼的內業恢復至取消前狀態；不要求恢復原因。恢復後 Plan 狀態依目前 Task 集合重新推導。 | 得；權限與原因屬規格設計 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[#103 留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5969654262) |
 | STM-R15 | 未派出的草稿 Task 得直接刪除；已派出的 Task 不得刪除，只能依 STM-R13 取消。 | 得 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[#103 補充留言](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986) |
@@ -62,7 +62,7 @@
 
 - `Inspection Plan`、`Inspection Task`、`Evidence`、`Report` 的屬性與關聯由 [domain-model](../domain-model/spec.md) 定義；本規格只定義其狀態行為。
 - 建立 `Inspection Task` 時保存 `Task Requirement Snapshot`；不得為 `Inspection Template` 新增版本實體或狀態（[PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)）。
-- `Evidence` 的照片內容依 [PR-05](../../intents/02-principles.md#pr-05) 保存為現場版與內業版；證據刪除與保留政策尚受 G-05 阻擋。
+- `Evidence` 的照片流程依維護者授權決定（#388）見 [KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64)，刪除與保留政策依同一授權見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)；本規格不判定 Evidence 狀態需求與 AC 是否可凍結。
 - `Report` 作為持久化版本實體保存資料快照；具體快照時間點和草稿版次邊界待 G-07 裁定（[PR-06](../../intents/02-principles.md#pr-06)）。
 
 **門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，比對開工門檻內 G-01～G-07、OQ-06 的「為什麼要先決定」及選項原文；結論只判斷是否阻擋本次 Plan／Task 狀態行為凍結）：
@@ -71,16 +71,16 @@
 |---|---|---|---|
 | G-01 | 是，點名 `Inspection Plan`、`Inspection Task` 與 `Task Requirement Snapshot` | 不阻擋本次 MVP 凍結 | MVP 已裁定不需要 interval；未決歸屬與快照只適用未來選用的自動切分功能。本次凍結範圍不含該功能，開工門檻明定未定部分不擋 MVP 凍結。 |
 | G-02 | 選項範例路徑含 `task_id` | 不相關 | 只以 Task ID 作證據儲存路徑的一段，不影響 Task 欄位、狀態或規則，適用只用 ID 引用例外；原圖模型已裁定。 |
-| G-03 | 否 | 不阻擋本次凍結 | 未決內容是 Evidence 編輯／上傳時序、離線暫存、前後端分工與重試，不改變本次 Plan／Task 狀態行為。 |
+| G-03 | 否 | 不阻擋本次凍結 | 照片流程已由維護者依負責人授權決定（#388），見 KD-61；不改變本次 Plan／Task 狀態行為。 |
 | G-04 | 否 | 不相關 | 議題討論 Evidence Variant 核可機制，且已裁定不另設核可流程；不影響 Plan／Task 狀態行為。 |
-| G-05 | 否 | 不阻擋本次凍結 | 未決內容是 Evidence 獨立刪除 API、保留期限及已被 Report 引用證據的處理；Evidence 範圍維持草稿。 |
+| G-05 | 否 | 不阻擋本次凍結 | Evidence 刪除與保留政策已由維護者依負責人授權決定（#388），見 KD-62；本表只判斷 Plan／Task，Evidence 是否可凍結不在本次判定範圍。 |
 | G-06 | 否 | 不阻擋本次凍結 | 未決內容是 Report 完整狀態機；Report 範圍維持草稿。 |
 | G-07 | 否 | 不阻擋本次凍結 | 未決內容是 Report 快照時點與草稿版次邊界；Report 範圍維持草稿。 |
 | OQ-06 | 是，提到任務完成判定 | 不阻擋本次凍結 | Result 語意與完成必要資料已由 KD-54 裁定；尚未定的 Defect／改善追蹤在 0.7.x，報告呈現不屬 Plan／Task 凍結範圍。 |
 
 ### 凍結範圍與阻擋議題
 
-Plan／Task 狀態行為依標頭所列需求與 AC 凍結。STM-AC07、Evidence／Report 的 STM-R07、STM-R08、STM-AC06，以及 Evidence／Report 表格、需求與議題段落均維持草稿；G-05、G-06、G-07 仍阻擋各自範圍。G-01 未決 interval 歸屬與快照規則只屬未來選用功能，不阻擋 MVP 狀態行為凍結。`inspection-planning` 負責 Plan／Task 建立、組成、派出操作與現場可見性及操作契約；本規格負責派出後的狀態效果、狀態轉換及 Plan 狀態彙總。資料模型仍由 `domain-model` 負責；Plan／Task、Task 項目關聯與 Snapshot 已由 DOM-R56～DOM-R57 凍結，本規格本次只凍結狀態行為。
+Plan／Task 狀態行為依標頭所列需求與 AC 凍結。STM-AC07、Evidence／Report 的 STM-R07、STM-R08、STM-AC06，以及 Evidence／Report 表格、需求與議題段落均維持草稿；Report 仍受 G-06、G-07 阻擋。Evidence 的照片流程與刪除／保留政策已由 KD-61～KD-64 決定，但其需求與 AC 是否可凍結不在 #404 判定範圍。G-01 未決 interval 歸屬與快照規則只屬未來選用功能，不阻擋 MVP 狀態行為凍結。`inspection-planning` 負責 Plan／Task 建立、組成、派出操作與現場可見性及操作契約；本規格負責派出後的狀態效果、狀態轉換及 Plan 狀態彙總。資料模型仍由 `domain-model` 負責；Plan／Task、Task 項目關聯與 Snapshot 已由 DOM-R56～DOM-R57 凍結，本規格本次只凍結狀態行為。
 
 ## 狀態與轉換
 
@@ -122,7 +122,7 @@ Task 建立後為草稿，派出後現場才看得到，進入未開始查核階
 
 ### Evidence
 
-MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原圖或編輯中間圖（[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[PR-05](../../intents/02-principles.md#pr-05)）。來源尚未裁定 Evidence 的狀態集合、刪除及保留期限（[G-05](../../intents/05-open-questions.md#g-05)）。
+MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原圖或編輯中間圖（[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[PR-05](../../intents/02-principles.md#pr-05)）。照片流程依維護者依負責人授權決定（#388）見 [KD-61](../../intents/03-decisions-and-stack.md#kd-61)，刪除與保留政策依同一授權見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)。Evidence 狀態集合及本規格需求與 AC 的凍結狀態仍維持草稿；#404 不裁定是否可凍結。
 
 | 階段／狀態 | 動作與後續階段 | 觸發者 | 裁定／提案及說明 |
 |---|---|---|---|
@@ -136,10 +136,10 @@ MVP 的 Evidence 只收照片；照片保存現場版與內業版，不保存原
 | 內業版產製失敗 | 原操作者重試產製 → 內業版產製中 | 原產製者（提案） | 具備相應權限代碼的原操作者得重試；錯誤資訊與清理方式依 SM-Q13 規格設計。 |
 | 現場版已保存 | 更正現場照片 → 更新唯一現場版 | 具照片更正權限代碼的使用者（現場與內業皆得，KD-42） | 得有限度編修並確認；仍只保存一張現場版，不保存原圖或中間版本（PR-05）。 |
 | 內業版已保存 | 更正內業照片 → 更新同一張內業版 | 具照片更正權限代碼的使用者（現場與內業皆得，KD-42） | 得編修並直接更新內業版，不另增版本或中間檔（PR-05）；更正是否需原因及額外紀錄依 SM-Q13 規格設計。 |
-| 任一已保存照片 | 所屬項目依 KD-55 作廢 → 標記該項照片作廢並排除於後續報告資料 | 系統 | 該項舊照片保留並標示「標準變更作廢」，內業可查找；同 Task 其他項目照片不受影響。獨立 Evidence 刪除與保留政策仍待 G-05。 |
-| 任一已保存照片 | 刪除、撤回、保留期限到期 | 觸發者與政策待決 | 不提出可執行的刪除轉換；見 G-05、SM-Q07。 |
+| 任一已保存照片 | 所屬項目依 KD-55 作廢 → 標記該項照片作廢並排除於後續報告資料 | 系統 | 該項舊照片保留並標示「標準變更作廢」，內業可查找；同 Task 其他項目照片不受影響。獨立刪除與保存政策依維護者依負責人授權決定（#388），見 KD-62。 |
+| 任一已保存照片 | 刪除、撤回、保留期限到期 | 觸發者與政策依 KD-62；細節由 0.6.x `field-evidence` 規格負責 | 本列維持草稿提案，不作為 Evidence 狀態轉換或凍結判斷；照片刪除與保留政策已由維護者依負責人授權決定（#388），見 KD-62。 |
 
-「上傳中」「上傳失敗待處理」「已保存」「現場版已保存」「內業版產製中／失敗」是描述階段的技術提案，不是來源已裁定的 Evidence 狀態值。Evidence 照片更正須依 PR-05 保持每張照片僅有現場版及內業版；MVP 不含非照片 Evidence（KD-53）。KD-55 作廢以項目為單位標記其結果與照片，保留並供內業查找，不另設整個 Task 的作廢狀態；獨立照片刪除 API、刪除方式與保留政策待 SM-Q07／G-05。上傳／內業版產製失敗依 SM-Q13 規格設計處理。
+「上傳中」「上傳失敗待處理」「已保存」「現場版已保存」「內業版產製中／失敗」是描述階段的技術提案，不是來源已裁定的 Evidence 狀態值。現場版上傳、內業版產生與失敗重送依維護者依負責人授權決定（#388），見 KD-61、KD-63；Evidence 照片更正須依 PR-05 保持每張照片僅有現場版及內業版；MVP 不含非照片 Evidence（KD-53）。KD-55 作廢以項目為單位標記其結果與照片，保留並供內業查找，不另設整個 Task 的作廢狀態；刪除與保留政策依同一授權決定，見 KD-62。具體狀態、權限、API 與失敗產物表示由 `field-evidence` 規格設計，本段不判定 Evidence 是否可凍結。
 
 ### Report
 
@@ -241,11 +241,11 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 - 任務完成失敗採單一資料庫交易；含「不符合」仍可完成的裁定與必要資料條件見 STM-R10、SM-Q15。
 
 <a id="sm-q07"></a>
-### SM-Q07：Evidence 照片是否可獨立刪除，如何保留？
+### SM-Q07：Evidence 照片是否可獨立刪除，如何保留？（已決定）
 
-- **情境**：使用者要求獨立移除照片，或照片已被報告引用。KD-55 項目作廢時僅該項照片標記作廢並由報告排除；此規則不決定獨立照片刪除與保留政策。
-- **選項**：刪除流程可選 A. 不提供獨立刪除；B. 具相應權限代碼的使用者提出刪除，另一具權限者核准後軟刪除；C. 具相應權限代碼的使用者可直接軟刪除，已被報告引用時改為封存。另須決定保留期限。
-- **影響**：決定照片能否取回、報告引用處理及儲存成本；獨立照片刪除 API、刪除語意與保留政策仍由 G-05 裁定，排入 0.6.x，不屬本規格本輪開工範圍。依據：[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[G-05](../../intents/05-open-questions.md#g-05)。
+- **裁定**：任務完成前，照片得由拍照者或內業軟刪除並寫稽核；任務完成後不可刪除，只能依 KD-42 修正；已被核發報告引用的照片不刪除；KD-55 作廢資料保留；MVP 不自動清除，保存期限隨專案。依維護者依負責人授權決定（#388），見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)。
+- **待規格化**：權限代碼、API、具體狀態表示及各操作的驗收由 0.6.x `field-evidence` 規格負責。本條更新裁定狀態，不判定 Evidence 是否可凍結。
+- 原選項不再作為待選方案；裁定由 KD-62 取代。
 
 <a id="sm-q08"></a>
 ### SM-Q08：報告狀態清單如何整併？（業務部分併入 SM-Q14）
@@ -268,19 +268,19 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 ### SM-Q12：誰能開始與完成 Inspection Task？（已裁定）
 
 - **裁定**：選 B。同專案且具現場查核權限的成員皆得開始與完成任務；指派只是建議。系統必須記錄實際操作者（開始、完成等），報告與稽核以實際查核人為準。
-- **依據**：負責人裁定 [#100 留言](https://github.com/speko-tw/inspect-flow/issues/100#issuecomment-5968301878)；權限依 [OQ-08](../../intents/05-open-questions.md#oq-08)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)，不寫固定職稱。原 SM-Q12 選項題保留錨點與編號（RG-M08）。
+- **依據**：負責人裁定 [#100 留言](https://github.com/speko-tw/inspect-flow/issues/100#issuecomment-5968301878)；角色與權限模型依負責人裁定（#387），見 [OQ-08](../../intents/05-open-questions.md#oq-08)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-67](../../intents/03-decisions-and-stack.md#kd-67)，不寫固定職稱。原 SM-Q12 選項題保留錨點與編號（RG-M08）。
 
 <a id="sm-q13"></a>
 ### SM-Q13：照片上傳、照片更正與內業版產製失敗怎麼處理？（規格設計，非負責人裁定）
 
 - **適用範圍**：MVP 的 Evidence 只收照片（[KD-53](../../intents/03-decisions-and-stack.md#kd-53)）；非照片 Evidence 不在本題或本規格範圍。
 - **規格設計**：原操作者可重試上傳／產製；系統記錄錯誤並清理或標記未完成產物以供安全重試。照片更正依 KD-42，具照片更正權限代碼的使用者（現場與內業皆得）可修正；保存規則仍依 PR-05，只保留現場版及內業版，不保留原圖或中間圖。理由是維持裁定權限與既定照片資料邊界（[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[PR-05](../../intents/02-principles.md#pr-05)）。
-- **作廢照片**：依 KD-55 標記所屬查核項目的舊照片為作廢；不另設整個 Task 的作廢狀態。G-05 的獨立刪除 API／保留不由此設計決定。
+- **作廢照片**：依 KD-55 標記所屬查核項目的舊照片為作廢；不另設整個 Task 的作廢狀態。獨立刪除與保留政策依維護者依負責人授權決定（#388），見 KD-62；API 與狀態表示由 `field-evidence` 規格負責。
 
 <a id="sm-q14"></a>
 ### SM-Q14（含原 SM-Q08 業務問題）：Report 產製狀態採何來源？（部分已裁定）
 
-- **已裁定**：Report 產製完成後由具備核發權限的使用者直接核發，不送審；錯誤的已核發 Report 以新版本取代，舊版保留並標示已取代。依負責人裁定 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)。不使用固定職稱或角色矩陣；權限依 OQ-08／KD-24～KD-29。
+- **已裁定**：Report 產製完成後由具備核發權限的使用者直接核發，不送審；錯誤的已核發 Report 以新版本取代，舊版保留並標示已取代。依負責人裁定 [#78 留言](https://github.com/speko-tw/inspect-flow/issues/78#issuecomment-5967467998)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)。不使用固定職稱或角色矩陣；權限模型依負責人裁定（#387），見 OQ-08／KD-60／KD-67。
 - **仍待裁定**：G-06 §20.6 與 §20.17 的其他產製狀態如何整併，以及 `VOID` 等狀態的適用範圍；G-07 的快照、Preview、草稿重產及正式版次界線亦未定。[#94 留言](https://github.com/speko-tw/inspect-flow/issues/94#issuecomment-5967468330)確認其他報告產製狀態仍待決。
 - 原 SM-Q08 業務部分併入本題並保留編號與錨點定位（RG-M08）。
 
@@ -306,8 +306,8 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 
 ## 待決議題來源對照
 
-- **OQ-09 部分裁定**：KD-42 已確定完成後更正仍維持完成、Plan 自動完成；KD-56 裁定派出、取消、恢復、封存、草稿完成條件及 Plan／Task 狀態連動。KD-03 已確定 `Inspection Template` 不版本化；KD-55 已確定項目層級作廢與文字更正例外。SM-Q12 已裁定：同專案具現場查核權限的成員都可開始／完成；指派僅供參考，記錄實際查核人。Plan／Task 欄位與關聯由 domain-model 規格負責；Plan／Task、Task 項目關聯與 Snapshot 已由 DOM-R56～DOM-R57 凍結，不影響本規格狀態行為凍結。Evidence／Report 狀態分別受 G-05、G-06、G-07 阻擋。
-- **G-05**：獨立 Evidence 刪除 API、軟／硬刪除、被報告引用的處理及保留期限未定，排入 0.6.x。
+- **OQ-09 部分裁定**：KD-42 已確定完成後更正仍維持完成、Plan 自動完成；KD-56 裁定派出、取消、恢復、封存、草稿完成條件及 Plan／Task 狀態連動。KD-03 已確定 `Inspection Template` 不版本化；KD-55 已確定項目層級作廢與文字更正例外。SM-Q12 已裁定：同專案具現場查核權限的成員都可開始／完成；指派僅供參考，記錄實際查核人。Plan／Task 欄位與關聯由 domain-model 規格負責；Plan／Task、Task 項目關聯與 Snapshot 已由 DOM-R56～DOM-R57 凍結，不影響本規格狀態行為凍結。Evidence 政策已由 KD-61～KD-64 決定；Evidence 狀態整理仍維持草稿，Report 狀態仍受 G-06、G-07 阻擋。
+- **G-05（已決定）**：照片刪除與保留依維護者依負責人授權決定（#388），見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)；API、權限及具體狀態表示由 0.6.x `field-evidence` 規格負責。
 - **G-06**：Report 其他產製狀態清單在 §20.6 和 §20.17 不一致，仍待裁定；直接核發及錯誤版次取代已依負責人裁定記錄。
 - **G-07**：Report Snapshot 時點、Preview／草稿重產是否覆寫及新版本何時取得新 ID 未定。
 
@@ -316,3 +316,4 @@ STM-AC08 的結果欄位驗證與寫入屬 0.7.x，不屬本規格本輪實作�
 - 對齊 #375 路線圖，將本規格涵蓋的 Report Phase 由 P9 更新為 P8 — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 - 依 #100／#103 裁定及補充裁定對齊 Plan／Task 狀態規則，並依部分凍結規則凍結標頭列出的狀態行為範圍；Evidence／Report 分別受 G-05／G-06／G-07 阻擋。本 PR 不修改 intents — #348。依據：[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57) 已由主線合併。
+- 對齊已決定的 Evidence 流程與刪除政策（KD-61、KD-62），並修正 G-03／G-05 阻擋狀態與權限依據；不擴大凍結範圍 — [#404](https://github.com/speko-tw/inspect-flow/issues/404)
