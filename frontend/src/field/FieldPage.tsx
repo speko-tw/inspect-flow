@@ -13,6 +13,7 @@ import {
   type MyCompanyProfile,
   type MyProject,
 } from './api'
+import { listAllProjects, type ProjectSummary } from './projectTemplatesApi'
 
 const EMPTY = '—'
 const COMPANY_ERROR = '無法載入公司資料，請稍後再試。'
@@ -59,6 +60,21 @@ export default function FieldPage() {
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const profile = useLoaded(fetchMyCompanyProfile)
   const projects = useLoaded(fetchMyProjects)
+  const [allProjects, setAllProjects] = useState<ProjectSummary[] | null>(null)
+
+  useEffect(() => {
+    let active = true
+    listAllProjects()
+      .then((items) => {
+        if (active) setAllProjects(items)
+      })
+      .catch(() => {
+        if (active) setAllProjects(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <div className="app-shell">
@@ -125,6 +141,24 @@ export default function FieldPage() {
             <ProjectsTable projects={projects.value} />
           )}
         </section>
+        {allProjects && (
+          <section aria-labelledby="all-projects-heading">
+            <h3 id="all-projects-heading">所有專案</h3>
+            {allProjects.length === 0 ? (
+              <p>目前沒有專案。</p>
+            ) : (
+              <ul>
+                {allProjects.map((project) => (
+                  <li key={project.id}>
+                    <Link to={`/field/projects/${project.id}`}>
+                      {project.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </main>
     </div>
   )
@@ -173,6 +207,7 @@ function ProjectsTable({ projects }: { projects: MyProject[] }) {
           <th scope="col">預定開工</th>
           <th scope="col">預定完工</th>
           <th scope="col">我的角色</th>
+          <th scope="col">查核項目</th>
         </tr>
       </thead>
       <tbody>
@@ -188,6 +223,9 @@ function ProjectsTable({ projects }: { projects: MyProject[] }) {
               {project.role_names.length > 0
                 ? project.role_names.join('、')
                 : '未指派角色'}
+            </td>
+            <td>
+              <Link to={`/field/projects/${project.id}`}>套用範本</Link>
             </td>
           </tr>
         ))}

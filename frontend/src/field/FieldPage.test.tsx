@@ -58,10 +58,12 @@ function stubBackend({
   profile = PROFILE,
   projects = PROJECTS,
   failProjects = false,
+  allProjects = null,
 }: {
   profile?: Partial<MyCompanyProfile> | MyCompanyProfile
   projects?: MyProject[]
   failProjects?: boolean
+  allProjects?: Array<{ id: string; name: string }> | null
 } = {}) {
   vi.stubGlobal(
     'fetch',
@@ -74,6 +76,14 @@ function stubBackend({
         return failProjects
           ? Response.json({ error: { code: 'x' } }, { status: 500 })
           : Response.json(projects)
+      }
+      if (url.endsWith('/projects')) {
+        return allProjects === null
+          ? Response.json(
+              { error: { code: 'permission.denied' } },
+              { status: 403 },
+            )
+          : Response.json(allProjects)
       }
       return Response.json([])
     }),
@@ -205,5 +215,27 @@ describe('我的工作台', () => {
     const profile = screen.getByRole('region', { name: '我的資料' })
     expect(within(profile).getAllByText('—')).toHaveLength(3)
     await screen.findByText('目前沒有參與的專案')
+  })
+
+  it('GET projects 為 403 時不顯示跨專案入口', async () => {
+    stubBackend()
+    renderPage()
+    await screen.findByText('示範工程甲')
+    expect(
+      screen.queryByRole('heading', { name: '所有專案' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('範本管理員能看全部專案的入口', async () => {
+    stubBackend({ allProjects: [{ id: 'p3', name: '示範工程丙' }] })
+    renderPage()
+    const section = await screen.findByRole('region', {
+      name: '所有專案',
+    })
+    expect(
+      within(section).getByRole('link', {
+        name: '示範工程丙',
+      }),
+    ).toHaveAttribute('href', '/field/projects/p3')
   })
 })

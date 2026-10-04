@@ -9,6 +9,7 @@ import SetupGate from './setup/SetupGate'
 
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
+const ProjectTemplatesPage = lazy(() => import('./field/ProjectTemplatesPage'))
 const SetupPage = lazy(() => import('./setup/SetupPage'))
 
 export default function App() {
@@ -65,6 +66,14 @@ export default function App() {
           element={
             <RequireAuth key="field">
               <FieldPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/field/projects/:projectId"
+          element={
+            <RequireAuth key="project-templates">
+              <ProjectTemplatesPage />
             </RequireAuth>
           }
         />
