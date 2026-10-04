@@ -527,6 +527,8 @@ def test_photo_requirements_are_required_unbounded_and_photo_only(clients):
         )
 
     for invalid_requirement in (
+        {"min_count": 0},
+        {"required": False, "min_count": 1},
         {"min_count": 1, "evidence_type": "text"},
         {"min_count": 1, "max_count": 1},
         {"min_count": 1, "overview": True},
