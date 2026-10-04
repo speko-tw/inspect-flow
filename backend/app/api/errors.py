@@ -8,6 +8,8 @@ an equivalent table.
 """
 
 import logging
+import traceback
+import uuid
 from enum import StrEnum
 
 from fastapi import FastAPI, Request
@@ -273,27 +275,34 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_unhandled_exception(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        # Deliberately omit the exception message and traceback
-        # (no ``exc_info``, no ``str(exc)``): an unhandled
-        # exception's message may embed request data such as an
-        # authorization token, and logging it would leak that
-        # value (RG-M17 forbids logging authorization tokens).
-        # The actual request path is also omitted -- a path
-        # parameter's value may itself be sensitive (RG-M17) -- so
-        # only the route template (e.g. ``/leaky/{token}``) is
-        # recorded, not the resolved path. Only the exception type,
-        # the method and the route template are safe to record.
+        # Do not format the exception, traceback source lines, locals,
+        # request path, headers, or body: any can contain credentials.
+        # Frame metadata provides actionable stack locations without
+        # serializing application data (RG-M17).
         route = request.scope.get("route")
         template = getattr(route, "path", None)
         if not isinstance(template, str):
             template = "<unmatched>"
+        request_id = uuid.uuid4().hex
+        frames = []
+        if exc.__traceback__ is not None:
+            for frame, line_number in traceback.walk_tb(exc.__traceback__):
+                frames.append(
+                    f"{frame.f_code.co_filename.rsplit('/', 1)[-1]}:"
+                    f"{line_number} in {frame.f_code.co_name}"
+                )
+        safe_traceback = " -> ".join(frames) or "<no frames>"
         logger.error(
-            "Unhandled %s during %s %s",
-            type(exc).__name__,
+            "Unhandled exception request_id=%s method=%s type=%s "
+            "route=%s traceback=%s",
+            request_id,
             request.method,
+            type(exc).__name__,
             template,
+            safe_traceback,
         )
         return JSONResponse(
             status_code=500,
             content={"error": {"code": ErrorCode.SERVER_INTERNAL_ERROR.value}},
+            headers={"X-Request-ID": request_id},
         )

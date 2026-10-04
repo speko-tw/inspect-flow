@@ -73,17 +73,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session
 
 from app.db import clock
 from app.models import AuditLog, User
-from app.services.operator import (
-    MultipleOperatorsFoundError,
-    OperatorNotFoundError,
-    get_current_operator,
-)
+from app.services.operator import get_current_operator, get_system_operator
 
 # ALG-R07: an event code's format, e.g. ``role.updated`` or
 # ``project_member.roles_changed``. The segment before the dot is
@@ -484,21 +478,7 @@ def _resolve_system_operator(session: Session) -> User:
     user or not) -- ``user.locked`` is written while handling an
     anonymous login request.
     """
-    try:
-        operator = session.scalars(
-            select(User).where(User.is_system.is_(True))
-        ).one_or_none()
-    except MultipleResultsFound as exc:
-        raise MultipleOperatorsFoundError(
-            "more than one is_system=True User found; DOM-R11/DOM-R13 "
-            "expect exactly one once the system has been initialized"
-        ) from exc
-    if operator is None:
-        raise OperatorNotFoundError(
-            "no is_system=True User found; has the initialization "
-            "command (DOM-R11) been run against this database?"
-        )
-    return operator
+    return get_system_operator(session)
 
 
 def record_audit_event(
