@@ -1,7 +1,7 @@
 .PHONY: help setup setup-backend setup-frontend check \
-	check-env check-backend check-postgres check-frontend \
+	check-env check-version check-backend check-postgres check-frontend \
 	migrate init reset-admin-password run-backend run-frontend \
-	dev-cert run-frontend-https
+	dev-cert run-frontend-https version
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -14,6 +14,7 @@ help:
 		'  make migrate                Apply database migrations' \
 		'  make init                   Create admin and first-login code' \
 		'  make reset-admin-password   Reset the built-in admin password' \
+		'  make version                Show the release version and commit' \
 		'  make run-backend            Start the backend development server' \
 		'  make run-frontend           Start the frontend development server' \
 		'  make dev-cert               Create the local HTTPS certificate' \
@@ -61,6 +62,10 @@ reset-admin-password:
 run-backend:
 	cd backend && uv run --locked uvicorn app.main:app --reload \
 		--host 127.0.0.1 --port 8000
+
+# Print the same release identity as the backend startup log and API.
+version:
+	cd backend && uv run --locked python -m app version
 
 run-frontend:
 	cd frontend && npm run dev
@@ -117,6 +122,7 @@ run-frontend-https: dev-cert
 # the later ones.
 check:
 	$(MAKE) --no-print-directory check-env
+	$(MAKE) --no-print-directory check-version
 	$(MAKE) --no-print-directory check-backend
 	$(MAKE) --no-print-directory check-postgres
 	$(MAKE) --no-print-directory check-frontend
@@ -137,6 +143,10 @@ check-env:
 	fi
 	@test -f .env.example || \
 		(echo ".env.example is missing" && exit 1)
+
+# VERSION is the source of truth; keep both package manifests aligned.
+check-version:
+	python3 scripts/check-version.py
 
 check-backend:
 	cd backend && uv run --locked ruff format --check .
