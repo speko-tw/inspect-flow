@@ -43,10 +43,10 @@ InspectFlow 是**工程查核系統**，涵蓋公共與私人工程的施工查�
 |---|---|
 | 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
 | 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立查核計畫、指派工程師、批次產生任務、監看完成度、審閱照片並產生報告，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
-| 範本管理員（全系統角色，不屬於任何專案） | 由 Admin 直接指派；新增、修改、刪除範本庫的範本，可查看所有專案並把任何專案的查核項目存成範本；範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#313](https://github.com/speko-tw/inspect-flow/issues/313)，2026-10-02），見 [KD-49](03-decisions-and-stack.md#kd-49)）。 |
+| 範本管理員（預設全公司角色） | 系統預先建立的全公司角色之一，由 Admin 修改角色內容；預設具有「管理範本庫」權限。此權限包含跨專案瀏覽查核項目並存成範本；Admin 擁有全部權限。範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#387](https://github.com/speko-tw/inspect-flow/issues/387)，2026-10-04），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-60](03-decisions-and-stack.md#kd-60)、[OQ-08](05-open-questions.md#oq-08)）。 |
 | 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
-系統採「系統管理者開關＋可自訂的專案角色」模式，取代原本架構基準 §17 例示的四個固定角色 `ADMIN`、`COORDINATOR`、`INSPECTOR`、`VIEWER`；另新增「全系統角色」機制（第一個是範本管理員，見上表與 [KD-49](03-decisions-and-stack.md#kd-49)），三者並存、不互相混用。專案角色清單全系統共用，由 Admin 之後在系統內新增與維護，初始化不預建範本角色（依據：負責人決定（#63，2026-09-26）、負責人裁定（#261，2026-09-29）；取代架構基準 §17，見 [KD-24](03-decisions-and-stack.md#kd-24)、[KD-26](03-decisions-and-stack.md#kd-26)）。權限機制的細節（權限＝資料 × 動作、角色掛在專案成員上、安全機制）已裁定，見 [05-open-questions.md](05-open-questions.md) [OQ-08](05-open-questions.md#oq-08)（已裁定）。
+系統採全公司角色與專案角色並行的權限模型。全公司角色直接指派給人，專案角色指派給某人在某專案；Admin 擁有全部權限。權限依查核作業、範本系統與報告系統分組，且每個權限標明全公司或專案範圍；完整權限表與預設角色見 [OQ-08](05-open-questions.md#oq-08)（已裁定）、[KD-60](03-decisions-and-stack.md#kd-60)。v0.3.0 先允許 Admin 管理範本，全公司角色與權限管理改造排入 0.5.x，見 [KD-67](03-decisions-and-stack.md#kd-67)；此模型取代架構基準 §17 的固定角色範例及舊全系統角色安排（[KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)、[KD-49](03-decisions-and-stack.md#kd-49)）。
 
 ### 人員、公司與權限的實體關係
 
@@ -55,7 +55,7 @@ flowchart LR
   Company["Company（公司）"] -.->|可選，最多一家| User["User（人員）"]
   User -->|一人可掛多筆| ProjectMember["ProjectMember（專案成員）"]
   Project["Project（專案）"] -->|一專案多筆成員| ProjectMember
-  Role["Role（角色，全系統共用清單）"] -.->|一筆成員可掛多個角色，權限加總| ProjectMember
+  Role["Role（專案角色）"] -.->|一筆成員可掛多個角色，權限加總| ProjectMember
   User -.->|is_admin 開關，不經 Role| Admin["系統管理者權限"]
 ```
 
@@ -94,9 +94,9 @@ flowchart LR
 - **Phase 2 — Identity & Access（身分與存取）**：登入 / 登出 / 目前使用者、角色、權限與存取檢查。
 - **Phase 3 — Template System**：範本庫（獨立於專案、套用即複製、範本不版本化，見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)）、`Template`、`TemplateItem`、`EvidenceRequirement`；範本只存結構、分類固定兩層（[KD-48](03-decisions-and-stack.md#kd-48)）、檢查標準分文字與數值兩種（[KD-52](03-decisions-and-stack.md#kd-52)）。
 - **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照；查驗項目與查驗點由內業事先給定，MVP 不以間距（interval）自動切分任務為必要流程（依 [G-01](05-open-questions.md#g-01) 裁定）。
-- **Phase 5 — Field UI & Admin Dashboard（現場介面與管理後台）**：今日任務、任務詳情、證據檢查清單、狀態；後台交付原定的今日工作量、完成數、完成率、專案進度、工程師進度、唯讀總覽、管理畫面及 Dashboard 查詢 API；其餘不依賴證據或伺服器完成驗證的項目於 0.5.x 交付，須依賴者分別於 0.6.x、0.7.x 補齊。
-- **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）；補齊依證據才算得出的管理後台指標（原 0.8.x 範圍）。
-- **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)；補齊依完成驗證才算得出的管理後台指標（原 0.8.x 範圍）。
+- **Phase 5 — Field UI & Admin Dashboard（現場介面與管理後台）**：今日任務、任務詳情、證據檢查清單、狀態；後台交付原定的今日工作量、完成數、完成率、專案進度、工程師進度、唯讀總覽、管理畫面及 Dashboard 查詢 API。完成數與完成率於 0.5.x 依 Task 狀態計算，0.7.x 完成驗證上線後，同一指標改採伺服器驗證結果（依 [KD-66](03-decisions-and-stack.md#kd-66)）；原 0.8.x 範圍沒有其他需依證據或伺服器完成驗證才得出的指標。
+- **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）。
+- **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。完成驗證上線後，管理後台完成數與完成率改採伺服器驗證結果（依 [KD-66](03-decisions-and-stack.md#kd-66)），不另增儀表板指標。
 - **Phase 8 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9；架構基準原 Phase 9，現行路線圖為 Phase 8）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
 
 - **Phase 9 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
@@ -104,7 +104,7 @@ flowchart LR
 
 各 Phase 對應哪份規格、目前狀態與被擋議題，見 [docs/specs/README.md 規格索引](../specs/README.md#index)。
 
-Phase N 對應哪個 Milestone、各 Phase 的能力範圍以[版本路線圖](06-versioning-and-milestone-governance.md#vg-05)為準；Phase 5 合併 Field UI 與 Admin Dashboard；依賴 Evidence 或 Completion Validation 才能計算的原有儀表板指標分別於 Phase 6、Phase 7 補齊，屬規格設計，非負責人另行裁定。
+Phase N 對應哪個 Milestone、各 Phase 的能力範圍以[版本路線圖](06-versioning-and-milestone-governance.md#vg-05)為準；Phase 5 合併 Field UI 與 Admin Dashboard。完成數與完成率先依 Task 狀態計算，Phase 7 完成驗證上線後改採伺服器驗證結果；不另增指標（依 [KD-66](03-decisions-and-stack.md#kd-66)）。
 
 0.5.x 與 0.4.x 可並行：規格立即開寫，實作依 0.4.x API 進度開工（依據：負責人裁定 [#375](https://github.com/speko-tw/inspect-flow/issues/375)，2026-10-04）。
 
@@ -160,7 +160,7 @@ Corporate SSO                            檢查時機／停留點
 
 ## 架構占位（placeholder）與業務決策的界線
 
-專案、人員、地點、工項欄位，以及查核規則、報表版面與簽核流程仍待決議；Result 的三種結果與必填內容已裁定（見 [KD-54](03-decisions-and-stack.md#kd-54)）；缺失（Defect）管理、不符合後的改善追蹤與限期複查、嚴重度對任務完成與報告的影響、自動判定等仍未裁定（見 [OQ-06](05-open-questions.md#oq-06)）。來源範例不是定案規格；完整清單見 [05-open-questions.md](05-open-questions.md)（依據：架構基準 §0、§12、§38–39）。
+專案、人員、地點、工項欄位，以及查核規則、報表版面與簽核流程仍待決議；Result 的三種結果與必填內容已裁定（見 [KD-54](03-decisions-and-stack.md#kd-54)）；不符合後的簡易改善追蹤已決定排入 0.7.x（見 [KD-65](03-decisions-and-stack.md#kd-65)），完整缺失（Defect）管理、限期複查、嚴重度對任務完成與報告的影響、自動判定等仍未裁定（見 [OQ-06](05-open-questions.md#oq-06)）。來源範例不是定案規格；完整清單見 [05-open-questions.md](05-open-questions.md)（依據：架構基準 §0、§12、§38–39）。
 
 ## 架構總圖
 

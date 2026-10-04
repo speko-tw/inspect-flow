@@ -13,6 +13,7 @@
 | T3 | 審查準則與自審流程 | `docs/review-guidelines.md`、`.github/pull_request_template.md`（「審查重點」段連結到準則） | — | SKL-AC07、SKL-AC08 | #13 |
 | T4 | 統一檢查入口與 CI | `Makefile`、`.github/workflows/ci.yml`、`.env.example`、`README.md`、`README.zh-TW.md`（補「怎麼跑檢查」） | T1、T2 | SKL-AC04、SKL-AC05、SKL-AC10 | #14 |
 | T5 | `main` 分支保護（**人工步驟**，由人在 repo 設定執行） | repo 設定：必過 check 指定為 T4 的 CI job，並要求分支為最新；核准人數設 0（見 SKL-R09） | T4 | SKL-AC09 | #15 |
+| T6 | 發布版本來源、後端版本 API／CLI／啟動記錄、前端版本注入與頁尾、同步檢查及文件 | `VERSION`、`Makefile`、`scripts/check-version.py`、`backend/` 版本模組與測試、`frontend/` Vite／頁尾與測試、`docs/specs/skeleton/`、`docs/release.md`、`README*` | T1、T2、T4 | SKL-AC11 | [#386](https://github.com/speko-tw/inspect-flow/issues/386) |
 
 - 各子目錄自己提供 `make` 可呼叫的指令（後端透過 `uv run`，前端透過 `npm run`）；根目錄 `Makefile` 只負責串接，CI 只呼叫 `make check`。
 - Python 版本寫在 `backend/.python-version`（3.12）；Node 用 LTS 版本，寫在 `frontend/.nvmrc`，CI 從這兩個檔讀版本，不在 workflow 另寫一份。
@@ -52,6 +53,7 @@
 | SKL-AC08 | 抽查 T1 至 T4 的 PR 留言 |
 | SKL-AC09 | 人設定完成後，在 T5 issue 回報以 CI 失敗的 PR 嘗試合併的結果 |
 | SKL-AC10 | T4 在 CI 加入 `git ls-files` 檢查，或在 PR 說明貼上指令輸出 |
+| SKL-AC11 | 版本 API／CLI／啟動記錄與失去 Git 時省略 SHA 由後端測試驗證；Admin、Field、登入及設定頁由前端路由測試驗證；一致性檢查的相同／不相同案例由 checker 測試驗證；`make check` 與 CI 驗證完整整合 |
 
 ## 考慮過但沒採用的做法
 
