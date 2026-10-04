@@ -10,6 +10,8 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node.js (version from
 `frontend/.nvmrc`), and `make`.
 
 - `make setup` installs backend and frontend dependencies.
+- `make version` prints the release version and the short commit SHA
+  when Git information is available.
 - `make check` runs, for backend and frontend, format checks, lint,
   type checks, tests, and build, plus the frontend bundle-split
   check.
@@ -22,6 +24,8 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node.js (version from
 
 Run `make setup` first. Each step below runs from the repository
 root.
+
+Run `make version` to check the release version and source commit.
 
 1. **Environment variables** (optional). The backend reads them
    from the shell environment; `.env` is not loaded automatically.

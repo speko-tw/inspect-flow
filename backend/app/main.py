@@ -1,5 +1,9 @@
 """FastAPI application factory."""
 
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 
 from app.api.errors import register_error_handlers
@@ -22,8 +26,12 @@ from app.api.v1.template_library import (
     template_router,
 )
 from app.api.v1.users import router as users_router
+from app.api.v1.version import router as version_router
 from app.auth.dependencies import bind_request_scope
 from app.auth.settings import validate_auth_settings
+from app.version import release_identity
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -38,9 +46,18 @@ def create_app() -> FastAPI:
     unauthenticated write (AUT-R09).
     """
     validate_auth_settings()
-    app = FastAPI(dependencies=[Depends(bind_request_scope)])
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        logger.info("%s", release_identity())
+        yield
+
+    app = FastAPI(
+        dependencies=[Depends(bind_request_scope)], lifespan=lifespan
+    )
     register_error_handlers(app)
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(version_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(me_router, prefix="/api/v1")
     app.include_router(projects_router, prefix="/api/v1")

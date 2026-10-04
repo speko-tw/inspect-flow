@@ -51,6 +51,7 @@
 | SKL-R08 | agent 開出 PR 後，**必須**依審查準則自審，並把結果留言在該 PR；人開的 PR 由人或 agent 依同一份準則審查；最後由人核准合併 | 必須 | [閉環前提](../README.md#human-gates)；[AGENTS.md](../../../AGENTS.md) |
 | SKL-R09 | `main` **必須**設定分支保護：所有變更經 PR 合併；CI 的 check 通過且分支為最新才能合併；禁止 force push 與刪除（由人設定）。GitHub 核准人數暫設 0，由人在合併前檢視 PR（流程約定）；加入第二位協作者時，改回至少一人核准 | 必須 | 架構基準 §22A.12；[閉環前提](../README.md#human-gates) |
 | SKL-R10 | repo **必須**只提交 `.env.example`，**不得**提交 `.env` | 必須 | 架構基準 §22.9；[PR-14](../../intents/02-principles.md#pr-14) |
+| SKL-R11 | repo **必須**以根目錄 `VERSION` 作為發布版本來源；Backend 與 Frontend 版號**必須**與之相同，啟動資訊、查詢介面與兩個前端介面**必須**顯示版本及可取得的 commit 短 SHA | 必須 | 負責人直接指示（[#386](https://github.com/speko-tw/inspect-flow/issues/386)）；版本號治理依 [VG-01](../../intents/06-versioning-and-milestone-governance.md#vg-01)、[VG-02](../../intents/06-versioning-and-milestone-governance.md#vg-02)、[VG-04](../../intents/06-versioning-and-milestone-governance.md#vg-04) |
 
 ## 資料
 
@@ -61,8 +62,13 @@
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
 | GET | `/api/v1/health` | 回傳 `{"status": "ok"}` | 公開 |
+| GET | `/api/v1/version` | 回傳 `{"version": "0.3.0", "commit": "a1b2c3d"}`；commit 無法取得時為 `null` | 公開 |
 
-**指令**：根目錄 `make check`。子目標（例如只跑測試）由計畫決定，不屬於本規格的契約。
+| 指令 | 用途 |
+|---|---|
+| `make version` | 顯示 `InspectFlow v0.3.0 (a1b2c3d)`；無法取得 commit 時只顯示版本 |
+| `cd backend && uv run --locked python -m app version` | 顯示後端目前發布版本 |
+| `make check` | 包含版本來源一致性檢查 |
 
 ## 驗收條件
 
@@ -78,6 +84,7 @@
 | SKL-AC08 | 實作本規格各任務的 PR 由 agent 開出 | 檢查 PR 留言 | 每個 PR 都有一則依審查準則寫成的自審留言 | SKL-R08 |
 | SKL-AC09 | 分支保護已設定 | 對 CI 失敗的 PR 嘗試合併 | GitHub 擋下合併（由人驗證） | SKL-R09 |
 | SKL-AC10 | repo | 執行 `git ls-files \| grep '\.env$'` | 沒有輸出，且 `.env.example` 存在 | SKL-R10 |
+| SKL-AC11 | repo 版號設定為 `0.3.0`，並分別以可用及不可用 Git 資訊啟動／建置 | 啟動 Backend、執行後端 CLI 與公開 API、進入 Admin、Field、登入及首次設定頁，並執行 `make check` | 啟動 log、CLI 與 API 顯示版本及可取得的短 SHA；API 不需登入且只回傳 `version`、`commit`；四種前端畫面頁尾顯示 `InspectFlow v0.3.0`，commit 顯示於 tooltip；無 Git 資訊時服務與建置仍成功且省略 SHA；改錯任一 manifest 版號時版本檢查失敗 | SKL-R11 |
 
 ## 待釐清
 
@@ -86,3 +93,4 @@
 ## 變更紀錄
 
 - SKL-R09 的 GitHub 核准人數暫設 0、改由人在合併前檢視 PR；SKL-AC09 改為只驗證 CI 失敗的 PR 會被擋下 — #22
+- 新增發布版本來源、後端查詢介面及雙前端版本頁尾（SKL-R11、SKL-AC11）— [#386](https://github.com/speko-tw/inspect-flow/issues/386)

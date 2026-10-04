@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 import react from '@vitejs/plugin-react'
 import { loadEnv } from 'vite'
@@ -163,12 +164,32 @@ export default defineConfig(({ mode, command, isPreview }) => {
   // VITE_BACKEND_URL 覆寫，不需改這個檔案就能切換到不同的後端。
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
+  const repoRoot = path.resolve(process.cwd(), '..')
+  const version =
+    env.INSPECTFLOW_VERSION ||
+    fs.readFileSync(path.join(repoRoot, 'VERSION'), 'utf8').trim()
+  let commit = env.INSPECTFLOW_COMMIT || ''
+  if (!commit) {
+    try {
+      commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim()
+    } catch {
+      commit = ''
+    }
+  }
   // 只有開發伺服器（vite serve）才讀憑證；build、preview 與 vitest
   // 不受影響（preview 的 command 也是 serve，要另外排除）。
   const isDevServer = command === 'serve' && !isPreview && mode !== 'test'
   const devHttps = isDevServer ? resolveDevHttps(env) : {}
 
   return {
+    define: {
+      __INSPECTFLOW_VERSION__: JSON.stringify(version),
+      __INSPECTFLOW_COMMIT__: JSON.stringify(commit),
+    },
     plugins: [react(), chunkModulesReportPlugin()],
     build: {
       manifest: true,

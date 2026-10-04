@@ -28,17 +28,18 @@
    3. 這次不修的項目，開 issue 並設 Milestone 追蹤，不可只記在留言。
    4. 完成條件：清單全部處理完、`make check` 與 CI 通過、手動驗收重跑通過；檢查 issue 關閉。
    - PATCH 版（例：`v0.2.1`）得只檢查這次變更的部分。
-4. **確認可以發**：
+4. **用 PR 更新發布版本**：建立 tag 前，開 PR 將根目錄 `VERSION` 更新為本次完整版號（例如 `0.3.0`），並同步更新 `backend/pyproject.toml` 與 `frontend/package.json`。PR 的 `make check` 必須確認三處一致；PR 合併後才進行下一步。
+5. **確認可以發**：
    - Release 追蹤 issue 的清單全部關閉（含檢查 issue）。
    - 取得 `main` 最新 commit，確認它的 CI 綠燈並記下來，這個 commit 就是要打 tag 的對象：
      ```bash
      git fetch origin
      git rev-parse origin/main
      ```
-5. **準備 Release Notes 草稿**：agent 依下方格式撰寫，貼在 Release 追蹤 issue 的留言。
-6. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
+6. **準備 Release Notes 草稿**：agent 依下方格式撰寫，貼在 Release 追蹤 issue 的留言。
+7. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
    ```bash
-   RELEASE_SHA=0123abcd   # 換成第 4 步記下的 commit；v0.X.Y 換成版號
+   RELEASE_SHA=0123abcd   # 換成第 5 步記下的 commit；v0.X.Y 換成版號
    if git fetch origin &&
      [ "$(git rev-parse origin/main)" = "$(git rev-parse "$RELEASE_SHA")" ]
    then
@@ -50,7 +51,7 @@
      echo "fetch 失敗或 main 已變動，未建 tag"
    fi
    ```
-   印出「fetch 失敗或 main 已變動」時不會建 tag 或 Release：fetch 失敗就排除網路或權限問題後重跑；`main` 已變動（第 4 步之後又有合併）就回到第 4 步。建 tag 之後任一行失敗也會停在該行；不要整段重跑，先用 `git rev-parse v0.X.Y^{commit}` 確認 tag 指向第 4 步的 commit，再從中斷的那行（push 或 `gh release create`）接著執行。tag 指向別的 commit 就停下，找負責人處理。
+   印出「fetch 失敗或 main 已變動」時不會建 tag 或 Release：fetch 失敗就排除網路或權限問題後重跑；`main` 已變動（第 5 步之後又有合併）就回到第 5 步。建 tag 之後任一行失敗也會停在該行；不要整段重跑，先用 `git rev-parse v0.X.Y^{commit}` 確認 tag 指向第 5 步的 commit，再從中斷的那行（push 或 `gh release create`）接著執行。tag 指向別的 commit 就停下，找負責人處理。
 7. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
    - Milestone `0.X.x` 保持開啟，之後的 PATCH（例：`v0.2.1`）照樣放在同一個 Milestone；確定這個系列不用再修 bug，或確認沒問題要進入下一個階段後才關閉。
 

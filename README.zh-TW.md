@@ -10,6 +10,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
 `frontend/.nvmrc`）、`make`。
 
 - `make setup` 安裝前後端依賴。
+- `make version` 顯示發布版本；能取得 Git 資訊時也會顯示 commit 短 SHA。
 - `make check` 對前後端依序執行格式檢查、lint、型別檢查、測試與
   build，並包含前端的拆包檢查。
 - CI 在每個 PR 與每次 push 到 `main` 時，執行同一個 `make check`。
@@ -19,6 +20,8 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
 ## 本機執行
 
 先執行 `make setup`。以下指令都在 repo 根目錄執行。
+
+執行 `make version` 可查詢目前發布版本與來源 commit。
 
 1. **環境變數**（可省略）。後端從 shell 環境讀取，不會自動載入
    `.env`。`INSPECTFLOW_DATABASE_URL` 未設定時，資料庫是 SQLite
