@@ -42,7 +42,13 @@ class CursorKey:
 
 
 def encode_cursor(key: CursorKey) -> str:
-    """Encode a CursorKey as an opaque, URL-safe cursor string."""
+    """Encode the canonical ``CursorKey`` cursor.
+
+    This seconds-precision, ``Z``-suffixed format is kept separate from
+    the microseconds-precision page cursor below to preserve the existing
+    cursor contract while template and project-item lists use their own
+    established format.
+    """
     payload = {"t": format_utc(key.created_at), "id": str(key.id)}
     raw = json.dumps(payload, separators=(",", ":"))
     encoded = base64.urlsafe_b64encode(raw.encode("utf-8"))
@@ -97,6 +103,12 @@ def decode_cursor(cursor: str) -> CursorKey:
 
 
 def page_cursor_key(cursor: str | None) -> tuple[datetime, uuid.UUID] | None:
+    """Decode the microseconds ``+00:00`` cursor used by list pages.
+
+    This format remains separate from ``CursorKey``'s seconds-precision,
+    ``Z``-suffixed format so existing template and project-item list
+    cursors stay compatible without changing the older cursor contract.
+    """
     if cursor is None:
         return None
     try:

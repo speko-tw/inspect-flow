@@ -1,6 +1,5 @@
 """Project inspection item operations (TPL T4 and T6 API support)."""
 
-from functools import partial
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -9,11 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import page, write_call
+from app.api.pagination import page
 from app.api.time_format import format_utc
 from app.api.v1.template_library import (
     template_item_detail,
-    template_library_error,
+    template_write_call,
 )
 from app.auth.access import (
     require_login_access,
@@ -40,8 +39,6 @@ from app.services.project_templates import (
     apply_template,
     create_template_from_project_item,
 )
-
-template_write_call = partial(write_call, error_mapper=template_library_error)
 
 router = APIRouter(prefix="/projects", tags=["project-inspection-items"])
 _TEMPLATE_WRITE = Depends(require_system_role(SystemRoleCode.TEMPLATE_ADMIN))
