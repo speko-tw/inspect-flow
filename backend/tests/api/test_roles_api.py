@@ -262,12 +262,72 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
     assert catalog.json() == {
         "items": [
             {
+                "code": "inspection_plan.archive",
+                "description": "封存查核計畫",
+            },
+            {
+                "code": "inspection_plan.create",
+                "description": "建立查核計畫",
+            },
+            {
+                "code": "inspection_plan.manage",
+                "description": "管理查核計畫",
+            },
+            {
+                "code": "inspection_plan.read",
+                "description": "讀取查核計畫",
+            },
+            {
+                "code": "inspection_plan.unarchive",
+                "description": "取消封存查核計畫",
+            },
+            {
+                "code": "inspection_task.assign",
+                "description": "指派查核任務",
+            },
+            {
+                "code": "inspection_task.cancel",
+                "description": "取消或恢復查核任務",
+            },
+            {
+                "code": "inspection_task.create",
+                "description": "建立查核任務",
+            },
+            {
+                "code": "inspection_task.delete_draft",
+                "description": "刪除草稿查核任務",
+            },
+            {
+                "code": "inspection_task.dispatch",
+                "description": "派出查核任務",
+            },
+            {
+                "code": "inspection_task.inspect",
+                "description": "執行現場查核",
+            },
+            {
+                "code": "inspection_task.manage",
+                "description": "管理查核任務",
+            },
+            {
+                "code": "inspection_task.read",
+                "description": "讀取查核任務",
+            },
+            {
                 "code": "project_inspection_item.edit",
                 "description": "編輯專案查核項目",
             },
             {
                 "code": "project_member.manage",
                 "description": "管理專案成員與其角色",
+            },
+            {
+                "code": "project_zone.manage",
+                "description": "管理專案分區",
+            },
+            {
+                "code": "project_zone.read",
+                "description": "讀取專案分區",
             },
         ]
     }

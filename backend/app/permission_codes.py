@@ -60,6 +60,27 @@ class PermissionCode(DescribedStrEnum):
         "project_inspection_item.edit",
         "編輯專案查核項目",
     )
+    PROJECT_ZONE_READ = ("project_zone.read", "讀取專案分區")
+    PROJECT_ZONE_MANAGE = ("project_zone.manage", "管理專案分區")
+    INSPECTION_PLAN_READ = ("inspection_plan.read", "讀取查核計畫")
+    INSPECTION_PLAN_CREATE = ("inspection_plan.create", "建立查核計畫")
+    INSPECTION_PLAN_MANAGE = ("inspection_plan.manage", "管理查核計畫")
+    INSPECTION_PLAN_ARCHIVE = ("inspection_plan.archive", "封存查核計畫")
+    INSPECTION_PLAN_UNARCHIVE = (
+        "inspection_plan.unarchive",
+        "取消封存查核計畫",
+    )
+    INSPECTION_TASK_READ = ("inspection_task.read", "讀取查核任務")
+    INSPECTION_TASK_MANAGE = ("inspection_task.manage", "管理查核任務")
+    INSPECTION_TASK_CREATE = ("inspection_task.create", "建立查核任務")
+    INSPECTION_TASK_DISPATCH = ("inspection_task.dispatch", "派出查核任務")
+    INSPECTION_TASK_ASSIGN = ("inspection_task.assign", "指派查核任務")
+    INSPECTION_TASK_INSPECT = ("inspection_task.inspect", "執行現場查核")
+    INSPECTION_TASK_DELETE_DRAFT = (
+        "inspection_task.delete_draft",
+        "刪除草稿查核任務",
+    )
+    INSPECTION_TASK_CANCEL = ("inspection_task.cancel", "取消或恢復查核任務")
 
 
 # Always ``PermissionCode`` in production. Only
