@@ -1,9 +1,9 @@
 # 管理後台（admin-dashboard）
 
 **代碼**：`ADM`　**Phase**：P5　**狀態**：草稿
-**前置規格**：`inspection-planning`、`authentication`、`audit-log`；指標補齊另依賴 `field-evidence`、`completion-validation`
-**引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[04-glossary](../../intents/04-glossary.md)
-**被擋議題**：無 OQ／G；全公司角色與權限畫面依尚未合併的 [#387](https://github.com/speko-tw/inspect-flow/issues/387)、[#390](https://github.com/speko-tw/inspect-flow/issues/390) 及本規格依賴處理
+**前置規格**：`inspection-planning`、`authentication`、`audit-log`；全公司角色依 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)／[KD-67](../../intents/03-decisions-and-stack.md#kd-67) 與 #390 前置規格更新
+**引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-49（已由 KD-60 取代）](../../intents/03-decisions-and-stack.md#kd-49)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-66](../../intents/03-decisions-and-stack.md#kd-66)、[KD-67](../../intents/03-decisions-and-stack.md#kd-67)、[04-glossary](../../intents/04-glossary.md)
+**被擋議題**：無 OQ／G；全公司角色與權限畫面的需求及範圍依已裁定的 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-67](../../intents/03-decisions-and-stack.md#kd-67)；實作依賴 #390 更新 authentication／domain-model 前置規格
 
 ## 目的
 
@@ -24,7 +24,7 @@
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
 - 建立、派出、取消、恢復或封存 Plan／Task 的操作，屬 `inspection-planning` 與現場工作流程；本規格只讀取並呈現其資料（#363）。
-- 完成查核所需的證據或影像編修，屬 `field-evidence`；依證據驗證完成的指標屬 0.6.x／0.7.x（依 #375、#388）。
+- 完成查核所需的證據或影像編修，屬 `field-evidence`；完成數與完成率在 0.5.x 依 Task 狀態計算，0.7.x 完成驗證上線後改採伺服器驗證完成，維持相同指標（依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)）。
 - 定義角色、權限資料模型或重新制定存取控制規則；模型由 `authentication`、`domain-model` 與 intents 負責，本規格只使用（#387、#390）。
 - 稽核事件寫入、保留與不可變更規則，屬 `audit-log`。
 - 正式報告、報告範本及核發流程，屬 `report-delivery`。
@@ -54,28 +54,28 @@
 
 ## 需求
 
-除明確標為負責人裁定的項目外，本規格所選的呈現方式、批次操作與 API 路徑屬**規格設計（非負責人裁定）**；不得據此新增或改寫 intents、角色資料模型或權限代碼。角色模型與權限集合以 #387／#390 合併後的前置規格為準。
+除明確標為負責人裁定的項目外，本規格所選的呈現方式、批次操作與 API 路徑屬**規格設計（非負責人裁定）**；不得據此新增或改寫 intents、角色資料模型或權限代碼。角色範圍與權限矩陣依 [OQ-08](../../intents/05-open-questions.md#oq-08)／[KD-60](../../intents/03-decisions-and-stack.md#kd-60)；schema 與 API 契約依 #390 前置規格。
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | ADM-R01 | 後台**必須**提供唯讀總覽及查詢 API；Dashboard 不得包裝成正式報告或正式交付物 | 必須 | 0.5.x 雛形流程依負責人補充（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977852498)）；Dashboard 不作正式交付物依 #375 與 [01-overview.md](../../intents/01-overview.md#查核生命週期)，屬範圍依據 |
 | ADM-R02 | 今日工作量與「派給誰」**必須**只計非封存 Plan 下狀態為 `PENDING` 或 `IN_PROGRESS` 的 Task；不依日期篩選，排除 `DRAFT`、`CANCELLED` 及封存 Plan 下的 Task | 必須 | 負責人裁定（[#104 留言](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977711401)）；`inspection-planning`、`state-machines` |
-| ADM-R03 | 完成數**必須**只計 `COMPLETED` Task；完成率**必須**為 `COMPLETED` 數 ÷ 同一查詢範圍內所有非取消且已派出的 Task 數（含 `PENDING`、`IN_PROGRESS`、`COMPLETED`）。分母為 0 時回傳 `0` | 必須 | 完成數與完成率 0.5.x 上線依 #388；公式為規格設計（非負責人裁定） |
+| ADM-R03 | 完成數**必須**只計 `COMPLETED` Task；完成率**必須**為 `COMPLETED` 數 ÷ 同一查詢範圍內所有非取消且已派出的 Task 數（含 `PENDING`、`IN_PROGRESS`、`COMPLETED`）。分母為 0 時回傳 `0` | 必須 | 完成數與完成率 0.5.x 依 Task 狀態計算（依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66) 與 #388）；公式為規格設計（非負責人裁定） |
 | ADM-R04 | 專案進度**必須**按專案呈現已派出 Task 總數、完成數與完成率，使用 ADM-R03 口徑；封存 Plan 不排除在歷史完成數與分母之外 | 必須 | 功能範圍依 #375、#388；封存 Plan 的計算口徑為規格設計（非負責人裁定） |
 | ADM-R05 | 工程師工作量**必須**分開呈現「派給誰」的 `PENDING`／`IN_PROGRESS` 數與「誰查的」依 `completed_by` 歸屬的 `COMPLETED` 數；不得混為單一數字。另應呈現由 `started_by` 歸屬的 `IN_PROGRESS` 開始者數 | 必須／應 | 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977779246)）；額外開始者數為規格設計（非負責人裁定） |
-| ADM-R06 | 專案範圍總覽**必須**只回傳目前使用者有權存取的專案；全公司總覽**必須**要求「看全部專案進度」全公司權限，專案權限不得擴大成全公司範圍 | 必須 | 權限範圍依 [#387](https://github.com/speko-tw/inspect-flow/issues/387) 及 #390；權限名稱及代碼依 intents 合併後前置規格 |
+| ADM-R06 | 專案範圍總覽**必須**只回傳目前使用者具「看專案進度與工作量」專案權限可存取的專案；全公司總覽**必須**要求「看全部專案進度」全公司權限，專案權限不得擴大成全公司範圍 | 必須 | 權限名稱、範圍與分組依 [OQ-08](../../intents/05-open-questions.md#oq-08) 及 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)；完整角色管理排入 0.5.x 依 [KD-67](../../intents/03-decisions-and-stack.md#kd-67)，schema 與 API 依 #390 前置規格 |
 | ADM-R07 | 只有 Admin **得**進入稽核查詢頁及呼叫查詢 API；介面唯讀，不新增、修改或刪除紀錄 | 必須 | 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、ALG-R04 |
 | ADM-R08 | 稽核查詢**必須**支援專案、操作者、時間範圍、事件類型篩選與穩定 cursor 分頁；沿用 `audit-log` 定義的事件及欄位 | 必須 | 負責人裁定選 C（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；欄位及 cursor 契約沿用 [audit-log](../audit-log/spec.md) 與 [KD-13](../../intents/03-decisions-and-stack.md#kd-13) |
 | ADM-R09 | Admin **必須**能管理全公司角色並指派給使用者，僅選全公司權限；不得混入專案角色／專案權限。Admin 的有效權限維持全部權限 | 必須 | #387／#390 權限需求來源；資料與權限模型以合併後 intents／前置規格為準 |
-| ADM-R10 | 修改或刪除全公司角色，以及指派或撤銷角色前，**必須**顯示受影響人數、受影響人員名單及各人的權限變化，並要求明確確認後才送出變更；專案角色沿用 0.2.x DOM-AC47 已有的 `user_count`／`project_count` 影響資訊 | 必須 | 角色修改／刪除影響確認依 PR-18；公司角色指派／撤銷前的名單與權限差異屬規格設計（非負責人裁定，第 1 輪審查定案）；專案角色依 [角色管理 API](../domain-model/spec.md#角色管理-api)（DOM-R55、DOM-AC47） |
+| ADM-R10 | 修改或刪除全公司角色，以及指派或撤銷角色前，**必須**顯示受影響人數、受影響人員名單及各人的權限變化，並要求明確確認後才送出變更；專案角色沿用 0.2.x DOM-AC47 已有的 `user_count`／`project_count` 影響資訊 | 必須 | 角色修改／刪除影響確認依 PR-18；公司角色指派／撤銷前的名單與權限差異屬規格設計（非負責人裁定）；專案角色依 [角色管理 API](../domain-model/spec.md#角色管理-api)（DOM-R55、DOM-AC47） |
 | ADM-R11 | 全公司角色管理**必須**呈現可修改的預建角色；範本管理權限不得寫死成不可修改角色。既有角色遷移依 #390 更新後規格 | 必須 | 需求來源：#387、#390；既有角色遷移依更新後規格 |
 | ADM-R12 | 專案列表**必須**顯示後端契約提供的成員數；若契約未定，先依流程完成 `domain-model` 規格變更，不得以 UI 假值通過驗收 | 必須 | [#286](https://github.com/speko-tw/inspect-flow/issues/286)、[變更規則](../README.md#change) |
-| ADM-R13 | 已交付的 0.2.x 基本管理不得重做；本規格**必須**補使用者／公司搜尋、cursor 分頁、批次啟用狀態、專案搜尋／分頁、成員批次指派／撤銷及 Admin 為既有使用者設定臨時密碼 | 必須 | 基本功能與進階功能分工依 #259、[authentication](../authentication/spec.md#範圍)、[domain-model](../domain-model/spec.md#範圍)；批次操作與既有使用者臨時密碼端點屬規格設計（非負責人裁定，第 1 輪審查定案） |
+| ADM-R13 | 已交付的 0.2.x 基本管理不得重做；本規格**必須**補使用者／公司搜尋、cursor 分頁、批次啟用狀態、專案搜尋／分頁、成員批次指派／撤銷及 Admin 為既有使用者設定臨時密碼 | 必須 | 基本功能與進階功能分工依 #259、[authentication](../authentication/spec.md#範圍)、[domain-model](../domain-model/spec.md#範圍)；批次操作與既有使用者臨時密碼端點屬規格設計（非負責人裁定） |
 | ADM-R14 | 0.5.x 主要流程**應**涵蓋派出 Task、現場查看／開始 Task、後台查看進度與工作量；0.5.x 不提供現場完成 Task，因此完成數、完成率及「誰查的」得為 0；示範資料建議含 `COMPLETED` Task | 應 | 主要流程依負責人補充（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977852498)），Field 尚不能完成依負責人裁定（[#104 留言](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977711401)）；seed 建議依 #381，非負責人裁定 |
 
 ## 資料
 
-本規格不新增領域實體。Task 狀態、`assignee_id`、`started_by`、`completed_by` 與 Plan 狀態沿用 [domain-model](../domain-model/spec.md)、[inspection-planning](../inspection-planning/spec.md) 與 [state-machines](../state-machines/spec.md)；稽核資料沿用 [audit-log](../audit-log/spec.md)。角色／權限 schema、permission code、seed 與 migration 依 #387／#390 合併後 intents 及前置規格，不在此預設。
+本規格不新增領域實體。Task 狀態、`assignee_id`、`started_by`、`completed_by` 與 Plan 狀態沿用 [domain-model](../domain-model/spec.md)、[inspection-planning](../inspection-planning/spec.md) 與 [state-machines](../state-machines/spec.md)；稽核資料沿用 [audit-log](../audit-log/spec.md)。角色範圍及權限名稱依 [OQ-08](../../intents/05-open-questions.md#oq-08) 與 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)；schema、permission code、seed 與 migration 依 #390 更新後的前置規格，不在此預設。
 
 #286 的 `member_count` 是專案回應契約變更；先更新 `domain-model` 並完成其規格流程再實作。規格設計（非負責人裁定）：數值計算該專案現存 `ProjectMember` 關聯列數；是否排除停用使用者須由 `domain-model` 變更一併明定。
 
@@ -94,9 +94,9 @@
 
 | 方法與路徑 | 契約與回應 | 權限與錯誤 |
 |---|---|---|
-| `GET /api/v1/admin/dashboard/summary?project_id=<uuid>` | 單一物件：`pending_count`、`in_progress_count`、`completed_count`、`completion_rate`；不分頁。省略 `project_id` 查全公司；提供時限單一專案 | 專案權限或全公司檢視權限；未登入 401，無權限 403；越權或不存在的專案均 403，遵守現有專案端點避免洩漏資源存在性 |
-| `GET /api/v1/admin/dashboard/projects?cursor=&limit=&q=` | `{items:[{project_id,name,pending_count,in_progress_count,completed_count,completion_denominator_count,completion_rate,member_count}],next_cursor}`；依 `(project.name, project.id)` 升冪；`q` 為專案名稱／代碼不分大小寫子字串；`member_count` 僅在 #286 契約先合併後提供 | 各專案只套用呼叫者可見範圍；全公司查詢需全公司檢視權限。錯誤同 summary；cursor／limit／q 無效 422 |
-| `GET /api/v1/admin/dashboard/engineers?project_id=<uuid>&cursor=&limit=&q=` | `{items:[{user_id,username,name_zh,assigned_pending_count,assigned_in_progress_count,completed_by_count,started_in_progress_count}],next_cursor}`；依 `(username,user_id)` 升冪；`q` 搜尋 username、中英文姓名、email、employee number | 專案或全公司檢視權限；project scope 必須提供 `project_id`；不得藉參數擴權；錯誤同 summary |
+| `GET /api/v1/admin/dashboard/summary?project_id=<uuid>` | 單一物件：`pending_count`、`in_progress_count`、`completed_count`、`completion_rate`；不分頁。省略 `project_id` 查全公司；提供時限單一專案 | 「看專案進度與工作量」專案權限或「看全部專案進度」全公司權限；未登入 401，無權限 403；越權或不存在的專案均 403，遵守現有專案端點避免洩漏資源存在性 |
+| `GET /api/v1/admin/dashboard/projects?cursor=&limit=&q=` | `{items:[{project_id,name,pending_count,in_progress_count,completed_count,completion_denominator_count,completion_rate,member_count}],next_cursor}`；依 `(project.name, project.id)` 升冪；`q` 為專案名稱／代碼不分大小寫子字串；`member_count` 僅在 #286 契約先合併後提供 | 各專案只套用呼叫者持有「看專案進度與工作量」權限的範圍；全公司查詢需「看全部專案進度」權限。錯誤同 summary；cursor／limit／q 無效 422 |
+| `GET /api/v1/admin/dashboard/engineers?project_id=<uuid>&cursor=&limit=&q=` | `{items:[{user_id,username,name_zh,assigned_pending_count,assigned_in_progress_count,completed_by_count,started_in_progress_count}],next_cursor}`；依 `(username,user_id)` 升冪；`q` 搜尋 username、中英文姓名、email、employee number | 「看專案進度與工作量」專案權限或「看全部專案進度」全公司權限；project scope 必須提供 `project_id`；不得藉參數擴權；錯誤同 summary |
 | `GET /api/v1/audit-logs?project_id=&actor_id=&from=&to=&event_type=&cursor=&limit=` | `{items:[既有 AuditLog 欄位],next_cursor}`；依 `(created_at,id)` 降冪；`from`／`to` 為 UTC ISO-8601，含起不含迄；多條件 AND 篩選；指定格式正確但不存在的 `project_id` 回 200 空頁 `{items:[],next_cursor:null}` | Admin；401 未登入、403 非 Admin；不存在專案為空結果而非權限錯誤；格式錯誤 422；只讀 |
 | `GET /api/v1/users?q=&cursor=&limit=` | 將目前全量列表改為 cursor page `{items:[既有 User 欄位],next_cursor}`；依 `(username,id)` 升冪；`q` 不分大小寫搜尋 username、姓名、email、employee number | Admin（沿用 AUT-R20）；401／403／422 如上；保留現有單筆及寫入端點 |
 | `POST /api/v1/users:batch-active-status` | 本體 `{user_ids:[uuid],is_active:boolean}`；成功回 `{items:[User]}`；整批原子提交；重複或空 ID、未知 ID、停用最後一位 Admin 等驗證失敗時不改任何列 | Admin；401／403；輸入或管理規則違反 422，衝突依既有管理錯誤映射 409 |
@@ -110,7 +110,7 @@
 | `POST /api/v1/company-roles`、`PATCH /api/v1/company-roles/{role_id}`、`DELETE /api/v1/company-roles/{role_id}` | 建立本體 `{name,permission_codes}`；PATCH 至少一欄、`permission_codes` 為完整替換集合；刪除成功 204。建立／修改／刪除前 UI 必須呈現 impact-preview 結果並取得明確確認 | Admin；401／403；不存在 404；重複名稱 409；未登記／錯誤權限代碼或空更新 422；依 #390 更新後 schema |
 | `PUT /api/v1/users/{user_id}/company-roles/{role_id}`、`DELETE /api/v1/users/{user_id}/company-roles/{role_id}` | 指派／撤銷既有公司角色；成功分別回 204；呼叫前 UI 顯示該使用者權限變化並確認 | Admin；401／403；未知 user／role 404；不允許範圍或重複狀態依更新後角色契約回 422／409 |
 
-所有新管理 API 的具體角色 schema、權限代碼及稽核事件仍由 #387／#390 更新前置規格；本節只凍結本規格所需的使用流程、HTTP 操作與錯誤邊界。稽核查詢 API 實作需先將 ALG-Q2 的方案裁定同步到 `audit-log`，該同步是獨立前置任務。
+所有新管理 API 的具體角色 schema 與權限代碼依 #390 更新後的前置規格；本節只凍結本規格所需的使用流程、HTTP 操作與錯誤邊界。稽核查詢 API 實作需先將 ALG-Q2 的方案裁定同步到 `audit-log`，該同步是獨立前置任務。
 
 ## 驗收條件
 
@@ -120,7 +120,7 @@
 | ADM-AC02 | 專案含各狀態 Task，包括封存 Plan 下完成 Task | 查詢完成數與完成率 | 完成數僅為 `COMPLETED`；分母為所有非取消已派出狀態；封存 Plan 的完成項仍列入歷史完成數與分母；分母 0 時率為 0 | ADM-R03、ADM-R04 |
 | ADM-AC03 | `PENDING`／`IN_PROGRESS` Task 有建議指派人；`IN_PROGRESS` 有開始者；`COMPLETED` 有實際完成者，且至少一筆由非指派人完成 | 查詢工程師彙總 | 三類數字各自歸屬 `assignee_id`、`started_by`、`completed_by`；不得互相替代；Field 尚無完成資料時完成數可為 0 | ADM-R05、ADM-R14 |
 | ADM-AC04 | 使用者只有部分專案權限 | 呼叫總覽並指定有權及無權 project_id | 可查有權專案；無權／不存在 project_id 都回 403，且不洩漏專案是否存在 | ADM-R06 |
-| ADM-AC05 | 使用者具全公司檢視權限 | 省略 project_id 查總覽，之後撤銷權限再查 | 有權時可讀全公司範圍；撤權後回 403；單一專案權限不能取代全公司權限 | ADM-R06 |
+| ADM-AC05 | 使用者具「看全部專案進度」全公司權限 | 省略 project_id 查總覽，之後撤銷權限再查 | 有權時可讀全公司範圍；撤權後回 403；單一專案權限不能取代全公司權限 | ADM-R06 |
 | ADM-AC06 | 非 Admin 或未登入者 | 開啟稽核頁並呼叫查詢 API | 未登入回 401、非 Admin 回 403，均不回稽核內容 | ADM-R07 |
 | ADM-AC07 | 多專案、操作者、時間及事件類型的稽核資料；資料時間可能相同 | 組合篩選並跨 cursor 翻頁，另以不存在的合法 UUID 作 `project_id` 篩選 | 結果符合 AND 篩選、`(created_at,id)` 穩定排序且無重複遺漏；不存在 project_id 時仍回 200、`items: []`、`next_cursor: null`；GET 不改資料 | ADM-R07、ADM-R08 |
 | ADM-AC08 | Admin 嘗試建立／修改／刪除公司角色或指派／撤銷角色 | UI 先載入 impact-preview，查看受影響人員及前後權限，確認後提交 | 未確認不得送出；確認後才變更；impact-preview 不包含專案角色權限；角色 schema 依 #390 | ADM-R09、ADM-R10、ADM-R11 |
@@ -132,10 +132,10 @@
 
 ## 待釐清
 
-- 全公司角色的欄位、權限代碼、角色指派及 migration 依 #387／#390 合併後的 intents 與 `authentication`／`domain-model` 更新；若其契約和本規格的 endpoint/schema 衝突，先以新權威更新本規格及 plan，再開實作 task。
+- 全公司角色的欄位、權限代碼、角色指派及 migration 依 [OQ-08](../../intents/05-open-questions.md#oq-08)／[KD-60](../../intents/03-decisions-and-stack.md#kd-60) 與 #390 更新後的 `authentication`／`domain-model` 前置規格；若其契約和本規格的 endpoint/schema 衝突，先以新權威更新本規格及 plan，再開實作 task。
 - #286 的 `member_count` 已列本規格範圍，但欄位與停用成員計數口徑仍須由 `domain-model` 規格變更凍結後才能實作。
 - ALG-Q2 已由負責人裁定選 C（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）。T5a 將此裁定獨立同步至 `audit-log` spec／plan；T5b 依賴 T5a 合併後即可實作稽核查詢 API／頁面。
-- 0.7.x 完成驗證上線後，以相同指標欄位呈現伺服器驗證完成，是否調整原 Task 狀態口徑依當時 `completion-validation` 凍結契約同步；不得同時增設含義不明的新完成率。
+- 完成數與完成率依 Task 狀態計算；0.7.x 完成驗證上線後，同一指標改採伺服器驗證完成（依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)），不另增新完成率。
 
 ## 變更紀錄
 

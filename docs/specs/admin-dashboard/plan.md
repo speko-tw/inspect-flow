@@ -18,13 +18,13 @@
 | T6a | 依 #286 變更 `domain-model` 的專案列表契約，定義 `member_count` 欄位及停用成員口徑 | `docs/specs/domain-model/spec.md`、`docs/specs/domain-model/plan.md` | T0 已先更新專案列表 cursor 契約；#286；規格變更 issue／流程 | ADM-AC09 前置 | #286 後續規格變更 task |
 | T6b | 專案列表 API cursor 分頁、搜尋與成員數欄位，更新專案列表 UI | `backend/app/api/v1/projects.py`、`backend/app/services/projects.py`、相關測試、`frontend/src/admin/projects/ProjectsPage.tsx` 及測試 | T0 既有列表契約變更與 T6a `member_count` 規格變更均合併；#275／#277 既有專案列表 | ADM-AC09、10、13 | 前置規格變更完成後開 task |
 | T7 | 進階管理：既有 user/company list 增加搜尋及 cursor 分頁，加入全批原子狀態操作、專案成員批次角色操作、既有使用者臨時密碼重設；不重做 0.2.x 基本 CRUD | `backend/app/api/v1/users.py`、`companies.py`、必要 services／測試；`frontend/src/admin/UsersPage.tsx`、`CompaniesPage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx` 及測試 | T0 的 user/company/project 既有列表 cursor 契約變更合併；#263、#265、#274、#275、#277 已完成；AUT-R36／R37；T4 前置角色契約依賴 #390 | ADM-AC10、11、13 | 待開 task |
-| T8 | 0.6.x／0.7.x 完成驗證就緒後，以驗證完成更新相同 Dashboard 指標，維持既有 API 欄位並補測試；示範 seed 含已完成 Task | `backend/app/services/`、相關 API／service tests、Dashboard UI／tests、`demo/` fixture（若由該 task 負責） | `field-evidence`、`completion-validation` 的資料契約及實作完成；#388、#381 | ADM-AC02、12 | 依前置規格開 task |
+| T8 | 0.7.x 完成驗證上線後，將 Dashboard 的完成數與完成率這兩個既有指標改採伺服器驗證完成，維持欄位與指標名稱並補測試 | `backend/app/services/`、相關 API／service tests、Dashboard UI／tests | `completion-validation` 完成驗證契約與實作；依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)；0.5.x seed 的完成 Task 由 ADM-AC12 對應 task 準備 | ADM-AC02 | 0.7.x 前置規格完成後開 task |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
 - T0 是改動已凍結 user/company/project 清單契約的先行跨規格 spec-change issue／PR，必須依 README 變更流程先合併；它同步更新既有前端呼叫端。T6a（#286）依賴 T0；T6b 依賴 T0 與 T6a；T7 依賴 T0。T0 未合併前，相關 API 契約欄位不得開始實作。
 - T6a 先完成規格變更，再開 T6b；不得直接在本規格或實作 PR 修改已凍結的 `domain-model`。
-- T7 根據第 1 輪審查前已檢查的現況表執行，不再把散落項目留到實作階段才盤點。已交付基本管理不得重做。
+- T7 根據本規格的 0.2.x 現況表執行；實作前若現況改變，更新該表及對應 task。已交付基本管理不得重做。
 
 ## 並行分組
 
@@ -33,12 +33,12 @@
 - 第 1 波：T0、T1、T4、T5a 可分別進行；T0 是先行 spec-change，T4 等 #390，T5a 只負責把已裁定 C 同步到 audit-log。若 T1／T4 等需共用 `backend/app/main.py` 註冊，依 README 的共用檔案規則錯開。
 - 第 2 波：T2、T3 依賴 T1；兩者共用 Dashboard 前端區域，應同一責任人串接或錯開。T5b 在 T5a 合併後開始。T6a 在 T0 合併後開始；T6b 等 T0、T6a 都合併後開始。
 - 第 3 波：T7 等 T0 合併後開始；與 T4 若共用角色／使用者路由，錯開實作；其餘檔案不重疊時可並行。
-- 後續版本：T8 等 Evidence 與 Completion Validation 契約和實作完成後執行。
+- 0.7.x 後續版本：T8 等 `completion-validation` 契約與實作完成後執行，僅切換既有完成數與完成率的計算來源。
 - #104 Field UI 僅在路由、共用 API client 或共用元件有重疊時錯開；其餘可平行。
 
 ## 風險
 
-- #387／#390 正在更新全公司角色模型；T4 必須等待權限範圍、schema、預建角色及 API 契約落入前置規格。發現衝突先同步文件，不以本計畫推論覆蓋。
+- 全公司角色與權限模型依 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-67](../../intents/03-decisions-and-stack.md#kd-67)；T4 必須等待 #390 將 schema、預建角色及 API 契約更新至前置規格。發現衝突先同步文件，不以本計畫推論覆蓋。
 - PR-18 影響預覽需在寫入前取得最新受影響者及權限差異；測試修改／刪除角色及指派／撤銷角色的不同影響集合。
 - T0 與 T6a 是已凍結清單端點的規格變更，必須在 `authentication`／`domain-model` spec-change PR 合併後才可實作；#286 的 `member_count` 另需 T6a 合併。未合併 T6a 前不得呈現前端推算的成員數。
 - Dashboard 彙總可能讀取大量 Task；先受授權範圍及 cursor 查詢限制，效能門檻依實際量測訂定。
