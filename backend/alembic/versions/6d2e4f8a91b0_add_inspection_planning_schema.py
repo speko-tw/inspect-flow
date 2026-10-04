@@ -50,6 +50,10 @@ def upgrade() -> None:
             "status IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')",
             name=op.f("ck_inspection_plans_inspection_plan_status_valid"),
         ),
+        sa.CheckConstraint(
+            "length(trim(name)) BETWEEN 1 AND 128",
+            name=op.f("ck_inspection_plans_inspection_plan_name_valid"),
+        ),
         sa.ForeignKeyConstraint(
             ["created_by"],
             ["users.id"],
@@ -130,9 +134,6 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_by", sa.Uuid(), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "has_defect", sa.Boolean(), server_default="0", nullable=False
-        ),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -140,7 +141,8 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "(status = 'CANCELLED' AND cancelled_from_status IS NOT NULL "
-            "AND cancellation_reason IS NOT NULL) OR "
+            "AND cancellation_reason IS NOT NULL "
+            "AND length(trim(cancellation_reason)) > 0) OR "
             "(status != 'CANCELLED' AND cancelled_from_status IS NULL "
             "AND cancellation_reason IS NULL)",
             name=op.f(
@@ -206,7 +208,7 @@ def upgrade() -> None:
         sa.Column("project_inspection_item_id", sa.Uuid(), nullable=False),
         sa.Column("before_revision", sa.Integer(), nullable=False),
         sa.Column("after_revision", sa.Integer(), nullable=False),
-        sa.Column("reinspection_required", sa.Boolean(), nullable=False),
+        sa.Column("reinspection_required", sa.Boolean(), nullable=True),
         sa.Column("before_data", sa.JSON(), nullable=False),
         sa.Column("after_data", sa.JSON(), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
@@ -240,6 +242,13 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint(
             "id", name=op.f("pk_project_inspection_item_changes")
+        ),
+        sa.UniqueConstraint(
+            "project_inspection_item_id",
+            "after_revision",
+            name=op.f(
+                "uq_project_inspection_item_changes_project_inspection_item_id"
+            ),
         ),
     )
     op.add_column(
@@ -341,6 +350,15 @@ def upgrade() -> None:
             "('STANDARD_CHANGED', 'TEXT_CORRECTED')",
             name=op.f(
                 "ck_task_requirement_snapshots_task_snapshot_superseded_reason_valid"
+            ),
+        ),
+        sa.CheckConstraint(
+            "(is_current AND superseded_reason IS NULL "
+            "AND superseded_at IS NULL) OR "
+            "(NOT is_current AND superseded_reason IS NOT NULL "
+            "AND superseded_at IS NOT NULL)",
+            name=op.f(
+                "ck_task_requirement_snapshots_task_snapshot_current_consistent"
             ),
         ),
         sa.CheckConstraint(
@@ -514,6 +532,12 @@ def upgrade() -> None:
                 "ck_task_snapshot_measurement_fields_task_snapshot_field_type_valid"
             ),
         ),
+        sa.CheckConstraint(
+            "field_type != 'number' OR unit IS NOT NULL",
+            name=op.f(
+                "ck_task_snapshot_measurement_fields_task_snapshot_number_field_requires_unit"
+            ),
+        ),
         sa.ForeignKeyConstraint(
             ["created_by"],
             ["users.id"],
@@ -540,6 +564,13 @@ def upgrade() -> None:
             "source_field_id",
             name=op.f("uq_task_snapshot_measurement_fields_point_id"),
         ),
+        sa.UniqueConstraint(
+            "point_id",
+            "source_field_id",
+            "field_type",
+            "unit",
+            name="uq_snapshot_field_point_source_type_unit",
+        ),
     )
     op.create_table(
         "task_snapshot_numeric_standards",
@@ -552,6 +583,13 @@ def upgrade() -> None:
         sa.Column("lower_bound", sa.String(), nullable=True),
         sa.Column("upper_bound", sa.String(), nullable=True),
         sa.Column("source_measurement_field_id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "measurement_field_type",
+            sa.String(length=16),
+            server_default="number",
+            nullable=False,
+        ),
+        sa.Column("measurement_field_unit", sa.String(), nullable=False),
         sa.Column("created_by", sa.Uuid(), nullable=False),
         sa.Column("updated_by", sa.Uuid(), nullable=False),
         sa.Column("id", sa.Uuid(), nullable=False),
@@ -561,6 +599,18 @@ def upgrade() -> None:
             "condition IN ('<=', '>=', '=', 'range')",
             name=op.f(
                 "ck_task_snapshot_numeric_standards_task_snapshot_numeric_condition_valid"
+            ),
+        ),
+        sa.CheckConstraint(
+            "measurement_field_type = 'number'",
+            name=op.f(
+                "ck_task_snapshot_numeric_standards_task_snapshot_numeric_requires_number_field"
+            ),
+        ),
+        sa.CheckConstraint(
+            "unit = measurement_field_unit",
+            name=op.f(
+                "ck_task_snapshot_numeric_standards_task_snapshot_numeric_unit_matches_field"
             ),
         ),
         sa.ForeignKeyConstraint(
@@ -577,10 +627,17 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.ForeignKeyConstraint(
-            ["point_id", "source_measurement_field_id"],
+            [
+                "point_id",
+                "source_measurement_field_id",
+                "measurement_field_type",
+                "measurement_field_unit",
+            ],
             [
                 "task_snapshot_measurement_fields.point_id",
                 "task_snapshot_measurement_fields.source_field_id",
+                "task_snapshot_measurement_fields.field_type",
+                "task_snapshot_measurement_fields.unit",
             ],
             ondelete="CASCADE",
         ),

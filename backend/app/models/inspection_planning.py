@@ -26,6 +26,11 @@ def _check_zone_name(value: str) -> None:
         raise ValueError("ProjectZone.name must be at most 128 characters")
 
 
+def _check_plan_name(value: str) -> None:
+    if len(value) > 128:
+        raise ValueError("InspectionPlan.name must be at most 128 characters")
+
+
 def _check_location_text(value: str) -> None:
     if len(value) > 256:
         raise ValueError("InspectionTask.location_text is too long")
@@ -66,7 +71,9 @@ class InspectionPlan(AuditMixin, TimestampedBase):
     project_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(
+        BoundedString(128, _check_plan_name), nullable=False
+    )
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="DRAFT", server_default="DRAFT"
     )
@@ -79,7 +86,20 @@ class InspectionPlan(AuditMixin, TimestampedBase):
             "status IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')",
             name="inspection_plan_status_valid",
         ),
+        CheckConstraint(
+            "length(trim(name)) BETWEEN 1 AND 128",
+            name="inspection_plan_name_valid",
+        ),
     )
+
+    @validates("name")
+    def validate_name(self, key: str, value: str) -> str:
+        normalized = value.strip()
+        if not normalized or len(normalized) > 128:
+            raise ValueError(
+                "InspectionPlan.name must contain 1-128 characters"
+            )
+        return normalized
 
 
 class InspectionTask(AuditMixin, TimestampedBase):
@@ -107,9 +127,6 @@ class InspectionTask(AuditMixin, TimestampedBase):
         Uuid, ForeignKey("users.id")
     )
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
-    has_defect: Mapped[bool] = mapped_column(
-        nullable=False, default=False, server_default="0"
-    )
     __table_args__ = (
         UniqueConstraint("id", "project_id"),
         ForeignKeyConstraint(
@@ -134,7 +151,8 @@ class InspectionTask(AuditMixin, TimestampedBase):
         ),
         CheckConstraint(
             "(status = 'CANCELLED' AND cancelled_from_status IS NOT NULL "
-            "AND cancellation_reason IS NOT NULL) OR "
+            "AND cancellation_reason IS NOT NULL "
+            "AND length(trim(cancellation_reason)) > 0) OR "
             "(status != 'CANCELLED' AND cancelled_from_status IS NULL "
             "AND cancellation_reason IS NULL)",
             name="inspection_task_cancellation_consistent",
@@ -215,6 +233,13 @@ class TaskRequirementSnapshot(AuditMixin, TimestampedBase):
             "('STANDARD_CHANGED', 'TEXT_CORRECTED')",
             name="task_snapshot_superseded_reason_valid",
         ),
+        CheckConstraint(
+            "(is_current AND superseded_reason IS NULL "
+            "AND superseded_at IS NULL) OR "
+            "(NOT is_current AND superseded_reason IS NOT NULL "
+            "AND superseded_at IS NOT NULL)",
+            name="task_snapshot_current_consistent",
+        ),
     )
 
 
@@ -271,18 +296,37 @@ class TaskSnapshotNumericStandard(AuditMixin, TimestampedBase):
     source_measurement_field_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, nullable=False
     )
+    measurement_field_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="number", server_default="number"
+    )
+    measurement_field_unit: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
         ForeignKeyConstraint(
-            ["point_id", "source_measurement_field_id"],
+            [
+                "point_id",
+                "source_measurement_field_id",
+                "measurement_field_type",
+                "measurement_field_unit",
+            ],
             [
                 "task_snapshot_measurement_fields.point_id",
                 "task_snapshot_measurement_fields.source_field_id",
+                "task_snapshot_measurement_fields.field_type",
+                "task_snapshot_measurement_fields.unit",
             ],
             ondelete="CASCADE",
         ),
         CheckConstraint(
             "condition IN ('<=', '>=', '=', 'range')",
             name="task_snapshot_numeric_condition_valid",
+        ),
+        CheckConstraint(
+            "measurement_field_type = 'number'",
+            name="task_snapshot_numeric_requires_number_field",
+        ),
+        CheckConstraint(
+            "unit = measurement_field_unit",
+            name="task_snapshot_numeric_unit_matches_field",
         ),
     )
 
@@ -301,9 +345,20 @@ class TaskSnapshotMeasurementField(AuditMixin, TimestampedBase):
     unit: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
         UniqueConstraint("point_id", "source_field_id"),
+        UniqueConstraint(
+            "point_id",
+            "source_field_id",
+            "field_type",
+            "unit",
+            name="uq_snapshot_field_point_source_type_unit",
+        ),
         CheckConstraint(
             "field_type IN ('text', 'number')",
             name="task_snapshot_field_type_valid",
+        ),
+        CheckConstraint(
+            "field_type != 'number' OR unit IS NOT NULL",
+            name="task_snapshot_number_field_requires_unit",
         ),
     )
 
@@ -346,10 +401,11 @@ class ProjectInspectionItemChange(AuditMixin, TimestampedBase):
     )
     before_revision: Mapped[int] = mapped_column(nullable=False)
     after_revision: Mapped[int] = mapped_column(nullable=False)
-    reinspection_required: Mapped[bool] = mapped_column(nullable=False)
+    reinspection_required: Mapped[bool | None] = mapped_column()
     before_data: Mapped[dict] = mapped_column(JSON, nullable=False)
     after_data: Mapped[dict] = mapped_column(JSON, nullable=False)
     __table_args__ = (
+        UniqueConstraint("project_inspection_item_id", "after_revision"),
         CheckConstraint(
             "after_revision > before_revision",
             name="project_item_change_revision_increases",
