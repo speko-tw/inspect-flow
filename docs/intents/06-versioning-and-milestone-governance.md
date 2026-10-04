@@ -217,9 +217,10 @@ Issue 涵蓋多個版本系列時，先判斷能否作為單一工作完成；�
 | 文件 | 負責 |
 |---|---|
 | 本文件 | 版本、Release 系列、Milestone、Issue／PR 版本歸屬、歷史 metadata migration |
-| [`docs/specs/README.md`](../specs/README.md) | Spec、Plan、Task、Phase、Issue／PR 流程 |
+| [`docs/specs/README.md`](../specs/README.md) | Spec、Plan、Task、Phase、Issue／PR 流程；[重大畫面的實作前原型關卡](../specs/README.md#ui-prototype-gate) |
+| [`docs/release.md`](../release.md) | 發版前實機試用、發版前檢查、tag 與 Release 步驟 |
 | [`AGENTS.md`](../../AGENTS.md) | Agent 操作規則、Git workflow、人的關卡 |
 
-三者**不得**重複定義彼此的完整規則；其他文件需要使用版本治理時，**應**連結本文件，而不是複製一份規則。
+各文件**不得**重複定義彼此的完整規則；其他文件需要使用版本治理時，**應**連結本文件，而不是複製一份規則。
 
 **依據**：負責人決定（2026-09-26）。
