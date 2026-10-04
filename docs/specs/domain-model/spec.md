@@ -21,6 +21,7 @@
   - 建立內建 `admin` 的初始化指令，以及既有資料的回填規則。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
   - `Project` 的業務欄位：依 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定）與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，見 [`Project` 業務欄位](#project-business-fields)。
+  - `Inspection Plan`、`Inspection Task`、Task 項目關聯與 `Task Requirement Snapshot`（DOM-R56～DOM-R57、DOM-AC51～DOM-AC52）。
 - 草稿（本次不凍結，不拆任務）：
   - `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體依各自開工門檻維持草稿，見[其他實體](#draft-others)；`Inspection Template` 由 `template-system` 定義。
 
@@ -190,10 +191,24 @@
 
 | 實體 | 門檻與原文理由／選項比對 | 結論與理由 |
 |---|---|---|
-| `Inspection Plan` | G-01 的 why/options 原文明列 Plan：A 將未來 interval 放 Template，B 放 Plan 輸入；KD-36 已裁定 MVP 無 interval，故不納入 Plan 欄位。G-02 的路徑只含 `project_id` UUID；G-03 的 why/options 談使用者看見編輯結果、上傳及重試；G-04 的選項是 Variant 核可與 Latest 的歧義，部分裁定後仍有缺圖出報表等餘項；G-05 是 Evidence 刪除／報告引用／保留；G-06 是 Report 狀態；G-07 是 Report Snapshot 時點及版次；OQ-06 是 Result 欄位，均未要求改 Plan 本身。OQ-09 明列 Plan 狀態；已裁定規則依 KD-42／KD-56，剩餘狀態表示依 state-machines 規格設計明示。 | G-01 的 MVP interval 欄位被明確排除；其餘門檻沒有改 Plan 欄位的選項。OQ-09 有關，業務裁定與技術設計分開列明，不宣稱未裁定為負責人裁定。 |
-| `Inspection Task` | G-01 why/options 點名 Task，討論未來 interval 的歸屬／快照，但 KD-36 排除 MVP interval。G-02～G-05 的原文選項分別限於 Evidence 原圖、編輯／上傳、核可及 Evidence DELETE；G-06／G-07 僅 Report 狀態與 Report Snapshot；OQ-06 僅 Result 欄位，均未要求 Task 欄位變更。OQ-09 明列 Task 狀態與例外；KD-55／KD-56 已裁定部分依狀態機引用，其餘標示為規格設計。 | G-01 不改 MVP Task 欄位；其他 G／OQ-06 不改 Task 本身。OQ-09 相關部分的業務決定有來源，未決表示不冒稱裁定。 |
+| `Inspection Plan` | G-01 的 why/options 原文明列 Plan：A 將未來 interval 放 Template，B 放 Plan 輸入；KD-36 已裁定 MVP 無 interval，故不納入 Plan 欄位。G-02 的路徑含 `project_id` UUID，僅引用 Project，不改 Plan 欄位或規則；Task 儲存鍵路徑中的 `task_id` UUID 僅引用 Task，也不改 Plan。G-03 的 why/options 談使用者看見編輯結果、上傳及重試；G-04 的選項是 Variant 核可與 Latest 的歧義，部分裁定後仍有缺圖出報表等餘項；G-05 是 Evidence 刪除／報告引用／保留；G-06 是 Report 狀態；G-07 是 Report Snapshot 時點及版次；OQ-06 是 Result 欄位，均未要求改 Plan 本身。OQ-09 明列 Plan 狀態；已裁定規則依 KD-42／KD-56，剩餘狀態表示依 state-machines 規格設計明示。 | G-01 的 MVP interval 欄位被明確排除；G-02 的 `project_id`／`task_id` 只作 ID 引用，其餘門檻沒有改 Plan 欄位的選項。OQ-09 有關，業務裁定與技術設計分開列明，不宣稱未裁定為負責人裁定。 |
+| `Inspection Task` | G-01 why/options 點名 Task，討論未來 interval 的歸屬／快照，但 KD-36 排除 MVP interval。G-02 儲存鍵範例路徑含 `<task_id>`；此 UUID 外鍵只引用 Task，依 README 規則 1「只用 ID 引用」例外，不改 Task 本身欄位或約束。G-03～G-05 的原文選項限於 Evidence 編輯／上傳時序、Variant 核可、Evidence 刪除保留，未要求 Task 欄位或狀態改動；G-06／G-07 僅 Report 狀態與 Report Snapshot。OQ-06「為什麼要先決定」明列任務完成判定邏輯；Result 與完成所需資料已由 KD-54 裁定，狀態轉換及伺服器覆核由 state-machines 負責，不要求新增 Task 欄位。OQ-09 明列 Task 狀態與更正例外；KD-55／KD-56 已裁定部分依狀態機引用，其餘標示為規格設計。 | 凍結 Task 對 Plan 關聯及需求 IP-R02～R09。G-02 的 `task_id` 僅為 UUID 引用；OQ-06 完成資料已有 KD-54 依據、Task 狀態行為另由 state-machines 定義。其他 Evidence／Report／Result 門檻不改 Task 定義；OQ-09 的未決細節依規格設計明示，不升格為負責人裁定。 |
 | Task 項目關聯 | G-01 未來 interval 可能進 Snapshot，但不裁定關聯方式；MVP 不設 interval。G-02～G-05 分別問 Evidence 儲存、編輯、核可及刪除政策；選項沒有 Task 項目關聯。G-06／G-07 與 OQ-06 分別處理 Report 狀態／快照與 Result 欄位；沒有要求關聯表改動。OQ-09／KD-55 明確要求標準變更影響特定項目，且負責人已裁定一個 Task 得含多項目。 | 凍結以明細關聯表達多項目與項目級變更的資料責任；表／子表表示法為規格設計。門檻其他選項不要求 Task 項目關聯變更。 |
 | `Task Requirement Snapshot` | G-01 why 原文直接問 interval 要不要快照、選項 A/B 尚有未來分歧；KD-36 排除 MVP interval。G-02～G-05 原文處理 Evidence 版本、上傳編輯、核可與獨立刪除；只會影響 Snapshot 所參照的 Evidence 歷史，不要求修改 Snapshot 的建立時需求。G-04 部分裁定，缺圖能否出報表等仍未定。G-06／G-07 的 why/options 限於 Report 狀態及 Report 自己的快照時點／DRAFT 覆寫；OQ-06 是 Result 欄位。OQ-09 明定 Task Requirement Snapshot 必須存在，KD-55 的修改、更正及作廢歷史依其裁定；新舊標準資料表示列規格設計。 | 凍結建立 Task 時保存需求與不靜默改寫歷史；interval 不進 MVP Snapshot。G-02～G-07/OQ-06 不改 Snapshot 業務欄位；OQ-09 的未決資料表示維持規格設計（非負責人裁定）。 |
+
+### Plan／Task 開工門檻逐項比對
+
+| 門檻項 | 狀態 | 依據 | 是否阻擋本凍結範圍 |
+|---|---|---|---|
+| G-01：Interval 歸屬 | 部分裁定；MVP 不需要 interval 欄位 | [KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01) | 否；未來選用功能另行裁定 |
+| G-02：Original Evidence | 已裁定 | [G-02](../../intents/05-open-questions.md#g-02) | 否；不影響 Plan／Task 關聯 |
+| G-03：Evidence 編輯時序 | 部分裁定；離線暫存、傳送時點、前後端分工與重試仍未定 | [G-03](../../intents/05-open-questions.md#g-03) | 否；不凍結 Evidence 實體 |
+| G-04：Evidence 核可與報表選圖 | 已裁定；缺圖時能否出報表及圖片選用細節仍未定 | [G-04](../../intents/05-open-questions.md#g-04) | 否；未定餘項屬 Evidence／Report，不凍結該等實體 |
+| G-05：Evidence 刪除與保留 | 未裁定，限制 field-evidence | [G-05](../../intents/05-open-questions.md#g-05) | 否；不凍結 Evidence 實體 |
+| G-06：Report 狀態 | 部分裁定，其他狀態未定 | [G-06](../../intents/05-open-questions.md#g-06)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57) | 否；不凍結 Report 實體 |
+| G-07：Report Snapshot 與版次 | 未裁定，限制 report-delivery | [G-07](../../intents/05-open-questions.md#g-07) | 否；不凍結 Report 實體 |
+| OQ-06：Result 語意與任務完成判定 | 已裁定；KD-54 已解除 Result 必要資料門檻 | [OQ-06](../../intents/05-open-questions.md#oq-06)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54) | 否；不凍結 Result 實體，Task 狀態行為由 state-machines 定義 |
+| OQ-09：Plan／Task 狀態例外 | 部分裁定；已裁定行為依 KD-42、KD-55～KD-57；未裁定表示細節在本規格明標為規格設計（非負責人裁定） | [OQ-09](../../intents/05-open-questions.md#oq-09)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56) | 否；僅凍結本規格列出的資料關聯與歷史責任，不宣稱未裁定業務規則已裁定 |
 
 ## 介面
 
@@ -341,20 +356,6 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 | DOM-AC51 | 專案 P1、P2；Plan PL1 關聯 P1；Plan PL2 關聯 P2；Task T1、T2 | 建立 PL1、PL2，分別建立 T1、T2；再嘗試以不存在的 Plan UUID 建立另一筆 Task | T1 關聯 PL1，T2 關聯 PL2；無效 Plan 外鍵遭拒絕；Plan／Task 狀態依 state-machines 規則保存 | DOM-R56 |
 | DOM-AC52 | 專案項目 I1、I2 有各自有效需求；Plan PL1、Task T1 | 建立 T1 並明確選取 I1、I2；之後修改 I1 的來源需求，分別選 KD-55「要」及「不要」重新查核，再讀取 T1 的項目關聯與 Snapshot | T1 有兩筆獨立項目關聯；每筆快照保留建立時需求；選「要」保留並標記受影響舊需求歷史，選「不要」只更正 Snapshot 文字且記錄變更，兩者皆不影響 I2 歷史 | DOM-R57 |
 
-### Plan／Task 開工門檻逐項比對
-
-| 門檻項 | 狀態 | 依據 | 是否阻擋本凍結範圍 |
-|---|---|---|---|
-| G-01：Interval 歸屬 | 部分裁定；MVP 不需要 interval 欄位 | [KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01) | 否；未來選用功能另行裁定 |
-| G-02：Original Evidence | 已裁定 | [G-02](../../intents/05-open-questions.md#g-02) | 否；不影響 Plan／Task 關聯 |
-| G-03：Evidence 編輯時序 | 未裁定，限制 field-evidence | [G-03](../../intents/05-open-questions.md#g-03) | 否；不凍結 Evidence 實體 |
-| G-04：Evidence 核可與報表選圖 | 部分裁定；核可機制已有結論，Evidence／Report 餘項仍未定 | [G-04](../../intents/05-open-questions.md#g-04) | 否；餘項屬 Evidence／Report，不凍結該等實體 |
-| G-05：Evidence 刪除與保留 | 未裁定，限制 field-evidence | [G-05](../../intents/05-open-questions.md#g-05) | 否；不凍結 Evidence 實體 |
-| G-06：Report 狀態 | 部分裁定，其他狀態未定 | [G-06](../../intents/05-open-questions.md#g-06)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57) | 否；不凍結 Report 實體 |
-| G-07：Report Snapshot 與版次 | 未裁定，限制 report-delivery | [G-07](../../intents/05-open-questions.md#g-07) | 否；不凍結 Report 實體 |
-| OQ-06：Result 語意 | 已裁定；KD-54 已解除門檻 | [OQ-06](../../intents/05-open-questions.md#oq-06)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54) | 否；不凍結 Result 實體 |
-| OQ-09：Plan／Task 狀態例外 | 部分裁定；已裁定行為依 KD-42、KD-55～KD-57；未裁定表示細節在本規格明標為規格設計（非負責人裁定） | [OQ-09](../../intents/05-open-questions.md#oq-09)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56) | 否；僅凍結本規格列出的資料關聯與歷史責任，不宣稱未裁定業務規則已裁定 |
-
 ### `Project`
 
 | 編號 | Given | When | Then | 對應需求 |
@@ -425,9 +426,9 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 
 ## 變更紀錄
 
-- 新增 Plan／Task、Task 項目關聯及 Task Requirement Snapshot 的凍結資料基線 DOM-R56～DOM-R57、DOM-AC51～DOM-AC52，並逐項比對開工門檻 — #358
-
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
+
+- 新增 Plan／Task、Task 項目關聯及 Task Requirement Snapshot 的凍結資料基線 DOM-R56～DOM-R57、DOM-AC51～DOM-AC52，並逐項比對開工門檻 — #358
 
 - DOM-R28～DOM-R31、DOM-AC19～DOM-AC21：依 DOM-Q1 裁定，新增 `User`、`Company`、`Role` 與權限代碼的字串長度上限及格式，並擴大凍結範圍；`project_code` 的長度暫定、待確認（DOM-R40，草稿） — [#121](https://github.com/speko-tw/inspect-flow/issues/121)
 - DOM-Q7 裁定：DOM-R01、DOM-R16 補上 `is_active` 預設啟用；新增 DOM-R32（停用公司不能再被選用、不影響旗下人員）、DOM-R33（停用前列出啟用中人員與人數），以及 DOM-AC22、DOM-AC23；DOM-AC01、DOM-AC11 補上預設值的斷言 — [#127](https://github.com/speko-tw/inspect-flow/issues/127)
