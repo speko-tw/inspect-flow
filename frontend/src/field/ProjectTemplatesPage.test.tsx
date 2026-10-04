@@ -144,10 +144,10 @@ function mockApi(
   return calls
 }
 
-function renderPage() {
+function renderPage(user = USER) {
   return render(
     <MemoryRouter initialEntries={['/field/projects/project-1']}>
-      <CurrentUserProvider value={{ user: USER, clear: vi.fn() }}>
+      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         <Routes>
           <Route
             element={<ProjectTemplatesPage />}
@@ -452,6 +452,18 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     paths.forEach((path, index) => {
       expect(requestCount(path)).toBe(beforeSave[index] + 1)
     })
+  })
+
+  it('Admin 可存成範本', async () => {
+    mockApi(Response.json([]), false, {
+      projectItems: [SAVED_ITEM],
+      canSave: true,
+    })
+    renderPage({ ...USER, is_admin: true })
+
+    expect(
+      await screen.findByRole('button', { name: '存為範本' }),
+    ).toBeInTheDocument()
   })
 
   it('存為範本 409 顯示同名訊息並保留選擇', async () => {

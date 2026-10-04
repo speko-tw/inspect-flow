@@ -106,6 +106,33 @@ function managementFetch({
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
+      if (url.includes('/template-categories?')) {
+        return Response.json({
+          items: [{ id: 'category-1', name: '土木工程' }],
+          next_cursor: null,
+        })
+      }
+      if (url.includes('/template-categories/category-1/systems?')) {
+        return Response.json({
+          items: [{ id: 'system-1', category_id: 'category-1', name: '護欄' }],
+          next_cursor: null,
+        })
+      }
+      if (url.includes('/template-systems/system-1/templates?')) {
+        return Response.json({
+          items: [
+            {
+              id: 'template-1',
+              system_id: 'system-1',
+              sequence: 1,
+              title: '欄杆尺寸',
+              instruction: '確認尺寸',
+              inspection_points: [],
+            },
+          ],
+          next_cursor: null,
+        })
+      }
       if (url.endsWith('/users') && (!init?.method || init.method === 'GET')) {
         return Response.json(rows)
       }
@@ -190,6 +217,21 @@ afterEach(() => {
 })
 
 describe('admin user and company pages', () => {
+  it('lets Admin edit templates from the management page', async () => {
+    managementFetch()
+    renderAdmin('/admin/templates')
+
+    expect(
+      await screen.findByRole('button', { name: '新增工程類別' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: '新增系統…' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+    ).toBeInTheDocument()
+  })
+
   it('lists users and protects the built-in admin controls', async () => {
     managementFetch()
     renderAdmin()
