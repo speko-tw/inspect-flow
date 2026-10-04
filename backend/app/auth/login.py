@@ -22,6 +22,7 @@ from app.auth.lockout import (
     clear_after_successful_check,
     is_locked,
     record_failure,
+    wait_for_sqlite_login_write_lock,
 )
 from app.auth.passwords import hash_password, needs_rehash, verify_password
 from app.models import User, UserPassword
@@ -108,10 +109,16 @@ def authenticate(db: Session, login: str, password: str) -> User | None:
     locked = is_locked(db, user_id)
     if user is None:
         _log_failed(None, "invalid_credentials")
+        db.commit()
+        wait_for_sqlite_login_write_lock(db)
+        db.commit()
         return None
     assert user_id is not None
     if locked:
         _log_failed(str(user_id), "locked")
+        db.commit()
+        wait_for_sqlite_login_write_lock(db)
+        db.commit()
         return None
     if user_password is None:
         db.commit()

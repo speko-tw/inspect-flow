@@ -13,6 +13,7 @@ from app.auth.settings import (
     SETUP_FAILURE_THRESHOLD_ENV_VAR,
     SETUP_FAILURE_WINDOW_ENV_VAR,
     SETUP_LOCKOUT_DURATION_ENV_VAR,
+    SQLITE_BUSY_TIMEOUT_ENV_VAR,
     InvalidAuthSettingError,
     get_lockout_settings,
     get_session_timeouts,
@@ -30,6 +31,7 @@ ALL_ENV_VARS = (
     SETUP_FAILURE_THRESHOLD_ENV_VAR,
     SETUP_FAILURE_WINDOW_ENV_VAR,
     SETUP_LOCKOUT_DURATION_ENV_VAR,
+    SQLITE_BUSY_TIMEOUT_ENV_VAR,
 )
 
 BAD_VALUES = ("0", "-1", "1.5", "abc", "1e3")
@@ -85,6 +87,7 @@ def test_unset_and_empty_use_defaults(monkeypatch):
         monkeypatch.setenv(name, "")
     validate_auth_settings()
     assert get_lockout_settings().failure_threshold == 10
+    assert get_lockout_settings().sqlite_busy_timeout_ms == 5_000
     assert get_setup_lockout_settings().lockout_duration == timedelta(
         minutes=15
     )
@@ -97,4 +100,5 @@ def test_positive_integers_are_accepted(monkeypatch):
     assert get_session_timeouts().idle_timeout == timedelta(minutes=3)
     assert get_session_timeouts().absolute_timeout == timedelta(hours=3)
     assert get_lockout_settings().failure_threshold == 3
+    assert get_lockout_settings().sqlite_busy_timeout_ms == 3
     assert get_setup_lockout_settings().failure_window == timedelta(minutes=3)

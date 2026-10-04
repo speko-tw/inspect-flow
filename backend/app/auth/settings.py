@@ -32,6 +32,7 @@ _DEFAULT_ABSOLUTE_TIMEOUT = timedelta(hours=8)
 FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_THRESHOLD"
 FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_LOGIN_FAILURE_WINDOW_MINUTES"
 LOCKOUT_DURATION_ENV_VAR = "INSPECTFLOW_LOGIN_LOCKOUT_MINUTES"
+SQLITE_BUSY_TIMEOUT_ENV_VAR = "INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS"
 
 SETUP_FAILURE_THRESHOLD_ENV_VAR = "INSPECTFLOW_SETUP_FAILURE_THRESHOLD"
 SETUP_FAILURE_WINDOW_ENV_VAR = "INSPECTFLOW_SETUP_FAILURE_WINDOW_MINUTES"
@@ -40,6 +41,8 @@ SETUP_LOCKOUT_DURATION_ENV_VAR = "INSPECTFLOW_SETUP_LOCKOUT_MINUTES"
 _DEFAULT_FAILURE_THRESHOLD = 10
 _DEFAULT_FAILURE_WINDOW = timedelta(minutes=15)
 _DEFAULT_LOCKOUT_DURATION = timedelta(minutes=15)
+_DEFAULT_SQLITE_BUSY_TIMEOUT_MS = 5_000
+_MAX_SQLITE_BUSY_TIMEOUT_MS = 2_147_483_647
 
 _DEFAULT_SETUP_FAILURE_THRESHOLD = 10
 _DEFAULT_SETUP_FAILURE_WINDOW = timedelta(minutes=15)
@@ -88,6 +91,7 @@ class LockoutSettings:
     failure_threshold: int
     failure_window: timedelta
     lockout_duration: timedelta
+    sqlite_busy_timeout_ms: int
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,13 @@ def get_setup_lockout_settings() -> SetupLockoutSettings:
 
 def get_lockout_settings() -> LockoutSettings:
     """Read AUT-R28 values at call time so env overrides take effect."""
+    sqlite_busy_timeout_ms = _read_positive_int(
+        SQLITE_BUSY_TIMEOUT_ENV_VAR, _DEFAULT_SQLITE_BUSY_TIMEOUT_MS
+    )
+    if sqlite_busy_timeout_ms > _MAX_SQLITE_BUSY_TIMEOUT_MS:
+        raise InvalidAuthSettingError(
+            f"{SQLITE_BUSY_TIMEOUT_ENV_VAR} exceeds SQLite's integer limit"
+        )
     return LockoutSettings(
         failure_threshold=_read_positive_int(
             FAILURE_THRESHOLD_ENV_VAR, _DEFAULT_FAILURE_THRESHOLD
@@ -128,6 +139,7 @@ def get_lockout_settings() -> LockoutSettings:
         lockout_duration=_read_duration(
             LOCKOUT_DURATION_ENV_VAR, "minutes", _DEFAULT_LOCKOUT_DURATION
         ),
+        sqlite_busy_timeout_ms=sqlite_busy_timeout_ms,
     )
 
 

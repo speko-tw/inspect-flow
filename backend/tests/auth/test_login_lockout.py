@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -76,23 +77,35 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     user = make_local_user(db_session, "DEMO_LOCK")
     user_id, email = user.id, user.email
     assert email is not None
-    monkeypatch.setattr(lockout_module, "_SQLITE_BUSY_TIMEOUT_MS", 50)
+    monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
     caplog.set_level(logging.WARNING, logger="app.auth")
 
     with engine.connect() as holder:
         holder.exec_driver_sql("BEGIN IMMEDIATE")
         try:
-            for password in ("wrong-password", P):
+            responses = []
+            durations = []
+            for login, password in (
+                (email, "wrong-password"),
+                (email, P),
+                ("missing-user", "wrong-password"),
+            ):
+                started = time.monotonic()
                 response = client.post(
                     "/api/v1/auth/login",
-                    json={"login": email, "password": password},
+                    json={"login": login, "password": password},
                 )
+                durations.append(time.monotonic() - started)
+                responses.append(response)
                 assert response.status_code == 503
                 assert response.json() == {
                     "error": {"code": ErrorCode.SERVER_TEMPORARILY_UNAVAILABLE}
                 }
                 assert response.headers["retry-after"] == "5"
                 assert "set-cookie" not in response.headers
+            assert max(durations) - min(durations) < 0.5
+            assert responses[0].content == responses[1].content
+            assert responses[1].content == responses[2].content
         finally:
             holder.rollback()
 
@@ -101,7 +114,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         for record in caplog.records
         if record.levelno == logging.WARNING
     ]
-    assert len(warnings) == 2
+    assert len(warnings) == 3
     assert all(
         record.event == "auth.lockout_write_timeout"
         and record.reason == "sqlite_lock_timeout"
@@ -121,6 +134,12 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         db_session.query(AuthSession).filter_by(user_id=user_id).count() == 0
     )
     db_session.rollback()
+    unknown = client.post(
+        "/api/v1/auth/login",
+        json={"login": "missing-user", "password": "wrong-password"},
+    )
+    assert unknown.status_code == 401
+    db_session.rollback()
     assert _login(client, user, "wrong-password").status_code == 401
     db_session.rollback()
     counter = db_session.scalar(
@@ -129,6 +148,53 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     assert counter is not None and counter.failure_count == 1
     db_session.rollback()
     assert _login(client, user, P).status_code == 200
+
+
+def test_locked_account_and_unknown_login_share_sqlite_timeout(
+    client, db_session, engine, now, monkeypatch
+):
+    _admin(db_session)
+    user = make_local_user(db_session, "DEMO_LOCKED")
+    assert user.email is not None
+    db_session.add(
+        LoginCounter(
+            user_id=user.id,
+            failure_count=10,
+            locked_until=now[0] + timedelta(minutes=15),
+        )
+    )
+    db_session.commit()
+    monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
+
+    with engine.connect() as holder:
+        holder.exec_driver_sql("BEGIN IMMEDIATE")
+        try:
+            responses = []
+            durations = []
+            for login, password in (
+                (user.email, P),
+                ("missing-user", "wrong-password"),
+            ):
+                started = time.monotonic()
+                response = client.post(
+                    "/api/v1/auth/login",
+                    json={"login": login, "password": password},
+                )
+                durations.append(time.monotonic() - started)
+                responses.append(response)
+            assert all(response.status_code == 503 for response in responses)
+            assert responses[0].content == responses[1].content
+            assert abs(durations[0] - durations[1]) < 0.5
+        finally:
+            holder.rollback()
+
+    locked = _login(client, user, P)
+    unknown = client.post(
+        "/api/v1/auth/login",
+        json={"login": "missing-user", "password": "wrong-password"},
+    )
+    assert locked.status_code == unknown.status_code == 401
+    assert locked.content == unknown.content
 
 
 def test_non_lock_sqlite_operational_error_is_not_converted(
