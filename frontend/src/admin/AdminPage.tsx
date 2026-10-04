@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Link,
   Navigate,
@@ -17,6 +17,7 @@ import ProjectDetailPage from './projects/ProjectDetailPage'
 import ProjectsPage from './projects/ProjectsPage'
 import TemplatesPage from './templates/TemplatesPage'
 import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
+import { createMockProjectItemApi } from './projectItems/api'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
@@ -25,13 +26,20 @@ function ProjectDetailWithItemEntry() {
   return (
     <>
       <ProjectDetailPage />
-      <p>
-        <Link to={`/admin/projects/${projectId}/inspection-items/item-1`}>
-          預覽查核項目修改確認（假資料）
-        </Link>
-      </p>
+      {import.meta.env.DEV && (
+        <p>
+          <Link to={`/admin/projects/${projectId}/inspection-items/item-1`}>
+            預覽查核項目修改確認（假資料）
+          </Link>
+        </p>
+      )}
     </>
   )
+}
+
+function DevProjectItemChangePage() {
+  const api = useMemo(() => createMockProjectItemApi(), [])
+  return <ProjectItemChangePage api={api} />
 }
 
 const NAV_ITEMS = [
@@ -151,10 +159,12 @@ export default function AdminPage() {
             path="projects/:projectId"
             element={<ProjectDetailWithItemEntry />}
           />
-          <Route
-            path="projects/:projectId/inspection-items/:itemId"
-            element={<ProjectItemChangePage />}
-          />
+          {import.meta.env.DEV && (
+            <Route
+              path="projects/:projectId/inspection-items/:itemId"
+              element={<DevProjectItemChangePage />}
+            />
+          )}
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
         </Routes>
