@@ -12,9 +12,9 @@
 | T2 | 全系統範本管理員授權與指派：本規格新增的全系統角色機制沿用 `authentication` 授權入口，支援範本權限檢查、Admin 指派／收回範本管理員並寫稽核紀錄、查看所有專案與將專案項目存為範本；專案編輯者可唯讀瀏覽範本並套用；不得把全系統角色併入 `is_admin` 或專案 `Role` | `backend/app/` 授權服務與相關測試（依 T1 實際路徑調整） | T1；`authentication`、`audit-log` | TPL-AC01、TPL-AC06、TPL-AC08 | #326；專案項目存成範本 API #365 |
 | T3 | 範本庫服務與 API：工程類別、系統新增／改名／刪除，以及單項範本 CRUD 與覆蓋更新；整個系統僅以 `system_id` 查詢或操作其項目集合；刪除有子系統／範本分別回 `template.category_not_empty`／`template.system_not_empty`（409）；依 api-conventions 實作錯誤、UUID 與分頁，讀取授權依 T2，另以 `system_id` 提供分頁巢狀讀取與整系統覆蓋；Admin 依 AUT-Q2 可讀，請求內的實測欄位識別只用於綁定，持久 UUID 由後端產生 | `backend/app/api/`、`backend/app/auth/access.py`、`backend/app/services/`、`backend/app/main.py`、`backend/tests/api/`、`backend/tests/contract/`、`docs/specs/template-system/`、`docs/specs/authentication/spec.md` | T1、T2 | TPL-AC01、TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC08、TPL-AC09、TPL-AC10 | #327 |
 | T4 | 專案套用範本：依 `project_inspection_item.edit` 複製單項或指定 `system_id` 下全部項目結構至 `ProjectInspectionItem`，並保存 `project_id`、來源範本名稱與套用時間；系統套用來源名稱用系統名稱。提供專案成員、Admin、範本管理員讀取完整副本的 cursor 分頁 API。驗證來源覆蓋或刪除不影響副本。P4 得擴充副本欄位並定義作廢／重查／更正流程 | `backend/app/` 專案服務/API 與測試 | T1、T2、T3 | TPL-AC05、TPL-AC06、TPL-AC08 | #328；專案副本列表 API #365 |
-| T5 | MVP 範本管理 UI：管理兩層分類、編輯範本結構、標準與實測欄位定義、管理照片需求、預覽單項與整個系統範本；入口掛載於既有 AdminPage，瀏覽連結位於 FieldPage，樣式沿用全域樣式表 | `frontend/src/admin/templates/api.ts`、`frontend/src/admin/templates/api.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`frontend/src/admin/templates/TemplatesPage.test.tsx`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/field/FieldPage.tsx`、`frontend/src/field/FieldPage.test.tsx`、`frontend/src/styles.css` | T2、T3 | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC09、TPL-AC10 | #329 |
+| T5 | MVP 範本管理 UI：管理兩層分類、編輯範本結構、標準與實測欄位定義、管理照片需求、預覽單項與整個系統範本；入口掛載於既有 AdminPage，瀏覽連結位於 FieldPage，樣式沿用全域樣式表 | `frontend/src/admin/templates/api.ts`、`frontend/src/admin/templates/api.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`frontend/src/admin/templates/TemplatesPage.test.tsx`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/field/FieldPage.tsx`、`frontend/src/field/FieldPage.test.tsx`、`frontend/src/styles.css` | T2、T3 | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC09、TPL-AC10 | #329、#357 |
 | T6 | 專案套用與存為範本 UI：由具 `project_inspection_item.edit` 權限者以 `template_id` 套用單項，或以 `system_id` 套用整個系統；範本管理員可跨專案瀏覽並把專案項目存至指定系統；顯示副本記錄的來源名稱與時間 | `frontend/src/features/projects/`、`frontend/src/routes/`、`frontend/tests/` | T2、T3、T4 | TPL-AC05、TPL-AC06、TPL-AC08 | #330 |
-| T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片覆蓋規則及不版本化；依規格確認範圍並更新索引，確保各 AC 都有證據 | `backend/tests/`、`frontend/tests/`、`docs/specs/template-system/spec.md`、`docs/specs/README.md` | T1～T6 | TPL-AC01～TPL-AC10 | #331 |
+| T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片需求結構及不版本化；依規格確認範圍並更新索引，確保 TPL-AC01～TPL-AC12 都有證據 | `backend/tests/api/`、`backend/tests/contract/`、`frontend/` 範本相關測試、`docs/specs/template-system/spec.md`、`docs/specs/template-system/plan.md`、`docs/specs/README.md` | T1～T6、T8（#356）、#357、#365 | TPL-AC01～TPL-AC12 | #331 |
 | T8 | 範圍條件兩種形式與套用同名拒絕：更新數值標準欄位、驗證、遷移、複製與重複名稱檢查 | `backend/`、`docs/specs/template-system/`、必要的 `docs/specs/database-foundation/` | T1、T3、T4 | TPL-AC11、TPL-AC12 | #356 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；任務 issue 開立前應把表內概略檔案責任換成實際檔案清單。
@@ -22,6 +22,8 @@
 - 不在本計畫建立報告範本、自主檢查／抽查欄位、現場證據上傳、實測值、自動判定、interval 自動切分或範本審核流程。
 - 任務 issue 已開立，依表格 T1～T7 對應 #325～#331。
 - T8 依負責人追加裁定由 #356 落地；範圍兩種形式與同名拒絕分別對應 TPL-AC11、TPL-AC12。
+- #365（PR #370）補上專案查核項目列表與存成範本 API；#357（PR #376）補上畫面，納入 T7 收尾驗收。
+- TPL-AC07 在本規格只驗收範本端每項次的必填照片需求、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
 
 ## 並行分組
 
@@ -53,7 +55,7 @@
 | TPL-AC04 | API 測試：更新同一 `Inspection Template` 後只有一份最新內容，migration/schema 中不存在 `Template Version`。 |
 | TPL-AC05 | 服務/API 測試：以 `template_id` 套用單項、以 `system_id` 套用整個系統；確認每筆 `ProjectInspectionItem` 複製完整、含 `project_id`、來源名稱與時間，且來源變更不影響專案資料。 |
 | TPL-AC06 | 權限與整合測試：範本管理員可跨專案讀取並存成範本；專案副本在來源刪改後保持不變。 |
-| TPL-AC07 | model/UI/API 測試：文字與數值標準欄位完整、沒有量測值或自動判定；每項次至少被一張非總覽照片覆蓋，一張照片可覆蓋多項次且無張數上限；總覽照由現場選拍且不計入最低覆蓋。 |
+| TPL-AC07 | API 測試 `test_photo_requirements_are_required_unbounded_and_photo_only` 與結構測試：每項次有必填照片需求、`min_count >= 1`、無最大數量且只接受照片；送入 `overview`／`is_overview` 總覽標記回 422，範本沒有總覽需求欄位，因此總覽照不計入此最低需求。現場照片覆蓋、跨項次共用及總覽照選拍由 P6 `field-evidence` #105 驗收。 |
 | TPL-AC08 | API 整合／契約測試：逐端點驗證讀寫權限；只有 Admin 可指派或收回固定 `template_admin` 角色，成功後查核稽核紀錄；Admin 與範本管理員的 `GET /api/v1/projects` 均回傳全部專案，其他非 Admin 為 403；分類或系統刪除衝突回指定 409；路徑、UUID、內容型別與錯誤 envelope 依 `api-conventions`。 |
 | TPL-AC09 | model/API 測試：同一項次可設多個文字或數字實測欄位；數字欄位有單位；每個數值標準綁定一個數字欄位，僅該欄位單位自動帶入且不可另設；範本 schema 不含現場填值或換算行為。 |
 | TPL-AC10 | 前端測試：範本管理 UI 可管理工程類別、系統與單項查核項目範本；分類或系統刪除衝突顯示對應 409。 |
