@@ -34,6 +34,11 @@ Run `make version` to check the release version and source commit.
    other settings, copy `.env.example` to `.env`, edit it, then load
    it into the current shell:
 
+   `INSPECTFLOW_VERSION` and `INSPECTFLOW_COMMIT` can override the
+   release version and short commit displayed by the backend and
+   frontend. When unset, the version comes from `VERSION` and the
+   commit is read from Git when available.
+
    ```bash
    set -a; . ./.env; set +a
    ```

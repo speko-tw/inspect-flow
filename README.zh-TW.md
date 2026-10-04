@@ -29,6 +29,10 @@ InspectFlow 工程查核系統（Engineering Inspection Management System）
    資料庫或調整其他設定，就把 `.env.example` 複製為 `.env` 並編輯，
    再載入目前的 shell：
 
+   `INSPECTFLOW_VERSION` 與 `INSPECTFLOW_COMMIT` 可覆寫後端及前端
+   顯示的發布版本與 commit 短 SHA。未設定時，版本讀取 `VERSION`，
+   commit 則在 Git 資訊可用時自動取得。
+
    ```bash
    set -a; . ./.env; set +a
    ```

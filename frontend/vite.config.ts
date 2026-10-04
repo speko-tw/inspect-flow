@@ -165,9 +165,20 @@ export default defineConfig(({ mode, command, isPreview }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
   const repoRoot = path.resolve(process.cwd(), '..')
-  const version =
-    env.INSPECTFLOW_VERSION ||
-    fs.readFileSync(path.join(repoRoot, 'VERSION'), 'utf8').trim()
+  let version = env.INSPECTFLOW_VERSION
+  if (!version) {
+    const versionPath = path.join(repoRoot, 'VERSION')
+    try {
+      version = fs.readFileSync(versionPath, 'utf8').trim()
+    } catch (error) {
+      throw new Error(`Unable to read release version from ${versionPath}`, {
+        cause: error,
+      })
+    }
+    if (!version) {
+      throw new Error(`Release version is empty in ${versionPath}`)
+    }
+  }
   let commit = env.INSPECTFLOW_COMMIT || ''
   if (!commit) {
     try {

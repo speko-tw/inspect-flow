@@ -5,12 +5,14 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from functools import cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
 
 
+@cache
 def get_version() -> str:
     """Return the configured release version."""
     override = os.getenv("INSPECTFLOW_VERSION")
@@ -23,6 +25,7 @@ def get_version() -> str:
         return "unknown"
 
 
+@cache
 def get_commit() -> str | None:
     """Return an injected commit or the current short Git SHA."""
     override = os.getenv("INSPECTFLOW_COMMIT")

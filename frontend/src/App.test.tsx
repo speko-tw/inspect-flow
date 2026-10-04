@@ -60,7 +60,9 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: '使用者管理' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('InspectFlow v0.3.0')).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
     expect(screen.queryByText('我的工作台')).not.toBeInTheDocument()
   })
 
@@ -74,7 +76,9 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('InspectFlow v0.3.0')).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
     expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
   })
 
@@ -88,7 +92,9 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: '登入' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('InspectFlow v0.3.0')).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
   })
 
   it('shows the release version on the first setup page', async () => {
@@ -103,6 +109,8 @@ describe('App routing', () => {
     )
 
     expect(await screen.findByLabelText('首次登入碼')).toBeInTheDocument()
-    expect(await screen.findByText('InspectFlow v0.3.0')).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
   })
 })

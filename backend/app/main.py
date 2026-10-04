@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 
 import logging
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -32,6 +33,12 @@ from app.auth.settings import validate_auth_settings
 from app.version import release_identity
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 def create_app() -> FastAPI:
