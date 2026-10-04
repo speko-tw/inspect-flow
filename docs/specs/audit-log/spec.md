@@ -91,7 +91,7 @@
 |---|---|---|---|---|
 | ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
 | ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定了篩選與唯讀畫面；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；查詢 API 的具體比對、時間邊界、排序、page size、錯誤與不存在專案空頁均為規格設計（非負責人裁定），細節見[查詢 API](#查詢-api) | ALG-AC18；ADM-AC07、ADM-AC13 |
-| ALG-R24 | 寫入入口在事件具專案脈絡時**必須**將事件當下的專案 UUID 寫入 `AuditLog.project_id`：`project_member.*`、`project_zone.*`、`inspection_plan.*`、`inspection_task.*`、`project_inspection_item.*` 等取其所屬專案，`template_item.created_from_project` 取來源專案；無專案脈絡的 `role.*`、`user.*` 等寫空值。刪除或修改事件即使 `before`／`after` 未列 `project_id`，仍須從被操作資料的所屬專案取得。帶 `project_id` 篩選只回欄位相符的紀錄，排除空值；不帶時回全部。既有紀錄不回填，歷史事件的 `project_id` 為空，無法由專案篩選找回 | 必須 | 規格設計（非負責人裁定）：為 [ALG-Q2](#alg-q2) 的專案篩選建立明確、可索引且不依賴已刪除 entity 的依據；不回填避免猜測歷史事件的專案歸屬 | ALG-AC18 |
+| ALG-R24 | 寫入入口在事件具專案脈絡時**必須**將事件當下的專案 UUID 寫入 `AuditLog.project_id`：已登記的 `project_member.*`、`project_zone.*`、`inspection_task.*`、`project_inspection_item.*` 取其所屬專案，`template_item.created_from_project` 取來源專案；日後登記的 Plan／Task 事件若具專案脈絡，同樣填入。無專案脈絡的 `role.*`、`user.*` 等寫空值。刪除或修改事件即使 `before`／`after` 未列 `project_id`，仍須從被操作資料的所屬專案取得。帶 `project_id` 篩選只回欄位相符的紀錄，排除空值；不帶時回全部。既有紀錄不回填，歷史事件的 `project_id` 為空，無法由專案篩選找回 | 必須 | 規格設計（非負責人裁定）：為 [ALG-Q2](#alg-q2) 的專案篩選建立明確、可索引且不依賴已刪除 entity 的依據；不回填避免猜測歷史事件的專案歸屬 | ALG-AC18 |
 
 ## 第一批事件
 
