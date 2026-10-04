@@ -62,3 +62,37 @@ def test_shared_system_operator_lookup_returns_builtin_account(session):
     session.flush()
 
     assert get_system_operator(session) is operator
+
+
+def test_shared_system_operator_lookup_missing_raises_not_found(session):
+    with pytest.raises(OperatorNotFoundError):
+        get_system_operator(session)
+
+
+def test_shared_system_operator_lookup_duplicate_raises_multiple_found(
+    session,
+):
+    first = create_root_user_with_company(session, "OPR013")
+    make_system_admin(first)
+    second = create_root_user_with_company(session, "OPR014")
+    session.flush()
+    session.execute(text("PRAGMA ignore_check_constraints = ON"))
+    session.execute(
+        update(User)
+        .where(User.id == second.id)
+        .values(
+            is_system=True,
+            is_admin=True,
+            company_id=None,
+            department=None,
+            location=None,
+            employee_no=None,
+            name_zh=None,
+            name_en=None,
+        )
+    )
+    session.execute(text("PRAGMA ignore_check_constraints = OFF"))
+    session.expire_all()
+
+    with pytest.raises(MultipleOperatorsFoundError):
+        get_system_operator(session)
