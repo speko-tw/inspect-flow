@@ -65,6 +65,7 @@ function templateFetch(
     categoryError?: number
     writeError?: number
     writeConflict?: boolean
+    deleteSuccess?: boolean
     categories?: Array<{ id: string; name: string }>
     systems?: Array<{ id: string; category_id: string; name: string }>
     items?: Array<Record<string, unknown>>
@@ -130,6 +131,12 @@ function templateFetch(
         path.startsWith('/api/v1/template-categories/category-') &&
         method === 'DELETE'
       ) {
+        if (!options.deleteSuccess) {
+          return Response.json(
+            { error: { code: 'template.category_not_empty' } },
+            { status: 409 },
+          )
+        }
         const id = path.split('/').at(-1)
         const index = categories.findIndex((row) => row.id === id)
         if (index >= 0) categories.splice(index, 1)
@@ -155,6 +162,12 @@ function templateFetch(
         path.startsWith('/api/v1/template-systems/system-') &&
         method === 'DELETE'
       ) {
+        if (options.deleteSuccess) {
+          const id = path.split('/').at(-1)
+          const index = systems.findIndex((row) => row.id === id)
+          if (index >= 0) systems.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
         return Response.json(
           { error: { code: 'template.system_not_empty' } },
           { status: 409 },
@@ -277,10 +290,14 @@ describe('TemplatesPage', () => {
   })
 
   it('selects a neighboring category after deleting one', async () => {
-    templateFetch({ categories: [category, otherCategory], items: [] })
+    const fetchMock = templateFetch({
+      categories: [category, otherCategory],
+      items: [],
+      deleteSuccess: true,
+    })
     render(<TemplatesPage />)
     await screen.findByRole('button', { name: '建築工程' })
-    const navigation = screen.getByRole('complementary', {
+    const navigation = await screen.findByRole('complementary', {
       name: '範本庫導覽',
     })
     fireEvent.click(
@@ -293,6 +310,111 @@ describe('TemplatesPage', () => {
       await screen.findByRole('heading', { name: '土木工程' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('還沒有工程類別')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('土木工程')
+    fireEvent.change(screen.getByLabelText(/名稱/), {
+      target: { value: '保留的工程類別' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+    await screen.findByRole('status')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-2') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+  })
+
+  it('deletes a system without retaining its name as the selected category', async () => {
+    const fetchMock = templateFetch({
+      systems: [system, secondSystem],
+      items: [],
+      deleteSuccess: true,
+    })
+    render(<TemplatesPage />)
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '排水' }),
+    )
+    await screen.findByRole('heading', { name: '排水' })
+    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+    await screen.findByRole('heading', { name: '土木工程' })
+    fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
+    await screen.findByRole('heading', { name: '護欄' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('護欄')
+    fireEvent.change(screen.getByLabelText(/名稱/), {
+      target: { value: '護欄新版' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+    await screen.findByRole('status')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-2') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+  })
+
+  it('clears stale category and system name drafts when changing selection', async () => {
+    const anotherSystem = {
+      id: 'system-3',
+      category_id: otherCategory.id,
+      name: '排水二區',
+    }
+    templateFetch({
+      categories: [category, otherCategory],
+      systems: [
+        system,
+        { ...secondSystem, category_id: otherCategory.id },
+        anotherSystem,
+      ],
+      items: [],
+    })
+    render(<TemplatesPage />)
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    await within(navigation).findByRole('button', { name: '建築工程' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    fireEvent.change(screen.getByLabelText(/名稱/), { target: { value: '' } })
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+    await screen.findByRole('heading', { name: '建築工程' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('建築工程')
+    fireEvent.keyDown(screen.getByLabelText(/名稱/), { key: 'Escape' })
+
+    fireEvent.click(within(navigation).getByRole('button', { name: '排水' }))
+    await screen.findByRole('heading', { name: '排水' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    fireEvent.change(screen.getByLabelText(/名稱/), { target: { value: '' } })
+    fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+    await screen.findByRole('heading', { name: '護欄' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('護欄')
   })
 
   it('separates add and rename and preserves draft on duplicate', async () => {
