@@ -55,6 +55,8 @@
 | TPL-R09 | 系統**必須**有固定的全系統角色代碼 `template_admin`（範本管理員），以程式內 enum／常數表示；MVP 角色清單不得由 Admin 自訂，不建立角色定義資料表或 seed。`SystemRoleAssignment` 指派表記錄 `user_id` 與角色代碼；Admin 指派或收回角色**必須**寫稽核紀錄，事件代碼與欄位依 [audit-log 的 `template-system` 事件目錄](../audit-log/spec.md#template-system-事件)。範本管理員可新增、修改、刪除查核範本、查看所有專案並將任一專案查核項目存成範本。此角色與 `Role`、`ProjectMember`、`is_admin` 並存且互相獨立；套用範本由具目標專案查核項目編輯權限 `project_inspection_item.edit` 者執行，不要求範本管理員身分。 | 必須／得 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)；固定角色與代碼為本規格設計。 |
 | TPL-R10 | 所有本規格 API **必須**遵守 `api-conventions`，使用 `/api/v1` 路徑、UUID 資源識別、JSON 請求／回應與共用錯誤格式，並由後端依 TPL-R09 執行授權。分類與系統均提供新增、改名及刪除；分類下仍有系統或系統下仍有範本時均**必須**拒絕刪除並回 HTTP 409，錯誤碼分別為 `template.category_not_empty`、`template.system_not_empty`。 | 必須 | [API-R01](../api-conventions/spec.md#需求)、[API-R02](../api-conventions/spec.md#需求)、[API-R03](../api-conventions/spec.md#需求)、[API-R05](../api-conventions/spec.md#需求)、[API-R06](../api-conventions/spec.md#需求)；路徑、錯誤碼與刪除行為為本規格設計。 |
 | TPL-R12 | 範本管理 UI **必須**納入 MVP，提供管理範本分類、系統與範本內容的能力。 | 必須 | 本規格範圍設計；依據架構基準 §12.3–12.7 及 [KD-47](../../intents/03-decisions-and-stack.md#kd-47)。 |
+| TPL-R13 | 數值標準的 `range` 條件**必須**擇一使用 `range_form`：`interval` 使用 `lower_bound`、`upper_bound`，且下限不得大於上限；`tolerance` 使用 `value`、`tolerance`，且容許誤差不得小於零。舊版請求省略 `range_form` 時預設為 `tolerance`，此時容許誤差為 `null`、空字串或省略時補 `0`；明填 `range_form: null` 不視為省略，明填 `range_form: tolerance` 時容許誤差仍必填。兩種形式不得混填。非 `range` 條件維持 `value` 與原有可選 `tolerance`，不得填形式或上下限；所有數字均須為有限值。兩種形式均沿用 TPL-R11 的欄位綁定與單位自動帶入。 | 必須／不得 | [KD-52](../../intents/03-decisions-and-stack.md#kd-52)；欄位、驗證與舊請求預設為本規格設計。 |
+| TPL-R14 | 套用範本前，系統**必須**將待套用項目的 `title` 與同一專案既有項目名稱比較，去除前後空白並忽略大小寫；有任何同名時整次拒絕，不寫入單項或整個系統的任何新項目，回 HTTP 409 `project_inspection_item.duplicate_name`，`error.details` 列出衝突的範本項目名稱。 | 必須 | [KD-47](../../intents/03-decisions-and-stack.md#kd-47)；比對與錯誤契約為本規格設計。 |
 
 ## 資料
 
@@ -83,7 +85,7 @@
 | GET | `/api/v1/templates/{template_id}` | 讀取範本結構 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | PUT | `/api/v1/templates/{template_id}` | 覆蓋目前範本內容 | 範本管理員 |
 | DELETE | `/api/v1/templates/{template_id}` | 刪除範本 | 範本管理員 |
-| POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目）；有效但沒有項目的系統回 `200` 與空清單 | 具該專案 `project_inspection_item.edit` 權限者 |
+| POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目）；同專案同名項目回 409 與衝突名稱清單且整次不寫入；有效但沒有項目的系統回 `200` 與空清單 | 具該專案 `project_inspection_item.edit` 權限者 |
 | POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | 範本管理員 |
 | GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 專案成員、Admin 或範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
@@ -94,7 +96,9 @@
 
 `POST /api/v1/projects/{project_id}/templates` 的 body 必含 `project_inspection_item_id` 與目標 `system_id`；來源項目必須屬於路徑指定的專案。系統以專案副本的結構欄位建立獨立範本；目標系統中去除前後空白且不分大小寫後同名的項目回 `409 template.name_conflict`。成功建立時寫入 `template_item.created_from_project` 稽核事件。專案查核項目列表以 `created_at`、`id` 升冪分頁，回 `{items, next_cursor}`，無下一頁時 `next_cursor` 為 `null`。一般登入者依 `require_project_permission` 檢查專案成員權限；非成員或不存在的專案都回 `403 permission.denied`。Admin 與範本管理員可讀取全部專案，指定的專案不存在時回 `404 resource.not_found`。
 
-範本結構寫入時，每個實測欄位以請求內的 `client_id`（UUID）供同項次的數值標準用 `measurement_field_client_id` 綁定；此識別只用於一次請求，資料表 `id` 由後端產生，回應以 `id` 與 `measurement_field_id` 表示持久識別。整份範本及整系統覆蓋請求內的 `client_id` 不得重複。項目與項次的 `sequence` 限 1～32767；數值標準的 `value` 必須是有限數字，所有數字單位去除前後空白後不得為空。這些輸入不合法時回 422 與共用驗證錯誤格式。Admin 讀取範本庫沿用 [AUT-Q2](../authentication/spec.md#aut-q2) 的所有專案權限放行裁定，不授予範本寫入權限。
+範本結構寫入時，每個實測欄位以請求內的 `client_id`（UUID）供同項次的數值標準用 `measurement_field_client_id` 綁定；此識別只用於一次請求，資料表 `id` 由後端產生，回應以 `id` 與 `measurement_field_id` 表示持久識別。整份範本及整系統覆蓋請求內的 `client_id` 不得重複。項目與項次的 `sequence` 限 1～32767；數值標準凡有填入的數字欄位均必須是有限數字，所有數字單位去除前後空白後不得為空。這些輸入不合法時回 422 與共用驗證錯誤格式。Admin 讀取範本庫沿用 [AUT-Q2](../authentication/spec.md#aut-q2) 的所有專案權限放行裁定，不授予範本寫入權限。
+
+數值標準 `condition=range` 時請求得省略 `range_form`，省略時預設為 `tolerance`，且 `tolerance` 為 `null`、空字串或省略時補 `0`；明填 `range_form: null` 則回 422，明填 `range_form: tolerance` 時容許誤差必填且不得為空。`interval` 僅填上下限，`value` 與 `tolerance` 為 `null`；`tolerance` 形式僅填標準值與非負容許誤差，上下限為 `null`。其他條件的 `range_form` 與上下限均為 `null`。既有 `range` 資料遷移為 `tolerance` 形式；舊容許誤差為空時補 `0`。範本與專案副本的讀取回應皆提供形式及上下限；套用和存成範本時保留這些欄位。
 
 指派 `template_admin` 的 PUT 是冪等操作：使用者已被指派時回 204，不新增稽核紀錄；並行重複指派遇到相同唯一鍵衝突時，確認指派已存在後亦回 204，不重複寫稽核。收回尚未指派的角色回 404。
 
@@ -114,6 +118,8 @@
 | TPL-AC08 | 已登入 Admin、範本管理員、一般專案成員、無專案權限者 | 呼叫各端點及 `GET /api/v1/projects`；改名／刪除分類與系統；指派或收回全系統角色 | Admin 與範本管理員可列出全部專案；其他非 Admin 回 403；只有 Admin 可指派或收回固定角色且成功後留下稽核紀錄；專案編輯者可瀏覽及套用但不能寫入範本；分類下有系統或系統下有查核項目時刪除分別回 409 與對應錯誤碼；API 符合共用慣例 | TPL-R09、TPL-R10 |
 | TPL-AC09 | 項次有多個文字或數字實測欄位，且設有數值標準 | 儲存並讀回範本欄位定義，另嘗試省略綁定欄位、綁文字欄位或讓一個數字欄位綁兩個標準 | 每個數字欄位都有單位；每個數值標準必須綁定該項次的一個數字欄位，有數值標準時不得缺少綁定欄位；一個數字欄位最多綁一個數值標準；只有綁定欄位的單位與標準相同並由系統帶入、不可另設；其他數字欄位可自設單位；非法關聯被拒絕；範本不含現場實測值或單位換算 | TPL-R11 |
 | TPL-AC10 | 範本管理員已登入且範本庫有工程類別、系統及範本 | 使用 MVP 範本管理 UI 新增、改名、預覽及刪除分類、系統與範本 | 管理 UI 可完成分類與範本管理；分類下有系統或系統下有查核項目時刪除被拒絕，並顯示對應的 409 錯誤 | TPL-R10、TPL-R12 |
+| TPL-AC11 | 數值標準分別採區間與標準值加減誤差，且資料庫已有舊 `range` 資料 | 建立、更新、讀取、套用及存成範本；另測試省略形式且誤差為空的舊請求、上下限反序、負誤差、缺欄位與欄位混填 | 兩種合法形式完整保留；省略形式預設 `tolerance` 且空誤差補 `0`；明填形式時空誤差及其他非法輸入回 422；舊資料遷移為 `tolerance`，空誤差補 `0`；實測欄位綁定與單位規則不變 | TPL-R11、TPL-R13 |
+| TPL-AC12 | 專案已有與待套用項目去空白且不分大小寫後同名的項目 | 套用單項或含衝突項目的整個系統 | 回 409 `project_inspection_item.duplicate_name`，`error.details` 列出衝突名稱，整次不新增任何項目 | TPL-R14 |
 
 <a id="design-decisions"></a>
 ## 設計決定
@@ -138,3 +144,6 @@
 - 澄清範本庫 Admin 讀取、整系統巢狀讀寫路徑、請求內實測欄位識別與驗證邊界 — [PR #345 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/345#pullrequestreview-5401219325)。
 - 範圍變更（負責人指示，#328）：有效但沒有查核項目的 system 套用回 HTTP 200 與空清單 — [#328 留言](https://github.com/speko-tw/inspect-flow/issues/328#issuecomment-5970915340)。
 - 澄清專案查核項目列表的授權順序與不存在專案的回應，補足存成範本的結構複製與隔離驗收 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)。
+- TPL-R13～TPL-R14、TPL-AC11～TPL-AC12：依負責人裁定，範圍條件可擇一使用區間或標準值加誤差，同專案同名時整次拒絕套用並列出衝突項目 — [#313 留言](https://github.com/speko-tw/inspect-flow/issues/313#issuecomment-5974836112)、[#356](https://github.com/speko-tw/inspect-flow/issues/356)。
+- #356 第 1 輪審查後，舊 `range` 列的空容許誤差轉為 `0`（視為精確值），避免新契約讀回後無法原樣儲存；舊版請求省略 `range_form` 時預設 `tolerance`，維持 T5 畫面的建立行為。這是相容性取捨；明填空形式仍回 422 — [PR #373 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/373#pullrequestreview-5404511885)。
+- #356 第 2 輪審查後，省略 `range_form` 的舊版 `range` 請求若容許誤差為空，也補 `0`；明填 `tolerance` 形式仍要求非空誤差，與資料遷移的取捨一致 — [PR #373 第 2 輪審查](https://github.com/speko-tw/inspect-flow/pull/373#pullrequestreview-5404582144)。

@@ -57,6 +57,9 @@ def inspection_points_detail(
                     "condition": numeric.condition,
                     "unit": numeric.unit,
                     "tolerance": numeric.tolerance,
+                    "range_form": numeric.range_form,
+                    "lower_bound": numeric.lower_bound,
+                    "upper_bound": numeric.upper_bound,
                     "measurement_field_id": numeric.measurement_field_id,
                 }
                 if numeric

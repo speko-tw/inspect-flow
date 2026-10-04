@@ -1,12 +1,17 @@
 """Project template application API (TPL-AC05/08, T4)."""
 
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import create_engine, inspect, select, text
 
+from alembic import command
+from app.api.errors import ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db.engine import dispose_engine
 from app.models import (
     AuditLog,
     Project,
@@ -164,6 +169,218 @@ def _create_templates(manager: TestClient) -> tuple[str, list[str]]:
         assert template.status_code == 201, template.text
         template_ids.append(template.json()["id"])
     return system_id, template_ids
+
+
+def test_duplicate_apply_rejects_single_and_system_atomically(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    system_id, template_ids = _create_templates(world["admin"])
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    first = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert first.status_code == 201, first.text
+    item = db_session.get(ProjectInspectionItem, UUID(first.json()[0]["id"]))
+    assert item is not None
+    item.title = " FIRST ITEM "
+    db_session.commit()
+    for source in (
+        {"template_id": template_ids[0]},
+        {"system_id": system_id},
+    ):
+        response = world["editor"].post(url, json=source)
+        assert response.status_code == 409, response.text
+        assert response.json() == {
+            "error": {
+                "code": ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME.value,
+                "details": ["First item"],
+            }
+        }
+        rows = db_session.scalars(
+            select(ProjectInspectionItem).where(
+                ProjectInspectionItem.project_id == world["project"].id
+            )
+        ).all()
+        assert [row.id for row in rows] == [item.id]
+
+
+def test_interval_survives_apply_and_save_as_template(db_session, make_client):
+    world = _world(db_session, make_client)
+    system_id, template_ids = _create_templates(world["admin"])
+    numeric = db_session.scalar(
+        select(TemplateNumericStandard)
+        .join(TemplateInspectionPoint)
+        .where(
+            TemplateInspectionPoint.template_item_id == UUID(template_ids[0])
+        )
+    )
+    assert numeric is not None
+    numeric.condition = "range"
+    numeric.range_form = "interval"
+    numeric.value = None
+    numeric.tolerance = None
+    numeric.lower_bound = "3.0"
+    numeric.upper_bound = "3.6"
+    db_session.commit()
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    applied = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert applied.status_code == 201, applied.text
+    listed = world["template_admin"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-items"
+    )
+    standard = listed.json()["items"][0]["inspection_points"][0][
+        "numeric_standard"
+    ]
+    assert (
+        standard["range_form"],
+        standard["lower_bound"],
+        standard["upper_bound"],
+    ) == ("interval", "3.0", "3.6")
+    category = world["template_admin"].post(
+        "/api/v1/template-categories", json={"name": "Saved category"}
+    )
+    target = world["template_admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Saved system"},
+    )
+    saved = world["template_admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": applied.json()[0]["id"],
+            "system_id": target.json()["id"],
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    assert (
+        saved.json()["inspection_points"][0]["numeric_standard"]["range_form"]
+        == "interval"
+    )
+
+
+def test_migration_marks_existing_ranges_as_tolerance(
+    db_session, engine, migrated_url, make_client
+):
+    world = _world(db_session, make_client)
+    _, template_ids = _create_templates(world["admin"])
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    applied = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert applied.status_code == 201, applied.text
+    template_standard = db_session.scalar(
+        select(TemplateNumericStandard)
+        .join(TemplateInspectionPoint)
+        .where(
+            TemplateInspectionPoint.template_item_id == UUID(template_ids[0])
+        )
+    )
+    project_standard = db_session.scalar(
+        select(ProjectNumericStandard).where(
+            ProjectNumericStandard.project_inspection_item_id
+            == UUID(applied.json()[0]["id"])
+        )
+    )
+    assert template_standard is not None
+    assert project_standard is not None
+    other_standard = db_session.scalar(
+        select(TemplateNumericStandard)
+        .join(TemplateInspectionPoint)
+        .where(
+            TemplateInspectionPoint.template_item_id == UUID(template_ids[1])
+        )
+    )
+    assert other_standard is not None
+    for standard in (template_standard, project_standard):
+        standard.condition = "range"
+        standard.range_form = "tolerance"
+    template_standard.tolerance = None
+    project_standard.tolerance = ""
+    other_standard.condition = "range"
+    other_standard.range_form = "tolerance"
+    db_session.commit()
+    db_session.close()
+    engine.dispose()
+    dispose_engine()
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    command.downgrade(config, "325e0f21a831")
+    command.upgrade(config, "head")
+    probe = create_engine(migrated_url)
+    try:
+        with probe.connect() as connection:
+            for table in (
+                "template_numeric_standards",
+                "project_numeric_standards",
+            ):
+                rows = connection.execute(
+                    text(
+                        "SELECT value, tolerance, range_form, lower_bound, "
+                        f"upper_bound FROM {table} WHERE condition='range' "
+                        "ORDER BY tolerance"
+                    )
+                ).all()
+                expected = [("10", "0", "tolerance", None, None)]
+                if table == "template_numeric_standards":
+                    expected.append(("10", "0.5", "tolerance", None, None))
+                assert rows == expected
+    finally:
+        probe.dispose()
+
+
+def test_interval_downgrade_keeps_both_tables_intact(
+    db_session, engine, migrated_url, make_client
+):
+    world = _world(db_session, make_client)
+    _, template_ids = _create_templates(world["admin"])
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+    applied = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert applied.status_code == 201, applied.text
+    standard = db_session.scalar(
+        select(ProjectNumericStandard).where(
+            ProjectNumericStandard.project_inspection_item_id
+            == UUID(applied.json()[0]["id"])
+        )
+    )
+    assert standard is not None
+    standard.condition = "range"
+    standard.range_form = "interval"
+    standard.value = None
+    standard.tolerance = None
+    standard.lower_bound = "3.0"
+    standard.upper_bound = "3.6"
+    db_session.commit()
+    db_session.close()
+    engine.dispose()
+    dispose_engine()
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    with pytest.raises(RuntimeError, match="interval standards"):
+        command.downgrade(config, "325e0f21a831")
+    probe = create_engine(migrated_url)
+    try:
+        with probe.connect() as connection:
+            version = connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            assert version == "a8356e4c12b0"
+            for table in (
+                "template_numeric_standards",
+                "project_numeric_standards",
+            ):
+                fields = {
+                    column["name"]
+                    for column in inspect(connection).get_columns(table)
+                }
+                assert {"range_form", "lower_bound", "upper_bound"} <= fields
+    finally:
+        probe.dispose()
 
 
 def test_apply_system_copies_nested_data_and_detaches_source(

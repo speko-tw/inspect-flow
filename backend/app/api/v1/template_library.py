@@ -92,15 +92,34 @@ class TextStandardBody(StrictBody):
 
 
 class NumericStandardBody(StrictBody):
-    value: str
+    value: str | None = None
     condition: Literal["<=", ">=", "=", "range"]
     unit: str = Field(min_length=1)
     tolerance: str | None = None
+    range_form: Literal["interval", "tolerance"] | None = None
+    lower_bound: str | None = None
+    upper_bound: str | None = None
     measurement_field_client_id: UUID
 
-    @field_validator("value")
+    @model_validator(mode="before")
     @classmethod
-    def numeric_value(cls, value: str) -> str:
+    def normalize_legacy_range(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if data.get("condition") != "range" or "range_form" in data:
+            return data
+        tolerance = data.get("tolerance")
+        if tolerance is None or (
+            isinstance(tolerance, str) and not tolerance.strip()
+        ):
+            return {**data, "tolerance": "0"}
+        return data
+
+    @field_validator("value", "tolerance", "lower_bound", "upper_bound")
+    @classmethod
+    def numeric_value(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         normalized = value.strip()
         try:
             number = Decimal(normalized)
@@ -109,6 +128,43 @@ class NumericStandardBody(StrictBody):
         if not number.is_finite():
             raise ValueError("value must be finite")
         return normalized
+
+    @model_validator(mode="after")
+    def matching_fields(self):
+        if (
+            self.condition == "range"
+            and "range_form" not in self.model_fields_set
+        ):
+            self.range_form = "tolerance"
+        bounds = (self.lower_bound, self.upper_bound)
+        if self.condition != "range":
+            if (
+                self.value is None
+                or self.range_form is not None
+                or any(bound is not None for bound in bounds)
+            ):
+                raise ValueError("non-range standards need value only")
+        elif self.range_form == "interval":
+            if (
+                self.value is not None
+                or self.tolerance is not None
+                or self.lower_bound is None
+                or self.upper_bound is None
+            ):
+                raise ValueError("interval needs ordered bounds only")
+            if Decimal(self.lower_bound) > Decimal(self.upper_bound):
+                raise ValueError("lower_bound exceeds upper_bound")
+        elif self.range_form == "tolerance":
+            if (
+                self.value is None
+                or self.tolerance is None
+                or Decimal(self.tolerance) < 0
+                or any(bound is not None for bound in bounds)
+            ):
+                raise ValueError("tolerance needs value and nonnegative error")
+        else:
+            raise ValueError("range_form is required for range")
+        return self
 
     @field_validator("unit")
     @classmethod
