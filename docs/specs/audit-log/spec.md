@@ -53,7 +53,7 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| ALG-R01 | `AuditLog`（資料表 `audit_logs`）**必須**具備：`id`（UUID 主鍵）、`created_at`（事件時間，含時區的 UTC）、`created_by`（操作者，外鍵指向 `User`）、`event_type`（事件代碼）、`entity_type`（被記錄的資料種類，例如 `role`）、`entity_id`（被記錄那一筆的 UUID）、`before`、`after`（改前、改後的內容，JSON）。`before`、`after` 允許空值，其餘不可空值，由資料庫約束保證 | 必須；應（欄位名） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（誰、何時、哪個 entity、做了什麼、前後內容，架構基準 §19）；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R08、DBF-R11、DBF-R14 | ALG-AC01 |
+| ALG-R01 | `AuditLog`（資料表 `audit_logs`）**必須**具備：`id`（UUID 主鍵）、`created_at`（事件時間，含時區的 UTC）、`created_by`（操作者，外鍵指向 `User`）、`event_type`（事件代碼）、`entity_type`（被記錄的資料種類，例如 `role`）、`entity_id`（被記錄那一筆的 UUID）、`before`、`after`（改前、改後的內容，JSON），以及可空值、有索引的 `project_id`（事件所屬專案 UUID，不設外鍵）。`before`、`after`、`project_id` 允許空值，其餘不可空值，由資料庫約束保證；新增 `project_id` 以後續 migration 落地，既有紀錄不回填 | 必須；應（欄位名） | [04-glossary](../../intents/04-glossary.md)「稽核紀錄」（誰、何時、哪個 entity、做了什麼、前後內容，架構基準 §19）；[KD-07](../../intents/03-decisions-and-stack.md#kd-07)；[PR-08](../../intents/02-principles.md#pr-08)；做法同 DBF-R08、DBF-R11、DBF-R14；`project_id` 為規格設計（非負責人裁定），依 [ALG-Q2](#alg-q2) 專案篩選需求保留事件當下脈絡 | ALG-AC01、ALG-AC18 |
 | ALG-R02 | `AuditLog` **不得**有 `updated_at`、`updated_by` | 必須 | 本規格推導：紀錄不會被修改（ALG-R04），PR-08 的「最後修改」不適用，留著欄位會讓人以為可以改 | ALG-AC01 |
 | ALG-R03 | `entity_id` **不得**是外鍵；被記錄的資料刪除後，紀錄**必須**保留 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126)（只能新增、不能刪除）；`Role` 可刪除（DOM-R21），外鍵會擋下刪除或連帶刪掉紀錄 | ALG-AC02 |
 | ALG-R04 | 稽核紀錄只能新增：Service 層只提供新增入口；後端經 SQLAlchemy 對 `audit_logs` 執行的任何修改或刪除（ORM flush、ORM 批次 `update`／`delete`、Core 語句、`text()` 原始 SQL）**必須**被拒絕，資料不變。後端以外直接連資料庫不在本條範圍：後端程式不得直接用資料庫驅動（DBF-R01），資料庫層保護見[計畫](plan.md#考慮過但沒採用的做法) | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（依 OWASP：只能新增，不能修改或刪除）；不要求資料庫層保護，理由：要寫資料庫專用 SQL（[PR-03](../../intents/02-principles.md#pr-03)） | ALG-AC03 |
@@ -90,7 +90,8 @@
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
-| ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；不存在專案回空頁為 admin-dashboard 規格設計，非負責人裁定 | ALG-AC18；ADM-AC07、ADM-AC13 |
+| ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定了篩選與唯讀畫面；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；查詢 API 的具體比對、時間邊界、排序、page size、錯誤與不存在專案空頁均為規格設計（非負責人裁定），細節見[查詢 API](#查詢-api) | ALG-AC18；ADM-AC07、ADM-AC13 |
+| ALG-R24 | 寫入入口在事件具專案脈絡時**必須**將事件當下的專案 UUID 寫入 `AuditLog.project_id`：`project_member.*`、`project_zone.*`、`inspection_plan.*`、`inspection_task.*`、`project_inspection_item.*` 等取其所屬專案，`template_item.created_from_project` 取來源專案；無專案脈絡的 `role.*`、`user.*` 等寫空值。刪除或修改事件即使 `before`／`after` 未列 `project_id`，仍須從被操作資料的所屬專案取得。帶 `project_id` 篩選只回欄位相符的紀錄，排除空值；不帶時回全部。既有紀錄不回填，歷史事件的 `project_id` 為空，無法由專案篩選找回 | 必須 | 規格設計（非負責人裁定）：為 [ALG-Q2](#alg-q2) 的專案篩選建立明確、可索引且不依賴已刪除 entity 的依據；不回填避免猜測歷史事件的專案歸屬 | ALG-AC18 |
 
 ## 第一批事件
 
@@ -180,7 +181,7 @@
 
 | 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
 |---|---|---|---|
-| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（做法同 DBF-R11、DBF-R14）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`（ALG-R01～ALG-R04） | 已凍結 |
+| `AuditLog` | UUID 主鍵、`created_at`、`created_by`（做法同 DBF-R11、DBF-R14）；不含 `updated_at`、`updated_by` | `event_type`、`entity_type`、`entity_id`、`before`、`after`；新增可空值且有索引的 `project_id`（ALG-R01、ALG-R24），既有資料不回填 | 已凍結；`project_id` 待 #412 migration |
 
 關聯：`User` 1—多 `AuditLog`（`created_by`）。`entity_id` 只存 UUID，不是外鍵（ALG-R03）。
 
@@ -203,10 +204,10 @@
 
 | 介面 | 契約 | 權限與錯誤 | 對應需求 |
 |---|---|---|---|
-| `GET /api/v1/audit-logs?project_id=&actor_id=&from=&to=&event_type=&cursor=&limit=` | 回 `{items:[既有 AuditLog 欄位],next_cursor}`；依 `(created_at,id)` 降冪；`from`、`to` 為 UTC ISO-8601，含起不含迄；多條件 AND 篩選。`cursor` 為不透明字串，`limit` 預設 50、範圍 1–100。合法但不存在的 `project_id` 回 `{items:[],next_cursor:null}` | Admin 專用；未登入 401、非 Admin 403、格式錯誤 422；不存在專案為 200 空頁；錯誤 envelope 依 API-R05 | ALG-R22、ALG-R23 |
+| `GET /api/v1/audit-logs?project_id=&actor_id=&from=&to=&event_type=&cursor=&limit=` | 回 `{items:[AuditLog 欄位（含 project_id）],next_cursor}`；依 `(created_at,id)` 降冪；`project_id` 精確比對 `AuditLog.project_id`，不提供時含所有紀錄；`actor_id` 精確比對 `created_by`，`event_type` 完全相符；`from`、`to` 為 UTC ISO-8601，含起不含迄；多條件 AND 篩選。`cursor` 為不透明字串，`limit` 預設 50、範圍 1–100。合法但不存在的 `project_id` 回 `{items:[],next_cursor:null}` | Admin 專用；未登入 401、非 Admin 403；格式錯誤、無效 cursor／limit 或 `from` 大於 `to` 回 422；不存在專案為 200 空頁；錯誤 envelope 與代碼依 API-R05、API-R07 | ALG-R22～ALG-R24 |
 | Admin 稽核查詢頁 | 呈現上述紀錄與專案、操作者、時間、事件類型篩選及 cursor 翻頁；只讀 | 僅 Admin 可進入 | ALG-R22、ALG-R23 |
 
-以上查詢契約與 [admin-dashboard 介面](../admin-dashboard/spec.md#介面)一致；該規格的 ADM-R07、ADM-R08 與 ADM-AC06、ADM-AC07、ADM-AC13 共同約束實作，不另建立不同的查詢語意。時間欄位輸出依 API-R09。
+以上查詢契約與 [admin-dashboard 介面](../admin-dashboard/spec.md#介面)一致；`project_id` 欄位及各篩選的比對依本規格 ALG-R24 與本表為準，該規格的 ADM-R07、ADM-R08 與 ADM-AC06、ADM-AC07、ADM-AC13 共同約束實作。`cursor` 不透明、`limit` 預設 50 且範圍 1–100、`from`／`to` 含起不含迄、`(created_at,id)` 降冪、`from` 大於 `to` 回 422，均為規格設計（非負責人裁定）；分頁鍵包含 UUID 依 API-R08，時間欄位輸出依 API-R09。錯誤代碼沿用 API-R07 的命名慣例，由共用 ErrorCode 列舉提供，不另在本規格指定代碼。
 
 ## 驗收條件
 
@@ -214,7 +215,7 @@
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| ALG-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，一筆作為操作者的 `User` | 用 SQLAlchemy inspector 檢查 `audit_logs`；新增一筆欄位齊全的紀錄；再分別嘗試新增 `created_by`、`event_type`、`entity_type`、`entity_id` 各為空值的紀錄，以及 `created_by` 指向不存在 UUID 的紀錄 | 有 ALG-R01 的所有欄位，主鍵是 UUID；`before`、`after` 可空值，其餘不可空值；`created_by` 外鍵指向 `users.id`；沒有 `updated_at`、`updated_by`；第一筆成功，其餘每一次都被資料庫拒絕，筆數不變 | ALG-R01、ALG-R02 |
+| ALG-AC01 | 對空資料庫執行 `alembic upgrade head` 之後，一筆作為操作者的 `User` | 用 SQLAlchemy inspector 檢查 `audit_logs`；新增一筆欄位齊全的紀錄；再分別嘗試新增 `created_by`、`event_type`、`entity_type`、`entity_id` 各為空值的紀錄，以及 `created_by` 指向不存在 UUID 的紀錄 | 有 ALG-R01 的所有欄位，主鍵是 UUID；`before`、`after`、`project_id` 可空值，其餘不可空值；`project_id` 有索引且沒有外鍵；`created_by` 外鍵指向 `users.id`；沒有 `updated_at`、`updated_by`；第一筆成功，其餘每一次都被資料庫拒絕，筆數不變 | ALG-R01、ALG-R02 |
 | ALG-AC02 | 同 ALG-AC01 | 用 inspector 列出 `audit_logs` 的外鍵；新增一筆 `entity_id` 為任何資料表都不存在的 UUID 的紀錄 | 唯一的外鍵是 `created_by`；新增成功 | ALG-R03 |
 | ALG-AC03 | 已有一筆紀錄 | 以 ORM 修改它的 `after` 後 flush；以 ORM 刪除它後 flush；以 `session.execute` 對 `AuditLog` 執行 ORM 批次 `update`、`delete`；以 `connection.execute` 執行 Core 的 `update(audit_logs)`、`delete(audit_logs)`；以 `text()` 執行 `UPDATE`、`DELETE FROM` 各一組寫法：不加引號、表名加雙引號（`"audit_logs"`）、加 schema 前綴（SQLite 用 `main.audit_logs`，PostgreSQL 用 `public.audit_logs`）、關鍵字與表名大小寫混用（`uPdAtE AUDIT_LOGS`）、前面有空白與換行；再以 `text()` 執行 `INSERT INTO audit_logs ...` 與 `SELECT ... FROM audit_logs`；（issue #233，兩輪審查後改採保守判斷）另以 `text()` 驗證：只要敘述中任何位置同時出現修改動作關鍵字（`UPDATE`、`DELETE`、`REPLACE`、`MERGE`——涵蓋 `REPLACE INTO`、`INSERT OR REPLACE`、`INSERT ... ON CONFLICT ... DO UPDATE`、`MERGE`，以及以上任一種包在 `WITH`／CTE 裡，不論修改在 CTE 本身或 CTE 之後、CTE 之間夾 PostgreSQL 的 `SEARCH`／`CYCLE` 子句）與 `audit_logs` 識別字（不分大小寫、可加引號與 schema 前綴），無論兩者實際語法位置關係、也無論關鍵字之間或關鍵字與表名之間是否夾 `/* */`、`--` 註解，都拒絕；`TRUNCATE` 敘述只要出現 `audit_logs` 識別字（不論在表清單第幾個、`*`／逗號前後是否有空白），或帶 `CASCADE`（不論對哪個資料表），也都拒絕；再驗證 `ON CONFLICT DO NOTHING`、SQLite 的 `INSERT OR IGNORE`、純新增（含值或 `RETURNING` 子句的字面文字恰好含關鍵字字樣者）、純讀取，以及不含 `audit_logs` 的其他敘述；`audit_logs` 識別字判斷改用 ASCII-only 不分大小寫（避免 Unicode 大小寫折疊，例如 `İ` 被誤判為 `i`）；再以 `text()` 驗證：PostgreSQL 的 `E'...'` 逸出字串（SQLite 不支援此語法，此處只驗證攔截器在送到資料庫前就先行判斷、與資料庫本身是否支援語法無關）內含反斜線跳脫引號（`E'\''`）的 upsert 仍被拒絕（正規化不會把跳脫的引號誤判成字串結尾而漏看後面的修改動作）；雙引號識別字內容經去除跳脫後完全等於 `audit_logs`（ASCII-only 不分大小寫）才視為 `audit_logs`，否則視為不相關的識別字（佔位處理，內容不再被當成一般 SQL 掃描），因此 `"audit_logs archive"`、`SELECT "UPDATE audit_logs" FROM other`、以及使用外觀相似字元（如 `İ`）的 `"audİt_logs"` 都不被誤判為 `audit_logs` 或修改動作關鍵字；反引號與 `[ ]` 識別字**不**做內容解析（PostgreSQL 的 `[` 是陣列／下標語法，不是識別字引號，嘗試比對配對括號曾經吞掉後面真正的修改動作，改採不吞內容的保守做法）：SQLite 的 `` `audit_logs` ``／`[audit_logs]` 精確引用因此仍會被偵測到，但 `` `audit_logs archive` ``／`[audit_logs archive]` 之類名稱裡剛好含 `audit_logs` 或關鍵字字樣的不同資料表會被誤擋（已知限制）；`ARRAY[[1, 2], [3, 4]]`、`ARRAY[(SELECT count(*) FROM audit_logs)]` 之後接 `UPDATE audit_logs` 的敘述驗證陣列語法不會吞掉後面的修改動作；PostgreSQL 的 `U&"..."` Unicode 逸出識別字（含 `UESCAPE`）不解碼跳脫序列，只要敘述同時出現修改動作與 `U&"` 識別字就一律保守視為可能指向 `audit_logs` 而拒絕（含與 `audit_logs` 無關的識別字，已知限制）；PostgreSQL 的 dollar-quoted 字串（`$$...$$`）與 `standard_conforming_strings = off` 的非 `E` 前綴逸出字串無法用字串比對可靠辨識，不在本條驗收範圍，改由 [#232](https://github.com/speko-tw/inspect-flow/issues/232) 的資料庫層保護涵蓋；再以 `text()` 驗證：不帶 `audit_log_ddl_allowed` 執行選項的一般連線上，`DROP TABLE audit_logs`（含 `IF EXISTS`、加引號、schema 前綴）、`ALTER TABLE audit_logs`（`RENAME`、`DROP COLUMN`、`ADD COLUMN` 一視同仁，不分是否具破壞性）、以及 `DROP TABLE` 其他資料表帶 `CASCADE`（比照 `TRUNCATE ... CASCADE` 的理由）都被拒絕；帶 `audit_log_ddl_allowed=True` 執行選項的連線上，前述 DDL 都成功執行，但 `UPDATE`／`DELETE`／`TRUNCATE audit_logs` 仍被拒絕（此選項只豁免 DDL 檢查）；以 `alembic upgrade`／`downgrade` 執行 T1 的 migration（往返 upgrade→downgrade→upgrade）在 `backend/alembic/env.py` 設定該執行選項後照常成功 | ORM 的四次、Core 的兩次與 `text()` 的十次修改、刪除（共 16 次）都被拒絕；重新讀取時，筆數與內容都和操作前相同；`text()` 的新增與讀取、ORM 新增紀錄、讀取其他資料表都成功，不被誤擋；issue #233 保守規則涵蓋的每種寫法都同樣被拒絕，資料不變；`ON CONFLICT DO NOTHING`、`INSERT OR IGNORE`、字面文字恰好含關鍵字字樣的純新增、純讀取都成功執行，不被誤擋；帶跳脫引號的 `E'...'` upsert 仍被拒絕；雙引號識別字內容不等於 `audit_logs` 的敘述都成功執行、內容等於的則被拒絕；陣列語法之後的 `UPDATE audit_logs` 都被拒絕；`U&"..."` 識別字搭配修改動作的敘述都被拒絕；一般連線上的 `DROP TABLE`／`ALTER TABLE audit_logs` 與帶 `CASCADE` 的 `DROP TABLE` 都被拒絕，資料與 schema 不變；帶執行選項的連線可以成功執行這些 DDL，但仍無法 `UPDATE`／`DELETE`／`TRUNCATE`；一律拒絕修改動作與 `TRUNCATE`、完全不看執行選項（因此帶執行選項的連線上，`UPDATE`／`DELETE`／`INSERT ... ON CONFLICT ... DO UPDATE` 即使敘述裡別處出現 `DROP`／`ALTER` 字樣，例如 `AS [DROP]` 別名，也被拒絕；`Connection` 與 `Session.connection(execution_options=...)` 兩種取得連線的方式都驗證）；關鍵字與引號識別字、字面值之間不夾空白的寫法（`DELETE FROM"audit_logs"`、`DROP TABLE"audit_logs"`、`main."audit_logs"`、`"x"."audit_logs"`）都被拒絕；migration 往返正常完成；保守規則已知會誤擋部分同時修改別的資料表又讀取 `audit_logs` 的敘述、帶 `CASCADE` 卻與 `audit_logs` 無關的 `TRUNCATE`／`DROP`、名稱含 `audit_logs`／關鍵字字樣的反引號或 `[ ]` 識別字、與 `audit_logs` 無關的 `U&"..."` 識別字，以及一般連線上對 `audit_logs` 做的任何 `ALTER TABLE`（即使只是新增欄位），記在 `app/models/audit_log.py` 模組說明的「已知限制」 | ALG-R04 |
 | ALG-AC04 | 初始化後的資料庫（有內建 `admin`）與另一位已登入的 `User` U；以可控時間固定現在時刻 | 不在 HTTP 請求中寫一筆紀錄；在已綁定 U 的請求範圍內寫一筆；在沒有登入者的請求範圍內寫一筆；呼叫端試圖自行指定操作者或時間 | 第一筆的 `created_by` 是 `admin`，第二筆是 U，兩筆的 `created_at` 都等於固定的時刻；第三次被拒絕、不寫入；入口不接受操作者與時間參數 | ALG-R05 |
@@ -231,7 +232,7 @@
 | ALG-AC15 | 公司 A、B；具 Admin 權限的操作者 A0；本系統帳號 U 屬於公司 A，`employee_no`、`department`、`location` 都有值；沒有公司的帳號 V | 以 A0 依序：把 U 的 `company_id` 改為 B；把 U 的 `department` 單獨改成新值（`company_id` 不變）；為 U 重新填入三個欄位後把 `company_id` 改為空值；把 V 的 `company_id` 設為 A；以會使工號重複的值把 U 改到 A（被資料庫拒絕） | 第一次恰有一筆 `user.company_changed`，`before` 是 A 與三個欄位的原值，`after` 是 B 與三個空值；第二次沒有紀錄；第三次一筆，`after.company_id` 為空值、三欄為空值；第四次一筆，`before.company_id` 為空值；被拒絕的那次沒有紀錄；`created_by` 都是 A0 | ALG-R14、ALG-R19、ALG-R20 |
 | ALG-AC16 | 初始化後的資料庫；`admin` 已設定過一次密碼 | 執行 `admin` 重設指令一次（兩次輸入相同的有效密碼）；再執行一次兩次輸入不同的指令 | 第一次恰有一筆 `user.password_set`，`entity_id` 是內建 `admin`，`created_by` 是內建 `admin`，`after.is_temporary` 為 `false`；事件目錄沒有為重設指令新增的事件代碼；第二次沒有紀錄 | ALG-R21 |
 | ALG-AC17 | 已有稽核紀錄；Admin、非 Admin 及未登入者 | 分別開啟稽核查詢頁並呼叫查詢 API，再比對查詢前後的紀錄 | Admin 可唯讀查詢；未登入回 401、非 Admin 回 403，均不回稽核內容；查詢不新增、修改或刪除紀錄 | ALG-R22；ADM-AC06 |
-| ALG-AC18 | 多筆跨專案、不同操作者與事件類型的紀錄，含相同事件時間；另有不存在的合法專案 UUID | 組合專案、操作者、時間、事件類型篩選並跨 cursor 翻頁；以不存在的 `project_id` 查詢；送無效篩選或 cursor／limit | 結果符合 AND 篩選、`(created_at,id)` 降冪且跨頁無重複遺漏；不存在的專案回 200、`items: []`、`next_cursor: null`；無效格式回 422 並符合 API-R05 錯誤 envelope | ALG-R23；ADM-AC07、ADM-AC13 |
+| ALG-AC18 | 多筆跨專案、不同操作者與事件類型的紀錄，含相同事件時間；混入 `role.*`／`user.*` 無專案事件與 migration 前既有的歷史紀錄；另有不存在的合法專案 UUID | 組合專案、操作者、時間、事件類型篩選並跨 cursor 翻頁；以不存在的 `project_id` 查詢；不帶專案篩選再查；送無效篩選、cursor／limit 及 `from` 大於 `to` | 新的有專案事件寫入正確 `project_id`，無專案事件及未回填的歷史紀錄為空值；帶專案篩選只回欄位相符的紀錄，排除無專案與歷史紀錄，不帶時均可查到；`actor_id` 精確比對 `created_by`、`event_type` 完全相符；結果符合 AND 篩選、`(created_at,id)` 降冪且跨頁無重複遺漏；不存在的專案回 200、`items: []`、`next_cursor: null`；無效格式與反向時間範圍回 422 且符合 API-R05 錯誤 envelope | ALG-R01、ALG-R23、ALG-R24；ADM-AC07、ADM-AC13 |
 
 ## 待釐清
 
@@ -253,7 +254,7 @@
 
 ## 變更紀錄
 
-- 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收 — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
+- 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收；`project_id` 可空欄位、索引及篩選語意為規格設計（非負責人裁定） — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
 - 對齊 #375 路線圖，將 Admin Dashboard 的 milestone 引用更新為 0.5.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
