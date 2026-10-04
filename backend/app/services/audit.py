@@ -646,6 +646,12 @@ register_audit_event(
     kind=AuditEventKind.DELETED,
     fields=("user_id", "role_code"),
 )
+register_audit_event(
+    "template_item.created_from_project",
+    entity_type="template_item",
+    kind=AuditEventKind.CREATED,
+    fields=("project_id", "project_inspection_item_id", "system_id"),
+)
 
 # `authentication` 事件 (docs/specs/audit-log/spec.md#authentication-事件,
 # ALG-R17). Registered here per ALG-R13; written at the actual
