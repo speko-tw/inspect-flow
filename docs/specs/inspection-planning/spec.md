@@ -2,7 +2,7 @@
 
 **代碼**：`IP`　**Phase**：P4　**狀態**：已凍結<br>
 **前置規格**：`template-system`、`state-machines`、`domain-model`、`authentication`、`audit-log`、`api-conventions`<br>
-**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)；恢復時套用目前標準依負責人[裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，該裁定已同步至 intents（PR #351）。<br>
+**引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[KD-40](../../intents/03-decisions-and-stack.md#kd-40)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-57](../../intents/03-decisions-and-stack.md#kd-57)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[OQ-03](../../intents/05-open-questions.md#oq-03)；恢復時套用目前標準依負責人[裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)，該裁定已同步至 intents（PR #351）。<br>
 **被擋議題**：無；Evidence／Report 不屬本規格範圍，依各自規格處理。
 
 ## 目的
@@ -18,6 +18,7 @@
 - 任務建立時產生 `Task Requirement Snapshot`。
 - 專案查核項目修改時，詢問是否重新查核；依裁定只作廢受影響項目的需求、結果及照片歷史，或更正既有 Snapshot 文字。
 - `ProjectInspectionItem` 的 P4 擴充欄位，以及與 Plan、Task、Snapshot 的關聯。
+- 專案選用的 `ProjectZone` 維護，以及 Task 的分區與補充地點資料。
 - `state-machines` 已定義的 Plan／Task 規則；Evidence／Report 尚未裁定的轉換不屬本規格範圍，依各自規格處理。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
@@ -44,20 +45,22 @@
 |---|---|---|---|
 | IP-R01 | 系統**必須**提供專案範圍的 `Inspection Plan`，並由後端依專案權限檢查建立、讀取與修改；端點使用 `/api/v1`、UUID 與共用錯誤契約。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[API-R01](../api-conventions/spec.md#需求)、[API-R06](../api-conventions/spec.md#需求)；欄位及端點為規格設計（非負責人裁定） |
 | IP-R02 | 內業人員**必須**依專案既有 `ProjectInspectionItem` 手動建立 `Inspection Task`；一筆 Task 得包含多個項目，也得只含一個項目。MVP 不自動依起訖點、間距或其他推算規則產生任務，也不得要求 interval 才能建立計畫或任務。KD-55 標準變更不會自動建立 Task；依內業流程保留並更新原 Task，詳 IP-R04／IP-Q07。 | 必須／不得／得 | [KD-36](../../intents/03-decisions-and-stack.md#kd-36)、[G-01](../../intents/05-open-questions.md#g-01)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[負責人補充裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)；多對多／明細表表示為規格設計（非負責人裁定） |
-| IP-R03 | 建立 `Inspection Task` 時，系統**必須**保存當時有效的 `Task Requirement Snapshot`；後續範本或專案查核項目變更不得一般性地改寫快照。KD-55 選「不要重新查核」時，相關且未取消 Task 的 Snapshot 文字**必須**一併更新，結果、照片及任務狀態不變；已取消 Task 恢復時的標準依 IP-R07。選「要重新查核」時，對未取消 Task 只將受影響項目的舊需求、結果與照片標示「標準變更作廢」並保留、可查找的歷史；已取消 Task 恢復時的標準依 IP-R07。同 Task 內未受影響項目及其結果、照片不變。系統**必須**以稽核事件記錄項目修改內容、選擇、操作者與時間。 | 必須 | [PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[負責人補充裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)；Snapshot 欄位結構及稽核事件代碼為規格設計（非負責人裁定） |
+| IP-R03 | 建立 `Inspection Task` 時，系統**必須**保存當時有效的 `Task Requirement Snapshot`；後續範本或專案查核項目變更不得一般性地改寫快照。KD-55 選「不要重新查核」時，相關且未取消 Task 的 Snapshot 文字**必須**一併更新，結果、照片及任務狀態不變；已取消 Task 恢復時的標準依 IP-R07。選「要重新查核」時，對未取消 Task 只將受影響項目的舊需求、結果與照片標示「標準變更作廢」並保留、可查找的歷史，並以新標準更新目前 Snapshot；已取消 Task 恢復時的標準依 IP-R07。同 Task 內未受影響項目及其結果、照片不變。系統**必須**以稽核事件記錄項目修改內容、選擇、操作者與時間。 | 必須 | [PR-04](../../intents/02-principles.md#pr-04)、[KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[負責人補充裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)；Snapshot 欄位結構及稽核事件代碼為規格設計（非負責人裁定） |
 | IP-R04 | 內業修改專案查核項目或查核項次並存檔時，系統**必須**詢問是否重新查核並說明後果。「使用」指同專案所有 Plan 中 Task 項目明細及 Snapshot 含該項目／項次。選「要」時，對已派出且未取消 Task 的受影響項目，舊需求／Snapshot 歷史**必須**標示「標準變更作廢」、保留並供搜尋，並以新標準更新目前 Snapshot。若該項目已有結果，系統另**必須**將其舊結果與照片標示「標準變更作廢」、保留可查並將該項目標記待重查；尚無結果時直接使用新 Snapshot，不標待重查。同 Task 其他項目及其結果、照片不變。受影響 Task 為 `COMPLETED` 時**必須**退回 `IN_PROGRESS`；為 `PENDING` 或 `IN_PROGRESS` 時維持原狀；有待重查項目的未取消 Task 不得完成。原 Task 為 `DRAFT` 時，在同一 Task 內套用新標準並更新 Snapshot，不保留作廢歷史、不改狀態、不建立新 Task。已取消 Task 若取消期間項目標準已修改，恢復時**必須**改用目前標準，並將原有結果中被修改的項目標示待重查；其他項目不受影響。此恢復行為依負責人裁定；如何在明細更新為目前標準時保留原 Snapshot、結果與待重查標記屬**規格設計（非負責人裁定）**。若任何受影響 Task 所屬 Plan 已封存，修改請求必須拒絕且不得寫入；內業先取消封存所有受影響 Plan 再重送。選「不要」時，相關且未取消 Task 的 Snapshot **必須**一併更正文字，不更動結果、照片及狀態；已取消 Task 恢復時的標準依 IP-R07。系統**必須**在同一交易寫入 `project_inspection_item.updated` 稽核事件，記錄修改內容、選擇、操作者與時間。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[PR-04](../../intents/02-principles.md#pr-04)、[負責人補充裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)；歷史記錄方式與項目待重查表示為規格設計（非負責人裁定） |
 | IP-R05 | 任務指派**必須**只作為建議；同專案具現場查核權限的成員皆得開始與完成已派出的任務。實際開始及完成操作者**必須**記錄在 Task 領域欄位（暫定為 `started_by`、`completed_by`），不得以指派人取代實際操作者，也不得以 AuditLog 取代這些欄位。 | 必須 | STM-R11：[SM-Q12](../state-machines/spec.md#sm-q12)；實際操作者欄位名稱為規格設計（非負責人裁定） |
 | IP-R06 | 第一筆 Task 派出時，系統**必須**自動將 Plan 設為 `IN_PROGRESS`。零 Task 的 Plan 為 `DRAFT`；有任何 `DRAFT` Task 時 Plan 不得為 `COMPLETED`，且新增 `DRAFT` Task 至 `COMPLETED` Plan 時須回到 `IN_PROGRESS`。Plan 至少有一筆可納入完成判定的 Task，且所有未取消 Task 均為 `COMPLETED`、沒有待重查項目時，Plan **必須**自動完成；只要未取消 Task 仍有待重查項目，該 Task 不得完成，Plan 也不得完成。Task 至少一筆且全部 Task 均已取消時，Plan **必須**自動成為 `CANCELLED`；若至少一筆 Task 已完成、其餘均已取消，Plan **必須**為 `COMPLETED`。取消封存時，系統**必須**按當前 Task 狀態重新衍生 Plan 有效狀態；不得依封存前狀態直接還原。用戶端不得直接設定衍生狀態。 | 必須／得／不得 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[STM-R02](../state-machines/spec.md#需求)；待重查項目完成門檻為規格設計（非負責人裁定） |
 | IP-R07 | 尚未派出的 `DRAFT` Task 得由內業直接硬刪除，不得取消；刪除動作**必須**另寫 `inspection_task.deleted` AuditLog 事件，記錄操作者、時間與內容摘要。派出後的 `PENDING` 或 `IN_PROGRESS` Task 得取消，已完成 Task 不得取消。取消時**必須**填原因、保留既有結果與照片、顯示「已取消」，保存取消前狀態且不計入 Plan 完成判定。已取消 Task 得恢復至取消前狀態並繼續查核；若取消期間標準變更，恢復時**必須**改用目前標準，並將原有結果中被修改的項目標示待重查。恢復不要求原因，操作者、時間與狀態變更須保留為歷史紀錄。上述恢復標準依[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)；恢復沿用取消權限、不另設恢復原因為**規格設計（非負責人裁定）**。 | 必須／不得／得 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[負責人裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970733042)；刪除方式、AuditLog 事件與欄位為規格設計（非負責人裁定） |
 | IP-R08 | P4 **不得**提供結果或照片新增／更正端點；本規格中的 Snapshot 文字更新，不屬結果或照片端點。KD-42 所述已完成任務結果／照片更正與修正紀錄屬 0.7.x。系統**不得**提供一般人工重新開啟 `COMPLETED` Task 的端點；但 KD-55 選「要」重新查核時，系統必須依項目級補充裁定自動將受影響 Task 由 `COMPLETED` 轉回 `IN_PROGRESS`，這是標準變更觸發的明確例外，不是人工重新開啟。 | 必須／不得 | [KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[負責人補充裁定](https://github.com/speko-tw/inspect-flow/issues/103#issuecomment-5970063986)、[STM-R03](../state-machines/spec.md#需求)；版本範圍依 `state-machines` 與 06-versioning-and-milestone-governance |
 | IP-R09 | 系統**必須**以資料表示各專案的查核項目與任務，不得為特定項目寫死條件分支；所有狀態與權限變更由後端覆核。Task 建立後為 `DRAFT`，僅內業派出後才對現場可見；Plan 在第一筆 Task 派出時自動進入 `IN_PROGRESS`。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[PR-09](../../intents/02-principles.md#pr-09)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56) |
+| IP-R10 | `Project` **得**依需求設定零筆以上 `ProjectZone`；具 `project_zone.manage` 權限的專案內業人員**得**新增、改名及刪除分區；分區 CRUD 與列表 API 路徑見下方介面表。`Inspection Task` **得**保存同專案的 `zone_id` 與選填 `location_text`（補充文字，上限 256 字元）；地點屬單一 Task 的執行位置，不是查核需求，因此不納入 `Task Requirement Snapshot`；Snapshot 只保存查核標準。若專案有分區，建立 Task 時**必須**選一筆該專案分區；若沒有分區，`zone_id` **必須**為空，只能填補充文字。每個 API 均須確認分區、Task 與 Plan 屬於同一 Project。分區有 Task 引用時不得刪除，回應 409；新增、改名及刪除成功時各寫一筆 AuditLog。分區名稱最多 128 字元（沿用 `Project.name` 的暫定上限），輸入先 trim 並存為 trim 後的名稱；trim 後不得為空，否則回 422。再以 Unicode casefold 比對，在同專案內唯一；重複名稱回 409 `project_zone.name_conflict`。`location_text` 最多 256 字元（沿用 `Project.site_location` 的暫定上限）。這些長度、空名稱拒絕及正規化算法為**規格設計（非負責人裁定）**。 | 必須／得／不得 | [KD-40](../../intents/03-decisions-and-stack.md#kd-40)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[OQ-03](../../intents/05-open-questions.md#oq-03)；技術細節為規格設計（非負責人裁定） |
 
 ## 資料
 
 共通 UUID、建立／修改時間及操作者欄位沿用 `database-foundation`。完整的 `Inspection Plan`、`Inspection Task`、`Task Requirement Snapshot` 欄位與關聯由本規格補充；`Project`、`User`、`ProjectMember` 沿用 `domain-model`；`ProjectInspectionItem` 的範本結構與子表沿用 `template-system`，本規格只定義 P4 擴充部分。
 
-以下為**規格設計（非負責人裁定）**：`Inspection Plan` 以 `project_id` 關聯專案；`Inspection Task` 以 `plan_id` 關聯計畫。Task 與 `ProjectInspectionItem` 採多對多關聯，可用 Task 項目明細表實作；每筆明細保存對應專案項目及建立當時的 `Task Requirement Snapshot`，不得以目前範本或目前專案項目內容靜默覆寫歷史。KD-55 選「不要」重新查核時，Snapshot 文字更正是明確例外，必須保留變更紀錄；其餘歷史需求仍須可追溯。精確欄位型別、唯一性、快照子表及刪除約束由 T1 設計並以 migration 驗收。
+以下為**規格設計（非負責人裁定）**：`Inspection Plan` 以 `project_id` 關聯專案；`Inspection Task` 以 `plan_id` 關聯計畫，並有選填 `zone_id` 與 `location_text`；分區外鍵必須與 Plan 所屬 Project 相同。Task 與 `ProjectInspectionItem` 採多對多關聯，可用 Task 項目明細表實作；每筆明細保存對應專案項目及建立當時的 `Task Requirement Snapshot`，不得以目前範本或目前專案項目內容靜默覆寫歷史。KD-55 選「不要」重新查核時，Snapshot 文字更正是明確例外，必須保留變更紀錄；其餘歷史需求仍須可追溯。精確欄位型別、唯一性、快照子表及刪除約束由 T1 設計並以 migration 驗收。
 
+<a id="開工門檻逐實體比對"></a>
 ### 開工門檻逐實體比對
 
 依 [README 部分凍結規則](../README.md#partial-freeze)，逐項核對 G-01～G-07、OQ-06 與 OQ-09 的「為什麼要先決定」及選項原文；「字面命中」只以引用另一實體 UUID 的欄位，不作為對被引用實體本身的阻擋。OQ-09 明確點名 Plan／Task，已裁定行為依 KD-42、KD-55～KD-57；本文未裁定的資料表示與剩餘狀態邊界均標為規格設計（非負責人裁定），不宣稱為負責人裁定。
@@ -90,9 +93,13 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 |---|---|---|---|
 | GET | `/api/v1/projects/{project_id}/inspection-plans` | 列出專案計畫 | `inspection_plan.read` |
 | POST | `/api/v1/projects/{project_id}/inspection-plans` | 建立計畫，初始為 `DRAFT` | `inspection_plan.create` |
+| GET | `/api/v1/projects/{project_id}/zones` | 列出專案分區 | `project_zone.read` |
+| POST | `/api/v1/projects/{project_id}/zones` | 新增專案分區 | `project_zone.manage` |
+| PATCH | `/api/v1/projects/{project_id}/zones/{zone_id}` | 修改分區名稱 | `project_zone.manage` |
+| DELETE | `/api/v1/projects/{project_id}/zones/{zone_id}` | 刪除未被 Task 引用的分區；被引用時回 409 `project_zone.in_use` | `project_zone.manage` |
 | GET | `/api/v1/inspection-plans/{plan_id}` | 讀取計畫、任務與摘要 | `inspection_plan.read` |
 | PATCH | `/api/v1/inspection-plans/{plan_id}` | 修改計畫資料；用戶端不得直接設定狀態 | `inspection_plan.manage` |
-| POST | `/api/v1/inspection-plans/{plan_id}/tasks` | 由一筆或多筆專案查核項目建立一筆 `DRAFT` Task 及各項 Snapshot；現場不可見 | `inspection_task.create` |
+| POST | `/api/v1/inspection-plans/{plan_id}/tasks` | 由一筆或多筆專案查核項目建立一筆 `DRAFT` Task 及各項 Snapshot；輸入 `zone_id`、`location_text` 作為地點；現場不可見 | `inspection_task.create` |
 | POST | `/api/v1/inspection-tasks/{task_id}:dispatch` | 內業派出草稿任務，使其對現場可見；第一筆派出時 Plan 進入 `IN_PROGRESS` | `inspection_task.dispatch` |
 | POST | `/api/v1/inspection-tasks/{task_id}:assign` | 設定或清除建議執行人 | `inspection_task.assign` |
 | POST | `/api/v1/inspection-tasks/{task_id}:start` | 開始執行任務 | `inspection_task.inspect` |
@@ -109,6 +116,8 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 | 權限代碼 | 用途 |
 |---|---|
+| `project_zone.read` | 讀取專案分區 |
+| `project_zone.manage` | 管理專案分區 |
 | `inspection_plan.read` | 讀取計畫與所屬任務 |
 | `inspection_plan.create` | 建立計畫 |
 | `inspection_plan.manage` | 修改計畫非狀態資料 |
@@ -145,6 +154,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 | IP-AC08 | Plan 處於 `DRAFT`、`IN_PROGRESS`、`COMPLETED` 或 `CANCELLED`；封存期間所屬 Task 不可操作 | 具權限者封存 Plan，再嘗試操作 Task，之後取消封存 | 任一狀態均可封存；封存期間 Task 唯讀；取消封存後依當前 Task 狀態重新計算有效 Plan 狀態，不使用封存前狀態欄位直接還原 | IP-R06 |
 | IP-AC09 | `PENDING`、`IN_PROGRESS` 或 `COMPLETED` Task 使用被修改項次 | KD-55 選「要」或「不要」重新查核；呼叫 P4 API | 不存在結果／照片新增或更正端點，也不存在一般人工重新開啟 `COMPLETED` Task 的端點；「不要」只更新 Snapshot 文字且狀態、結果、照片不變；「要」保留並標示作廢受影響項目的舊需求／Snapshot 歷史，並以新標準更新目前 Snapshot；已有結果者另作廢舊結果與照片並標待重查，尚無結果者直接使用新 Snapshot、不標待重查。`COMPLETED` Task 回 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` 維持原狀；待重查項目完成前不得完成 Task；結果／照片更正端點仍屬 0.7.x | IP-R03、IP-R04、IP-R06、IP-R08 |
 | IP-AC10 | 有管理 Plan、Task 或項目之請求 | 以非預期狀態值、跨專案識別碼或無權限帳號呼叫 API | 後端拒絕不合法狀態或越權存取，其他專案資料不變；回應遵守 api-conventions | IP-R01、IP-R09 |
+| IP-AC11 | 專案 P 有分區 Z1、專案 Q 有分區 Z2、專案 R 無分區；P、R 各有一筆尚無 Task 的 Plan | 以有／無 `project_zone.manage` 權限者新增 P 的未引用分區 Z3、修改 Z3 名稱並刪除 Z3；嘗試新增同名分區與 trim 後空白名稱；建立 P 的 T1 並引用 Z1，另嘗試引用 Q 的 Z2 或不提供分區；在 R 的 Plan 建立 T2；最後刪除被 T1 引用的 Z1 | 有權限新增、改名及刪除未引用的 Z3 均成功且各產生一筆稽核事件，無權限回 403；同專案重複名稱（忽略前後空白及 Unicode casefold）回 409；trim 後空白名稱回 422；名稱與補充文字上限分別為 128、256 字元，超過回 422；T1 引用 Z2 或未提供 P 必要的 `zone_id` 回 422；R 的 T2 不得帶 `zone_id`，得單獨填 `location_text`；引用中的 Z1 刪除回 409 且資料不變。地點欄位不進 Task Requirement Snapshot | IP-R10 |
 
 ## 決議追蹤
 
@@ -173,6 +183,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 ## 變更紀錄
 
+- 範圍變更（負責人指示，#369）：新增 `ProjectZone` 管理、Task 分區與補充地點欄位及其規則；KD-55「不要重新查核」更新 Snapshot 文字、KD-55「要」以新標準更新目前 Snapshot — [#73 裁定](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5976192382)、[#369](https://github.com/speko-tw/inspect-flow/issues/369)
 - 凍結 Plan／Task、Task 項目關聯及 Snapshot 的 IP-R01～IP-R09、IP-AC01～IP-AC10；逐項核對開工門檻並更正 SM-Q12 的引用錨點 — #358
 
 
