@@ -190,6 +190,10 @@ def _template(system_id, title="Foundation"):
             False,
         ),
         (
+            {"range_form": "tolerance", "value": "3.3", "tolerance": ""},
+            False,
+        ),
+        (
             {
                 "range_form": "interval",
                 "value": None,
@@ -250,6 +254,36 @@ def test_range_forms_validate_on_create_and_update(clients, standard, valid):
         f"/api/v1/templates/{created.json()['id']}", json=body
     )
     assert invalid.status_code == 422
+
+
+@pytest.mark.parametrize("tolerance", [None, "", "  ", "omitted"])
+def test_legacy_range_empty_tolerance_defaults_to_zero(
+    clients, db_session, tolerance
+):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id)
+    numeric = body["inspection_points"][0]["numeric_standard"]
+    numeric["condition"] = "range"
+    if tolerance == "omitted":
+        numeric.pop("tolerance")
+    else:
+        numeric["tolerance"] = tolerance
+
+    created = manager.post("/api/v1/templates", json=body)
+    assert created.status_code == 201, created.text
+    point = created.json()["inspection_points"][0]
+    assert point["numeric_standard"]["range_form"] == "tolerance"
+    assert point["numeric_standard"]["tolerance"] == "0"
+
+    persisted = db_session.scalar(
+        select(TemplateNumericStandard).where(
+            TemplateNumericStandard.inspection_point_id == UUID(point["id"])
+        )
+    )
+    assert persisted is not None
+    assert persisted.range_form == "tolerance"
+    assert persisted.tolerance == "0"
 
 
 @pytest.mark.parametrize(

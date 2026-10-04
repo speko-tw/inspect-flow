@@ -101,6 +101,20 @@ class NumericStandardBody(StrictBody):
     upper_bound: str | None = None
     measurement_field_client_id: UUID
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_range(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if data.get("condition") != "range" or "range_form" in data:
+            return data
+        tolerance = data.get("tolerance")
+        if tolerance is None or (
+            isinstance(tolerance, str) and not tolerance.strip()
+        ):
+            return {**data, "tolerance": "0"}
+        return data
+
     @field_validator("value", "tolerance", "lower_bound", "upper_bound")
     @classmethod
     def numeric_value(cls, value: str | None) -> str | None:
