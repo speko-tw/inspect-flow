@@ -36,11 +36,11 @@
 
 | 項目 | 0.2.x 現況（程式證據） | 處置 |
 |---|---|---|
-| 使用者基本管理 | `backend/app/api/v1/users.py` 提供列表、單筆、建立、修改、公司連結、Admin 與啟用狀態；`frontend/src/admin/UsersPage.tsx` 已有基本管理，但列表未搜尋或 cursor 分頁 | 本規格加入搜尋、cursor 分頁及批次啟用狀態；基本 CRUD 沿用既有功能 |
-| 公司基本管理 | `backend/app/api/v1/companies.py` 提供列表、單筆、建立、修改、啟用狀態及停用前指定使用者；`frontend/src/admin/CompaniesPage.tsx` 有單筆停用影響確認，但列表未搜尋或 cursor 分頁 | 本規格加入搜尋、cursor 分頁及批次狀態操作；既有單筆 CRUD 沿用 |
+| 使用者基本管理 | `backend/app/api/v1/users.py` 提供列表、單筆、建立、修改、公司連結、Admin 與啟用狀態；`frontend/src/admin/UsersPage.tsx` 提供基本管理及搜尋、cursor 分頁 | 搜尋與 cursor 分頁已完成；基本 CRUD 沿用既有功能，批次啟用狀態仍由本規格處理 |
+| 公司基本管理 | `backend/app/api/v1/companies.py` 提供列表、單筆、建立、修改、啟用狀態及停用前指定使用者；`frontend/src/admin/CompaniesPage.tsx` 提供影響確認、搜尋及 cursor 分頁 | 搜尋與 cursor 分頁已完成；既有單筆 CRUD 沿用，批次狀態操作仍由本規格處理 |
 | Admin 為既有使用者重設臨時密碼 | `backend/app/api/v1/users.py` 目前僅在建立使用者時回傳臨時密碼，沒有既有使用者重設路由；`authentication` AUT-R36／AUT-R37 已定義共用入口與臨時密碼規則 | 本規格加入 Admin 重設端點及一次性顯示流程，呼叫 AUT-R36，不另定密碼機制 |
 | 專案角色管理 | `backend/app/api/v1/roles.py`、`frontend/src/admin/roles/RolesPage.tsx` 已實作全系統角色 CRUD；`domain-model` DOM-R55、DOM-AC47 定義 cursor API 與 `user_count`／`project_count` 影響數 | 已完成；本規格沿用專案角色管理與既有影響資訊，不重做角色模型 |
-| 專案與成員基本管理 | `backend/app/api/v1/projects.py`、`frontend/src/admin/projects/ProjectsPage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx` 已提供專案及成員基本操作；專案角色指派沿用既有角色 API | 基本管理已完成；本規格加入專案列表進階搜尋／分頁及成員批次指派／撤銷 |
+| 專案與成員基本管理 | `backend/app/api/v1/projects.py`、`frontend/src/admin/projects/ProjectsPage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx` 提供專案及成員基本操作；專案角色指派沿用既有角色 API | 基本管理與列表搜尋／cursor 分頁已完成；成員批次指派／撤銷仍由本規格處理 |
 | 角色變更前影響範圍（PR-18） | 專案角色介面已有 `user_count`、`project_count`；全公司角色由 #387／#390 前置規格定義，現有介面尚未提供公司角色變更前的受影響人員與權限差異 | 本規格要求公司角色修改、刪除、指派及撤銷前顯示受影響人數、名單、權限差異並確認；專案角色沿用 DOM-AC47 |
 | #286 專案成員數 | `backend/app/api/v1/projects.py` 的專案列表回應尚無 `member_count`；#286 要求 API 與列表提供此數值 | 納入本規格；先依規格變更流程更新 `domain-model` API 契約，再實作 |
 

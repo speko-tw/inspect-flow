@@ -292,6 +292,9 @@ describe('admin user and company pages', () => {
     renderAdmin()
 
     expect(await screen.findByText('anna.deng')).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: '使用者列表，可水平捲動' }),
+    ).toBeInTheDocument()
     expect(screen.getByText('admin', { exact: true })).toBeInTheDocument()
     expect(screen.getByText('（系統帳號）')).toBeInTheDocument()
     const adminRow = screen.getByRole('row', { name: /admin.*系統帳號/ })
@@ -315,7 +318,7 @@ describe('admin user and company pages', () => {
       id: `paging-${index}`,
       username: `paging.user.${index}`,
       email: `paging.${index}@demo.example`,
-      name_zh: index === 50 ? '目標人員' : `人員${index}`,
+      name_zh: `人員${index}`,
     }))
     managementFetch({ userRows: rows })
     renderAdmin()
@@ -326,33 +329,43 @@ describe('admin user and company pages', () => {
     expect(await screen.findByText('paging.user.50')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋使用者'), {
-      target: { value: '目標人員' },
+      target: { value: '人員' },
     })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    expect(await screen.findByText('paging.user.0')).toBeInTheDocument()
+    expect(screen.queryByText('paging.user.50')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('搜尋使用者'), {
+      target: { value: '草稿不應套用' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('paging.user.50')).toBeInTheDocument()
-    expect(screen.queryByText('paging.user.0')).not.toBeInTheDocument()
   })
 
   it('searches companies and loads the next cursor page', async () => {
     const rows = Array.from({ length: 51 }, (_, index) => ({
       id: `company-${index}`,
-      name: index === 50 ? '目標公司' : `示範公司${index}`,
+      name: `目標公司${index}`,
       is_active: true,
     }))
     managementFetch({ companyRows: rows })
     renderAdmin('/admin/companies')
 
-    expect(await screen.findByText('示範公司0')).toBeInTheDocument()
-    expect(screen.queryByText('目標公司')).not.toBeInTheDocument()
+    expect(await screen.findByText('目標公司0')).toBeInTheDocument()
+    expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    expect(await screen.findByText('目標公司')).toBeInTheDocument()
+    expect(await screen.findByText('目標公司50')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋公司'), {
-      target: { value: '目標' },
+      target: { value: '目標公司' },
     })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
-    expect(await screen.findByText('目標公司')).toBeInTheDocument()
-    expect(screen.queryByText('示範公司0')).not.toBeInTheDocument()
+    expect(await screen.findByText('目標公司0')).toBeInTheDocument()
+    expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('搜尋公司'), {
+      target: { value: '草稿不應套用' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    expect(await screen.findByText('目標公司50')).toBeInTheDocument()
   })
 
   it('shows and clears a temporary password', async () => {

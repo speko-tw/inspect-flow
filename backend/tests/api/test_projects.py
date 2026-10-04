@@ -247,6 +247,45 @@ def test_project_list_search_cursor_and_validation(project_api):
         ][0]["project_code"]
         == "DEMO-OTHER-275"
     )
+    project_name = project_api["project"].name
+    assert client.get("/api/v1/projects", params={"q": project_name}).json()[
+        "items"
+    ]
+
+    duplicate_first = client.post(
+        "/api/v1/projects",
+        json={
+            "project_code": "SAME-NAME-A",
+            "name": "同名分頁測試",
+            "client_name": "測試業主",
+            "site_location": "測試地點",
+        },
+    )
+    duplicate_second = client.post(
+        "/api/v1/projects",
+        json={
+            "project_code": "SAME-NAME-B",
+            "name": "同名分頁測試",
+            "client_name": "測試業主",
+            "site_location": "測試地點",
+        },
+    )
+    assert duplicate_first.status_code == duplicate_second.status_code == 201
+    first_same = client.get(
+        "/api/v1/projects", params={"q": "同名分頁測試", "limit": 1}
+    ).json()
+    second_same = client.get(
+        "/api/v1/projects",
+        params={
+            "q": "同名分頁測試",
+            "limit": 1,
+            "cursor": first_same["next_cursor"],
+        },
+    ).json()
+    assert [
+        row["id"] for row in first_same["items"] + second_same["items"]
+    ] == sorted([duplicate_first.json()["id"], duplicate_second.json()["id"]])
+    assert second_same["next_cursor"] is None
     max_page = client.get("/api/v1/projects", params={"limit": 100})
     assert max_page.status_code == 200
     for params in (

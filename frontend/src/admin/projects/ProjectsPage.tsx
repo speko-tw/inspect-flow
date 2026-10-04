@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { managementErrorMessage } from '../api'
@@ -54,25 +54,29 @@ export default function ProjectsPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [reloadKey, setReloadKey] = useState(0)
   const [query, setQuery] = useState('')
+  const [appliedQuery, setAppliedQuery] = useState('')
+  const [listError, setListError] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const requestId = useRef(0)
 
   useEffect(() => {
     let active = true
+    const id = ++requestId.current
     async function load() {
       try {
-        const page = await listProjectsPage({ q: '', limit: 50 })
-        if (active) {
+        const page = await listProjectsPage({ q: appliedQuery, limit: 50 })
+        if (active && id === requestId.current) {
           setProjects(page.items)
           setNextCursor(page.next_cursor)
         }
       } catch (caught) {
         if (active) {
-          setError(managementErrorMessage(caught))
+          setListError(managementErrorMessage(caught))
         }
       } finally {
         if (active) {
-          setLoading(false)
+          if (id === requestId.current) setLoading(false)
         }
       }
     }
@@ -80,39 +84,39 @@ export default function ProjectsPage() {
     return () => {
       active = false
     }
-  }, [reloadKey])
+  }, [reloadKey, appliedQuery])
 
   async function searchProjects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setProjects([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setListError('')
+    setAppliedQuery(query.trim())
     setLoading(true)
-    setError('')
-    try {
-      const page = await listProjectsPage({ q: query.trim(), limit: 50 })
-      setProjects(page.items)
-      setNextCursor(page.next_cursor)
-    } catch (caught) {
-      setError(managementErrorMessage(caught))
-    } finally {
-      setLoading(false)
-    }
   }
 
   async function loadMoreProjects() {
-    if (!nextCursor) return
+    if (!nextCursor || loading || loadingMore) return
+    const id = requestId.current
+    const cursor = nextCursor
     setLoadingMore(true)
-    setError('')
+    setListError('')
     try {
       const page = await listProjectsPage({
-        q: query,
-        cursor: nextCursor,
+        q: appliedQuery,
+        cursor,
         limit: 50,
       })
-      setProjects((current) => [...current, ...page.items])
-      setNextCursor(page.next_cursor)
+      if (id === requestId.current) {
+        setProjects((current) => [...current, ...page.items])
+        setNextCursor(page.next_cursor)
+      }
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
     } finally {
-      setLoadingMore(false)
+      if (id === requestId.current) setLoadingMore(false)
     }
   }
 
@@ -161,6 +165,11 @@ export default function ProjectsPage() {
           : `專案「${saved.name}」已儲存。`,
       )
       cancelEdit()
+      setProjects([])
+      setNextCursor(null)
+      setLoading(true)
+      setLoadingMore(false)
+      setListError('')
       setReloadKey((key) => key + 1)
     } catch (caught) {
       setError(managementErrorMessage(caught))
@@ -187,7 +196,25 @@ export default function ProjectsPage() {
           搜尋
         </button>
       </form>
-      {!loading && projects.length === 0 ? <p>目前沒有專案。</p> : null}
+      {listError && <p role="alert">{listError}</p>}
+      {!loading && projects.length === 0 ? (
+        appliedQuery ? (
+          <p>
+            找不到符合「{appliedQuery}」的專案。{' '}
+            <button
+              onClick={() => {
+                setQuery('')
+                setAppliedQuery('')
+              }}
+              type="button"
+            >
+              清除搜尋
+            </button>
+          </p>
+        ) : (
+          <p>目前沒有專案。</p>
+        )
+      ) : null}
       {projects.length > 0 && (
         <table>
           <thead>
@@ -233,7 +260,7 @@ export default function ProjectsPage() {
       )}
       {nextCursor && (
         <button
-          disabled={loadingMore}
+          disabled={loading || loadingMore}
           onClick={() => void loadMoreProjects()}
           type="button"
         >

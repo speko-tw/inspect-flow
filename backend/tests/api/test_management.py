@@ -249,6 +249,14 @@ def test_user_company_lists_search_cursor_and_validation(
             employee_no=employee_no,
             company_id=UUID(first_company.json()["id"]),
         )
+    create_user(
+        db_session,
+        username="literal.query.person",
+        email="literal%_\\query@example.test",
+        name_zh="符號%_\\人員",
+        employee_no="LITERAL",
+        company_id=UUID(first_company.json()["id"]),
+    )
     db_session.commit()
 
     first = client.get("/api/v1/users", params={"limit": 1, "q": "user"})
@@ -291,6 +299,11 @@ def test_user_company_lists_search_cursor_and_validation(
         ]
         == "alpha.user"
     )
+    for literal in ("%", "_", "\\"):
+        matches = client.get("/api/v1/users", params={"q": literal}).json()[
+            "items"
+        ]
+        assert "literal.query.person" in {item["username"] for item in matches}
 
     companies = client.get("/api/v1/companies", params={"limit": 1})
     assert companies.status_code == 200
@@ -310,6 +323,15 @@ def test_user_company_lists_search_cursor_and_validation(
         ]["name"]
         == "示範乙公司"
     )
+    literal_company = client.post(
+        "/api/v1/companies", json={"name": "字面%_\\公司"}
+    )
+    assert literal_company.status_code == 201
+    for literal in ("%", "_", "\\"):
+        matches = client.get(
+            "/api/v1/companies", params={"q": literal}
+        ).json()["items"]
+        assert "字面%_\\公司" in {item["name"] for item in matches}
 
     for path in ("/api/v1/users", "/api/v1/companies"):
         assert client.get(path, params={"limit": 0}).status_code == 422

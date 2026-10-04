@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -34,52 +34,67 @@ export default function UsersPage({
   const [editingCompany, setEditingCompany] = useState<string | null>(null)
   const [busyUser, setBusyUser] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [appliedQuery, setAppliedQuery] = useState('')
+  const [listError, setListError] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const requestId = useRef(0)
 
   async function loadUserPage(
     search: string,
     cursor: string | null = null,
     append = false,
+    id = requestId.current,
   ) {
     const page = await listUsersPage({ q: search, cursor, limit: 50 })
-    setUsers((current) => (append ? [...current, ...page.items] : page.items))
-    setNextCursor(page.next_cursor)
+    if (id === requestId.current) {
+      setUsers((current) =>
+        append ? [...current, ...page.items] : page.items,
+      )
+      setNextCursor(page.next_cursor)
+    }
   }
 
   async function reload() {
-    setError('')
+    const id = ++requestId.current
+    setListError('')
+    setUsers([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setLoading(true)
     try {
       const [, nextCompanies] = await Promise.all([
-        loadUserPage(query),
+        loadUserPage(appliedQuery, null, false, id),
         listCompanies(),
       ])
-      setCompanies(nextCompanies)
+      if (id === requestId.current) setCompanies(nextCompanies)
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
     } finally {
-      setLoading(false)
+      if (id === requestId.current) setLoading(false)
     }
   }
 
   useEffect(() => {
     let active = true
+    const id = ++requestId.current
     async function load() {
       try {
         const [, nextCompanies] = await Promise.all([
-          loadUserPage(''),
+          loadUserPage('', null, false, id),
           listCompanies(),
         ])
-        if (active) {
+        if (active && id === requestId.current) {
           setCompanies(nextCompanies)
         }
       } catch (caught) {
         if (active) {
-          setError(managementErrorMessage(caught))
+          setListError(managementErrorMessage(caught))
         }
       } finally {
         if (active) {
-          setLoading(false)
+          if (id === requestId.current) setLoading(false)
         }
       }
     }
@@ -91,27 +106,63 @@ export default function UsersPage({
 
   async function searchUsers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const search = query.trim()
+    setAppliedQuery(search)
+    const id = ++requestId.current
+    setUsers([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setListError('')
     setLoading(true)
-    setError('')
     try {
-      await loadUserPage(query.trim())
+      const [, nextCompanies] = await Promise.all([
+        loadUserPage(search, null, false, id),
+        listCompanies(),
+      ])
+      if (id === requestId.current) setCompanies(nextCompanies)
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
     } finally {
-      setLoading(false)
+      if (id === requestId.current) setLoading(false)
     }
   }
 
   async function loadMoreUsers() {
-    if (!nextCursor) return
+    if (!nextCursor || loading || loadingMore) return
+    const id = requestId.current
     setLoadingMore(true)
-    setError('')
+    setListError('')
     try {
-      await loadUserPage(query, nextCursor, true)
+      await loadUserPage(appliedQuery, nextCursor, true, id)
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
     } finally {
-      setLoadingMore(false)
+      if (id === requestId.current) setLoadingMore(false)
+    }
+  }
+
+  async function clearSearch() {
+    setQuery('')
+    setAppliedQuery('')
+    const id = ++requestId.current
+    setUsers([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setListError('')
+    setLoading(true)
+    try {
+      const [, nextCompanies] = await Promise.all([
+        loadUserPage('', null, false, id),
+        listCompanies(),
+      ])
+      if (id === requestId.current) setCompanies(nextCompanies)
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoading(false)
     }
   }
 
@@ -180,121 +231,141 @@ export default function UsersPage({
             搜尋
           </button>
         </form>
-        {!loading && users.length === 0 ? <p>目前沒有使用者。</p> : null}
+        {listError && <p role="alert">{listError}</p>}
+        {!loading && users.length === 0 ? (
+          appliedQuery ? (
+            <p>
+              找不到符合「{appliedQuery}」的使用者。{' '}
+              <button onClick={() => void clearSearch()} type="button">
+                清除搜尋
+              </button>
+            </p>
+          ) : (
+            <p>目前沒有使用者。</p>
+          )
+        ) : null}
         {users.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">帳號</th>
-                <th scope="col">姓名</th>
-                <th scope="col">公司</th>
-                <th scope="col">系統管理者</th>
-                <th scope="col">狀態</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <Fragment key={user.id}>
-                  <tr>
-                    <th scope="row">
-                      {user.username}
-                      {user.is_system ? <span>（系統帳號）</span> : null}
-                    </th>
-                    <td>{user.name_zh ?? '—'}</td>
-                    <td>{companyLabel(user, companies)}</td>
-                    <td>{user.is_admin ? '是' : '否'}</td>
-                    <td>{user.is_active ? '啟用' : '停用'}</td>
-                    <td>
-                      <button
-                        disabled={
-                          user.is_system || user.auth_source !== 'local'
-                        }
-                        onClick={() =>
-                          setEditingUser(
-                            editingUser === user.id ? null : user.id,
-                          )
-                        }
-                        type="button"
-                      >
-                        修改資料
-                      </button>
-                      <button
-                        disabled={
-                          user.is_system || user.auth_source !== 'local'
-                        }
-                        onClick={() =>
-                          setEditingCompany(
-                            editingCompany === user.id ? null : user.id,
-                          )
-                        }
-                        type="button"
-                      >
-                        公司連結
-                      </button>
-                      <button
-                        disabled={user.is_system || busyUser === user.id}
-                        onClick={() => void toggleAdmin(user)}
-                        type="button"
-                      >
-                        {user.is_admin ? '收回管理者' : '指派管理者'}
-                      </button>
-                      <button
-                        disabled={user.is_system || busyUser === user.id}
-                        onClick={() =>
-                          void act(user.id, () =>
-                            setUserActive(user.id, !user.is_active),
-                          )
-                        }
-                        type="button"
-                      >
-                        {user.is_active ? '停用' : '啟用'}
-                      </button>
-                    </td>
-                  </tr>
-                  {(editingUser === user.id || editingCompany === user.id) && (
-                    <tr className="row-detail">
-                      <td colSpan={6}>
-                        {editingUser === user.id && (
-                          <UserDetailsForm
-                            onCancel={() => setEditingUser(null)}
-                            onSave={(fields) =>
-                              void act(user.id, () =>
-                                updateUser(user.id, fields),
-                              )
-                            }
-                            user={user}
-                          />
-                        )}
-                        {editingCompany === user.id && (
-                          <CompanyLinkForm
-                            companies={companies}
-                            onCancel={() => setEditingCompany(null)}
-                            onSave={(companyId, fields) =>
-                              void act(user.id, () =>
-                                companyId === user.company_id
-                                  ? updateUser(user.id, fields)
-                                  : linkUserCompany(
-                                      user.id,
-                                      companyId,
-                                      fields,
-                                    ),
-                              )
-                            }
-                            user={user}
-                          />
-                        )}
+          <div
+            aria-label="使用者列表，可水平捲動"
+            className="users-table-scroll"
+            role="region"
+            tabIndex={0}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">帳號</th>
+                  <th scope="col">姓名</th>
+                  <th scope="col">公司</th>
+                  <th scope="col">系統管理者</th>
+                  <th scope="col">狀態</th>
+                  <th scope="col">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <Fragment key={user.id}>
+                    <tr>
+                      <th scope="row">
+                        {user.username}
+                        {user.is_system ? <span>（系統帳號）</span> : null}
+                      </th>
+                      <td>{user.name_zh ?? '—'}</td>
+                      <td>{companyLabel(user, companies)}</td>
+                      <td>{user.is_admin ? '是' : '否'}</td>
+                      <td>{user.is_active ? '啟用' : '停用'}</td>
+                      <td>
+                        <button
+                          disabled={
+                            user.is_system || user.auth_source !== 'local'
+                          }
+                          onClick={() =>
+                            setEditingUser(
+                              editingUser === user.id ? null : user.id,
+                            )
+                          }
+                          type="button"
+                        >
+                          修改資料
+                        </button>
+                        <button
+                          disabled={
+                            user.is_system || user.auth_source !== 'local'
+                          }
+                          onClick={() =>
+                            setEditingCompany(
+                              editingCompany === user.id ? null : user.id,
+                            )
+                          }
+                          type="button"
+                        >
+                          公司連結
+                        </button>
+                        <button
+                          disabled={user.is_system || busyUser === user.id}
+                          onClick={() => void toggleAdmin(user)}
+                          type="button"
+                        >
+                          {user.is_admin ? '收回管理者' : '指派管理者'}
+                        </button>
+                        <button
+                          disabled={user.is_system || busyUser === user.id}
+                          onClick={() =>
+                            void act(user.id, () =>
+                              setUserActive(user.id, !user.is_active),
+                            )
+                          }
+                          type="button"
+                        >
+                          {user.is_active ? '停用' : '啟用'}
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                    {(editingUser === user.id ||
+                      editingCompany === user.id) && (
+                      <tr className="row-detail">
+                        <td colSpan={6}>
+                          {editingUser === user.id && (
+                            <UserDetailsForm
+                              onCancel={() => setEditingUser(null)}
+                              onSave={(fields) =>
+                                void act(user.id, () =>
+                                  updateUser(user.id, fields),
+                                )
+                              }
+                              user={user}
+                            />
+                          )}
+                          {editingCompany === user.id && (
+                            <CompanyLinkForm
+                              companies={companies}
+                              onCancel={() => setEditingCompany(null)}
+                              onSave={(companyId, fields) =>
+                                void act(user.id, () =>
+                                  companyId === user.company_id
+                                    ? updateUser(user.id, fields)
+                                    : linkUserCompany(
+                                        user.id,
+                                        companyId,
+                                        fields,
+                                      ),
+                                )
+                              }
+                              user={user}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {nextCursor && (
           <button
-            disabled={loadingMore}
+            disabled={loading || loadingMore}
             onClick={() => void loadMoreUsers()}
             type="button"
           >
