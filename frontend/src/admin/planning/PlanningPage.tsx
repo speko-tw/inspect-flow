@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
+import { ManagementApiError } from '../api'
 import { planningClient, planningErrorMessage } from './api'
 import type {
   InspectionPlan,
@@ -31,18 +32,12 @@ function taskTitle(task: InspectionTask): string {
   return task.items.map((item) => item.title).join('、')
 }
 
-function statusOf(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null || !('status' in error)) {
-    return undefined
-  }
-  const status = (error as { status?: unknown }).status
-  return typeof status === 'number' ? status : undefined
-}
-
 export default function PlanningPage({
   client = planningClient,
+  initialProjectId = '',
 }: {
   client?: PlanningClient
+  initialProjectId?: string
 }) {
   const [projects, setProjects] = useState<PlanningProject[]>([])
   const [projectId, setProjectId] = useState('')
@@ -54,6 +49,7 @@ export default function PlanningPage({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [error, setError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [planName, setPlanName] = useState('')
@@ -80,6 +76,36 @@ export default function PlanningPage({
     title: string
     action: () => Promise<unknown>
   } | null>(null)
+  const confirmationTrigger = useRef<HTMLElement | null>(null)
+  const confirmationHeading = useRef<HTMLHeadingElement | null>(null)
+  const cancelTrigger = useRef<HTMLElement | null>(null)
+  const cancelHeading = useRef<HTMLHeadingElement | null>(null)
+  const pageHeading = useRef<HTMLHeadingElement | null>(null)
+  const previousConfirmation = useRef(false)
+  const previousCancelTask = useRef(false)
+
+  useEffect(() => {
+    if (confirmation) confirmationHeading.current?.focus()
+    else if (previousConfirmation.current) {
+      if (confirmationTrigger.current?.isConnected) {
+        confirmationTrigger.current.focus()
+      } else {
+        pageHeading.current?.focus()
+      }
+      confirmationTrigger.current = null
+    }
+    previousConfirmation.current = Boolean(confirmation)
+  }, [confirmation])
+
+  useEffect(() => {
+    if (cancelTask) cancelHeading.current?.focus()
+    else if (previousCancelTask.current) {
+      if (cancelTrigger.current?.isConnected) cancelTrigger.current.focus()
+      else pageHeading.current?.focus()
+      cancelTrigger.current = null
+    }
+    previousCancelTask.current = Boolean(cancelTask)
+  }, [cancelTask])
 
   useEffect(() => {
     let active = true
@@ -90,17 +116,19 @@ export default function PlanningPage({
         const nextProjects = await client.listProjects()
         if (active) {
           setProjects(nextProjects)
-          const firstProjectId = nextProjects[0]?.id ?? ''
-          setProjectId((current) =>
-            nextProjects.some((project) => project.id === current)
-              ? current
-              : firstProjectId,
+          const firstProjectId = nextProjects.some(
+            (entry) => entry.id === initialProjectId,
           )
+            ? initialProjectId
+            : (nextProjects[0]?.id ?? '')
+          setProjectId(firstProjectId)
           if (!firstProjectId) setLoading(false)
         }
       } catch (caught) {
         if (active) {
-          if (statusOf(caught) === 403) setReadOnly(true)
+          if (caught instanceof ManagementApiError && caught.status === 403) {
+            setAccessDenied(true)
+          }
           setError(planningErrorMessage(caught))
           setLoading(false)
         }
@@ -110,7 +138,7 @@ export default function PlanningPage({
     return () => {
       active = false
     }
-  }, [client])
+  }, [client, initialProjectId])
 
   useEffect(() => {
     if (!projectId) return
@@ -118,17 +146,22 @@ export default function PlanningPage({
     async function loadProjectData() {
       setLoading(true)
       setError('')
-      setItems([])
-      setZones([])
-      setMembers([])
-      setPlans([])
       try {
         const [nextItems, nextZones, nextMembers, nextPlans] =
           await Promise.all([
             client.listProjectItems(projectId),
             client.listProjectZones(projectId),
             client.listProjectMembers(projectId),
-            client.listPlans(projectId),
+            (async () => {
+              const all: InspectionPlan[] = []
+              let cursor: string | null = null
+              do {
+                const page = await client.listPlans(projectId, cursor)
+                all.push(...page.items)
+                cursor = page.next_cursor
+              } while (cursor)
+              return all
+            })(),
           ])
         if (active) {
           setItems(nextItems)
@@ -138,13 +171,10 @@ export default function PlanningPage({
         }
       } catch (caught) {
         if (active) {
-          if (statusOf(caught) === 403) setReadOnly(true)
+          if (caught instanceof ManagementApiError && caught.status === 403) {
+            setAccessDenied(true)
+          }
           setError(planningErrorMessage(caught))
-          setItems([])
-          setZones([])
-          setMembers([])
-          setPlans([])
-          setSelectedPlanId('')
         }
       } finally {
         if (active) setLoading(false)
@@ -157,7 +187,38 @@ export default function PlanningPage({
   }, [client, projectId, reloadKey])
 
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? null
-  const canEditPlan = Boolean(selectedPlan && !selectedPlan.archived)
+  const [selectedPlanData, setSelectedPlanData] = useState<{
+    id: string
+    plan: InspectionPlan
+  } | null>(null)
+  useEffect(() => {
+    if (!selectedPlanId) return
+    let active = true
+    void client.getPlan(selectedPlanId).then(
+      (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
+      (caught: unknown) => {
+        if (active) {
+          if (caught instanceof ManagementApiError && caught.status === 403) {
+            setAccessDenied(true)
+          }
+          setError(planningErrorMessage(caught))
+        }
+      },
+    )
+    return () => {
+      active = false
+    }
+  }, [client, selectedPlanId, reloadKey])
+  const selectedPlanDetail =
+    selectedPlanData?.id === selectedPlanId ? selectedPlanData.plan : null
+  const canEditPlan = Boolean(
+    selectedPlan && selectedPlan.status !== 'ARCHIVED',
+  )
+
+  function confirm(title: string, action: () => Promise<unknown>): void {
+    confirmationTrigger.current = document.activeElement as HTMLElement
+    setConfirmation({ title, action })
+  }
 
   async function act(operation: () => Promise<unknown>): Promise<boolean> {
     setError('')
@@ -174,7 +235,9 @@ export default function PlanningPage({
       setReloadKey((key) => key + 1)
       return true
     } catch (caught) {
-      if (statusOf(caught) === 403) setReadOnly(true)
+      if (caught instanceof ManagementApiError && caught.status === 403) {
+        setReadOnly(true)
+      }
       setError(planningErrorMessage(caught))
       return false
     } finally {
@@ -185,6 +248,8 @@ export default function PlanningPage({
   async function changeProject(nextProjectId: string) {
     if (nextProjectId === projectId) return
     setProjectId(nextProjectId)
+    setReadOnly(false)
+    setAccessDenied(false)
     setSelectedPlanId('')
     setItems([])
     setZones([])
@@ -251,15 +316,26 @@ export default function PlanningPage({
     )
   }
 
+  if (accessDenied) {
+    return (
+      <section>
+        <h1>無權限</h1>
+        <p role="alert">你沒有這個專案的查核計畫讀取權限。</p>
+      </section>
+    )
+  }
+
   return (
     <section aria-labelledby="planning-heading">
-      <h1 id="planning-heading">計畫與任務</h1>
+      <h1 id="planning-heading" ref={pageHeading} tabIndex={-1}>
+        計畫與任務
+      </h1>
       <p>計畫狀態由任務狀態自動推導；任務派出後才會提供給現場。</p>
       {readOnly && <p role="status">目前為唯讀模式。</p>}
       {error && <p role="alert">{error}</p>}
       {loading ? <p>載入中…</p> : null}
 
-      {!loading && (
+      {projects.length > 0 && (
         <>
           <label>
             專案
@@ -299,10 +375,9 @@ export default function PlanningPage({
                     <button
                       disabled={busy || readOnly}
                       onClick={() =>
-                        setConfirmation({
-                          title: `刪除分區「${zone.name}」？`,
-                          action: () => client.deleteZone(projectId, zone.id),
-                        })
+                        confirm(`刪除分區「${zone.name}」？`, () =>
+                          client.deleteZone(projectId, zone.id),
+                        )
                       }
                       type="button"
                     >
@@ -375,14 +450,14 @@ export default function PlanningPage({
                 )}
               </section>
 
-              {selectedPlan && (
+              {selectedPlan && selectedPlanDetail && (
                 <section aria-labelledby="plan-detail-heading">
-                  <h2 id="plan-detail-heading">{selectedPlan.name}</h2>
-                  <p>計畫狀態：{PLAN_STATUS[selectedPlan.status]}</p>
+                  <h2 id="plan-detail-heading">{selectedPlanDetail.name}</h2>
+                  <p>計畫狀態：{PLAN_STATUS[selectedPlanDetail.status]}</p>
                   {!readOnly && (
                     <>
                       <button
-                        disabled={busy || selectedPlan.archived}
+                        disabled={busy || selectedPlan.status === 'ARCHIVED'}
                         onClick={() => {
                           setEditingPlanName(true)
                           setUpdatedPlanName(selectedPlan.name)
@@ -394,23 +469,25 @@ export default function PlanningPage({
                       <button
                         disabled={busy}
                         onClick={() =>
-                          setConfirmation({
-                            title: selectedPlan.archived
+                          confirm(
+                            selectedPlan.status === 'ARCHIVED'
                               ? '取消封存計畫並依目前任務重算狀態？'
                               : '封存計畫？封存期間任務將唯讀。',
-                            action: () =>
-                              selectedPlan.archived
+                            () =>
+                              selectedPlan.status === 'ARCHIVED'
                                 ? client.unarchivePlan(selectedPlan.id)
                                 : client.archivePlan(selectedPlan.id),
-                          })
+                          )
                         }
                         type="button"
                       >
-                        {selectedPlan.archived ? '取消封存' : '封存計畫'}
+                        {selectedPlan.status === 'ARCHIVED'
+                          ? '取消封存'
+                          : '封存計畫'}
                       </button>
                     </>
                   )}
-                  {editingPlanName && !selectedPlan.archived && (
+                  {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
                     <form
                       onSubmit={(event) => {
                         event.preventDefault()
@@ -445,26 +522,28 @@ export default function PlanningPage({
                   )}
 
                   <h3>任務</h3>
-                  {selectedPlan.tasks.length === 0 ? (
+                  {(selectedPlanDetail.tasks ?? []).length === 0 ? (
                     <p>尚未建立任務。</p>
                   ) : null}
                   <ul>
-                    {selectedPlan.tasks.map((task) => (
+                    {(selectedPlanDetail.tasks ?? []).map((task) => (
                       <li key={task.id}>
                         <article>
                           <h4>
                             {taskTitle(task)} （{TASK_STATUS[task.status]}）
                           </h4>
-                          {task.location.zone && (
-                            <p>分區：{task.location.zone.name}</p>
-                          )}
-                          {task.location.location_text && (
-                            <p>補充地點：{task.location.location_text}</p>
+                          {task.zone && <p>分區：{task.zone.name}</p>}
+                          {task.location_text && (
+                            <p>補充地點：{task.location_text}</p>
                           )}
                           <p>
                             建議指派：
-                            {task.suggested_assignee?.name_zh ??
-                              task.suggested_assignee?.username ??
+                            {members.find(
+                              (member) => member.id === task.assignee_id,
+                            )?.name_zh ??
+                              members.find(
+                                (member) => member.id === task.assignee_id,
+                              )?.username ??
                               '未指派'}
                           </p>
                           {task.status === 'CANCELLED' && (
@@ -477,12 +556,10 @@ export default function PlanningPage({
                                   <button
                                     disabled={busy}
                                     onClick={() =>
-                                      setConfirmation({
-                                        title:
-                                          '派出此任務？派出後現場即可查看。',
-                                        action: () =>
-                                          client.dispatchTask(task.id),
-                                      })
+                                      confirm(
+                                        '派出此任務？派出後現場即可查看。',
+                                        () => client.dispatchTask(task.id),
+                                      )
                                     }
                                     type="button"
                                   >
@@ -491,11 +568,9 @@ export default function PlanningPage({
                                   <button
                                     disabled={busy}
                                     onClick={() =>
-                                      setConfirmation({
-                                        title: '永久刪除此草稿任務？',
-                                        action: () =>
-                                          client.deleteDraftTask(task.id),
-                                      })
+                                      confirm('永久刪除此草稿任務？', () =>
+                                        client.deleteDraftTask(task.id),
+                                      )
                                     }
                                     type="button"
                                   >
@@ -512,9 +587,8 @@ export default function PlanningPage({
                                     onClick={() =>
                                       setEditingLocation({
                                         task,
-                                        zoneId: task.location.zone?.id ?? '',
-                                        locationText:
-                                          task.location.location_text ?? '',
+                                        zoneId: task.zone_id ?? '',
+                                        locationText: task.location_text ?? '',
                                       })
                                     }
                                     type="button"
@@ -526,8 +600,7 @@ export default function PlanningPage({
                                     onClick={() =>
                                       setEditingAssignee({
                                         task,
-                                        assigneeId:
-                                          task.suggested_assignee?.id ?? '',
+                                        assigneeId: task.assignee_id ?? '',
                                       })
                                     }
                                     type="button"
@@ -541,7 +614,10 @@ export default function PlanningPage({
                               ) && (
                                 <button
                                   disabled={busy}
-                                  onClick={() => setCancelTask(task)}
+                                  onClick={(event) => {
+                                    cancelTrigger.current = event.currentTarget
+                                    setCancelTask(task)
+                                  }}
                                   type="button"
                                 >
                                   取消任務
@@ -551,11 +627,9 @@ export default function PlanningPage({
                                 <button
                                   disabled={busy}
                                   onClick={() =>
-                                    setConfirmation({
-                                      title: '恢復此任務至取消前狀態？',
-                                      action: () =>
-                                        client.restoreTask(task.id),
-                                    })
+                                    confirm('恢復此任務至取消前狀態？', () =>
+                                      client.restoreTask(task.id),
+                                    )
                                   }
                                   type="button"
                                 >
@@ -741,44 +815,61 @@ export default function PlanningPage({
       )}
 
       {cancelTask && (
-        <section aria-labelledby="cancel-task-heading">
-          <h2 id="cancel-task-heading">取消任務</h2>
+        <section
+          aria-labelledby="cancel-task-heading"
+          aria-modal="true"
+          className="planning-dialog"
+          role="dialog"
+        >
+          <h2 id="cancel-task-heading" ref={cancelHeading} tabIndex={-1}>
+            取消任務
+          </h2>
           <p>取消後會保留任務資料；之後可以恢復到取消前狀態。</p>
-          <label>
-            取消原因
-            <textarea
-              onChange={(event) => setCancelReason(event.target.value)}
-              required
-              value={cancelReason}
-            />
-          </label>
-          <button
-            disabled={busy || !cancelReason.trim()}
-            onClick={() =>
-              setConfirmation({
-                title: '確認取消此任務並保存原因？',
-                action: () => client.cancelTask(cancelTask.id, cancelReason),
-              })
-            }
-            type="button"
-          >
-            確認取消
-          </button>{' '}
-          <button
-            onClick={() => {
-              setCancelTask(null)
-              setCancelReason('')
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void act(() => client.cancelTask(cancelTask.id, cancelReason))
             }}
-            type="button"
           >
-            返回
-          </button>
+            <label>
+              取消原因
+              <textarea
+                onChange={(event) => setCancelReason(event.target.value)}
+                required
+                value={cancelReason}
+              />
+            </label>
+            <button disabled={busy || !cancelReason.trim()} type="submit">
+              確認取消
+            </button>{' '}
+            <button
+              disabled={busy}
+              onClick={() => {
+                setCancelTask(null)
+                setCancelReason('')
+              }}
+              type="button"
+            >
+              返回
+            </button>
+          </form>
         </section>
       )}
 
       {confirmation && (
-        <section aria-labelledby="confirm-action-heading" role="group">
-          <h2 id="confirm-action-heading">請確認操作</h2>
+        <section
+          aria-labelledby="confirm-action-heading"
+          aria-modal="true"
+          className="planning-dialog"
+          role="dialog"
+        >
+          <h2
+            id="confirm-action-heading"
+            ref={confirmationHeading}
+            tabIndex={-1}
+          >
+            請確認操作
+          </h2>
           <p>{confirmation.title}</p>
           <button
             disabled={busy || readOnly}

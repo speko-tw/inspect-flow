@@ -1,5 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
+import {
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -13,12 +20,20 @@ import UsersPage from './UsersPage'
 
 const PlanningPage = lazy(() => import('./planning/PlanningPage'))
 
+function ProjectPlanningRoute() {
+  const { projectId } = useParams()
+  return (
+    <Suspense fallback={<p>載入中…</p>}>
+      <PlanningPage initialProjectId={projectId} />
+    </Suspense>
+  )
+}
+
 const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
   { to: '/admin/companies', label: '公司' },
   { to: '/admin/roles', label: '角色' },
   { to: '/admin/projects', label: '專案' },
-  { to: '/admin/planning', label: '計畫與任務' },
   { to: '/admin/templates', label: '範本管理' },
   { to: '/change-password', label: '變更密碼' },
 ]
@@ -52,7 +67,11 @@ export default function AdminPage() {
     )
   }
 
-  if (!user.is_admin) {
+  const isProjectPlanning = /^\/admin\/projects\/[^/]+\/planning\/?$/.test(
+    location.pathname,
+  )
+
+  if (!user.is_admin && !isProjectPlanning) {
     return (
       <main>
         <h1>無權限</h1>
@@ -67,7 +86,7 @@ export default function AdminPage() {
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
         <h1>Admin</h1>
         <nav aria-label="管理功能">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter(() => user.is_admin).map((item) => (
             <NavLink
               key={item.to}
               onClick={() => setTemporaryPassword(null)}
@@ -76,6 +95,7 @@ export default function AdminPage() {
               {item.label}
             </NavLink>
           ))}
+          {!user.is_admin && <NavLink to="/">返回工作台</NavLink>}
         </nav>
         <span className="topbar-user">
           登入者：{user.name_zh ?? user.username}
@@ -129,12 +149,8 @@ export default function AdminPage() {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
           <Route
-            path="planning"
-            element={
-              <Suspense fallback={<p>載入中…</p>}>
-                <PlanningPage />
-              </Suspense>
-            }
+            path="projects/:projectId/planning"
+            element={<ProjectPlanningRoute />}
           />
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />

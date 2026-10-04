@@ -7,7 +7,8 @@ import {
 } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { createMockPlanningClient, PlanningApiError } from './api'
+import { PlanningApiError } from './api'
+import { createMockPlanningClient } from './api.mock'
 import PlanningPage from './PlanningPage'
 
 describe('planning management page', () => {
@@ -34,8 +35,8 @@ describe('planning management page', () => {
       })
       fireEvent.click(planButton)
 
-      fireEvent.click(screen.getByLabelText(/混凝土外觀/))
-      fireEvent.click(screen.getByLabelText(/鋼筋保護層/))
+      fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
+      fireEvent.click(await screen.findByLabelText(/鋼筋保護層/))
       fireEvent.change(screen.getByLabelText('任務分區'), {
         target: {
           value: (await client.listProjectZones('project-demo-1'))[0].id,
@@ -101,11 +102,15 @@ describe('planning management page', () => {
           name: '取消任務',
         }),
       )
+      const cancelDialog = screen.getByRole('dialog')
+      expect(cancelDialog).toHaveAttribute('aria-modal', 'true')
+      expect(document.activeElement).toBe(
+        within(cancelDialog).getByRole('heading', { name: '取消任務' }),
+      )
       fireEvent.change(screen.getByLabelText('取消原因'), {
         target: { value: '現場順序調整' },
       })
       fireEvent.click(screen.getByRole('button', { name: '確認取消' }))
-      fireEvent.click(screen.getByRole('button', { name: '確認' }))
       await screen.findByText('取消原因：現場順序調整')
 
       const cancelledTask = screen
@@ -143,6 +148,95 @@ describe('planning management page', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
     })
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-demo-2' },
+    })
+    await screen.findByRole('heading', { name: '專案分區' })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('shows a permission page when planning reads return 403', async () => {
+    const client = createMockPlanningClient()
+    client.listProjects = async () => {
+      throw new PlanningApiError(403, 'permission.denied')
+    }
+    render(<PlanningPage client={client} />)
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '沒有這個專案的查核計畫讀取權限',
+    )
+  })
+
+  it('deletes draft tasks through a confirmation dialog', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+      target: { value: '草稿刪除' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '草稿刪除（草稿）' }),
+    )
+    fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
+    fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+    const task = await screen.findByRole('heading', {
+      name: /混凝土外觀\s+（草稿）/,
+    })
+    const article = task.closest('article') as HTMLElement
+    fireEvent.click(within(article).getByRole('button', { name: '刪除草稿' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole('heading', { name: '請確認操作' }),
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: '確認' }))
+    expect(await screen.findByText('尚未建立任務。')).toBeInTheDocument()
+  })
+
+  it('hides task actions on archived plans and restores them on unarchive', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '封存驗收',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    const task = await client.createTask(plan.id, {
+      item_ids: [item.id],
+      suggested_assignee_id: null,
+      zone_id: null,
+      location_text: null,
+    })
+    await client.dispatchTask(task.id)
+    render(<PlanningPage client={client} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '封存驗收（進行中）' }),
+    )
+    const article = (
+      await screen.findByRole('heading', {
+        name: /混凝土外觀\s+（待開始）/,
+      })
+    ).closest('article') as HTMLElement
+    fireEvent.click(screen.getByRole('button', { name: '封存計畫' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
+    )
+    await screen.findByText('計畫狀態：已封存')
+    expect(
+      within(article).queryByRole('button', { name: '修改地點' }),
+    ).toBeNull()
+    expect(
+      within(article).queryByRole('button', { name: '取消任務' }),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '取消封存' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
+    )
+    expect(
+      await within(article).findByRole('button', { name: '修改地點' }),
+    ).toBeInTheDocument()
   })
 
   it('clears project A data when project B loading fails', async () => {
@@ -229,11 +323,109 @@ describe('planning management page', () => {
     })
     fireEvent.click(planButton)
 
-    fireEvent.click(screen.getByLabelText(/材料進場查驗/))
+    fireEvent.click(await screen.findByLabelText(/材料進場查驗/))
     fireEvent.change(screen.getByLabelText('建議指派人'), {
       target: { value: 'project-b-member-1' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
     await screen.findByText('建議指派：專案 B 現場人員')
+  })
+
+  it('renames zones and explains when an in-use zone cannot be deleted', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.change(screen.getByLabelText('分區名稱'), {
+      target: { value: '北區' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+    const zone = await screen.findByText('北區')
+    fireEvent.click(
+      within(zone.parentElement as HTMLElement).getByRole('button', {
+        name: '改名',
+      }),
+    )
+    fireEvent.change(screen.getByLabelText('分區名稱'), {
+      target: { value: '北側' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
+    const renamed = await screen.findByText('北側')
+
+    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+      target: { value: '分區引用' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '分區引用（草稿）' }),
+    )
+    fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
+    fireEvent.change(screen.getByLabelText('任務分區'), {
+      target: {
+        value: (await client.listProjectZones('project-demo-1'))[0].id,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+    await screen.findByRole('heading', { name: /混凝土外觀\s+（草稿）/ })
+    fireEvent.click(
+      within(renamed.parentElement as HTMLElement).getByRole('button', {
+        name: '刪除',
+      }),
+    )
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '分區已有任務使用，無法刪除。',
+    )
+  })
+
+  it('does not show a zone selector for projects without zones', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-demo-2' },
+    })
+    fireEvent.change(screen.getByLabelText('計畫名稱'), {
+      target: { value: '無分區計畫' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '無分區計畫（草稿）' }),
+    )
+    await screen.findByLabelText(/材料進場查驗/)
+    expect(screen.queryByLabelText('任務分區')).toBeNull()
+  })
+
+  it('hides location editing for completed and cancelled tasks', async () => {
+    const client = createMockPlanningClient({ completionReady: true })
+    const plan = await client.createPlan('project-demo-1', {
+      name: '唯讀狀態',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    const completed = await client.createTask(plan.id, {
+      item_ids: [item.id],
+      suggested_assignee_id: null,
+      zone_id: null,
+      location_text: null,
+    })
+    await client.dispatchTask(completed.id)
+    await client.startTask(completed.id)
+    await client.completeTask(completed.id)
+    const cancelled = await client.createTask(plan.id, {
+      item_ids: [item.id],
+      suggested_assignee_id: null,
+      zone_id: null,
+      location_text: null,
+    })
+    await client.dispatchTask(cancelled.id)
+    await client.cancelTask(cancelled.id, '取消驗收')
+    render(<PlanningPage client={client} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '唯讀狀態（已完成）' }),
+    )
+    await screen.findByRole('heading', { name: /已完成/ })
+    expect(screen.queryByRole('button', { name: '修改地點' })).toBeNull()
+    expect(screen.getByText('取消原因：取消驗收')).toBeInTheDocument()
   })
 })

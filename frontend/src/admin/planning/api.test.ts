@@ -1,10 +1,43 @@
 import { describe, expect, it } from 'vitest'
 
-import { createMockPlanningClient } from './api'
+import { createMockPlanningClient } from './api.mock'
 
 const PROJECT = 'project-demo-1'
 
 describe('mock planning client', () => {
+  it('paginates plan summaries and retrieves task details separately', async () => {
+    const client = createMockPlanningClient()
+    const created = []
+    for (let index = 0; index < 21; index += 1) {
+      created.push(await client.createPlan(PROJECT, { name: `計畫 ${index}` }))
+    }
+
+    const first = await client.listPlans(PROJECT)
+    expect(first.items).toHaveLength(20)
+    expect(first.items[0]).not.toHaveProperty('tasks')
+    expect(first.next_cursor).toBe('20')
+    const second = await client.listPlans(PROJECT, first.next_cursor)
+    expect(second.items).toHaveLength(1)
+    expect(second.next_cursor).toBeNull()
+
+    const [item] = await client.listProjectItems(PROJECT)
+    const task = await client.createTask(created[0].id, {
+      item_ids: [item.id],
+      suggested_assignee_id: null,
+      zone_id: null,
+      location_text: '東側',
+    })
+    expect((await client.getPlan(created[0].id)).tasks).toEqual([task])
+    expect(await client.getTask(task.id)).toMatchObject({
+      zone_id: null,
+      zone: null,
+      location_text: '東側',
+      assignee_id: null,
+      started_by: null,
+      completed_by: null,
+    })
+  })
+
   it(
     'keeps assignment advisory and records the actual field ' + 'operator',
     async () => {
@@ -25,10 +58,10 @@ describe('mock planning client', () => {
       const started = await client.startTask(task.id)
       const completed = await client.completeTask(task.id)
 
-      expect(dispatched.suggested_assignee?.id).toBe('project-a-member-1')
+      expect(dispatched.assignee_id).toBe('project-a-member-1')
       expect(started.started_by).toBe('project-a-member-2')
       expect(completed.completed_by).toBe('project-a-member-2')
-      expect((await client.listPlans(PROJECT))[0].status).toBe('COMPLETED')
+      expect((await client.getPlan(plan.id)).status).toBe('COMPLETED')
       await expect(
         client.updateLocation(task.id, {
           zone_id: null,
@@ -57,20 +90,20 @@ describe('mock planning client', () => {
       location_text: '地下室',
     })
     expect(task.status).toBe('DRAFT')
-    expect((await client.listPlans(PROJECT))[0].status).toBe('DRAFT')
+    expect((await client.getPlan(plan.id)).status).toBe('DRAFT')
 
     const dispatched = await client.dispatchTask(task.id)
     expect(dispatched.status).toBe('PENDING')
-    expect((await client.listPlans(PROJECT))[0].status).toBe('IN_PROGRESS')
+    expect((await client.getPlan(plan.id)).status).toBe('IN_PROGRESS')
 
     const cancelled = await client.cancelTask(task.id, '施工順序調整')
     expect(cancelled.status).toBe('CANCELLED')
     expect(cancelled.cancellation_reason).toBe('施工順序調整')
-    expect((await client.listPlans(PROJECT))[0].status).toBe('CANCELLED')
+    expect((await client.getPlan(plan.id)).status).toBe('CANCELLED')
 
     const restored = await client.restoreTask(task.id)
     expect(restored.status).toBe('PENDING')
-    expect((await client.listPlans(PROJECT))[0].status).toBe('IN_PROGRESS')
+    expect((await client.getPlan(plan.id)).status).toBe('IN_PROGRESS')
   })
 
   it(
@@ -152,7 +185,7 @@ describe('mock planning client', () => {
         zone_id: null,
         location_text: '  北側入口  ',
       })
-      expect(task.location.location_text).toBe('北側入口')
+      expect(task.location_text).toBe('北側入口')
       await client.updateLocation(task.id, {
         zone_id: null,
         location_text: '更新位置',
@@ -200,9 +233,9 @@ describe('mock planning client', () => {
         location_text: null,
       })
       item.title = '外部修改'
-      expect(
-        (await client.listPlans(PROJECT))[0].tasks[0].items[0].title,
-      ).toBe(task.items[0].title)
+      expect((await client.getPlan(plan.id)).tasks?.[0].items[0].title).toBe(
+        task.items[0].title,
+      )
     },
   )
 
@@ -212,7 +245,7 @@ describe('mock planning client', () => {
       const client = createMockPlanningClient()
       const plan = await client.createPlan(PROJECT, { name: '封存' })
       await client.updatePlan(plan.id, { name: '  已更名  ' })
-      expect((await client.listPlans(PROJECT))[0].name).toBe('已更名')
+      expect((await client.getPlan(plan.id)).name).toBe('已更名')
       const archived = await client.archivePlan(plan.id)
       expect(archived.status).toBe('ARCHIVED')
       await expect(
@@ -247,9 +280,13 @@ describe('mock planning client', () => {
         task.id,
         'project-a-member-1',
       )
-      expect(assigned.suggested_assignee?.username).toBe('field-one')
+      expect(
+        (await client.listProjectMembers(PROJECT)).find(
+          (member) => member.id === assigned.assignee_id,
+        )?.username,
+      ).toBe('field-one')
       await client.deleteDraftTask(task.id)
-      expect((await client.listPlans(PROJECT))[0].tasks).toHaveLength(0)
+      expect((await client.getPlan(plan.id)).tasks).toHaveLength(0)
     },
   )
 })
