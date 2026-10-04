@@ -135,7 +135,7 @@
 - 項次設有實測欄位時，**必須**全部填寫才能選符合或不符合；量不到時改選「不適用」並寫原因。
 - 實測欄位的型別由內業設定：數字（**必須**設單位，只接受數字）或文字（自由填寫）。項次設有數值標準時，對應實測欄位的單位**必須**相同，由系統自動帶入、不得另設；現場自行換算，單位換算不在本次範圍（[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)，2026-10-03）。
 
-記錄於 [KD-37](03-decisions-and-stack.md#kd-37)、[KD-54](03-decisions-and-stack.md#kd-54)；討論見 [#76](https://github.com/speko-tw/inspect-flow/issues/76)。**不在本次裁定**：不符合後的改善追蹤與限期複查、系統自動判定，維持在 0.7.x，尚未裁定；缺失（Defect）管理屬延後能力（見 [01-overview.md](01-overview.md#延後但不排除的能力)）。
+記錄於 [KD-37](03-decisions-and-stack.md#kd-37)、[KD-54](03-decisions-and-stack.md#kd-54)；討論見 [#76](https://github.com/speko-tw/inspect-flow/issues/76)。不符合後的簡易改善追蹤已由 [KD-65](03-decisions-and-stack.md#kd-65) 決定排入 0.7.x；完整缺失（Defect）管理、限期複查、自動判定及嚴重度對報告呈現的影響仍未決，報告中如何呈現三種結果與嚴重度移至 [OQ-07](#oq-07)。
 
 **為什麼要先決定**：直接影響 `Evidence` 資料模型、任務完成判定邏輯（[PR-01](02-principles.md#pr-01) 的伺服器端覆核）、報告版面設計（照片旁是否顯示 PASS／FAIL），以及「查核結果語意一旦定案後不能追溯性改寫既有資料」這一條不可延後意圖（見 [02-principles.md](02-principles.md#costly-to-retrofit-intents) 第 8 項）。
 
@@ -143,9 +143,9 @@
 - 定義 PASS/FAIL/N/A ＋ Measurement ＋ Severity ＋ Defect 欄位。
 - 維持目前簡化、不擴充欄位。
 
-**目前暫定**：已由上方裁定取代。仍未定的包括：缺失（Defect）實體與缺失欄位、不符合後的改善追蹤與限期複查、嚴重度對任務完成與報告的影響、自動判定（0.7.x）；報告章節使用 PASS／FAIL 措辭（依據：架構基準 §20.10）的落差，另見 [G-08](#g-08)。
+**目前暫定**：已由上方裁定取代。仍未定的包括：缺失（Defect）實體與欄位、限期複查、嚴重度對任務完成的影響、自動判定及報告如何呈現結果與嚴重度（見 [OQ-07](#oq-07)）。簡易改善追蹤依 [KD-65](03-decisions-and-stack.md#kd-65)；G-08 其餘部分已移轉至 OQ-07。
 
-**誰決定、何時**：負責人；已於 [#76](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5867495484)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5871381768) 部分裁定（2026-09-28）；其餘部分（`N/A`、不符合時的嚴重度與註解、不適用的原因、欄位型別與必填）已於 [#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965076758) 裁定（2026-10-03）；缺失（Defect）實體、缺失欄位與不符合後的改善追蹤仍屬 0.7.x，尚未裁定。
+**誰決定、何時**：負責人；已於 [#76](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5867495484)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5871381768) 部分裁定（2026-09-28）；其餘欄位（`N/A`、不符合時的嚴重度與註解、不適用的原因、欄位型別與必填）已於 [#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965076758) 裁定（2026-10-03）；簡易改善追蹤由維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；其他未定項目移至 OQ-07 或延後處理。
 
 **影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-04](02-principles.md#pr-04) 不可延後意圖第 8 項、[KD-37](03-decisions-and-stack.md#kd-37)、[KD-54](03-decisions-and-stack.md#kd-54)；另見 [G-08](#g-08)。
 
@@ -156,7 +156,7 @@
 
 ### OQ-07：正式報表需要哪些欄位？誰簽名？是否需要版次？報表最終版面與簽核流程？（部分裁定）
 
-**裁定**：查驗是一套共通流程，建立查驗時**不得**選定或處理輸出報表樣板；報表是獨立的功能模組，**得**匯入不同樣板格式，並一律使用內業版圖片（見 [G-02](#g-02)、[G-04](#g-04)）。記錄於 [KD-41](03-decisions-and-stack.md#kd-41)；討論見 [#77](https://github.com/speko-tw/inspect-flow/issues/77)。**未定**：具體匯入格式、樣板欄位對應、選樣板時機、簽署欄位、Revision 規則。
+**裁定**：查驗是一套共通流程，建立查驗時**不得**選定或處理輸出報表樣板；報表是獨立的功能模組，**得**匯入不同樣板格式，並一律使用內業版圖片（見 [G-02](#g-02)、[G-04](#g-04)）。記錄於 [KD-41](03-decisions-and-stack.md#kd-41)；討論見 [#77](https://github.com/speko-tw/inspect-flow/issues/77)。G-08 移轉至本條的未決部分是報告如何呈現符合、不符合、不適用及嚴重度。其他未定項目：具體匯入格式、樣板欄位對應、選樣板時機、簽署欄位、Revision 規則。
 
 **為什麼要先決定**：影響 [KD-05](03-decisions-and-stack.md#kd-05)（DOCX/PDF 核心交付物）與 [04-glossary.md](04-glossary.md) `Report` / `Report Template` 的完整欄位設計。
 
@@ -197,21 +197,37 @@
 
 ### OQ-08：角色權限矩陣（誰能做什麼、在什麼專案範圍內）的正式版本？（已裁定）
 
-> **加註**：其中「客戶公司成員的確認提示」已由負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）取消（[KD-28](03-decisions-and-stack.md#kd-28) 已取消，公司不再有類型）；其餘裁定不變。另補充：具 Admin 權限的人可指派、收回他人的 Admin 權限，內建 `admin` 除外（[KD-24](03-decisions-and-stack.md#kd-24)）；範本角色預建的補充裁定已被負責人裁定（#261，2026-09-29）取代，現由 Admin 之後在系統內新增（[KD-26](03-decisions-and-stack.md#kd-26)）。
+**裁定**：角色分為全公司角色與專案角色。全公司角色直接指派給人，管理跨專案及全公司共用資源；專案角色指派給某人在某專案，沿用 `ProjectMember`。每個權限標明全公司或專案範圍，角色只能勾選同範圍權限；Admin 擁有全部權限，不需另行指派。權限依查核作業、範本系統、報告系統三大系統分組，權限及預設角色表見下。記錄於 [KD-60](03-decisions-and-stack.md#kd-60)；舊權限基礎見 [KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)，範本角色取代關係見 [KD-49](03-decisions-and-stack.md#kd-49)。
 
-**裁定**：不採固定角色矩陣，改為「系統管理者開關（Admin）＋全系統共用、可自訂的角色清單」；權限表示為「資料 × 動作」的權限代碼；角色掛在專案成員（`ProjectMember`）上，同一專案可疊加多個角色。負責人裁定（#261，2026-09-29）：取消三個範本角色；角色由 Admin 之後自行命名新增，初始化只建立內建 `admin`、不建立角色。安全機制（後端預設拒絕、變更寫稽核紀錄、不能拿掉最後一個 Admin）與客戶公司成員的確認提示一併裁定。記錄於 [KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)；討論見 [#63](https://github.com/speko-tw/inspect-flow/issues/63)。
+| 系統 | 權限 | 範圍 | 預設給誰 |
+|---|---|---|---|
+| 查核作業 | 管理計畫與任務（建立、派出、取消、恢復、封存） | 專案 | 內業 |
+| | 修改專案查核項目、套用範本 | 專案 | 內業 |
+| | 現場查核（看任務、開始；之後填結果、拍照） | 專案 | 現場工程師 |
+| | 看專案進度與工作量 | 專案 | 內業、專案經理 |
+| | 看全部專案進度 | 全公司 | 公司主管 |
+| 範本系統 | 瀏覽範本庫（有套用權限即可） | 專案 | 內業 |
+| | 管理範本庫 | 全公司 | 範本管理員 |
+| 報告系統 | 產出報告草稿 | 專案 | 報告人員、內業 |
+| | 核發報告、發出更正版 | 專案 | 專案經理 |
+| | 看已核發報告 | 專案 | 專案成員 |
+| | 管理報告範本 | 全公司 | 報告範本管理員 |
+| | （將來）審核報告 | 專案 | 加簽核流程時再開 |
+| 共通 | 查稽核紀錄 | 全公司 | 僅 Admin（#107 裁定） |
 
-**為什麼要先決定**：影響 [01-overview.md](01-overview.md) 角色定義的落地細節，以及 [PR-01](02-principles.md#pr-01)（伺服器端覆核）如何實作授權檢查。
+全公司預設角色為範本管理員、報告範本管理員、公司主管；專案預設角色為專案經理、內業、現場工程師、報告人員、檢視者（將來給業主、監造）。Admin 可修改。權限代碼命名、預設角色 seed 方式與既有 `template_admin` 資料轉移由規格依業界慣例決定，不屬負責人另行裁定。
+
+**為什麼要先決定**：影響 [01-overview.md](01-overview.md) 角色定義的落地細節，以及 [PR-01](02-principles.md#pr-01)（伺服器端覆核）如何實作授權檢查。角色管理與全公司角色的完整改造依 [KD-67](03-decisions-and-stack.md#kd-67) 排入 0.5.x；v0.3.0 先讓 Admin 管理範本。
 
 **選項**：沿用範例矩陣（ADMIN／COORDINATOR／INSPECTOR／VIEWER 各自可做的事）／團隊調整後的正式版本。
 
-**目前暫定**：架構基準文件給出一份範例矩陣，但明言「權限表後續再由團隊正式定案」。
+**目前暫定**：無。
 
-**誰決定、何時**：負責人；已於 [#63](https://github.com/speko-tw/inspect-flow/issues/63) 裁定（2026-09-26）。
+**誰決定、何時**：負責人；已於 [#387](https://github.com/speko-tw/inspect-flow/issues/387) 裁定（2026-10-04）。
 
 **影響的原則**：[PR-01](02-principles.md#pr-01)、[PR-18](02-principles.md#pr-18)。
 
-**依據**：議題背景為架構基準 §17；裁定為負責人決定（#63，2026-09-26），取代架構基準 §17 的範例矩陣。
+**依據**：議題背景為架構基準 §17；裁定為負責人決定（[#387](https://github.com/speko-tw/inspect-flow/issues/387)，2026-10-04），更新既有 [KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29) 的角色範圍安排。
 
 
 <a id="oq-09"></a>
@@ -324,19 +340,19 @@
 
 <a id="oq-12"></a>
 
-### OQ-12：現場影像編輯是否含 Contrast（對比）？是否含標註（Annotation）？
+### OQ-12：現場影像編輯是否含 Contrast（對比）？是否含標註（Annotation）？（已決定）
 
 **為什麼要先決定**：影響 [01-overview.md](01-overview.md) 的 Phase 6（Photo Upload & Field Evidence Editor）範圍認定。
 
-**選項**：納入 MVP／延後至第二階段再評估。
+**裁定**：MVP 不做對比調整與照片上畫標註；文字註記依 [KD-50](03-decisions-and-stack.md#kd-50) 處理。記錄於 [KD-64](03-decisions-and-stack.md#kd-64)。
 
-**目前暫定**：架構基準文件對 Contrast 的定位前後不完全一致——§13A.1 把 Contrast 列為「可選」，語氣上不排除納入第一版；但 §13A.12「第一版 MVP 的建議範圍」明確只列出 Preview／Zoom-Pan／Crop／Rotate／ Brightness／Reset／Save Edited Variant，把 Contrast 與 Annotation 都放進「第二階段再評估」。本文件採較晚、較具體的 §13A.12 為預設假設：**Contrast／Annotation 不在 MVP 範圍**，但這是來源文件本身用語不完全一致的地方，不是團隊已拍板的結論。
+**目前暫定**：無。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
 **影響的原則**：無直接對應的 PR。
 
-**依據**：架構基準 §13A.1、§13A.12
+**依據**：架構基準 §13A.1、§13A.12；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；見 [KD-64](03-decisions-and-stack.md#kd-64)。
 
 ## C. 技術與維運待決
 
@@ -361,19 +377,21 @@
 
 <a id="oq-14"></a>
 
-### OQ-14：Evidence 編輯的最終影像處理，MVP 是否採「Frontend Preview + Backend Render」？
+### OQ-14：Evidence 編輯的最終影像處理，MVP 是否採「Frontend Preview + Backend Render」？（已決定）
 
 **為什麼要先決定**：影響現場版、內業版兩階段照片流程（見 [KD-32](03-decisions-and-stack.md#kd-32)、[KD-33](03-decisions-and-stack.md#kd-33)）與 [PR-07](02-principles.md#pr-07)（可追溯性、產製一致性）如何落地；也影響 Offline 模式未來銜接的方式。
 
 **選項**：Strategy A（Frontend Render）／Strategy B（Backend Render）。
 
-**目前暫定**：架構基準文件把兩者並列為選項，並比較優缺點後表示「MVP 可先採 Frontend Preview + Backend Render」，用語是「可先採」而非硬性規定。
+**裁定**：現場拍照後由前端壓縮產生現場版直接上傳，不保存拍攝原圖；內業版由後端依編輯操作從現場版產生，前端只做預覽。MVP 採 Online-first，不做離線佇列；失敗時照片留在畫面上，可自動重試後手動重送。記錄於 [KD-61](03-decisions-and-stack.md#kd-61)。
 
-**誰決定、何時**：未指定。
+**目前暫定**：無。
+
+**誰決定、何時**：維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
 **影響的原則**：[KD-32](03-decisions-and-stack.md#kd-32)、[KD-33](03-decisions-and-stack.md#kd-33)、[PR-07](02-principles.md#pr-07)；另見 [G-03](#g-03)。
 
-**依據**：架構基準 §13A.7–13A.8
+**依據**：架構基準 §13A.7–13A.8、§30 Phase 6、§35；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；見 [KD-61](03-decisions-and-stack.md#kd-61)。
 
 
 <a id="oq-15"></a>
@@ -384,13 +402,13 @@
 
 **選項**：DOCX → LibreOffice Headless／受控 Office Conversion Service → PDF／其他轉換工具。
 
-**目前暫定**：建議優先方向為「DOCX → LibreOffice Headless／受控 Office Conversion Service → PDF」，但明言「實際 Production 採何種轉換器，應在 Pilot 階段以字型／表格／中文／圖片／頁首頁尾／頁碼／分頁／簽名欄進行實測後決定」。
+**目前暫定**：#84（此 OQ 的前置決定 issue）歸 0.8.x 正式報告；規格先採建議方向「DOCX → LibreOffice Headless／受控 Office Conversion Service → PDF」，於 Pilot 實測後在 0.9.x 確認實際 Production 轉換器。實測項目含字型、表格、中文、圖片、頁首頁尾、頁碼、分頁與簽名欄。
 
-**誰決定、何時**：團隊；Pilot 階段實測後。
+**誰決定、何時**：團隊；Milestone 歸屬依維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；轉換器於 Pilot 階段實測後確認。
 
 **影響的原則**：[KD-05](03-decisions-and-stack.md#kd-05)。
 
-**依據**：架構基準 §20.4
+**依據**：架構基準 §20.4；#84 版本歸屬與確認時點依維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
 
 <a id="oq-16"></a>
@@ -414,19 +432,19 @@
 
 <a id="oq-17"></a>
 
-### OQ-17：照片上傳大小上限、失敗重試與冪等（idempotency）語意？
+### OQ-17：照片上傳大小上限、失敗重試與冪等（idempotency）語意？（已決定）
 
 **為什麼要先決定**：影響現場網路品質不佳時的上傳體驗，以及 Evidence 記錄是否可能因重試而重複產生。
 
-**選項**：無明列選項，待補重試與冪等策略。
+**裁定**：單檔上限 30 MB（得由設定檔調整）；前端自動重試 3 次，採指數退避，之後顯示手動重送；每次上傳使用前端產生的 UUID 作冪等鍵，後端重複收到同一鍵時回原結果。離線佇列與重新連線同步不在 MVP 範圍。記錄於 [KD-63](03-decisions-and-stack.md#kd-63)。
 
-**目前暫定**：僅以環境變數範例 `MAX_UPLOAD_SIZE_MB=30` 帶過，未定義重試或冪等策略；離線佇列與重新連線同步屬於 §35 明確延後的能力。
+**目前暫定**：無。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
 **影響的原則**：無。
 
-**依據**：架構基準 §22.9、§35
+**依據**：架構基準 §22.9、§35；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；見 [KD-63](03-decisions-and-stack.md#kd-63)。
 
 
 <a id="oq-18"></a>
@@ -551,23 +569,23 @@
 
 <a id="g-03"></a>
 
-### G-03：現場編輯流程與「Backend Render」策略的先後順序沒有對齊（部分裁定）
+### G-03：現場編輯流程與「Backend Render」策略的先後順序沒有對齊（已決定）
 
-**裁定**：每筆照片最後只保存現場版、內業版兩張圖片，不另外保存拍攝原圖，也不保存編輯中的中間圖片。現場人員拍攝並編修後，確認、存檔一張現場版，再傳遞至內業；內業系統將現場與查核資訊加入圖片後，存一張內業版；內業人員之後可以編修內業版；報表使用內業版。立場 A、B 原本針對「原圖」的先後順序爭議已不適用，因為系統不保存原圖。記錄於 [KD-33](03-decisions-and-stack.md#kd-33)；討論見 [#91](https://github.com/speko-tw/inspect-flow/issues/91)。**未定**：裝置離線暫存／傳送時點、預覽與正式產圖的前後端分工、失敗重試機制，不可依此裁定推定保留第三張原圖。
+**裁定**：每筆照片只保存現場版與內業版，不保存拍攝原圖或編輯中間圖片。現場拍照後由前端壓縮產生現場版直接上傳；內業版由後端依編輯操作從現場版產生，前端只做預覽。MVP 採 Online-first，不做離線佇列；上傳失敗時照片留在畫面上，可自動重試後手動重送。記錄於 [KD-61](03-decisions-and-stack.md#kd-61)；照片保存模型見 [KD-32](03-decisions-and-stack.md#kd-32)、[KD-33](03-decisions-and-stack.md#kd-33)。
 
-**為什麼要先決定**：兩種敘述若同時成立，需要團隊明確定義「使用者何時看到編輯結果」「原圖何時真正上傳」「重試與失敗時的行為」，否則實作團隊會依各自理解做出不同的前後端契約。
+**為什麼要先決定**：明確現場版上傳時點、後端產生內業版的分工與失敗時行為，讓前後端採用一致契約。
 
 **選項**：
 - **立場 A**：§13A.5 描述的現場流程是「拍照 → 預覽 → 編輯（Zoom/Crop/Rotate/Brightness/Reset）→ 確 認 → Upload」，暗示編輯發生在上傳之前。
 - **立場 B**：§13A.7–13A.8 建議的「Frontend Preview + Backend Render」策略，要求後端先取得已上傳的 Original Evidence ID，才能依 Edit Operations 產生 Edited Variant；§30 Phase 6 的驗收流程也明寫 「Upload Original → Backend validation → Storage → Evidence DB record → Generate Edited Variant」，即先上傳原圖，編輯結果之後才送出。
 
-**目前暫定**：無（來源內部不一致）；保存時點與流程順序已由裁定取代，原圖相關的先後順序爭議不再適用。
+**目前暫定**：無。
 
-**誰決定、何時**：負責人；已於 [#91](https://github.com/speko-tw/inspect-flow/issues/91#issuecomment-5869324206) 部分裁定（2026-09-28）；離線暫存、前後端分工、重試裁定時間未指定。
+**誰決定、何時**：維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
-**影響的原則**：[OQ-14](#oq-14)、[KD-33](03-decisions-and-stack.md#kd-33)。
+**影響的原則**：[OQ-14](#oq-14)、[KD-32](03-decisions-and-stack.md#kd-32)、[KD-33](03-decisions-and-stack.md#kd-33)、[PR-07](02-principles.md#pr-07)。
 
-**依據**：議題背景為架構基準 §13A.5、§13A.7–13A.8、§30 Phase 6；部分裁定為負責人決定（#91，2026-09-28）。
+**依據**：議題背景為架構基準 §13A.5、§13A.7–13A.8、§30 Phase 6、§35；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
 
 <a id="g-04"></a>
@@ -593,9 +611,11 @@
 
 <a id="g-05"></a>
 
-### G-05：Evidence 的刪除 API 與「原圖永不覆蓋／歷史必須可追溯」的原則需要一套共同政策
+### G-05：Evidence 的刪除 API 與「原圖永不覆蓋／歷史必須可追溯」的原則需要一套共同政策（已決定）
 
-**為什麼要先決定**：需要團隊定義「刪除」在此系統中是否等於軟刪除（soft delete）、是否禁止刪除已被報告引用的證據、刪除後的存取與保留期限如何處理。
+**裁定**：任務完成前，拍照者或內業得刪除未完成任務的照片，採軟刪除並寫稽核；任務完成後不可刪除，只能依 [KD-42](03-decisions-and-stack.md#kd-42) 修正；已被核發報告引用的照片永不刪除；作廢資料依 [KD-55](03-decisions-and-stack.md#kd-55) 保留。MVP 不做自動清除，保存期限隨專案。記錄於 [KD-62](03-decisions-and-stack.md#kd-62)。
+
+**為什麼要先決定**：照片刪除須兼顧任務狀態、已核發報告引用與歷史可追溯性。
 
 **選項**：
 - **立場 A**：§15 的 API 範圍明確列出 `DELETE /api/v1/evidence/{id}`。
@@ -603,11 +623,11 @@
 
 **目前暫定**：無。
 
-**誰決定、何時**：未指定。
+**誰決定、何時**：維護者依負責人授權決定（2026-10-04，#388），負責人可推翻。
 
 **影響的原則**：[PR-05](02-principles.md#pr-05)、[PR-06](02-principles.md#pr-06)、 [PR-07](02-principles.md#pr-07)。
 
-**依據**：架構基準 §13A.2、§13A.11、§15、§20.11
+**依據**：架構基準 §13A.2、§13A.11、§15、§20.11；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；見 [KD-62](03-decisions-and-stack.md#kd-62)。
 
 
 <a id="g-06"></a>
@@ -652,9 +672,9 @@
 
 <a id="g-08"></a>
 
-### G-08：查核結果（Result）在報告章節被當作既有資料使用，但其欄位本身仍是未定案項目（部分裁定）
+### G-08：查核結果（Result）在報告章節被當作既有資料使用，但其欄位本身仍是未定案項目（已移轉）
 
-**裁定**：Result 的欄位已由 [OQ-06](#oq-06) 補完大部分：結果三種（符合、不符合、不適用）、不符合的嚴重度與註解、不適用的原因、實測欄位的型別與必填規則，見 [KD-37](03-decisions-and-stack.md#kd-37)、[KD-54](03-decisions-and-stack.md#kd-54)。**未定**：缺失（Defect）管理與不符合後的改善追蹤（維持 0.7.x），以及報告如何呈現三種結果與嚴重度（本次裁定沒有涵蓋，見 [OQ-07](#oq-07)）。
+**裁定**：Result 欄位由 [OQ-06](#oq-06) 補完：結果三種（符合、不符合、不適用）、不符合的嚴重度與註解、不適用的原因、實測欄位型別與必填規則，見 [KD-37](03-decisions-and-stack.md#kd-37)、[KD-54](03-decisions-and-stack.md#kd-54)。不符合後的 0.7.x 簡易改善追蹤依 [KD-65](03-decisions-and-stack.md#kd-65) 決定。報告如何呈現三種結果與嚴重度移至 [OQ-07](#oq-07) 處理；本議題其餘部分已移轉並解除阻擋。
 
 **為什麼要先決定**：報告架構的設計已經預設 Result 資料存在，但 Result 的資料模型本身還沒有定案；這與 [OQ-06](#oq-06) 是同一個缺口的兩面，應合併處理，且任何後續定案都要遵守 [PR-04](02-principles.md#pr-04) 的歷史不可變原則。
 
@@ -662,13 +682,13 @@
 - **立場 A**：§20.2（Report 產製架構）把「Results」與「Approval / Signature Metadata」列為 Database 提供給 Report Service 的既有輸入；§20.10 的照片版面設計範例也直接使用「PASS / FAIL」措辭。
 - **立場 B**：§38（Result）明確把「是否需要 PASS/FAIL/N/A？Measurement？Severity？Defect？」列為留待 團隊討論的未定案項目。
 
-**目前暫定**：無。
+**目前暫定**：無；改善追蹤依 [KD-65](03-decisions-and-stack.md#kd-65)，報告呈現依 [OQ-07](#oq-07)。
 
-**誰決定、何時**：負責人；Result 欄位部分已於 [#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965076758) 裁定（2026-10-03）；其餘未指定。
+**誰決定、何時**：Result 欄位由負責人於 [#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965076758) 裁定（2026-10-03）；改善追蹤由維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；報告呈現移轉至 [OQ-07](#oq-07)。
 
 **影響的原則**：[OQ-06](#oq-06)、[PR-04](02-principles.md#pr-04)、[KD-54](03-decisions-and-stack.md#kd-54)。
 
-**依據**：架構基準 §20.2、§20.10、§38；部分裁定為負責人裁定（#76 留言，2026-10-03），見 [OQ-06](#oq-06)。
+**依據**：架構基準 §20.2、§20.10、§38；Result 欄位依負責人裁定（#76 留言，2026-10-03），改善追蹤依維護者授權決定（2026-10-04，#388），負責人可推翻；報告呈現見 [OQ-07](#oq-07)。
 
 
 <a id="g-09"></a>
@@ -708,30 +728,39 @@
 
 <a id="g-11"></a>
 
-### G-11：報告的 Phase E 排序容易誤導 MVP 範圍
+### G-11：報告的 Phase E 排序容易誤導 MVP 範圍（已決定）
 
 **為什麼要先決定**：§20.21 把 Version / Issue Control 排在報告實作 Phase E；§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8），卻要求 MVP 保存部分版本與快照資料。需要明確區分最低治理資料和完整簽核流程。
 
 **選項**：§20.21 Phase E 含 Document No、Revision、Status、Snapshot、Approval、Issue；§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）明定報告範本版本、文件編號、版次、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256。後者沒有要求完整 Approval／Issue 流程，§15 與 §20.12 容許先簡化。
 
-**目前暫定**：[KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06) 採 §30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）的最低治理資料；完整簽核與核發流程見 [OQ-07](#oq-07)。
+**裁定**：視為已由 [KD-57](03-decisions-and-stack.md#kd-57) 回答：MVP 保留最低治理資料，核發不需送審，完整簽核流程之後再加。報告其餘待定欄位與呈現需求依 [OQ-07](#oq-07)。
 
-**誰決定、何時**：團隊；時間未指定。
+**目前暫定**：無。
+
+**誰決定、何時**：維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；核發不需送審與最低治理資料見 [KD-57](03-decisions-and-stack.md#kd-57)。
 
 **影響的原則**：[KD-05](03-decisions-and-stack.md#kd-05)、[PR-06](02-principles.md#pr-06)。
 
-**依據**：架構基準 §15、§20.12、§20.21、§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）
+**依據**：架構基準 §15、§20.12、§20.21、§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）；維護者依負責人授權決定（2026-10-04，#388），負責人可推翻；核發裁定依 [KD-57](03-decisions-and-stack.md#kd-57)。
 
 <a id="gate"></a>
 ## E. 開工門檻（Domain Model／API 契約凍結前必須裁定）
 
-以下議題**必須**在 Domain Model 與 API 契約凍結之前，先由團隊裁定出單一答案；它們目前都已在本檔中留有紀錄，但尚沒有能讓兩組實作者各自做出相容實作的單一結論。
+以下列出 Domain Model 與 API 契約凍結前的裁定狀態；未解除的項目仍須先有單一答案，才能讓不同實作者做出相容實作。
 
-**已裁定、解除擋門檻**（2026-09-28、2026-10-03，見各條目「裁定」段）：
+**已裁定、解除擋門檻**（2026-09-28～2026-10-04，見各條目「裁定」段）：
 
 - ~~G-02（Original 的唯一來源）~~：已裁定——不保存原圖，只保存現場版與內業版兩張圖片，見 [G-02](#g-02)（已裁定）。
 - ~~G-04（報告選圖／核可）~~：已裁定——現場確認即完成，不需另一位核可者，報表一律用內業版，見 [G-04](#g-04)（已裁定）。
-- ~~OQ-06（Result 語意）~~：已裁定（2026-10-03）——查核項次結果分符合、不符合、不適用，並定出各結果的必填內容與實測欄位型別，見 [OQ-06](#oq-06)（已裁定）、[KD-54](03-decisions-and-stack.md#kd-54)。不再擋 `template-system`，也不再因 OQ-06 擋 `completion-validation`（是否另有其他門檻，以[規格索引](../specs/README.md#index)為準）；不符合後的改善追蹤、限期複查與自動判定維持 0.7.x，尚未裁定。
+- ~~OQ-06（Result 語意）~~：已裁定（2026-10-03）——查核項次結果分符合、不符合、不適用，並定出各結果的必填內容與實測欄位型別，見 [OQ-06](#oq-06)（已裁定）、[KD-54](03-decisions-and-stack.md#kd-54)。不再擋 `template-system`，也不再因 OQ-06 擋 `completion-validation`（是否另有其他門檻，以[規格索引](../specs/README.md#index)為準）；不符合後的簡易改善追蹤依 [KD-65](03-decisions-and-stack.md#kd-65) 排入 0.7.x；限期複查與自動判定仍未裁定。
+- ~~OQ-08（權限模型）~~：全公司角色、專案角色、Admin 全權與三大系統權限表已裁定，見 [OQ-08](#oq-08)、[KD-60](03-decisions-and-stack.md#kd-60)；v0.3.0 與 0.5.x 排程見 [KD-67](03-decisions-and-stack.md#kd-67)。
+- ~~G-03／OQ-14（照片流程）~~：現場版上傳、後端產生內業版、Online-first 與失敗重送已決定，見 [G-03](#g-03)、[OQ-14](#oq-14)、[KD-61](03-decisions-and-stack.md#kd-61)。
+- ~~G-05（Evidence 刪除）~~：任務完成前軟刪除、已核發報告引用照片不可刪、保存期限隨專案，見 [G-05](#g-05)、[KD-62](03-decisions-and-stack.md#kd-62)。
+- ~~OQ-17（照片上傳）~~：30 MB 上限、3 次指數退避重試與 UUID 冪等鍵已決定，見 [OQ-17](#oq-17)、[KD-63](03-decisions-and-stack.md#kd-63)。
+- ~~OQ-12（影像編輯）~~：MVP 不做對比調整與照片上畫標註，見 [OQ-12](#oq-12)、[KD-64](03-decisions-and-stack.md#kd-64)。
+- ~~G-08（Result）~~：Result 欄位已定；改善追蹤依 [KD-65](03-decisions-and-stack.md#kd-65)，報告呈現移至 [OQ-07](#oq-07)。
+- ~~G-11（報告治理）~~：最低治理資料與不送審已由 [KD-57](03-decisions-and-stack.md#kd-57) 回答。
 
 **部分裁定，未定部分不擋 MVP 凍結**：
 
@@ -739,8 +768,6 @@
 
 **仍在擋門檻**：
 
-- **[G-03](#g-03)**（原圖上傳與編輯時序，部分裁定）：現場版、內業版的保存時點已定（見 [G-03](#g-03)）；裝置離線暫存與傳送時點、前後端分工、失敗重試的行為仍未定，繼續擋 `field-evidence` 規格凍結。
-- **[G-05](#g-05)**（刪除與保留）：`Evidence` 的 `DELETE` API 與「照片只保存現場版、內業版兩張」如何共存，是否為軟刪除、是否禁止刪除已被報告引用的證據；本題未受本次裁定影響，仍待決。
 - **[G-06](#g-06)（部分裁定）／[G-07](#g-07)**（報告狀態與版次快照邊界）：核發不需送審、新版取代舊版已定（[KD-57](03-decisions-and-stack.md#kd-57)）；仍需合併出一份唯一、完整的 `Report` 狀態機 （含 `GENERATING`／`GENERATION_FAILED`），並定義 Snapshot 的確切時間點與 `DRAFT` 階段是否就地覆寫。
 
 [README.md](README.md) 亦連結至本節；規劃 Domain Model／API Specification 前，請先逐項確認以上各則是否已有團隊裁定的答案。本節的「凍結」對應規格文件的「已凍結」狀態，以及「部分凍結」規格標頭列出的凍結範圍（見 [docs/specs/README.md](../specs/README.md)）；門檻未裁定前，確認與門檻無關的實體得先凍結，其餘維持草稿（依 [OQ-22](#oq-22) 的裁定；做法見 [docs/specs/README.md 部分凍結](../specs/README.md#partial-freeze)）。
