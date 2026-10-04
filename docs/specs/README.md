@@ -53,7 +53,7 @@ docs/specs/
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
 | [`template-system`](template-system/spec.md) | P3 | 功能 | 已凍結 | 無；TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 已依規格設計定案，含最小專案查核項目副本表；OQ-06、OQ-20 已裁定，副本後續欄位及作廢／重查／更正流程由 P4 `inspection-planning` 定義 |
 | [`inspection-planning`](inspection-planning/spec.md) | P4 | 功能 | 已凍結 | 無；`ProjectZone`／Task 地點依 KD-58、OQ-03 凍結；Evidence／Report 不屬本規格範圍 |
-| `field-ui` | P5 | 功能 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09) |
+| [`field-ui`](field-ui/spec.md) | P5 | 功能 | 草稿 | 無；Plan／Task 狀態依 `state-machines`，Evidence 上傳與完成驗證不屬本階段 |
 | `field-evidence` | P6 | 功能 | 未開始 | [G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
 | `completion-validation` | P7 | 功能 | 未開始 | — |
 | `admin-dashboard` | P5 | 功能 | 未開始 | — |
