@@ -24,12 +24,13 @@
 
 ## 跨規格依賴
 
-- `#361`：inspection-planning T3，提供 Plan、Task 與專案項目 API（含 Task 詳情、開始及 Field 所需查詢）。Field 列表需 `inspection_task.inspect` 權限及安全隱藏 `DRAFT` 詳情。API/RBAC 契約若不符，先更新來源規格與 issue，不以 UI mock 代替。`dispatched_at` 目前不在凍結 Task 模型；如必須新增持久欄位，先走規格變更流程。
+- `#361`：inspection-planning T3，提供 Plan、Task 與專案項目 API（含 Task 詳情、開始及 Field 所需查詢）。依 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)，Field 使用專案範圍的現場查核權限；`inspection_task.inspect` 是本規格所選的代碼名稱（依 [OQ-08](../../intents/05-open-questions.md#oq-08)，代碼命名由規格決定）。API/RBAC 契約若不符，先更新來源規格與 issue，不以 UI mock 代替。`dispatched_at` 目前不在凍結 Task 模型；如必須新增持久欄位，先走規格變更流程。
+- [KD-67](../../intents/03-decisions-and-stack.md#kd-67)：完整全公司角色與權限管理排入 0.5.x。Field 的專案權限須由 `authentication`／`inspection-planning` 契約及 seed 提供；角色管理 UI 屬 Admin 任務，不作為 Field 畫面的依賴。
 - `#363`：inspection-planning T4，內業 Plan／Task 管理 UI，不是 Field 前端基礎；它可能同時修改共用路由或 API client。由責任方先協調共用檔案及接合順序，Field 任務不將 #363 寫成基礎設施前置。
 - 前端基礎與認證路由已由 0.1／0.2 建立；Field 依現有單一 React app 與 code-splitting 契約增補 `/field/*`。
 - `admin-dashboard`：提供範本頁搬遷目標路由；若尚未完成，T7 需作為依賴協調，不把內業範本功能留在 Field。
 - `inspection-planning`：Task 可見範圍、Task 詳情、內嵌分區名稱、`location_text` 與開始端點。Field 不呼叫分區列表 API。
-- `state-machines`、`authentication`、`domain-model`、`api-conventions`：狀態、Session、權限、cursor 契約依其凍結內容；要更動共用規格或登記表時另開適當任務。
+- `state-machines`、`authentication`、`domain-model`、`api-conventions`：狀態、Session、權限、cursor 契約依其凍結內容；需求快照依 [KD-55](../../intents/03-decisions-and-stack.md#kd-55) 接受指定的文字更正例外，Field 讀取 Task API 的權威內容。要更動共用規格或登記表時另開適當任務。
 - `#231`：區網開發伺服器防護、mkcert 根憑證信任步驟及 iPhone 實機 Session 驗收，納入 T5；實際 Vite 限制方式依能力選定並做可重現驗證。
 - `#381`：提供真實後端及 seed 的端到端示範，依賴 Field 清單、詳情與開始流程，不以 mock 或假回應驗收。
 
