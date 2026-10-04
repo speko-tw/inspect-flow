@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getSystemTemplates, putSystemTemplates } from './api'
+import {
+  createTemplateItem,
+  deleteTemplateItem,
+  getSystemTemplates,
+  putSystemTemplates,
+  updateTemplateItem,
+} from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -67,5 +73,35 @@ describe('template API', () => {
         }),
       }),
     )
+  })
+
+  it('uses single-item endpoints for create, update, and delete', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ id: 'item-1' }, { status: 201 }))
+      .mockResolvedValueOnce(Response.json({ id: 'item-1' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const item = {
+      system_id: 'system-1',
+      sequence: 1,
+      title: '坡度',
+      instruction: '',
+      inspection_points: [],
+    }
+
+    await createTemplateItem(item)
+    await updateTemplateItem('item-1', item)
+    await deleteTemplateItem('item-1')
+
+    expect(
+      fetchMock.mock.calls.map(([url, init]) => [url, init?.method]),
+    ).toEqual([
+      ['/api/v1/templates', 'POST'],
+      ['/api/v1/templates/item-1', 'PUT'],
+      ['/api/v1/templates/item-1', 'DELETE'],
+    ])
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify(item))
+    expect(fetchMock.mock.calls[1][1]?.body).toBe(JSON.stringify(item))
   })
 })

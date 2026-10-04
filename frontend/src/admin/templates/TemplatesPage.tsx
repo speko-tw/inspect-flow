@@ -1,22 +1,49 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 
 import { ManagementApiError, managementErrorMessage } from '../api'
+import { InlineConfirm } from './InlineConfirm'
+import { InspectionPointCard } from './InspectionPointCard'
+import { TemplateItemEditor } from './TemplateItemEditor'
+import { TemplateLibraryNav } from './TemplateLibraryNav'
+import { boundField } from './templateEditorUtils'
 import {
   createTemplateCategory,
+  createTemplateItem,
   createTemplateSystem,
   deleteTemplateCategory,
+  deleteTemplateItem,
   deleteTemplateSystem,
   getSystemTemplates,
   listTemplateCategories,
   listTemplateSystems,
-  putSystemTemplates,
   renameTemplateCategory,
   renameTemplateSystem,
+  updateTemplateItem,
   type InspectionPoint,
+  type MeasurementField,
   type TemplateCategory,
   type TemplateItem,
   type TemplateSystem,
 } from './api'
+
+type Selection = { type: 'category' | 'system' | 'item'; id: string }
+type Mode =
+  | 'view'
+  | 'create-category'
+  | 'create-system'
+  | 'rename-category'
+  | 'rename-system'
+  | 'create-item'
+  | 'edit-item'
+  | 'delete-category'
+  | 'delete-system'
+  | 'delete-item'
 
 function blankPoint(sequence: number): InspectionPoint {
   return {
@@ -36,7 +63,30 @@ function blankTemplate(systemId: string, sequence: number): TemplateItem {
     sequence,
     title: '',
     instruction: '',
-    inspection_points: [],
+    inspection_points: [blankPoint(1)],
+  }
+}
+
+function localizeFields(item: TemplateItem): TemplateItem {
+  return {
+    ...item,
+    inspection_points: item.inspection_points.map((point) => {
+      const measurementFields = point.measurement_fields.map((field) => ({
+        ...field,
+        client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
+      }))
+      const numeric = point.numeric_standard
+      return {
+        ...point,
+        measurement_fields: measurementFields.map((field) =>
+          Boolean(numeric) &&
+          (field.id === numeric?.measurement_field_id ||
+            field.client_id === numeric?.measurement_field_client_id)
+            ? { ...field, unit: field.unit ?? numeric?.unit ?? '' }
+            : field,
+        ),
+      }
+    }),
   }
 }
 
@@ -49,14 +99,13 @@ function forWire(item: TemplateItem): TemplateItem {
         client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
       }))
       const numeric = point.numeric_standard
+      const bound = fields.find(
+        (field) =>
+          field.client_id === numeric?.measurement_field_client_id ||
+          field.id === numeric?.measurement_field_id,
+      )
       const interval =
         numeric?.condition === 'range' && numeric.range_form === 'interval'
-      const bound =
-        fields.find(
-          (field) =>
-            field.client_id === numeric?.measurement_field_client_id ||
-            field.id === numeric?.measurement_field_client_id,
-        ) ?? fields.find((field) => field.id === numeric?.measurement_field_id)
       return {
         ...point,
         id: undefined,
@@ -64,7 +113,11 @@ function forWire(item: TemplateItem): TemplateItem {
           client_id: field.client_id,
           name: field.name,
           field_type: field.field_type,
-          unit: field.unit,
+          unit:
+            field.field_type === 'number' &&
+            (field.client_id === bound?.client_id || field.id === bound?.id)
+              ? null
+              : field.unit,
         })),
         numeric_standard: numeric
           ? {
@@ -90,54 +143,6 @@ function forWire(item: TemplateItem): TemplateItem {
   }
 }
 
-function numericStandardPreview(
-  standard: NonNullable<InspectionPoint['numeric_standard']>,
-): string {
-  if (standard.condition === 'range') {
-    if ((standard.range_form ?? 'tolerance') === 'interval') {
-      return (
-        `${standard.lower_bound ?? ''}～${standard.upper_bound ?? ''} ` +
-        standard.unit
-      )
-    }
-    return `${standard.value} ± ${standard.tolerance} ${standard.unit}`
-  }
-  const symbols = { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }
-  const tolerance =
-    standard.tolerance === null ? '' : `；容許誤差：${standard.tolerance}`
-  return (
-    `${symbols[standard.condition]} ${standard.value} ${standard.unit}` +
-    tolerance
-  )
-}
-
-function apiMessage(error: unknown): string {
-  if (error instanceof ManagementApiError) {
-    const messages: Record<string, string> = {
-      'template.name_conflict': '名稱已存在，請改用其他名稱。',
-      'template.category_not_empty': '此工程類別仍有系統，無法刪除。',
-      'template.system_not_empty': '此系統仍有查核項目，無法刪除。',
-      'request.validation_failed': '資料驗證失敗，請檢查必填欄位與數值格式。',
-      'permission.denied': '你沒有權限執行這項操作。',
-    }
-    if (messages[error.code ?? '']) return messages[error.code ?? '']
-    if (error.status === 422) {
-      return '資料驗證失敗，請檢查必填欄位與數值格式。'
-    }
-  }
-  return managementErrorMessage(error)
-}
-
-function readErrorMessage(error: unknown): string {
-  if (
-    error instanceof ManagementApiError &&
-    (error.status === 403 || error.code === 'permission.denied')
-  ) {
-    return '你沒有權限瀏覽範本庫。'
-  }
-  return apiMessage(error)
-}
-
 function isForbidden(error: unknown): boolean {
   return (
     error instanceof ManagementApiError &&
@@ -145,47 +150,115 @@ function isForbidden(error: unknown): boolean {
   )
 }
 
+function apiMessage(error: unknown): string {
+  if (error instanceof ManagementApiError) {
+    const messages: Record<string, string> = {
+      'template.name_conflict': '同一層已有相同名稱，請換個名稱。',
+      'template.category_not_empty': '此類別還有系統，請先處理系統。',
+      'template.system_not_empty': '此系統還有查核項目，請先處理項目。',
+      'request.validation_failed':
+        '範本未儲存，輸入內容已保留。請重新檢查查核項次與單位。',
+      'permission.denied': '你沒有權限執行這項操作。',
+    }
+    if (messages[error.code ?? '']) return messages[error.code ?? '']
+    if (error.status === 422) {
+      return '範本未儲存，輸入內容已保留。請重新檢查查核項次與單位。'
+    }
+  }
+  return managementErrorMessage(error)
+}
+
 export default function TemplatesPage() {
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
   const [items, setItems] = useState<TemplateItem[]>([])
-  const [categoryId, setCategoryId] = useState('')
-  const [systemId, setSystemId] = useState('')
-  const [editingCategory, setEditingCategory] = useState('')
-  const [editingSystem, setEditingSystem] = useState('')
-  const [creatingCategory, setCreatingCategory] = useState(false)
-  const [creatingSystem, setCreatingSystem] = useState(false)
-  const [editingItem, setEditingItem] = useState<TemplateItem | null>(null)
-  const [preview, setPreview] = useState<TemplateItem | null>(null)
-  const [previewGroups, setPreviewGroups] = useState<TemplateItem[] | null>(
-    null,
-  )
-  const [confirmDeleteId, setConfirmDeleteId] = useState('')
-  const [confirmDeleteCategory, setConfirmDeleteCategory] = useState(false)
-  const [confirmDeleteSystem, setConfirmDeleteSystem] = useState(false)
+  const [selected, setSelected] = useState<Selection | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [mode, setMode] = useState<Mode>('view')
+  const [nameDraft, setNameDraft] = useState('')
+  const [itemDraft, setItemDraft] = useState<TemplateItem | null>(null)
+  const [baseline, setBaseline] = useState('')
+  const [photoDraft, setPhotoDraft] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [readOnly, setReadOnly] = useState(false)
+  const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
+  const [guard, setGuard] = useState<Selection | null>(null)
+  const [confirmField, setConfirmField] = useState('')
+
+  const categoryId =
+    selected?.type === 'category'
+      ? selected.id
+      : selected?.type === 'system'
+        ? (systems.find((system) => system.id === selected.id)?.category_id ??
+          '')
+        : selected?.type === 'item'
+          ? (systems.find(
+              (system) =>
+                system.id ===
+                items.find((item) => item.id === selected.id)?.system_id,
+            )?.category_id ?? '')
+          : ''
+  const systemId =
+    selected?.type === 'system'
+      ? selected.id
+      : selected?.type === 'item'
+        ? (items.find((item) => item.id === selected.id)?.system_id ?? '')
+        : ''
+  const selectedCategory = categories.find((item) => item.id === categoryId)
+  const selectedSystem = systems.find((item) => item.id === systemId)
+  const selectedItem = items.find((item) => item.id === selected?.id)
+  const dirty = useMemo(() => {
+    if (
+      mode === 'create-category' ||
+      mode === 'create-system' ||
+      mode === 'rename-category' ||
+      mode === 'rename-system'
+    ) {
+      const original = mode.startsWith('rename')
+        ? mode === 'rename-category'
+          ? (selectedCategory?.name ?? '')
+          : (selectedSystem?.name ?? '')
+        : ''
+      return nameDraft !== original
+    }
+    if (mode === 'create-item' || mode === 'edit-item') {
+      return JSON.stringify({ itemDraft, photoDraft }) !== baseline
+    }
+    return false
+  }, [
+    baseline,
+    itemDraft,
+    mode,
+    nameDraft,
+    photoDraft,
+    selectedCategory?.name,
+    selectedSystem?.name,
+  ])
 
   useEffect(() => {
     let active = true
     void listTemplateCategories()
-      .then((result) => {
-        if (active) {
-          setCategories(result)
-          setCategoryId(result[0]?.id ?? '')
+      .then((rows) => {
+        if (!active) return
+        setCategories(rows)
+        if (rows[0]) {
+          setSelected({ type: 'category', id: rows[0].id })
+          setExpanded(new Set([rows[0].id]))
         }
       })
       .catch((caught: unknown) => {
-        if (active) {
-          if (isForbidden(caught)) setReadOnly(true)
-          setError(readErrorMessage(caught))
-        }
+        if (!active) return
+        if (isForbidden(caught)) setReadOnly(true)
+        setError(
+          isForbidden(caught)
+            ? '你沒有權限瀏覽範本庫。'
+            : managementErrorMessage(caught),
+        )
       })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
+      .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
@@ -193,19 +266,24 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     let active = true
-    if (!categoryId) return
+    if (!categoryId) {
+      return
+    }
     void listTemplateSystems(categoryId)
-      .then((result) => {
-        if (active) {
-          setSystems(result)
-          setSystemId(result[0]?.id ?? '')
-        }
+      .then((rows) => {
+        if (!active) return
+        setSystems((current) => [
+          ...current.filter((row) => row.category_id !== categoryId),
+          ...rows,
+        ])
       })
       .catch((caught: unknown) => {
-        if (active) {
-          if (isForbidden(caught)) setReadOnly(true)
-          setError(readErrorMessage(caught))
-        }
+        if (active)
+          setError(
+            isForbidden(caught)
+              ? '你沒有權限瀏覽範本庫。'
+              : managementErrorMessage(caught),
+          )
       })
     return () => {
       active = false
@@ -214,1040 +292,906 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     let active = true
-    if (!systemId) return
+    if (!systemId) {
+      return
+    }
     void getSystemTemplates(systemId)
       .then((result) => {
-        if (active) setItems(result.items)
+        if (active) setItems(result.items.map(localizeFields))
       })
       .catch((caught: unknown) => {
-        if (active) {
-          if (isForbidden(caught)) setReadOnly(true)
-          setError(readErrorMessage(caught))
-        }
+        if (active)
+          setError(
+            isForbidden(caught)
+              ? '你沒有權限瀏覽範本庫。'
+              : managementErrorMessage(caught),
+          )
       })
     return () => {
       active = false
     }
   }, [systemId])
 
-  function denied(caught: unknown): void {
-    const forbidden =
-      caught instanceof ManagementApiError &&
-      (caught.status === 403 || caught.code === 'permission.denied')
+  function resetMode(): void {
+    setMode('view')
+    setNameDraft('')
+    setItemDraft(null)
+    setBaseline('')
+    setPhotoDraft({})
+    setErrors({})
+    setConfirmField('')
+  }
+
+  function showNotice(message: string): void {
+    setError('')
+    setNotice(message)
+  }
+
+  function fail(caught: unknown): void {
+    setNotice('')
     setError(
-      forbidden
+      isForbidden(caught)
         ? '目前帳號只有瀏覽權限，已切換為唯讀模式。'
         : apiMessage(caught),
     )
-    if (forbidden) {
-      setReadOnly(true)
-      setEditingCategory('')
-      setEditingSystem('')
+    if (isForbidden(caught)) setReadOnly(true)
+  }
+
+  function navigate(next: Selection): void {
+    setNotice('')
+    setError('')
+    if (dirty) {
+      setGuard(next)
+      return
+    }
+    resetMode()
+    setSelected(next)
+    setMobilePane('detail')
+    if (next.type !== 'item') setItems([])
+    if (next.type !== 'item') {
+      setExpanded((current) => new Set([...current, next.id]))
     }
   }
 
-  async function reloadAll(
-    preferredCategoryId?: string,
-    preferredSystemId?: string,
-  ) {
-    try {
-      const result = await listTemplateCategories()
-      setCategories(result)
-      const selected = result.find(
-        (item) => item.id === (preferredCategoryId ?? categoryId),
-      )
-      const nextCategory = selected?.id ?? result[0]?.id ?? ''
-      setCategoryId(nextCategory)
-      if (nextCategory) {
-        const nextSystems = await listTemplateSystems(nextCategory)
-        setSystems(nextSystems)
-        const selectedSystem = nextSystems.find(
-          (item) => item.id === (preferredSystemId ?? systemId),
-        )
-        const nextSystem = selectedSystem?.id ?? nextSystems[0]?.id ?? ''
-        setSystemId(nextSystem)
-        if (nextSystem) setItems((await getSystemTemplates(nextSystem)).items)
-        else setItems([])
-      } else {
-        setSystems([])
-        setSystemId('')
-        setItems([])
-      }
-    } catch (caught) {
-      denied(caught)
-    }
+  function beginName(nextMode: Mode, initial = ''): void {
+    setNotice('')
+    setError('')
+    setMode(nextMode)
+    setNameDraft(initial)
+    setMobilePane('detail')
   }
 
-  async function saveCategory(event: FormEvent<HTMLFormElement>) {
+  function beginItem(
+    item: TemplateItem,
+    nextMode: 'create-item' | 'edit-item',
+  ): void {
+    const normalized = localizeFields(item)
+    const photos = Object.fromEntries(
+      normalized.inspection_points.map((point, index) => [
+        String(index),
+        String(point.evidence_requirements[0]?.min_count ?? 1),
+      ]),
+    )
+    setItemDraft(normalized)
+    setPhotoDraft(photos)
+    setBaseline(JSON.stringify({ itemDraft: normalized, photoDraft: photos }))
+    setErrors({})
+    setMode(nextMode)
+    setNotice('')
+    setError('')
+  }
+
+  async function saveName(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
-    const name = editingCategory.trim()
-    if (!name) return
-    try {
-      let preferredCategoryId = categoryId
-      if (
-        !creatingCategory &&
-        categories.some((item) => item.id === categoryId)
-      ) {
-        await renameTemplateCategory(categoryId, name)
-        setNotice('工程類別已更新。')
-      } else {
-        const created = await createTemplateCategory(name)
-        setCategoryId(created.id)
-        preferredCategoryId = created.id
-        setNotice('工程類別已新增。')
-      }
-      setEditingCategory('')
-      setCreatingCategory(false)
-      setError('')
-      await reloadAll(preferredCategoryId)
-    } catch (caught) {
-      denied(caught)
-    }
-  }
-
-  async function saveSystem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const name = editingSystem.trim()
-    if (!name || !categoryId) return
-    try {
-      let preferredSystemId = systemId
-      if (!creatingSystem && systems.some((item) => item.id === systemId)) {
-        await renameTemplateSystem(systemId, name)
-        setNotice('系統已更新。')
-      } else {
-        const created = await createTemplateSystem(categoryId, name)
-        setSystemId(created.id)
-        preferredSystemId = created.id
-        setNotice('系統已新增。')
-      }
-      setEditingSystem('')
-      setCreatingSystem(false)
-      setError('')
-      await reloadAll(categoryId, preferredSystemId)
-    } catch (caught) {
-      denied(caught)
-    }
-  }
-
-  async function removeCategory() {
-    if (!categoryId) return
-    setConfirmDeleteCategory(false)
-    try {
-      await deleteTemplateCategory(categoryId)
-      setNotice('工程類別已刪除。')
-      setError('')
-      await reloadAll()
-    } catch (caught) {
-      denied(caught)
-    }
-  }
-
-  async function removeSystem() {
-    if (!systemId) return
-    setConfirmDeleteSystem(false)
-    try {
-      await deleteTemplateSystem(systemId)
-      setNotice('系統已刪除。')
-      setError('')
-      await reloadAll()
-    } catch (caught) {
-      denied(caught)
-    }
-  }
-
-  async function saveItem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!systemId || !editingItem) return
-    const invalid = editingItem.inspection_points.some((point) => {
-      const standard = point.numeric_standard
-      if (!standard || standard.condition !== 'range') return false
-      if ((standard.range_form ?? 'tolerance') === 'interval') {
-        const lower = Number(standard.lower_bound)
-        const upper = Number(standard.upper_bound)
-        return (
-          !standard.lower_bound?.trim() ||
-          !standard.upper_bound?.trim() ||
-          !Number.isFinite(lower) ||
-          !Number.isFinite(upper) ||
-          lower > upper
-        )
-      }
-      const tolerance = Number(standard.tolerance)
-      return (
-        !standard.value?.trim() ||
-        !standard.tolerance?.trim() ||
-        !Number.isFinite(Number(standard.value)) ||
-        !Number.isFinite(tolerance) ||
-        tolerance < 0
-      )
-    })
-    if (invalid) {
-      setError('範圍標準欄位無效，請檢查上下限或容許誤差。')
+    const name = nameDraft.trim()
+    const nameError = !name ? '請填寫名稱' : ''
+    const siblings = mode.includes('category')
+      ? categories
+          .filter((row) => row.id !== selectedCategory?.id)
+          .map((row) => row.name)
+      : systems
+          .filter(
+            (row) =>
+              row.category_id === categoryId && row.id !== selectedSystem?.id,
+          )
+          .map((row) => row.name)
+    const duplicate = siblings.some(
+      (row) => row.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+    )
+    if (nameError || duplicate) {
+      setErrors({ name: nameError || '已有同名項目，請換個名稱' })
+      document.getElementById('tpl-name')?.focus()
       return
     }
     try {
-      const input = forWire({ ...editingItem, system_id: systemId })
-      const next = editingItem.id
-        ? items.map((item) => (item.id === editingItem.id ? input : item))
-        : [...items, input]
-      const result = await putSystemTemplates(systemId, next.map(forWire))
-      setItems(result.items)
-      setEditingItem(null)
-      setError('')
-      setNotice('查核項目範本已儲存。')
+      if (mode === 'create-category') {
+        const created = await createTemplateCategory(name)
+        setCategories((current) => [...current, created])
+        setSelected({ type: 'category', id: created.id })
+        setExpanded((current) => new Set([...current, created.id]))
+        showNotice(`已新增工程類別「${created.name}」`)
+      } else if (mode === 'rename-category' && selectedCategory) {
+        const updated = await renameTemplateCategory(selectedCategory.id, name)
+        setCategories((current) =>
+          current.map((row) => (row.id === updated.id ? updated : row)),
+        )
+        showNotice(`已重新命名為「${updated.name}」`)
+      } else if (mode === 'create-system' && selectedCategory) {
+        const created = await createTemplateSystem(selectedCategory.id, name)
+        setSystems((current) => [...current, created])
+        setSelected({ type: 'system', id: created.id })
+        setExpanded((current) => new Set([...current, created.id]))
+        showNotice(`已新增系統「${created.name}」`)
+      } else if (mode === 'rename-system' && selectedSystem) {
+        const updated = await renameTemplateSystem(selectedSystem.id, name)
+        setSystems((current) =>
+          current.map((row) => (row.id === updated.id ? updated : row)),
+        )
+        showNotice(`已重新命名為「${updated.name}」`)
+      }
+      resetMode()
     } catch (caught) {
-      denied(caught)
-      await reloadAll()
+      fail(caught)
+      if (isForbidden(caught)) setNameDraft(nameDraft)
     }
   }
 
-  async function removeItem(item: TemplateItem) {
-    if (!systemId) return
-    try {
-      const result = await putSystemTemplates(
-        systemId,
-        items.filter((row) => row.id !== item.id).map(forWire),
-      )
-      setItems(result.items)
-      setConfirmDeleteId('')
-      setNotice('查核項目範本已刪除。')
-      setError('')
-    } catch (caught) {
-      denied(caught)
-      await reloadAll()
-    }
+  function updateDraft(changes: Partial<TemplateItem>): void {
+    setItemDraft((current) => (current ? { ...current, ...changes } : current))
+    setErrors({})
+    setError('')
   }
 
-  function updatePoint(index: number, changes: Partial<InspectionPoint>) {
-    setEditingItem((current) =>
+  function updatePoint(
+    index: number,
+    changes: Partial<InspectionPoint>,
+  ): void {
+    setItemDraft((current) =>
       current
         ? {
             ...current,
-            inspection_points: current.inspection_points.map((point, item) =>
-              item === index ? { ...point, ...changes } : point,
+            inspection_points: current.inspection_points.map(
+              (point, position) =>
+                position === index ? { ...point, ...changes } : point,
             ),
           }
         : current,
     )
+    setErrors({})
+    setError('')
   }
 
-  function renderPoint(point: InspectionPoint, index: number) {
-    const numeric = point.numeric_standard
-    return (
-      <fieldset key={point.id ?? index}>
-        <legend>查核項次 {index + 1}</legend>
-        <label>
-          項次標題
-          <input
-            onChange={(event) =>
-              updatePoint(index, { title: event.target.value })
-            }
-            required
-            value={point.title}
-          />
-        </label>
-        <label>
-          項次說明
-          <textarea
-            onChange={(event) =>
-              updatePoint(index, { instruction: event.target.value })
-            }
-            value={point.instruction}
-          />
-        </label>
-        <label>
-          標準類型
-          <select
-            onChange={(event) =>
-              updatePoint(index, {
-                text_standard:
-                  event.target.value === 'text' ? { text: '' } : null,
-                numeric_standard:
-                  event.target.value === 'number'
-                    ? {
-                        value: '',
-                        condition: '<=',
-                        unit: '',
-                        tolerance: null,
-                        range_form: null,
-                        lower_bound: null,
-                        upper_bound: null,
-                        measurement_field_client_id: '',
-                      }
-                    : null,
-              })
-            }
-            value={numeric ? 'number' : point.text_standard ? 'text' : 'none'}
-          >
-            <option value="none">無</option>
-            <option value="text">文字標準</option>
-            <option value="number">數值標準</option>
-          </select>
-        </label>
-        {point.text_standard && (
-          <label>
-            標準文字
-            <textarea
-              onChange={(event) =>
-                updatePoint(index, {
-                  text_standard: { text: event.target.value },
-                })
-              }
-              value={point.text_standard.text}
-            />
-          </label>
-        )}
-        {numeric && (
-          <>
-            <label>
-              綁定數字實測欄位
-              <select
-                onChange={(event) => {
-                  const field = point.measurement_fields.find(
-                    (candidate) =>
-                      candidate.client_id === event.target.value ||
-                      candidate.id === event.target.value,
-                  )
-                  updatePoint(index, {
-                    numeric_standard: {
-                      ...numeric,
-                      measurement_field_id: undefined,
-                      measurement_field_client_id: event.target.value,
-                      unit: field?.unit ?? '',
-                    },
-                  })
-                }}
-                required
-                value={
-                  numeric.measurement_field_client_id ??
-                  point.measurement_fields.find(
-                    (field) => field.id === numeric.measurement_field_id,
-                  )?.id ??
-                  ''
-                }
-              >
-                <option value="">請選擇數字欄位</option>
-                {point.measurement_fields
-                  .filter((field) => field.field_type === 'number')
-                  .map((field) => (
-                    <option
-                      key={field.client_id ?? field.id}
-                      value={field.client_id ?? field.id}
-                    >
-                      {field.name}（{field.unit}）
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              條件
-              <select
-                onChange={(event) => {
-                  const condition = event.target.value as
-                    '<=' | '>=' | '=' | 'range'
-                  updatePoint(index, {
-                    numeric_standard: {
-                      ...numeric,
-                      condition,
-                      range_form:
-                        condition === 'range'
-                          ? (numeric.range_form ?? 'tolerance')
-                          : null,
-                      lower_bound: null,
-                      upper_bound: null,
-                    },
-                  })
-                }}
-                value={numeric.condition}
-              >
-                <option value="<=">≤</option>
-                <option value=">=">≥</option>
-                <option value="=">＝</option>
-                <option value="range">範圍</option>
-              </select>
-            </label>
-            {numeric.condition === 'range' && (
-              <>
-                <label>
-                  範圍形式
-                  <select
-                    onChange={(event) => {
-                      const rangeForm = event.target.value as
-                        'interval' | 'tolerance'
-                      updatePoint(index, {
-                        numeric_standard: {
-                          ...numeric,
-                          range_form: rangeForm,
-                          value: rangeForm === 'interval' ? '' : numeric.value,
-                          tolerance:
-                            rangeForm === 'interval'
-                              ? null
-                              : numeric.tolerance,
-                          lower_bound:
-                            rangeForm === 'tolerance'
-                              ? null
-                              : numeric.lower_bound,
-                          upper_bound:
-                            rangeForm === 'tolerance'
-                              ? null
-                              : numeric.upper_bound,
-                        },
-                      })
-                    }}
-                    value={numeric.range_form ?? 'tolerance'}
-                  >
-                    <option value="interval">區間（下限～上限）</option>
-                    <option value="tolerance">標準值 ± 容許誤差</option>
-                  </select>
-                </label>
-                {(numeric.range_form ?? 'tolerance') === 'interval' ? (
-                  <>
-                    <label>
-                      下限
-                      <input
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          updatePoint(index, {
-                            numeric_standard: {
-                              ...numeric,
-                              lower_bound: event.target.value,
-                            },
-                          })
-                        }
-                        required
-                        value={numeric.lower_bound ?? ''}
-                      />
-                    </label>
-                    <label>
-                      上限
-                      <input
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          updatePoint(index, {
-                            numeric_standard: {
-                              ...numeric,
-                              upper_bound: event.target.value,
-                            },
-                          })
-                        }
-                        required
-                        value={numeric.upper_bound ?? ''}
-                      />
-                    </label>
-                  </>
-                ) : (
-                  <>
-                    <label>
-                      標準值
-                      <input
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          updatePoint(index, {
-                            numeric_standard: {
-                              ...numeric,
-                              value: event.target.value,
-                            },
-                          })
-                        }
-                        required
-                        value={numeric.value ?? ''}
-                      />
-                    </label>
-                    <label>
-                      容許誤差
-                      <input
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          updatePoint(index, {
-                            numeric_standard: {
-                              ...numeric,
-                              tolerance: event.target.value || null,
-                            },
-                          })
-                        }
-                        required
-                        value={numeric.tolerance ?? ''}
-                      />
-                    </label>
-                  </>
-                )}
-              </>
-            )}
-            {numeric.condition !== 'range' && (
-              <>
-                <label>
-                  標準值
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) =>
-                      updatePoint(index, {
-                        numeric_standard: {
-                          ...numeric,
-                          value: event.target.value,
-                        },
-                      })
-                    }
-                    required
-                    value={numeric.value ?? ''}
-                  />
-                </label>
-                <label>
-                  容許誤差
-                  <input
-                    inputMode="decimal"
-                    onChange={(event) =>
-                      updatePoint(index, {
-                        numeric_standard: {
-                          ...numeric,
-                          tolerance: event.target.value || null,
-                        },
-                      })
-                    }
-                    value={numeric.tolerance ?? ''}
-                  />
-                </label>
-              </>
-            )}
-            <label>
-              單位（由綁定欄位帶入）
-              <input disabled value={numeric.unit} />
-            </label>
-          </>
-        )}
-        <h3>實測欄位</h3>
-        {point.measurement_fields.map((field, fieldIndex) => (
-          <fieldset key={field.client_id ?? field.id ?? fieldIndex}>
-            <label>
-              欄位名稱
-              <input
-                onChange={(event) => {
-                  const fields = [...point.measurement_fields]
-                  fields[fieldIndex] = { ...field, name: event.target.value }
-                  updatePoint(index, { measurement_fields: fields })
-                }}
-                value={field.name}
-              />
-            </label>
-            <label>
-              欄位型別
-              <select
-                onChange={(event) => {
-                  const fields = [...point.measurement_fields]
-                  fields[fieldIndex] = {
-                    ...field,
-                    field_type: event.target.value as 'text' | 'number',
-                    unit:
-                      event.target.value === 'number'
-                        ? (field.unit ?? '')
-                        : null,
-                  }
-                  updatePoint(index, { measurement_fields: fields })
-                }}
-                value={field.field_type}
-              >
-                <option value="text">文字</option>
-                <option value="number">數字</option>
-              </select>
-            </label>
-            {field.field_type === 'number' && (
-              <label>
-                單位
-                <input
-                  disabled={
-                    numeric?.measurement_field_client_id ===
-                      (field.client_id ?? field.id) ||
-                    numeric?.measurement_field_id === field.id
-                  }
-                  onChange={(event) => {
-                    const fields = [...point.measurement_fields]
-                    fields[fieldIndex] = { ...field, unit: event.target.value }
-                    updatePoint(index, { measurement_fields: fields })
-                  }}
-                  required
-                  value={field.unit ?? ''}
-                />
-              </label>
-            )}
-            <button
-              onClick={() =>
-                updatePoint(index, {
-                  measurement_fields: point.measurement_fields.filter(
-                    (_entry, position) => position !== fieldIndex,
-                  ),
-                })
-              }
-              type="button"
-            >
-              移除欄位
-            </button>
-          </fieldset>
-        ))}
-        <button
-          onClick={() =>
-            updatePoint(index, {
-              measurement_fields: [
-                ...point.measurement_fields,
-                {
-                  client_id: crypto.randomUUID(),
-                  name: '',
-                  field_type: 'text',
-                  unit: null,
-                },
-              ],
-            })
+  function updateField(
+    pointIndex: number,
+    fieldIndex: number,
+    changes: Partial<MeasurementField>,
+  ): void {
+    const point = itemDraft?.inspection_points[pointIndex]
+    const field = point?.measurement_fields[fieldIndex]
+    if (!point || !field) return
+    const isBound = boundField(point) === field
+    if (changes.field_type && isBound && changes.field_type !== 'number') {
+      setError('此欄位正用於數值標準。請先解除綁定，再變更欄位型別。')
+      return
+    }
+    const fields = point.measurement_fields.map((row, position) =>
+      position === fieldIndex
+        ? {
+            ...row,
+            ...changes,
+            unit:
+              changes.field_type === 'text'
+                ? null
+                : (changes.unit ?? row.unit ?? ''),
           }
-          type="button"
-        >
-          新增實測欄位
-        </button>
-        <label>
-          每項次最少照片數
-          <input
-            min={1}
-            onChange={(event) =>
-              updatePoint(index, {
-                evidence_requirements: [
-                  { min_count: Number(event.target.value) || 1 },
-                ],
-              })
+        : row,
+    )
+    const standard = point.numeric_standard
+    updatePoint(pointIndex, {
+      measurement_fields: fields,
+      numeric_standard:
+        standard && isBound
+          ? { ...standard, unit: fields[fieldIndex].unit ?? '' }
+          : standard,
+    })
+  }
+
+  function addPoint(): void {
+    if (!itemDraft) return
+    updateDraft({
+      inspection_points: [
+        ...itemDraft.inspection_points,
+        blankPoint(itemDraft.inspection_points.length + 1),
+      ],
+    })
+  }
+
+  function removePoint(index: number): void {
+    if (!itemDraft) return
+    updateDraft({
+      inspection_points: itemDraft.inspection_points
+        .filter((_point, position) => position !== index)
+        .map((point, position) => ({ ...point, sequence: position + 1 })),
+    })
+    setPhotoDraft((current) => {
+      const next: Record<string, string> = {}
+      Object.entries(current).forEach(([key, value]) => {
+        const oldIndex = Number(key)
+        if (oldIndex < index) next[String(oldIndex)] = value
+        if (oldIndex > index) next[String(oldIndex - 1)] = value
+      })
+      return next
+    })
+  }
+
+  function validateItem(): Record<string, string> {
+    if (!itemDraft) return {}
+    const result: Record<string, string> = {}
+    if (!itemDraft.title.trim()) result.title = '請填寫查核項目名稱'
+    if (
+      items.some(
+        (row) =>
+          row.id !== itemDraft.id &&
+          row.title.trim().toLocaleLowerCase() ===
+            itemDraft.title.trim().toLocaleLowerCase(),
+      )
+    ) {
+      result.title = '此系統已有同名查核項目，請換個名稱'
+    }
+    itemDraft.inspection_points.forEach((point, pointIndex) => {
+      const key = `point:${pointIndex}`
+      if (!point.title.trim()) result[`${key}:title`] = '請填寫項次標題'
+      point.measurement_fields.forEach((field, fieldIndex) => {
+        const base = `${key}:field:${fieldIndex}`
+        if (!field.name.trim()) {
+          result[`${base}:name`] = '請填寫欄位名稱'
+        }
+        if (field.field_type === 'number' && !field.unit?.trim()) {
+          result[`${base}:unit`] = '請填寫單位'
+        }
+      })
+      const standard = point.numeric_standard
+      if (standard) {
+        if (!boundField(point)) {
+          result[`${key}:binding`] = '請選擇要用來判定的數字欄位'
+        }
+        if (standard.condition === 'range') {
+          if ((standard.range_form ?? 'tolerance') === 'interval') {
+            const lower = Number(standard.lower_bound)
+            const upper = Number(standard.upper_bound)
+            if (!standard.lower_bound?.trim() || !Number.isFinite(lower)) {
+              result[`${key}:lower`] = '請填寫有效的下限'
             }
-            type="number"
-            value={point.evidence_requirements[0]?.min_count ?? 1}
-          />
-        </label>
-        <button
-          className="btn-danger"
-          onClick={() =>
-            setEditingItem((current) =>
-              current
-                ? {
-                    ...current,
-                    inspection_points: current.inspection_points
-                      .filter((_entry, position) => position !== index)
-                      .map((entry, position) => ({
-                        ...entry,
-                        sequence: position + 1,
-                      })),
-                  }
-                : current,
+            if (!standard.upper_bound?.trim() || !Number.isFinite(upper)) {
+              result[`${key}:upper`] = '請填寫有效的上限'
+            }
+            if (
+              Number.isFinite(lower) &&
+              Number.isFinite(upper) &&
+              lower > upper
+            ) {
+              result[`${key}:range`] = '下限不能大於上限'
+            }
+          } else {
+            if (
+              !standard.value?.trim() ||
+              !Number.isFinite(Number(standard.value))
+            ) {
+              result[`${key}:value`] = '請填寫有效的標準值'
+            }
+            const tolerance = Number(standard.tolerance)
+            if (!standard.tolerance?.trim() || !Number.isFinite(tolerance)) {
+              result[`${key}:tolerance`] = '請填寫有效的容許誤差'
+            } else if (tolerance < 0) {
+              result[`${key}:tolerance`] = '容許誤差不能小於 0'
+            }
+          }
+        } else if (
+          !standard.value?.trim() ||
+          !Number.isFinite(Number(standard.value))
+        ) {
+          result[`${key}:value`] = '請填寫有效的標準值'
+        }
+      }
+      const photos = photoDraft[String(pointIndex)] ?? '1'
+      if (
+        !photos.trim() ||
+        !Number.isInteger(Number(photos)) ||
+        Number(photos) < 1
+      ) {
+        result[`${key}:photos`] = '照片至少需要 1 張'
+      }
+    })
+    return result
+  }
+
+  function focusFirstError(nextErrors: Record<string, string>): void {
+    const first = Object.keys(nextErrors)[0]
+    if (!first) return
+    window.setTimeout(() => {
+      const fieldKey = first.endsWith(':range')
+        ? first.slice(0, -':range'.length) + ':lower'
+        : first
+      const field = document.querySelector<HTMLElement>(
+        `[data-error-key="${fieldKey}"]`,
+      )
+      const card = field?.closest('details')
+      if (card) card.open = true
+      field?.scrollIntoView?.({ block: 'center' })
+      field?.focus()
+    }, 0)
+  }
+
+  function wireItem(item: TemplateItem): TemplateItem {
+    const next = forWire(item)
+    return {
+      ...next,
+      inspection_points: next.inspection_points.map((point, index) => ({
+        ...point,
+        sequence: index + 1,
+        evidence_requirements: [
+          {
+            min_count: Number(photoDraft[String(index)] ?? '1'),
+          },
+        ],
+      })),
+    }
+  }
+
+  async function saveItem(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    if (!itemDraft) return
+    const found = validateItem()
+    if (Object.keys(found).length) {
+      setErrors(found)
+      setError('')
+      focusFirstError(found)
+      return
+    }
+    try {
+      const input = wireItem({ ...itemDraft, system_id: systemId })
+      const result = itemDraft.id
+        ? await updateTemplateItem(itemDraft.id, input)
+        : await createTemplateItem(input)
+      setItems((current) =>
+        itemDraft.id
+          ? current.map((row) =>
+              row.id === result.id ? localizeFields(result) : row,
             )
-          }
-          type="button"
-        >
-          移除此項次
-        </button>
-      </fieldset>
+          : [...current, localizeFields(result)],
+      )
+      setSelected({ type: 'item', id: result.id ?? '' })
+      resetMode()
+      showNotice('查核項目已儲存')
+    } catch (caught) {
+      fail(caught)
+    }
+  }
+
+  async function confirmDelete(): Promise<void> {
+    try {
+      if (mode === 'delete-category' && selectedCategory) {
+        await deleteTemplateCategory(selectedCategory.id)
+        setCategories((current) =>
+          current.filter((row) => row.id !== selectedCategory.id),
+        )
+        setSystems((current) =>
+          current.filter((row) => row.category_id !== selectedCategory.id),
+        )
+        setSelected(null)
+        showNotice(`已刪除「${selectedCategory.name}」`)
+      } else if (mode === 'delete-system' && selectedSystem) {
+        await deleteTemplateSystem(selectedSystem.id)
+        setSystems((current) =>
+          current.filter((row) => row.id !== selectedSystem.id),
+        )
+        setSelected({ type: 'category', id: selectedSystem.category_id })
+        showNotice(`已刪除「${selectedSystem.name}」`)
+      } else if (mode === 'delete-item' && selectedItem?.id) {
+        await deleteTemplateItem(selectedItem.id)
+        setItems((current) =>
+          current.filter((row) => row.id !== selectedItem.id),
+        )
+        setSelected({ type: 'system', id: selectedItem.system_id })
+        showNotice(`已刪除「${selectedItem.title}」`)
+      }
+      resetMode()
+    } catch (caught) {
+      fail(caught)
+      setMode('view')
+    }
+  }
+
+  function updateNumeric(
+    index: number,
+    changes: Partial<NonNullable<InspectionPoint['numeric_standard']>>,
+  ): void {
+    const point = itemDraft?.inspection_points[index]
+    if (!point?.numeric_standard) return
+    const numeric = { ...point.numeric_standard, ...changes }
+    const bound = point.measurement_fields.find(
+      (field) =>
+        field.client_id === numeric.measurement_field_client_id ||
+        field.id === numeric.measurement_field_id,
+    )
+    updatePoint(index, {
+      numeric_standard: { ...numeric, unit: bound?.unit ?? numeric.unit },
+    })
+  }
+
+  function renderNameForm(): ReactNode {
+    const heading =
+      mode === 'create-category'
+        ? '新增工程類別'
+        : mode === 'create-system'
+          ? `在「${selectedCategory?.name}」新增系統`
+          : mode === 'rename-category'
+            ? '重新命名工程類別'
+            : '重新命名系統'
+    const siblingNames =
+      mode === 'rename-category'
+        ? categories
+            .filter((row) => row.id !== selectedCategory?.id)
+            .map((row) => row.name)
+        : mode === 'create-category'
+          ? categories.map((row) => row.name)
+          : mode === 'rename-system'
+            ? systems
+                .filter(
+                  (row) =>
+                    row.category_id === categoryId &&
+                    row.id !== selectedSystem?.id,
+                )
+                .map((row) => row.name)
+            : systems
+                .filter((row) => row.category_id === categoryId)
+                .map((row) => row.name)
+    const duplicate =
+      nameDraft.trim() &&
+      siblingNames.some(
+        (name) =>
+          name.trim().toLocaleLowerCase() ===
+          nameDraft.trim().toLocaleLowerCase(),
+      )
+    return (
+      <form
+        className="tpl-name-form"
+        onSubmit={(event) => void saveName(event)}
+      >
+        <h2>{heading}</h2>
+        <label htmlFor="tpl-name">
+          名稱{' '}
+          <span aria-hidden="true" className="tpl-required">
+            *
+          </span>
+        </label>
+        <input
+          aria-describedby={errors.name ? 'tpl-name-error' : undefined}
+          aria-invalid={Boolean(errors.name || duplicate)}
+          autoFocus
+          data-error-key="name"
+          id="tpl-name"
+          onChange={(event) => {
+            setNameDraft(event.target.value)
+            setErrors({})
+            setError('')
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') resetMode()
+          }}
+          aria-required="true"
+          value={nameDraft}
+        />
+        {(errors.name || duplicate) && (
+          <p className="tpl-field-error" id="tpl-name-error" role="alert">
+            {errors.name || '已有同名項目，請換個名稱'}
+          </p>
+        )}
+        <p className="tpl-hint">同一層名稱不可重複。</p>
+        <div className="tpl-actions">
+          <button
+            className="btn-primary"
+            disabled={Boolean(duplicate)}
+            type="submit"
+          >
+            儲存
+          </button>
+          <button onClick={resetMode} type="button">
+            取消
+          </button>
+          <span className="tpl-hint">Enter 儲存，Esc 取消</span>
+        </div>
+      </form>
     )
   }
 
-  const selectedCategory = categories.find((item) => item.id === categoryId)
-  const selectedSystem = systems.find((item) => item.id === systemId)
-  const editable = !readOnly
+  function renderItemEditor(): ReactNode {
+    return (
+      <TemplateItemEditor
+        addPoint={addPoint}
+        confirmField={confirmField}
+        dirty={dirty}
+        errors={errors}
+        setError={setError}
+        itemDraft={itemDraft}
+        mode={mode as 'create-item' | 'edit-item'}
+        photoDraft={photoDraft}
+        readOnly={readOnly}
+        removePoint={removePoint}
+        resetMode={resetMode}
+        saveItem={saveItem}
+        selected={selected}
+        selectedCategory={selectedCategory}
+        selectedSystem={selectedSystem}
+        setConfirmField={setConfirmField}
+        setErrors={setErrors}
+        setGuard={setGuard}
+        setPhotoDraft={setPhotoDraft}
+        systemId={systemId}
+        updateDraft={updateDraft}
+        updateField={updateField}
+        updateNumeric={updateNumeric}
+        updatePoint={updatePoint}
+      />
+    )
+  }
 
-  return (
-    <section aria-labelledby="templates-heading">
-      <h1 id="templates-heading">範本管理</h1>
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
-      {readOnly && <p>唯讀瀏覽</p>}
-      {loading ? <p>載入中…</p> : null}
-      {!loading && categories.length === 0 && <p>目前沒有工程類別。</p>}
-      <div className="template-browser">
-        <section aria-label="工程類別">
-          <h2>工程類別</h2>
-          <label>
-            選擇工程類別
-            <select
-              onChange={(event) => {
-                setCategoryId(event.target.value)
-                setCreatingCategory(false)
-                setCreatingSystem(false)
-                setEditingCategory('')
-                setEditingSystem('')
-                setEditingItem(null)
-                setConfirmDeleteCategory(false)
-                setConfirmDeleteSystem(false)
-                setConfirmDeleteId('')
-                setSystemId('')
-                setItems([])
-              }}
-              value={categoryId}
-            >
-              <option value="">請選擇</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {editable && (
-            <>
-              <button
-                onClick={() => {
-                  setCreatingCategory(true)
-                  setEditingCategory('')
-                }}
-                type="button"
-              >
-                新增工程類別
-              </button>
-              <form onSubmit={saveCategory}>
-                <label>
-                  工程類別名稱
-                  <input
-                    onChange={(event) =>
-                      setEditingCategory(event.target.value)
-                    }
-                    required
-                    value={
-                      creatingCategory
-                        ? editingCategory
-                        : editingCategory || selectedCategory?.name || ''
-                    }
-                  />
-                </label>
-                <button type="submit">
-                  {creatingCategory ? '新增類別' : '更新類別'}
-                </button>
-              </form>
-              {selectedCategory && (
-                <>
-                  <button
-                    className="btn-danger"
-                    onClick={() => setConfirmDeleteCategory(true)}
-                    type="button"
-                  >
-                    刪除工程類別
-                  </button>
-                  {confirmDeleteCategory && (
-                    <div role="group" aria-label="確認刪除工程類別">
-                      <p>確定刪除工程類別「{selectedCategory.name}」？</p>
-                      <button
-                        onClick={() => void removeCategory()}
-                        type="button"
-                      >
-                        確認刪除工程類別
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteCategory(false)}
-                        type="button"
-                      >
-                        取消刪除工程類別
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </section>
-        <section aria-label="系統">
-          <h2>系統</h2>
-          <label>
-            選擇系統
-            <select
-              onChange={(event) => {
-                setSystemId(event.target.value)
-                setCreatingSystem(false)
-                setEditingSystem('')
-                setEditingItem(null)
-                setConfirmDeleteSystem(false)
-                setConfirmDeleteId('')
-                setItems([])
-              }}
-              value={systemId}
-            >
-              <option value="">請選擇</option>
-              {systems.map((system) => (
-                <option key={system.id} value={system.id}>
-                  {system.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {editable && (
-            <>
-              <button
-                disabled={!categoryId}
-                onClick={() => {
-                  setCreatingSystem(true)
-                  setEditingSystem('')
-                }}
-                type="button"
-              >
-                新增系統…
-              </button>
-              <form onSubmit={saveSystem}>
-                <label>
-                  系統名稱
-                  <input
-                    disabled={!categoryId}
-                    onChange={(event) => setEditingSystem(event.target.value)}
-                    required
-                    value={
-                      creatingSystem
-                        ? editingSystem
-                        : editingSystem || selectedSystem?.name || ''
-                    }
-                  />
-                </label>
-                <button disabled={!categoryId} type="submit">
-                  {creatingSystem ? '新增系統' : '更新系統'}
-                </button>
-              </form>
-              {selectedSystem && (
-                <>
-                  <button
-                    className="btn-danger"
-                    onClick={() => setConfirmDeleteSystem(true)}
-                    type="button"
-                  >
-                    刪除系統
-                  </button>
-                  {confirmDeleteSystem && (
-                    <div role="group" aria-label="確認刪除系統">
-                      <p>確定刪除系統「{selectedSystem.name}」？</p>
-                      <button
-                        onClick={() => void removeSystem()}
-                        type="button"
-                      >
-                        確認刪除系統
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteSystem(false)}
-                        type="button"
-                      >
-                        取消刪除系統
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </section>
-        <section aria-label="查核項目範本">
-          <h2>查核項目範本</h2>
-          {editable && selectedSystem && (
-            <button
-              onClick={() =>
-                setEditingItem(blankTemplate(systemId, items.length + 1))
-              }
-              type="button"
-            >
-              新增查核項目
-            </button>
-          )}
-          <ul>
-            {items.map((item) => (
-              <li key={item.id}>
-                {item.sequence}. {item.title}{' '}
-                <button
-                  aria-label={`預覽：${item.title}`}
-                  onClick={() => {
-                    setPreview(item)
-                    setPreviewGroups(null)
-                  }}
-                  type="button"
-                >
-                  預覽單項
-                </button>{' '}
-                {editable && (
-                  <>
-                    <button
-                      aria-label={`編輯：${item.title}`}
-                      onClick={() => setEditingItem(item)}
-                      type="button"
-                    >
-                      編輯
-                    </button>{' '}
-                    <button
-                      aria-label={`刪除：${item.title}`}
-                      onClick={() => setConfirmDeleteId(item.id ?? '')}
-                      type="button"
-                    >
-                      刪除
-                    </button>
-                    {confirmDeleteId === item.id && (
-                      <span
-                        role="group"
-                        aria-label={`確認刪除：${item.title}`}
-                      >
-                        <span>確定刪除「{item.title}」？</span>
-                        <button
-                          onClick={() => void removeItem(item)}
-                          type="button"
-                        >
-                          確認刪除
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId('')}
-                          type="button"
-                        >
-                          取消刪除
-                        </button>
-                      </span>
-                    )}
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-          {items.length > 0 && (
-            <button
-              onClick={() =>
-                (() => {
-                  setPreview({
-                    system_id: systemId,
-                    sequence: 1,
-                    title: selectedSystem?.name ?? '系統範本',
-                    instruction: '',
-                    inspection_points: [],
-                  })
-                  setPreviewGroups(items)
-                })()
-              }
-              type="button"
-            >
-              預覽整個系統
-            </button>
-          )}
-        </section>
-      </div>
-      {editingItem && (
-        <form
-          aria-label="查核項目編輯器"
-          onSubmit={(event) => {
-            if (!editable) {
-              event.preventDefault()
-              return
-            }
-            void saveItem(event)
-          }}
+  const editable = !readOnly
+  const childCount =
+    selected?.type === 'category'
+      ? systems.filter((row) => row.category_id === selected.id).length
+      : selected?.type === 'system'
+        ? items.length
+        : 0
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640
+
+  function renderDetail(): ReactNode {
+    if (guard) {
+      return (
+        <div
+          className="tpl-guard"
+          role="alertdialog"
+          aria-label="尚未儲存的變更"
         >
-          <h2>{editingItem.id ? '編輯查核項目' : '新增查核項目'}</h2>
-          {!editable && <p>以下內容是尚未儲存的草稿，僅供唯讀檢視。</p>}
-          <fieldset disabled={!editable}>
-            <label>
-              項目名稱
-              <input
-                onChange={(event) =>
-                  setEditingItem({ ...editingItem, title: event.target.value })
-                }
-                required
-                value={editingItem.title}
-              />
-            </label>
-            <label>
-              項目說明
-              <textarea
-                onChange={(event) =>
-                  setEditingItem({
-                    ...editingItem,
-                    instruction: event.target.value,
-                  })
-                }
-                value={editingItem.instruction}
-              />
-            </label>
-            <label>
-              項目順序
-              <input
-                max={32767}
-                min={1}
-                onChange={(event) =>
-                  setEditingItem({
-                    ...editingItem,
-                    sequence: Number(event.target.value),
-                  })
-                }
-                type="number"
-                value={editingItem.sequence}
-              />
-            </label>
-            {editingItem.inspection_points.map(renderPoint)}
-            {editable && (
-              <button
-                onClick={() =>
-                  setEditingItem({
-                    ...editingItem,
-                    inspection_points: [
-                      ...editingItem.inspection_points,
-                      blankPoint(editingItem.inspection_points.length + 1),
-                    ],
-                  })
-                }
-                type="button"
-              >
-                新增查核項次
-              </button>
-            )}
-            {editable && <button type="submit">儲存範本</button>}
-            {editable && (
-              <button onClick={() => setEditingItem(null)} type="button">
-                取消
-              </button>
-            )}
-          </fieldset>
-        </form>
-      )}
-      {preview && (
-        <section aria-label="範本預覽" role="dialog">
-          <h2>{preview.title}</h2>
-          <p>{preview.instruction || '沒有項目說明。'}</p>
-          {(previewGroups ?? [preview]).map((group) => (
-            <section key={group.id ?? group.title}>
-              {previewGroups && (
-                <h3>
-                  {group.sequence}. {group.title}
-                </h3>
-              )}
-              {group.inspection_points.map((point, index) => (
-                <article key={point.id ?? `${point.sequence}-${index}`}>
-                  <h3>
-                    {previewGroups
-                      ? `項次 ${point.sequence}. `
-                      : `${point.sequence}. `}
-                    {point.title}
-                  </h3>
-                  <p>{point.instruction || '沒有項次說明。'}</p>
-                  {point.text_standard && (
-                    <p>文字標準：{point.text_standard.text}</p>
-                  )}
-                  {point.numeric_standard && (
-                    <p>
-                      數值標準：
-                      {numericStandardPreview(point.numeric_standard)}
-                    </p>
-                  )}
-                  <p>
-                    實測欄位：
-                    {point.measurement_fields
-                      .map(
-                        (field) =>
-                          `${field.name}${field.unit ? `（${field.unit}）` : ''}`,
-                      )
-                      .join('、') || '無'}
-                  </p>
-                  <p>
-                    至少照片數：
-                    {point.evidence_requirements[0]?.min_count ?? 1}
-                  </p>
-                </article>
-              ))}
-            </section>
-          ))}
+          <p>
+            <strong>這裡有尚未儲存的變更。</strong>
+            要保留編輯，還是捨棄變更？
+          </p>
           <button
+            className="btn-primary"
+            onClick={() => setGuard(null)}
+            type="button"
+          >
+            保留編輯
+          </button>
+          <button
+            className="btn-danger"
             onClick={() => {
-              setPreview(null)
-              setPreviewGroups(null)
+              const next = guard
+              setGuard(null)
+              resetMode()
+              setSelected(next)
+              setMobilePane('detail')
             }}
             type="button"
           >
-            關閉預覽
+            捨棄變更
           </button>
-        </section>
+        </div>
+      )
+    }
+    if (
+      mode === 'create-category' ||
+      mode === 'create-system' ||
+      mode === 'rename-category' ||
+      mode === 'rename-system'
+    ) {
+      return renderNameForm()
+    }
+    if (mode === 'create-item' || mode === 'edit-item') {
+      return renderItemEditor()
+    }
+    if (!selected) {
+      return (
+        <div className="tpl-empty">
+          <h2>還沒有工程類別</h2>
+          <p>新增一個類別，開始整理查核項目。</p>
+          {!readOnly && (
+            <button onClick={() => beginName('create-category')} type="button">
+              新增工程類別
+            </button>
+          )}
+        </div>
+      )
+    }
+    if (selected.type === 'category' && selectedCategory) {
+      return (
+        <>
+          <p className="tpl-crumb">範本庫 / {selectedCategory.name}</p>
+          <h2 tabIndex={-1}>{selectedCategory.name}</h2>
+          <div className="tpl-actions">
+            {editable && (
+              <>
+                <button
+                  onClick={() =>
+                    beginName('rename-category', selectedCategory.name)
+                  }
+                  type="button"
+                >
+                  重新命名
+                </button>
+                <button
+                  className="btn-danger"
+                  onClick={() => {
+                    setNotice('')
+                    setError(
+                      childCount ? '此類別還有系統，請先處理系統。' : '',
+                    )
+                    setMode(childCount ? 'view' : 'delete-category')
+                  }}
+                  type="button"
+                >
+                  刪除
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={() => beginName('create-system')}
+                  type="button"
+                >
+                  在「{selectedCategory.name}」新增系統
+                </button>
+              </>
+            )}
+          </div>
+          {mode === 'delete-category' && (
+            <InlineConfirm
+              onCancel={() => setMode('view')}
+              onConfirm={() => void confirmDelete()}
+            >
+              刪除「{selectedCategory.name}」？刪除後無法復原。
+            </InlineConfirm>
+          )}
+          <h3>
+            系統（
+            {
+              systems.filter((row) => row.category_id === selectedCategory.id)
+                .length
+            }
+            ）
+          </h3>
+          {systems.filter((row) => row.category_id === selectedCategory.id)
+            .length === 0 ? (
+            <p className="tpl-empty-small">
+              這個類別還沒有系統。新增第一個系統。
+            </p>
+          ) : (
+            <ul className="tpl-detail-list">
+              {systems
+                .filter((row) => row.category_id === selectedCategory.id)
+                .map((system) => (
+                  <li key={system.id}>
+                    <button
+                      onClick={() =>
+                        navigate({ type: 'system', id: system.id })
+                      }
+                      type="button"
+                    >
+                      {system.name}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </>
+      )
+    }
+    if (selected.type === 'system' && selectedSystem) {
+      return (
+        <>
+          <p className="tpl-crumb">
+            範本庫 / {selectedCategory?.name} /{selectedSystem.name}
+          </p>
+          <h2 tabIndex={-1}>{selectedSystem.name}</h2>
+          <div className="tpl-actions">
+            {editable && (
+              <>
+                <button
+                  onClick={() =>
+                    beginName('rename-system', selectedSystem.name)
+                  }
+                  type="button"
+                >
+                  重新命名
+                </button>
+                <button
+                  className="btn-danger"
+                  onClick={() => {
+                    setNotice('')
+                    setError(
+                      childCount ? '此系統還有查核項目，請先處理項目。' : '',
+                    )
+                    setMode(childCount ? 'view' : 'delete-system')
+                  }}
+                  type="button"
+                >
+                  刪除
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={() =>
+                    beginItem(
+                      blankTemplate(selectedSystem.id, items.length + 1),
+                      'create-item',
+                    )
+                  }
+                  type="button"
+                >
+                  新增查核項目
+                </button>
+              </>
+            )}
+          </div>
+          {mode === 'delete-system' && (
+            <InlineConfirm
+              onCancel={() => setMode('view')}
+              onConfirm={() => void confirmDelete()}
+            >
+              刪除「{selectedSystem.name}」？刪除後無法復原。
+            </InlineConfirm>
+          )}
+          <h3>查核項目（{items.length}）</h3>
+          {items.length === 0 ? (
+            <p className="tpl-empty-small">
+              這個系統還沒有查核項目。新增第一個查核項目。
+            </p>
+          ) : (
+            <ul className="tpl-detail-list">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <button
+                    onClick={() =>
+                      navigate({ type: 'item', id: item.id ?? '' })
+                    }
+                    type="button"
+                  >
+                    {item.sequence}. {item.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )
+    }
+    if (selected.type === 'item' && selectedItem) {
+      return (
+        <>
+          <p className="tpl-crumb">
+            範本庫 / {selectedCategory?.name} /{selectedSystem?.name} /{' '}
+            {selectedItem.title}
+          </p>
+          <h2 tabIndex={-1}>{selectedItem.title}</h2>
+          {selectedItem.instruction && <p>{selectedItem.instruction}</p>}
+          <div className="tpl-actions">
+            {editable && (
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={() => beginItem(selectedItem, 'edit-item')}
+                  type="button"
+                >
+                  編輯查核項目
+                </button>
+                <button
+                  className="btn-danger"
+                  onClick={() => setMode('delete-item')}
+                  type="button"
+                >
+                  刪除查核項目
+                </button>
+              </>
+            )}
+          </div>
+          {mode === 'delete-item' && (
+            <InlineConfirm
+              onCancel={() => setMode('view')}
+              onConfirm={() => void confirmDelete()}
+            >
+              刪除「{selectedItem.title}」？刪除後無法復原。
+            </InlineConfirm>
+          )}
+          <h3>查核項次（{selectedItem.inspection_points.length}）</h3>
+          {selectedItem.inspection_points.map((point, index) => (
+            <InspectionPointCard
+              index={index}
+              key={point.id ?? index}
+              point={point}
+            />
+          ))}
+        </>
+      )
+    }
+    return (
+      <div className="tpl-empty">
+        <h2>選一個項目</h2>
+        <p>從左側選一個工程類別、系統或查核項目，這裡會顯示內容。</p>
+      </div>
+    )
+  }
+
+  return (
+    <section aria-labelledby="templates-heading" className="tpl-page">
+      <header className="tpl-page-heading">
+        <h1 id="templates-heading">範本管理</h1>
+        {readOnly && <span className="tpl-readonly">唯讀瀏覽</span>}
+      </header>
+      {loading ? (
+        <p>載入中…</p>
+      ) : (
+        <div className="tpl-layout" data-pane={mobilePane}>
+          <div className="tpl-list-pane">
+            {mobilePane === 'detail' && (
+              <button
+                className="tpl-mobile-back"
+                onClick={() => setMobilePane('list')}
+                type="button"
+              >
+                ‹ 返回
+              </button>
+            )}
+            <TemplateLibraryNav
+              categories={categories}
+              expanded={expanded}
+              items={items}
+              mobile={isMobile}
+              onAddCategory={() => beginName('create-category')}
+              onSelect={navigate}
+              onToggle={(id) =>
+                setExpanded((current) => {
+                  const next = new Set(current)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+              readOnly={readOnly}
+              selected={selected}
+              systems={systems}
+              mode="manage"
+            />
+          </div>
+          <main className="tpl-detail-pane">
+            {mobilePane === 'detail' && (
+              <button
+                className="tpl-mobile-back"
+                onClick={() => setMobilePane('list')}
+                type="button"
+              >
+                ‹ 返回清單
+              </button>
+            )}
+            {guard ? (
+              renderDetail()
+            ) : (
+              <>
+                {error && (
+                  <p
+                    className="tpl-detail-notice tpl-notice-error"
+                    role="alert"
+                  >
+                    {error}
+                  </p>
+                )}
+                {notice && (
+                  <p className="tpl-detail-notice tpl-notice-ok" role="status">
+                    {notice}
+                  </p>
+                )}
+                {renderDetail()}
+              </>
+            )}
+          </main>
+        </div>
       )}
     </section>
   )

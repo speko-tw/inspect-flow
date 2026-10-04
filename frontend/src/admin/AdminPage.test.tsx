@@ -229,11 +229,25 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByRole('button', { name: '新增工程類別' }),
     ).toBeInTheDocument()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
     expect(
-      await screen.findByRole('button', { name: '新增系統…' }),
+      await screen.findByRole('button', {
+        name: /在「土木工程」新增系統/,
+      }),
     ).toBeInTheDocument()
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '護欄' }),
+    )
     expect(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+      await screen.findByRole('button', { name: '新增查核項目' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '欄杆尺寸' }),
+    )
+    expect(
+      await screen.findByRole('button', { name: '編輯查核項目' }),
     ).toBeInTheDocument()
   })
 

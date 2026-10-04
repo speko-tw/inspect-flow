@@ -713,3 +713,355 @@ output {
     overflow-x: auto;
   }
 }
+
+/* ---- 範本管理新版詳情流程（#427） ---- */
+
+.tpl-page {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4);
+}
+
+.tpl-page-heading,
+.tpl-nav-heading,
+.tpl-editor-heading,
+.tpl-actions,
+.tpl-editor-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.tpl-page-heading h1,
+.tpl-nav-heading h2,
+.tpl-editor-heading h2 {
+  margin: 0;
+}
+
+.tpl-readonly,
+.tpl-required {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.tpl-layout {
+  display: grid;
+  grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+  margin-top: var(--space-4);
+}
+
+.tpl-nav,
+.tpl-detail-pane,
+.tpl-card,
+.tpl-point-card,
+.tpl-field-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tpl-nav-heading {
+  align-items: flex-start;
+  margin-bottom: var(--space-3);
+}
+
+.tpl-tree,
+.tpl-tree ul,
+.tpl-detail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tpl-tree ul {
+  margin-left: var(--space-3);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--border);
+}
+
+.tpl-tree-row {
+  display: flex;
+  width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.tpl-tree-row:hover,
+.tpl-detail-list button:hover {
+  background: var(--surface-alt);
+}
+
+.tpl-tree-row[aria-current='true'] {
+  border-left-color: var(--primary);
+  background: var(--surface-alt);
+  font-weight: 700;
+}
+
+.tpl-item-row {
+  color: var(--text-muted);
+}
+
+.tpl-tree-empty,
+.tpl-mobile-hint,
+.tpl-hint,
+.tpl-crumb {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.tpl-tree-empty {
+  padding: var(--space-2);
+}
+
+.tpl-tree-action {
+  padding: var(--space-2);
+}
+
+.tpl-empty {
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+}
+
+.tpl-empty p,
+.tpl-empty-small {
+  color: var(--text-muted);
+}
+
+.tpl-detail-pane h2 {
+  margin-top: var(--space-1);
+}
+
+.tpl-detail-list li {
+  margin-bottom: var(--space-2);
+}
+
+.tpl-detail-list button {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tpl-actions {
+  justify-content: flex-start;
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.tpl-notice {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+}
+
+.tpl-notice-error,
+.tpl-error-summary {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.tpl-notice-ok {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.tpl-detail-notice {
+  margin-bottom: var(--space-3);
+}
+
+.tpl-name-form,
+.tpl-editor {
+  display: grid;
+  max-width: none;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.tpl-editor-body {
+  display: contents;
+}
+
+.tpl-name-form > *,
+.tpl-editor > * {
+  min-width: 0;
+}
+
+.tpl-name-form label,
+.tpl-editor label {
+  margin: 0;
+}
+
+.tpl-field-error {
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+  color: var(--error-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.tpl-error-summary {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+}
+
+.tpl-error-summary p {
+  margin: 0 0 var(--space-1);
+}
+
+.tpl-error-summary ul {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.tpl-error-summary button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tpl-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tpl-card h3,
+.tpl-point-card h4 {
+  margin: 0;
+}
+
+.tpl-point-card {
+  display: grid;
+  gap: var(--space-2);
+  background: var(--surface-alt);
+}
+
+.tpl-point-card summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tpl-point-section {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.tpl-point-section h4 {
+  margin: 0;
+}
+
+.tpl-point-section-body {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.tpl-field-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.tpl-bound-note,
+.tpl-preview-line {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  overflow-wrap: anywhere;
+}
+
+.tpl-inline-confirm,
+.tpl-guard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+
+.tpl-guard {
+  border-color: var(--border-strong);
+}
+
+.tpl-guard p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.tpl-mobile-back {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .tpl-page {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .tpl-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tpl-layout[data-pane='detail'] .tpl-list-pane {
+    display: none;
+  }
+
+  .tpl-layout[data-pane='list'] .tpl-detail-pane {
+    display: none;
+  }
+
+  .tpl-mobile-back {
+    display: inline-flex;
+    margin-bottom: var(--space-3);
+  }
+
+  .tpl-nav,
+  .tpl-detail-pane {
+    padding: var(--space-3);
+  }
+
+  .tpl-step-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tpl-editor-footer button {
+    flex: 1 1 auto;
+  }
+}

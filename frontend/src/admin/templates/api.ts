@@ -151,3 +151,24 @@ export function putSystemTemplates(
     body: JSON.stringify({ items }),
   })
 }
+
+export function createTemplateItem(item: TemplateItem): Promise<TemplateItem> {
+  return request('/templates', {
+    method: 'POST',
+    body: JSON.stringify(item),
+  })
+}
+
+export function updateTemplateItem(
+  id: string,
+  item: TemplateItem,
+): Promise<TemplateItem> {
+  return request(`/templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(item),
+  })
+}
+
+export function deleteTemplateItem(id: string): Promise<void> {
+  return request(`/templates/${id}`, { method: 'DELETE' })
+}
