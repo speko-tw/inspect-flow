@@ -13,7 +13,7 @@
 | T3 | 初始化指令不寫稽核紀錄的測試 | `backend/tests/cli/test_init_system_audit.py`（新增） | T1；[#134](https://github.com/speko-tw/inspect-flow/issues/134)（初始化指令，會建立 `backend/tests/cli/`） | ALG-AC08 | #217 |
 | T4 | 寫入時機的驗收測試：只寫測試，透過 `domain-model` T7 的入口做 ALG-AC11 的操作序列，檢查紀錄 | `backend/tests/services/test_audit_write_timing.py`（新增） | T2；[#135](https://github.com/speko-tw/inspect-flow/issues/135)（DOM T7） | ALG-AC11 | #218 |
 
-- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 ALG-AC13～ALG-AC16 由下方[本次變更後續實作](#本次變更後續實作)涵蓋；T1～T4 的內容保持當時的樣子。
+- 每個任務一個 PR 就能完成，並能單獨驗收；ALG-AC01～ALG-AC12 每條都被一個任務涵蓋。本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 ALG-AC13～ALG-AC16 由下方[本次變更後續實作](#本次變更後續實作)涵蓋；ALG-AC17、ALG-AC18 與 `project_id` 擴充由 [Admin 唯讀查詢後續實作](#admin-唯讀查詢後續實作)涵蓋；T1～T4 的內容保持當時的樣子。
 - 規格凍結後才依本表開 task issue；本 PR 只寫文件。
 - T3 開工時若 T2 還沒合併，也可以併進 T2（只要 #134 已合併），在 T2 的 PR 更新本表。
 - **和 `domain-model` T7（[#135](https://github.com/speko-tw/inspect-flow/issues/135)）的分工**：T7 依賴本計畫 T2，在 `Role`、角色指派、移出專案、`is_admin` 的入口呼叫寫入入口；DOM-R22 寫明由本規格驗收，所以驗收測試放在本計畫 T4，排在 #135 之後。T4 若發現 T7 漏寫或寫錯，開 `Bug` 修 `domain-model` 的 Service 檔，T4 本身不改 Service 檔（一個任務不跨兩份規格）。
@@ -39,6 +39,14 @@
 
 - 這些任務的檔案清單，開 issue 時依當時的程式碼盤點，不在這裡預先寫死。
 - 事件目錄 `backend/app/services/audit.py` 是共用檔案：C 只加 `user.*` 的兩個新條目與標記，E 不改目錄，只呼叫；兩者不同時進行。
+
+## Admin 唯讀查詢後續實作
+
+依據：[ALG-Q2 負責人裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)。本次 #411 只同步規格與計畫，不實作 API 或畫面；待 #411 合併後，由下列任務依 [admin-dashboard 計畫 T5b](../admin-dashboard/plan.md#任務) 落地，避免兩份計畫定出不同契約。
+
+| 任務 | 稽核相關的內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| T5b | 新增 `AuditLog.project_id` 可空值欄位與索引的 migration（既有資料不回填）；寫入入口及各專案事件呼叫端依 ALG-R24 填值，無專案事件留空；實作 Admin 唯讀稽核查詢 API 與管理後台頁面，依專案、操作者、時間及事件類型篩選，採穩定 cursor 分頁，合法但不存在的 `project_id` 回 200 空頁。原列檔案範圍依 [admin-dashboard T5b](../admin-dashboard/plan.md#任務)，另需 `backend/app/models/audit_log.py`、`backend/alembic/versions/`、稽核寫入入口及對應測試；#412 開工時依規格流程同步其 issue／plan 檔案清單 | #411 合併；`authentication` Admin 存取檢查 | ALG-AC01（新增欄位）、ALG-AC17、ALG-AC18；ADM-AC06、ADM-AC07、ADM-AC13 | [#412](https://github.com/speko-tw/inspect-flow/issues/412) |
 
 ## 並行分組
 
@@ -80,6 +88,8 @@
 | ALG-AC14 | `backend/tests/services/test_audit_user_events.py`（E，新增）：改名（含大小寫）、相同值、重名被拒絕三種，斷言筆數、`created_by` 與小寫的 `before`、`after`；掃描目錄的宣告欄位 |
 | ALG-AC15 | 同上：換公司、單獨改部門、清空後解除連結、連結公司、工號重複被拒絕，斷言筆數與四欄內容 |
 | ALG-AC16 | `backend/tests/cli/test_reset_admin_password_audit.py`（C，新增）：執行重設指令兩次（一次成功、一次輸入不同），斷言一筆 `user.password_set` 與目錄沒有新增事件代碼 |
+| ALG-AC17 | #412（T5b）：以未登入、非 Admin、Admin 呼叫查詢 API 並操作頁面；核對 401／403 與成功查詢前後 `audit_logs` 不變 |
+| ALG-AC18 | #412（T5b）：以 migration 前歷史事件、新的有專案與無專案事件（含刪除／修改時 `before`／`after` 無 `project_id`）驗證欄位填值、空值及索引；組合 `project_id`、`actor_id`、`event_type`、時間範圍並跨 cursor 翻頁，核對 AND、精確比對、降冪排序、無重複遺漏、無專案事件及歷史事件在專案篩選時被排除、不帶專案時仍可查、不存在專案 200 空頁、反向時間範圍與無效輸入 422；與 ADM-AC07、ADM-AC13 共用驗證 |
 
 ## 考慮過但沒採用的做法
 
