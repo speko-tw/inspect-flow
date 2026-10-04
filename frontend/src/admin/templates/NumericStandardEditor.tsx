@@ -28,51 +28,68 @@ export function NumericStandardEditor({
   const standard = point.numeric_standard
   const key = `point:${index}`
   const numberOptions = numberFields(point)
+  const unit = boundField(point)?.unit || standard?.unit || ''
   return (
     <section className="tpl-point-section" aria-label="判定標準">
       <h4>判定標準</h4>
       <div className="tpl-point-section-body">
-        <label htmlFor={`standard-kind-${index}`}>標準類型</label>
-        <select
-          id={`standard-kind-${index}`}
-          onChange={(event) => {
-            const kind = event.target.value
-            if (kind === 'numeric') {
-              const next = numberStandard(point)
-              updatePoint(index, next)
-              if (!numberFields(point).length) {
-                window.setTimeout(() => {
-                  document
-                    .getElementById(
-                      `field-${index}-` +
-                        `${next.measurement_fields.length - 1}-` +
-                        'name',
-                    )
-                    ?.focus()
-                }, 0)
-              }
-            } else if (kind === 'text') {
-              updatePoint(index, {
-                numeric_standard: null,
-                text_standard: point.text_standard ?? { text: '' },
-              })
-            } else {
-              updatePoint(index, {
-                numeric_standard: null,
-                text_standard: null,
-              })
-            }
-          }}
-          value={standard ? 'numeric' : point.text_standard ? 'text' : 'none'}
-        >
-          <option value="none">不設定標準</option>
-          <option value="text">文字標準</option>
-          <option value="numeric">數值標準</option>
-        </select>
+        <fieldset className="tpl-radio-group">
+          <legend>判定方式</legend>
+          {[
+            ['none', '無'],
+            ['text', '文字'],
+            ['numeric', '數值'],
+          ].map(([kind, label]) => (
+            <label className="tpl-radio-option" key={kind}>
+              <input
+                checked={
+                  (standard
+                    ? 'numeric'
+                    : point.text_standard
+                      ? 'text'
+                      : 'none') === kind
+                }
+                name={`standard-kind-${index}`}
+                onChange={() => {
+                  if (kind === 'numeric') {
+                    const next = numberStandard(point)
+                    updatePoint(index, next)
+                    if (!numberFields(point).length) {
+                      window.setTimeout(() => {
+                        document
+                          .getElementById(
+                            `field-${index}-` +
+                              `${next.measurement_fields.length - 1}-` +
+                              'name',
+                          )
+                          ?.focus()
+                      }, 0)
+                    }
+                  } else if (kind === 'text') {
+                    updatePoint(index, {
+                      numeric_standard: null,
+                      text_standard: point.text_standard ?? { text: '' },
+                    })
+                  } else {
+                    updatePoint(index, {
+                      numeric_standard: null,
+                      text_standard: null,
+                    })
+                  }
+                }}
+                type="radio"
+                value={kind}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
         {point.text_standard && (
           <>
             <label htmlFor={`standard-text-${index}`}>標準文字</label>
             <textarea
+              aria-invalid={Boolean(inputError(`${key}:text`))}
+              data-error-key={`${key}:text`}
               id={`standard-text-${index}`}
               onChange={(event) =>
                 updatePoint(index, {
@@ -81,6 +98,9 @@ export function NumericStandardEditor({
               }
               value={point.text_standard.text}
             />
+            {inputError(`${key}:text`) && (
+              <p className="tpl-field-error">{inputError(`${key}:text`)}</p>
+            )}
           </>
         )}
         {standard && (
@@ -137,54 +157,68 @@ export function NumericStandardEditor({
             {inputError(`${key}:binding`) && (
               <p className="tpl-field-error">{inputError(`${key}:binding`)}</p>
             )}
-            <label htmlFor={`condition-${index}`}>條件</label>
-            <select
-              id={`condition-${index}`}
-              onChange={(event) => {
-                const condition = event.target.value as
-                  '<=' | '>=' | '=' | 'range'
-                updateNumeric(index, {
-                  condition,
-                  range_form:
-                    condition === 'range'
-                      ? (standard.range_form ?? 'interval')
-                      : null,
-                  lower_bound:
-                    condition === 'range'
-                      ? (standard.lower_bound ?? '')
-                      : null,
-                  upper_bound:
-                    condition === 'range'
-                      ? (standard.upper_bound ?? '')
-                      : null,
-                  value: standard.value ?? '',
-                  tolerance: standard.tolerance ?? '',
-                })
-              }}
-              value={standard.condition}
-            >
-              <option value="<=">≤（不得超過標準值）</option>
-              <option value=">=">≥（不得低於標準值）</option>
-              <option value="=">＝（等於標準值）</option>
-              <option value="range">範圍</option>
-            </select>
+            <fieldset className="tpl-radio-group">
+              <legend>條件</legend>
+              {[
+                ['range', '範圍'],
+                ['<=', '≤'],
+                ['>=', '≥'],
+                ['=', '＝'],
+              ].map(([condition, label]) => (
+                <label className="tpl-radio-option" key={condition}>
+                  <input
+                    checked={standard.condition === condition}
+                    name={`condition-${index}`}
+                    onChange={() => {
+                      const selected = condition as '<=' | '>=' | '=' | 'range'
+                      updateNumeric(index, {
+                        condition: selected,
+                        range_form:
+                          selected === 'range'
+                            ? (standard.range_form ?? 'interval')
+                            : null,
+                        lower_bound:
+                          selected === 'range'
+                            ? (standard.lower_bound ?? '')
+                            : null,
+                        upper_bound:
+                          selected === 'range'
+                            ? (standard.upper_bound ?? '')
+                            : null,
+                        value: standard.value ?? '',
+                        tolerance: standard.tolerance ?? '',
+                      })
+                    }}
+                    type="radio"
+                    value={condition}
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
             {standard.condition === 'range' && (
-              <>
-                <label htmlFor={`range-form-${index}`}>範圍形式</label>
-                <select
-                  id={`range-form-${index}`}
-                  onChange={(event) =>
-                    updateNumeric(index, {
-                      range_form: event.target.value as
-                        'interval' | 'tolerance',
-                    })
-                  }
-                  value={standard.range_form ?? 'interval'}
-                >
-                  <option value="interval">區間（下限～上限）</option>
-                  <option value="tolerance">標準值 ± 容許誤差</option>
-                </select>
-              </>
+              <fieldset className="tpl-radio-group">
+                <legend>範圍形式</legend>
+                {[
+                  ['interval', '區間（下限～上限）'],
+                  ['tolerance', '標準值 ± 容許誤差'],
+                ].map(([form, label]) => (
+                  <label className="tpl-radio-option" key={form}>
+                    <input
+                      checked={(standard.range_form ?? 'interval') === form}
+                      name={`range-form-${index}`}
+                      onChange={() =>
+                        updateNumeric(index, {
+                          range_form: form as 'interval' | 'tolerance',
+                        })
+                      }
+                      type="radio"
+                      value={form}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
             )}
             {standard.condition === 'range' &&
             (standard.range_form ?? 'interval') === 'interval' ? (
@@ -195,20 +229,23 @@ export function NumericStandardEditor({
                     *
                   </b>
                 </label>
-                <input
-                  aria-invalid={Boolean(
-                    inputError(`${key}:lower`) || inputError(`${key}:range`),
-                  )}
-                  data-error-key={`${key}:lower`}
-                  id={`lower-${index}`}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateNumeric(index, {
-                      lower_bound: event.target.value,
-                    })
-                  }
-                  value={standard.lower_bound ?? ''}
-                />
+                <div className="tpl-input-with-unit">
+                  <input
+                    aria-invalid={Boolean(
+                      inputError(`${key}:lower`) || inputError(`${key}:range`),
+                    )}
+                    data-error-key={`${key}:lower`}
+                    id={`lower-${index}`}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateNumeric(index, {
+                        lower_bound: event.target.value,
+                      })
+                    }
+                    value={standard.lower_bound ?? ''}
+                  />
+                  {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                </div>
                 {inputError(`${key}:lower`) && (
                   <p className="tpl-field-error">
                     {inputError(`${key}:lower`)}
@@ -225,18 +262,21 @@ export function NumericStandardEditor({
                     *
                   </b>
                 </label>
-                <input
-                  aria-invalid={Boolean(inputError(`${key}:upper`))}
-                  data-error-key={`${key}:upper`}
-                  id={`upper-${index}`}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateNumeric(index, {
-                      upper_bound: event.target.value,
-                    })
-                  }
-                  value={standard.upper_bound ?? ''}
-                />
+                <div className="tpl-input-with-unit">
+                  <input
+                    aria-invalid={Boolean(inputError(`${key}:upper`))}
+                    data-error-key={`${key}:upper`}
+                    id={`upper-${index}`}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateNumeric(index, {
+                        upper_bound: event.target.value,
+                      })
+                    }
+                    value={standard.upper_bound ?? ''}
+                  />
+                  {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                </div>
                 {inputError(`${key}:upper`) && (
                   <p className="tpl-field-error">
                     {inputError(`${key}:upper`)}
@@ -251,43 +291,54 @@ export function NumericStandardEditor({
                     *
                   </b>
                 </label>
-                <input
-                  aria-invalid={Boolean(inputError(`${key}:value`))}
-                  data-error-key={`${key}:value`}
-                  id={`value-${index}`}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    updateNumeric(index, {
-                      value: event.target.value,
-                    })
-                  }
-                  value={standard.value ?? ''}
-                />
+                <div className="tpl-input-with-unit">
+                  <input
+                    aria-invalid={Boolean(inputError(`${key}:value`))}
+                    data-error-key={`${key}:value`}
+                    id={`value-${index}`}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      updateNumeric(index, {
+                        value: event.target.value,
+                      })
+                    }
+                    value={standard.value ?? ''}
+                  />
+                  {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                </div>
                 {inputError(`${key}:value`) && (
                   <p className="tpl-field-error">
                     {inputError(`${key}:value`)}
                   </p>
                 )}
-                {(standard.condition === 'range' || standard.tolerance) && (
+                {(standard.condition === 'range' ||
+                  standard.condition === '=' ||
+                  standard.tolerance) && (
                   <>
                     <label htmlFor={`tolerance-${index}`}>
-                      容許誤差{' '}
-                      <b aria-hidden="true" className="tpl-required">
-                        *
-                      </b>
+                      容許誤差
+                      {standard.condition === 'range' && (
+                        <b aria-hidden="true" className="tpl-required">
+                          {' *'}
+                        </b>
+                      )}
+                      {standard.condition === '=' && '（選填）'}
                     </label>
-                    <input
-                      aria-invalid={Boolean(inputError(`${key}:tolerance`))}
-                      data-error-key={`${key}:tolerance`}
-                      id={`tolerance-${index}`}
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        updateNumeric(index, {
-                          tolerance: event.target.value,
-                        })
-                      }
-                      value={standard.tolerance ?? ''}
-                    />
+                    <div className="tpl-input-with-unit">
+                      <input
+                        aria-invalid={Boolean(inputError(`${key}:tolerance`))}
+                        data-error-key={`${key}:tolerance`}
+                        id={`tolerance-${index}`}
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateNumeric(index, {
+                            tolerance: event.target.value,
+                          })
+                        }
+                        value={standard.tolerance ?? ''}
+                      />
+                      {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                    </div>
                     {inputError(`${key}:tolerance`) && (
                       <p className="tpl-field-error">
                         {inputError(`${key}:tolerance`)}

@@ -1,5 +1,7 @@
 """Template library HTTP contract (TPL-AC01/02/03/04/07/08/09/11)."""
 
+import json
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -688,6 +690,52 @@ def test_single_template_api_roundtrip_preserves_sibling(clients):
     sibling_after_delete = manager.get(f"/api/v1/templates/{sibling_id}")
     assert sibling_after_delete.status_code == 200
     assert sibling_after_delete.json() == sibling_snapshot
+
+
+def test_frontend_payload_fixture_roundtrips_through_single_item_api(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    fixture_path = (
+        Path(__file__).parents[3]
+        / "frontend/src/admin/templates/fixtures/template-item-payload.json"
+    )
+    body = json.loads(fixture_path.read_text(encoding="utf-8"))
+    body["system_id"] = system_id
+
+    created = manager.post("/api/v1/templates", json=body)
+    assert created.status_code == 201, created.text
+    template_id = created.json()["id"]
+
+    fetched = manager.get(f"/api/v1/templates/{template_id}")
+    assert fetched.status_code == 200, fetched.text
+    fetched_points = fetched.json()["inspection_points"]
+    assert [
+        point["numeric_standard"]["condition"] for point in fetched_points[:4]
+    ] == ["range", "<=", ">=", "="]
+    assert fetched_points[0]["numeric_standard"]["range_form"] == "interval"
+    assert fetched_points[4]["text_standard"]["text"] == (
+        "Match the approved sample"
+    )
+    for point in fetched_points[:4]:
+        bound_id = point["numeric_standard"]["measurement_field_id"]
+        bound = next(
+            field
+            for field in point["measurement_fields"]
+            if field["id"] == bound_id
+        )
+        assert point["numeric_standard"]["unit"]
+        assert bound["unit"] == point["numeric_standard"]["unit"]
+
+    body["title"] = "Edited frontend payload contract"
+    updated = manager.put(f"/api/v1/templates/{template_id}", json=body)
+    assert updated.status_code == 200, updated.text
+    reread = manager.get(f"/api/v1/templates/{template_id}")
+    assert reread.status_code == 200, reread.text
+    assert reread.json()["title"] == body["title"]
+
+    deleted = manager.delete(f"/api/v1/templates/{template_id}")
+    assert deleted.status_code == 204, deleted.text
+    assert manager.get(f"/api/v1/templates/{template_id}").status_code == 404
 
 
 def test_photo_requirements_are_required_unbounded_and_photo_only(clients):

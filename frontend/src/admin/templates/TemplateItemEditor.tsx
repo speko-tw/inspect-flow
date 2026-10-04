@@ -11,8 +11,7 @@ type Mode = 'create-item' | 'edit-item'
 type Props = {
   itemDraft: TemplateItem | null
   errors: Record<string, string>
-  setErrors: (errors: Record<string, string>) => void
-  setError: (message: string) => void
+  requestError: string
   dirty: boolean
   setGuard: (selection: Selection | null) => void
   selected: Selection | null
@@ -47,8 +46,7 @@ type Props = {
 export function TemplateItemEditor({
   itemDraft,
   errors,
-  setErrors,
-  setError,
+  requestError,
   dirty,
   setGuard,
   selected,
@@ -185,7 +183,12 @@ export function TemplateItemEditor({
             {itemDraft.inspection_points.map((point, index) => (
               <details className="tpl-point-card" key={point.id ?? index} open>
                 <summary>
-                  項次 {index + 1}：{point.title || '未命名項次'}
+                  <span>
+                    項次 {index + 1}：{point.title || '未命名項次'}
+                  </span>
+                  <span className="tpl-point-summary">
+                    {pointSummary(point, photoDraft[String(index)] ?? '1')}
+                  </span>
                 </summary>
                 <label htmlFor={`point-${index}-title`}>
                   項次標題{' '}
@@ -228,7 +231,6 @@ export function TemplateItemEditor({
                   point={point}
                   pointIndex={index}
                   setConfirmField={setConfirmField}
-                  setError={setError}
                   updateField={updateField}
                   updatePoint={updatePoint}
                 />
@@ -239,8 +241,8 @@ export function TemplateItemEditor({
                   updateNumeric={updateNumeric}
                   updatePoint={updatePoint}
                 />
-                <section className="tpl-point-section" aria-label="照片與預覽">
-                  <h4>照片需求與即時預覽</h4>
+                <section className="tpl-point-section" aria-label="照片需求">
+                  <h4>照片需求</h4>
                   <label htmlFor={`photos-${index}`}>
                     照片至少幾張{' '}
                     <b aria-hidden="true" className="tpl-required">
@@ -258,7 +260,6 @@ export function TemplateItemEditor({
                         ...current,
                         [String(index)]: event.target.value,
                       }))
-                      setErrors({})
                     }}
                     value={photoDraft[String(index)] ?? '1'}
                   />
@@ -267,29 +268,45 @@ export function TemplateItemEditor({
                       {inputError(`point:${index}:photos`)}
                     </p>
                   )}
-                  <p className="tpl-preview-line">
-                    {point.title || `項次 ${index + 1}`}｜
-                    {point.measurement_fields
-                      .map(
-                        (field) =>
-                          `${field.name || '未命名欄位'}${
-                            field.unit ? `（${field.unit}）` : ''
-                          }`,
-                      )
-                      .join('、') || '無實測欄位'}
-                    ｜{numericSummary(point)}｜照片{' '}
-                    {photoDraft[String(index)] || '1'} 張
-                  </p>
                 </section>
               </details>
             ))}
+            {errors.points && (
+              <p className="tpl-field-error" role="alert">
+                {errors.points}
+              </p>
+            )}
             <button onClick={addPoint} type="button">
               新增查核項次
             </button>
           </section>
+          <section className="tpl-card tpl-live-preview" aria-label="預覽">
+            <h3>預覽：每個項次的白話摘要</h3>
+            <p>
+              <strong className="tpl-preview-title">
+                {itemDraft.title || '（尚未命名）'}
+              </strong>
+              共 {itemDraft.inspection_points.length} 個項次
+            </p>
+            <ol>
+              {itemDraft.inspection_points.map((point, index) => (
+                <li key={point.id ?? index}>
+                  <strong className="tpl-preview-point">
+                    項次 {index + 1}
+                  </strong>
+                  {pointSummary(point, photoDraft[String(index)] ?? '1')}
+                </li>
+              ))}
+            </ol>
+          </section>
         </>
       </fieldset>
       <div className="tpl-editor-footer">
+        {requestError && (
+          <p className="tpl-field-error" role="alert">
+            {requestError}
+          </p>
+        )}
         <button className="btn-primary" disabled={readOnly} type="submit">
           儲存查核項目
         </button>
@@ -305,4 +322,14 @@ export function TemplateItemEditor({
       </div>
     </form>
   )
+}
+
+function pointSummary(point: InspectionPoint, photos: string): string {
+  const fields = point.measurement_fields
+    .map((field) => {
+      const name = field.name.trim() || '？'
+      return `${name}${field.unit?.trim() ? `（${field.unit}）` : ''}`
+    })
+    .join('、')
+  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${numericSummary(point)}｜照片 ${photos.trim() || '？'} 張`
 }

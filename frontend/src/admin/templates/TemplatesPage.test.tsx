@@ -16,6 +16,11 @@ const system = {
   category_id: category.id,
   name: '護欄',
 }
+const secondSystem = {
+  id: 'system-2',
+  category_id: category.id,
+  name: '排水',
+}
 const sampleItem = {
   id: 'template-1',
   system_id: system.id,
@@ -125,10 +130,10 @@ function templateFetch(
         path.startsWith('/api/v1/template-categories/category-') &&
         method === 'DELETE'
       ) {
-        return Response.json(
-          { error: { code: 'template.category_not_empty' } },
-          { status: 409 },
-        )
+        const id = path.split('/').at(-1)
+        const index = categories.findIndex((row) => row.id === id)
+        if (index >= 0) categories.splice(index, 1)
+        return new Response(null, { status: 204 })
       }
       if (
         path.startsWith('/api/v1/template-systems/system-') &&
@@ -160,7 +165,11 @@ function templateFetch(
         path.endsWith('/templates') &&
         method === 'GET'
       ) {
-        return Response.json({ items, next_cursor: null })
+        const systemId = path.split('/')[4]
+        return Response.json({
+          items: items.filter((item) => item.system_id === systemId),
+          next_cursor: null,
+        })
       }
       if (path === '/api/v1/templates' && method === 'POST') {
         if (options.writeError) {
@@ -236,9 +245,7 @@ async function startNewItem(): Promise<void> {
   fireEvent.change(screen.getByLabelText(/項次標題/), {
     target: { value: '坡度' },
   })
-  fireEvent.change(screen.getByLabelText('標準類型'), {
-    target: { value: 'numeric' },
-  })
+  fireEvent.click(screen.getByRole('radio', { name: '數值' }))
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -252,7 +259,7 @@ describe('TemplatesPage', () => {
       await screen.findAllByRole('heading', {
         name: '還沒有工程類別',
       }),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     fireEvent.click(
       screen.getAllByRole('button', {
         name: '新增工程類別',
@@ -267,6 +274,25 @@ describe('TemplatesPage', () => {
       await screen.findByRole('heading', { name: '橋梁工程' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('已新增工程類別')
+  })
+
+  it('selects a neighboring category after deleting one', async () => {
+    templateFetch({ categories: [category, otherCategory], items: [] })
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '建築工程' })
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '土木工程' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('還沒有工程類別')).not.toBeInTheDocument()
   })
 
   it('separates add and rename and preserves draft on duplicate', async () => {
@@ -304,16 +330,14 @@ describe('TemplatesPage', () => {
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: '%' },
     })
-    fireEvent.change(screen.getByLabelText('條件'), {
-      target: { value: 'range' },
-    })
-    fireEvent.change(screen.getByLabelText(/下限/), {
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
       target: { value: '1' },
     })
-    fireEvent.change(screen.getByLabelText(/上限/), {
+    fireEvent.change(screen.getByLabelText(/^上限/), {
       target: { value: '3' },
     })
-    expect(screen.getByText(/1～3 %/)).toBeInTheDocument()
+    expect(screen.getAllByText(/1～3 %/).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
 
     await screen.findByRole('status')
@@ -341,13 +365,11 @@ describe('TemplatesPage', () => {
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: '%' },
     })
-    fireEvent.change(screen.getByLabelText('條件'), {
-      target: { value: 'range' },
-    })
-    fireEvent.change(screen.getByLabelText(/下限/), {
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
       target: { value: '3' },
     })
-    fireEvent.change(screen.getByLabelText(/上限/), {
+    fireEvent.change(screen.getByLabelText(/^上限/), {
       target: { value: '1' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
@@ -360,6 +382,66 @@ describe('TemplatesPage', () => {
     expect(document.getElementById('lower-0')).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: '下限不能大於上限' }))
     expect(document.getElementById('lower-0')).toHaveFocus()
+  })
+
+  it('keeps unresolved errors while revalidating after the first save', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫單位')).not.toHaveLength(0)
+    expect(screen.getAllByText('下限不能大於上限')).not.toHaveLength(0)
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('尚有 1 處要修正'),
+    )
+    expect(screen.getAllByText('下限不能大於上限')).not.toHaveLength(0)
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument(),
+    )
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
+  })
+
+  it('blocks empty point lists and blank text standards at their fields', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '空白標準測試' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '移除此項次' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+    expect(
+      await screen.findAllByText('請至少新增一個查核項次'),
+    ).not.toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: '外觀' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '文字' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+    expect(await screen.findAllByText('請填寫標準文字')).not.toHaveLength(0)
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
   })
 
   it('shows all editor sections and inline validation errors', async () => {
@@ -381,7 +463,7 @@ describe('TemplatesPage', () => {
       screen.getByRole('heading', { name: '判定標準' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: '照片需求與即時預覽' }),
+      screen.getByRole('heading', { name: '照片需求' }),
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -392,7 +474,7 @@ describe('TemplatesPage', () => {
     expect(await screen.findAllByText('請填寫項次標題')).toHaveLength(2)
     expect(screen.getByRole('alert')).toHaveTextContent('尚有')
     expect(screen.getByLabelText(/項次標題/)).toHaveFocus()
-    expect(screen.getByText(/照片 1 張/)).toBeInTheDocument()
+    expect(screen.getAllByText(/照片 1 張/).length).toBeGreaterThan(0)
     fireEvent.change(screen.getByLabelText(/項次標題/), {
       target: { value: '橋面坡度' },
     })
@@ -405,7 +487,7 @@ describe('TemplatesPage', () => {
     )
     expect(
       pointSections.map((section) => section.getAttribute('aria-label')),
-    ).toEqual(['要記錄什麼', '判定標準', '照片與預覽'])
+    ).toEqual(['要記錄什麼', '判定標準', '照片需求'])
     expect(pointCard).toHaveAttribute('open')
     fireEvent.click(pointSummary as HTMLElement)
     expect(pointCard).not.toHaveAttribute('open')
@@ -424,13 +506,11 @@ describe('TemplatesPage', () => {
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: '%' },
     })
-    fireEvent.change(screen.getByLabelText('條件'), {
-      target: { value: 'range' },
-    })
-    fireEvent.change(screen.getByLabelText(/下限/), {
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
       target: { value: '1' },
     })
-    fireEvent.change(screen.getByLabelText(/上限/), {
+    fireEvent.change(screen.getByLabelText(/^上限/), {
       target: { value: '3' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
@@ -452,13 +532,11 @@ describe('TemplatesPage', () => {
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: '%' },
     })
-    fireEvent.change(screen.getByLabelText('條件'), {
-      target: { value: 'range' },
-    })
-    fireEvent.change(screen.getByLabelText(/下限/), {
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
       target: { value: '1' },
     })
-    fireEvent.change(screen.getByLabelText(/上限/), {
+    fireEvent.change(screen.getByLabelText(/^上限/), {
       target: { value: '3' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
@@ -518,6 +596,11 @@ describe('TemplatesPage', () => {
     }
     expect(body.inspection_points[0].measurement_fields[1].unit).toBeNull()
     expect(body.inspection_points[0].numeric_standard.unit).toBe('cm')
+    expect(body).not.toHaveProperty('id')
+    expect(body.inspection_points[0].numeric_standard).toHaveProperty(
+      'tolerance',
+      null,
+    )
   })
 
   it('blocks deletion while a system has children', async () => {
@@ -531,6 +614,38 @@ describe('TemplatesPage', () => {
     expect(
       screen.getAllByRole('button', { name: '欄杆尺寸' }).length,
     ).toBeGreaterThan(0)
+  })
+
+  it('keeps expanded items visible for two loaded systems', async () => {
+    const secondItem = {
+      ...sampleItem,
+      id: 'template-2',
+      system_id: secondSystem.id,
+      title: '排水查核',
+    }
+    templateFetch({
+      systems: [system, secondSystem],
+      items: [sampleItem, secondItem],
+    })
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '排水' }),
+    )
+    expect(
+      await within(navigation).findByRole('button', { name: '排水查核' }),
+    ).toBeInTheDocument()
+    expect(
+      within(navigation).getByRole('button', { name: '欄杆尺寸' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '欄杆尺寸' }),
+    )
+    fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
+    expect(await screen.findByText('查核項目（1）')).toBeInTheDocument()
   })
 
   it('guards a dirty draft when switching selection', async () => {
@@ -580,16 +695,14 @@ describe('TemplatesPage', () => {
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: '%' },
     })
-    fireEvent.change(screen.getByLabelText('範圍形式'), {
-      target: { value: 'tolerance' },
-    })
-    fireEvent.change(screen.getByLabelText(/標準值/), {
+    fireEvent.click(screen.getByRole('radio', { name: '標準值 ± 容許誤差' }))
+    fireEvent.change(document.getElementById('value-0') as HTMLInputElement, {
       target: { value: '3' },
     })
-    fireEvent.change(screen.getByLabelText(/容許誤差/), {
+    fireEvent.change(screen.getByLabelText(/^容許誤差/), {
       target: { value: '-1' },
     })
-    expect(screen.getByText(/3 ± -1 %/)).toBeInTheDocument()
+    expect(screen.getAllByText(/3 ± -1 %/).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
     expect(await screen.findAllByText('容許誤差不能小於 0')).not.toHaveLength(
       0,

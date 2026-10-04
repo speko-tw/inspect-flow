@@ -746,6 +746,10 @@ output {
   font-weight: 700;
 }
 
+.tpl-required {
+  display: inline;
+}
+
 .tpl-layout {
   display: grid;
   grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
@@ -803,6 +807,23 @@ output {
   cursor: pointer;
 }
 
+.tpl-tree-count,
+.tpl-item-open {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.tpl-tree-count {
+  margin-left: auto;
+}
+
+.tpl-item-open {
+  margin-left: auto;
+  text-decoration: underline;
+}
+
 .tpl-tree-row:hover,
 .tpl-detail-list button:hover {
   background: var(--surface-alt);
@@ -846,6 +867,10 @@ output {
 
 .tpl-detail-pane h2 {
   margin-top: var(--space-1);
+}
+
+.tpl-detail-pane {
+  width: 100%;
 }
 
 .tpl-detail-list li {
@@ -968,8 +993,64 @@ output {
 }
 
 .tpl-point-card summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
   font-weight: 700;
   cursor: pointer;
+}
+
+.tpl-point-summary {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.tpl-live-preview ol {
+  padding-left: var(--space-5);
+}
+
+.tpl-preview-title,
+.tpl-preview-point {
+  margin-right: 0.5em;
+}
+
+.tpl-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tpl-radio-group legend {
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.tpl-radio-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tpl-input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tpl-input-with-unit input {
+  min-width: 0;
+  flex: 1;
+}
+
+.tpl-unit-suffix {
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .tpl-point-section {
@@ -1055,6 +1136,11 @@ output {
   .tpl-nav,
   .tpl-detail-pane {
     padding: var(--space-3);
+  }
+
+  .tpl-tree-count {
+    white-space: normal;
+    text-align: right;
   }
 
   .tpl-step-nav {

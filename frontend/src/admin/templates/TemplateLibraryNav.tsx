@@ -6,6 +6,7 @@ export function TemplateLibraryNav({
   categories,
   systems,
   items,
+  loadedSystemIds,
   selected,
   expanded,
   onSelect,
@@ -18,6 +19,7 @@ export function TemplateLibraryNav({
   categories: TemplateCategory[]
   systems: TemplateSystem[]
   items: TemplateItem[]
+  loadedSystemIds: Set<string>
   selected: Selection | null
   expanded: Set<string>
   onSelect: (selection: Selection) => void
@@ -31,7 +33,7 @@ export function TemplateLibraryNav({
     <aside className="tpl-nav" aria-label="範本庫導覽">
       <div className="tpl-nav-heading">
         <h2>範本庫</h2>
-        {!readOnly && mode === 'manage' && (
+        {categories.length > 0 && !readOnly && mode === 'manage' && (
           <button onClick={onAddCategory} type="button">
             新增工程類別
           </button>
@@ -39,8 +41,7 @@ export function TemplateLibraryNav({
       </div>
       {categories.length === 0 ? (
         <div className="tpl-empty">
-          <h3>還沒有工程類別</h3>
-          <p>新增一個類別，開始整理查核項目。</p>
+          <p>還沒有工程類別。</p>
           {!readOnly && mode === 'manage' && (
             <button onClick={onAddCategory} type="button">
               新增工程類別
@@ -54,6 +55,7 @@ export function TemplateLibraryNav({
             return (
               <li key={category.id}>
                 <button
+                  aria-label={category.name}
                   aria-current={
                     selected?.type === 'category' &&
                     selected.id === category.id
@@ -70,6 +72,13 @@ export function TemplateLibraryNav({
                 >
                   <span aria-hidden="true">{categoryOpen ? '▾' : '▸'}</span>
                   <span>{category.name}</span>
+                  <span aria-hidden="true" className="tpl-tree-count">
+                    {
+                      systems.filter((row) => row.category_id === category.id)
+                        .length
+                    }{' '}
+                    個系統
+                  </span>
                 </button>
                 {categoryOpen && (
                   <ul>
@@ -79,6 +88,7 @@ export function TemplateLibraryNav({
                       return (
                         <li key={system.id}>
                           <button
+                            aria-label={system.name}
                             aria-current={
                               selected?.type === 'system' &&
                               selected.id === system.id
@@ -97,6 +107,17 @@ export function TemplateLibraryNav({
                               {systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
+                            <span
+                              aria-hidden="true"
+                              className="tpl-tree-count"
+                            >
+                              {
+                                items.filter(
+                                  (item) => item.system_id === system.id,
+                                ).length
+                              }{' '}
+                              個查核項目
+                            </span>
                           </button>
                           {systemOpen && (
                             <ul>
@@ -105,6 +126,9 @@ export function TemplateLibraryNav({
                                 .map((item) => (
                                   <li key={item.id ?? item.title}>
                                     <button
+                                      aria-label={
+                                        item.title || '未命名查核項目'
+                                      }
                                       aria-current={
                                         selected?.type === 'item' &&
                                         selected.id === item.id
@@ -122,15 +146,25 @@ export function TemplateLibraryNav({
                                       <span>
                                         {item.title || '未命名查核項目'}
                                       </span>
+                                      <span
+                                        aria-hidden="true"
+                                        className="tpl-item-open"
+                                      >
+                                        開啟詳情
+                                      </span>
                                     </button>
                                   </li>
                                 ))}
-                              {items.filter(
-                                (item) => item.system_id === system.id,
-                              ).length === 0 && (
-                                <li className="tpl-tree-empty">
-                                  還沒有查核項目
-                                </li>
+                              {loadedSystemIds.has(system.id) &&
+                                items.filter(
+                                  (item) => item.system_id === system.id,
+                                ).length === 0 && (
+                                  <li className="tpl-tree-empty">
+                                    還沒有查核項目
+                                  </li>
+                                )}
+                              {!loadedSystemIds.has(system.id) && (
+                                <li className="tpl-tree-empty">載入中…</li>
                               )}
                             </ul>
                           )}
@@ -144,7 +178,7 @@ export function TemplateLibraryNav({
           })}
         </ul>
       )}
-      {mobile && <p className="tpl-mobile-hint">選取項目以開啟詳情</p>}
+      {mobile && <p className="tpl-mobile-hint">點選「開啟詳情」查看內容</p>}
     </aside>
   )
 }

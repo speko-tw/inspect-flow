@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -11,7 +12,7 @@ import { InlineConfirm } from './InlineConfirm'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
-import { boundField } from './templateEditorUtils'
+import { boundField, forWire } from './templateEditorUtils'
 import {
   createTemplateCategory,
   createTemplateItem,
@@ -90,59 +91,6 @@ function localizeFields(item: TemplateItem): TemplateItem {
   }
 }
 
-function forWire(item: TemplateItem): TemplateItem {
-  return {
-    ...item,
-    inspection_points: item.inspection_points.map((point) => {
-      const fields = point.measurement_fields.map((field) => ({
-        ...field,
-        client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
-      }))
-      const numeric = point.numeric_standard
-      const bound = fields.find(
-        (field) =>
-          field.client_id === numeric?.measurement_field_client_id ||
-          field.id === numeric?.measurement_field_id,
-      )
-      const interval =
-        numeric?.condition === 'range' && numeric.range_form === 'interval'
-      return {
-        ...point,
-        id: undefined,
-        measurement_fields: fields.map((field) => ({
-          client_id: field.client_id,
-          name: field.name,
-          field_type: field.field_type,
-          unit:
-            field.field_type === 'number' &&
-            (field.client_id === bound?.client_id || field.id === bound?.id)
-              ? null
-              : field.unit,
-        })),
-        numeric_standard: numeric
-          ? {
-              value: interval ? null : String(numeric.value ?? ''),
-              condition: numeric.condition,
-              unit: bound?.unit ?? numeric.unit,
-              tolerance: interval ? null : numeric.tolerance,
-              range_form:
-                numeric.condition === 'range'
-                  ? (numeric.range_form ?? 'tolerance')
-                  : null,
-              lower_bound: interval ? (numeric.lower_bound ?? null) : null,
-              upper_bound: interval ? (numeric.upper_bound ?? null) : null,
-              measurement_field_client_id:
-                bound?.client_id ?? numeric.measurement_field_client_id,
-            }
-          : null,
-        evidence_requirements: point.evidence_requirements.map((entry) => ({
-          min_count: entry.min_count,
-        })),
-      }
-    }),
-  }
-}
-
 function isForbidden(error: unknown): boolean {
   return (
     error instanceof ManagementApiError &&
@@ -172,6 +120,9 @@ export default function TemplatesPage() {
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
   const [items, setItems] = useState<TemplateItem[]>([])
+  const [loadedSystemIds, setLoadedSystemIds] = useState<Set<string>>(
+    new Set(),
+  )
   const [selected, setSelected] = useState<Selection | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [mode, setMode] = useState<Mode>('view')
@@ -180,6 +131,8 @@ export default function TemplatesPage() {
   const [baseline, setBaseline] = useState('')
   const [photoDraft, setPhotoDraft] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [attemptedSave, setAttemptedSave] = useState(false)
+  const [actionError, setActionError] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -210,6 +163,7 @@ export default function TemplatesPage() {
   const selectedCategory = categories.find((item) => item.id === categoryId)
   const selectedSystem = systems.find((item) => item.id === systemId)
   const selectedItem = items.find((item) => item.id === selected?.id)
+  const systemItems = items.filter((item) => item.system_id === systemId)
   const dirty = useMemo(() => {
     if (
       mode === 'create-category' ||
@@ -297,7 +251,13 @@ export default function TemplatesPage() {
     }
     void getSystemTemplates(systemId)
       .then((result) => {
-        if (active) setItems(result.items.map(localizeFields))
+        if (active) {
+          setLoadedSystemIds((current) => new Set([...current, systemId]))
+          setItems((current) => [
+            ...current.filter((item) => item.system_id !== systemId),
+            ...result.items.map(localizeFields),
+          ])
+        }
       })
       .catch((caught: unknown) => {
         if (active)
@@ -319,6 +279,8 @@ export default function TemplatesPage() {
     setBaseline('')
     setPhotoDraft({})
     setErrors({})
+    setAttemptedSave(false)
+    setActionError('')
     setConfirmField('')
   }
 
@@ -347,7 +309,6 @@ export default function TemplatesPage() {
     resetMode()
     setSelected(next)
     setMobilePane('detail')
-    if (next.type !== 'item') setItems([])
     if (next.type !== 'item') {
       setExpanded((current) => new Set([...current, next.id]))
     }
@@ -356,6 +317,7 @@ export default function TemplatesPage() {
   function beginName(nextMode: Mode, initial = ''): void {
     setNotice('')
     setError('')
+    setActionError('')
     setMode(nextMode)
     setNameDraft(initial)
     setMobilePane('detail')
@@ -376,6 +338,7 @@ export default function TemplatesPage() {
     setPhotoDraft(photos)
     setBaseline(JSON.stringify({ itemDraft: normalized, photoDraft: photos }))
     setErrors({})
+    setAttemptedSave(false)
     setMode(nextMode)
     setNotice('')
     setError('')
@@ -438,7 +401,6 @@ export default function TemplatesPage() {
 
   function updateDraft(changes: Partial<TemplateItem>): void {
     setItemDraft((current) => (current ? { ...current, ...changes } : current))
-    setErrors({})
     setError('')
   }
 
@@ -457,7 +419,6 @@ export default function TemplatesPage() {
           }
         : current,
     )
-    setErrors({})
     setError('')
   }
 
@@ -524,12 +485,12 @@ export default function TemplatesPage() {
     })
   }
 
-  function validateItem(): Record<string, string> {
+  const validateItem = useCallback((): Record<string, string> => {
     if (!itemDraft) return {}
     const result: Record<string, string> = {}
     if (!itemDraft.title.trim()) result.title = '請填寫查核項目名稱'
     if (
-      items.some(
+      systemItems.some(
         (row) =>
           row.id !== itemDraft.id &&
           row.title.trim().toLocaleLowerCase() ===
@@ -537,6 +498,9 @@ export default function TemplatesPage() {
       )
     ) {
       result.title = '此系統已有同名查核項目，請換個名稱'
+    }
+    if (itemDraft.inspection_points.length === 0) {
+      result.points = '請至少新增一個查核項次'
     }
     itemDraft.inspection_points.forEach((point, pointIndex) => {
       const key = `point:${pointIndex}`
@@ -586,12 +550,25 @@ export default function TemplatesPage() {
               result[`${key}:tolerance`] = '容許誤差不能小於 0'
             }
           }
-        } else if (
-          !standard.value?.trim() ||
-          !Number.isFinite(Number(standard.value))
-        ) {
-          result[`${key}:value`] = '請填寫有效的標準值'
+        } else {
+          if (
+            !standard.value?.trim() ||
+            !Number.isFinite(Number(standard.value))
+          ) {
+            result[`${key}:value`] = '請填寫有效的標準值'
+          }
+          if (standard.tolerance?.trim()) {
+            const tolerance = Number(standard.tolerance)
+            if (!Number.isFinite(tolerance)) {
+              result[`${key}:tolerance`] = '請填寫有效的容許誤差'
+            } else if (tolerance < 0) {
+              result[`${key}:tolerance`] = '容許誤差不能小於 0'
+            }
+          }
         }
+      }
+      if (point.text_standard && !point.text_standard.text.trim()) {
+        result[`${key}:text`] = '請填寫標準文字'
       }
       const photos = photoDraft[String(pointIndex)] ?? '1'
       if (
@@ -603,7 +580,7 @@ export default function TemplatesPage() {
       }
     })
     return result
-  }
+  }, [itemDraft, photoDraft, systemItems])
 
   function focusFirstError(nextErrors: Record<string, string>): void {
     const first = Object.keys(nextErrors)[0]
@@ -641,6 +618,7 @@ export default function TemplatesPage() {
   async function saveItem(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (!itemDraft) return
+    setAttemptedSave(true)
     const found = validateItem()
     if (Object.keys(found).length) {
       setErrors(found)
@@ -672,13 +650,21 @@ export default function TemplatesPage() {
     try {
       if (mode === 'delete-category' && selectedCategory) {
         await deleteTemplateCategory(selectedCategory.id)
-        setCategories((current) =>
-          current.filter((row) => row.id !== selectedCategory.id),
+        const previousIndex = categories.findIndex(
+          (row) => row.id === selectedCategory.id,
         )
+        const remaining = categories.filter(
+          (row) => row.id !== selectedCategory.id,
+        )
+        const nextCategory =
+          remaining[Math.min(previousIndex, remaining.length - 1)]
+        setCategories(remaining)
         setSystems((current) =>
           current.filter((row) => row.category_id !== selectedCategory.id),
         )
-        setSelected(null)
+        setSelected(
+          nextCategory ? { type: 'category', id: nextCategory.id } : null,
+        )
         showNotice(`已刪除「${selectedCategory.name}」`)
       } else if (mode === 'delete-system' && selectedSystem) {
         await deleteTemplateSystem(selectedSystem.id)
@@ -697,7 +683,9 @@ export default function TemplatesPage() {
       }
       resetMode()
     } catch (caught) {
-      fail(caught)
+      setNotice('')
+      setError('')
+      setActionError(apiMessage(caught))
       setMode('view')
     }
   }
@@ -811,8 +799,8 @@ export default function TemplatesPage() {
         addPoint={addPoint}
         confirmField={confirmField}
         dirty={dirty}
-        errors={errors}
-        setError={setError}
+        errors={attemptedSave ? validateItem() : errors}
+        requestError={error}
         itemDraft={itemDraft}
         mode={mode as 'create-item' | 'edit-item'}
         photoDraft={photoDraft}
@@ -824,7 +812,6 @@ export default function TemplatesPage() {
         selectedCategory={selectedCategory}
         selectedSystem={selectedSystem}
         setConfirmField={setConfirmField}
-        setErrors={setErrors}
         setGuard={setGuard}
         setPhotoDraft={setPhotoDraft}
         systemId={systemId}
@@ -841,7 +828,7 @@ export default function TemplatesPage() {
     selected?.type === 'category'
       ? systems.filter((row) => row.category_id === selected.id).length
       : selected?.type === 'system'
-        ? items.length
+        ? systemItems.length
         : 0
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640
 
@@ -892,15 +879,18 @@ export default function TemplatesPage() {
       return renderItemEditor()
     }
     if (!selected) {
+      if (categories.length > 0) {
+        return (
+          <div className="tpl-empty">
+            <h2>選一個項目</h2>
+            <p>從左側選一個工程類別、系統或查核項目，這裡會顯示內容。</p>
+          </div>
+        )
+      }
       return (
         <div className="tpl-empty">
           <h2>還沒有工程類別</h2>
           <p>新增一個類別，開始整理查核項目。</p>
-          {!readOnly && (
-            <button onClick={() => beginName('create-category')} type="button">
-              新增工程類別
-            </button>
-          )}
         </div>
       )
     }
@@ -924,7 +914,7 @@ export default function TemplatesPage() {
                   className="btn-danger"
                   onClick={() => {
                     setNotice('')
-                    setError(
+                    setActionError(
                       childCount ? '此類別還有系統，請先處理系統。' : '',
                     )
                     setMode(childCount ? 'view' : 'delete-category')
@@ -933,6 +923,11 @@ export default function TemplatesPage() {
                 >
                   刪除
                 </button>
+                {actionError && mode !== 'delete-category' && (
+                  <p className="tpl-field-error" role="alert">
+                    {actionError}
+                  </p>
+                )}
                 <button
                   className="btn-primary"
                   onClick={() => beginName('create-system')}
@@ -1007,7 +1002,7 @@ export default function TemplatesPage() {
                   className="btn-danger"
                   onClick={() => {
                     setNotice('')
-                    setError(
+                    setActionError(
                       childCount ? '此系統還有查核項目，請先處理項目。' : '',
                     )
                     setMode(childCount ? 'view' : 'delete-system')
@@ -1016,11 +1011,16 @@ export default function TemplatesPage() {
                 >
                   刪除
                 </button>
+                {actionError && mode !== 'delete-system' && (
+                  <p className="tpl-field-error" role="alert">
+                    {actionError}
+                  </p>
+                )}
                 <button
                   className="btn-primary"
                   onClick={() =>
                     beginItem(
-                      blankTemplate(selectedSystem.id, items.length + 1),
+                      blankTemplate(selectedSystem.id, systemItems.length + 1),
                       'create-item',
                     )
                   }
@@ -1039,14 +1039,14 @@ export default function TemplatesPage() {
               刪除「{selectedSystem.name}」？刪除後無法復原。
             </InlineConfirm>
           )}
-          <h3>查核項目（{items.length}）</h3>
-          {items.length === 0 ? (
+          <h3>查核項目（{systemItems.length}）</h3>
+          {systemItems.length === 0 ? (
             <p className="tpl-empty-small">
               這個系統還沒有查核項目。新增第一個查核項目。
             </p>
           ) : (
             <ul className="tpl-detail-list">
-              {items.map((item) => (
+              {systemItems.map((item) => (
                 <li key={item.id}>
                   <button
                     onClick={() =>
@@ -1084,11 +1084,19 @@ export default function TemplatesPage() {
                 </button>
                 <button
                   className="btn-danger"
-                  onClick={() => setMode('delete-item')}
+                  onClick={() => {
+                    setActionError('')
+                    setMode('delete-item')
+                  }}
                   type="button"
                 >
                   刪除查核項目
                 </button>
+                {actionError && (
+                  <p className="tpl-field-error" role="alert">
+                    {actionError}
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -1143,6 +1151,7 @@ export default function TemplatesPage() {
               categories={categories}
               expanded={expanded}
               items={items}
+              loadedSystemIds={loadedSystemIds}
               mobile={isMobile}
               onAddCategory={() => beginName('create-category')}
               onSelect={navigate}
@@ -1160,7 +1169,7 @@ export default function TemplatesPage() {
               mode="manage"
             />
           </div>
-          <main className="tpl-detail-pane">
+          <section className="tpl-detail-pane" aria-label="範本詳情">
             {mobilePane === 'detail' && (
               <button
                 className="tpl-mobile-back"
@@ -1174,7 +1183,7 @@ export default function TemplatesPage() {
               renderDetail()
             ) : (
               <>
-                {error && (
+                {error && mode !== 'create-item' && mode !== 'edit-item' && (
                   <p
                     className="tpl-detail-notice tpl-notice-error"
                     role="alert"
@@ -1190,7 +1199,7 @@ export default function TemplatesPage() {
                 {renderDetail()}
               </>
             )}
-          </main>
+          </section>
         </div>
       )}
     </section>

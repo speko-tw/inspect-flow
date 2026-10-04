@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import type { InspectionPoint, MeasurementField } from './api'
 import { InlineConfirm } from './InlineConfirm'
 import { boundField } from './templateEditorUtils'
@@ -8,7 +10,6 @@ type Props = {
   errors: Record<string, string>
   confirmField: string
   setConfirmField: (value: string) => void
-  setError: (message: string) => void
   updateField: (
     pointIndex: number,
     fieldIndex: number,
@@ -23,10 +24,10 @@ export function MeasurementFieldEditor({
   errors,
   confirmField,
   setConfirmField,
-  setError,
   updateField,
   updatePoint,
 }: Props) {
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
   return (
     <section className="tpl-point-section" aria-label="要記錄什麼">
       <h4>要記錄什麼</h4>
@@ -72,17 +73,35 @@ export function MeasurementFieldEditor({
             </label>
             <select
               id={`field-${pointIndex}-${fieldIndex}-type`}
-              onChange={(event) =>
+              onChange={(event) => {
+                if (bound && event.target.value !== 'number') {
+                  setActionErrors((current) => ({
+                    ...current,
+                    [`${base}:type`]:
+                      '這個欄位用於數值標準；請先改綁其他欄位或移除標準。',
+                  }))
+                  return
+                }
+                setActionErrors((current) => {
+                  const next = { ...current }
+                  delete next[`${base}:type`]
+                  return next
+                })
                 updateField(pointIndex, fieldIndex, {
                   field_type: event.target.value as 'text' | 'number',
                   unit: event.target.value === 'text' ? null : '',
                 })
-              }
+              }}
               value={field.field_type}
             >
               <option value="text">文字</option>
               <option value="number">數字</option>
             </select>
+            {actionErrors[`${base}:type`] && (
+              <p className="tpl-field-error" role="alert">
+                {actionErrors[`${base}:type`]}
+              </p>
+            )}
             {field.field_type === 'number' && (
               <>
                 <label htmlFor={`field-${pointIndex}-${fieldIndex}-unit`}>
@@ -107,11 +126,7 @@ export function MeasurementFieldEditor({
                 )}
               </>
             )}
-            {bound && (
-              <p className="tpl-hint">
-                此欄位綁定數值標準。先解除綁定才能刪除或改成文字。
-              </p>
-            )}
+            {bound && <p className="tpl-hint">此欄位用於數值標準。</p>}
             {confirmField === `${pointIndex}:${fieldIndex}` ? (
               <InlineConfirm
                 confirmLabel="移除欄位"
@@ -124,9 +139,11 @@ export function MeasurementFieldEditor({
               <button
                 onClick={() => {
                   if (bound) {
-                    setError(
-                      '此欄位正用於數值標準。請先解除綁定，再移除欄位。',
-                    )
+                    setActionErrors((current) => ({
+                      ...current,
+                      [`${base}:remove`]:
+                        '這個欄位用於數值標準；請先改綁其他欄位或移除標準。',
+                    }))
                   } else if (field.name || field.unit) {
                     setConfirmField(`${pointIndex}:${fieldIndex}`)
                   } else {
@@ -137,6 +154,11 @@ export function MeasurementFieldEditor({
               >
                 移除欄位
               </button>
+            )}
+            {actionErrors[`${base}:remove`] && (
+              <p className="tpl-field-error" role="alert">
+                {actionErrors[`${base}:remove`]}
+              </p>
             )}
           </div>
         )
