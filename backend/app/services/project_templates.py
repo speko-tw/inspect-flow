@@ -1,5 +1,6 @@
 """Copy template structures into project-owned inspection items."""
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.base import uuid7
 from app.models import (
+    Project,
     ProjectEvidenceRequirement,
     ProjectInspectionItem,
     ProjectInspectionPoint,
@@ -26,6 +28,38 @@ from app.models import (
 from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
 from app.services.template_library import create_template
+
+
+class DuplicateProjectItemError(ValueError):
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
+        super().__init__(", ".join(names))
+
+
+def _reject_duplicate_names(
+    db: Session, project_id: UUID, templates: Sequence[TemplateItem]
+) -> None:
+    # Every path creating ProjectInspectionItem must take this same
+    # project-row lock before checking names and writing copies.
+    # PostgreSQL serializes applies here; SQLite does not row-lock.
+    db.scalar(
+        select(Project.id).where(Project.id == project_id).with_for_update()
+    )
+    existing = {
+        title.strip().casefold()
+        for title in db.scalars(
+            select(ProjectInspectionItem.title).where(
+                ProjectInspectionItem.project_id == project_id
+            )
+        )
+    }
+    conflicts = [
+        template.title
+        for template in templates
+        if template.title.strip().casefold() in existing
+    ]
+    if conflicts:
+        raise DuplicateProjectItemError(conflicts)
 
 
 def _copy_template_item(
@@ -121,6 +155,9 @@ def _copy_template_item(
                     condition=numeric_standard.condition,
                     unit=numeric_standard.unit,
                     tolerance=numeric_standard.tolerance,
+                    range_form=numeric_standard.range_form,
+                    lower_bound=numeric_standard.lower_bound,
+                    upper_bound=numeric_standard.upper_bound,
                     measurement_field_id=field_id_map[
                         numeric_standard.measurement_field_id
                     ],
@@ -176,6 +213,7 @@ def apply_template(
         template = db.get(TemplateItem, template_id)
         if template is None:
             return None
+        _reject_duplicate_names(db, project_id, [template])
         return [
             _copy_template_item(
                 db,
@@ -196,6 +234,7 @@ def apply_template(
         .where(TemplateItem.system_id == system_id)
         .order_by(TemplateItem.sequence, TemplateItem.id)
     ).all()
+    _reject_duplicate_names(db, project_id, templates)
     return [
         _copy_template_item(
             db,
@@ -274,6 +313,9 @@ def create_template_from_project_item(
                     "condition": numeric.condition,
                     "unit": numeric.unit,
                     "tolerance": numeric.tolerance,
+                    "range_form": numeric.range_form,
+                    "lower_bound": numeric.lower_bound,
+                    "upper_bound": numeric.upper_bound,
                     "measurement_field_client_id": client_ids[
                         numeric.measurement_field_id
                     ],

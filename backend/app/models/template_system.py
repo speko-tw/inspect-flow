@@ -179,10 +179,13 @@ class TemplateNumericStandard(AuditMixin, TimestampedBase):
         nullable=False,
         unique=True,
     )
-    value: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[str | None] = mapped_column(String)
     condition: Mapped[str] = mapped_column(String, nullable=False)
     unit: Mapped[str] = mapped_column(String, nullable=False)
     tolerance: Mapped[str | None] = mapped_column(String)
+    range_form: Mapped[str | None] = mapped_column(String(16))
+    lower_bound: Mapped[str | None] = mapped_column(String)
+    upper_bound: Mapped[str | None] = mapped_column(String)
     measurement_field_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, nullable=False, unique=True
     )
@@ -346,10 +349,13 @@ class ProjectNumericStandard(AuditMixin, TimestampedBase):
         ForeignKey("project_inspection_items.id", ondelete="CASCADE"),
         nullable=False,
     )
-    value: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[str | None] = mapped_column(String)
     condition: Mapped[str] = mapped_column(String, nullable=False)
     unit: Mapped[str] = mapped_column(String, nullable=False)
     tolerance: Mapped[str | None] = mapped_column(String)
+    range_form: Mapped[str | None] = mapped_column(String(16))
+    lower_bound: Mapped[str | None] = mapped_column(String)
+    upper_bound: Mapped[str | None] = mapped_column(String)
     measurement_field_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, nullable=False, unique=True
     )

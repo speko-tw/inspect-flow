@@ -154,6 +154,10 @@ class ErrorCode(DescribedStrEnum):
         "template.name_conflict",
         "A template library name is already in use at this level.",
     )
+    PROJECT_INSPECTION_ITEM_DUPLICATE_NAME = (
+        "project_inspection_item.duplicate_name",
+        "One or more inspection item names already exist in this project.",
+    )
     TEMPLATE_CATEGORY_NOT_EMPTY = (
         "template.category_not_empty",
         "The category still contains systems.",
@@ -195,11 +199,13 @@ class APIError(Exception):
         message: str = "",
         *,
         headers: dict[str, str] | None = None,
+        details: list[str] | None = None,
     ) -> None:
         self.code = code
         self.status_code = status_code
         self.message = message
         self.headers = headers
+        self.details = details
         super().__init__(message or code.value)
 
 
@@ -223,18 +229,21 @@ def _http_exception_code(exc: StarletteHTTPException) -> ErrorCode:
 def register_error_handlers(app: FastAPI) -> None:
     """Register the shared exception handlers on ``app``.
 
-    Every handler responds with
-    ``{"error": {"code": "<dot.namespace>"}}`` only -- no message
-    or exception detail is included in the response body.
+    Every handler includes ``error.code``. Only an ``APIError``
+    explicitly given details also includes ``error.details``;
+    messages and raw exception data are never returned.
     """
 
     @app.exception_handler(APIError)
     async def handle_api_error(
         request: Request, exc: APIError
     ) -> JSONResponse:
+        error: dict[str, object] = {"code": exc.code.value}
+        if exc.details is not None:
+            error["details"] = exc.details
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"code": exc.code.value}},
+            content={"error": error},
             headers=exc.headers,
         )
 
