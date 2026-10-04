@@ -83,7 +83,7 @@
 | GET | `/api/v1/templates/{template_id}` | 讀取範本結構 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | PUT | `/api/v1/templates/{template_id}` | 覆蓋目前範本內容 | 範本管理員 |
 | DELETE | `/api/v1/templates/{template_id}` | 刪除範本 | 範本管理員 |
-| POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目） | 具該專案 `project_inspection_item.edit` 權限者 |
+| POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目）；有效但沒有項目的系統回 `200` 與空清單 | 具該專案 `project_inspection_item.edit` 權限者 |
 | POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含目標 `system_id` | 範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
 | PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204 | Admin |
@@ -105,7 +105,7 @@
 | TPL-AC02 | 已有含前後空白或大小寫差異的工程類別、系統及查核項目名稱 | 建立正規化後同名的分類、系統或同系統項目，再於不同父層建立同名 | 去除前後空白並忽略大小寫後，同一父層名稱衝突回 409 `template.name_conflict`；不同父層同名可建立；資料沒有分類代號欄位 | TPL-R03 |
 | TPL-AC03 | 範本含具 `sequence`、`title`、`instruction` 的查核項目、項次、文字及數值標準、照片需求 | 儲存後讀回範本 | 所有結構一致；沒有現場結果、照片檔或 interval 欄位 | TPL-R04、TPL-R05、TPL-R06、TPL-R07 |
 | TPL-AC04 | 範本管理員儲存一份範本 | 更新同一範本，再讀取 | 回傳更新後唯一現行內容；沒有版本記錄或 `Template Version` | TPL-R02 |
-| TPL-AC05 | 一個 `system_id` 下有多個查核項目，另有單一項目範本 | 分別以 `system_id` 與 `template_id` 套用到專案 | 可套用單項與整個系統；每筆 `ProjectInspectionItem` 複製項目結構並保存 `project_id`、套用時間及來源範本名稱（單項用 `title`、系統用系統名稱）；來源變更不影響副本 | TPL-R04、TPL-R08 |
+| TPL-AC05 | 一個 `system_id` 下有多個查核項目，另有單一項目範本；另有一個沒有查核項目的有效系統 | 分別以 `system_id` 與 `template_id` 套用到專案 | 可套用單項與整個系統；每筆 `ProjectInspectionItem` 複製項目結構並保存 `project_id`、套用時間及來源範本名稱（單項用 `title`、系統用系統名稱）；來源變更不影響副本；套用沒有查核項目的有效系統回 `200` 與空清單 | TPL-R04、TPL-R08 |
 | TPL-AC06 | 專案已套用範本，另有範本管理員 | 覆蓋或刪除來源範本，檢查專案副本；範本管理員再讀取及存成範本 | 專案副本不變；範本管理員能查看所有專案並把任一專案項目存成範本 | TPL-R08、TPL-R09 |
 | TPL-AC07 | 項次含文字標準、數值標準及照片需求 | 讀取定義並對照系統行為 | 文字標準不解析；數值標準具四類定義欄位但不接受實測值或自動判定；每項次至少被一張非總覽照片覆蓋，一張照片可覆蓋多個項次且照片數無上限；總覽照由現場選擇且不計入最低覆蓋 | TPL-R05、TPL-R06、TPL-R07 |
 | TPL-AC08 | 已登入 Admin、範本管理員、一般專案成員、無專案權限者 | 呼叫各端點及 `GET /api/v1/projects`；改名／刪除分類與系統；指派或收回全系統角色 | Admin 與範本管理員可列出全部專案；其他非 Admin 回 403；只有 Admin 可指派或收回固定角色且成功後留下稽核紀錄；專案編輯者可瀏覽及套用但不能寫入範本；分類下有系統或系統下有查核項目時刪除分別回 409 與對應錯誤碼；API 符合共用慣例 | TPL-R09、TPL-R10 |
@@ -133,3 +133,4 @@
 - TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 定案並凍結規格；模板管理、API、資料模型與套用責任依本規格明確分界 — #110（PR #335 後續）。
 - 登記範本管理員角色指派／收回的稽核事件代碼與欄位，並引用 `audit-log` 事件目錄 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
 - 澄清範本庫 Admin 讀取、整系統巢狀讀寫路徑、請求內實測欄位識別與驗證邊界 — [PR #345 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/345#pullrequestreview-5401219325)。
+- 範圍變更（負責人指示，#328）：有效但沒有查核項目的 system 套用回 HTTP 200 與空清單 — [#328 留言](https://github.com/speko-tw/inspect-flow/issues/328#issuecomment-5970915340)。
