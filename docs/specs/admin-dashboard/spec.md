@@ -90,16 +90,16 @@
 
 ## 介面
 
-本節列出具體 API 契約。清單端點遵守 API-R08：`cursor` 是不透明字串，`limit` 預設 50、範圍 1–100，回應 `{items, next_cursor}`；排序鍵均含 UUID。這組 page-size 預設及新端點路徑是規格設計（非負責人裁定），沿用既有 `GET /api/v1/roles` 慣例。所有端點使用 API-R01 前綴 `/api/v1`、API-R02 HTTP 狀態及 API-R05 錯誤 envelope。
+本節列出具體 API 契約。清單端點遵守 API-R08：`cursor` 是不透明字串，`limit` 預設 50、範圍 1–100，回應 `{items, next_cursor}`；排序鍵均含 UUID。這組 page-size 預設及新端點路徑是規格設計（非負責人裁定），沿用既有 `GET /api/v1/roles` 慣例。所有端點使用 API-R01 前綴 `/api/v1`、API-R02 HTTP 狀態及 API-R05 錯誤 envelope；錯誤代碼由共用 ErrorCode 列舉提供，不在本規格另列代碼對照表。
 
 | 方法與路徑 | 契約與回應 | 權限與錯誤 |
 |---|---|---|
-| `GET /api/v1/admin/dashboard/summary?project_id=<uuid>` | 單一物件：`pending_count`、`in_progress_count`、`completed_count`、`completion_rate`；不分頁。省略 `project_id` 查全公司；提供時限單一專案 | 專案權限或全公司檢視權限；未登入 `401 auth.not_authenticated`，無權限 `403 permission.denied`；越權或不存在的專案均 `403 permission.denied`，遵守現有專案端點避免洩漏資源存在性 |
-| `GET /api/v1/admin/dashboard/projects?cursor=&limit=&q=` | `{items:[{project_id,name,pending_count,in_progress_count,completed_count,completion_denominator_count,completion_rate,member_count}],next_cursor}`；依 `(project.name, project.id)` 升冪；`q` 為專案名稱／代碼不分大小寫子字串；`member_count` 僅在 #286 契約先合併後提供 | 各專案只套用呼叫者可見範圍；全公司查詢需全公司檢視權限。錯誤同 summary；cursor／limit／q 無效 `422 request.validation_failed` |
+| `GET /api/v1/admin/dashboard/summary?project_id=<uuid>` | 單一物件：`pending_count`、`in_progress_count`、`completed_count`、`completion_rate`；不分頁。省略 `project_id` 查全公司；提供時限單一專案 | 專案權限或全公司檢視權限；未登入 401，無權限 403；越權或不存在的專案均 403，遵守現有專案端點避免洩漏資源存在性 |
+| `GET /api/v1/admin/dashboard/projects?cursor=&limit=&q=` | `{items:[{project_id,name,pending_count,in_progress_count,completed_count,completion_denominator_count,completion_rate,member_count}],next_cursor}`；依 `(project.name, project.id)` 升冪；`q` 為專案名稱／代碼不分大小寫子字串；`member_count` 僅在 #286 契約先合併後提供 | 各專案只套用呼叫者可見範圍；全公司查詢需全公司檢視權限。錯誤同 summary；cursor／limit／q 無效 422 |
 | `GET /api/v1/admin/dashboard/engineers?project_id=<uuid>&cursor=&limit=&q=` | `{items:[{user_id,username,name_zh,assigned_pending_count,assigned_in_progress_count,completed_by_count,started_in_progress_count}],next_cursor}`；依 `(username,user_id)` 升冪；`q` 搜尋 username、中英文姓名、email、employee number | 專案或全公司檢視權限；project scope 必須提供 `project_id`；不得藉參數擴權；錯誤同 summary |
 | `GET /api/v1/audit-logs?project_id=&actor_id=&from=&to=&event_type=&cursor=&limit=` | `{items:[既有 AuditLog 欄位],next_cursor}`；依 `(created_at,id)` 降冪；`from`／`to` 為 UTC ISO-8601，含起不含迄；多條件 AND 篩選 | Admin；401 未登入、403 非 Admin；不存在或無權限專案回 403；格式錯誤 422；只讀 |
 | `GET /api/v1/users?q=&cursor=&limit=` | 將目前全量列表改為 cursor page `{items:[既有 User 欄位],next_cursor}`；依 `(username,id)` 升冪；`q` 不分大小寫搜尋 username、姓名、email、employee number | Admin（沿用 AUT-R20）；401／403／422 如上；保留現有單筆及寫入端點 |
-| `POST /api/v1/users:batch-active-status` | 本體 `{user_ids:[uuid],is_active:boolean}`；成功回 `{items:[User]}`；整批原子提交；重複或空 ID、未知 ID、停用最後一位 Admin 等驗證失敗時不改任何列 | Admin；401／403；輸入或管理規則違反 `422 request.validation_failed`，衝突依既有管理錯誤映射 409 |
+| `POST /api/v1/users:batch-active-status` | 本體 `{user_ids:[uuid],is_active:boolean}`；成功回 `{items:[User]}`；整批原子提交；重複或空 ID、未知 ID、停用最後一位 Admin 等驗證失敗時不改任何列 | Admin；401／403；輸入或管理規則違反 422，衝突依既有管理錯誤映射 409 |
 | `POST /api/v1/users/{user_id}/temporary-password` | 空本體；經 AUT-R36 設定系統產生的臨時密碼並標 `must_change_password=true`；回 `{user_id,username,temporary_password,must_change_password:true}` 一次，回應設 `Cache-Control: no-store`；呼叫 AUT-R36 的工作階段撤銷、失敗計數重設與稽核行為 | Admin；401／403；未知使用者 404；不得重設內建 `admin` 或外部身分帳號，回 422；成功後舊 session 失效 |
 | `GET /api/v1/companies?q=&cursor=&limit=` | `{items:[既有 Company 欄位],next_cursor}`；依 `(name,id)` 升冪；`q` 不分大小寫搜尋名稱 | Admin；401／403／422 如上；保留既有單筆及寫入端點 |
 | `POST /api/v1/companies:batch-status` | 本體 `{items:[{company_id,is_active,disable_user_ids:[uuid]}]}`；逐公司套用既有停用語意，成功回 `{items:[Company]}`；整批原子提交，避免部分公司更新 | Admin；401／403；未知 ID、重複項目或不屬於該公司的 `disable_user_ids` 回 422 且整批不變 |
