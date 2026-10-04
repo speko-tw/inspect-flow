@@ -79,6 +79,30 @@ class OperatorNotAuthenticatedError(RuntimeError):
     """
 
 
+def get_system_operator(session: Session) -> User:
+    """Return the unique built-in system account (DOM-R11/DOM-R13).
+
+    Both the request-independent operator fallback and system audit
+    events use this lookup. Keep its missing/duplicate behavior in one
+    place so both callers report the same data-integrity failures.
+    """
+    try:
+        operator = session.scalars(
+            select(User).where(User.is_system.is_(True))
+        ).one_or_none()
+    except MultipleResultsFound as exc:
+        raise MultipleOperatorsFoundError(
+            "more than one is_system=True User found; DOM-R11/DOM-R13 "
+            "expect exactly one once the system has been initialized"
+        ) from exc
+    if operator is None:
+        raise OperatorNotFoundError(
+            "no is_system=True User found; has the initialization "
+            "command (DOM-R11) been run against this database?"
+        )
+    return operator
+
+
 def get_current_operator(session: Session) -> User:
     """Return "the current operator" to fill ``created_by``/
     ``updated_by`` with (DOM-R14, AUT-R09).
@@ -105,18 +129,4 @@ def get_current_operator(session: Session) -> User:
             )
         return user
 
-    try:
-        operator = session.scalars(
-            select(User).where(User.is_system.is_(True))
-        ).one_or_none()
-    except MultipleResultsFound as exc:
-        raise MultipleOperatorsFoundError(
-            "more than one is_system=True User found; DOM-R11/DOM-R13 "
-            "expect exactly one once the system has been initialized"
-        ) from exc
-    if operator is None:
-        raise OperatorNotFoundError(
-            "no is_system=True User found; has the initialization "
-            "command (DOM-R11) been run against this database?"
-        )
-    return operator
+    return get_system_operator(session)

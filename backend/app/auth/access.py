@@ -163,6 +163,13 @@ def _has_system_role(
     return assignment_id is not None
 
 
+def is_admin_or_system_role(
+    db: Session, user: User, role_code: SystemRoleCode
+) -> bool:
+    """Return whether the user is Admin or has the selected system role."""
+    return user.is_admin or _has_system_role(db, user, role_code)
+
+
 # -- 公開 (AUT-R18) -----------------------------------------------
 
 
@@ -270,9 +277,7 @@ def require_admin_or_system_role(
         user: User = Depends(require_login),  # noqa: B008
         db: Session = Depends(get_db),  # noqa: B008
     ) -> User:
-        if user.is_admin:
-            return user
-        if not _has_system_role(db, user, role_code):
+        if not is_admin_or_system_role(db, user, role_code):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 

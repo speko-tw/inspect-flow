@@ -52,7 +52,7 @@
 | TPL-R11 | 每個查核項次**得**設定多個實測欄位；每欄由內業設定為文字或數字。數字欄位**必須**有單位。每個數值標準**必須**綁定該項次的一個數字實測欄位；有數值標準時**必須**有綁定欄位，一個數字欄位最多綁定一個數值標準。僅被綁定欄位的單位**必須**與該數值標準相同，並由系統自動帶入、不得另設；其他數字欄位由內業自設單位。範本只定義欄位，不保存現場填值；單位換算由現場自行處理。 | 得／必須／不得 | [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)（已由 [#332](https://github.com/speko-tw/inspect-flow/issues/332)／[PR #333](https://github.com/speko-tw/inspect-flow/pull/333) 記錄；原始依據為負責人[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)）；綁定方式與限制為本規格設計（見 TPL-Q8） |
 | TPL-R07 | MVP 的 `Evidence Requirement` **必須**支援照片需求，Evidence 類型固定為照片。每個查核項次**必須**至少有一筆必填照片需求，`min_count` 至少為 1 且不設最大數量；照片需求**不得**在程式中針對特定項目寫死。範本結構不設總覽照片欄位；`overview`、`is_overview` 等總覽標記不屬範本欄位，因此不能用總覽照滿足項次的最低照片需求。現場照片覆蓋行為（每個查核項次至少一張非總覽照片、一張照片可覆蓋多個項次、總覽照片由現場選拍且不計入最低數量、照片數無上限）由 P6 `field-evidence` 驗收，追蹤於 [#105](https://github.com/speko-tw/inspect-flow/issues/105)。 | 必須／得／不得 | [PR-09](../../intents/02-principles.md#pr-09)、[KD-38](../../intents/03-decisions-and-stack.md#kd-38)、[KD-48](../../intents/03-decisions-and-stack.md#kd-48)、[KD-50](../../intents/03-decisions-and-stack.md#kd-50)、[KD-53](../../intents/03-decisions-and-stack.md#kd-53)、[OQ-05](../../intents/05-open-questions.md#oq-05) |
 | TPL-R08 | 套用範本時**必須**複製所選單一查核項目，或 `system_id` 範圍內全部查核項目的結構，建立專案自己的查核項目副本；每筆副本沿用範本項目結構，並帶 `project_id`、來源範本名稱與套用時間。項次、標準、實測欄位及照片需求各自存於對應的專案端子表，並以 `project_inspection_item_id` 外鍵連至副本，不以 JSON 欄位保存。單項套用的來源名稱為項目 `title`；系統套用的來源名稱為系統名稱，同次套用的各副本記錄相同來源名稱與時間。此後修改或刪除來源範本**不得**改動已套用的專案內容。P4 `inspection-planning` 得擴充副本欄位，並定義修改後的作廢／重查／更正流程。 | 必須／不得 | [KD-03](../../intents/03-decisions-and-stack.md#kd-03)、[KD-47](../../intents/03-decisions-and-stack.md#kd-47)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)；最小副本表與來源名稱選擇為本規格設計。 |
-| TPL-R09 | 系統**必須**有固定的全系統角色代碼 `template_admin`（範本管理員），以程式內 enum／常數表示；MVP 角色清單不得由 Admin 自訂，不建立角色定義資料表或 seed。`SystemRoleAssignment` 指派表記錄 `user_id` 與角色代碼；Admin 指派或收回角色**必須**寫稽核紀錄，事件代碼與欄位依 [audit-log 的 `template-system` 事件目錄](../audit-log/spec.md#template-system-事件)。範本管理員可新增、修改、刪除查核範本、查看所有專案並將任一專案查核項目存成範本。此角色與 `Role`、`ProjectMember`、`is_admin` 並存且互相獨立；套用範本由具目標專案查核項目編輯權限 `project_inspection_item.edit` 者執行，不要求範本管理員身分。 | 必須／得 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)；固定角色與代碼為本規格設計。 |
+| TPL-R09 | 系統**必須**有固定的全系統角色代碼 `template_admin`（範本管理員），以程式內 enum／常數表示；MVP 角色清單不得由 Admin 自訂，不建立角色定義資料表或 seed。`SystemRoleAssignment` 指派表記錄 `user_id` 與角色代碼；Admin 指派或收回角色**必須**寫稽核紀錄，事件代碼與欄位依 [audit-log 的 `template-system` 事件目錄](../audit-log/spec.md#template-system-事件)。Admin 與範本管理員均可新增、修改、刪除分類、系統與查核範本，並將可跨專案查看的查核項目存成範本；範本管理員可查看所有專案，Admin 依既有權限亦可。一般專案成員（包括專案管理者）不得管理範本庫或跨專案查看查核項目。此角色與 `Role`、`ProjectMember`、`is_admin` 並存且互相獨立；套用範本由具目標專案查核項目編輯權限 `project_inspection_item.edit` 者執行，不要求範本管理員身分。 | 必須／得 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-27](../../intents/03-decisions-and-stack.md#kd-27)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[KD-49](../../intents/03-decisions-and-stack.md#kd-49)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)；Admin 放行為負責人指示（[#387](https://github.com/speko-tw/inspect-flow/issues/387)）。 |
 | TPL-R10 | 所有本規格 API **必須**遵守 `api-conventions`，使用 `/api/v1` 路徑、UUID 資源識別、JSON 請求／回應與共用錯誤格式，並由後端依 TPL-R09 執行授權。分類與系統均提供新增、改名及刪除；分類下仍有系統或系統下仍有範本時均**必須**拒絕刪除並回 HTTP 409，錯誤碼分別為 `template.category_not_empty`、`template.system_not_empty`。 | 必須 | [API-R01](../api-conventions/spec.md#需求)、[API-R02](../api-conventions/spec.md#需求)、[API-R03](../api-conventions/spec.md#需求)、[API-R05](../api-conventions/spec.md#需求)、[API-R06](../api-conventions/spec.md#需求)；路徑、錯誤碼與刪除行為為本規格設計。 |
 | TPL-R12 | 範本管理 UI **必須**納入 MVP，提供管理範本分類、系統與範本內容的能力。 | 必須 | 本規格範圍設計；依據架構基準 §12.3–12.7 及 [KD-47](../../intents/03-decisions-and-stack.md#kd-47)。 |
 | TPL-R13 | 數值標準的 `range` 條件**必須**擇一使用 `range_form`：`interval` 使用 `lower_bound`、`upper_bound`，且下限不得大於上限；`tolerance` 使用 `value`、`tolerance`，且容許誤差不得小於零。舊版請求省略 `range_form` 時預設為 `tolerance`，此時容許誤差為 `null`、空字串或省略時補 `0`；明填 `range_form: null` 不視為省略，明填 `range_form: tolerance` 時容許誤差仍必填。兩種形式不得混填。非 `range` 條件維持 `value` 與原有可選 `tolerance`，不得填形式或上下限；所有數字均須為有限值。兩種形式均沿用 TPL-R11 的欄位綁定與單位自動帶入。 | 必須／不得 | [KD-52](../../intents/03-decisions-and-stack.md#kd-52)；欄位、驗證與舊請求預設為本規格設計。 |
@@ -71,23 +71,23 @@
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
 | GET | `/api/v1/template-categories` | 列出工程類別 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
-| POST | `/api/v1/template-categories` | 建立工程類別 | 範本管理員 |
-| PATCH | `/api/v1/template-categories/{category_id}` | 改名工程類別 | 範本管理員 |
-| DELETE | `/api/v1/template-categories/{category_id}` | 刪除工程類別；其下仍有系統時回 409 `template.category_not_empty` | 範本管理員 |
+| POST | `/api/v1/template-categories` | 建立工程類別 | Admin 或範本管理員 |
+| PATCH | `/api/v1/template-categories/{category_id}` | 改名工程類別 | Admin 或範本管理員 |
+| DELETE | `/api/v1/template-categories/{category_id}` | 刪除工程類別；其下仍有系統時回 409 `template.category_not_empty` | Admin 或範本管理員 |
 | GET | `/api/v1/template-categories/{category_id}/systems` | 列出類別下系統 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
-| POST | `/api/v1/template-categories/{category_id}/systems` | 建立系統 | 範本管理員 |
-| PATCH | `/api/v1/template-systems/{system_id}` | 改名系統 | 範本管理員 |
-| DELETE | `/api/v1/template-systems/{system_id}` | 刪除系統；其下仍有查核項目時回 409 `template.system_not_empty` | 範本管理員 |
+| POST | `/api/v1/template-categories/{category_id}/systems` | 建立系統 | Admin 或範本管理員 |
+| PATCH | `/api/v1/template-systems/{system_id}` | 改名系統 | Admin 或範本管理員 |
+| DELETE | `/api/v1/template-systems/{system_id}` | 刪除系統；其下仍有查核項目時回 409 `template.system_not_empty` | Admin 或範本管理員 |
 | GET | `/api/v1/template-systems/{system_id}/templates` | 依 cursor 分頁讀取系統下的範本，每筆含完整項次、標準、實測欄位及照片需求 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
-| PUT | `/api/v1/template-systems/{system_id}/templates` | 在單一交易中覆蓋系統下的範本集合；保留 body 中有既有 `id` 的項目，刪除未列出的項目並建立沒有 `id` 的項目 | 範本管理員 |
+| PUT | `/api/v1/template-systems/{system_id}/templates` | 在單一交易中覆蓋系統下的範本集合；保留 body 中有既有 `id` 的項目，刪除未列出的項目並建立沒有 `id` 的項目 | Admin 或範本管理員 |
 | GET | `/api/v1/templates` | 查詢範本與查核項目 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
-| POST | `/api/v1/templates` | 建立一筆查核項目範本；body 必含 `system_id` | 範本管理員 |
+| POST | `/api/v1/templates` | 建立一筆查核項目範本；body 必含 `system_id` | Admin 或範本管理員 |
 | GET | `/api/v1/templates/{template_id}` | 讀取範本結構 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
-| PUT | `/api/v1/templates/{template_id}` | 覆蓋目前範本內容 | 範本管理員 |
-| DELETE | `/api/v1/templates/{template_id}` | 刪除範本 | 範本管理員 |
+| PUT | `/api/v1/templates/{template_id}` | 覆蓋目前範本內容 | Admin 或範本管理員 |
+| DELETE | `/api/v1/templates/{template_id}` | 刪除範本 | Admin 或範本管理員 |
 | POST | `/api/v1/projects/{project_id}/inspection-items:apply-template` | body 擇一帶 `template_id`（單項）或 `system_id`（複製該系統下全部項目）；同專案同名項目回 409 與衝突名稱清單且整次不寫入；有效但沒有項目的系統回 `200` 與空清單 | 具該專案 `project_inspection_item.edit` 權限者 |
-| POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | 範本管理員 |
-| GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 專案成員、Admin 或範本管理員 |
+| POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | Admin 或範本管理員 |
+| GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 該專案成員、Admin 或範本管理員；跨專案瀏覽限 Admin 或範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
 | PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204 | Admin |
 | DELETE | `/api/v1/system-role-assignments/template_admin/{user_id}` | 收回使用者的 `template_admin` 指派；尚未指派時回 404 | Admin |
@@ -113,11 +113,11 @@
 | TPL-AC03 | 範本含具 `sequence`、`title`、`instruction` 的查核項目、項次、文字及數值標準、照片需求 | 儲存後讀回範本 | 所有結構一致；沒有現場結果、照片檔或 interval 欄位 | TPL-R04、TPL-R05、TPL-R06、TPL-R07 |
 | TPL-AC04 | 範本管理員儲存一份範本 | 更新同一範本，再讀取 | 回傳更新後唯一現行內容；沒有版本記錄或 `Template Version` | TPL-R02 |
 | TPL-AC05 | 一個 `system_id` 下有多個查核項目，另有單一項目範本；另有一個沒有查核項目的有效系統 | 分別以 `system_id` 與 `template_id` 套用到專案 | 可套用單項與整個系統；每筆 `ProjectInspectionItem` 複製項目結構並保存 `project_id`、套用時間及來源範本名稱（單項用 `title`、系統用系統名稱）；來源變更不影響副本；套用沒有查核項目的有效系統回 `200` 與空清單 | TPL-R04、TPL-R08 |
-| TPL-AC06 | 專案已套用範本，另有範本管理員 | 覆蓋或刪除來源範本，檢查專案副本；範本管理員再讀取及存成範本 | 專案副本不變；範本管理員能查看所有專案並把任一專案項目存成範本 | TPL-R08、TPL-R09 |
+| TPL-AC06 | 專案已套用範本，另有 Admin 或範本管理員 | 覆蓋或刪除來源範本，檢查專案副本；Admin 或範本管理員再讀取及存成範本 | 專案副本不變；Admin 或範本管理員能查看所有專案並把任一專案項目存成範本 | TPL-R08、TPL-R09 |
 | TPL-AC07 | 項次含文字標準、數值標準及照片需求 | 儲存並讀回定義，檢查範本結構與允許欄位 | 文字標準不解析；數值標準不接受實測值或自動判定；每個項次至少有一筆必填的照片需求，`min_count >= 1`、無最大數量且只接受照片類型；範本不接受 `overview`、`is_overview` 等總覽標記，故總覽照不能滿足項次最低數量。現場拍照覆蓋、跨項次共用照片與總覽照選拍行為由 P6 `field-evidence` #105 驗收 | TPL-R05、TPL-R06、TPL-R07 |
-| TPL-AC08 | 已登入 Admin、範本管理員、一般專案成員、無專案權限者 | 呼叫各端點及 `GET /api/v1/projects`；改名／刪除分類與系統；指派或收回全系統角色 | Admin 與範本管理員可列出全部專案；其他非 Admin 回 403；只有 Admin 可指派或收回固定角色且成功後留下稽核紀錄；專案編輯者可瀏覽及套用但不能寫入範本；分類下有系統或系統下有查核項目時刪除分別回 409 與對應錯誤碼；API 符合共用慣例 | TPL-R09、TPL-R10 |
+| TPL-AC08 | 已登入 Admin、範本管理員、一般專案成員（含專案管理者）、無專案權限者 | 呼叫範本分類、系統、單項與整系統寫入端點、存成範本、跨專案查核項目列表及 `GET /api/v1/projects`；改名／刪除分類與系統；指派或收回全系統角色 | Admin 與範本管理員可執行全部範本庫寫入、存成範本及跨專案瀏覽；Admin 與範本管理員可列出全部專案，其他非 Admin 回 403；只有 Admin 可指派或收回固定角色且成功後留下稽核紀錄；專案成員（含專案管理者）可瀏覽與套用有權限的範本，但不能寫入範本或跨專案瀏覽；分類下有系統或系統下有查核項目時刪除分別回 409 與對應錯誤碼；API 符合共用慣例 | TPL-R09、TPL-R10 |
 | TPL-AC09 | 項次有多個文字或數字實測欄位，且設有數值標準 | 儲存並讀回範本欄位定義，另嘗試省略綁定欄位、綁文字欄位或讓一個數字欄位綁兩個標準 | 每個數字欄位都有單位；每個數值標準必須綁定該項次的一個數字欄位，有數值標準時不得缺少綁定欄位；一個數字欄位最多綁一個數值標準；只有綁定欄位的單位與標準相同並由系統帶入、不可另設；其他數字欄位可自設單位；非法關聯被拒絕；範本不含現場實測值或單位換算 | TPL-R11 |
-| TPL-AC10 | 範本管理員已登入且範本庫有工程類別、系統及範本 | 使用 MVP 範本管理 UI 新增、改名、預覽及刪除分類、系統與範本 | 管理 UI 可完成分類與範本管理；分類下有系統或系統下有查核項目時刪除被拒絕，並顯示對應的 409 錯誤 | TPL-R10、TPL-R12 |
+| TPL-AC10 | Admin 或範本管理員已登入且範本庫有工程類別、系統及範本 | 使用 MVP 範本管理 UI 新增、改名、預覽及刪除分類、系統與範本 | 管理 UI 可完成分類與範本管理；分類下有系統或系統下有查核項目時刪除被拒絕，並顯示對應的 409 錯誤 | TPL-R10、TPL-R12 |
 | TPL-AC11 | 數值標準分別採區間與標準值加減誤差，且資料庫已有舊 `range` 資料 | 建立、更新、讀取、套用及存成範本；另測試省略形式且誤差為空的舊請求、上下限反序、負誤差、缺欄位與欄位混填 | 兩種合法形式完整保留；省略形式預設 `tolerance` 且空誤差補 `0`；明填形式時空誤差及其他非法輸入回 422；舊資料遷移為 `tolerance`，空誤差補 `0`；實測欄位綁定與單位規則不變 | TPL-R11、TPL-R13 |
 | TPL-AC12 | 專案已有與待套用項目去空白且不分大小寫後同名的項目 | 套用單項或含衝突項目的整個系統 | 回 409 `project_inspection_item.duplicate_name`，`error.details` 列出衝突名稱，整次不新增任何項目 | TPL-R14 |
 
@@ -150,3 +150,4 @@
 - #356 第 1 輪審查後，舊 `range` 列的空容許誤差轉為 `0`（視為精確值），避免新契約讀回後無法原樣儲存；舊版請求省略 `range_form` 時預設 `tolerance`，維持 T5 畫面的建立行為。這是相容性取捨；明填空形式仍回 422 — [PR #373 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/373#pullrequestreview-5404511885)。
 - #356 第 2 輪審查後，省略 `range_form` 的舊版 `range` 請求若容許誤差為空，也補 `0`；明填 `tolerance` 形式仍要求非空誤差，與資料遷移的取捨一致 — [PR #373 第 2 輪審查](https://github.com/speko-tw/inspect-flow/pull/373#pullrequestreview-5404582144)。
 - 澄清 TPL-AC07：本規格驗收範本端的必填照片需求、最低數量、無上限、照片類型及沒有總覽照片需求欄位；現場照片覆蓋、跨項次共用與總覽照選拍行為移交 P6 `field-evidence` — [#105 留言](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-5977919739)。
+- Admin 亦可管理範本庫並跨專案瀏覽、存成範本；一般專案成員（含專案管理者）仍不得寫入範本或跨專案瀏覽 — [#387](https://github.com/speko-tw/inspect-flow/issues/387)。
