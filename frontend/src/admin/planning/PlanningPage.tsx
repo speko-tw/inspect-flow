@@ -303,6 +303,7 @@ export default function PlanningPage({
       (plan) => active && setSelectedPlanData({ id: selectedPlanId, plan }),
       (caught: unknown) => {
         if (active) {
+          setErrorContext('page')
           if (caught instanceof ManagementApiError && caught.status === 403) {
             setAccessDenied(true)
           } else {

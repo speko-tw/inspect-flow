@@ -239,8 +239,36 @@ describe('planning management page', () => {
     fireEvent.submit(form as HTMLFormElement)
 
     const alert = await within(form as HTMLElement).findByRole('alert')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(alert).toHaveTextContent('輸入資料不符合規格')
+  })
+
+  it('shows a plan-detail read error at page level', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} />)
+    await screen.findByRole('heading', { name: '查核計畫' })
+
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '既有計畫' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    const planButton = await screen.findByRole('button', {
+      name: '既有計畫（草稿）',
+    })
+
+    client.getPlan = async () => {
+      throw new PlanningApiError(500, 'inspection_plan.unavailable')
+    }
+    fireEvent.click(planButton)
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent('目前無法完成操作')
+      expect(alert.closest('section')).toHaveAttribute(
+        'aria-labelledby',
+        'planning-heading',
+      )
+    })
   })
 
   it('adds zones in a separate inline row and cancels with Escape', async () => {
