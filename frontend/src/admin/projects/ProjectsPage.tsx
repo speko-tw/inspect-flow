@@ -1,11 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { managementErrorMessage } from '../api'
 import {
   createProject,
   hasDuplicateCodeWarning,
-  listProjects,
+  listProjectsPage,
   updateProject,
   type Project,
   type ProjectInput,
@@ -53,22 +53,30 @@ export default function ProjectsPage() {
   const [editing, setEditing] = useState<Project | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [reloadKey, setReloadKey] = useState(0)
+  const [query, setQuery] = useState('')
+  const [appliedQuery, setAppliedQuery] = useState('')
+  const [listError, setListError] = useState('')
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const requestId = useRef(0)
 
   useEffect(() => {
     let active = true
+    const id = ++requestId.current
     async function load() {
       try {
-        const rows = await listProjects()
-        if (active) {
-          setProjects(rows)
+        const page = await listProjectsPage({ q: appliedQuery, limit: 50 })
+        if (active && id === requestId.current) {
+          setProjects(page.items)
+          setNextCursor(page.next_cursor)
         }
       } catch (caught) {
         if (active) {
-          setError(managementErrorMessage(caught))
+          setListError(managementErrorMessage(caught))
         }
       } finally {
         if (active) {
-          setLoading(false)
+          if (id === requestId.current) setLoading(false)
         }
       }
     }
@@ -76,7 +84,55 @@ export default function ProjectsPage() {
     return () => {
       active = false
     }
-  }, [reloadKey])
+  }, [reloadKey, appliedQuery])
+
+  async function searchProjects(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const search = query.trim()
+    const id = ++requestId.current
+    setProjects([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setListError('')
+    setAppliedQuery(search)
+    setLoading(true)
+    try {
+      const page = await listProjectsPage({ q: search, limit: 50 })
+      if (id === requestId.current) {
+        setProjects(page.items)
+        setNextCursor(page.next_cursor)
+      }
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoading(false)
+    }
+  }
+
+  async function loadMoreProjects() {
+    if (!nextCursor || loading || loadingMore) return
+    const id = requestId.current
+    const cursor = nextCursor
+    setLoadingMore(true)
+    setListError('')
+    try {
+      const page = await listProjectsPage({
+        q: appliedQuery,
+        cursor,
+        limit: 50,
+      })
+      if (id === requestId.current) {
+        setProjects((current) => [...current, ...page.items])
+        setNextCursor(page.next_cursor)
+      }
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoadingMore(false)
+    }
+  }
 
   function change(field: keyof FormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -123,6 +179,11 @@ export default function ProjectsPage() {
           : `專案「${saved.name}」已儲存。`,
       )
       cancelEdit()
+      setProjects([])
+      setNextCursor(null)
+      setLoading(true)
+      setLoadingMore(false)
+      setListError('')
       setReloadKey((key) => key + 1)
     } catch (caught) {
       setError(managementErrorMessage(caught))
@@ -137,7 +198,37 @@ export default function ProjectsPage() {
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
       {loading ? <p>載入中…</p> : null}
-      {!loading && projects.length === 0 ? <p>目前沒有專案。</p> : null}
+      <form onSubmit={searchProjects}>
+        <label>
+          搜尋專案
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            value={query}
+          />
+        </label>
+        <button disabled={loading} type="submit">
+          搜尋
+        </button>
+      </form>
+      {listError && <p role="alert">{listError}</p>}
+      {!loading && projects.length === 0 ? (
+        appliedQuery ? (
+          <p>
+            找不到符合「{appliedQuery}」的專案。{' '}
+            <button
+              onClick={() => {
+                setQuery('')
+                setAppliedQuery('')
+              }}
+              type="button"
+            >
+              清除搜尋
+            </button>
+          </p>
+        ) : (
+          <p>目前沒有專案。</p>
+        )
+      ) : null}
       {projects.length > 0 && (
         <table>
           <thead>
@@ -180,6 +271,15 @@ export default function ProjectsPage() {
             ))}
           </tbody>
         </table>
+      )}
+      {nextCursor && (
+        <button
+          disabled={loading || loadingMore}
+          onClick={() => void loadMoreProjects()}
+          type="button"
+        >
+          {loadingMore ? '載入中…' : '載入更多'}
+        </button>
       )}
       <form onSubmit={save}>
         <h2>{editing ? `編輯專案「${editing.name}」` : '新增專案'}</h2>
