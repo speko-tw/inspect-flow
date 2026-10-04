@@ -15,6 +15,7 @@ from app.services.operator import (
     MultipleOperatorsFoundError,
     OperatorNotFoundError,
     get_current_operator,
+    get_system_operator,
 )
 from tests.db.conftest import create_root_user_with_company, make_system_admin
 
@@ -53,3 +54,11 @@ class TestGetCurrentOperator:
 
         with pytest.raises(MultipleOperatorsFoundError):
             get_current_operator(session)
+
+
+def test_shared_system_operator_lookup_returns_builtin_account(session):
+    operator = create_root_user_with_company(session, "OPR012")
+    make_system_admin(operator)
+    session.flush()
+
+    assert get_system_operator(session) is operator
