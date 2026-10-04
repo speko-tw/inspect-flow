@@ -18,6 +18,7 @@
 - 第一批事件：`Role` 的新增、修改、刪除；`ProjectMember` 的角色指派；把人移出專案；`User.is_admin` 的變更（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、DOM-R22、[#126](https://github.com/speko-tw/inspect-flow/issues/126)、[#125](https://github.com/speko-tw/inspect-flow/issues/125)）。
 - `authentication` 的兩種事件：設定密碼、帳號被鎖（[AUT-Q6](../authentication/spec.md#aut-q6) 裁定，[#148](https://github.com/speko-tw/inspect-flow/issues/148)），見 [`authentication` 事件](#authentication-事件)；首次設定 `admin` 密碼與 `admin` 重設指令沿用 `user.password_set`（ALG-R18、ALG-R21）。
 - 帳號名稱修改與公司連結變更（含因此清空的欄位）兩種事件（DOM-R22；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）），見[帳號與公司連結事件](#帳號與公司連結事件)。
+- `ProjectZone` 新增、改名與刪除事件，依 `inspection-planning` IP-R10 登記，見[`inspection-planning` 事件](#inspection-planning-事件)。
 - 寫入時機的驗收：DOM-R22 列出的每一種變更是否寫出正確的紀錄（DOM-R22 寫明由本規格驗收）。
 - 預留：外部身分同步覆蓋基本欄位的事件（[KD-20](../../intents/03-decisions-and-stack.md#kd-20)），只保證之後不用改資料表就能套用。
 
@@ -111,6 +112,17 @@
 | `system_role_assignment.created` | 指派固定的 `template_admin` 角色 | `system_role_assignment` | 空值 | `user_id`、`role_code` |
 | `system_role_assignment.deleted` | 收回固定的 `template_admin` 角色 | `system_role_assignment` | `user_id`、`role_code` | 空值 |
 | `template_item.created_from_project` | 範本管理員將專案查核項目存成範本 | `template_item` | 空值 | `project_id`、`project_inspection_item_id`、`system_id` |
+
+<a id="inspection-planning-事件"></a>
+## `inspection-planning` 事件
+
+依 `inspection-planning` IP-R10 登記 `ProjectZone` 管理事件。每次成功新增、改名或刪除各寫一筆；失敗或回滾不得留紀錄。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
+
+| 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
+|---|---|---|---|---|
+| `project_zone.created` | 新增專案分區 | `project_zone` | 空值 | `project_id`、`name` |
+| `project_zone.updated` | 修改分區名稱 | `project_zone` | 有變動的 `name` | 同左 |
+| `project_zone.deleted` | 刪除未被 Task 引用的專案分區 | `project_zone` | `project_id`、`name` | 空值 |
 
 <a id="authentication-事件"></a>
 ## `authentication` 事件
@@ -216,6 +228,8 @@
 ## 變更紀錄
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
+
+- 範圍變更（負責人指示，#369）：登記 `ProjectZone` 新增、改名與刪除事件，依 IP-R10 同一交易寫入 — [#73 裁定](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5976192382)、[#369](https://github.com/speko-tw/inspect-flow/issues/369)
 
 - 依 AUT-Q6 裁定，新增 ALG-R15～ALG-R17（系統事件、每次都寫、`authentication` 事件）與 ALG-AC12，登記 `user.password_set`、`user.locked`，ALG-R05、ALG-R09 補上對應的例外 — [#148](https://github.com/speko-tw/inspect-flow/issues/148)
 - 負責人裁定（#261，2026-09-29）：初始化不再預建三個範本角色；ALG-R12 僅描述內建 `admin` 與首次登入碼，初始化仍不寫稽核紀錄 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
