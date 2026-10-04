@@ -1,10 +1,7 @@
 """Category, system and inspection template endpoints (TPL T3)."""
 
-import base64
-import binascii
-import json
-from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from typing import Any, Literal
 from uuid import UUID
 
@@ -16,11 +13,12 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.pagination import page, write_call
 from app.auth.access import (
     require_system_role,
     require_system_role_or_any_project_permission,
@@ -299,88 +297,18 @@ def _invalid_structure_constraint(exc: IntegrityError) -> bool:
     )
 
 
-def _write_call(call, *args):
-    try:
-        return call(*args)
-    except InvalidTemplateError as exc:
-        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    except IntegrityError as exc:
+def template_library_error(exc: Exception) -> APIError | None:
+    if isinstance(exc, InvalidTemplateError):
+        return APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    if isinstance(exc, IntegrityError):
         if _name_conflict(exc):
-            raise APIError(ErrorCode.TEMPLATE_NAME_CONFLICT, 409) from exc
+            return APIError(ErrorCode.TEMPLATE_NAME_CONFLICT, 409)
         if _invalid_structure_constraint(exc):
-            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-        raise
+            return APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    return None
 
 
-def _cursor_key(cursor: str | None) -> tuple[datetime, UUID] | None:
-    if cursor is None:
-        return None
-    try:
-        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
-        payload = json.loads(raw.decode("utf-8"))
-        if not isinstance(payload, dict) or set(payload) != {"t", "id"}:
-            raise ValueError("invalid cursor")
-        timestamp = datetime.fromisoformat(payload["t"])
-        identifier = UUID(payload["id"])
-        if timestamp.tzinfo is None:
-            raise ValueError("cursor has no timezone")
-        key = (timestamp.astimezone(UTC), identifier)
-        if _encode_cursor(*key) != cursor:
-            raise ValueError("noncanonical cursor")
-        return key
-    except (
-        ValueError,
-        TypeError,
-        AttributeError,
-        UnicodeDecodeError,
-        binascii.Error,
-        json.JSONDecodeError,
-    ) as exc:
-        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-
-
-def _encode_cursor(created_at: datetime, identifier: UUID) -> str:
-    payload = {
-        "t": created_at.astimezone(UTC).isoformat(timespec="microseconds"),
-        "id": str(identifier),
-    }
-    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-
-
-def _page(
-    db: Session,
-    model,
-    *,
-    cursor: str | None,
-    limit: int,
-    filters=(),
-    full: bool = False,
-) -> dict:
-    statement = select(model).where(*filters)
-    key = _cursor_key(cursor)
-    if key is not None:
-        statement = statement.where(
-            or_(
-                model.created_at > key[0],
-                and_(model.created_at == key[0], model.id > key[1]),
-            )
-        )
-    rows = db.scalars(
-        statement.order_by(model.created_at, model.id).limit(limit + 1)
-    ).all()
-    page = rows[:limit]
-    next_cursor = None
-    if len(rows) > limit:
-        last = page[-1]
-        next_cursor = _encode_cursor(last.created_at, last.id)
-    return {
-        "items": [
-            template_item_detail(db, row) if full else _summary(row)
-            for row in page
-        ],
-        "next_cursor": next_cursor,
-    }
+template_write_call = partial(write_call, error_mapper=template_library_error)
 
 
 def _summary(row) -> dict:
@@ -422,12 +350,18 @@ def list_categories(
     limit: int = Query(default=_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = _db_dependency,  # noqa: B008
 ) -> dict:
-    return _page(db, TemplateCategory, cursor=cursor, limit=limit)
+    return page(
+        db,
+        TemplateCategory,
+        cursor=cursor,
+        limit=limit,
+        serialize=_summary,
+    )
 
 
 @category_router.post("", status_code=201, dependencies=[_write])
 def add_category(body: NameBody, db: Session = _db_dependency) -> dict:
-    return _summary(_write_call(create_category, db, body.name))
+    return _summary(template_write_call(create_category, db, body.name))
 
 
 @category_router.patch("/{category_id}", dependencies=[_write])
@@ -435,7 +369,9 @@ def patch_category(
     category_id: UUID, body: NameBody, db: Session = _db_dependency
 ) -> dict:
     category = _category(db, category_id)
-    return _summary(_write_call(rename_category, db, category, body.name))
+    return _summary(
+        template_write_call(rename_category, db, category, body.name)
+    )
 
 
 @category_router.delete(
@@ -464,12 +400,13 @@ def list_systems(
     db: Session = _db_dependency,
 ) -> dict:
     _category(db, category_id)
-    return _page(
+    return page(
         db,
         TemplateSystem,
         cursor=cursor,
         limit=limit,
         filters=(TemplateSystem.category_id == category_id,),
+        serialize=_summary,
     )
 
 
@@ -480,7 +417,9 @@ def add_system(
     category_id: UUID, body: NameBody, db: Session = _db_dependency
 ) -> dict:
     category = _category(db, category_id)
-    return _summary(_write_call(create_system, db, category, body.name))
+    return _summary(
+        template_write_call(create_system, db, category, body.name)
+    )
 
 
 @system_router.patch("/{system_id}", dependencies=[_write])
@@ -488,7 +427,7 @@ def patch_system(
     system_id: UUID, body: NameBody, db: Session = _db_dependency
 ) -> dict:
     system = _system(db, system_id)
-    return _summary(_write_call(rename_system, db, system, body.name))
+    return _summary(template_write_call(rename_system, db, system, body.name))
 
 
 @system_router.delete("/{system_id}", status_code=204, dependencies=[_write])
@@ -515,13 +454,20 @@ def list_templates(
     if system_id is not None:
         _system(db, system_id)
         filters = (TemplateItem.system_id == system_id,)
-    return _page(db, TemplateItem, cursor=cursor, limit=limit, filters=filters)
+    return page(
+        db,
+        TemplateItem,
+        cursor=cursor,
+        limit=limit,
+        filters=filters,
+        serialize=_summary,
+    )
 
 
 @template_router.post("", status_code=201, dependencies=[_write])
 def add_template(body: TemplateBody, db: Session = _db_dependency) -> dict:
     _system(db, body.system_id)
-    item = _write_call(create_template, db, body.model_dump())
+    item = template_write_call(create_template, db, body.model_dump())
     return template_item_detail(db, item)
 
 
@@ -536,7 +482,9 @@ def put_template(
 ) -> dict:
     item = _item(db, template_id)
     _system(db, body.system_id)
-    updated = _write_call(replace_template, db, item, body.model_dump())
+    updated = template_write_call(
+        replace_template, db, item, body.model_dump()
+    )
     return template_item_detail(db, updated)
 
 
@@ -555,13 +503,13 @@ def get_system_templates(
     db: Session = _db_dependency,
 ) -> dict:
     _system(db, system_id)
-    return _page(
+    return page(
         db,
         TemplateItem,
         cursor=cursor,
         limit=limit,
         filters=(TemplateItem.system_id == system_id,),
-        full=True,
+        serialize=lambda item: template_item_detail(db, item),
     )
 
 
@@ -580,22 +528,24 @@ def put_system_templates(
     if len(set(names)) != len(names):
         raise APIError(ErrorCode.TEMPLATE_NAME_CONFLICT, 409)
     payloads = [entry.model_dump(exclude={"id"}) for entry in entries]
-    _write_call(validate_system_structures, payloads)
+    template_write_call(validate_system_structures, payloads)
     existing = db.scalars(
         select(TemplateItem).where(TemplateItem.system_id == system_id)
     ).all()
     by_id = {item.id: item for item in existing}
     if any(identifier not in by_id for identifier in ids):
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    _write_call(park_template_names, db, existing)
+    template_write_call(park_template_names, db, existing)
     for item in existing:
         if item.id not in ids:
             delete_template(db, item)
     result = []
     for entry, data in zip(entries, payloads, strict=True):
         if entry.id is None:
-            item = _write_call(create_template, db, data)
+            item = template_write_call(create_template, db, data)
         else:
-            item = _write_call(replace_template, db, by_id[entry.id], data)
+            item = template_write_call(
+                replace_template, db, by_id[entry.id], data
+            )
         result.append(template_item_detail(db, item))
     return {"items": result}

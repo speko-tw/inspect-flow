@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import {
   afterEach,
@@ -51,11 +51,13 @@ describe('App routing', () => {
   })
 
   it('renders the admin user management page on /admin', async () => {
-    render(
-      <MemoryRouter initialEntries={['/admin']}>
-        <App />
-      </MemoryRouter>,
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/admin']}>
+          <App />
+        </MemoryRouter>,
+      )
+    })
 
     expect(
       await screen.findByRole('heading', { name: '使用者管理' }),
