@@ -119,7 +119,7 @@ function chunkModulesReportPlugin(): Plugin {
  * - INSPECTFLOW_DEV_HTTPS_CERT、INSPECTFLOW_DEV_HTTPS_KEY：憑證與
  *   私鑰的檔案路徑，兩個都設才啟用 HTTPS；都不設就維持 HTTP。
  * - INSPECTFLOW_DEV_HOST：開發伺服器綁定的 IPv4 網卡位址；與
- *   INSPECTFLOW_DEV_ALLOWED_CIDR 一起設定時，限制介面與來源子網。
+ *   CIDR 限制允許來源；HOST 限制綁定網卡。
  *   兩者只在 HTTPS 模式接受；未設定時只綁本機。
  *
  * 不用 VITE_ 前綴，這些值才不會被 Vite 帶進前端程式。

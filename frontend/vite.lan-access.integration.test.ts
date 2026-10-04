@@ -71,7 +71,7 @@ function websocketStatus(
 }
 
 describe('Vite LAN HTTP and WebSocket access integration', () => {
-  it('allows the configured peer and rejects other peers and Host values', async () => {
+  it('allows the configured peer and rejects other peers', async () => {
     const server = await createServer({
       configFile: false,
       root: process.cwd(),

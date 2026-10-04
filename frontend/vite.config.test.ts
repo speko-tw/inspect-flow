@@ -118,7 +118,35 @@ describe('LAN development server access', () => {
     expect(isIpv4InCidr('2001:db8::1', '192.168.1.0/24')).toBe(false)
   })
 
-  it('requires both the interface and source subnet when LAN is enabled', () => {
+  it('checks CIDR boundaries and IPv4-mapped peers', () => {
+    const cidr = '192.168.1.0/24'
+    expect(isIpv4InCidr('192.168.1.0', cidr)).toBe(true)
+    expect(isIpv4InCidr('192.168.1.255', cidr)).toBe(true)
+    expect(isIpv4InCidr('192.168.2.0', cidr)).toBe(false)
+    expect(isIpv4InCidr('192.168.0.255', cidr)).toBe(false)
+    expect(isIpv4InCidr('::ffff:c0a8:0205', cidr)).toBe(false)
+
+    expect(isIpv4InCidr('192.168.1.42', '192.168.1.42/32')).toBe(true)
+    expect(isIpv4InCidr('192.168.1.43', '192.168.1.42/32')).toBe(false)
+  })
+
+  it('rejects malformed IPv4 CIDR values', () => {
+    for (const cidr of ['192.168.1.0/33', '192.168.1.0', '192.168.01.0/24']) {
+      expect(() => isIpv4InCidr('192.168.1.20', cidr)).toThrow('IPv4 CIDR')
+    }
+  })
+
+  it('defaults to loopback and requires HTTPS for LAN binding', () => {
+    expect(resolveDevHttps({})).toEqual({})
+    expect(() =>
+      resolveDevHttps({
+        INSPECTFLOW_DEV_HOST: '192.168.1.20',
+        INSPECTFLOW_DEV_ALLOWED_CIDR: '192.168.1.0/24',
+      }),
+    ).toThrow('只能在 HTTPS 模式使用')
+  })
+
+  it('requires interface and subnet for LAN access', () => {
     expect(() =>
       resolveDevHttps({ INSPECTFLOW_DEV_HOST: '192.168.1.20' }),
     ).toThrow('INSPECTFLOW_DEV_ALLOWED_CIDR')

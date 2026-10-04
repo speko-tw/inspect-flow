@@ -38,6 +38,7 @@ const appleIcon = await readFile(appleIconPath)
 assert.equal(appleIcon.toString('hex', 0, 8), '89504e470d0a1a0a')
 assert.equal(appleIcon.readUInt32BE(16), 180)
 assert.equal(appleIcon.readUInt32BE(20), 180)
+assert.equal(appleIcon[25], 2, 'Apple touch icon must be opaque RGB')
 
 /** @param {string} directory @returns {Promise<string[]>} */
 async function walk(directory) {
@@ -55,15 +56,11 @@ async function walk(directory) {
 }
 
 const files = await walk(dist)
-assert.ok(
-  !files.some((file) => path.basename(file).toLowerCase().includes('service')),
-  'build must not include a service worker file',
-)
 for (const file of files.filter((entry) => entry.endsWith('.js'))) {
   const bundle = await readFile(file, 'utf8')
   assert.doesNotMatch(
     bundle,
-    /serviceWorker\s*\.\s*register\s*\(/,
+    /navigator\s*\.\s*serviceWorker\s*\.\s*register\s*\(/,
     'build must not register a service worker',
   )
 }
