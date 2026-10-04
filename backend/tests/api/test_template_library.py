@@ -149,6 +149,85 @@ def _template(system_id, title="Foundation"):
     }
 
 
+@pytest.mark.parametrize(
+    ("standard", "valid"),
+    [
+        (
+            {
+                "range_form": "interval",
+                "value": None,
+                "tolerance": None,
+                "lower_bound": "3.0",
+                "upper_bound": "3.6",
+            },
+            True,
+        ),
+        (
+            {"range_form": "tolerance", "value": "3.3", "tolerance": "0.3"},
+            True,
+        ),
+        (
+            {
+                "range_form": "interval",
+                "value": None,
+                "tolerance": None,
+                "lower_bound": "3.6",
+                "upper_bound": "3.0",
+            },
+            False,
+        ),
+        (
+            {"range_form": "tolerance", "value": "3.3", "tolerance": "-0.3"},
+            False,
+        ),
+        (
+            {
+                "range_form": "interval",
+                "value": "3.3",
+                "lower_bound": "3.0",
+                "upper_bound": "3.6",
+            },
+            False,
+        ),
+        (
+            {
+                "range_form": "tolerance",
+                "value": "3.3",
+                "tolerance": "0.3",
+                "lower_bound": "3.0",
+            },
+            False,
+        ),
+    ],
+)
+def test_range_forms_validate_on_create_and_update(clients, standard, valid):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id)
+    numeric = body["inspection_points"][0]["numeric_standard"]
+    numeric.update(standard)
+    numeric["condition"] = "range"
+    created = manager.post("/api/v1/templates", json=body)
+    assert created.status_code == (201 if valid else 422), created.text
+    if not valid:
+        return
+    assert (
+        created.json()["inspection_points"][0]["numeric_standard"][
+            "range_form"
+        ]
+        == standard["range_form"]
+    )
+    changed = manager.put(
+        f"/api/v1/templates/{created.json()['id']}", json=body
+    )
+    assert changed.status_code == 200, changed.text
+    numeric["range_form"] = None
+    invalid = manager.put(
+        f"/api/v1/templates/{created.json()['id']}", json=body
+    )
+    assert invalid.status_code == 422
+
+
 def test_access_and_name_conflicts(clients):
     manager = clients["manager"]
     category_id, system_id = _tree(manager)

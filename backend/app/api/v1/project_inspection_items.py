@@ -36,6 +36,7 @@ from app.models import (
 )
 from app.services.inspection_details import inspection_points_detail
 from app.services.project_templates import (
+    DuplicateProjectItemError,
     apply_template,
     create_template_from_project_item,
 )
@@ -127,12 +128,19 @@ def apply_template_to_project(
     if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     template_id, system_id = body.selected_source()
-    result = apply_template(
-        db,
-        project_id=project_id,
-        template_id=template_id,
-        system_id=system_id,
-    )
+    try:
+        result = apply_template(
+            db,
+            project_id=project_id,
+            template_id=template_id,
+            system_id=system_id,
+        )
+    except DuplicateProjectItemError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
+            409,
+            details=exc.names,
+        ) from exc
     if result is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     if system_id is not None and not result:

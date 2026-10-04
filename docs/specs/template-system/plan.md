@@ -15,11 +15,13 @@
 | T5 | MVP 範本管理 UI：管理兩層分類、編輯範本結構、標準與實測欄位定義、管理照片需求、預覽單項與整個系統範本；入口掛載於既有 AdminPage，瀏覽連結位於 FieldPage，樣式沿用全域樣式表 | `frontend/src/admin/templates/api.ts`、`frontend/src/admin/templates/api.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`frontend/src/admin/templates/TemplatesPage.test.tsx`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/field/FieldPage.tsx`、`frontend/src/field/FieldPage.test.tsx`、`frontend/src/styles.css` | T2、T3 | TPL-AC02、TPL-AC03、TPL-AC04、TPL-AC07、TPL-AC09、TPL-AC10 | #329 |
 | T6 | 專案套用與存為範本 UI：由具 `project_inspection_item.edit` 權限者以 `template_id` 套用單項，或以 `system_id` 套用整個系統；範本管理員可跨專案瀏覽並把專案項目存至指定系統；顯示副本記錄的來源名稱與時間 | `frontend/src/features/projects/`、`frontend/src/routes/`、`frontend/tests/` | T2、T3、T4 | TPL-AC05、TPL-AC06、TPL-AC08 | #330 |
 | T7 | E2E／整合驗收與文件收尾：驗證權限、複製隔離、照片覆蓋規則及不版本化；依規格確認範圍並更新索引，確保各 AC 都有證據 | `backend/tests/`、`frontend/tests/`、`docs/specs/template-system/spec.md`、`docs/specs/README.md` | T1～T6 | TPL-AC01～TPL-AC10 | #331 |
+| T8 | 範圍條件兩種形式與套用同名拒絕：更新數值標準欄位、驗證、遷移、複製與重複名稱檢查 | `backend/`、`docs/specs/template-system/`、必要的 `docs/specs/database-foundation/` | T1、T3、T4 | TPL-AC11、TPL-AC12 | #356 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；任務 issue 開立前應把表內概略檔案責任換成實際檔案清單。
 - 每條本規格 AC 至少由一個任務涵蓋；TPL-AC01、AC08 涵蓋權限及管理員指派稽核，AC02～AC04 涵蓋結構與不版本化，AC05～AC06 涵蓋複製與權限，AC07 涵蓋標準及照片需求，AC09 涵蓋實測欄位結構與單位。
 - 不在本計畫建立報告範本、自主檢查／抽查欄位、現場證據上傳、實測值、自動判定、interval 自動切分或範本審核流程。
 - 任務 issue 已開立，依表格 T1～T7 對應 #325～#331。
+- T8 依負責人追加裁定由 #356 落地；範圍兩種形式與同名拒絕分別對應 TPL-AC11、TPL-AC12。
 
 ## 並行分組
 
@@ -55,6 +57,8 @@
 | TPL-AC08 | API 整合／契約測試：逐端點驗證讀寫權限；只有 Admin 可指派或收回固定 `template_admin` 角色，成功後查核稽核紀錄；Admin 與範本管理員的 `GET /api/v1/projects` 均回傳全部專案，其他非 Admin 為 403；分類或系統刪除衝突回指定 409；路徑、UUID、內容型別與錯誤 envelope 依 `api-conventions`。 |
 | TPL-AC09 | model/API 測試：同一項次可設多個文字或數字實測欄位；數字欄位有單位；每個數值標準綁定一個數字欄位，僅該欄位單位自動帶入且不可另設；範本 schema 不含現場填值或換算行為。 |
 | TPL-AC10 | 前端測試：範本管理 UI 可管理工程類別、系統與單項查核項目範本；分類或系統刪除衝突顯示對應 409。 |
+| TPL-AC11 | API／migration 測試：兩種形式建立、更新與讀回；非法欄位組合回 422；舊資料轉為 `tolerance`；套用後再存成範本保留形式。 |
+| TPL-AC12 | API 測試：單項與整系統套用遇同專案同名回 409 與衝突名稱；整次無新增項目。 |
 
 ## 考慮過但沒採用的做法
 

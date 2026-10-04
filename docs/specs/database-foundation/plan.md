@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 DBF-R01～DBF-R14、DBF-AC01～DBF-AC11，以及 Phase 3 範本與最小專案副本資料表的 DBF-R20～DBF-R21、DBF-AC12～DBF-AC13。T5 是依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）對 T4 已完成範圍的修訂，不新增需求或驗收條件編號。Phase 3 schema 與約束由 `template-system` T1（[#325](https://github.com/speko-tw/inspect-flow/issues/325)）實作並同時滿足 DBF-AC12、DBF-AC13；最小 `ProjectInspectionItem` 由 `template-system` 定義與建表，P4 `inspection-planning` 得擴充欄位並負責作廢／重查／更正流程。`Template Version` 依 KD-03 不建立。
+本計畫涵蓋 DBF-R01～DBF-R14、DBF-AC01～DBF-AC11，以及 Phase 3 範本與最小專案副本資料表的 DBF-R20～DBF-R22、DBF-AC12～DBF-AC14。T5 是依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）對 T4 已完成範圍的修訂，不新增需求或驗收條件編號。Phase 3 schema 與約束由 `template-system` T1（[#325](https://github.com/speko-tw/inspect-flow/issues/325)）實作並同時滿足 DBF-AC12、DBF-AC13；新增的範圍形式欄位與既有資料轉換由 `template-system` T8（#356）實作並滿足 DBF-AC14。最小 `ProjectInspectionItem` 由 `template-system` 定義與建表，P4 `inspection-planning` 得擴充欄位並負責作廢／重查／更正流程。`Template Version` 依 KD-03 不建立。
 
 ## 任務
 
@@ -22,6 +22,7 @@
 - 依 plan 開 task issue 時才建立上表的 issue 編號；本 PR 只寫文件，不開 task issue。
 - 本規格目前所有列出的資料模型與資料庫基礎 AC 均已凍結；`已凍結` 不代表各實作任務已完成，所有任務合併且 AC 驗證完成後才改為「已完成」。
 - Phase 3 的 DBF-AC12、DBF-AC13 由範本資料模型任務 #325 的資料庫/API 測試驗收；其凍結包含最小專案副本表，不含 P4 後續欄位及流程。
+- DBF-AC14 由 #356 的 migration 與範本／專案副本測試驗收，確認舊 `range` 資料轉換及新區間形式的可空 `value`。
 
 ## 並行分組
 

@@ -212,11 +212,12 @@ class TestRoundTrip:
         finally:
             eng.dispose()
 
-    def test_new_migration_is_the_head(self):
+    def test_account_migration_remains_in_single_chain(self):
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(_cfg())
-        assert script.get_heads() == [_NEW_HEAD]
+        assert len(script.get_heads()) == 1
+        assert _NEW_HEAD in {row.revision for row in script.walk_revisions()}
         revision = script.get_revision(_NEW_HEAD)
         assert revision is not None
         assert revision.down_revision == _NEW_PARENT
