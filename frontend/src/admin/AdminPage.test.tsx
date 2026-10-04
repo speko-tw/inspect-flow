@@ -163,7 +163,6 @@ function managementFetch({
             start + limit < filtered.length ? String(start + limit) : null,
         })
       }
-      }
       if (parsed.pathname === '/api/v1/companies' && method === 'GET') {
         const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
         const filtered = companies.filter((row) =>
