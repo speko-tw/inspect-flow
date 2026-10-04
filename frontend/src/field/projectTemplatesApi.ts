@@ -1,3 +1,7 @@
+import type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
+
+export type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
+
 const API_BASE = '/api/v1'
 
 export class ProjectTemplatesApiError extends Error {
@@ -38,16 +42,6 @@ export interface ProjectSummary {
   name: string
 }
 
-export interface TemplateCategory {
-  id: string
-  name: string
-}
-
-export interface TemplateSystem {
-  id: string
-  name: string
-}
-
 export interface TemplateItem {
   id: string
   title: string
@@ -58,6 +52,12 @@ export interface AppliedItem {
   project_id: string
   source_template_name: string
   applied_at: string
+}
+
+export interface ProjectInspectionItem extends AppliedItem {
+  sequence: number
+  title: string
+  instruction: string
 }
 
 interface Page<T> {
@@ -97,6 +97,12 @@ export function listAllProjects(): Promise<ProjectSummary[]> {
   return request('/projects')
 }
 
+export function listProjectInspectionItems(
+  projectId: string,
+): Promise<ProjectInspectionItem[]> {
+  return allPages(`/projects/${projectId}/inspection-items`)
+}
+
 export function applyTemplate(
   projectId: string,
   source: { template_id: string } | { system_id: string },
@@ -107,9 +113,26 @@ export function applyTemplate(
   })
 }
 
+export function saveProjectItemAsTemplate(
+  projectId: string,
+  projectInspectionItemId: string,
+  systemId: string,
+): Promise<TemplateItem> {
+  return request(`/projects/${projectId}/templates`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_inspection_item_id: projectInspectionItemId,
+      system_id: systemId,
+    }),
+  })
+}
+
 export function templateErrorMessage(error: unknown): string {
   if (error instanceof ProjectTemplatesApiError) {
     if (error.status === 409) {
+      if (error.code === 'template.name_conflict') {
+        return '該系統已有同名範本。'
+      }
       return '範本內容有衝突，請重新整理後再試。'
     }
     if (error.status === 422) {
