@@ -77,7 +77,7 @@ make run-frontend-https  # 以 HTTPS 啟動前端
 要換 port，執行 `make run-frontend-https FRONTEND_PORT=<port>`。
 `make run-frontend` 仍是原本的 HTTP。
 
-**iPhone／iPad**（同一個區網）仍需手動設定（#231）：
+**iPhone／iPad**（同一個區網）設定與實機驗收（#231）：
 
 - 重新產生含這台電腦區網 IP 的憑證：
 
@@ -88,13 +88,36 @@ make run-frontend-https  # 以 HTTPS 啟動前端
     localhost 127.0.0.1 <區網 IP>
   ```
 
-  這會覆寫 `make dev-cert` 產生的檔案。
-- 啟動前端前再 `export INSPECTFLOW_DEV_HOST=0.0.0.0`，讓前端對區網
-  開放；這個變數只在 HTTPS 模式有效。後端仍只綁 127.0.0.1，由前端
-  轉送 `/api`。
-- 把 `mkcert -CAROOT` 目錄裡的 `rootCA.pem` 傳到 iPhone 安裝，再到
-  「設定 > 一般 > 關於本機 > 憑證信任設定」開啟信任。
-- 用 `https://<區網 IP>:5173` 開啟。
+  將 `<區網 IP>` 換成開發電腦的 IPv4 位址。這會覆寫
+  `make dev-cert` 產生的檔案。
+- 在 iPhone 的 Wi-Fi 網路詳細資料查看 IPv4 位址與子網路遮罩。例如
+  兩台裝置都在 `192.168.1.x` 時，允許網段可用 `192.168.1.0/24`。
+  用以下指令啟動前端：
+
+  ```bash
+  make run-frontend-https \
+    INSPECTFLOW_DEV_HOST=192.168.1.20 \
+    INSPECTFLOW_DEV_ALLOWED_CIDR=192.168.1.0/24
+  ```
+
+  請將範例 IP 換成憑證使用的區網 IP，並將 CIDR 換成實際允許的
+  子網。伺服器只會綁定該網卡，區網防護也只接受該 Host；網段外的
+  請求會收到 HTTP 403。
+  `INSPECTFLOW_DEV_HOST` 與 `INSPECTFLOW_DEV_ALLOWED_CIDR` 只能在 HTTPS
+  模式下使用，且必須一起設定；未設定時 Vite 只監聽本機。後端仍只
+  綁 `127.0.0.1`，前端負責轉送 `/api`。
+- 在開發電腦執行 `mkcert -CAROOT`，只把該目錄中的 `rootCA.pem`
+  傳到 iPhone（例如使用 AirDrop）。這是公開根憑證。**不得傳送
+  `rootCA-key.pem` 或任何 CA 私鑰。** 在 iPhone 開啟憑證並到「設定」
+  安裝已下載的憑證描述檔，再前往「設定 > 一般 > 關於本機 > 憑證
+  信任設定」，為該根憑證開啟完整信任。
+- 用 Safari 開啟 `https://<區網 IP>:5173/field/` 並登入；重新整理，
+  確認仍維持登入，再登出。要加入主畫面，使用「分享 > 加入主畫面」；
+  再從新圖示開啟一次，確認以獨立視窗顯示。
+
+  **實機驗收：NOT_RUN（需負責人的 iPhone）。** 確認允許網段可連線、
+  網段外來源收到 HTTP 403，再完成上述 Safari 登入、重新整理、登出與
+  主畫面步驟。
 
 ## 文件
 
