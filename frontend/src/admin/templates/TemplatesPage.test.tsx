@@ -94,6 +94,7 @@ function templateFetch({
   writeError,
   writeConflict = false,
   writeSuccess = false,
+  deleteSuccess = false,
   categoryItems = [category],
   systemItems = [system],
   templateItems = templates,
@@ -102,6 +103,7 @@ function templateFetch({
   writeError?: number
   writeConflict?: boolean
   writeSuccess?: boolean
+  deleteSuccess?: boolean
   categoryItems?: Array<{ id: string; name: string }>
   systemItems?: Array<{
     id: string
@@ -128,7 +130,11 @@ function templateFetch({
         path.endsWith('/systems') &&
         path.includes('/template-categories/')
       ) {
-        return Response.json({ items: systemItems, next_cursor: null })
+        const categoryId = path.split('/').at(-2)
+        return Response.json({
+          items: systemItems.filter((item) => item.category_id === categoryId),
+          next_cursor: null,
+        })
       }
       if (path.endsWith('/templates') && path.includes('/template-systems/')) {
         if (method === 'GET') {
@@ -191,16 +197,23 @@ function templateFetch({
           { status: 409 },
         )
       }
-      if (
-        path.endsWith('/template-categories/category-1') &&
-        method === 'DELETE'
-      ) {
+      if (path.includes('/template-categories/') && method === 'DELETE') {
+        if (path.endsWith('/category-2') && deleteSuccess) {
+          categoryItems.splice(1, 1)
+          return new Response(null, { status: 204 })
+        }
         return Response.json(
           { error: { code: 'template.category_not_empty' } },
           { status: 409 },
         )
       }
-      if (path.endsWith('/template-systems/system-1') && method === 'DELETE') {
+      if (path.includes('/template-systems/') && method === 'DELETE') {
+        if (deleteSuccess) {
+          const deletedId = path.split('/').at(-1)
+          const index = systemItems.findIndex((item) => item.id === deletedId)
+          if (index >= 0) systemItems.splice(index, 1)
+          return new Response(null, { status: 204 })
+        }
         return Response.json(
           { error: { code: 'template.system_not_empty' } },
           { status: 409 },
@@ -338,6 +351,68 @@ describe('TemplatesPage', () => {
           evidence_requirements: [{ min_count: 3 }],
         }),
       ])
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯：伸縮縫外觀' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    const pointEditor = screen.getByRole('form', { name: '查核項目編輯器' })
+    const numericPoint = within(
+      within(pointEditor).getByRole('group', { name: '查核項次 2' }),
+    )
+    fireEvent.change(numericPoint.getByLabelText('項次標題'), {
+      target: { value: '伸縮縫寬度' },
+    })
+    fireEvent.click(numericPoint.getByRole('button', { name: '新增實測欄位' }))
+    fireEvent.change(numericPoint.getByLabelText('欄位名稱'), {
+      target: { value: '實際寬度' },
+    })
+    fireEvent.change(numericPoint.getByLabelText('欄位型別'), {
+      target: { value: 'number' },
+    })
+    const fieldUnit = numericPoint.getByLabelText('單位')
+    expect(fieldUnit).not.toBeDisabled()
+    fireEvent.change(fieldUnit, { target: { value: 'mm' } })
+    fireEvent.change(numericPoint.getByLabelText('標準類型'), {
+      target: { value: 'number' },
+    })
+    fireEvent.change(numericPoint.getByLabelText('標準值'), {
+      target: { value: '20' },
+    })
+    const binding = numericPoint.getByLabelText('綁定數字實測欄位')
+    fireEvent.change(binding, {
+      target: {
+        value: numericPoint
+          .getByRole('option', {
+            name: '實際寬度（mm）',
+          })
+          .getAttribute('value'),
+      },
+    })
+    expect(fieldUnit).not.toBeDisabled()
+    expect(numericPoint.getByLabelText('單位（由綁定欄位帶入）')).toHaveValue(
+      'mm',
+    )
+    fireEvent.click(
+      within(pointEditor).getByRole('button', { name: '儲存範本' }),
+    )
+
+    await waitFor(() => {
+      expect(items[0].inspection_points).toHaveLength(2)
+    })
+    const latestPut = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'PUT')
+      .at(-1)
+    const body = JSON.parse(String(latestPut?.[1]?.body)) as {
+      items: Array<{
+        inspection_points: Array<{
+          numeric_standard: { unit: string }
+          measurement_fields: Array<{ unit: string | null }>
+        }>
+      }>
+    }
+    expect(body.items[0].inspection_points[1]).toMatchObject({
+      numeric_standard: { unit: 'mm' },
+      measurement_fields: [{ unit: null }],
     })
   })
 
@@ -868,30 +943,19 @@ describe('TemplatesPage', () => {
     ).toBe(false)
   })
 
-  it('clears category and system editors when their selection changes', async () => {
+  it('shows the remaining category and system names after deleting selections', async () => {
     const secondCategory = { id: 'category-2', name: '道路工程' }
     const secondSystem = {
       id: 'system-2',
-      category_id: secondCategory.id,
+      category_id: category.id,
       name: '路面',
     }
-    templateFetch({
+    const fetchMock = templateFetch({
       categoryItems: [category, secondCategory],
       systemItems: [system, secondSystem],
+      deleteSuccess: true,
     })
     render(<TemplatesPage />)
-    await screen.findByRole('option', { name: '道路工程' })
-
-    fireEvent.change(screen.getByLabelText('工程類別名稱'), {
-      target: { value: '未儲存分類草稿' },
-    })
-    fireEvent.change(screen.getByLabelText('選擇工程類別'), {
-      target: { value: secondCategory.id },
-    })
-    await waitFor(() => {
-      expect(screen.getByLabelText('工程類別名稱')).toHaveValue('道路工程')
-    })
-
     await screen.findByRole('option', { name: '路面' })
     fireEvent.change(screen.getByLabelText('系統名稱'), {
       target: { value: '未儲存系統草稿' },
@@ -902,6 +966,49 @@ describe('TemplatesPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
     })
+
+    fireEvent.change(screen.getByLabelText('選擇系統'), {
+      target: { value: secondSystem.id },
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '刪除系統' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除系統' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('系統名稱')).toHaveValue('護欄')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+
+    fireEvent.change(screen.getByLabelText('工程類別名稱'), {
+      target: { value: '未儲存分類草稿' },
+    })
+    fireEvent.change(screen.getByLabelText('選擇工程類別'), {
+      target: { value: secondCategory.id },
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('工程類別名稱')).toHaveValue('道路工程')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '刪除工程類別' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除工程類別' }))
+    await waitFor(() => {
+      expect(screen.getByLabelText('工程類別名稱')).toHaveValue('土木工程')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
   })
 
   it('keeps cleared names blank and saves retyped category and system names', async () => {

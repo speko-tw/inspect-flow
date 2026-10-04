@@ -257,6 +257,8 @@ export default function TemplatesPage() {
     preferredCategoryId?: string,
     preferredSystemId?: string,
   ) {
+    setEditingCategory(null)
+    setEditingSystem(null)
     try {
       const result = await listTemplateCategories()
       setCategories(result)
