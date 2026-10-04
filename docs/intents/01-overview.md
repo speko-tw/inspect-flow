@@ -95,8 +95,8 @@ flowchart LR
 - **Phase 3 — Template System**：範本庫（獨立於專案、套用即複製、範本不版本化，見 [KD-03](03-decisions-and-stack.md#kd-03)、[KD-47](03-decisions-and-stack.md#kd-47)）、`Template`、`TemplateItem`、`EvidenceRequirement`；範本只存結構、分類固定兩層（[KD-48](03-decisions-and-stack.md#kd-48)）、檢查標準分文字與數值兩種（[KD-52](03-decisions-and-stack.md#kd-52)）。
 - **Phase 4 — Inspection Planning**：`InspectionPlan`、`InspectionTask`、任務需求快照；查驗項目與查驗點由內業事先給定，MVP 不以間距（interval）自動切分任務為必要流程（依 [G-01](05-open-questions.md#g-01) 裁定）。
 - **Phase 5 — Field UI & Admin Dashboard（現場介面與管理後台）**：今日任務、任務詳情、證據檢查清單、狀態；後台交付原定的今日工作量、完成數、完成率、專案進度、工程師進度、唯讀總覽、管理畫面及 Dashboard 查詢 API；其餘不依賴證據或伺服器完成驗證的項目於 0.5.x 交付，須依賴者分別於 0.6.x、0.7.x 補齊。
-- **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）。
-- **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)。
+- **Phase 6 — Evidence（證據）**：拍照、現場編修並確認產生現場版、上傳、內業加工產生內業版（內業之後編修直接更新內業版本身，不另存新版本）、儲存、Evidence 紀錄（依 [G-02](05-open-questions.md#g-02)、[KD-32](03-decisions-and-stack.md#kd-32) 裁定）；補齊依證據才算得出的管理後台指標（原 0.8.x 範圍）。
+- **Phase 7 — Completion Validation（完成驗證）**：必要證據 vs. 已上傳證據的伺服器端驗證；查核項次結果分符合、不符合、不適用，各結果的必填內容見 [KD-54](03-decisions-and-stack.md#kd-54)；補齊依完成驗證才算得出的管理後台指標（原 0.8.x 範圍）。
 - **Phase 8 — Formal Report Delivery**：Report View Model、DOCX 範本、DOCX／PDF 與版次資料。MVP **必須**保存報告範本（報告版面）版本、文件編號、版次、產製者與時間、兩種檔案鍵、資料快照與 SHA-256；已核發檔案**不得**覆蓋（依據：架構基準 §20.22、§30 Phase 9；架構基準原 Phase 9，現行路線圖為 Phase 8）。完整簽核流程**得**先用空白簽名欄簡化；正式流程見 [OQ-07](05-open-questions.md#oq-07)（依據：架構基準 §15、§20.12）。
 
 - **Phase 9 — Pilot Deployment**：單一 Linux 伺服器、Docker Compose、HTTPS、持久化儲存。
