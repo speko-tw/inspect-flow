@@ -63,7 +63,9 @@ def _world(db_session, make_client):
         created_by=admin.id,
         updated_by=admin.id,
     )
-    role = Role(name="Apply editor", created_by=admin.id, updated_by=admin.id)
+    role = Role(
+        name="Project manager", created_by=admin.id, updated_by=admin.id
+    )
     role.permission_codes.append(
         RolePermission(code="project_inspection_item.edit")
     )
@@ -667,11 +669,11 @@ def test_project_item_can_be_saved_as_template_and_audited(
     assert applied.status_code == 201, applied.text
     project_item_id = applied.json()[0]["id"]
 
-    target_category = world["template_admin"].post(
+    target_category = world["admin"].post(
         "/api/v1/template-categories", json={"name": "Saved category"}
     )
     assert target_category.status_code == 201, target_category.text
-    target_system = world["template_admin"].post(
+    target_system = world["admin"].post(
         f"/api/v1/template-categories/{target_category.json()['id']}/systems",
         json={"name": "Saved system"},
     )
@@ -681,7 +683,7 @@ def test_project_item_can_be_saved_as_template_and_audited(
         "project_inspection_item_id": project_item_id,
         "system_id": target_system.json()["id"],
     }
-    saved = world["template_admin"].post(url, json=body)
+    saved = world["admin"].post(url, json=body)
     assert saved.status_code == 201, saved.text
     assert saved.json()["title"] == "First item"
     saved_item_id = UUID(saved.json()["id"])
@@ -718,6 +720,21 @@ def test_project_item_can_be_saved_as_template_and_audited(
         )
     )
     assert saved_field_id not in project_field_ids
+    manager_category = world["template_admin"].post(
+        "/api/v1/template-categories", json={"name": "Manager category"}
+    )
+    assert manager_category.status_code == 201, manager_category.text
+    manager_system = world["template_admin"].post(
+        f"/api/v1/template-categories/{manager_category.json()['id']}/systems",
+        json={"name": "Manager system"},
+    )
+    assert manager_system.status_code == 201, manager_system.text
+    manager_saved = world["template_admin"].post(
+        url,
+        json={**body, "system_id": manager_system.json()["id"]},
+    )
+    assert manager_saved.status_code == 201, manager_saved.text
+    assert world["editor"].post(url, json=body).status_code == 403
     template_point_ids = set(
         db_session.scalars(
             select(TemplateInspectionPoint.id).where(
@@ -949,6 +966,7 @@ def test_project_item_list_authorization_and_cursor_pagination(
     cross_list_url = f"/api/v1/projects/{other_project.id}/inspection-items"
     assert world["template_admin"].get(cross_list_url).status_code == 200
     assert world["admin"].get(cross_list_url).status_code == 200
+    assert world["editor"].get(cross_list_url).status_code == 403
 
 
 def test_apply_system_rolls_back_all_copies_after_mid_request_failure(
