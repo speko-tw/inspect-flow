@@ -150,6 +150,78 @@ class ErrorCode(DescribedStrEnum):
         "project.member_conflict",
         "The user is already a member of this project.",
     )
+    INSPECTION_PLAN_NOT_FOUND = (
+        "inspection_plan.not_found",
+        "The inspection plan was not found.",
+    )
+    INSPECTION_PLAN_INVALID_NAME = (
+        "inspection_plan.invalid_name",
+        "The inspection plan name is invalid.",
+    )
+    INSPECTION_PLAN_ARCHIVED = (
+        "inspection_plan.archived",
+        "The inspection plan is archived.",
+    )
+    INSPECTION_TASK_NOT_FOUND = (
+        "inspection_task.not_found",
+        "The inspection task was not found.",
+    )
+    INSPECTION_TASK_INVALID_TRANSITION = (
+        "inspection_task.invalid_transition",
+        "The inspection task cannot make this transition.",
+    )
+    INSPECTION_TASK_LOCATION_LOCKED = (
+        "inspection_task.location_locked",
+        "The task location is read-only.",
+    )
+    INSPECTION_TASK_ITEMS_REQUIRED = (
+        "inspection_task.items_required",
+        "At least one project inspection item is required.",
+    )
+    INSPECTION_TASK_INVALID_ITEM = (
+        "inspection_task.invalid_project_item",
+        "A selected item does not belong to this project.",
+    )
+    INSPECTION_TASK_INVALID_ZONE = (
+        "inspection_task.invalid_zone",
+        "The selected zone is invalid for this project.",
+    )
+    INSPECTION_TASK_INVALID_ASSIGNEE = (
+        "inspection_task.invalid_assignee",
+        "The suggested assignee is not a project member.",
+    )
+    INSPECTION_TASK_INVALID_LOCATION = (
+        "inspection_task.invalid_location",
+        "The task location text is invalid.",
+    )
+    INSPECTION_TASK_ITEMS_INCOMPLETE = (
+        "inspection_task.items_incomplete",
+        "Task items requiring reinspection are incomplete.",
+    )
+    PROJECT_ZONE_NOT_FOUND = (
+        "project_zone.not_found",
+        "The project zone was not found.",
+    )
+    PROJECT_ZONE_INVALID_NAME = (
+        "project_zone.invalid_name",
+        "The project zone name is invalid.",
+    )
+    PROJECT_ZONE_NAME_CONFLICT = (
+        "project_zone.name_conflict",
+        "The project already has a zone with this name.",
+    )
+    PROJECT_ZONE_IN_USE = (
+        "project_zone.in_use",
+        "The project zone is referenced by a task.",
+    )
+    INSPECTION_TASK_REASON_REQUIRED = (
+        "inspection_task.reason_required",
+        "A cancellation reason is required.",
+    )
+    PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED = (
+        "project_inspection_item.reinspection_choice_required",
+        "Choose whether affected tasks must be reinspected.",
+    )
     TEMPLATE_NAME_CONFLICT = (
         "template.name_conflict",
         "A template library name is already in use at this level.",
