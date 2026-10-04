@@ -26,8 +26,8 @@
 - 自主檢查／抽查的檢查層級與檢查者欄位：屬 P4 `inspection-planning`（0.4.x；依 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)），不屬本規格範圍。
 - 現場選擇符合／不符合／不適用、填寫實測值、嚴重度、註解與原因，以及自動判定、缺失流程：屬 0.7.x 現場規格；本規格只定義範本的實測欄位結構，不定義現場填值或結果行為（依 [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)）。
 - Evidence 上傳與照片檔案儲存：移至 `field-evidence`（P6）；本規格只定義範本中的照片需求。
-- 報告版面與 `Report Template`：移至 `report-delivery`（P9）。查核範本不等於報告範本，報告範本的版本規則不受本規格影響。
-- 範本建議、審核與核准流程：移至後續版本（#314，0.8.x）。
+- 報告版面與 `Report Template`：移至 `report-delivery`（P8）。查核範本不等於報告範本，報告範本的版本規則不受本規格影響。
+- 範本建議、審核與核准流程：移至 0.6.x（#314，依負責人最新指示）。
 - interval 欄位及依間距自動切分任務：MVP 不需要；未來若提出選用功能，再依 [G-01](../../intents/05-open-questions.md#g-01) 裁定其歸屬與快照規則。
 
 ## 使用情境
@@ -137,6 +137,8 @@
 
 
 ## 變更紀錄
+
+- 對齊 #375 路線圖，將 Report Delivery 更新為 P8，並將範本建議、審核與核准流程更新為 0.6.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 - 單位規則的意圖已由 [#332](https://github.com/speko-tw/inspect-flow/issues/332)／[PR #333](https://github.com/speko-tw/inspect-flow/pull/333) 記錄（KD-54 已合併；原始來源為負責人[#76 留言](https://github.com/speko-tw/inspect-flow/issues/76#issuecomment-5965931420)）。本規格依此將數值標準綁定一個數字欄位，並在 TPL-Q8 定案具體欄位關聯；單位換算仍由現場處理且不在本規格範圍。
 - TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 定案並凍結規格；模板管理、API、資料模型與套用責任依本規格明確分界 — #110（PR #335 後續）。

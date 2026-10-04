@@ -1,6 +1,6 @@
 # 領域模型（domain-model）
 
-**代碼**：`DOM`　**Phase**：P1、P3、P4、P6、P9　**狀態**：部分凍結
+**代碼**：`DOM`　**Phase**：P1、P3、P4、P6、P8　**狀態**：部分凍結
 **前置規格**：`database-foundation`（UUID 主鍵、業務編號、建立與修改紀錄等共通結構，見 DBF-R11～DBF-R14）、`api-conventions`（UUID 字串 ID、UTC 時間格式）
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-18](../../intents/02-principles.md#pr-18)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、[KD-16](../../intents/03-decisions-and-stack.md#kd-16)～[KD-29](../../intents/03-decisions-and-stack.md#kd-29)（KD-16、KD-18、KD-22、KD-28 已被取代，KD-23 已改寫）、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)～[KD-46](../../intents/03-decisions-and-stack.md#kd-46)、[OQ-02](../../intents/05-open-questions.md#oq-02)（已裁定；欄位部分已被取代）、[OQ-08](../../intents/05-open-questions.md#oq-08)（已裁定）、[OQ-22](../../intents/05-open-questions.md#oq-22)
 **被擋議題**：本次新增的 ProjectZone／Plan／Task 凍結範圍無開工門檻阻擋；其他仍為草稿的實體依其責任範圍受 G-03、G-05～G-07 等議題阻擋，見[其他實體](#draft-others)與下方門檻比對表。
@@ -431,6 +431,8 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
     5. 內建 `admin` 的 `email` 選填，但仍受 DOM-R02 的唯一與不分大小寫規則（有值時）。
 
 ## 變更紀錄
+
+- 對齊 #375 路線圖，將本規格涵蓋的報表 Phase 由 P9 更新為 P8 — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
 
