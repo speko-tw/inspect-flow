@@ -162,7 +162,7 @@
 
 **選項**：報表版面、照片排列、簽核欄位內容、業主／標案指定格式有多種可能形式，留待未來團隊與業主／標案規範決定。
 
-**目前暫定**：§30 Phase 9 要求保存文件編號、版次、報告範本版本、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256，見 [KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06)。§20.6 建議 `status` 欄位；完整簽核與核發流程仍待決。
+**目前暫定**：§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）要求保存文件編號、版次、報告範本版本、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256，見 [KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06)。§20.6 建議 `status` 欄位；完整簽核與核發流程仍待決。
 
 **誰決定、何時**：業主／標案規範與團隊；查驗與報表樣板的流程界線已於 [#77](https://github.com/speko-tw/inspect-flow/issues/77#issuecomment-5871382248) 由負責人部分裁定（2026-09-28）；其餘時間未指定。
 
@@ -175,7 +175,7 @@
 
 ### OQ-20：由誰、何時決定擴大 MVP 的 Evidence Type 範圍？（已裁定）
 
-**裁定**：MVP 佐證**只收照片**；佐證類型未來可能擴充（例如文件、量測數值、簽名、影片）。**不設**固定的檢討時點：有需要時開 issue，由負責人裁定後寫入規格再實作。額外文件（出廠證明、試驗報告等）拍照並以照片註記說明；報告功能（0.9.x）提供「補充文件」區可附文件或連結；串接文件管理系統屬未來。記錄於 [KD-53](03-decisions-and-stack.md#kd-53)；討論見 [#88](https://github.com/speko-tw/inspect-flow/issues/88)（[裁定留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956189277)，2026-10-02）。**未定**：原 `TEXT` 是否仍保留為獨立 Evidence 類型，裁定沒有說明，待規格確認。
+**裁定**：MVP 佐證**只收照片**；佐證類型未來可能擴充（例如文件、量測數值、簽名、影片）。**不設**固定的檢討時點：有需要時開 issue，由負責人裁定後寫入規格再實作。額外文件（出廠證明、試驗報告等）拍照並以照片註記說明；報告功能（0.8.x）提供「補充文件」區可附文件或連結；串接文件管理系統屬未來。記錄於 [KD-53](03-decisions-and-stack.md#kd-53)；討論見 [#88](https://github.com/speko-tw/inspect-flow/issues/88)（[裁定留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956040233)、[補充留言](https://github.com/speko-tw/inspect-flow/issues/88#issuecomment-5956189277)，2026-10-02）。**未定**：原 `TEXT` 是否仍保留為獨立 Evidence 類型，裁定沒有說明，待規格確認。
 
 **為什麼要先決定**：直接影響 [01-overview.md](01-overview.md)「MVP 的證據類型邊界」一節如何落地，以及 `EvidenceRequirement.type` 實際支援哪些值。
 
@@ -693,7 +693,7 @@
 
 ### G-10：來源缺漏：備份範圍（並非互相矛盾，而是來源未把三者寫在同一句）
 
-**為什麼要先決定**：[PR-12](02-principles.md#pr-12) 為此補上一個整合決策：備份範圍涵蓋 Database、範本檔案、原圖與衍生照片、已核發 DOCX／PDF，並定義一致性邊界；但這是本文件的整合結果，不是來源文件單一章節的明文規定，團隊應確認此整合範圍是否即為預期範圍。
+**為什麼要先決定**：[PR-12](02-principles.md#pr-12) 為此補上一個整合決策：備份範圍涵蓋 Database、範本檔案、現場版與內業版照片（依 [KD-32](03-decisions-and-stack.md#kd-32)，不另存拍攝原圖）、已核發 DOCX／PDF，並定義一致性邊界；但這是本文件的整合結果，不是來源文件單一章節的明文規定，團隊應確認此整合範圍是否即為預期範圍。
 
 **選項**（缺漏說明，非對立立場）：§23（Backup）明確要求「照片與 Database 必須視為同一套業務資料」， 只點名這兩者需要一致對應的備份策略；§22.12（Persistent Volumes）與 §20.5／§20.15 把 Database、 Photos、Reports 三者並列為「至少需要持久化」；§22A.10（Rollback）另要求 Storage Backup Strategy。三處沒有任何一處把「資料庫＋照片＋報表必須一致備份」逐字寫在同一句話裡——這是來源**缺漏**，不是兩條互相矛盾的規則。
 
@@ -710,17 +710,17 @@
 
 ### G-11：報告的 Phase E 排序容易誤導 MVP 範圍
 
-**為什麼要先決定**：§20.21 把 Version / Issue Control 排在報告實作 Phase E；§30 Phase 9 卻要求 MVP 保存部分版本與快照資料。需要明確區分最低治理資料和完整簽核流程。
+**為什麼要先決定**：§20.21 把 Version / Issue Control 排在報告實作 Phase E；§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8），卻要求 MVP 保存部分版本與快照資料。需要明確區分最低治理資料和完整簽核流程。
 
-**選項**：§20.21 Phase E 含 Document No、Revision、Status、Snapshot、Approval、Issue；§30 Phase 9 明定報告範本版本、文件編號、版次、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256。後者沒有要求完整 Approval／Issue 流程，§15 與 §20.12 容許先簡化。
+**選項**：§20.21 Phase E 含 Document No、Revision、Status、Snapshot、Approval、Issue；§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）明定報告範本版本、文件編號、版次、產製者與時間、DOCX／PDF 儲存鍵、資料快照及 SHA-256。後者沒有要求完整 Approval／Issue 流程，§15 與 §20.12 容許先簡化。
 
-**目前暫定**：[KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06) 採 §30 Phase 9 的最低治理資料；完整簽核與核發流程見 [OQ-07](#oq-07)。
+**目前暫定**：[KD-05](03-decisions-and-stack.md#kd-05) 與 [PR-06](02-principles.md#pr-06) 採 §30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）的最低治理資料；完整簽核與核發流程見 [OQ-07](#oq-07)。
 
 **誰決定、何時**：團隊；時間未指定。
 
 **影響的原則**：[KD-05](03-decisions-and-stack.md#kd-05)、[PR-06](02-principles.md#pr-06)。
 
-**依據**：架構基準 §15、§20.12、§20.21、§30 Phase 9
+**依據**：架構基準 §15、§20.12、§20.21、§30 Phase 9（架構基準原 Phase 9、現行路線圖 Phase 8）
 
 <a id="gate"></a>
 ## E. 開工門檻（Domain Model／API 契約凍結前必須裁定）

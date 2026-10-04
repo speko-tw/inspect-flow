@@ -33,7 +33,7 @@ docs/specs/
     └── plan.md
 ```
 
-- 資料夾以能力命名（例如 `skeleton`、`template-system`），不放 Phase 編號。Phase N 對應 Milestone 0.N.x；資料夾名稱不必跟著 Phase 改，對應關係記在下方索引。
+- 資料夾以能力命名（例如 `skeleton`、`template-system`），不放 Phase 編號。Phase 與 Milestone 的對應及能力範圍以[版本路線圖](../intents/06-versioning-and-milestone-governance.md#vg-05)為準；Phase N 對應 Milestone 0.N.x，Phase 5 同時包含 Field UI 與 Admin Dashboard；實際能力分期依路線圖，規格索引列出各規格涵蓋的 Phase。資料夾名稱不必跟著 Phase 改，規格對應關係記在下方索引。
 - 共用規格（`api-conventions`、`domain-model`、`state-machines`）也是一般規格，只是會被多份規格引用。
 
 <a id="index"></a>
@@ -46,20 +46,20 @@ docs/specs/
 | [`skeleton`](skeleton/spec.md) | P1 | 功能 | 已完成 | — |
 | [`api-conventions`](api-conventions/spec.md) | 全部 | 共用 | 已完成 | — |
 | [`database-foundation`](database-foundation/spec.md) | P1、P3 | 功能 | 已凍結 | 無；範本與最小專案副本 schema 依 `template-system` 凍結，P4 擴充副本欄位及流程；MVP 不設 interval，未來選用功能依 [G-01](../intents/05-open-questions.md#g-01) 另行處理 |
-| [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P9 | 共用 | 部分凍結 | 凍結範圍含既有 User／Company／Role／ProjectMember／Project 與初始化、角色 API，以及 `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯、`Task Requirement Snapshot`（DOM-R56～R58、DOM-AC51～AC53）；其餘 Evidence／Result／Report 實體依各自門檻維持草稿，詳見[逐項比對](domain-model/spec.md#projectzone-plan-task-開工門檻比對) |
-| [`state-machines`](state-machines/spec.md) | P4、P6、P7、P9 | 共用 | 部分凍結 | Plan／Task 狀態行為依標頭凍結範圍凍結；Evidence／Report 的需求與 AC 維持草稿，分別受 [G-05](../intents/05-open-questions.md#g-05)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07) 阻擋。Plan／Task 資料模型已由 `domain-model` DOM-R56～DOM-R57 凍結 |
+| [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P8 | 共用 | 部分凍結 | 凍結範圍含既有 User／Company／Role／ProjectMember／Project 與初始化、角色 API，以及 `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯、`Task Requirement Snapshot`（DOM-R56～R58、DOM-AC51～AC53）；其餘 Evidence／Result／Report 實體依各自門檻維持草稿，詳見[逐項比對](domain-model/spec.md#projectzone-plan-task-門檻比對) |
+| [`state-machines`](state-machines/spec.md) | P4、P6、P7、P8 | 共用 | 部分凍結 | Plan／Task 狀態行為依標頭凍結範圍凍結；Evidence／Report 的需求與 AC 維持草稿，分別受 [G-05](../intents/05-open-questions.md#g-05)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07) 阻擋。Plan／Task 資料模型已由 `domain-model` DOM-R56～DOM-R57 凍結 |
 | [`authentication`](authentication/spec.md) | P2 | 功能 | 已凍結 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定）；首次登入碼與帳號名稱登入依 [#259](https://github.com/speko-tw/inspect-flow/issues/259) 變更，[AUT-Q7](authentication/spec.md#aut-q7) 已裁定 |
 | [`audit-log`](audit-log/spec.md) | P2 | 共用 | 已凍結 | 無；[ALG-Q1](audit-log/spec.md#alg-q1)～[ALG-Q5](audit-log/spec.md#alg-q5) 待負責人決定，不擋凍結（ALG-Q5 若選 B，另加一支 migration 新增可空值欄位）；[ALG-Q6](audit-log/spec.md#alg-q6) 已裁定 |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
 | [`template-system`](template-system/spec.md) | P3 | 功能 | 已凍結 | 無；TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 已依規格設計定案，含最小專案查核項目副本表；OQ-06、OQ-20 已裁定，副本後續欄位及作廢／重查／更正流程由 P4 `inspection-planning` 定義 |
 | [`inspection-planning`](inspection-planning/spec.md) | P4 | 功能 | 已凍結 | 無；`ProjectZone`／Task 地點依 KD-58、OQ-03 凍結；Evidence／Report 不屬本規格範圍 |
 | `field-ui` | P5 | 功能 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09) |
-| `field-evidence` | P6 | 功能 | 未開始 | [G-02](../intents/05-open-questions.md#g-02)、[G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
+| `field-evidence` | P6 | 功能 | 未開始 | [G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
 | `completion-validation` | P7 | 功能 | 未開始 | — |
-| `admin-dashboard` | P8 | 功能 | 未開始 | — |
-| `report-delivery` | P9 | 功能 | 未開始 | [G-04](../intents/05-open-questions.md#g-04)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
-| `pilot-deployment` | P10 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
-| （尚無專屬規格） | P11 | 功能 | 未開始 | — |
+| `admin-dashboard` | P5 | 功能 | 未開始 | — |
+| `report-delivery` | P8 | 功能 | 未開始 | [G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
+| `pilot-deployment` | P9 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
+| （尚無專屬規格） | P10 | 功能 | 未開始 | — |
 
 ## 狀態
 
