@@ -341,6 +341,21 @@ describe('admin user and company pages', () => {
     expect(await screen.findByText('paging.user.50')).toBeInTheDocument()
   })
 
+  it('reloads users when searching the same query repeatedly', async () => {
+    managementFetch()
+    renderAdmin()
+
+    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
+    const search = screen.getByRole('button', { name: '搜尋' })
+    fireEvent.click(search)
+    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
+    expect(search).toBeEnabled()
+
+    fireEvent.click(search)
+    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
+    expect(search).toBeEnabled()
+  })
+
   it('searches companies and loads the next cursor page', async () => {
     const rows = Array.from({ length: 51 }, (_, index) => ({
       id: `company-${index}`,
@@ -366,6 +381,21 @@ describe('admin user and company pages', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
+  })
+
+  it('reloads companies when searching the same query repeatedly', async () => {
+    managementFetch()
+    renderAdmin('/admin/companies')
+
+    expect(await screen.findByText('示範公司')).toBeInTheDocument()
+    const search = screen.getByRole('button', { name: '搜尋' })
+    fireEvent.click(search)
+    expect(await screen.findByText('示範公司')).toBeInTheDocument()
+    expect(search).toBeEnabled()
+
+    fireEvent.click(search)
+    expect(await screen.findByText('示範公司')).toBeInTheDocument()
+    expect(search).toBeEnabled()
   })
 
   it('shows and clears a temporary password', async () => {

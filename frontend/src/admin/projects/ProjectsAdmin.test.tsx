@@ -300,6 +300,21 @@ describe('admin projects page', () => {
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
   })
 
+  it('reloads projects when searching the same query repeatedly', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+
+    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    const search = screen.getByRole('button', { name: '搜尋' })
+    fireEvent.click(search)
+    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(search).toBeEnabled()
+
+    fireEvent.click(search)
+    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(search).toBeEnabled()
+  })
+
   it('creates a project with optional dates left empty', async () => {
     const fetchMock = projectFetch()
     renderAt('/admin/projects')

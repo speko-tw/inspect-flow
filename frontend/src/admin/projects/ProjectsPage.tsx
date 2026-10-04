@@ -88,12 +88,26 @@ export default function ProjectsPage() {
 
   async function searchProjects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const search = query.trim()
+    const id = ++requestId.current
     setProjects([])
     setNextCursor(null)
     setLoadingMore(false)
     setListError('')
-    setAppliedQuery(query.trim())
+    setAppliedQuery(search)
     setLoading(true)
+    try {
+      const page = await listProjectsPage({ q: search, limit: 50 })
+      if (id === requestId.current) {
+        setProjects(page.items)
+        setNextCursor(page.next_cursor)
+      }
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoading(false)
+    }
   }
 
   async function loadMoreProjects() {
