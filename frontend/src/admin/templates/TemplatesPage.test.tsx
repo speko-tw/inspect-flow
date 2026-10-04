@@ -107,7 +107,7 @@ function templateFetch({
     category_id: string
     name: string
   }>
-  templateItems?: typeof templates
+  templateItems?: unknown[]
 } = {}) {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -541,11 +541,11 @@ describe('TemplatesPage', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
     )
-    fireEvent.change(screen.getByLabelText('容許誤差'), {
-      target: { value: '0.5' },
-    })
     fireEvent.change(screen.getByLabelText('條件'), {
       target: { value: 'range' },
+    })
+    fireEvent.change(screen.getByLabelText('容許誤差'), {
+      target: { value: '0.5' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
     await screen.findByRole('status')
@@ -562,6 +562,7 @@ describe('TemplatesPage', () => {
             value: string
             condition: string
             tolerance: string
+            range_form: string
           }
         }>
       }>
@@ -570,9 +571,167 @@ describe('TemplatesPage', () => {
       value: '110',
       condition: 'range',
       tolerance: '0.5',
+      range_form: 'tolerance',
     })
     fireEvent.click(screen.getByRole('button', { name: '編輯：欄杆尺寸' }))
     expect(screen.getByLabelText('容許誤差')).toHaveValue('0.5')
+  })
+
+  it('reads a legacy range without range_form as tolerance form', async () => {
+    const legacyRange = [
+      {
+        ...templates[0],
+        inspection_points: [
+          {
+            ...templates[0].inspection_points[0],
+            numeric_standard: {
+              ...templates[0].inspection_points[0].numeric_standard!,
+              condition: 'range' as const,
+              value: '3.3',
+              tolerance: '0.3',
+            },
+          },
+        ],
+      },
+    ]
+    templateFetch({ templateItems: legacyRange })
+    render(<TemplatesPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '預覽：欄杆尺寸' }),
+    )
+    expect(screen.getByRole('dialog')).toHaveTextContent('3.3 ± 0.3 cm')
+    fireEvent.click(screen.getByRole('button', { name: '關閉預覽' }))
+    fireEvent.click(screen.getByRole('button', { name: '編輯：欄杆尺寸' }))
+    expect(screen.getByLabelText('範圍形式')).toHaveValue('tolerance')
+    expect(screen.getByLabelText('標準值')).toHaveValue('3.3')
+    expect(screen.getByLabelText('容許誤差')).toHaveValue('0.3')
+  })
+
+  it('rejects a negative range tolerance before sending a request', async () => {
+    const fetchMock = templateFetch()
+    render(<TemplatesPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+    )
+    fireEvent.change(screen.getByLabelText('條件'), {
+      target: { value: 'range' },
+    })
+    fireEvent.change(screen.getByLabelText('容許誤差'), {
+      target: { value: '-0.1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '範圍標準欄位無效',
+    )
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+    ).toBe(false)
+  })
+
+  it('saves interval bounds, clears tolerance form fields, and previews units', async () => {
+    const intervalItem = [
+      {
+        ...templates[0],
+        inspection_points: [
+          {
+            ...templates[0].inspection_points[0],
+            numeric_standard: {
+              ...templates[0].inspection_points[0].numeric_standard!,
+              value: '',
+              condition: 'range' as const,
+              range_form: 'interval' as const,
+              tolerance: null,
+              lower_bound: '3.0',
+              upper_bound: '3.6',
+            },
+          },
+        ],
+      },
+    ]
+    const fetchMock = templateFetch({
+      writeSuccess: true,
+      templateItems: intervalItem,
+    })
+    render(<TemplatesPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '預覽：欄杆尺寸' }),
+    )
+    expect(screen.getByRole('dialog')).toHaveTextContent('3.0～3.6 cm')
+    fireEvent.click(screen.getByRole('button', { name: '關閉預覽' }))
+    fireEvent.click(screen.getByRole('button', { name: '編輯：欄杆尺寸' }))
+    expect(screen.getByLabelText('下限')).toHaveValue('3.0')
+    fireEvent.change(screen.getByLabelText('範圍形式'), {
+      target: { value: 'tolerance' },
+    })
+    expect(screen.queryByLabelText('下限')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('標準值'), {
+      target: { value: '3.3' },
+    })
+    fireEvent.change(screen.getByLabelText('容許誤差'), {
+      target: { value: '0.3' },
+    })
+    fireEvent.change(screen.getByLabelText('範圍形式'), {
+      target: { value: 'interval' },
+    })
+    expect(screen.getByLabelText('下限')).toHaveValue('')
+    fireEvent.change(screen.getByLabelText('下限'), {
+      target: { value: '3.0' },
+    })
+    fireEvent.change(screen.getByLabelText('上限'), {
+      target: { value: '3.6' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
+    await screen.findByRole('status')
+    const call = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === 'PUT',
+    )
+    const body = JSON.parse(String(call?.[1]?.body)) as {
+      items: Array<{
+        inspection_points: Array<{ numeric_standard: Record<string, unknown> }>
+      }>
+    }
+    expect(body.items[0].inspection_points[0].numeric_standard).toMatchObject({
+      condition: 'range',
+      range_form: 'interval',
+      value: null,
+      tolerance: null,
+      lower_bound: '3.0',
+      upper_bound: '3.6',
+    })
+  })
+
+  it('rejects reversed interval bounds before sending a request', async () => {
+    const fetchMock = templateFetch()
+    const intervalItem = [
+      {
+        ...templates[0],
+        inspection_points: [
+          {
+            ...templates[0].inspection_points[0],
+            numeric_standard: {
+              ...templates[0].inspection_points[0].numeric_standard!,
+              value: '',
+              condition: 'range' as const,
+              range_form: 'interval' as const,
+              lower_bound: '4',
+              upper_bound: '3',
+            },
+          },
+        ],
+      },
+    ]
+    templateFetch({ templateItems: intervalItem })
+    render(<TemplatesPage />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '範圍標準欄位無效',
+    )
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+    ).toBe(false)
   })
 
   it('clears category and system editors when their selection changes', async () => {

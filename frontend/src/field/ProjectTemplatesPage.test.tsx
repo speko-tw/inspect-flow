@@ -275,6 +275,27 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     ).toHaveLength(2)
   })
 
+  it('套用遇同名 409 時列出 details 衝突名稱', async () => {
+    mockApi(
+      Response.json(
+        {
+          error: {
+            code: 'project_inspection_item.duplicate_name',
+            details: ['風管檢查', '水管檢查'],
+          },
+        },
+        { status: 409 },
+      ),
+    )
+    renderPage()
+    await selectSystem()
+    fireEvent.click(screen.getByLabelText('整個系統'))
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '專案已有同名查核項目：風管檢查、水管檢查，請先改名再套用',
+    )
+  })
+
   it('以 system_id 套用空系統時顯示空結果', async () => {
     const calls = mockApi(Response.json([], { status: 200 }))
     renderPage()
