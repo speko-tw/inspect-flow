@@ -9,7 +9,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -248,34 +248,54 @@ def test_unhandled_exception_does_not_log_secret_message(
     error_app: FastAPI,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Regression: an unhandled exception's message may embed
-    sensitive request data (e.g. an authorization token); the
-    handler must not log that message or a traceback, only the
-    exception type and the request line (RG-M17).
+    """Traceback frame metadata is logged without secret-bearing data.
 
     A path *parameter's value* can be just as sensitive as the
     exception message, so the log must record the route template
     (``/leaky/{token}``) rather than the resolved path
     (``/leaky/path-secret-value``).
     """
-    secret = "synthetic-secret-token"
+    secrets = {
+        "synthetic-bearer-token",
+        "synthetic-cookie-session-secret",
+        "synthetic-password-value",
+        "synthetic-token-shaped-value-1234567890abcdef",
+    }
     path_secret = "path-secret-value"
 
     router = APIRouter()
 
-    @router.get("/leaky/{token}")
-    def leaky(token: str) -> None:
-        raise RuntimeError(f"Bearer {secret}")
+    @router.post("/leaky/{token}")
+    async def leaky(token: str, request: Request) -> None:
+        payload = await request.json()
+        raise RuntimeError(
+            "Bearer synthetic-bearer-token "
+            f"cookie=synthetic-cookie-session-secret "
+            f"password={payload['password']} "
+            "synthetic-token-shaped-value-1234567890abcdef"
+        )
 
     error_app.include_router(router)
     client = TestClient(error_app, raise_server_exceptions=False)
 
     with caplog.at_level(logging.ERROR, logger="app.api.errors"):
-        response = client.get(f"/leaky/{path_secret}")
+        response = client.post(
+            f"/leaky/{path_secret}",
+            headers={
+                "Authorization": "Bearer synthetic-bearer-token",
+                "Cookie": "session=synthetic-cookie-session-secret",
+                "X-Request-ID": "untrusted-request-id-sentinel",
+            },
+            json={"password": "synthetic-password-value"},
+        )
 
     assert response.status_code == 500
-    assert secret not in response.text
     assert path_secret not in response.text
+    assert all(secret not in response.text for secret in secrets)
+    assert "X-Request-ID" in response.headers
+    request_id = response.headers["X-Request-ID"]
+    assert re.fullmatch(r"[0-9a-f]{32}", request_id)
+    assert request_id != "untrusted-request-id-sentinel"
 
     app_records = [
         record for record in caplog.records if record.name == "app.api.errors"
@@ -283,14 +303,28 @@ def test_unhandled_exception_does_not_log_secret_message(
     assert len(app_records) >= 1
     for record in app_records:
         message = record.getMessage()
-        assert secret not in message
         assert path_secret not in message
+        assert request_id in message
+        assert "traceback=" in message
         assert record.exc_info is None
         assert not record.exc_text
+
+    assert all(
+        secret not in record.getMessage()
+        for secret in secrets
+        for record in caplog.records
+    )
+    assert all(secret not in caplog.text for secret in secrets)
+    assert path_secret not in caplog.text
+    assert "untrusted-request-id-sentinel" not in caplog.text
 
     assert "RuntimeError" in caplog.text
     assert any(
         "/leaky/{token}" in record.getMessage() for record in app_records
+    )
+    assert any(
+        "test_error_envelope.py" in record.getMessage()
+        for record in app_records
     )
 
 
