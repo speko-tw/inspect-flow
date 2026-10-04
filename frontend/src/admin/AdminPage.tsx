@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
@@ -11,11 +11,14 @@ import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
+const PlanningPage = lazy(() => import('./planning/PlanningPage'))
+
 const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
   { to: '/admin/companies', label: '公司' },
   { to: '/admin/roles', label: '角色' },
   { to: '/admin/projects', label: '專案' },
+  { to: '/admin/planning', label: '計畫與任務' },
   { to: '/admin/templates', label: '範本管理' },
   { to: '/change-password', label: '變更密碼' },
 ]
@@ -125,6 +128,14 @@ export default function AdminPage() {
           <Route path="roles" element={<RolesPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route
+            path="planning"
+            element={
+              <Suspense fallback={<p>載入中…</p>}>
+                <PlanningPage />
+              </Suspense>
+            }
+          />
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
         </Routes>
