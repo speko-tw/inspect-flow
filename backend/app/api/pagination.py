@@ -15,9 +15,15 @@ import binascii
 import json
 import re
 import uuid
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Any
 
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session
+
+from app.api.errors import APIError, ErrorCode
 from app.api.time_format import format_utc, parse_utc
 
 _CURSOR_ALPHABET = re.compile(r"[A-Za-z0-9_-]+")
@@ -36,7 +42,13 @@ class CursorKey:
 
 
 def encode_cursor(key: CursorKey) -> str:
-    """Encode a CursorKey as an opaque, URL-safe cursor string."""
+    """Encode the canonical ``CursorKey`` cursor.
+
+    This seconds-precision, ``Z``-suffixed format is kept separate from
+    the microseconds-precision page cursor below to preserve the existing
+    cursor contract while template and project-item lists use their own
+    established format.
+    """
     payload = {"t": format_utc(key.created_at), "id": str(key.id)}
     raw = json.dumps(payload, separators=(",", ":"))
     encoded = base64.urlsafe_b64encode(raw.encode("utf-8"))
@@ -88,3 +100,91 @@ def decode_cursor(cursor: str) -> CursorKey:
         raise ValueError(f"non-canonical cursor: {cursor!r}")
 
     return key
+
+
+def page_cursor_key(cursor: str | None) -> tuple[datetime, uuid.UUID] | None:
+    """Decode the microseconds ``+00:00`` cursor used by list pages.
+
+    This format remains separate from ``CursorKey``'s seconds-precision,
+    ``Z``-suffixed format so existing template and project-item list
+    cursors stay compatible without changing the older cursor contract.
+    """
+    if cursor is None:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict) or set(payload) != {"t", "id"}:
+            raise ValueError("invalid cursor")
+        timestamp = datetime.fromisoformat(payload["t"])
+        identifier = uuid.UUID(payload["id"])
+        if timestamp.tzinfo is None:
+            raise ValueError("cursor has no timezone")
+        key = (timestamp.astimezone(UTC), identifier)
+        if encode_page_cursor(*key) != cursor:
+            raise ValueError("noncanonical cursor")
+        return key
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+        UnicodeDecodeError,
+        binascii.Error,
+        json.JSONDecodeError,
+    ) as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+
+
+def encode_page_cursor(created_at: datetime, identifier: uuid.UUID) -> str:
+    payload = {
+        "t": created_at.astimezone(UTC).isoformat(timespec="microseconds"),
+        "id": str(identifier),
+    }
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def page(
+    db: Session,
+    model: type[Any],
+    *,
+    cursor: str | None,
+    limit: int,
+    serialize: Callable[[Any], Any],
+    filters: Sequence[Any] = (),
+) -> dict[str, Any]:
+    statement = select(model).where(*filters)
+    key = page_cursor_key(cursor)
+    if key is not None:
+        statement = statement.where(
+            or_(
+                model.created_at > key[0],
+                and_(model.created_at == key[0], model.id > key[1]),
+            )
+        )
+    rows = db.scalars(
+        statement.order_by(model.created_at, model.id).limit(limit + 1)
+    ).all()
+    items = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit:
+        last = items[-1]
+        next_cursor = encode_page_cursor(last.created_at, last.id)
+    return {
+        "items": [serialize(item) for item in items],
+        "next_cursor": next_cursor,
+    }
+
+
+def write_call(
+    call: Callable[..., Any],
+    *args: Any,
+    error_mapper: Callable[[Exception], APIError | None],
+) -> Any:
+    try:
+        return call(*args)
+    except Exception as exc:
+        mapped = error_mapper(exc)
+        if mapped is None:
+            raise
+        raise mapped from exc
