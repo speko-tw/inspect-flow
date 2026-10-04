@@ -101,7 +101,7 @@ function mockApi(
         next_cursor: null,
       })
     }
-    if (url.includes('/system-1/templates')) {
+    if (url.includes('/templates?system_id=system-1')) {
       return Response.json({
         items: [
           { id: 'template-1', title: '風管檢查' },
@@ -419,7 +419,7 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     const paths = [
       '/template-categories?limit=100',
       '/template-categories/category-1/systems?limit=100',
-      '/template-systems/system-1/templates?limit=100',
+      '/templates?system_id=system-1&limit=100',
     ]
     const requestCount = (path: string) =>
       calls.mock.calls.filter(([url]) => String(url).endsWith(path)).length
