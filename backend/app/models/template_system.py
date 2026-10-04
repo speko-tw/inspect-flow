@@ -294,6 +294,17 @@ class ProjectInspectionItem(AuditMixin, TimestampedBase):
     instruction: Mapped[str] = mapped_column(String, nullable=False)
     source_template_name: Mapped[str] = mapped_column(String, nullable=False)
     applied_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    standard_revision: Mapped[int] = mapped_column(
+        nullable=False, default=1, server_default="1"
+    )
+    __table_args__ = (
+        Index(
+            "uq_project_inspection_items_id_project_id",
+            "id",
+            "project_id",
+            unique=True,
+        ),
+    )
 
 
 class ProjectInspectionPoint(AuditMixin, TimestampedBase):
