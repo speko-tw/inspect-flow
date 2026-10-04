@@ -11,9 +11,9 @@ from app.api.errors import APIError, ErrorCode
 from app.api.time_format import format_utc
 from app.api.v1.template_library import (
     _cursor_key,
-    _detail,
     _encode_cursor,
     _write_call,
+    template_item_detail,
 )
 from app.auth.access import (
     require_login_access,
@@ -34,6 +34,7 @@ from app.models import (
     SystemRoleCode,
     User,
 )
+from app.services.inspection_details import inspection_points_detail
 from app.services.project_templates import (
     apply_template,
     create_template_from_project_item,
@@ -75,70 +76,6 @@ def _project_item_detail(db: Session, item: ProjectInspectionItem) -> dict:
         .where(ProjectInspectionPoint.project_inspection_item_id == item.id)
         .order_by(ProjectInspectionPoint.sequence, ProjectInspectionPoint.id)
     ).all()
-    nested = []
-    for point in points:
-        fields = db.scalars(
-            select(ProjectMeasurementField)
-            .where(ProjectMeasurementField.inspection_point_id == point.id)
-            .order_by(
-                ProjectMeasurementField.created_at, ProjectMeasurementField.id
-            )
-        ).all()
-        text = db.scalar(
-            select(ProjectTextStandard).where(
-                ProjectTextStandard.inspection_point_id == point.id
-            )
-        )
-        numeric = db.scalar(
-            select(ProjectNumericStandard).where(
-                ProjectNumericStandard.inspection_point_id == point.id
-            )
-        )
-        evidence = db.scalars(
-            select(ProjectEvidenceRequirement)
-            .where(ProjectEvidenceRequirement.inspection_point_id == point.id)
-            .order_by(
-                ProjectEvidenceRequirement.created_at,
-                ProjectEvidenceRequirement.id,
-            )
-        ).all()
-        nested.append(
-            {
-                "id": point.id,
-                "sequence": point.sequence,
-                "title": point.title,
-                "instruction": point.instruction,
-                "text_standard": {"text": text.text} if text else None,
-                "numeric_standard": {
-                    "value": numeric.value,
-                    "condition": numeric.condition,
-                    "unit": numeric.unit,
-                    "tolerance": numeric.tolerance,
-                    "measurement_field_id": numeric.measurement_field_id,
-                }
-                if numeric
-                else None,
-                "measurement_fields": [
-                    {
-                        "id": field.id,
-                        "name": field.name,
-                        "field_type": field.field_type,
-                        "unit": field.unit,
-                    }
-                    for field in fields
-                ],
-                "evidence_requirements": [
-                    {
-                        "id": row.id,
-                        "evidence_type": row.evidence_type,
-                        "required": row.required,
-                        "min_count": row.min_count,
-                        "max_count": row.max_count,
-                    }
-                    for row in evidence
-                ],
-            }
-        )
     return {
         "id": item.id,
         "project_id": item.project_id,
@@ -147,7 +84,14 @@ def _project_item_detail(db: Session, item: ProjectInspectionItem) -> dict:
         "instruction": item.instruction,
         "source_template_name": item.source_template_name,
         "applied_at": format_utc(item.applied_at),
-        "inspection_points": nested,
+        "inspection_points": inspection_points_detail(
+            db,
+            points,
+            measurement_field_model=ProjectMeasurementField,
+            text_standard_model=ProjectTextStandard,
+            numeric_standard_model=ProjectNumericStandard,
+            evidence_requirement_model=ProjectEvidenceRequirement,
+        ),
     }
 
 
@@ -225,7 +169,7 @@ def save_project_item_as_template(
     )
     if item is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    return _detail(db, item)
+    return template_item_detail(db, item)
 
 
 @router.get(
@@ -238,9 +182,6 @@ def list_project_inspection_items(
     db: Session = Depends(get_db),  # noqa: B008
     user: User = Depends(require_login_access),  # noqa: B008
 ) -> dict:
-    project = db.get(Project, project_id)
-    if project is None:
-        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     if not _can_read_all_projects(db, user):
         membership = db.scalar(
             select(ProjectMember.id).where(
@@ -250,6 +191,8 @@ def list_project_inspection_items(
         )
         if membership is None:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    elif db.get(Project, project_id) is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
     key = _cursor_key(cursor)
     statement = select(ProjectInspectionItem).where(

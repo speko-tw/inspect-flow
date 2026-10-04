@@ -37,6 +37,7 @@ from app.models import (
     TemplateSystem,
     TemplateTextStandard,
 )
+from app.services.inspection_details import inspection_points_detail
 from app.services.template_library import (
     InvalidTemplateError,
     create_category,
@@ -318,7 +319,10 @@ def _page(
         last = page[-1]
         next_cursor = _encode_cursor(last.created_at, last.id)
     return {
-        "items": [_detail(db, row) if full else _summary(row) for row in page],
+        "items": [
+            template_item_detail(db, row) if full else _summary(row)
+            for row in page
+        ],
         "next_cursor": next_cursor,
     }
 
@@ -338,79 +342,21 @@ def _summary(row) -> dict:
     return data
 
 
-def _detail(db: Session, item: TemplateItem) -> dict:
+def template_item_detail(db: Session, item: TemplateItem) -> dict:
     data = _summary(item)
     points = db.scalars(
         select(TemplateInspectionPoint)
         .where(TemplateInspectionPoint.template_item_id == item.id)
         .order_by(TemplateInspectionPoint.sequence)
     ).all()
-    result = []
-    for point in points:
-        fields = db.scalars(
-            select(TemplateMeasurementField)
-            .where(TemplateMeasurementField.inspection_point_id == point.id)
-            .order_by(
-                TemplateMeasurementField.created_at,
-                TemplateMeasurementField.id,
-            )
-        ).all()
-        text = db.scalar(
-            select(TemplateTextStandard).where(
-                TemplateTextStandard.inspection_point_id == point.id
-            )
-        )
-        numeric = db.scalar(
-            select(TemplateNumericStandard).where(
-                TemplateNumericStandard.inspection_point_id == point.id
-            )
-        )
-        requirements = db.scalars(
-            select(TemplateEvidenceRequirement)
-            .where(TemplateEvidenceRequirement.inspection_point_id == point.id)
-            .order_by(
-                TemplateEvidenceRequirement.created_at,
-                TemplateEvidenceRequirement.id,
-            )
-        ).all()
-        result.append(
-            {
-                "id": point.id,
-                "sequence": point.sequence,
-                "title": point.title,
-                "instruction": point.instruction,
-                "text_standard": {"text": text.text} if text else None,
-                "numeric_standard": {
-                    "value": numeric.value,
-                    "condition": numeric.condition,
-                    "unit": numeric.unit,
-                    "tolerance": numeric.tolerance,
-                    "measurement_field_id": numeric.measurement_field_id,
-                }
-                if numeric
-                else None,
-                "measurement_fields": [
-                    {
-                        "id": field.id,
-                        "name": field.name,
-                        "field_type": field.field_type,
-                        "unit": field.unit,
-                    }
-                    for field in fields
-                ],
-                "evidence_requirements": [
-                    {
-                        "id": requirement.id,
-                        "evidence_type": "photo",
-                        "required": True,
-                        "min_count": requirement.min_count,
-                        "max_count": None,
-                    }
-                    for requirement in requirements
-                ],
-            }
-        )
-    data["inspection_points"] = result
+    data["inspection_points"] = inspection_points_detail(
+        db,
+        points,
+        measurement_field_model=TemplateMeasurementField,
+        text_standard_model=TemplateTextStandard,
+        numeric_standard_model=TemplateNumericStandard,
+        evidence_requirement_model=TemplateEvidenceRequirement,
+    )
     return data
 
 
@@ -520,12 +466,12 @@ def list_templates(
 def add_template(body: TemplateBody, db: Session = _db_dependency) -> dict:
     _system(db, body.system_id)
     item = _write_call(create_template, db, body.model_dump())
-    return _detail(db, item)
+    return template_item_detail(db, item)
 
 
 @template_router.get("/{template_id}", dependencies=[_read])
 def get_template(template_id: UUID, db: Session = _db_dependency) -> dict:
-    return _detail(db, _item(db, template_id))
+    return template_item_detail(db, _item(db, template_id))
 
 
 @template_router.put("/{template_id}", dependencies=[_write])
@@ -535,7 +481,7 @@ def put_template(
     item = _item(db, template_id)
     _system(db, body.system_id)
     updated = _write_call(replace_template, db, item, body.model_dump())
-    return _detail(db, updated)
+    return template_item_detail(db, updated)
 
 
 @template_router.delete(
@@ -595,5 +541,5 @@ def put_system_templates(
             item = _write_call(create_template, db, data)
         else:
             item = _write_call(replace_template, db, by_id[entry.id], data)
-        result.append(_detail(db, item))
+        result.append(template_item_detail(db, item))
     return {"items": result}

@@ -104,6 +104,8 @@
 
 依 [TPL-R09](../template-system/spec.md#需求) 登記全系統範本管理員角色指派與收回事件；事件須和角色指派變更在同一個交易內寫入（ALG-R06、ALG-R14）。
 
+範本管理員將專案查核項目存成範本時，另寫 `template_item.created_from_project`；事件與範本建立在同一個交易內完成，並記錄來源專案、副本及目標系統的 ID。
+
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
 | `system_role_assignment.created` | 指派固定的 `template_admin` 角色 | `system_role_assignment` | 空值 | `user_id`、`role_code` |
@@ -219,3 +221,4 @@
 - 負責人裁定（#261，2026-09-29）：初始化不再預建三個範本角色；ALG-R12 僅描述內建 `admin` 與首次登入碼，初始化仍不寫稽核紀錄 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
 - 範圍變更（admin 與帳號重新設計）：改寫 ALG-R05、ALG-R12、ALG-R14、ALG-AC08，新增 ALG-R18～ALG-R21（首次設定為系統事件、帳號名稱與公司連結事件、`admin` 重設沿用 `user.password_set`）與 ALG-AC13～ALG-AC16、ALG-Q6，「`User` 基本欄位修改不寫稽核」的非目標部分已被取代 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 登記 `template-system` 的固定範本管理員角色指派／收回事件及其稽核欄位 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
+- 澄清存成範本事件與範本建立同交易，並列明其來源與目標識別欄位 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)
