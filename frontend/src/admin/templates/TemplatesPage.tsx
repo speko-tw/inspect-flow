@@ -52,11 +52,18 @@ function forWire(item: TemplateItem): TemplateItem {
       const interval =
         numeric?.condition === 'range' && numeric.range_form === 'interval'
       const bound =
-        fields.find(
+        numeric &&
+        (fields.find(
           (field) =>
-            field.client_id === numeric?.measurement_field_client_id ||
-            field.id === numeric?.measurement_field_client_id,
-        ) ?? fields.find((field) => field.id === numeric?.measurement_field_id)
+            (numeric.measurement_field_client_id != null &&
+              numeric.measurement_field_client_id !== '' &&
+              (field.client_id === numeric.measurement_field_client_id ||
+                field.id === numeric.measurement_field_client_id)) ||
+            (numeric.measurement_field_id != null &&
+              numeric.measurement_field_id !== '' &&
+              field.id === numeric.measurement_field_id),
+        ) ??
+          undefined)
       return {
         ...point,
         id: undefined,
@@ -64,7 +71,7 @@ function forWire(item: TemplateItem): TemplateItem {
           client_id: field.client_id,
           name: field.name,
           field_type: field.field_type,
-          unit: field.unit,
+          unit: field === bound ? null : field.unit,
         })),
         numeric_standard: numeric
           ? {
@@ -151,8 +158,8 @@ export default function TemplatesPage() {
   const [items, setItems] = useState<TemplateItem[]>([])
   const [categoryId, setCategoryId] = useState('')
   const [systemId, setSystemId] = useState('')
-  const [editingCategory, setEditingCategory] = useState('')
-  const [editingSystem, setEditingSystem] = useState('')
+  const [editingCategory, setEditingCategory] = useState<string | null>(null)
+  const [editingSystem, setEditingSystem] = useState<string | null>(null)
   const [creatingCategory, setCreatingCategory] = useState(false)
   const [creatingSystem, setCreatingSystem] = useState(false)
   const [editingItem, setEditingItem] = useState<TemplateItem | null>(null)
@@ -241,8 +248,8 @@ export default function TemplatesPage() {
     )
     if (forbidden) {
       setReadOnly(true)
-      setEditingCategory('')
-      setEditingSystem('')
+      setEditingCategory(null)
+      setEditingSystem(null)
     }
   }
 
@@ -280,7 +287,7 @@ export default function TemplatesPage() {
 
   async function saveCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const name = editingCategory.trim()
+    const name = (editingCategory ?? '').trim()
     if (!name) return
     try {
       let preferredCategoryId = categoryId
@@ -296,7 +303,7 @@ export default function TemplatesPage() {
         preferredCategoryId = created.id
         setNotice('工程類別已新增。')
       }
-      setEditingCategory('')
+      setEditingCategory(null)
       setCreatingCategory(false)
       setError('')
       await reloadAll(preferredCategoryId)
@@ -307,7 +314,7 @@ export default function TemplatesPage() {
 
   async function saveSystem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const name = editingSystem.trim()
+    const name = (editingSystem ?? '').trim()
     if (!name || !categoryId) return
     try {
       let preferredSystemId = systemId
@@ -320,7 +327,7 @@ export default function TemplatesPage() {
         preferredSystemId = created.id
         setNotice('系統已新增。')
       }
-      setEditingSystem('')
+      setEditingSystem(null)
       setCreatingSystem(false)
       setError('')
       await reloadAll(categoryId, preferredSystemId)
@@ -433,6 +440,16 @@ export default function TemplatesPage() {
 
   function renderPoint(point: InspectionPoint, index: number) {
     const numeric = point.numeric_standard
+    const boundField = point.measurement_fields.find(
+      (field) =>
+        (numeric?.measurement_field_client_id != null &&
+          numeric.measurement_field_client_id !== '' &&
+          (field.client_id === numeric.measurement_field_client_id ||
+            field.id === numeric.measurement_field_client_id)) ||
+        (numeric?.measurement_field_id != null &&
+          numeric.measurement_field_id !== '' &&
+          field.id === numeric.measurement_field_id),
+    )
     return (
       <fieldset key={point.id ?? index}>
         <legend>查核項次 {index + 1}</legend>
@@ -710,7 +727,7 @@ export default function TemplatesPage() {
             )}
             <label>
               單位（由綁定欄位帶入）
-              <input disabled value={numeric.unit} />
+              <input disabled value={boundField?.unit ?? numeric.unit} />
             </label>
           </>
         )}
@@ -753,11 +770,6 @@ export default function TemplatesPage() {
               <label>
                 單位
                 <input
-                  disabled={
-                    numeric?.measurement_field_client_id ===
-                      (field.client_id ?? field.id) ||
-                    numeric?.measurement_field_id === field.id
-                  }
                   onChange={(event) => {
                     const fields = [...point.measurement_fields]
                     fields[fieldIndex] = { ...field, unit: event.target.value }
@@ -862,8 +874,11 @@ export default function TemplatesPage() {
                 setCategoryId(event.target.value)
                 setCreatingCategory(false)
                 setCreatingSystem(false)
-                setEditingCategory('')
-                setEditingSystem('')
+                setEditingCategory(
+                  categories.find((item) => item.id === event.target.value)
+                    ?.name ?? null,
+                )
+                setEditingSystem(null)
                 setEditingItem(null)
                 setConfirmDeleteCategory(false)
                 setConfirmDeleteSystem(false)
@@ -900,11 +915,7 @@ export default function TemplatesPage() {
                       setEditingCategory(event.target.value)
                     }
                     required
-                    value={
-                      creatingCategory
-                        ? editingCategory
-                        : editingCategory || selectedCategory?.name || ''
-                    }
+                    value={editingCategory ?? selectedCategory?.name ?? ''}
                   />
                 </label>
                 <button type="submit">
@@ -950,7 +961,10 @@ export default function TemplatesPage() {
               onChange={(event) => {
                 setSystemId(event.target.value)
                 setCreatingSystem(false)
-                setEditingSystem('')
+                setEditingSystem(
+                  systems.find((item) => item.id === event.target.value)
+                    ?.name ?? null,
+                )
                 setEditingItem(null)
                 setConfirmDeleteSystem(false)
                 setConfirmDeleteId('')
@@ -985,11 +999,7 @@ export default function TemplatesPage() {
                     disabled={!categoryId}
                     onChange={(event) => setEditingSystem(event.target.value)}
                     required
-                    value={
-                      creatingSystem
-                        ? editingSystem
-                        : editingSystem || selectedSystem?.name || ''
-                    }
+                    value={editingSystem ?? selectedSystem?.name ?? ''}
                   />
                 </label>
                 <button disabled={!categoryId} type="submit">
