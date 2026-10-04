@@ -76,12 +76,10 @@ def inspection_points_detail(
                 "evidence_requirements": [
                     {
                         "id": row.id,
-                        "evidence_type": getattr(
-                            row, "evidence_type", "photo"
-                        ),
-                        "required": getattr(row, "required", True),
+                        "evidence_type": row.evidence_type,
+                        "required": row.required,
                         "min_count": row.min_count,
-                        "max_count": getattr(row, "max_count", None),
+                        "max_count": row.max_count,
                     }
                     for row in evidence
                 ],
