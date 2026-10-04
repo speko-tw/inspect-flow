@@ -144,10 +144,10 @@ function mockApi(
   return calls
 }
 
-function renderPage() {
+function renderPage(user = USER) {
   return render(
     <MemoryRouter initialEntries={['/field/projects/project-1']}>
-      <CurrentUserProvider value={{ user: USER, clear: vi.fn() }}>
+      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         <Routes>
           <Route
             element={<ProjectTemplatesPage />}
@@ -452,6 +452,33 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     paths.forEach((path, index) => {
       expect(requestCount(path)).toBe(beforeSave[index] + 1)
     })
+  })
+
+  it('後端允許時顯示存成範本', async () => {
+    mockApi(Response.json([]), false, {
+      projectItems: [SAVED_ITEM],
+      canSave: true,
+    })
+    renderPage({ ...USER, is_admin: true })
+
+    expect(
+      await screen.findByRole('button', { name: '存為範本' }),
+    ).toBeInTheDocument()
+  })
+
+  it('後端拒絕跨專案瀏覽時隱藏存為範本操作', async () => {
+    mockApi(Response.json([]), false, {
+      projectItems: [SAVED_ITEM],
+      canSave: false,
+    })
+    renderPage({ ...USER, is_admin: true })
+
+    expect(
+      await screen.findByRole('rowheader', { name: SAVED_ITEM.title }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '存為範本' }),
+    ).not.toBeInTheDocument()
   })
 
   it('存為範本 409 顯示同名訊息並保留選擇', async () => {
