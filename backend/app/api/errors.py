@@ -291,10 +291,12 @@ def register_error_handlers(app: FastAPI) -> None:
                     f"{frame.f_code.co_filename.rsplit('/', 1)[-1]}:"
                     f"{line_number} in {frame.f_code.co_name}"
                 )
-        safe_traceback = " <- ".join(frames) or "<no frames>"
+        safe_traceback = " -> ".join(frames) or "<no frames>"
         logger.error(
-            "Unhandled exception request_id=%s type=%s route=%s traceback=%s",
+            "Unhandled exception request_id=%s method=%s type=%s "
+            "route=%s traceback=%s",
             request_id,
+            request.method,
             type(exc).__name__,
             template,
             safe_traceback,

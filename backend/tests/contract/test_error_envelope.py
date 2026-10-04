@@ -305,6 +305,7 @@ def test_unhandled_exception_does_not_log_secret_message(
         message = record.getMessage()
         assert path_secret not in message
         assert request_id in message
+        assert "method=POST" in message
         assert "traceback=" in message
         assert record.exc_info is None
         assert not record.exc_text
@@ -325,6 +326,13 @@ def test_unhandled_exception_does_not_log_secret_message(
     assert any(
         "test_error_envelope.py" in record.getMessage()
         for record in app_records
+    )
+    traceback_summary = next(
+        record.getMessage().split("traceback=", 1)[1] for record in app_records
+    )
+    assert " -> " in traceback_summary
+    assert traceback_summary.index("errors.py:") < traceback_summary.index(
+        "test_error_envelope.py:"
     )
 
 
