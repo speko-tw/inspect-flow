@@ -9,6 +9,19 @@ so each model registers its table as a side effect of that import;
 from app.models.audit_log import AuditLog
 from app.models.auth_session import AuthSession
 from app.models.company import Company
+from app.models.inspection_planning import (
+    InspectionPlan,
+    InspectionTask,
+    ProjectInspectionItemChange,
+    ProjectZone,
+    TaskInspectionItem,
+    TaskRequirementSnapshot,
+    TaskSnapshotEvidenceRequirement,
+    TaskSnapshotMeasurementField,
+    TaskSnapshotNumericStandard,
+    TaskSnapshotPoint,
+    TaskSnapshotTextStandard,
+)
 from app.models.login_counter import LoginCounter
 from app.models.login_failure import LoginFailure
 from app.models.project import Project
@@ -40,6 +53,17 @@ __all__ = [
     "AuditLog",
     "AuthSession",
     "Company",
+    "InspectionPlan",
+    "InspectionTask",
+    "ProjectInspectionItemChange",
+    "ProjectZone",
+    "TaskInspectionItem",
+    "TaskRequirementSnapshot",
+    "TaskSnapshotEvidenceRequirement",
+    "TaskSnapshotMeasurementField",
+    "TaskSnapshotNumericStandard",
+    "TaskSnapshotPoint",
+    "TaskSnapshotTextStandard",
     "LoginCounter",
     "LoginFailure",
     "Project",
