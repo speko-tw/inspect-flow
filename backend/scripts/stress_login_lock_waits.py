@@ -23,6 +23,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.db.settings import DATABASE_URL_ENV_VAR
 from app.main import create_app
@@ -42,6 +43,22 @@ def _measure_one(app, login: str, password: str) -> float:
                 f"{response.status_code}: {response.text}"
             )
         return time.monotonic() - started
+
+
+def _measure_database_read(app) -> float:
+    with TestClient(app, base_url="https://testserver") as client:
+        started = time.monotonic()
+        response = client.get(
+            "/api/v1/auth/me",
+            cookies={SESSION_COOKIE_NAME: "unknown-session-token"},
+        )
+        elapsed = time.monotonic() - started
+        if response.status_code != 401:
+            raise RuntimeError(
+                "expected an unauthenticated database lookup to return "
+                f"401, got {response.status_code}: {response.text}"
+            )
+        return elapsed
 
 
 def main() -> None:
@@ -67,18 +84,21 @@ def main() -> None:
             known_login = user.email
             if known_login is None:
                 raise RuntimeError("stress user must have an email")
+            _auth_session, session_token = create_session(session, user)
+            session.commit()
         app_engine.dispose()
 
         app = create_app()
         known_times = []
         unknown_times = []
+        read_times = []
         holder_engine = create_engine(f"sqlite:///{database_path}")
         try:
             with holder_engine.connect() as holder:
                 holder.exec_driver_sql("BEGIN IMMEDIATE")
                 try:
                     with ThreadPoolExecutor(
-                        max_workers=args.repeats * 2
+                        max_workers=args.repeats * 3
                     ) as pool:
                         known_futures = [
                             pool.submit(
@@ -98,11 +118,18 @@ def main() -> None:
                             )
                             for _ in range(args.repeats)
                         ]
+                        read_futures = [
+                            pool.submit(_measure_database_read, app)
+                            for _ in range(args.repeats)
+                        ]
                         known_times = [
                             future.result() for future in known_futures
                         ]
                         unknown_times = [
                             future.result() for future in unknown_futures
+                        ]
+                        read_times = [
+                            future.result() for future in read_futures
                         ]
                 finally:
                     holder.rollback()
@@ -132,6 +159,15 @@ def main() -> None:
                         "unknown login did not recover after releasing lock: "
                         f"{unknown_after.status_code}"
                     )
+                me_after = client.get(
+                    "/api/v1/auth/me",
+                    cookies={SESSION_COOKIE_NAME: session_token},
+                )
+                if me_after.status_code != 200:
+                    raise RuntimeError(
+                        "database-backed /auth/me did not recover after "
+                        f"releasing lock: {me_after.status_code}"
+                    )
         finally:
             holder_engine.dispose()
             dispose_engine()
@@ -139,6 +175,7 @@ def main() -> None:
     for label, samples in (
         ("known", known_times),
         ("unknown", unknown_times),
+        ("db-read", read_times),
     ):
         print(
             f"{label}: n={len(samples)} "
@@ -146,7 +183,8 @@ def main() -> None:
             f"median={statistics.median(samples):.3f}s "
             f"max={max(samples):.3f}s"
         )
-    print("after lock release: known=200 unknown=401")
+    print("during lock: db-read=401; after lock release: known=200")
+    print("after lock release: unknown=401 db-read-authenticated=200")
 
 
 if __name__ == "__main__":

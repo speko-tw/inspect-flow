@@ -25,6 +25,7 @@ from app.auth.password_service import set_password
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.auth.settings import get_lockout_settings
 from app.db import clock
+from app.db.engine import get_engine
 from app.main import create_app
 from app.models import (
     AuditLog,
@@ -70,6 +71,11 @@ def _fail(client, user, count=1):
     return [_login(client, user, "wrong-password") for _ in range(count)]
 
 
+def _read_busy_timeout():
+    with get_engine().connect() as connection:
+        return connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+
+
 def test_sqlite_write_lock_timeout_returns_retryable_error(
     client, db_session, engine, monkeypatch, caplog
 ):
@@ -77,6 +83,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     user = make_local_user(db_session, "DEMO_LOCK")
     user_id, email = user.id, user.email
     assert email is not None
+    original_busy_timeout = _read_busy_timeout()
     monkeypatch.setenv("INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS", "50")
     caplog.set_level(logging.WARNING, logger="app.auth")
 
@@ -103,6 +110,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
                 }
                 assert response.headers["retry-after"] == "5"
                 assert "set-cookie" not in response.headers
+                assert _read_busy_timeout() == original_busy_timeout
             assert max(durations) - min(durations) < 0.5
             assert responses[0].content == responses[1].content
             assert responses[1].content == responses[2].content
@@ -139,8 +147,10 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
         json={"login": "missing-user", "password": "wrong-password"},
     )
     assert unknown.status_code == 401
+    assert _read_busy_timeout() == original_busy_timeout
     db_session.rollback()
     assert _login(client, user, "wrong-password").status_code == 401
+    assert _read_busy_timeout() == original_busy_timeout
     db_session.rollback()
     counter = db_session.scalar(
         select(LoginCounter).where(LoginCounter.user_id == user_id)
@@ -148,6 +158,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
     assert counter is not None and counter.failure_count == 1
     db_session.rollback()
     assert _login(client, user, P).status_code == 200
+    assert _read_busy_timeout() == original_busy_timeout
 
 
 def test_locked_account_and_unknown_login_share_sqlite_timeout(
@@ -204,6 +215,10 @@ def test_non_lock_sqlite_operational_error_is_not_converted(
         sqlite_errorname = "SQLITE_IOERR"
 
     expected = OperationalError("upsert", {}, OtherSQLiteError())
+    connection = db_session.connection()
+    original_busy_timeout = connection.exec_driver_sql(
+        "PRAGMA busy_timeout"
+    ).scalar_one()
 
     def fail_execute(_statement):
         raise expected
@@ -212,6 +227,10 @@ def test_non_lock_sqlite_operational_error_is_not_converted(
     with pytest.raises(OperationalError) as caught:
         lockout_module._serialize_account(db_session, uuid.uuid4())
     assert caught.value is expected
+    assert (
+        connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
+        == original_busy_timeout
+    )
 
 
 def test_ac27_ac51_lock_boundary_audit_and_log(
