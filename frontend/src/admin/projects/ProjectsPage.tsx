@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 import { managementErrorMessage } from '../api'
 import {
@@ -45,6 +45,7 @@ function toInput(form: FormState): ProjectInput {
 }
 
 export default function ProjectsPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -155,6 +156,7 @@ export default function ProjectsPage() {
     setError('')
     setNotice('')
     const input = toInput(form)
+    const creating = editing === null
     setSaving(true)
     try {
       let saved: Project
@@ -172,6 +174,11 @@ export default function ProjectsPage() {
         saved = await updateProject(editing.id, changed)
       } else {
         saved = await createProject(input)
+      }
+      if (creating) {
+        cancelEdit()
+        navigate(`/admin/projects/${saved.id}`)
+        return
       }
       setNotice(
         hasDuplicateCodeWarning(saved)
@@ -262,9 +269,15 @@ export default function ProjectsPage() {
                   </button>
                   <Link
                     className="button-link"
-                    to={`/admin/projects/${project.id}`}
+                    to={`/admin/projects/${project.id}/members`}
                   >
                     成員
+                  </Link>
+                  <Link
+                    className="button-link"
+                    to={`/admin/projects/${project.id}`}
+                  >
+                    開啟專案
                   </Link>
                 </td>
               </tr>

@@ -72,6 +72,10 @@
 | ADM-R12 | 專案列表**必須**顯示後端契約提供的成員數；若契約未定，先依流程完成 `domain-model` 規格變更，不得以 UI 假值通過驗收 | 必須 | [#286](https://github.com/speko-tw/inspect-flow/issues/286)、[變更規則](../README.md#change) |
 | ADM-R13 | 已交付的 0.2.x 基本管理不得重做；本規格**必須**補使用者／公司搜尋、cursor 分頁、批次啟用狀態、專案搜尋／分頁、成員批次指派／撤銷及 Admin 為既有使用者設定臨時密碼 | 必須 | 基本功能與進階功能分工依 #259、[authentication](../authentication/spec.md#範圍)、[domain-model](../domain-model/spec.md#範圍)；批次操作與既有使用者臨時密碼端點屬規格設計（非負責人裁定） |
 | ADM-R14 | 0.5.x 主要流程**應**涵蓋派出 Task、現場查看／開始 Task、後台查看進度與工作量；0.5.x 不提供現場完成 Task，因此完成數、完成率及「誰查的」得為 0；示範資料建議含 `COMPLETED` Task | 應 | 主要流程依負責人補充（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977852498)），Field 尚不能完成依負責人裁定（[#104 留言](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977711401)）；seed 建議依 #381，非負責人裁定 |
+| ADM-R15 | 專案管理介面**必須**提供專案首頁，以專案代號及名稱識別專案；首頁依 workflow summary 的 `primary_step` 顯示唯一主要下一步及前往連結，沒有待處理步驟時顯示「追蹤進度」；關鍵數字呈現成員、查核項目、草稿任務、已派出未完成及待重查，`task_counts_visible=false` 時不得以 0 代替隱藏數字，並顯示「無權查看任務」 | 必須 | 範圍變更（負責人指示，#447）；欄位與顯示細節為規格設計（非負責人裁定） |
+| ADM-R16 | 專案首頁**必須**提供「專案首頁、成員、查核項目、分區、計畫與任務、進度」區段導覽；手機版以「區段選單」抽屜呈現，觸控目標至少 44px、可用鍵盤操作，當前區段使用 `aria-current` | 必須 | 範圍變更（負責人指示，#447）；介面細節為規格設計（非負責人裁定）；[PR-19](../../intents/02-principles.md#pr-19) |
+| ADM-R17 | 只有 `inspection_task.inspect`／`inspection_task.read` 現場執行權限，且沒有任何內業專案權限者，**必須**隱藏專案內業區段並導向 Field；前端依 workflow summary 的 `viewer_permission_codes` 有效專案權限判斷，不得用任務數字或 DRAFT 可見性推測；有效權限含任何內業權限時可進入專案區段 | 必須 | 範圍變更（負責人指示，#447）；現場／內業權限判斷與 UI 路由細節為規格設計（非負責人裁定）；PR-10、AUT-R19 |
+| ADM-R18 | 專案列表**必須**提供「開啟專案」連結；建立專案成功後**必須**導向該專案首頁 | 必須 | 範圍變更（負責人指示，#447）；導向方式為規格設計（非負責人裁定） |
 
 ## 資料
 
@@ -104,6 +108,7 @@
 | `GET /api/v1/companies?q=&cursor=&limit=` | `{items:[既有 Company 欄位],next_cursor}`；依 `(name,id)` 升冪；`q` 不分大小寫搜尋名稱 | Admin；401／403／422 如上；保留既有單筆及寫入端點 |
 | `POST /api/v1/companies:batch-status` | 本體 `{items:[{company_id,is_active,disable_user_ids:[uuid]}]}`；逐公司套用既有停用語意，成功回 `{items:[Company]}`；整批原子提交，避免部分公司更新 | Admin；401／403；未知 ID、重複項目或不屬於該公司的 `disable_user_ids` 回 422 且整批不變 |
 | `GET /api/v1/projects?q=&cursor=&limit=` | 將既有列表回應改為 `{items:[既有 Project 欄位],next_cursor}`；依 `(name,id)` 升冪；`q` 搜尋專案名稱／代碼；`member_count` 仍待 #286 `domain-model` 契約完成後另行加入 | 沿用既有 Admin／SystemRole 檢查；401／403／422 |
+| `GET /api/v1/projects/{project_id}/workflow-summary` | 依 `inspection-planning` IP-R11 回傳 `project: {id, project_code, name}`、專案摘要、`next_steps`、`primary_step`、`task_counts_visible`、`draft_tasks_missing_assignee` 及 `viewer_permission_codes`；前端依 `primary_step` 選主要動作，專案識別欄位不需另呼叫需 `inspection_plan.read` 的專案詳情端點 | 依 IP-R11；非成員或無專案讀取權限 403；Admin 全部可讀 |
 | `POST /api/v1/projects/{project_id}/members:batch-roles` | 本體 `{items:[{user_id,role_ids:[uuid]}]}`，在同一專案批次替換各成員角色集合；成功回 `{items:[既有 ProjectMember 欄位]}`；全批原子提交 | Admin；401／403；未知使用者／角色、重複使用者或跨專案角色回 422；不得更改公司角色 |
 | `POST /api/v1/company-roles/impact-preview` | 本體指定 `{operation: "update"|"delete"|"assign"|"revoke",role_id,user_id?,permission_codes?}`；回 `{affected_user_count,affected_users:[{user_id,username,name,permissions_before,permissions_after,permissions_added,permissions_removed}]}`；update/delete 涵蓋該角色全體持有人，assign/revoke 涵蓋指定使用者 | Admin；401／403；未知 ID 404；非法權限代碼／本體 422；角色與權限 schema 依 #387／#390 前置規格 |
 | `GET /api/v1/company-roles?cursor=&limit=`、`GET /api/v1/company-roles/{role_id}`、`GET /api/v1/company-roles/permission-codes` | 角色清單使用 `{items,next_cursor}`、依 `(created_at,id)` 升冪；單筆及權限代碼清單沿用更新後 `domain-model` 回應 schema | Admin；401／403；未知角色 404；錯誤 envelope 依 API-R05 |
@@ -129,6 +134,11 @@
 | ADM-AC11 | 有既有使用者及符合 AUT-R36 的密碼服務 | Admin 重設其臨時密碼，再嘗試取得第二次 | 僅成功回應顯示一次；標記臨時、舊 session 失效、登入失敗鎖定計數清除並寫既定稽核；不可再次取得密碼 | ADM-R13、AUT-R36、AUT-R37 |
 | ADM-AC12 | 驗收資料由 API／seed 建立已完成 Task；0.5.x Field 使用者只能開始而不能完成 Task | 開啟後台試用流程 | 示範完成數、完成率及「誰查的」可由 seed 顯示；無完成紀錄時三者為 0；現場主要流程可從派出、查看／開始至後台監看 | ADM-R14 |
 | ADM-AC13 | 各管理端點收到未登入、無權限、跨專案、無效 cursor／limit、未知 ID 請求 | 逐一呼叫 API | 一般專案受限端點依契約回 401／403／422／404 且不洩漏；Admin 稽核端點以不存在 project_id 篩選必須回 200 空頁；所有錯誤符合 API-R05 envelope | ADM-R06～ADM-R13 |
+| ADM-AC14 | 專案摘要 `next_steps` 各代碼分別為主要待辦，另有 `primary_step=null` 的全完成摘要 | 開啟專案首頁 | 首頁以 API 的 `primary_step` 顯示正確白話文案與對應區段連結；全完成時顯示「追蹤進度」；不自行從單一計數推導主要步驟 | ADM-R15 |
+| ADM-AC15 | 專案摘要包含各項非零數字；另一摘要為 `task_counts_visible=false` 且固定 Task 計數為 0 | 開啟專案首頁 | 首頁顯示成員、查核項目、草稿、已派出未完成、待重查數；無任務讀取權限時顯示「無權查看任務」，不顯示任務的零值卡片 | ADM-R15 |
+| ADM-AC16 | 使用者位於專案首頁或任一專案區段 | 以桌面滑鼠、360px 觸控及鍵盤開啟與切換區段 | 桌面顯示側欄；手機以區段選單抽屜顯示；連結皆可用鍵盤操作、觸控目標至少 44px，當前區段帶 `aria-current="page"` | ADM-R16 |
+| ADM-AC17 | workflow summary 回傳只有 `inspection_task.inspect`／`inspection_task.read` 的有效專案權限；另有含 `project_member.manage` 或其他內業專案權限的摘要 | 現場專屬使用者與內業使用者開啟專案路由 | 現場專屬使用者導向 `/field` 且不載入內業專案資料；內業使用者留在專案介面並可使用其可見區段；不得以 `task_counts_visible` 代替權限判斷 | ADM-R17 |
+| ADM-AC18 | 專案列表有既有專案；Admin 建立新專案成功 | 開啟專案清單或送出新增專案表單 | 每列「開啟專案」導向對應首頁；建立後直接導向新專案首頁，編輯既有專案仍留在清單 | ADM-R18 |
 
 ## 待釐清
 
@@ -139,4 +149,5 @@
 
 ## 變更紀錄
 
+- 範圍變更（負責人指示，#447）：新增專案首頁、下一步與關鍵數字、區段導覽、現場專屬使用者路由及專案建立導向（ADM-R15～ADM-R18、ADM-AC14～ADM-AC18）— [#445 負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)。介面細節為規格設計（非負責人裁定）。
 - 初稿：依 #107、#375、#387、#388、#390 及 #286 整理 0.5.x 範圍；權限與前置規格仍待各自變更完成。

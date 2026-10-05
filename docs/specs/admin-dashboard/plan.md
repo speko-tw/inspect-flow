@@ -19,12 +19,14 @@
 | T6b | 專案列表 API cursor 分頁、搜尋與成員數欄位，更新專案列表 UI | `backend/app/api/v1/projects.py`、`backend/app/services/projects.py`、相關測試、`frontend/src/admin/projects/ProjectsPage.tsx` 及測試 | T0 既有列表契約變更與 T6a `member_count` 規格變更均合併；#275／#277 既有專案列表 | ADM-AC09、10、13 | 前置規格變更完成後開 task |
 | T7 | 進階管理：既有 user/company list 增加搜尋及 cursor 分頁，加入全批原子狀態操作、專案成員批次角色操作、既有使用者臨時密碼重設；不重做 0.2.x 基本 CRUD | `backend/app/api/v1/users.py`、`companies.py`、必要 services／測試；`frontend/src/admin/UsersPage.tsx`、`CompaniesPage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx` 及測試 | T0 的 user/company/project 既有列表 cursor 契約變更合併；#263、#265、#274、#275、#277 已完成；AUT-R36／R37；T4 前置角色契約依賴 #390 | ADM-AC10、11、13 | 待開 task |
 | T8 | 0.7.x 完成驗證上線後，將 Dashboard 的完成數與完成率這兩個既有指標改採伺服器驗證完成，維持欄位與指標名稱並補測試 | `backend/app/services/`、相關 API／service tests、Dashboard UI／tests | `completion-validation` 完成驗證契約與實作；依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)；0.5.x seed 的完成 Task 由 ADM-AC12 對應 task 準備 | ADM-AC02 | 0.7.x 前置規格完成後開 task |
+| T9 | 建立專案首頁、流程摘要顯示、區段導覽及現場專屬權限路由；專案建立成功後導向新首頁，為相關互動與 #454 回應契約補前端測試及實際後端走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/projectHome/`（新增）、`frontend/src/admin/AdminPage.tsx`（僅新增專案路由）、`frontend/src/admin/projects/ProjectsPage.tsx`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx`、`frontend/src/styles.css` | #454 workflow summary API；原型由負責人操作核可；Field/內業分類使用摘要回傳的 `viewer_permission_codes` 有效專案權限 | ADM-AC14～18 | #447 |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
 - T0 已同步 user/company/project 清單契約、後端與前端；T6a（#286）依賴 T0，T6b 依賴 T0 與 T6a，T7 依賴 T0。T0 不包含 #286 的 `member_count`。
 - T6a 先完成規格變更，再開 T6b；不得直接在本規格或實作 PR 修改已凍結的 `domain-model`。
 - T7 根據本規格的 0.2.x 現況表執行；實作前若現況改變，更新該表及對應 task。已交付基本管理不得重做。
+- T9 首頁與區段導覽依賴 #454 的 workflow summary 欄位；未合併前只依其最新已核定回應契約建置 mock，合併後必須 merge 最新 `main` 再完成真後端走查。現場專屬帳號的權限分類依 `viewer_permission_codes`，不得從 `task_counts_visible` 或零計數推斷。
 
 ## 並行分組
 
@@ -42,6 +44,7 @@
 - PR-18 影響預覽需在寫入前取得最新受影響者及權限差異；測試修改／刪除角色及指派／撤銷角色的不同影響集合。
 - T0 與 T6a 是已凍結清單端點的規格變更，必須在 `authentication`／`domain-model` spec-change PR 合併後才可實作；#286 的 `member_count` 另需 T6a 合併。未合併 T6a 前不得呈現前端推算的成員數。
 - Dashboard 彙總可能讀取大量 Task；先受授權範圍及 cursor 查詢限制，效能門檻依實際量測訂定。
+- Project home 的內業／現場路由依賴摘要 API 回傳呼叫者的有效 `viewer_permission_codes`；契約缺欄時須先補 API，不得由前端自行猜測專案角色。
 - 0.5.x Field 不提供完成 Task；若 seed 沒有 `COMPLETED` 資料，完成數、完成率與實際查核人數為 0，應在 demo fixture 中準備可重現案例。
 
 ## 驗證（Proof）
@@ -56,5 +59,9 @@
 | ADM-AC09 | #286 契約合併後 API 測試多專案及零成員筆數；UI 使用 API 值，不在契約尚未完成時推算 |
 | ADM-AC10、11 | user/company 搜尋、cursor、原子批次 rollback、臨時密碼一次性回傳、舊 session 失效、計數與稽核，以及專案成員批次角色操作的 API/UI 測試 |
 | ADM-AC12 | demo seed／API fixture 建立已完成、進行中及取消 Task；走通派出、現場開始、Dashboard 查看，並驗證沒有完成資料時指標為 0 |
+| ADM-AC14、15 | 前端摘要 mock 驗證五種 `primary_step`、全完成狀態、各數字、未指派草稿數與 `task_counts_visible=false`；#454 合併後再用真後端確認 |
+| ADM-AC16 | Testing Library 驗證區段連結、目前區段 `aria-current`、手機選單展開、Escape 關閉；真實 Vite 與無頭瀏覽器分別走查 1280px、360px 並保存截圖 |
+| ADM-AC17 | 前端測試以 `viewer_permission_codes` 只含 `inspection_task.inspect`／`inspection_task.read` 的帳號驗證導向 Field，並以任一內業權限驗證留在專案；真後端登入測試帳號走查權限結果 |
+| ADM-AC18 | 專案清單測試建立成功導向新首頁、每列「開啟專案」及「成員」各自連至正確區段 |
 
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。
