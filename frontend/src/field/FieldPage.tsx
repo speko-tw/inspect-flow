@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
+import TaskDetail from './TaskDetail'
 
 type Scope = 'mine' | 'all'
 type Status = 'all' | FieldTask['status']
@@ -57,19 +58,7 @@ export default function FieldPage() {
       <main>
         {typeof notice === 'string' && <p role="status">{notice}</p>}
         {detailId ? (
-          <>
-            <Link
-              className="field-back"
-              to={`/field/${location.search}`}
-              state={{ restoreTaskList: true }}
-            >
-              返回任務
-            </Link>
-            <section className="field-notice">
-              <h1>任務詳情</h1>
-              <p>任務詳情頁建置中，請返回任務清單。</p>
-            </section>
-          </>
+          <TaskDetail key={detailId} taskId={detailId} />
         ) : (
           <TaskList
             key={`${user.id}:${location.search}`}

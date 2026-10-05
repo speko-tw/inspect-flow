@@ -155,6 +155,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 - 單一專案 GET 對具 `inspection_plan.read` 的專案成員只回 `id`、`project_code`、`name`、`planned_start_date`、`planned_completion_date`。Admin 回傳 `client_name`、`site_location` 與 `warnings` 等完整欄位。Project 沒有狀態欄位（DOM-R43），因此回應不含 `status`；依 #361 審查裁決不新增衍生狀態。Plan 建立 body 為 `{ "name": string }`；修改 Plan 使用相同欄位的 PATCH，禁止提交狀態。Plan 回應含 `id`、`project_id`、`name`、`status`、`archived`、`created_at`、`updated_at`。計畫列表為 `{items, next_cursor}`，不內嵌 Tasks；單筆 Plan 詳情可內嵌 Tasks。
 - 建立 Task body 為 `{ "item_ids": UUID[], "zone_id": UUID|null, "location_text": string|null, "suggested_assignee_id": UUID|null }`。Task 回應含 `id`、`project_id`、`plan_id`、`status`、`dispatched_at`、`zone_id`、`zone: {id,name}|null`、`location_text`、`assignee_id`、`assignee: {id,username,name_zh}|null`、`started_by`、`completed_by`、`cancellation_reason`、`cancelled_from`、`items`、建立與修改時間。`items` 含項目 ID、明細狀態、`needs_reinspection`、目前及歷史 Snapshot；Snapshot 含修訂、來源標準修訂、項目名稱／指示、來源範本名稱、有效性、作廢原因／時間與完整查核項次。
+- 請求欄位上限（SEC-004，規格設計，非負責人裁定）：為擋下超大 payload，請求欄位在到達資料庫前先限制長度。計畫與分區名稱 body 上限 512 字元、`location_text` 1024 字元、取消原因 `reason` 與項目 `instruction` 2000 字元、項目 `title` 256 字元，`item_ids` 與 `inspection_points` 各最多 200 筆；超過回 422 `request.validation_failed`。計畫與分區名稱仍以 128 字元、`location_text` 仍以 256 字元為業務上限，超過這兩個值但未達請求上限時，維持回 `inspection_plan.invalid_name`、`project_zone.invalid_name`、`inspection_task.invalid_location`。巢狀項次欄位的上限見 [template-system](../template-system/spec.md#介面)。
 - `:assign` body 為 `{ "assignee_id": UUID|null }`；`:cancel` body 為 `{ "reason": string }`；`:restore`、`:dispatch`、`:start`、`:complete`、`:archive`、`:unarchive` 不收 body。Task 地點 PATCH body 必含 `zone_id` 與 `location_text`，成功回應為完整 Task 表示，含分區 ID／名稱。
 - Task 清單端點包含 Plan 下的 `/inspection-plans/{plan_id}/tasks`、專案下的 `/projects/{project_id}/inspection-tasks`，以及按專案查核項目列出的 `/projects/{project_id}/inspection-items/{project_inspection_item_id}/tasks`；三者均回 `{items, next_cursor}`。專案計畫列表不得內嵌 Task。項目影響列表的每筆回應另含 `plan_name`、`plan_archived`、`has_result`；結果 API 上線前（0.7.x）`has_result` 恆為 `false`。
 - `workflow-summary` 回應欄位為 `member_count`、`inspection_item_count`、`zone_count`、`plan_count`、`task_counts`、`pending_reinspection_task_count` 與 `next_steps`。`task_counts` 固定包含 `DRAFT`、`PENDING`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED` 五個整數欄位；`pending_reinspection_task_count` 計算至少有一筆待重查項目的不同 Task 數。聚合須由資料庫計數，不得先載入全部資料列。
@@ -225,6 +226,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 - 規格澄清：補充 Plan／Task 回應與動作 body、cursor 列表、項目使用 Task 清單、可指派候選人及錯誤碼；`inspection_plan.read` 可讀分區名稱，現場人員讀取 DRAFT Task 回 404；封存 Plan 下的 Task 動作一律先回 `inspection_plan.archived` — #361
 - 規格設計（非負責人裁定，#416）：首次派送寫入 `dispatched_at`，後續狀態轉換維持不變；歷史非 DRAFT Task 以 `created_at` 近似回填；Task API 回應加入 `dispatched_at`，本次不新增派送稽核事件 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 - 規格澄清（#416，第 2 輪審查）：Field 詳情的量測欄位 ID 與數值標準對應為關聯 ID 例外；補充 Admin 列表空頁行為及量測欄位排序 — PR #443
+- 規格澄清（規格設計，非負責人裁定，#462）：列表端點改以批次載入子資料，查詢數不隨每頁筆數成長；新增 Task 與 Plan 列表索引；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
 
 
 <a id="ip-q11"></a>

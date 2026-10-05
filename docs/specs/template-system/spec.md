@@ -98,6 +98,8 @@
 
 範本結構寫入時，每個實測欄位以請求內的 `client_id`（UUID）供同項次的數值標準用 `measurement_field_client_id` 綁定；此識別只用於一次請求，資料表 `id` 由後端產生，回應以 `id` 與 `measurement_field_id` 表示持久識別。整份範本及整系統覆蓋請求內的 `client_id` 不得重複。項目與項次的 `sequence` 限 1～32767；數值標準凡有填入的數字欄位均必須是有限數字，所有數字單位去除前後空白後不得為空。這些輸入不合法時回 422 與共用驗證錯誤格式。Admin 讀取範本庫沿用 [AUT-Q2](../authentication/spec.md#aut-q2) 的所有專案權限放行裁定，不授予範本寫入權限。
 
+請求欄位上限（SEC-004，規格設計，非負責人裁定）：範本與系統覆蓋的請求在到達資料庫前先限制大小。範本類別與系統名稱、範本與項次 `title`、實測欄位 `name` 各最多 256 字元；`instruction` 與文字標準 `text` 各最多 2000 字元；數值標準 `unit` 最多 32 字元，`value`、`tolerance`、`lower_bound`、`upper_bound` 的字串各最多 64 字元；`min_count` 不得超過 1000。單一範本最多 200 個項次，單一項次最多 50 個實測欄位與 20 筆照片需求；整系統覆蓋一次最多 200 個範本。專案查核項目的 PATCH 沿用同一組項次上限。超過一律回 422 `request.validation_failed`。
+
 數值標準 `condition=range` 時請求得省略 `range_form`，省略時預設為 `tolerance`，且 `tolerance` 為 `null`、空字串或省略時補 `0`；明填 `range_form: null` 則回 422，明填 `range_form: tolerance` 時容許誤差必填且不得為空。`interval` 僅填上下限，`value` 與 `tolerance` 為 `null`；`tolerance` 形式僅填標準值與非負容許誤差，上下限為 `null`。其他條件的 `range_form` 與上下限均為 `null`。既有 `range` 資料遷移為 `tolerance` 形式；舊容許誤差為空時補 `0`。範本與專案副本的讀取回應皆提供形式及上下限；套用和存成範本時保留這些欄位。
 
 指派 `template_admin` 的 PUT 是冪等操作：使用者已被指派時回 204，不新增稽核紀錄；並行重複指派遇到相同唯一鍵衝突時，確認指派已存在後亦回 204，不重複寫稽核。收回尚未指派的角色回 404。
@@ -183,3 +185,4 @@
 - 範本管理頁改採階層清單與詳情、單頁分段查核項目編輯、欄位錯誤定位及單項範本 CRUD；數值單位輸入維持在綁定欄位 — [#427 定案留言](https://github.com/speko-tw/inspect-flow/issues/427#issuecomment-5981195507)。
 - TPL-R19、TPL-AC17：#427 第 1 輪審查確認實測欄位必須依使用者排列穩定讀回；既有欄位以原 `created_at`、`id` 順序回填。
 - TPL-R19 的排序需求屬規格設計（非負責人裁定），為 #427 審查中發現的缺陷修正；TPL-AC17 增列含資料 upgrade、downgrade、再 upgrade 遷移測試 — [PR #441 第 2 輪審查](https://github.com/speko-tw/inspect-flow/pull/441#pullrequestreview-5407786064)。
+- 規格澄清（規格設計，非負責人裁定，#462）：範本與專案項目列表、範本詳情改以批次載入項次子資料，查詢數不隨項目數成長；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
