@@ -1131,6 +1131,11 @@ output {
   padding: var(--space-5) var(--space-4);
 }
 
+.tpl-return-project {
+  display: inline-flex;
+  margin-bottom: var(--space-3);
+}
+
 .tpl-page-heading,
 .tpl-nav-heading,
 .tpl-editor-heading,
@@ -1233,6 +1238,24 @@ output {
   text-decoration: underline;
 }
 
+.tpl-item-open {
+  display: none;
+}
+
+.project-item-applied-notice {
+  display: inline-block;
+  margin: 0 var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+
+.project-item-applied-time {
+  margin-inline-end: var(--space-2);
+}
+
 .tpl-tree-row:hover,
 .tpl-detail-list button:hover {
   background: var(--surface-alt);
@@ -1322,6 +1345,69 @@ output {
   border-color: var(--success-border);
   background: var(--success-bg);
   color: var(--success-text);
+}
+
+.project-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.project-workspace-card {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.project-workspace-card h3,
+.project-workspace-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-workspace-card .project-code {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.project-workspace-card .primary-action {
+  justify-content: center;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary, #fff);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tpl-project-items ul,
+.tpl-preview-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding-left: 1.25rem;
+}
+
+.tpl-project-items li {
+  display: grid;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.tpl-preview-list p {
+  margin: var(--space-1) 0;
+}
+
+.tpl-layout > .tpl-list-pane {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
 }
 
 .tpl-detail-notice {
@@ -1524,6 +1610,13 @@ output {
 }
 
 @media (max-width: 40rem) {
+  .projects-admin-table {
+    display: none;
+  }
+
+  .project-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .tpl-page {
     padding: var(--space-4) var(--space-3);
   }
@@ -1553,6 +1646,10 @@ output {
   .tpl-tree-count {
     white-space: normal;
     text-align: right;
+  }
+
+  .tpl-item-open {
+    display: inline;
   }
 
   .tpl-step-nav {

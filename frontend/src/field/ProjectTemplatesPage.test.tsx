@@ -1,10 +1,4 @@
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -27,134 +21,218 @@ const USER: CurrentUser = {
   must_change_password: false,
 }
 
-const SAVED_ITEM: ProjectInspectionItem = {
+const PROJECT_ITEM: ProjectInspectionItem = {
   id: 'copy-1',
   project_id: 'project-1',
   sequence: 1,
-  title: '風管檢查',
-  instruction: '檢查風管',
-  source_template_name: '空調',
+  title: '管線查核',
+  instruction: '確認管線安裝',
+  source_template_name: '給排水',
   applied_at: '2026-10-04T01:00:00Z',
 }
 
+const TEMPLATE = {
+  id: 'template-1',
+  system_id: 'system-1',
+  sequence: 1,
+  title: '管線查核',
+  instruction: '確認管線安裝',
+  inspection_points: [
+    {
+      sequence: 1,
+      title: '坡度',
+      instruction: '確認排水坡度',
+      text_standard: { text: '依圖施工' },
+      numeric_standard: {
+        value: null,
+        condition: 'range',
+        unit: '%',
+        tolerance: null,
+        range_form: 'interval',
+        lower_bound: '1',
+        upper_bound: '3',
+      },
+      measurement_fields: [],
+      evidence_requirements: [
+        {
+          evidence_type: 'photo',
+          required: true,
+          min_count: 1,
+          max_count: null,
+        },
+      ],
+    },
+  ],
+}
+
 function mockApi(
-  applyResponse: Response,
-  denyCategories = false,
   options: {
-    projectItems?: ProjectInspectionItem[]
-    afterApplyItems?: ProjectInspectionItem[]
-    canSave?: boolean
+    applyResponse?: Response
     saveResponse?: Response
-    denyItems?: boolean
-    paginatedItems?: ProjectInspectionItem[]
-    afterSaveTemplates?: boolean
+    templates?: (typeof TEMPLATE)[]
+    projectItems?: ProjectInspectionItem[]
+    canSave?: boolean
+    denyCategories?: boolean
+    secondSystemTemplate?: boolean
   } = {},
 ) {
-  let applied = false
-  let saved = false
-  const calls = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  let saveRequests = 0
+  const calls = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (url.includes('/projects?limit=100')) {
+    if (url === '/api/v1/projects?limit=100') {
       return options.canSave
         ? Response.json({
-            items: [{ id: 'project-1', name: '示範工程' }],
+            items: [
+              {
+                id: 'project-1',
+                project_code: '試用 A',
+                name: '試用專案 A',
+              },
+            ],
             next_cursor: null,
           })
         : Response.json(
             { error: { code: 'permission.denied' } },
-            { status: 403 },
+            {
+              status: 403,
+            },
           )
     }
-    if (url.includes('/inspection-items?limit=100')) {
-      if (options.denyItems) {
+    if (url === '/api/v1/me/projects') {
+      return Response.json([
+        {
+          id: 'project-1',
+          project_code: '試用 A',
+          name: '試用專案 A',
+          client_name: '示範公司',
+          site_location: '北部',
+          planned_start_date: null,
+          planned_completion_date: null,
+          role_names: ['內業'],
+        },
+      ])
+    }
+    if (url.endsWith('/inspection-items?limit=100')) {
+      return Response.json({
+        items: options.projectItems ?? [],
+        next_cursor: null,
+      })
+    }
+    if (url === '/api/v1/template-categories?limit=100') {
+      if (options.denyCategories) {
         return Response.json(
           { error: { code: 'permission.denied' } },
-          { status: 403 },
+          {
+            status: 403,
+          },
         )
       }
-      if (options.paginatedItems) {
-        const second = url.includes('cursor=next')
-        return Response.json({
-          items: [options.paginatedItems[second ? 1 : 0]],
-          next_cursor: second ? null : 'next',
-        })
-      }
-      return Response.json({
-        items: applied
-          ? (options.afterApplyItems ?? options.projectItems ?? [])
-          : (options.projectItems ?? []),
-        next_cursor: null,
-      })
-    }
-    if (url.endsWith('/template-categories?limit=100')) {
-      if (denyCategories) {
-        return Response.json(
-          { error: { code: 'permission.denied' } },
-          { status: 403 },
-        )
-      }
-      return Response.json({
-        items: [{ id: 'category-1', name: '機電' }],
-        next_cursor: null,
-      })
-    }
-    if (url.includes('/category-1/systems')) {
-      return Response.json({
-        items: [{ id: 'system-1', name: '空調' }],
-        next_cursor: null,
-      })
-    }
-    if (url.includes('/templates?system_id=system-1')) {
       return Response.json({
         items: [
-          { id: 'template-1', title: '風管檢查' },
-          ...(saved && options.afterSaveTemplates
-            ? [{ id: 'new-template-1', title: '新增的範本' }]
-            : []),
+          { id: 'category-1', name: '建築工程' },
+          { id: 'category-2', name: '土木工程' },
         ],
         next_cursor: null,
       })
     }
-    if (
-      url.endsWith('/inspection-items:apply-template') &&
-      init?.method === 'POST'
-    ) {
-      applied = true
-      return applyResponse
+    if (url.includes('/category-1/systems?limit=100')) {
+      return Response.json({
+        items: [
+          { id: 'system-1', category_id: 'category-1', name: '給排水' },
+          { id: 'system-2', category_id: 'category-1', name: '電氣' },
+        ],
+        next_cursor: null,
+      })
     }
-    if (
-      url.endsWith('/projects/project-1/templates') &&
-      init?.method === 'POST'
-    ) {
-      const response =
-        options.saveResponse ??
-        Response.json(
+    if (url.includes('/category-2/systems?limit=100')) {
+      return Response.json({
+        items: [{ id: 'system-3', category_id: 'category-2', name: '基礎' }],
+        next_cursor: null,
+      })
+    }
+    if (url.includes('/template-systems/system-1/templates?limit=100')) {
+      return Response.json({
+        items: options.templates ?? [
+          TEMPLATE,
           {
-            id: 'new-template-1',
-            title: SAVED_ITEM.title,
+            ...TEMPLATE,
+            id: 'template-2',
+            title: '水壓測試',
           },
+        ],
+        next_cursor: null,
+      })
+    }
+    if (url.includes('/template-systems/system-2/templates?limit=100')) {
+      return Response.json({
+        items:
+          options.secondSystemTemplate === false
+            ? []
+            : [
+                {
+                  ...TEMPLATE,
+                  id: 'template-3',
+                  system_id: 'system-2',
+                  title: '電力查核',
+                },
+              ],
+        next_cursor: null,
+      })
+    }
+    if (url.includes('/template-systems/system-3/templates?limit=100')) {
+      return Response.json({ items: [], next_cursor: null })
+    }
+    if (url.endsWith('/inspection-items:apply-template')) {
+      return (
+        options.applyResponse ??
+        Response.json(
+          [
+            {
+              id: 'copy-2',
+              project_id: 'project-1',
+              source_template_name: '給排水',
+              applied_at: '2026-10-05T01:00:00Z',
+            },
+          ],
           { status: 201 },
         )
-      if (response.ok) saved = true
-      return response
+      )
+    }
+    if (url.endsWith('/projects/project-1/templates')) {
+      saveRequests += 1
+      return options.saveResponse && saveRequests === 1
+        ? options.saveResponse
+        : Response.json(
+            {
+              id: 'template-new',
+              title: '管線查核',
+            },
+            { status: 201 },
+          )
     }
     return Response.json(
       { error: { code: 'resource.not_found' } },
-      { status: 404 },
+      {
+        status: 404,
+      },
     )
   })
   vi.stubGlobal('fetch', calls)
   return calls
 }
 
-function renderPage(user = USER) {
+function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/field/projects/project-1']}>
-      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
+    <MemoryRouter initialEntries={['/admin/projects/project-1/templates']}>
+      <CurrentUserProvider value={{ user: USER, clear: vi.fn() }}>
         <Routes>
           <Route
             element={<ProjectTemplatesPage />}
-            path="/field/projects/:projectId"
+            path="/admin/projects/:projectId/templates"
+          />
+          <Route
+            element={<p>PROJECT_DETAIL</p>}
+            path="/admin/projects/:projectId"
           />
         </Routes>
       </CurrentUserProvider>
@@ -162,63 +240,55 @@ function renderPage(user = USER) {
   )
 }
 
-async function selectSystem() {
-  fireEvent.change(await screen.findByLabelText('工程類別'), {
-    target: { value: 'category-1' },
-  })
-  fireEvent.change(await screen.findByLabelText('系統'), {
-    target: { value: 'system-1' },
-  })
-  await screen.findByRole('option', { name: '風管檢查' })
+function useMobileViewport() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  )
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
+async function chooseSystem() {
+  const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+  fireEvent.click(await within(nav).findByRole('button', { name: '建築工程' }))
+  fireEvent.click(await within(nav).findByRole('button', { name: '給排水' }))
+  await within(nav).findByRole('button', { name: '管線查核' })
+}
 
-describe('專案範本套用（TPL-AC05、AC08）', () => {
-  it('404 對套用、列表與存為範本使用中性訊息', () => {
+afterEach(() => vi.unstubAllGlobals())
+
+describe('專案範本套用與存為範本（#429）', () => {
+  it('把 409 衝突名稱轉成原型指定訊息，並保留中性 404', () => {
+    expect(
+      templateErrorMessage(
+        new ProjectTemplatesApiError(
+          409,
+          'project_inspection_item.duplicate_name',
+          ['管線查核'],
+        ),
+      ),
+    ).toBe('已套用過『管線查核』，本次沒有新增任何項目。')
     expect(templateErrorMessage(new ProjectTemplatesApiError(404))).toBe(
       '找不到指定的資料，請重新整理後再試。',
     )
   })
 
-  it('單項套用顯示副本來源與時間', async () => {
-    const calls = mockApi(
-      Response.json(
-        [
-          {
-            id: 'copy-1',
-            project_id: 'project-1',
-            source_template_name: '風管檢查',
-            applied_at: '2026-10-04T01:00:00Z',
-          },
-        ],
-        { status: 201 },
-      ),
-      false,
-      { afterApplyItems: [SAVED_ITEM] },
-    )
+  it('預覽單一項目後套用，返回專案看到新項目', async () => {
+    const calls = mockApi()
     renderPage()
-    await selectSystem()
-    fireEvent.change(screen.getByLabelText('查核項目'), {
-      target: { value: 'template-1' },
-    })
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    expect(screen.getByText('將新增 1 個項目')).toBeInTheDocument()
+    expect(screen.getByText(/確認排水坡度/)).toBeInTheDocument()
+    expect(screen.getByText('數值標準：坡度 1～3 %')).toBeInTheDocument()
+    expect(screen.getByText('文字標準：依圖施工')).toBeInTheDocument()
+    expect(screen.getByText('照片：至少 1 張')).toBeInTheDocument()
+    expect(screen.getByText(/之後修改範本不會更新/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
-
-    const result = await screen.findByText(/來源：風管檢查/)
-    expect(result).toBeInTheDocument()
-    expect(screen.getByText(/套用時間：/)).toBeInTheDocument()
-    expect(
-      await screen.findByRole('rowheader', {
-        name: SAVED_ITEM.title,
-      }),
-    ).toBeInTheDocument()
-    expect(
-      calls.mock.calls.filter(([url]) =>
-        String(url).includes('/inspection-items?limit=100'),
-      ),
-    ).toHaveLength(2)
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/inspection-items:apply-template',
       expect.objectContaining({
@@ -228,359 +298,295 @@ describe('專案範本套用（TPL-AC05、AC08）', () => {
     )
   })
 
-  it('整系統套用並重載多筆副本', async () => {
-    const second = {
-      ...SAVED_ITEM,
-      id: 'copy-2',
-      sequence: 2,
-      title: '水管檢查',
-      applied_at: '2026-10-04T02:00:00Z',
-    }
-    const applied = [SAVED_ITEM, second].map((item) => ({
-      id: item.id,
-      project_id: item.project_id,
-      source_template_name: item.source_template_name,
-      applied_at: item.applied_at,
-    }))
-    const calls = mockApi(Response.json(applied, { status: 201 }), false, {
-      afterApplyItems: [SAVED_ITEM, second],
-    })
+  it('整個系統切換後從樹選單一項目，只送出該範本 ID', async () => {
+    const calls = mockApi()
     renderPage()
-    await selectSystem()
-    await screen.findByText('目前沒有查核項目。')
-    fireEvent.click(screen.getByLabelText('整個系統'))
+    await chooseSystem()
+    fireEvent.click(screen.getByLabelText('整個系統（2 個項目）'))
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    expect(screen.getByText('將新增 1 個項目')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
-
-    const result = await screen.findByRole('status')
-    const entries = within(result).getAllByRole('listitem')
-    expect(entries).toHaveLength(2)
-    for (const entry of entries) {
-      expect(entry).toHaveTextContent('來源：空調')
-      expect(within(entry).getByText(/2026/)).toBeInTheDocument()
-    }
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/inspection-items:apply-template',
       expect.objectContaining({
-        method: 'POST',
+        body: JSON.stringify({ template_id: 'template-1' }),
+      }),
+    )
+  })
+
+  it('選單改選單項後再選整個系統，送出 system_id', async () => {
+    const calls = mockApi()
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    fireEvent.click(screen.getByRole('button', { name: '給排水' }))
+    expect(screen.getByLabelText('整個系統（2 個項目）')).toBeChecked()
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByRole('button', { name: '取消' })).toHaveFocus()
+    fireEvent.click(within(dialog).getByRole('button', { name: '確定套用' }))
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
+    expect(calls).toHaveBeenCalledWith(
+      '/api/v1/projects/project-1/inspection-items:apply-template',
+      expect.objectContaining({
         body: JSON.stringify({ system_id: 'system-1' }),
       }),
     )
-    expect(
-      await screen.findByRole('rowheader', { name: second.title }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('rowheader', { name: SAVED_ITEM.title }),
-    ).toBeInTheDocument()
-    expect(
-      calls.mock.calls.filter(([url]) =>
-        String(url).includes('/inspection-items?limit=100'),
-      ),
-    ).toHaveLength(2)
   })
 
-  it('套用遇同名 409 時列出 details 衝突名稱', async () => {
-    mockApi(
-      Response.json(
+  it('保留每個已開啟系統自己的項目與計數', async () => {
+    mockApi()
+    renderPage()
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '給排水' }))
+    await within(nav).findByRole('button', { name: '管線查核' })
+    fireEvent.click(within(nav).getByRole('button', { name: '電氣' }))
+    await screen.findByRole('heading', { name: '套用範本：電氣' })
+    const water = within(nav).getByRole('button', { name: '給排水' })
+    expect(water).toHaveTextContent('2 個查核項目')
+    fireEvent.click(water)
+    expect(
+      await screen.findByRole('heading', { name: '套用範本：給排水' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('整個系統（2 個項目）')).toBeChecked()
+    expect(screen.getByLabelText('單一項目：管線查核')).toBeInTheDocument()
+  })
+
+  it('手機在清單與詳情間切換，返回後保留樹的展開狀態', async () => {
+    useMobileViewport()
+    mockApi()
+    renderPage()
+    const layout = await screen.findByRole('region', { name: '範本操作' })
+    const paneLayout = layout.parentElement
+    expect(paneLayout).toHaveAttribute('data-pane', 'list')
+    fireEvent.click(await screen.findByRole('button', { name: '建築工程' }))
+    expect(paneLayout).toHaveAttribute('data-pane', 'detail')
+    fireEvent.click(screen.getByRole('button', { name: '返回選擇' }))
+    expect(paneLayout).toHaveAttribute('data-pane', 'list')
+    expect(screen.getByRole('button', { name: '建築工程' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('手機選取類別後可從詳情直接選系統', async () => {
+    useMobileViewport()
+    mockApi()
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '建築工程' }))
+    const detail = screen.getByRole('region', { name: '範本操作' })
+    const electrical = await within(detail).findByRole('button', {
+      name: '電氣',
+    })
+    expect(electrical).toBeInTheDocument()
+    fireEvent.click(electrical)
+    expect(
+      await screen.findByRole('heading', { name: '套用範本：電氣' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
+  })
+
+  it('整系統多項套用前要求頁內確認', async () => {
+    const calls = mockApi()
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByLabelText('整個系統（2 個項目）'))
+    expect(screen.getByText('將新增 2 個項目')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('一次新增 2 個項目')
+    fireEvent.click(within(dialog).getByRole('button', { name: '確定套用' }))
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
+    expect(calls).toHaveBeenCalledWith(
+      '/api/v1/projects/project-1/inspection-items:apply-template',
+      expect.objectContaining({
+        body: JSON.stringify({ system_id: 'system-1' }),
+      }),
+    )
+  })
+
+  it('同名 409 提供改選範本與返回專案兩個出口', async () => {
+    mockApi({
+      applyResponse: Response.json(
         {
           error: {
             code: 'project_inspection_item.duplicate_name',
-            details: ['風管檢查', '水管檢查'],
+            details: ['管線查核'],
           },
         },
         { status: 409 },
       ),
-    )
+    })
     renderPage()
-    await selectSystem()
-    fireEvent.click(screen.getByLabelText('整個系統'))
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '專案已有同名查核項目：風管檢查、水管檢查，請先改名再套用',
-    )
-  })
-
-  it('以 system_id 套用空系統時顯示空結果', async () => {
-    const calls = mockApi(Response.json([], { status: 200 }))
-    renderPage()
-    await selectSystem()
-    fireEvent.click(screen.getByLabelText('整個系統'))
-    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
-
-    const empty = await screen.findByText('這個系統沒有項目')
-    expect(empty).toBeInTheDocument()
-    expect(calls).toHaveBeenCalledWith(
-      '/api/v1/projects/project-1/inspection-items:apply-template',
-      expect.objectContaining({
-        body: JSON.stringify({ system_id: 'system-1' }),
-      }),
-    )
-  })
-
-  it('寫入 403 後保留選擇並切為唯讀', async () => {
-    mockApi(
-      Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
-    )
-    renderPage()
-    await selectSystem()
-    fireEvent.change(screen.getByLabelText('查核項目'), {
-      target: { value: 'template-1' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
-
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('button', { name: '套用至專案' }),
-      ).not.toBeInTheDocument()
-    })
-    expect(screen.getByLabelText('查核項目')).toHaveValue('template-1')
-    expect(screen.getByText('目前只能瀏覽範本。')).toBeInTheDocument()
-  })
-
-  it('讀取 403 時不顯示套用按鈕', async () => {
-    mockApi(Response.json([]), true)
-    renderPage()
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你沒有權限執行這項操作。',
+      '已套用過『管線查核』，本次沒有新增任何項目。',
     )
     expect(
-      screen.queryByRole('button', { name: '套用至專案' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it.each([409, 422])('寫入 %i 顯示中文訊息', async (status) => {
-    mockApi(
-      Response.json(
-        { error: { code: 'request.validation_failed' } },
-        { status },
-      ),
+      within(screen.getByRole('alert')).getByRole('button', {
+        name: '改選其他範本',
+      }),
+    ).toHaveFocus()
+    expect(
+      screen.getByRole('button', { name: '改選其他範本' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '返回專案' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(screen.getByRole('alert')).getByRole('button', {
+        name: '返回專案',
+      }),
     )
-    renderPage()
-    await selectSystem()
-    fireEvent.click(screen.getByLabelText('整個系統'))
-    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      status === 409 ? '範本內容有衝突' : '範本資料無效',
-    )
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
   })
 
-  it('列表載入副本來源與時間', async () => {
-    mockApi(Response.json([]), false, { projectItems: [SAVED_ITEM] })
-    renderPage()
-
-    const table = await screen.findByRole('table')
-    const row = within(table).getByRole('row', { name: /風管檢查/ })
-    expect(within(row).getByText('空調')).toBeInTheDocument()
-    expect(within(row).getByText(/2026/)).toBeInTheDocument()
-  })
-
-  it('分頁讀完專案副本', async () => {
-    mockApi(Response.json([]), false, {
-      paginatedItems: [
-        SAVED_ITEM,
+  it('同名 409 的改選出口會清除錯誤並返回範本選擇', async () => {
+    mockApi({
+      applyResponse: Response.json(
         {
-          ...SAVED_ITEM,
-          id: 'copy-2',
-          title: '水管檢查',
+          error: {
+            code: 'project_inspection_item.duplicate_name',
+            details: ['管線查核'],
+          },
         },
-      ],
+        { status: 409 },
+      ),
     })
     renderPage()
-
-    expect(
-      await screen.findByRole('rowheader', {
-        name: '水管檢查',
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    const alert = await screen.findByRole('alert')
+    fireEvent.click(
+      within(alert).getByRole('button', {
+        name: '改選其他範本',
       }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('rowheader', {
-        name: SAVED_ITEM.title,
-      }),
-    ).toBeInTheDocument()
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText('選擇範本')).toBeInTheDocument()
   })
 
-  it('範本管理員可選系統並存成範本', async () => {
-    const calls = mockApi(Response.json([]), false, {
-      projectItems: [SAVED_ITEM],
+  it('存為範本同名時保留來源與目的地，改選其他系統可完成', async () => {
+    const calls = mockApi({
       canSave: true,
-      afterSaveTemplates: true,
+      projectItems: [PROJECT_ITEM],
+      saveResponse: Response.json(
+        {
+          error: {
+            code: 'template.name_conflict',
+          },
+        },
+        { status: 409 },
+      ),
     })
     renderPage()
-    await selectSystem()
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: '存為範本',
-      }),
-    )
-    fireEvent.change(screen.getByLabelText('目標工程類別'), {
-      target: { value: 'category-1' },
-    })
-    fireEvent.change(await screen.findByLabelText('目標系統'), {
-      target: { value: 'system-1' },
-    })
-    const paths = [
-      '/template-categories?limit=100',
-      '/template-categories/category-1/systems?limit=100',
-      '/templates?system_id=system-1&limit=100',
-    ]
-    const requestCount = (path: string) =>
-      calls.mock.calls.filter(([url]) => String(url).endsWith(path)).length
-    const beforeSave = paths.map(requestCount)
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: '確認存為範本',
-      }),
-    )
-
+    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
     expect(
-      await screen.findByRole('status', {
-        name: '',
+      screen.getByRole('heading', {
+        name: '將「管線查核」存為範本',
       }),
-    ).toHaveTextContent('已存為範本。')
+    ).toBeInTheDocument()
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    expect(screen.getByText(/範本庫 \/ 建築工程 \/ 電氣/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/名稱/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    const conflict = await screen.findByRole('alert')
+    expect(conflict).toHaveTextContent(
+      '這個系統已有「管線查核」，沒有存入範本。請改選其他系統。',
+    )
+    expect(
+      within(conflict).getByRole('button', { name: '改選系統' }),
+    ).toHaveFocus()
+    expect(
+      within(nav).getByRole('button', { name: '電氣' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '改選系統' }))
+    fireEvent.click(within(nav).getByRole('button', { name: '土木工程' }))
+    fireEvent.click(await within(nav).findByRole('button', { name: '基礎' }))
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已將「管線查核」存入「土木工程 / 基礎」。',
+    )
+    expect(
+      screen.getByRole('button', { name: '返回專案' }),
+    ).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/templates',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          project_inspection_item_id: SAVED_ITEM.id,
-          system_id: 'system-1',
+          project_inspection_item_id: 'copy-1',
+          system_id: 'system-3',
         }),
       }),
     )
-    expect(
-      await screen.findByRole('option', { name: '新增的範本' }),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('系統')).toHaveValue('system-1')
-    paths.forEach((path, index) => {
-      expect(requestCount(path)).toBe(beforeSave[index] + 1)
-    })
   })
 
-  it('後端允許時顯示存成範本', async () => {
-    mockApi(Response.json([]), false, {
-      projectItems: [SAVED_ITEM],
-      canSave: true,
-    })
-    renderPage({ ...USER, is_admin: true })
-
-    expect(
-      await screen.findByRole('button', { name: '存為範本' }),
-    ).toBeInTheDocument()
-  })
-
-  it('後端拒絕跨專案瀏覽時隱藏存為範本操作', async () => {
-    mockApi(Response.json([]), false, {
-      projectItems: [SAVED_ITEM],
-      canSave: false,
-    })
-    renderPage({ ...USER, is_admin: true })
-
-    expect(
-      await screen.findByRole('rowheader', { name: SAVED_ITEM.title }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: '存為範本' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('存為範本 409 顯示同名訊息並保留選擇', async () => {
-    mockApi(Response.json([]), false, {
-      projectItems: [SAVED_ITEM],
-      canSave: true,
-      saveResponse: Response.json(
-        { error: { code: 'template.name_conflict' } },
-        { status: 409 },
-      ),
-    })
+  it('範本讀取 403 時切成唯讀，仍保留既有專案項目', async () => {
+    mockApi({ denyCategories: true, projectItems: [PROJECT_ITEM] })
     renderPage()
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: '存為範本',
-      }),
-    )
-    fireEvent.change(screen.getByLabelText('目標工程類別'), {
-      target: { value: 'category-1' },
-    })
-    fireEvent.change(await screen.findByLabelText('目標系統'), {
-      target: { value: 'system-1' },
-    })
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: '確認存為範本',
-      }),
-    )
-
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '該系統已有同名範本。',
+      '你沒有權限執行這項操作。',
     )
-    expect(screen.getByLabelText('目標系統')).toHaveValue('system-1')
-  })
-
-  it('非範本管理員不顯示存為範本操作', async () => {
-    mockApi(Response.json([]), false, { projectItems: [SAVED_ITEM] })
-    renderPage()
-    await screen.findByRole('rowheader', { name: SAVED_ITEM.title })
+    expect(
+      screen.getByText('範本讀取權限不足，無法載入其他內容。'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('管線查核')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '套用至專案' }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: '存為範本' }),
     ).not.toBeInTheDocument()
   })
 
-  it('存為範本寫入 403 後隱藏操作且保留選擇', async () => {
-    mockApi(Response.json([]), false, {
-      projectItems: [SAVED_ITEM],
-      canSave: true,
+  it('空系統明確說明沒有可套用項目且不允許送出', async () => {
+    mockApi({ secondSystemTemplate: false })
+    renderPage()
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '這個系統沒有查核項目。',
+    )
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
+  })
+
+  it('專案成員可發起存為範本，寫入 403 後停用並顯示權限訊息', async () => {
+    mockApi({
+      canSave: false,
+      projectItems: [PROJECT_ITEM],
       saveResponse: Response.json(
         { error: { code: 'permission.denied' } },
         { status: 403 },
       ),
     })
     renderPage()
-    fireEvent.click(
-      await screen.findByRole('button', {
-        name: '存為範本',
-      }),
-    )
-    fireEvent.change(screen.getByLabelText('目標工程類別'), {
-      target: { value: 'category-1' },
-    })
-    fireEvent.change(await screen.findByLabelText('目標系統'), {
-      target: { value: 'system-1' },
-    })
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: '確認存為範本',
-      }),
-    )
-
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('button', {
-          name: '存為範本',
-        }),
-      ).not.toBeInTheDocument()
-    })
-    expect(screen.getByLabelText('目標系統')).toHaveValue('system-1')
-    const readOnly = screen.getByText('目前只能瀏覽查核項目。')
-    expect(readOnly).toBeInTheDocument()
-  })
-
-  it('專案列表讀取 403 隱藏所有操作', async () => {
-    mockApi(Response.json([]), false, { denyItems: true, canSave: true })
-    renderPage()
-
+    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(within(nav).getByRole('button', { name: '建築工程' }))
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '你沒有權限執行這項操作。',
     )
-    expect(
-      screen.queryByRole('button', {
-        name: '套用至專案',
-      }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', {
-        name: '存為範本',
-      }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '目前只能瀏覽查核項目。',
+    )
+    expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
   })
 })

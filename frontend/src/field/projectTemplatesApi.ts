@@ -1,4 +1,5 @@
 import type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
+import { getSystemTemplates } from '../admin/templates/api'
 
 export type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
 
@@ -42,6 +43,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface ProjectSummary {
   id: string
+  project_code: string
   name: string
 }
 
@@ -96,7 +98,12 @@ export function listTemplateSystems(
 }
 
 export function listTemplateItems(systemId: string): Promise<TemplateItem[]> {
-  return allPages('/templates', new URLSearchParams({ system_id: systemId }))
+  return getSystemTemplates(systemId).then((result) =>
+    result.items.filter(
+      (item): item is typeof item & { id: string } =>
+        typeof item.id === 'string',
+    ),
+  )
 }
 
 export function listAllProjects(): Promise<ProjectSummary[]> {
@@ -133,34 +140,46 @@ export function saveProjectItemAsTemplate(
   })
 }
 
-export function templateErrorMessage(error: unknown): string {
-  if (error instanceof ProjectTemplatesApiError) {
+export function templateErrorMessage(
+  error: unknown,
+  conflictingTemplateName?: string,
+): string {
+  if (
+    error instanceof ProjectTemplatesApiError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'status' in error &&
+      typeof error.status === 'number')
+  ) {
+    const apiError = error as ProjectTemplatesApiError
     if (
-      error.status === 409 &&
-      error.code === 'project_inspection_item.duplicate_name'
+      apiError.status === 409 &&
+      apiError.code === 'project_inspection_item.duplicate_name'
     ) {
-      const names = Array.isArray(error.details)
-        ? error.details.filter(
+      const names = Array.isArray(apiError.details)
+        ? apiError.details.filter(
             (name): name is string => typeof name === 'string',
           )
         : []
       return names.length
-        ? `專案已有同名查核項目：${names.join('、')}，請先改名再套用`
-        : '專案已有同名查核項目，請先改名再套用。'
+        ? `已套用過${names.map((name) => `『${name}』`).join('、')}，本次沒有新增任何項目。`
+        : '已套用過同名項目，本次沒有新增任何項目。'
     }
-    if (error.status === 409) {
-      if (error.code === 'template.name_conflict') {
-        return '該系統已有同名範本。'
+    if (apiError.status === 409) {
+      if (apiError.code === 'template.name_conflict') {
+        return conflictingTemplateName
+          ? `這個系統已有「${conflictingTemplateName}」，沒有存入範本。請改選其他系統。`
+          : '該系統已有同名範本。'
       }
       return '範本內容有衝突，請重新整理後再試。'
     }
-    if (error.status === 422) {
+    if (apiError.status === 422) {
       return '選擇的範本資料無效，請檢查後再試。'
     }
-    if (error.status === 404) {
+    if (apiError.status === 404) {
       return '找不到指定的資料，請重新整理後再試。'
     }
-    if (error.status === 403) {
+    if (apiError.status === 403) {
       return '你沒有權限執行這項操作。'
     }
   }

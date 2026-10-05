@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Route, Routes } from 'react-router'
+import { Navigate, Route, Routes, useParams } from 'react-router'
 
 import ChangePasswordPage from './auth/ChangePasswordPage'
 import HomeRedirect from './auth/HomeRedirect'
@@ -10,8 +10,12 @@ import VersionFooter from './VersionFooter'
 
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
-const ProjectTemplatesPage = lazy(() => import('./field/ProjectTemplatesPage'))
 const SetupPage = lazy(() => import('./setup/SetupPage'))
+
+function LegacyProjectTemplateRedirect() {
+  const { projectId = '' } = useParams()
+  return <Navigate replace to={`/admin/projects/${projectId}/templates`} />
+}
 
 export default function App() {
   return (
@@ -76,7 +80,7 @@ export default function App() {
               path="/field/projects/:projectId"
               element={
                 <RequireAuth key="project-templates">
-                  <ProjectTemplatesPage />
+                  <LegacyProjectTemplateRedirect />
                 </RequireAuth>
               }
             />
