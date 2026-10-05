@@ -42,7 +42,9 @@ const detail = {
   status: 'PENDING',
   dispatched_at: '2026-10-05T08:00:00Z',
   location: { zone_name: '一樓', location_text: '東側' },
-  suggested_assignee: { name_zh: '示範查核員' },
+  suggested_assignee: { name_zh: '示範查核員', is_me: true },
+  started_by: null,
+  cancellation_reason: null,
   items: [
     {
       title: '外牆鋼筋查核',
@@ -117,17 +119,7 @@ describe('現場任務詳情', () => {
     expect(screen.getByText('3～4 mm')).toBeInTheDocument()
     expect(screen.getByText('5 ± 0.5 mm')).toBeInTheDocument()
     expect(screen.getAllByText('至少 2 張')).toHaveLength(2)
-    expect(
-      screen.getByRole('button', {
-        name: '開始查核（下一步開放）',
-      }),
-    ).toBeDisabled()
-    expect(fetcher).toHaveBeenCalledTimes(1)
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: '開始查核（下一步開放）',
-      }),
-    )
+    expect(screen.getByRole('button', { name: '開始查核' })).toBeEnabled()
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
@@ -140,6 +132,7 @@ describe('現場任務詳情', () => {
           status: 'IN_PROGRESS',
           location: { zone_name: null, location_text: '西側' },
           suggested_assignee: null,
+          started_by: { name_zh: '示範查核員乙', is_me: false },
         }),
       ),
     )
@@ -147,7 +140,8 @@ describe('現場任務詳情', () => {
     expect(await screen.findByText('西側')).toBeInTheDocument()
     expect(screen.queryByText(/分區：/)).not.toBeInTheDocument()
     expect(screen.getByText('未指定')).toBeInTheDocument()
-    expect(screen.getByText('查核進行中。')).toBeInTheDocument()
+    expect(screen.getByText('查核進行中')).toBeInTheDocument()
+    expect(screen.getByText('實際開始者：示範查核員乙')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /開始查核/ }),
     ).not.toBeInTheDocument()

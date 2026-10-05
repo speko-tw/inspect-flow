@@ -27,6 +27,9 @@ const TASK: FieldTask = {
 const DETAIL = {
   ...TASK,
   item_summary: undefined,
+  suggested_assignee: { name_zh: '示範查核員', is_me: true },
+  started_by: null,
+  cancellation_reason: null,
   items: [
     {
       title: '外牆鋼筋查核',
@@ -352,5 +355,144 @@ describe('今日任務首頁', () => {
     renderPage()
     expect(await screen.findByText('無法載入任務')).toBeInTheDocument()
     expect(screen.queryByText('目前沒有符合的任務')).not.toBeInTheDocument()
+  })
+})
+
+describe('開始查核後返回清單', () => {
+  const STARTED = {
+    ...DETAIL,
+    status: 'IN_PROGRESS',
+    started_by: { name_zh: '示範查核員', is_me: true },
+  }
+
+  /** 詳情依序回傳 `details`（先看到待開始，開始後才是最新狀態）。 */
+  function listFetcher(
+    onStart: () => Response,
+    details: Array<Record<string, unknown>>,
+  ) {
+    let detailCalls = 0
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'POST') return onStart()
+      if (url.includes('/field/inspection-tasks/task-1')) {
+        const next = details[Math.min(detailCalls, details.length - 1)]
+        detailCalls += 1
+        return Response.json(next)
+      }
+      const second = {
+        ...TASK,
+        id: 'task-2',
+        item_summary: { first_title: '第二查核項目', item_count: 1 },
+      }
+      return Response.json({
+        items: url.includes('status=PENDING') ? [TASK] : [TASK, second],
+        next_cursor: null,
+      })
+    })
+  }
+
+  async function startFirstCard() {
+    fireEvent.click(screen.getAllByRole('link', { name: /查看任務/ })[0])
+    fireEvent.click(await screen.findByRole('button', { name: '開始查核' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認開始查核' }))
+  }
+
+  it('成功開始：所有狀態的卡片改為進行中，保留篩選與捲動', async () => {
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollY', 120)
+    vi.stubGlobal('scrollTo', scrollTo)
+    const fetcher = listFetcher(
+      () => Response.json({ id: 'task-1', status: 'IN_PROGRESS' }),
+      [DETAIL, STARTED],
+    )
+    vi.stubGlobal('fetch', fetcher)
+    renderPage()
+    await screen.findByText('外牆鋼筋查核 等 2 項')
+    fireEvent.click(screen.getByRole('button', { name: '全部' }))
+    await screen.findByText('第二查核項目')
+    await startFirstCard()
+    expect(await screen.findByText('查核進行中')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
+    const cards = await screen.findAllByRole('link', { name: /查看任務/ })
+    expect(cards).toHaveLength(2)
+    expect(cards[0]).toHaveClass('progress')
+    expect(within(cards[0]).getByText('進行中')).toBeInTheDocument()
+    expect(cards[1]).not.toHaveClass('progress')
+    expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120))
+    // 列表來自記憶，沒有重抓：只有兩次列表請求。
+    const listCalls = fetcher.mock.calls.filter(
+      ([input, init]) =>
+        !init?.method && !String(input).includes('inspection-tasks/task-1'),
+    )
+    expect(listCalls).toHaveLength(2)
+  })
+
+  it('待開始篩選：開始成功後該筆不再出現在待開始清單', async () => {
+    vi.stubGlobal('scrollTo', vi.fn())
+    vi.stubGlobal(
+      'fetch',
+      listFetcher(
+        () => Response.json({ id: 'task-1', status: 'IN_PROGRESS' }),
+        [DETAIL, STARTED],
+      ),
+    )
+    renderPage()
+    await screen.findByText('外牆鋼筋查核 等 2 項')
+    fireEvent.click(screen.getByRole('button', { name: '待開始' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '待開始' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    await startFirstCard()
+    await screen.findByText('查核進行中')
+    fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
+    expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '待開始' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('取消競態失敗：返回後清單不再出現該筆，其他卡片保留', async () => {
+    vi.stubGlobal('scrollTo', vi.fn())
+    vi.stubGlobal(
+      'fetch',
+      listFetcher(
+        () =>
+          Response.json(
+            { error: { code: 'inspection_task.invalid_transition' } },
+            { status: 409 },
+          ),
+        [
+          DETAIL,
+          {
+            ...DETAIL,
+            status: 'CANCELLED',
+            cancellation_reason: '施工順序調整',
+          },
+        ],
+      ),
+    )
+    renderPage()
+    await screen.findByText('外牆鋼筋查核 等 2 項')
+    fireEvent.click(screen.getByRole('button', { name: '全部' }))
+    await screen.findByText('第二查核項目')
+    await startFirstCard()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '取消原因：施工順序調整。',
+    )
+    fireEvent.click(screen.getAllByRole('link', { name: /返回任務/ })[0])
+    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
+    expect(screen.queryByText('外牆鋼筋查核 等 2 項')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 })
