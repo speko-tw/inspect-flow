@@ -15,9 +15,11 @@ import {
 } from './api'
 import UserForm from './UserForm'
 
-const SELF_REVOKE_CONFIRM =
-  '你將收回自己的管理者權限，之後無法再進入管理頁，確定嗎？'
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
+type PendingAction = {
+  user: User
+  kind: 'admin' | 'deactivate'
+}
 
 export default function UsersPage({
   onTemporaryPassword,
@@ -33,12 +35,27 @@ export default function UsersPage({
   const [editingUser, setEditingUser] = useState<string | null>(null)
   const [editingCompany, setEditingCompany] = useState<string | null>(null)
   const [busyUser, setBusyUser] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(
+    null,
+  )
+  const [actionError, setActionError] = useState('')
+  const confirmationRef = useRef<HTMLElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
   const [listError, setListError] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+
+  useEffect(() => {
+    if (!pendingAction) return
+    confirmationRef.current?.scrollIntoView?.({
+      block: 'center',
+      inline: 'start',
+    })
+    cancelRef.current?.focus()
+  }, [pendingAction])
 
   async function loadUserPage(
     search: string,
@@ -184,27 +201,69 @@ export default function UsersPage({
   // 收回「自己」的管理者權限：先確認；成功後不能再重新載入列表
   // （會被 403 擋下），改為導離管理頁並帶提示，目標頁的守衛會重新
   // 取得目前使用者。
-  async function toggleAdmin(user: User) {
-    const revokingSelf = user.is_admin && user.id === currentUser.id
-    if (!revokingSelf) {
-      void act(user.id, () => setUserAdmin(user.id, !user.is_admin))
+  async function confirmAction() {
+    if (!pendingAction) return
+    const { user, kind } = pendingAction
+    setActionError('')
+    if (kind === 'admin' && user.is_admin && user.id === currentUser.id) {
+      setBusyUser(user.id)
+      try {
+        await setUserAdmin(user.id, false)
+        setPendingAction(null)
+        navigate('/field', {
+          replace: true,
+          state: { notice: SELF_REVOKED_NOTICE },
+        })
+      } catch (caught) {
+        setActionError(managementErrorMessage(caught))
+        setBusyUser(null)
+      }
       return
     }
-    if (!window.confirm(SELF_REVOKE_CONFIRM)) {
-      return
-    }
-    setError('')
     setBusyUser(user.id)
     try {
-      await setUserAdmin(user.id, false)
-      navigate('/field', {
-        replace: true,
-        state: { notice: SELF_REVOKED_NOTICE },
-      })
+      await (kind === 'admin'
+        ? setUserAdmin(user.id, !user.is_admin)
+        : setUserActive(user.id, false))
+      setPendingAction(null)
+      setEditingUser(null)
+      setEditingCompany(null)
+      await reload()
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      setActionError(managementErrorMessage(caught))
+    } finally {
       setBusyUser(null)
     }
+  }
+
+  function actionMessage({ user, kind }: PendingAction): string {
+    if (kind === 'deactivate') {
+      return `停用 ${user.username} 後，該使用者將無法登入。`
+    }
+    if (user.is_admin) {
+      return user.id === currentUser.id
+        ? `收回 ${user.username} 的管理者權限後，你將無法再進入管理頁。`
+        : `收回 ${user.username} 的管理者權限後，該使用者將失去系統管理權限。`
+    }
+    return `指派 ${user.username} 為管理者後，該使用者將擁有系統全部權限。`
+  }
+
+  function requestAction(user: User, kind: PendingAction['kind']) {
+    if (kind === 'admin' || (kind === 'deactivate' && user.is_active)) {
+      setActionError('')
+      setPendingAction({ user, kind })
+      return
+    }
+    void act(user.id, () => setUserActive(user.id, true))
+  }
+
+  function toggleAdmin(user: User) {
+    requestAction(user, 'admin')
+  }
+
+  function cancelPendingAction() {
+    setPendingAction(null)
+    setActionError('')
   }
 
   function created(user: { username: string; temporary_password: string }) {
@@ -310,17 +369,43 @@ export default function UsersPage({
                         </button>
                         <button
                           disabled={user.is_system || busyUser === user.id}
-                          onClick={() =>
-                            void act(user.id, () =>
-                              setUserActive(user.id, !user.is_active),
-                            )
-                          }
+                          onClick={() => requestAction(user, 'deactivate')}
                           type="button"
                         >
                           {user.is_active ? '停用' : '啟用'}
                         </button>
                       </td>
                     </tr>
+                    {pendingAction?.user.id === user.id && (
+                      <tr className="row-detail">
+                        <td colSpan={6}>
+                          <section
+                            aria-label="操作確認"
+                            className="inline-confirmation"
+                            ref={confirmationRef}
+                            role="region"
+                          >
+                            <p>{actionMessage(pendingAction)}</p>
+                            {actionError && <p role="alert">{actionError}</p>}
+                            <button
+                              disabled={busyUser === user.id}
+                              onClick={cancelPendingAction}
+                              ref={cancelRef}
+                              type="button"
+                            >
+                              取消
+                            </button>
+                            <button
+                              disabled={busyUser === user.id}
+                              onClick={() => void confirmAction()}
+                              type="button"
+                            >
+                              確認
+                            </button>
+                          </section>
+                        </td>
+                      </tr>
+                    )}
                     {(editingUser === user.id ||
                       editingCompany === user.id) && (
                       <tr className="row-detail">

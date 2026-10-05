@@ -1,7 +1,13 @@
 // 登入、變更密碼、收回自己的管理者權限後的導向（#284 第 1～3 項）。
 // 用完整的 `App` 與路由驗證，後端以 fetch 替身模擬。
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import {
   afterEach,
@@ -257,13 +263,13 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
 describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
   it('先確認；取消時不送出請求', async () => {
     const backend = stubBackend(ADMIN)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderApp('/admin/users')
     fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
 
-    expect(confirm).toHaveBeenCalledWith(
-      '你將收回自己的管理者權限，之後無法再進入管理頁，確定嗎？',
-    )
+    const confirmation = screen.getByRole('region', { name: '操作確認' })
+    expect(confirmation).toHaveTextContent('boss')
+    expect(confirmation).toHaveTextContent('無法再進入管理頁')
+    fireEvent.click(within(confirmation).getByRole('button', { name: '取消' }))
     expect(
       backend.fetchMock.mock.calls.some(([url]) =>
         String(url).endsWith(`/users/${ADMIN.id}/admin`),
@@ -276,9 +282,14 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
 
   it('確認後收回成功：提示並導離管理頁，不顯示權限錯誤', async () => {
     const backend = stubBackend(ADMIN)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderApp('/admin/users')
     fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    )
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       '已收回你的管理者權限',
@@ -305,7 +316,6 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
 
   it('收回自己失敗時留在管理頁並顯示錯誤', async () => {
     const backend = stubBackend(ADMIN)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const original = backend.fetchMock.getMockImplementation()!
     backend.fetchMock.mockImplementation(
       async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -320,6 +330,12 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
     )
     renderApp('/admin/users')
     fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    )
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
