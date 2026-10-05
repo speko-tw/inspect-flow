@@ -42,12 +42,12 @@
 |---|---|---|---|
 | FUI-R01 | Field **必須**在同一 React application 中提供 `/field/*` 路由，並依路由拆分程式碼，使 Field 路由不載入 Admin 程式。 | 必須 | [KD-12](../../intents/03-decisions-and-stack.md#kd-12)、[OQ-21](../../intents/05-open-questions.md#oq-21)；路由組織為規格設計 |
 | FUI-R02 | 今日任務頁**必須**預設列出登入者在其具 `inspection_task.inspect` 權限的專案中、建議指派給本人的未完成已派 Task（`PENDING`、`IN_PROGRESS`）。「今日」不按日期欄位篩選。頁面**必須**可切換到所有有權限專案的未完成已派 Task。未派出的 `DRAFT` 不得出現在 Field 清單或詳情。建議指派只作預設篩選，不限制同專案其他具 `inspection_task.inspect` 權限成員開始任務。 | 必須 | 今日任務與後續日期檢視：[今日任務裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977711401)、[日期需求檢視裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977713303)；範圍切換及排序為規格設計；[IP-R05](../inspection-planning/spec.md#需求)、[IP-R09](../inspection-planning/spec.md#需求)、[STM-R11](../state-machines/spec.md#需求) |
-| FUI-R03 | 任務詳情**必須**呈現 Task 狀態、專案、任務地點及 Task Requirement Snapshot。需求清單逐項顯示內容與必要照片／量測要求；唯讀呈現不得建立 Evidence 或 Result。Snapshot 預設為建立 Task 時的需求；符合 [KD-55](../../intents/03-decisions-and-stack.md#kd-55) 的更正例外時，Field 顯示 Task API 回傳的最新內容。`DRAFT` Task 對只有現場查核權限的使用者，列表與詳情都必須由後端視為不存在並回 `404 task.not_found`。草稿、取消及封存不得呈現為可操作狀態。 | 必須 | [不開放完成裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977723428)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[DOM-R57](../domain-model/spec.md)、[STM-R09](../state-machines/spec.md#需求)；Field 專用詳情端點與呈現方式為規格設計，後端依賴 #361 |
+| FUI-R03 | 任務詳情**必須**呈現 Task 狀態、專案、任務地點及 Task Requirement Snapshot。需求清單逐項顯示內容與必要照片／量測要求；唯讀呈現不得建立 Evidence 或 Result。Snapshot 預設為建立 Task 時的需求；符合 [KD-55](../../intents/03-decisions-and-stack.md#kd-55) 的更正例外時，Field 顯示 Task API 回傳的最新內容。`DRAFT` Task 對 Field 清單及詳情 API 必須由後端隱藏，詳情統一回 404。草稿、取消及封存不得呈現為可操作狀態。 | 必須 | [不開放完成裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977723428)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[DOM-R57](../domain-model/spec.md)、[STM-R09](../state-machines/spec.md#需求)；Field 專用詳情端點與呈現方式為規格設計，後端依賴 #361、#416 |
 | FUI-R04 | 對 `PENDING` Task，Field **必須**提供「開始查核」操作；只有登入者具該專案 `inspection_task.inspect` 權限且 Plan 未封存時可操作。操作呼叫既有開始端點，由伺服器覆核狀態與權限；成功後顯示最新狀態與實際開始者。`IN_PROGRESS` 顯示進行中且不得重複開始，其他狀態不提供開始操作。 | 必須 | [IP-R05](../inspection-planning/spec.md#需求)、[IP-R09](../inspection-planning/spec.md#需求)、[STM-R01](../state-machines/spec.md#需求)、[STM-R11](../state-machines/spec.md#需求)；按鈕與回應呈現為規格設計 |
-| FUI-R05 | 系統**必須**提供跨專案 Field Task 清單端點，只回傳登入者有 `inspection_task.inspect` 權限專案中的 `PENDING`、`IN_PROGRESS` 已派 Task。查詢採 `dispatched_at` 新到舊、再以 Task UUID 排序；`limit` 預設 50、上限 100，使用不透明 cursor。不得以客戶端提供的 User ID 決定本人任務。API 宣告 `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION` 存取層級；非 Admin 且任何專案都沒有該權限時回 403；有權限但沒有符合資料時回 200 空清單。指定 `project_id` 而使用者不是該專案成員或無 `inspection_task.inspect` 權限時回 403。清單不含 `DRAFT`、`CANCELLED`、`COMPLETED`。 | 必須 | 跨專案端點為 0.4.x 缺漏（#104）；[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[OQ-08](../../intents/05-open-questions.md#oq-08)（權限範圍為專案；此規格選用的代碼名稱是規格設計）、[PR-01](../../intents/02-principles.md#pr-01)、[API-R01](../api-conventions/spec.md#需求)、[API-R06](../api-conventions/spec.md#需求)、[API-R08](../api-conventions/spec.md#需求)、[DOM-R35](../domain-model/spec.md#需求)、[AUT-R18](../authentication/spec.md#權限檢查)、[AUT-R19](../authentication/spec.md#權限檢查)；端點與分頁細節為規格設計 |
-| FUI-R06 | Field 清單與詳情都**必須**以 `inspection_task.inspect` 作為專案權限。跨專案列表逐筆只回傳有權限專案資料；無權限的其他專案不影響列表。Field 詳情對不存在、`DRAFT` 或無該 Task 權限者統一回 `404 task.not_found`；不得讓只具 `inspection_task.read` 的唯讀成員看見現場任務。管理者依現有 Admin 規則放行。 | 必須 | [KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[AUT-R18](../authentication/spec.md#權限檢查)、[AUT-R19](../authentication/spec.md#權限檢查)、[IP-R09](../inspection-planning/spec.md#需求)；現場查核權限的專案範圍依 KD-60；代碼名稱及 Field 隱藏草稿詳情契約為規格設計，後端依賴 #361 |
+| FUI-R05 | 系統**必須**提供跨專案 Field Task 清單端點，只回傳登入者有 `inspection_task.inspect` 權限專案中的 `PENDING`、`IN_PROGRESS` 已派 Task。查詢採 `dispatched_at` 新到舊、再以 Task UUID 排序；`limit` 預設 50、上限 100，使用不透明 cursor。不得以客戶端提供的 User ID 決定本人任務。API 宣告 `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION` 存取層級；非 Admin 且任何專案都沒有該權限時回 403；有權限但沒有符合資料時回 200 空清單。指定 `project_id` 而使用者不是該專案成員或無 `inspection_task.inspect` 權限時回 403。清單不含 `DRAFT`、`CANCELLED`、`COMPLETED`。首次派送時間使用 Task 的 `dispatched_at` 欄位；歷史非 DRAFT Task 依 `created_at` 近似回填。 | 必須 | 跨專案端點為 0.4.x 缺漏（#104）；[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[OQ-08](../../intents/05-open-questions.md#oq-08)（權限範圍為專案；此規格選用的代碼名稱是規格設計）、[PR-01](../../intents/02-principles.md#pr-01)、[API-R01](../api-conventions/spec.md#需求)、[API-R06](../api-conventions/spec.md#需求)、[API-R08](../api-conventions/spec.md#需求)、[DOM-R35](../domain-model/spec.md#需求)、[AUT-R18](../authentication/spec.md#權限檢查)、[AUT-R19](../authentication/spec.md#權限檢查)；派送時間依 #416 維護者裁定，端點與分頁細節為規格設計 |
+| FUI-R06 | Field 清單與詳情都**必須**以 `inspection_task.inspect` 作為專案權限。跨專案列表逐筆只回傳有權限專案資料；無權限的其他專案不影響列表。Field 詳情對不存在、`DRAFT` 或無該 Task 權限者統一回 404；不得讓只具 `inspection_task.read` 的唯讀成員看見現場任務。管理者依現有 Admin 規則放行。 | 必須 | [KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[AUT-R18](../authentication/spec.md#權限檢查)、[AUT-R19](../authentication/spec.md#權限檢查)、[IP-R09](../inspection-planning/spec.md#需求)；現場查核權限的專案範圍依 KD-60；API 錯誤碼及 Field 隱藏草稿詳情契約為規格設計，後端依賴 #361、#416 |
 | FUI-R07 | 登入狀態**必須**沿用 `authentication` 的伺服器端 Session 與 HttpOnly、Secure Cookie。未登入進入 Field 頁面時導向既有登入流程，登入成功後返回原請求路徑；Session 失效時依 `authentication` 的 401 契約重新登入。403 不得偽裝成空清單或登出。Field 頁面**必須**提供登出操作。 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[AUT-R14](../authentication/spec.md#需求)、[AUT-R18](../authentication/spec.md#權限檢查)、[PR-01](../../intents/02-principles.md#pr-01)；返回路徑處理為規格設計 |
-| FUI-R08 | Field **必須**提供適配手機與平板的觸控介面，基準寬度為 360px、390px、768px，主要觸控目標至少 44×44 CSS px；主要內容不得需要水平捲動即可閱讀。`viewport` meta **必須**允許使用者縮放。不得顯示範本庫設定、資料庫 ID、Requirement Schema、Project Configuration、Storage Key、metadata 或資料庫管理功能。 | 必須／不得 | [PR-10](../../intents/02-principles.md#pr-10)；尺寸及觸控基準為規格設計 |
+| FUI-R08 | Field **必須**提供適配手機與平板的觸控介面，基準寬度為 360px、390px、768px，主要觸控目標至少 44×44 CSS px；主要內容不得需要水平捲動即可閱讀。`viewport` meta **必須**允許使用者縮放。不得顯示範本庫設定、資料庫 ID、Requirement Schema、Project Configuration、Storage Key、metadata 或資料庫管理功能；唯一例外是 Field 量測欄位與其數值標準間關聯所需的 `measurement_fields[].id`、`numeric_standard.measurement_field_id`，供表單正確對應欄位，不得用於其他資料操作。 | 必須／不得 | [PR-10](../../intents/02-principles.md#pr-10)；尺寸及觸控基準與量測欄位關聯回應為規格設計（#416） |
 | FUI-R09 | 現場 Web **必須**提供最小 Web App Manifest，含應用名稱、圖示、`display: standalone`、`start_url: /field/` 及主題色，並提供 iOS 主畫面捷徑所需圖示與 meta。MVP **不得**註冊快取型 Service Worker；採 Online-first，不宣稱離線查核、同步或背景上傳。 | 必須／不得 | [PWA 技術棧卡片](../../intents/03-decisions-and-stack.md#stack-pwa)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)；最小 manifest 與 iOS meta 為規格設計 |
 | FUI-R10 | 設定 `INSPECTFLOW_DEV_HOST` 開放區網時，開發伺服器**必須**限制連入至明確指定的網段或介面，實際方式依 Vite 能力定案；**必須**提供 iPhone 安裝並明確信任 mkcert 根憑證的逐步指引，以及 iPhone 實測登入、Session 維持、登出流程。保留 Secure Cookie 所需 HTTPS；根憑證私鑰不得傳至裝置或提交 repository，後端仍只綁 localhost、由 HTTPS 前端代理 API。開發流程不得被描述為正式部署設定。 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[#231](https://github.com/speko-tw/inspect-flow/issues/231)、[README iPhone 測試流程](../../../README.zh-TW.md)；網段限制技術方式為規格設計 |
 | FUI-R11 | 現有 `/field/*` 個人工作台**必須**轉為今日任務現場首頁；範本瀏覽與專案套用範本為內業功能，**必須**移至 `/admin/...`，舊現場路徑轉址至新內業路徑。Field 保留個人資料、密碼變更與登出入口；公司資訊、專案清單及專案管理細節不得留在 Field 工作台，相關管理入口由 `admin-dashboard` 負責。任務本身所需的專案名稱及地點仍顯示於 Field 任務清單與詳情。 | 必須 | [PR-10](../../intents/02-principles.md#pr-10)、[OQ-21](../../intents/05-open-questions.md#oq-21)；現有 route 調整為規格設計；管理頁整合依賴 `admin-dashboard` |
@@ -56,7 +56,7 @@
 
 本規格不新增資料實體或欄位。`Inspection Task`、Task 項目與 `Task Requirement Snapshot` 沿用 [domain-model](../domain-model/spec.md)；Project、Task 地點與派任務規則沿用 [inspection-planning](../inspection-planning/spec.md)；狀態與轉換沿用 [state-machines](../state-machines/spec.md)。Task Requirement Snapshot 建立時保存需求；依 KD-55 核准的文字更正例外由 Task API 回傳更新後內容，Field 只呈現伺服器權威資料，不自行修改或還原快照。Task 地點使用 Task 回應內嵌的分區 `{id, name}` 與 `location_text`；Field 不呼叫分區列表 API，也不要求 `project_zone.read`。無分區時只顯示 `location_text`。
 
-排序契約需要 `dispatched_at`；目前凍結的 Task 資料模型尚無此欄位。`inspection-planning`／#361 必須先提供穩定的派送時間契約與 API 回應；若需新增凍結資料欄位，須先依規格變更流程裁定，Field 規格不得自行擴寫資料模型。
+排序使用 `Inspection Task.dispatched_at`，首次派送時記錄伺服器時間；既有非 DRAFT Task 以 `created_at` 近似回填，細節見 [DOM-R56](../domain-model/spec.md#plan-task-與需求快照-部分凍結)、[IP-R11](../inspection-planning/spec.md#需求) 與 #416。
 
 ## 介面
 
@@ -65,12 +65,12 @@
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
 | GET | `/field/tasks` | 今日任務及跨專案已派任務清單；預設本人建議指派，可切換全部可查核任務；`limit`／`cursor` 分頁 | 前端需登入；後端逐筆套用 `inspection_task.inspect` |
-| GET | `/field/tasks/{task_id}` | 現場任務詳情與需求快照 | 前端需登入；後端 `inspection_task.inspect`；不存在、`DRAFT` 或無權限一律 `404 task.not_found` |
-| GET | `/api/v1/field/inspection-tasks` | 跨專案列出 `PENDING`、`IN_PROGRESS` 已派任務；`assigned_to_me=true` 預設，`false` 列出所有可查核專案任務；可選 `project_id`、`limit`（預設 50、上限 100）、`cursor` | `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION`；逐筆檢查 `inspection_task.inspect`；指定專案無權限為 403；無任何專案權限的非 Admin 為 403 |
-| GET | `/api/v1/field/inspection-tasks/{task_id}` | 現場安全詳情，含內嵌 Task 分區摘要與需求快照 | `inspection_task.inspect`；`DRAFT`／不存在／無權限回 `404 task.not_found` |
+| GET | `/field/tasks/{task_id}` | 現場任務詳情與需求快照 | 前端需登入；後端 `inspection_task.inspect`；不存在、`DRAFT` 或無權限一律 404 |
+| GET | `/api/v1/field/inspection-tasks` | 跨專案列出 `PENDING`、`IN_PROGRESS` 已派任務；`assigned_to_me=true` 預設，`false` 列出所有可查核專案任務；可選 `project_id`、`limit`（預設 50、範圍 1–100）、`cursor`。回 `{items,next_cursor}`；每筆含 `id`、`project_id`、`project_name`、`status`、`dispatched_at`、`location: {zone_name,location_text}`、`suggested_assignee: {name_zh}|null`。全部檢視中的建議執行人姓名可見，以便同專案協作 | `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION`；逐筆檢查 `inspection_task.inspect`；Admin 即使無專案或指定不存在的 `project_id` 仍回 200 空頁；非 Admin 無任何專案權限或指定專案無權限回 403；有權限無符合資料為空頁 |
+| GET | `/api/v1/field/inspection-tasks/{task_id}` | 現場安全詳情，含分區名稱、補充位置、建議執行人及目前需求快照；不回傳 Plan ID、其他人帳號、歷史 Snapshot 或內業專用欄位。量測欄位回 `id`、`name`、`field_type`、`unit`；數值標準回 `measurement_field_id` 以關聯量測欄位 | `inspection_task.inspect`；`DRAFT`／不存在／無權限統一回 404；只具 `inspection_task.read` 回 404 |
 | POST | `/api/v1/inspection-tasks/{task_id}:start` | 開始查核；既有端點，本規格定義 Field 呼叫行為 | `inspection_task.inspect`，後端覆核 Task 與 Plan 狀態 |
 
-列表排序鍵為 `dispatched_at DESC, task_id DESC`，游標包含此排序鍵並遵循 API-R08，不能以 `updated_at` 作游標或排序鍵；開始查核不得改變派送順序。需求快照欄位沿用既有 Task 回應。若 API 欄位形狀或路徑與 `inspection-planning` 實作衝突，先協調並更新規格，不得由前端拼接不同資料來源。
+列表排序鍵為 `dispatched_at DESC, id DESC`，只查詢 `dispatched_at IS NOT NULL` 的非草稿資料，NULL 明確排在最後；游標包含此排序鍵並遵循 API-R08，不能以 `updated_at` 作游標或排序鍵；開始查核不得改變派送順序。Field 詳情只回目前 Snapshot 的使用者可見內容；不包含來源範本名、Task/Plan/項目關聯 ID、Snapshot 歷史、其他使用者帳號或內業專用資料。數值標準與量測欄位以來源欄位 UUID 對應；量測欄位按 `sort_order, id` 排序。不存在資源、DRAFT、只具 read 權限或無專案 inspect 權限統一回 404 `resource.not_found`；列表入口無任何 inspect 權限或指定專案無權限的非 Admin 回 403 `permission.denied`。Admin 有權限但無符合資料（含不存在的 `project_id`）回 200 空頁。有權限但沒有符合資料回 200 空頁。未登入回 401。端點與回應欄位為規格設計（非負責人裁定）；#416 實作契約依 #417 前端需求對齊。
 
 ## 現況與銜接
 
@@ -85,7 +85,7 @@
 | FUI-AC01 | 真實後端有兩個具 `inspection_task.inspect` 權限的專案，含本人／他人／未指派及各種狀態任務；另有無權限專案 | 讀取今日清單並切換全部可查核任務 | 預設只見本人建議指派的未完成任務；切換後見所有有權限專案的未完成任務；只具 `inspection_task.read` 者看不到任務；`DRAFT`、`COMPLETED`、`CANCELLED` 及無權限專案資料均不可見 | FUI-R02、R05、R06 |
 | FUI-AC02 | 真實 API 中，非 Admin 對任何專案皆無 `inspection_task.inspect` 權限；另有有權限但無符合資料的使用者 | 呼叫跨專案列表；再以無權限及有權限的 `project_id` 篩選 | 無任何專案權限回 403；有權限但無符合資料回 200 空清單；指定專案無成員資格或無權限回 403；有權限的跨專案清單逐筆過濾 | FUI-R05、R06 |
 | FUI-AC03 | 真實 Task API 回應含分區名稱及補充位置文字；另有僅 `location_text` 的 Task；需求快照含照片／量測要求，其中一筆已依 KD-55 更正文字 | 開啟現場任務詳情 | 顯示內嵌分區名稱與補充文字，無分區時只顯示補充文字；不呼叫分區列表 API；唯讀呈現 API 回傳的當前需求文字（含 KD-55 授權更正）及其要求；不寫入 Evidence、Result 或自行修改快照 | FUI-R03、R06 |
-| FUI-AC04 | 真實後端有 `DRAFT` Task；使用者僅有 `inspection_task.inspect`，沒有計畫管理權限 | 以列表與詳情 API 直接請求該 Task ID | 列表排除該 Task，詳情回 `404 task.not_found`；直接知道 ID 不會繞過 Field 隱藏規則 | FUI-R03、R06 |
+| FUI-AC04 | 真實後端有 `DRAFT` Task；使用者僅有 `inspection_task.inspect`，沒有計畫管理權限 | 以列表與詳情 API 直接請求該 Task ID | 列表排除該 Task，詳情回 404；直接知道 ID 不會繞過 Field 隱藏規則 | FUI-R03、R06 |
 | FUI-AC05 | 真實後端有未封存專案中的 `PENDING` Task，登入者具 `inspection_task.inspect` 但不是建議指派人 | 使用者按開始查核 | 後端接受合法動作，變為 `IN_PROGRESS` 並記錄實際使用者；介面顯示伺服器最新狀態 | FUI-R04 |
 | FUI-AC06 | 真實後端有 `IN_PROGRESS`、`COMPLETED`、`CANCELLED` 及封存 Plan 的 Task | 查看操作並直接重送開始請求 | UI 不提供非法開始操作；後端拒絕非法狀態或權限請求且 Task 不變；封存 Task 唯讀 | FUI-R04 |
 | FUI-AC07 | 真實 API 有超過一頁且具相同派送時間的資料 | 使用預設與全部任務篩選，以 `limit`／cursor 取完資料並開始其中一筆 | `limit` 預設 50、拒絕或限制至上限 100；依 `dispatched_at DESC` 再 Task UUID 穩定排序，無重複遺漏；開始查核不改變排序；cursor 不透明且本人條件由 Session 決定 | FUI-R02、R05 |
@@ -97,11 +97,14 @@
 
 ## 待釐清
 
-- `dispatched_at` 尚未出現在凍結 Task 模型；#361／`inspection-planning` 須提供派送時間 API 契約。若需要新增持久欄位，須先走規格變更流程，不能在 Field 實作中自行擴張模型。
-- Field 專用安全詳情（草稿與無權限回 `404 task.not_found`）需由 #361 實作；不得以目前通用 `inspection_task.read` 詳情端點取代。
+- `dispatched_at`、Field 清單及安全詳情 API 已由 #416 提供；前端整合由 T2、T3 驗收。
+- Field 安全詳情對 DRAFT 與無 inspect 權限回 `404 resource.not_found`；不得以目前通用 `inspection_task.read` 詳情端點取代。
 - #231 的區網限制落實方式須依 Vite 能力於實作時選定；若 Vite 無法限制來源網段或介面，先提出可驗證替代設計再實作。
 - 範本頁遷移需要 `admin-dashboard` 提供目標路由；若時程交錯，維持此項為明確整合依賴，不得保留在 Field。
 
 ## 變更紀錄
+
+- 依 PR #443 第 1 輪審查補充 Field API 邊界、量測欄位對應與排序契約 — #416
+- 規格設計（非負責人裁定，#416）：明定 Field 列表／安全詳情 API 的端點、參數、回應欄位、錯誤碼、逐專案權限過濾及 `dispatched_at` 排序來源；詳情只回 Field 安全欄位 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 
 - 修正草稿：補齊來源裁定連結、權限與草稿保護、PWA/iPhone 驗收及現有路由銜接；未改變領域模型。

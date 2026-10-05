@@ -361,3 +361,20 @@ def test_issue_290_my_projects_route_requires_login() -> None:
     declaration = declarations[("GET", "/api/v1/me/projects")]
     assert declaration is not None
     assert declaration.level is AccessLevel.LOGIN_REQUIRED
+
+
+def test_issue_416_field_routes_declare_their_access_contract() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if "/field/inspection-tasks" in info.path
+    }
+    listing = routes[("GET", "/api/v1/field/inspection-tasks")]
+    detail = routes[("GET", "/api/v1/field/inspection-tasks/{task_id}")]
+    assert listing is not None
+    assert listing.level is AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION
+    assert listing.permission_code == "inspection_task.inspect"
+    assert listing.system_role_code == "admin"
+    assert detail is not None
+    assert detail.level is AccessLevel.LOGIN_REQUIRED
