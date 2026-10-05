@@ -233,16 +233,16 @@ function calls(
 }
 
 function fillProjectForm() {
-  fireEvent.change(screen.getByLabelText('專案代號'), {
+  fireEvent.change(screen.getByLabelText(/專案代號/), {
     target: { value: 'DEMO-002' },
   })
-  fireEvent.change(screen.getByLabelText('工程名稱'), {
+  fireEvent.change(screen.getByLabelText(/工程名稱/), {
     target: { value: '第二示範工程' },
   })
-  fireEvent.change(screen.getByLabelText('業主／委託單位'), {
+  fireEvent.change(screen.getByLabelText(/業主／委託單位/), {
     target: { value: '示範業主' },
   })
-  fireEvent.change(screen.getByLabelText('整體工程地點'), {
+  fireEvent.change(screen.getByLabelText(/整體工程地點/), {
     target: { value: '第二示範工地' },
   })
 }
@@ -285,6 +285,19 @@ describe('admin projects page', () => {
     )
     expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveClass(
       'button-link',
+    )
+  })
+
+  it('links project details to planning and task management', async () => {
+    projectFetch()
+    renderAt('/admin/projects/project-1')
+
+    expect(
+      await screen.findByRole('heading', { name: '專案成員：示範工程' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '計畫與任務' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/planning',
     )
   })
 
@@ -359,7 +372,7 @@ describe('admin projects page', () => {
     await screen.findAllByText('示範工程')
 
     fillProjectForm()
-    fireEvent.change(screen.getByLabelText('專案代號'), {
+    fireEvent.change(screen.getByLabelText(/專案代號/), {
       target: { value: 'DEMO-001' },
     })
     fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
@@ -376,8 +389,8 @@ describe('admin projects page', () => {
     await screen.findAllByText('示範工程')
 
     fireEvent.click(screen.getByRole('button', { name: '編輯' }))
-    expect(screen.getByLabelText('專案代號')).toHaveValue('DEMO-001')
-    fireEvent.change(screen.getByLabelText('工程名稱'), {
+    expect(screen.getByLabelText(/專案代號/)).toHaveValue('DEMO-001')
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '改名後的工程' },
     })
     fireEvent.change(screen.getByLabelText('預定開工日'), {
@@ -421,14 +434,14 @@ describe('admin projects page', () => {
     })
     renderAt('/admin/projects')
     await screen.findAllByText('示範工程')
-    fireEvent.change(screen.getByLabelText('工程名稱'), {
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的新工程' },
     })
     fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
 
     const prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
-    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的新工程')
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
     fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
     fireEvent.click(
@@ -437,7 +450,7 @@ describe('admin projects page', () => {
         { name: '捨棄' },
       ),
     )
-    expect(screen.getByLabelText('工程名稱')).toHaveValue('示範工程')
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('示範工程')
   })
 
   it('asks before switching to another project and preserves or discards edits', async () => {
@@ -453,13 +466,13 @@ describe('admin projects page', () => {
     })
     renderAt('/admin/projects')
     await screen.findAllByText('第二示範工程')
-    fireEvent.change(screen.getByLabelText('工程名稱'), {
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的新工程' },
     })
     fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
-    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的新工程')
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
     fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
     prompt = screen.getByRole('region', { name: '未儲存變更' })
@@ -474,20 +487,20 @@ describe('admin projects page', () => {
     renderAt('/admin/projects')
     await screen.findAllByText('示範工程')
     fireEvent.click(screen.getByRole('button', { name: '編輯' }))
-    fireEvent.change(screen.getByLabelText('工程名稱'), {
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的修改' },
     })
 
     fireEvent.click(screen.getAllByRole('button', { name: '新增專案' })[0])
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
-    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的修改')
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的修改')
 
     fireEvent.click(screen.getAllByRole('button', { name: '新增專案' })[0])
     prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
     expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
-    expect(screen.getByLabelText('工程名稱')).toHaveValue('')
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('')
   })
 
   it('keeps or discards dirty edits before opening another project', async () => {
@@ -504,14 +517,14 @@ describe('admin projects page', () => {
     renderAt('/admin/projects')
     await screen.findAllByText('第二示範工程')
     fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
-    fireEvent.change(screen.getByLabelText('工程名稱'), {
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的修改' },
     })
 
     fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
-    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的修改')
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的修改')
 
     fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
     prompt = screen.getByRole('region', { name: '未儲存變更' })

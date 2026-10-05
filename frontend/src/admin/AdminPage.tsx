@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   Navigate,
   NavLink,
@@ -22,6 +22,17 @@ import { projectItemApi } from './projectItems/api'
 import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
+
+const PlanningPage = lazy(() => import('./planning/PlanningPage'))
+
+function ProjectPlanningRoute() {
+  const { projectId } = useParams()
+  return (
+    <Suspense fallback={<p>載入中…</p>}>
+      <PlanningPage key={projectId} initialProjectId={projectId} />
+    </Suspense>
+  )
+}
 
 const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
@@ -69,28 +80,34 @@ function AdminPageContent() {
     )
   }
 
+  const isMemberProjectRoute =
+    /^\/admin\/projects\/[^/]+(?:\/templates|\/planning|\/inspection-items\/[^/]+)?\/?$/.test(
+      location.pathname,
+    )
+
+  if (!user.is_admin && isMemberProjectRoute) {
+    return (
+      <main>
+        <Routes>
+          <Route element={<MemberProjectItems />} path="projects/:projectId" />
+          <Route
+            element={<ProjectTemplatesPage />}
+            path="projects/:projectId/templates"
+          />
+          <Route
+            element={<ProjectItemChangePage api={projectItemApi} />}
+            path="projects/:projectId/inspection-items/:itemId"
+          />
+          <Route
+            element={<ProjectPlanningRoute />}
+            path="projects/:projectId/planning"
+          />
+        </Routes>
+        <NavLink to="/field">返回工作台</NavLink>
+      </main>
+    )
+  }
   if (!user.is_admin) {
-    if (location.pathname.startsWith('/admin/projects/')) {
-      return (
-        <main>
-          <Routes>
-            <Route
-              element={<MemberProjectItems />}
-              path="projects/:projectId"
-            />
-            <Route
-              element={<ProjectTemplatesPage />}
-              path="projects/:projectId/templates"
-            />
-            <Route
-              element={<ProjectItemChangePage api={projectItemApi} />}
-              path="projects/:projectId/inspection-items/:itemId"
-            />
-          </Routes>
-          <NavLink to="/field">返回工作台</NavLink>
-        </main>
-      )
-    }
     return (
       <main>
         <h1>無權限</h1>
@@ -184,6 +201,10 @@ function AdminPageContent() {
             <Route
               path="projects/:projectId/templates"
               element={<ProjectTemplatesPage />}
+            />
+            <Route
+              path="projects/:projectId/planning"
+              element={<ProjectPlanningRoute />}
             />
             <Route
               path="projects/:projectId/inspection-items/:itemId"
