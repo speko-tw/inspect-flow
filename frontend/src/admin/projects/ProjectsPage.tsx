@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 import { managementErrorMessage } from '../api'
 import {
@@ -21,6 +21,10 @@ const EMPTY_FORM = {
 }
 
 type FormState = typeof EMPTY_FORM
+type Transition =
+  | { kind: 'new' }
+  | { kind: 'edit'; project: Project }
+  | { kind: 'navigate'; to: string }
 
 function toForm(project: Project): FormState {
   return {
@@ -45,6 +49,7 @@ function toInput(form: FormState): ProjectInput {
 }
 
 export default function ProjectsPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -52,6 +57,7 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [transition, setTransition] = useState<Transition | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
@@ -59,6 +65,19 @@ export default function ProjectsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+  const transitionRef = useRef<HTMLElement>(null)
+  const keepEditingRef = useRef<HTMLButtonElement>(null)
+  const originalForm = editing ? toForm(editing) : EMPTY_FORM
+  const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
+    (key) =>
+      form[key as keyof FormState] !== originalForm[key as keyof FormState],
+  )
+
+  useEffect(() => {
+    if (!transition) return
+    transitionRef.current?.scrollIntoView?.({ block: 'center' })
+    keepEditingRef.current?.focus()
+  }, [transition])
 
   useEffect(() => {
     let active = true
@@ -138,16 +157,33 @@ export default function ProjectsPage() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
-  function startEdit(project: Project) {
-    setEditing(project)
-    setForm(toForm(project))
-    setNotice('')
-    setError('')
+  function applyTransition(next: Transition) {
+    setTransition(null)
+    if (next.kind === 'edit') {
+      setEditing(next.project)
+      setForm(toForm(next.project))
+      setNotice('')
+      setError('')
+    } else if (next.kind === 'new') {
+      setEditing(null)
+      setForm(EMPTY_FORM)
+      setNotice('')
+      setError('')
+    } else {
+      navigate(next.to)
+    }
   }
 
-  function cancelEdit() {
-    setEditing(null)
-    setForm(EMPTY_FORM)
+  function requestTransition(next: Transition) {
+    if (hasUnsavedChanges) {
+      setTransition(next)
+      return
+    }
+    applyTransition(next)
+  }
+
+  function startEdit(project: Project) {
+    requestTransition({ kind: 'edit', project })
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -166,19 +202,18 @@ export default function ProjectsPage() {
           ),
         )
         if (Object.keys(changed).length === 0) {
-          cancelEdit()
+          applyTransition({ kind: 'new' })
           return
         }
         saved = await updateProject(editing.id, changed)
       } else {
         saved = await createProject(input)
       }
-      setNotice(
-        hasDuplicateCodeWarning(saved)
-          ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
-          : `專案「${saved.name}」已儲存。`,
-      )
-      cancelEdit()
+      const savedNotice = hasDuplicateCodeWarning(saved)
+        ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
+        : `專案「${saved.name}」已儲存。`
+      applyTransition({ kind: 'new' })
+      setNotice(savedNotice)
       setProjects([])
       setNextCursor(null)
       setLoading(true)
@@ -197,6 +232,26 @@ export default function ProjectsPage() {
       <h1 id="projects-heading">專案管理</h1>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
+      {transition && (
+        <section
+          aria-label="未儲存變更"
+          className="inline-confirmation"
+          ref={transitionRef}
+          role="region"
+        >
+          <p>目前的專案內容尚未儲存，要保留編輯或捨棄？</p>
+          <button
+            onClick={() => setTransition(null)}
+            ref={keepEditingRef}
+            type="button"
+          >
+            保留編輯
+          </button>
+          <button onClick={() => applyTransition(transition)} type="button">
+            捨棄
+          </button>
+        </section>
+      )}
       {loading ? <p>載入中…</p> : null}
       <form onSubmit={searchProjects}>
         <label>
@@ -262,6 +317,14 @@ export default function ProjectsPage() {
                   </button>
                   <Link
                     className="button-link"
+                    onClick={(event) => {
+                      if (!hasUnsavedChanges) return
+                      event.preventDefault()
+                      setTransition({
+                        kind: 'navigate',
+                        to: `/admin/projects/${project.id}`,
+                      })
+                    }}
                     to={`/admin/projects/${project.id}`}
                   >
                     成員
@@ -283,8 +346,18 @@ export default function ProjectsPage() {
       )}
       <form onSubmit={save}>
         <h2>{editing ? `編輯專案「${editing.name}」` : '新增專案'}</h2>
+        {editing && (
+          <button
+            onClick={() => requestTransition({ kind: 'new' })}
+            type="button"
+          >
+            新增專案
+          </button>
+        )}
         <label>
-          專案代號
+          <span className="required-label">
+            專案代號 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={32}
             onChange={(event) => change('project_code', event.target.value)}
@@ -293,7 +366,9 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          工程名稱
+          <span className="required-label">
+            工程名稱 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={128}
             onChange={(event) => change('name', event.target.value)}
@@ -302,7 +377,9 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          業主／委託單位
+          <span className="required-label">
+            業主／委託單位 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={128}
             onChange={(event) => change('client_name', event.target.value)}
@@ -311,7 +388,9 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          整體工程地點
+          <span className="required-label">
+            整體工程地點 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={256}
             onChange={(event) => change('site_location', event.target.value)}
@@ -343,7 +422,10 @@ export default function ProjectsPage() {
           {editing ? '儲存專案' : '新增專案'}
         </button>
         {editing && (
-          <button onClick={cancelEdit} type="button">
+          <button
+            onClick={() => requestTransition({ kind: 'new' })}
+            type="button"
+          >
             取消
           </button>
         )}
