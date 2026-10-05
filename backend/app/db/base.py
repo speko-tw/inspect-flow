@@ -3,8 +3,8 @@ DBF-R14).
 
 Provides:
 
-- :func:`uuid7`: an RFC 9562 UUID version 7 generator used as the
-  default for primary keys.
+- :func:`uuid7`: a monotonic RFC 9562 UUID version 7 generator used
+  as the default for primary keys.
 - :class:`UTCDateTime`: a timezone-aware UTC datetime column type
   that behaves the same on SQLite and PostgreSQL.
 - :class:`Base`: the shared declarative base (with a naming
@@ -19,6 +19,7 @@ Provides:
 """
 
 import os
+import threading
 import time
 import uuid
 from datetime import UTC, datetime
@@ -28,7 +29,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import DateTime, TypeDecorator, Uuid
 
 from app.db import clock
-
 
 # Chosen per KD-07 after evaluating UUIDv4 and SQLite
 # AUTOINCREMENT (DBF-R07 rules out relying on AUTOINCREMENT as a
@@ -42,18 +42,63 @@ from app.db import clock
 # generator implements RFC 9562 UUIDv7 directly; once the backend
 # requires Python >= 3.14, this can be replaced with the standard
 # library's ``uuid.uuid7``.
+#
+# Ids are monotonic within a process (RFC 9562 section 6.2, method
+# 1, the same layout as Python 3.14's ``uuid.uuid7``): a 42-bit
+# counter fills ``rand_a`` and the top of ``rand_b``, starts at a
+# random value each millisecond and is incremented for every id
+# minted in the same millisecond. Rows written in one request often
+# share ``created_at`` (and always do under a frozen test clock), so
+# ``ORDER BY created_at, id`` relies on ids keeping insertion order
+# (KD-07; #475). Purely random low bits would order same-millisecond
+# ids arbitrarily.
+_UUID7_COUNTER_MAX = (1 << 42) - 1
+_uuid7_lock = threading.Lock()
+_uuid7_last_ms = -1
+_uuid7_last_counter = 0
+
+
+def _uuid7_counter_seed() -> int:
+    # 41 random bits, top counter bit clear, leaves room for at least
+    # 2**41 increments within one millisecond.
+    return int.from_bytes(os.urandom(6), "big") & 0x1FFFFFFFFFF
+
+
+def _uuid7_reset_after_fork() -> None:
+    global _uuid7_lock, _uuid7_last_ms, _uuid7_last_counter
+    _uuid7_lock = threading.Lock()
+    _uuid7_last_ms = -1
+    _uuid7_last_counter = 0
+
+
+os.register_at_fork(after_in_child=_uuid7_reset_after_fork)
+
+
 def uuid7() -> uuid.UUID:
-    """Generate an RFC 9562 UUID version 7 value."""
-    unix_ts_ms = time.time_ns() // 1_000_000
-    rand_bytes = os.urandom(10)
-    rand_a = int.from_bytes(rand_bytes[0:2], "big") & 0x0FFF
-    rand_b = int.from_bytes(rand_bytes[2:10], "big") & 0x3FFFFFFFFFFFFFFF
+    """Generate a monotonic RFC 9562 UUID version 7 value."""
+    global _uuid7_last_ms, _uuid7_last_counter
+    with _uuid7_lock:
+        unix_ts_ms = time.time_ns() // 1_000_000
+        if unix_ts_ms > _uuid7_last_ms:
+            counter = _uuid7_counter_seed()
+        else:
+            # Same millisecond, or the clock stepped back: keep the
+            # last timestamp so ids never go backwards.
+            unix_ts_ms = _uuid7_last_ms
+            counter = _uuid7_last_counter + 1
+            if counter > _UUID7_COUNTER_MAX:
+                unix_ts_ms += 1
+                counter = _uuid7_counter_seed()
+        _uuid7_last_ms = unix_ts_ms
+        _uuid7_last_counter = counter
+    tail = int.from_bytes(os.urandom(4), "big")
 
     value = unix_ts_ms & 0xFFFFFFFFFFFF
     value = (value << 4) | 0x7  # version 7
-    value = (value << 12) | rand_a
+    value = (value << 12) | (counter >> 30)  # rand_a: counter high
     value = (value << 2) | 0b10  # variant 10 (RFC 4122/9562)
-    value = (value << 62) | rand_b
+    value = (value << 30) | (counter & 0x3FFFFFFF)  # counter low
+    value = (value << 32) | tail  # random tail
 
     return uuid.UUID(int=value)
 
