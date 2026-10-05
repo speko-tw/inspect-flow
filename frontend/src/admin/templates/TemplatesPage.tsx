@@ -660,16 +660,25 @@ export default function TemplatesPage() {
     }
   }
 
-  async function saveItem(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function saveItem(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<number[] | null> {
     event.preventDefault()
-    if (!itemDraft) return
+    if (!itemDraft) return null
     setAttemptedSave(true)
     const found = validateItem()
     if (Object.keys(found).length) {
       setErrors(found)
       setError('')
       focusFirstError(found)
-      return
+      return [
+        ...new Set(
+          Object.keys(found)
+            .map((key) => /^point:(\d+):/.exec(key)?.[1])
+            .filter((index): index is string => index !== undefined)
+            .map(Number),
+        ),
+      ]
     }
     try {
       const input = wireItem({ ...itemDraft, system_id: systemId })
@@ -686,8 +695,10 @@ export default function TemplatesPage() {
       setSelected({ type: 'item', id: result.id ?? '' })
       resetMode()
       showNotice('查核項目已儲存')
+      return null
     } catch (caught) {
       fail(caught)
+      return null
     }
   }
 

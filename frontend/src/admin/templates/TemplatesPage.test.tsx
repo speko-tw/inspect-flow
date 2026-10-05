@@ -443,7 +443,7 @@ describe('TemplatesPage', () => {
     expect(cards[1]).not.toHaveAttribute('open')
   })
 
-  it('opens all invalid points and keeps errors visible', async () => {
+  it('opens invalid points and preserves focus while typing in the first', async () => {
     templateFetch({ items: [] })
     render(<TemplatesPage />)
     await openSystem()
@@ -453,35 +453,104 @@ describe('TemplatesPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
     fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(document.getElementById('point-1-title')!, {
+      target: { value: '已完成' },
+    })
     fireEvent.change(document.getElementById('point-2-title')!, {
       target: { value: '已完成' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
     const cards = document.querySelectorAll('.tpl-point-card')
+    await waitFor(() => expect(cards[0]).toHaveAttribute('open'))
     expect(cards[0]).toHaveAttribute('open')
-    expect(cards[1]).toHaveAttribute('open')
+    expect(cards[1]).not.toHaveAttribute('open')
     expect(cards[2]).toHaveAttribute('open')
     expect(cards[0].querySelector('summary')).toHaveTextContent('待修正 1')
-    expect(cards[1].querySelector('summary')).toHaveTextContent('待修正 1')
+    expect(cards[1].querySelector('summary')).not.toHaveTextContent('待修正')
+    await waitFor(() =>
+      expect(document.getElementById('point-0-title')).toHaveFocus(),
+    )
+    const firstTitle = document.getElementById('point-0-title')!
+    fireEvent.change(firstTitle, { target: { value: 'A' } })
+    fireEvent.change(firstTitle, { target: { value: 'AB' } })
+    expect(firstTitle).toHaveValue('AB')
+    expect(cards[0]).toHaveAttribute('open')
+    expect(firstTitle).toHaveFocus()
+  })
+
+  it('keeps a non-current invalid point open while typing after save', async () => {
+    templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '管線查核' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(document.getElementById('point-1-title')!, {
+      target: { value: '已完成' },
+    })
+    fireEvent.click(
+      document
+        .querySelectorAll('.tpl-point-card')[2]
+        .querySelector('summary')!,
+    )
+    expect(
+      [...document.querySelectorAll('.tpl-point-card')].every(
+        (card) => !card.hasAttribute('open'),
+      ),
+    ).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    const cards = document.querySelectorAll('.tpl-point-card')
+    await waitFor(() => expect(cards[0]).toHaveAttribute('open'))
+    expect(cards[0]).toHaveAttribute('open')
+    expect(cards[1]).not.toHaveAttribute('open')
+    expect(cards[2]).toHaveAttribute('open')
+    await waitFor(() =>
+      expect(document.getElementById('point-0-title')).toHaveFocus(),
+    )
+    const firstTitle = document.getElementById('point-0-title')!
+    fireEvent.change(firstTitle, { target: { value: 'A' } })
+    fireEvent.change(firstTitle, { target: { value: 'AB' } })
+    expect(firstTitle).toHaveValue('AB')
+    expect(cards[0]).toHaveAttribute('open')
+    expect(firstTitle).toHaveFocus()
+  })
+
+  it('keeps the third invalid point open while typing XY', async () => {
+    templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '管線查核' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(document.getElementById('point-1-title')!, {
+      target: { value: '已完成' },
+    })
+    fireEvent.change(document.getElementById('point-2-title')!, {
+      target: { value: '已完成' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    const cards = document.querySelectorAll('.tpl-point-card')
     await waitFor(() =>
       expect(document.getElementById('point-0-title')).toHaveFocus(),
     )
     const thirdTitle = document.getElementById('point-2-title')!
     thirdTitle.focus()
-    expect(thirdTitle).toHaveFocus()
     fireEvent.change(thirdTitle, { target: { value: 'X' } })
     fireEvent.change(thirdTitle, { target: { value: 'XY' } })
     expect(thirdTitle).toHaveValue('XY')
     expect(cards[2]).toHaveAttribute('open')
     expect(thirdTitle).toHaveFocus()
-
-    fireEvent.click(cards[2].querySelector('summary')!)
-    expect(cards[0]).toHaveAttribute('open')
-    expect(cards[1]).toHaveAttribute('open')
-    expect(cards[2]).not.toHaveAttribute('open')
   })
 
-  it('keeps invalid points open when another point is expanded', async () => {
+  it('keeps remaining errors open and closes a corrected point on expansion', async () => {
     templateFetch({ items: [] })
     render(<TemplatesPage />)
     await openSystem()
@@ -497,8 +566,8 @@ describe('TemplatesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
 
     const cards = document.querySelectorAll('.tpl-point-card')
+    await waitFor(() => expect(cards[0]).toHaveAttribute('open'))
     expect(cards[0]).toHaveAttribute('open')
-    expect(cards[1]).not.toHaveAttribute('open')
     expect(cards[2]).toHaveAttribute('open')
     fireEvent.change(document.getElementById('point-2-title')!, {
       target: { value: '修正完成' },
@@ -508,6 +577,29 @@ describe('TemplatesPage', () => {
     expect(cards[0]).toHaveAttribute('open')
     expect(cards[1]).toHaveAttribute('open')
     expect(cards[2]).not.toHaveAttribute('open')
+  })
+
+  it('allows manually collapsing an expanded invalid point', async () => {
+    templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '管線查核' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(document.getElementById('point-1-title')!, {
+      target: { value: '已完成' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    const cards = document.querySelectorAll('.tpl-point-card')
+    await waitFor(() => expect(cards[0]).toHaveAttribute('open'))
+    expect(cards[0]).toHaveAttribute('open')
+    fireEvent.click(cards[0].querySelector('summary')!)
+    expect(cards[0]).not.toHaveAttribute('open')
   })
 
   it('shows empty state and creates a category', async () => {

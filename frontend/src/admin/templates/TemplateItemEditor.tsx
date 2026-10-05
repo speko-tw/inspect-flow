@@ -20,7 +20,7 @@ type Props = {
   selectedSystem?: { name: string }
   mode: Mode
   resetMode: () => void
-  saveItem: (event: FormEvent<HTMLFormElement>) => void | Promise<void>
+  saveItem: (event: FormEvent<HTMLFormElement>) => Promise<number[] | null>
   readOnly: boolean
   updateDraft: (changes: Partial<TemplateItem>) => void
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
@@ -69,10 +69,7 @@ export function TemplateItemEditor({
   setConfirmField,
 }: Props) {
   const [openPoint, setOpenPoint] = useState<number | null>(0)
-  const [expandedErrorPoints, setExpandedErrorPoints] = useState<Set<number>>(
-    new Set(),
-  )
-  const [accordionInteracted, setAccordionInteracted] = useState(false)
+  const [errorOpen, setErrorOpen] = useState<Set<number>>(new Set())
   const inputError = (key: string) => errors[key]
   const errorPoints = new Set(
     Object.keys(errors)
@@ -81,21 +78,10 @@ export function TemplateItemEditor({
       .filter((index) => Number.isInteger(index)),
   )
   if (!itemDraft) return null
-  const preserveErrorExpansion = () => {
-    const pointsToPreserve = accordionInteracted
-      ? openPoint !== null && errorPoints.has(openPoint)
-        ? [openPoint]
-        : []
-      : [...errorPoints]
-    setExpandedErrorPoints(
-      (current) => new Set([...current, ...pointsToPreserve]),
-    )
-  }
   const updatePointAndPreserveErrors = (
     index: number,
     changes: Partial<InspectionPoint>,
   ) => {
-    preserveErrorExpansion()
     updatePoint(index, changes)
   }
   const updateFieldAndPreserveErrors = (
@@ -103,20 +89,17 @@ export function TemplateItemEditor({
     fieldIndex: number,
     changes: Partial<MeasurementField>,
   ) => {
-    preserveErrorExpansion()
     updateField(pointIndex, fieldIndex, changes)
   }
   const updateNumericAndPreserveErrors = (
     index: number,
     changes: Partial<NonNullable<InspectionPoint['numeric_standard']>>,
   ) => {
-    preserveErrorExpansion()
     updateNumeric(index, changes)
   }
   const updatePhotoDraftAndPreserveErrors = (
     updater: (current: Record<string, string>) => Record<string, string>,
   ) => {
-    preserveErrorExpansion()
     setPhotoDraft(updater)
   }
   const focusPointTitle = (index: number) => {
@@ -149,9 +132,11 @@ export function TemplateItemEditor({
         }
       }}
       onSubmit={(event) => {
-        setAccordionInteracted(false)
-        setExpandedErrorPoints(new Set())
-        void saveItem(event)
+        void saveItem(event).then((invalidPoints) => {
+          if (invalidPoints !== null) {
+            setErrorOpen(new Set(invalidPoints))
+          }
+        })
       }}
     >
       <div className="tpl-editor-heading">
@@ -242,35 +227,31 @@ export function TemplateItemEditor({
               <details
                 className="tpl-point-card"
                 key={point.id ?? index}
-                open={
-                  openPoint === index ||
-                  (expandedErrorPoints.has(index) && errorPoints.has(index)) ||
-                  (!accordionInteracted && errorPoints.has(index))
-                }
+                open={openPoint === index || errorOpen.has(index)}
               >
                 <summary
                   onClick={(event) => {
                     event.preventDefault()
-                    const isOpen =
-                      openPoint === index ||
-                      (expandedErrorPoints.has(index) &&
-                        errorPoints.has(index)) ||
-                      (!accordionInteracted && errorPoints.has(index))
+                    const isOpen = openPoint === index || errorOpen.has(index)
                     const opening = !isOpen
-                    setAccordionInteracted(true)
-                    setExpandedErrorPoints((current) => {
-                      const preserved = accordionInteracted
-                        ? current
-                        : new Set([...current, ...errorPoints])
-                      return new Set(
-                        [...preserved].filter(
-                          (pointIndex) =>
-                            errorPoints.has(pointIndex) &&
-                            (opening || pointIndex !== index),
-                        ),
+                    if (opening) {
+                      setOpenPoint(index)
+                      setErrorOpen(
+                        (current) =>
+                          new Set(
+                            [...current].filter((pointIndex) =>
+                              errorPoints.has(pointIndex),
+                            ),
+                          ),
                       )
-                    })
-                    setOpenPoint(opening ? index : null)
+                    } else {
+                      setErrorOpen((current) => {
+                        const next = new Set(current)
+                        next.delete(index)
+                        return next
+                      })
+                      if (openPoint === index) setOpenPoint(null)
+                    }
                     if (opening) focusPointTitle(index)
                   }}
                 >
@@ -329,7 +310,7 @@ export function TemplateItemEditor({
                   <button
                     onClick={() => {
                       removePoint(index)
-                      setExpandedErrorPoints((current) => {
+                      setErrorOpen((current) => {
                         const next = new Set<number>()
                         current.forEach((pointIndex) => {
                           if (pointIndex < index) next.add(pointIndex)
@@ -405,6 +386,14 @@ export function TemplateItemEditor({
                 const index = itemDraft.inspection_points.length
                 addPoint()
                 setOpenPoint(index)
+                setErrorOpen(
+                  (current) =>
+                    new Set(
+                      [...current].filter((pointIndex) =>
+                        errorPoints.has(pointIndex),
+                      ),
+                    ),
+                )
                 focusPointTitle(index)
               }}
               type="button"
