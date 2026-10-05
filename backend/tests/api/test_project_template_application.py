@@ -264,6 +264,104 @@ def test_interval_survives_apply_and_save_as_template(db_session, make_client):
     )
 
 
+def test_measurement_field_order_survives_apply_and_save_as_template(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Ordered category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Ordered system"},
+    )
+    field_ids = [str(uuid4()) for _ in range(3)]
+    body = {
+        "system_id": system.json()["id"],
+        "sequence": 1,
+        "title": "Ordered item",
+        "instruction": "Check in displayed order",
+        "inspection_points": [
+            {
+                "sequence": 1,
+                "title": "Ordered point",
+                "instruction": "Record values",
+                "numeric_standard": {
+                    "value": "10",
+                    "condition": ">=",
+                    "unit": "mm",
+                    "tolerance": "1",
+                    "measurement_field_client_id": field_ids[0],
+                },
+                "measurement_fields": [
+                    {
+                        "client_id": field_ids[0],
+                        "name": "First",
+                        "field_type": "number",
+                    },
+                    {
+                        "client_id": field_ids[1],
+                        "name": "Second",
+                        "field_type": "text",
+                    },
+                    {
+                        "client_id": field_ids[2],
+                        "name": "Third",
+                        "field_type": "number",
+                        "unit": "cm",
+                    },
+                ],
+                "evidence_requirements": [{"min_count": 1}],
+            }
+        ],
+    }
+    created = world["admin"].post("/api/v1/templates", json=body)
+    assert created.status_code == 201, created.text
+    template_id = created.json()["id"]
+    expected = [("First", "mm"), ("Second", None), ("Third", "cm")]
+
+    read = world["admin"].get(f"/api/v1/templates/{template_id}")
+    assert read.status_code == 200, read.text
+    point = read.json()["inspection_points"][0]
+    assert [
+        (field["name"], field["unit"]) for field in point["measurement_fields"]
+    ] == expected
+
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}/inspection-items:apply-template",
+        json={"template_id": template_id},
+    )
+    assert applied.status_code == 201, applied.text
+    project_list = world["editor"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-items"
+    )
+    project_point = project_list.json()["items"][0]["inspection_points"][0]
+    assert [
+        (field["name"], field["unit"])
+        for field in project_point["measurement_fields"]
+    ] == expected
+
+    saved_category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Saved ordered category"}
+    )
+    saved_system = world["admin"].post(
+        f"/api/v1/template-categories/{saved_category.json()['id']}/systems",
+        json={"name": "Saved ordered system"},
+    )
+    saved = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": applied.json()[0]["id"],
+            "system_id": saved_system.json()["id"],
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    assert [
+        (field["name"], field["unit"])
+        for field in saved.json()["inspection_points"][0]["measurement_fields"]
+    ] == expected
+
+
 def test_migration_marks_existing_ranges_as_tolerance(
     db_session, engine, migrated_url, make_client
 ):
@@ -310,8 +408,28 @@ def test_migration_marks_existing_ranges_as_tolerance(
     engine.dispose()
     dispose_engine()
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
-    command.downgrade(config, "325e0f21a831")
-    command.upgrade(config, "head")
+    probe = create_engine(migrated_url)
+    try:
+        with probe.begin() as connection:
+            for table in (
+                "template_numeric_standards",
+                "project_numeric_standards",
+            ):
+                connection.execute(
+                    text(f"ALTER TABLE {table} DROP COLUMN range_form")
+                )
+                connection.execute(
+                    text(f"ALTER TABLE {table} DROP COLUMN lower_bound")
+                )
+                connection.execute(
+                    text(f"ALTER TABLE {table} DROP COLUMN upper_bound")
+                )
+            connection.execute(
+                text("UPDATE alembic_version SET version_num = '325e0f21a831'")
+            )
+    finally:
+        probe.dispose()
+    command.upgrade(config, "a8356e4c12b0")
     probe = create_engine(migrated_url)
     try:
         with probe.connect() as connection:
@@ -363,6 +481,14 @@ def test_interval_downgrade_keeps_both_tables_intact(
     engine.dispose()
     dispose_engine()
     config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    probe = create_engine(migrated_url)
+    try:
+        with probe.begin() as connection:
+            connection.execute(
+                text("UPDATE alembic_version SET version_num = 'a8356e4c12b0'")
+            )
+    finally:
+        probe.dispose()
     with pytest.raises(RuntimeError, match="interval standards"):
         command.downgrade(config, "325e0f21a831")
     probe = create_engine(migrated_url)

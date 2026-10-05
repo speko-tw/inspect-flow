@@ -33,7 +33,7 @@ def inspection_points_detail(
             select(measurement_field_model)
             .where(measurement_field_model.inspection_point_id == point.id)
             .order_by(
-                measurement_field_model.created_at,
+                measurement_field_model.sort_order,
                 measurement_field_model.id,
             )
         ).all()

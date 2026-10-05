@@ -19,6 +19,7 @@ export interface TemplateSystem {
 export interface MeasurementField {
   id?: string
   client_id?: string
+  clientKey?: string
   name: string
   field_type: 'text' | 'number'
   unit: string | null
@@ -40,6 +41,7 @@ export interface InspectionPoint {
     upper_bound?: string | null
     measurement_field_id?: string
     measurement_field_client_id?: string
+    measurement_field_client_key?: string
   } | null
   measurement_fields: MeasurementField[]
   evidence_requirements: Array<{
@@ -150,4 +152,25 @@ export function putSystemTemplates(
     method: 'PUT',
     body: JSON.stringify({ items }),
   })
+}
+
+export function createTemplateItem(item: TemplateItem): Promise<TemplateItem> {
+  return request('/templates', {
+    method: 'POST',
+    body: JSON.stringify(item),
+  })
+}
+
+export function updateTemplateItem(
+  id: string,
+  item: TemplateItem,
+): Promise<TemplateItem> {
+  return request(`/templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(item),
+  })
+}
+
+export function deleteTemplateItem(id: string): Promise<void> {
+  return request(`/templates/${id}`, { method: 'DELETE' })
 }

@@ -8,210 +8,242 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import TemplatesPage from './TemplatesPage'
+import wireFixture from './fixtures/template-item-payload.json'
 import type { TemplateItem } from './api'
 
 const category = { id: 'category-1', name: '土木工程' }
+const otherCategory = { id: 'category-2', name: '建築工程' }
 const system = {
   id: 'system-1',
   category_id: category.id,
   name: '護欄',
 }
-const templates = [
-  {
-    id: 'template-1',
-    system_id: system.id,
-    sequence: 1,
-    title: '欄杆尺寸',
-    instruction: '確認尺寸符合圖說',
-    inspection_points: [
-      {
-        id: 'point-1',
-        sequence: 1,
-        title: '高度',
-        instruction: '量測欄杆高度',
-        text_standard: null,
-        numeric_standard: {
-          value: '110',
-          condition: '>=',
-          unit: 'cm',
-          tolerance: null,
-          measurement_field_id: 'field-1',
-        },
-        measurement_fields: [
-          {
-            id: 'field-1',
-            name: '實際高度',
-            field_type: 'number',
-            unit: 'cm',
-          },
-          {
-            id: 'field-2',
-            name: '第二次量測',
-            field_type: 'number',
-            unit: 'mm',
-          },
-        ],
-        evidence_requirements: [
-          {
-            id: 'evidence-1',
-            evidence_type: 'photo',
-            required: true,
-            min_count: 2,
-            max_count: null,
-          },
-        ],
+const secondSystem = {
+  id: 'system-2',
+  category_id: category.id,
+  name: '排水',
+}
+const sampleItem = {
+  id: 'template-1',
+  system_id: system.id,
+  sequence: 1,
+  title: '欄杆尺寸',
+  instruction: '確認尺寸符合圖說',
+  inspection_points: [
+    {
+      id: 'point-1',
+      sequence: 1,
+      title: '高度',
+      instruction: '量測欄杆高度',
+      text_standard: null,
+      numeric_standard: {
+        value: '110',
+        condition: '>=',
+        unit: 'cm',
+        tolerance: null,
+        measurement_field_id: 'field-1',
       },
-    ],
-  },
-]
-
-const secondTemplate = {
-  ...templates[0],
-  id: 'template-2',
-  sequence: 2,
-  title: '底座尺寸',
-  inspection_points: templates[0].inspection_points.map((point) => ({
-    ...point,
-    id: 'point-2',
-    title: '底座寬度',
-    numeric_standard: {
-      ...point.numeric_standard!,
-      measurement_field_id: 'field-3',
+      measurement_fields: [
+        {
+          id: 'field-1',
+          name: '實際高度',
+          field_type: 'number',
+          unit: null,
+        },
+        {
+          id: 'field-2',
+          name: '第二次量測',
+          field_type: 'number',
+          unit: 'mm',
+        },
+      ],
+      evidence_requirements: [{ min_count: 2 }],
     },
-    measurement_fields: point.measurement_fields.map((field, index) => ({
-      ...field,
-      id: `field-${index + 3}`,
-    })),
-    evidence_requirements: point.evidence_requirements.map((entry) => ({
-      ...entry,
-      id: 'evidence-2',
-    })),
-  })),
+  ],
 }
 
-function templateFetch({
-  categoryError,
-  writeError,
-  writeConflict = false,
-  writeSuccess = false,
-  deleteSuccess = false,
-  categoryItems = [category],
-  systemItems = [system],
-  templateItems = templates,
-}: {
-  categoryError?: number
-  writeError?: number
-  writeConflict?: boolean
-  writeSuccess?: boolean
-  deleteSuccess?: boolean
-  categoryItems?: Array<{ id: string; name: string }>
-  systemItems?: Array<{
-    id: string
-    category_id: string
-    name: string
-  }>
-  templateItems?: unknown[]
-} = {}) {
+function hasValidWireContract(value: unknown): boolean {
+  const exactKeys = (row: Record<string, unknown>, keys: string[]) =>
+    Object.keys(row).sort().join(',') === [...keys].sort().join(',')
+  if (!value || typeof value !== 'object') return false
+  const item = value as Record<string, unknown>
+  if (
+    !exactKeys(item, [
+      'system_id',
+      'sequence',
+      'title',
+      'instruction',
+      'inspection_points',
+    ]) ||
+    !Array.isArray(item.inspection_points)
+  ) {
+    return false
+  }
+  return item.inspection_points.every((rawPoint) => {
+    if (!rawPoint || typeof rawPoint !== 'object') return false
+    const point = rawPoint as Record<string, unknown>
+    if (
+      !exactKeys(point, [
+        'sequence',
+        'title',
+        'instruction',
+        'measurement_fields',
+        'numeric_standard',
+        'text_standard',
+        'evidence_requirements',
+      ]) ||
+      !Array.isArray(point.measurement_fields) ||
+      !Array.isArray(point.evidence_requirements)
+    ) {
+      return false
+    }
+    const standard = point.numeric_standard as Record<string, unknown> | null
+    const boundClientId = standard?.measurement_field_client_id
+    const fields = point.measurement_fields as Array<Record<string, unknown>>
+    const matchingFields = fields.filter(
+      (field) => field.client_id === boundClientId,
+    )
+    if (standard && matchingFields.length !== 1) return false
+    return (
+      fields.every((field) => {
+        if (
+          !exactKeys(field, ['client_id', 'name', 'field_type', 'unit']) ||
+          typeof field.client_id !== 'string' ||
+          typeof field.name !== 'string'
+        ) {
+          return false
+        }
+        if (field.field_type === 'text') return field.unit === null
+        if (field.field_type !== 'number') return false
+        const isBound = field.client_id === boundClientId
+        return isBound
+          ? field.unit === null
+          : typeof field.unit === 'string' && field.unit.trim().length > 0
+      }) &&
+      (!standard ||
+        (exactKeys(standard, [
+          'value',
+          'condition',
+          'unit',
+          'tolerance',
+          'range_form',
+          'lower_bound',
+          'upper_bound',
+          'measurement_field_client_id',
+        ]) &&
+          typeof standard.unit === 'string' &&
+          standard.unit.trim().length > 0))
+    )
+  })
+}
+
+function templateFetch(
+  options: {
+    categoryError?: number
+    writeError?: number
+    writeConflict?: boolean
+    deleteSuccess?: boolean
+    validateWire?: boolean
+    categories?: Array<{ id: string; name: string }>
+    systems?: Array<{ id: string; category_id: string; name: string }>
+    items?: Array<Record<string, unknown>>
+  } = {},
+) {
+  const categories = options.categories ?? [category]
+  const systems = options.systems ?? [system]
+  const items = [...(options.items ?? [sampleItem])]
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input)
-      const path = new URL(url, 'http://localhost').pathname
+      const path = new URL(String(input), 'http://localhost').pathname
       const method = init?.method ?? 'GET'
-      if (path.endsWith('/template-categories') && method === 'GET') {
-        if (categoryError) {
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined
+
+      if (path === '/api/v1/template-categories' && method === 'GET') {
+        if (options.categoryError) {
           return Response.json(
             { error: { code: 'permission.denied' } },
-            { status: categoryError },
+            { status: options.categoryError },
           )
         }
-        return Response.json({ items: categoryItems, next_cursor: null })
+        return Response.json({ items: categories, next_cursor: null })
+      }
+      if (path === '/api/v1/template-categories' && method === 'POST') {
+        const row = { id: `category-${categories.length + 1}`, ...body }
+        categories.push(row)
+        return Response.json(row, { status: 201 })
       }
       if (
-        path.endsWith('/systems') &&
-        path.includes('/template-categories/')
+        path.includes('/template-categories/') &&
+        path.endsWith('/systems')
       ) {
-        const categoryId = path.split('/').at(-2)
-        return Response.json({
-          items: systemItems.filter((item) => item.category_id === categoryId),
-          next_cursor: null,
-        })
-      }
-      if (path.endsWith('/templates') && path.includes('/template-systems/')) {
+        const id = path.split('/')[4]
         if (method === 'GET') {
-          return Response.json({ items: templateItems, next_cursor: null })
-        }
-        if (writeSuccess) {
-          const body = JSON.parse(String(init?.body)) as {
-            items: Array<Record<string, unknown>>
-          }
           return Response.json({
-            items: body.items.map((item, index) => ({
-              ...item,
-              id: item.id ?? `created-${index}`,
-            })),
+            items: systems.filter((row) => row.category_id === id),
+            next_cursor: null,
           })
         }
-        if (writeConflict) {
+        if (method === 'POST') {
+          const row = {
+            id: `system-${systems.length + 1}`,
+            category_id: id,
+            ...body,
+          }
+          systems.push(row)
+          return Response.json(row, { status: 201 })
+        }
+      }
+      if (
+        path.startsWith('/api/v1/template-categories/category-') &&
+        method === 'PATCH'
+      ) {
+        if (options.writeConflict) {
           return Response.json(
             { error: { code: 'template.name_conflict' } },
             { status: 409 },
           )
         }
-        const status = writeError ?? 403
-        return Response.json(
-          {
-            error: {
-              code:
-                status === 403
-                  ? 'permission.denied'
-                  : 'request.validation_failed',
-            },
-          },
-          { status },
-        )
+        return Response.json({ id: category.id, ...body })
       }
       if (
-        path.endsWith('/template-categories/category-1') &&
+        path.startsWith('/api/v1/template-categories/category-') &&
+        method === 'DELETE'
+      ) {
+        if (!options.deleteSuccess) {
+          return Response.json(
+            { error: { code: 'template.category_not_empty' } },
+            { status: 409 },
+          )
+        }
+        const id = path.split('/').at(-1)
+        const index = categories.findIndex((row) => row.id === id)
+        if (index >= 0) categories.splice(index, 1)
+        return new Response(null, { status: 204 })
+      }
+      if (
+        path.startsWith('/api/v1/template-systems/system-') &&
         method === 'PATCH'
       ) {
-        if (writeSuccess) {
-          const body = JSON.parse(String(init?.body)) as { name: string }
-          const updatedCategory = { ...categoryItems[0], ...body }
-          categoryItems[0] = updatedCategory
-          return Response.json(updatedCategory)
+        if (options.writeConflict) {
+          return Response.json(
+            { error: { code: 'template.name_conflict' } },
+            { status: 409 },
+          )
         }
-        return Response.json(
-          { error: { code: 'template.name_conflict' } },
-          { status: 409 },
-        )
+        return Response.json({
+          id: system.id,
+          category_id: category.id,
+          ...body,
+        })
       }
-      if (path.endsWith('/template-systems/system-1') && method === 'PATCH') {
-        if (writeSuccess) {
-          const body = JSON.parse(String(init?.body)) as { name: string }
-          const updatedSystem = { ...systemItems[0], ...body }
-          systemItems[0] = updatedSystem
-          return Response.json(updatedSystem)
-        }
-        return Response.json(
-          { error: { code: 'template.name_conflict' } },
-          { status: 409 },
-        )
-      }
-      if (path.includes('/template-categories/') && method === 'DELETE') {
-        if (path.endsWith('/category-2') && deleteSuccess) {
-          categoryItems.splice(1, 1)
-          return new Response(null, { status: 204 })
-        }
-        return Response.json(
-          { error: { code: 'template.category_not_empty' } },
-          { status: 409 },
-        )
-      }
-      if (path.includes('/template-systems/') && method === 'DELETE') {
-        if (deleteSuccess) {
-          const deletedId = path.split('/').at(-1)
-          const index = systemItems.findIndex((item) => item.id === deletedId)
-          if (index >= 0) systemItems.splice(index, 1)
+      if (
+        path.startsWith('/api/v1/template-systems/system-') &&
+        method === 'DELETE'
+      ) {
+        if (options.deleteSuccess) {
+          const id = path.split('/').at(-1)
+          const index = systems.findIndex((row) => row.id === id)
+          if (index >= 0) systems.splice(index, 1)
           return new Response(null, { status: 204 })
         }
         return Response.json(
@@ -219,204 +251,927 @@ function templateFetch({
           { status: 409 },
         )
       }
-      return Response.json({ items: [category], next_cursor: null })
+      if (
+        path.includes('/template-systems/') &&
+        path.endsWith('/templates') &&
+        method === 'GET'
+      ) {
+        const systemId = path.split('/')[4]
+        return Response.json({
+          items: items.filter((item) => item.system_id === systemId),
+          next_cursor: null,
+        })
+      }
+      if (path === '/api/v1/templates' && method === 'POST') {
+        if (options.writeError) {
+          return Response.json(
+            {
+              error: {
+                code:
+                  options.writeError === 403
+                    ? 'permission.denied'
+                    : 'request.validation_failed',
+              },
+            },
+            { status: options.writeError },
+          )
+        }
+        if (options.writeConflict) {
+          return Response.json(
+            { error: { code: 'template.name_conflict' } },
+            { status: 409 },
+          )
+        }
+        if (options.validateWire && !hasValidWireContract(body)) {
+          return Response.json(
+            { error: { code: 'request.validation_failed' } },
+            { status: 422 },
+          )
+        }
+        const created = { id: 'template-created', ...body }
+        items.push(created)
+        return Response.json(created, { status: 201 })
+      }
+      if (path.startsWith('/api/v1/templates/template-') && method === 'PUT') {
+        if (options.writeError) {
+          return Response.json(
+            {
+              error: {
+                code:
+                  options.writeError === 403
+                    ? 'permission.denied'
+                    : 'request.validation_failed',
+              },
+            },
+            { status: options.writeError },
+          )
+        }
+        if (options.validateWire && !hasValidWireContract(body)) {
+          return Response.json(
+            { error: { code: 'request.validation_failed' } },
+            { status: 422 },
+          )
+        }
+        return Response.json({ ...body, id: path.split('/').at(-1) })
+      }
+      if (
+        path.startsWith('/api/v1/templates/template-') &&
+        method === 'DELETE'
+      ) {
+        return new Response(null, { status: 204 })
+      }
+      return Response.json({ items: [], next_cursor: null })
     },
   )
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
 
+async function openSystem(): Promise<void> {
+  const navigation = await screen.findByRole('complementary', {
+    name: '範本庫導覽',
+  })
+  fireEvent.click(
+    await within(navigation).findByRole('button', {
+      name: '護欄',
+    }),
+  )
+  await screen.findByRole('heading', { name: '護欄' })
+}
+
+async function startNewItem(): Promise<void> {
+  await openSystem()
+  fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+  fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+    target: { value: '管線查核' },
+  })
+  fireEvent.change(screen.getByLabelText(/項次標題/), {
+    target: { value: '坡度' },
+  })
+  fireEvent.click(screen.getByRole('radio', { name: '數值' }))
+}
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe('TemplatesPage', () => {
-  it('creates a category, system, and item template through the screen', async () => {
-    const categories: Array<{ id: string; name: string }> = []
-    const systems: Array<{
-      id: string
-      category_id: string
-      name: string
-    }> = []
-    const items: Array<Record<string, unknown>> = []
-    const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = new URL(String(input), 'http://localhost').pathname
-        const method = init?.method ?? 'GET'
-        if (path === '/api/v1/template-categories' && method === 'GET') {
-          return Response.json({ items: categories, next_cursor: null })
-        }
-        if (path === '/api/v1/template-categories' && method === 'POST') {
-          const body = JSON.parse(String(init?.body)) as { name: string }
-          const row = { id: 'category-new', name: body.name }
-          categories.push(row)
-          return Response.json(row, { status: 201 })
-        }
-        if (
-          path === '/api/v1/template-categories/category-new/systems' &&
-          method === 'GET'
-        ) {
-          return Response.json({ items: systems, next_cursor: null })
-        }
-        if (
-          path === '/api/v1/template-categories/category-new/systems' &&
-          method === 'POST'
-        ) {
-          const body = JSON.parse(String(init?.body)) as { name: string }
-          const row = {
-            id: 'system-new',
-            category_id: 'category-new',
-            name: body.name,
-          }
-          systems.push(row)
-          return Response.json(row, { status: 201 })
-        }
-        if (
-          path === '/api/v1/template-systems/system-new/templates' &&
-          method === 'GET'
-        ) {
-          return Response.json({ items, next_cursor: null })
-        }
-        if (
-          path === '/api/v1/template-systems/system-new/templates' &&
-          method === 'PUT'
-        ) {
-          const body = JSON.parse(String(init?.body)) as {
-            items: Array<Record<string, unknown>>
-          }
-          items.splice(
-            0,
-            items.length,
-            ...body.items.map((item, index) => ({
-              ...item,
-              id: item.id ?? `template-${index + 1}`,
-            })),
-          )
-          return Response.json({ items })
-        }
-        return Response.json({ items: [], next_cursor: null })
-      },
-    )
-    vi.stubGlobal('fetch', fetchMock)
+  it('shows empty state and creates a category', async () => {
+    templateFetch({ categories: [], systems: [], items: [] })
     render(<TemplatesPage />)
 
+    expect(
+      await screen.findAllByRole('heading', {
+        name: '還沒有工程類別',
+      }),
+    ).toHaveLength(1)
     fireEvent.click(
-      await screen.findByRole('button', { name: '新增工程類別' }),
+      screen.getAllByRole('button', {
+        name: '新增工程類別',
+      })[0],
     )
-    fireEvent.change(screen.getByLabelText('工程類別名稱'), {
+    fireEvent.change(screen.getByLabelText(/名稱/), {
       target: { value: '橋梁工程' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '新增類別' }))
-    await screen.findByRole('option', { name: '橋梁工程' })
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '新增系統…' }))
-    fireEvent.change(screen.getByLabelText('系統名稱'), {
-      target: { value: '伸縮縫' },
+    expect(
+      await screen.findByRole('heading', { name: '橋梁工程' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('已新增工程類別')
+  })
+
+  it('selects a neighboring category after deleting one', async () => {
+    const fetchMock = templateFetch({
+      categories: [category, otherCategory],
+      items: [],
+      deleteSuccess: true,
     })
-    fireEvent.click(screen.getByRole('button', { name: '新增系統' }))
-    await screen.findByRole('option', { name: '伸縮縫' })
-
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '建築工程' })
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
+    })
     fireEvent.click(
-      await screen.findByRole('button', { name: '新增查核項目' }),
+      await within(navigation).findByRole('button', { name: '建築工程' }),
     )
-    fireEvent.change(screen.getByLabelText('項目名稱'), {
-      target: { value: '伸縮縫外觀' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByText(/伸縮縫外觀/)).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '查核項目範本已儲存。',
-    )
+    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '編輯：伸縮縫外觀' }))
-    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
-    fireEvent.change(screen.getByLabelText('項次標題'), {
-      target: { value: '伸縮縫外觀確認' },
+    expect(
+      await screen.findByRole('heading', { name: '土木工程' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('還沒有工程類別')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('土木工程')
+    fireEvent.change(screen.getByLabelText(/名稱/), {
+      target: { value: '保留的工程類別' },
     })
-    fireEvent.change(screen.getByLabelText('標準類型'), {
-      target: { value: 'text' },
-    })
-    fireEvent.change(screen.getByLabelText('標準文字'), {
-      target: { value: '表面無裂縫' },
-    })
-    fireEvent.change(screen.getByLabelText('每項次最少照片數'), {
-      target: { value: '3' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+    await screen.findByRole('status')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-2') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+  })
 
-    await waitFor(() => {
-      expect(items[0].inspection_points).toEqual([
-        expect.objectContaining({
-          sequence: 1,
-          title: '伸縮縫外觀確認',
-          text_standard: { text: '表面無裂縫' },
-          evidence_requirements: [{ min_count: 3 }],
-        }),
-      ])
+  it('deletes a system without retaining its name as the selected category', async () => {
+    const fetchMock = templateFetch({
+      systems: [system, secondSystem],
+      items: [],
+      deleteSuccess: true,
     })
-
-    fireEvent.click(screen.getByRole('button', { name: '編輯：伸縮縫外觀' }))
-    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
-    const pointEditor = screen.getByRole('form', { name: '查核項目編輯器' })
-    const numericPoint = within(
-      within(pointEditor).getByRole('group', { name: '查核項次 2' }),
-    )
-    fireEvent.change(numericPoint.getByLabelText('項次標題'), {
-      target: { value: '伸縮縫寬度' },
+    render(<TemplatesPage />)
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
     })
-    fireEvent.click(numericPoint.getByRole('button', { name: '新增實測欄位' }))
-    fireEvent.change(numericPoint.getByLabelText('欄位名稱'), {
-      target: { value: '實際寬度' },
-    })
-    fireEvent.change(numericPoint.getByLabelText('欄位型別'), {
-      target: { value: 'number' },
-    })
-    const fieldUnit = numericPoint.getByLabelText('單位')
-    expect(fieldUnit).not.toBeDisabled()
-    fireEvent.change(fieldUnit, { target: { value: 'mm' } })
-    fireEvent.change(numericPoint.getByLabelText('標準類型'), {
-      target: { value: 'number' },
-    })
-    fireEvent.change(numericPoint.getByLabelText('標準值'), {
-      target: { value: '20' },
-    })
-    const binding = numericPoint.getByLabelText('綁定數字實測欄位')
-    fireEvent.change(binding, {
-      target: {
-        value: numericPoint
-          .getByRole('option', {
-            name: '實際寬度（mm）',
-          })
-          .getAttribute('value'),
-      },
-    })
-    expect(fieldUnit).not.toBeDisabled()
-    expect(numericPoint.getByLabelText('單位（由綁定欄位帶入）')).toHaveValue(
-      'mm',
-    )
     fireEvent.click(
-      within(pointEditor).getByRole('button', { name: '儲存範本' }),
+      await within(navigation).findByRole('button', { name: '排水' }),
     )
-
-    await waitFor(() => {
-      expect(items[0].inspection_points).toHaveLength(2)
+    await screen.findByRole('heading', { name: '排水' })
+    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+    await screen.findByRole('heading', { name: '土木工程' })
+    fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
+    await screen.findByRole('heading', { name: '護欄' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('護欄')
+    fireEvent.change(screen.getByLabelText(/名稱/), {
+      target: { value: '護欄新版' },
     })
-    const latestPut = fetchMock.mock.calls
-      .filter(([, init]) => init?.method === 'PUT')
-      .at(-1)
-    const body = JSON.parse(String(latestPut?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{
-          numeric_standard: { unit: string }
-          measurement_fields: Array<{ unit: string | null }>
-        }>
-      }>
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+    await screen.findByRole('status')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-2') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+  })
+
+  it('clears stale category and system name drafts when changing selection', async () => {
+    const anotherSystem = {
+      id: 'system-3',
+      category_id: otherCategory.id,
+      name: '排水二區',
     }
-    expect(body.items[0].inspection_points[1]).toMatchObject({
-      numeric_standard: { unit: 'mm' },
-      measurement_fields: [{ unit: null }],
+    templateFetch({
+      categories: [category, otherCategory],
+      systems: [
+        system,
+        { ...secondSystem, category_id: otherCategory.id },
+        anotherSystem,
+      ],
+      items: [],
+    })
+    render(<TemplatesPage />)
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    await within(navigation).findByRole('button', { name: '建築工程' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    fireEvent.change(screen.getByLabelText(/名稱/), { target: { value: '' } })
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+    await screen.findByRole('heading', { name: '建築工程' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('建築工程')
+    fireEvent.keyDown(screen.getByLabelText(/名稱/), { key: 'Escape' })
+
+    fireEvent.click(within(navigation).getByRole('button', { name: '排水' }))
+    await screen.findByRole('heading', { name: '排水' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    fireEvent.change(screen.getByLabelText(/名稱/), { target: { value: '' } })
+    fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+    await screen.findByRole('heading', { name: '護欄' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    expect(await screen.findByLabelText(/名稱/)).toHaveValue('護欄')
+  })
+
+  it('keeps cleared category and system names blank until retyped on Enter', async () => {
+    const fetchMock = templateFetch()
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '土木工程' })
+
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    const categoryInput = await screen.findByLabelText(/名稱/)
+    fireEvent.change(categoryInput, { target: { value: '' } })
+    expect(categoryInput).toHaveValue('')
+    fireEvent.keyDown(categoryInput, { key: 'Enter', code: 'Enter' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('請填寫名稱')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+    fireEvent.change(categoryInput, { target: { value: '土木工程新版' } })
+    expect(categoryInput).toHaveValue('土木工程新版')
+    fireEvent.keyDown(categoryInput, { key: 'Enter', code: 'Enter' })
+    await screen.findByText(/已重新命名為「土木工程新版」/)
+    const categoryPatch = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-categories/category-1') &&
+        init?.method === 'PATCH',
+    )
+    expect(JSON.parse(String(categoryPatch?.[1]?.body))).toEqual({
+      name: '土木工程新版',
+    })
+
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '護欄' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    const systemInput = await screen.findByLabelText(/名稱/)
+    fireEvent.change(systemInput, { target: { value: '' } })
+    expect(systemInput).toHaveValue('')
+    fireEvent.keyDown(systemInput, { key: 'Enter', code: 'Enter' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('請填寫名稱')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+    fireEvent.change(systemInput, { target: { value: '護欄新版' } })
+    expect(systemInput).toHaveValue('護欄新版')
+    fireEvent.keyDown(systemInput, { key: 'Enter', code: 'Enter' })
+    await screen.findByText(/已重新命名為「護欄新版」/)
+    const systemPatch = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-systems/system-1') &&
+        init?.method === 'PATCH',
+    )
+    expect(JSON.parse(String(systemPatch?.[1]?.body))).toEqual({
+      name: '護欄新版',
     })
   })
 
-  it('shows the library denial when the read API returns 403', async () => {
+  it('separates add and rename and preserves draft on duplicate', async () => {
+    templateFetch({ categories: [category, otherCategory] })
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '建築工程' })
+    fireEvent.click(screen.getByRole('button', { name: '新增工程類別' }))
+    expect(
+      screen.getByRole('heading', { name: '新增工程類別' }),
+    ).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/名稱/), {
+      target: { value: '土木工程' },
+    })
+    expect(screen.getByText('已有同名項目，請換個名稱')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '儲存' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/名稱/), { target: { value: '' } })
+    expect(screen.getByLabelText(/名稱/)).toHaveValue('')
+    fireEvent.keyDown(screen.getByLabelText(/名稱/), { key: 'Escape' })
+    expect(
+      screen.queryByRole('heading', { name: '新增工程類別' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('creates numeric items with editable units and posts null', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await startNewItem()
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/欄位名稱/)).toHaveFocus(),
+    )
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    expect(screen.getAllByText(/1～3 %/).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByRole('status')
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates' && init?.method === 'POST',
+    )
+    const body = JSON.parse(String(post?.[1]?.body)) as {
+      inspection_points: Array<{
+        measurement_fields: Array<{ unit: string | null }>
+        numeric_standard: { unit: string }
+      }>
+    }
+    expect(body.inspection_points[0].measurement_fields[0].unit).toBeNull()
+    expect(body.inspection_points[0].numeric_standard.unit).toBe('%')
+  })
+
+  it('preserves units when a new numeric field is not bound', async () => {
+    const fetchMock = templateFetch({ items: [], validateWire: true })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: wireFixture.title },
+    })
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: wireFixture.inspection_points[5].title },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增實測欄位' }))
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: {
+        value: wireFixture.inspection_points[5].measurement_fields[0].name,
+      },
+    })
+    fireEvent.change(document.getElementById('field-0-0-unit')!, {
+      target: {
+        value: wireFixture.inspection_points[5].measurement_fields[0].unit,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByText('查核項目已儲存')
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates' && init?.method === 'POST',
+    )
+    const body = JSON.parse(String(post?.[1]?.body))
+    const expectedPoint = structuredClone(wireFixture.inspection_points[5])
+    expectedPoint.sequence = body.inspection_points[0].sequence
+    expectedPoint.measurement_fields[0].client_id =
+      body.inspection_points[0].measurement_fields[0].client_id
+    expect(body.inspection_points[0]).toEqual(expectedPoint)
+    expect(body.inspection_points[0].measurement_fields[0].unit).toBe('m')
+  })
+
+  it('does not bind an earlier new field before a persisted field id', async () => {
+    const item = structuredClone(sampleItem) as TemplateItem
+    item.inspection_points[0].numeric_standard = {
+      ...item.inspection_points[0].numeric_standard!,
+      measurement_field_id: '00000000-0000-4000-8000-000000000021',
+      measurement_field_client_id: undefined,
+      unit: 'cm',
+    }
+    item.inspection_points[0].measurement_fields = [
+      {
+        client_id: '00000000-0000-4000-8000-000000000020',
+        name: '長',
+        field_type: 'number',
+        unit: 'm',
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000021',
+        name: '寬',
+        field_type: 'number',
+        unit: 'cm',
+      },
+    ]
+    const fetchMock = templateFetch({
+      items: [item as unknown as Record<string, unknown>],
+      validateWire: true,
+    })
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '欄杆尺寸' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByText('查核項目已儲存')
+    const put = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates/template-1' &&
+        init?.method === 'PUT',
+    )
+    const body = JSON.parse(String(put?.[1]?.body))
+    const point = body.inspection_points[0]
+    expect(
+      point.measurement_fields.map(
+        (field: { unit: string | null }) => field.unit,
+      ),
+    ).toEqual(['m', null])
+    expect(point.numeric_standard.measurement_field_client_id).toBe(
+      point.measurement_fields[1].client_id,
+    )
+    expect(point.numeric_standard.unit).toBe('cm')
+  })
+
+  it('binds the second new numeric field and preserves the first unit', async () => {
+    const fetchMock = templateFetch({ items: [], validateWire: true })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: wireFixture.inspection_points[6].title },
+    })
+    const firstField = wireFixture.inspection_points[6].measurement_fields[0]
+    const secondField = wireFixture.inspection_points[6].measurement_fields[1]
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: firstField.name },
+    })
+    fireEvent.change(document.getElementById('field-0-0-unit')!, {
+      target: { value: firstField.unit },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增實測欄位' }))
+    fireEvent.change(document.getElementById('field-0-1-name')!, {
+      target: { value: secondField.name },
+    })
+    fireEvent.change(document.getElementById('field-0-1-unit')!, {
+      target: { value: 'cm' },
+    })
+    fireEvent.change(screen.getByLabelText(/用來判定的數字欄位/), {
+      target: {
+        value: screen
+          .getByRole('option', { name: 'Width' })
+          .getAttribute('value'),
+      },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByText('查核項目已儲存')
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates' && init?.method === 'POST',
+    )
+    const body = JSON.parse(String(post?.[1]?.body))
+    const point = body.inspection_points[0]
+    const expectedPoint = structuredClone(wireFixture.inspection_points[6])
+    expectedPoint.sequence = point.sequence
+    expectedPoint.measurement_fields.forEach((field, index) => {
+      field.client_id = point.measurement_fields[index].client_id
+    })
+    expectedPoint.numeric_standard!.measurement_field_client_id =
+      point.measurement_fields[1].client_id
+    expect(point).toEqual(expectedPoint)
+    expect(
+      point.measurement_fields.map(
+        (field: { unit: string | null }) => field.unit,
+      ),
+    ).toEqual(['m', null])
+    expect(point.numeric_standard.measurement_field_client_id).toBe(
+      point.measurement_fields[1].client_id,
+    )
+  })
+
+  it('validates units and reversed interval before any request', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('下限不能大於上限')).not.toHaveLength(0)
+    expect(screen.getByRole('alert')).toHaveTextContent('尚有')
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
+    expect(document.getElementById('lower-0')).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: '下限不能大於上限' }))
+    expect(document.getElementById('lower-0')).toHaveFocus()
+  })
+
+  it('keeps unresolved errors while revalidating after the first save', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫單位')).not.toHaveLength(0)
+    expect(screen.getAllByText('下限不能大於上限')).not.toHaveLength(0)
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('尚有 1 處要修正'),
+    )
+    expect(screen.getAllByText('下限不能大於上限')).not.toHaveLength(0)
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument(),
+    )
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
+  })
+
+  it('blocks empty point lists and blank text standards at their fields', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '空白標準測試' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '移除此項次' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+    expect(
+      await screen.findAllByText('請至少新增一個查核項次'),
+    ).not.toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: '外觀' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '文字' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+    expect(await screen.findAllByText('請填寫標準文字')).not.toHaveLength(0)
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
+  })
+
+  it('shows all editor sections and inline validation errors', async () => {
+    templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+
+    expect(
+      screen.getByRole('heading', { name: '基本資料' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '查核項次' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '要記錄什麼' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '判定標準' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '照片需求' }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '管線查核' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫項次標題')).toHaveLength(2)
+    expect(screen.getByRole('alert')).toHaveTextContent('尚有')
+    expect(screen.getByLabelText(/項次標題/)).toHaveFocus()
+    expect(screen.getAllByText(/照片 1 張/).length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: '橋面坡度' },
+    })
+    const pointSummary = document.querySelector(
+      '.tpl-point-card > summary',
+    ) as HTMLElement
+    const pointCard = pointSummary.closest('details') as HTMLDetailsElement
+    const pointSections = Array.from(
+      pointCard.querySelectorAll('.tpl-point-section'),
+    )
+    expect(
+      pointSections.map((section) => section.getAttribute('aria-label')),
+    ).toEqual(['要記錄什麼', '判定標準', '照片需求'])
+    expect(pointCard).toHaveAttribute('open')
+    fireEvent.click(pointSummary as HTMLElement)
+    expect(pointCard).not.toHaveAttribute('open')
+    expect(pointSummary).toHaveTextContent('橋面坡度')
+    fireEvent.click(pointSummary as HTMLElement)
+    expect(screen.getByLabelText(/項次標題/)).toHaveValue('橋面坡度')
+  })
+
+  it('keeps draft after 403 and switches to read-only', async () => {
+    templateFetch({ items: [], writeError: 403 })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '已切換為唯讀模式',
+    )
+    expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('管線查核')
+    expect(screen.getByLabelText(/查核項目名稱/)).toBeDisabled()
+  })
+
+  it('keeps the draft after a generic 422 without field paths', async () => {
+    const fetchMock = templateFetch({ items: [], writeError: 422 })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '範本未儲存，輸入內容已保留',
+    )
+    expect(screen.getByLabelText(/單位/)).toHaveValue('%')
+    expect(screen.getByLabelText(/單位/)).not.toBeDisabled()
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(true)
+    expect(screen.queryByText(/欄位路徑/)).not.toBeInTheDocument()
+  })
+
+  it('rebinds numeric standard without disabling the unit input', async () => {
+    const fetchMock = templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', {
+        name: '欄杆尺寸',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
+
+    const unit = screen.getAllByLabelText(/單位/)[0]
+    expect(unit).toHaveValue('cm')
+    expect(unit).not.toBeDisabled()
+    fireEvent.change(unit, { target: { value: 'm' } })
+    expect(screen.getByText(/標準單位：m/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/用來判定的數字欄位/), {
+      target: { value: 'field-2' },
+    })
+    const reboundUnit = document.getElementById(
+      'field-0-1-unit',
+    ) as HTMLInputElement
+    expect(reboundUnit).not.toBeDisabled()
+    fireEvent.change(reboundUnit, { target: { value: 'cm' } })
+    expect(screen.getByText(/標準單位：cm/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByRole('status')
+    const put = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates/template-1' &&
+        init?.method === 'PUT',
+    )
+    const body = JSON.parse(String(put?.[1]?.body)) as {
+      inspection_points: Array<{
+        measurement_fields: Array<{ unit: string | null }>
+        numeric_standard: { unit: string }
+      }>
+    }
+    expect(body.inspection_points[0].measurement_fields[1].unit).toBeNull()
+    expect(body.inspection_points[0].numeric_standard.unit).toBe('cm')
+    expect(body).not.toHaveProperty('id')
+    expect(body.inspection_points[0].numeric_standard).toHaveProperty(
+      'tolerance',
+      null,
+    )
+  })
+
+  it('replaces a blocked type-change message with the remove message', async () => {
+    templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', {
+        name: '欄杆尺寸',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
+
+    const typeMessage = '這個欄位用於數值標準；請先改綁其他欄位或移除標準。'
+    fireEvent.change(screen.getAllByLabelText('欄位型別')[0], {
+      target: { value: 'text' },
+    })
+    expect(screen.getByText(typeMessage)).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '移除欄位' })[0])
+    expect(screen.queryByText(typeMessage)).not.toBeInTheDocument()
+    expect(
+      screen.getByText('這個欄位仍綁定數值標準，請先解除綁定後再移除。'),
+    ).toBeInTheDocument()
+  })
+
+  it('blocks deletion while a system has children', async () => {
+    templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '此系統還有查核項目，請先處理項目。',
+    )
+    expect(
+      screen.getAllByRole('button', { name: '欄杆尺寸' }).length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('keeps expanded items visible for two loaded systems', async () => {
+    const secondItem = {
+      ...sampleItem,
+      id: 'template-2',
+      system_id: secondSystem.id,
+      title: '排水查核',
+    }
+    templateFetch({
+      systems: [system, secondSystem],
+      items: [sampleItem, secondItem],
+    })
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '排水' }),
+    )
+    expect(
+      await within(navigation).findByRole('button', { name: '排水查核' }),
+    ).toBeInTheDocument()
+    expect(
+      within(navigation).getByRole('button', { name: '欄杆尺寸' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '欄杆尺寸' }),
+    )
+    fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
+    expect(await screen.findByText('查核項目（1）')).toBeInTheDocument()
+  })
+
+  it('guards a dirty draft when switching selection', async () => {
+    templateFetch({ categories: [category, otherCategory] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '未儲存項目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建築工程' }))
+    expect(
+      screen.getByRole('alertdialog', {
+        name: '尚未儲存的變更',
+      }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('未儲存項目')
+  })
+
+  it('switches between mobile list and detail panes', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 360,
+    })
+    templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+    expect(document.querySelector('.tpl-layout')).toHaveAttribute(
+      'data-pane',
+      'detail',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '‹ 返回清單' }))
+    expect(document.querySelector('.tpl-layout')).toHaveAttribute(
+      'data-pane',
+      'list',
+    )
+  })
+
+  it('keeps tolerance validation and previews the selected unit', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '標準值 ± 容許誤差' }))
+    fireEvent.change(document.getElementById('value-0') as HTMLInputElement, {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText(/^容許誤差/), {
+      target: { value: '-1' },
+    })
+    expect(screen.getAllByText(/3 ± -1 %/).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+    expect(await screen.findAllByText('容許誤差不能小於 0')).not.toHaveLength(
+      0,
+    )
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
+  })
+
+  it('shows a read-only library after the read API returns 403', async () => {
     templateFetch({ categoryError: 403 })
     render(<TemplatesPage />)
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -426,752 +1181,5 @@ describe('TemplatesPage', () => {
       screen.queryByRole('button', { name: '新增工程類別' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('唯讀瀏覽')).toBeInTheDocument()
-  })
-
-  it('previews an item and all points in the selected system', async () => {
-    templateFetch()
-    render(<TemplatesPage />)
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: '預覽：欄杆尺寸' }),
-    )
-    const preview = screen.getByRole('dialog', { name: '範本預覽' })
-    expect(within(preview).getByText('數值標準：≥ 110 cm')).toBeInTheDocument()
-    expect(within(preview).getByText('至少照片數：2')).toBeInTheDocument()
-    fireEvent.click(within(preview).getByRole('button', { name: '關閉預覽' }))
-
-    fireEvent.click(screen.getByRole('button', { name: '預覽整個系統' }))
-    expect(screen.getByRole('dialog', { name: '範本預覽' })).toHaveTextContent(
-      '高度',
-    )
-  })
-
-  it('previews system items in separate named groups', async () => {
-    templateFetch({ templateItems: [...templates, secondTemplate] })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '預覽整個系統' }),
-    )
-
-    const preview = screen.getByRole('dialog', { name: '範本預覽' })
-    expect(
-      within(preview).getByRole('heading', { name: '1. 欄杆尺寸' }),
-    ).toBeInTheDocument()
-    expect(
-      within(preview).getByRole('heading', { name: '2. 底座尺寸' }),
-    ).toBeInTheDocument()
-    expect(within(preview).getByText('項次 1. 高度')).toBeInTheDocument()
-    expect(within(preview).getByText('項次 1. 底座寬度')).toBeInTheDocument()
-  })
-
-  it('shows localized 409 errors for a duplicate name and occupied system', async () => {
-    templateFetch({ writeConflict: true })
-    render(<TemplatesPage />)
-    await screen.findByRole('option', { name: '土木工程' })
-
-    fireEvent.change(screen.getByLabelText('工程類別名稱'), {
-      target: { value: '重複名稱' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '名稱已存在，請改用其他名稱。',
-    )
-
-    fireEvent.change(screen.getByLabelText('系統名稱'), {
-      target: { value: '重複系統' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '名稱已存在，請改用其他名稱。',
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: '刪除工程類別' }))
-    expect(
-      screen.getByRole('group', { name: '確認刪除工程類別' }),
-    ).toHaveTextContent('土木工程')
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除工程類別' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '此工程類別仍有系統，無法刪除。',
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: '刪除系統' }))
-    expect(
-      screen.getByRole('group', { name: '確認刪除系統' }),
-    ).toHaveTextContent('護欄')
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除系統' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '此系統仍有查核項目，無法刪除。',
-    )
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-    fireEvent.change(screen.getByLabelText('項目名稱'), {
-      target: { value: '重複項目' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '名稱已存在，請改用其他名稱。',
-    )
-  })
-
-  it('shows numeric unit as bound and switches to read-only after write 403', async () => {
-    const fetchMock = templateFetch()
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-
-    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
-    expect(
-      within(editor).getByLabelText('單位（由綁定欄位帶入）'),
-    ).toBeDisabled()
-    expect(within(editor).getAllByLabelText('單位')[0]).not.toBeDisabled()
-
-    fireEvent.change(within(editor).getByLabelText('項目名稱'), {
-      target: { value: '保留中的範本草稿' },
-    })
-    fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前帳號只有瀏覽權限，已切換為唯讀模式。',
-    )
-    expect(screen.getByText('唯讀瀏覽')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('button', { name: '新增查核項目' }),
-      ).not.toBeInTheDocument()
-    })
-    expect(screen.getByLabelText('項目名稱')).toHaveValue('保留中的範本草稿')
-    expect(screen.getByLabelText('項目名稱')).toBeDisabled()
-    expect(
-      screen.getByText('以下內容是尚未儲存的草稿，僅供唯讀檢視。'),
-    ).toBeInTheDocument()
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/template-systems/system-1/templates') &&
-          init?.method === 'PUT',
-      ),
-    ).toBe(true)
-    const putCall = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(putCall?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{
-          measurement_fields: Array<{
-            client_id: string
-            unit: string | null
-          }>
-          numeric_standard: {
-            measurement_field_client_id: string
-            unit: string
-          }
-        }>
-      }>
-    }
-    const savedPoint = body.items[0].inspection_points[0]
-    expect(savedPoint.numeric_standard.unit).toBe('cm')
-    expect(savedPoint.measurement_fields[0].unit).toBeNull()
-    expect(savedPoint.measurement_fields[1].unit).toBe('mm')
-    expect(savedPoint.numeric_standard.measurement_field_client_id).toBe(
-      savedPoint.measurement_fields[0].client_id,
-    )
-    expect(screen.queryByText('查核項目範本已儲存。')).not.toBeInTheDocument()
-  })
-
-  it('rebinds a loaded numeric standard by selected field id and uses its unit', async () => {
-    const fetchMock = templateFetch()
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-
-    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
-    const binding = within(editor).getByLabelText('綁定數字實測欄位')
-    expect(binding).toHaveValue('field-1')
-    fireEvent.change(binding, { target: { value: 'field-2' } })
-
-    expect(
-      within(editor).getByLabelText('單位（由綁定欄位帶入）'),
-    ).toHaveValue('mm')
-    const fieldUnits = within(editor).getAllByLabelText('單位')
-    expect(fieldUnits[0]).not.toBeDisabled()
-    expect(fieldUnits[1]).not.toBeDisabled()
-    fireEvent.change(fieldUnits[1], { target: { value: 'µm' } })
-    expect(
-      within(editor).getByLabelText('單位（由綁定欄位帶入）'),
-    ).toHaveValue('µm')
-
-    fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前帳號只有瀏覽權限，已切換為唯讀模式。',
-    )
-    const putCall = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(putCall?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{
-          measurement_fields: Array<{
-            client_id: string
-            unit: string | null
-          }>
-          numeric_standard: {
-            measurement_field_client_id: string
-            unit: string
-          }
-        }>
-      }>
-    }
-    const savedPoint = body.items[0].inspection_points[0]
-    expect(savedPoint.numeric_standard.unit).toBe('µm')
-    expect(savedPoint.measurement_fields[0].unit).toBe('cm')
-    expect(savedPoint.measurement_fields[1].unit).toBeNull()
-    expect(savedPoint.numeric_standard.measurement_field_client_id).toBe(
-      savedPoint.measurement_fields[1].client_id,
-    )
-  })
-
-  it('preserves units when a new numeric field is not bound', async () => {
-    const item = structuredClone(templates[0]) as TemplateItem
-    item.inspection_points[0].numeric_standard = null
-    item.inspection_points[0].measurement_fields = [
-      {
-        name: '新實測欄位',
-        field_type: 'number',
-        unit: 'm',
-      },
-    ]
-    const fetchMock = templateFetch({ templateItems: [item] })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-
-    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
-    fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          ([url, init]) =>
-            String(url).endsWith('/template-systems/system-1/templates') &&
-            init?.method === 'PUT',
-        ),
-      ).toBe(true)
-    })
-
-    const putCall = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(putCall?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{
-          measurement_fields: Array<{ unit: string | null }>
-          numeric_standard: null
-        }>
-      }>
-    }
-    const savedPoint = body.items[0].inspection_points[0]
-    expect(savedPoint.measurement_fields[0].unit).toBe('m')
-    expect(savedPoint.numeric_standard).toBeNull()
-  })
-
-  it('does not bind an earlier new field before a persisted field id', async () => {
-    const item = structuredClone(templates[0]) as TemplateItem
-    item.inspection_points[0].numeric_standard = {
-      ...item.inspection_points[0].numeric_standard!,
-      measurement_field_id: 'field-2',
-      measurement_field_client_id: undefined,
-      unit: 'mm',
-    }
-    item.inspection_points[0].measurement_fields = [
-      {
-        name: '新實測欄位',
-        field_type: 'number',
-        unit: 'cm',
-      },
-      {
-        id: 'field-2',
-        name: '既有目標欄位',
-        field_type: 'number',
-        unit: 'mm',
-      },
-    ]
-    const fetchMock = templateFetch({ templateItems: [item] })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-
-    const editor = screen.getByRole('form', { name: '查核項目編輯器' })
-    expect(
-      within(editor).getByLabelText('單位（由綁定欄位帶入）'),
-    ).toHaveValue('mm')
-    fireEvent.click(within(editor).getByRole('button', { name: '儲存範本' }))
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          ([url, init]) =>
-            String(url).endsWith('/template-systems/system-1/templates') &&
-            init?.method === 'PUT',
-        ),
-      ).toBe(true)
-    })
-
-    const putCall = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(putCall?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{
-          measurement_fields: Array<{ unit: string | null }>
-          numeric_standard: { unit: string }
-        }>
-      }>
-    }
-    const savedPoint = body.items[0].inspection_points[0]
-    expect(savedPoint.measurement_fields[0].unit).toBe('cm')
-    expect(savedPoint.measurement_fields[1].unit).toBeNull()
-    expect(savedPoint.numeric_standard.unit).toBe('mm')
-  })
-
-  it('saves and reloads tolerance for a range numeric standard', async () => {
-    const fetchMock = templateFetch({ writeSuccess: true })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-    fireEvent.change(screen.getByLabelText('條件'), {
-      target: { value: 'range' },
-    })
-    fireEvent.change(screen.getByLabelText('容許誤差'), {
-      target: { value: '0.5' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    await screen.findByRole('status')
-
-    const putCall = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(putCall?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{
-          numeric_standard: {
-            value: string
-            condition: string
-            tolerance: string
-            range_form: string
-          }
-        }>
-      }>
-    }
-    expect(body.items[0].inspection_points[0].numeric_standard).toMatchObject({
-      value: '110',
-      condition: 'range',
-      tolerance: '0.5',
-      range_form: 'tolerance',
-    })
-    fireEvent.click(screen.getByRole('button', { name: '編輯：欄杆尺寸' }))
-    expect(screen.getByLabelText('容許誤差')).toHaveValue('0.5')
-  })
-
-  it('reads a legacy range without range_form as tolerance form', async () => {
-    const legacyRange = [
-      {
-        ...templates[0],
-        inspection_points: [
-          {
-            ...templates[0].inspection_points[0],
-            numeric_standard: {
-              ...templates[0].inspection_points[0].numeric_standard!,
-              condition: 'range' as const,
-              value: '3.3',
-              tolerance: '0.3',
-            },
-          },
-        ],
-      },
-    ]
-    templateFetch({ templateItems: legacyRange })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '預覽：欄杆尺寸' }),
-    )
-    expect(screen.getByRole('dialog')).toHaveTextContent('3.3 ± 0.3 cm')
-    fireEvent.click(screen.getByRole('button', { name: '關閉預覽' }))
-    fireEvent.click(screen.getByRole('button', { name: '編輯：欄杆尺寸' }))
-    expect(screen.getByLabelText('範圍形式')).toHaveValue('tolerance')
-    expect(screen.getByLabelText('標準值')).toHaveValue('3.3')
-    expect(screen.getByLabelText('容許誤差')).toHaveValue('0.3')
-  })
-
-  it('rejects a negative range tolerance before sending a request', async () => {
-    const fetchMock = templateFetch()
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-    fireEvent.change(screen.getByLabelText('條件'), {
-      target: { value: 'range' },
-    })
-    fireEvent.change(screen.getByLabelText('容許誤差'), {
-      target: { value: '-0.1' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '範圍標準欄位無效',
-    )
-    expect(
-      fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
-    ).toBe(false)
-  })
-
-  it('saves interval bounds, clears tolerance form fields, and previews units', async () => {
-    const intervalItem = [
-      {
-        ...templates[0],
-        inspection_points: [
-          {
-            ...templates[0].inspection_points[0],
-            numeric_standard: {
-              ...templates[0].inspection_points[0].numeric_standard!,
-              value: '',
-              condition: 'range' as const,
-              range_form: 'interval' as const,
-              tolerance: null,
-              lower_bound: '3.0',
-              upper_bound: '3.6',
-            },
-          },
-        ],
-      },
-    ]
-    const fetchMock = templateFetch({
-      writeSuccess: true,
-      templateItems: intervalItem,
-    })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '預覽：欄杆尺寸' }),
-    )
-    expect(screen.getByRole('dialog')).toHaveTextContent('3.0～3.6 cm')
-    fireEvent.click(screen.getByRole('button', { name: '關閉預覽' }))
-    fireEvent.click(screen.getByRole('button', { name: '編輯：欄杆尺寸' }))
-    expect(screen.getByLabelText('下限')).toHaveValue('3.0')
-    fireEvent.change(screen.getByLabelText('範圍形式'), {
-      target: { value: 'tolerance' },
-    })
-    expect(screen.queryByLabelText('下限')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('標準值'), {
-      target: { value: '3.3' },
-    })
-    fireEvent.change(screen.getByLabelText('容許誤差'), {
-      target: { value: '0.3' },
-    })
-    fireEvent.change(screen.getByLabelText('範圍形式'), {
-      target: { value: 'interval' },
-    })
-    expect(screen.getByLabelText('下限')).toHaveValue('')
-    fireEvent.change(screen.getByLabelText('下限'), {
-      target: { value: '3.0' },
-    })
-    fireEvent.change(screen.getByLabelText('上限'), {
-      target: { value: '3.6' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    await screen.findByRole('status')
-    const call = fetchMock.mock.calls.find(
-      ([, init]) => init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(call?.[1]?.body)) as {
-      items: Array<{
-        inspection_points: Array<{ numeric_standard: Record<string, unknown> }>
-      }>
-    }
-    expect(body.items[0].inspection_points[0].numeric_standard).toMatchObject({
-      condition: 'range',
-      range_form: 'interval',
-      value: null,
-      tolerance: null,
-      lower_bound: '3.0',
-      upper_bound: '3.6',
-    })
-  })
-
-  it('rejects reversed interval bounds before sending a request', async () => {
-    const fetchMock = templateFetch()
-    const intervalItem = [
-      {
-        ...templates[0],
-        inspection_points: [
-          {
-            ...templates[0].inspection_points[0],
-            numeric_standard: {
-              ...templates[0].inspection_points[0].numeric_standard!,
-              value: '',
-              condition: 'range' as const,
-              range_form: 'interval' as const,
-              lower_bound: '4',
-              upper_bound: '3',
-            },
-          },
-        ],
-      },
-    ]
-    templateFetch({ templateItems: intervalItem })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '範圍標準欄位無效',
-    )
-    expect(
-      fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
-    ).toBe(false)
-  })
-
-  it('shows the remaining category and system names after deleting selections', async () => {
-    const secondCategory = { id: 'category-2', name: '道路工程' }
-    const secondSystem = {
-      id: 'system-2',
-      category_id: category.id,
-      name: '路面',
-    }
-    const fetchMock = templateFetch({
-      categoryItems: [category, secondCategory],
-      systemItems: [system, secondSystem],
-      deleteSuccess: true,
-    })
-    render(<TemplatesPage />)
-    await screen.findByRole('option', { name: '路面' })
-    fireEvent.change(screen.getByLabelText('系統名稱'), {
-      target: { value: '未儲存系統草稿' },
-    })
-    fireEvent.change(screen.getByLabelText('選擇系統'), {
-      target: { value: secondSystem.id },
-    })
-    await waitFor(() => {
-      expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
-    })
-
-    fireEvent.change(screen.getByLabelText('選擇系統'), {
-      target: { value: secondSystem.id },
-    })
-    await waitFor(() => {
-      expect(screen.getByLabelText('系統名稱')).toHaveValue('路面')
-    })
-    fireEvent.click(screen.getByRole('button', { name: '刪除系統' }))
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除系統' }))
-    await waitFor(() => {
-      expect(screen.getByLabelText('系統名稱')).toHaveValue('護欄')
-    })
-    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/template-systems/system-1') &&
-          init?.method === 'PATCH',
-      ),
-    ).toBe(false)
-
-    fireEvent.change(screen.getByLabelText('工程類別名稱'), {
-      target: { value: '未儲存分類草稿' },
-    })
-    fireEvent.change(screen.getByLabelText('選擇工程類別'), {
-      target: { value: secondCategory.id },
-    })
-    await waitFor(() => {
-      expect(screen.getByLabelText('工程類別名稱')).toHaveValue('道路工程')
-    })
-    fireEvent.click(screen.getByRole('button', { name: '刪除工程類別' }))
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除工程類別' }))
-    await waitFor(() => {
-      expect(screen.getByLabelText('工程類別名稱')).toHaveValue('土木工程')
-    })
-    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/template-categories/category-1') &&
-          init?.method === 'PATCH',
-      ),
-    ).toBe(false)
-  })
-
-  it('keeps cleared names blank and saves retyped category and system names', async () => {
-    const fetchMock = templateFetch({ writeSuccess: true })
-    render(<TemplatesPage />)
-
-    const categoryInput = await screen.findByLabelText('工程類別名稱')
-    fireEvent.change(categoryInput, { target: { value: '' } })
-    expect(categoryInput).toHaveValue('')
-    expect(categoryInput).toBeRequired()
-    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
-    expect(categoryInput).toHaveValue('')
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/template-categories/category-1') &&
-          init?.method === 'PATCH',
-      ),
-    ).toBe(false)
-
-    fireEvent.change(categoryInput, {
-      target: { value: 'Civil Engineering' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '更新類別' }))
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      '工程類別已更新。',
-    )
-    await waitFor(() => {
-      expect(categoryInput).toHaveValue('Civil Engineering')
-    })
-
-    const systemInput = screen.getByLabelText('系統名稱')
-    fireEvent.change(systemInput, { target: { value: '' } })
-    expect(systemInput).toHaveValue('')
-    expect(systemInput).toBeRequired()
-    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
-    expect(systemInput).toHaveValue('')
-    expect(
-      fetchMock.mock.calls.some(
-        ([url, init]) =>
-          String(url).endsWith('/template-systems/system-1') &&
-          init?.method === 'PATCH',
-      ),
-    ).toBe(false)
-
-    fireEvent.change(systemInput, { target: { value: 'Guard Rail' } })
-    fireEvent.click(screen.getByRole('button', { name: '更新系統' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('系統已更新。')
-    await waitFor(() => {
-      expect(systemInput).toHaveValue('Guard Rail')
-    })
-
-    const categoryUpdate = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-categories/category-1') &&
-        init?.method === 'PATCH',
-    )
-    const systemUpdate = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1') &&
-        init?.method === 'PATCH',
-    )
-    expect(JSON.parse(String(categoryUpdate?.[1]?.body))).toEqual({
-      name: 'Civil Engineering',
-    })
-    expect(JSON.parse(String(systemUpdate?.[1]?.body))).toEqual({
-      name: 'Guard Rail',
-    })
-  })
-
-  it('updates and deletes an item using the full system collection API', async () => {
-    const fetchMock = templateFetch({ writeSuccess: true })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-    fireEvent.change(screen.getByLabelText('項目名稱'), {
-      target: { value: '更新後的欄杆尺寸' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-
-    expect(await screen.findByText(/更新後的欄杆尺寸/)).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '查核項目範本已儲存。',
-    )
-    fireEvent.click(
-      screen.getByRole('button', { name: '刪除：更新後的欄杆尺寸' }),
-    )
-    expect(
-      screen.getByText('確定刪除「更新後的欄杆尺寸」？'),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
-    await waitFor(() => {
-      expect(screen.queryByText(/更新後的欄杆尺寸/)).not.toBeInTheDocument()
-    })
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '查核項目範本已刪除。',
-    )
-    const puts = fetchMock.mock.calls.filter(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    expect(puts).toHaveLength(2)
-    expect(JSON.parse(String(puts[1][1]?.body)).items).toEqual([])
-  })
-
-  it('normalizes server-shaped rows before deleting one from a system', async () => {
-    const fetchMock = templateFetch({
-      templateItems: [...templates, secondTemplate],
-      writeSuccess: true,
-    })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '刪除：欄杆尺寸' }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
-
-    await waitFor(() => {
-      expect(screen.queryByText(/欄杆尺寸/)).not.toBeInTheDocument()
-    })
-    const putCall = fetchMock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/template-systems/system-1/templates') &&
-        init?.method === 'PUT',
-    )
-    const body = JSON.parse(String(putCall?.[1]?.body)) as {
-      items: Array<{
-        id: string
-        inspection_points: Array<{
-          id?: string
-          numeric_standard: Record<string, unknown>
-          measurement_fields: Array<Record<string, unknown>>
-          evidence_requirements: Array<Record<string, unknown>>
-        }>
-      }>
-    }
-    expect(body.items).toHaveLength(1)
-    expect(body.items[0].id).toBe('template-2')
-    expect(body.items[0].inspection_points[0]).not.toHaveProperty('id')
-    expect(
-      body.items[0].inspection_points[0].numeric_standard,
-    ).not.toHaveProperty('measurement_field_id')
-    expect(
-      body.items[0].inspection_points[0].measurement_fields[0],
-    ).not.toHaveProperty('id')
-    expect(
-      body.items[0].inspection_points[0].evidence_requirements[0],
-    ).toEqual({ min_count: 2 })
-  })
-
-  it('shows a clear localized validation message for 422', async () => {
-    templateFetch({ writeError: 422 })
-    render(<TemplatesPage />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: '儲存範本' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '資料驗證失敗，請檢查必填欄位與數值格式。',
-    )
-    expect(
-      screen.getByRole('form', { name: '查核項目編輯器' }),
-    ).toBeInTheDocument()
   })
 })
