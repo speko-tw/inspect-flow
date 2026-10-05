@@ -157,7 +157,7 @@
 
 ## 變更紀錄
 
-- 範圍變更（負責人核可 #445 原型，#449）：專案成員加入與取代角色至少一個，零角色回 422 `project.member_roles_required`；成員區段加入表單附角色白話說明與欄旁錯誤，成員清單改卡片、修改角色獨立畫面、移出確認（ADM-R20～ADM-R22、ADM-AC20～ADM-AC22）；同步 `domain-model` 專案管理 API 介面表。畫面與錯誤碼細節為規格設計（非負責人裁定）— [#445](https://github.com/speko-tw/inspect-flow/issues/445)、[#449](https://github.com/speko-tw/inspect-flow/issues/449)
+- 範圍變更（負責人核可 #445 原型，#449）：專案成員加入與取代角色至少一個，零角色回 422 `project.member_roles_required`；成員區段加入表單附角色白話說明與欄旁錯誤，成員清單改卡片、修改角色獨立畫面、移出確認（ADM-R20～ADM-R22、ADM-AC20～ADM-AC22）；同步 `domain-model` 專案管理 API 介面表。畫面與錯誤碼細節為規格設計（非負責人裁定）— [#445 負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)、[原型核可](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988590932)、[#449](https://github.com/speko-tw/inspect-flow/issues/449)
 - 範圍變更（負責人指示，#447）：新增專案首頁、下一步與關鍵數字、區段導覽、現場專屬使用者路由及專案建立導向（ADM-R16～ADM-R19、ADM-AC15～ADM-AC19）— [#445 負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)。介面細節為規格設計（非負責人裁定）。
 - 初稿：依 #107、#375、#387、#388、#390 及 #286 整理 0.5.x 範圍；權限與前置規格仍待各自變更完成。
 - 使用者結果畫面、管理者／停用確認及專案未儲存提示 — 負責人直接指示（#430，2026-10-04 核可範圍）；細節屬規格設計（非負責人裁定）。
