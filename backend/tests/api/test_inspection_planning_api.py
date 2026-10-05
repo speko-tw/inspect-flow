@@ -1,7 +1,9 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
-from datetime import UTC, datetime
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.base import uuid7
@@ -16,6 +18,9 @@ from app.models import (
     Role,
     RolePermission,
     TaskInspectionItem,
+    TaskRequirementSnapshot,
+    TaskSnapshotMeasurementField,
+    TaskSnapshotPoint,
 )
 from tests.db.conftest import create_root_user_with_company
 
@@ -426,11 +431,15 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     admin = world["admin"]
     field = world["field"]
     prefix = "/api/v1/field/inspection-tasks"
+    assert make_client().get(prefix).status_code == 401
     assert world["outsider"].get(prefix).status_code == 403
     assert world["reader"].get(prefix).status_code == 403
     empty = field.get(prefix)
     assert empty.status_code == 200, empty.text
     assert empty.json() == {"items": [], "next_cursor": None}
+    admin_empty = admin.get(prefix, params={"project_id": str(uuid4())})
+    assert admin_empty.status_code == 200, admin_empty.text
+    assert admin_empty.json() == {"items": [], "next_cursor": None}
 
     plan = admin.post(
         f"/api/v1/projects/{project.id}/inspection-plans",
@@ -484,6 +493,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         ).status_code
         == 403
     )
+    assert field.get(f"{prefix}/{foreign_task_id}").status_code == 404
     draft = admin.post(
         f"/api/v1/inspection-plans/{plan_id}/tasks",
         json={
@@ -496,9 +506,27 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     assert field.get(f"{prefix}/{draft_id}").status_code == 404
 
     timestamp = datetime.now(UTC).replace(microsecond=0)
+    older_timestamp = timestamp - timedelta(days=1)
     set_clock(lambda: timestamp)
     dispatched_ids = []
     try:
+        older = admin.post(
+            f"/api/v1/inspection-plans/{plan_id}/tasks",
+            json={
+                "item_ids": [str(world["item"].id)],
+                "suggested_assignee_id": str(world["field_user_two"].id),
+            },
+        )
+        assert older.status_code == 201, older.text
+        older_id = older.json()["id"]
+        old_dispatch = admin.post(
+            f"/api/v1/inspection-tasks/{older_id}:dispatch"
+        )
+        assert old_dispatch.status_code == 200, old_dispatch.text
+        older_row = db_session.get(InspectionTask, UUID(older_id))
+        assert older_row is not None
+        older_row.dispatched_at = older_timestamp
+        db_session.commit()
         for assignee_id in (
             world["field_user"].id,
             world["field_user_two"].id,
@@ -530,7 +558,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         }
         all_tasks = field.get(prefix, params={"assigned_to_me": "false"})
         assert all_tasks.status_code == 200, all_tasks.text
-        expected = sorted(dispatched_ids, reverse=True)
+        expected = sorted(dispatched_ids, reverse=True) + [older_id]
         assert [row["id"] for row in all_tasks.json()["items"]] == expected
         assert foreign_task_id not in {
             row["id"] for row in all_tasks.json()["items"]
@@ -567,6 +595,29 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         assert "assignee_id" not in detail.json()
         assert "started_by" not in detail.json()
         assert "source_template_name" not in str(detail.json())
+        assert (
+            world["reader"].get(f"{prefix}/{dispatched_ids[0]}").status_code
+            == 404
+        )
+        assert field.get(f"{prefix}/{uuid4()}").status_code == 404
+
+        completed_id = uuid7()
+        db_session.add(
+            InspectionTask(
+                id=completed_id,
+                plan_id=UUID(plan_id),
+                project_id=project.id,
+                status="COMPLETED",
+                dispatched_at=timestamp,
+                created_by=world["admin_user"].id,
+                updated_by=world["admin_user"].id,
+            )
+        )
+        db_session.commit()
+        after_completed = field.get(prefix, params={"assigned_to_me": "false"})
+        assert str(completed_id) not in {
+            row["id"] for row in after_completed.json()["items"]
+        }
 
         started = field.post(
             f"/api/v1/inspection-tasks/{dispatched_ids[0]}:start"
@@ -577,6 +628,10 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             json={"reason": "migration contract"},
         )
         assert cancelled.status_code == 200, cancelled.text
+        after_cancelled = field.get(prefix, params={"assigned_to_me": "false"})
+        assert dispatched_ids[0] not in {
+            row["id"] for row in after_cancelled.json()["items"]
+        }
         restored = admin.post(
             f"/api/v1/inspection-tasks/{dispatched_ids[0]}:restore"
         )
@@ -607,6 +662,110 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         assert first_default_page.json()["next_cursor"]
     finally:
         reset_clock()
+
+
+def test_field_task_detail_keeps_numeric_measurement_mapping_and_order(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    field = world["field"]
+    project = world["project"]
+    first_client_id = uuid4()
+    second_client_id = uuid4()
+    item_url = (
+        f"/api/v1/projects/{project.id}/inspection-items/{world['item'].id}"
+    )
+    updated = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "量測項次",
+                    "instruction": "量測說明",
+                    "numeric_standard": {
+                        "value": "5",
+                        "condition": "=",
+                        "unit": "mm",
+                        "measurement_field_client_id": str(second_client_id),
+                    },
+                    "measurement_fields": [
+                        {
+                            "client_id": str(first_client_id),
+                            "name": "第一量測欄位",
+                            "field_type": "number",
+                            "unit": "mm",
+                        },
+                        {
+                            "client_id": str(second_client_id),
+                            "name": "第二量測欄位",
+                            "field_type": "number",
+                            "unit": "mm",
+                        },
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    plan = admin.post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "量測欄位排序"},
+    )
+    assert plan.status_code == 201, plan.text
+    created = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    task_item = db_session.scalar(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.task_id == UUID(task_id)
+        )
+    )
+    assert task_item is not None
+    snapshot = db_session.scalar(
+        select(TaskRequirementSnapshot).where(
+            TaskRequirementSnapshot.task_inspection_item_id == task_item.id,
+            TaskRequirementSnapshot.is_current.is_(True),
+        )
+    )
+    assert snapshot is not None
+    point = db_session.scalar(
+        select(TaskSnapshotPoint).where(
+            TaskSnapshotPoint.snapshot_id == snapshot.id
+        )
+    )
+    assert point is not None
+    fields = db_session.scalars(
+        select(TaskSnapshotMeasurementField).where(
+            TaskSnapshotMeasurementField.point_id == point.id
+        )
+    ).all()
+    assert {row.name for row in fields} == {
+        "第一量測欄位",
+        "第二量測欄位",
+    }
+    for row in fields:
+        row.sort_order = 0 if row.name == "第二量測欄位" else 1
+    db_session.commit()
+
+    dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+    detail = field.get(f"/api/v1/field/inspection-tasks/{task_id}")
+    assert detail.status_code == 200, detail.text
+    point_detail = detail.json()["items"][0]["inspection_points"][0]
+    assert [row["name"] for row in point_detail["measurement_fields"]] == [
+        "第二量測欄位",
+        "第一量測欄位",
+    ]
+    assert (
+        point_detail["numeric_standard"]["measurement_field_id"]
+        == (point_detail["measurement_fields"][0]["id"])
+    )
 
 
 def test_project_item_change_requires_choice_and_returns_task_actions(

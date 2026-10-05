@@ -55,12 +55,12 @@ from app.services.inspection_planning import (
     delete_draft_inspection_task,
     delete_project_zone,
     dispatch_inspection_task,
+    field_inspection_task_filters,
     get_field_inspection_task,
     get_inspection_plan,
     get_inspection_task,
     inspection_task_list_filters,
     inspection_task_visibility_filters,
-    list_field_inspection_tasks,
     list_inspection_plans,
     rename_inspection_plan,
     rename_project_zone,
@@ -311,12 +311,6 @@ def _field_task_summary(
         points = []
         for point in current["inspection_points"]:
             numeric = point["numeric_standard"]
-            if numeric is not None:
-                numeric = {
-                    key: value
-                    for key, value in numeric.items()
-                    if key != "measurement_field_id"
-                }
             points.append(
                 {
                     "sequence": point["sequence"],
@@ -327,7 +321,12 @@ def _field_task_summary(
                     "measurement_fields": [
                         {
                             key: field[key]
-                            for key in ("name", "field_type", "unit")
+                            for key in (
+                                "id",
+                                "name",
+                                "field_type",
+                                "unit",
+                            )
                         }
                         for field in point["measurement_fields"]
                     ],
@@ -369,8 +368,11 @@ def _snapshot(
             )
         )
         fields = db.scalars(
-            select(TaskSnapshotMeasurementField).where(
-                TaskSnapshotMeasurementField.point_id == point.id
+            select(TaskSnapshotMeasurementField)
+            .where(TaskSnapshotMeasurementField.point_id == point.id)
+            .order_by(
+                TaskSnapshotMeasurementField.sort_order,
+                TaskSnapshotMeasurementField.id,
             )
         ).all()
         evidence = db.scalars(
@@ -836,7 +838,7 @@ def field_inspection_tasks(
     user: User = Depends(require_login),  # noqa: B008
 ):
     try:
-        rows = list_field_inspection_tasks(
+        filters = field_inspection_task_filters(
             db,
             user_id=user.id,
             is_admin=user.is_admin,
@@ -849,9 +851,7 @@ def field_inspection_tasks(
             raise
         raise APIError(response[0], response[1]) from exc
     key = page_cursor_key(cursor)
-    statement = select(InspectionTask).where(
-        InspectionTask.id.in_([row.id for row in rows])
-    )
+    statement = select(InspectionTask).where(*filters)
     if key is not None:
         statement = statement.where(
             or_(
@@ -864,14 +864,16 @@ def field_inspection_tasks(
         )
     page_rows = db.scalars(
         statement.order_by(
-            InspectionTask.dispatched_at.desc(), InspectionTask.id.desc()
+            InspectionTask.dispatched_at.desc().nulls_last(),
+            InspectionTask.id.desc(),
         ).limit(limit + 1)
     ).all()
     items = page_rows[:limit]
     next_cursor = None
     if len(page_rows) > limit:
         last = items[-1]
-        assert last.dispatched_at is not None
+        if last.dispatched_at is None:
+            raise APIError(ErrorCode.SERVER_INTERNAL_ERROR, 500)
         next_cursor = encode_page_cursor(last.dispatched_at, last.id)
     return {
         "items": [

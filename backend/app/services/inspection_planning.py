@@ -523,15 +523,15 @@ def get_inspection_task(
     return task
 
 
-def list_field_inspection_tasks(
+def field_inspection_task_filters(
     session: Session,
     *,
     user_id: uuid.UUID,
     is_admin: bool,
     assigned_to_me: bool,
     project_id: uuid.UUID | None = None,
-) -> list[InspectionTask]:
-    """List dispatched Tasks visible through project inspect permission."""
+) -> tuple[ColumnElement[bool], ...]:
+    """Build filters for dispatched Tasks visible to the Field caller."""
     if is_admin:
         permitted_ids = set(session.scalars(select(Project.id)).all())
     else:
@@ -554,7 +554,7 @@ def list_field_inspection_tasks(
         if not is_admin and project_id not in permitted_ids:
             raise PlanningError("authorization.forbidden")
         permitted_ids.intersection_update({project_id})
-    if not permitted_ids:
+    if not permitted_ids and not is_admin:
         raise PlanningError("authorization.forbidden")
     filters: list[ColumnElement[bool]] = [
         InspectionTask.project_id.in_(permitted_ids),
@@ -562,7 +562,8 @@ def list_field_inspection_tasks(
     ]
     if assigned_to_me:
         filters.append(InspectionTask.assignee_id == user_id)
-    return list(session.scalars(select(InspectionTask).where(*filters)).all())
+    filters.append(InspectionTask.dispatched_at.is_not(None))
+    return tuple(filters)
 
 
 def get_field_inspection_task(

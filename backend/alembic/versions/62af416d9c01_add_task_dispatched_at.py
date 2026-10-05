@@ -1,7 +1,7 @@
 """Store the first dispatch time on inspection tasks.
 
 Revision ID: 62af416d9c01
-Revises: 6d2e4f8a91b0
+Revises: 4f7a1c93d2e6
 Create Date: 2026-10-05
 """
 
