@@ -25,32 +25,39 @@ export default function ProjectSectionPage({
   section: Exclude<ProjectSection, 'home'>
 }) {
   const { projectId = '' } = useParams()
-  const [project, setProject] = useState<{
-    project_code: string
-    name: string
+  const [result, setResult] = useState<{
+    projectId: string
+    project: { project_code: string; name: string }
+    canViewIndoor: boolean
+    error?: string
+    denied?: boolean
   } | null>(null)
-  const [canViewIndoor, setCanViewIndoor] = useState<boolean | null>(null)
-  const [error, setError] = useState('')
-  const [denied, setDenied] = useState(false)
 
   useEffect(() => {
     let active = true
     getWorkflowSummary(projectId)
       .then((summary) => {
         if (active) {
-          setCanViewIndoor(canViewIndoorSections(summary))
-          setProject({
-            project_code: summary.project.project_code,
-            name: summary.project.name,
+          setResult({
+            projectId,
+            canViewIndoor: canViewIndoorSections(summary),
+            project: {
+              project_code: summary.project.project_code,
+              name: summary.project.name,
+            },
           })
         }
       })
       .catch((caught: unknown) => {
         if (active) {
-          setDenied(
-            caught instanceof ManagementApiError && caught.status === 403,
-          )
-          setError(managementErrorMessage(caught))
+          setResult({
+            projectId,
+            canViewIndoor: false,
+            project: { project_code: '', name: '' },
+            denied:
+              caught instanceof ManagementApiError && caught.status === 403,
+            error: managementErrorMessage(caught),
+          })
         }
       })
     return () => {
@@ -58,11 +65,32 @@ export default function ProjectSectionPage({
     }
   }, [projectId])
 
-  if (canViewIndoor === false) return <Navigate replace to="/field" />
-  if (denied) return <ProjectDeniedPage />
+  const currentResult = result?.projectId === projectId ? result : null
+  if (
+    currentResult &&
+    !currentResult.canViewIndoor &&
+    currentResult.error === undefined
+  ) {
+    return <Navigate replace to="/field" />
+  }
+  if (currentResult?.error) {
+    if (currentResult.denied) return <ProjectDeniedPage />
+    return (
+      <main>
+        <p role="alert">{currentResult.error}</p>
+      </main>
+    )
+  }
+  if (!currentResult) {
+    return (
+      <main>
+        <p>正在確認專案權限…</p>
+      </main>
+    )
+  }
 
   let content = <p>正在確認專案權限…</p>
-  if (canViewIndoor) {
+  if (currentResult.canViewIndoor) {
     if (section === 'members') {
       content = <ProjectDetailPage />
     } else if (section === 'inspection-items') {
@@ -81,10 +109,10 @@ export default function ProjectSectionPage({
   return (
     <ProjectSectionShell
       activeSection={section}
-      project={project}
+      project={currentResult.project}
       projectId={projectId}
     >
-      {error ? <p role="alert">{error}</p> : content}
+      {content}
     </ProjectSectionShell>
   )
 }
