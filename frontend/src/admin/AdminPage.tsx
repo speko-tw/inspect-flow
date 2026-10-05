@@ -17,6 +17,7 @@ import ProjectHomePage from './projectHome/ProjectHomePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import ProjectsPage from './projects/ProjectsPage'
 import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
+import ProjectTemplatesPage from '../field/ProjectTemplatesPage'
 import { projectItemApi } from './projectItems/api'
 import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
@@ -75,7 +76,7 @@ function AdminPageContent() {
   }
 
   const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
+    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
       location.pathname,
     )
 
@@ -85,6 +86,10 @@ function AdminPageContent() {
         <main>
           <Routes>
             <Route element={<ProjectHomePage />} path="projects/:projectId" />
+            <Route
+              element={<ProjectTemplatesPage />}
+              path="projects/:projectId/templates"
+            />
             <Route
               element={<ProjectSectionPage section="members" />}
               path="projects/:projectId/members"
@@ -220,6 +225,10 @@ function AdminPageContent() {
             <Route
               path="projects/:projectId/zones"
               element={<ProjectSectionPage section="zones" />}
+            />
+            <Route
+              path="projects/:projectId/templates"
+              element={<ProjectTemplatesPage />}
             />
             <Route
               path="projects/:projectId/planning"

@@ -1,5 +1,5 @@
-import { act, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router'
 import {
   afterEach,
   beforeAll,
@@ -42,6 +42,11 @@ function stubAuthenticatedFetch() {
       return Response.json([])
     }),
   )
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="pathname">{location.pathname}</output>
 }
 
 // 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
@@ -88,6 +93,21 @@ describe('App routing', () => {
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
     ).toBeInTheDocument()
     expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
+  })
+
+  it('redirects the legacy Field project URL to its Admin template page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/field/projects/project-1']}>
+        <LocationProbe />
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/admin/projects/project-1/templates',
+      ),
+    )
   })
 
   it('shows the release version on the login page', async () => {

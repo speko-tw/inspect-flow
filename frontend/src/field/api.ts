@@ -78,6 +78,17 @@ export interface FieldTaskDetail extends Omit<
   }>
 }
 
+export interface MyProject {
+  id: string
+  project_code: string
+  name: string
+  client_name: string
+  site_location: string
+  planned_start_date: string | null
+  planned_completion_date: string | null
+  role_names: string[]
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -239,4 +250,9 @@ export async function fetchFieldTasks(params: {
     throw new Error('Field task list response has an unexpected shape')
   }
   return { items: body.items, next_cursor: body.next_cursor }
+}
+
+/** Project template flow fallback for members who cannot list all projects. */
+export function fetchMyProjects(): Promise<MyProject[]> {
+  return getJson<MyProject[]>('/me/projects')
 }

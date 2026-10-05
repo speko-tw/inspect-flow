@@ -1025,6 +1025,24 @@ describe('admin user and company pages', () => {
     expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
   })
 
+  it('allows non-admin users to open project template routes', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderAdmin('/admin/projects/project-demo-1/templates', false)
+
+    expect(
+      await screen.findByRole('region', { name: '範本操作' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回專案' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-demo-1',
+    )
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
+  })
+
   it('lets non-admin users reach template browsing and displays API 403', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),

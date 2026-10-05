@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router'
+import { Link, NavLink, useLocation } from 'react-router'
 
 const SECTIONS = [
   { id: 'home', label: '專案首頁', suffix: '' },
@@ -39,7 +39,14 @@ export default function ProjectSectionShell({
   children: ReactNode
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
   const base = `/admin/projects/${projectId}`
+  const routeState = location.state as { highlightedItemIds?: unknown } | null
+  const highlightedItemIds = Array.isArray(routeState?.highlightedItemIds)
+    ? routeState.highlightedItemIds.filter(
+        (id): id is string => typeof id === 'string',
+      )
+    : []
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -63,6 +70,11 @@ export default function ProjectSectionShell({
           end={section.id === 'home'}
           key={section.id}
           onClick={() => setMenuOpen(false)}
+          state={
+            section.id === 'inspection-items' && highlightedItemIds.length > 0
+              ? { highlightedItemIds }
+              : undefined
+          }
           to={`${base}${section.suffix}`}
         >
           {section.label}

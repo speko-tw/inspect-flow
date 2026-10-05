@@ -75,6 +75,27 @@ function renderPage(
 afterEach(() => vi.unstubAllGlobals())
 
 describe('今日任務首頁', () => {
+  it('顯示任務入口與個人資料，且沒有範本入口', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          items: [],
+          next_cursor: null,
+        }),
+      ),
+    )
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: '今日任務' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '變更密碼' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument()
+    expect(screen.getByText('我的資料')).toBeInTheDocument()
+    expect(screen.queryByText(/範本/)).not.toBeInTheDocument()
+  })
+
   it('預設查本人，切換範圍與狀態會傳後端參數', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toContain('/api/v1/field/inspection-tasks')

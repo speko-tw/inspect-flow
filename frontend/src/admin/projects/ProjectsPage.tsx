@@ -275,6 +275,27 @@ export default function ProjectsPage() {
         </button>
       </form>
       {listError && <p role="alert">{listError}</p>}
+      {projects.length > 0 && (
+        <section aria-labelledby="project-workspace-heading">
+          <h2 id="project-workspace-heading">專案工作台</h2>
+          <div className="project-workspace-grid">
+            {projects.map((project) => (
+              <article className="project-workspace-card" key={project.id}>
+                <p className="project-code">{project.project_code}</p>
+                <h3>{project.name}</h3>
+                <p>{project.site_location}</p>
+                <Link
+                  className="button-link primary-action"
+                  to={`/admin/projects/${project.id}/templates`}
+                >
+                  套用範本
+                </Link>
+                <Link to={`/admin/projects/${project.id}`}>查看專案</Link>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       {!loading && projects.length === 0 ? (
         appliedQuery ? (
           <p>
@@ -294,7 +315,7 @@ export default function ProjectsPage() {
         )
       ) : null}
       {projects.length > 0 && (
-        <table>
+        <table className="projects-admin-table">
           <thead>
             <tr>
               <th scope="col">專案代號</th>

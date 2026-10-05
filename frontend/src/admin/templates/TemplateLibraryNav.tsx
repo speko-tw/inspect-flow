@@ -16,6 +16,7 @@ export function TemplateLibraryNav({
   readOnly,
   mobile,
   mode,
+  selectSystemOnly = false,
 }: {
   categories: TemplateCategory[]
   systems: TemplateSystem[]
@@ -30,6 +31,7 @@ export function TemplateLibraryNav({
   readOnly: boolean
   mobile: boolean
   mode: 'manage' | 'select'
+  selectSystemOnly?: boolean
 }) {
   return (
     <aside className="tpl-nav" aria-label="範本庫導覽">
@@ -100,16 +102,18 @@ export function TemplateLibraryNav({
                                 ? 'true'
                                 : undefined
                             }
-                            aria-expanded={systemOpen}
+                            aria-expanded={
+                              selectSystemOnly ? undefined : systemOpen
+                            }
                             className="tpl-tree-row"
                             onClick={() => {
-                              onToggle(system.id)
+                              if (!selectSystemOnly) onToggle(system.id)
                               onSelect({ type: 'system', id: system.id })
                             }}
                             type="button"
                           >
                             <span aria-hidden="true">
-                              {systemOpen ? '▾' : '▸'}
+                              {selectSystemOnly ? '•' : systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
                             {loadedSystemIds.has(system.id) && (
@@ -126,7 +130,7 @@ export function TemplateLibraryNav({
                               </span>
                             )}
                           </button>
-                          {systemOpen && (
+                          {!selectSystemOnly && systemOpen && (
                             <ul>
                               {items
                                 .filter((item) => item.system_id === system.id)
