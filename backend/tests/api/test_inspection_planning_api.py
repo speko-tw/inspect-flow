@@ -1,6 +1,7 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import event, select
@@ -661,7 +662,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         assert detail.json()["items"][0]["title"] == "表面檢查"
         assert "plan_id" not in detail.json()
         assert "assignee_id" not in detail.json()
-        assert "started_by" not in detail.json()
+        assert detail.json()["started_by"] is None
         assert "source_template_name" not in str(detail.json())
         assert (
             world["reader"].get(f"{prefix}/{dispatched_ids[0]}").status_code
@@ -896,6 +897,162 @@ def test_project_item_change_requires_choice_and_returns_task_actions(
     task_model = db_session.get(InspectionTask, UUID(task.json()["id"]))
     assert task_model is not None
     assert task_model.status == "DRAFT"
+
+
+def _dispatched_field_task(world, plan_name, assignee_id=None):
+    admin = world["admin"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": plan_name},
+    )
+    assert plan.status_code == 201, plan.text
+    body: dict[str, Any] = {"item_ids": [str(world["item"].id)]}
+    if assignee_id is not None:
+        body["suggested_assignee_id"] = str(assignee_id)
+    created = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks", json=body
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    assert (
+        admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch").status_code
+        == 200
+    )
+    return plan.json()["id"], task_id
+
+
+def test_field_task_detail_shows_starter_name_and_cancel_reason_only(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    starter = world["field_user"]
+    other = world["field_user_two"]
+    starter.name_zh = "示範查核員甲"
+    other.name_zh = "示範查核員乙"
+    db_session.commit()
+    _, task_id = _dispatched_field_task(world, "開始者顯示", other.id)
+    url = f"/api/v1/field/inspection-tasks/{task_id}"
+
+    before = world["field"].get(url).json()
+    assert before["started_by"] is None
+    assert before["cancellation_reason"] is None
+    assert before["suggested_assignee"] == {
+        "name_zh": "示範查核員乙",
+        "is_me": False,
+    }
+    assert world["field_two"].get(url).json()["suggested_assignee"] == {
+        "name_zh": "示範查核員乙",
+        "is_me": True,
+    }
+
+    started = world["field"].post(f"/api/v1/inspection-tasks/{task_id}:start")
+    assert started.status_code == 200, started.text
+    mine = world["field"].get(url)
+    assert mine.json()["started_by"] == {
+        "name_zh": "示範查核員甲",
+        "is_me": True,
+    }
+    theirs = world["field_two"].get(url)
+    assert theirs.json()["started_by"] == {
+        "name_zh": "示範查核員甲",
+        "is_me": False,
+    }
+    # Names only: no account name, e-mail or user id leaks through.
+    for leaked in (starter.username, str(starter.id), str(other.id)):
+        assert leaked not in mine.text
+        assert leaked not in theirs.text
+    assert starter.email is None or starter.email not in mine.text
+
+    cancelled = admin.post(
+        f"/api/v1/inspection-tasks/{task_id}:cancel",
+        json={"reason": "施工順序調整"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    after = world["field"].get(url).json()
+    assert after["status"] == "CANCELLED"
+    assert after["cancellation_reason"] == "施工順序調整"
+    restored = admin.post(f"/api/v1/inspection-tasks/{task_id}:restore")
+    assert restored.status_code == 200, restored.text
+    assert world["field"].get(url).json()["cancellation_reason"] is None
+
+
+def test_field_task_detail_hides_starter_and_reason_for_drafts_and_readers(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": "草稿不洩漏"},
+    )
+    draft = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    draft_url = f"/api/v1/field/inspection-tasks/{draft.json()['id']}"
+    assert world["field"].get(draft_url).status_code == 404
+    _, task_id = _dispatched_field_task(world, "唯讀不可見")
+    cancelled = admin.post(
+        f"/api/v1/inspection-tasks/{task_id}:cancel",
+        json={"reason": "內部原因"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    url = f"/api/v1/field/inspection-tasks/{task_id}"
+    for client in (world["reader"], world["plain"], world["outsider"]):
+        denied = client.get(url)
+        assert denied.status_code == 404
+        assert "內部原因" not in denied.text
+    assert make_client().get(url).status_code == 401
+
+
+def test_field_start_rejections_map_to_distinct_error_codes(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    field = world["field"]
+
+    def start(client, task_id):
+        return client.post(f"/api/v1/inspection-tasks/{task_id}:start")
+
+    _, cancelled_id = _dispatched_field_task(world, "取消後開始")
+    assert (
+        admin.post(
+            f"/api/v1/inspection-tasks/{cancelled_id}:cancel",
+            json={"reason": "改日重派"},
+        ).status_code
+        == 200
+    )
+    rejected = start(field, cancelled_id)
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == (
+        "inspection_task.invalid_transition"
+    )
+
+    _, started_id = _dispatched_field_task(world, "他人已開始")
+    assert start(world["field_two"], started_id).status_code == 200
+    again = start(field, started_id)
+    assert again.status_code == 409
+    assert again.json()["error"]["code"] == (
+        "inspection_task.invalid_transition"
+    )
+
+    plan_id, archived_id = _dispatched_field_task(world, "封存後開始")
+    assert (
+        admin.post(f"/api/v1/inspection-plans/{plan_id}:archive").status_code
+        == 200
+    )
+    archived = start(field, archived_id)
+    assert archived.status_code == 409
+    assert archived.json()["error"]["code"] == "inspection_plan.archived"
+
+    _, readable_id = _dispatched_field_task(world, "權限不足")
+    forbidden = start(world["reader"], readable_id)
+    assert forbidden.status_code == 403
+    assert forbidden.json()["error"]["code"] == "permission.denied"
+    assert start(field, uuid4()).status_code == 404
+    assert start(make_client(), readable_id).status_code == 401
 
 
 def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(

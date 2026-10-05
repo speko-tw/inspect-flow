@@ -68,8 +68,10 @@
 | GET | `/field/tasks` | 今日任務及跨專案已派任務清單；預設本人建議指派，可切換全部可查核任務；`limit`／`cursor` 分頁 | 前端需登入；後端逐筆套用 `inspection_task.inspect` |
 | GET | `/field/tasks/{task_id}` | 現場任務詳情與需求快照 | 前端需登入；後端 `inspection_task.inspect`；不存在、`DRAFT` 或無權限一律 404 |
 | GET | `/api/v1/field/inspection-tasks` | 跨專案列出 `PENDING`、`IN_PROGRESS` 已派任務；`assigned_to_me=true` 預設，`false` 列出所有可查核專案任務；可選 `project_id`、`status=PENDING\|IN_PROGRESS`（省略為全部未完成狀態）、`limit`（預設 50、範圍 1–100）、`cursor`。狀態在資料庫查詢層篩選，與 cursor 分頁共用相同排序。回 `{items,next_cursor}`；每筆含 `id`、`project_id`、`project_name`、`status`、`dispatched_at`、`location: {zone_name,location_text}`、`suggested_assignee: {name_zh}\|null`、`item_summary: {first_title: string\|null, item_count: number}`。摘要採第一個 Task 查核項目之目前需求快照標題與項目總數；無目前快照時標題為 null，前端以「查核任務」呈現。全部檢視中的建議執行人姓名可見，以便同專案協作 | `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION`；逐筆檢查 `inspection_task.inspect`；Admin 即使無專案或指定不存在的 `project_id` 仍回 200 空頁；非 Admin 無任何專案權限或指定專案無權限回 403；有權限無符合資料為空頁 |
-| GET | `/api/v1/field/inspection-tasks/{task_id}` | 現場安全詳情，含分區名稱、補充位置、建議執行人及目前需求快照；不回傳 Plan ID、其他人帳號、歷史 Snapshot 或內業專用欄位。量測欄位回 `id`、`name`、`field_type`、`unit`；數值標準回 `measurement_field_id` 以關聯量測欄位 | `inspection_task.inspect`；`DRAFT`／不存在／無權限統一回 404；只具 `inspection_task.read` 回 404 |
-| POST | `/api/v1/inspection-tasks/{task_id}:start` | 開始查核；既有端點，本規格定義 Field 呼叫行為 | `inspection_task.inspect`，後端覆核 Task 與 Plan 狀態 |
+| GET | `/api/v1/field/inspection-tasks/{task_id}` | 現場安全詳情，含分區名稱、補充位置、建議執行人及目前需求快照；另含 `suggested_assignee.is_me`（登入者是否為建議執行人）、`started_by: {name_zh,is_me}\|null`（實際開始者顯示名稱，未開始為 null）、`cancellation_reason: string\|null`（僅 `CANCELLED` 回原因，其餘為 null）；只給顯示名稱與是否為本人，不給使用者 ID 或帳號。不回傳 Plan ID、其他人帳號、歷史 Snapshot 或內業專用欄位。量測欄位回 `id`、`name`、`field_type`、`unit`；數值標準回 `measurement_field_id` 以關聯量測欄位 | `inspection_task.inspect`；`DRAFT`／不存在／無權限統一回 404；只具 `inspection_task.read` 回 404 |
+| POST | `/api/v1/inspection-tasks/{task_id}:start` | 開始查核；既有端點，本規格定義 Field 呼叫行為與被拒絕時的說明（見表後說明） | `inspection_task.inspect`，後端覆核 Task 與 Plan 狀態 |
+
+開始查核被拒絕時，前端依後端回應對應說明，並顯示在操作旁、聚焦錯誤訊息；不做樂觀更新，成功與否以後端回應為準。回應為 409 且錯誤碼 `inspection_plan.archived` 時說明計畫已封存；409 且錯誤碼 `inspection_task.invalid_transition` 時表示狀態已變，前端重抓 Field 詳情，依權威狀態說明已取消（附取消原因）、已由他人開始或已完成，若其實是登入者自己已開始則直接顯示進行中；403 說明權限不足；404 說明找不到任務；401 重新登入；其餘狀態碼與網路中斷視為任務未開始，保留確認並允許再試。
 
 列表排序鍵為 `dispatched_at DESC, id DESC`，只查詢 `dispatched_at IS NOT NULL` 的非草稿資料，NULL 明確排在最後；游標包含此排序鍵並遵循 API-R08，不能以 `updated_at` 作游標或排序鍵；開始查核不得改變派送順序。Field 詳情只回目前 Snapshot 的使用者可見內容；不包含來源範本名、Task/Plan/項目關聯 ID、Snapshot 歷史、其他使用者帳號或內業專用資料。數值標準與量測欄位以來源欄位 UUID 對應；量測欄位按 `sort_order, id` 排序。不存在資源、DRAFT、只具 read 權限或無專案 inspect 權限統一回 404 `resource.not_found`；列表入口無任何 inspect 權限或指定專案無權限的非 Admin 回 403 `permission.denied`。Admin 有權限但無符合資料（含不存在的 `project_id`）回 200 空頁。有權限但沒有符合資料回 200 空頁。未登入回 401。端點與回應欄位為規格設計（非負責人裁定）；#416 實作契約依 #417 前端需求對齊。
 
@@ -106,6 +108,7 @@
 
 ## 變更紀錄
 
+- 規格設計（非負責人裁定，#419）：Field 安全詳情增列 `suggested_assignee.is_me`、`started_by`（顯示名稱與是否本人）與 `cancellation_reason`（僅已取消任務），讓開始查核後顯示實際開始者、非建議指派者的提示及取消競態的原因；開始被拒絕的說明文案依後端錯誤碼對應，屬規格設計。
 - 規格設計（非負責人裁定，#417）：Field 列表增列目前查核項目摘要及資料庫層 `status` 篩選；卡片多項目文案為「第一項等 N 項」，返回清單時以 URL 保留範圍與狀態、Field 頁面記憶保留已載入頁數及捲動位置；離開 Field 頁面後清除記憶。
 - 依 PR #443 第 1 輪審查補充 Field API 邊界、量測欄位對應與排序契約 — #416
 - 規格設計（非負責人裁定，#416）：明定 Field 列表／安全詳情 API 的端點、參數、回應欄位、錯誤碼、逐專案權限過濾及 `dispatched_at` 排序來源；詳情只回 Field 安全欄位 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)

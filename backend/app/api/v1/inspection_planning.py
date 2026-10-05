@@ -320,7 +320,11 @@ def _task_summaries(
 
 
 def _field_task_summary(
-    db: Session, task: InspectionTask, *, detail: bool
+    db: Session,
+    task: InspectionTask,
+    *,
+    detail: bool,
+    viewer_id: UUID | None = None,
 ) -> dict[str, Any]:
     project = db.get(Project, task.project_id)
     assignee = db.get(User, task.assignee_id) if task.assignee_id else None
@@ -344,6 +348,20 @@ def _field_task_summary(
     }
     if not detail:
         return result
+    # Display names only: no account fields, and no ids that let the
+    # client guess who a person is. ``is_me`` lets the viewer tell
+    # "you" apart without comparing names.
+    if assignee is not None and result["suggested_assignee"] is not None:
+        result["suggested_assignee"]["is_me"] = assignee.id == viewer_id
+    starter = db.get(User, task.started_by) if task.started_by else None
+    result["started_by"] = (
+        {"name_zh": starter.name_zh, "is_me": starter.id == viewer_id}
+        if starter
+        else None
+    )
+    result["cancellation_reason"] = (
+        task.cancellation_reason if task.status == "CANCELLED" else None
+    )
     summary = _task_summary(db, task)
     result["items"] = []
     for item in summary["items"]:
@@ -1008,7 +1026,7 @@ def field_inspection_task(
         user_id=user.id,
         is_admin=user.is_admin,
     )
-    return _field_task_summary(db, task, detail=True)
+    return _field_task_summary(db, task, detail=True, viewer_id=user.id)
 
 
 @router.post(
