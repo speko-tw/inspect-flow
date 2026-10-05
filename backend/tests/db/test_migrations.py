@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import DateTime, create_engine, insert, inspect, text
+from sqlalchemy.orm import Session
 
 from alembic import command
 
@@ -116,6 +117,331 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
 
     expected_head = ScriptDirectory.from_config(cfg).get_current_head()
     assert _stamped_version(db_url) == expected_head
+
+
+def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
+    from datetime import UTC, datetime
+    from uuid import UUID, uuid4
+
+    from app.models import (
+        InspectionPlan,
+        InspectionTask,
+        Project,
+        ProjectInspectionItem,
+        ProjectInspectionPoint,
+        ProjectMeasurementField,
+        ProjectNumericStandard,
+        TaskInspectionItem,
+        TaskRequirementSnapshot,
+        TaskSnapshotMeasurementField,
+        TaskSnapshotNumericStandard,
+        TaskSnapshotPoint,
+        TemplateCategory,
+        TemplateInspectionPoint,
+        TemplateItem,
+        TemplateMeasurementField,
+        TemplateNumericStandard,
+        TemplateSystem,
+    )
+    from tests.db.conftest import create_root_user_with_company
+
+    cfg = _alembic_config()
+    migration_revision = "62af416d9c01"
+    previous_revision = "4f7a1c93d2e6"
+    command.upgrade(cfg, previous_revision)
+    engine = create_engine(db_url)
+    pending_created = datetime(2026, 10, 1, tzinfo=UTC)
+    draft_created = datetime(2026, 10, 2, tzinfo=UTC)
+    with Session(engine) as session:
+        operator = create_root_user_with_company(session, "DISPATCHMIG")
+        audit = {
+            "created_by": operator.id,
+            "updated_by": operator.id,
+        }
+        category = TemplateCategory(name="Migration category", **audit)
+        session.add(category)
+        session.flush()
+        system = TemplateSystem(
+            category_id=category.id,
+            name="Migration system",
+            **audit,
+        )
+        session.add(system)
+        session.flush()
+        template_item = TemplateItem(
+            system_id=system.id,
+            sequence=1,
+            title="Migration template item",
+            instruction="Migration template instruction",
+            **audit,
+        )
+        session.add(template_item)
+        session.flush()
+        template_point = TemplateInspectionPoint(
+            template_item_id=template_item.id,
+            sequence=1,
+            title="Migration template point",
+            instruction="Template point instruction",
+            **audit,
+        )
+        session.add(template_point)
+        session.flush()
+        template_field = TemplateMeasurementField(
+            inspection_point_id=template_point.id,
+            name="Template measure",
+            field_type="number",
+            unit="mm",
+            sort_order=0,
+            **audit,
+        )
+        session.add(template_field)
+        session.flush()
+        template_standard = TemplateNumericStandard(
+            inspection_point_id=template_point.id,
+            value="10",
+            condition=">=",
+            unit="mm",
+            tolerance=None,
+            measurement_field_id=template_field.id,
+            measurement_field_type="number",
+            measurement_field_unit="mm",
+            **audit,
+        )
+        session.add(template_standard)
+        session.flush()
+        project = Project(
+            project_code="DISPATCHMIG",
+            name="Migration project",
+            client_name="Migration client",
+            site_location="Migration site",
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        session.add(project)
+        session.flush()
+        project_item = ProjectInspectionItem(
+            project_id=project.id,
+            sequence=1,
+            title="Migration project item",
+            instruction="Project item instruction",
+            source_template_name="Migration template",
+            applied_at=pending_created,
+            **audit,
+        )
+        session.add(project_item)
+        session.flush()
+        project_point = ProjectInspectionPoint(
+            project_inspection_item_id=project_item.id,
+            sequence=1,
+            title="Migration project point",
+            instruction="Project point instruction",
+            **audit,
+        )
+        session.add(project_point)
+        session.flush()
+        project_field = ProjectMeasurementField(
+            inspection_point_id=project_point.id,
+            project_inspection_item_id=project_item.id,
+            name="Project measure",
+            field_type="number",
+            unit="mm",
+            sort_order=0,
+            **audit,
+        )
+        session.add(project_field)
+        session.flush()
+        project_standard = ProjectNumericStandard(
+            inspection_point_id=project_point.id,
+            project_inspection_item_id=project_item.id,
+            value="11",
+            condition="<=",
+            unit="mm",
+            tolerance=None,
+            measurement_field_id=project_field.id,
+            measurement_field_type="number",
+            measurement_field_unit="mm",
+            **audit,
+        )
+        session.add(project_standard)
+        session.flush()
+        plan = InspectionPlan(
+            project_id=project.id,
+            name="Migration plan",
+            **audit,
+        )
+        session.add(plan)
+        session.flush()
+        pending_id = uuid4()
+        draft_id = uuid4()
+        session.execute(
+            insert(InspectionTask),
+            [
+                {
+                    "id": pending_id,
+                    "plan_id": plan.id,
+                    "project_id": project.id,
+                    "status": "PENDING",
+                    "created_by": operator.id,
+                    "updated_by": operator.id,
+                    "created_at": pending_created,
+                    "updated_at": pending_created,
+                },
+                {
+                    "id": draft_id,
+                    "plan_id": plan.id,
+                    "project_id": project.id,
+                    "status": "DRAFT",
+                    "created_by": operator.id,
+                    "updated_by": operator.id,
+                    "created_at": draft_created,
+                    "updated_at": draft_created,
+                },
+            ],
+        )
+        for task_id in (pending_id, draft_id):
+            association = TaskInspectionItem(
+                task_id=task_id,
+                project_id=project.id,
+                project_inspection_item_id=project_item.id,
+                **audit,
+            )
+            session.add(association)
+            session.flush()
+            snapshot = TaskRequirementSnapshot(
+                task_inspection_item_id=association.id,
+                revision=1,
+                source_standard_revision=1,
+                title="Migration snapshot",
+                instruction="Snapshot instruction",
+                source_template_name="Migration template",
+                **audit,
+            )
+            session.add(snapshot)
+            session.flush()
+            snapshot_point = TaskSnapshotPoint(
+                snapshot_id=snapshot.id,
+                source_point_id=project_point.id,
+                sequence=1,
+                title="Snapshot point",
+                instruction="Snapshot point instruction",
+                **audit,
+            )
+            session.add(snapshot_point)
+            session.flush()
+            snapshot_field = TaskSnapshotMeasurementField(
+                point_id=snapshot_point.id,
+                source_field_id=template_field.id,
+                name="Snapshot measure",
+                field_type="number",
+                unit="mm",
+                sort_order=0,
+                **audit,
+            )
+            session.add(snapshot_field)
+            session.flush()
+            session.add(
+                TaskSnapshotNumericStandard(
+                    point_id=snapshot_point.id,
+                    value="12",
+                    condition="=",
+                    unit="mm",
+                    tolerance=None,
+                    source_measurement_field_id=snapshot_field.source_field_id,
+                    measurement_field_type="number",
+                    measurement_field_unit="mm",
+                    **audit,
+                )
+            )
+        session.commit()
+
+    tables = (
+        "template_categories",
+        "template_systems",
+        "template_items",
+        "template_inspection_points",
+        "template_measurement_fields",
+        "template_numeric_standards",
+        "projects",
+        "project_inspection_items",
+        "project_inspection_points",
+        "project_measurement_fields",
+        "project_numeric_standards",
+        "inspection_plans",
+        "inspection_tasks",
+        "task_inspection_items",
+        "task_requirement_snapshots",
+        "task_snapshot_points",
+        "task_snapshot_measurement_fields",
+        "task_snapshot_numeric_standards",
+    )
+
+    def row_counts() -> dict[str, int]:
+        with engine.connect() as connection:
+            return {
+                table: connection.execute(
+                    text(f"SELECT count(*) FROM {table}")
+                ).scalar_one()
+                for table in tables
+            }
+
+    before = row_counts()
+    command.upgrade(cfg, migration_revision)
+    inspector = inspect(engine)
+    assert "dispatched_at" in {
+        column["name"] for column in inspector.get_columns("inspection_tasks")
+    }
+    with engine.connect() as connection:
+        values = {
+            UUID(str(row["id"])): row
+            for row in connection.execute(
+                text(
+                    "SELECT id, status, created_at, dispatched_at "
+                    "FROM inspection_tasks"
+                )
+            ).mappings()
+        }
+    assert values[pending_id]["status"] == "PENDING"
+    assert (
+        values[pending_id]["dispatched_at"] == values[pending_id]["created_at"]
+    )
+    assert values[draft_id]["status"] == "DRAFT"
+    assert values[draft_id]["dispatched_at"] is None
+    assert row_counts() == before
+
+    command.downgrade(cfg, previous_revision)
+    assert "dispatched_at" not in {
+        column["name"]
+        for column in inspect(engine).get_columns("inspection_tasks")
+    }
+    assert row_counts() == before
+
+    command.upgrade(cfg, migration_revision)
+    assert row_counts() == before
+    with engine.connect() as connection:
+        round_trip_values = {
+            UUID(str(row["id"])): row
+            for row in connection.execute(
+                text(
+                    "SELECT id, status, created_at, dispatched_at "
+                    "FROM inspection_tasks"
+                )
+            ).mappings()
+        }
+    assert (
+        round_trip_values[pending_id]["dispatched_at"]
+        == (round_trip_values[pending_id]["created_at"])
+    )
+    assert round_trip_values[draft_id]["dispatched_at"] is None
+    inspector = inspect(engine)
+    dispatched_type = next(
+        column["type"]
+        for column in inspector.get_columns("inspection_tasks")
+        if column["name"] == "dispatched_at"
+    )
+    assert isinstance(dispatched_type, DateTime)
+    if engine.dialect.name == "postgresql":
+        assert dispatched_type.timezone is True
+    engine.dispose()
 
 
 _PRE_EXISTING_LOGGER_NAME = "tests.db.test_migrations.pre_existing_logger"
