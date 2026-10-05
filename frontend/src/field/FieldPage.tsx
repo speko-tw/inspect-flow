@@ -83,7 +83,6 @@ export default function FieldPage() {
         <h1>工作台</h1>
         <nav aria-label="我的功能">
           {user.is_admin && <Link to="/admin">進入管理頁</Link>}
-          <Link to="/admin/templates">瀏覽範本庫</Link>
           <Link to="/change-password" state={{ from }}>
             變更密碼
           </Link>
@@ -151,7 +150,7 @@ export default function FieldPage() {
               <ul>
                 {allProjects.map((project) => (
                   <li key={project.id}>
-                    <Link to={`/field/projects/${project.id}`}>
+                    <Link to={`/admin/projects/${project.id}`}>
                       {project.name}
                     </Link>
                   </li>
@@ -226,8 +225,6 @@ function ProjectsTable({ projects }: { projects: MyProject[] }) {
                 : '未指派角色'}
             </td>
             <td>
-              <Link to={`/field/projects/${project.id}`}>套用範本</Link>
-              {' ・ '}
               <Link to={`/admin/projects/${project.id}`}>
                 查看／修改查核項目
               </Link>

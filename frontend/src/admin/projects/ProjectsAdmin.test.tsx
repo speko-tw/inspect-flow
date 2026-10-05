@@ -270,6 +270,15 @@ describe('admin projects page', () => {
       2,
     )
     expect(screen.getByText('（代號重複）')).toBeVisible()
+    expect(
+      screen.getByRole('heading', {
+        name: '專案工作台',
+      }),
+    ).toBeVisible()
+    expect(document.querySelector('.projects-admin-table')).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('link', { name: '套用範本' })[0],
+    ).toHaveAttribute('href', '/admin/projects/project-1/templates')
     expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveAttribute(
       'href',
       '/admin/projects/project-1',
@@ -290,16 +299,16 @@ describe('admin projects page', () => {
     projectFetch({ projects })
     renderAt('/admin/projects')
 
-    expect(await screen.findByText('示範工程0')).toBeInTheDocument()
+    expect(await screen.findAllByText('示範工程0')).not.toHaveLength(0)
     expect(screen.queryByText('目標工程')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    expect(await screen.findByText('目標工程')).toBeInTheDocument()
+    expect(await screen.findAllByText('目標工程')).not.toHaveLength(0)
 
     fireEvent.change(screen.getByLabelText('搜尋專案'), {
       target: { value: 'demo-050' },
     })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
-    expect(await screen.findByText('目標工程')).toBeInTheDocument()
+    expect(await screen.findAllByText('目標工程')).not.toHaveLength(0)
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
   })
 
@@ -307,21 +316,21 @@ describe('admin projects page', () => {
     projectFetch()
     renderAt('/admin/projects')
 
-    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(await screen.findAllByText('示範工程')).not.toHaveLength(0)
     const search = screen.getByRole('button', { name: '搜尋' })
     fireEvent.click(search)
-    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(await screen.findAllByText('示範工程')).not.toHaveLength(0)
     expect(search).toBeEnabled()
 
     fireEvent.click(search)
-    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(await screen.findAllByText('示範工程')).not.toHaveLength(0)
     expect(search).toBeEnabled()
   })
 
   it('creates a project with optional dates left empty', async () => {
     const fetchMock = projectFetch()
     renderAt('/admin/projects')
-    await screen.findByText('示範工程')
+    await screen.findAllByText('示範工程')
 
     fillProjectForm()
     fireEvent.change(screen.getByLabelText('預定完工日'), {
@@ -332,7 +341,7 @@ describe('admin projects page', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       '專案「第二示範工程」已儲存。',
     )
-    expect(await screen.findByText('第二示範工程')).toBeVisible()
+    expect(await screen.findAllByText('第二示範工程')).not.toHaveLength(0)
     const [, init] = calls(fetchMock, 'POST', /\/projects$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       project_code: 'DEMO-002',
@@ -347,7 +356,7 @@ describe('admin projects page', () => {
   it('warns about a duplicate project code but still saves', async () => {
     projectFetch()
     renderAt('/admin/projects')
-    await screen.findByText('示範工程')
+    await screen.findAllByText('示範工程')
 
     fillProjectForm()
     fireEvent.change(screen.getByLabelText('專案代號'), {
@@ -364,7 +373,7 @@ describe('admin projects page', () => {
   it('edits a project by sending only changed fields', async () => {
     const fetchMock = projectFetch()
     renderAt('/admin/projects')
-    await screen.findByText('示範工程')
+    await screen.findAllByText('示範工程')
 
     fireEvent.click(screen.getByRole('button', { name: '編輯' }))
     expect(screen.getByLabelText('專案代號')).toHaveValue('DEMO-001')
@@ -376,7 +385,7 @@ describe('admin projects page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
 
-    expect(await screen.findByText('改名後的工程')).toBeVisible()
+    expect(await screen.findAllByText('改名後的工程')).not.toHaveLength(0)
     const [, init] = calls(fetchMock, 'PATCH', /\/projects\/project-1$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       name: '改名後的工程',
@@ -388,7 +397,7 @@ describe('admin projects page', () => {
   it('does not call the API when nothing was edited', async () => {
     const fetchMock = projectFetch()
     renderAt('/admin/projects')
-    await screen.findByText('示範工程')
+    await screen.findAllByText('示範工程')
 
     fireEvent.click(screen.getByRole('button', { name: '編輯' }))
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
@@ -409,7 +418,7 @@ describe('admin projects page', () => {
       },
     })
     renderAt('/admin/projects')
-    await screen.findByText('示範工程')
+    await screen.findAllByText('示範工程')
 
     fillProjectForm()
     fireEvent.click(screen.getByRole('button', { name: '新增專案' }))

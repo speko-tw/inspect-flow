@@ -174,10 +174,9 @@ describe('我的工作台', () => {
     expect(
       screen.queryByRole('link', { name: '進入管理頁' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '瀏覽範本庫' })).toHaveAttribute(
-      'href',
-      '/admin/templates',
-    )
+    expect(
+      screen.queryByRole('link', { name: '瀏覽範本庫' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByText('一般使用者')).toBeInTheDocument()
     unmount()
 
@@ -240,6 +239,6 @@ describe('我的工作台', () => {
       within(section).getByRole('link', {
         name: '示範工程丙',
       }),
-    ).toHaveAttribute('href', '/field/projects/p3')
+    ).toHaveAttribute('href', '/admin/projects/p3')
   })
 })

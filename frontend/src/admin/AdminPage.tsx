@@ -17,6 +17,7 @@ import ProjectsPage from './projects/ProjectsPage'
 import TemplatesPage from './templates/TemplatesPage'
 import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
 import ProjectItemLinks from './projectItems/ProjectItemLinks'
+import ProjectTemplatesPage from '../field/ProjectTemplatesPage'
 import { projectItemApi } from './projectItems/api'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
@@ -72,6 +73,10 @@ export default function AdminPage() {
             <Route
               element={<MemberProjectItems />}
               path="projects/:projectId"
+            />
+            <Route
+              element={<ProjectTemplatesPage />}
+              path="projects/:projectId/templates"
             />
             <Route
               element={<ProjectItemChangePage api={projectItemApi} />}
@@ -157,6 +162,10 @@ export default function AdminPage() {
           <Route path="roles" element={<RolesPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route
+            path="projects/:projectId/templates"
+            element={<ProjectTemplatesPage />}
+          />
           <Route
             path="projects/:projectId/inspection-items/:itemId"
             element={<ProjectItemChangePage api={projectItemApi} />}
