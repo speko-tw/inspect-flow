@@ -121,7 +121,7 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
 
 def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
     from datetime import UTC, datetime
-    from uuid import uuid4
+    from uuid import UUID, uuid4
 
     from app.models import InspectionPlan, Project
     from tests.db.conftest import create_root_user_with_company
@@ -199,11 +199,18 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
             .mappings()
             .all()
         )
-    values = {row["id"]: row for row in rows}
-    pending_time = datetime.fromisoformat(
-        values[pending_id.hex]["dispatched_at"]
+    values = {UUID(str(row["id"])).hex: row for row in rows}
+    pending_value = values[pending_id.hex]["dispatched_at"]
+    pending_time = (
+        pending_value
+        if isinstance(pending_value, datetime)
+        else datetime.fromisoformat(pending_value)
     )
-    assert pending_time.replace(tzinfo=UTC) == pending_created
+    if pending_time.tzinfo is None:
+        pending_time = pending_time.replace(tzinfo=UTC)
+    else:
+        pending_time = pending_time.astimezone(UTC)
+    assert pending_time == pending_created
     assert values[draft_id.hex]["dispatched_at"] is None
     inspector = inspect(engine)
     task_columns = {
