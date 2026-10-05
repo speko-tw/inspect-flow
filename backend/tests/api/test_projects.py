@@ -1,7 +1,9 @@
 """Project and ProjectMember management API checks."""
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TypedDict
 from uuid import UUID, uuid4
 
@@ -555,12 +557,18 @@ def test_member_operations_require_project_permission_and_audit(
     assert body["username"] == target.username
     assert body["role_ids"] == [str(role.id)]
 
+    other_role = create_role(
+        db_session,
+        name="現場查核",
+        permission_codes=["project_member.manage"],
+    )
+    db_session.commit()
     replaced = client.put(
         f"/api/v1/projects/{project.id}/members/{target.id}/roles",
-        json={"role_ids": []},
+        json={"role_ids": [str(other_role.id)]},
     )
     assert replaced.status_code == 200
-    assert replaced.json()["role_ids"] == []
+    assert replaced.json()["role_ids"] == [str(other_role.id)]
     db_session.expire_all()
     member = db_session.get(ProjectMember, member_id)
     assert member is not None
@@ -577,7 +585,7 @@ def test_member_operations_require_project_permission_and_audit(
         "project_member.roles_changed",
     ]
     assert _audit_field(events[-1].before, "role_ids") == [str(role.id)]
-    assert _audit_field(events[-1].after, "role_ids") == []
+    assert _audit_field(events[-1].after, "role_ids") == [str(other_role.id)]
     db_session.commit()
 
     removed = client.delete(
@@ -634,10 +642,13 @@ def test_admin_can_manage_members_and_anonymous_is_rejected(project_api):
 
     added = admin_client.post(
         f"/api/v1/projects/{project.id}/members",
-        json={"user_id": str(target.id)},
+        json={
+            "user_id": str(target.id),
+            "role_ids": [str(project_api["role"].id)],
+        },
     )
     assert added.status_code == 201
-    assert added.json()["role_ids"] == []
+    assert added.json()["role_ids"] == [str(project_api["role"].id)]
 
 
 def test_member_conflict_and_unknown_role_errors(project_api):
@@ -649,7 +660,10 @@ def test_member_conflict_and_unknown_role_errors(project_api):
 
     duplicate = client.post(
         f"/api/v1/projects/{project.id}/members",
-        json={"user_id": str(actor.id)},
+        json={
+            "user_id": str(actor.id),
+            "role_ids": [str(project_api["role"].id)],
+        },
     )
     assert duplicate.status_code == 409
     assert duplicate.json()["error"]["code"] == "project.member_conflict"
@@ -663,6 +677,118 @@ def test_member_conflict_and_unknown_role_errors(project_api):
     )
     assert missing_role.status_code == 404
     assert missing_role.json()["error"]["code"] == "resource.not_found"
+
+
+def test_member_roles_are_required_on_create_and_update(
+    project_api, db_session: Session
+):
+    """ADM-AC20: zero-role writes are 422 and change nothing."""
+    client = project_api["actor_client"]
+    project = project_api["project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+    members_url = f"/api/v1/projects/{project.id}/members"
+    roles_url = f"{members_url}/{target.id}/roles"
+
+    for body in (
+        {"user_id": str(target.id)},
+        {
+            "user_id": str(target.id),
+            "role_ids": [],
+        },
+    ):
+        refused = client.post(members_url, json=body)
+        assert refused.status_code == 422
+        assert (
+            refused.json()["error"]["code"]
+            == ErrorCode.PROJECT_MEMBER_ROLES_REQUIRED.value
+            == "project.member_roles_required"
+        )
+    assert (
+        db_session.scalar(
+            select(ProjectMember.id).where(ProjectMember.user_id == target.id)
+        )
+        is None
+    )
+
+    created = client.post(
+        members_url,
+        json={"user_id": str(target.id), "role_ids": [str(role.id)]},
+    )
+    assert created.status_code == 201
+
+    refused = client.put(roles_url, json={"role_ids": []})
+    assert refused.status_code == 422
+    assert refused.json()["error"]["code"] == "project.member_roles_required"
+
+    # Permission is checked before the role rule: no 422 leaks to outsiders.
+    plain = project_api["plain_client"]
+    assert (
+        plain.post(members_url, json={"user_id": str(target.id)}).status_code
+        == 403
+    )
+    assert plain.put(roles_url, json={"role_ids": []}).status_code == 403
+    unchanged = client.get(members_url)
+    assert unchanged.status_code == 200
+    rows = {row["user_id"]: row for row in unchanged.json()}
+    assert rows[str(target.id)]["role_ids"] == [str(role.id)]
+
+    # A body with no role_ids field is a plain schema error, not this rule.
+    malformed = client.put(roles_url, json={})
+    assert malformed.status_code == 422
+    assert (
+        malformed.json()["error"]["code"]
+        == ErrorCode.REQUEST_VALIDATION_FAILED.value
+    )
+
+
+def test_member_api_matches_frontend_contract_fixture(project_api):
+    """RG-M22: the shapes the member page's tests mock are the real ones."""
+    fixture = json.loads(
+        (
+            Path(__file__).parents[3]
+            / "frontend/src/admin/projects/fixtures"
+            / "member-roles-contract.json"
+        ).read_text(encoding="utf-8")
+    )
+    client = project_api["actor_client"]
+    project = project_api["project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+    members_url = f"/api/v1/projects/{project.id}/members"
+
+    add_body = {"user_id": str(target.id), "role_ids": [str(role.id)]}
+    assert sorted(add_body) == fixture["add_request_keys"]
+    created = client.post(members_url, json=add_body)
+    assert created.status_code == 201
+    assert sorted(created.json()) == fixture["member_write_response_keys"]
+
+    set_body = {"role_ids": [str(role.id)]}
+    assert sorted(set_body) == fixture["set_roles_request_keys"]
+    replaced = client.put(f"{members_url}/{target.id}/roles", json=set_body)
+    assert replaced.status_code == 200
+    assert sorted(replaced.json()) == fixture["member_write_response_keys"]
+
+    listed = client.get(members_url)
+    assert listed.status_code == 200
+    assert all(
+        sorted(row) == fixture["member_list_item_keys"]
+        for row in listed.json()
+    )
+
+    refused = client.post(
+        members_url,
+        json={"user_id": str(project_api["admin"].id), "role_ids": []},
+    )
+    expected = fixture["zero_role_error"]
+    assert refused.status_code == expected["status"]
+    assert refused.json()["error"]["code"] == expected["code"]
 
 
 def test_member_missing_resources_and_duplicate_roles(project_api):
