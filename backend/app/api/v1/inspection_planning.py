@@ -81,6 +81,10 @@ from app.services.inspection_planning import (
 )
 from app.services.operator import get_current_operator
 from app.services.permissions import effective_permissions
+from app.services.template_library import (
+    InvalidTemplateError,
+    validate_template_structure,
+)
 
 router = APIRouter(
     tags=["inspection-planning"],
@@ -1185,6 +1189,8 @@ def patch_project_item(
     )
     if item is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    if body.inspection_points is not None:
+        _validate_project_points(body.inspection_points)
     associations = db.scalars(
         select(TaskInspectionItem).where(
             TaskInspectionItem.project_inspection_item_id == item.id
@@ -1258,6 +1264,16 @@ def patch_project_item(
     result["affected_tasks"] = affected
     result["reinspection_selected"] = body.reinspect
     return result
+
+
+def _validate_project_points(points: list[PointBody]) -> None:
+    """Apply the template structure rules before any row is touched."""
+    try:
+        validate_template_structure(
+            {"inspection_points": [point.model_dump() for point in points]}
+        )
+    except InvalidTemplateError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 
 
 def _replace_project_points(

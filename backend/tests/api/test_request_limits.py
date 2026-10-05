@@ -88,8 +88,7 @@ _TEMPLATE_MUTATIONS = {
         ],
     ),
     "evidence count": lambda b: _first_point(b).update(
-        evidence_requirements=[{"min_count": 1}]
-        * (limits.EVIDENCE_REQUIREMENTS_MAX + 1)
+        evidence_requirements=[{"min_count": 1}, {"min_count": 1}]
     ),
     "min photo count": lambda b: _first_point(b).update(
         evidence_requirements=[{"min_count": limits.MIN_PHOTO_COUNT_MAX + 1}]
