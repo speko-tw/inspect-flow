@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.api.limits import (
-    EVIDENCE_REQUIREMENTS_MAX,
     LONG_TEXT_MAX,
     MEASUREMENT_FIELDS_MAX,
     MIN_PHOTO_COUNT_MAX,
@@ -215,8 +214,10 @@ class PointBody(StrictBody):
     measurement_fields: list[MeasurementFieldBody] = Field(
         default_factory=list, max_length=MEASUREMENT_FIELDS_MAX
     )
+    # Exactly one photo requirement per point (#464): the count is
+    # expressed by ``min_count``, never by repeating the requirement.
     evidence_requirements: list[EvidenceRequirementBody] = Field(
-        min_length=1, max_length=EVIDENCE_REQUIREMENTS_MAX
+        min_length=1, max_length=1
     )
 
     @model_validator(mode="after")
@@ -298,6 +299,7 @@ def _invalid_structure_constraint(exc: IntegrityError) -> bool:
         "uq_template_measurement_fields_point_id",
         "uq_template_measurement_fields_point_id_type_unit",
         "uq_template_numeric_standards_measurement_field_id",
+        "uq_template_evidence_point_type",
         "ck_template_measurement_fields_"
         "numeric_measurement_field_requires_unit",
     )
@@ -307,6 +309,8 @@ def _invalid_structure_constraint(exc: IntegrityError) -> bool:
         "template_inspection_points.sequence",
         "template_measurement_fields.id",
         "template_numeric_standards.measurement_field_id",
+        "template_evidence_requirements.inspection_point_id, "
+        "template_evidence_requirements.evidence_type",
     )
     return constraint in names or any(
         name in detail for name in (*names, *sqlite_columns)

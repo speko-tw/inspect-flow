@@ -273,6 +273,12 @@ class TemplateEvidenceRequirement(AuditMixin, TimestampedBase):
     min_count: Mapped[int] = mapped_column(nullable=False, default=1)
     max_count: Mapped[int | None] = mapped_column()
     __table_args__ = (
+        Index(
+            "uq_template_evidence_point_type",
+            "inspection_point_id",
+            "evidence_type",
+            unique=True,
+        ),
         CheckConstraint(
             "evidence_type = 'photo'", name="evidence_type_photo_only"
         ),
@@ -485,6 +491,12 @@ class ProjectEvidenceRequirement(AuditMixin, TimestampedBase):
     min_count: Mapped[int] = mapped_column(nullable=False, default=1)
     max_count: Mapped[int | None] = mapped_column()
     __table_args__ = (
+        Index(
+            "uq_project_evidence_point_type",
+            "inspection_point_id",
+            "evidence_type",
+            unique=True,
+        ),
         ForeignKeyConstraint(
             ["inspection_point_id", "project_inspection_item_id"],
             [
