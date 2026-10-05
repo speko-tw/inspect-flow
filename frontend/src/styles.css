@@ -539,25 +539,6 @@ form > div {
   gap: var(--space-1);
 }
 
-.template-browser {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
-  gap: var(--space-4);
-  align-items: start;
-}
-
-.template-browser > section {
-  min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.template-browser li {
-  margin-bottom: var(--space-2);
-}
-
 label {
   display: grid;
   gap: var(--space-1);
@@ -678,12 +659,6 @@ button[type='submit']:hover:not(:disabled),
   border-color: var(--primary-hover);
 }
 
-.btn-secondary {
-  background: var(--surface);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -744,15 +719,6 @@ tbody tr:nth-child(even) {
 
 tbody th {
   font-weight: 600;
-}
-
-/* 欄位名稱在左、內容在右的表（例如我的工作台）：左欄等寬。 */
-table.key-value {
-  table-layout: fixed;
-}
-
-table.key-value th {
-  width: 8rem;
 }
 
 td button {
@@ -1283,10 +1249,6 @@ output {
   padding: var(--space-2);
 }
 
-.tpl-tree-action {
-  padding: var(--space-2);
-}
-
 .tpl-empty {
   padding: var(--space-5) var(--space-3);
   text-align: center;
@@ -1573,8 +1535,7 @@ output {
   padding: var(--space-3);
 }
 
-.tpl-bound-note,
-.tpl-preview-line {
+.tpl-bound-note {
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
@@ -1650,10 +1611,6 @@ output {
 
   .tpl-item-open {
     display: inline;
-  }
-
-  .tpl-step-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tpl-editor-footer button {
