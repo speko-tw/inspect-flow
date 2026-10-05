@@ -99,6 +99,9 @@ function stubBackend(me: CurrentUserBody, loginAs = ADMIN): Backend {
         backend.me = { ...ADMIN, is_admin: false }
         return Response.json({})
       }
+      if (url.includes('/field/inspection-tasks?')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
       return Response.json([])
     },
   )
@@ -149,7 +152,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '我的工作台' }),
+      await screen.findByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
   })
 
@@ -159,7 +162,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '我的工作台' }),
+      await screen.findByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
   })
 
@@ -211,7 +214,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 
     expect(
-      await screen.findByRole('heading', { name: '我的工作台' }),
+      await screen.findByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
   })
 
@@ -229,7 +232,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     renderApp('/')
 
     expect(
-      await screen.findByRole('heading', { name: '我的工作台' }),
+      await screen.findByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
   })
 
@@ -295,7 +298,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       '已收回你的管理者權限',
     )
     expect(
-      screen.getByRole('heading', { name: '我的工作台' }),
+      screen.getByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('你沒有權限執行這項操作')).toBeNull()
     expect(screen.queryByRole('heading', { name: '使用者管理' })).toBeNull()

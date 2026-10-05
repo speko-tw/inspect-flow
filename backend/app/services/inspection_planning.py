@@ -536,6 +536,7 @@ def field_inspection_task_filters(
     is_admin: bool,
     assigned_to_me: bool,
     project_id: uuid.UUID | None = None,
+    status: str | None = None,
 ) -> tuple[ColumnElement[bool], ...]:
     """Build filters for dispatched Tasks visible to the Field caller."""
     if is_admin:
@@ -566,6 +567,8 @@ def field_inspection_task_filters(
         InspectionTask.project_id.in_(permitted_ids),
         InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
     ]
+    if status is not None:
+        filters.append(InspectionTask.status == status)
     if assigned_to_me:
         filters.append(InspectionTask.assignee_id == user_id)
     filters.append(InspectionTask.dispatched_at.is_not(None))
