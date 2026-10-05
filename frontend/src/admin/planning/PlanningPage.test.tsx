@@ -238,7 +238,7 @@ describe('planning management page', () => {
     expect(alert).toHaveTextContent('輸入資料不符合規格')
   })
 
-  it('shows a plan-name error only in the form that triggered it', async () => {
+  it('shows a plan-name error only in the form that caused it', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
       name: '既有計畫',
