@@ -120,7 +120,7 @@ export interface PlanningClient {
   listProjectItems(projectId: string): Promise<ProjectInspectionItem[]>
   /** GET /api/v1/projects/{project_id}/zones. */
   listProjectZones(projectId: string): Promise<ProjectZone[]>
-  /** GET /api/v1/projects/{project_id}/inspection-task-assignees?cursor={cursor}. */
+  /** GET /projects/{project_id}/inspection-task-assignees. */
   listProjectAssignees(projectId: string): Promise<SuggestedAssignee[]>
   /** POST /api/v1/projects/{project_id}/zones. */
   createZone(projectId: string, name: string): Promise<ProjectZone>

@@ -6,7 +6,7 @@ import { planningClient } from './api'
 const PROJECT = 'project-demo-1'
 
 describe('mock planning client', () => {
-  it('paginates plan summaries and retrieves task details separately', async () => {
+  it('paginates plans and fetches task details separately', async () => {
     const client = createMockPlanningClient()
     const created = []
     for (let index = 0; index < 21; index += 1) {
@@ -296,7 +296,7 @@ describe('mock planning client', () => {
 describe('planning HTTP client contract', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('reads backend task snapshot shape and uses paginated API envelopes', async () => {
+  it('reads Task snapshots and paginated API envelopes', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input)
       if (path.includes('/inspection-plans?')) {
@@ -361,7 +361,7 @@ describe('planning HTTP client contract', () => {
     )
   })
 
-  it('uses the assignee endpoint instead of the management member list', async () => {
+  it('uses the assignee API instead of the project member list', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ items: [], next_cursor: null }),
     )

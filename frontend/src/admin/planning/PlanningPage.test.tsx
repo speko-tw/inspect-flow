@@ -267,7 +267,7 @@ describe('planning management page', () => {
     })
   })
 
-  it('adds zones in a separate inline row and cancels with Escape', async () => {
+  it('adds zones inline and cancels with Escape', async () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
@@ -357,7 +357,7 @@ describe('planning management page', () => {
     expect(document.querySelector('[inert]')).toBeNull()
   })
 
-  it('hides task actions on archived plans and restores them on unarchive', async () => {
+  it('hides actions on archived plans and restores them', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
       name: '封存驗收',
@@ -510,7 +510,7 @@ describe('planning management page', () => {
     await screen.findByText('建議指派：專案 B 現場人員')
   })
 
-  it('renames zones and explains when an in-use zone cannot be deleted', async () => {
+  it('renames zones and explains in-use deletion', async () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
