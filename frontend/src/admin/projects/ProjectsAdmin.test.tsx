@@ -406,6 +406,10 @@ describe('admin projects page', () => {
     expect(
       await screen.findByRole('heading', { name: 'DEMO-001｜第二示範工程' }),
     ).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '專案代號「DEMO-001」與其他專案重複，仍已儲存。',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '關閉警告' }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

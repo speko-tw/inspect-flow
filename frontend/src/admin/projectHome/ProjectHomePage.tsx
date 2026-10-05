@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router'
+import { Link, Navigate, useLocation, useParams } from 'react-router'
 
 import { ManagementApiError, managementErrorMessage } from '../api'
 import ProjectSectionShell from './ProjectSectionShell'
@@ -44,6 +44,9 @@ const STEP_CONTENT: Record<
 
 export default function ProjectHomePage() {
   const { projectId = '' } = useParams()
+  const location = useLocation()
+  const [duplicateWarningDismissed, setDuplicateWarningDismissed] =
+    useState(false)
   const [result, setResult] = useState<{
     projectId: string
     summary?: WorkflowSummary
@@ -81,6 +84,9 @@ export default function ProjectHomePage() {
   const loading = currentResult === null
   const primary: WorkflowStepCode | null = summary?.primary_step ?? null
   const base = `/admin/projects/${projectId}`
+  const duplicateWarning = (
+    location.state as { duplicateProjectCode?: string } | null
+  )?.duplicateProjectCode
 
   if (summary && !canViewIndoorSections(summary)) {
     return <Navigate replace to="/field" />
@@ -93,9 +99,23 @@ export default function ProjectHomePage() {
       activeSection="home"
       project={summary?.project ?? null}
       projectId={projectId}
+      viewerPermissions={summary?.viewer_permission_codes ?? []}
     >
       <section aria-labelledby="project-home-heading">
         <h2 id="project-home-heading">專案首頁</h2>
+        {duplicateWarning && !duplicateWarningDismissed && (
+          <div role="alert">
+            <p>
+              警告：專案代號「{duplicateWarning}」與其他專案重複，仍已儲存。
+            </p>
+            <button
+              onClick={() => setDuplicateWarningDismissed(true)}
+              type="button"
+            >
+              關閉警告
+            </button>
+          </div>
+        )}
         {loading && <p>載入中…</p>}
         {error && <p role="alert">{error}</p>}
         {summary && (

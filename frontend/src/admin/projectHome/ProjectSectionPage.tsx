@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, Navigate, useParams } from 'react-router'
+import { Navigate, useParams } from 'react-router'
 
 import { ManagementApiError, managementErrorMessage } from '../api'
 import ProjectItemLinks from '../projectItems/ProjectItemLinks'
@@ -31,6 +31,7 @@ export default function ProjectSectionPage({
   const [result, setResult] = useState<{
     projectId: string
     project: { project_code: string; name: string }
+    viewerPermissions: string[]
     canViewIndoor: boolean
     error?: string
     denied?: boolean
@@ -44,6 +45,7 @@ export default function ProjectSectionPage({
           setResult({
             projectId,
             canViewIndoor: canViewIndoorSections(summary),
+            viewerPermissions: summary.viewer_permission_codes,
             project: {
               project_code: summary.project.project_code,
               name: summary.project.name,
@@ -57,6 +59,7 @@ export default function ProjectSectionPage({
             projectId,
             canViewIndoor: false,
             project: { project_code: '', name: '' },
+            viewerPermissions: [],
             denied:
               caught instanceof ManagementApiError && caught.status === 403,
             error: managementErrorMessage(caught),
@@ -95,7 +98,6 @@ export default function ProjectSectionPage({
         <section aria-labelledby="project-section-heading">
           <h2 id="project-section-heading">{TITLES[section]}</h2>
           <p>此區段內容會在後續任務提供。</p>
-          <Link to={`/admin/projects/${projectId}`}>返回專案首頁</Link>
         </section>
       )
     }
@@ -106,6 +108,7 @@ export default function ProjectSectionPage({
       activeSection={section}
       project={currentResult.project}
       projectId={projectId}
+      viewerPermissions={currentResult.viewerPermissions}
     >
       {content}
     </ProjectSectionShell>

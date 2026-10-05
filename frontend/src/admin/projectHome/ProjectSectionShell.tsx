@@ -14,17 +14,28 @@ const SECTIONS = [
   { id: 'progress', label: '進度', suffix: '/progress' },
 ]
 
+const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
+  home: [],
+  members: ['project_member.manage'],
+  'inspection-items': ['project_inspection_item.edit'],
+  zones: ['project_zone.read', 'project_zone.manage'],
+  planning: ['inspection_plan.read'],
+  progress: ['inspection_task.read', 'inspection_task.inspect'],
+}
+
 export type ProjectSection = (typeof SECTIONS)[number]['id']
 
 export default function ProjectSectionShell({
   project,
   projectId,
   activeSection,
+  viewerPermissions,
   children,
 }: {
   project: { project_code: string; name: string } | null
   projectId: string
   activeSection: ProjectSection
+  viewerPermissions: string[]
   children: ReactNode
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -40,9 +51,16 @@ export default function ProjectSectionShell({
 
   const navigation = (
     <nav aria-label="專案區段" className="project-section-nav">
-      {SECTIONS.map((section) => (
+      {SECTIONS.filter(
+        (section) =>
+          section.id === 'home' ||
+          SECTION_PERMISSIONS[section.id].some((permission) =>
+            viewerPermissions.includes(permission),
+          ),
+      ).map((section) => (
         <NavLink
           aria-current={activeSection === section.id ? 'page' : undefined}
+          end={section.id === 'home'}
           key={section.id}
           onClick={() => setMenuOpen(false)}
           to={`${base}${section.suffix}`}

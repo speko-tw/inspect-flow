@@ -139,6 +139,36 @@ function managementFetch({
       const url = String(input)
       const parsed = new URL(url, 'http://testserver')
       const method = init?.method ?? 'GET'
+      if (parsed.pathname.endsWith('/workflow-summary') && method === 'GET') {
+        const projectId = parsed.pathname.split('/')[4]
+        return Response.json({
+          project: {
+            id: projectId,
+            project_code: 'DEMO-001',
+            name: '示範工程',
+          },
+          member_count: 0,
+          inspection_item_count: 0,
+          zone_count: 0,
+          plan_count: 0,
+          task_counts: {
+            DRAFT: 0,
+            PENDING: 0,
+            IN_PROGRESS: 0,
+            COMPLETED: 0,
+            CANCELLED: 0,
+          },
+          pending_reinspection_task_count: 0,
+          next_steps: [],
+          primary_step: null,
+          task_counts_visible: false,
+          draft_tasks_missing_assignee: 0,
+          viewer_permission_codes: [
+            'project_member.manage',
+            'inspection_plan.read',
+          ],
+        })
+      }
       if (url.includes('/template-categories?')) {
         return Response.json({
           items: templateCategories,
@@ -984,6 +1014,12 @@ describe('admin user and company pages', () => {
 
     expect(
       await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '計畫與任務', current: 'page' }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
     expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()

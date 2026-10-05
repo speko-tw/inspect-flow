@@ -74,27 +74,10 @@ function AdminPageContent() {
     )
   }
 
-  const isProjectPlanning = /^\/admin\/projects\/[^/]+\/planning\/?$/.test(
-    location.pathname,
-  )
   const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:members|inspection-items(?:\/[^/]+)?|zones|progress))?\/?$/.test(
+    /^\/admin\/projects\/[^/]+(?:\/(?:members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
       location.pathname,
     )
-
-  if (!user.is_admin && isProjectPlanning) {
-    return (
-      <main>
-        <Routes>
-          <Route
-            element={<ProjectPlanningRoute />}
-            path="projects/:projectId/planning"
-          />
-        </Routes>
-        <NavLink to="/field">返回工作台</NavLink>
-      </main>
-    )
-  }
 
   if (!user.is_admin) {
     if (isProjectSectionRoute) {
@@ -115,7 +98,11 @@ function AdminPageContent() {
               path="projects/:projectId/zones"
             />
             <Route
-              element={<ProjectSectionPage section="planning" />}
+              element={
+                <ProjectSectionPage section="planning">
+                  <ProjectPlanningRoute />
+                </ProjectSectionPage>
+              }
               path="projects/:projectId/planning"
             />
             <Route
@@ -147,7 +134,7 @@ function AdminPageContent() {
     <div className="app-shell">
       <header className="topbar">
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
-        <h1>Admin</h1>
+        {isProjectSectionRoute ? <p>Admin</p> : <h1>Admin</h1>}
         {!temporaryPassword && (
           <nav aria-label="管理功能">
             {NAV_ITEMS.map((item) => (

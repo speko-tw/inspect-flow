@@ -211,7 +211,11 @@ export default function ProjectsPage() {
         saved = await createProject(input)
       }
       if (creating) {
-        navigate(`/admin/projects/${saved.id}`)
+        navigate(`/admin/projects/${saved.id}`, {
+          state: hasDuplicateCodeWarning(saved)
+            ? { duplicateProjectCode: saved.project_code }
+            : null,
+        })
         return
       }
       const savedNotice = hasDuplicateCodeWarning(saved)

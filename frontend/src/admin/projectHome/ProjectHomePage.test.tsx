@@ -62,7 +62,13 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
     primary_step: 'dispatch_draft_tasks',
     task_counts_visible: true,
     draft_tasks_missing_assignee: 2,
-    viewer_permission_codes: ['inspection_plan.read', 'inspection_task.read'],
+    viewer_permission_codes: [
+      'project_member.manage',
+      'project_inspection_item.edit',
+      'project_zone.read',
+      'inspection_plan.read',
+      'inspection_task.read',
+    ],
     ...overrides,
   }
 }
@@ -79,6 +85,22 @@ function renderAt(path = '/admin/projects/project-1') {
           <Route
             element={<ProjectSectionPage section="members" />}
             path="/admin/projects/:projectId/members"
+          />
+          <Route
+            element={<ProjectSectionPage section="inspection-items" />}
+            path="/admin/projects/:projectId/inspection-items"
+          />
+          <Route
+            element={<ProjectSectionPage section="zones" />}
+            path="/admin/projects/:projectId/zones"
+          />
+          <Route
+            element={<ProjectSectionPage section="planning" />}
+            path="/admin/projects/:projectId/planning"
+          />
+          <Route
+            element={<ProjectSectionPage section="progress" />}
+            path="/admin/projects/:projectId/progress"
           />
           <Route
             element={
@@ -122,11 +144,49 @@ describe('project home', () => {
     expect(screen.getByText('草稿任務').parentElement).toHaveTextContent(
       '4 件未指派 2 件',
     )
+  })
+
+  it.each([
+    ['/admin/projects/project-1', '專案首頁'],
+    ['/admin/projects/project-1/members', '成員'],
+    ['/admin/projects/project-1/inspection-items', '查核項目'],
+    ['/admin/projects/project-1/zones', '分區'],
+    ['/admin/projects/project-1/planning', '計畫與任務'],
+    ['/admin/projects/project-1/progress', '進度'],
+  ])('marks only %s as the current project section', async (path, label) => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt(path)
+
+    await screen.findByRole('heading', { name: /DEMO-001｜示範工程/ })
+    const currentLinks = screen.getAllByRole('link', { current: 'page' })
+    expect(currentLinks).toHaveLength(1)
+    expect(currentLinks[0]).toHaveAccessibleName(label)
+  })
+
+  it('hides sections when the viewer lacks their read permission', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: ['project_zone.read', 'inspection_plan.read'],
+      }),
+    )
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
     expect(
-      screen
-        .getAllByRole('link', { name: '專案首頁' })
-        .some((link) => link.getAttribute('aria-current') === 'page'),
-    ).toBe(true)
+      screen.queryByRole('link', { name: '成員' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '查核項目' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '分區' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: '進度' }),
+    ).not.toBeInTheDocument()
   })
 
   it.each([
