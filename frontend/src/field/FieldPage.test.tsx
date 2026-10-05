@@ -77,13 +77,13 @@ function stubBackend({
           ? Response.json({ error: { code: 'x' } }, { status: 500 })
           : Response.json(projects)
       }
-      if (url.endsWith('/projects')) {
+      if (url.includes('/projects?limit=100')) {
         return allProjects === null
           ? Response.json(
               { error: { code: 'permission.denied' } },
               { status: 403 },
             )
-          : Response.json(allProjects)
+          : Response.json({ items: allProjects, next_cursor: null })
       }
       return Response.json([])
     }),

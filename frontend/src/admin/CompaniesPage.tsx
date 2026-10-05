@@ -1,9 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import {
   createCompany,
   listActiveCompanyUsers,
-  listCompanies,
+  listCompaniesPage,
   managementErrorMessage,
   renameCompany,
   setCompanyActive,
@@ -18,6 +18,12 @@ export default function CompaniesPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [query, setQuery] = useState('')
+  const [appliedQuery, setAppliedQuery] = useState('')
+  const [listError, setListError] = useState('')
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const requestId = useRef(0)
   const [deactivating, setDeactivating] = useState<{
     company: Company
     users: Array<{ id: string; username: string; name_zh: string | null }>
@@ -26,30 +32,42 @@ export default function CompaniesPage() {
   } | null>(null)
 
   async function reload() {
-    setError('')
+    const id = ++requestId.current
+    setListError('')
+    setCompanies([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setLoading(true)
     try {
-      setCompanies(await listCompanies())
+      const page = await listCompaniesPage({ q: appliedQuery, limit: 50 })
+      if (id === requestId.current) {
+        setCompanies(page.items)
+        setNextCursor(page.next_cursor)
+      }
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
     } finally {
-      setLoading(false)
+      if (id === requestId.current) setLoading(false)
     }
   }
 
   useEffect(() => {
     let active = true
+    const id = ++requestId.current
     async function load() {
       try {
-        const rows = await listCompanies()
-        if (active) {
-          setCompanies(rows)
+        const page = await listCompaniesPage({ limit: 50 })
+        if (active && id === requestId.current) {
+          setCompanies(page.items)
+          setNextCursor(page.next_cursor)
         }
       } catch (caught) {
-        if (active) {
-          setError(managementErrorMessage(caught))
+        if (active && id === requestId.current) {
+          setListError(managementErrorMessage(caught))
         }
       } finally {
-        if (active) {
+        if (active && id === requestId.current) {
           setLoading(false)
         }
       }
@@ -59,6 +77,76 @@ export default function CompaniesPage() {
       active = false
     }
   }, [])
+
+  async function searchCompanies(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const search = query.trim()
+    setAppliedQuery(search)
+    const id = ++requestId.current
+    setCompanies([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setListError('')
+    setLoading(true)
+    try {
+      const page = await listCompaniesPage({ q: search, limit: 50 })
+      if (id === requestId.current) {
+        setCompanies(page.items)
+        setNextCursor(page.next_cursor)
+      }
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoading(false)
+    }
+  }
+
+  async function loadMoreCompanies() {
+    if (!nextCursor || loading || loadingMore) return
+    const id = requestId.current
+    setLoadingMore(true)
+    setListError('')
+    try {
+      const page = await listCompaniesPage({
+        q: appliedQuery,
+        cursor: nextCursor,
+        limit: 50,
+      })
+      if (id === requestId.current) {
+        setCompanies((current) => [...current, ...page.items])
+        setNextCursor(page.next_cursor)
+      }
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoadingMore(false)
+    }
+  }
+
+  async function clearSearch() {
+    setQuery('')
+    setAppliedQuery('')
+    const id = ++requestId.current
+    setCompanies([])
+    setNextCursor(null)
+    setLoadingMore(false)
+    setListError('')
+    setLoading(true)
+    try {
+      const page = await listCompaniesPage({ limit: 50 })
+      if (id === requestId.current) {
+        setCompanies(page.items)
+        setNextCursor(page.next_cursor)
+      }
+    } catch (caught) {
+      if (id === requestId.current)
+        setListError(managementErrorMessage(caught))
+    } finally {
+      if (id === requestId.current) setLoading(false)
+    }
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -175,7 +263,31 @@ export default function CompaniesPage() {
         </section>
       )}
       {loading ? <p>載入中…</p> : null}
-      {!loading && companies.length === 0 ? <p>目前沒有公司。</p> : null}
+      <form onSubmit={searchCompanies}>
+        <label>
+          搜尋公司
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            value={query}
+          />
+        </label>
+        <button disabled={loading} type="submit">
+          搜尋
+        </button>
+      </form>
+      {listError && <p role="alert">{listError}</p>}
+      {!loading && companies.length === 0 ? (
+        appliedQuery ? (
+          <p>
+            找不到符合「{appliedQuery}」的公司。{' '}
+            <button onClick={() => void clearSearch()} type="button">
+              清除搜尋
+            </button>
+          </p>
+        ) : (
+          <p>目前沒有公司。</p>
+        )
+      ) : null}
       {companies.length > 0 && (
         <table>
           <thead>
@@ -212,6 +324,15 @@ export default function CompaniesPage() {
             ))}
           </tbody>
         </table>
+      )}
+      {nextCursor && (
+        <button
+          disabled={loading || loadingMore}
+          onClick={() => void loadMoreCompanies()}
+          type="button"
+        >
+          {loadingMore ? '載入中…' : '載入更多'}
+        </button>
       )}
       <form onSubmit={save}>
         <h2>{renamingId ? '修改公司名稱' : '新增公司'}</h2>

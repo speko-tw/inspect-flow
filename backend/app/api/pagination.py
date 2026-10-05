@@ -20,13 +20,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import String, and_, bindparam, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.api.time_format import format_utc, parse_utc
 
 _CURSOR_ALPHABET = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def ilike_contains(column: Any, value: str) -> Any:
+    """Build a literal, case-insensitive substring condition."""
+    escaped = (
+        value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    pattern = bindparam("list_search_query", f"%{escaped}%", type_=String())
+    return column.ilike(pattern, escape="\\")
 
 
 @dataclass(frozen=True, order=True)
@@ -174,6 +183,85 @@ def page(
         "items": [serialize(item) for item in items],
         "next_cursor": next_cursor,
     }
+
+
+def page_by_text_key(
+    db: Session,
+    model: type[Any],
+    *,
+    sort_key: Any,
+    key_name: str,
+    cursor: str | None,
+    limit: int,
+    serialize: Callable[[Any], Any],
+    filters: Sequence[Any] = (),
+) -> dict[str, Any]:
+    """Page rows ordered by a required text field and UUID (API-R08)."""
+    cursor_key = _text_page_cursor_key(cursor, key_name)
+    statement = select(model).where(*filters)
+    if cursor_key is not None:
+        value, identifier = cursor_key
+        statement = statement.where(
+            or_(
+                sort_key > value,
+                and_(sort_key == value, model.id > identifier),
+            )
+        )
+    rows = db.scalars(
+        statement.order_by(sort_key, model.id).limit(limit + 1)
+    ).all()
+    items = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit:
+        last = items[-1]
+        next_cursor = _encode_text_page_cursor(
+            getattr(last, key_name), last.id, key_name
+        )
+    return {
+        "items": [serialize(item) for item in items],
+        "next_cursor": next_cursor,
+    }
+
+
+def _encode_text_page_cursor(
+    value: str, identifier: uuid.UUID, key_name: str
+) -> str:
+    payload = {"field": key_name, "value": value, "id": str(identifier)}
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _text_page_cursor_key(
+    cursor: str | None, key_name: str
+) -> tuple[str, uuid.UUID] | None:
+    if cursor is None:
+        return None
+    try:
+        if not _CURSOR_ALPHABET.fullmatch(cursor):
+            raise ValueError("invalid cursor alphabet")
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        payload = json.loads(raw.decode("utf-8"))
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"field", "value", "id"}
+            or payload["field"] != key_name
+            or not isinstance(payload["value"], str)
+        ):
+            raise ValueError("invalid cursor payload")
+        identifier = uuid.UUID(payload["id"])
+        value = payload["value"]
+        if _encode_text_page_cursor(value, identifier, key_name) != cursor:
+            raise ValueError("noncanonical cursor")
+        return value, identifier
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+        UnicodeDecodeError,
+        binascii.Error,
+        json.JSONDecodeError,
+    ) as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 
 
 def write_call(

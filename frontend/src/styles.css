@@ -355,6 +355,16 @@ table {
   font-size: 0.95rem;
 }
 
+.users-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.users-table-scroll table {
+  min-width: 58rem;
+}
+
 th,
 td {
   padding: var(--space-2) var(--space-3);

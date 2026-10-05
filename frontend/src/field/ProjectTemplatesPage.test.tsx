@@ -54,9 +54,12 @@ function mockApi(
   let saved = false
   const calls = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    if (url.endsWith('/projects')) {
+    if (url.includes('/projects?limit=100')) {
       return options.canSave
-        ? Response.json([{ id: 'project-1', name: '示範工程' }])
+        ? Response.json({
+            items: [{ id: 'project-1', name: '示範工程' }],
+            next_cursor: null,
+          })
         : Response.json(
             { error: { code: 'permission.denied' } },
             { status: 403 },

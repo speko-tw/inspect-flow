@@ -91,7 +91,7 @@ hint if mkcert is missing. To use another port, run
 `make run-frontend-https FRONTEND_PORT=<port>`. `make run-frontend`
 stays on plain HTTP.
 
-**iPhone or iPad** (same LAN) is still manual (#231):
+**iPhone or iPad** (same LAN) setup and device acceptance (#231):
 
 - Regenerate the certificate with this machine's LAN IP appended:
 
@@ -102,15 +102,41 @@ stays on plain HTTP.
     localhost 127.0.0.1 <LAN IP>
   ```
 
-  This overwrites the files `make dev-cert` created.
-- Also `export INSPECTFLOW_DEV_HOST=0.0.0.0` before starting the
-  frontend so it listens on the LAN; the variable only works in
-  HTTPS mode. The backend still binds 127.0.0.1 only; the frontend
-  forwards `/api` to it.
-- Copy `rootCA.pem` from the `mkcert -CAROOT` directory to the
-  iPhone, install it, then enable it under Settings > General >
-  About > Certificate Trust Settings.
-- Open `https://<LAN IP>:5173`.
+  Replace `<LAN IP>` with the development machine's IPv4 address. This
+  overwrites the files `make dev-cert` created.
+- Find the iPhone's IPv4 address and subnet mask in its Wi-Fi network
+  details. For example, use `192.168.1.0/24` when both devices are on
+  that subnet. Start the frontend with:
+
+  ```bash
+  make run-frontend-https \
+    INSPECTFLOW_DEV_HOST=192.168.1.20 \
+    INSPECTFLOW_DEV_ALLOWED_CIDR=192.168.1.0/24
+  ```
+
+  Replace the example host with the LAN IP used in the certificate, and
+  replace the CIDR with the actual allowed subnet. The server binds only
+  to that interface, and the LAN guard accepts only that Host value;
+  requests from outside the CIDR receive HTTP 403. `INSPECTFLOW_DEV_HOST` and
+  `INSPECTFLOW_DEV_ALLOWED_CIDR` are accepted only with HTTPS and must be
+  set together. Without them, Vite stays on loopback. The backend still
+  binds `127.0.0.1`; the frontend forwards `/api` to it.
+- On the development machine, run `mkcert -CAROOT` and transfer only
+  `rootCA.pem` from that directory to the iPhone (for example, with
+  AirDrop). This is the public root certificate. **Never transfer
+  `rootCA-key.pem` or any CA private key.** Open the certificate on the
+  iPhone and install the downloaded certificate profile in Settings.
+  Then go to Settings > General > About > Certificate Trust Settings and
+  enable full trust for the installed root certificate.
+- In Safari, open `https://<LAN IP>:5173/field/`, sign in, reload the
+  page and confirm the session remains signed in, then sign out. To add
+  Field to the Home Screen, use Share > Add to Home Screen; open it once
+  from the new icon to confirm standalone display.
+
+  **Device acceptance: NOT_RUN (requires the owner's iPhone).** Verify
+  that an allowed subnet can connect and an outside source gets HTTP 403,
+  then complete the Safari sign-in, reload, sign-out, and Home Screen
+  steps above.
 
 ## Documentation
 

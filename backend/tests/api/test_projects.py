@@ -194,7 +194,7 @@ def test_project_crud_duplicate_code_warning_and_dates(project_api):
     assert edited.json()["warnings"] == [{"code": "project_code.duplicate"}]
     listed = client.get("/api/v1/projects")
     assert listed.status_code == 200
-    assert len(listed.json()) == 4
+    assert len(listed.json()["items"]) == 4
     fetched = client.get(f"/api/v1/projects/{first_body['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["warnings"] == [{"code": "project_code.duplicate"}]
@@ -207,7 +207,7 @@ def test_project_list_query_count_does_not_grow(
     with _select_statements(get_engine()) as baseline:
         first = client.get("/api/v1/projects")
     assert first.status_code == 200
-    assert len(first.json()) == 2
+    assert len(first.json()["items"]) == 2
 
     for index in range(8):
         create_project(
@@ -223,10 +223,78 @@ def test_project_list_query_count_does_not_grow(
         listed = client.get("/api/v1/projects")
     assert listed.status_code == 200
     rows = listed.json()
-    assert len(rows) == 10
-    assert sum(bool(row["warnings"]) for row in rows) == 2
+    assert len(rows["items"]) == 10
+    assert sum(bool(row["warnings"]) for row in rows["items"]) == 2
     assert baseline
     assert len(expanded) == len(baseline)
+
+
+def test_project_list_search_cursor_and_validation(project_api):
+    client = project_api["admin_client"]
+    first = client.get("/api/v1/projects", params={"limit": 1})
+    assert first.status_code == 200
+    assert first.json()["next_cursor"]
+    last = client.get(
+        "/api/v1/projects",
+        params={"limit": 1, "cursor": first.json()["next_cursor"]},
+    )
+    assert last.status_code == 200
+    assert last.json()["items"][0]["id"] != first.json()["items"][0]["id"]
+    assert last.json()["next_cursor"] is None
+    assert (
+        client.get("/api/v1/projects", params={"q": "demo-other"}).json()[
+            "items"
+        ][0]["project_code"]
+        == "DEMO-OTHER-275"
+    )
+    project_name = project_api["project"].name
+    assert client.get("/api/v1/projects", params={"q": project_name}).json()[
+        "items"
+    ]
+
+    duplicate_first = client.post(
+        "/api/v1/projects",
+        json={
+            "project_code": "SAME-NAME-A",
+            "name": "同名分頁測試",
+            "client_name": "測試業主",
+            "site_location": "測試地點",
+        },
+    )
+    duplicate_second = client.post(
+        "/api/v1/projects",
+        json={
+            "project_code": "SAME-NAME-B",
+            "name": "同名分頁測試",
+            "client_name": "測試業主",
+            "site_location": "測試地點",
+        },
+    )
+    assert duplicate_first.status_code == duplicate_second.status_code == 201
+    first_same = client.get(
+        "/api/v1/projects", params={"q": "同名分頁測試", "limit": 1}
+    ).json()
+    second_same = client.get(
+        "/api/v1/projects",
+        params={
+            "q": "同名分頁測試",
+            "limit": 1,
+            "cursor": first_same["next_cursor"],
+        },
+    ).json()
+    assert [
+        row["id"] for row in first_same["items"] + second_same["items"]
+    ] == sorted([duplicate_first.json()["id"], duplicate_second.json()["id"]])
+    assert second_same["next_cursor"] is None
+    max_page = client.get("/api/v1/projects", params={"limit": 100})
+    assert max_page.status_code == 200
+    for params in (
+        {"limit": 0},
+        {"limit": 101},
+        {"cursor": "invalid!"},
+        {"q": "x" * 257},
+    ):
+        assert client.get("/api/v1/projects", params=params).status_code == 422
 
 
 def test_project_crud_requires_admin(project_api):

@@ -17,6 +17,11 @@ export interface Project {
   warnings: ProjectWarning[]
 }
 
+export interface ProjectPage {
+  items: Project[]
+  next_cursor: string | null
+}
+
 export type ProjectInput = {
   project_code: string
   name: string
@@ -57,8 +62,30 @@ export function hasDuplicateCodeWarning(project: Project): boolean {
   )
 }
 
-export function listProjects(): Promise<Project[]> {
-  return request('/projects')
+export function listProjectsPage(
+  options: {
+    q?: string
+    cursor?: string | null
+    limit?: number
+  } = {},
+): Promise<ProjectPage> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? 50),
+  })
+  if (options.q?.trim()) params.set('q', options.q.trim())
+  if (options.cursor) params.set('cursor', options.cursor)
+  return request(`/projects?${params.toString()}`)
+}
+
+export async function listProjects(): Promise<Project[]> {
+  const items: Project[] = []
+  let cursor: string | null = null
+  do {
+    const page = await listProjectsPage({ cursor, limit: 100 })
+    items.push(...page.items)
+    cursor = page.next_cursor
+  } while (cursor)
+  return items
 }
 
 export function getProject(id: string): Promise<Project> {
