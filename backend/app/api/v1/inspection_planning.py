@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import UUID
 
@@ -42,6 +43,7 @@ from app.models import (
     TaskSnapshotTextStandard,
     User,
 )
+from app.services.batch_load import load_by_id, load_grouped
 from app.services.inspection_details import project_inspection_item_detail
 from app.services.inspection_planning import (
     PlanningError,
@@ -224,57 +226,85 @@ def _zone(db: Session, zone_id: UUID | None) -> dict[str, Any] | None:
 
 
 def _task_summary(db: Session, task: InspectionTask) -> dict[str, Any]:
-    items = db.scalars(
-        select(TaskInspectionItem)
-        .where(TaskInspectionItem.task_id == task.id)
-        .order_by(TaskInspectionItem.created_at, TaskInspectionItem.id)
-    ).all()
-    details = []
-    for association in items:
-        snapshots = db.scalars(
-            select(TaskRequirementSnapshot)
-            .where(
-                TaskRequirementSnapshot.task_inspection_item_id
-                == association.id
+    return _task_summaries(db, [task])[0]
+
+
+def _task_summaries(
+    db: Session, tasks: Sequence[InspectionTask]
+) -> list[dict[str, Any]]:
+    """Serialize tasks with a fixed number of batched queries (#462)."""
+    associations = load_grouped(
+        db,
+        TaskInspectionItem.task_id,
+        [task.id for task in tasks],
+        TaskInspectionItem.created_at,
+        TaskInspectionItem.id,
+    )
+    snapshots = load_grouped(
+        db,
+        TaskRequirementSnapshot.task_inspection_item_id,
+        [row.id for rows in associations.values() for row in rows],
+        TaskRequirementSnapshot.revision,
+        TaskRequirementSnapshot.id,
+    )
+    rendered = _render_snapshots(
+        db, [row for rows in snapshots.values() for row in rows]
+    )
+    assignees = load_by_id(
+        db,
+        User,
+        [task.assignee_id for task in tasks if task.assignee_id is not None],
+    )
+    zones = load_by_id(
+        db,
+        ProjectZone,
+        [task.zone_id for task in tasks if task.zone_id is not None],
+    )
+    result = []
+    for task in tasks:
+        details = []
+        for association in associations.get(task.id, ()):
+            rows = snapshots.get(association.id, ())
+            current = next((row for row in rows if row.is_current), None)
+            details.append(
+                {
+                    "id": association.project_inspection_item_id,
+                    "status": association.item_status,
+                    "needs_reinspection": association.needs_reinspection,
+                    "snapshots": [rendered[row.id] for row in rows],
+                    "current_snapshot": rendered[current.id]
+                    if current
+                    else None,
+                }
             )
-            .order_by(TaskRequirementSnapshot.revision)
-        ).all()
-        current = next((row for row in snapshots if row.is_current), None)
-        details.append(
+        assignee = assignees.get(task.assignee_id)
+        zone = zones.get(task.zone_id)
+        result.append(
             {
-                "id": association.project_inspection_item_id,
-                "status": association.item_status,
-                "needs_reinspection": association.needs_reinspection,
-                "snapshots": [_snapshot(db, row) for row in snapshots],
-                "current_snapshot": _snapshot(db, current)
-                if current
-                else None,
+                "id": task.id,
+                "project_id": task.project_id,
+                "plan_id": task.plan_id,
+                "status": task.status,
+                "zone_id": task.zone_id,
+                "zone": {"id": zone.id, "name": zone.name} if zone else None,
+                "location_text": task.location_text,
+                "assignee_id": task.assignee_id,
+                "assignee": _person(assignee) if assignee else None,
+                "started_by": task.started_by,
+                "completed_by": task.completed_by,
+                "cancellation_reason": task.cancellation_reason,
+                "cancelled_from": task.cancelled_from_status,
+                "dispatched_at": (
+                    format_utc(task.dispatched_at)
+                    if task.dispatched_at is not None
+                    else None
+                ),
+                "items": details,
+                "created_at": task.created_at.isoformat(),
+                "updated_at": task.updated_at.isoformat(),
             }
         )
-    assignee = db.get(User, task.assignee_id) if task.assignee_id else None
-    return {
-        "id": task.id,
-        "project_id": task.project_id,
-        "plan_id": task.plan_id,
-        "status": task.status,
-        "zone_id": task.zone_id,
-        "zone": _zone(db, task.zone_id),
-        "location_text": task.location_text,
-        "assignee_id": task.assignee_id,
-        "assignee": _person(assignee) if assignee else None,
-        "started_by": task.started_by,
-        "completed_by": task.completed_by,
-        "cancellation_reason": task.cancellation_reason,
-        "cancelled_from": task.cancelled_from_status,
-        "dispatched_at": (
-            format_utc(task.dispatched_at)
-            if task.dispatched_at is not None
-            else None
-        ),
-        "items": details,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
-    }
+    return result
 
 
 def _field_task_summary(
@@ -347,92 +377,95 @@ def _person(user: User) -> dict[str, Any]:
     return {"id": user.id, "username": user.username, "name_zh": user.name_zh}
 
 
-def _snapshot(
-    db: Session, snapshot: TaskRequirementSnapshot
-) -> dict[str, Any]:
-    points = db.scalars(
-        select(TaskSnapshotPoint)
-        .where(TaskSnapshotPoint.snapshot_id == snapshot.id)
-        .order_by(TaskSnapshotPoint.sequence, TaskSnapshotPoint.id)
-    ).all()
-    rendered = []
-    for point in points:
-        text = db.scalar(
-            select(TaskSnapshotTextStandard).where(
-                TaskSnapshotTextStandard.point_id == point.id
-            )
-        )
-        numeric = db.scalar(
-            select(TaskSnapshotNumericStandard).where(
-                TaskSnapshotNumericStandard.point_id == point.id
-            )
-        )
-        fields = db.scalars(
-            select(TaskSnapshotMeasurementField)
-            .where(TaskSnapshotMeasurementField.point_id == point.id)
-            .order_by(
-                TaskSnapshotMeasurementField.sort_order,
-                TaskSnapshotMeasurementField.id,
-            )
-        ).all()
-        evidence = db.scalars(
-            select(TaskSnapshotEvidenceRequirement).where(
-                TaskSnapshotEvidenceRequirement.point_id == point.id
-            )
-        ).all()
-        rendered.append(
-            {
-                "sequence": point.sequence,
-                "title": point.title,
-                "instruction": point.instruction,
-                "text_standard": {"text": text.text} if text else None,
-                "numeric_standard": {
-                    "value": numeric.value,
-                    "condition": numeric.condition,
-                    "unit": numeric.unit,
-                    "tolerance": numeric.tolerance,
-                    "range_form": numeric.range_form,
-                    "lower_bound": numeric.lower_bound,
-                    "upper_bound": numeric.upper_bound,
-                    "measurement_field_id": (
-                        numeric.source_measurement_field_id
-                    ),
+def _render_snapshots(
+    db: Session, snapshots: Sequence[TaskRequirementSnapshot]
+) -> dict[UUID, dict[str, Any]]:
+    """Render snapshots keyed by id, loading child rows in batches."""
+    points = load_grouped(
+        db,
+        TaskSnapshotPoint.snapshot_id,
+        [snapshot.id for snapshot in snapshots],
+        TaskSnapshotPoint.sequence,
+        TaskSnapshotPoint.id,
+    )
+    point_ids = [row.id for rows in points.values() for row in rows]
+    texts = load_grouped(db, TaskSnapshotTextStandard.point_id, point_ids)
+    numerics = load_grouped(
+        db, TaskSnapshotNumericStandard.point_id, point_ids
+    )
+    fields = load_grouped(
+        db,
+        TaskSnapshotMeasurementField.point_id,
+        point_ids,
+        TaskSnapshotMeasurementField.sort_order,
+        TaskSnapshotMeasurementField.id,
+    )
+    evidences = load_grouped(
+        db,
+        TaskSnapshotEvidenceRequirement.point_id,
+        point_ids,
+        TaskSnapshotEvidenceRequirement.id,
+    )
+    result: dict[UUID, dict[str, Any]] = {}
+    for snapshot in snapshots:
+        rendered = []
+        for point in points.get(snapshot.id, ()):
+            text = next(iter(texts.get(point.id, ())), None)
+            numeric = next(iter(numerics.get(point.id, ())), None)
+            rendered.append(
+                {
+                    "sequence": point.sequence,
+                    "title": point.title,
+                    "instruction": point.instruction,
+                    "text_standard": {"text": text.text} if text else None,
+                    "numeric_standard": {
+                        "value": numeric.value,
+                        "condition": numeric.condition,
+                        "unit": numeric.unit,
+                        "tolerance": numeric.tolerance,
+                        "range_form": numeric.range_form,
+                        "lower_bound": numeric.lower_bound,
+                        "upper_bound": numeric.upper_bound,
+                        "measurement_field_id": (
+                            numeric.source_measurement_field_id
+                        ),
+                    }
+                    if numeric
+                    else None,
+                    "measurement_fields": [
+                        {
+                            "id": f.source_field_id,
+                            "name": f.name,
+                            "field_type": f.field_type,
+                            "unit": f.unit,
+                        }
+                        for f in fields.get(point.id, ())
+                    ],
+                    "evidence_requirements": [
+                        {
+                            "evidence_type": e.evidence_type,
+                            "required": e.required,
+                            "min_count": e.min_count,
+                            "max_count": e.max_count,
+                        }
+                        for e in evidences.get(point.id, ())
+                    ],
                 }
-                if numeric
-                else None,
-                "measurement_fields": [
-                    {
-                        "id": f.source_field_id,
-                        "name": f.name,
-                        "field_type": f.field_type,
-                        "unit": f.unit,
-                    }
-                    for f in fields
-                ],
-                "evidence_requirements": [
-                    {
-                        "evidence_type": e.evidence_type,
-                        "required": e.required,
-                        "min_count": e.min_count,
-                        "max_count": e.max_count,
-                    }
-                    for e in evidence
-                ],
-            }
-        )
-    return {
-        "revision": snapshot.revision,
-        "source_standard_revision": snapshot.source_standard_revision,
-        "title": snapshot.title,
-        "instruction": snapshot.instruction,
-        "source_template_name": snapshot.source_template_name,
-        "is_current": snapshot.is_current,
-        "superseded_reason": snapshot.superseded_reason,
-        "superseded_at": snapshot.superseded_at.isoformat()
-        if snapshot.superseded_at
-        else None,
-        "inspection_points": rendered,
-    }
+            )
+        result[snapshot.id] = {
+            "revision": snapshot.revision,
+            "source_standard_revision": snapshot.source_standard_revision,
+            "title": snapshot.title,
+            "instruction": snapshot.instruction,
+            "source_template_name": snapshot.source_template_name,
+            "is_current": snapshot.is_current,
+            "superseded_reason": snapshot.superseded_reason,
+            "superseded_at": snapshot.superseded_at.isoformat()
+            if snapshot.superseded_at
+            else None,
+            "inspection_points": rendered,
+        }
+    return result
 
 
 def _plan_summary(
@@ -460,7 +493,7 @@ def _plan_summary(
                 .order_by(InspectionTask.created_at, InspectionTask.id)
             ).all()
         )
-        result["tasks"] = [_task_summary(db, task) for task in tasks]
+        result["tasks"] = _task_summaries(db, tasks)
     return result
 
 
@@ -684,7 +717,7 @@ def plan_tasks(
                 db, project_id=plan.project_id
             ),
         ),
-        serialize=lambda row: _task_summary(db, row),
+        serialize_batch=lambda rows: _task_summaries(db, rows),
     )
 
 
@@ -706,7 +739,7 @@ def project_tasks(
         cursor=cursor,
         limit=limit,
         filters=filters,
-        serialize=lambda row: _task_summary(db, row),
+        serialize_batch=lambda rows: _task_summaries(db, rows),
     )
 
 
@@ -749,23 +782,25 @@ def item_tasks(
             InspectionTask.project_id == project_id,
             InspectionTask.id.in_(task_ids),
         ),
-        serialize=lambda row: _impact_summary(db, row),
+        serialize_batch=lambda rows: _impact_summaries(db, rows),
     )
 
 
-def _impact_summary(db: Session, task: InspectionTask):
-    plan = db.get(InspectionPlan, task.plan_id)
-    summary = _task_summary(db, task)
-    summary.update(
-        {
-            "plan_name": plan.name if plan else None,
-            "plan_archived": bool(plan and plan.is_archived),
-            # Results are not part of the inspection-planning API before
-            # the 0.7.x result endpoints are introduced.
-            "has_result": False,
-        }
-    )
-    return summary
+def _impact_summaries(db: Session, tasks: Sequence[InspectionTask]):
+    plans = load_by_id(db, InspectionPlan, [task.plan_id for task in tasks])
+    summaries = _task_summaries(db, tasks)
+    for task, summary in zip(tasks, summaries, strict=True):
+        plan = plans.get(task.plan_id)
+        summary.update(
+            {
+                "plan_name": plan.name if plan else None,
+                "plan_archived": bool(plan and plan.is_archived),
+                # Results are not part of the inspection-planning API
+                # before the 0.7.x result endpoints are introduced.
+                "has_result": False,
+            }
+        )
+    return summaries
 
 
 @router.get("/projects/{project_id}/inspection-task-assignees")
