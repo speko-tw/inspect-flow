@@ -113,7 +113,7 @@ def _require_permission(
     return operator.id
 
 
-def _project_permissions(
+def project_permissions_for(
     session: Session, project_id: uuid.UUID
 ) -> frozenset[str]:
     operator = get_current_operator(session)
@@ -122,6 +122,12 @@ def _project_permissions(
     return effective_permissions(
         session, user_id=operator.id, project_id=project_id
     )
+
+
+def _project_permissions(
+    session: Session, project_id: uuid.UUID
+) -> frozenset[str]:
+    return project_permissions_for(session, project_id)
 
 
 def _lock_plan(session: Session, plan_id: uuid.UUID) -> InspectionPlan | None:
