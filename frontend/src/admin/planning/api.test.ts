@@ -320,6 +320,16 @@ describe('planning HTTP client contract', () => {
     ).toBe('計畫名稱不可空白，且不得超過 128 字元。')
   })
 
+  it.each([
+    [401, '登入狀態已失效，請重新登入。'],
+    [403, '你沒有權限執行這項操作，畫面已切換為唯讀。'],
+    [500, '伺服器暫時無法處理，請稍後再試。'],
+    [409, '目前狀態不允許這項操作，請重新整理。'],
+    [404, '找不到資料，請重新整理後再試。'],
+  ])('maps status %s to the shared planning message', (status, text) => {
+    expect(planningErrorMessage(new ManagementApiError(status))).toBe(text)
+  })
+
   it('reads Task snapshots and paginated API envelopes', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = String(input)

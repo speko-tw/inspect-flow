@@ -1,43 +1,17 @@
 // Field 清單請求使用同站 Cookie；回應欄位在此檢查後交給畫面。
 
-const API_BASE = '/api/v1'
+import { HttpError, request } from '../http'
 
 /** 工作台的 API 回傳非預期狀態碼時拋出。 */
-export class FieldApiError extends Error {
-  readonly status: number
-  /** 後端錯誤封包的 `error.code`；非 JSON 回應時為 undefined。 */
-  readonly code: string | undefined
-
-  constructor(status: number, code?: string) {
-    super(`API 錯誤（狀態碼 ${status}）`)
+export class FieldApiError extends HttpError {
+  constructor(status: number, code?: string, details?: unknown) {
+    super(status, code, details)
     this.name = 'FieldApiError'
-    this.status = status
-    this.code = code
   }
 }
 
-async function failure(response: Response): Promise<FieldApiError> {
-  let code: string | undefined
-  try {
-    const body: unknown = await response.json()
-    if (isRecord(body) && isRecord(body.error)) {
-      const value = body.error.code
-      if (typeof value === 'string') code = value
-    }
-  } catch {
-    // 非 JSON 的錯誤回應只以狀態碼處理。
-  }
-  return new FieldApiError(response.status, code)
-}
-
-async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: 'same-origin',
-  })
-  if (!response.ok) {
-    throw await failure(response)
-  }
-  return (await response.json()) as T
+function getJson<T>(path: string): Promise<T> {
+  return request<T>(path, undefined, FieldApiError)
 }
 
 export interface FieldTask {
@@ -276,14 +250,11 @@ export async function fetchFieldTaskDetail(
 export async function startFieldTask(
   taskId: string,
 ): Promise<{ id: string; status: FieldTaskDetail['status'] }> {
-  const response = await fetch(
-    `${API_BASE}/inspection-tasks/${encodeURIComponent(taskId)}:start`,
-    { method: 'POST', credentials: 'same-origin' },
+  const body = await request<unknown>(
+    `/inspection-tasks/${encodeURIComponent(taskId)}:start`,
+    { method: 'POST' },
+    FieldApiError,
   )
-  if (!response.ok) {
-    throw await failure(response)
-  }
-  const body: unknown = await response.json()
   if (
     !isRecord(body) ||
     typeof body.id !== 'string' ||

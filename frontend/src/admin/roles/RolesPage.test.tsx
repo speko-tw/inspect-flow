@@ -433,7 +433,7 @@ describe('admin role management page', () => {
     renderRoles()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '系統發生錯誤，請稍後再試。',
+      '伺服器暫時無法處理，請稍後再試。',
     )
   })
 

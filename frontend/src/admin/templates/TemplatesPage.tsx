@@ -7,7 +7,8 @@ import {
   type ReactNode,
 } from 'react'
 
-import { ManagementApiError, managementErrorMessage } from '../api'
+import { HttpError, isForbidden } from '../../http'
+import { managementErrorMessage } from '../api'
 import { InlineConfirm } from './InlineConfirm'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
@@ -110,27 +111,21 @@ function localizeFields(item: TemplateItem): TemplateItem {
   }
 }
 
-function isForbidden(error: unknown): boolean {
-  return (
-    error instanceof ManagementApiError &&
-    (error.status === 403 || error.code === 'permission.denied')
-  )
+const TEMPLATE_NOT_SAVED =
+  '範本未儲存，輸入內容已保留。請重新檢查查核項次與單位。'
+
+const TEMPLATE_ERROR_CODES: Record<string, string> = {
+  'template.name_conflict': '同一層已有相同名稱，請換個名稱。',
+  'template.category_not_empty': '此類別還有系統，請先處理系統。',
+  'template.system_not_empty': '此系統還有查核項目，請先處理項目。',
+  'request.validation_failed': TEMPLATE_NOT_SAVED,
 }
 
 function apiMessage(error: unknown): string {
-  if (error instanceof ManagementApiError) {
-    const messages: Record<string, string> = {
-      'template.name_conflict': '同一層已有相同名稱，請換個名稱。',
-      'template.category_not_empty': '此類別還有系統，請先處理系統。',
-      'template.system_not_empty': '此系統還有查核項目，請先處理項目。',
-      'request.validation_failed':
-        '範本未儲存，輸入內容已保留。請重新檢查查核項次與單位。',
-      'permission.denied': '你沒有權限執行這項操作。',
-    }
-    if (messages[error.code ?? '']) return messages[error.code ?? '']
-    if (error.status === 422) {
-      return '範本未儲存，輸入內容已保留。請重新檢查查核項次與單位。'
-    }
+  if (error instanceof HttpError) {
+    const specific = TEMPLATE_ERROR_CODES[error.code ?? '']
+    if (specific) return specific
+    if (error.status === 422) return TEMPLATE_NOT_SAVED
   }
   return managementErrorMessage(error)
 }

@@ -49,11 +49,6 @@ export interface Role {
   permission_codes: string[]
 }
 
-interface RolePage {
-  items: Role[]
-  next_cursor: string | null
-}
-
 export const DUPLICATE_CODE_WARNING = 'project_code.duplicate'
 
 export function hasDuplicateCodeWarning(project: Project): boolean {
@@ -75,17 +70,6 @@ export function listProjectsPage(
   if (options.q?.trim()) params.set('q', options.q.trim())
   if (options.cursor) params.set('cursor', options.cursor)
   return request(`/projects?${params.toString()}`)
-}
-
-export async function listProjects(): Promise<Project[]> {
-  const items: Project[] = []
-  let cursor: string | null = null
-  do {
-    const page = await listProjectsPage({ cursor, limit: 100 })
-    items.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return items
 }
 
 export function getProject(id: string): Promise<Project> {
@@ -144,21 +128,6 @@ export function removeProjectMember(
   return request(`/projects/${projectId}/members/${userId}`, {
     method: 'DELETE',
   })
-}
-
-/** 角色 API 是游標分頁；沿著 `next_cursor` 取完所有角色。 */
-export async function listAllRoles(): Promise<Role[]> {
-  const roles: Role[] = []
-  let cursor: string | null = null
-  do {
-    const query: string = cursor
-      ? `?limit=100&cursor=${encodeURIComponent(cursor)}`
-      : '?limit=100'
-    const page: RolePage = await request(`/roles${query}`)
-    roles.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return roles
 }
 
 export function personLabel(person: {

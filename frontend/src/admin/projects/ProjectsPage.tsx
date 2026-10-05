@@ -290,7 +290,12 @@ export default function ProjectsPage() {
                 >
                   套用範本
                 </Link>
-                <Link to={`/admin/projects/${project.id}`}>查看專案</Link>
+                <Link
+                  className="standalone-link"
+                  to={`/admin/projects/${project.id}`}
+                >
+                  查看專案
+                </Link>
               </article>
             ))}
           </div>
