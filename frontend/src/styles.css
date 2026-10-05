@@ -1631,7 +1631,11 @@ output {
   }
 }
 
-/* ---- 觸控目標：窄螢幕一律 >= 44px（放在檔尾，蓋過前面各元件的較小值） ---- */
+/*
+ * ---- 觸控目標：窄螢幕一律 >= 44px（放在檔尾，蓋過前面各元件的較小值）----
+ * 頂端導覽連結（.topbar nav a）與專案頁的「回專案清單」
+ * （.project-home-header p a）已在各自的規則裡不分寬度固定 44px，不重複列在這裡。
+ */
 
 @media (max-width: 40rem) {
   button,
@@ -1640,7 +1644,6 @@ output {
   .button-link,
   td button,
   .topbar button,
-  .topbar nav a,
   .standalone-link,
   .tpl-return-project,
   .tpl-tree-row,
@@ -1655,7 +1658,6 @@ output {
     min-height: var(--touch-target);
   }
 
-  .topbar nav a,
   .standalone-link {
     display: inline-flex;
     align-items: center;
