@@ -687,7 +687,7 @@ describe('admin project members', () => {
       '可查看任務、到現場查核',
     )
     expect(screen.getByLabelText('審核者')).toHaveAccessibleDescription(
-      '可建立與修改計畫、建立與修改任務、派出任務',
+      '可建立計畫、建立任務、派出任務',
     )
     expect(document.body.textContent).not.toMatch(/inspection_|project_/)
   })

@@ -12,12 +12,25 @@ describe('describeRole', () => {
         'inspection_task.dispatch',
         'inspection_task.assign',
       ]),
-    ).toBe('可建立與修改計畫、建立與修改任務、指派人員、派出任務')
+    ).toBe('可建立計畫、建立任務、指派任務給查核員、派出任務')
   })
 
-  it('shows only the stronger phrase of a read/manage pair', () => {
+  it('words each code only as far as the backend operation goes', () => {
+    expect(describeRole(['inspection_plan.create'])).toBe('可建立計畫')
+    expect(describeRole(['inspection_plan.manage'])).toBe('可修改計畫名稱')
+    expect(describeRole(['inspection_task.create'])).toBe('可建立任務')
+    expect(describeRole(['inspection_task.manage'])).toBe('可修改任務位置')
+    expect(describeRole(['inspection_plan.archive'])).toBe('可封存計畫')
+    expect(describeRole(['inspection_plan.unarchive'])).toBe('可取消封存計畫')
+    expect(describeRole(['inspection_task.delete_draft'])).toBe(
+      '可刪除草稿任務',
+    )
+    expect(describeRole(['inspection_task.cancel'])).toBe('可取消或恢復任務')
+  })
+
+  it('judges read and manage codes separately', () => {
     expect(describeRole(['project_zone.read', 'project_zone.manage'])).toBe(
-      '可管理分區',
+      '可查看分區、新增、修改與刪除分區',
     )
     expect(describeRole(['project_zone.read'])).toBe('可查看分區')
   })
