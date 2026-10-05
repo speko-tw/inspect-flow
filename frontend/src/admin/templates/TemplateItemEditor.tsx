@@ -244,7 +244,7 @@ export function TemplateItemEditor({
                 key={point.id ?? index}
                 open={
                   openPoint === index ||
-                  expandedErrorPoints.has(index) ||
+                  (expandedErrorPoints.has(index) && errorPoints.has(index)) ||
                   (!accordionInteracted && errorPoints.has(index))
                 }
               >
@@ -253,11 +253,23 @@ export function TemplateItemEditor({
                     event.preventDefault()
                     const isOpen =
                       openPoint === index ||
-                      expandedErrorPoints.has(index) ||
+                      (expandedErrorPoints.has(index) &&
+                        errorPoints.has(index)) ||
                       (!accordionInteracted && errorPoints.has(index))
                     const opening = !isOpen
                     setAccordionInteracted(true)
-                    setExpandedErrorPoints(new Set())
+                    setExpandedErrorPoints((current) => {
+                      const preserved = accordionInteracted
+                        ? current
+                        : new Set([...current, ...errorPoints])
+                      return new Set(
+                        [...preserved].filter(
+                          (pointIndex) =>
+                            errorPoints.has(pointIndex) &&
+                            (opening || pointIndex !== index),
+                        ),
+                      )
+                    })
                     setOpenPoint(opening ? index : null)
                     if (opening) focusPointTitle(index)
                   }}
