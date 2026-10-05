@@ -1,0 +1,59 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
+
+import { ManagementApiError } from '../api'
+import { listProjectItems, type ProjectItemData } from './api'
+
+export default function ProjectItemLinks({
+  projectId,
+}: {
+  projectId: string
+}) {
+  const [items, setItems] = useState<ProjectItemData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    listProjectItems(projectId)
+      .then((loaded) => {
+        if (active) setItems(loaded)
+      })
+      .catch((caught: unknown) => {
+        if (!active) return
+        setError(
+          caught instanceof ManagementApiError && caught.status === 403
+            ? '你沒有權限瀏覽此專案的查核項目。'
+            : '無法載入專案查核項目。',
+        )
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [projectId])
+
+  return (
+    <section aria-labelledby="project-items-heading">
+      <h2 id="project-items-heading">專案查核項目</h2>
+      {loading && <p>載入中…</p>}
+      {error && <p role="alert">{error}</p>}
+      {!loading && !error && items.length === 0 && <p>目前沒有查核項目。</p>}
+      {items.length > 0 && (
+        <ul>
+          {items.map((item) => (
+            <li key={item.id}>
+              <Link
+                to={`/admin/projects/${projectId}/inspection-items/${item.id}`}
+              >
+                修改「{item.title}」
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}

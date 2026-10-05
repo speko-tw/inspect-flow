@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
+import {
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -8,6 +15,9 @@ import RolesPage from './roles/RolesPage'
 import ProjectDetailPage from './projects/ProjectDetailPage'
 import ProjectsPage from './projects/ProjectsPage'
 import TemplatesPage from './templates/TemplatesPage'
+import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
+import ProjectItemLinks from './projectItems/ProjectItemLinks'
+import { projectItemApi } from './projectItems/api'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
@@ -19,6 +29,11 @@ const NAV_ITEMS = [
   { to: '/admin/templates', label: '範本管理' },
   { to: '/change-password', label: '變更密碼' },
 ]
+
+function MemberProjectItems() {
+  const { projectId = '' } = useParams()
+  return <ProjectItemLinks projectId={projectId} />
+}
 
 export default function AdminPage() {
   const { user } = useCurrentUser()
@@ -50,6 +65,23 @@ export default function AdminPage() {
   }
 
   if (!user.is_admin) {
+    if (location.pathname.startsWith('/admin/projects/')) {
+      return (
+        <main>
+          <Routes>
+            <Route
+              element={<MemberProjectItems />}
+              path="projects/:projectId"
+            />
+            <Route
+              element={<ProjectItemChangePage api={projectItemApi} />}
+              path="projects/:projectId/inspection-items/:itemId"
+            />
+          </Routes>
+          <NavLink to="/field">返回工作台</NavLink>
+        </main>
+      )
+    }
     return (
       <main>
         <h1>無權限</h1>
@@ -125,6 +157,10 @@ export default function AdminPage() {
           <Route path="roles" element={<RolesPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route
+            path="projects/:projectId/inspection-items/:itemId"
+            element={<ProjectItemChangePage api={projectItemApi} />}
+          />
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
         </Routes>
