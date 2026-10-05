@@ -69,7 +69,10 @@ export function TemplateItemEditor({
   setConfirmField,
 }: Props) {
   const [openPoint, setOpenPoint] = useState<number | null>(0)
-  if (!itemDraft) return null
+  const [expandedErrorPoints, setExpandedErrorPoints] = useState<Set<number>>(
+    new Set(),
+  )
+  const [accordionInteracted, setAccordionInteracted] = useState(false)
   const inputError = (key: string) => errors[key]
   const errorPoints = new Set(
     Object.keys(errors)
@@ -77,6 +80,45 @@ export function TemplateItemEditor({
       .map((key) => Number(key.split(':')[1]))
       .filter((index) => Number.isInteger(index)),
   )
+  if (!itemDraft) return null
+  const preserveErrorExpansion = () => {
+    const pointsToPreserve = accordionInteracted
+      ? openPoint !== null && errorPoints.has(openPoint)
+        ? [openPoint]
+        : []
+      : [...errorPoints]
+    setExpandedErrorPoints(
+      (current) => new Set([...current, ...pointsToPreserve]),
+    )
+  }
+  const updatePointAndPreserveErrors = (
+    index: number,
+    changes: Partial<InspectionPoint>,
+  ) => {
+    preserveErrorExpansion()
+    updatePoint(index, changes)
+  }
+  const updateFieldAndPreserveErrors = (
+    pointIndex: number,
+    fieldIndex: number,
+    changes: Partial<MeasurementField>,
+  ) => {
+    preserveErrorExpansion()
+    updateField(pointIndex, fieldIndex, changes)
+  }
+  const updateNumericAndPreserveErrors = (
+    index: number,
+    changes: Partial<NonNullable<InspectionPoint['numeric_standard']>>,
+  ) => {
+    preserveErrorExpansion()
+    updateNumeric(index, changes)
+  }
+  const updatePhotoDraftAndPreserveErrors = (
+    updater: (current: Record<string, string>) => Record<string, string>,
+  ) => {
+    preserveErrorExpansion()
+    setPhotoDraft(updater)
+  }
   const focusPointTitle = (index: number) => {
     window.setTimeout(() => {
       document.getElementById(`point-${index}-title`)?.focus()
@@ -106,7 +148,11 @@ export function TemplateItemEditor({
           resetMode()
         }
       }}
-      onSubmit={(event) => void saveItem(event)}
+      onSubmit={(event) => {
+        setAccordionInteracted(false)
+        setExpandedErrorPoints(new Set())
+        void saveItem(event)
+      }}
     >
       <div className="tpl-editor-heading">
         <div>
@@ -196,12 +242,22 @@ export function TemplateItemEditor({
               <details
                 className="tpl-point-card"
                 key={point.id ?? index}
-                open={openPoint === index || errorPoints.has(index)}
+                open={
+                  openPoint === index ||
+                  expandedErrorPoints.has(index) ||
+                  (!accordionInteracted && errorPoints.has(index))
+                }
               >
                 <summary
                   onClick={(event) => {
                     event.preventDefault()
-                    const opening = openPoint !== index
+                    const isOpen =
+                      openPoint === index ||
+                      expandedErrorPoints.has(index) ||
+                      (!accordionInteracted && errorPoints.has(index))
+                    const opening = !isOpen
+                    setAccordionInteracted(true)
+                    setExpandedErrorPoints(new Set())
                     setOpenPoint(opening ? index : null)
                     if (opening) focusPointTitle(index)
                   }}
@@ -236,7 +292,9 @@ export function TemplateItemEditor({
                   data-error-key={`point:${index}:title`}
                   id={`point-${index}-title`}
                   onChange={(event) =>
-                    updatePoint(index, { title: event.target.value })
+                    updatePointAndPreserveErrors(index, {
+                      title: event.target.value,
+                    })
                   }
                   value={point.title}
                 />
@@ -249,7 +307,7 @@ export function TemplateItemEditor({
                 <textarea
                   id={`point-${index}-instruction`}
                   onChange={(event) =>
-                    updatePoint(index, {
+                    updatePointAndPreserveErrors(index, {
                       instruction: event.target.value,
                     })
                   }
@@ -259,6 +317,14 @@ export function TemplateItemEditor({
                   <button
                     onClick={() => {
                       removePoint(index)
+                      setExpandedErrorPoints((current) => {
+                        const next = new Set<number>()
+                        current.forEach((pointIndex) => {
+                          if (pointIndex < index) next.add(pointIndex)
+                          if (pointIndex > index) next.add(pointIndex - 1)
+                        })
+                        return next
+                      })
                       setOpenPoint((current) => {
                         if (current === null) return null
                         if (current > index) return current - 1
@@ -277,15 +343,15 @@ export function TemplateItemEditor({
                   point={point}
                   pointIndex={index}
                   setConfirmField={setConfirmField}
-                  updateField={updateField}
-                  updatePoint={updatePoint}
+                  updateField={updateFieldAndPreserveErrors}
+                  updatePoint={updatePointAndPreserveErrors}
                 />
                 <NumericStandardEditor
                   errors={errors}
                   point={point}
                   pointIndex={index}
-                  updateNumeric={updateNumeric}
-                  updatePoint={updatePoint}
+                  updateNumeric={updateNumericAndPreserveErrors}
+                  updatePoint={updatePointAndPreserveErrors}
                 />
                 <section className="tpl-point-section" aria-label="照片需求">
                   <h4>照片需求</h4>
@@ -302,7 +368,7 @@ export function TemplateItemEditor({
                     inputMode="numeric"
                     min="1"
                     onChange={(event) => {
-                      setPhotoDraft((current) => ({
+                      updatePhotoDraftAndPreserveErrors((current) => ({
                         ...current,
                         [String(index)]: event.target.value,
                       }))

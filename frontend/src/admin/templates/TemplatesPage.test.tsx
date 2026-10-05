@@ -466,10 +466,23 @@ describe('TemplatesPage', () => {
     await waitFor(() =>
       expect(document.getElementById('point-0-title')).toHaveFocus(),
     )
+    const thirdTitle = document.getElementById('point-2-title')!
+    thirdTitle.focus()
+    expect(thirdTitle).toHaveFocus()
+    fireEvent.change(thirdTitle, { target: { value: 'X' } })
+    fireEvent.change(thirdTitle, { target: { value: 'XY' } })
+    expect(thirdTitle).toHaveValue('XY')
+    expect(cards[2]).toHaveAttribute('open')
+    expect(thirdTitle).toHaveFocus()
+
     fireEvent.click(cards[2].querySelector('summary')!)
-    expect(cards[0]).toHaveAttribute('open')
-    expect(cards[1]).toHaveAttribute('open')
+    expect(cards[0]).not.toHaveAttribute('open')
+    expect(cards[1]).not.toHaveAttribute('open')
     expect(cards[2]).not.toHaveAttribute('open')
+    fireEvent.click(cards[2].querySelector('summary')!)
+    expect(cards[0]).not.toHaveAttribute('open')
+    expect(cards[1]).not.toHaveAttribute('open')
+    expect(cards[2]).toHaveAttribute('open')
   })
 
   it('shows empty state and creates a category', async () => {
