@@ -27,7 +27,7 @@
 - T9 依負責人 [#427 定案留言](https://github.com/speko-tw/inspect-flow/issues/427#issuecomment-5981195507) 與核可原型調整既有 T5 介面；單項 API 沿用 T3，不修改後端產品程式碼。
 - #365（PR #370）補上專案查核項目列表與存成範本 API；#357（PR #376）補上畫面，納入 T7 收尾驗收。
 - #389（負責人依 #387 指示）：Admin 與範本管理員可管理範本庫、存成範本及跨專案瀏覽；一般專案成員維持 403。此變更採用 `backend/app/auth/access.py` 的共用授權判斷，並由 TPL-AC08 API／契約測試及前端 Admin 控制項測試驗證。
-- TPL-AC07 在本規格只驗收範本端每項次至少一筆必填照片需求、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
+- TPL-AC07 在本規格只驗收範本端每項次恰好一筆必填照片需求（多送一筆回 422）、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。
 
 ## 並行分組
@@ -60,7 +60,7 @@
 | TPL-AC04 | API 測試：更新同一 `Inspection Template` 後只有一份最新內容，migration/schema 中不存在 `Template Version`。 |
 | TPL-AC05 | 服務/API 測試：以 `template_id` 套用單項、以 `system_id` 套用整個系統；確認每筆 `ProjectInspectionItem` 複製完整、含 `project_id`、來源名稱與時間，且來源變更不影響專案資料。 |
 | TPL-AC06 | 權限與整合測試：範本管理員可跨專案讀取並存成範本；專案副本在來源刪改後保持不變。 |
-| TPL-AC07 | API 測試 `test_photo_requirements_are_required_unbounded_and_photo_only` 與結構測試：每項次至少有一筆必填照片需求、`min_count >= 1`、無最大數量且只接受照片；送入 `overview`／`is_overview` 總覽標記回 422，範本沒有總覽需求欄位，因此總覽照不計入此最低需求。現場照片覆蓋、跨項次共用及總覽照選拍由 P6 `field-evidence` #105 驗收。 |
+| TPL-AC07 | API 測試 `test_photo_requirements_are_required_unbounded_and_photo_only`、`test_template_writes_reject_two_photo_requirements_per_point`、`test_structure_validation_requires_exactly_one_photo_requirement`、`test_save_as_template_rejects_a_source_with_two_photo_requirements`、`test_project_item_patch_rejects_invalid_point_structure`，以及資料庫測試 `test_duplicate_photo_requirement_rows_are_blocked_by_the_database`與遷移測試 `test_evidence_unique_migration_keeps_largest_min_count_per_point`：每項次恰好一筆必填照片需求（範本 POST、PUT、整系統 PUT 與專案項目 PATCH 送兩筆都回 422；另存為範本的結構驗證與資料庫唯一索引同樣擋下）、`min_count >= 1`、無最大數量且只接受照片；送入 `overview`／`is_overview` 總覽標記回 422，範本沒有總覽需求欄位，因此總覽照不計入此最低需求。現場照片覆蓋、跨項次共用及總覽照選拍由 P6 `field-evidence` #105 驗收。 |
 | TPL-AC08 | API 整合／契約測試：逐端點驗證讀寫權限；Admin 與範本管理員可執行所有範本庫寫入、存成範本及跨專案瀏覽，一般專案成員（含專案管理者）仍為 403；只有 Admin 可指派或收回固定 `template_admin` 角色，成功後查核稽核紀錄；Admin 與範本管理員的 `GET /api/v1/projects` 均回傳全部專案，其他非 Admin 為 403；分類或系統刪除衝突回指定 409；路徑、UUID、內容型別與錯誤 envelope 依 `api-conventions`。 |
 | TPL-AC09 | model/API 測試：同一項次可設多個文字或數字實測欄位；數字欄位有單位；每個數值標準綁定一個數字欄位，僅該欄位單位自動帶入且不可另設；範本 schema 不含現場填值或換算行為。 |
 | TPL-AC10 | 前端測試：範本管理 UI 可管理工程類別、系統與單項查核項目範本；分類或系統刪除衝突顯示對應 409。 |

@@ -149,7 +149,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 | `inspection_task.cancel` | 取消或恢復任務；恢復沿用此代碼，無獨立 `inspection_task.restore`（規格設計，非負責人裁定） |
 | `project_inspection_item.edit` | 修改專案查核項目；沿用 `template-system` TPL-R09，不重複新增代碼 |
 
-修改專案查核項目的 PATCH body 可帶項目欄位及完整子表集合；未提供的頂層欄位不變，若提供查核項次、標準、實測欄位或照片需求集合，該集合以完整取代方式處理。若有 Task 使用此專案查核項目，body **必須**帶布林值 `reinspect`；未提供時回 422 `project_inspection_item.reinspection_choice_required`。沒有任何 Task 使用時可省略，由後端判斷。整次修改、KD-55 選擇、Snapshot 更新／項目級結果及照片作廢須在同一交易內完成；任何一步失敗則全部回滾。「要」時只將相關 Task 明細中的受影響項目標示「標準變更作廢」，保留可搜尋的舊 Snapshot、結果與照片；`COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀，僅將受影響項目標記待重查；原 Task 為 `DRAFT` 則更新同一 Task 的標準與 Snapshot，不作廢、不改狀態。「不要」時更新相關 Task 的 Snapshot 文字，結果、照片、狀態不變。已取消 Task 遇標準變更時，在恢復操作依目前標準處理，規則見 IP-R07。
+修改專案查核項目的 PATCH body 可帶項目欄位及完整子表集合；未提供的頂層欄位不變，若提供查核項次、標準、實測欄位或照片需求集合，該集合以完整取代方式處理，並套用與範本相同的結構驗證（每個項次恰好一筆照片需求、項次 `sequence` 不重複等），不符回 422。若有 Task 使用此專案查核項目，body **必須**帶布林值 `reinspect`；未提供時回 422 `project_inspection_item.reinspection_choice_required`。沒有任何 Task 使用時可省略，由後端判斷。整次修改、KD-55 選擇、Snapshot 更新／項目級結果及照片作廢須在同一交易內完成；任何一步失敗則全部回滾。「要」時只將相關 Task 明細中的受影響項目標示「標準變更作廢」，保留可搜尋的舊 Snapshot、結果與照片；`COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀，僅將受影響項目標記待重查；原 Task 為 `DRAFT` 則更新同一 Task 的標準與 Snapshot，不作廢、不改狀態。「不要」時更新相關 Task 的 Snapshot 文字，結果、照片、狀態不變。已取消 Task 遇標準變更時，在恢復操作依目前標準處理，規則見 IP-R07。
 
 ### API 表示與請求契約（規格設計，非負責人裁定）
 
@@ -219,6 +219,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 ## 變更紀錄
 
+- 規格澄清（規格設計，非負責人裁定，#464）：專案查核項目 PATCH 提供子表集合時，改為套用與範本相同的結構驗證（每個項次恰好一筆照片需求、`sequence` 不重複等），不符回 422；原本重複 `sequence` 會回 500。合法輸入的行為不變 — [#464](https://github.com/speko-tw/inspect-flow/issues/464)
 - 範圍變更（負責人指示，#446）：新增專案流程摘要 API、權限與聚合回應契約（IP-R11、IP-AC12）— [負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)
 - 範圍變更（負責人指示，#369）：新增 `ProjectZone` 管理、Task 分區與補充地點欄位及其規則（IP-R10、IP-AC11）— [#73 裁定](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5976192382)、[#369](https://github.com/speko-tw/inspect-flow/issues/369)
 - 規格澄清（#369 留言，非負責人裁定）：分開說明 KD-55 選「要」與「不要」重新查核時對目前 Snapshot 的更新方式 — [#369](https://github.com/speko-tw/inspect-flow/issues/369)

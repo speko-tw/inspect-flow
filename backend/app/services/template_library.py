@@ -25,7 +25,11 @@ class InvalidTemplateError(ValueError):
 
 
 def validate_template_structure(data: dict) -> None:
-    """Reject duplicate point positions and request-local field keys."""
+    """Reject duplicate point positions and request-local field keys.
+
+    Every point carries exactly one photo requirement (#464); the
+    required count is ``min_count``, not the number of rows.
+    """
     sequences: set[int] = set()
     client_ids: set[UUID] = set()
     for point in data["inspection_points"]:
@@ -33,6 +37,10 @@ def validate_template_structure(data: dict) -> None:
         if sequence in sequences:
             raise InvalidTemplateError("inspection point sequence repeats")
         sequences.add(sequence)
+        if len(point["evidence_requirements"]) != 1:
+            raise InvalidTemplateError(
+                "each point needs exactly one photo requirement"
+            )
         numeric = point["numeric_standard"]
         fields = point["measurement_fields"]
         for field in fields:
