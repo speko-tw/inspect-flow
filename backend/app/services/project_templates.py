@@ -103,9 +103,14 @@ def _copy_template_item(
 
         field_id_map: dict[UUID, UUID] = {}
         fields = db.scalars(
-            select(TemplateMeasurementField).where(
+            select(TemplateMeasurementField)
+            .where(
                 TemplateMeasurementField.inspection_point_id
                 == template_point.id
+            )
+            .order_by(
+                TemplateMeasurementField.sort_order,
+                TemplateMeasurementField.id,
             )
         ).all()
         for template_field in fields:
@@ -119,6 +124,7 @@ def _copy_template_item(
                     name=template_field.name,
                     field_type=template_field.field_type,
                     unit=template_field.unit,
+                    sort_order=template_field.sort_order,
                     created_by=operator_id,
                     updated_by=operator_id,
                 )
@@ -281,7 +287,8 @@ def create_template_from_project_item(
             select(ProjectMeasurementField)
             .where(ProjectMeasurementField.inspection_point_id == point.id)
             .order_by(
-                ProjectMeasurementField.created_at, ProjectMeasurementField.id
+                ProjectMeasurementField.sort_order,
+                ProjectMeasurementField.id,
             )
         ).all()
         client_ids = {field.id: uuid7() for field in fields}

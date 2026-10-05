@@ -1,0 +1,164 @@
+{
+  "system_id": "00000000-0000-4000-8000-000000000001",
+  "sequence": 1,
+  "title": "Front end payload contract",
+  "instruction": "Contract fixture",
+  "inspection_points": [
+    {
+      "sequence": 1,
+      "title": "Interval",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": {
+        "value": null,
+        "condition": "range",
+        "unit": "mm",
+        "tolerance": null,
+        "range_form": "interval",
+        "lower_bound": "3",
+        "upper_bound": "4",
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000011"
+      },
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000011",
+          "name": "Length",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 2,
+      "title": "Less or equal",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": {
+        "value": "10",
+        "condition": "<=",
+        "unit": "cm",
+        "tolerance": null,
+        "range_form": null,
+        "lower_bound": null,
+        "upper_bound": null,
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000012"
+      },
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000012",
+          "name": "Maximum width",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 3,
+      "title": "Greater or equal",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": {
+        "value": "5",
+        "condition": ">=",
+        "unit": "m",
+        "tolerance": null,
+        "range_form": null,
+        "lower_bound": null,
+        "upper_bound": null,
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000013"
+      },
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000013",
+          "name": "Minimum height",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 4,
+      "title": "Equals",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": {
+        "value": "7",
+        "condition": "=",
+        "unit": "mm",
+        "tolerance": null,
+        "range_form": null,
+        "lower_bound": null,
+        "upper_bound": null,
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000014"
+      },
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000014",
+          "name": "Exact thickness",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 5,
+      "title": "Text standard",
+      "instruction": "",
+      "text_standard": { "text": "Match the approved sample" },
+      "numeric_standard": null,
+      "measurement_fields": [],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 6,
+      "title": "Unbound numeric field",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": null,
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000015",
+          "name": "Unbound length",
+          "field_type": "number",
+          "unit": "m"
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 7,
+      "title": "Bind second new field",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": {
+        "value": null,
+        "condition": "range",
+        "unit": "cm",
+        "tolerance": null,
+        "range_form": "interval",
+        "lower_bound": "1",
+        "upper_bound": "3",
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000017"
+      },
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000016",
+          "name": "Length",
+          "field_type": "number",
+          "unit": "m"
+        },
+        {
+          "client_id": "00000000-0000-4000-8000-000000000017",
+          "name": "Width",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    }
+  ]
+}
