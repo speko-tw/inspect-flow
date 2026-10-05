@@ -968,6 +968,27 @@ describe('admin user and company pages', () => {
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
   })
 
+  it.each([
+    '/admin/projects',
+    '/admin/companies',
+    '/admin/projects/project-demo-1/planning/extra',
+  ])('denies non-admin access to protected route %s', (path) => {
+    managementFetch()
+    renderAdmin(path, false)
+    expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
+  })
+
+  it('allows non-admin users to open project planning routes', async () => {
+    managementFetch()
+    renderAdmin('/admin/projects/project-demo-1/planning', false)
+
+    expect(
+      await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
+  })
+
   it('lets non-admin users reach template browsing and displays API 403', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),

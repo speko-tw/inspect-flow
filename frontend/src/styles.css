@@ -218,6 +218,17 @@ label {
   font-weight: 600;
 }
 
+.required-label {
+  display: inline-flex;
+  gap: 0.2em;
+  white-space: nowrap;
+}
+
+.required-label > [aria-hidden='true'] {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 /* 包著核取方塊的 label：同一列、字重一般。 */
 label:has(> input[type='checkbox']),
 label:has(> input[type='radio']) {
@@ -723,16 +734,6 @@ output {
   white-space: normal;
 }
 
-.project-required-label {
-  display: inline;
-}
-
-.project-required-label::after {
-  content: ' *';
-  color: var(--danger);
-  font-weight: 700;
-}
-
 /* ---- 窄螢幕 ---- */
 
 @media (max-width: 40rem) {
@@ -757,6 +758,23 @@ output {
     display: block;
     overflow-x: auto;
   }
+}
+
+.planning-dialog {
+  position: fixed;
+  z-index: 1000;
+  top: 50%;
+  left: 50%;
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1.5rem;
+  transform: translate(-50%, -50%);
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%);
 }
 
 /* ---- 範本管理新版詳情流程（#427） ---- */
