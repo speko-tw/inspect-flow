@@ -36,6 +36,9 @@ function stubAuthenticatedFetch() {
       if (/\/(users|companies|projects)\?/.test(url)) {
         return Response.json({ items: [], next_cursor: null })
       }
+      if (url.includes('/field/inspection-tasks?')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
       return Response.json([])
     }),
   )
@@ -68,10 +71,10 @@ describe('App routing', () => {
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
     ).toBeInTheDocument()
-    expect(screen.queryByText('我的工作台')).not.toBeInTheDocument()
+    expect(screen.queryByText('今日任務')).not.toBeInTheDocument()
   })
 
-  it('renders the personal workspace on /field', async () => {
+  it('renders Field tasks on /field', async () => {
     render(
       <MemoryRouter initialEntries={['/field']}>
         <App />
@@ -79,7 +82,7 @@ describe('App routing', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: '我的工作台' }),
+      await screen.findByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),

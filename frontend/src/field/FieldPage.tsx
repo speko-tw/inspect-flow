@@ -1,240 +1,344 @@
-// 一般使用者的「我的工作台」（#290）：我的資料、我的公司、我參與的
-// 專案與角色、範本瀏覽、變更密碼、登出；系統管理者另有管理頁連結。
-// 只顯示資料；各 API 的權限由後端把關。
-
 import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
-import {
-  fetchMyCompanyProfile,
-  fetchMyProjects,
-  type MyCompanyProfile,
-  type MyProject,
-} from './api'
-import { listAllProjects, type ProjectSummary } from './projectTemplatesApi'
+import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
 
-const EMPTY = '—'
-const COMPANY_ERROR = '無法載入公司資料，請稍後再試。'
-const PROJECTS_ERROR = '無法載入參與的專案，請稍後再試。'
-
-type Loaded<T> =
-  { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; value: T }
-
-function useLoaded<T>(load: () => Promise<T>): Loaded<T> {
-  const [state, setState] = useState<Loaded<T>>({ kind: 'loading' })
-
-  useEffect(() => {
-    let cancelled = false
-    load()
-      .then((value) => {
-        if (!cancelled) {
-          setState({ kind: 'ready', value })
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setState({ kind: 'error' })
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-    // 只在掛載時載入一次。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return state
+type Scope = 'mine' | 'all'
+type Status = 'all' | FieldTask['status']
+type ListState = {
+  items: FieldTask[]
+  nextCursor: string | null
+  pages: number
+  scrollY: number
 }
 
-function text(value: string | null | undefined): string {
-  return value ? value : EMPTY
+const PAGE_SIZE = 10
+
+function taskTitle(task: FieldTask) {
+  const { first_title: first, item_count: count } = task.item_summary
+  if (!first) return '查核任務'
+  return count > 1 ? `${first} 等 ${count} 項` : first
+}
+
+function displayTime(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('zh-TW', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(date)
 }
 
 export default function FieldPage() {
   const { user } = useCurrentUser()
+  const [listMemory] = useState(() => new Map<string, ListState>())
   const location = useLocation()
+  const detailId = location.pathname.match(/^\/field\/tasks\/([^/]+)\/?$/)?.[1]
   const from = `${location.pathname}${location.search}${location.hash}`
-  // 從別頁導來時可帶一則提示（例如收回自己的管理者權限後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
-  const profile = useLoaded(fetchMyCompanyProfile)
-  const projects = useLoaded(fetchMyProjects)
-  const [allProjects, setAllProjects] = useState<ProjectSummary[] | null>(null)
-
-  useEffect(() => {
-    let active = true
-    listAllProjects()
-      .then((items) => {
-        if (active) setAllProjects(items)
-      })
-      .catch(() => {
-        if (active) setAllProjects(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <span className="topbar-brand">InspectFlow 工程查核系統</span>
-        <h1>工作台</h1>
-        <nav aria-label="我的功能">
-          {user.is_admin && <Link to="/admin">進入管理頁</Link>}
-          <Link to="/admin/templates">瀏覽範本庫</Link>
+    <div className="field-shell">
+      <header className="field-top">
+        <div className="field-brand">
+          <strong>InspectFlow 工程查核系統</strong>
+          <span>{user.name_zh ?? user.username}</span>
+        </div>
+        <nav className="field-top-actions" aria-label="我的功能">
           <Link to="/change-password" state={{ from }}>
             變更密碼
           </Link>
+          <LogoutButton />
         </nav>
-        <span className="topbar-user">
-          登入者：{user.name_zh ?? user.username}
-        </span>
-        <LogoutButton />
       </header>
       <main>
         {typeof notice === 'string' && <p role="status">{notice}</p>}
-        <h2>我的工作台</h2>
-
-        <section aria-labelledby="my-profile-heading">
-          <h3 id="my-profile-heading">我的資料</h3>
-          <table className="key-value">
-            <tbody>
-              <tr>
-                <th scope="row">帳號名稱</th>
-                <td>{user.username}</td>
-              </tr>
-              <tr>
-                <th scope="row">中文姓名</th>
-                <td>{text(user.name_zh)}</td>
-              </tr>
-              <tr>
-                <th scope="row">英文姓名</th>
-                <td>{text(user.name_en)}</td>
-              </tr>
-              <tr>
-                <th scope="row">Email</th>
-                <td>{text(user.email)}</td>
-              </tr>
-              <tr>
-                <th scope="row">身分</th>
-                <td>{user.is_admin ? '系統管理者' : '一般使用者'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-
-        <section aria-labelledby="my-company-heading">
-          <h3 id="my-company-heading">我的公司</h3>
-          {profile.kind === 'loading' && <p>載入中…</p>}
-          {profile.kind === 'error' && <p role="alert">{COMPANY_ERROR}</p>}
-          {profile.kind === 'ready' && (
-            <CompanyDetails profile={profile.value} />
-          )}
-        </section>
-
-        <section aria-labelledby="my-projects-heading">
-          <h3 id="my-projects-heading">我參與的專案</h3>
-          {projects.kind === 'loading' && <p>載入中…</p>}
-          {projects.kind === 'error' && <p role="alert">{PROJECTS_ERROR}</p>}
-          {projects.kind === 'ready' && (
-            <ProjectsTable projects={projects.value} />
-          )}
-        </section>
-        {allProjects && (
-          <section aria-labelledby="all-projects-heading">
-            <h3 id="all-projects-heading">所有專案</h3>
-            {allProjects.length === 0 ? (
-              <p>目前沒有專案。</p>
-            ) : (
-              <ul>
-                {allProjects.map((project) => (
-                  <li key={project.id}>
-                    <Link to={`/field/projects/${project.id}`}>
-                      {project.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+        {detailId ? (
+          <>
+            <Link className="field-back" to={`/field/${location.search}`}>
+              返回任務
+            </Link>
+            <section className="field-notice">
+              <h1>任務詳情</h1>
+              <p>任務詳情頁建置中，請返回任務清單。</p>
+            </section>
+          </>
+        ) : (
+          <TaskList
+            key={`${user.id}:${location.search}`}
+            userId={user.id}
+            memory={listMemory}
+          />
         )}
       </main>
+      {!detailId && (
+        <details className="field-profile">
+          <summary>我的資料</summary>
+          <p>帳號名稱：{user.username}</p>
+          <p>中文姓名：{user.name_zh ?? '—'}</p>
+          <p>英文姓名：{user.name_en ?? '—'}</p>
+          <p>Email：{user.email ?? '—'}</p>
+        </details>
+      )}
     </div>
   )
 }
 
-function CompanyDetails({ profile }: { profile: MyCompanyProfile }) {
-  if (profile.company === null) {
-    return <p>未連結公司</p>
-  }
-  return (
-    <table className="key-value">
-      <tbody>
-        <tr>
-          <th scope="row">公司</th>
-          <td>{profile.company.name}</td>
-        </tr>
-        <tr>
-          <th scope="row">部門</th>
-          <td>{text(profile.department)}</td>
-        </tr>
-        <tr>
-          <th scope="row">地點</th>
-          <td>{text(profile.location)}</td>
-        </tr>
-        <tr>
-          <th scope="row">工號</th>
-          <td>{text(profile.employee_no)}</td>
-        </tr>
-      </tbody>
-    </table>
+function TaskList({
+  userId,
+  memory,
+}: {
+  userId: string
+  memory: Map<string, ListState>
+}) {
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const scope: Scope = params.get('scope') === 'all' ? 'all' : 'mine'
+  const rawStatus = params.get('status')
+  const status: Status =
+    rawStatus === 'PENDING' || rawStatus === 'IN_PROGRESS' ? rawStatus : 'all'
+  const key = `${userId}:${scope}:${status}`
+  const [state, setState] = useState<ListState | null>(
+    () => memory.get(key) ?? null,
   )
-}
+  const [loading, setLoading] = useState(() => !memory.has(key))
+  const [error, setError] = useState<'forbidden' | 'other' | null>(null)
+  const [retry, setRetry] = useState(0)
 
-function ProjectsTable({ projects }: { projects: MyProject[] }) {
-  if (projects.length === 0) {
-    return <p>目前沒有參與的專案</p>
+  useEffect(() => {
+    let active = true
+    const saved = memory.get(key)
+    if (saved) {
+      requestAnimationFrame(() => window.scrollTo(0, saved.scrollY))
+      return () => {
+        active = false
+      }
+    }
+    fetchFieldTasks({
+      assignedToMe: scope === 'mine',
+      status: status === 'all' ? null : status,
+      limit: PAGE_SIZE,
+    })
+      .then((page) => {
+        if (!active) return
+        const next = {
+          items: page.items,
+          nextCursor: page.next_cursor,
+          pages: 1,
+          scrollY: 0,
+        }
+        memory.set(key, next)
+        setState(next)
+      })
+      .catch((cause: unknown) => {
+        if (!active) return
+        if (cause instanceof FieldApiError && cause.status === 401) {
+          navigate('/login', {
+            state: { from: location.pathname + location.search },
+          })
+        } else {
+          setError(
+            cause instanceof FieldApiError && cause.status === 403
+              ? 'forbidden'
+              : 'other',
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [
+    key,
+    location.pathname,
+    location.search,
+    memory,
+    navigate,
+    retry,
+    scope,
+    status,
+  ])
+
+  function updateFilter(nextScope: Scope, nextStatus: Status) {
+    const next = new URLSearchParams()
+    if (nextScope === 'all') next.set('scope', 'all')
+    if (nextStatus !== 'all') next.set('status', nextStatus)
+    setParams(next)
   }
+
+  async function loadMore() {
+    if (!state?.nextCursor || loading) return
+    setLoading(true)
+    setError(null)
+    try {
+      const page = await fetchFieldTasks({
+        assignedToMe: scope === 'mine',
+        status: status === 'all' ? null : status,
+        cursor: state.nextCursor,
+        limit: PAGE_SIZE,
+      })
+      const next = {
+        items: [...state.items, ...page.items],
+        nextCursor: page.next_cursor,
+        pages: state.pages + 1,
+        scrollY: window.scrollY,
+      }
+      memory.set(key, next)
+      setState(next)
+    } catch (cause) {
+      setError(
+        cause instanceof FieldApiError && cause.status === 403
+          ? 'forbidden'
+          : 'other',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">專案代號</th>
-          <th scope="col">工程名稱</th>
-          <th scope="col">業主／委託單位</th>
-          <th scope="col">工程地點</th>
-          <th scope="col">預定開工</th>
-          <th scope="col">預定完工</th>
-          <th scope="col">我的角色</th>
-          <th scope="col">查核項目</th>
-        </tr>
-      </thead>
-      <tbody>
-        {projects.map((project) => (
-          <tr key={project.id}>
-            <td>{project.project_code}</td>
-            <td>{project.name}</td>
-            <td>{project.client_name}</td>
-            <td>{project.site_location}</td>
-            <td>{text(project.planned_start_date)}</td>
-            <td>{text(project.planned_completion_date)}</td>
-            <td>
-              {project.role_names.length > 0
-                ? project.role_names.join('、')
-                : '未指派角色'}
-            </td>
-            <td>
-              <Link to={`/field/projects/${project.id}`}>套用範本</Link>
-              {' ・ '}
-              <Link to={`/admin/projects/${project.id}`}>
-                查看／修改查核項目
-              </Link>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <h1 className="field-heading">今日任務</h1>
+      <p className="field-intro">已派出的未完成任務，依派送時間排列。</p>
+      {error !== 'forbidden' && (
+        <>
+          <div className="field-scope" aria-label="任務範圍">
+            {(['mine', 'all'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => updateFilter(value, status)}
+              >
+                {value === 'mine' ? '我的任務' : '全部'}
+              </button>
+            ))}
+          </div>
+          <div className="field-filter" aria-label="任務狀態">
+            {(['all', 'PENDING', 'IN_PROGRESS'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={status === value}
+                onClick={() => updateFilter(scope, value)}
+              >
+                {
+                  {
+                    all: '所有狀態',
+                    PENDING: '待開始',
+                    IN_PROGRESS: '進行中',
+                  }[value]
+                }
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {loading && !state && <p role="status">載入任務中…</p>}
+      {error === 'forbidden' && (
+        <section className="field-notice field-error" role="alert">
+          <h2>目前無法查看現場任務</h2>
+          <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
+        </section>
+      )}
+      {error === 'other' && (
+        <section className="field-notice field-error" role="alert">
+          <h2>無法載入任務</h2>
+          <p>請稍後再試。</p>
+          <button
+            type="button"
+            onClick={() => {
+              memory.delete(key)
+              setState(null)
+              setError(null)
+              setLoading(true)
+              setRetry((value) => value + 1)
+            }}
+          >
+            重試
+          </button>
+        </section>
+      )}
+      {state && error !== 'forbidden' && (
+        <>
+          <p className="field-count">
+            {scope === 'mine' ? '我的任務' : '全部可查核任務'} 已顯示{' '}
+            {state.items.length} 筆
+          </p>
+          {state.items.length === 0 ? (
+            <section className="field-notice">
+              <h2>目前沒有符合的任務</h2>
+              <p>你有現場查核權限，但目前沒有符合範圍與狀態的任務。</p>
+              {scope === 'mine' && (
+                <button
+                  type="button"
+                  onClick={() => updateFilter('all', status)}
+                >
+                  查看全部任務
+                </button>
+              )}
+            </section>
+          ) : (
+            <div className="field-task-list">
+              {state.items.map((task) => (
+                <Link
+                  className={`field-task-card ${task.status === 'IN_PROGRESS' ? 'progress' : ''}`}
+                  key={task.id}
+                  to={`/field/tasks/${task.id}${location.search}`}
+                  onClick={() => {
+                    const saved = memory.get(key)
+                    if (saved)
+                      memory.set(key, {
+                        ...saved,
+                        scrollY: window.scrollY,
+                      })
+                  }}
+                >
+                  <span className="field-card-top">
+                    <strong>{taskTitle(task)}</strong>
+                    <span className="field-status">
+                      {task.status === 'PENDING' ? '待開始' : '進行中'}
+                    </span>
+                  </span>
+                  <span className="field-card-project">
+                    {task.project_name}
+                  </span>
+                  <span className="field-card-meta">
+                    <span>
+                      地點：{task.location.location_text ?? '未指定'}
+                    </span>
+                    {task.location.zone_name && (
+                      <span>分區：{task.location.zone_name}</span>
+                    )}
+                    <span>
+                      建議指派：{task.suggested_assignee?.name_zh ?? '未指定'}
+                    </span>
+                  </span>
+                  <span className="field-card-foot">
+                    <span>派送 {displayTime(task.dispatched_at)}</span>
+                    <strong>查看任務</strong>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+          {state.nextCursor && (
+            <button
+              type="button"
+              className="field-more"
+              disabled={loading}
+              onClick={loadMore}
+            >
+              {loading ? '載入中…' : '載入更多'}
+            </button>
+          )}
+        </>
+      )}
+    </>
   )
 }
