@@ -717,9 +717,12 @@ output {
 }
 
 .users-table-scroll .inline-confirmation {
+  box-sizing: border-box;
   position: sticky;
   left: 0;
   width: min(32rem, calc(100vw - 4rem));
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 /* ---- 窄螢幕 ---- */
