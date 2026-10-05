@@ -39,6 +39,45 @@ export interface FieldTaskPage {
   next_cursor: string | null
 }
 
+export interface FieldTaskDetail extends Omit<
+  FieldTask,
+  'item_summary' | 'status'
+> {
+  status: FieldTask['status'] | 'COMPLETED' | 'CANCELLED'
+  items: Array<{
+    title: string
+    instruction: string | null
+    inspection_points: Array<{
+      sequence: number
+      title: string
+      instruction: string | null
+      text_standard: { text: string } | null
+      numeric_standard: {
+        value: string | null
+        condition: '<=' | '>=' | '=' | 'range'
+        unit: string
+        tolerance: string | null
+        range_form: 'interval' | 'tolerance' | null
+        lower_bound: string | null
+        upper_bound: string | null
+        measurement_field_id: string | null
+      } | null
+      measurement_fields: Array<{
+        id: string
+        name: string
+        field_type: 'text' | 'number'
+        unit: string | null
+      }>
+      evidence_requirements: Array<{
+        evidence_type: string
+        required: boolean
+        min_count: number
+        max_count: number | null
+      }>
+    }>
+  }>
+}
+
 export interface MyProject {
   id: string
   project_code: string
@@ -56,6 +95,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function optionalText(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
+}
+
+function numericText(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.trim() !== '' &&
+    Number.isFinite(Number(value))
+  )
+}
+
+function optionalNumericText(value: unknown): value is string | null {
+  return value === null || numericText(value)
 }
 
 function isFieldTask(value: unknown): value is FieldTask {
@@ -79,6 +130,102 @@ function isFieldTask(value: unknown): value is FieldTask {
     Number.isInteger(summary.item_count) &&
     Number(summary.item_count) >= 0
   )
+}
+
+function isNumericStandard(value: unknown): boolean {
+  if (value === null) return true
+  if (
+    !isRecord(value) ||
+    !optionalNumericText(value.value) ||
+    !['<=', '>=', '=', 'range'].includes(String(value.condition)) ||
+    typeof value.unit !== 'string' ||
+    !optionalNumericText(value.tolerance) ||
+    (value.range_form !== null &&
+      value.range_form !== 'interval' &&
+      value.range_form !== 'tolerance') ||
+    !optionalNumericText(value.lower_bound) ||
+    !optionalNumericText(value.upper_bound) ||
+    !optionalText(value.measurement_field_id)
+  ) {
+    return false
+  }
+  if (value.condition !== 'range') return numericText(value.value)
+  if (value.range_form === 'interval') {
+    return numericText(value.lower_bound) || numericText(value.upper_bound)
+  }
+  return numericText(value.value) && numericText(value.tolerance)
+}
+
+function isPoint(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return (
+    Number.isInteger(value.sequence) &&
+    typeof value.title === 'string' &&
+    optionalText(value.instruction) &&
+    (value.text_standard === null ||
+      (isRecord(value.text_standard) &&
+        typeof value.text_standard.text === 'string')) &&
+    isNumericStandard(value.numeric_standard) &&
+    Array.isArray(value.measurement_fields) &&
+    value.measurement_fields.every(
+      (field: unknown) =>
+        isRecord(field) &&
+        typeof field.id === 'string' &&
+        typeof field.name === 'string' &&
+        (field.field_type === 'text' || field.field_type === 'number') &&
+        optionalText(field.unit),
+    ) &&
+    Array.isArray(value.evidence_requirements) &&
+    value.evidence_requirements.every(
+      (evidence: unknown) =>
+        isRecord(evidence) &&
+        typeof evidence.evidence_type === 'string' &&
+        typeof evidence.required === 'boolean' &&
+        Number.isInteger(evidence.min_count) &&
+        Number(evidence.min_count) >= 0 &&
+        (evidence.max_count === null ||
+          (Number.isInteger(evidence.max_count) &&
+            Number(evidence.max_count) >= 0)),
+    )
+  )
+}
+
+function isFieldTaskDetail(value: unknown): value is FieldTaskDetail {
+  if (!isRecord(value)) return false
+  return (
+    isFieldTask({
+      ...value,
+      status: 'PENDING',
+      item_summary: {
+        first_title: null,
+        item_count: 0,
+      },
+    }) &&
+    ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(
+      String(value.status),
+    ) &&
+    Array.isArray(value.items) &&
+    value.items.every(
+      (item: unknown) =>
+        isRecord(item) &&
+        typeof item.title === 'string' &&
+        optionalText(item.instruction) &&
+        Array.isArray(item.inspection_points) &&
+        item.inspection_points.every(isPoint),
+    )
+  )
+}
+
+export async function fetchFieldTaskDetail(
+  taskId: string,
+): Promise<FieldTaskDetail> {
+  const body = await getJson<unknown>(
+    `/field/inspection-tasks/${encodeURIComponent(taskId)}`,
+  )
+  if (!isFieldTaskDetail(body)) {
+    throw new Error('Field task detail response has an unexpected shape')
+  }
+  return body
 }
 
 export async function fetchFieldTasks(params: {

@@ -24,6 +24,17 @@ const TASK: FieldTask = {
   suggested_assignee: { name_zh: '示範查核員' },
   item_summary: { first_title: '外牆鋼筋查核', item_count: 2 },
 }
+const DETAIL = {
+  ...TASK,
+  item_summary: undefined,
+  items: [
+    {
+      title: '外牆鋼筋查核',
+      instruction: '依圖面查核',
+      inspection_points: [],
+    },
+  ],
+}
 
 function LocationProbe() {
   const location = useLocation()
@@ -112,6 +123,9 @@ describe('今日任務首頁', () => {
     vi.stubGlobal('scrollTo', scrollTo)
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
+      if (url.includes('/field/inspection-tasks/task-1')) {
+        return Response.json(DETAIL)
+      }
       return Response.json(
         url.includes('cursor=next')
           ? {
@@ -138,10 +152,8 @@ describe('今日任務首頁', () => {
     expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
     expect(String(fetcher.mock.calls[3][0])).toContain('cursor=next')
     fireEvent.click(screen.getAllByRole('link', { name: /查看任務/ })[0])
-    expect(
-      await screen.findByText('任務詳情頁建置中，請返回任務清單。'),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('link', { name: '返回任務' }))
+    expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
     expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',
@@ -152,7 +164,7 @@ describe('今日任務首頁', () => {
       'true',
     )
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 240))
-    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(fetcher).toHaveBeenCalledTimes(5)
   })
 
   it('切回曾看過的篩選組合會重抓第一頁', async () => {
