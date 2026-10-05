@@ -156,7 +156,9 @@ def test_project_zone_normalization_audit_and_referenced_delete(
 ):
     project = _project(session, operator, "ZONE")
     _grant(session, operator, project, *_planning_codes())
-    zone = create_project_zone(session, project_id=project.id, name="  北側  ")
+    zone_name = "  北側  "
+    zone_args = {"project_id": project.id, "name": zone_name}
+    zone = create_project_zone(session, **zone_args)
     assert zone.name == "北側"
     with pytest.raises(PlanningError) as conflict:
         create_project_zone(session, project_id=project.id, name="北側")
@@ -194,7 +196,8 @@ def test_project_zone_normalization_audit_and_referenced_delete(
 def test_zone_without_task_can_be_deleted(session, operator):
     project = _project(session, operator, "ZONEDEL")
     _grant(session, operator, project, "project_zone.manage")
-    zone = create_project_zone(session, project_id=project.id, name="待刪分區")
+    zone_name = "待刪分區"
+    zone = create_project_zone(session, project_id=project.id, name=zone_name)
     delete_project_zone(session, zone)
     assert session.get(ProjectZone, zone.id) is None
     assert (
@@ -275,6 +278,14 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
 def test_plan_manage_and_assignee_must_be_project_members(session, operator):
     project = _project(session, operator, "ASSIGN")
     _grant(session, operator, project, *_planning_codes())
+    assignee = create_root_user_with_company(session, "ASSIGN001")
+    _grant(
+        session,
+        operator,
+        project,
+        "inspection_task.inspect",
+        user=assignee,
+    )
     plan = create_inspection_plan(
         session, project_id=project.id, name="初始名稱"
     )
@@ -285,8 +296,8 @@ def test_plan_manage_and_assignee_must_be_project_members(session, operator):
     task = create_inspection_task(
         session, plan=plan, project_inspection_item_ids=[source.id]
     )
-    assign_inspection_task(session, task, assignee_id=operator.id)
-    assert task.assignee_id == operator.id
+    assign_inspection_task(session, task, assignee_id=assignee.id)
+    assert task.assignee_id == assignee.id
     with pytest.raises(PlanningError) as invalid:
         assign_inspection_task(session, task, assignee_id=uuid.uuid4())
     assert invalid.value.code == "inspection_task.invalid_assignee"
@@ -415,7 +426,8 @@ def test_snapshot_child_rows_copy_source_and_remain_immutable(
 def test_task_snapshot_location_state_and_restore_audit(session, operator):
     project = _project(session, operator, "TASK")
     _grant(session, operator, project, *_planning_codes())
-    zone = create_project_zone(session, project_id=project.id, name="第一區")
+    zone_name = "第一區"
+    zone = create_project_zone(session, project_id=project.id, name=zone_name)
     plan = create_inspection_plan(
         session, project_id=project.id, name="計畫一"
     )
@@ -517,7 +529,10 @@ def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
     complete_inspection_task(session, completed)
     with pytest.raises(PlanningError) as completed_location:
         update_task_location(
-            session, completed, zone_id=None, location_text="完成後不可改"
+            session,
+            completed,
+            zone_id=None,
+            location_text="完成後不可改",
         )
     assert completed_location.value.code == "inspection_task.location_locked"
     with pytest.raises(PlanningError) as completed_cancel:
@@ -531,7 +546,10 @@ def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
     cancel_inspection_task(session, cancelled, reason="取消驗證")
     with pytest.raises(PlanningError) as cancelled_location:
         update_task_location(
-            session, cancelled, zone_id=None, location_text="取消後不可改"
+            session,
+            cancelled,
+            zone_id=None,
+            location_text="取消後不可改",
         )
     assert cancelled_location.value.code == "inspection_task.location_locked"
     restore_inspection_task(session, cancelled)
@@ -544,7 +562,7 @@ def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
         update_task_location(
             session, archived, zone_id=None, location_text="封存後不可改"
         )
-    assert archived_location.value.code == "inspection_task.location_locked"
+    assert archived_location.value.code == "inspection_plan.archived"
 
 
 def test_cross_project_zone_is_rejected(session, operator):
@@ -788,7 +806,7 @@ def test_archived_plan_locks_task_changes_and_unarchive_rederives(
     archive_inspection_plan(session, plan, archived=True)
     with pytest.raises(PlanningError) as locked:
         dispatch_inspection_task(session, task)
-    assert locked.value.code == "inspection_task.invalid_transition"
+    assert locked.value.code == "inspection_plan.archived"
     plan.status = "COMPLETED"
     archive_inspection_plan(session, plan, archived=False)
     assert plan.status == "IN_PROGRESS"

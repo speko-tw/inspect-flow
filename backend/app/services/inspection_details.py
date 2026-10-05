@@ -6,6 +6,16 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.time_format import format_utc
+from app.models import (
+    ProjectEvidenceRequirement,
+    ProjectInspectionItem,
+    ProjectInspectionPoint,
+    ProjectMeasurementField,
+    ProjectNumericStandard,
+    ProjectTextStandard,
+)
+
 
 def inspection_points_detail(
     db: Session,
@@ -86,3 +96,31 @@ def inspection_points_detail(
             }
         )
     return result
+
+
+def project_inspection_item_detail(
+    db: Session, item: ProjectInspectionItem
+) -> dict[str, Any]:
+    """Serialize a project item for APIs that return its details."""
+    points = db.scalars(
+        select(ProjectInspectionPoint)
+        .where(ProjectInspectionPoint.project_inspection_item_id == item.id)
+        .order_by(ProjectInspectionPoint.sequence, ProjectInspectionPoint.id)
+    ).all()
+    return {
+        "id": item.id,
+        "project_id": item.project_id,
+        "sequence": item.sequence,
+        "title": item.title,
+        "instruction": item.instruction,
+        "source_template_name": item.source_template_name,
+        "applied_at": format_utc(item.applied_at),
+        "inspection_points": inspection_points_detail(
+            db,
+            points,
+            measurement_field_model=ProjectMeasurementField,
+            text_standard_model=ProjectTextStandard,
+            numeric_standard_model=ProjectNumericStandard,
+            evidence_requirement_model=ProjectEvidenceRequirement,
+        ),
+    }

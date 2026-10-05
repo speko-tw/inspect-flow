@@ -301,6 +301,7 @@
 | AUT-AC53 | 同 AUT-AC27 的 U；依 AUT-AC27 觸發鎖定（第 10 次在時間 L），鎖定仍在生效中 | 在鎖定期間，經設定密碼的 Service 入口（Admin 設定臨時密碼的畫面，或以測試直接呼叫入口）替 U 重設密碼 | 重設後立即以新密碼登入回 200（鎖定已解除、失敗計數已歸零）；重設前後 `AuthSession` 與 `UserPassword` 的筆數、`updated_by` 符合 AUT-R36 的一般寫入行為 | AUT-R28、AUT-R36 |
 | AUT-AC67 | SQLite 資料庫；一個已知帳號（含密碼錯誤與正確密碼）、一個已鎖定帳號，以及一個未知帳號；以較短的 `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 設定重現另一連線持有寫鎖 | 寫鎖仍被持有時分別呼叫三種登入情境；釋放寫鎖後再次登入未知與已鎖定帳號 | 寫鎖等待逾時的所有情境都回 503 `server.temporarily_unavailable`、`Retry-After: 5`，回應本體相同且沒有 `Set-Cookie`；逾時沒有新增或改變失敗計數、沒有建立 `AuthSession`，也沒有 `auth.login_failed` 日誌；鎖釋放後，未知與已鎖定帳號都回 401 `auth.invalid_credentials`、沒有 Cookie，且各記一筆對應的失敗日誌 | AUT-R28；`test_sqlite_write_lock_timeout_returns_retryable_error`、`test_locked_account_and_unknown_login_share_sqlite_timeout` |
 | AUT-AC68 | `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 分別設為 `1`、`60000`、`60001` 毫秒 | 啟動後端應用程式 | 1 與 60000 毫秒可啟動；60001 毫秒啟動失敗並指出變數名稱 | AUT-R28；`test_sqlite_busy_timeout_accepts_bounds`、`test_sqlite_busy_timeout_rejects_above_maximum` |
+| AUT-AC69 | 專案 P；成員 U 有 `inspection_plan.read`；成員 F 只有 `inspection_task.inspect`；非成員 N；Admin A 不屬於 P | U、F、N、A 讀取 `GET /api/v1/projects/{project_id}`；A 另讀取不存在的專案 | U 回 200 且只含基本欄位；F、N 回 403 `permission.denied`；A 回完整欄位；不存在的專案回 404 `resource.not_found` | AUT-R19、DOM-R43 |
 
 ### 稽核紀錄與日誌
 
