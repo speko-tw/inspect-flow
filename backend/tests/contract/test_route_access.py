@@ -132,6 +132,10 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     }
     template_admin_list = ("GET", "/api/v1/projects")
     planning_project_get = ("GET", "/api/v1/projects/{project_id}")
+    workflow_summary = (
+        "GET",
+        "/api/v1/projects/{project_id}/workflow-summary",
+    )
     member_routes = {
         ("GET", "/api/v1/projects/{project_id}/members"),
         ("POST", "/api/v1/projects/{project_id}/members"),
@@ -181,6 +185,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         | {
             template_admin_list,
             planning_project_get,
+            workflow_summary,
             apply_template,
             save_template,
             list_inspection_items,
@@ -199,6 +204,9 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     assert declaration is not None
     assert declaration.level is AccessLevel.PROJECT_PERMISSION
     assert declaration.permission_code == "inspection_plan.read"
+    declaration = routes[workflow_summary]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.LOGIN_REQUIRED
     for route in member_routes:
         declaration = routes[route]
         assert declaration is not None

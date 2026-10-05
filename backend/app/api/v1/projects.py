@@ -15,6 +15,7 @@ from app.api.pagination import ilike_contains, page_by_text_key
 from app.auth.access import (
     require_admin,
     require_admin_or_system_role,
+    require_login_access,
     require_project_permission,
 )
 from app.auth.dependencies import get_db
@@ -26,12 +27,14 @@ from app.models import (
     SystemRoleCode,
     User,
 )
+from app.services.permissions import effective_permissions
 from app.services.project_members import (
     add_project_member,
     list_project_members,
     remove_project_member,
     set_project_member_roles,
 )
+from app.services.project_workflow_summary import get_project_workflow_summary
 from app.services.projects import (
     InvalidProjectFieldError,
     ProjectUnchangedError,
@@ -72,6 +75,21 @@ class ProjectPlanningResponse(BaseModel):
     name: str
     planned_start_date: date | None
     planned_completion_date: date | None
+
+
+class WorkflowCount(BaseModel):
+    code: str
+    count: int
+
+
+class ProjectWorkflowSummaryResponse(BaseModel):
+    member_count: int
+    inspection_item_count: int
+    zone_count: int
+    plan_count: int
+    task_counts: dict[str, int]
+    pending_reinspection_task_count: int
+    next_steps: list[WorkflowCount]
 
 
 class ProjectListResponse(BaseModel):
@@ -277,6 +295,61 @@ def get_project(
         name=project.name,
         planned_start_date=project.planned_start_date,
         planned_completion_date=project.planned_completion_date,
+    )
+
+
+@router.get(
+    "/{project_id}/workflow-summary",
+    response_model=ProjectWorkflowSummaryResponse,
+)
+def get_workflow_summary(
+    project_id: UUID,
+    db: Session = Depends(get_db),  # noqa: B008
+    user: User = Depends(require_login_access),  # noqa: B008
+) -> ProjectWorkflowSummaryResponse:
+    """Return aggregate workflow counts to members with project read access."""
+    permissions = (
+        frozenset()
+        if user.is_admin
+        else effective_permissions(db, user_id=user.id, project_id=project_id)
+    )
+    readable_permissions = {
+        "inspection_plan.read",
+        "project_zone.read",
+        "inspection_task.read",
+        "inspection_task.inspect",
+    }
+    if not user.is_admin and not readable_permissions.intersection(
+        permissions
+    ):
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    _get_project(db, project_id)
+    summary = get_project_workflow_summary(
+        db,
+        project_id=project_id,
+        can_read_drafts=(
+            user.is_admin or "inspection_task.read" in permissions
+        ),
+        can_read_tasks=(
+            user.is_admin
+            or bool(
+                {
+                    "inspection_task.read",
+                    "inspection_task.inspect",
+                }.intersection(permissions)
+            )
+        ),
+    )
+    return ProjectWorkflowSummaryResponse(
+        member_count=summary["member_count"],
+        inspection_item_count=summary["inspection_item_count"],
+        zone_count=summary["zone_count"],
+        plan_count=summary["plan_count"],
+        task_counts=summary["task_counts"],
+        pending_reinspection_task_count=(
+            summary["pending_reinspection_task_count"]
+        ),
+        next_steps=[WorkflowCount(**step) for step in summary["next_steps"]],
     )
 
 
