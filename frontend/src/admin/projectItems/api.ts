@@ -39,6 +39,7 @@ export interface AffectedTask {
 export interface ProjectItemPreview {
   item: ProjectItemData
   affectedTasks: AffectedTask[]
+  readOnly?: boolean
 }
 
 export interface ProjectItemChange {
@@ -130,14 +131,22 @@ function patchPoints(points: InspectionPoint[]) {
 export const projectItemApi: ProjectItemApi = {
   async loadPreview(projectId, itemId) {
     const path = `/projects/${projectId}/inspection-items`
-    const [items, tasks] = await Promise.all([
-      listProjectItems(projectId),
-      allPages<ImpactTask>(`${path}/${itemId}/tasks`),
-    ])
+    const items = await listProjectItems(projectId)
     const item = items.find((entry) => entry.id === itemId)
     if (!item) throw new ManagementApiError(404, 'resource.not_found')
+    let tasks: ImpactTask[] = []
+    let readOnly = false
+    try {
+      tasks = await allPages<ImpactTask>(`${path}/${itemId}/tasks`)
+    } catch (caught) {
+      if (!(caught instanceof ManagementApiError) || caught.status !== 403) {
+        throw caught
+      }
+      readOnly = true
+    }
     return {
       item,
+      readOnly,
       affectedTasks: tasks.map((task) => ({
         id: task.id,
         name:

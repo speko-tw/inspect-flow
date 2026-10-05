@@ -121,6 +121,10 @@ export default function ProjectItemChangePage({
         setTitle(loaded.item.title)
         setInstruction(loaded.item.instruction)
         setInspectionPoints(loaded.item.inspection_points)
+        if (loaded.readOnly) {
+          setReadOnly(true)
+          setError('你沒有權限修改此專案查核項目。')
+        }
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)
           setError(ARCHIVED_PLAN_ERROR)
@@ -181,6 +185,7 @@ export default function ProjectItemChangePage({
         setTitle(loaded.item.title)
         setInstruction(loaded.item.instruction)
         setInspectionPoints(loaded.item.inspection_points)
+        if (loaded.readOnly) setReadOnly(true)
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)
         }
@@ -210,7 +215,10 @@ export default function ProjectItemChangePage({
           const loaded = await reloadPreview()
           setReinspect(null)
           setConfirming(true)
-          if (loaded.affectedTasks.some((task) => task.planArchived)) {
+          if (
+            loaded.readOnly ||
+            loaded.affectedTasks.some((task) => task.planArchived)
+          ) {
             setReadOnly(true)
           }
         } catch (reloadError) {
