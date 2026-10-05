@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
+import { useState } from 'react'
+import {
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -21,21 +28,19 @@ const NAV_ITEMS = [
 ]
 
 export default function AdminPage() {
+  const location = useLocation()
+  return <AdminPageContent key={location.key} />
+}
+
+function AdminPageContent() {
   const { user } = useCurrentUser()
   const location = useLocation()
+  const navigate = useNavigate()
   const [temporaryPassword, setTemporaryPassword] = useState<{
     username: string
     password: string
     locationKey: string
   } | null>(null)
-
-  useEffect(() => {
-    const clearTemporaryPassword = () => setTemporaryPassword(null)
-    window.addEventListener('popstate', clearTemporaryPassword)
-    return () => {
-      window.removeEventListener('popstate', clearTemporaryPassword)
-    }
-  }, [])
 
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
@@ -63,71 +68,81 @@ export default function AdminPage() {
       <header className="topbar">
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
         <h1>Admin</h1>
-        <nav aria-label="管理功能">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              onClick={() => setTemporaryPassword(null)}
-              to={item.to}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+        {!temporaryPassword && (
+          <nav aria-label="管理功能">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                onClick={() => setTemporaryPassword(null)}
+                to={item.to}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
         <span className="topbar-user">
           登入者：{user.name_zh ?? user.username}
         </span>
-        <LogoutButton />
+        {!temporaryPassword && <LogoutButton />}
       </header>
       <main>
         {typeof notice === 'string' && <p role="status">{notice}</p>}
         {temporaryPassword &&
-          location.pathname === '/admin/users' &&
-          location.key === temporaryPassword.locationKey && (
-            <section
-              aria-labelledby="temporary-password-heading"
-              role="status"
+        location.pathname === '/admin/users' &&
+        location.key === temporaryPassword.locationKey ? (
+          <section
+            aria-labelledby="temporary-password-heading"
+            className="temporary-password-result"
+            role="status"
+          >
+            <h2 id="temporary-password-heading">使用者已新增</h2>
+            <p>帳號：{temporaryPassword.username}</p>
+            <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
+            <TemporaryPassword password={temporaryPassword.password} />
+            <button
+              onClick={() => {
+                setTemporaryPassword(null)
+                navigate('/admin/users', { replace: true })
+              }}
+              type="button"
             >
-              <h2 id="temporary-password-heading">使用者已新增</h2>
-              <p>
-                請將以下臨時密碼交給 {temporaryPassword.username}
-                。首次登入時必須變更密碼；關閉後無法再次查看。
-              </p>
-              <TemporaryPassword password={temporaryPassword.password} />
-              <button onClick={() => setTemporaryPassword(null)} type="button">
-                已抄下，關閉
-              </button>
-            </section>
-          )}
-
-        <Routes>
-          <Route
-            index
-            element={
-              <Navigate replace state={location.state} to="/admin/users" />
-            }
-          />
-          <Route
-            path="users"
-            element={
-              <UsersPage
-                onTemporaryPassword={(username, password) =>
-                  setTemporaryPassword({
-                    username,
-                    password,
-                    locationKey: location.key,
-                  })
-                }
-              />
-            }
-          />
-          <Route path="companies" element={<CompaniesPage />} />
-          <Route path="roles" element={<RolesPage />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-          <Route path="templates" element={<TemplatesPage />} />
-          <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
-        </Routes>
+              已抄下，回到使用者列表
+            </button>
+          </section>
+        ) : (
+          <Routes>
+            <Route
+              index
+              element={
+                <Navigate replace state={location.state} to="/admin/users" />
+              }
+            />
+            <Route
+              path="users"
+              element={
+                <UsersPage
+                  onTemporaryPassword={(username, password) =>
+                    setTemporaryPassword({
+                      username,
+                      password,
+                      locationKey: location.key,
+                    })
+                  }
+                />
+              }
+            />
+            <Route path="companies" element={<CompaniesPage />} />
+            <Route path="roles" element={<RolesPage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route
+              path="projects/:projectId"
+              element={<ProjectDetailPage />}
+            />
+            <Route path="templates" element={<TemplatesPage />} />
+            <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
+          </Routes>
+        )}
       </main>
     </div>
   )
