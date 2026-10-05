@@ -399,6 +399,119 @@ describe('admin projects page', () => {
     expect(calls(fetchMock, 'PATCH', /projects/)).toHaveLength(0)
   })
 
+  it('keeps a dirty create form when edit is requested, then discards on choice', async () => {
+    projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    renderAt('/admin/projects')
+    await screen.findByText('示範工程')
+    fireEvent.change(screen.getByLabelText('工程名稱'), {
+      target: { value: '未儲存的新工程' },
+    })
+    fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
+
+    const prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的新工程')
+
+    fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    expect(screen.getByLabelText('工程名稱')).toHaveValue('示範工程')
+  })
+
+  it('asks before switching to another project and preserves or discards edits', async () => {
+    projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    renderAt('/admin/projects')
+    await screen.findByText('第二示範工程')
+    fireEvent.change(screen.getByLabelText('工程名稱'), {
+      target: { value: '未儲存的新工程' },
+    })
+    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
+    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的新工程')
+
+    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
+    prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    expect(
+      await screen.findByRole('heading', { name: '專案成員：第二示範工程' }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps or discards dirty edits when switching to a new project form', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+    await screen.findByText('示範工程')
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.change(screen.getByLabelText('工程名稱'), {
+      target: { value: '未儲存的修改' },
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: '新增專案' })[0])
+    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的修改')
+
+    fireEvent.click(screen.getAllByRole('button', { name: '新增專案' })[0])
+    prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
+    expect(screen.getByLabelText('工程名稱')).toHaveValue('')
+  })
+
+  it('keeps or discards dirty edits before opening another project', async () => {
+    projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    renderAt('/admin/projects')
+    await screen.findByText('第二示範工程')
+    fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
+    fireEvent.change(screen.getByLabelText('工程名稱'), {
+      target: { value: '未儲存的修改' },
+    })
+
+    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
+    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText('工程名稱')).toHaveValue('未儲存的修改')
+
+    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
+    prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    expect(
+      await screen.findByRole('heading', { name: '專案成員：第二示範工程' }),
+    ).toBeInTheDocument()
+  })
+
   it('shows a clear message when saving fails', async () => {
     projectFetch({
       failWith: {
