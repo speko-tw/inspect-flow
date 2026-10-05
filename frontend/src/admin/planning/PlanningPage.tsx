@@ -120,6 +120,19 @@ export default function PlanningPage({
   }, [addingZone, renamingZone])
 
   useEffect(() => {
+    const content = pageContent.current
+    if (!content) return
+    Array.from(content.children).forEach((child) => {
+      const element = child as HTMLElement
+      if (element.getAttribute('role') !== 'dialog') {
+        element.inert = dialogOpen
+        if (dialogOpen) element.setAttribute('inert', '')
+        else element.removeAttribute('inert')
+      }
+    })
+  }, [dialogOpen])
+
+  useEffect(() => {
     if (confirmation) confirmationHeading.current?.focus()
     else if (previousConfirmation.current) {
       if (confirmationTrigger.current?.isConnected) {
@@ -141,19 +154,6 @@ export default function PlanningPage({
     }
     previousCancelTask.current = Boolean(cancelTask)
   }, [cancelTask])
-
-  useEffect(() => {
-    const content = pageContent.current
-    if (!content) return
-    Array.from(content.children).forEach((child) => {
-      const element = child as HTMLElement
-      if (element.getAttribute('role') !== 'dialog') {
-        element.inert = dialogOpen
-        if (dialogOpen) element.setAttribute('inert', '')
-        else element.removeAttribute('inert')
-      }
-    })
-  }, [dialogOpen])
 
   useEffect(() => {
     let active = true
@@ -364,7 +364,7 @@ export default function PlanningPage({
     event.preventDefault()
     const created = await act(
       () => client.createPlan(projectId, { name: planName }),
-      'plan',
+      'plan-create',
     )
     if (created) setPlanName('')
   }
@@ -465,609 +465,606 @@ export default function PlanningPage({
 
       {projects.length > 0 && (
         <>
-          {projects.length === 0 ? (
-            <p>目前沒有可管理的專案。</p>
-          ) : (
-            <>
-              <section aria-labelledby="zones-heading">
-                <h2 id="zones-heading">專案分區</h2>
-                {zonesDenied && (
-                  <p role="status">
-                    沒有讀取分區的權限；其他計畫功能仍可使用。
-                  </p>
-                )}
-                {zones.length === 0 ? <p>尚未設定分區。</p> : null}
-                {zones.map((zone) => (
-                  <div key={zone.id}>
-                    {renamingZone?.id === zone.id ? (
-                      <form
-                        data-error-context="zone"
-                        onSubmit={(event) => void renameZone(event)}
-                      >
-                        <label>
-                          分區名稱 <span aria-hidden="true">*</span>
-                          <input
-                            aria-describedby="zone-name-hint"
-                            autoFocus
-                            maxLength={128}
-                            onChange={(event) =>
-                              setZoneName(event.target.value)
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === 'Escape') {
-                                event.preventDefault()
-                                setRenamingZone(null)
-                                setZoneName('')
-                                setError('')
-                              } else if (event.key === 'Enter') {
-                                event.preventDefault()
-                                event.currentTarget.form?.requestSubmit()
-                              }
-                            }}
-                            required
-                            value={zoneName}
-                          />
-                        </label>
-                        <span id="zone-name-hint">請輸入分區名稱。</span>
-                        {error && errorContext === 'zone' && (
-                          <p ref={errorMessage} role="alert" tabIndex={-1}>
-                            {error}
-                          </p>
-                        )}
-                        <button disabled={busy} type="submit">
-                          儲存名稱
-                        </button>
-                        <button
-                          onClick={() => {
+          <section aria-labelledby="zones-heading">
+            <h2 id="zones-heading">專案分區</h2>
+            {zonesDenied && (
+              <p role="status">沒有讀取分區的權限；其他計畫功能仍可使用。</p>
+            )}
+            {zones.length === 0 ? <p>尚未設定分區。</p> : null}
+            {zones.map((zone) => (
+              <div key={zone.id}>
+                {renamingZone?.id === zone.id ? (
+                  <form
+                    data-error-context="zone"
+                    onSubmit={(event) => void renameZone(event)}
+                  >
+                    <label>
+                      分區名稱 <span aria-hidden="true">*</span>
+                      <input
+                        aria-describedby="zone-name-hint"
+                        autoFocus
+                        maxLength={128}
+                        onChange={(event) => setZoneName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
                             setRenamingZone(null)
                             setZoneName('')
                             setError('')
-                          }}
-                          type="button"
-                        >
-                          取消編輯
-                        </button>
-                      </form>
-                    ) : (
-                      <>
-                        {zone.name}{' '}
-                        <button
-                          disabled={busy || readOnly}
-                          onClick={() => {
-                            setError('')
-                            renameZoneTrigger.current =
-                              document.activeElement as HTMLButtonElement
-                            setZoneName(zone.name)
-                            setRenamingZone(zone)
-                          }}
-                          type="button"
-                        >
-                          重新命名
-                        </button>{' '}
-                      </>
-                    )}
-                    <button
-                      disabled={busy || readOnly}
-                      onClick={() =>
-                        confirm(`刪除分區「${zone.name}」？`, () =>
-                          client.deleteZone(projectId, zone.id),
-                        )
-                      }
-                      type="button"
-                    >
-                      刪除
-                    </button>
-                  </div>
-                ))}
-                {!readOnly && !zonesDenied && !renamingZone && (
-                  <>
-                    <button
-                      ref={addZoneTrigger}
-                      onClick={() => {
-                        setError('')
-                        setAddingZone(true)
-                        setZoneName('')
-                      }}
-                      type="button"
-                    >
-                      ＋ 新增分區
-                    </button>
-                    {addingZone && (
-                      <form
-                        data-error-context="zone"
-                        onSubmit={(event) => void saveZone(event)}
-                      >
-                        <label>
-                          分區名稱 <span aria-hidden="true">*</span>
-                          <input
-                            aria-describedby="zone-name-hint"
-                            autoFocus
-                            maxLength={128}
-                            onChange={(event) =>
-                              setZoneName(event.target.value)
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === 'Escape') {
-                                event.preventDefault()
-                                setAddingZone(false)
-                                setZoneName('')
-                                setError('')
-                              } else if (event.key === 'Enter') {
-                                event.preventDefault()
-                                event.currentTarget.form?.requestSubmit()
-                              }
-                            }}
-                            required
-                            value={zoneName}
-                          />
-                        </label>
-                        <span id="zone-name-hint">請輸入分區名稱。</span>
-                        {error && errorContext === 'zone' && (
-                          <p ref={errorMessage} role="alert" tabIndex={-1}>
-                            {error}
-                          </p>
-                        )}
-                        <button disabled={busy} type="submit">
-                          新增分區
-                        </button>
-                        <button
-                          onClick={() => {
-                            setAddingZone(false)
-                            setZoneName('')
-                            setError('')
-                          }}
-                          type="button"
-                        >
-                          取消
-                        </button>
-                      </form>
-                    )}
-                  </>
-                )}
-              </section>
-
-              <section aria-labelledby="plans-heading">
-                <h2 id="plans-heading">查核計畫</h2>
-                {plans.length === 0 ? <p>目前沒有計畫。</p> : null}
-                <ul>
-                  {plans.map((plan) => (
-                    <li key={plan.id}>
-                      <button
-                        aria-current={selectedPlanId === plan.id}
-                        onClick={() => setSelectedPlanId(plan.id)}
-                        type="button"
-                      >
-                        {plan.name}（{PLAN_STATUS[plan.status]}）
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {!readOnly && (
-                  <form
-                    data-error-context="plan"
-                    onSubmit={(event) => void createPlan(event)}
-                  >
-                    <h3>建立計畫</h3>
-                    <label>
-                      計畫名稱 <span aria-hidden="true">*</span>
-                      <input
-                        aria-describedby="plan-name-hint"
-                        maxLength={128}
-                        onChange={(event) => setPlanName(event.target.value)}
+                          } else if (event.key === 'Enter') {
+                            event.preventDefault()
+                            event.currentTarget.form?.requestSubmit()
+                          }
+                        }}
                         required
-                        value={planName}
+                        value={zoneName}
                       />
                     </label>
-                    <span id="plan-name-hint">請輸入計畫名稱。</span>
-                    {error && errorContext === 'plan' && (
+                    <span id="zone-name-hint">請輸入分區名稱。</span>
+                    {error && errorContext === 'zone' && (
                       <p ref={errorMessage} role="alert" tabIndex={-1}>
                         {error}
                       </p>
                     )}
                     <button disabled={busy} type="submit">
-                      建立計畫
+                      儲存名稱
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRenamingZone(null)
+                        setZoneName('')
+                        setError('')
+                      }}
+                      type="button"
+                    >
+                      取消編輯
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    {zone.name}{' '}
+                    <button
+                      disabled={busy || readOnly}
+                      onClick={() => {
+                        setError('')
+                        renameZoneTrigger.current =
+                          document.activeElement as HTMLButtonElement
+                        setZoneName(zone.name)
+                        setRenamingZone(zone)
+                      }}
+                      type="button"
+                    >
+                      重新命名
+                    </button>{' '}
+                  </>
+                )}
+                <button
+                  disabled={busy || readOnly}
+                  onClick={() =>
+                    confirm(`刪除分區「${zone.name}」？`, () =>
+                      client.deleteZone(projectId, zone.id),
+                    )
+                  }
+                  type="button"
+                >
+                  刪除
+                </button>
+              </div>
+            ))}
+            {!readOnly && !zonesDenied && !renamingZone && (
+              <>
+                <button
+                  ref={addZoneTrigger}
+                  onClick={() => {
+                    setError('')
+                    setAddingZone(true)
+                    setZoneName('')
+                  }}
+                  type="button"
+                >
+                  ＋ 新增分區
+                </button>
+                {addingZone && (
+                  <form
+                    data-error-context="zone"
+                    onSubmit={(event) => void saveZone(event)}
+                  >
+                    <label>
+                      分區名稱 <span aria-hidden="true">*</span>
+                      <input
+                        aria-describedby="zone-name-hint"
+                        autoFocus
+                        maxLength={128}
+                        onChange={(event) => setZoneName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            setAddingZone(false)
+                            setZoneName('')
+                            setError('')
+                          } else if (event.key === 'Enter') {
+                            event.preventDefault()
+                            event.currentTarget.form?.requestSubmit()
+                          }
+                        }}
+                        required
+                        value={zoneName}
+                      />
+                    </label>
+                    <span id="zone-name-hint">請輸入分區名稱。</span>
+                    {error && errorContext === 'zone' && (
+                      <p ref={errorMessage} role="alert" tabIndex={-1}>
+                        {error}
+                      </p>
+                    )}
+                    <button disabled={busy} type="submit">
+                      新增分區
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAddingZone(false)
+                        setZoneName('')
+                        setError('')
+                      }}
+                      type="button"
+                    >
+                      取消
                     </button>
                   </form>
                 )}
-              </section>
+              </>
+            )}
+          </section>
 
-              {selectedPlan && selectedPlanDetail && (
-                <section aria-labelledby="plan-detail-heading">
-                  <h2 id="plan-detail-heading">{selectedPlanDetail.name}</h2>
-                  <p>計畫狀態：{PLAN_STATUS[selectedPlanDetail.status]}</p>
-                  {!readOnly && (
-                    <>
-                      <button
-                        disabled={busy || selectedPlan.status === 'ARCHIVED'}
-                        onClick={() => {
-                          setError('')
-                          setEditingPlanName(true)
-                          setUpdatedPlanName(selectedPlan.name)
-                        }}
-                        type="button"
-                      >
-                        修改計畫名稱
-                      </button>{' '}
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          confirm(
-                            selectedPlan.status === 'ARCHIVED'
-                              ? '取消封存計畫並依目前任務重算狀態？'
-                              : '封存計畫？封存期間任務將唯讀。',
-                            () =>
-                              selectedPlan.status === 'ARCHIVED'
-                                ? client.unarchivePlan(selectedPlan.id)
-                                : client.archivePlan(selectedPlan.id),
-                          )
-                        }
-                        type="button"
-                      >
-                        {selectedPlan.status === 'ARCHIVED'
-                          ? '取消封存'
-                          : '封存計畫'}
-                      </button>
-                    </>
-                  )}
-                  {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
-                    <form
-                      data-error-context="plan"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        void act(
-                          () =>
-                            client.updatePlan(selectedPlan.id, {
-                              name: updatedPlanName,
-                            }),
-                          'plan',
-                        )
-                      }}
-                    >
-                      <label>
-                        計畫名稱 <span aria-hidden="true">*</span>
-                        <input
-                          aria-describedby="updated-plan-name-hint"
-                          maxLength={128}
-                          onChange={(event) =>
-                            setUpdatedPlanName(event.target.value)
-                          }
-                          required
-                          value={updatedPlanName}
-                        />
-                      </label>
-                      <span id="updated-plan-name-hint">請輸入計畫名稱。</span>
-                      {error && errorContext === 'plan' && (
-                        <p ref={errorMessage} role="alert" tabIndex={-1}>
-                          {error}
-                        </p>
-                      )}
-                      <button disabled={busy} type="submit">
-                        儲存計畫名稱
-                      </button>
-                      <button
-                        onClick={() => setEditingPlanName(false)}
-                        type="button"
-                      >
-                        取消編輯
-                      </button>
-                    </form>
-                  )}
+          <section aria-labelledby="plans-heading">
+            <h2 id="plans-heading">查核計畫</h2>
+            {plans.length === 0 ? <p>目前沒有計畫。</p> : null}
+            <ul>
+              {plans.map((plan) => (
+                <li key={plan.id}>
+                  <button
+                    aria-current={selectedPlanId === plan.id}
+                    onClick={() => setSelectedPlanId(plan.id)}
+                    type="button"
+                  >
+                    {plan.name}（{PLAN_STATUS[plan.status]}）
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {!readOnly && (
+              <form
+                data-error-context="plan-create"
+                onSubmit={(event) => void createPlan(event)}
+              >
+                <h3>建立計畫</h3>
+                <label>
+                  計畫名稱 <span aria-hidden="true">*</span>
+                  <input
+                    aria-describedby={
+                      errorContext === 'plan-create'
+                        ? 'plan-name-hint plan-name-error'
+                        : 'plan-name-hint'
+                    }
+                    aria-invalid={errorContext === 'plan-create' && !!error}
+                    maxLength={128}
+                    onChange={(event) => setPlanName(event.target.value)}
+                    required
+                    value={planName}
+                  />
+                </label>
+                <span id="plan-name-hint">請輸入計畫名稱。</span>
+                {error && errorContext === 'plan-create' && (
+                  <p
+                    id="plan-name-error"
+                    ref={errorMessage}
+                    role="alert"
+                    tabIndex={-1}
+                  >
+                    {error}
+                  </p>
+                )}
+                <button disabled={busy} type="submit">
+                  建立計畫
+                </button>
+              </form>
+            )}
+          </section>
 
-                  <h3>任務</h3>
-                  {(selectedPlanDetail.tasks ?? []).length === 0 ? (
-                    <p>尚未建立任務。</p>
-                  ) : null}
-                  <ul>
-                    {(selectedPlanDetail.tasks ?? []).map((task) => (
-                      <li key={task.id}>
-                        <article>
-                          <h4>
-                            {taskTitle(task)} （{TASK_STATUS[task.status]}）
-                          </h4>
-                          {task.zone && <p>分區：{task.zone.name}</p>}
-                          {task.location_text && (
-                            <p>補充地點：{task.location_text}</p>
-                          )}
-                          <p>
-                            建議指派：
-                            {task.assignee?.name_zh ??
-                              task.assignee?.username ??
-                              '未指派'}
-                          </p>
-                          {task.status === 'CANCELLED' && (
-                            <p>取消原因：{task.cancellation_reason}</p>
-                          )}
-                          {canEditPlan && !readOnly && (
-                            <div>
-                              {task.status === 'DRAFT' && (
-                                <>
-                                  <button
-                                    disabled={busy}
-                                    onClick={() =>
-                                      confirm(
-                                        '派出此任務？派出後現場即可查看。',
-                                        () => client.dispatchTask(task.id),
-                                      )
-                                    }
-                                    type="button"
-                                  >
-                                    派出任務
-                                  </button>{' '}
-                                  <button
-                                    disabled={busy}
-                                    onClick={() =>
-                                      confirm('永久刪除此草稿任務？', () =>
-                                        client.deleteDraftTask(task.id),
-                                      )
-                                    }
-                                    type="button"
-                                  >
-                                    刪除草稿
-                                  </button>{' '}
-                                </>
-                              )}
-                              {['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(
-                                task.status,
-                              ) && (
-                                <>
-                                  <button
-                                    disabled={busy}
-                                    onClick={() =>
-                                      setEditingLocation({
-                                        task,
-                                        zoneId: task.zone_id ?? '',
-                                        locationText: task.location_text ?? '',
-                                      })
-                                    }
-                                    type="button"
-                                  >
-                                    修改地點
-                                  </button>{' '}
-                                  <button
-                                    disabled={busy}
-                                    onClick={() =>
-                                      setEditingAssignee({
-                                        task,
-                                        assigneeId: task.assignee_id ?? '',
-                                      })
-                                    }
-                                    type="button"
-                                  >
-                                    修改建議指派
-                                  </button>{' '}
-                                </>
-                              )}
-                              {['PENDING', 'IN_PROGRESS'].includes(
-                                task.status,
-                              ) && (
-                                <button
-                                  disabled={busy}
-                                  onClick={(event) => {
-                                    cancelTrigger.current = event.currentTarget
-                                    setCancelTask(task)
-                                  }}
-                                  type="button"
-                                >
-                                  取消任務
-                                </button>
-                              )}
-                              {task.status === 'CANCELLED' && (
-                                <button
-                                  disabled={busy}
-                                  onClick={() =>
-                                    confirm('恢復此任務至取消前狀態？', () =>
-                                      client.restoreTask(task.id),
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  恢復任務
-                                </button>
-                              )}
-                            </div>
-                          )}
-                          {editingLocation?.task.id === task.id && (
-                            <form
-                              data-error-context="location"
-                              onSubmit={(event) => {
-                                event.preventDefault()
-                                void act(
-                                  () =>
-                                    client.updateLocation(task.id, {
-                                      zone_id: zones.length
-                                        ? editingLocation.zoneId || null
-                                        : null,
-                                      location_text:
-                                        editingLocation.locationText.trim() ||
-                                        null,
-                                    }),
-                                  'location',
-                                )
-                              }}
-                            >
-                              {zones.length > 0 && !zonesDenied && (
-                                <label>
-                                  分區 <span aria-hidden="true">*</span>
-                                  <select
-                                    aria-describedby="location-zone-hint"
-                                    onChange={(event) =>
-                                      setEditingLocation({
-                                        ...editingLocation,
-                                        zoneId: event.target.value,
-                                      })
-                                    }
-                                    required
-                                    value={editingLocation.zoneId}
-                                  >
-                                    <option value="">請選擇分區</option>
-                                    {zones.map((zone) => (
-                                      <option key={zone.id} value={zone.id}>
-                                        {zone.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <span id="location-zone-hint">
-                                    請選擇任務分區。
-                                  </span>
-                                </label>
-                              )}
-                              <label>
-                                補充地點
-                                <input
-                                  maxLength={256}
-                                  onChange={(event) =>
-                                    setEditingLocation({
-                                      ...editingLocation,
-                                      locationText: event.target.value,
-                                    })
-                                  }
-                                  value={editingLocation.locationText}
-                                />
-                              </label>
-                              <button disabled={busy} type="submit">
-                                儲存地點
-                              </button>
-                              {error && errorContext === 'location' && (
-                                <p
-                                  ref={errorMessage}
-                                  role="alert"
-                                  tabIndex={-1}
-                                >
-                                  {error}
-                                </p>
-                              )}
-                            </form>
-                          )}
-                          {editingAssignee?.task.id === task.id && (
-                            <form
-                              onSubmit={(event) => {
-                                event.preventDefault()
-                                void act(() =>
-                                  client.setSuggestedAssignee(
-                                    task.id,
-                                    editingAssignee.assigneeId || null,
-                                  ),
-                                )
-                              }}
-                            >
-                              <label>
-                                建議指派人
-                                <select
-                                  onChange={(event) =>
-                                    setEditingAssignee({
-                                      ...editingAssignee,
-                                      assigneeId: event.target.value,
-                                    })
-                                  }
-                                  value={editingAssignee.assigneeId}
-                                >
-                                  <option value="">不指定</option>
-                                  {members.map((member) => (
-                                    <option key={member.id} value={member.id}>
-                                      {member.name_zh ?? member.username}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <button disabled={busy} type="submit">
-                                儲存指派
-                              </button>
-                            </form>
-                          )}
-                        </article>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {canEditPlan && !readOnly && (
-                    <form
-                      data-error-context="task"
-                      onSubmit={(event) => void createTask(event)}
-                    >
-                      <h3>建立任務</h3>
-                      <fieldset>
-                        <legend>
-                          選擇一筆以上查核項目{' '}
-                          <span aria-hidden="true">*</span>
-                        </legend>
-                        <p>至少選擇一筆查核項目。</p>
-                        {items.map((item) => (
-                          <label key={item.id}>
-                            <input
-                              checked={taskItems.includes(item.id)}
-                              onChange={(event) =>
-                                toggleItem(item.id, event.target.checked)
-                              }
-                              type="checkbox"
-                              value={item.id}
-                            />
-                            {item.sequence}. {item.title} — {item.instruction}
-                          </label>
-                        ))}
-                      </fieldset>
-                      {zones.length > 0 && !zonesDenied && (
-                        <label>
-                          任務分區 <span aria-hidden="true">*</span>
-                          <select
-                            aria-describedby="task-zone-hint"
-                            onChange={(event) =>
-                              setTaskZoneId(event.target.value)
-                            }
-                            required
-                            value={taskZoneId}
-                          >
-                            <option value="">請選擇分區</option>
-                            {zones.map((zone) => (
-                              <option key={zone.id} value={zone.id}>
-                                {zone.name}
-                              </option>
-                            ))}
-                          </select>
-                          <span id="task-zone-hint">請選擇任務分區。</span>
-                        </label>
-                      )}
-                      {error && errorContext === 'task' && (
-                        <p ref={errorMessage} role="alert" tabIndex={-1}>
-                          {error}
-                        </p>
-                      )}
-                      <label>
-                        補充地點
-                        <input
-                          maxLength={256}
-                          onChange={(event) =>
-                            setTaskLocation(event.target.value)
-                          }
-                          value={taskLocation}
-                        />
-                      </label>
-                      <label>
-                        建議指派人
-                        <select
-                          onChange={(event) =>
-                            setAssigneeId(event.target.value)
-                          }
-                          value={assigneeId}
-                        >
-                          <option value="">不指定</option>
-                          {members.map((member) => (
-                            <option key={member.id} value={member.id}>
-                              {member.name_zh ?? member.username}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        disabled={busy || taskItems.length === 0}
-                        type="submit"
-                      >
-                        建立草稿任務
-                      </button>
-                    </form>
-                  )}
-                </section>
+          {selectedPlan && selectedPlanDetail && (
+            <section aria-labelledby="plan-detail-heading">
+              <h2 id="plan-detail-heading">{selectedPlanDetail.name}</h2>
+              <p>計畫狀態：{PLAN_STATUS[selectedPlanDetail.status]}</p>
+              {!readOnly && (
+                <>
+                  <button
+                    disabled={busy || selectedPlan.status === 'ARCHIVED'}
+                    onClick={() => {
+                      setError('')
+                      setEditingPlanName(true)
+                      setUpdatedPlanName(selectedPlan.name)
+                    }}
+                    type="button"
+                  >
+                    修改計畫名稱
+                  </button>{' '}
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      confirm(
+                        selectedPlan.status === 'ARCHIVED'
+                          ? '取消封存計畫並依目前任務重算狀態？'
+                          : '封存計畫？封存期間任務將唯讀。',
+                        () =>
+                          selectedPlan.status === 'ARCHIVED'
+                            ? client.unarchivePlan(selectedPlan.id)
+                            : client.archivePlan(selectedPlan.id),
+                      )
+                    }
+                    type="button"
+                  >
+                    {selectedPlan.status === 'ARCHIVED'
+                      ? '取消封存'
+                      : '封存計畫'}
+                  </button>
+                </>
               )}
-            </>
+              {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
+                <form
+                  data-error-context="plan-rename"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void act(
+                      () =>
+                        client.updatePlan(selectedPlan.id, {
+                          name: updatedPlanName,
+                        }),
+                      'plan-rename',
+                    )
+                  }}
+                >
+                  <label>
+                    計畫名稱 <span aria-hidden="true">*</span>
+                    <input
+                      aria-describedby={
+                        errorContext === 'plan-rename'
+                          ? 'updated-plan-name-hint updated-plan-name-error'
+                          : 'updated-plan-name-hint'
+                      }
+                      aria-invalid={errorContext === 'plan-rename' && !!error}
+                      maxLength={128}
+                      onChange={(event) =>
+                        setUpdatedPlanName(event.target.value)
+                      }
+                      required
+                      value={updatedPlanName}
+                    />
+                  </label>
+                  <span id="updated-plan-name-hint">請輸入計畫名稱。</span>
+                  {error && errorContext === 'plan-rename' && (
+                    <p
+                      id="updated-plan-name-error"
+                      ref={errorMessage}
+                      role="alert"
+                      tabIndex={-1}
+                    >
+                      {error}
+                    </p>
+                  )}
+                  <button disabled={busy} type="submit">
+                    儲存計畫名稱
+                  </button>
+                  <button
+                    onClick={() => setEditingPlanName(false)}
+                    type="button"
+                  >
+                    取消編輯
+                  </button>
+                </form>
+              )}
+
+              <h3>任務</h3>
+              {(selectedPlanDetail.tasks ?? []).length === 0 ? (
+                <p>尚未建立任務。</p>
+              ) : null}
+              <ul>
+                {(selectedPlanDetail.tasks ?? []).map((task) => (
+                  <li key={task.id}>
+                    <article>
+                      <h4>
+                        {taskTitle(task)} （{TASK_STATUS[task.status]}）
+                      </h4>
+                      {task.zone && <p>分區：{task.zone.name}</p>}
+                      {task.location_text && (
+                        <p>補充地點：{task.location_text}</p>
+                      )}
+                      <p>
+                        建議指派：
+                        {task.assignee?.name_zh ??
+                          task.assignee?.username ??
+                          '未指派'}
+                      </p>
+                      {task.status === 'CANCELLED' && (
+                        <p>取消原因：{task.cancellation_reason}</p>
+                      )}
+                      {canEditPlan && !readOnly && (
+                        <div>
+                          {task.status === 'DRAFT' && (
+                            <>
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  confirm(
+                                    '派出此任務？派出後現場即可查看。',
+                                    () => client.dispatchTask(task.id),
+                                  )
+                                }
+                                type="button"
+                              >
+                                派出任務
+                              </button>{' '}
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  confirm('永久刪除此草稿任務？', () =>
+                                    client.deleteDraftTask(task.id),
+                                  )
+                                }
+                                type="button"
+                              >
+                                刪除草稿
+                              </button>{' '}
+                            </>
+                          )}
+                          {['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(
+                            task.status,
+                          ) && (
+                            <>
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  setEditingLocation({
+                                    task,
+                                    zoneId: task.zone_id ?? '',
+                                    locationText: task.location_text ?? '',
+                                  })
+                                }
+                                type="button"
+                              >
+                                修改地點
+                              </button>{' '}
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  setEditingAssignee({
+                                    task,
+                                    assigneeId: task.assignee_id ?? '',
+                                  })
+                                }
+                                type="button"
+                              >
+                                修改建議指派
+                              </button>{' '}
+                            </>
+                          )}
+                          {['PENDING', 'IN_PROGRESS'].includes(
+                            task.status,
+                          ) && (
+                            <button
+                              disabled={busy}
+                              onClick={(event) => {
+                                cancelTrigger.current = event.currentTarget
+                                setCancelTask(task)
+                              }}
+                              type="button"
+                            >
+                              取消任務
+                            </button>
+                          )}
+                          {task.status === 'CANCELLED' && (
+                            <button
+                              disabled={busy}
+                              onClick={() =>
+                                confirm('恢復此任務至取消前狀態？', () =>
+                                  client.restoreTask(task.id),
+                                )
+                              }
+                              type="button"
+                            >
+                              恢復任務
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {editingLocation?.task.id === task.id && (
+                        <form
+                          data-error-context="location"
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            void act(
+                              () =>
+                                client.updateLocation(task.id, {
+                                  zone_id: zones.length
+                                    ? editingLocation.zoneId || null
+                                    : null,
+                                  location_text:
+                                    editingLocation.locationText.trim() ||
+                                    null,
+                                }),
+                              'location',
+                            )
+                          }}
+                        >
+                          {zones.length > 0 && !zonesDenied && (
+                            <label>
+                              分區 <span aria-hidden="true">*</span>
+                              <select
+                                aria-describedby="location-zone-hint"
+                                onChange={(event) =>
+                                  setEditingLocation({
+                                    ...editingLocation,
+                                    zoneId: event.target.value,
+                                  })
+                                }
+                                required
+                                value={editingLocation.zoneId}
+                              >
+                                <option value="">請選擇分區</option>
+                                {zones.map((zone) => (
+                                  <option key={zone.id} value={zone.id}>
+                                    {zone.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <span id="location-zone-hint">
+                                請選擇任務分區。
+                              </span>
+                            </label>
+                          )}
+                          <label>
+                            補充地點
+                            <input
+                              maxLength={256}
+                              onChange={(event) =>
+                                setEditingLocation({
+                                  ...editingLocation,
+                                  locationText: event.target.value,
+                                })
+                              }
+                              value={editingLocation.locationText}
+                            />
+                          </label>
+                          <button disabled={busy} type="submit">
+                            儲存地點
+                          </button>
+                          {error && errorContext === 'location' && (
+                            <p ref={errorMessage} role="alert" tabIndex={-1}>
+                              {error}
+                            </p>
+                          )}
+                        </form>
+                      )}
+                      {editingAssignee?.task.id === task.id && (
+                        <form
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            void act(() =>
+                              client.setSuggestedAssignee(
+                                task.id,
+                                editingAssignee.assigneeId || null,
+                              ),
+                            )
+                          }}
+                        >
+                          <label>
+                            建議指派人
+                            <select
+                              onChange={(event) =>
+                                setEditingAssignee({
+                                  ...editingAssignee,
+                                  assigneeId: event.target.value,
+                                })
+                              }
+                              value={editingAssignee.assigneeId}
+                            >
+                              <option value="">不指定</option>
+                              {members.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                  {member.name_zh ?? member.username}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button disabled={busy} type="submit">
+                            儲存指派
+                          </button>
+                        </form>
+                      )}
+                    </article>
+                  </li>
+                ))}
+              </ul>
+
+              {canEditPlan && !readOnly && (
+                <form
+                  data-error-context="task"
+                  onSubmit={(event) => void createTask(event)}
+                >
+                  <h3>建立任務</h3>
+                  <fieldset>
+                    <legend>
+                      選擇一筆以上查核項目 <span aria-hidden="true">*</span>
+                    </legend>
+                    <p>至少選擇一筆查核項目。</p>
+                    {items.map((item) => (
+                      <label key={item.id}>
+                        <input
+                          checked={taskItems.includes(item.id)}
+                          onChange={(event) =>
+                            toggleItem(item.id, event.target.checked)
+                          }
+                          type="checkbox"
+                          value={item.id}
+                        />
+                        {item.sequence}. {item.title} — {item.instruction}
+                      </label>
+                    ))}
+                  </fieldset>
+                  {zones.length > 0 && !zonesDenied && (
+                    <label>
+                      任務分區 <span aria-hidden="true">*</span>
+                      <select
+                        aria-describedby="task-zone-hint"
+                        onChange={(event) => setTaskZoneId(event.target.value)}
+                        required
+                        value={taskZoneId}
+                      >
+                        <option value="">請選擇分區</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span id="task-zone-hint">請選擇任務分區。</span>
+                    </label>
+                  )}
+                  {error && errorContext === 'task' && (
+                    <p ref={errorMessage} role="alert" tabIndex={-1}>
+                      {error}
+                    </p>
+                  )}
+                  <label>
+                    補充地點
+                    <input
+                      maxLength={256}
+                      onChange={(event) => setTaskLocation(event.target.value)}
+                      value={taskLocation}
+                    />
+                  </label>
+                  <label>
+                    建議指派人
+                    <select
+                      onChange={(event) => setAssigneeId(event.target.value)}
+                      value={assigneeId}
+                    >
+                      <option value="">不指定</option>
+                      {members.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name_zh ?? member.username}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    disabled={busy || taskItems.length === 0}
+                    type="submit"
+                  >
+                    建立草稿任務
+                  </button>
+                </form>
+              )}
+            </section>
           )}
         </>
       )}

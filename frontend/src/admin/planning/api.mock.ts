@@ -1,4 +1,4 @@
-import { PlanningApiError } from './api'
+import { ManagementApiError } from '../api'
 import type {
   InspectionPlan,
   InspectionTask,
@@ -127,7 +127,7 @@ export function createMockPlanningClient(options?: {
 
   function project(projectId: string): PlanningProject {
     const found = PROJECTS.find((entry) => entry.id === projectId)
-    if (!found) throw new PlanningApiError(404, 'project.not_found')
+    if (!found) throw new ManagementApiError(404, 'resource.not_found')
     return found
   }
 
@@ -139,24 +139,14 @@ export function createMockPlanningClient(options?: {
       entry.tasks.some((task) => task.id === taskId),
     )
     const task = plan?.tasks.find((entry) => entry.id === taskId)
-    if (!plan || !task)
-      throw new PlanningApiError(404, 'inspection_task.not_found')
+    if (!plan || !task) throw new ManagementApiError(404, 'resource.not_found')
     return { plan, task }
   }
 
   function getPlan(planId: string): MockPlan {
     const found = plans.find((entry) => entry.id === planId)
-    if (!found) throw new PlanningApiError(404, 'inspection_plan.not_found')
+    if (!found) throw new ManagementApiError(404, 'resource.not_found')
     return found
-  }
-
-  function editable(plan: MockPlan, task: InspectionTask): void {
-    if (
-      plan.status === 'ARCHIVED' ||
-      !['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(task.status)
-    ) {
-      throw new PlanningApiError(409, 'inspection_task.read_only')
-    }
   }
 
   function findZone(
@@ -167,7 +157,8 @@ export function createMockPlanningClient(options?: {
     const zone = zones.find(
       (entry) => entry.id === zoneId && entry.project_id === projectId,
     )
-    if (!zone) throw new PlanningApiError(422, 'project_zone.invalid')
+    if (!zone)
+      throw new ManagementApiError(422, 'inspection_task.invalid_zone')
     return zone
   }
 
@@ -178,14 +169,14 @@ export function createMockPlanningClient(options?: {
     const projectZones = zones.filter((zone) => zone.project_id === projectId)
     const zone = findZone(projectId, input.zone_id)
     if (projectZones.length > 0 && zone === null) {
-      throw new PlanningApiError(422, 'project_zone.required')
+      throw new ManagementApiError(422, 'inspection_task.invalid_zone')
     }
     if (projectZones.length === 0 && input.zone_id !== null) {
-      throw new PlanningApiError(422, 'project_zone.not_allowed')
+      throw new ManagementApiError(422, 'inspection_task.invalid_zone')
     }
     const locationText = input.location_text?.trim() ?? ''
     if (characterCount(locationText) > 256) {
-      throw new PlanningApiError(422, 'inspection_task.location_too_long')
+      throw new ManagementApiError(422, 'inspection_task.invalid_location')
     }
     return {
       zone: zone ? { id: zone.id, name: zone.name } : null,
@@ -213,7 +204,7 @@ export function createMockPlanningClient(options?: {
       project(projectId)
       const name = rawName.trim()
       if (!name || characterCount(name) > 128) {
-        throw new PlanningApiError(422, 'project_zone.name_invalid')
+        throw new ManagementApiError(422, 'project_zone.invalid_name')
       }
       if (
         zones.some(
@@ -222,7 +213,7 @@ export function createMockPlanningClient(options?: {
             normalizedName(zone.name) === normalizedName(name),
         )
       ) {
-        throw new PlanningApiError(409, 'project_zone.name_conflict')
+        throw new ManagementApiError(409, 'project_zone.name_conflict')
       }
       const zone = { id: crypto.randomUUID(), project_id: projectId, name }
       zones.push(zone)
@@ -233,10 +224,10 @@ export function createMockPlanningClient(options?: {
       const zone = zones.find(
         (entry) => entry.id === zoneId && entry.project_id === projectId,
       )
-      if (!zone) throw new PlanningApiError(404, 'project_zone.not_found')
+      if (!zone) throw new ManagementApiError(404, 'resource.not_found')
       const name = rawName.trim()
       if (!name || characterCount(name) > 128) {
-        throw new PlanningApiError(422, 'project_zone.name_invalid')
+        throw new ManagementApiError(422, 'project_zone.invalid_name')
       }
       if (
         zones.some(
@@ -246,7 +237,7 @@ export function createMockPlanningClient(options?: {
             normalizedName(entry.name) === normalizedName(name),
         )
       ) {
-        throw new PlanningApiError(409, 'project_zone.name_conflict')
+        throw new ManagementApiError(409, 'project_zone.name_conflict')
       }
       zone.name = name
       for (const currentPlan of plans) {
@@ -263,13 +254,13 @@ export function createMockPlanningClient(options?: {
       const index = zones.findIndex(
         (entry) => entry.id === zoneId && entry.project_id === projectId,
       )
-      if (index < 0) throw new PlanningApiError(404, 'project_zone.not_found')
+      if (index < 0) throw new ManagementApiError(404, 'resource.not_found')
       if (
         plans.some((entry) =>
           entry.tasks.some((task) => task.zone?.id === zoneId),
         )
       ) {
-        throw new PlanningApiError(409, 'project_zone.in_use')
+        throw new ManagementApiError(409, 'project_zone.in_use')
       }
       zones.splice(index, 1)
     },
@@ -302,7 +293,7 @@ export function createMockPlanningClient(options?: {
       project(projectId)
       const name = input.name.trim()
       if (!name || characterCount(name) > 128) {
-        throw new PlanningApiError(422, 'inspection_plan.name_invalid')
+        throw new ManagementApiError(422, 'inspection_plan.invalid_name')
       }
       const plan: MockPlan = {
         id: crypto.randomUUID(),
@@ -320,12 +311,12 @@ export function createMockPlanningClient(options?: {
     async updatePlan(planId, input) {
       const plan = getPlan(planId)
       if (plan.status === 'ARCHIVED') {
-        throw new PlanningApiError(409, 'inspection_plan.archived')
+        throw new ManagementApiError(409, 'inspection_plan.archived')
       }
       if (input.name !== undefined) {
         const name = input.name.trim()
         if (!name || characterCount(name) > 128) {
-          throw new PlanningApiError(422, 'inspection_plan.name_invalid')
+          throw new ManagementApiError(422, 'inspection_plan.invalid_name')
         }
         plan.name = name
       }
@@ -334,18 +325,18 @@ export function createMockPlanningClient(options?: {
     async createTask(planId, input) {
       const plan = getPlan(planId)
       if (plan.status === 'ARCHIVED')
-        throw new PlanningApiError(409, 'inspection_plan.archived')
+        throw new ManagementApiError(409, 'inspection_plan.archived')
       if (input.item_ids.length === 0) {
-        throw new PlanningApiError(422, 'inspection_task.items_required')
+        throw new ManagementApiError(422, 'inspection_task.items_required')
       }
       const projectZones = zones.filter(
         (zone) => zone.project_id === plan.project_id,
       )
       if (projectZones.length > 0 && input.zone_id === null) {
-        throw new PlanningApiError(422, 'project_zone.required')
+        throw new ManagementApiError(422, 'inspection_task.invalid_zone')
       }
       if (projectZones.length === 0 && input.zone_id !== null) {
-        throw new PlanningApiError(422, 'project_zone.not_allowed')
+        throw new ManagementApiError(422, 'inspection_task.invalid_zone')
       }
       const itemById = new Map(
         (ITEMS[plan.project_id] ?? []).map((item) => [item.id, item]),
@@ -353,7 +344,7 @@ export function createMockPlanningClient(options?: {
       const items: TaskInspectionItem[] = input.item_ids.map((id) => {
         const item = itemById.get(id)
         if (!item)
-          throw new PlanningApiError(
+          throw new ManagementApiError(
             422,
             'inspection_task.invalid_project_item',
           )
@@ -379,7 +370,7 @@ export function createMockPlanningClient(options?: {
         (person) => person.id === input.suggested_assignee_id,
       )
       if (input.suggested_assignee_id && !assignee) {
-        throw new PlanningApiError(422, 'user.not_found')
+        throw new ManagementApiError(422, 'inspection_task.invalid_assignee')
       }
       const task: InspectionTask = {
         id: crypto.randomUUID(),
@@ -405,12 +396,14 @@ export function createMockPlanningClient(options?: {
     },
     async setSuggestedAssignee(taskId, assigneeId) {
       const { plan, task } = planForTask(taskId)
-      editable(plan, task)
+      if (plan.status === 'ARCHIVED') {
+        throw new ManagementApiError(409, 'inspection_plan.archived')
+      }
       const assignee = (MEMBERS[plan.project_id] ?? []).find(
         (entry) => entry.id === assigneeId,
       )
       if (assigneeId && !assignee) {
-        throw new PlanningApiError(422, 'user.not_found')
+        throw new ManagementApiError(422, 'inspection_task.invalid_assignee')
       }
       task.assignee_id = assignee?.id ?? null
       task.assignee = assignee ?? null
@@ -419,7 +412,7 @@ export function createMockPlanningClient(options?: {
     async startTask(taskId) {
       const { plan, task } = planForTask(taskId)
       if (plan.status === 'ARCHIVED' || task.status !== 'PENDING') {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       task.status = 'IN_PROGRESS'
       task.started_by = actingUserId
@@ -429,10 +422,10 @@ export function createMockPlanningClient(options?: {
     async completeTask(taskId) {
       const { plan, task } = planForTask(taskId)
       if (plan.status === 'ARCHIVED' || task.status !== 'IN_PROGRESS') {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       if (!completionReady) {
-        throw new PlanningApiError(422, 'inspection_task.data_incomplete')
+        throw new ManagementApiError(422, 'inspection_task.items_incomplete')
       }
       task.status = 'COMPLETED'
       task.completed_by = actingUserId
@@ -441,7 +434,12 @@ export function createMockPlanningClient(options?: {
     },
     async updateLocation(taskId, input) {
       const { plan, task } = planForTask(taskId)
-      editable(plan, task)
+      if (plan.status === 'ARCHIVED') {
+        throw new ManagementApiError(409, 'inspection_plan.archived')
+      }
+      if (!['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(task.status)) {
+        throw new ManagementApiError(409, 'inspection_task.location_locked')
+      }
       const location = validateLocation(plan.project_id, input)
       task.zone_id = location.zone?.id ?? null
       task.zone = location.zone
@@ -451,7 +449,7 @@ export function createMockPlanningClient(options?: {
     async dispatchTask(taskId) {
       const { plan, task } = planForTask(taskId)
       if (plan.status === 'ARCHIVED' || task.status !== 'DRAFT') {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       task.status = 'PENDING'
       plan.status = derivedStatus(plan)
@@ -460,7 +458,7 @@ export function createMockPlanningClient(options?: {
     async deleteDraftTask(taskId) {
       const { plan, task } = planForTask(taskId)
       if (plan.status === 'ARCHIVED' || task.status !== 'DRAFT') {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       plan.tasks.splice(plan.tasks.indexOf(task), 1)
       plan.status = derivedStatus(plan)
@@ -471,13 +469,13 @@ export function createMockPlanningClient(options?: {
         plan.status === 'ARCHIVED' ||
         !['PENDING', 'IN_PROGRESS'].includes(task.status)
       ) {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       const reason = rawReason.trim()
       if (!reason)
-        throw new PlanningApiError(422, 'inspection_task.reason_required')
+        throw new ManagementApiError(422, 'inspection_task.reason_required')
       if (task.status !== 'PENDING' && task.status !== 'IN_PROGRESS') {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       task.cancelled_from = task.status
       task.status = 'CANCELLED'
@@ -492,7 +490,7 @@ export function createMockPlanningClient(options?: {
         task.status !== 'CANCELLED' ||
         !task.cancelled_from
       ) {
-        throw new PlanningApiError(409, 'inspection_task.invalid_transition')
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
       }
       task.status = task.cancelled_from
       task.cancelled_from = null

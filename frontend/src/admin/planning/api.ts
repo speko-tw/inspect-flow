@@ -102,12 +102,6 @@ export interface UpdateLocationInput {
   location_text: string | null
 }
 
-export class PlanningApiError extends ManagementApiError {
-  constructor(status: number, code: string) {
-    super(status, code)
-  }
-}
-
 /**
  * The operation names map one-to-one to the frozen planning endpoint table.
  * State values are read-only response data; there is no arbitrary status
@@ -303,6 +297,12 @@ export function planningErrorMessage(error: unknown): string {
   if (error.status === 403) return '你沒有權限執行這項操作，畫面已切換為唯讀。'
   if (error.code === 'project_zone.name_conflict') {
     return '同一專案已有相同名稱的分區。'
+  }
+  if (error.code === 'project_zone.invalid_name') {
+    return '分區名稱不可空白，且不得超過 128 字元。'
+  }
+  if (error.code === 'inspection_plan.invalid_name') {
+    return '計畫名稱不可空白，且不得超過 128 字元。'
   }
   if (error.code === 'project_zone.in_use') {
     return '分區已有任務使用，無法刪除。'

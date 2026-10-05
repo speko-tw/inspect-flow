@@ -8,7 +8,6 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 
 import { ManagementApiError } from '../api'
-import { PlanningApiError } from './api'
 import { createMockPlanningClient } from './api.mock'
 import PlanningPage from './PlanningPage'
 
@@ -138,7 +137,7 @@ describe('planning management page', () => {
   it('switches to read-only after a write returns 403', async () => {
     const client = createMockPlanningClient()
     client.createPlan = async () => {
-      throw new PlanningApiError(403, 'permission.denied')
+      throw new ManagementApiError(403, 'permission.denied')
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
 
@@ -193,7 +192,7 @@ describe('planning management page', () => {
   it('shows missing project without fallback', async () => {
     const client = createMockPlanningClient()
     vi.spyOn(client, 'getProject').mockRejectedValue(
-      new ManagementApiError(404, 'project.not_found'),
+      new ManagementApiError(404, 'resource.not_found'),
     )
     render(<PlanningPage client={client} initialProjectId="missing-project" />)
 
@@ -218,7 +217,7 @@ describe('planning management page', () => {
   it('shows and focuses a create-plan error inside its form', async () => {
     const client = createMockPlanningClient()
     client.createPlan = async () => {
-      throw new PlanningApiError(422, 'validation.invalid')
+      throw new ManagementApiError(422, 'validation.invalid')
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '查核計畫' })
@@ -239,6 +238,35 @@ describe('planning management page', () => {
     expect(alert).toHaveTextContent('輸入資料不符合規格')
   })
 
+  it('shows a plan-name error only in the form that triggered it', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '既有計畫',
+    })
+    client.updatePlan = async () => {
+      throw new ManagementApiError(409, 'inspection_plan.archived')
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '既有計畫（草稿）' }),
+    )
+    expect(await screen.findByText(plan.name)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '修改計畫名稱' }))
+
+    const createForm = document.querySelector(
+      'form[data-error-context="plan-create"]',
+    ) as HTMLFormElement
+    const renameForm = document.querySelector(
+      'form[data-error-context="plan-rename"]',
+    ) as HTMLFormElement
+    fireEvent.submit(renameForm)
+
+    expect(await within(renameForm).findByRole('alert')).toHaveTextContent(
+      '計畫已封存，無法修改。',
+    )
+    expect(within(createForm).queryByRole('alert')).toBeNull()
+  })
+
   it('shows a plan-detail read error at page level', async () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
@@ -253,7 +281,7 @@ describe('planning management page', () => {
     })
 
     client.getPlan = async () => {
-      throw new PlanningApiError(500, 'inspection_plan.unavailable')
+      throw new ManagementApiError(500, 'inspection_plan.unavailable')
     }
     fireEvent.click(planButton)
 
@@ -404,7 +432,7 @@ describe('planning management page', () => {
     const listProjectZones = client.listProjectZones.bind(client)
     client.listProjectZones = async (projectId) => {
       if (projectId === 'project-demo-2') {
-        throw new PlanningApiError(503, 'project_zone.unavailable')
+        throw new ManagementApiError(503, 'project_zone.unavailable')
       }
       return listProjectZones(projectId)
     }

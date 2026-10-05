@@ -1,11 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ManagementApiError } from '../api'
 import { createMockPlanningClient } from './api.mock'
-import { planningClient } from './api'
+import { planningClient, planningErrorMessage } from './api'
 
 const PROJECT = 'project-demo-1'
 
 describe('mock planning client', () => {
+  it('uses the backend error code for an invalid plan name', async () => {
+    const client = createMockPlanningClient()
+    await expect(
+      client.createPlan(PROJECT, { name: '   ' }),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: 'inspection_plan.invalid_name',
+    })
+  })
+
   it('paginates plans and fetches task details separately', async () => {
     const client = createMockPlanningClient()
     const created = []
@@ -142,7 +153,7 @@ describe('mock planning client', () => {
         }),
       ).rejects.toMatchObject({
         status: 422,
-        code: 'project_zone.required',
+        code: 'inspection_task.invalid_zone',
       })
 
       const otherProjectZone = await client.createZone(
@@ -156,17 +167,17 @@ describe('mock planning client', () => {
         }),
       ).rejects.toMatchObject({
         status: 422,
-        code: 'project_zone.invalid',
+        code: 'inspection_task.invalid_zone',
       })
       await expect(client.createZone(PROJECT, '   ')).rejects.toMatchObject({
         status: 422,
-        code: 'project_zone.name_invalid',
+        code: 'project_zone.invalid_name',
       })
       await expect(
         client.createZone(PROJECT, 'a'.repeat(129)),
       ).rejects.toMatchObject({
         status: 422,
-        code: 'project_zone.name_invalid',
+        code: 'project_zone.invalid_name',
       })
     },
   )
@@ -198,7 +209,7 @@ describe('mock planning client', () => {
         }),
       ).rejects.toMatchObject({
         status: 422,
-        code: 'inspection_task.location_too_long',
+        code: 'inspection_task.invalid_location',
       })
 
       await client.dispatchTask(task.id)
@@ -295,6 +306,19 @@ describe('mock planning client', () => {
 
 describe('planning HTTP client contract', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('explains invalid zone and plan names beside their fields', () => {
+    expect(
+      planningErrorMessage(
+        new ManagementApiError(422, 'project_zone.invalid_name'),
+      ),
+    ).toBe('分區名稱不可空白，且不得超過 128 字元。')
+    expect(
+      planningErrorMessage(
+        new ManagementApiError(422, 'inspection_plan.invalid_name'),
+      ),
+    ).toBe('計畫名稱不可空白，且不得超過 128 字元。')
+  })
 
   it('reads Task snapshots and paginated API envelopes', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
