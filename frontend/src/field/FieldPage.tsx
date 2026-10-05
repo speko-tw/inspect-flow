@@ -35,6 +35,7 @@ function displayTime(value: string) {
 export default function FieldPage() {
   const { user } = useCurrentUser()
   const [listMemory] = useState(() => new Map<string, ListState>())
+  const [returnKeys] = useState(() => new Set<string>())
   const location = useLocation()
   const detailId = location.pathname.match(/^\/field\/tasks\/([^/]+)\/?$/)?.[1]
   const from = `${location.pathname}${location.search}${location.hash}`
@@ -57,7 +58,11 @@ export default function FieldPage() {
         {typeof notice === 'string' && <p role="status">{notice}</p>}
         {detailId ? (
           <>
-            <Link className="field-back" to={`/field/${location.search}`}>
+            <Link
+              className="field-back"
+              to={`/field/${location.search}`}
+              state={{ restoreTaskList: true }}
+            >
               返回任務
             </Link>
             <section className="field-notice">
@@ -70,6 +75,7 @@ export default function FieldPage() {
             key={`${user.id}:${location.search}`}
             userId={user.id}
             memory={listMemory}
+            returnKeys={returnKeys}
           />
         )}
       </main>
@@ -89,9 +95,11 @@ export default function FieldPage() {
 function TaskList({
   userId,
   memory,
+  returnKeys,
 }: {
   userId: string
   memory: Map<string, ListState>
+  returnKeys: Set<string>
 }) {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
@@ -101,16 +109,23 @@ function TaskList({
   const status: Status =
     rawStatus === 'PENDING' || rawStatus === 'IN_PROGRESS' ? rawStatus : 'all'
   const key = `${userId}:${scope}:${status}`
-  const [state, setState] = useState<ListState | null>(
-    () => memory.get(key) ?? null,
+  const [restore] = useState(
+    () =>
+      returnKeys.has(key) ||
+      (location.state as { restoreTaskList?: unknown } | null)
+        ?.restoreTaskList === true,
   )
-  const [loading, setLoading] = useState(() => !memory.has(key))
+  const [state, setState] = useState<ListState | null>(() =>
+    restore ? (memory.get(key) ?? null) : null,
+  )
+  const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     let active = true
-    const saved = memory.get(key)
+    returnKeys.delete(key)
+    const saved = restore ? memory.get(key) : null
     if (saved) {
       requestAnimationFrame(() => window.scrollTo(0, saved.scrollY))
       return () => {
@@ -160,6 +175,8 @@ function TaskList({
     memory,
     navigate,
     retry,
+    restore,
+    returnKeys,
     scope,
     status,
   ])
@@ -168,7 +185,7 @@ function TaskList({
     const next = new URLSearchParams()
     if (nextScope === 'all') next.set('scope', 'all')
     if (nextStatus !== 'all') next.set('status', nextStatus)
-    setParams(next)
+    setParams(next, { state: null })
   }
 
   async function loadMore() {
@@ -246,7 +263,7 @@ function TaskList({
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
         </section>
       )}
-      {error === 'other' && (
+      {error === 'other' && !state?.nextCursor && (
         <section className="field-notice field-error" role="alert">
           <h2>無法載入任務</h2>
           <p>請稍後再試。</p>
@@ -291,6 +308,7 @@ function TaskList({
                   key={task.id}
                   to={`/field/tasks/${task.id}${location.search}`}
                   onClick={() => {
+                    returnKeys.add(key)
                     const saved = memory.get(key)
                     if (saved)
                       memory.set(key, {
@@ -328,14 +346,25 @@ function TaskList({
             </div>
           )}
           {state.nextCursor && (
-            <button
-              type="button"
-              className="field-more"
-              disabled={loading}
-              onClick={loadMore}
-            >
-              {loading ? '載入中…' : '載入更多'}
-            </button>
+            <>
+              <button
+                type="button"
+                className="field-more"
+                disabled={loading}
+                onClick={loadMore}
+              >
+                {loading ? '載入中…' : '載入更多'}
+              </button>
+              {error === 'other' && (
+                <section className="field-notice field-error" role="alert">
+                  <h2>無法載入任務</h2>
+                  <p>請稍後再試。</p>
+                  <button type="button" onClick={() => void loadMore()}>
+                    重試
+                  </button>
+                </section>
+              )}
+            </>
           )}
         </>
       )}

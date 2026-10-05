@@ -455,6 +455,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         instruction="示範指示",
         source_template_name="示範範本",
         applied_at=world["admin_user"].created_at,
+        created_at=world["item"].created_at + timedelta(seconds=1),
         created_by=world["admin_user"].id,
         updated_by=world["admin_user"].id,
     )

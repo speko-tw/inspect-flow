@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -19,7 +25,14 @@ const TASK: FieldTask = {
   item_summary: { first_title: '外牆鋼筋查核', item_count: 2 },
 }
 
-function renderPage() {
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{JSON.stringify(location)}</div>
+}
+
+function renderPage(
+  options: { user?: Partial<CurrentUser>; state?: unknown } = {},
+) {
   nextUser += 1
   const user: CurrentUser = {
     id: `user-${nextUser}`,
@@ -30,15 +43,22 @@ function renderPage() {
     is_admin: false,
     must_change_password: false,
   }
-  return render(
-    <MemoryRouter initialEntries={['/field/']}>
-      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
+  const clear = vi.fn()
+  const currentUser = { ...user, ...options.user }
+  const view = render(
+    <MemoryRouter
+      initialEntries={[{ pathname: '/field/', state: options.state }]}
+    >
+      <CurrentUserProvider value={{ user: currentUser, clear }}>
+        <LocationProbe />
         <Routes>
           <Route path="/field/*" element={<FieldPage />} />
+          <Route path="/change-password" element={<p>密碼頁</p>} />
         </Routes>
       </CurrentUserProvider>
     </MemoryRouter>,
   )
+  return { ...view, clear }
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -112,6 +132,135 @@ describe('今日任務首頁', () => {
     )
     await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 240))
     expect(fetcher).toHaveBeenCalledTimes(4)
+  })
+
+  it('切回曾看過的篩選組合會重抓第一頁', async () => {
+    let currentStatus: FieldTask['status'] = 'PENDING'
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      return Response.json({
+        items:
+          url.includes('status=PENDING') && currentStatus !== 'PENDING'
+            ? []
+            : [{ ...TASK, status: currentStatus }],
+        next_cursor: null,
+      })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    renderPage()
+    await screen.findByText('外牆鋼筋查核 等 2 項')
+    fireEvent.click(screen.getByRole('button', { name: '待開始' }))
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+    currentStatus = 'IN_PROGRESS'
+    fireEvent.click(screen.getByRole('button', { name: '所有狀態' }))
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
+    expect(screen.getByText('外牆鋼筋查核 等 2 項').closest('a')).toHaveClass(
+      'progress',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '待開始' }))
+    expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
+    expect(screen.queryByText('外牆鋼筋查核 等 2 項')).not.toBeInTheDocument()
+    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(String(fetcher.mock.calls[3][0])).toContain('status=PENDING')
+    expect(String(fetcher.mock.calls[3][0])).not.toContain('cursor=')
+  })
+
+  it('下一頁失敗只重試該 cursor，保留已載入卡片', async () => {
+    let nextPageAttempts = 0
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (!String(input).includes('cursor=next')) {
+        return Response.json({ items: [TASK], next_cursor: 'next' })
+      }
+      nextPageAttempts += 1
+      return nextPageAttempts === 1
+        ? Response.json({ error: { code: 'server.error' } }, { status: 500 })
+        : Response.json({
+            items: [
+              {
+                ...TASK,
+                id: 'task-2',
+                item_summary: { first_title: '第二項目', item_count: 1 },
+              },
+            ],
+            next_cursor: null,
+          })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    renderPage()
+    await screen.findByText('外牆鋼筋查核 等 2 項')
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    expect(await screen.findByText('無法載入任務')).toBeInTheDocument()
+    expect(screen.getByText('外牆鋼筋查核 等 2 項')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重試' }))
+    expect(await screen.findByText('第二項目')).toBeInTheDocument()
+    expect(screen.getByText('外牆鋼筋查核 等 2 項')).toBeInTheDocument()
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(String(fetcher.mock.calls[1][0])).toContain('cursor=next')
+    expect(String(fetcher.mock.calls[2][0])).toContain('cursor=next')
+  })
+
+  it('卡片正確處理空標題、單項、無分區與進行中', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          items: [
+            {
+              ...TASK,
+              item_summary: { first_title: null, item_count: 0 },
+              location: { zone_name: null, location_text: '東側' },
+            },
+            {
+              ...TASK,
+              id: 'task-2',
+              status: 'IN_PROGRESS',
+              item_summary: { first_title: '單一查核項目', item_count: 1 },
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+    )
+    renderPage()
+    const fallback = await screen.findByText('查核任務')
+    const firstCard = fallback.closest('a')
+    expect(firstCard).not.toBeNull()
+    expect(within(firstCard!).queryByText(/分區：/)).not.toBeInTheDocument()
+    const secondCard = screen.getByText('單一查核項目').closest('a')
+    expect(secondCard).toHaveClass('progress')
+    expect(within(secondCard!).getByText('進行中')).toBeInTheDocument()
+    expect(screen.queryByText('單一查核項目 等 1 項')).not.toBeInTheDocument()
+  })
+
+  it('保留密碼入口、來源 state 提示、登出與個人資料空值', async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/auth/logout')
+        ? Response.json({})
+        : Response.json({ items: [], next_cursor: null }),
+    )
+    vi.stubGlobal('fetch', fetcher)
+    const { clear } = renderPage({
+      user: { name_zh: null, name_en: null, email: null },
+      state: { notice: '密碼已更新。' },
+    })
+    expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('密碼已更新。')
+    expect(screen.getByRole('link', { name: '變更密碼' })).toHaveAttribute(
+      'href',
+      '/change-password',
+    )
+    const profile = screen.getByText('我的資料').closest('details')
+    expect(profile).not.toBeNull()
+    expect(within(profile!).getByText('中文姓名：—')).toBeInTheDocument()
+    expect(within(profile!).getByText('英文姓名：—')).toBeInTheDocument()
+    expect(within(profile!).getByText('Email：—')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '登出' }))
+    await waitFor(() => expect(clear).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('link', { name: '變更密碼' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(
+      '"from":"/field/"',
+    )
+    expect(screen.getByText('密碼頁')).toBeInTheDocument()
   })
 
   it('有權限但無任務時顯示空狀態', async () => {
