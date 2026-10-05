@@ -9,6 +9,8 @@ export interface ProjectItemData {
   sequence: number
   title: string
   instruction: string
+  source_template_name: string
+  applied_at: string
   inspection_points: InspectionPoint[]
 }
 

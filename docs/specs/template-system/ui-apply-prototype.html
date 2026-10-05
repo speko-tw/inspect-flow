@@ -1,0 +1,1450 @@
+<!-- #429 approved design reference; the trial dock is removed. -->
+<title>專案查核項目與範本庫</title>
+<style>
+:root {
+  --bg: #f3f5f8;
+  --fg: #1b2430;
+  --surface: #ffffff;
+  --surface-alt: #f7f9fb;
+  --muted: #526071;
+  --border: #d3dae3;
+  --border-strong: #7d8a9a;
+  --primary: #1b5ec2;
+  --primary-hover: #154c9e;
+  --on-primary: #ffffff;
+  --danger: #b3261e;
+  --danger-hover: #8f1d17;
+  --on-danger: #ffffff;
+  --error-bg: #fdeceb;
+  --error-text: #8c1d18;
+  --error-border: #e9a7a3;
+  --ok-bg: #e8f6ee;
+  --ok-text: #14532d;
+  --ok-border: #9fd3b4;
+  --warn-bg: #fff4dc;
+  --warn-text: #5c3d00;
+  --warn-border: #e2c071;
+  --sel-bg: #e6effb;
+  --focus: #1b5ec2;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151c;
+    --fg: #e7ecf2;
+    --surface: #19202a;
+    --surface-alt: #1e2631;
+    --muted: #a6b2c0;
+    --border: #2d3745;
+    --border-strong: #6b7a8c;
+    --primary: #7db3ff;
+    --primary-hover: #a3c8ff;
+    --on-primary: #0a1424;
+    --danger: #ff9b92;
+    --danger-hover: #ffb9b2;
+    --on-danger: #2a0a07;
+    --error-bg: #3a1613;
+    --error-text: #ffb4ac;
+    --error-border: #7a3029;
+    --ok-bg: #12301f;
+    --ok-text: #a9e8c3;
+    --ok-border: #2c6b46;
+    --warn-bg: #33290f;
+    --warn-text: #f3d994;
+    --warn-border: #6b5520;
+    --sel-bg: #1c2d47;
+    --focus: #8fbfff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151c;
+  --fg: #e7ecf2;
+  --surface: #19202a;
+  --surface-alt: #1e2631;
+  --muted: #a6b2c0;
+  --border: #2d3745;
+  --border-strong: #6b7a8c;
+  --primary: #7db3ff;
+  --primary-hover: #a3c8ff;
+  --on-primary: #0a1424;
+  --danger: #ff9b92;
+  --danger-hover: #ffb9b2;
+  --on-danger: #2a0a07;
+  --error-bg: #3a1613;
+  --error-text: #ffb4ac;
+  --error-border: #7a3029;
+  --ok-bg: #12301f;
+  --ok-text: #a9e8c3;
+  --ok-border: #2c6b46;
+  --warn-bg: #33290f;
+  --warn-text: #f3d994;
+  --warn-border: #6b5520;
+  --sel-bg: #1c2d47;
+  --focus: #8fbfff;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+form h2 { margin-bottom: 14px; }
+h1, h2, h3, h4 { margin: 0 0 8px; line-height: 1.3; overflow-wrap: anywhere; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0 0 8px; }
+ul, ol { margin: 0; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--muted); }
+
+.shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.wrap { flex: 1; width: 100%; max-width: 76rem; margin-inline: auto; padding-inline: 16px; padding-block: 0 24px; min-width: 0; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding-block: 12px; border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 1.1rem; }
+.tag { font-size: .75rem; padding: 0 8px; border: 1px solid var(--warn-border); background: var(--warn-bg); color: var(--warn-text); border-radius: 3px; }
+.top-act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip { font-size: .9rem; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: 3px; background: var(--surface); }
+.banner { margin-block: 12px 0; padding: 8px 12px; border: 1px solid var(--warn-border); background: var(--warn-bg); color: var(--warn-text); font-size: .9rem; border-radius: 4px; }
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-block: 12px 16px; }
+.tab { padding: 8px 16px; border: 0; border-bottom: 3px solid transparent; margin-bottom: -2px; background: none; color: var(--muted); font: inherit; cursor: pointer; min-height: 44px; }
+.tab:hover { color: var(--fg); }
+.tab[aria-current="page"] { color: var(--fg); border-bottom-color: var(--primary); font-weight: 700; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 6px 14px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--fg); border-radius: 4px; font: inherit; cursor: pointer; text-align: center; }
+.btn:hover { background: var(--surface-alt); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+.btn.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.btn.danger { border-color: var(--danger); color: var(--danger); }
+.btn.danger.solid { background: var(--danger); color: var(--on-danger); }
+.btn.danger.solid:hover { background: var(--danger-hover); }
+.btn.sm { min-height: 34px; padding: 2px 10px; font-size: .9rem; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+
+/* layout */
+.mgr { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 16px; min-width: 0; margin-bottom: 16px; }
+.mgr > .panel { margin-bottom: 0; }
+.detailcol { min-width: 0; }
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.list-head h2 { margin: 0; font-size: 1.1rem; }
+.only-mobile { display: none; }
+.openbtn { display: none; }
+
+/* tree */
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { margin-left: 14px; padding-left: 6px; border-left: 1px solid var(--border); }
+.rowwrap { display: flex; align-items: center; gap: 4px; }
+.row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; min-height: 40px; border: 0; border-left: 3px solid transparent; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: 3px; }
+.row:hover { background: var(--surface-alt); }
+.row.is-sel { background: var(--sel-bg); border-left-color: var(--primary); font-weight: 700; }
+.row.is-ctx { border-left-color: var(--border-strong); }
+.chev { flex: none; width: 0; height: 0; border-style: solid; border-width: 5px 0 5px 7px; border-color: transparent transparent transparent var(--muted); transition: transform .1s; }
+.row[aria-expanded="true"] .chev, .pt.open .chev { transform: rotate(90deg); }
+.chev.none { border: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); opacity: .6; margin-inline: 1px; }
+.lbl { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cnt { flex: none; font-size: .8rem; font-weight: 400; color: var(--muted); border: 1px solid var(--border); border-radius: 10px; padding: 0 7px; background: var(--surface-alt); }
+.empty-sm { color: var(--muted); font-size: .92rem; margin: 4px 0 8px; }
+.empty { padding: 24px 8px; text-align: center; }
+.empty p { color: var(--muted); }
+
+/* notices / guard / confirm */
+.notice { padding: 10px 12px; border: 1px solid; border-radius: 4px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.notice.ok { background: var(--ok-bg); color: var(--ok-text); border-color: var(--ok-border); }
+.notice.err { background: var(--error-bg); color: var(--error-text); border-color: var(--error-border); }
+.notice.info { background: var(--sel-bg); border-color: var(--border-strong); }
+.guard { position: sticky; top: 0; z-index: 20; margin-bottom: 12px; padding: 12px; border: 2px solid var(--warn-border); background: var(--warn-bg); color: var(--warn-text); border-radius: 4px; }
+.guard .btn { color: var(--fg); }
+.confirm { border: 2px solid var(--danger); border-radius: 4px; padding: 12px; margin-bottom: 12px; background: var(--surface-alt); }
+.inline-confirm { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* detail */
+.crumb { font-size: .88rem; color: var(--muted); margin-bottom: 4px; overflow-wrap: anywhere; }
+.kindtag { font-size: .8rem; color: var(--muted); margin-bottom: 2px; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
+.childlist { list-style: none; padding: 0; margin: 0 0 12px; }
+.childlist li { margin-bottom: 6px; }
+.childbtn { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
+.childbtn:hover { background: var(--surface-alt); }
+.hint { color: var(--muted); font-size: .88rem; margin: 4px 0 8px; }
+
+/* forms */
+label, .lab { display: block; font-weight: 600; font-size: .92rem; margin-bottom: 4px; }
+.req { color: var(--danger); }
+input[type="text"], select, textarea { display: block; width: 100%; min-height: 40px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--fg); font: inherit; }
+textarea { min-height: 64px; resize: vertical; }
+[aria-invalid="true"] { border-color: var(--danger) !important; box-shadow: 0 0 0 1px var(--danger); }
+.field-error { color: var(--error-text); font-size: .88rem; margin-top: 4px; font-weight: 600; overflow-wrap: anywhere; }
+.fg { margin-bottom: 12px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; }
+.opt { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 0 16px 4px 0; min-height: 34px; cursor: pointer; font-size: 1rem; }
+.opt input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+.valrow { display: flex; align-items: flex-start; gap: 6px; }
+.valrow > .inp { flex: 1; min-width: 0; }
+.suffix { flex: none; min-width: 3ch; padding-top: 8px; color: var(--muted); font-size: .92rem; }
+.using { margin: 0 0 12px; padding: 8px 10px; background: var(--sel-bg); border-radius: 4px; border: 1px solid var(--border); }
+
+.sec { margin-bottom: 20px; }
+.sec > h3 { padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.pt { border: 1px solid var(--border-strong); border-radius: 5px; margin-bottom: 12px; background: var(--surface); }
+.pt-h { display: flex; align-items: stretch; gap: 8px; background: var(--surface-alt); border-radius: 5px 5px 0 0; }
+.pt:not(.open) .pt-h { border-radius: 5px; }
+.pt-toggle { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; text-align: left; padding: 10px 12px; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; border-radius: 5px; }
+.pt-toggle .pt-name { font-weight: 700; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pt-sum { flex-basis: 100%; color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; padding-left: 17px; }
+.pt.open .pt-sum { display: none; }
+.badge { align-self: center; margin-right: 10px; font-size: .82rem; font-weight: 700; padding: 1px 8px; border-radius: 3px; background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); white-space: nowrap; }
+.pt-body { padding: 12px; border-top: 1px solid var(--border); }
+fieldset.blk { border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px 6px; margin: 0 0 14px; min-width: 0; }
+fieldset.blk > legend { font-weight: 700; padding: 0 6px; }
+.fld { border-bottom: 1px dashed var(--border); margin-bottom: 8px; padding-bottom: 6px; }
+.fld-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0 12px; }
+.fld-act { margin-bottom: 6px; }
+.form-foot { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); }
+.err-sum { color: var(--error-text); font-weight: 700; }
+details.pv { border: 1px solid var(--border); border-radius: 4px; padding: 0 12px; margin-bottom: 16px; background: var(--surface-alt); }
+details.pv > summary { cursor: pointer; font-weight: 700; min-height: 40px; display: flex; align-items: center; }
+.pv-body { padding-bottom: 10px; }
+.pv-body ol, .prev-items { padding-left: 20px; }
+.pv-body li, .prev-items li { margin-bottom: 4px; overflow-wrap: anywhere; }
+pre { overflow: auto; max-width: 100%; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 4px; padding: 10px; font-family: var(--font-mono); font-size: .82rem; line-height: 1.45; }
+
+/* view */
+.vpt { border: 1px solid var(--border); border-radius: 4px; padding: 10px 12px; margin-bottom: 10px; }
+.vpt h4 { margin: 0 0 4px; }
+.vpt dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; }
+.vpt dt { color: var(--muted); }
+.vpt dd { margin: 0; overflow-wrap: anywhere; }
+
+/* apply / project */
+.plist { list-style: none; padding: 0; margin: 0; }
+.plist li { border: 1px solid var(--border); border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; }
+.plist .pn { font-weight: 700; display: block; overflow-wrap: anywhere; }
+.plist .pm { color: var(--muted); font-size: .9rem; display: block; overflow-wrap: anywhere; }
+.recent { outline: 2px solid var(--ok-border); }
+
+.project-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.project-card { border: 1px solid var(--border); border-radius: 5px; padding: 16px; background: var(--surface); }
+.project-card .btn { margin-top: 8px; }
+.destination { border: 1px solid var(--border); background: var(--surface-alt); padding: 12px; margin-bottom: 12px; border-radius: 4px; }
+
+@media (max-width: 640px) {
+  .mgr { grid-template-columns: minmax(0, 1fr); }
+  .mgr[data-pane="detail"] > .listcol { display: none; }
+  .mgr[data-pane="list"] > .detailcol { display: none; }
+  .only-mobile { display: inline-flex; }
+  .openbtn { display: inline-flex; flex: none; }
+  .panel { padding: 12px; }
+  .vpt dl { grid-template-columns: 1fr; }
+  .top { padding-block: 8px; }
+  .tabs { overflow-x: auto; }
+  .tab { flex: none; padding-inline: 10px; }
+  .project-card .btn { width: 100%; }
+}
+</style>
+
+<div class="shell">
+  <div class="wrap" id="app"></div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ---------- 小工具 ---------- */
+var seq = 0;
+function uid(p) { seq += 1; return p + seq; }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function T(s) { return String(s == null ? '' : s).trim(); }
+function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase(); }
+function el(id) { return document.getElementById(id); }
+function isMobile() { return window.matchMedia('(max-width: 640px)').matches; }
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* 略過 */ } }
+function idp(path) { return path.replace(/:/g, '-'); }
+function iid(path) { return 'in-' + idp(path); }
+function slot(path) {
+  return '<div class="field-error" id="err-' + idp(path) + '" data-err="' + path + '" hidden></div>';
+}
+var KIND = { cat: '工程類別', sys: '系統', item: '查核項目' };
+var OPHINT = {
+  le: '量測值不得超過標準值。例如：坡度不得超過 3 %。',
+  ge: '量測值不得低於標準值。例如：水壓不得低於 0.6 MPa。',
+  eq: '量測值要等於標準值，可再填容許誤差。例如：厚度 10 mm，誤差 ±1。',
+  range: '量測值要落在一段範圍內。可用「區間」或「標準值 ± 容許誤差」表示。'
+};
+var STDHINT = {
+  none: '只記錄量測結果，不自動判定合格與否。',
+  text: '用一句話描述合格的樣子，例如「無滲漏」。',
+  numeric: '用數字欄位的量測值判定，例如坡度要落在 1～3 % 之間。'
+};
+
+/* ---------- 狀態 ---------- */
+var S = {
+  tab: 'mgr',
+  lib: [], proj: [], projectData: { A: [], B: [] }, activeProject: 'A', expanded: {},
+  sel: null, mode: 'view', create: null,
+  nameDraft: '', nameBase: '', nameErr: '',
+  draft: null, baseline: '', attempted: false,
+  notice: null, guard: null, pane: 'list',
+  previewOpen: true, fieldBlock: null, confirmRemove: null,
+  aSel: null, aTarget: '', aNotice: null, aConfirm: false, aPane: 'list', lastApplied: [],
+  saveSource: null, saveNotice: null, savePane: 'list',
+};
+var app = el('app');
+
+/* ---------- 資料模型（草稿與存檔格式） ---------- */
+function newField(type) { return { key: uid('f'), name: '', type: type || 'number', unit: '' }; }
+function newPoint() {
+  return { key: uid('p'), open: true, title: '', desc: '', fields: [],
+    std: { kind: 'none', text: '', fieldKey: '', op: 'range', form: 'interval', lo: '', hi: '', target: '', tol: '' },
+    photos: '1' };
+}
+function blankDraft() { return { name: '', desc: '', points: [newPoint()] }; }
+function snap(d) { return JSON.stringify(d, function (k, v) { return k === 'open' ? undefined : v; }); }
+function numStr(v) { return v == null ? '' : String(v); }
+
+function toModel(D) {
+  return {
+    name: T(D.name), desc: T(D.desc),
+    points: D.points.map(function (p) {
+      var bound = p.std.kind === 'numeric' ? p.std.fieldKey : '';
+      var bf = p.fields.filter(function (f) { return f.key === bound; })[0];
+      var s = { kind: p.std.kind };
+      if (p.std.kind === 'text') { s.text = T(p.std.text); }
+      if (p.std.kind === 'numeric') {
+        s.fieldKey = bound; s.unit = bf ? T(bf.unit) : ''; s.op = p.std.op;
+        if (p.std.op === 'range') {
+          s.form = p.std.form;
+          if (p.std.form === 'interval') { s.lo = Number(T(p.std.lo)); s.hi = Number(T(p.std.hi)); }
+          else { s.target = Number(T(p.std.target)); s.tol = Number(T(p.std.tol)); }
+        } else if (p.std.op === 'eq') {
+          s.target = Number(T(p.std.target)); s.tol = T(p.std.tol) === '' ? null : Number(T(p.std.tol));
+        } else { s.target = Number(T(p.std.target)); }
+      }
+      return {
+        title: T(p.title), desc: T(p.desc),
+        fields: p.fields.map(function (f) {
+          return { key: f.key, name: T(f.name), type: f.type, unit: (f.type === 'number' && f.key !== bound) ? T(f.unit) : null };
+        }),
+        std: s, photos: parseInt(T(p.photos), 10)
+      };
+    })
+  };
+}
+function toDraft(m) {
+  return {
+    name: m.name, desc: m.desc || '',
+    points: m.points.map(function (p, i) {
+      var bound = p.std.kind === 'numeric' ? p.std.fieldKey : '';
+      return {
+        key: uid('p'), open: i === 0, title: p.title, desc: p.desc || '',
+        fields: p.fields.map(function (f) {
+          return { key: f.key, name: f.name, type: f.type, unit: f.key === bound ? (p.std.unit || '') : (f.unit || '') };
+        }),
+        std: {
+          kind: p.std.kind, text: p.std.text || '', fieldKey: bound, op: p.std.op || 'range', form: p.std.form || 'interval',
+          lo: numStr(p.std.lo), hi: numStr(p.std.hi), target: numStr(p.std.target), tol: numStr(p.std.tol)
+        },
+        photos: String(p.photos)
+      };
+    })
+  };
+}
+function wire(m) {
+  return {
+    name: m.name, description: m.desc,
+    points: m.points.map(function (p) {
+      var o = {
+        title: p.title,
+        measurement_fields: p.fields.map(function (f) { return { name: f.name, type: f.type, unit: f.unit }; }),
+        min_photos: p.photos
+      };
+      if (p.std.kind === 'text') { o.text_standard = p.std.text; }
+      if (p.std.kind === 'numeric') {
+        var bf = p.fields.filter(function (f) { return f.key === p.std.fieldKey; })[0];
+        var n = { field: bf ? bf.name : null, unit: p.std.unit, op: p.std.op };
+        ['form', 'lo', 'hi', 'target', 'tol'].forEach(function (k) { if (p.std[k] !== undefined) { n[k] = p.std[k]; } });
+        o.numeric_standard = n;
+      }
+      return o;
+    })
+  };
+}
+
+/* ---------- 白話摘要 ---------- */
+function boundField(p) { return p.fields.filter(function (f) { return f.key === p.std.fieldKey; })[0] || null; }
+function unitOf(p) { var f = boundField(p); return f ? T(f.unit) : ''; }
+function vt(v) { return T(v) || '？'; }
+function fieldLabel(f) {
+  var n = T(f.name) || '（未命名欄位）';
+  return f.type === 'number' ? n + '（' + (T(f.unit) || '單位未填') + '）' : n;
+}
+function stdShort(p) {
+  var s = p.std, u = unitOf(p), U = u ? ' ' + u : '';
+  if (s.kind === 'none') { return '不判定'; }
+  if (s.kind === 'text') { return '文字：' + (T(s.text) || '（未填）'); }
+  if (s.op === 'range') {
+    return s.form === 'interval' ? vt(s.lo) + '～' + vt(s.hi) + U : vt(s.target) + ' ± ' + vt(s.tol) + U;
+  }
+  if (s.op === 'le') { return '≤ ' + vt(s.target) + U; }
+  if (s.op === 'ge') { return '≥ ' + vt(s.target) + U; }
+  return '＝ ' + vt(s.target) + (T(s.tol) ? ' ± ' + T(s.tol) : '') + U;
+}
+function pointSummary(p) {
+  var f = p.fields.length ? '量測 ' + p.fields.map(fieldLabel).join('、') : '無實測欄位';
+  return [T(p.title) || '（未命名項次）', f, stdShort(p), '照片 ' + (T(p.photos) || '？') + ' 張'].join('｜');
+}
+function plain(p) {
+  var s = p.std, title = T(p.title) || '（未命名項次）';
+  if (s.kind === 'none') { return title + '：只記錄，不判定'; }
+  if (s.kind === 'text') { return title + '：' + (T(s.text) || '（未填）'); }
+  var bf = boundField(p), nm = (bf && T(bf.name)) || title, u = unitOf(p), U = u ? ' ' + u : '';
+  if (s.op === 'range') {
+    return s.form === 'interval' ? nm + ' ' + vt(s.lo) + '～' + vt(s.hi) + U : nm + ' ' + vt(s.target) + ' ± ' + vt(s.tol) + U;
+  }
+  if (s.op === 'le') { return nm + ' 不超過 ' + vt(s.target) + U; }
+  if (s.op === 'ge') { return nm + ' 不低於 ' + vt(s.target) + U; }
+  return nm + ' 等於 ' + vt(s.target) + (T(s.tol) ? ' ± ' + T(s.tol) : '') + U;
+}
+
+/* ---------- 範本庫查詢 ---------- */
+function find(type, id) {
+  var i, j, k, c, s;
+  for (i = 0; i < S.lib.length; i++) {
+    c = S.lib[i];
+    if (type === 'cat' && c.id === id) { return { cat: c }; }
+    for (j = 0; j < c.systems.length; j++) {
+      s = c.systems[j];
+      if (type === 'sys' && s.id === id) { return { cat: c, sys: s }; }
+      for (k = 0; k < s.items.length; k++) {
+        if (type === 'item' && s.items[k].id === id) { return { cat: c, sys: s, item: s.items[k] }; }
+      }
+    }
+  }
+  return null;
+}
+function childCount(type, id) {
+  var f = find(type, id);
+  if (!f) { return 0; }
+  if (type === 'cat') { return f.cat.systems.length; }
+  if (type === 'sys') { return f.sys.items.length; }
+  return 0;
+}
+function siblings(kind, parentId) {
+  if (kind === 'cat') { return S.lib; }
+  if (kind === 'sys') { return find('cat', parentId).cat.systems; }
+  return find('sys', parentId).sys.items;
+}
+function nodeOf(type, id) { var f = find(type, id); return f ? (f[type]) : null; }
+function pointCountOf(item) { return item.points.length; }
+
+/* ---------- 驗證 ---------- */
+function parseNum(s) {
+  var t = T(s);
+  if (t === '') { return null; }
+  var n = Number(t);
+  return isFinite(n) ? n : NaN;
+}
+function numberErr(v, label) {
+  var n = parseNum(v);
+  if (n === null) { return '請填寫' + label; }
+  if (isNaN(n)) { return label + '要是數字（例如 1.5）'; }
+  return '';
+}
+function itemSiblings() {
+  if (!S.draft) { return []; }
+  if (S.mode === 'create') { return find('sys', S.create.parentId).sys.items; }
+  var f = find('item', S.sel.id);
+  return f.sys.items.filter(function (i) { return i.id !== f.item.id; });
+}
+function validate(D) {
+  var errs = [];
+  function add(path, msg) { errs.push({ path: path, msg: msg }); }
+  if (!T(D.name)) { add('name', '請填寫名稱'); }
+  else if (itemSiblings().some(function (i) { return norm(i.name) === norm(D.name); })) {
+    add('name', '此系統已有同名查核項目，請換個名稱');
+  }
+  D.points.forEach(function (p) {
+    var k = p.key, m;
+    if (!T(p.title)) { add(k + ':title', '請填寫項次標題'); }
+    p.fields.forEach(function (f) {
+      if (!T(f.name)) { add(k + ':' + f.key + ':name', '請填寫欄位名稱'); }
+      if (f.type === 'number' && !T(f.unit)) { add(k + ':' + f.key + ':unit', '請填寫單位'); }
+    });
+    var s = p.std;
+    if (s.kind === 'text' && !T(s.text)) { add(k + ':stdtext', '請填寫標準文字'); }
+    if (s.kind === 'numeric') {
+      if (!boundField(p) || boundField(p).type !== 'number') { add(k + ':bind', '請選擇要用來判定的數字欄位'); }
+      if (s.op === 'range' && s.form === 'interval') {
+        m = numberErr(s.lo, '下限'); if (m) { add(k + ':lo', m); }
+        m = numberErr(s.hi, '上限'); if (m) { add(k + ':hi', m); }
+        var lo = parseNum(s.lo), hi = parseNum(s.hi);
+        if (lo !== null && hi !== null && !isNaN(lo) && !isNaN(hi) && lo > hi) { add(k + ':range', '下限不能大於上限'); }
+      } else {
+        m = numberErr(s.target, '標準值'); if (m) { add(k + ':target', m); }
+        if (s.op === 'range' || (s.op === 'eq' && T(s.tol) !== '')) {
+          var tn = parseNum(s.tol);
+          if (tn === null) { add(k + ':tol', '請填寫容許誤差'); }
+          else if (isNaN(tn)) { add(k + ':tol', '容許誤差要是數字（例如 0.5）'); }
+          else if (tn < 0) { add(k + ':tol', '容許誤差不能小於 0'); }
+        }
+      }
+    }
+    var ph = T(p.photos);
+    if (ph === '') { add(k + ':photos', '請填寫照片張數，至少 1 張'); }
+    else if (!/^\d+$/.test(ph)) { add(k + ':photos', '請填寫整數，至少 1 張'); }
+    else if (parseInt(ph, 10) < 1) { add(k + ':photos', '照片至少 1 張'); }
+  });
+  if (!D.points.length) { add('points', '請至少新增一個查核項次'); }
+  return errs;
+}
+function errInputs(path) {
+  var parts = path.split(':');
+  if (parts[1] === 'range') {
+    return [el(iid(parts[0] + ':lo')), el(iid(parts[0] + ':hi'))].filter(Boolean);
+  }
+  var e = el(iid(path));
+  return e ? [e] : [];
+}
+function focusPathOf(path) {
+  var parts = path.split(':');
+  return parts[1] === 'range' ? iid(parts[0] + ':lo') : iid(path);
+}
+function applyErrors() {
+  if (!S.draft) { return; }
+  var list = S.attempted ? validate(S.draft) : [];
+  var map = {};
+  list.forEach(function (e) { if (!map[e.path]) { map[e.path] = e.msg; } });
+  app.querySelectorAll('[data-err]').forEach(function (sl) {
+    var msg = map[sl.dataset.err] || '';
+    sl.textContent = msg;
+    sl.hidden = !msg;
+    errInputs(sl.dataset.err).forEach(function (inp) {
+      if (msg) { inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('aria-describedby', sl.id); }
+      else { inp.removeAttribute('aria-invalid'); inp.removeAttribute('aria-describedby'); }
+    });
+  });
+  S.draft.points.forEach(function (p) {
+    var n = list.filter(function (e) { return e.path.indexOf(p.key + ':') === 0; }).length;
+    var b = app.querySelector('[data-badge="' + p.key + '"]');
+    if (b) { b.textContent = '待修正 ' + n; b.hidden = n === 0; }
+  });
+  var sum = el('err-sum');
+  if (sum) {
+    sum.textContent = list.length ? '尚有 ' + list.length + ' 處要修正' : '';
+    sum.hidden = !list.length;
+    var more = el('err-sum-more');
+    if (more) { more.hidden = !list.length; }
+  }
+}
+
+/* ---------- 綁定邏輯 ---------- */
+function numFields(p) { return p.fields.filter(function (f) { return f.type === 'number'; }); }
+function reconcile(p) {
+  if (p.std.kind !== 'numeric') { return; }
+  var nums = numFields(p);
+  if (!nums.some(function (f) { return f.key === p.std.fieldKey; })) { p.std.fieldKey = ''; }
+  if (!p.std.fieldKey && nums.length === 1) { p.std.fieldKey = nums[0].key; }
+}
+function hasContentField(f) { return T(f.name) !== '' || T(f.unit) !== ''; }
+function hasContentPoint(p) {
+  return T(p.title) !== '' || T(p.desc) !== '' || p.fields.length > 0 || p.std.kind !== 'none' || T(p.photos) !== '1';
+}
+/* 回傳擋下的原因；null 表示可以動 */
+function fieldGuard(p, f) {
+  if (p.std.kind !== 'numeric' || f.type !== 'number') { return null; }
+  if (f.key === p.std.fieldKey) { return '這個欄位用於數值標準；請先改綁或移除標準。'; }
+  if (numFields(p).length === 1) { return '數值標準需要至少一個數字欄位；請先把判定標準改成「無」或「文字」。'; }
+  return null;
+}
+
+/* ---------- HTML：共用 ---------- */
+function noticeHTML(n) {
+  if (!n) { return ''; }
+  return '<div class="notice ' + n.kind + '" role="' + (n.kind === 'err' ? 'alert' : 'status') + '">' + esc(n.text) + '</div>';
+}
+function isSelRow(type, id) {
+  if (S.tab === 'mgr') { return !!S.sel && S.sel.type === type && S.sel.id === id; }
+  if (S.tab === 'save') { return type !== 'item' && !!S.aSel && S.aSel.type === type && S.aSel.id === id; }
+  if (type === 'item') { return S.aTarget === 'item:' + id; }
+  if (type === 'sys') { return !!S.aSel && S.aSel.type === 'sys' && S.aSel.id === id && S.aTarget === 'sys'; }
+  return !!S.aSel && S.aSel.type === 'cat' && S.aSel.id === id;
+}
+function isCtxRow(type, id) {
+  return S.tab === 'apply' && type === 'sys' && !!S.aSel && S.aSel.type === 'sys' && S.aSel.id === id && S.aTarget !== 'sys';
+}
+function rowHTML(type, node, kids, countLabel) {
+  var sel = isSelRow(type, node.id), n = kids ? kids.length : 0;
+  var hasKids = type !== 'item' && n > 0 && (type === 'cat' || S.tab !== 'save');
+  var open = !!S.expanded[node.id];
+  var attrs = 'type="button" class="row' + (sel ? ' is-sel' : '') + (isCtxRow(type, node.id) ? ' is-ctx' : '') +
+    '" id="row-' + S.tab + '-' + node.id + '" data-act="row" data-type="' + type + '" data-id="' + node.id + '"';
+  if (hasKids) { attrs += ' aria-expanded="' + open + '"'; }
+  if (sel) { attrs += ' aria-current="true"'; }
+  var h = '<div class="rowwrap"><button ' + attrs + '>' +
+    '<span class="chev' + (hasKids ? '' : ' none') + '" aria-hidden="true"></span>' +
+    '<span class="lbl">' + esc(node.name) + '</span>';
+  if (type !== 'item') { h += '<span class="cnt">' + n + '<span class="sr">' + esc(countLabel) + '</span></span>'; }
+  h += '</button>';
+  if (sel && S.tab === 'mgr') { h += '<button type="button" class="btn sm openbtn" data-act="open-detail">開啟詳情</button>'; }
+  if (sel && S.tab === 'apply') { h += '<button type="button" class="btn sm openbtn" data-act="a-open-detail">開啟詳情</button>'; }
+  h += '</div>';
+  if (hasKids && open) {
+    h += '<ul>' + kids.map(function (k) {
+      if (type === 'cat') {
+        return '<li>' + rowHTML('sys', k, k.items, '個查核項目') + '</li>';
+      }
+      return '<li>' + rowHTML('item', k, null, '') + '</li>';
+    }).join('') + '</ul>';
+  }
+  return h;
+}
+function treeHTML() {
+  if (!S.lib.length) { return '<p class="empty-sm">還沒有工程類別。</p>'; }
+  return '<nav aria-label="範本庫階層"><ul class="tree">' + S.lib.map(function (c) {
+    return '<li>' + rowHTML('cat', c, c.systems, '個系統') + '</li>';
+  }).join('') + '</ul></nav>';
+}
+function headerHTML() {
+  return '<div class="top" role="banner"><div class="brand"><strong>工程查核系統</strong></div>' +
+    '<div class="top-act"><span class="chip">專案 ' + S.activeProject + '　試用專案 ' + S.activeProject + '</span>' +
+    '<button type="button" class="btn sm" id="btn-demo" data-act="load-demo">載入示範資料</button>' +
+    '<button type="button" class="btn sm" id="btn-reset" data-act="reset">重新開始（清空）</button></div></div>' +
+    '<div class="tabs"><button type="button" class="tab" id="tab-mgr" data-act="tab" data-tab="mgr"' + (S.tab === 'mgr' ? ' aria-current="page"' : '') + '>範本管理</button>' +
+    '<button type="button" class="tab" id="tab-workspace" data-act="tab" data-tab="workspace"' + (S.tab === 'workspace' ? ' aria-current="page"' : '') + '>專案工作台</button>' +
+    '<button type="button" class="tab" id="tab-apply" data-act="tab" data-tab="apply"' + (S.tab === 'apply' ? ' aria-current="page"' : '') + '>套用範本</button>' +
+    (S.tab === 'save' ? '<button type="button" class="tab" id="tab-save" data-act="tab" data-tab="save" aria-current="page">存為範本</button>' : '') + '</div>';
+}
+function guardHTML() {
+  if (!S.guard) { return ''; }
+  return '<div class="guard" role="alertdialog" aria-labelledby="guard-t"><p id="guard-t"><strong>這裡有尚未儲存的變更。</strong>要保留編輯，還是捨棄變更？</p>' +
+    '<div class="btns"><button type="button" class="btn primary" id="guard-keep" data-act="guard-keep">保留編輯</button>' +
+    '<button type="button" class="btn danger" id="guard-discard" data-act="guard-discard">捨棄變更</button></div></div>';
+}
+
+/* ---------- HTML：範本管理 ---------- */
+function backBtn() { return '<button type="button" class="btn sm only-mobile" id="btn-back" data-act="back" style="margin-bottom:8px">‹ 返回</button>'; }
+function nameFormHTML() {
+  var c = S.create, title, kind;
+  if (S.mode === 'rename') {
+    var node = nodeOf(S.sel.type, S.sel.id);
+    kind = S.sel.type;
+    title = '重新命名' + KIND[kind] + '『' + node.name + '』';
+  } else if (c.kind === 'cat') { title = '新增工程類別'; }
+  else { title = '在『' + find('cat', c.parentId).cat.name + '』新增系統'; }
+  return '<form data-form="name" novalidate aria-labelledby="form-t" style="margin-bottom:16px">' +
+    '<h2 id="form-t">' + esc(title) + '</h2>' +
+    '<div class="fg"><label for="name-in">名稱 <span class="req" aria-hidden="true">*</span></label>' +
+    '<input type="text" id="name-in" data-k="name-draft" autocomplete="off" aria-required="true" value="' + esc(S.nameDraft) + '"' +
+    (S.nameErr ? ' aria-invalid="true" aria-describedby="name-err"' : '') + '>' +
+    '<div class="field-error" id="name-err"' + (S.nameErr ? '' : ' hidden') + '>' + esc(S.nameErr) + '</div></div>' +
+    '<div class="btns"><button type="submit" class="btn primary" id="btn-save-name">儲存</button>' +
+    '<button type="button" class="btn" id="btn-cancel-name" data-act="cancel-name">取消</button>' +
+    '<span class="hint" style="margin:0">Enter 儲存，Esc 取消</span></div></form>';
+}
+function confirmDeleteHTML(node) {
+  return '<div class="confirm" role="alertdialog" aria-labelledby="cf-t"><p id="cf-t"><strong>刪除『' + esc(node.name) + '』？刪除後無法復原。</strong></p>' +
+    '<div class="btns"><button type="button" class="btn danger solid" id="btn-do-delete" data-act="do-delete">確認刪除</button>' +
+    '<button type="button" class="btn" id="btn-cancel-delete" data-act="cancel-delete">取消</button></div></div>';
+}
+function emptyDetailHTML() {
+  if (!S.lib.length) {
+    return '<div class="empty"><h2>還沒有工程類別</h2><p>還沒有工程類別。新增一個類別，開始整理查核項目。</p>' +
+      '<button type="button" class="btn primary" id="btn-new-cat-2" data-act="new-cat">新增工程類別</button></div>';
+  }
+  return '<div class="empty"><h2>選一個項目</h2><p>從左側選一個工程類別、系統或查核項目，這裡會顯示內容。</p></div>';
+}
+function nodeHTML(f) {
+  var type = S.sel.type, node = f[type], isCat = type === 'cat', h = '';
+  var kids = isCat ? node.systems : node.items;
+  h += '<p class="crumb">範本庫 / ' + esc(f.cat.name) + (isCat ? '' : ' / ' + esc(node.name)) + '</p>';
+  h += '<p class="kindtag">' + KIND[type] + '</p><h2 id="detail-h" tabindex="-1">' + esc(node.name) + '</h2>';
+  if (S.mode === 'rename') { h += nameFormHTML(); }
+  else {
+    h += '<div class="detail-actions"><button type="button" class="btn" id="btn-rename" data-act="rename">重新命名</button>' +
+      '<button type="button" class="btn danger" id="btn-delete" data-act="ask-delete">刪除</button></div>';
+  }
+  if (S.mode === 'confirmDelete') { h += confirmDeleteHTML(node); }
+  h += '<h3>' + (isCat ? '系統' : '查核項目') + '（' + kids.length + '）</h3>';
+  if (!kids.length) {
+    h += '<p class="empty-sm">' + (isCat ? '這個類別還沒有系統。新增第一個系統。' : '這個系統還沒有查核項目。新增第一個查核項目。') + '</p>';
+  } else {
+    h += '<ul class="childlist">' + kids.map(function (k) {
+      var sub = isCat ? k.items.length + ' 個查核項目' : k.points.length + ' 個項次';
+      return '<li><button type="button" class="childbtn" data-act="row" data-type="' + (isCat ? 'sys' : 'item') + '" data-id="' + k.id + '"><span>' + esc(k.name) + '</span><span class="muted">' + sub + '</span></button></li>';
+    }).join('') + '</ul>';
+  }
+  h += isCat
+    ? '<button type="button" class="btn primary" id="btn-new-sys" data-act="new-sys" data-id="' + node.id + '">在『' + esc(node.name) + '』新增系統</button>'
+    : '<button type="button" class="btn primary" id="btn-new-item" data-act="new-item" data-id="' + node.id + '">新增查核項目</button>';
+  return h;
+}
+function viewItemHTML(f) {
+  var it = f.item, h = '';
+  h += '<p class="crumb">範本庫 / ' + esc(f.cat.name) + ' / ' + esc(f.sys.name) + ' / ' + esc(it.name) + '</p>';
+  h += '<p class="kindtag">查核項目</p><h2 id="detail-h" tabindex="-1">' + esc(it.name) + '</h2>';
+  if (it.desc) { h += '<p>' + esc(it.desc) + '</p>'; }
+  if (S.mode === 'confirmDelete') { h += confirmDeleteHTML(it); }
+  else {
+    h += '<div class="detail-actions"><button type="button" class="btn primary" id="btn-edit-item" data-act="edit-item">編輯查核項目</button>' +
+      '<button type="button" class="btn danger" id="btn-delete" data-act="ask-delete">刪除查核項目</button></div>';
+  }
+  h += '<h3>查核項次（' + it.points.length + '）</h3>';
+  var D = toDraft(it);
+  h += D.points.map(function (p, i) {
+    var fl = p.fields.length ? p.fields.map(fieldLabel).join('、') : '無實測欄位';
+    return '<div class="vpt"><h4>項次 ' + (i + 1) + '：' + esc(T(p.title)) + '</h4>' +
+      (T(p.desc) ? '<p class="muted">' + esc(p.desc) + '</p>' : '') +
+      '<dl><dt>要記錄什麼</dt><dd>' + esc(fl) + '</dd><dt>判定標準</dt><dd>' + esc(plain(p)) + '</dd><dt>照片</dt><dd>至少 ' + esc(p.photos) + ' 張</dd></dl></div>';
+  }).join('');
+  return h;
+}
+
+/* ----- 編輯器 ----- */
+function fieldHTML(p, f) {
+  var k = p.key, base = k + ':' + f.key;
+  var confirm = S.confirmRemove && S.confirmRemove.kind === 'field' && S.confirmRemove.key === f.key;
+  var h = '<div class="fld"><div class="fld-grid">';
+  h += '<div class="fg"><label for="' + iid(base + ':name') + '">欄位名稱 <span class="req" aria-hidden="true">*</span></label>' +
+    '<input type="text" id="' + iid(base + ':name') + '" data-k="f-name" data-p="' + k + '" data-f="' + f.key + '" autocomplete="off" aria-required="true" value="' + esc(f.name) + '">' + slot(base + ':name') + '</div>';
+  if (f.type === 'number') {
+    h += '<div class="fg"><label for="' + iid(base + ':unit') + '">單位 <span class="req" aria-hidden="true">*</span></label>' +
+      '<input type="text" id="' + iid(base + ':unit') + '" data-k="f-unit" data-p="' + k + '" data-f="' + f.key + '" autocomplete="off" aria-required="true" value="' + esc(f.unit) + '">' + slot(base + ':unit') + '</div>';
+  }
+  h += '<div class="fg"><label for="' + iid(base + ':type') + '">型別</label>' +
+    '<select id="' + iid(base + ':type') + '" data-k="f-type" data-p="' + k + '" data-f="' + f.key + '">' +
+    '<option value="text"' + (f.type === 'text' ? ' selected' : '') + '>文字</option>' +
+    '<option value="number"' + (f.type === 'number' ? ' selected' : '') + '>數字</option></select></div>';
+  h += '</div><div class="fld-act">';
+  if (confirm) {
+    h += '<span class="inline-confirm" role="group" aria-label="確認移除欄位">確定移除這個欄位？' +
+      '<button type="button" class="btn sm danger solid" id="rmf-yes" data-act="confirm-rm" data-p="' + k + '" data-f="' + f.key + '">移除</button>' +
+      '<button type="button" class="btn sm" id="rmf-no" data-act="cancel-rm">取消</button></span>';
+  } else {
+    h += '<button type="button" class="btn sm" id="rmf-' + f.key + '" data-act="rm-field" data-p="' + k + '" data-f="' + f.key + '">移除欄位</button>';
+  }
+  h += '</div>';
+  if (S.fieldBlock && S.fieldBlock.fk === f.key) { h += '<div class="field-error" role="alert">' + esc(S.fieldBlock.text) + '</div>'; }
+  return h + '</div>';
+}
+function valInput(p, key, label, required) {
+  var k = p.key;
+  return '<div class="fg"><label for="' + iid(k + ':' + key) + '">' + label + (required ? ' <span class="req" aria-hidden="true">*</span>' : '') + '</label>' +
+    '<div class="valrow"><div class="inp"><input type="text" inputmode="decimal" id="' + iid(k + ':' + key) + '" data-k="' + key + '" data-p="' + k + '" autocomplete="off"' + (required ? ' aria-required="true"' : '') + ' value="' + esc(p.std[key]) + '"></div>' +
+    '<span class="suffix" data-unit-for="' + k + '">' + esc(unitSuffix(p)) + '</span></div>' + slot(k + ':' + key) + '</div>';
+}
+function unitSuffix(p) {
+  var nums = numFields(p), b = boundField(p);
+  if (!b) { return nums.length > 1 ? '（先選欄位）' : ''; }
+  return T(b.unit) || '（單位未填）';
+}
+function bindHTML(p) {
+  var k = p.key, nums = numFields(p);
+  if (nums.length === 0) { return '<p class="hint">請先在「要記錄什麼」新增一個數字欄位。</p>'; }
+  if (nums.length === 1) {
+    var f = nums[0];
+    return '<p class="using" id="' + iid(k + ':bind-using') + '">使用：<strong>' + esc(T(f.name) || '（尚未命名）') + '</strong>（' + esc(T(f.unit) || '單位未填') + '）</p>';
+  }
+  return '<div class="fg"><label for="' + iid(k + ':bind') + '">用來判定的數字欄位 <span class="req" aria-hidden="true">*</span></label>' +
+    '<select id="' + iid(k + ':bind') + '" data-k="bind" data-p="' + k + '" aria-required="true"><option value="">請選擇…</option>' +
+    nums.map(function (f) {
+      return '<option value="' + f.key + '"' + (f.key === p.std.fieldKey ? ' selected' : '') + '>' + esc(fieldLabel(f)) + '</option>';
+    }).join('') + '</select>' + slot(k + ':bind') + '</div>';
+}
+function numericHTML(p) {
+  var k = p.key, s = p.std, h = '';
+  h += '<div data-bindwrap="' + k + '">' + bindHTML(p) + '</div>';
+  h += '<div class="fg"><label for="' + iid(k + ':op') + '">條件</label><select id="' + iid(k + ':op') + '" data-k="op" data-p="' + k + '">' +
+    [['le', '≤（不得超過標準值）'], ['ge', '≥（不得低於標準值）'], ['eq', '＝（等於標準值）'], ['range', '範圍（落在一段範圍內）']].map(function (o) {
+      return '<option value="' + o[0] + '"' + (s.op === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('') + '</select><p class="hint" data-ophint="' + k + '">' + OPHINT[s.op] + '</p></div>';
+  if (s.op === 'range') {
+    h += '<div class="fg" role="radiogroup" aria-labelledby="form-l-' + k + '"><span class="lab" id="form-l-' + k + '">範圍形式</span>' +
+      [['interval', '區間（下限～上限）'], ['tol', '標準值 ± 容許誤差']].map(function (o) {
+        return '<label class="opt"><input type="radio" name="form-' + k + '" id="' + iid(k + ':form-' + o[0]) + '" value="' + o[0] + '" data-k="form" data-p="' + k + '"' + (s.form === o[0] ? ' checked' : '') + '> ' + o[1] + '</label>';
+      }).join('') + '</div>';
+    if (s.form === 'interval') {
+      h += '<div class="grid2">' + valInput(p, 'lo', '下限', true) + valInput(p, 'hi', '上限', true) + '</div>' + slot(k + ':range');
+    } else {
+      h += '<div class="grid2">' + valInput(p, 'target', '標準值', true) + valInput(p, 'tol', '容許誤差', true) + '</div>';
+    }
+  } else if (s.op === 'eq') {
+    h += '<div class="grid2">' + valInput(p, 'target', '標準值', true) + valInput(p, 'tol', '容許誤差（選填）', false) + '</div>';
+  } else {
+    h += '<div class="grid2">' + valInput(p, 'target', '標準值', true) + '</div>';
+  }
+  return h;
+}
+function pointHTML(p, idx) {
+  var k = p.key, h = '';
+  h += '<section class="pt' + (p.open ? ' open' : '') + '" id="pt-' + k + '">';
+  h += '<div class="pt-h"><button type="button" class="pt-toggle" id="ptt-' + k + '" data-act="toggle-pt" data-p="' + k + '" aria-expanded="' + p.open + '" aria-controls="ptb-' + k + '">' +
+    '<span class="chev" aria-hidden="true"></span><span class="pt-name" data-ptname="' + k + '">' + esc(ptName(p, idx)) + '</span>' +
+    '<span class="pt-sum" data-sum="' + k + '">' + esc(pointSummary(p)) + '</span></button>' +
+    '<span class="badge" data-badge="' + k + '" hidden></span></div>';
+  h += '<div class="pt-body" id="ptb-' + k + '"' + (p.open ? '' : ' hidden') + '>';
+  h += '<div class="fg"><label for="' + iid(k + ':title') + '">項次標題 <span class="req" aria-hidden="true">*</span></label>' +
+    '<input type="text" id="' + iid(k + ':title') + '" data-k="p-title" data-p="' + k + '" autocomplete="off" aria-required="true" value="' + esc(p.title) + '">' + slot(k + ':title') + '</div>';
+  h += '<div class="fg"><label for="' + iid(k + ':desc') + '">說明（選填）</label><textarea id="' + iid(k + ':desc') + '" data-k="p-desc" data-p="' + k + '">' + esc(p.desc) + '</textarea></div>';
+
+  h += '<fieldset class="blk"><legend>要記錄什麼</legend><p class="hint">現場要量測或填寫的內容。沒有也可以，例如只要拍照。</p>';
+  if (!p.fields.length) { h += '<p class="empty-sm">還沒有實測欄位。</p>'; }
+  h += p.fields.map(function (f) { return fieldHTML(p, f); }).join('');
+  h += '<button type="button" class="btn sm" id="addf-' + k + '" data-act="add-field" data-p="' + k + '" style="margin-bottom:8px">新增實測欄位</button></fieldset>';
+
+  h += '<fieldset class="blk"><legend>判定標準</legend><div role="radiogroup" aria-label="判定方式">' +
+    [['none', '無'], ['text', '文字'], ['numeric', '數值']].map(function (o) {
+      return '<label class="opt"><input type="radio" name="std-' + k + '" id="' + iid(k + ':std-' + o[0]) + '" value="' + o[0] + '" data-k="std-kind" data-p="' + k + '"' + (p.std.kind === o[0] ? ' checked' : '') + '> ' + o[1] + '</label>';
+    }).join('') + '</div><p class="hint">' + STDHINT[p.std.kind] + '</p>';
+  if (p.std.kind === 'text') {
+    h += '<div class="fg"><label for="' + iid(k + ':stdtext') + '">標準文字 <span class="req" aria-hidden="true">*</span></label>' +
+      '<input type="text" id="' + iid(k + ':stdtext') + '" data-k="std-text" data-p="' + k + '" autocomplete="off" aria-required="true" value="' + esc(p.std.text) + '">' + slot(k + ':stdtext') + '</div>';
+  }
+  if (p.std.kind === 'numeric') { h += numericHTML(p); }
+  h += '</fieldset>';
+
+  h += '<div class="fg" style="max-width:16rem"><label for="' + iid(k + ':photos') + '">照片至少幾張 <span class="req" aria-hidden="true">*</span></label>' +
+    '<input type="text" inputmode="numeric" id="' + iid(k + ':photos') + '" data-k="photos" data-p="' + k + '" autocomplete="off" aria-required="true" value="' + esc(p.photos) + '">' + slot(k + ':photos') + '</div>';
+
+  if (S.confirmRemove && S.confirmRemove.kind === 'point' && S.confirmRemove.key === k) {
+    h += '<span class="inline-confirm" role="group" aria-label="確認移除項次">確定移除這個項次？' +
+      '<button type="button" class="btn sm danger solid" id="rmp-yes" data-act="confirm-rm" data-p="' + k + '">移除</button>' +
+      '<button type="button" class="btn sm" id="rmp-no" data-act="cancel-rm">取消</button></span>';
+  } else {
+    h += '<button type="button" class="btn sm danger" id="rmp-' + k + '" data-act="rm-pt" data-p="' + k + '">移除此項次</button>';
+  }
+  return h + '</div></section>';
+}
+function ptName(p, idx) { return '項次 ' + (idx + 1) + (T(p.title) ? '：' + T(p.title) : ''); }
+function editorHTML() {
+  var D = S.draft, creating = S.mode === 'create', title, f;
+  if (creating) { f = find('sys', S.create.parentId); title = '在『' + f.sys.name + '』新增查核項目'; }
+  else { f = find('item', S.sel.id); title = '編輯查核項目『' + f.item.name + '』'; }
+  var h = '<p class="crumb">範本庫 / ' + esc(f.cat.name) + ' / ' + esc(f.sys.name) + '</p>';
+  h += '<form data-form="item" id="item-form" novalidate aria-labelledby="detail-h"><h2 id="detail-h" tabindex="-1">' + esc(title) + '</h2>';
+  h += '<div class="sec"><h3>基本資料</h3>' +
+    '<div class="fg"><label for="in-name">項目名稱 <span class="req" aria-hidden="true">*</span></label>' +
+    '<input type="text" id="in-name" data-k="i-name" autocomplete="off" aria-required="true" value="' + esc(D.name) + '">' + slot('name') + '</div>' +
+    '<div class="fg"><label for="in-desc">說明（選填）</label><textarea id="in-desc" data-k="i-desc">' + esc(D.desc) + '</textarea></div></div>';
+  h += '<div class="sec"><h3>查核項次</h3>';
+  h += D.points.map(pointHTML).join('');
+  h += '<button type="button" class="btn" id="in-points" data-act="add-pt">新增查核項次</button>' + slot('points') + '</div>';
+  h += '<details class="pv" id="preview"' + (S.previewOpen ? ' open' : '') + '><summary>預覽：每個項次的白話摘要</summary><div class="pv-body" id="preview-body"></div></details>';
+  h += '<div class="form-foot"><button type="submit" class="btn primary" id="btn-save-item">儲存查核項目</button>' +
+    '<button type="button" class="btn" id="btn-cancel-edit" data-act="cancel-edit">取消編輯</button>' +
+    '<span class="err-sum" id="err-sum" role="alert" hidden></span><span class="muted" id="err-sum-more" hidden>（修正前不會送出）</span></div></form>';
+  return h;
+}
+function previewHTML() {
+  var D = S.draft;
+  if (!D) { return ''; }
+  return '<p><strong>' + esc(T(D.name) || '（尚未命名）') + '</strong>　共 ' + D.points.length + ' 個項次</p><ol>' +
+    D.points.map(function (p, i) {
+      return '<li><strong>項次 ' + (i + 1) + '</strong>　' + esc(plain(p)) + ' <span class="muted">・照片至少 ' + esc(T(p.photos) || '？') + ' 張</span></li>';
+    }).join('') + '</ol>';
+}
+function detailHTML() {
+  var h = backBtn() + noticeHTML(S.notice);
+  if (S.mode === 'create') { return h + (S.create.kind === 'item' ? editorHTML() : nameFormHTML()); }
+  if (!S.sel) { return h + emptyDetailHTML(); }
+  var f = find(S.sel.type, S.sel.id);
+  if (!f) { return h + emptyDetailHTML(); }
+  if (S.sel.type === 'item') { return h + (S.mode === 'edit' ? editorHTML() : viewItemHTML(f)); }
+  return h + nodeHTML(f);
+}
+function mgrHTML() {
+  var pane = (isMobile() && !S.sel && S.mode === 'view') ? 'list' : S.pane;
+  return '<div class="mgr" data-pane="' + pane + '" id="mgr">' +
+    '<div class="panel listcol"><div class="list-head"><h2>範本庫</h2>' +
+    '<button type="button" class="btn primary sm" id="btn-new-cat" data-act="new-cat">新增工程類別</button></div>' + treeHTML() + '</div>' +
+    '<div class="panel detailcol" id="detail">' + detailHTML() + '</div></div>';
+}
+
+/* ---------- HTML：套用到專案 ---------- */
+function targetItems() {
+  if (!S.aSel) { return null; }
+  var f = find('sys', S.aSel.id);
+  if (!f) { return null; }
+  if (S.aTarget === 'sys') { return { f: f, items: f.sys.items, whole: true }; }
+  if (S.aTarget.indexOf('item:') === 0) {
+    var it = f.sys.items.filter(function (i) { return 'item:' + i.id === S.aTarget; })[0];
+    return { f: f, items: it ? [it] : [], whole: false };
+  }
+  return { f: f, items: [], whole: false };
+}
+function projHTML() {
+  var h = '<div class="panel" id="proj-panel"><h2 id="proj-h" tabindex="-1" style="font-size:1.1rem">專案查核項目：試用專案 ' + S.activeProject + '</h2>';
+  if (!S.proj.length) { h += '<p class="empty-sm">專案還沒有查核項目。從上方選範本後按「套用至專案」。</p>'; }
+  else {
+    h += '<ul class="plist">' + S.proj.map(function (p) {
+      return '<li' + (S.lastApplied.indexOf(p.id) >= 0 ? ' class="recent"' : '') + '><span class="pn">' + esc(p.name) + '</span>' +
+        '<span class="pm">來源：' + esc(p.source) + '</span><span class="pm">套用時間：' + esc(p.at) + '　・　' + p.model.points.length + ' 個項次</span>' +
+        '<button type="button" class="btn sm" data-act="start-save" data-id="' + p.id + '">存為範本</button></li>';
+    }).join('') + '</ul>';
+  }
+  return h + '<p class="hint">套用後是專案自己的副本，之後修改範本不會更新已套用的項目。</p></div>';
+}
+function applyPanelHTML() {
+  var h = '<button type="button" class="btn sm only-mobile" id="btn-a-back" data-act="a-back" style="margin-bottom:8px">‹ 返回</button>';
+  if (S.aNotice) {
+    h += '<div class="notice ' + S.aNotice.kind + '" role="' + (S.aNotice.kind === 'err' ? 'alert' : 'status') + '"><p style="margin:0 0 ' + (S.aNotice.conflict ? '8' : '0') + 'px">' + esc(S.aNotice.text) + '</p>';
+    if (S.aNotice.conflict) {
+      h += '<div class="btns" style="margin:0"><button type="button" class="btn" id="btn-a-reselect" data-act="a-reselect">改選其他範本</button>' +
+        '<button type="button" class="btn" id="btn-a-toproj" data-act="a-toproj">返回專案</button></div>';
+    }
+    h += '</div>';
+  }
+  if (!S.lib.length) {
+    return h + '<div class="empty"><h2>範本庫還沒有內容</h2><p>請先到「範本管理」新增，或按頁首「載入示範資料」。</p></div>';
+  }
+  if (!S.aSel) {
+    return h + '<h2 id="detail-h" tabindex="-1">套用範本到專案</h2><p>在左側點選一個系統，或展開後點選其中的查核項目。接著會在這裡預覽將新增什麼。</p>';
+  }
+  if (S.aSel.type === 'cat') {
+    var c = find('cat', S.aSel.id).cat;
+    return h + '<h2 id="detail-h" tabindex="-1">' + esc(c.name) + '</h2><p>請選這個類別底下的一個系統：</p>' +
+      (c.systems.length ? '<ul class="childlist">' + c.systems.map(function (s) {
+        return '<li><button type="button" class="childbtn" data-act="row" data-type="sys" data-id="' + s.id + '"><span>' + esc(s.name) + '</span><span class="muted">' + s.items.length + ' 個查核項目</span></button></li>';
+      }).join('') + '</ul>' : '<p class="empty-sm">這個類別還沒有系統。</p>');
+  }
+  var t = targetItems();
+  if (!t) { return h; }
+  var f = t.f, n = t.items.length;
+  h += '<p class="crumb">範本庫 / ' + esc(f.cat.name) + ' / ' + esc(f.sys.name) + '</p><h2 id="detail-h" tabindex="-1">套用範本：' + esc(f.sys.name) + '</h2>';
+  h += '<fieldset class="blk"><legend>要套用什麼</legend>';
+  h += '<label class="opt"><input type="radio" name="a-target" id="a-target-sys" value="sys" data-k="a-target"' + (t.whole ? ' checked' : '') + '> 整個系統（' + f.sys.items.length + ' 個項目）</label><br>';
+  h += f.sys.items.map(function (i) {
+    return '<label class="opt"><input type="radio" name="a-target" id="a-target-' + i.id + '" value="item:' + i.id + '" data-k="a-target"' + (S.aTarget === 'item:' + i.id ? ' checked' : '') + '> 單一項目：' + esc(i.name) + '</label><br>';
+  }).join('');
+  h += '</fieldset>';
+  if (!n) {
+    h += '<p class="empty-sm">此系統沒有可套用的項目。</p><button type="button" class="btn primary" disabled>套用至專案</button>';
+    return h;
+  }
+  h += '<h3>將新增 ' + n + ' 個項目</h3><ul class="prev-items">' + t.items.map(function (i) {
+    var D = toDraft(i);
+    return '<li><strong>' + esc(i.name) + '</strong><span class="muted">（' + i.points.length + ' 個項次）</span><ul>' + D.points.map(function (p, x) {
+      return '<li>項次 ' + (x + 1) + '　' + esc(plain(p)) + '</li>';
+    }).join('') + '</ul></li>';
+  }).join('') + '</ul>';
+  h += '<p class="hint">之後修改範本不會更新已套用的項目。套用後是專案自己的副本。</p>';
+  if (S.aConfirm) {
+    h += '<div class="confirm" role="alertdialog" aria-labelledby="acf-t"><p id="acf-t"><strong>一次新增 ' + n + ' 個項目到專案？</strong>目前專案項目無法刪除或改名。</p>' +
+      '<div class="btns"><button type="button" class="btn primary" id="btn-a-yes" data-act="a-yes">確定套用</button>' +
+      '<button type="button" class="btn" id="btn-a-no" data-act="a-no">取消</button></div></div>';
+  } else {
+    h += '<button type="button" class="btn primary" id="btn-a-apply" data-act="a-apply">套用至專案</button>';
+  }
+  return h;
+}
+function applyHTML() {
+  return '<div class="mgr" data-pane="' + S.aPane + '" id="mgr">' +
+    '<div class="panel listcol"><div class="list-head"><h2>選擇範本</h2></div>' + treeHTML() +
+    '<div class="only-mobile" style="margin-top:12px;flex-wrap:wrap;gap:8px;align-items:center"><span class="muted">專案已有 ' + S.proj.length + ' 個項目</span>' +
+    '<button type="button" class="btn sm" data-act="a-open-detail">看專案項目</button></div></div>' +
+    '<div class="detailcol"><div class="panel" id="detail">' + applyPanelHTML() + '</div>' + projHTML() + '</div></div>';
+}
+
+/* ---------- 專案工作台與存為範本 ---------- */
+function workspaceHTML() {
+  var projects = [
+    { code: '專案 A', name: '試用專案 A', count: S.projectData.A.length, key: 'A' },
+    { code: '專案 B', name: '試用專案 B', count: S.projectData.B.length, key: 'B' }
+  ];
+  return '<section class="panel"><h1>專案工作台</h1><p class="hint">選擇專案，開始安排查核項目。</p>' +
+    '<div class="project-grid">' + projects.map(function (p) {
+      return '<article class="project-card"><p class="kindtag">' + esc(p.code) + '</p><h2>' + esc(p.name) + '</h2>' +
+        '<p class="muted">已有 ' + p.count + ' 個查核項目</p>' +
+        '<button type="button" class="btn primary" data-act="workspace-apply" data-project="' + p.key + '">套用範本</button></article>';
+    }).join('') + '</div></section>';
+}
+function saveHTML() {
+  var source = S.proj.filter(function (p) { return p.id === S.saveSource; })[0];
+  if (!source) { return '<div class="panel"><h2>請先從專案查核項目選擇來源</h2><button type="button" class="btn" data-act="tab" data-tab="apply">返回專案</button></div>'; }
+  var f = S.aSel && S.aSel.type === 'sys' ? find('sys', S.aSel.id) : null;
+  var h = '<button type="button" class="btn sm only-mobile" data-act="save-back" style="margin-bottom:8px">‹ 返回選擇系統</button>';
+  h += '<p class="crumb">專案 ' + S.activeProject + '　試用專案 ' + S.activeProject + ' / ' + esc(source.name) + '</p>';
+  h += '<h1 id="detail-h" tabindex="-1">將「' + esc(source.name) + '」存為範本</h1>';
+  if (S.saveNotice) { h += noticeHTML(S.saveNotice); if (S.saveNotice.kind === 'err') { h += '<button type="button" class="btn" data-act="save-back">改選系統</button>'; } }
+  if (!S.lib.length) { h += '<p>範本庫還沒有工程類別，請先建立目的地。</p>'; }
+  else if (f) {
+    h += '<div class="destination"><p><strong>存入位置</strong></p><p>範本庫 / ' + esc(f.cat.name) + ' / ' + esc(f.sys.name) + '</p>' +
+      '<p>將新增「' + esc(source.name) + '」，保留原項目的查核項次與標準。</p></div>' +
+      '<button type="button" class="btn primary" id="btn-save-now" data-act="save-now">存入這個系統</button>';
+  } else if (S.aSel && S.aSel.type === 'cat') {
+    var cat = find('cat', S.aSel.id).cat;
+    h += '<p>請選擇「' + esc(cat.name) + '」底下的一個系統：</p>' +
+      '<ul class="childlist">' + cat.systems.map(function (sys) {
+        return '<li><button type="button" class="childbtn" data-act="row" data-type="sys" data-id="' + sys.id + '">' + esc(sys.name) + '</button></li>';
+      }).join('') + '</ul>';
+  } else { h += '<p>先選工程類別，再選要存入的系統。</p>'; }
+  h += '<div class="btns"><button type="button" class="btn" data-act="tab" data-tab="apply">返回專案</button></div>';
+  return '<div class="mgr" data-pane="' + S.savePane + '"><div class="panel listcol"><div class="list-head"><h2>選擇目標系統</h2></div>' + treeHTML() + '</div>' +
+    '<div class="panel detailcol">' + h + '</div></div>';
+}
+function doSave() {
+  var source = S.proj.filter(function (p) { return p.id === S.saveSource; })[0];
+  var f = S.aSel && S.aSel.type === 'sys' ? find('sys', S.aSel.id) : null;
+  if (!source || !f) { return; }
+  if (f.sys.items.some(function (i) { return norm(i.name) === norm(source.name); })) {
+    S.saveNotice = { kind: 'err', text: '這個系統已有「' + source.name + '」，沒有存入範本。請改選其他系統。' };
+    render({ focus: 'btn-save-now' }); return;
+  }
+  var copy = clone(source.model);
+  copy.id = uid('i'); copy.name = source.name;
+  f.sys.items.push(copy);
+  S.saveNotice = { kind: 'ok', text: '已將「' + source.name + '」存入「' + f.sys.name + '」。' };
+  render({ focus: 'detail-h' });
+}
+
+/* ---------- 畫面更新 ---------- */
+function refreshDerived() {
+  if (!S.draft || !app.querySelector('#item-form')) { return; }
+  S.draft.points.forEach(function (p, idx) {
+    var k = p.key, a = app.querySelector('[data-ptname="' + k + '"]');
+    if (a) { a.textContent = ptName(p, idx); }
+    var b = app.querySelector('[data-sum="' + k + '"]');
+    if (b) { b.textContent = pointSummary(p); }
+    app.querySelectorAll('[data-unit-for="' + k + '"]').forEach(function (u) { u.textContent = unitSuffix(p); });
+    var w = app.querySelector('[data-bindwrap="' + k + '"]');
+    if (w && !w.contains(document.activeElement)) {
+      var nh = bindHTML(p);
+      if (w.innerHTML !== nh) { w.innerHTML = nh; }
+    }
+  });
+  var pb = el('preview-body');
+  if (pb) { pb.innerHTML = previewHTML(); }
+  applyErrors();
+}
+function render(opts) {
+  opts = opts || {};
+  var y = window.scrollY;
+  var ae = document.activeElement;
+  var fid = opts.focus || (ae && ae.id && app.contains(ae) ? ae.id : null);
+  app.innerHTML = headerHTML() + guardHTML() + (S.tab === 'mgr' ? mgrHTML() : S.tab === 'apply' ? applyHTML() : S.tab === 'save' ? saveHTML() : workspaceHTML());
+  refreshDerived();
+  window.scrollTo(0, y);
+  if (opts.scrollTo) {
+    var st = el(opts.scrollTo);
+    if (st) { st.scrollIntoView({ block: 'start' }); }
+  }
+  if (fid) {
+    var t = el(fid);
+    if (t && t.offsetParent !== null) {
+      t.focus({ preventScroll: !opts.scroll });
+      if (opts.selectAll && t.select) { t.select(); }
+      else if (t.type === 'text' && t.setSelectionRange) { var l = t.value.length; t.setSelectionRange(l, l); }
+      if (opts.scroll && t.scrollIntoView) { t.scrollIntoView({ block: 'center' }); }
+    }
+  }
+}
+
+/* ---------- 動作 ---------- */
+function clearNotice() { S.notice = null; S.aNotice = null; S.fieldBlock = null; }
+function isDirty() {
+  if (S.mode === 'edit' || (S.mode === 'create' && S.create && S.create.kind === 'item')) { return !!S.draft && snap(S.draft) !== S.baseline; }
+  if (S.mode === 'rename' || S.mode === 'create') { return S.nameDraft !== S.nameBase; }
+  return false;
+}
+function resetEdit() {
+  if (S.create && S.create.kind === 'cat' && !S.sel) { S.sel = S.create.prevSel || null; }
+  S.mode = 'view'; S.draft = null; S.create = null; S.attempted = false;
+  S.guard = null; S.fieldBlock = null; S.confirmRemove = null; S.nameErr = '';
+}
+function guard(fn) {
+  if (isDirty()) { S.guard = fn; render({ focus: 'guard-keep' }); return; }
+  fn();
+}
+function loadDemo() {
+  seq = seq || 0;
+  function pt(title, fields, std, photos) {
+    var p = newPoint(); p.title = title; p.photos = String(photos || 1); p.open = false;
+    p.fields = fields.map(function (x) { var f = newField(x[1]); f.name = x[0]; f.unit = x[2] || ''; return f; });
+    Object.keys(std).forEach(function (k) { p.std[k] = std[k]; });
+    if (p.std.kind === 'numeric' && p.fields.length) { p.std.fieldKey = p.fields[0].key; }
+    return p;
+  }
+  function item(name, desc, pts) { var m = toModel({ name: name, desc: desc, points: pts }); m.id = uid('i'); return m; }
+  var pipe = item('管線查核', '檢查管線坡度與管壁厚度。', [
+    pt('坡度', [['坡度', 'number', '%']], { kind: 'numeric', op: 'range', form: 'interval', lo: '1', hi: '3' }, 1),
+    pt('厚度', [['厚度', 'number', 'mm']], { kind: 'numeric', op: 'range', form: 'tol', target: '10', tol: '1' }, 1)
+  ]);
+  var water = item('水壓測試', '', [pt('試壓', [['試驗壓力', 'number', 'MPa']], { kind: 'numeric', op: 'ge', target: '0.6' }, 2)]);
+  var panel = item('配電箱外觀', '', [pt('外觀', [['備註', 'text', '']], { kind: 'text', text: '無破損、無銹蝕' }, 1)]);
+  S.lib = [
+    { id: uid('c'), name: '建築工程', systems: [
+      { id: uid('s'), name: '給排水', items: [pipe, water] },
+      { id: uid('s'), name: '電氣', items: [panel] } ] },
+    { id: uid('c'), name: '土木工程', systems: [{ id: uid('s'), name: '基礎', items: [] }] }
+  ];
+  S.proj = []; S.projectData = { A: S.proj, B: [] }; S.activeProject = 'A'; S.lastApplied = []; S.saveSource = null; S.saveNotice = null;
+  S.expanded = {}; S.expanded[S.lib[0].id] = true; S.expanded[S.lib[0].systems[0].id] = true;
+  S.sel = null; S.aSel = null; S.aTarget = '';
+}
+function doDemo() {
+  guard(function () {
+    resetEdit(); loadDemo();
+    S.notice = { kind: 'info', text: '已載入示範資料：建築工程／給排水／管線查核等。第 1～12 步要從空白開始，請按「重新開始（清空）」。' };
+    S.aNotice = null; S.pane = 'list'; S.aPane = 'list';
+    render({ focus: 'btn-demo' });
+  });
+}
+function doReset() {
+  guard(function () {
+    resetEdit();
+    S.lib = []; S.proj = []; S.projectData = { A: S.proj, B: [] }; S.activeProject = 'A'; S.expanded = {}; S.sel = null; S.aSel = null; S.aTarget = ''; S.lastApplied = []; S.saveSource = null; S.saveNotice = null;
+    S.notice = null; S.aNotice = null; S.pane = 'list'; S.aPane = 'list'; S.aConfirm = false;
+    render({ focus: 'btn-reset' });
+  });
+}
+
+/* 範本管理：選取列 */
+function onRowMgr(type, id) {
+  var same = !!S.sel && S.sel.type === type && S.sel.id === id;
+  if (same) {
+    S.fieldBlock = null;
+    if (type !== 'item' && childCount(type, id) > 0) { S.expanded[id] = !S.expanded[id]; }
+    render({ focus: 'row-mgr-' + id });
+    return;
+  }
+  guard(function () {
+    resetEdit(); clearNotice();
+    S.sel = { type: type, id: id };
+    if (type !== 'item') { S.expanded[id] = true; }
+    S.pane = 'detail';
+    render({ focus: isMobile() ? 'detail-h' : 'row-mgr-' + id });
+  });
+}
+function onRowApply(type, id) {
+  S.aNotice = null; S.aConfirm = false; S.saveNotice = null;
+  var same = false;
+  if (type === 'cat') {
+    same = !!S.aSel && S.aSel.type === 'cat' && S.aSel.id === id;
+    if (same) { S.expanded[id] = !S.expanded[id]; }
+    else { S.aSel = { type: 'cat', id: id }; S.aTarget = ''; S.expanded[id] = true; }
+  } else if (type === 'sys') {
+    same = !!S.aSel && S.aSel.type === 'sys' && S.aSel.id === id && S.aTarget === 'sys';
+    if (same) { S.expanded[id] = !S.expanded[id]; }
+    else { S.aSel = { type: 'sys', id: id }; S.aTarget = 'sys'; S.expanded[id] = true; }
+  } else {
+    var f = find('item', id);
+    S.aSel = { type: 'sys', id: f.sys.id }; S.aTarget = 'item:' + id; S.expanded[f.sys.id] = true;
+  }
+  if (!same) { S.aPane = 'detail'; S.savePane = 'detail'; }
+  render({ focus: (!same && isMobile()) ? 'detail-h' : 'row-' + S.tab + '-' + id });
+}
+function startNameForm(mode, kind, parentId) {
+  guard(function () {
+    resetEdit(); clearNotice();
+    S.mode = mode;
+    if (mode === 'create') {
+      S.create = { kind: kind, parentId: parentId, prevSel: S.sel };
+      if (kind === 'cat') { S.sel = null; } else { S.sel = { type: 'cat', id: parentId }; S.expanded[parentId] = true; }
+      S.nameDraft = ''; S.nameBase = '';
+    } else {
+      S.nameDraft = nodeOf(S.sel.type, S.sel.id).name; S.nameBase = S.nameDraft;
+    }
+    S.pane = 'detail';
+    render({ focus: 'name-in', selectAll: mode === 'rename' });
+  });
+}
+function startNewItem(sysId) {
+  guard(function () {
+    resetEdit(); clearNotice();
+    var f = find('sys', sysId);
+    S.sel = { type: 'sys', id: sysId }; S.expanded[sysId] = true; S.expanded[f.cat.id] = true;
+    S.mode = 'create'; S.create = { kind: 'item', parentId: sysId };
+    S.draft = blankDraft(); S.baseline = snap(S.draft); S.attempted = false; S.pane = 'detail';
+    render({ focus: 'in-name' });
+  });
+}
+function saveName() {
+  var v = T(S.nameDraft), kind, sibs, selfId = null;
+  if (S.mode === 'rename') { kind = S.sel.type; selfId = S.sel.id; var f = find(kind, selfId); sibs = kind === 'cat' ? S.lib : f.cat.systems; }
+  else { kind = S.create.kind; sibs = siblings(kind, S.create.parentId); }
+  var err = '';
+  if (!v) { err = '請填寫名稱'; }
+  else if (sibs.some(function (n) { return n.id !== selfId && norm(n.name) === norm(v); })) { err = '已有同名' + KIND[kind] + '，請換個名稱'; }
+  if (err) { S.nameErr = err; render({ focus: 'name-in' }); return; }
+  clearNotice();
+  if (S.mode === 'rename') {
+    nodeOf(kind, selfId).name = v;
+    resetEdit();
+    S.notice = { kind: 'ok', text: '已重新命名為「' + v + '」' };
+  } else {
+    var node;
+    if (kind === 'cat') { node = { id: uid('c'), name: v, systems: [] }; S.lib.push(node); }
+    else { node = { id: uid('s'), name: v, items: [] }; find('cat', S.create.parentId).cat.systems.push(node); S.expanded[S.create.parentId] = true; }
+    resetEdit();
+    S.sel = { type: kind, id: node.id }; S.expanded[node.id] = true;
+    S.notice = { kind: 'ok', text: '已新增' + KIND[kind] + '「' + v + '」' };
+  }
+  S.pane = 'detail';
+  render({ focus: 'detail-h', scrollTo: 'detail' });
+}
+function cancelName() {
+  var wasCreate = S.mode === 'create';
+  var wasCat = wasCreate && S.create.kind === 'cat';
+  resetEdit(); clearNotice();
+  render({ focus: wasCat ? 'btn-new-cat' : 'detail-h' });
+}
+function askDelete() {
+  clearNotice();
+  var type = S.sel.type, id = S.sel.id;
+  if (type === 'cat' && childCount('cat', id) > 0) { S.notice = { kind: 'err', text: '此類別還有系統，請先處理系統。' }; render({ focus: 'btn-delete' }); return; }
+  if (type === 'sys' && childCount('sys', id) > 0) { S.notice = { kind: 'err', text: '此系統還有查核項目，請先處理項目。' }; render({ focus: 'btn-delete' }); return; }
+  S.mode = 'confirmDelete';
+  render({ focus: 'btn-cancel-delete' });
+}
+function doDelete() {
+  var type = S.sel.type, id = S.sel.id, f = find(type, id), name = f[type].name;
+  if (type === 'cat') { S.lib = S.lib.filter(function (c) { return c.id !== id; }); S.sel = null; }
+  else if (type === 'sys') { f.cat.systems = f.cat.systems.filter(function (s) { return s.id !== id; }); S.sel = { type: 'cat', id: f.cat.id }; }
+  else { f.sys.items = f.sys.items.filter(function (i) { return i.id !== id; }); S.sel = { type: 'sys', id: f.sys.id }; }
+  resetEdit(); clearNotice();
+  S.notice = { kind: 'ok', text: '已刪除「' + name + '」' };
+  if (!S.sel) { S.pane = 'list'; }
+  render({ focus: S.sel ? 'detail-h' : 'btn-new-cat', scrollTo: 'detail' });
+}
+function startEdit() {
+  clearNotice();
+  var f = find('item', S.sel.id);
+  S.mode = 'edit'; S.draft = toDraft(f.item); S.baseline = snap(S.draft); S.attempted = false;
+  render({ focus: 'in-name' });
+}
+function cancelEdit() {
+  guard(function () {
+    resetEdit(); clearNotice();
+    render({ focus: 'detail-h', scrollTo: 'detail' });
+  });
+}
+function saveItem() {
+  S.attempted = true; S.notice = null; S.fieldBlock = null; S.confirmRemove = null;
+  var errs = validate(S.draft);
+  if (errs.length) {
+    S.draft.points.forEach(function (p) {
+      if (errs.some(function (e) { return e.path.indexOf(p.key + ':') === 0; })) { p.open = true; }
+    });
+    render({ focus: focusPathOf(errs[0].path), scroll: true });
+    return;
+  }
+  var model = toModel(S.draft), item;
+  if (S.mode === 'create') {
+    var f = find('sys', S.create.parentId);
+    model.id = uid('i'); f.sys.items.push(model); item = model;
+    S.expanded[f.sys.id] = true; S.expanded[f.cat.id] = true;
+  } else {
+    item = find('item', S.sel.id).item;
+    model.id = item.id; Object.keys(item).forEach(function (k) { delete item[k]; }); Object.keys(model).forEach(function (k) { item[k] = model[k]; });
+  }
+  resetEdit();
+  S.sel = { type: 'item', id: item.id };
+  S.notice = { kind: 'ok', text: '查核項目已儲存' };
+  S.pane = 'detail';
+  render({ focus: 'detail-h', scrollTo: 'detail' });
+}
+
+/* 編輯器內的結構動作 */
+function pointOf(k) { return S.draft.points.filter(function (p) { return p.key === k; })[0]; }
+function fieldOf(p, k) { return p.fields.filter(function (f) { return f.key === k; })[0]; }
+function onEditorAct(act, t) {
+  S.fieldBlock = null;
+  var p = t.dataset.p ? pointOf(t.dataset.p) : null, f = (p && t.dataset.f) ? fieldOf(p, t.dataset.f) : null;
+  if (act === 'toggle-pt') { p.open = !p.open; render({ focus: 'ptt-' + p.key }); }
+  else if (act === 'add-pt') {
+    S.confirmRemove = null;
+    var np = newPoint(); S.draft.points.push(np);
+    render({ focus: iid(np.key + ':title'), scroll: true });
+  }
+  else if (act === 'rm-pt') {
+    if (hasContentPoint(p)) { S.confirmRemove = { kind: 'point', key: p.key }; render({ focus: 'rmp-no' }); }
+    else { S.draft.points.splice(S.draft.points.indexOf(p), 1); render({ focus: 'in-points' }); }
+  }
+  else if (act === 'add-field') {
+    var nf = newField('number'); p.fields.push(nf); reconcile(p);
+    render({ focus: iid(p.key + ':' + nf.key + ':name') });
+  }
+  else if (act === 'rm-field') {
+    var why = fieldGuard(p, f);
+    if (why) { S.fieldBlock = { fk: f.key, text: why }; render({ focus: 'rmf-' + f.key }); return; }
+    if (hasContentField(f)) { S.confirmRemove = { kind: 'field', key: f.key }; render({ focus: 'rmf-no' }); }
+    else { p.fields.splice(p.fields.indexOf(f), 1); reconcile(p); render({ focus: 'addf-' + p.key }); }
+  }
+  else if (act === 'confirm-rm') {
+    S.confirmRemove = null;
+    if (f) { p.fields.splice(p.fields.indexOf(f), 1); reconcile(p); render({ focus: 'addf-' + p.key }); }
+    else { S.draft.points.splice(S.draft.points.indexOf(p), 1); render({ focus: 'in-points' }); }
+  }
+  else if (act === 'cancel-rm') { S.confirmRemove = null; render(); }
+}
+function onChange(t) {
+  var k = t.dataset.k;
+  if (!k) { return; }
+  if (k === 'a-target') { S.aTarget = t.value; S.aNotice = null; S.aConfirm = false; render({ focus: t.id }); return; }
+  if (!S.draft) { return; }
+  var p = t.dataset.p ? pointOf(t.dataset.p) : null, f = (p && t.dataset.f) ? fieldOf(p, t.dataset.f) : null;
+  S.fieldBlock = null;
+  if (k === 'std-kind') {
+    p.std.kind = t.value;
+    var focus = t.id;
+    if (t.value === 'numeric') {
+      if (!numFields(p).length) { var nf = newField('number'); p.fields.push(nf); focus = iid(p.key + ':' + nf.key + ':name'); }
+      reconcile(p);
+    }
+    render({ focus: focus });
+  } else if (k === 'f-type') {
+    if (f.type === 'number' && t.value === 'text') {
+      var why = fieldGuard(p, f);
+      if (why) { S.fieldBlock = { fk: f.key, text: why }; render({ focus: t.id }); return; }
+    }
+    f.type = t.value; reconcile(p);
+    render({ focus: t.id });
+  } else if (k === 'op') { p.std.op = t.value; render({ focus: t.id }); }
+  else if (k === 'form') { p.std.form = t.value; render({ focus: t.id }); }
+  else if (k === 'bind') { p.std.fieldKey = t.value; render({ focus: t.id }); }
+}
+function onInput(t) {
+  var k = t.dataset.k;
+  if (!k || t.tagName === 'SELECT' || t.type === 'radio') { return; }
+  if (k === 'name-draft') {
+    S.nameDraft = t.value; S.nameErr = '';
+    var ne = el('name-err');
+    if (ne) { ne.hidden = true; ne.textContent = ''; }
+    t.removeAttribute('aria-invalid'); t.removeAttribute('aria-describedby');
+    return;
+  }
+  if (!S.draft) { return; }
+  var p = t.dataset.p ? pointOf(t.dataset.p) : null, f = (p && t.dataset.f) ? fieldOf(p, t.dataset.f) : null;
+  if (k === 'i-name') { S.draft.name = t.value; }
+  else if (k === 'i-desc') { S.draft.desc = t.value; }
+  else if (k === 'p-title') { p.title = t.value; }
+  else if (k === 'p-desc') { p.desc = t.value; }
+  else if (k === 'f-name') { f.name = t.value; }
+  else if (k === 'f-unit') { f.unit = t.value; }
+  else if (k === 'std-text') { p.std.text = t.value; }
+  else if (k === 'photos') { p.photos = t.value; }
+  else if (k === 'lo' || k === 'hi' || k === 'target' || k === 'tol') { p.std[k] = t.value; }
+  else { return; }
+  var blk = app.querySelector('[role="alert"].field-error');
+  if (blk && S.fieldBlock) { S.fieldBlock = null; blk.remove(); }
+  refreshDerived();
+}
+
+/* 套用到專案 */
+function nowStr() {
+  var d = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + ' ' + z(d.getHours()) + ':' + z(d.getMinutes());
+}
+function doApply(confirmed) {
+  var t = targetItems();
+  if (!t || !t.items.length) { return; }
+  var conflicts = t.items.filter(function (i) {
+    return S.proj.some(function (p) { return norm(p.name) === norm(i.name); });
+  });
+  if (conflicts.length) {
+    S.aConfirm = false; S.lastApplied = [];
+    S.aNotice = { kind: 'err', conflict: true, text: '已套用過' + conflicts.map(function (c) { return '『' + c.name + '』'; }).join('、') + '，本次沒有新增任何項目。' };
+    render({ focus: 'btn-a-reselect' });
+    return;
+  }
+  if (t.whole && t.items.length > 1 && !confirmed) { S.aConfirm = true; S.aNotice = null; render({ focus: 'btn-a-no' }); return; }
+  var ids = [];
+  t.items.forEach(function (i) {
+    var p = { id: uid('a'), name: i.name, source: t.whole ? t.f.sys.name : i.name, at: nowStr(), model: clone(i) };
+    S.proj.push(p); ids.push(p.id);
+  });
+  S.lastApplied = ids; S.aConfirm = false;
+  S.aNotice = { kind: 'ok', text: '已套用 ' + ids.length + ' 個項目到「試用專案 ' + S.activeProject + '」，請看下方專案查核項目。' };
+  render({ focus: 'proj-h', scrollTo: 'proj-panel' });
+}
+
+/* ---------- 事件 ---------- */
+app.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-act]');
+  if (!t || !app.contains(t)) { return; }
+  var act = t.dataset.act;
+  if (act === 'guard-keep') { S.guard = null; S.pane = 'detail'; render({ focus: S.mode === 'rename' || (S.mode === 'create' && S.create.kind !== 'item') ? 'name-in' : 'in-name' }); return; }
+  if (act === 'guard-discard') { var fn = S.guard; S.guard = null; resetEdit(); if (fn) { fn(); } else { render(); } return; }
+  if (act === 'tab') {
+    var tab = t.dataset.tab;
+    if (tab === S.tab) { return; }
+    S.tab = tab; S.aNotice = null; S.fieldBlock = null; S.confirmRemove = null;
+    render({ focus: 'tab-' + tab });
+    return;
+  }
+  if (act === 'load-demo') { doDemo(); return; }
+  if (act === 'reset') { doReset(); return; }
+  if (act === 'row') { (S.tab === 'mgr' ? onRowMgr : onRowApply)(t.dataset.type, t.dataset.id); return; }
+  if (act === 'workspace-apply') { S.activeProject = t.dataset.project; S.proj = S.projectData[S.activeProject]; S.tab = 'apply'; S.aSel = null; S.aTarget = ''; S.aPane = 'list'; S.aNotice = null; render({ focus: 'tab-apply' }); return; }
+  if (act === 'start-save') { S.saveSource = t.dataset.id; S.tab = 'save'; S.aSel = null; S.aTarget = ''; S.savePane = 'detail'; S.saveNotice = null; render({ focus: 'detail-h' }); return; }
+  if (act === 'save-now') { doSave(); return; }
+  if (act === 'save-back') { S.savePane = 'list'; render({ focus: S.aSel ? 'row-save-' + S.aSel.id : null }); return; }
+  if (act === 'open-detail') { S.pane = 'detail'; render({ focus: 'detail-h' }); return; }
+  if (act === 'a-open-detail') { if (S.tab === 'save') { S.savePane = 'detail'; render({ focus: 'detail-h' }); } else { S.aPane = 'detail'; render({ focus: S.aSel ? 'detail-h' : 'proj-h' }); } return; }
+  if (act === 'back') { S.pane = 'list'; render({ focus: S.sel ? 'row-mgr-' + S.sel.id : 'btn-new-cat' }); return; }
+  if (act === 'a-back') { S.aPane = 'list'; render({ focus: S.aSel ? 'row-apply-' + S.aSel.id : null }); return; }
+  if (act === 'new-cat') { startNameForm('create', 'cat', null); return; }
+  if (act === 'new-sys') { startNameForm('create', 'sys', t.dataset.id); return; }
+  if (act === 'new-item') { startNewItem(t.dataset.id); return; }
+  if (act === 'rename') { startNameForm('rename'); return; }
+  if (act === 'cancel-name') { cancelName(); return; }
+  if (act === 'ask-delete') { askDelete(); return; }
+  if (act === 'do-delete') { doDelete(); return; }
+  if (act === 'cancel-delete') { S.mode = 'view'; render({ focus: 'btn-delete' }); return; }
+  if (act === 'edit-item') { startEdit(); return; }
+  if (act === 'cancel-edit') { cancelEdit(); return; }
+  if (act === 'a-apply') { doApply(false); return; }
+  if (act === 'a-yes') { doApply(true); return; }
+  if (act === 'a-no') { S.aConfirm = false; render({ focus: 'btn-a-apply' }); return; }
+  if (act === 'a-reselect') {
+    S.aNotice = null; S.aSel = null; S.aTarget = ''; S.aPane = 'list';
+    render({ focus: S.lib.length ? 'row-apply-' + S.lib[0].id : null });
+    return;
+  }
+  if (act === 'a-toproj') { S.aNotice = null; S.aPane = 'detail'; render({ focus: 'proj-h', scrollTo: 'proj-panel' }); return; }
+  if (S.draft) { onEditorAct(act, t); }
+});
+app.addEventListener('input', function (e) { onInput(e.target); });
+app.addEventListener('change', function (e) { onChange(e.target); });
+app.addEventListener('submit', function (e) {
+  e.preventDefault();
+  var form = e.target.getAttribute('data-form');
+  if (form === 'name') { saveName(); }
+  else if (form === 'item') { saveItem(); }
+});
+app.addEventListener('toggle', function (e) {
+  if (e.target.id === 'preview') { S.previewOpen = e.target.open; }
+}, true);
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && e.target.matches && e.target.matches('#item-form input[type="text"]')) { e.preventDefault(); return; }
+  if (e.key !== 'Escape') { return; }
+  if (S.guard) { S.guard = null; render({ focus: 'in-name' }); return; }
+  if (S.confirmRemove) { S.confirmRemove = null; render(); return; }
+  if (S.tab === 'mgr') {
+    if (S.mode === 'confirmDelete') { S.mode = 'view'; render({ focus: 'btn-delete' }); return; }
+    if (S.mode === 'rename' || (S.mode === 'create' && S.create && S.create.kind !== 'item')) { cancelName(); return; }
+  } else if (S.aConfirm) { S.aConfirm = false; render({ focus: 'btn-a-apply' }); }
+});
+/* ---------- 啟動 ---------- */
+render();
+})();
+</script>
