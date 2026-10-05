@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import DateTime, create_engine, inspect, text
+from sqlalchemy.orm import Session
 
 from alembic import command
 
@@ -116,6 +117,105 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
 
     expected_head = ScriptDirectory.from_config(cfg).get_current_head()
     assert _stamped_version(db_url) == expected_head
+
+
+def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from app.models import InspectionPlan, Project
+    from tests.db.conftest import create_root_user_with_company
+
+    cfg = _alembic_config()
+    command.upgrade(cfg, "6d2e4f8a91b0")
+    engine = create_engine(db_url)
+    pending_created = datetime(2026, 10, 1, tzinfo=UTC)
+    draft_created = datetime(2026, 10, 2, tzinfo=UTC)
+    with Session(engine) as session:
+        operator = create_root_user_with_company(session, "DISPATCHMIG")
+        project = Project(
+            project_code="DISPATCHMIG",
+            name="Migration project",
+            client_name="Migration client",
+            site_location="Migration site",
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        session.add(project)
+        session.flush()
+        plan = InspectionPlan(
+            project_id=project.id,
+            name="Migration plan",
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        session.add(plan)
+        session.flush()
+        pending_id = uuid4()
+        draft_id = uuid4()
+        insert = text(
+            "INSERT INTO inspection_tasks "
+            "(id, plan_id, project_id, status, created_by, updated_by, "
+            "created_at, updated_at) VALUES "
+            "(:id, :plan_id, :project_id, :status, :created_by, "
+            ":updated_by, :created_at, :updated_at)"
+        )
+        session.execute(
+            insert,
+            [
+                {
+                    "id": pending_id.hex,
+                    "plan_id": plan.id.hex,
+                    "project_id": project.id.hex,
+                    "status": "PENDING",
+                    "created_by": operator.id.hex,
+                    "updated_by": operator.id.hex,
+                    "created_at": pending_created,
+                    "updated_at": pending_created,
+                },
+                {
+                    "id": draft_id.hex,
+                    "plan_id": plan.id.hex,
+                    "project_id": project.id.hex,
+                    "status": "DRAFT",
+                    "created_by": operator.id.hex,
+                    "updated_by": operator.id.hex,
+                    "created_at": draft_created,
+                    "updated_at": draft_created,
+                },
+            ],
+        )
+        session.commit()
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as connection:
+        rows = (
+            connection.execute(
+                text(
+                    "SELECT id, status, created_at, dispatched_at "
+                    "FROM inspection_tasks"
+                )
+            )
+            .mappings()
+            .all()
+        )
+    values = {row["id"]: row for row in rows}
+    pending_time = datetime.fromisoformat(
+        values[pending_id.hex]["dispatched_at"]
+    )
+    assert pending_time.replace(tzinfo=UTC) == pending_created
+    assert values[draft_id.hex]["dispatched_at"] is None
+    inspector = inspect(engine)
+    task_columns = {
+        col["name"]: col for col in inspector.get_columns("inspection_tasks")
+    }
+    assert task_columns["dispatched_at"]["nullable"] is True
+    dispatched_type = task_columns["dispatched_at"]["type"]
+    assert isinstance(dispatched_type, DateTime)
+    if engine.dialect.name == "postgresql":
+        assert dispatched_type.timezone is True
+    assert inspector.get_foreign_keys("inspection_tasks")
+    engine.dispose()
 
 
 _PRE_EXISTING_LOGGER_NAME = "tests.db.test_migrations.pre_existing_logger"

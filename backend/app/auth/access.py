@@ -333,6 +333,49 @@ def require_system_role_or_any_project_permission(
     )
 
 
+def require_admin_or_any_project_permission(
+    permission_code: str,
+) -> Callable[..., User]:
+    """Allow Admin or a user holding a permission in any project."""
+    if not is_permission_code_registered(permission_code):
+        raise ValueError(f"unregistered permission code: {permission_code}")
+
+    def _check(
+        user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db),  # noqa: B008
+    ) -> User:
+        if user.is_admin:
+            return user
+        allowed = db.scalar(
+            select(ProjectMember.id)
+            .join(
+                ProjectMemberRole,
+                ProjectMemberRole.project_member_id == ProjectMember.id,
+            )
+            .join(
+                RolePermission,
+                RolePermission.role_id == ProjectMemberRole.role_id,
+            )
+            .where(
+                ProjectMember.user_id == user.id,
+                RolePermission.code == permission_code,
+            )
+            .limit(1)
+        )
+        if allowed is None:
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        return user
+
+    return _mark(
+        _check,
+        RouteAccessDeclaration(
+            level=AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION,
+            permission_code=permission_code,
+            system_role_code="admin",
+        ),
+    )
+
+
 # -- 需專案權限 (AUT-R19) --------------------------------------------
 
 

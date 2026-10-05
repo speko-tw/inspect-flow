@@ -8,7 +8,7 @@
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|---|
-| T1 | 補齊跨專案已派 Task API 與 Field 安全詳情 API：逐筆權限過濾、無權限專案 403、預設本人、cursor 分頁、`dispatched_at` 排序及 `DRAFT` 詳情隱藏。前端假資料不可作為完成條件；若現有凍結 Task 契約缺少派送時間，先確認並完成規格變更流程。 | API router／schema／service、API 測試、錯誤碼與權限登記；精確檔案依 #361 實際落點 | #361；與 T2 response contract 對齊 | FUI-AC01–04、AC07–08 | — |
+| T1 | 補齊跨專案已派 Task API 與 Field 安全詳情 API：逐筆權限過濾、無權限專案 403、預設本人、cursor 分頁、`dispatched_at` 排序及 `DRAFT` 詳情隱藏；新增首次派送時間欄位與歷史回填。 | `backend/app/auth/access.py`、`backend/app/api/v1/inspection_planning.py`、`backend/app/models/inspection_planning.py`、`backend/app/services/inspection_planning.py`、新增 Alembic migration、`backend/tests/api/test_inspection_planning_api.py`、`backend/tests/contract/test_route_access.py`、`backend/tests/db/test_migrations.py`；同步 `domain-model`、`inspection-planning`、本規格 | #361；與 #417 response contract 對齊；#416 維護者已裁定新增派送時間欄位 | FUI-AC01–04、AC07–08 | #416 |
 | T2 | 將現有 Field 個人工作台改為 `/field/` 今日任務首頁，提供登入保護、列表、載入／空／錯誤／403 狀態及兩種範圍切換；可先用 fixture 寫元件測試，但此任務完成前必須改接真實 API，並以真實後端驗證相關 AC。將變更密碼／適用個人入口保留在 Field，登出可用。 | 前端路由、Field layout、清單頁、API client 與前端測試 | 已有前端基礎（0.1／0.2）；T1 API 可用；不得依賴 #363 作為前端基礎 | FUI-AC01–02、AC07–10、AC12 | — |
 | T3 | 建立真實 Task 詳情頁與唯讀需求快照清單，呈現位置、專案、狀態及照片／量測要求；完成條件包含接上真實詳情 API。`DRAFT` 隱藏須依 T1 後端保證，不可只靠前端過濾。 | Field task detail、需求呈現元件、API client 與前端測試 | T2；#361 Task 詳情／Snapshot API 與 Field 安全詳情契約 | FUI-AC03–04、AC08–09 | — |
 | T4 | 串接開始查核操作，依 Task／Plan 狀態顯示控制項，以真實後端回應更新權威狀態；完成條件含非指派但有權限成員開始任務的整合驗證。 | Field start action、API client 整合及前後端測試 | T3；#361 開始 Task API 與狀態契約 | FUI-AC05–08 | — |
@@ -24,7 +24,7 @@
 
 ## 跨規格依賴
 
-- `#361`：inspection-planning T3，提供 Plan、Task 與專案項目 API（含 Task 詳情、開始及 Field 所需查詢）。依 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)，Field 使用專案範圍的現場查核權限；`inspection_task.inspect` 是本規格所選的代碼名稱（依 [OQ-08](../../intents/05-open-questions.md#oq-08)，代碼命名由規格決定）。API/RBAC 契約若不符，先更新來源規格與 issue，不以 UI mock 代替。`dispatched_at` 目前不在凍結 Task 模型；如必須新增持久欄位，先走規格變更流程。
+- `#361`：inspection-planning T3，提供 Plan、Task 與專案項目 API（含 Task 詳情、開始及 Field 所需查詢）。依 [KD-60](../../intents/03-decisions-and-stack.md#kd-60)，Field 使用專案範圍的現場查核權限；`inspection_task.inspect` 是本規格所選的代碼名稱（依 [OQ-08](../../intents/05-open-questions.md#oq-08)，代碼命名由規格決定）。API/RBAC 契約若不符，先更新來源規格與 issue，不以 UI mock 代替。派送時間契約已由 #416 維護者裁定並納入本次實作。
 - [KD-67](../../intents/03-decisions-and-stack.md#kd-67)：完整全公司角色與權限管理排入 0.5.x。Field 的專案權限須由 `authentication`／`inspection-planning` 契約及 seed 提供；角色管理 UI 屬 Admin 任務，不作為 Field 畫面的依賴。
 - `#363`：inspection-planning T4，內業 Plan／Task 管理 UI，不是 Field 前端基礎；它可能同時修改共用路由或 API client。由責任方先協調共用檔案及接合順序，Field 任務不將 #363 寫成基礎設施前置。
 - 前端基礎與認證路由已由 0.1／0.2 建立；Field 依現有單一 React app 與 code-splitting 契約增補 `/field/*`。
@@ -47,7 +47,7 @@
 ## 風險
 
 - `#361` 未提供 Field 跨專案列表或安全詳情契約時，真實 API AC 不能通過；不可用 fixture／mock 報稱完成。
-- `dispatched_at` 不在目前凍結資料模型。排序必須先依 inspection-planning/API 契約提供；若需改模型先走規格變更，不得在此規格直接新增欄位。
+- 歷史非 DRAFT Task 的 `dispatched_at` 由 migration 以 `created_at` 近似回填；新 DRAFT 保持空值，Field 清單不含 DRAFT。
 - Task 指派是建議而非排他權限。清單預設只影響本人篩選，開始權限仍由後端依同專案 `inspection_task.inspect` 覆核。
 - 登入 Cookie 帶 `Secure`；iPhone／iPad 區網測試需 HTTPS、憑證 SAN 涵蓋 IP、裝置明確信任根憑證且開發伺服器限制來源。CA 私鑰留在開發機。
 - Task 詳情的需求快照唯讀；Evidence／Result 實體仍受各自階段規格限制，不提前實作照片上傳、結果輸入或完成動作。
@@ -61,12 +61,12 @@
 |---|---|
 | FUI-AC01 | 真實 API 整合測試涵蓋多專案、assigned/unassigned、各 Task 狀態與無權限專案；驗證預設及全部範圍。 |
 | FUI-AC02 | 真實 API 測試驗證無任一專案權限回 403、有權限但空結果回 200，及指定專案無權限回 403。 |
-| FUI-AC03 | 以真實 Task 詳情 response 驗證分區名稱、補充文字／純文字位置、正常快照與 KD-55 核准文字更正後的權威內容；確認不呼叫 zone list、不寫 Evidence／Result。 |
-| FUI-AC04 | 後端直接以 inspect-only 使用者請求 DRAFT ID，驗證清單排除且安全詳情回 `404 task.not_found`。 |
+| FUI-AC03 | 以真實 Field 詳情 response 驗證分區名稱、補充文字／純文字位置、需求快照，並確認無 Plan／資料庫關聯 ID、其他使用者帳號或內業欄位；確認不呼叫 zone list、不寫 Evidence／Result。 |
+| FUI-AC04 | 後端直接以 inspect-only 使用者請求 DRAFT ID，驗證清單排除且安全詳情回 404。 |
 | FUI-AC05 | 使用非建議指派但有權限的使用者呼叫真實開始 API，驗證狀態及實際操作者。 |
 | FUI-AC06 | 真實 API 測試對進行中、完成、取消、封存 Task 執行開始請求；前端驗證控制項顯示。 |
-| FUI-AC07 | 建立多頁且派送時間相同的真實資料，逐頁驗證 `dispatched_at DESC, task_id DESC`、預設 50／上限 100、cursor 不重複遺漏及開始後順序不變。 |
-| FUI-AC08 | 真實前後端分別驗證未登入、401、403、404、read-only 權限，確認錯誤不顯示成空資料或登出。 |
+| FUI-AC07 | API 整合測試建立多筆同時間派送資料，驗證 `dispatched_at DESC, id DESC` tie-break、跨頁 cursor、預設 50／上限 100、本人／全部篩選及開始後順序不變；`test_migrations.py` 驗證歷史回填與 DRAFT 空值。 |
+| FUI-AC08 | 後端 API 整合測試驗證未登入、401、403、404、read-only 權限及 Field 詳情隱藏；`test_route_access.py` 驗證清單與詳情的存取層級宣告。 |
 | FUI-AC09 | Browser viewport 360／390／768px 實測主要觸控目標至少 44×44 CSS px、無水平捲動、meta 允許縮放；人工檢查無 PR-10 禁止內容。 |
 | FUI-AC10 | 檢查 production build 的 manifest 欄位、iOS icon/meta、未註冊快取 Service Worker、Field route chunk 不含 Admin；資料透過線上 API 載入。 |
 | FUI-AC11 | 依 #231 文件使用真 iPhone Safari：允許網段可連、未允許來源不可連；驗證 mkcert 根憑證安裝與信任、登入、Session 維持、登出、Secure Cookie 及 proxy。 |

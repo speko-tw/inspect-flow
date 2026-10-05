@@ -7,13 +7,18 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import page
+from app.api.pagination import encode_page_cursor, page, page_cursor_key
+from app.api.time_format import format_utc
 from app.api.v1.template_library import PointBody
-from app.auth.access import require_login_access, require_project_permission
+from app.auth.access import (
+    require_admin_or_any_project_permission,
+    require_login_access,
+    require_project_permission,
+)
 from app.auth.dependencies import get_db, require_login
 from app.db.base import uuid7
 from app.models import (
@@ -50,10 +55,12 @@ from app.services.inspection_planning import (
     delete_draft_inspection_task,
     delete_project_zone,
     dispatch_inspection_task,
+    get_field_inspection_task,
     get_inspection_plan,
     get_inspection_task,
     inspection_task_list_filters,
     inspection_task_visibility_filters,
+    list_field_inspection_tasks,
     list_inspection_plans,
     rename_inspection_plan,
     rename_project_zone,
@@ -259,10 +266,82 @@ def _task_summary(db: Session, task: InspectionTask) -> dict[str, Any]:
         "completed_by": task.completed_by,
         "cancellation_reason": task.cancellation_reason,
         "cancelled_from": task.cancelled_from_status,
+        "dispatched_at": (
+            format_utc(task.dispatched_at)
+            if task.dispatched_at is not None
+            else None
+        ),
         "items": details,
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
     }
+
+
+def _field_task_summary(
+    db: Session, task: InspectionTask, *, detail: bool
+) -> dict[str, Any]:
+    project = db.get(Project, task.project_id)
+    assignee = db.get(User, task.assignee_id) if task.assignee_id else None
+    result: dict[str, Any] = {
+        "id": task.id,
+        "project_id": task.project_id,
+        "project_name": project.name if project else None,
+        "status": task.status,
+        "dispatched_at": (
+            format_utc(task.dispatched_at)
+            if task.dispatched_at is not None
+            else None
+        ),
+        "location": {
+            "zone_name": (_zone(db, task.zone_id) or {}).get("name"),
+            "location_text": task.location_text,
+        },
+        "suggested_assignee": (
+            {"name_zh": assignee.name_zh} if assignee else None
+        ),
+    }
+    if not detail:
+        return result
+    summary = _task_summary(db, task)
+    result["items"] = []
+    for item in summary["items"]:
+        current = item["current_snapshot"]
+        if current is None:
+            continue
+        points = []
+        for point in current["inspection_points"]:
+            numeric = point["numeric_standard"]
+            if numeric is not None:
+                numeric = {
+                    key: value
+                    for key, value in numeric.items()
+                    if key != "measurement_field_id"
+                }
+            points.append(
+                {
+                    "sequence": point["sequence"],
+                    "title": point["title"],
+                    "instruction": point["instruction"],
+                    "text_standard": point["text_standard"],
+                    "numeric_standard": numeric,
+                    "measurement_fields": [
+                        {
+                            key: field[key]
+                            for key in ("name", "field_type", "unit")
+                        }
+                        for field in point["measurement_fields"]
+                    ],
+                    "evidence_requirements": point["evidence_requirements"],
+                }
+            )
+        result["items"].append(
+            {
+                "title": current["title"],
+                "instruction": current["instruction"],
+                "inspection_points": points,
+            }
+        )
+    return result
 
 
 def _person(user: User) -> dict[str, Any]:
@@ -738,6 +817,87 @@ def assignees(
 def dispatch(task_id: UUID, db: Session = _db_dependency):
     task = _one_task(db, task_id)
     return _task_summary(db, _call(dispatch_inspection_task, db, task))
+
+
+@router.get(
+    "/field/inspection-tasks",
+    dependencies=[
+        Depends(
+            require_admin_or_any_project_permission("inspection_task.inspect")
+        )
+    ],
+)
+def field_inspection_tasks(
+    assigned_to_me: bool = True,
+    project_id: UUID | None = None,
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = _db_dependency,
+    user: User = Depends(require_login),  # noqa: B008
+):
+    try:
+        rows = list_field_inspection_tasks(
+            db,
+            user_id=user.id,
+            is_admin=user.is_admin,
+            assigned_to_me=assigned_to_me,
+            project_id=project_id,
+        )
+    except PlanningError as exc:
+        response = _planning_error_response(exc.code)
+        if response is None:
+            raise
+        raise APIError(response[0], response[1]) from exc
+    key = page_cursor_key(cursor)
+    statement = select(InspectionTask).where(
+        InspectionTask.id.in_([row.id for row in rows])
+    )
+    if key is not None:
+        statement = statement.where(
+            or_(
+                InspectionTask.dispatched_at < key[0],
+                and_(
+                    InspectionTask.dispatched_at == key[0],
+                    InspectionTask.id < key[1],
+                ),
+            )
+        )
+    page_rows = db.scalars(
+        statement.order_by(
+            InspectionTask.dispatched_at.desc(), InspectionTask.id.desc()
+        ).limit(limit + 1)
+    ).all()
+    items = page_rows[:limit]
+    next_cursor = None
+    if len(page_rows) > limit:
+        last = items[-1]
+        assert last.dispatched_at is not None
+        next_cursor = encode_page_cursor(last.dispatched_at, last.id)
+    return {
+        "items": [
+            _field_task_summary(db, task, detail=False) for task in items
+        ],
+        "next_cursor": next_cursor,
+    }
+
+
+@router.get(
+    "/field/inspection-tasks/{task_id}",
+    dependencies=[Depends(require_login_access)],
+)
+def field_inspection_task(
+    task_id: UUID,
+    db: Session = _db_dependency,
+    user: User = Depends(require_login),  # noqa: B008
+):
+    task = _call(
+        get_field_inspection_task,
+        db,
+        task_id=task_id,
+        user_id=user.id,
+        is_admin=user.is_admin,
+    )
+    return _field_task_summary(db, task, detail=True)
 
 
 @router.post(
