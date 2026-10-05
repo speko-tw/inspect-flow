@@ -121,6 +121,9 @@ function projectFetch({
         )
       }
       const parsed = new URL(url, 'http://testserver')
+      if (parsed.pathname.endsWith('/inspection-items') && method === 'GET') {
+        return Response.json({ items: [], next_cursor: null })
+      }
       if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
         const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
         const filtered = projectRows.filter((project) =>
