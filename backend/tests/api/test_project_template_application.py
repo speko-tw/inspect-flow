@@ -1137,3 +1137,62 @@ def test_apply_system_rolls_back_all_copies_after_mid_request_failure(
         ProjectEvidenceRequirement,
     ):
         assert db_session.scalar(select(child_model)) is None
+
+
+def test_save_as_template_rejects_a_source_with_two_photo_requirements(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    system_id, _ = _create_templates(world["admin"])
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": system_id},
+    )
+    assert applied.status_code == 201, applied.text
+    project_item_id = UUID(applied.json()[0]["id"])
+    first = db_session.scalars(
+        select(ProjectEvidenceRequirement).where(
+            ProjectEvidenceRequirement.project_inspection_item_id
+            == project_item_id
+        )
+    ).first()
+    assert first is not None
+    # The unique index blocks a second row in a migrated database, so
+    # drop it to stand in for data written before the index existed.
+    db_session.execute(text("DROP INDEX uq_project_evidence_point_type"))
+    db_session.add(
+        ProjectEvidenceRequirement(
+            inspection_point_id=first.inspection_point_id,
+            project_inspection_item_id=project_item_id,
+            evidence_type="photo",
+            required=True,
+            min_count=9,
+            created_by=first.created_by,
+            updated_by=first.updated_by,
+        )
+    )
+    db_session.commit()
+    target_category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Two rows category"}
+    )
+    target_system = world["admin"].post(
+        f"/api/v1/template-categories/{target_category.json()['id']}/systems",
+        json={"name": "Two rows system"},
+    )
+    assert target_system.status_code == 201, target_system.text
+
+    rejected = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": str(project_item_id),
+            "system_id": target_system.json()["id"],
+        },
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert rejected.json() == {"error": {"code": "request.validation_failed"}}
+    listed = world["admin"].get(
+        f"/api/v1/templates?system_id={target_system.json()['id']}"
+    )
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["items"] == []
