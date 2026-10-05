@@ -189,7 +189,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
   it.each([
     ['/admin/reports', 'Admin'],
-    ['/field/tasks', '我的工作台'],
+    ['/field/tasks', '今日任務'],
   ])('%s 變更密碼成功後回到原本的路徑', async (path, heading) => {
     let mustChangePassword = true
 
@@ -208,6 +208,9 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
         if (url.endsWith('/api/v1/auth/password') && method === 'POST') {
           mustChangePassword = false
           return new Response(null, { status: 204 })
+        }
+        if (url.includes('/field/inspection-tasks?')) {
+          return jsonResponse({ items: [], next_cursor: null })
         }
 
         throw new Error(`unexpected fetch: ${method} ${url}`)
@@ -272,6 +275,9 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
           current = ADMIN_USER
           return jsonResponse(ADMIN_USER)
         }
+        if (url.includes('/field/inspection-tasks?')) {
+          return jsonResponse({ items: [], next_cursor: null })
+        }
         return jsonResponse([])
       }),
     )
@@ -281,7 +287,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/field'])
 
-    await screen.findByRole('heading', { name: '我的工作台' })
+    await screen.findByRole('heading', { name: '今日任務' })
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
 
@@ -293,7 +299,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/field'])
 
-    await screen.findByRole('heading', { name: '我的工作台' })
+    await screen.findByRole('heading', { name: '今日任務' })
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
 

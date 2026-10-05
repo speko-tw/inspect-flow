@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -832,6 +832,7 @@ def dispatch(task_id: UUID, db: Session = _db_dependency):
 def field_inspection_tasks(
     assigned_to_me: bool = True,
     project_id: UUID | None = None,
+    status: Literal["PENDING", "IN_PROGRESS"] | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = _db_dependency,
@@ -844,6 +845,7 @@ def field_inspection_tasks(
             is_admin=user.is_admin,
             assigned_to_me=assigned_to_me,
             project_id=project_id,
+            status=status,
         )
     except PlanningError as exc:
         response = _planning_error_response(exc.code)
@@ -869,6 +871,59 @@ def field_inspection_tasks(
         ).limit(limit + 1)
     ).all()
     items = page_rows[:limit]
+    # Keep referenced rows alive in the identity map for the whole page.
+    _projects = db.scalars(
+        select(Project).where(
+            Project.id.in_({task.project_id for task in items})
+        )
+    ).all()
+    _assignees = db.scalars(
+        select(User).where(
+            User.id.in_(
+                {
+                    task.assignee_id
+                    for task in items
+                    if task.assignee_id is not None
+                }
+            )
+        )
+    ).all()
+    _zones = db.scalars(
+        select(ProjectZone).where(
+            ProjectZone.id.in_(
+                {task.zone_id for task in items if task.zone_id is not None}
+            )
+        )
+    ).all()
+    summaries: dict[UUID, tuple[str, int]] = {}
+    if items:
+        rows = db.execute(
+            select(
+                TaskInspectionItem.task_id,
+                TaskInspectionItem.id,
+                TaskRequirementSnapshot.title,
+            )
+            .join(
+                TaskRequirementSnapshot,
+                and_(
+                    TaskRequirementSnapshot.task_inspection_item_id
+                    == TaskInspectionItem.id,
+                    TaskRequirementSnapshot.is_current.is_(True),
+                ),
+                isouter=True,
+            )
+            .where(
+                TaskInspectionItem.task_id.in_([task.id for task in items]),
+            )
+            .order_by(
+                TaskInspectionItem.task_id,
+                TaskInspectionItem.created_at,
+                TaskInspectionItem.id,
+            )
+        ).all()
+        for task_id, _, title in rows:
+            first, count = summaries.get(task_id, (title, 0))
+            summaries[task_id] = (first, count + 1)
     next_cursor = None
     if len(page_rows) > limit:
         last = items[-1]
@@ -877,7 +932,14 @@ def field_inspection_tasks(
         next_cursor = encode_page_cursor(last.dispatched_at, last.id)
     return {
         "items": [
-            _field_task_summary(db, task, detail=False) for task in items
+            {
+                **_field_task_summary(db, task, detail=False),
+                "item_summary": {
+                    "first_title": summaries.get(task.id, (None, 0))[0],
+                    "item_count": summaries.get(task.id, (None, 0))[1],
+                },
+            }
+            for task in items
         ],
         "next_cursor": next_cursor,
     }
