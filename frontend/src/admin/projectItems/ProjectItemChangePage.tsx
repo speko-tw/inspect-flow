@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
@@ -271,10 +271,7 @@ export default function ProjectItemChangePage({
 
   return (
     <section aria-labelledby="project-item-heading">
-      <p>
-        <Link to={`/admin/projects/${projectId ?? ''}`}>返回專案</Link>
-      </p>
-      <h1 id="project-item-heading">修改專案查核項目</h1>
+      <h2 id="project-item-heading">修改專案查核項目</h2>
       {readOnly && <p role="status">唯讀瀏覽</p>}
       {error && !preview && <p role="alert">{error}</p>}
       {preview && (

@@ -191,6 +191,7 @@ export default function ProjectsPage() {
     setError('')
     setNotice('')
     const input = toInput(form)
+    const creating = editing === null
     setSaving(true)
     try {
       let saved: Project
@@ -208,6 +209,14 @@ export default function ProjectsPage() {
         saved = await updateProject(editing.id, changed)
       } else {
         saved = await createProject(input)
+      }
+      if (creating) {
+        navigate(`/admin/projects/${saved.id}`, {
+          state: hasDuplicateCodeWarning(saved)
+            ? { duplicateProjectCode: saved.project_code }
+            : null,
+        })
+        return
       }
       const savedNotice = hasDuplicateCodeWarning(saved)
         ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
@@ -343,12 +352,26 @@ export default function ProjectsPage() {
                       event.preventDefault()
                       setTransition({
                         kind: 'navigate',
+                        to: `/admin/projects/${project.id}/members`,
+                      })
+                    }}
+                    to={`/admin/projects/${project.id}/members`}
+                  >
+                    成員
+                  </Link>
+                  <Link
+                    className="button-link"
+                    onClick={(event) => {
+                      if (!hasUnsavedChanges) return
+                      event.preventDefault()
+                      setTransition({
+                        kind: 'navigate',
                         to: `/admin/projects/${project.id}`,
                       })
                     }}
                     to={`/admin/projects/${project.id}`}
                   >
-                    成員
+                    開啟專案
                   </Link>
                 </td>
               </tr>
