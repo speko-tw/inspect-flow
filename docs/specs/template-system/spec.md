@@ -185,4 +185,4 @@
 - 範本管理頁改採階層清單與詳情、單頁分段查核項目編輯、欄位錯誤定位及單項範本 CRUD；數值單位輸入維持在綁定欄位 — [#427 定案留言](https://github.com/speko-tw/inspect-flow/issues/427#issuecomment-5981195507)。
 - TPL-R19、TPL-AC17：#427 第 1 輪審查確認實測欄位必須依使用者排列穩定讀回；既有欄位以原 `created_at`、`id` 順序回填。
 - TPL-R19 的排序需求屬規格設計（非負責人裁定），為 #427 審查中發現的缺陷修正；TPL-AC17 增列含資料 upgrade、downgrade、再 upgrade 遷移測試 — [PR #441 第 2 輪審查](https://github.com/speko-tw/inspect-flow/pull/441#pullrequestreview-5407786064)。
-- 規格設計（非負責人裁定，#462）：範本與專案項目列表、範本詳情改以批次載入項次子資料，查詢數不隨項目數成長；請求欄位加長度與筆數上限 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
+- 規格澄清（規格設計，非負責人裁定，#462）：範本與專案項目列表、範本詳情改以批次載入項次子資料，查詢數不隨項目數成長；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)

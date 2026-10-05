@@ -226,7 +226,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 - 規格澄清：補充 Plan／Task 回應與動作 body、cursor 列表、項目使用 Task 清單、可指派候選人及錯誤碼；`inspection_plan.read` 可讀分區名稱，現場人員讀取 DRAFT Task 回 404；封存 Plan 下的 Task 動作一律先回 `inspection_plan.archived` — #361
 - 規格設計（非負責人裁定，#416）：首次派送寫入 `dispatched_at`，後續狀態轉換維持不變；歷史非 DRAFT Task 以 `created_at` 近似回填；Task API 回應加入 `dispatched_at`，本次不新增派送稽核事件 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 - 規格澄清（#416，第 2 輪審查）：Field 詳情的量測欄位 ID 與數值標準對應為關聯 ID 例外；補充 Admin 列表空頁行為及量測欄位排序 — PR #443
-- 規格設計（非負責人裁定，#462）：列表端點改以批次載入子資料，查詢數不隨每頁筆數成長；新增 Task 與 Plan 列表索引；請求欄位加長度與筆數上限 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
+- 規格澄清（規格設計，非負責人裁定，#462）：列表端點改以批次載入子資料，查詢數不隨每頁筆數成長；新增 Task 與 Plan 列表索引；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
 
 
 <a id="ip-q11"></a>
