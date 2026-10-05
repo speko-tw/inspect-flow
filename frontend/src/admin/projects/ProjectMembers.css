@@ -116,6 +116,11 @@
   max-width: 40rem;
 }
 
+/* 下拉選單與按鈕同樣至少 44px（全域預設 2.5rem 不足）。 */
+.member-add-form select {
+  min-height: 44px;
+}
+
 .member-add-form {
   margin-bottom: var(--space-5);
 }
