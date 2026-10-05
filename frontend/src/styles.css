@@ -828,6 +828,41 @@ output {
   margin: 0;
 }
 
+.temporary-password-result,
+.inline-confirmation {
+  margin-block: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.temporary-password-result {
+  max-width: 42rem;
+  margin-inline: auto;
+}
+
+.inline-confirmation button + button {
+  margin-inline-start: var(--space-2);
+}
+
+.users-table-scroll .inline-confirmation {
+  box-sizing: border-box;
+  width: min(32rem, calc(100vw - 4rem));
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.project-required-label {
+  display: inline;
+}
+
+.project-required-label::after {
+  content: ' *';
+  color: var(--danger);
+  font-weight: 700;
+}
+
 /* ---- 窄螢幕 ---- */
 
 @media (max-width: 40rem) {

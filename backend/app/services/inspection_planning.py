@@ -113,7 +113,7 @@ def _require_permission(
     return operator.id
 
 
-def _project_permissions(
+def project_permissions_for(
     session: Session, project_id: uuid.UUID
 ) -> frozenset[str]:
     operator = get_current_operator(session)
@@ -122,6 +122,12 @@ def _project_permissions(
     return effective_permissions(
         session, user_id=operator.id, project_id=project_id
     )
+
+
+def _project_permissions(
+    session: Session, project_id: uuid.UUID
+) -> frozenset[str]:
+    return project_permissions_for(session, project_id)
 
 
 def _lock_plan(session: Session, plan_id: uuid.UUID) -> InspectionPlan | None:
@@ -523,6 +529,67 @@ def get_inspection_task(
     return task
 
 
+def field_inspection_task_filters(
+    session: Session,
+    *,
+    user_id: uuid.UUID,
+    is_admin: bool,
+    assigned_to_me: bool,
+    project_id: uuid.UUID | None = None,
+) -> tuple[ColumnElement[bool], ...]:
+    """Build filters for dispatched Tasks visible to the Field caller."""
+    if is_admin:
+        permitted_ids = set(session.scalars(select(Project.id)).all())
+    else:
+        member_project_ids = set(
+            session.scalars(
+                select(ProjectMember.project_id).where(
+                    ProjectMember.user_id == user_id
+                )
+            ).all()
+        )
+        permitted_ids = {
+            candidate_id
+            for candidate_id in member_project_ids
+            if "inspection_task.inspect"
+            in effective_permissions(
+                session, user_id=user_id, project_id=candidate_id
+            )
+        }
+    if project_id is not None:
+        if not is_admin and project_id not in permitted_ids:
+            raise PlanningError("authorization.forbidden")
+        permitted_ids.intersection_update({project_id})
+    if not permitted_ids and not is_admin:
+        raise PlanningError("authorization.forbidden")
+    filters: list[ColumnElement[bool]] = [
+        InspectionTask.project_id.in_(permitted_ids),
+        InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
+    ]
+    if assigned_to_me:
+        filters.append(InspectionTask.assignee_id == user_id)
+    filters.append(InspectionTask.dispatched_at.is_not(None))
+    return tuple(filters)
+
+
+def get_field_inspection_task(
+    session: Session,
+    *,
+    task_id: uuid.UUID,
+    user_id: uuid.UUID,
+    is_admin: bool,
+) -> InspectionTask:
+    """Hide missing, draft, or unauthorized Tasks from Field callers."""
+    task = session.get(InspectionTask, task_id)
+    if task is None or task.status == "DRAFT":
+        raise PlanningError("inspection_task.not_found")
+    if not is_admin and "inspection_task.inspect" not in effective_permissions(
+        session, user_id=user_id, project_id=task.project_id
+    ):
+        raise PlanningError("inspection_task.not_found")
+    return task
+
+
 def assign_inspection_task(
     session: Session,
     task: InspectionTask,
@@ -602,6 +669,8 @@ def dispatch_inspection_task(
     if plan is None or task.status != "DRAFT":
         raise PlanningError("inspection_task.invalid_transition")
     task.status = "PENDING"
+    if task.dispatched_at is None:
+        task.dispatched_at = utc_now()
     task.updated_by = operator_id
     session.flush()
     _refresh_plan_status(session, plan)

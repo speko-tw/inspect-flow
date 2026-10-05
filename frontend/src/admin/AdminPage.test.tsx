@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -79,11 +79,14 @@ function renderAdmin(path = '/admin/users', isAdmin = true) {
       <Routes>
         <Route
           element={
-            <CurrentUserProvider
-              value={{ user: signedInUser, clear: vi.fn() }}
-            >
-              <AdminPage />
-            </CurrentUserProvider>
+            <>
+              <CurrentUserProvider
+                value={{ user: signedInUser, clear: vi.fn() }}
+              >
+                <AdminPage />
+              </CurrentUserProvider>
+              <TestNavigation />
+            </>
           }
           path="/admin/*"
         />
@@ -92,14 +95,28 @@ function renderAdmin(path = '/admin/users', isAdmin = true) {
   )
 }
 
+function TestNavigation() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <Link to="/admin/companies">測試 SPA 管理頁導覽</Link>
+      <button onClick={() => navigate(-1)} type="button">
+        測試瀏覽器上一頁
+      </button>
+    </>
+  )
+}
+
 function managementFetch({
   userRows = [builtInUser, regularUser],
   companyRows = [company],
   onCreate,
+  failAdminAction = false,
 }: {
   userRows?: User[]
   companyRows?: Company[]
   onCreate?: (body: Record<string, unknown>) => CreatedUser
+  failAdminAction?: boolean
 } = {}) {
   const rows = userRows.map((user) => ({ ...user }))
   const companies = companyRows.map((row) => ({ ...row }))
@@ -235,6 +252,12 @@ function managementFetch({
         return Response.json(row)
       }
       if (url.endsWith('/users/user-1/admin')) {
+        if (failAdminAction) {
+          return Response.json(
+            { error: { code: 'user.builtin_protected' } },
+            { status: 403 },
+          )
+        }
         const row = rows.find((user) => user.id === 'user-1')
         if (row) {
           row.is_admin = Boolean(
@@ -441,6 +464,7 @@ describe('admin user and company pages', () => {
     const passwordHeading = await screen.findByRole('heading', {
       name: '使用者已新增',
     })
+    expect(passwordHeading).toHaveFocus()
     expect(passwordHeading.closest('section')).toHaveAttribute(
       'role',
       'status',
@@ -455,7 +479,18 @@ describe('admin user and company pages', () => {
         employee_no: null,
       }),
     )
-    fireEvent.click(screen.getByRole('button', { name: '已抄下，關閉' }))
+    expect(screen.queryByRole('heading', { name: '使用者管理' })).toBeNull()
+    expect(screen.queryByLabelText(/^帳號名稱/)).toBeNull()
+    expect(screen.queryByRole('navigation', { name: '管理功能' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '登出' })).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: '已抄下，回到使用者列表' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: '使用者管理' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '管理功能' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
     expect(screen.queryByText(password)).not.toBeInTheDocument()
     expectNoPasswordPersistence(password)
@@ -503,7 +538,9 @@ describe('admin user and company pages', () => {
       await screen.findByRole('button', { name: '已複製' }),
     ).toBeInTheDocument()
 
-    // 沒有關閉第一組就再建立第二位使用者。
+    fireEvent.click(
+      screen.getByRole('button', { name: '已抄下，回到使用者列表' }),
+    )
     await createUser('second.user')
     await waitFor(() => {
       expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(passwords[1])
@@ -537,11 +574,10 @@ describe('admin user and company pages', () => {
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     expect(await screen.findByText('leave-page-password')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('link', { name: '公司' }))
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     expect(screen.queryByText('leave-page-password')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('link', { name: '使用者' }))
     expect(
-      await screen.findByRole('heading', { name: '使用者管理' }),
+      await screen.findByRole('heading', { name: '公司管理' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('leave-page-password')).not.toBeInTheDocument()
     expectNoPasswordPersistence('leave-page-password')
@@ -572,7 +608,14 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByText('back-navigation-password'),
     ).toBeInTheDocument()
-    fireEvent(window, new PopStateEvent('popstate'))
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    expect(
+      await screen.findByRole('heading', { name: '公司管理' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
+    expect(
+      await screen.findByRole('heading', { name: '使用者管理' }),
+    ).toBeInTheDocument()
     expect(
       screen.queryByText('back-navigation-password'),
     ).not.toBeInTheDocument()
@@ -714,6 +757,27 @@ describe('admin user and company pages', () => {
     )
   })
 
+  it('keeps a failed admin action beside its confirmation', async () => {
+    managementFetch({ failAdminAction: true })
+    renderAdmin()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '指派管理者' }))
+    const confirmation = screen.getByRole('region', { name: '操作確認' })
+    expect(
+      within(confirmation).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    fireEvent.click(
+      within(confirmation).getByRole('button', {
+        name: '確認',
+      }),
+    )
+    expect(await within(confirmation).findByRole('alert')).toHaveTextContent(
+      '內建 admin 帳號不可修改或停用。',
+    )
+    expect(confirmation).toBeInTheDocument()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
   it('edits users and toggles admin and active status', async () => {
     const fetchMock = managementFetch()
     renderAdmin()
@@ -744,6 +808,24 @@ describe('admin user and company pages', () => {
     fireEvent.click(
       within(userRow).getByRole('button', { name: '指派管理者' }),
     )
+    const assignment = screen.getByRole('region', { name: '操作確認' })
+    expect(assignment).toHaveTextContent('anna.new')
+    expect(assignment).toHaveTextContent('系統全部權限')
+    fireEvent.click(within(assignment).getByRole('button', { name: '取消' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/admin') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '指派管理者' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    )
     await waitFor(() => {
       expect(screen.getByRole('row', { name: /anna\.new/ })).toHaveTextContent(
         '是',
@@ -753,6 +835,38 @@ describe('admin user and company pages', () => {
     fireEvent.click(
       within(userRow).getByRole('button', { name: '收回管理者' }),
     )
+    expect(screen.getByRole('region', { name: '操作確認' })).toHaveTextContent(
+      'anna.new',
+    )
+    const adminActionsBeforeCancel = fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        String(url).endsWith('/users/user-1/admin') && init?.method === 'PUT',
+    ).length
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '取消' },
+      ),
+    )
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/admin') &&
+          init?.method === 'PUT',
+      ),
+    ).toHaveLength(adminActionsBeforeCancel)
+    fireEvent.click(
+      within(screen.getByRole('row', { name: /anna\.new/ })).getByRole(
+        'button',
+        { name: '收回管理者' },
+      ),
+    )
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    )
     await waitFor(() => {
       expect(screen.getByRole('row', { name: /anna\.new/ })).toHaveTextContent(
         '否',
@@ -760,6 +874,29 @@ describe('admin user and company pages', () => {
     })
     userRow = screen.getByRole('row', { name: /anna\.new/ })
     fireEvent.click(within(userRow).getByRole('button', { name: '停用' }))
+    const deactivation = screen.getByRole('region', { name: '操作確認' })
+    expect(deactivation).toHaveTextContent('anna.new')
+    expect(deactivation).toHaveTextContent('無法登入')
+    fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/users/user-1/active') &&
+          init?.method === 'PUT',
+      ),
+    ).toBe(false)
+    fireEvent.click(
+      within(screen.getByRole('row', { name: /anna\.new/ })).getByRole(
+        'button',
+        { name: '停用' },
+      ),
+    )
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    )
     await waitFor(() => {
       expect(screen.getByRole('row', { name: /anna\.new/ })).toHaveTextContent(
         '停用',
