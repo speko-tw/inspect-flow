@@ -138,7 +138,7 @@ def _template(system_id, title="Foundation"):
                         "unit": "cm",
                     },
                 ],
-                "evidence_requirements": [{"min_count": 1}, {"min_count": 2}],
+                "evidence_requirements": [{"min_count": 2}],
             },
             {
                 "sequence": 2,
@@ -538,7 +538,7 @@ def test_structure_replace_and_validation(clients, db_session):
         ("Comment", None),
         ("Width", "cm"),
     ]
-    assert len(point["evidence_requirements"]) == 2
+    assert len(point["evidence_requirements"]) == 1
     assert "result" not in response.json()
     assert "interval" not in response.json()
     assert "photo" not in response.json()
@@ -1088,3 +1088,139 @@ def test_known_nested_constraint_is_422_and_unknown_error_stays_500(
     )
     assert response.status_code == 500
     assert response.json() == {"error": {"code": "server.internal_error"}}
+
+
+_VALIDATION_ERROR = {"error": {"code": "request.validation_failed"}}
+
+
+def _with_two_photo_rows(body: dict) -> dict:
+    body["inspection_points"][0]["evidence_requirements"] = [
+        {"min_count": 1},
+        {"min_count": 2},
+    ]
+    return body
+
+
+def test_template_writes_reject_two_photo_requirements_per_point(
+    clients, db_session
+):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    created = manager.post(
+        "/api/v1/templates", json=_template(system_id, "One photo row")
+    )
+    assert created.status_code == 201, created.text
+    template_id = created.json()["id"]
+    # Positive controls: the same bodies with one row are accepted.
+    one_row_put = manager.put(
+        f"/api/v1/templates/{template_id}",
+        json=_template(system_id, "One photo row"),
+    )
+    assert one_row_put.status_code == 200, one_row_put.text
+    one_row_system = manager.put(
+        f"/api/v1/template-systems/{system_id}/templates",
+        json={
+            "items": [
+                {
+                    **_template(system_id, "One photo row"),
+                    "id": template_id,
+                }
+            ]
+        },
+    )
+    assert one_row_system.status_code == 200, one_row_system.text
+    before = db_session.scalar(
+        select(func.count()).select_from(TemplateEvidenceRequirement)
+    )
+
+    posted = manager.post(
+        "/api/v1/templates",
+        json=_with_two_photo_rows(_template(system_id, "Two rows POST")),
+    )
+    assert posted.status_code == 422, posted.text
+    assert posted.json() == _VALIDATION_ERROR
+
+    replaced = manager.put(
+        f"/api/v1/templates/{template_id}",
+        json=_with_two_photo_rows(_template(system_id, "One photo row")),
+    )
+    assert replaced.status_code == 422, replaced.text
+    assert replaced.json() == _VALIDATION_ERROR
+
+    system_put = manager.put(
+        f"/api/v1/template-systems/{system_id}/templates",
+        json={
+            "items": [
+                {
+                    **_with_two_photo_rows(
+                        _template(system_id, "One photo row")
+                    ),
+                    "id": template_id,
+                }
+            ]
+        },
+    )
+    assert system_put.status_code == 422, system_put.text
+    assert system_put.json() == _VALIDATION_ERROR
+
+    db_session.expire_all()
+    after = db_session.scalar(
+        select(func.count()).select_from(TemplateEvidenceRequirement)
+    )
+    assert after == before
+    fetched = manager.get(f"/api/v1/templates/{template_id}")
+    assert fetched.status_code == 200, fetched.text
+    assert [
+        len(point["evidence_requirements"])
+        for point in fetched.json()["inspection_points"]
+    ] == [1, 1]
+
+
+def test_structure_validation_requires_exactly_one_photo_requirement():
+    from app.services.template_library import (
+        InvalidTemplateError,
+        validate_template_structure,
+    )
+
+    def data(requirements: list[dict]) -> dict:
+        return {
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "numeric_standard": None,
+                    "measurement_fields": [],
+                    "evidence_requirements": requirements,
+                }
+            ]
+        }
+
+    validate_template_structure(data([{"min_count": 3}]))
+    for requirements in ([], [{"min_count": 1}, {"min_count": 1}]):
+        with pytest.raises(InvalidTemplateError):
+            validate_template_structure(data(requirements))
+
+
+def test_duplicate_photo_requirement_rows_are_blocked_by_the_database(
+    clients, db_session
+):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    created = manager.post(
+        "/api/v1/templates", json=_template(system_id, "Unique photo row")
+    )
+    assert created.status_code == 201, created.text
+    existing = db_session.scalars(select(TemplateEvidenceRequirement)).first()
+    assert existing is not None
+    db_session.add(
+        TemplateEvidenceRequirement(
+            inspection_point_id=existing.inspection_point_id,
+            evidence_type="photo",
+            required=True,
+            min_count=5,
+            created_by=existing.created_by,
+            updated_by=existing.updated_by,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+    db_session.rollback()

@@ -581,6 +581,191 @@ def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
     engine.dispose()
 
 
+def test_evidence_unique_migration_keeps_largest_min_count_per_point(
+    db_url,
+):
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID, uuid4
+
+    from app.models import (
+        Project,
+        ProjectEvidenceRequirement,
+        ProjectInspectionItem,
+        ProjectInspectionPoint,
+        TemplateCategory,
+        TemplateEvidenceRequirement,
+        TemplateInspectionPoint,
+        TemplateItem,
+        TemplateSystem,
+    )
+    from tests.db.conftest import create_root_user_with_company
+
+    cfg = _alembic_config()
+    migration_revision = "d5a2c8e7b194"
+    previous_revision = "b3f9a6d27c41"
+    indexes = {
+        "template_evidence_requirements": "uq_template_evidence_point_type",
+        "project_evidence_requirements": "uq_project_evidence_point_type",
+    }
+    base = datetime(2026, 10, 1, tzinfo=UTC)
+
+    def unique_indexes(engine) -> dict[str, bool]:
+        inspector = inspect(engine)
+        return {
+            table: any(
+                index["name"] == name and index["unique"]
+                for index in inspector.get_indexes(table)
+            )
+            for table, name in indexes.items()
+        }
+
+    command.upgrade(cfg, previous_revision)
+    engine = create_engine(db_url)
+    assert unique_indexes(engine) == dict.fromkeys(indexes, False)
+    kept: dict[str, UUID] = {}
+    dropped: list[UUID] = []
+    with Session(engine) as session:
+        operator = create_root_user_with_company(session, "EVIDMIG")
+        audit = {"created_by": operator.id, "updated_by": operator.id}
+        category = TemplateCategory(name="Evidence category", **audit)
+        session.add(category)
+        session.flush()
+        system = TemplateSystem(
+            category_id=category.id, name="Evidence system", **audit
+        )
+        session.add(system)
+        session.flush()
+        template_item = TemplateItem(
+            system_id=system.id,
+            sequence=1,
+            title="Evidence template",
+            instruction="Instruction",
+            **audit,
+        )
+        session.add(template_item)
+        project = Project(
+            project_code="EVIDMIG",
+            name="Evidence project",
+            client_name="Demo client",
+            site_location="Demo site",
+            **audit,
+        )
+        session.add(project)
+        session.flush()
+        project_item = ProjectInspectionItem(
+            project_id=project.id,
+            sequence=1,
+            title="Evidence project item",
+            instruction="Instruction",
+            source_template_name="Template",
+            applied_at=base,
+            **audit,
+        )
+        session.add(project_item)
+        session.flush()
+        for sequence, shape in enumerate(
+            ("largest", "tie", "single"), start=1
+        ):
+            template_point = TemplateInspectionPoint(
+                template_item_id=template_item.id,
+                sequence=sequence,
+                title=f"Template point {shape}",
+                instruction="Instruction",
+                **audit,
+            )
+            project_point = ProjectInspectionPoint(
+                project_inspection_item_id=project_item.id,
+                sequence=sequence,
+                title=f"Project point {shape}",
+                instruction="Instruction",
+                **audit,
+            )
+            session.add_all([template_point, project_point])
+            session.flush()
+            # (min_count, minutes after base, keep this row?)
+            rows = {
+                "largest": ((1, 0, False), (5, 1, True), (3, 2, False)),
+                "tie": ((2, 3, False), (2, 1, True)),
+                "single": ((4, 0, True),),
+            }[shape]
+            for min_count, minutes, keep in rows:
+                row_id = uuid4()
+                stamp = base + timedelta(minutes=minutes)
+                session.add_all(
+                    [
+                        TemplateEvidenceRequirement(
+                            id=row_id,
+                            inspection_point_id=template_point.id,
+                            min_count=min_count,
+                            created_at=stamp,
+                            **audit,
+                        ),
+                        ProjectEvidenceRequirement(
+                            id=row_id,
+                            inspection_point_id=project_point.id,
+                            project_inspection_item_id=project_item.id,
+                            min_count=min_count,
+                            created_at=stamp,
+                            **audit,
+                        ),
+                    ]
+                )
+                if keep:
+                    kept[f"{shape}:{sequence}"] = row_id
+                else:
+                    dropped.append(row_id)
+        session.commit()
+
+    def remaining(table: str) -> set[UUID]:
+        with engine.connect() as connection:
+            return {
+                row[0] if isinstance(row[0], UUID) else UUID(str(row[0]))
+                for row in connection.execute(text(f"SELECT id FROM {table}"))
+            }
+
+    def counts() -> dict[str, int]:
+        with engine.connect() as connection:
+            return {
+                table: connection.execute(
+                    text(f"SELECT COUNT(*) FROM {table}")
+                ).scalar_one()
+                for table in (
+                    "template_inspection_points",
+                    "project_inspection_points",
+                    "project_inspection_items",
+                )
+            }
+
+    parents_before = counts()
+    assert len(remaining("template_evidence_requirements")) == 6
+
+    command.upgrade(cfg, migration_revision)
+    for table in indexes:
+        assert remaining(table) == set(kept.values())
+        assert not set(dropped) & remaining(table)
+    assert unique_indexes(engine) == dict.fromkeys(indexes, True)
+    assert counts() == parents_before
+    with engine.connect() as connection:
+        mins = sorted(
+            connection.execute(
+                text("SELECT min_count FROM project_evidence_requirements")
+            ).scalars()
+        )
+    assert mins == [2, 4, 5]
+
+    command.downgrade(cfg, previous_revision)
+    assert unique_indexes(engine) == dict.fromkeys(indexes, False)
+    assert counts() == parents_before
+    for table in indexes:
+        assert remaining(table) == set(kept.values())
+
+    command.upgrade(cfg, "head")
+    assert unique_indexes(engine) == dict.fromkeys(indexes, True)
+    for table in indexes:
+        assert remaining(table) == set(kept.values())
+    engine.dispose()
+
+
 _PRE_EXISTING_LOGGER_NAME = "tests.db.test_migrations.pre_existing_logger"
 
 

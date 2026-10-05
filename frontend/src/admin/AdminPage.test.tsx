@@ -494,7 +494,8 @@ describe('admin user and company pages', () => {
     const passwordHeading = await screen.findByRole('heading', {
       name: '使用者已新增',
     })
-    expect(passwordHeading).toHaveFocus()
+    // 聚焦在 useEffect 裡；標題插入 DOM 後才聚焦，所以要等。
+    await waitFor(() => expect(passwordHeading).toHaveFocus())
     expect(passwordHeading.closest('section')).toHaveAttribute(
       'role',
       'status',

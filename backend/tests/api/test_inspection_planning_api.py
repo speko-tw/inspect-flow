@@ -1,18 +1,22 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
+import time
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import base as db_base
 from app.db.base import uuid7
 from app.db.clock import reset_clock, set_clock
 from app.db.engine import get_engine
 from app.models import (
     InspectionTask,
     Project,
+    ProjectEvidenceRequirement,
     ProjectInspectionItem,
     ProjectMember,
     ProjectMemberRole,
@@ -743,6 +747,59 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         )
         assert len(first_default_page.json()["items"]) == 50
         assert first_default_page.json()["next_cursor"]
+    finally:
+        reset_clock()
+
+
+def test_field_task_items_keep_request_order_within_one_millisecond(
+    db_session, make_client, monkeypatch
+):
+    # #475: a task's items share created_at under a frozen clock, so the
+    # list summary and the detail fall back to the id tie-break. Pin
+    # every id to one millisecond to cover a fast database.
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    field = world["field"]
+    item, item_two = world["item"], world["item_two"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": "Item order"},
+    )
+    assert plan.status_code == 201, plan.text
+    now_ns = time.time_ns()
+    monkeypatch.setattr(
+        db_base, "time", SimpleNamespace(time_ns=lambda: now_ns)
+    )
+    frozen = datetime.now(UTC).replace(microsecond=0)
+    set_clock(lambda: frozen)
+    try:
+        expected = {}
+        for order in [(item, item_two), (item_two, item)] * 3:
+            created = admin.post(
+                f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+                json={
+                    "item_ids": [str(row.id) for row in order],
+                    "suggested_assignee_id": str(world["field_user"].id),
+                },
+            )
+            assert created.status_code == 201, created.text
+            task_id = created.json()["id"]
+            dispatched = admin.post(
+                f"/api/v1/inspection-tasks/{task_id}:dispatch"
+            )
+            assert dispatched.status_code == 200, dispatched.text
+            expected[task_id] = [row.title for row in order]
+
+        listed = field.get("/api/v1/field/inspection-tasks")
+        assert listed.status_code == 200, listed.text
+        assert {
+            row["id"]: row["item_summary"]["first_title"]
+            for row in listed.json()["items"]
+        } == {task_id: titles[0] for task_id, titles in expected.items()}
+        for task_id, titles in expected.items():
+            detail = field.get(f"/api/v1/field/inspection-tasks/{task_id}")
+            assert detail.status_code == 200, detail.text
+            assert [row["title"] for row in detail.json()["items"]] == titles
     finally:
         reset_clock()
 
@@ -1699,3 +1756,108 @@ def test_cancelled_task_restore_uses_current_item_standard(
     assert restored.json()["items"][0]["current_snapshot"]["title"] == (
         "目前採用標準"
     )
+
+
+def _item_point(rows: list[dict], sequence: int = 1) -> dict:
+    return {
+        "sequence": sequence,
+        "title": "外觀",
+        "instruction": "拍照",
+        "text_standard": {"text": "無破損"},
+        "evidence_requirements": rows,
+    }
+
+
+def test_project_item_patch_rejects_invalid_point_structure(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    item_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        f"/inspection-items/{world['item'].id}"
+    )
+    validation = {"error": {"code": "request.validation_failed"}}
+
+    two_rows = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                _item_point([{"min_count": 1}, {"min_count": 2}])
+            ]
+        },
+    )
+    assert two_rows.status_code == 422, two_rows.text
+    assert two_rows.json() == validation
+    no_rows = admin.patch(
+        item_url, json={"inspection_points": [_item_point([])]}
+    )
+    assert no_rows.status_code == 422, no_rows.text
+    repeated_sequence = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                _item_point([{"min_count": 1}]),
+                _item_point([{"min_count": 1}]),
+            ]
+        },
+    )
+    assert repeated_sequence.status_code == 422, repeated_sequence.text
+    assert repeated_sequence.json() == validation
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(ProjectEvidenceRequirement)
+        )
+        == 0
+    )
+    unchanged = db_session.get(ProjectInspectionItem, world["item"].id)
+    assert unchanged is not None
+    assert unchanged.standard_revision == 1
+
+
+def test_one_photo_requirement_keeps_task_flows_working(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project_id = world["project"].id
+    item_url = (
+        f"/api/v1/projects/{project_id}/inspection-items/{world['item'].id}"
+    )
+    patched = admin.patch(
+        item_url,
+        json={"inspection_points": [_item_point([{"min_count": 3}])]},
+    )
+    assert patched.status_code == 200, patched.text
+    plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "單一照片需求"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task.status_code == 201, task.text
+
+    used_by_draft = admin.patch(
+        item_url,
+        json={
+            "reinspect": False,
+            "inspection_points": [_item_point([{"min_count": 2}])],
+        },
+    )
+    assert used_by_draft.status_code == 200, used_by_draft.text
+    assert used_by_draft.json()["affected_tasks"][0]["action"] == (
+        "draft_updated"
+    )
+
+    task_path = f"/api/v1/inspection-tasks/{task.json()['id']}"
+    assert admin.post(f"{task_path}:dispatch").status_code == 200
+    assert admin.post(f"{task_path}:start").status_code == 200
+    cancelled = admin.post(f"{task_path}:cancel", json={"reason": "暫停"})
+    assert cancelled.status_code == 200, cancelled.text
+    restored = admin.post(f"{task_path}:restore")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["status"] == "IN_PROGRESS"
