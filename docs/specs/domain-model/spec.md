@@ -243,8 +243,8 @@
 | `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
 | `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
-| `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，可同時指定零個以上角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
-| `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；空集合代表不指派角色 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，**必須**同時指定至少一個角色；零個角色回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20） | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；集合**必須**至少一個角色，空集合回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20）；既有沒有角色的舊成員不受影響，改角色時才需補上 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `DELETE /api/v1/projects/{project_id}/members/{user_id}` | 將人員移出專案 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 
 新增與修改專案的回應**必須**在 `warnings` 陣列中指出重複的
@@ -254,7 +254,8 @@ ProjectMember 回應包含成員 UUID、`user_id`、`username` 與完整的
 `role_ids` 集合。成員列表的每一筆另含 `name_zh`、`email`、`company_id`、
 `company_name`（沒有公司時為空值）與 `is_active`，供管理頁顯示。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
 回 HTTP 204。重複加入同一人回 HTTP 409、`project.member_conflict`；缺少
-專案、人員或角色回 HTTP 404、`resource.not_found`；其餘無效輸入回 HTTP
+專案、人員或角色回 HTTP 404、`resource.not_found`；加入或取代時沒有任何角色回 HTTP
+422、`project.member_roles_required`（權限與資源是否存在先於此檢查）；其餘無效輸入回 HTTP
 422、`request.validation_failed`。
 
 HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中的「全部 Admin」
@@ -284,6 +285,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - `user.employee_no_conflict` — HTTP 409：指派或變更公司連結時，同一家公司已有相同工號。
 - `company.name_conflict` — HTTP 409：新增或修改公司名稱時，名稱已被其他公司使用（不分大小寫）。
 - `project.member_conflict` — HTTP 409：同一人已是該專案成員。
+- `project.member_roles_required` — HTTP 422：加入成員或取代角色集合時沒有指定任何角色（ADM-R20；資料層仍允許沒有角色，見 DOM-R36）。
 
 ## 驗收條件
 
@@ -462,3 +464,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 範圍變更（負責人指示，#290）：介面新增 `GET /api/v1/me/projects`（我的專案 API）與 DOM-AC50，回傳目前使用者參與的專案與自己的角色名稱，供我的工作台使用；不改既有欄位與錯誤碼 — [#290](https://github.com/speko-tw/inspect-flow/issues/290)
 - 規格設計（非負責人裁定，#416）：Task 新增可空、timezone-aware 的 `dispatched_at`；首次派送記錄伺服器時間，既有非 DRAFT 以 `created_at` 近似回填，DRAFT 保持空值 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 - 範圍變更（負責人指示，#407）：既有專案列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依 `(name,id)` 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。
+- 範圍變更（負責人核可 #445 原型，#449）：專案管理 API 的成員加入與角色集合取代必須至少一個角色，零角色回 422 `project.member_roles_required`；DOM-R36「成員得沒有角色」仍指資料層與 service 層（舊資料、移除角色的內部流程），不改需求與 AC — [#449](https://github.com/speko-tw/inspect-flow/issues/449)
