@@ -12,6 +12,7 @@ from app.models import (
     ProjectInspectionItem,
     ProjectInspectionItemChange,
     ProjectInspectionPoint,
+    ProjectMeasurementField,
     ProjectMember,
     ProjectMemberRole,
     ProjectTextStandard,
@@ -20,6 +21,7 @@ from app.models import (
     RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
+    TaskSnapshotMeasurementField,
     TaskSnapshotPoint,
     TaskSnapshotTextStandard,
 )
@@ -345,6 +347,21 @@ def test_snapshot_child_rows_copy_source_and_remain_immutable(
     )
     session.add(point)
     session.flush()
+    session.add_all(
+        [
+            ProjectMeasurementField(
+                inspection_point_id=point.id,
+                project_inspection_item_id=source.id,
+                name=name,
+                field_type="text",
+                sort_order=sort_order,
+                created_by=operator.id,
+                updated_by=operator.id,
+            )
+            for sort_order, name in enumerate(("第一欄", "第二欄", "第三欄"))
+        ]
+    )
+    session.flush()
     standard = ProjectTextStandard(
         inspection_point_id=point.id,
         project_inspection_item_id=source.id,
@@ -381,6 +398,16 @@ def test_snapshot_child_rows_copy_source_and_remain_immutable(
     assert snapshot_text is not None
     assert snapshot_point.title == "測點原名"
     assert snapshot_text.text == "文字標準原文"
+    snapshot_fields = session.scalars(
+        select(TaskSnapshotMeasurementField)
+        .where(TaskSnapshotMeasurementField.point_id == snapshot_point.id)
+        .order_by(TaskSnapshotMeasurementField.sort_order)
+    ).all()
+    assert [field.name for field in snapshot_fields] == [
+        "第一欄",
+        "第二欄",
+        "第三欄",
+    ]
 
     dispatch_inspection_task(session, task)
     point.title = "測點新名"

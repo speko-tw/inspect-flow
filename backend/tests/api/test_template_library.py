@@ -1,5 +1,7 @@
-"""Template library HTTP contract (TPL-AC01/02/03/04/07/08/09)."""
+"""Template library HTTP contract (TPL-AC01/02/03/04/07/08/09/11)."""
 
+import json
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -529,10 +531,12 @@ def test_structure_replace_and_validation(clients, db_session):
         point["measurement_fields"][0]["id"]
         != (body["inspection_points"][0]["measurement_fields"][0]["client_id"])
     )
-    assert [field["unit"] for field in point["measurement_fields"]] == [
-        "mm",
-        None,
-        "cm",
+    assert [
+        (field["name"], field["unit"]) for field in point["measurement_fields"]
+    ] == [
+        ("Thickness", "mm"),
+        ("Comment", None),
+        ("Width", "cm"),
     ]
     assert len(point["evidence_requirements"]) == 2
     assert "result" not in response.json()
@@ -610,6 +614,142 @@ def test_structure_replace_and_validation(clients, db_session):
     invalid["result"] = "pass"
     assert manager.post("/api/v1/templates", json=invalid).status_code == 422
     assert manager.get(f"/api/v1/templates/{template_id}").status_code == 200
+
+
+def test_single_template_api_roundtrip_preserves_sibling(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id, "Roundtrip target")
+    point_input = body["inspection_points"][0]
+    fields_input = point_input["measurement_fields"]
+    numeric_input = point_input["numeric_standard"]
+    numeric_input.update(
+        condition="range",
+        range_form="tolerance",
+        value="10",
+        tolerance="1",
+    )
+    numeric_input["unit"] = "mm"
+    numeric_input["measurement_field_client_id"] = fields_input[0]["client_id"]
+    fields_input[0]["unit"] = None
+
+    sibling_body = _template(system_id, "Untouched sibling")
+    sibling = manager.post("/api/v1/templates", json=sibling_body)
+    assert sibling.status_code == 201, sibling.text
+    sibling_id = sibling.json()["id"]
+    sibling_before = manager.get(f"/api/v1/templates/{sibling_id}")
+    assert sibling_before.status_code == 200, sibling_before.text
+    sibling_snapshot = sibling_before.json()
+
+    created = manager.post("/api/v1/templates", json=body)
+    assert created.status_code == 201, created.text
+    template_id = created.json()["id"]
+    initial_read = manager.get(f"/api/v1/templates/{template_id}")
+    assert initial_read.status_code == 200, initial_read.text
+    initial_point = initial_read.json()["inspection_points"][0]
+    initial_numeric = initial_point["numeric_standard"]
+    assert initial_numeric["range_form"] == "tolerance"
+    assert initial_numeric["unit"] == "mm"
+    assert initial_point["measurement_fields"][0]["unit"] == "mm"
+
+    # Rebind to the formerly independent field. The old binding becomes an
+    # ordinary numeric field, while the newly bound field sends unit: null.
+    fields_input[0]["unit"] = "mm"
+    fields_input[2]["unit"] = None
+    numeric_input.update(
+        value=None,
+        tolerance=None,
+        range_form="interval",
+        lower_bound="9",
+        upper_bound="11",
+        unit="in",
+        measurement_field_client_id=fields_input[2]["client_id"],
+    )
+    updated = manager.put(f"/api/v1/templates/{template_id}", json=body)
+    assert updated.status_code == 200, updated.text
+    updated_read = manager.get(f"/api/v1/templates/{template_id}")
+    assert updated_read.status_code == 200, updated_read.text
+    updated_point = updated_read.json()["inspection_points"][0]
+    updated_numeric = updated_point["numeric_standard"]
+    assert updated_numeric["range_form"] == "interval"
+    assert updated_numeric["lower_bound"] == "9"
+    assert updated_numeric["upper_bound"] == "11"
+    assert updated_numeric["unit"] == "in"
+    assert updated_point["measurement_fields"][0]["unit"] == "mm"
+    assert updated_point["measurement_fields"][2]["unit"] == "in"
+    assert (
+        updated_numeric["measurement_field_id"]
+        == updated_point["measurement_fields"][2]["id"]
+    )
+
+    sibling_after_update = manager.get(f"/api/v1/templates/{sibling_id}")
+    assert sibling_after_update.status_code == 200
+    assert sibling_after_update.json() == sibling_snapshot
+
+    deleted = manager.delete(f"/api/v1/templates/{template_id}")
+    assert deleted.status_code == 204, deleted.text
+    assert manager.get(f"/api/v1/templates/{template_id}").status_code == 404
+    sibling_after_delete = manager.get(f"/api/v1/templates/{sibling_id}")
+    assert sibling_after_delete.status_code == 200
+    assert sibling_after_delete.json() == sibling_snapshot
+
+
+def test_frontend_payload_fixture_roundtrips_through_single_item_api(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    fixture_path = (
+        Path(__file__).parents[3]
+        / "frontend/src/admin/templates/fixtures/template-item-payload.json"
+    )
+    body = json.loads(fixture_path.read_text(encoding="utf-8"))
+    body["system_id"] = system_id
+
+    created = manager.post("/api/v1/templates", json=body)
+    assert created.status_code == 201, created.text
+    template_id = created.json()["id"]
+
+    fetched = manager.get(f"/api/v1/templates/{template_id}")
+    assert fetched.status_code == 200, fetched.text
+    fetched_points = fetched.json()["inspection_points"]
+    assert [
+        point["numeric_standard"]["condition"] for point in fetched_points[:4]
+    ] == ["range", "<=", ">=", "="]
+    assert fetched_points[0]["numeric_standard"]["range_form"] == "interval"
+    assert fetched_points[4]["text_standard"]["text"] == (
+        "Match the approved sample"
+    )
+    unbound_point = fetched_points[5]
+    assert unbound_point["numeric_standard"] is None
+    assert unbound_point["measurement_fields"][0]["unit"] == "m"
+    second_bound_point = fetched_points[6]
+    assert [
+        field["unit"] for field in second_bound_point["measurement_fields"]
+    ] == ["m", "cm"]
+    assert (
+        second_bound_point["numeric_standard"]["measurement_field_id"]
+        == second_bound_point["measurement_fields"][1]["id"]
+    )
+    assert second_bound_point["numeric_standard"]["unit"] == "cm"
+    for point in fetched_points[:4]:
+        bound_id = point["numeric_standard"]["measurement_field_id"]
+        bound = next(
+            field
+            for field in point["measurement_fields"]
+            if field["id"] == bound_id
+        )
+        assert point["numeric_standard"]["unit"]
+        assert bound["unit"] == point["numeric_standard"]["unit"]
+
+    body["title"] = "Edited frontend payload contract"
+    updated = manager.put(f"/api/v1/templates/{template_id}", json=body)
+    assert updated.status_code == 200, updated.text
+    reread = manager.get(f"/api/v1/templates/{template_id}")
+    assert reread.status_code == 200, reread.text
+    assert reread.json()["title"] == body["title"]
+
+    deleted = manager.delete(f"/api/v1/templates/{template_id}")
+    assert deleted.status_code == 204, deleted.text
+    assert manager.get(f"/api/v1/templates/{template_id}").status_code == 404
 
 
 def test_system_put_accepts_frontend_numeric_unit_payload(clients):
