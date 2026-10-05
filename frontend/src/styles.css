@@ -218,6 +218,12 @@ label {
   font-weight: 600;
 }
 
+.required-label {
+  display: inline-flex;
+  gap: 0.2em;
+  white-space: nowrap;
+}
+
 /* 包著核取方塊的 label：同一列、字重一般。 */
 label:has(> input[type='checkbox']),
 label:has(> input[type='radio']) {

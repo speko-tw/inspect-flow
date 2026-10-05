@@ -479,7 +479,9 @@ export default function PlanningPage({
                     onSubmit={(event) => void renameZone(event)}
                   >
                     <label>
-                      分區名稱 <span aria-hidden="true">*</span>
+                      <span className="required-label">
+                        分區名稱 <span aria-hidden="true">*</span>
+                      </span>
                       <input
                         aria-describedby="zone-name-hint"
                         autoFocus
@@ -570,7 +572,9 @@ export default function PlanningPage({
                     onSubmit={(event) => void saveZone(event)}
                   >
                     <label>
-                      分區名稱 <span aria-hidden="true">*</span>
+                      <span className="required-label">
+                        分區名稱 <span aria-hidden="true">*</span>
+                      </span>
                       <input
                         aria-describedby="zone-name-hint"
                         autoFocus
@@ -639,7 +643,9 @@ export default function PlanningPage({
               >
                 <h3>建立計畫</h3>
                 <label>
-                  計畫名稱 <span aria-hidden="true">*</span>
+                  <span className="required-label">
+                    計畫名稱 <span aria-hidden="true">*</span>
+                  </span>
                   <input
                     aria-describedby={
                       errorContext === 'plan-create'
@@ -724,7 +730,9 @@ export default function PlanningPage({
                   }}
                 >
                   <label>
-                    計畫名稱 <span aria-hidden="true">*</span>
+                    <span className="required-label">
+                      計畫名稱 <span aria-hidden="true">*</span>
+                    </span>
                     <input
                       aria-describedby={
                         errorContext === 'plan-rename'
@@ -897,7 +905,9 @@ export default function PlanningPage({
                         >
                           {zones.length > 0 && !zonesDenied && (
                             <label>
-                              分區 <span aria-hidden="true">*</span>
+                              <span className="required-label">
+                                分區 <span aria-hidden="true">*</span>
+                              </span>
                               <select
                                 aria-describedby="location-zone-hint"
                                 onChange={(event) =>
@@ -1012,7 +1022,9 @@ export default function PlanningPage({
                   </fieldset>
                   {zones.length > 0 && !zonesDenied && (
                     <label>
-                      任務分區 <span aria-hidden="true">*</span>
+                      <span className="required-label">
+                        任務分區 <span aria-hidden="true">*</span>
+                      </span>
                       <select
                         aria-describedby="task-zone-hint"
                         onChange={(event) => setTaskZoneId(event.target.value)}
@@ -1095,7 +1107,9 @@ export default function PlanningPage({
             }}
           >
             <label>
-              取消原因 <span aria-hidden="true">*</span>
+              <span className="required-label">
+                取消原因 <span aria-hidden="true">*</span>
+              </span>
               <textarea
                 aria-describedby="cancel-reason-hint"
                 onChange={(event) => setCancelReason(event.target.value)}

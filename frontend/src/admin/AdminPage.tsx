@@ -117,7 +117,7 @@ export default function AdminPage() {
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
         <h1>Admin</h1>
         <nav aria-label="管理功能">
-          {NAV_ITEMS.filter(() => user.is_admin).map((item) => (
+          {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
               onClick={() => setTemporaryPassword(null)}
@@ -126,7 +126,6 @@ export default function AdminPage() {
               {item.label}
             </NavLink>
           ))}
-          {!user.is_admin && <NavLink to="/">返回工作台</NavLink>}
         </nav>
         <span className="topbar-user">
           登入者：{user.name_zh ?? user.username}
