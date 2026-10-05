@@ -238,6 +238,14 @@
 .field-error p {
   color: inherit;
 }
+.field-detail-error .button-link,
+.field-detail-error button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
 .field-more {
   display: block;
   width: 100%;

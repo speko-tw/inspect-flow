@@ -86,6 +86,18 @@ function optionalText(value: unknown): value is string | null {
   return value === null || typeof value === 'string'
 }
 
+function numericText(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.trim() !== '' &&
+    Number.isFinite(Number(value))
+  )
+}
+
+function optionalNumericText(value: unknown): value is string | null {
+  return value === null || numericText(value)
+}
+
 function isFieldTask(value: unknown): value is FieldTask {
   if (!isRecord(value)) return false
   const location = value.location
@@ -110,20 +122,27 @@ function isFieldTask(value: unknown): value is FieldTask {
 }
 
 function isNumericStandard(value: unknown): boolean {
-  return (
-    value === null ||
-    (isRecord(value) &&
-      optionalText(value.value) &&
-      ['<=', '>=', '=', 'range'].includes(String(value.condition)) &&
-      typeof value.unit === 'string' &&
-      optionalText(value.tolerance) &&
-      (value.range_form === null ||
-        value.range_form === 'interval' ||
-        value.range_form === 'tolerance') &&
-      optionalText(value.lower_bound) &&
-      optionalText(value.upper_bound) &&
-      optionalText(value.measurement_field_id))
-  )
+  if (value === null) return true
+  if (
+    !isRecord(value) ||
+    !optionalNumericText(value.value) ||
+    !['<=', '>=', '=', 'range'].includes(String(value.condition)) ||
+    typeof value.unit !== 'string' ||
+    !optionalNumericText(value.tolerance) ||
+    (value.range_form !== null &&
+      value.range_form !== 'interval' &&
+      value.range_form !== 'tolerance') ||
+    !optionalNumericText(value.lower_bound) ||
+    !optionalNumericText(value.upper_bound) ||
+    !optionalText(value.measurement_field_id)
+  ) {
+    return false
+  }
+  if (value.condition !== 'range') return numericText(value.value)
+  if (value.range_form === 'interval') {
+    return numericText(value.lower_bound) || numericText(value.upper_bound)
+  }
+  return numericText(value.value) && numericText(value.tolerance)
 }
 
 function isPoint(value: unknown): boolean {

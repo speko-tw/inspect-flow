@@ -183,8 +183,109 @@ describe('現場任務詳情', () => {
     expect(
       await screen.findByRole('heading', { name: heading }),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('link', { name: '返回任務清單' }))
+    const back = screen.getByRole('link', { name: '返回任務清單' })
+    expect(back).toHaveClass('button-link')
+    fireEvent.click(back)
     expect(screen.getByText('任務清單')).toBeInTheDocument()
+  })
+
+  it('其他錯誤的重試按鈕留在錯誤區', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({}, { status: 500 })),
+    )
+    renderDetail()
+    const alert = await screen.findByRole('alert')
+    expect(
+      within(alert).getByRole('button', { name: '重試' }),
+    ).toBeInTheDocument()
+    expect(alert).toHaveClass('field-detail-error')
+  })
+
+  it.each([
+    {
+      ...basePoint.numeric_standard,
+      lower_bound: null,
+      upper_bound: null,
+    },
+    {
+      ...basePoint.numeric_standard,
+      lower_bound: '無效',
+      upper_bound: null,
+    },
+    {
+      ...basePoint.numeric_standard,
+      range_form: 'tolerance',
+      value: null,
+      tolerance: '0.5',
+      lower_bound: null,
+      upper_bound: null,
+    },
+    {
+      ...basePoint.numeric_standard,
+      range_form: 'tolerance',
+      value: '5',
+      tolerance: null,
+      lower_bound: null,
+      upper_bound: null,
+    },
+  ])('拒絕缺少必要數值的標準 %j', async (standard) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          ...detail,
+          items: [
+            {
+              ...detail.items[0],
+              inspection_points: [
+                {
+                  ...basePoint,
+                  numeric_standard: standard,
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    )
+    renderDetail()
+    expect(
+      await screen.findByRole('heading', { name: '無法載入任務詳情' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/null～null/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [null, '4', '≤ 4 mm'],
+    ['3', null, '≥ 3 mm'],
+  ])('單側區間標準以界線表示，不顯示 null', async (lower, upper, label) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          ...detail,
+          items: [
+            {
+              ...detail.items[0],
+              inspection_points: [
+                {
+                  ...basePoint,
+                  numeric_standard: {
+                    ...basePoint.numeric_standard,
+                    lower_bound: lower,
+                    upper_bound: upper,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    )
+    renderDetail()
+    expect(await screen.findByText(label)).toBeInTheDocument()
+    expect(screen.queryByText(/null/)).not.toBeInTheDocument()
   })
 
   it('拒絕錯誤的詳情回應形狀', async () => {

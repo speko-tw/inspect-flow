@@ -19,7 +19,12 @@ function standardText(
   const suffix = unit ? ` ${unit}` : ''
   if (standard.condition === 'range') {
     if (standard.range_form === 'interval') {
-      return `${standard.lower_bound}～${standard.upper_bound}${suffix}`
+      if (standard.lower_bound && standard.upper_bound) {
+        return `${standard.lower_bound}～${standard.upper_bound}${suffix}`
+      }
+      return standard.lower_bound
+        ? `≥ ${standard.lower_bound}${suffix}`
+        : `≤ ${standard.upper_bound}${suffix}`
     }
     return `${standard.value} ± ${standard.tolerance}${suffix}`
   }
@@ -66,6 +71,7 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
           })
           return
         }
+        // Field 詳情以 404 隱藏不可見任務；403 僅防禦其他閘道拒絕。
         setError(
           cause instanceof FieldApiError && cause.status === 404
             ? 'missing'
@@ -86,7 +92,10 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
       </Link>
       {!task && !error && <p role="status">載入任務詳情中…</p>}
       {error && (
-        <section className="field-notice field-error" role="alert">
+        <section
+          className="field-notice field-error field-detail-error"
+          role="alert"
+        >
           <h1>
             {error === 'missing'
               ? '找不到這筆任務'
@@ -112,7 +121,11 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
               重試
             </button>
           )}
-          <Link to={back} state={{ restoreTaskList: true }}>
+          <Link
+            className="button-link"
+            to={back}
+            state={{ restoreTaskList: true }}
+          >
             返回任務清單
           </Link>
         </section>
