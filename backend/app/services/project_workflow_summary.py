@@ -17,8 +17,8 @@ from app.models import (
 )
 from app.services.inspection_planning import (
     PlanningError,
-    _project_permissions,
     inspection_task_visibility_filters,
+    project_permissions_for,
 )
 from app.services.operator import get_current_operator
 
@@ -68,7 +68,7 @@ def get_project_workflow_summary(
     project_id: UUID,
 ) -> ProjectWorkflowSummary:
     """Return visible project counts using SQL aggregates."""
-    permissions = _project_permissions(session, project_id)
+    permissions = project_permissions_for(session, project_id)
     is_admin = get_current_operator(session).is_admin
     readable_permissions = {
         "inspection_plan.read",

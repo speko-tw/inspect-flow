@@ -409,6 +409,9 @@ def test_task_count_visibility_draft_permissions_and_access_errors(
     assert set(plan_reader.json()["task_counts"].values()) == {0}
     assert plan_reader.json()["pending_reinspection_task_count"] == 0
 
+    plain_member = world["plain"].get(_summary_path(project.id))
+    assert plain_member.status_code == 403
+
     _grant_permission(
         db_session, world, world["plain_user"], "project_zone.read"
     )
