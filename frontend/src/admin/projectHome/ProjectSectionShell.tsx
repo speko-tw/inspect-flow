@@ -81,7 +81,7 @@ export default function ProjectSectionShell({
         >
           {navigation}
         </div>
-        <main className="project-section-content">{children}</main>
+        <div className="project-section-content">{children}</div>
       </div>
     </div>
   )

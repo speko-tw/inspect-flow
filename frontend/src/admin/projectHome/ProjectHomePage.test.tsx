@@ -70,25 +70,27 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
 function renderAt(path = '/admin/projects/project-1') {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route
-          element={<ProjectHomePage />}
-          path="/admin/projects/:projectId"
-        />
-        <Route
-          element={<ProjectSectionPage section="members" />}
-          path="/admin/projects/:projectId/members"
-        />
-        <Route
-          element={
-            <ProjectSectionPage section="inspection-items">
-              <p>查核項目細節</p>
-            </ProjectSectionPage>
-          }
-          path="/admin/projects/:projectId/inspection-items/:itemId"
-        />
-        <Route element={<p>Field 工作台</p>} path="/field" />
-      </Routes>
+      <main>
+        <Routes>
+          <Route
+            element={<ProjectHomePage />}
+            path="/admin/projects/:projectId"
+          />
+          <Route
+            element={<ProjectSectionPage section="members" />}
+            path="/admin/projects/:projectId/members"
+          />
+          <Route
+            element={
+              <ProjectSectionPage section="inspection-items">
+                <p>查核項目細節</p>
+              </ProjectSectionPage>
+            }
+            path="/admin/projects/:projectId/inspection-items/:itemId"
+          />
+          <Route element={<p>Field 工作台</p>} path="/field" />
+        </Routes>
+      </main>
     </MemoryRouter>,
   )
 }
@@ -107,6 +109,7 @@ describe('project home', () => {
     expect(
       await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
     ).toBeVisible()
+    expect(screen.getAllByRole('main')).toHaveLength(1)
     expect(screen.getByText('完成草稿任務並派出')).toBeVisible()
     expect(
       screen.getByRole('link', {

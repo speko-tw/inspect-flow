@@ -78,18 +78,10 @@ export default function ProjectSectionPage({
   }
   if (currentResult?.error) {
     if (currentResult.denied) return <ProjectDeniedPage />
-    return (
-      <main>
-        <p role="alert">{currentResult.error}</p>
-      </main>
-    )
+    return <p role="alert">{currentResult.error}</p>
   }
   if (!currentResult) {
-    return (
-      <main>
-        <p>正在確認專案權限…</p>
-      </main>
-    )
+    return <p role="status">正在確認專案權限…</p>
   }
 
   let content = children ?? <p>正在確認專案權限…</p>
