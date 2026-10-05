@@ -75,7 +75,13 @@ os.register_at_fork(after_in_child=_uuid7_reset_after_fork)
 
 
 def uuid7() -> uuid.UUID:
-    """Generate a monotonic RFC 9562 UUID version 7 value."""
+    """Generate a monotonic RFC 9562 UUID version 7 value.
+
+    Use it only as a sortable primary key, never as a credential or an
+    unguessable link: the next id minted in the same millisecond can be
+    derived from the previous one (counter + 1). Generate credentials
+    with :mod:`secrets` instead.
+    """
     global _uuid7_last_ms, _uuid7_last_counter
     with _uuid7_lock:
         unix_ts_ms = time.time_ns() // 1_000_000

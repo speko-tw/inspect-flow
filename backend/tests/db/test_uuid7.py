@@ -2,6 +2,7 @@
 (DBF-R11).
 """
 
+import threading
 import time
 import uuid
 from types import SimpleNamespace
@@ -84,3 +85,50 @@ def test_uuid7_counter_overflow_moves_to_the_next_millisecond(
     assert value.int >> 80 == now_ms + 1
     assert value.version == 7
     assert value.variant == uuid.RFC_4122
+
+
+def test_uuid7_is_unique_and_ordered_per_thread_under_concurrency():
+    thread_count = 8
+    per_thread = 5000
+    barrier = threading.Barrier(thread_count)
+    results: list[list[uuid.UUID]] = [[] for _ in range(thread_count)]
+
+    def mint(slot: list[uuid.UUID]) -> None:
+        barrier.wait()
+        slot.extend(uuid7() for _ in range(per_thread))
+
+    threads = [threading.Thread(target=mint, args=(slot,)) for slot in results]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert all(len(values) == per_thread for values in results)
+    assert all(values == sorted(values) for values in results)
+    assert len({value for values in results for value in values}) == (
+        thread_count * per_thread
+    )
+
+
+def test_uuid7_reset_after_fork_clears_state_and_replaces_the_lock(
+    monkeypatch,
+):
+    # Register the originals so monkeypatch restores them afterwards.
+    held_lock = threading.Lock()
+    monkeypatch.setattr(base, "_uuid7_lock", held_lock)
+    monkeypatch.setattr(base, "_uuid7_last_ms", time.time_ns() // 1_000_000)
+    monkeypatch.setattr(base, "_uuid7_last_counter", 123)
+    # A lock held by another thread at fork time stays held in the
+    # child, so the child must not reuse it.
+    held_lock.acquire()
+    try:
+        base._uuid7_reset_after_fork()
+
+        assert base._uuid7_last_ms == -1
+        assert base._uuid7_last_counter == 0
+        assert base._uuid7_lock is not held_lock
+        assert base._uuid7_lock.acquire(blocking=False)
+        base._uuid7_lock.release()
+        assert uuid7().version == 7
+    finally:
+        held_lock.release()
