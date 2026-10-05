@@ -148,7 +148,7 @@
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
-| DOM-R56 | `Inspection Plan` **必須**關聯一個 `Project`；`Inspection Task` **必須**關聯一個 Plan。Plan 與 Task 各自以 UUID 識別並沿用 `database-foundation` 的共通建立、修改欄位。Task 的狀態與 Plan 衍生狀態依 [state-machines](../state-machines/spec.md#凍結範圍與阻擋議題)；關聯欄位、外鍵與刪除約束為規格設計（非負責人裁定） | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；欄位與約束為規格設計（非負責人裁定） | DOM-AC51 |
+| DOM-R56 | `Inspection Plan` **必須**關聯一個 `Project`；`Inspection Task` **必須**關聯一個 Plan。Plan 與 Task 各自以 UUID 識別並沿用 `database-foundation` 的共通建立、修改欄位。Task 另有可空、含時區的 `dispatched_at`；首次由 `DRAFT` 派送時記錄伺服器時間，之後狀態轉換不得變更。新建 `DRAFT` 的值為空。新增欄位的 migration 對既有非 `DRAFT` Task 以 `created_at` 近似回填，既有 `DRAFT` 保持空值。Task 的狀態與 Plan 衍生狀態依 [state-machines](../state-machines/spec.md#凍結範圍與阻擋議題)；關聯欄位、外鍵、時間回填及刪除約束為規格設計（非負責人裁定） | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；`dispatched_at` 與歷史回填依 #416 維護者裁定；欄位與約束為規格設計（非負責人裁定） | DOM-AC51、DOM-AC54 |
 | DOM-R57 | 一筆 Task **得**包含一筆以上的專案查核項目；系統**必須**以明確的 Task 項目關聯保存每筆項目對應的 `ProjectInspectionItem`，並為每筆關聯保存建立任務當時的 `Task Requirement Snapshot`。Snapshot 必須能保留當時需求並可追溯標準變更；KD-55 的作廢與文字更正依 `inspection-planning`，不得以目前項目內容靜默覆寫既有歷史。關聯與 Snapshot 的表格／子表及精確欄位為規格設計（非負責人裁定） | 必須；得（多項目） | [PR-04](../../intents/02-principles.md#pr-04)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；表示法為規格設計（非負責人裁定） | DOM-AC52 |
 | DOM-R58 | `ProjectZone` **必須**屬於一個 `Project`，名稱最多 128 字元（沿用 `Project.name` 的暫定上限），先去除名稱前後空白並保存，trim 後不得為空，再以 Unicode casefold 比對，於專案內唯一；空名稱拒絕、名稱長度與正規化算法是**規格設計（非負責人裁定）**。`Inspection Task` **得**關聯一個 `ProjectZone` 並**得**保存補充地點文字；分區與 Task 所屬 Project 必須相同。專案已有分區時建立 Task 必須選一區；無分區時 Task 不得有 `zone_id`。Task 引用中的分區不得刪除。名稱的資料庫唯一約束作法由 T1 選擇，並受 DOM-R34 的 SQLite ASCII 限制；Service 層仍**必須**執行名稱正規化及唯一性檢查。分區管理 API 與細節由 `inspection-planning` 定義。 | 必須／得／不得 | [KD-40](../../intents/03-decisions-and-stack.md#kd-40)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[OQ-03](../../intents/05-open-questions.md#oq-03)；技術細節為規格設計（非負責人裁定） | DOM-AC53 |
 
@@ -361,6 +361,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 | DOM-AC51 | 專案 P1、P2；Plan PL1 關聯 P1；Plan PL2 關聯 P2；Task T1、T2 | 建立 PL1、PL2，分別建立 T1、T2；再嘗試以不存在的 Plan UUID 建立另一筆 Task | T1 關聯 PL1，T2 關聯 PL2；無效 Plan 外鍵遭拒絕；Plan／Task 狀態依 state-machines 規則保存 | DOM-R56 |
 | DOM-AC52 | 專案項目 I1、I2 有各自有效需求；Plan PL1、Task T1 | 建立 T1 並明確選取 I1、I2；之後修改 I1 的來源需求，分別選 KD-55「要」及「不要」重新查核，再讀取 T1 的項目關聯與 Snapshot | T1 有兩筆獨立項目關聯；每筆快照保留建立時需求；選「要」保留並標記受影響舊需求歷史，選「不要」只更正 Snapshot 文字且記錄變更，兩者皆不影響 I2 歷史 | DOM-R57 |
 | DOM-AC53 | 專案 P 有分區 Z1、專案 Q 有分區 Z2、專案 R 無分區；P、R 各有一筆尚無 Task 的 Plan；具／不具 `project_zone.manage` 權限的成員 | 以 Service/API 新增 P 的未引用分區 Z3、修改 Z3 名稱並刪除 Z3；嘗試新增同名分區與只含空白的分區；建立 P 的 T1 並分別提供同專案 Z1、Q 的 Z2、未提供分區；在 R 的 Plan 建立 T2 且不提供分區；最後嘗試刪除被 T1 引用的 Z1 | Z3 新增、修改與未引用刪除成功；同專案重名、trim 後空白及無權限操作拒絕；P 有分區時建立 Task 必須指定 Z1，且不得引用 Q 的 Z2；R 無分區時不得指定 `zone_id`；Task 引用時 Z1 不得刪除。名稱 Unicode casefold/trim 與長度依 inspection-planning 規則驗收 | DOM-R58 |
+| DOM-AC54 | 資料庫有一筆 `DRAFT` Task 與一筆非 `DRAFT` Task，並各自保留原始 `created_at` | 執行派送時間 migration；新建 Task 後首次派送，再執行開始、取消及恢復 | migration 只新增可空的 timezone-aware `dispatched_at` 欄位並以 `created_at` 回填既有非 `DRAFT` Task，`DRAFT` 為空；首次派送記錄伺服器 UTC 時間，Task 後續狀態轉換不更改該值；migration 不重建資料表 | DOM-R56 |
 
 ### `Project`
 
@@ -459,4 +460,5 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 範圍變更（負責人裁定）：DOM-R55 的角色回應新增 `user_count`（不重複使用者數）、`project_count`，供角色管理頁在修改與刪除前顯示影響範圍（PR-18）；不改既有欄位與錯誤碼 — [#276](https://github.com/speko-tw/inspect-flow/issues/276)；裁定紀錄：[#276 留言](https://github.com/speko-tw/inspect-flow/issues/276#issuecomment-5932231697)
 - 範圍變更（負責人裁定）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/members`（成員列表，權限同其他成員端點），回應含使用者顯示欄位；供專案與成員管理頁顯示現有成員；裁定原文：[#277 留言](https://github.com/speko-tw/inspect-flow/issues/277#issuecomment-5932232205) — [#277](https://github.com/speko-tw/inspect-flow/issues/277)
 - 範圍變更（負責人指示，#290）：介面新增 `GET /api/v1/me/projects`（我的專案 API）與 DOM-AC50，回傳目前使用者參與的專案與自己的角色名稱，供我的工作台使用；不改既有欄位與錯誤碼 — [#290](https://github.com/speko-tw/inspect-flow/issues/290)
+- 規格設計（非負責人裁定，#416）：Task 新增可空、timezone-aware 的 `dispatched_at`；首次派送記錄伺服器時間，既有非 DRAFT 以 `created_at` 近似回填，DRAFT 保持空值 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 - 範圍變更（負責人指示，#407）：既有專案列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依 `(name,id)` 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。
