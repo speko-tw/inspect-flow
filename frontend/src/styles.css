@@ -50,6 +50,9 @@
   --success-bg: #e8f6ee;
   --success-text: #14532d;
   --success-border: #9fd3b4;
+  --warning-bg: #fff4dc;
+  --warning-text: #5c3d00;
+  --warning-border: #e2c071;
   --focus: #1b5ec2;
   --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 16px rgb(16 24 40 / 6%);
 }
@@ -237,6 +240,14 @@
 .field-error p {
   color: inherit;
 }
+.field-detail-error .button-link,
+.field-detail-error button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
 .field-more {
   display: block;
   width: 100%;
@@ -247,6 +258,89 @@
   display: inline-grid;
   place-items: center;
   min-height: 44px;
+}
+.field-detail-hero,
+.field-detail-item,
+.field-action-panel {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.field-detail-hero h1 {
+  margin: 8px 0 3px;
+}
+.field-detail-hero .field-status.pending {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.field-detail-hero .field-status.cancelled {
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border-color: var(--border-strong);
+}
+.field-detail-project,
+.field-detail-item > p,
+.field-detail-point > p,
+.field-action-panel p {
+  color: var(--text-muted);
+}
+.field-detail-meta {
+  display: grid;
+  gap: 3px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.field-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 20px;
+}
+.field-section-head h2,
+.field-detail-item h3,
+.field-action-panel h2 {
+  margin: 0;
+}
+.field-section-head small,
+.field-point-number {
+  color: var(--text-muted);
+}
+.field-detail-point {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.field-detail-point h4 {
+  margin: 3px 0;
+}
+.field-detail-req {
+  display: grid;
+  gap: 9px;
+  margin: 12px 0 0;
+}
+.field-detail-req div {
+  display: grid;
+  gap: 2px;
+}
+.field-detail-req dt {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.field-detail-req dd {
+  margin: 0;
+}
+.field-action-panel button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 12px 0;
 }
 .field-profile {
   margin-top: 24px;
@@ -292,6 +386,9 @@
     --success-bg: #12301f;
     --success-text: #a9e8c3;
     --success-border: #2c6b46;
+    --warning-bg: #33290f;
+    --warning-text: #f3d994;
+    --warning-border: #6b5520;
     --focus: #8fbfff;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 16px rgb(0 0 0 / 30%);
   }
