@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
+import { isForbidden } from '../http'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
 
 type Scope = 'mine' | 'all'
@@ -155,11 +156,7 @@ function TaskList({
             state: { from: location.pathname + location.search },
           })
         } else {
-          setError(
-            cause instanceof FieldApiError && cause.status === 403
-              ? 'forbidden'
-              : 'other',
-          )
+          setError(isForbidden(cause) ? 'forbidden' : 'other')
         }
       })
       .finally(() => {
@@ -208,11 +205,7 @@ function TaskList({
       memory.set(key, next)
       setState(next)
     } catch (cause) {
-      setError(
-        cause instanceof FieldApiError && cause.status === 403
-          ? 'forbidden'
-          : 'other',
-      )
+      setError(isForbidden(cause) ? 'forbidden' : 'other')
     } finally {
       setLoading(false)
     }

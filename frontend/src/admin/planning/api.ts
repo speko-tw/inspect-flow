@@ -1,4 +1,5 @@
-import { ManagementApiError, request } from '../api'
+import { listAllPages, request } from '../api'
+import { HttpError, httpErrorMessage, isForbidden } from '../../http'
 
 /** HTTP client for the frozen inspection-planning API contract. */
 
@@ -172,21 +173,6 @@ export interface PlanningClient {
   unarchivePlan(planId: string): Promise<InspectionPlan>
 }
 
-async function allPages<T>(path: string): Promise<T[]> {
-  const items: T[] = []
-  let cursor: string | null = null
-  do {
-    const params = new URLSearchParams({ limit: '100' })
-    if (cursor) params.set('cursor', cursor)
-    const page = await request<{ items: T[]; next_cursor: string | null }>(
-      `${path}?${params.toString()}`,
-    )
-    items.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return items
-}
-
 export const planningClient: PlanningClient = {
   async getProject(projectId) {
     const project = await request<{ id: string; name: string }>(
@@ -195,13 +181,13 @@ export const planningClient: PlanningClient = {
     return { id: project.id, name: project.name }
   },
   listProjectItems(projectId) {
-    return allPages(`/projects/${projectId}/inspection-items`)
+    return listAllPages(`/projects/${projectId}/inspection-items`)
   },
   listProjectZones(projectId) {
-    return allPages(`/projects/${projectId}/zones`)
+    return listAllPages(`/projects/${projectId}/zones`)
   },
   listProjectAssignees(projectId) {
-    return allPages(`/projects/${projectId}/inspection-task-assignees`)
+    return listAllPages(`/projects/${projectId}/inspection-task-assignees`)
   },
   createZone(projectId, name) {
     return request(`/projects/${projectId}/zones`, {
@@ -290,35 +276,33 @@ export const planningClient: PlanningClient = {
   },
 }
 
+const PLANNING_ERROR_CODES: Record<string, string> = {
+  'project_zone.name_conflict': '同一專案已有相同名稱的分區。',
+  'project_zone.invalid_name': '分區名稱不可空白，且不得超過 128 字元。',
+  'inspection_plan.invalid_name': '計畫名稱不可空白，且不得超過 128 字元。',
+  'project_zone.in_use': '分區已有任務使用，無法刪除。',
+  'inspection_plan.archived': '計畫已封存，無法修改。',
+  'inspection_task.invalid_transition': '目前任務狀態不允許這項操作。',
+  'inspection_task.reason_required': '請填寫取消原因。',
+  'inspection_task.location_locked': '目前任務狀態無法修改地點。',
+  'resource.not_found': '找不到資料，請重新整理後再試。',
+}
+
 export function planningErrorMessage(error: unknown): string {
-  if (!(error instanceof ManagementApiError)) {
-    return '目前無法完成操作，請稍後再試。'
+  // 唯讀切換的說明是規劃頁的特例，其餘狀態碼走共用對應表。
+  if (isForbidden(error)) {
+    return '你沒有權限執行這項操作，畫面已切換為唯讀。'
   }
-  if (error.status === 403) return '你沒有權限執行這項操作，畫面已切換為唯讀。'
-  if (error.code === 'project_zone.name_conflict') {
-    return '同一專案已有相同名稱的分區。'
-  }
-  if (error.code === 'project_zone.invalid_name') {
-    return '分區名稱不可空白，且不得超過 128 字元。'
-  }
-  if (error.code === 'inspection_plan.invalid_name') {
-    return '計畫名稱不可空白，且不得超過 128 字元。'
-  }
-  if (error.code === 'project_zone.in_use') {
-    return '分區已有任務使用，無法刪除。'
-  }
-  if (error.code === 'inspection_plan.archived')
-    return '計畫已封存，無法修改。'
-  if (error.code === 'inspection_task.invalid_transition')
-    return '目前任務狀態不允許這項操作。'
-  if (error.code === 'inspection_task.reason_required')
-    return '請填寫取消原因。'
-  if (error.code === 'inspection_task.location_locked')
-    return '目前任務狀態無法修改地點。'
-  if (error.code === 'resource.not_found')
-    return '找不到資料，請重新整理後再試。'
-  if (error.status === 422) return '輸入資料不符合規格，請檢查後再試。'
-  if (error.status === 409) return '目前狀態不允許這項操作，請重新整理。'
-  if (error.status === 404) return '找不到資料，請重新整理後再試。'
-  return '目前無法完成操作，請稍後再試。'
+  const status = error instanceof HttpError ? error.status : undefined
+  return httpErrorMessage(error, {
+    codes: PLANNING_ERROR_CODES,
+    fallback:
+      status === 422
+        ? '輸入資料不符合規格，請檢查後再試。'
+        : status === 409
+          ? '目前狀態不允許這項操作，請重新整理。'
+          : status === 404
+            ? '找不到資料，請重新整理後再試。'
+            : '目前無法完成操作，請稍後再試。',
+  })
 }

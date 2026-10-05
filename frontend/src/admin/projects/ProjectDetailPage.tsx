@@ -3,10 +3,10 @@ import { useParams } from 'react-router'
 
 import { listUsers, managementErrorMessage, type User } from '../api'
 import ProjectItemLinks from '../projectItems/ProjectItemLinks'
+import { listRoles } from '../roles/api'
 import {
   addProjectMember,
   getProject,
-  listAllRoles,
   listProjectMembers,
   personLabel,
   removeProjectMember,
@@ -79,7 +79,7 @@ export default function ProjectDetailPage() {
             getProject(projectId),
             listProjectMembers(projectId),
             listUsers(),
-            listAllRoles(),
+            listRoles(),
           ])
         if (active) {
           setProject(nextProject)

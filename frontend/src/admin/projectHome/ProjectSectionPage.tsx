@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Navigate, useParams } from 'react-router'
 
-import { ManagementApiError, managementErrorMessage } from '../api'
+import { isForbidden } from '../../http'
+import { managementErrorMessage } from '../api'
 import ProjectItemLinks from '../projectItems/ProjectItemLinks'
 import ProjectDetailPage from '../projects/ProjectDetailPage'
 import ProjectSectionShell, {
@@ -60,8 +61,7 @@ export default function ProjectSectionPage({
             canViewIndoor: false,
             project: { project_code: '', name: '' },
             viewerPermissions: [],
-            denied:
-              caught instanceof ManagementApiError && caught.status === 403,
+            denied: isForbidden(caught),
             error: managementErrorMessage(caught),
           })
         }

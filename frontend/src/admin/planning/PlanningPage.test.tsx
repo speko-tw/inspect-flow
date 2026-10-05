@@ -287,7 +287,7 @@ describe('planning management page', () => {
 
     await waitFor(() => {
       const alert = screen.getByRole('alert')
-      expect(alert).toHaveTextContent('目前無法完成操作')
+      expect(alert).toHaveTextContent('伺服器暫時無法處理')
       expect(alert.closest('section')).toHaveAttribute(
         'aria-labelledby',
         'planning-heading',

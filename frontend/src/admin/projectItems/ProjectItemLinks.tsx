@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
-import { ManagementApiError } from '../api'
+import { isForbidden } from '../../http'
 import { listProjectItems, type ProjectItemData } from './api'
 
 export default function ProjectItemLinks({
@@ -31,7 +31,7 @@ export default function ProjectItemLinks({
       .catch((caught: unknown) => {
         if (!active) return
         setError(
-          caught instanceof ManagementApiError && caught.status === 403
+          isForbidden(caught)
             ? '你沒有權限瀏覽此專案的查核項目。'
             : '無法載入專案查核項目。',
         )

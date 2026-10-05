@@ -1,9 +1,4 @@
-import { request } from '../api'
-
-export interface Page<T> {
-  items: T[]
-  next_cursor: string | null
-}
+import { listAllPages, request } from '../api'
 
 export interface TemplateCategory {
   id: string
@@ -67,21 +62,8 @@ export interface TemplateSystemCollection {
   items: TemplateItem[]
 }
 
-async function listAll<T>(path: string): Promise<T[]> {
-  const rows: T[] = []
-  let cursor: string | null = null
-  do {
-    const params = new URLSearchParams({ limit: '100' })
-    if (cursor) params.set('cursor', cursor)
-    const page = await request<Page<T>>(`${path}?${params.toString()}`)
-    rows.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return rows
-}
-
 export function listTemplateCategories(): Promise<TemplateCategory[]> {
-  return listAll('/template-categories')
+  return listAllPages('/template-categories')
 }
 
 export function createTemplateCategory(
@@ -110,7 +92,7 @@ export function deleteTemplateCategory(id: string): Promise<void> {
 export function listTemplateSystems(
   categoryId: string,
 ): Promise<TemplateSystem[]> {
-  return listAll(`/template-categories/${categoryId}/systems`)
+  return listAllPages(`/template-categories/${categoryId}/systems`)
 }
 
 export function createTemplateSystem(
@@ -140,9 +122,9 @@ export function deleteTemplateSystem(id: string): Promise<void> {
 export function getSystemTemplates(
   systemId: string,
 ): Promise<TemplateSystemCollection> {
-  return listAll<TemplateItem>(`/template-systems/${systemId}/templates`).then(
-    (items) => ({ items }),
-  )
+  return listAllPages<TemplateItem>(
+    `/template-systems/${systemId}/templates`,
+  ).then((items) => ({ items }))
 }
 
 export function createTemplateItem(item: TemplateItem): Promise<TemplateItem> {
