@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import type { InspectionPoint, MeasurementField } from './api'
 import { InlineConfirm } from './InlineConfirm'
-import { boundField } from './templateEditorUtils'
+import { boundField, localizeField } from './templateEditorUtils'
 
 type Props = {
   point: InspectionPoint
@@ -47,7 +47,7 @@ export function MeasurementFieldEditor({
           setConfirmField('')
         }
         return (
-          <div className="tpl-field-card" key={field.client_id ?? field.id}>
+          <div className="tpl-field-card" key={field.clientKey}>
             <label htmlFor={`field-${pointIndex}-${fieldIndex}-name`}>
               欄位名稱{' '}
               <b aria-hidden="true" className="tpl-required">
@@ -167,10 +167,11 @@ export function MeasurementFieldEditor({
             measurement_fields: [
               ...point.measurement_fields,
               {
-                client_id: crypto.randomUUID(),
-                name: '',
-                field_type: 'number',
-                unit: '',
+                ...localizeField({
+                  name: '',
+                  field_type: 'number',
+                  unit: '',
+                }),
               },
             ],
           })

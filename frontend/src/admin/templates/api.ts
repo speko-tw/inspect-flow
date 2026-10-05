@@ -19,6 +19,7 @@ export interface TemplateSystem {
 export interface MeasurementField {
   id?: string
   client_id?: string
+  clientKey?: string
   name: string
   field_type: 'text' | 'number'
   unit: string | null
@@ -40,6 +41,7 @@ export interface InspectionPoint {
     upper_bound?: string | null
     measurement_field_id?: string
     measurement_field_client_id?: string
+    measurement_field_client_key?: string
   } | null
   measurement_fields: MeasurementField[]
   evidence_requirements: Array<{

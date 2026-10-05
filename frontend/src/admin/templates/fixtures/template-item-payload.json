@@ -112,6 +112,53 @@
       "numeric_standard": null,
       "measurement_fields": [],
       "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 6,
+      "title": "Unbound numeric field",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": null,
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000015",
+          "name": "Unbound length",
+          "field_type": "number",
+          "unit": "m"
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
+    },
+    {
+      "sequence": 7,
+      "title": "Bind second new field",
+      "instruction": "",
+      "text_standard": null,
+      "numeric_standard": {
+        "value": null,
+        "condition": "range",
+        "unit": "cm",
+        "tolerance": null,
+        "range_form": "interval",
+        "lower_bound": "1",
+        "upper_bound": "3",
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000017"
+      },
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000016",
+          "name": "Length",
+          "field_type": "number",
+          "unit": "m"
+        },
+        {
+          "client_id": "00000000-0000-4000-8000-000000000017",
+          "name": "Width",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "evidence_requirements": [{ "min_count": 1 }]
     }
   ]
 }

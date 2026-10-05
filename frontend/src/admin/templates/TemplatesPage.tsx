@@ -12,7 +12,7 @@ import { InlineConfirm } from './InlineConfirm'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
-import { boundField, forWire } from './templateEditorUtils'
+import { boundField, forWire, localizeField } from './templateEditorUtils'
 import {
   createTemplateCategory,
   createTemplateItem,
@@ -72,17 +72,36 @@ function localizeFields(item: TemplateItem): TemplateItem {
   return {
     ...item,
     inspection_points: item.inspection_points.map((point) => {
-      const measurementFields = point.measurement_fields.map((field) => ({
-        ...field,
-        client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
-      }))
+      const measurementFields = point.measurement_fields.map(localizeField)
       const numeric = point.numeric_standard
+      const keyByClientId = new Map(
+        measurementFields.map((field) => [field.client_id!, field.clientKey!]),
+      )
+      const keyById = new Map(
+        measurementFields
+          .filter((field) => field.id)
+          .map((field) => [field.id!, field.clientKey!]),
+      )
+      const boundKey =
+        numeric?.measurement_field_client_key ??
+        (numeric?.measurement_field_client_id
+          ? keyByClientId.get(numeric.measurement_field_client_id)
+          : undefined) ??
+        (numeric?.measurement_field_id
+          ? keyById.get(numeric.measurement_field_id)
+          : undefined)
       return {
         ...point,
+        numeric_standard: numeric
+          ? {
+              ...numeric,
+              measurement_field_id: undefined,
+              measurement_field_client_id: undefined,
+              measurement_field_client_key: boundKey,
+            }
+          : null,
         measurement_fields: measurementFields.map((field) =>
-          Boolean(numeric) &&
-          (field.id === numeric?.measurement_field_id ||
-            field.client_id === numeric?.measurement_field_client_id)
+          Boolean(numeric) && Boolean(boundKey) && field.clientKey === boundKey
             ? { ...field, unit: field.unit ?? numeric?.unit ?? '' }
             : field,
         ),
@@ -703,8 +722,8 @@ export default function TemplatesPage() {
     const numeric = { ...point.numeric_standard, ...changes }
     const bound = point.measurement_fields.find(
       (field) =>
-        field.client_id === numeric.measurement_field_client_id ||
-        field.id === numeric.measurement_field_id,
+        Boolean(numeric.measurement_field_client_key) &&
+        field.clientKey === numeric.measurement_field_client_key,
     )
     updatePoint(index, {
       numeric_standard: { ...numeric, unit: bound?.unit ?? numeric.unit },
@@ -770,6 +789,10 @@ export default function TemplatesPage() {
           }}
           onKeyDown={(event) => {
             if (event.key === 'Escape') resetMode()
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              event.currentTarget.form?.requestSubmit()
+            }
           }}
           aria-required="true"
           value={nameDraft}

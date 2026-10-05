@@ -8,6 +8,8 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import TemplatesPage from './TemplatesPage'
+import wireFixture from './fixtures/template-item-payload.json'
+import type { TemplateItem } from './api'
 
 const category = { id: 'category-1', name: '土木工程' }
 const otherCategory = { id: 'category-2', name: '建築工程' }
@@ -60,12 +62,88 @@ const sampleItem = {
   ],
 }
 
+function hasValidWireContract(value: unknown): boolean {
+  const exactKeys = (row: Record<string, unknown>, keys: string[]) =>
+    Object.keys(row).sort().join(',') === [...keys].sort().join(',')
+  if (!value || typeof value !== 'object') return false
+  const item = value as Record<string, unknown>
+  if (
+    !exactKeys(item, [
+      'system_id',
+      'sequence',
+      'title',
+      'instruction',
+      'inspection_points',
+    ]) ||
+    !Array.isArray(item.inspection_points)
+  ) {
+    return false
+  }
+  return item.inspection_points.every((rawPoint) => {
+    if (!rawPoint || typeof rawPoint !== 'object') return false
+    const point = rawPoint as Record<string, unknown>
+    if (
+      !exactKeys(point, [
+        'sequence',
+        'title',
+        'instruction',
+        'measurement_fields',
+        'numeric_standard',
+        'text_standard',
+        'evidence_requirements',
+      ]) ||
+      !Array.isArray(point.measurement_fields) ||
+      !Array.isArray(point.evidence_requirements)
+    ) {
+      return false
+    }
+    const standard = point.numeric_standard as Record<string, unknown> | null
+    const boundClientId = standard?.measurement_field_client_id
+    const fields = point.measurement_fields as Array<Record<string, unknown>>
+    const matchingFields = fields.filter(
+      (field) => field.client_id === boundClientId,
+    )
+    if (standard && matchingFields.length !== 1) return false
+    return (
+      fields.every((field) => {
+        if (
+          !exactKeys(field, ['client_id', 'name', 'field_type', 'unit']) ||
+          typeof field.client_id !== 'string' ||
+          typeof field.name !== 'string'
+        ) {
+          return false
+        }
+        if (field.field_type === 'text') return field.unit === null
+        if (field.field_type !== 'number') return false
+        const isBound = field.client_id === boundClientId
+        return isBound
+          ? field.unit === null
+          : typeof field.unit === 'string' && field.unit.trim().length > 0
+      }) &&
+      (!standard ||
+        (exactKeys(standard, [
+          'value',
+          'condition',
+          'unit',
+          'tolerance',
+          'range_form',
+          'lower_bound',
+          'upper_bound',
+          'measurement_field_client_id',
+        ]) &&
+          typeof standard.unit === 'string' &&
+          standard.unit.trim().length > 0))
+    )
+  })
+}
+
 function templateFetch(
   options: {
     categoryError?: number
     writeError?: number
     writeConflict?: boolean
     deleteSuccess?: boolean
+    validateWire?: boolean
     categories?: Array<{ id: string; name: string }>
     systems?: Array<{ id: string; category_id: string; name: string }>
     items?: Array<Record<string, unknown>>
@@ -204,6 +282,12 @@ function templateFetch(
             { status: 409 },
           )
         }
+        if (options.validateWire && !hasValidWireContract(body)) {
+          return Response.json(
+            { error: { code: 'request.validation_failed' } },
+            { status: 422 },
+          )
+        }
         const created = { id: 'template-created', ...body }
         items.push(created)
         return Response.json(created, { status: 201 })
@@ -220,6 +304,12 @@ function templateFetch(
               },
             },
             { status: options.writeError },
+          )
+        }
+        if (options.validateWire && !hasValidWireContract(body)) {
+          return Response.json(
+            { error: { code: 'request.validation_failed' } },
+            { status: 422 },
           )
         }
         return Response.json({ ...body, id: path.split('/').at(-1) })
@@ -417,6 +507,70 @@ describe('TemplatesPage', () => {
     expect(await screen.findByLabelText(/名稱/)).toHaveValue('護欄')
   })
 
+  it('keeps cleared category and system names blank until retyped on Enter', async () => {
+    const fetchMock = templateFetch()
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '土木工程' })
+
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    const categoryInput = await screen.findByLabelText(/名稱/)
+    fireEvent.change(categoryInput, { target: { value: '' } })
+    expect(categoryInput).toHaveValue('')
+    fireEvent.keyDown(categoryInput, { key: 'Enter', code: 'Enter' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('請填寫名稱')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-categories/category-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+    fireEvent.change(categoryInput, { target: { value: '土木工程新版' } })
+    expect(categoryInput).toHaveValue('土木工程新版')
+    fireEvent.keyDown(categoryInput, { key: 'Enter', code: 'Enter' })
+    await screen.findByText(/已重新命名為「土木工程新版」/)
+    const categoryPatch = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-categories/category-1') &&
+        init?.method === 'PATCH',
+    )
+    expect(JSON.parse(String(categoryPatch?.[1]?.body))).toEqual({
+      name: '土木工程新版',
+    })
+
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '護欄' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    const systemInput = await screen.findByLabelText(/名稱/)
+    fireEvent.change(systemInput, { target: { value: '' } })
+    expect(systemInput).toHaveValue('')
+    fireEvent.keyDown(systemInput, { key: 'Enter', code: 'Enter' })
+    expect(await screen.findByRole('alert')).toHaveTextContent('請填寫名稱')
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith('/template-systems/system-1') &&
+          init?.method === 'PATCH',
+      ),
+    ).toBe(false)
+    fireEvent.change(systemInput, { target: { value: '護欄新版' } })
+    expect(systemInput).toHaveValue('護欄新版')
+    fireEvent.keyDown(systemInput, { key: 'Enter', code: 'Enter' })
+    await screen.findByText(/已重新命名為「護欄新版」/)
+    const systemPatch = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/template-systems/system-1') &&
+        init?.method === 'PATCH',
+    )
+    expect(JSON.parse(String(systemPatch?.[1]?.body))).toEqual({
+      name: '護欄新版',
+    })
+  })
+
   it('separates add and rename and preserves draft on duplicate', async () => {
     templateFetch({ categories: [category, otherCategory] })
     render(<TemplatesPage />)
@@ -475,6 +629,162 @@ describe('TemplatesPage', () => {
     }
     expect(body.inspection_points[0].measurement_fields[0].unit).toBeNull()
     expect(body.inspection_points[0].numeric_standard.unit).toBe('%')
+  })
+
+  it('preserves units when a new numeric field is not bound', async () => {
+    const fetchMock = templateFetch({ items: [], validateWire: true })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: wireFixture.title },
+    })
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: wireFixture.inspection_points[5].title },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增實測欄位' }))
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: {
+        value: wireFixture.inspection_points[5].measurement_fields[0].name,
+      },
+    })
+    fireEvent.change(document.getElementById('field-0-0-unit')!, {
+      target: {
+        value: wireFixture.inspection_points[5].measurement_fields[0].unit,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByText('查核項目已儲存')
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates' && init?.method === 'POST',
+    )
+    const body = JSON.parse(String(post?.[1]?.body))
+    const expectedPoint = structuredClone(wireFixture.inspection_points[5])
+    expectedPoint.sequence = body.inspection_points[0].sequence
+    expectedPoint.measurement_fields[0].client_id =
+      body.inspection_points[0].measurement_fields[0].client_id
+    expect(body.inspection_points[0]).toEqual(expectedPoint)
+    expect(body.inspection_points[0].measurement_fields[0].unit).toBe('m')
+  })
+
+  it('does not bind an earlier new field before a persisted field id', async () => {
+    const item = structuredClone(sampleItem) as TemplateItem
+    item.inspection_points[0].numeric_standard = {
+      ...item.inspection_points[0].numeric_standard!,
+      measurement_field_id: '00000000-0000-4000-8000-000000000021',
+      measurement_field_client_id: undefined,
+      unit: 'cm',
+    }
+    item.inspection_points[0].measurement_fields = [
+      {
+        client_id: '00000000-0000-4000-8000-000000000020',
+        name: '長',
+        field_type: 'number',
+        unit: 'm',
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000021',
+        name: '寬',
+        field_type: 'number',
+        unit: 'cm',
+      },
+    ]
+    const fetchMock = templateFetch({
+      items: [item as unknown as Record<string, unknown>],
+      validateWire: true,
+    })
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '欄杆尺寸' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByText('查核項目已儲存')
+    const put = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates/template-1' &&
+        init?.method === 'PUT',
+    )
+    const body = JSON.parse(String(put?.[1]?.body))
+    const point = body.inspection_points[0]
+    expect(
+      point.measurement_fields.map(
+        (field: { unit: string | null }) => field.unit,
+      ),
+    ).toEqual(['m', null])
+    expect(point.numeric_standard.measurement_field_client_id).toBe(
+      point.measurement_fields[1].client_id,
+    )
+    expect(point.numeric_standard.unit).toBe('cm')
+  })
+
+  it('binds the second new numeric field and preserves the first unit', async () => {
+    const fetchMock = templateFetch({ items: [], validateWire: true })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: wireFixture.inspection_points[6].title },
+    })
+    const firstField = wireFixture.inspection_points[6].measurement_fields[0]
+    const secondField = wireFixture.inspection_points[6].measurement_fields[1]
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: firstField.name },
+    })
+    fireEvent.change(document.getElementById('field-0-0-unit')!, {
+      target: { value: firstField.unit },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增實測欄位' }))
+    fireEvent.change(document.getElementById('field-0-1-name')!, {
+      target: { value: secondField.name },
+    })
+    fireEvent.change(document.getElementById('field-0-1-unit')!, {
+      target: { value: 'cm' },
+    })
+    fireEvent.change(screen.getByLabelText(/用來判定的數字欄位/), {
+      target: {
+        value: screen
+          .getByRole('option', { name: 'Width' })
+          .getAttribute('value'),
+      },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    await screen.findByText('查核項目已儲存')
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url) === '/api/v1/templates' && init?.method === 'POST',
+    )
+    const body = JSON.parse(String(post?.[1]?.body))
+    const point = body.inspection_points[0]
+    const expectedPoint = structuredClone(wireFixture.inspection_points[6])
+    expectedPoint.sequence = point.sequence
+    expectedPoint.measurement_fields.forEach((field, index) => {
+      field.client_id = point.measurement_fields[index].client_id
+    })
+    expectedPoint.numeric_standard!.measurement_field_client_id =
+      point.measurement_fields[1].client_id
+    expect(point).toEqual(expectedPoint)
+    expect(
+      point.measurement_fields.map(
+        (field: { unit: string | null }) => field.unit,
+      ),
+    ).toEqual(['m', null])
+    expect(point.numeric_standard.measurement_field_client_id).toBe(
+      point.measurement_fields[1].client_id,
+    )
   })
 
   it('validates units and reversed interval before any request', async () => {

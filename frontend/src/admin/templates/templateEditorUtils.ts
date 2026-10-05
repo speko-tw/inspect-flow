@@ -6,20 +6,29 @@ export function numberFields(point: InspectionPoint): MeasurementField[] {
   )
 }
 
+export function localizeField(field: MeasurementField): MeasurementField {
+  const clientKey =
+    field.clientKey ?? field.client_id ?? field.id ?? crypto.randomUUID()
+  return {
+    ...field,
+    client_id: field.client_id ?? field.id ?? clientKey,
+    clientKey,
+  }
+}
+
 export function boundField(
   point: InspectionPoint,
 ): MeasurementField | undefined {
-  const standard = point.numeric_standard
-  return point.measurement_fields.find(
-    (field) =>
-      field.client_id === standard?.measurement_field_client_id ||
-      field.id === standard?.measurement_field_id,
-  )
+  const key = point.numeric_standard?.measurement_field_client_key
+  if (!key) return undefined
+  return point.measurement_fields.find((field) => field.clientKey === key)
 }
 
 export function addNumberField(point: InspectionPoint): InspectionPoint {
+  const clientKey = crypto.randomUUID()
   const field: MeasurementField = {
-    client_id: crypto.randomUUID(),
+    client_id: clientKey,
+    clientKey,
     name: '',
     field_type: 'number',
     unit: '',
@@ -32,7 +41,8 @@ export function addNumberField(point: InspectionPoint): InspectionPoint {
     numeric_standard: standard
       ? {
           ...standard,
-          measurement_field_client_id: field.client_id,
+          measurement_field_client_key: field.clientKey,
+          measurement_field_client_id: undefined,
           measurement_field_id: undefined,
           unit: '',
         }
@@ -56,12 +66,11 @@ export function numberStandard(point: InspectionPoint): InspectionPoint {
       range_form: existing?.range_form ?? 'interval',
       lower_bound: existing?.lower_bound ?? '',
       upper_bound: existing?.upper_bound ?? '',
-      measurement_field_id:
-        existing?.measurement_field_id ??
-        (fields.length === 1 ? fields[0].id : undefined),
-      measurement_field_client_id:
-        existing?.measurement_field_client_id ??
-        (fields.length === 1 ? fields[0].client_id : ''),
+      measurement_field_id: undefined,
+      measurement_field_client_id: undefined,
+      measurement_field_client_key:
+        existing?.measurement_field_client_key ??
+        (fields.length === 1 ? fields[0].clientKey : ''),
     },
   }
 }
@@ -73,15 +82,28 @@ export function forWire(item: TemplateItem): TemplateItem {
     title: item.title.trim(),
     instruction: item.instruction,
     inspection_points: item.inspection_points.map((point) => {
-      const fields = point.measurement_fields.map((field) => ({
-        ...field,
-        client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
-      }))
+      const fields = point.measurement_fields.map(localizeField)
       const numeric = point.numeric_standard
+      const keyByClientId = new Map(
+        fields
+          .filter((field) => field.client_id)
+          .map((field) => [field.client_id!, field.clientKey!]),
+      )
+      const keyById = new Map(
+        fields
+          .filter((field) => field.id)
+          .map((field) => [field.id!, field.clientKey!]),
+      )
+      const boundKey =
+        numeric?.measurement_field_client_key ??
+        (numeric?.measurement_field_client_id
+          ? keyByClientId.get(numeric.measurement_field_client_id)
+          : undefined) ??
+        (numeric?.measurement_field_id
+          ? keyById.get(numeric.measurement_field_id)
+          : undefined)
       const bound = fields.find(
-        (field) =>
-          field.client_id === numeric?.measurement_field_client_id ||
-          field.id === numeric?.measurement_field_id,
+        (field) => Boolean(boundKey) && field.clientKey === boundKey,
       )
       const interval =
         numeric?.condition === 'range' && numeric.range_form === 'interval'
@@ -96,7 +118,8 @@ export function forWire(item: TemplateItem): TemplateItem {
           field_type: field.field_type,
           unit:
             field.field_type === 'number' &&
-            (field.client_id === bound?.client_id || field.id === bound?.id)
+            Boolean(bound) &&
+            field.clientKey === bound?.clientKey
               ? null
               : field.field_type === 'number'
                 ? clean(field.unit)
@@ -114,8 +137,7 @@ export function forWire(item: TemplateItem): TemplateItem {
                   : null,
               lower_bound: interval ? clean(numeric.lower_bound) : null,
               upper_bound: interval ? clean(numeric.upper_bound) : null,
-              measurement_field_client_id:
-                bound?.client_id ?? numeric.measurement_field_client_id,
+              measurement_field_client_id: bound?.client_id,
             }
           : null,
         text_standard: point.text_standard

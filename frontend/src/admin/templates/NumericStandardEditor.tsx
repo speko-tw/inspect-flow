@@ -119,27 +119,20 @@ export function NumericStandardEditor({
                   id={`binding-${index}`}
                   onChange={(event) => {
                     const field = numberOptions.find(
-                      (row) =>
-                        (row.client_id ?? row.id) === event.target.value,
+                      (row) => row.clientKey === event.target.value,
                     )
                     updateNumeric(index, {
                       measurement_field_id: undefined,
-                      measurement_field_client_id: event.target.value,
+                      measurement_field_client_id: undefined,
+                      measurement_field_client_key: event.target.value,
                       unit: field?.unit ?? '',
                     })
                   }}
-                  value={
-                    standard.measurement_field_client_id ??
-                    standard.measurement_field_id ??
-                    ''
-                  }
+                  value={standard.measurement_field_client_key ?? ''}
                 >
                   <option value="">請選擇…</option>
                   {numberOptions.map((field) => (
-                    <option
-                      key={field.client_id ?? field.id}
-                      value={field.client_id ?? field.id}
-                    >
+                    <option key={field.clientKey} value={field.clientKey}>
                       {field.name || '未命名欄位'}
                     </option>
                   ))}

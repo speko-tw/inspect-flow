@@ -718,6 +718,18 @@ def test_frontend_payload_fixture_roundtrips_through_single_item_api(clients):
     assert fetched_points[4]["text_standard"]["text"] == (
         "Match the approved sample"
     )
+    unbound_point = fetched_points[5]
+    assert unbound_point["numeric_standard"] is None
+    assert unbound_point["measurement_fields"][0]["unit"] == "m"
+    second_bound_point = fetched_points[6]
+    assert [
+        field["unit"] for field in second_bound_point["measurement_fields"]
+    ] == ["m", "cm"]
+    assert (
+        second_bound_point["numeric_standard"]["measurement_field_id"]
+        == second_bound_point["measurement_fields"][1]["id"]
+    )
+    assert second_bound_point["numeric_standard"]["unit"] == "cm"
     for point in fetched_points[:4]:
         bound_id = point["numeric_standard"]["measurement_field_id"]
         bound = next(
