@@ -48,6 +48,20 @@ function errorMessage(error: unknown): string {
   if (isReinspectionChoiceRequired(error)) {
     return REINSPECTION_CHOICE_ERROR
   }
+  if (error instanceof ManagementApiError) {
+    if (error.code === 'inspection_plan.archived') {
+      return ARCHIVED_PLAN_ERROR
+    }
+    if (error.code === 'resource.not_found') {
+      return '找不到此查核項目，請返回專案重新選擇。'
+    }
+    if (error.code === 'request.validation_failed') {
+      return '請檢查項目名稱與查核項次的必填欄位。'
+    }
+    if (error.code === 'inspection_task.invalid_transition') {
+      return '任務狀態已變更，請重新載入後再試。'
+    }
+  }
   return '載入或儲存失敗，請稍後再試。'
 }
 
@@ -65,7 +79,7 @@ function taskConsequence(status: TaskStatus): string {
   if (status === 'DRAFT') return '標準在原任務內更新'
   if (status === 'COMPLETED') return '退回進行中'
   if (status === 'CANCELLED') {
-    return '恢復時套用新標準並' + '標記待重查'
+    return '恢復時套用新標準；原有結果若受影響才待重查'
   }
   return '維持目前狀態'
 }
@@ -84,12 +98,16 @@ export default function ProjectItemChangePage({
   )
   const [reinspect, setReinspect] = useState<boolean | null>(null)
   const [result, setResult] = useState<ProjectItemChangeResult | null>(null)
+  const [resultTasks, setResultTasks] = useState(
+    [] as ProjectItemPreview['affectedTasks'],
+  )
   const [confirming, setConfirming] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
+  const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -130,6 +148,10 @@ export default function ProjectItemChangePage({
     }
   }, [confirming])
 
+  useEffect(() => {
+    if (error && preview) actionErrorRef.current?.focus()
+  }, [error, preview])
+
   async function reloadPreview(): Promise<ProjectItemPreview> {
     if (!projectId || !itemId) throw new Error('Missing route parameters')
     const loaded = await api.loadPreview(projectId, itemId)
@@ -151,13 +173,14 @@ export default function ProjectItemChangePage({
     }
     try {
       const updated = await api.update(projectId, itemId, change)
+      setResultTasks(preview?.affectedTasks ?? [])
       setResult(updated)
       setConfirming(false)
       try {
         const loaded = await reloadPreview()
-        setTitle(change.title)
-        setInstruction(change.instruction)
-        setInspectionPoints(change.inspection_points)
+        setTitle(loaded.item.title)
+        setInstruction(loaded.item.instruction)
+        setInspectionPoints(loaded.item.inspection_points)
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)
         }
@@ -171,6 +194,17 @@ export default function ProjectItemChangePage({
       if (isForbidden(caught)) {
         setReadOnly(true)
         setConfirming(false)
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.code === 'inspection_plan.archived'
+      ) {
+        setReadOnly(true)
+        setConfirming(false)
+        try {
+          await reloadPreview()
+        } catch {
+          // 保留後端回報的封存訊息。
+        }
       } else if (isReinspectionChoiceRequired(caught)) {
         try {
           const loaded = await reloadPreview()
@@ -216,12 +250,12 @@ export default function ProjectItemChangePage({
       </p>
       <h1 id="project-item-heading">修改專案查核項目</h1>
       {readOnly && <p role="status">唯讀瀏覽</p>}
-      {error && <p role="alert">{error}</p>}
+      {error && !preview && <p role="alert">{error}</p>}
       {preview && (
         <>
           <form onSubmit={submit}>
             <label>
-              項目名稱
+              項目名稱 *
               <input
                 disabled={readOnly || busy}
                 onChange={(event) => setTitle(event.target.value)}
@@ -243,8 +277,9 @@ export default function ProjectItemChangePage({
                 <fieldset key={`${point.sequence}-${index}`}>
                   <legend>第 {point.sequence} 項</legend>
                   <label>
-                    項次名稱
+                    項次名稱 *
                     <input
+                      required
                       onChange={(event) =>
                         setInspectionPoints(
                           updatePoint(inspectionPoints, index, {
@@ -270,8 +305,9 @@ export default function ProjectItemChangePage({
                   </label>
                   {point.text_standard && (
                     <label>
-                      文字標準
+                      文字標準 *
                       <textarea
+                        required
                         onChange={(event) =>
                           setInspectionPoints(
                             updatePoint(inspectionPoints, index, {
@@ -307,6 +343,11 @@ export default function ProjectItemChangePage({
             <button disabled={readOnly || busy} type="submit">
               儲存變更
             </button>
+            {error && (
+              <p ref={actionErrorRef} role="alert" tabIndex={-1}>
+                {error}
+              </p>
+            )}
           </form>
 
           {confirming && (
@@ -403,41 +444,54 @@ export default function ProjectItemChangePage({
           {result && (
             <section aria-labelledby="change-result-heading" role="status">
               <h2 id="change-result-heading">修改結果</h2>
-              <h3>已作廢並保留的舊需求／Snapshot 歷史</h3>
-              {result.invalidatedHistory.length ? (
-                <ul>
-                  {result.invalidatedHistory.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>沒有舊需求或 Snapshot 歷史被作廢。</p>
+              <p>
+                {result.reinspection_selected
+                  ? '已選擇重新查核。'
+                  : '已更正文字，沒有重新查核。'}
+              </p>
+              {result.reinspection_selected && (
+                <p>
+                  已派出且未取消任務中，受影響項目的舊需求與 Snapshot
+                  已標記作廢並保留可查；只有已有結果的項目，才另外作廢
+                  舊結果與照片並列為待重查。
+                </p>
               )}
-              <h3>已作廢的結果／照片，並列為待重查</h3>
-              {result.invalidatedResults.length ? (
+              <h3>受影響任務的實際處理</h3>
+              {result.affected_tasks.length ? (
                 <ul>
-                  {result.invalidatedResults.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
+                  {result.affected_tasks.map((task) => {
+                    const before = resultTasks.find(
+                      (entry) => entry.id === task.task_id,
+                    )
+                    return (
+                      <li key={task.task_id}>
+                        {before?.name ?? task.task_id}：
+                        {task.action === 'draft_updated' && '草稿任務原位更新'}
+                        {task.action === 'returned_to_in_progress' &&
+                          '已完成任務退回進行中'}
+                        {task.action === 'needs_reinspection' &&
+                          '受影響項目待重查'}
+                        {task.action === 'updated' &&
+                          '目前標準已更新，任務狀態維持'}
+                        {task.action === 'apply_current_standard_on_restore' &&
+                          '取消狀態維持，恢復時套用目前標準'}
+                        {result.reinspection_selected &&
+                          task.prior_status !== 'DRAFT' &&
+                          task.prior_status !== 'CANCELLED' &&
+                          '；此項目的舊需求與 Snapshot 已作廢並保留可查'}
+                        {task.needs_reinspection && '；須重新查核'}
+                        {before && before.preservedItemTitles.length > 0 && (
+                          <>
+                            ；其他項目維持有效：
+                            {before.preservedItemTitles.join('、')}
+                          </>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               ) : (
-                <p>沒有既有結果或照片需要作廢。</p>
-              )}
-              <h3>維持有效的其他項目</h3>
-              <ul>
-                {result.preservedItems.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-              <h3>草稿任務原位更新</h3>
-              {result.updatedDraftTasks.length ? (
-                <ul>
-                  {result.updatedDraftTasks.map((task) => (
-                    <li key={task}>{task}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p>沒有草稿任務。</p>
+                <p>沒有任務使用此項目。</p>
               )}
             </section>
           )}

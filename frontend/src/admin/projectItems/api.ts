@@ -1,9 +1,5 @@
+import { ManagementApiError, request, type Page } from '../api'
 import type { InspectionPoint } from '../templates/api'
-
-/**
- * TODO(#361): define the read contract for affected Tasks and the PATCH
- * success response. The frozen spec defines only the project item PATCH.
- */
 
 export type TaskStatus =
   'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
@@ -16,6 +12,20 @@ export interface ProjectItemData {
   inspection_points: InspectionPoint[]
 }
 
+interface TaskItem {
+  id: string
+  current_snapshot: { title: string } | null
+}
+
+interface ImpactTask {
+  id: string
+  status: TaskStatus
+  plan_name: string | null
+  plan_archived: boolean
+  has_result: boolean
+  items: TaskItem[]
+}
+
 export interface AffectedTask {
   id: string
   name: string
@@ -23,15 +33,14 @@ export interface AffectedTask {
   status: TaskStatus
   planArchived: boolean
   hasResult: boolean
+  preservedItemTitles: string[]
 }
 
 export interface ProjectItemPreview {
   item: ProjectItemData
   affectedTasks: AffectedTask[]
-  preservedItemTitles: string[]
 }
 
-/** Matches the frozen inspection-planning PATCH body. */
 export interface ProjectItemChange {
   title: string
   instruction: string
@@ -39,15 +48,24 @@ export interface ProjectItemChange {
   reinspect?: boolean
 }
 
-/**
- * TODO(#361): map the eventual PATCH response to this UI result contract.
- */
-export interface ProjectItemChangeResult {
-  invalidatedHistory: string[]
-  invalidatedResults: string[]
-  preservedItems: string[]
-  updatedDraftTasks: string[]
-  reinspectionSelected: boolean
+export type TaskAction =
+  | 'draft_updated'
+  | 'returned_to_in_progress'
+  | 'needs_reinspection'
+  | 'updated'
+  | 'apply_current_standard_on_restore'
+
+export interface AffectedTaskResult {
+  task_id: string
+  prior_status: TaskStatus
+  status: TaskStatus
+  action: TaskAction
+  needs_reinspection: boolean
+}
+
+export interface ProjectItemChangeResult extends ProjectItemData {
+  reinspection_selected: boolean | null
+  affected_tasks: AffectedTaskResult[]
 }
 
 export interface ProjectItemApi {
@@ -59,125 +77,93 @@ export interface ProjectItemApi {
   ): Promise<ProjectItemChangeResult>
 }
 
-function textPoint(
-  sequence: number,
-  title: string,
-  text: string,
-): InspectionPoint {
-  return {
-    sequence,
-    title,
-    instruction: '',
-    text_standard: { text },
-    numeric_standard: null,
-    measurement_fields: [],
-    evidence_requirements: [],
-  }
+async function allPages<T>(path: string): Promise<T[]> {
+  const rows: T[] = []
+  let cursor: string | null = null
+  do {
+    const params = new URLSearchParams({ limit: '100' })
+    if (cursor) params.set('cursor', cursor)
+    const page = await request<Page<T>>(`${path}?${params}`)
+    rows.push(...page.items)
+    cursor = page.next_cursor
+  } while (cursor)
+  return rows
 }
 
-const DEMO_TASKS: AffectedTask[] = [
-  {
-    id: 'task-draft',
-    name: '地下室抽查',
-    planName: '地下室查核計畫',
-    status: 'DRAFT',
-    planArchived: false,
-    hasResult: false,
-  },
-  {
-    id: 'task-pending',
-    name: '一樓巡檢',
-    planName: '樓層巡檢計畫',
-    status: 'PENDING',
-    planArchived: false,
-    hasResult: false,
-  },
-  {
-    id: 'task-done',
-    name: '二樓巡檢',
-    planName: '樓層巡檢計畫',
-    status: 'COMPLETED',
-    planArchived: false,
-    hasResult: true,
-  },
-  {
-    id: 'task-in-progress',
-    name: '三樓巡檢',
-    planName: '樓層巡檢計畫',
-    status: 'IN_PROGRESS',
-    planArchived: false,
-    hasResult: false,
-  },
-  {
-    id: 'task-cancelled',
-    name: '屋頂抽查',
-    planName: '屋頂查核計畫',
-    status: 'CANCELLED',
-    planArchived: false,
-    hasResult: true,
-  },
-]
-
-function copyPreview(preview: ProjectItemPreview): ProjectItemPreview {
-  return structuredClone(preview)
+export function listProjectItems(
+  projectId: string,
+): Promise<ProjectItemData[]> {
+  return allPages(`/projects/${projectId}/inspection-items`)
 }
 
-/** Mock entry for development only; #361 replaces this adapter. */
-export function createMockProjectItemApi(): ProjectItemApi {
-  const preview: ProjectItemPreview = {
-    item: {
-      id: 'item-1',
-      sequence: 1,
-      title: '混凝土表面檢查',
-      instruction: '檢查混凝土表面狀況',
-      inspection_points: [
-        textPoint(1, '表面完整', '不得有明顯裂縫'),
-        textPoint(2, '表面平整', '不得有明顯高低差'),
-      ],
-    },
-    affectedTasks: structuredClone(DEMO_TASKS),
-    preservedItemTitles: ['鋼筋間距', '保護層厚度'],
-  }
+function patchPoints(points: InspectionPoint[]) {
+  return points.map((point) => ({
+    sequence: point.sequence,
+    title: point.title,
+    instruction: point.instruction,
+    text_standard: point.text_standard,
+    numeric_standard: point.numeric_standard
+      ? {
+          value: point.numeric_standard.value,
+          condition: point.numeric_standard.condition,
+          unit: point.numeric_standard.unit,
+          tolerance: point.numeric_standard.tolerance,
+          range_form: point.numeric_standard.range_form ?? null,
+          lower_bound: point.numeric_standard.lower_bound ?? null,
+          upper_bound: point.numeric_standard.upper_bound ?? null,
+          measurement_field_client_id:
+            point.numeric_standard.measurement_field_id,
+        }
+      : null,
+    measurement_fields: point.measurement_fields.map((field) => ({
+      client_id: field.id,
+      name: field.name,
+      field_type: field.field_type,
+      unit: field.unit,
+    })),
+    evidence_requirements: point.evidence_requirements.map((row) => ({
+      min_count: row.min_count,
+    })),
+  }))
+}
 
-  return {
-    async loadPreview() {
-      return copyPreview(preview)
-    },
-    async update(_projectId, _itemId, change) {
-      const activeTasks = preview.affectedTasks.filter(
-        (task) => task.status !== 'CANCELLED',
-      )
-      preview.item = {
-        ...preview.item,
+export const projectItemApi: ProjectItemApi = {
+  async loadPreview(projectId, itemId) {
+    const path = `/projects/${projectId}/inspection-items`
+    const [items, tasks] = await Promise.all([
+      listProjectItems(projectId),
+      allPages<ImpactTask>(`${path}/${itemId}/tasks`),
+    ])
+    const item = items.find((entry) => entry.id === itemId)
+    if (!item) throw new ManagementApiError(404, 'resource.not_found')
+    return {
+      item,
+      affectedTasks: tasks.map((task) => ({
+        id: task.id,
+        name:
+          task.items.find((entry) => entry.id === itemId)?.current_snapshot
+            ?.title ?? item.title,
+        planName: task.plan_name ?? '未命名計畫',
+        status: task.status,
+        planArchived: task.plan_archived,
+        hasResult: task.has_result,
+        preservedItemTitles: task.items
+          .filter((entry) => entry.id !== itemId)
+          .map((entry) => entry.current_snapshot?.title ?? entry.id),
+      })),
+    }
+  },
+  update(projectId, itemId, change) {
+    return request(`/projects/${projectId}/inspection-items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
         title: change.title,
         instruction: change.instruction,
-        inspection_points: structuredClone(change.inspection_points),
-      }
-      const result: ProjectItemChangeResult = {
-        invalidatedHistory: change.reinspect
-          ? activeTasks
-              .filter((task) => task.status !== 'DRAFT')
-              .map((task) => `${task.name}：${change.title}`)
-          : [],
-        invalidatedResults: change.reinspect
-          ? activeTasks
-              .filter((task) => task.status !== 'DRAFT' && task.hasResult)
-              .map((task) => `${task.name}：${change.title}`)
-          : [],
-        preservedItems: [...preview.preservedItemTitles],
-        updatedDraftTasks: activeTasks
-          .filter((task) => task.status === 'DRAFT')
-          .map((task) => task.name),
-        reinspectionSelected: change.reinspect ?? false,
-      }
-      if (change.reinspect) {
-        preview.affectedTasks = preview.affectedTasks.map((task) =>
-          task.status === 'COMPLETED'
-            ? { ...task, status: 'IN_PROGRESS' }
-            : task,
-        )
-      }
-      return result
-    },
-  }
+        inspection_points: patchPoints(change.inspection_points),
+        ...(change.reinspect === undefined
+          ? {}
+          : { reinspect: change.reinspect }),
+      }),
+    })
+  },
 }
