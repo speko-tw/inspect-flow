@@ -305,6 +305,12 @@ class ProjectInspectionItem(AuditMixin, TimestampedBase):
             "project_id",
             unique=True,
         ),
+        Index(
+            "ix_project_inspection_items_project_created_id",
+            "project_id",
+            "created_at",
+            "id",
+        ),
     )
 
 

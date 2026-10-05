@@ -26,6 +26,7 @@ from app.models import (
     User,
 )
 from app.services.audit import record_audit_event
+from app.services.batch_load import load_grouped
 from app.services.operator import get_current_operator
 from app.services.template_library import create_template
 
@@ -89,6 +90,27 @@ def _copy_template_item(
         .where(TemplateInspectionPoint.template_item_id == template.id)
         .order_by(TemplateInspectionPoint.sequence, TemplateInspectionPoint.id)
     ).all()
+    point_ids = [point.id for point in points]
+    template_fields = load_grouped(
+        db,
+        TemplateMeasurementField.inspection_point_id,
+        point_ids,
+        TemplateMeasurementField.sort_order,
+        TemplateMeasurementField.id,
+    )
+    template_texts = load_grouped(
+        db, TemplateTextStandard.inspection_point_id, point_ids
+    )
+    template_numerics = load_grouped(
+        db, TemplateNumericStandard.inspection_point_id, point_ids
+    )
+    template_evidence = load_grouped(
+        db,
+        TemplateEvidenceRequirement.inspection_point_id,
+        point_ids,
+        TemplateEvidenceRequirement.created_at,
+        TemplateEvidenceRequirement.id,
+    )
     for template_point in points:
         point = ProjectInspectionPoint(
             project_inspection_item_id=copy.id,
@@ -102,18 +124,7 @@ def _copy_template_item(
         db.flush()
 
         field_id_map: dict[UUID, UUID] = {}
-        fields = db.scalars(
-            select(TemplateMeasurementField)
-            .where(
-                TemplateMeasurementField.inspection_point_id
-                == template_point.id
-            )
-            .order_by(
-                TemplateMeasurementField.sort_order,
-                TemplateMeasurementField.id,
-            )
-        ).all()
-        for template_field in fields:
+        for template_field in template_fields.get(template_point.id, ()):
             field_id = uuid7()
             field_id_map[template_field.id] = field_id
             db.add(
@@ -130,10 +141,8 @@ def _copy_template_item(
                 )
             )
 
-        text_standard = db.scalar(
-            select(TemplateTextStandard).where(
-                TemplateTextStandard.inspection_point_id == template_point.id
-            )
+        text_standard = next(
+            iter(template_texts.get(template_point.id, ())), None
         )
         if text_standard is not None:
             db.add(
@@ -146,11 +155,8 @@ def _copy_template_item(
                 )
             )
 
-        numeric_standard = db.scalar(
-            select(TemplateNumericStandard).where(
-                TemplateNumericStandard.inspection_point_id
-                == template_point.id
-            )
+        numeric_standard = next(
+            iter(template_numerics.get(template_point.id, ())), None
         )
         if numeric_standard is not None:
             db.add(
@@ -178,13 +184,7 @@ def _copy_template_item(
                 )
             )
 
-        evidence = db.scalars(
-            select(TemplateEvidenceRequirement).where(
-                TemplateEvidenceRequirement.inspection_point_id
-                == template_point.id
-            )
-        ).all()
-        for requirement in evidence:
+        for requirement in template_evidence.get(template_point.id, ()):
             db.add(
                 ProjectEvidenceRequirement(
                     inspection_point_id=point.id,
@@ -282,34 +282,33 @@ def create_template_from_project_item(
         .where(ProjectInspectionPoint.project_inspection_item_id == source.id)
         .order_by(ProjectInspectionPoint.sequence, ProjectInspectionPoint.id)
     ).all()
+    point_ids = [point.id for point in points]
+    project_fields = load_grouped(
+        db,
+        ProjectMeasurementField.inspection_point_id,
+        point_ids,
+        ProjectMeasurementField.sort_order,
+        ProjectMeasurementField.id,
+    )
+    project_texts = load_grouped(
+        db, ProjectTextStandard.inspection_point_id, point_ids
+    )
+    project_numerics = load_grouped(
+        db, ProjectNumericStandard.inspection_point_id, point_ids
+    )
+    project_requirements = load_grouped(
+        db,
+        ProjectEvidenceRequirement.inspection_point_id,
+        point_ids,
+        ProjectEvidenceRequirement.created_at,
+        ProjectEvidenceRequirement.id,
+    )
     for point in points:
-        fields = db.scalars(
-            select(ProjectMeasurementField)
-            .where(ProjectMeasurementField.inspection_point_id == point.id)
-            .order_by(
-                ProjectMeasurementField.sort_order,
-                ProjectMeasurementField.id,
-            )
-        ).all()
+        fields = project_fields.get(point.id, [])
         client_ids = {field.id: uuid7() for field in fields}
-        text = db.scalar(
-            select(ProjectTextStandard).where(
-                ProjectTextStandard.inspection_point_id == point.id
-            )
-        )
-        numeric = db.scalar(
-            select(ProjectNumericStandard).where(
-                ProjectNumericStandard.inspection_point_id == point.id
-            )
-        )
-        requirements = db.scalars(
-            select(ProjectEvidenceRequirement)
-            .where(ProjectEvidenceRequirement.inspection_point_id == point.id)
-            .order_by(
-                ProjectEvidenceRequirement.created_at,
-                ProjectEvidenceRequirement.id,
-            )
-        ).all()
+        text = next(iter(project_texts.get(point.id, ())), None)
+        numeric = next(iter(project_numerics.get(point.id, ())), None)
+        requirements = project_requirements.get(point.id, [])
         points_data.append(
             {
                 "sequence": point.sequence,

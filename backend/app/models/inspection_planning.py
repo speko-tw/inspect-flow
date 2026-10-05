@@ -82,6 +82,12 @@ class InspectionPlan(AuditMixin, TimestampedBase):
     )
     __table_args__ = (
         UniqueConstraint("id", "project_id"),
+        Index(
+            "ix_inspection_plans_project_created_id",
+            "project_id",
+            "created_at",
+            "id",
+        ),
         CheckConstraint(
             "status IN ('DRAFT', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')",
             name="inspection_plan_status_valid",
@@ -130,6 +136,19 @@ class InspectionTask(AuditMixin, TimestampedBase):
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     __table_args__ = (
         UniqueConstraint("id", "project_id"),
+        Index(
+            "ix_inspection_tasks_project_created_id",
+            "project_id",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_inspection_tasks_plan_created_id",
+            "plan_id",
+            "created_at",
+            "id",
+        ),
+        Index("ix_inspection_tasks_assignee_id", "assignee_id"),
         ForeignKeyConstraint(
             ["plan_id", "project_id"],
             ["inspection_plans.id", "inspection_plans.project_id"],

@@ -159,9 +159,18 @@ def page(
     *,
     cursor: str | None,
     limit: int,
-    serialize: Callable[[Any], Any],
+    serialize: Callable[[Any], Any] | None = None,
+    serialize_batch: Callable[[Sequence[Any]], list[Any]] | None = None,
     filters: Sequence[Any] = (),
 ) -> dict[str, Any]:
+    """Page rows ordered by ``(created_at, id)``.
+
+    Pass ``serialize`` to render one row at a time, or ``serialize_batch``
+    to render the whole page at once (one batched load per child table
+    instead of per-row queries).
+    """
+    if (serialize is None) == (serialize_batch is None):
+        raise ValueError("pass exactly one of serialize, serialize_batch")
     statement = select(model).where(*filters)
     key = page_cursor_key(cursor)
     if key is not None:
@@ -179,10 +188,12 @@ def page(
     if len(rows) > limit:
         last = items[-1]
         next_cursor = encode_page_cursor(last.created_at, last.id)
-    return {
-        "items": [serialize(item) for item in items],
-        "next_cursor": next_cursor,
-    }
+    if serialize_batch is not None:
+        rendered = serialize_batch(items)
+    else:
+        assert serialize is not None
+        rendered = [serialize(item) for item in items]
+    return {"items": rendered, "next_cursor": next_cursor}
 
 
 def page_by_text_key(
