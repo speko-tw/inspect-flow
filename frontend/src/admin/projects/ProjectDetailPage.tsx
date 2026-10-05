@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 
 import { listUsers, managementErrorMessage, type User } from '../api'
+import ProjectItemLinks from '../projectItems/ProjectItemLinks'
 import {
   addProjectMember,
   getProject,
@@ -150,6 +151,7 @@ export default function ProjectDetailPage() {
       {loading ? <p>載入中…</p> : null}
       {project && (
         <>
+          <ProjectItemLinks projectId={projectId} />
           <p>
             專案代號 {project.project_code}；業主／委託單位{' '}
             {project.client_name}；工程地點 {project.site_location}
