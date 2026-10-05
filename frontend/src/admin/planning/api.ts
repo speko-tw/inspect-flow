@@ -1,10 +1,6 @@
-import { ManagementApiError } from '../api'
+import { ManagementApiError, request } from '../api'
 
-/**
- * Inspection planning client contract. Paths and actions follow
- * docs/specs/inspection-planning/spec.md; the mock remains replaceable by the
- * HTTP implementation after the planning API is available.
- */
+/** HTTP client for the frozen inspection-planning API contract. */
 
 export type PlanStatus =
   'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'ARCHIVED'
@@ -19,9 +15,28 @@ export interface PlanningProject {
 
 export interface ProjectInspectionItem {
   id: string
+  project_id: string
   sequence: number
   title: string
   instruction: string
+  source_template_name: string | null
+  inspection_points: unknown[]
+}
+
+export interface TaskInspectionItem {
+  id: string
+  status: string
+  needs_reinspection: boolean
+  snapshots: Array<Record<string, unknown>>
+  current_snapshot: {
+    revision: number
+    source_standard_revision: number
+    title: string
+    instruction: string
+    source_template_name: string
+    is_current: boolean
+    inspection_points: unknown[]
+  } | null
 }
 
 export interface SuggestedAssignee {
@@ -38,10 +53,12 @@ export interface ProjectZone {
 
 export interface InspectionTask {
   id: string
+  project_id: string
   plan_id: string
   status: TaskStatus
-  items: ProjectInspectionItem[]
+  items: TaskInspectionItem[]
   assignee_id: string | null
+  assignee: SuggestedAssignee | null
   zone_id: string | null
   zone: { id: string; name: string } | null
   location_text: string | null
@@ -49,6 +66,8 @@ export interface InspectionTask {
   cancelled_from: 'PENDING' | 'IN_PROGRESS' | null
   started_by: string | null
   completed_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface InspectionPlan {
@@ -56,6 +75,9 @@ export interface InspectionPlan {
   project_id: string
   name: string
   status: PlanStatus
+  archived: boolean
+  created_at: string
+  updated_at: string
   tasks?: InspectionTask[]
 }
 
@@ -92,18 +114,14 @@ export class PlanningApiError extends ManagementApiError {
  * update operation.
  */
 export interface PlanningClient {
-  /**
-   * GET /api/v1/projects/{project_id}; TODO(#361): allow project inspectors.
-   */
+  /** GET /projects/{project_id}. */
   getProject(projectId: string): Promise<PlanningProject>
-  /** GET /api/v1/projects; used by the development-only project picker. */
-  listProjects(): Promise<PlanningProject[]>
   /** GET /api/v1/projects/{project_id}/inspection-items. */
   listProjectItems(projectId: string): Promise<ProjectInspectionItem[]>
   /** GET /api/v1/projects/{project_id}/zones. */
   listProjectZones(projectId: string): Promise<ProjectZone[]>
-  /** GET /api/v1/projects/{project_id}/members. */
-  listProjectMembers(projectId: string): Promise<SuggestedAssignee[]>
+  /** GET /api/v1/projects/{project_id}/inspection-task-assignees?cursor={cursor}. */
+  listProjectAssignees(projectId: string): Promise<SuggestedAssignee[]>
   /** POST /api/v1/projects/{project_id}/zones. */
   createZone(projectId: string, name: string): Promise<ProjectZone>
   /** PATCH /api/v1/projects/{project_id}/zones/{zone_id}. */
@@ -160,35 +178,123 @@ export interface PlanningClient {
   unarchivePlan(planId: string): Promise<InspectionPlan>
 }
 
-const unavailableClient: PlanningClient = new Proxy({} as PlanningClient, {
-  get: () => async () => {
-    throw new ManagementApiError(501, 'inspection_planning.not_implemented')
-  },
-})
-
-/** The mock module is loaded only by development builds. */
-function createDevelopmentClient(): PlanningClient {
-  let clientPromise: Promise<PlanningClient> | null = null
-  return new Proxy({} as PlanningClient, {
-    get:
-      (_target, operation: keyof PlanningClient) =>
-      async (...args: unknown[]) => {
-        clientPromise ??= import('./api.mock').then(
-          ({ createMockPlanningClient }) => createMockPlanningClient(),
-        )
-        const client = await clientPromise
-        const method = client[operation]
-        if (typeof method !== 'function') {
-          throw new Error('Unknown planning operation')
-        }
-        return Reflect.apply(method, client, args)
-      },
-  })
+async function allPages<T>(path: string): Promise<T[]> {
+  const items: T[] = []
+  let cursor: string | null = null
+  do {
+    const params = new URLSearchParams({ limit: '100' })
+    if (cursor) params.set('cursor', cursor)
+    const page = await request<{ items: T[]; next_cursor: string | null }>(
+      `${path}?${params.toString()}`,
+    )
+    items.push(...page.items)
+    cursor = page.next_cursor
+  } while (cursor)
+  return items
 }
 
-export const planningClient: PlanningClient = import.meta.env.DEV
-  ? createDevelopmentClient()
-  : unavailableClient
+export const planningClient: PlanningClient = {
+  async getProject(projectId) {
+    const project = await request<{ id: string; name: string }>(
+      `/projects/${projectId}`,
+    )
+    return { id: project.id, name: project.name }
+  },
+  listProjectItems(projectId) {
+    return allPages(`/projects/${projectId}/inspection-items`)
+  },
+  listProjectZones(projectId) {
+    return allPages(`/projects/${projectId}/zones`)
+  },
+  listProjectAssignees(projectId) {
+    return allPages(`/projects/${projectId}/inspection-task-assignees`)
+  },
+  createZone(projectId, name) {
+    return request(`/projects/${projectId}/zones`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    })
+  },
+  renameZone(projectId, zoneId, name) {
+    return request(`/projects/${projectId}/zones/${zoneId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    })
+  },
+  deleteZone(projectId, zoneId) {
+    return request(`/projects/${projectId}/zones/${zoneId}`, {
+      method: 'DELETE',
+    })
+  },
+  async listPlans(projectId, cursor) {
+    const params = new URLSearchParams({ limit: '100' })
+    if (cursor) params.set('cursor', cursor)
+    return request(`/projects/${projectId}/inspection-plans?${params}`)
+  },
+  getPlan(planId) {
+    return request(`/inspection-plans/${planId}`)
+  },
+  getTask(taskId) {
+    return request(`/inspection-tasks/${taskId}`)
+  },
+  createPlan(projectId, input) {
+    return request(`/projects/${projectId}/inspection-plans`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+  updatePlan(planId, input) {
+    return request(`/inspection-plans/${planId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  },
+  createTask(planId, input) {
+    return request(`/inspection-plans/${planId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+  setSuggestedAssignee(taskId, assigneeId) {
+    return request(`/inspection-tasks/${taskId}:assign`, {
+      method: 'POST',
+      body: JSON.stringify({ assignee_id: assigneeId }),
+    })
+  },
+  startTask(taskId) {
+    return request(`/inspection-tasks/${taskId}:start`, { method: 'POST' })
+  },
+  completeTask(taskId) {
+    return request(`/inspection-tasks/${taskId}:complete`, { method: 'POST' })
+  },
+  updateLocation(taskId, input) {
+    return request(`/inspection-tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  },
+  dispatchTask(taskId) {
+    return request(`/inspection-tasks/${taskId}:dispatch`, { method: 'POST' })
+  },
+  deleteDraftTask(taskId) {
+    return request(`/inspection-tasks/${taskId}`, { method: 'DELETE' })
+  },
+  cancelTask(taskId, reason) {
+    return request(`/inspection-tasks/${taskId}:cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    })
+  },
+  restoreTask(taskId) {
+    return request(`/inspection-tasks/${taskId}:restore`, { method: 'POST' })
+  },
+  archivePlan(planId) {
+    return request(`/inspection-plans/${planId}:archive`, { method: 'POST' })
+  },
+  unarchivePlan(planId) {
+    return request(`/inspection-plans/${planId}:unarchive`, { method: 'POST' })
+  },
+}
 
 export function planningErrorMessage(error: unknown): string {
   if (!(error instanceof ManagementApiError)) {
@@ -201,10 +307,18 @@ export function planningErrorMessage(error: unknown): string {
   if (error.code === 'project_zone.in_use') {
     return '分區已有任務使用，無法刪除。'
   }
-  // TODO(#361): Replace status fallbacks when the API error contract lands.
+  if (error.code === 'inspection_plan.archived')
+    return '計畫已封存，無法修改。'
+  if (error.code === 'inspection_task.invalid_transition')
+    return '目前任務狀態不允許這項操作。'
+  if (error.code === 'inspection_task.reason_required')
+    return '請填寫取消原因。'
+  if (error.code === 'inspection_task.location_locked')
+    return '目前任務狀態無法修改地點。'
+  if (error.code === 'resource.not_found')
+    return '找不到資料，請重新整理後再試。'
   if (error.status === 422) return '輸入資料不符合規格，請檢查後再試。'
   if (error.status === 409) return '目前狀態不允許這項操作，請重新整理。'
   if (error.status === 404) return '找不到資料，請重新整理後再試。'
-  if (error.status === 501) return '查核計畫 API 尚未提供。'
   return '目前無法完成操作，請稍後再試。'
 }

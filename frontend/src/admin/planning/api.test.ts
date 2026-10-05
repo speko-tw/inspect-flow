@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockPlanningClient } from './api.mock'
+import { planningClient } from './api'
 
 const PROJECT = 'project-demo-1'
 
@@ -233,9 +234,10 @@ describe('mock planning client', () => {
         location_text: null,
       })
       item.title = '外部修改'
-      expect((await client.getPlan(plan.id)).tasks?.[0].items[0].title).toBe(
-        task.items[0].title,
-      )
+      expect(
+        (await client.getPlan(plan.id)).tasks?.[0].items[0].current_snapshot
+          ?.title,
+      ).toBe(task.items[0].current_snapshot?.title)
     },
   )
 
@@ -281,7 +283,7 @@ describe('mock planning client', () => {
         'project-a-member-1',
       )
       expect(
-        (await client.listProjectMembers(PROJECT)).find(
+        (await client.listProjectAssignees(PROJECT)).find(
           (member) => member.id === assigned.assignee_id,
         )?.username,
       ).toBe('field-one')
@@ -289,4 +291,89 @@ describe('mock planning client', () => {
       expect((await client.getPlan(plan.id)).tasks).toHaveLength(0)
     },
   )
+})
+
+describe('planning HTTP client contract', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('reads backend task snapshot shape and uses paginated API envelopes', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input)
+      if (path.includes('/inspection-plans?')) {
+        const cursor = new URL(path, 'http://localhost').searchParams.get(
+          'cursor',
+        )
+        return Response.json(
+          cursor
+            ? { items: [], next_cursor: null }
+            : { items: [], next_cursor: 'cursor-2' },
+        )
+      }
+      return Response.json({
+        id: 'task-1',
+        project_id: PROJECT,
+        plan_id: 'plan-1',
+        status: 'DRAFT',
+        zone_id: null,
+        zone: null,
+        location_text: null,
+        assignee_id: null,
+        assignee: null,
+        started_by: null,
+        completed_by: null,
+        cancellation_reason: null,
+        cancelled_from: null,
+        items: [
+          {
+            id: 'item-1',
+            status: 'PENDING',
+            needs_reinspection: false,
+            snapshots: [],
+            current_snapshot: {
+              revision: 1,
+              title: '外牆檢查',
+              instruction: '確認外牆狀況',
+            },
+          },
+        ],
+        created_at: '2026-10-05T00:00:00Z',
+        updated_at: '2026-10-05T00:00:00Z',
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const plans = await planningClient.listPlans(PROJECT)
+    const task = await planningClient.getTask('task-1')
+
+    expect(plans).toEqual({ items: [], next_cursor: 'cursor-2' })
+    expect(task.items[0].current_snapshot?.title).toBe('外牆檢查')
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        '/api/v1/projects/project-demo-1/inspection-plans?',
+      ),
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/inspection-tasks/task-1',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
+  })
+
+  it('uses the assignee endpoint instead of the management member list', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ items: [], next_cursor: null }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await planningClient.listProjectAssignees(PROJECT)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '/projects/project-demo-1/inspection-task-assignees?',
+      ),
+      expect.any(Object),
+    )
+  })
 })

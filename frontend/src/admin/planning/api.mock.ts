@@ -2,6 +2,7 @@ import { PlanningApiError } from './api'
 import type {
   InspectionPlan,
   InspectionTask,
+  TaskInspectionItem,
   PlanStatus,
   PlanningClient,
   PlanningProject,
@@ -29,18 +30,27 @@ const ITEMS: Record<string, ProjectInspectionItem[]> = {
   'project-demo-1': [
     {
       id: 'item-demo-1',
+      project_id: 'project-demo-1',
+      source_template_name: '示範範本',
+      inspection_points: [],
       sequence: 1,
       title: '混凝土外觀',
       instruction: '確認表面無明顯裂縫或蜂窩。',
     },
     {
       id: 'item-demo-2',
+      project_id: 'project-demo-1',
+      source_template_name: '示範範本',
+      inspection_points: [],
       sequence: 2,
       title: '鋼筋保護層',
       instruction: '依核定圖說檢查保護層厚度。',
     },
     {
       id: 'item-demo-3',
+      project_id: 'project-demo-1',
+      source_template_name: '示範範本',
+      inspection_points: [],
       sequence: 3,
       title: '施工縫處理',
       instruction: '確認施工縫清潔與止水處理。',
@@ -49,6 +59,9 @@ const ITEMS: Record<string, ProjectInspectionItem[]> = {
   'project-demo-2': [
     {
       id: 'item-demo-4',
+      project_id: 'project-demo-2',
+      source_template_name: '示範範本',
+      inspection_points: [],
       sequence: 1,
       title: '材料進場查驗',
       instruction: '核對材料標示及出廠文件。',
@@ -184,9 +197,6 @@ export function createMockPlanningClient(options?: {
     async getProject(projectId) {
       return clone(project(projectId))
     },
-    async listProjects() {
-      return clone(PROJECTS)
-    },
     async listProjectItems(projectId) {
       project(projectId)
       return clone(ITEMS[projectId] ?? [])
@@ -195,7 +205,7 @@ export function createMockPlanningClient(options?: {
       project(projectId)
       return clone(zones.filter((zone) => zone.project_id === projectId))
     },
-    async listProjectMembers(projectId) {
+    async listProjectAssignees(projectId) {
       project(projectId)
       return clone(MEMBERS[projectId] ?? [])
     },
@@ -272,6 +282,9 @@ export function createMockPlanningClient(options?: {
         project_id: entry.project_id,
         name: entry.name,
         status: entry.status,
+        archived: entry.status === 'ARCHIVED',
+        created_at: entry.created_at,
+        updated_at: entry.updated_at,
       }))
       const next = offset + items.length
       return clone({
@@ -296,6 +309,9 @@ export function createMockPlanningClient(options?: {
         project_id: projectId,
         name,
         status: 'DRAFT',
+        archived: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         tasks: [],
       }
       plans.push(plan)
@@ -334,10 +350,29 @@ export function createMockPlanningClient(options?: {
       const itemById = new Map(
         (ITEMS[plan.project_id] ?? []).map((item) => [item.id, item]),
       )
-      const items = input.item_ids.map((id) => {
+      const items: TaskInspectionItem[] = input.item_ids.map((id) => {
         const item = itemById.get(id)
-        if (!item) throw new PlanningApiError(422, 'inspection_item.invalid')
-        return clone(item)
+        if (!item)
+          throw new PlanningApiError(
+            422,
+            'inspection_task.invalid_project_item',
+          )
+        const snapshot = {
+          revision: 1,
+          source_standard_revision: 1,
+          title: item.title,
+          instruction: item.instruction,
+          source_template_name: item.source_template_name ?? '示範範本',
+          is_current: true,
+          inspection_points: item.inspection_points,
+        }
+        return {
+          id: item.id,
+          status: 'PENDING',
+          needs_reinspection: false,
+          snapshots: [snapshot],
+          current_snapshot: snapshot,
+        }
       })
       const location = validateLocation(plan.project_id, input)
       const assignee = (MEMBERS[plan.project_id] ?? []).find(
@@ -348,10 +383,12 @@ export function createMockPlanningClient(options?: {
       }
       const task: InspectionTask = {
         id: crypto.randomUUID(),
+        project_id: plan.project_id,
         plan_id: planId,
         status: 'DRAFT',
         items,
         assignee_id: assignee?.id ?? null,
+        assignee: assignee ?? null,
         zone_id: location.zone?.id ?? null,
         zone: location.zone,
         location_text: location.location_text,
@@ -359,6 +396,8 @@ export function createMockPlanningClient(options?: {
         cancelled_from: null,
         started_by: null,
         completed_by: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }
       plan.tasks.push(task)
       plan.status = derivedStatus(plan)
@@ -374,6 +413,7 @@ export function createMockPlanningClient(options?: {
         throw new PlanningApiError(422, 'user.not_found')
       }
       task.assignee_id = assignee?.id ?? null
+      task.assignee = assignee ?? null
       return clone(task)
     },
     async startTask(taskId) {

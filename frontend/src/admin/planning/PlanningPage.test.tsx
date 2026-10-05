@@ -18,7 +18,9 @@ describe('planning management page', () => {
       'and restore',
     async () => {
       const client = createMockPlanningClient()
-      render(<PlanningPage client={client} />)
+      render(
+        <PlanningPage client={client} initialProjectId="project-demo-1" />,
+      )
 
       await screen.findByRole('heading', { name: '專案分區' })
       fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
@@ -138,7 +140,7 @@ describe('planning management page', () => {
     client.createPlan = async () => {
       throw new PlanningApiError(403, 'permission.denied')
     }
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
 
     await screen.findByRole('heading', { name: '查核計畫' })
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
@@ -150,11 +152,7 @@ describe('planning management page', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '建立計畫' })).toBeNull()
     })
-    fireEvent.change(screen.getByLabelText('專案'), {
-      target: { value: 'project-demo-2' },
-    })
-    await screen.findByRole('heading', { name: '專案分區' })
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent('唯讀模式')
   })
 
   it('shows a permission page when planning reads return 403', async () => {
@@ -178,13 +176,17 @@ describe('planning management page', () => {
 
   it('loads project from route ID without listing or fallback', async () => {
     const client = createMockPlanningClient()
-    const listProjects = vi
-      .spyOn(client, 'listProjects')
-      .mockResolvedValue([{ id: 'project-demo-1', name: '示範工程 A' }])
-    render(<PlanningPage client={client} initialProjectId="project-demo-2" />)
+    const getProject = vi.spyOn(client, 'getProject')
+    render(
+      <PlanningPage
+        key="project-demo-2"
+        client={client}
+        initialProjectId="project-demo-2"
+      />,
+    )
 
     expect(await screen.findByText('專案：示範工程 B')).toBeInTheDocument()
-    expect(listProjects).not.toHaveBeenCalled()
+    expect(getProject).toHaveBeenCalledWith('project-demo-2')
     expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
   })
 
@@ -193,13 +195,11 @@ describe('planning management page', () => {
     vi.spyOn(client, 'getProject').mockRejectedValue(
       new ManagementApiError(404, 'project.not_found'),
     )
-    const listProjects = vi.spyOn(client, 'listProjects')
     render(<PlanningPage client={client} initialProjectId="missing-project" />)
 
     expect(
       await screen.findByRole('heading', { name: '找不到專案' }),
     ).toBeInTheDocument()
-    expect(listProjects).not.toHaveBeenCalled()
     expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
   })
 
@@ -208,15 +208,11 @@ describe('planning management page', () => {
     vi.spyOn(client, 'getProject').mockRejectedValue(
       new ManagementApiError(403, 'permission.denied'),
     )
-    const listProjects = vi.spyOn(client, 'listProjects')
     render(<PlanningPage client={client} initialProjectId="project-locked" />)
 
-    expect(await screen.findByText('專案：project-locked')).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', { name: '查核計畫' }),
+      await screen.findByRole('heading', { name: '無權限' }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
-    expect(listProjects).not.toHaveBeenCalled()
   })
 
   it('shows and focuses a create-plan error inside its form', async () => {
@@ -224,7 +220,7 @@ describe('planning management page', () => {
     client.createPlan = async () => {
       throw new PlanningApiError(422, 'validation.invalid')
     }
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '查核計畫' })
 
     const form = screen.getByLabelText(/計畫名稱/).closest('form')
@@ -245,7 +241,7 @@ describe('planning management page', () => {
 
   it('shows a plan-detail read error at page level', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '查核計畫' })
 
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
@@ -273,7 +269,7 @@ describe('planning management page', () => {
 
   it('adds zones in a separate inline row and cancels with Escape', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
 
     const addButton = screen.getByRole('button', { name: '＋ 新增分區' })
@@ -293,7 +289,7 @@ describe('planning management page', () => {
     client.listProjectZones = async () => {
       throw new ManagementApiError(403, 'permission.denied')
     }
-    client.listProjectMembers = async () => {
+    client.listProjectAssignees = async () => {
       throw new ManagementApiError(403, 'permission.denied')
     }
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
@@ -307,7 +303,7 @@ describe('planning management page', () => {
 
   it('deletes draft tasks through a confirmation dialog', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '草稿刪除' },
@@ -334,7 +330,7 @@ describe('planning management page', () => {
 
   it('closes dialogs on Escape and returns focus to the trigger', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
     fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
     fireEvent.change(screen.getByLabelText(/分區名稱/), {
@@ -374,7 +370,7 @@ describe('planning management page', () => {
       location_text: null,
     })
     await client.dispatchTask(task.id)
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     fireEvent.click(
       await screen.findByRole('button', { name: '封存驗收（進行中）' }),
     )
@@ -412,7 +408,9 @@ describe('planning management page', () => {
       }
       return listProjectZones(projectId)
     }
-    render(<PlanningPage client={client} />)
+    const { rerender } = render(
+      <PlanningPage client={client} initialProjectId="project-demo-1" />,
+    )
 
     await screen.findByRole('heading', { name: '專案分區' })
     fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
@@ -428,11 +426,18 @@ describe('planning management page', () => {
     fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
     await screen.findByRole('button', { name: 'A 專用計畫（草稿）' })
 
-    fireEvent.change(screen.getByLabelText('專案'), {
-      target: { value: 'project-demo-2' },
-    })
+    vi.spyOn(client, 'getProject').mockRejectedValueOnce(
+      new ManagementApiError(404, 'resource.not_found'),
+    )
+    rerender(
+      <PlanningPage
+        key="project-demo-2"
+        client={client}
+        initialProjectId="project-demo-2"
+      />,
+    )
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前無法完成操作',
+      '網址中的專案不存在或已刪除',
     )
     expect(
       screen.queryByRole('button', { name: 'A 專用計畫（草稿）' }),
@@ -446,7 +451,9 @@ describe('planning management page', () => {
     async () => {
       const client = createMockPlanningClient()
       const deleteZone = vi.spyOn(client, 'deleteZone')
-      render(<PlanningPage client={client} />)
+      const { rerender } = render(
+        <PlanningPage client={client} initialProjectId="project-demo-1" />,
+      )
 
       await screen.findByRole('heading', { name: '專案分區' })
       fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
@@ -462,9 +469,13 @@ describe('planning management page', () => {
       )
       expect(screen.getByText('刪除分區「待刪除分區」？')).toBeInTheDocument()
 
-      fireEvent.change(screen.getByLabelText('專案'), {
-        target: { value: 'project-demo-2' },
-      })
+      rerender(
+        <PlanningPage
+          key="project-demo-2"
+          client={client}
+          initialProjectId="project-demo-2"
+        />,
+      )
       await screen.findByRole('heading', { name: '查核計畫' })
       expect(screen.queryByText('刪除分區「待刪除分區」？')).toBeNull()
       expect(deleteZone).not.toHaveBeenCalled()
@@ -473,13 +484,15 @@ describe('planning management page', () => {
 
   it('offers members returned for the selected project', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(
+      <PlanningPage
+        key="project-demo-2"
+        client={client}
+        initialProjectId="project-demo-2"
+      />,
+    )
 
     await screen.findByRole('heading', { name: '專案分區' })
-    fireEvent.change(screen.getByLabelText('專案'), {
-      target: { value: 'project-demo-2' },
-    })
-    await screen.findByRole('heading', { name: '查核計畫' })
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: 'B 專案計畫' },
     })
@@ -499,7 +512,7 @@ describe('planning management page', () => {
 
   it('renames zones and explains when an in-use zone cannot be deleted', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
     fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
     fireEvent.change(screen.getByLabelText(/分區名稱/), {
@@ -559,11 +572,14 @@ describe('planning management page', () => {
 
   it('does not show a zone selector for projects without zones', async () => {
     const client = createMockPlanningClient()
-    render(<PlanningPage client={client} />)
+    render(
+      <PlanningPage
+        key="project-demo-2"
+        client={client}
+        initialProjectId="project-demo-2"
+      />,
+    )
     await screen.findByRole('heading', { name: '專案分區' })
-    fireEvent.change(screen.getByLabelText('專案'), {
-      target: { value: 'project-demo-2' },
-    })
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '無分區計畫' },
     })
@@ -598,7 +614,7 @@ describe('planning management page', () => {
     })
     await client.dispatchTask(cancelled.id)
     await client.cancelTask(cancelled.id, '取消驗收')
-    render(<PlanningPage client={client} />)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     fireEvent.click(
       await screen.findByRole('button', { name: '唯讀狀態（已完成）' }),
     )

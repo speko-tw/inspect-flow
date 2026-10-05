@@ -35,7 +35,9 @@ const TASK_STATUS: Record<InspectionTask['status'], string> = {
 }
 
 function taskTitle(task: InspectionTask): string {
-  return task.items.map((item) => item.title).join('、')
+  return task.items
+    .map((item) => item.current_snapshot?.title ?? '')
+    .join('、')
 }
 
 export default function PlanningPage({
@@ -155,56 +157,36 @@ export default function PlanningPage({
 
   useEffect(() => {
     let active = true
-    async function loadProjects() {
+    async function loadProjectRoute() {
       setLoading(true)
       setError('')
       setAccessDenied(false)
       setProjectNotFound(false)
+      if (!initialProjectId) {
+        setLoading(false)
+        return
+      }
       try {
-        if (initialProjectId) {
-          let project: PlanningProject
-          try {
-            project = await client.getProject(initialProjectId)
-          } catch (caught) {
-            if (
-              caught instanceof ManagementApiError &&
-              caught.status === 403
-            ) {
-              // TODO(#361): project inspectors need a readable project name.
-              project = { id: initialProjectId, name: initialProjectId }
-            } else {
-              throw caught
-            }
-          }
-          if (active) {
-            setProjects([project])
-            setProjectId(initialProjectId)
-          }
-          return
-        }
-        const nextProjects = await client.listProjects()
+        const project = await client.getProject(initialProjectId)
         if (active) {
-          setProjects(nextProjects)
-          const firstProjectId = nextProjects[0]?.id ?? ''
-          setProjectId(firstProjectId)
-          if (!firstProjectId) setLoading(false)
+          setProjects([project])
+          setProjectId(initialProjectId)
         }
       } catch (caught) {
-        if (active) {
-          if (caught instanceof ManagementApiError && caught.status === 403) {
-            setAccessDenied(true)
-          } else if (
-            caught instanceof ManagementApiError &&
-            caught.status === 404
-          ) {
-            setProjectNotFound(true)
-          }
-          setError(planningErrorMessage(caught))
-          setLoading(false)
+        if (!active) return
+        if (caught instanceof ManagementApiError && caught.status === 403) {
+          setAccessDenied(true)
+        } else if (
+          caught instanceof ManagementApiError &&
+          caught.status === 404
+        ) {
+          setProjectNotFound(true)
         }
+        setError(planningErrorMessage(caught))
+        setLoading(false)
       }
     }
-    void loadProjects()
+    void loadProjectRoute()
     return () => {
       active = false
     }
@@ -232,7 +214,7 @@ export default function PlanningPage({
       const results = await Promise.allSettled([
         client.listProjectItems(projectId),
         client.listProjectZones(projectId),
-        client.listProjectMembers(projectId),
+        client.listProjectAssignees(projectId),
         allPlans(),
       ])
       if (active) {
@@ -378,35 +360,6 @@ export default function PlanningPage({
     }
   }
 
-  async function changeProject(nextProjectId: string) {
-    if (nextProjectId === projectId) return
-    setProjectId(nextProjectId)
-    setReadOnly(false)
-    setAccessDenied(false)
-    setSelectedPlanId('')
-    setItems([])
-    setZones([])
-    setMembers([])
-    setPlans([])
-    setTaskItems([])
-    setTaskZoneId('')
-    setTaskLocation('')
-    setAssigneeId('')
-    setPlanName('')
-    setEditingPlanName(false)
-    setUpdatedPlanName('')
-    setZoneName('')
-    setAddingZone(false)
-    setRenamingZone(null)
-    setEditingLocation(null)
-    setEditingAssignee(null)
-    setCancelTask(null)
-    setCancelReason('')
-    setConfirmation(null)
-    setError('')
-    setLoading(true)
-  }
-
   async function createPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const created = await act(
@@ -501,7 +454,7 @@ export default function PlanningPage({
       {projects[0] && <p>專案：{projects[0].name}</p>}
       {readOnly && <p role="status">目前為唯讀模式。</p>}
       {membersDenied && (
-        <p role="status">沒有讀取成員清單的權限；可略過建議指派。</p>
+        <p role="status">沒有讀取可指派人員清單的權限；可略過建議指派。</p>
       )}
       {error && errorContext === 'page' && (
         <p ref={errorMessage} role="alert" tabIndex={-1}>
@@ -512,23 +465,6 @@ export default function PlanningPage({
 
       {projects.length > 0 && (
         <>
-          {!initialProjectId && (
-            <label>
-              專案
-              <select
-                disabled={busy}
-                onChange={(event) => void changeProject(event.target.value)}
-                value={projectId}
-              >
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
           {projects.length === 0 ? (
             <p>目前沒有可管理的專案。</p>
           ) : (
@@ -834,12 +770,8 @@ export default function PlanningPage({
                           )}
                           <p>
                             建議指派：
-                            {members.find(
-                              (member) => member.id === task.assignee_id,
-                            )?.name_zh ??
-                              members.find(
-                                (member) => member.id === task.assignee_id,
-                              )?.username ??
+                            {task.assignee?.name_zh ??
+                              task.assignee?.username ??
                               '未指派'}
                           </p>
                           {task.status === 'CANCELLED' && (

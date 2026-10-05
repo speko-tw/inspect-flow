@@ -24,7 +24,7 @@ function ProjectPlanningRoute() {
   const { projectId } = useParams()
   return (
     <Suspense fallback={<p>載入中…</p>}>
-      <PlanningPage initialProjectId={projectId} />
+      <PlanningPage key={projectId} initialProjectId={projectId} />
     </Suspense>
   )
 }
