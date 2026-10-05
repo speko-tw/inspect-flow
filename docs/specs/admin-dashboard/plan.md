@@ -21,6 +21,7 @@
 | T8 | 0.7.x 完成驗證上線後，將 Dashboard 的完成數與完成率這兩個既有指標改採伺服器驗證完成，維持欄位與指標名稱並補測試 | `backend/app/services/`、相關 API／service tests、Dashboard UI／tests | `completion-validation` 完成驗證契約與實作；依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)；0.5.x seed 的完成 Task 由 ADM-AC12 對應 task 準備 | ADM-AC02 | 0.7.x 前置規格完成後開 task |
 | T9 | U1 使用者建立結果畫面、U2 管理者指派／收回與停用的列內確認，以及 P1 專案表單未儲存轉場提示 | `frontend/src/admin/AdminPage.tsx`、`UsersPage.tsx`、`projects/ProjectsPage.tsx`、`frontend/src/styles.css`、相關前端測試 | 負責人直接指示（#430，2026-10-04 核可範圍）；使用者建立沿用 AUT-R46，變更既有列表能力不得回退 | ADM-AC14 | #430 |
 | T10 | 建立專案首頁、流程摘要顯示、依有效權限過濾區段及現場專屬路由；專案建立成功後導向新首頁並保留重複代號警告。`AdminPage` 移除專用 `MemberProjectItems` 元件，管理者與非管理者共用 `ProjectSectionPage` 區段殼；非管理者 planning 路由移入同一殼層，調整區段頁標題階層及唯一回清單連結；補前端契約測試、瀏覽器走查及真後端驗證 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/projectHome/`（新增與測試）、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/admin/projects/ProjectsPage.tsx`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projectItems/ProjectItemChangePage.tsx`、`frontend/src/admin/planning/PlanningPage.tsx`、`frontend/src/styles.css` | #454 workflow summary API；原型由負責人操作核可；Field/內業分類及各區段可見性依摘要 `viewer_permission_codes` 與各區段讀取權限 | ADM-AC15～19 | #447 |
+| T11 | 專案成員區段：加入成員必選至少一個角色並附白話說明、成員卡片清單、修改角色獨立畫面、移出確認；後端專案成員 API 零角色回 422 專用錯誤碼；補 API 測試、前端 UI 測試與前後端契約 fixture、真後端瀏覽器走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`docs/specs/domain-model/spec.md`、`backend/app/api/errors.py`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_projects.py`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projects/MemberRoleFields.tsx`、`frontend/src/admin/projects/roleDescriptions.ts`、`frontend/src/admin/projects/ProjectMembers.css`、`frontend/src/admin/projects/fixtures/`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx` | T10（專案區段殼）；原型由負責人操作核可（#445） | ADM-AC20～22 | #449 |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
@@ -64,6 +65,8 @@
 | ADM-AC17 | Testing Library 驗證每個區段恰一個目前頁、缺少各區段權限時導覽隱藏、頁面單一 `<h1>` 與唯一「回專案清單」連結、手機選單展開及 Escape 關閉；真實 Vite 與無頭瀏覽器分別走查 1280px、360px 並保存截圖 |
 | ADM-AC18 | 前端測試以 `viewer_permission_codes` 只含 `inspection_task.inspect`／`inspection_task.read` 的帳號驗證導向 Field，並以任一內業權限驗證留在專案；真後端登入測試帳號走查權限結果 |
 | ADM-AC19 | 專案清單測試建立成功導向新首頁、重複代號仍已儲存警告顯示且可關閉、每列「開啟專案」及「成員」各自連至正確區段 |
+| ADM-AC20 | `backend/tests/api/test_projects.py`：零角色加入／取代回 422 且資料不變、帶角色成功、無權限先 403；同檔契約測試讀取 `frontend/src/admin/projects/fixtures/member-roles-contract.json`，驗證真 API 的欄位集合與錯誤碼和前端 mock 一致（RG-M22） |
+| ADM-AC21、22 | `ProjectsAdmin.test.tsx` 與 `roleDescriptions.test.ts`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、角色白話說明、修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
 | ADM-AC14 | UI 測試驗證一次性密碼結果／離頁清除、三種高風險操作的取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通流程並記錄 HTTP 狀態與桌面／360px 截圖 |
 
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。

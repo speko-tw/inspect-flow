@@ -1,0 +1,20 @@
+{
+  "add_request_keys": ["role_ids", "user_id"],
+  "set_roles_request_keys": ["role_ids"],
+  "member_write_response_keys": ["id", "role_ids", "user_id", "username"],
+  "member_list_item_keys": [
+    "company_id",
+    "company_name",
+    "email",
+    "id",
+    "is_active",
+    "name_zh",
+    "role_ids",
+    "user_id",
+    "username"
+  ],
+  "zero_role_error": {
+    "status": 422,
+    "code": "project.member_roles_required"
+  }
+}
