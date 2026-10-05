@@ -152,6 +152,10 @@ class ErrorCode(DescribedStrEnum):
         "project.member_conflict",
         "The user is already a member of this project.",
     )
+    PROJECT_MEMBER_ROLES_REQUIRED = (
+        "project.member_roles_required",
+        "A project member must have at least one role.",
+    )
     INSPECTION_PLAN_NOT_FOUND = (
         "inspection_plan.not_found",
         "The inspection plan was not found.",

@@ -246,6 +246,12 @@ def _checked_role_ids(db: Session, role_ids: list[UUID]) -> list[UUID]:
     return role_ids
 
 
+def _require_roles(role_ids: list[UUID]) -> None:
+    """ADM-R20: the API never creates or leaves a roleless member."""
+    if not role_ids:
+        raise APIError(ErrorCode.PROJECT_MEMBER_ROLES_REQUIRED, 422)
+
+
 def _member_conflict(exc: IntegrityError) -> bool:
     constraint = getattr(
         getattr(exc.orig, "diag", None), "constraint_name", None
@@ -448,6 +454,7 @@ def add_member(
     user = db.get(User, body.user_id)
     if user is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    _require_roles(body.role_ids)
     role_ids = _checked_role_ids(db, body.role_ids)
     try:
         member = add_project_member(
@@ -475,6 +482,7 @@ def edit_member_roles(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> ProjectMemberResponse:
     member = _get_member(db, project_id, user_id)
+    _require_roles(body.role_ids)
     role_ids = _checked_role_ids(db, body.role_ids)
     set_project_member_roles(db, member, role_ids)
     return _member_response(db, member)
