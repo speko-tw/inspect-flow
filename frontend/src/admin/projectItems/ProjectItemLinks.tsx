@@ -47,7 +47,12 @@ export default function ProjectItemLinks({
   return (
     <section aria-labelledby="project-items-heading">
       <h2 id="project-items-heading">專案查核項目</h2>
-      <Link to={`/admin/projects/${projectId}/templates`}>套用範本</Link>
+      <Link
+        className="standalone-link"
+        to={`/admin/projects/${projectId}/templates`}
+      >
+        套用範本
+      </Link>
       {loading && <p>載入中…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && !error && items.length === 0 && <p>目前沒有查核項目。</p>}

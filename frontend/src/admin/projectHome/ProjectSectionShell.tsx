@@ -87,7 +87,9 @@ export default function ProjectSectionShell({
     <div className="project-home-layout">
       <header className="project-home-header">
         <p>
-          <Link to="/admin/projects">回專案清單</Link>
+          <Link className="standalone-link" to="/admin/projects">
+            回專案清單
+          </Link>
         </p>
         <h1>
           {project ? `${project.project_code}｜${project.name}` : '專案'}
