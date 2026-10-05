@@ -114,6 +114,7 @@ class InspectionTask(AuditMixin, TimestampedBase):
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="DRAFT", server_default="DRAFT"
     )
+    dispatched_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     cancelled_from_status: Mapped[str | None] = mapped_column(String(16))
     cancellation_reason: Mapped[str | None] = mapped_column(String)
     assignee_id: Mapped[uuid.UUID | None] = mapped_column(
