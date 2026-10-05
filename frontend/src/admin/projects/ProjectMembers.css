@@ -1,0 +1,150 @@
+/* 專案成員區段（#449）：卡片清單、角色說明與欄位錯誤。
+   寬螢幕卡片左右排列，360px 改上下排列，觸控目標至少 44px。 */
+
+.member-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  list-style: none;
+}
+
+.member-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.member-card-main {
+  min-width: 0;
+  flex: 1 1 16rem;
+  overflow-wrap: anywhere;
+}
+
+.member-card-main p {
+  margin: 0;
+}
+
+.member-card-name {
+  font-weight: 700;
+}
+
+.member-card-roles {
+  margin-top: var(--space-1);
+}
+
+.member-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.member-card-actions button,
+.member-actions button,
+.member-confirm button,
+.member-add-form button,
+.member-edit-view button {
+  min-height: 44px;
+}
+
+.member-confirm {
+  flex: 1 1 100%;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+}
+
+.member-confirm p {
+  margin: 0;
+}
+
+.member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.member-hint,
+.member-muted {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.member-warning {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.member-role-option {
+  min-height: 44px;
+  padding: var(--space-1) 0;
+  align-items: flex-start;
+}
+
+.member-role-option input {
+  flex: none;
+  margin-top: 0.2rem;
+}
+
+.member-role-text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.member-role-name {
+  font-weight: 600;
+}
+
+.member-field-error {
+  margin: var(--space-2) 0 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.member-add-form,
+.member-edit-view {
+  max-width: 40rem;
+}
+
+.member-add-form {
+  margin-bottom: var(--space-5);
+}
+
+.member-empty {
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.member-empty p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .member-card {
+    align-items: stretch;
+  }
+
+  .member-card-actions {
+    flex: 1 1 100%;
+  }
+
+  .member-card-actions button {
+    flex: 1 1 8rem;
+  }
+
+  .member-actions button {
+    flex: 1 1 8rem;
+  }
+}
