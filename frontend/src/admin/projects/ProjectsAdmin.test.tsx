@@ -124,6 +124,36 @@ function projectFetch({
       if (parsed.pathname.endsWith('/inspection-items') && method === 'GET') {
         return Response.json({ items: [], next_cursor: null })
       }
+      if (parsed.pathname.endsWith('/workflow-summary') && method === 'GET') {
+        const summaryProject =
+          projectRows.find(
+            (row) => row.id === parsed.pathname.split('/')[4],
+          ) ?? projectRows[0]
+        return Response.json({
+          project: {
+            id: summaryProject?.id ?? 'project-1',
+            project_code: summaryProject?.project_code ?? 'DEMO-001',
+            name: summaryProject?.name ?? '示範工程',
+          },
+          member_count: memberRows.length,
+          inspection_item_count: 0,
+          zone_count: 0,
+          plan_count: 0,
+          task_counts: {
+            DRAFT: 0,
+            PENDING: 0,
+            IN_PROGRESS: 0,
+            COMPLETED: 0,
+            CANCELLED: 0,
+          },
+          pending_reinspection_task_count: 0,
+          next_steps: [],
+          primary_step: null,
+          task_counts_visible: true,
+          draft_tasks_missing_assignee: 0,
+          viewer_permission_codes: ['inspection_plan.read'],
+        })
+      }
       if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
         const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
         const filtered = projectRows.filter((project) =>
@@ -272,19 +302,25 @@ describe('admin projects page', () => {
     expect(screen.getByText('（代號重複）')).toBeVisible()
     expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveAttribute(
       'href',
-      '/admin/projects/project-1',
+      '/admin/projects/project-1/members',
     )
+    expect(
+      screen.getAllByRole('link', { name: '開啟專案' })[0],
+    ).toHaveAttribute('href', '/admin/projects/project-1')
     expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveClass(
       'button-link',
     )
   })
 
-  it('links project details to planning and task management', async () => {
+  it('opens the project home with section navigation', async () => {
     projectFetch()
     renderAt('/admin/projects/project-1')
 
     expect(
-      await screen.findByRole('heading', { name: '專案成員：示範工程' }),
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'DEMO-001｜示範工程' }),
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '計畫與任務' })).toHaveAttribute(
       'href',
@@ -342,10 +378,9 @@ describe('admin projects page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      '專案「第二示範工程」已儲存。',
-    )
-    expect(await screen.findByText('第二示範工程')).toBeVisible()
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-002｜第二示範工程' }),
+    ).toBeVisible()
     const [, init] = calls(fetchMock, 'POST', /\/projects$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       project_code: 'DEMO-002',
@@ -368,9 +403,13 @@ describe('admin projects page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
 
-    const status = await screen.findByRole('status')
-    expect(status).toHaveTextContent('專案代號「DEMO-001」與其他專案重複')
-    expect(status).toHaveTextContent('仍已儲存')
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜第二示範工程' }),
+    ).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '專案代號「DEMO-001」與其他專案重複，仍已儲存。',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '關閉警告' }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -575,7 +614,7 @@ describe('admin project members', () => {
         },
       ],
     })
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
 
     const annaRow = (await screen.findByText('anna.deng')).closest('tr')
     expect(annaRow).not.toBeNull()
@@ -588,7 +627,7 @@ describe('admin project members', () => {
 
   it('adds a member; hides existing, inactive, system users', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
     await screen.findByText('anna.deng')
 
     const select = screen.getByLabelText('使用者')
@@ -617,7 +656,7 @@ describe('admin project members', () => {
 
   it('adds a member without any role', async () => {
     const fetchMock = projectFetch()
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
     fireEvent.change(screen.getByLabelText('使用者'), {
@@ -637,7 +676,7 @@ describe('admin project members', () => {
 
   it('replaces a member role set, including clearing every role', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
     await screen.findByText('anna.deng')
 
     fireEvent.click(screen.getByRole('button', { name: '調整角色' }))
@@ -665,7 +704,7 @@ describe('admin project members', () => {
 
   it('asks for confirmation before removing a member', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
     await screen.findByText('anna.deng')
 
     fireEvent.click(screen.getByRole('button', { name: '移出專案' }))
@@ -688,7 +727,7 @@ describe('admin project members', () => {
         status: 409,
       },
     })
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
     fireEvent.change(screen.getByLabelText('使用者'), {
@@ -705,7 +744,7 @@ describe('admin project members', () => {
 
   it('follows role pagination until every role is loaded', async () => {
     const fetchMock = projectFetch({ rolePages: [[roleA], [roleB]] })
-    renderAt('/admin/projects/project-1')
+    renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
     expect(screen.getByLabelText('審核者')).toBeVisible()
@@ -721,7 +760,7 @@ describe('admin project members', () => {
         status: 404,
       },
     })
-    renderAt('/admin/projects/missing')
+    renderAt('/admin/projects/missing/members')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '找不到這筆資料',
