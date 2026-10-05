@@ -3,11 +3,12 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.base import uuid7
 from app.db.clock import reset_clock, set_clock
+from app.db.engine import get_engine
 from app.models import (
     InspectionTask,
     Project,
@@ -447,6 +448,19 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     )
     assert plan.status_code == 201, plan.text
     plan_id = plan.json()["id"]
+    second_item = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=2,
+        title="第二查核項目",
+        instruction="示範指示",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_at=world["item"].created_at + timedelta(seconds=1),
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(second_item)
+    db_session.commit()
 
     foreign_project = Project(
         project_code="FIELD-API-FOREIGN",
@@ -535,7 +549,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             created = admin.post(
                 f"/api/v1/inspection-plans/{plan_id}/tasks",
                 json={
-                    "item_ids": [str(world["item"].id)],
+                    "item_ids": [str(world["item"].id), str(second_item.id)],
                     "suggested_assignee_id": str(assignee_id),
                 },
             )
@@ -556,6 +570,10 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             dispatched_ids[0],
             dispatched_ids[2],
         }
+        assert own.json()["items"][0]["item_summary"] == {
+            "first_title": "表面檢查",
+            "item_count": 2,
+        }
         all_tasks = field.get(prefix, params={"assigned_to_me": "false"})
         assert all_tasks.status_code == 200, all_tasks.text
         expected = sorted(dispatched_ids, reverse=True) + [older_id]
@@ -563,6 +581,29 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         assert foreign_task_id not in {
             row["id"] for row in all_tasks.json()["items"]
         }
+
+        def select_count(limit: int) -> int:
+            statements: list[str] = []
+
+            def record(conn, cursor, statement, parameters, context, many):
+                if statement.lstrip().upper().startswith("SELECT"):
+                    statements.append(statement)
+
+            engine = get_engine()
+            event.listen(engine, "before_cursor_execute", record)
+            try:
+                measured = field.get(
+                    prefix,
+                    params={"assigned_to_me": "false", "limit": limit},
+                )
+                assert measured.status_code == 200, measured.text
+                assert len(measured.json()["items"]) == limit
+            finally:
+                event.remove(engine, "before_cursor_execute", record)
+            assert statements
+            return len(statements)
+
+        assert select_count(2) == select_count(4)
         first_page = field.get(
             prefix, params={"assigned_to_me": "false", "limit": 2}
         )
@@ -582,6 +623,33 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             2:
         ]
         assert second_page.json()["next_cursor"] is None
+        pending_first = field.get(
+            prefix,
+            params={
+                "assigned_to_me": "false",
+                "status": "PENDING",
+                "limit": 2,
+            },
+        )
+        assert [row["id"] for row in pending_first.json()["items"]] == (
+            expected[:2]
+        )
+        pending_next = field.get(
+            prefix,
+            params={
+                "assigned_to_me": "false",
+                "status": "PENDING",
+                "limit": 2,
+                "cursor": pending_first.json()["next_cursor"],
+            },
+        )
+        assert [row["id"] for row in pending_next.json()["items"]] == (
+            expected[2:]
+        )
+        assert (
+            field.get(prefix, params={"status": "COMPLETED"}).status_code
+            == 422
+        )
         assert field.get(prefix, params={"limit": 101}).status_code == 422
         assert (
             field.get(prefix, params={"cursor": "invalid"}).status_code == 422
@@ -623,6 +691,20 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             f"/api/v1/inspection-tasks/{dispatched_ids[0]}:start"
         )
         assert started.status_code == 200, started.text
+        progress = field.get(
+            prefix,
+            params={
+                "assigned_to_me": "false",
+                "status": "IN_PROGRESS",
+            },
+        )
+        assert [row["id"] for row in progress.json()["items"]] == [
+            dispatched_ids[0]
+        ]
+        pending = field.get(prefix, params={"status": "PENDING"})
+        assert dispatched_ids[0] not in {
+            row["id"] for row in pending.json()["items"]
+        }
         cancelled = admin.post(
             f"/api/v1/inspection-tasks/{dispatched_ids[0]}:cancel",
             json={"reason": "migration contract"},

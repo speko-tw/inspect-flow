@@ -271,6 +271,9 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
                 passwordStatus,
               )
         }
+        if (url.includes('/field/inspection-tasks?')) {
+          return jsonResponse({ items: [], next_cursor: null })
+        }
         return jsonResponse([])
       }),
     )
@@ -295,7 +298,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
     await submitChange()
 
-    await screen.findByRole('heading', { name: '我的工作台' })
+    await screen.findByRole('heading', { name: '今日任務' })
     expect((await screen.findByRole('status')).textContent).toBe(
       '密碼已變更。',
     )

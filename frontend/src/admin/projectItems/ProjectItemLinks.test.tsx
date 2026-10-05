@@ -7,7 +7,7 @@ import ProjectItemLinks from './ProjectItemLinks'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ProjectItemLinks', () => {
-  it('shows source and applied time and highlights newly applied items', async () => {
+  it('shows source, applied time, and new-item highlight', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(

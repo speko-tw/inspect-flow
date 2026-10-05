@@ -67,7 +67,7 @@
 |---|---|---|---|
 | GET | `/field/tasks` | 今日任務及跨專案已派任務清單；預設本人建議指派，可切換全部可查核任務；`limit`／`cursor` 分頁 | 前端需登入；後端逐筆套用 `inspection_task.inspect` |
 | GET | `/field/tasks/{task_id}` | 現場任務詳情與需求快照 | 前端需登入；後端 `inspection_task.inspect`；不存在、`DRAFT` 或無權限一律 404 |
-| GET | `/api/v1/field/inspection-tasks` | 跨專案列出 `PENDING`、`IN_PROGRESS` 已派任務；`assigned_to_me=true` 預設，`false` 列出所有可查核專案任務；可選 `project_id`、`limit`（預設 50、範圍 1–100）、`cursor`。回 `{items,next_cursor}`；每筆含 `id`、`project_id`、`project_name`、`status`、`dispatched_at`、`location: {zone_name,location_text}`、`suggested_assignee: {name_zh}|null`。全部檢視中的建議執行人姓名可見，以便同專案協作 | `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION`；逐筆檢查 `inspection_task.inspect`；Admin 即使無專案或指定不存在的 `project_id` 仍回 200 空頁；非 Admin 無任何專案權限或指定專案無權限回 403；有權限無符合資料為空頁 |
+| GET | `/api/v1/field/inspection-tasks` | 跨專案列出 `PENDING`、`IN_PROGRESS` 已派任務；`assigned_to_me=true` 預設，`false` 列出所有可查核專案任務；可選 `project_id`、`status=PENDING\|IN_PROGRESS`（省略為全部未完成狀態）、`limit`（預設 50、範圍 1–100）、`cursor`。狀態在資料庫查詢層篩選，與 cursor 分頁共用相同排序。回 `{items,next_cursor}`；每筆含 `id`、`project_id`、`project_name`、`status`、`dispatched_at`、`location: {zone_name,location_text}`、`suggested_assignee: {name_zh}\|null`、`item_summary: {first_title: string\|null, item_count: number}`。摘要採第一個 Task 查核項目之目前需求快照標題與項目總數；無目前快照時標題為 null，前端以「查核任務」呈現。全部檢視中的建議執行人姓名可見，以便同專案協作 | `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION`；逐筆檢查 `inspection_task.inspect`；Admin 即使無專案或指定不存在的 `project_id` 仍回 200 空頁；非 Admin 無任何專案權限或指定專案無權限回 403；有權限無符合資料為空頁 |
 | GET | `/api/v1/field/inspection-tasks/{task_id}` | 現場安全詳情，含分區名稱、補充位置、建議執行人及目前需求快照；不回傳 Plan ID、其他人帳號、歷史 Snapshot 或內業專用欄位。量測欄位回 `id`、`name`、`field_type`、`unit`；數值標準回 `measurement_field_id` 以關聯量測欄位 | `inspection_task.inspect`；`DRAFT`／不存在／無權限統一回 404；只具 `inspection_task.read` 回 404 |
 | POST | `/api/v1/inspection-tasks/{task_id}:start` | 開始查核；既有端點，本規格定義 Field 呼叫行為 | `inspection_task.inspect`，後端覆核 Task 與 Plan 狀態 |
 
@@ -106,6 +106,7 @@
 
 ## 變更紀錄
 
+- 規格設計（非負責人裁定，#417）：Field 列表增列目前查核項目摘要及資料庫層 `status` 篩選；卡片多項目文案為「第一項等 N 項」，返回清單時以 URL 保留範圍與狀態、Field 頁面記憶保留已載入頁數及捲動位置；離開 Field 頁面後清除記憶。
 - 依 PR #443 第 1 輪審查補充 Field API 邊界、量測欄位對應與排序契約 — #416
 - 規格設計（非負責人裁定，#416）：明定 Field 列表／安全詳情 API 的端點、參數、回應欄位、錯誤碼、逐專案權限過濾及 `dispatched_at` 排序來源；詳情只回 Field 安全欄位 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 

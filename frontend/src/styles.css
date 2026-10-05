@@ -52,6 +52,222 @@
   --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 16px rgb(16 24 40 / 6%);
 }
 
+/* Field task list follows the approved narrow mobile layout. */
+.field-shell {
+  width: min(100%, 440px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 0 16px 32px;
+}
+.field-top {
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.field-brand {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.field-brand strong {
+  color: var(--text);
+}
+.field-top-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.field-top-actions > * {
+  flex: 1;
+  min-height: 44px;
+  text-align: center;
+}
+.field-top-actions a {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+}
+.field-heading {
+  margin: 18px 0 3px;
+  font-size: 1.72rem;
+}
+.field-intro {
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+.field-scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.field-scope button {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.field-scope button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.field-filter {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 9px;
+}
+.field-filter button {
+  min-height: 44px;
+  padding: 5px 12px;
+  border-radius: 24px;
+}
+.field-filter button[aria-pressed='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--surface-alt);
+  font-weight: 700;
+}
+.field-count {
+  margin: 4px 0 10px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.field-task-list {
+  display: grid;
+  gap: 10px;
+}
+.field-task-card {
+  display: block;
+  min-width: 0;
+  padding: 13px 14px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 7px;
+}
+.field-task-card.progress {
+  border-left-color: var(--success-text);
+}
+.field-task-card:hover {
+  border-color: var(--primary);
+}
+.field-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field-card-top strong {
+  font-size: 1.08rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.field-status {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: var(--success-text);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.field-task-card:not(.progress) .field-status {
+  color: var(--text);
+  background: var(--surface-alt);
+  border-color: var(--border-strong);
+}
+.field-card-project {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 4px 0 7px;
+}
+.field-card-meta {
+  display: grid;
+  gap: 2px;
+  font-size: 0.91rem;
+}
+.field-card-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.field-card-foot strong {
+  color: var(--primary);
+}
+.field-notice {
+  padding: 16px;
+  margin: 10px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.field-notice h2 {
+  margin: 0 0 5px;
+  font-size: 1.13rem;
+}
+.field-notice p {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+}
+.field-error {
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-color: var(--error-border);
+}
+.field-error p {
+  color: inherit;
+}
+.field-more {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 15px 0 6px;
+}
+.field-back {
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+}
+.field-profile {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.field-profile summary {
+  min-height: 44px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+@media (max-width: 380px) {
+  .field-shell {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .field-task-card {
+    padding: 11px 12px;
+  }
+  .field-card-top {
+    flex-wrap: wrap;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #10151c;
@@ -904,6 +1120,10 @@ output {
   background: var(--primary);
   color: var(--on-primary);
   font-weight: 700;
+}
+
+.project-item-applied-time {
+  margin-inline-end: var(--space-2);
 }
 
 .tpl-tree-row:hover,

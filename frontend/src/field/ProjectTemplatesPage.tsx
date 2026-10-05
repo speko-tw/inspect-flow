@@ -355,8 +355,10 @@ export default function ProjectTemplatesPage() {
       const category = categories.find(
         (item) => item.id === destination?.category_id,
       )
+      const categoryName = category?.name ?? '範本庫'
+      const systemName = destination?.name ?? '目標系統'
       setNotice(
-        `已將「${saveSource.title}」存入「${category?.name ?? '範本庫'} / ${destination?.name ?? '目標系統'}」。`,
+        `已將「${saveSource.title}」存入「${categoryName} / ${systemName}」。`,
       )
       setSaveSource(null)
       setSelected(null)

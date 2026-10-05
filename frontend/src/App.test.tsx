@@ -1,5 +1,5 @@
-import { act, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router'
 import {
   afterEach,
   beforeAll,
@@ -36,9 +36,17 @@ function stubAuthenticatedFetch() {
       if (/\/(users|companies|projects)\?/.test(url)) {
         return Response.json({ items: [], next_cursor: null })
       }
+      if (url.includes('/field/inspection-tasks?')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
       return Response.json([])
     }),
   )
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="pathname">{location.pathname}</output>
 }
 
 // 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
@@ -68,10 +76,10 @@ describe('App routing', () => {
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
     ).toBeInTheDocument()
-    expect(screen.queryByText('我的工作台')).not.toBeInTheDocument()
+    expect(screen.queryByText('今日任務')).not.toBeInTheDocument()
   })
 
-  it('renders the personal workspace on /field', async () => {
+  it('renders Field tasks on /field', async () => {
     render(
       <MemoryRouter initialEntries={['/field']}>
         <App />
@@ -79,12 +87,27 @@ describe('App routing', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: '我的工作台' }),
+      await screen.findByRole('heading', { name: '今日任務' }),
     ).toBeInTheDocument()
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
     ).toBeInTheDocument()
     expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
+  })
+
+  it('redirects the legacy Field project URL to its Admin template page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/field/projects/project-1']}>
+        <LocationProbe />
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/admin/projects/project-1/templates',
+      ),
+    )
   })
 
   it('shows the release version on the login page', async () => {

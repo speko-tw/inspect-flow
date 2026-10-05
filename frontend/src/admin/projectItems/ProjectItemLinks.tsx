@@ -62,7 +62,10 @@ export default function ProjectItemLinks({
               )}
               <strong>{item.title}</strong>
               <p>來源範本：{item.source_template_name}</p>
-              <time dateTime={item.applied_at}>
+              <time
+                className="project-item-applied-time"
+                dateTime={item.applied_at}
+              >
                 套用時間：{new Date(item.applied_at).toLocaleString('zh-TW')}
               </time>
               <Link
