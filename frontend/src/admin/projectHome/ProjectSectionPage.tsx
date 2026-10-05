@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 
 import { ManagementApiError, managementErrorMessage } from '../api'
@@ -21,8 +22,10 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
 
 export default function ProjectSectionPage({
   section,
+  children,
 }: {
   section: Exclude<ProjectSection, 'home'>
+  children?: ReactNode
 }) {
   const { projectId = '' } = useParams()
   const [result, setResult] = useState<{
@@ -89,8 +92,8 @@ export default function ProjectSectionPage({
     )
   }
 
-  let content = <p>正在確認專案權限…</p>
-  if (currentResult.canViewIndoor) {
+  let content = children ?? <p>正在確認專案權限…</p>
+  if (!children && currentResult.canViewIndoor) {
     if (section === 'members') {
       content = <ProjectDetailPage />
     } else if (section === 'inspection-items') {

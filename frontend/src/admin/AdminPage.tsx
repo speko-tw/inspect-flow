@@ -79,7 +79,11 @@ export default function AdminPage() {
               path="projects/:projectId/progress"
             />
             <Route
-              element={<ProjectItemChangePage api={projectItemApi} />}
+              element={
+                <ProjectSectionPage section="inspection-items">
+                  <ProjectItemChangePage api={projectItemApi} />
+                </ProjectSectionPage>
+              }
               path="projects/:projectId/inspection-items/:itemId"
             />
           </Routes>
@@ -184,7 +188,11 @@ export default function AdminPage() {
           />
           <Route
             path="projects/:projectId/inspection-items/:itemId"
-            element={<ProjectItemChangePage api={projectItemApi} />}
+            element={
+              <ProjectSectionPage section="inspection-items">
+                <ProjectItemChangePage api={projectItemApi} />
+              </ProjectSectionPage>
+            }
           />
           <Route path="templates" element={<TemplatesPage />} />
           <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
