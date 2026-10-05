@@ -294,11 +294,25 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByRole('button', { name: '新增工程類別' }),
     ).toBeInTheDocument()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
     expect(
-      await screen.findByRole('button', { name: '新增系統…' }),
+      await screen.findByRole('button', {
+        name: /在「土木工程」新增系統/,
+      }),
     ).toBeInTheDocument()
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '護欄' }),
+    )
     expect(
-      await screen.findByRole('button', { name: '編輯：欄杆尺寸' }),
+      await screen.findByRole('button', { name: '新增查核項目' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '欄杆尺寸' }),
+    )
+    expect(
+      await screen.findByRole('button', { name: '編輯查核項目' }),
     ).toBeInTheDocument()
   })
 
@@ -942,6 +956,39 @@ describe('admin user and company pages', () => {
       '/',
     )
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+  })
+
+  it('lets members read items when edit permission is denied', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/inspection-items/item-1/tasks')) {
+        return Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        )
+      }
+      return Response.json({
+        items: [
+          {
+            id: 'item-1',
+            sequence: 1,
+            title: '混凝土表面',
+            instruction: '檢查表面',
+            inspection_points: [],
+          },
+        ],
+        next_cursor: null,
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderAdmin('/admin/projects/project-1', false)
+    fireEvent.click(
+      await screen.findByRole('link', {
+        name: '修改「混凝土表面」',
+      }),
+    )
+    expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
+    expect(screen.getByLabelText('項目名稱 *')).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('沒有權限修改')
   })
 
   it('supports creating, renaming, and deactivating a company', async () => {

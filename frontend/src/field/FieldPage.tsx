@@ -227,6 +227,10 @@ function ProjectsTable({ projects }: { projects: MyProject[] }) {
             </td>
             <td>
               <Link to={`/field/projects/${project.id}`}>套用範本</Link>
+              {' ・ '}
+              <Link to={`/admin/projects/${project.id}`}>
+                查看／修改查核項目
+              </Link>
             </td>
           </tr>
         ))}

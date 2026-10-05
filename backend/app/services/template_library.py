@@ -155,7 +155,7 @@ def _add_points(
             else None
         )
         field_ids = {field["client_id"]: uuid7() for field in fields}
-        for field in fields:
+        for sort_order, field in enumerate(fields):
             unit = field["unit"]
             if field["client_id"] == bound_client_id:
                 if unit is not None:
@@ -175,6 +175,7 @@ def _add_points(
                     name=field["name"],
                     field_type=field["field_type"],
                     unit=unit,
+                    sort_order=sort_order,
                     created_by=operator_id,
                     updated_by=operator_id,
                 )
