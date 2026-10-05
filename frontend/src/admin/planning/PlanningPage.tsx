@@ -424,7 +424,7 @@ export default function PlanningPage({
   if (accessDenied) {
     return (
       <section>
-        <h1>無權限</h1>
+        <h2>無權限</h2>
         <p role="alert">你沒有這個專案的查核計畫讀取權限。</p>
         <p>
           <a href="/">返回工作台</a>
@@ -436,7 +436,7 @@ export default function PlanningPage({
   if (projectNotFound) {
     return (
       <section>
-        <h1>找不到專案</h1>
+        <h2>找不到專案</h2>
         <p role="alert">網址中的專案不存在或已刪除。</p>
         <p>
           <a href="/">返回工作台</a>
@@ -447,9 +447,9 @@ export default function PlanningPage({
 
   return (
     <section aria-labelledby="planning-heading" ref={pageContent}>
-      <h1 id="planning-heading" ref={pageHeading} tabIndex={-1}>
+      <h2 id="planning-heading" ref={pageHeading} tabIndex={-1}>
         計畫與任務
-      </h1>
+      </h2>
       <p>計畫狀態由任務狀態自動推導；任務派出後才會提供給現場。</p>
       {projects[0] && <p>專案：{projects[0].name}</p>}
       {readOnly && <p role="status">目前為唯讀模式。</p>}

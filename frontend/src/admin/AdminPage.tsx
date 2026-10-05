@@ -13,10 +13,10 @@ import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
-import ProjectDetailPage from './projects/ProjectDetailPage'
+import ProjectHomePage from './projectHome/ProjectHomePage'
+import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import ProjectsPage from './projects/ProjectsPage'
 import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
-import ProjectItemLinks from './projectItems/ProjectItemLinks'
 import { projectItemApi } from './projectItems/api'
 import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
@@ -41,11 +41,6 @@ const NAV_ITEMS = [
   { to: '/admin/templates', label: '範本管理' },
   { to: '/change-password', label: '變更密碼' },
 ]
-
-function MemberProjectItems() {
-  const { projectId = '' } = useParams()
-  return <ProjectItemLinks projectId={projectId} />
-}
 
 export default function AdminPage() {
   const location = useLocation()
@@ -79,34 +74,54 @@ function AdminPageContent() {
     )
   }
 
-  const isProjectPlanning = /^\/admin\/projects\/[^/]+\/planning\/?$/.test(
-    location.pathname,
-  )
-  const isMemberProjectRoute =
-    /^\/admin\/projects\/[^/]+(?:\/inspection-items\/[^/]+)?\/?$/.test(
+  const isProjectSectionRoute =
+    /^\/admin\/projects\/[^/]+(?:\/(?:members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
       location.pathname,
     )
 
-  if (!user.is_admin && (isProjectPlanning || isMemberProjectRoute)) {
-    return (
-      <main>
-        <Routes>
-          <Route element={<MemberProjectItems />} path="projects/:projectId" />
-          <Route
-            element={<ProjectItemChangePage api={projectItemApi} />}
-            path="projects/:projectId/inspection-items/:itemId"
-          />
-          <Route
-            element={<ProjectPlanningRoute />}
-            path="projects/:projectId/planning"
-          />
-        </Routes>
-        <NavLink to="/field">返回工作台</NavLink>
-      </main>
-    )
-  }
-
   if (!user.is_admin) {
+    if (isProjectSectionRoute) {
+      return (
+        <main>
+          <Routes>
+            <Route element={<ProjectHomePage />} path="projects/:projectId" />
+            <Route
+              element={<ProjectSectionPage section="members" />}
+              path="projects/:projectId/members"
+            />
+            <Route
+              element={<ProjectSectionPage section="inspection-items" />}
+              path="projects/:projectId/inspection-items"
+            />
+            <Route
+              element={<ProjectSectionPage section="zones" />}
+              path="projects/:projectId/zones"
+            />
+            <Route
+              element={
+                <ProjectSectionPage section="planning">
+                  <ProjectPlanningRoute />
+                </ProjectSectionPage>
+              }
+              path="projects/:projectId/planning"
+            />
+            <Route
+              element={<ProjectSectionPage section="progress" />}
+              path="projects/:projectId/progress"
+            />
+            <Route
+              element={
+                <ProjectSectionPage section="inspection-items">
+                  <ProjectItemChangePage api={projectItemApi} />
+                </ProjectSectionPage>
+              }
+              path="projects/:projectId/inspection-items/:itemId"
+            />
+          </Routes>
+          <NavLink to="/field">返回工作台</NavLink>
+        </main>
+      )
+    }
     return (
       <main>
         <h1>無權限</h1>
@@ -119,7 +134,7 @@ function AdminPageContent() {
     <div className="app-shell">
       <header className="topbar">
         <span className="topbar-brand">InspectFlow 工程查核系統</span>
-        <h1>Admin</h1>
+        {isProjectSectionRoute ? <p>Admin</p> : <h1>Admin</h1>}
         {!temporaryPassword && (
           <nav aria-label="管理功能">
             {NAV_ITEMS.map((item) => (
@@ -193,17 +208,38 @@ function AdminPageContent() {
             <Route path="companies" element={<CompaniesPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="projects" element={<ProjectsPage />} />
+            <Route path="projects/:projectId" element={<ProjectHomePage />} />
             <Route
-              path="projects/:projectId"
-              element={<ProjectDetailPage />}
+              path="projects/:projectId/members"
+              element={<ProjectSectionPage section="members" />}
+            />
+            <Route
+              path="projects/:projectId/inspection-items"
+              element={<ProjectSectionPage section="inspection-items" />}
+            />
+            <Route
+              path="projects/:projectId/zones"
+              element={<ProjectSectionPage section="zones" />}
             />
             <Route
               path="projects/:projectId/planning"
-              element={<ProjectPlanningRoute />}
+              element={
+                <ProjectSectionPage section="planning">
+                  <ProjectPlanningRoute />
+                </ProjectSectionPage>
+              }
+            />
+            <Route
+              path="projects/:projectId/progress"
+              element={<ProjectSectionPage section="progress" />}
             />
             <Route
               path="projects/:projectId/inspection-items/:itemId"
-              element={<ProjectItemChangePage api={projectItemApi} />}
+              element={
+                <ProjectSectionPage section="inspection-items">
+                  <ProjectItemChangePage api={projectItemApi} />
+                </ProjectSectionPage>
+              }
             />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
