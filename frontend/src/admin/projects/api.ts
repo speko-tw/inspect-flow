@@ -77,17 +77,6 @@ export function listProjectsPage(
   return request(`/projects?${params.toString()}`)
 }
 
-export async function listProjects(): Promise<Project[]> {
-  const items: Project[] = []
-  let cursor: string | null = null
-  do {
-    const page = await listProjectsPage({ cursor, limit: 100 })
-    items.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return items
-}
-
 export function getProject(id: string): Promise<Project> {
   return request(`/projects/${id}`)
 }

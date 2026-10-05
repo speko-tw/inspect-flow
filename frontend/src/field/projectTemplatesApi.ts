@@ -1,5 +1,4 @@
 import type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
-import { getSystemTemplates } from '../admin/templates/api'
 
 export type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
 
@@ -95,15 +94,6 @@ export function listTemplateSystems(
   categoryId: string,
 ): Promise<TemplateSystem[]> {
   return allPages(`/template-categories/${categoryId}/systems`)
-}
-
-export function listTemplateItems(systemId: string): Promise<TemplateItem[]> {
-  return getSystemTemplates(systemId).then((result) =>
-    result.items.filter(
-      (item): item is typeof item & { id: string } =>
-        typeof item.id === 'string',
-    ),
-  )
 }
 
 export function listAllProjects(): Promise<ProjectSummary[]> {

@@ -145,16 +145,6 @@ export function getSystemTemplates(
   )
 }
 
-export function putSystemTemplates(
-  systemId: string,
-  items: TemplateItem[],
-): Promise<TemplateSystemCollection> {
-  return request(`/template-systems/${systemId}/templates`, {
-    method: 'PUT',
-    body: JSON.stringify({ items }),
-  })
-}
-
 export function createTemplateItem(item: TemplateItem): Promise<TemplateItem> {
   return request('/templates', {
     method: 'POST',
