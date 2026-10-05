@@ -238,8 +238,8 @@
 
 | 方法與路徑 | 行為 | 存取層級 |
 |---|---|---|
+| `GET /api/v1/projects/{project_id}` | `inspection_plan.read` 專案成員讀取基本欄位；Admin 取得完整資料；Project 不設狀態欄位（DOM-R43） | 需專案權限 `inspection_plan.read`；Admin 依 AUT-R19 放行 |
 | `GET /api/v1/projects?q=&cursor=&limit=` | `{items: [既有 Project 欄位], next_cursor}`；依 `(name,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `name`、`project_code`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | 沿用 Admin 或 `template_admin` 系統角色（AUT-R20、AUT-R19） |
-| `GET /api/v1/projects/{project_id}` | 取得專案 | 需 Admin（AUT-R20） |
 | `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
 | `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
