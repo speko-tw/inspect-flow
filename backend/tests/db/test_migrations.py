@@ -444,6 +444,143 @@ def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
     engine.dispose()
 
 
+_PLANNING_INDEXES = {
+    "inspection_tasks": {
+        "ix_inspection_tasks_project_created_id": [
+            "project_id",
+            "created_at",
+            "id",
+        ],
+        "ix_inspection_tasks_plan_created_id": [
+            "plan_id",
+            "created_at",
+            "id",
+        ],
+        "ix_inspection_tasks_assignee_id": ["assignee_id"],
+    },
+    "inspection_plans": {
+        "ix_inspection_plans_project_created_id": [
+            "project_id",
+            "created_at",
+            "id",
+        ],
+    },
+    "project_inspection_items": {
+        "ix_project_inspection_items_project_created_id": [
+            "project_id",
+            "created_at",
+            "id",
+        ],
+    },
+}
+
+
+def _planning_index_columns(engine) -> dict[str, list[str]]:
+    inspector = inspect(engine)
+    found = {}
+    for table, expected in _PLANNING_INDEXES.items():
+        by_name = {
+            index["name"]: index["column_names"]
+            for index in inspector.get_indexes(table)
+        }
+        found.update({name: by_name.get(name) for name in expected})
+    return found
+
+
+def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
+    from datetime import UTC, datetime
+
+    from app.models import (
+        InspectionPlan,
+        InspectionTask,
+        Project,
+        ProjectInspectionItem,
+    )
+    from tests.db.conftest import create_root_user_with_company
+
+    cfg = _alembic_config()
+    migration_revision = "b3f9a6d27c41"
+    previous_revision = "62af416d9c01"
+    expected = {
+        name: columns
+        for indexes in _PLANNING_INDEXES.values()
+        for name, columns in indexes.items()
+    }
+    command.upgrade(cfg, previous_revision)
+    engine = create_engine(db_url)
+    assert set(_planning_index_columns(engine).values()) == {None}
+    with Session(engine) as session:
+        operator = create_root_user_with_company(session, "INDEXMIG")
+        audit = {"created_by": operator.id, "updated_by": operator.id}
+        project = Project(
+            project_code="INDEXMIG",
+            name="Index migration project",
+            client_name="Demo client",
+            site_location="Demo site",
+            **audit,
+        )
+        session.add(project)
+        session.flush()
+        plan = InspectionPlan(
+            project_id=project.id, name="Index migration plan", **audit
+        )
+        session.add(plan)
+        session.flush()
+        session.add_all(
+            [
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=project.id,
+                    assignee_id=operator.id,
+                    **audit,
+                ),
+                ProjectInspectionItem(
+                    project_id=project.id,
+                    sequence=1,
+                    title="Index migration item",
+                    instruction="Instruction",
+                    source_template_name="Template",
+                    applied_at=datetime.now(UTC),
+                    **audit,
+                ),
+            ]
+        )
+        session.commit()
+
+    tables = (
+        "users",
+        "projects",
+        "inspection_plans",
+        "inspection_tasks",
+        "project_inspection_items",
+    )
+
+    def row_counts() -> dict[str, int]:
+        with engine.connect() as connection:
+            return {
+                table: connection.execute(
+                    text(f"SELECT COUNT(*) FROM {table}")
+                ).scalar_one()
+                for table in tables
+            }
+
+    before = row_counts()
+    assert before["inspection_tasks"] == 1
+
+    command.upgrade(cfg, migration_revision)
+    assert _planning_index_columns(engine) == expected
+    assert row_counts() == before
+
+    command.downgrade(cfg, previous_revision)
+    assert set(_planning_index_columns(engine).values()) == {None}
+    assert row_counts() == before
+
+    command.upgrade(cfg, "head")
+    assert _planning_index_columns(engine) == expected
+    assert row_counts() == before
+    engine.dispose()
+
+
 _PRE_EXISTING_LOGGER_NAME = "tests.db.test_migrations.pre_existing_logger"
 
 
