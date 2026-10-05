@@ -892,6 +892,20 @@ output {
   text-decoration: underline;
 }
 
+.tpl-item-open {
+  display: none;
+}
+
+.project-item-applied-notice {
+  display: inline-block;
+  margin: 0 var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+
 .tpl-tree-row:hover,
 .tpl-detail-list button:hover {
   background: var(--surface-alt);
@@ -1282,6 +1296,10 @@ output {
   .tpl-tree-count {
     white-space: normal;
     text-align: right;
+  }
+
+  .tpl-item-open {
+    display: inline;
   }
 
   .tpl-step-nav {

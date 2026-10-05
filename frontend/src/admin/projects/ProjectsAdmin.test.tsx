@@ -312,16 +312,30 @@ describe('admin projects page', () => {
     projectFetch({ projects })
     renderAt('/admin/projects')
 
-    expect(await screen.findAllByText('示範工程0')).not.toHaveLength(0)
+    await screen.findAllByText('示範工程0')
+    const table = within(
+      document.querySelector('.projects-admin-table') as HTMLElement,
+    )
+    expect(table.getByText('示範工程0')).toBeInTheDocument()
     expect(screen.queryByText('目標工程')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    expect(await screen.findAllByText('目標工程')).not.toHaveLength(0)
+    await screen.findAllByText('目標工程')
+    expect(
+      within(
+        document.querySelector('.projects-admin-table') as HTMLElement,
+      ).getByText('目標工程'),
+    ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('搜尋專案'), {
       target: { value: 'demo-050' },
     })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
-    expect(await screen.findAllByText('目標工程')).not.toHaveLength(0)
+    await screen.findAllByText('目標工程')
+    expect(
+      within(
+        document.querySelector('.projects-admin-table') as HTMLElement,
+      ).getByText('目標工程'),
+    ).toBeInTheDocument()
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
   })
 
@@ -329,15 +343,27 @@ describe('admin projects page', () => {
     projectFetch()
     renderAt('/admin/projects')
 
-    expect(await screen.findAllByText('示範工程')).not.toHaveLength(0)
+    await screen.findAllByText('示範工程')
+    const table = within(
+      document.querySelector('.projects-admin-table') as HTMLElement,
+    )
+    expect(table.getByText('示範工程')).toBeInTheDocument()
     const search = screen.getByRole('button', { name: '搜尋' })
     fireEvent.click(search)
-    expect(await screen.findAllByText('示範工程')).not.toHaveLength(0)
-    expect(search).toBeEnabled()
+    await waitFor(() => expect(search).toBeEnabled())
+    expect(
+      within(
+        document.querySelector('.projects-admin-table') as HTMLElement,
+      ).getByText('示範工程'),
+    ).toBeInTheDocument()
 
     fireEvent.click(search)
-    expect(await screen.findAllByText('示範工程')).not.toHaveLength(0)
-    expect(search).toBeEnabled()
+    await waitFor(() => expect(search).toBeEnabled())
+    expect(
+      within(
+        document.querySelector('.projects-admin-table') as HTMLElement,
+      ).getByText('示範工程'),
+    ).toBeInTheDocument()
   })
 
   it('creates a project with optional dates left empty', async () => {
@@ -354,7 +380,12 @@ describe('admin projects page', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       '專案「第二示範工程」已儲存。',
     )
-    expect(await screen.findAllByText('第二示範工程')).not.toHaveLength(0)
+    await screen.findAllByText('第二示範工程')
+    expect(
+      await within(
+        document.querySelector('.projects-admin-table') as HTMLElement,
+      ).findByText('第二示範工程'),
+    ).toBeInTheDocument()
     const [, init] = calls(fetchMock, 'POST', /\/projects$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       project_code: 'DEMO-002',
@@ -398,7 +429,12 @@ describe('admin projects page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
 
-    expect(await screen.findAllByText('改名後的工程')).not.toHaveLength(0)
+    await screen.findAllByText('改名後的工程')
+    expect(
+      await within(
+        document.querySelector('.projects-admin-table') as HTMLElement,
+      ).findByText('改名後的工程'),
+    ).toBeInTheDocument()
     const [, init] = calls(fetchMock, 'PATCH', /\/projects\/project-1$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       name: '改名後的工程',

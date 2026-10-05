@@ -73,6 +73,7 @@ function mockApi(
     projectItems?: ProjectInspectionItem[]
     canSave?: boolean
     denyCategories?: boolean
+    secondSystemTemplate?: boolean
   } = {},
 ) {
   let saveRequests = 0
@@ -163,7 +164,20 @@ function mockApi(
       })
     }
     if (url.includes('/template-systems/system-2/templates?limit=100')) {
-      return Response.json({ items: [], next_cursor: null })
+      return Response.json({
+        items:
+          options.secondSystemTemplate === false
+            ? []
+            : [
+                {
+                  ...TEMPLATE,
+                  id: 'template-3',
+                  system_id: 'system-2',
+                  title: '電力查核',
+                },
+              ],
+        next_cursor: null,
+      })
     }
     if (url.includes('/template-systems/system-3/templates?limit=100')) {
       return Response.json({ items: [], next_cursor: null })
@@ -226,10 +240,22 @@ function renderPage() {
   )
 }
 
+function useMobileViewport() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  )
+}
+
 async function chooseSystem() {
-  fireEvent.click(await screen.findByRole('button', { name: '建築工程' }))
-  fireEvent.click(await screen.findByRole('button', { name: '給排水' }))
-  await screen.findByRole('button', { name: '管線查核' })
+  const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+  fireEvent.click(await within(nav).findByRole('button', { name: '建築工程' }))
+  fireEvent.click(await within(nav).findByRole('button', { name: '給排水' }))
+  await within(nav).findByRole('button', { name: '管線查核' })
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -289,7 +315,50 @@ describe('專案範本套用與存為範本（#429）', () => {
     )
   })
 
+  it('選單改選單項後再選整個系統，送出 system_id', async () => {
+    const calls = mockApi()
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    fireEvent.click(screen.getByRole('button', { name: '給排水' }))
+    expect(screen.getByLabelText('整個系統（2 個項目）')).toBeChecked()
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByRole('button', { name: '取消' })).toHaveFocus()
+    fireEvent.click(within(dialog).getByRole('button', { name: '確定套用' }))
+    expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
+    expect(calls).toHaveBeenCalledWith(
+      '/api/v1/projects/project-1/inspection-items:apply-template',
+      expect.objectContaining({
+        body: JSON.stringify({ system_id: 'system-1' }),
+      }),
+    )
+  })
+
+  it('保留每個已開啟系統自己的項目與計數', async () => {
+    mockApi()
+    renderPage()
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '給排水' }))
+    await within(nav).findByRole('button', { name: '管線查核' })
+    fireEvent.click(within(nav).getByRole('button', { name: '電氣' }))
+    await screen.findByRole('heading', { name: '套用範本：電氣' })
+    const water = within(nav).getByRole('button', { name: '給排水' })
+    expect(water).toHaveTextContent('2 個查核項目')
+    fireEvent.click(water)
+    expect(
+      await screen.findByRole('heading', { name: '套用範本：給排水' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('整個系統（2 個項目）')).toBeChecked()
+    expect(screen.getByLabelText('單一項目：管線查核')).toBeInTheDocument()
+  })
+
   it('手機在清單與詳情間切換，返回後保留樹的展開狀態', async () => {
+    useMobileViewport()
     mockApi()
     renderPage()
     const layout = await screen.findByRole('region', { name: '範本操作' })
@@ -303,6 +372,23 @@ describe('專案範本套用與存為範本（#429）', () => {
       'aria-expanded',
       'true',
     )
+  })
+
+  it('手機選取類別後可從詳情直接選系統', async () => {
+    useMobileViewport()
+    mockApi()
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '建築工程' }))
+    const detail = screen.getByRole('region', { name: '範本操作' })
+    const electrical = await within(detail).findByRole('button', {
+      name: '電氣',
+    })
+    expect(electrical).toBeInTheDocument()
+    fireEvent.click(electrical)
+    expect(
+      await screen.findByRole('heading', { name: '套用範本：電氣' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
   })
 
   it('整系統多項套用前要求頁內確認', async () => {
@@ -343,6 +429,11 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '已套用過『管線查核』，本次沒有新增任何項目。',
     )
+    expect(
+      within(screen.getByRole('alert')).getByRole('button', {
+        name: '改選其他範本',
+      }),
+    ).toHaveFocus()
     expect(
       screen.getByRole('button', { name: '改選其他範本' }),
     ).toBeInTheDocument()
@@ -403,20 +494,34 @@ describe('專案範本套用與存為範本（#429）', () => {
         name: '將「管線查核」存為範本',
       }),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '建築工程' }))
-    fireEvent.click(await screen.findByRole('button', { name: '電氣' }))
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
     expect(screen.getByText(/範本庫 \/ 建築工程 \/ 電氣/)).toBeInTheDocument()
     expect(screen.queryByLabelText(/名稱/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    const conflict = await screen.findByRole('alert')
+    expect(conflict).toHaveTextContent(
       '這個系統已有「管線查核」，沒有存入範本。請改選其他系統。',
     )
-    expect(screen.getByRole('button', { name: '電氣' })).toBeInTheDocument()
+    expect(
+      within(conflict).getByRole('button', { name: '改選系統' }),
+    ).toHaveFocus()
+    expect(
+      within(nav).getByRole('button', { name: '電氣' }),
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '改選系統' }))
-    fireEvent.click(screen.getByRole('button', { name: '土木工程' }))
-    fireEvent.click(await screen.findByRole('button', { name: '基礎' }))
+    fireEvent.click(within(nav).getByRole('button', { name: '土木工程' }))
+    fireEvent.click(await within(nav).findByRole('button', { name: '基礎' }))
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('已存為範本。')
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已將「管線查核」存入「土木工程 / 基礎」。',
+    )
+    expect(
+      screen.getByRole('button', { name: '返回專案' }),
+    ).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/templates',
       expect.objectContaining({
@@ -442,6 +547,23 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.queryByRole('button', { name: '套用至專案' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '存為範本' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('空系統明確說明沒有可套用項目且不允許送出', async () => {
+    mockApi({ secondSystemTemplate: false })
+    renderPage()
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '這個系統沒有查核項目。',
+    )
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
   })
 
   it('專案成員可發起存為範本，寫入 403 後停用並顯示權限訊息', async () => {
@@ -455,8 +577,9 @@ describe('專案範本套用與存為範本（#429）', () => {
     })
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
-    fireEvent.click(screen.getByRole('button', { name: '建築工程' }))
-    fireEvent.click(await screen.findByRole('button', { name: '電氣' }))
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(within(nav).getByRole('button', { name: '建築工程' }))
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '你沒有權限執行這項操作。',

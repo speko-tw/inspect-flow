@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import {
@@ -70,7 +70,9 @@ export default function ProjectTemplatesPage() {
   const [project, setProject] = useState<ProjectSummary | null>(null)
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
-  const [templates, setTemplates] = useState<TemplateItem[]>([])
+  const [templatesBySystem, setTemplatesBySystem] = useState<
+    Record<string, TemplateItem[]>
+  >({})
   const [selected, setSelected] = useState<Selection | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [loadedCategories, setLoadedCategories] = useState<Set<string>>(
@@ -78,8 +80,6 @@ export default function ProjectTemplatesPage() {
   )
   const [loadedSystems, setLoadedSystems] = useState<Set<string>>(new Set())
   const [projectItems, setProjectItems] = useState<ProjectInspectionItem[]>([])
-  const [mode, setMode] = useState<'item' | 'system'>('item')
-  const [templateId, setTemplateId] = useState('')
   const [saveSource, setSaveSource] = useState<ProjectInspectionItem | null>(
     null,
   )
@@ -97,7 +97,42 @@ export default function ProjectTemplatesPage() {
   const [saveAllowed, setSaveAllowed] = useState(false)
   const [saveDenied, setSaveDenied] = useState(false)
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 40rem)').matches,
+  )
   const [error, setError] = useState('')
+  const [applyErrorCode, setApplyErrorCode] = useState('')
+  const [saveErrorCode, setSaveErrorCode] = useState('')
+  const conflictActionRef = useRef<HTMLButtonElement>(null)
+  const saveConflictActionRef = useRef<HTMLButtonElement>(null)
+  const cancelConfirmRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia('(max-width: 40rem)')
+    const update = () => setIsMobile(query.matches)
+    update()
+    query.addEventListener?.('change', update)
+    return () => query.removeEventListener?.('change', update)
+  }, [])
+
+  useEffect(() => {
+    if (applyConfirm) cancelConfirmRef.current?.focus()
+  }, [applyConfirm])
+
+  const applyConflict =
+    applyErrorCode === 'project_inspection_item.duplicate_name'
+  const saveConflict = saveErrorCode === 'template.name_conflict'
+
+  useEffect(() => {
+    if (applyConflict) conflictActionRef.current?.focus()
+  }, [applyConflict])
+
+  useEffect(() => {
+    if (saveConflict) saveConflictActionRef.current?.focus()
+  }, [saveConflict])
 
   useEffect(() => {
     let active = true
@@ -181,35 +216,37 @@ export default function ProjectTemplatesPage() {
     setSelected(next)
     setMobilePane('detail')
     setApplyError('')
+    setApplyErrorCode('')
     setSaveError('')
+    setSaveErrorCode('')
     setNotice('')
     setApplyConfirm(false)
     if (next.type === 'category') {
       try {
         const rows = await listTemplateSystems(next.id)
-        setLoadedCategories((current) => new Set(current).add(next.id))
         setSystems((current) => [
           ...current.filter((item) => item.category_id !== next.id),
           ...rows,
         ])
+        setLoadedCategories((current) => new Set(current).add(next.id))
       } catch (caught) {
         setError(templateErrorMessage(caught))
         if (forbidden(caught)) setReadOnly(true)
       }
     } else if (next.type === 'system') {
-      setTemplates([])
+      setSelected(next)
       try {
         const result = await getSystemTemplates(next.id)
-        setTemplates(result.items)
+        setTemplatesBySystem((current) => ({
+          ...current,
+          [next.id]: result.items,
+        }))
         setLoadedSystems((current) => new Set(current).add(next.id))
       } catch (caught) {
         setError(templateErrorMessage(caught))
         if (forbidden(caught)) setReadOnly(true)
       }
-    } else {
-      setMode('item')
-      setTemplateId(next.id)
-    }
+    } else setSelected(next)
   }
 
   function toggleNode(id: string) {
@@ -226,8 +263,9 @@ export default function ProjectTemplatesPage() {
       ? systems.find(
           (item) =>
             item.id ===
-            templates.find((template) => template.id === selected.id)
-              ?.system_id,
+            Object.values(templatesBySystem)
+              .flat()
+              .find((template) => template.id === selected.id)?.system_id,
         )
       : selected?.type === 'system'
         ? systems.find((item) => item.id === selected.id)
@@ -237,21 +275,23 @@ export default function ProjectTemplatesPage() {
     : selected?.type === 'category'
       ? categories.find((item) => item.id === selected.id)
       : undefined
-  const selectedTemplate = templates.find((item) => item.id === templateId)
+  const templates = selectedSystem
+    ? (templatesBySystem[selectedSystem.id] ?? [])
+    : []
+  const mode = selected?.type === 'system' ? 'system' : 'item'
   const selectedTemplates =
     selected?.type === 'item'
       ? templates.filter((item) => item.id === selected.id)
       : mode === 'system'
         ? templates
-        : selectedTemplate
-          ? [selectedTemplate]
-          : []
+        : []
   const hasSelection = Boolean(
     selectedSystem &&
     selectedTemplates.length > 0 &&
     (mode === 'system' || selected?.type === 'item'),
   )
   const isSaveMode = saveSource !== null
+  const allTemplates = Object.values(templatesBySystem).flat()
 
   async function submitApply() {
     if (!selectedSystem || !hasSelection || busy || itemsDenied || readOnly) {
@@ -267,16 +307,22 @@ export default function ProjectTemplatesPage() {
           : { template_id: selectedTemplates[0].id ?? '' },
       )
       if (result.length === 0) {
-        setApplyError('這個系統沒有項目')
+        setApplyError('這個系統沒有查核項目。')
         return
       }
       navigate(`/admin/projects/${projectId}`, {
         state: {
           notice: `已新增 ${result.length} 個項目到「${project?.name ?? '專案'}」。`,
+          highlightedItemIds: result.map((item) => item.id),
         },
       })
     } catch (caught) {
       setApplyError(templateErrorMessage(caught))
+      setApplyErrorCode(
+        caught instanceof ProjectTemplatesApiError && caught.status === 409
+          ? (caught.code ?? '')
+          : '',
+      )
       if (forbidden(caught)) setReadOnly(true)
     } finally {
       setBusy(false)
@@ -289,7 +335,9 @@ export default function ProjectTemplatesPage() {
     setSelected(null)
     setExpanded(new Set())
     setSaveError('')
+    setSaveErrorCode('')
     setApplyError('')
+    setApplyErrorCode('')
     setNotice('')
     setMobilePane('list')
   }
@@ -303,12 +351,22 @@ export default function ProjectTemplatesPage() {
     setNotice('')
     try {
       await saveProjectItemAsTemplate(projectId, saveSource.id, selected.id)
-      setNotice('已存為範本。')
+      const destination = systems.find((system) => system.id === selected.id)
+      const category = categories.find(
+        (item) => item.id === destination?.category_id,
+      )
+      setNotice(
+        `已將「${saveSource.title}」存入「${category?.name ?? '範本庫'} / ${destination?.name ?? '目標系統'}」。`,
+      )
       setSaveSource(null)
       setSelected(null)
-      setTemplates([])
     } catch (caught) {
       setSaveError(templateErrorMessage(caught, saveSource.title))
+      setSaveErrorCode(
+        caught instanceof ProjectTemplatesApiError && caught.status === 409
+          ? (caught.code ?? '')
+          : '',
+      )
       if (forbidden(caught)) setSaveDenied(true)
     } finally {
       setBusy(false)
@@ -319,10 +377,10 @@ export default function ProjectTemplatesPage() {
     <TemplateLibraryNav
       categories={categories}
       expanded={expanded}
-      items={templates}
+      items={allTemplates}
       loadedCategoryIds={loadedCategories}
       loadedSystemIds={loadedSystems}
-      mobile={true}
+      mobile={isMobile}
       mode="select"
       onAddCategory={() => undefined}
       onSelect={(value) => void selectNode(value)}
@@ -364,9 +422,19 @@ export default function ProjectTemplatesPage() {
         {itemsDenied && <p role="status">目前只能瀏覽專案查核項目。</p>}
         {error && <p role="alert">{error}</p>}
         {notice && (
-          <p className="tpl-notice tpl-notice-ok" role="status">
-            {notice}
-          </p>
+          <>
+            <p className="tpl-notice tpl-notice-ok" role="status">
+              {notice}
+            </p>
+            {!isSaveMode && (
+              <button
+                onClick={() => navigate(`/admin/projects/${projectId}`)}
+                type="button"
+              >
+                返回專案
+              </button>
+            )}
+          </>
         )}
         <div className="tpl-layout" data-pane={mobilePane}>
           <div className="tpl-list-pane">
@@ -386,15 +454,18 @@ export default function ProjectTemplatesPage() {
                       <time dateTime={item.applied_at}>
                         {formatTime(item.applied_at)}
                       </time>
-                      {saveAllowed && !saveDenied && !itemsDenied && (
-                        <button
-                          disabled={busy}
-                          onClick={() => startSave(item)}
-                          type="button"
-                        >
-                          存為範本
-                        </button>
-                      )}
+                      {saveAllowed &&
+                        !readDenied &&
+                        !saveDenied &&
+                        !itemsDenied && (
+                          <button
+                            disabled={busy}
+                            onClick={() => startSave(item)}
+                            type="button"
+                          >
+                            存為範本
+                          </button>
+                        )}
                     </li>
                   ))}
                 </ul>
@@ -416,7 +487,35 @@ export default function ProjectTemplatesPage() {
             {isSaveMode ? (
               <>
                 <h2>選擇目標系統</h2>
-                {!selectedSystem && <p>先選工程類別，再選要存入的系統。</p>}
+                {!selectedSystem && (
+                  <>
+                    <p>先選工程類別，再選要存入的系統。</p>
+                    {isMobile && selectedCategory && (
+                      <ul className="tpl-category-systems">
+                        {systems
+                          .filter(
+                            (system) =>
+                              system.category_id === selectedCategory.id,
+                          )
+                          .map((system) => (
+                            <li key={system.id}>
+                              <button
+                                onClick={() =>
+                                  void selectNode({
+                                    type: 'system',
+                                    id: system.id,
+                                  })
+                                }
+                                type="button"
+                              >
+                                {system.name}
+                              </button>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                  </>
+                )}
                 {selectedSystem && selectedCategory && (
                   <div className="tpl-card">
                     <p>
@@ -442,9 +541,11 @@ export default function ProjectTemplatesPage() {
                   <div className="tpl-notice tpl-notice-error" role="alert">
                     <p>{saveError}</p>
                     <button
+                      ref={saveConflictActionRef}
                       disabled={busy}
                       onClick={() => {
                         setSaveError('')
+                        setSaveErrorCode('')
                         setSelected(null)
                         setMobilePane('list')
                       }}
@@ -468,6 +569,30 @@ export default function ProjectTemplatesPage() {
                   <>
                     <h2>{selectedCategory.name}</h2>
                     <p>請選這個類別底下的一個系統。</p>
+                    {isMobile && (
+                      <ul className="tpl-category-systems">
+                        {systems
+                          .filter(
+                            (system) =>
+                              system.category_id === selectedCategory.id,
+                          )
+                          .map((system) => (
+                            <li key={system.id}>
+                              <button
+                                onClick={() =>
+                                  void selectNode({
+                                    type: 'system',
+                                    id: system.id,
+                                  })
+                                }
+                                type="button"
+                              >
+                                {system.name}
+                              </button>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
                   </>
                 )}
                 {selectedSystem && (
@@ -483,8 +608,12 @@ export default function ProjectTemplatesPage() {
                           checked={mode === 'system'}
                           name="apply-target"
                           onChange={() => {
-                            setMode('system')
+                            setSelected({
+                              type: 'system',
+                              id: selectedSystem.id,
+                            })
                             setApplyError('')
+                            setApplyErrorCode('')
                             setApplyConfirm(false)
                           }}
                           type="radio"
@@ -494,13 +623,14 @@ export default function ProjectTemplatesPage() {
                       {templates.map((item) => (
                         <label key={item.id}>
                           <input
-                            checked={mode === 'item' && templateId === item.id}
+                            checked={
+                              mode === 'item' && selected?.id === item.id
+                            }
                             name="apply-target"
                             onChange={() => {
-                              setMode('item')
-                              setTemplateId(item.id ?? '')
                               setSelected({ type: 'item', id: item.id ?? '' })
                               setApplyError('')
+                              setApplyErrorCode('')
                               setApplyConfirm(false)
                             }}
                             type="radio"
@@ -549,19 +679,24 @@ export default function ProjectTemplatesPage() {
                         </p>
                       </>
                     )}
+                    {templates.length === 0 &&
+                      loadedSystems.has(selectedSystem.id) && (
+                        <p role="status">這個系統沒有查核項目。</p>
+                      )}
                     {applyError && (
                       <div
                         className="tpl-notice tpl-notice-error"
                         role="alert"
                       >
                         <p>{applyError}</p>
-                        {applyError.startsWith('已套用過') ? (
+                        {applyConflict ? (
                           <div className="tpl-actions">
                             <button
+                              ref={conflictActionRef}
                               onClick={() => {
                                 setSelected(null)
-                                setTemplateId('')
                                 setApplyError('')
+                                setApplyErrorCode('')
                                 setMobilePane('list')
                               }}
                               type="button"
@@ -599,6 +734,7 @@ export default function ProjectTemplatesPage() {
                             確定套用
                           </button>
                           <button
+                            ref={cancelConfirmRef}
                             onClick={() => setApplyConfirm(false)}
                             type="button"
                           >

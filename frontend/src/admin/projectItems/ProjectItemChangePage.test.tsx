@@ -27,6 +27,8 @@ const preview: ProjectItemPreview = {
     sequence: 1,
     title: '混凝土表面檢查',
     instruction: '檢查混凝土表面狀況',
+    source_template_name: '混凝土施工',
+    applied_at: '2026-10-05T01:00:00Z',
     inspection_points: [point],
   },
   affectedTasks: [

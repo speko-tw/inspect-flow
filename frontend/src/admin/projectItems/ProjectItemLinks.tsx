@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 
 import { ManagementApiError } from '../api'
 import { listProjectItems, type ProjectItemData } from './api'
@@ -9,9 +9,18 @@ export default function ProjectItemLinks({
 }: {
   projectId: string
 }) {
+  const location = useLocation()
   const [items, setItems] = useState<ProjectItemData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const routeState = location.state as { highlightedItemIds?: unknown } | null
+  const highlightedItemIds = new Set(
+    Array.isArray(routeState?.highlightedItemIds)
+      ? routeState.highlightedItemIds.filter(
+          (id): id is string => typeof id === 'string',
+        )
+      : [],
+  )
 
   useEffect(() => {
     let active = true
@@ -46,6 +55,16 @@ export default function ProjectItemLinks({
         <ul>
           {items.map((item) => (
             <li key={item.id}>
+              {highlightedItemIds.has(item.id) && (
+                <p className="project-item-applied-notice" role="status">
+                  剛套用
+                </p>
+              )}
+              <strong>{item.title}</strong>
+              <p>來源範本：{item.source_template_name}</p>
+              <time dateTime={item.applied_at}>
+                套用時間：{new Date(item.applied_at).toLocaleString('zh-TW')}
+              </time>
               <Link
                 to={`/admin/projects/${projectId}/inspection-items/${item.id}`}
               >
