@@ -1261,7 +1261,6 @@ describe('management error messages', () => {
   it.each([
     ['request.validation_failed', '資料格式不正確，請檢查輸入內容。'],
     ['resource.not_found', '找不到這筆資料，請重新整理後再試。'],
-    ['server.internal_error', '系統發生錯誤，請稍後再試。'],
     ['permission.denied', '你沒有權限執行這項操作。'],
     ['user.builtin_protected', '內建 admin 帳號不可修改或停用。'],
     ['user.last_admin', '系統至少要保留一位啟用中的管理者。'],
@@ -1275,6 +1274,22 @@ describe('management error messages', () => {
   ])('maps %s to a Traditional Chinese message', (code, message) => {
     expect(managementErrorMessage(new ManagementApiError(422, code))).toBe(
       message,
+    )
+  })
+
+  it.each([
+    [401, '登入狀態已失效，請重新登入。'],
+    [403, '你沒有權限執行這項操作。'],
+    [500, '伺服器暫時無法處理，請稍後再試。'],
+    [503, '伺服器暫時無法處理，請稍後再試。'],
+    [422, '操作失敗，請稍後再試。'],
+  ])('maps status %s without a code to a shared message', (status, text) => {
+    expect(managementErrorMessage(new ManagementApiError(status))).toBe(text)
+  })
+
+  it('treats a non-API failure as a network problem', () => {
+    expect(managementErrorMessage(new TypeError('Failed to fetch'))).toBe(
+      '無法連線到伺服器，請稍後再試。',
     )
   })
 })

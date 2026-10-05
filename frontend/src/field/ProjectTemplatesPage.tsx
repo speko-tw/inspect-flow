@@ -10,6 +10,7 @@ import {
   type TemplateSystem,
 } from '../admin/templates/api'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
+import { isForbidden } from '../http'
 import { fetchMyProjects } from './api'
 import {
   applyTemplate,
@@ -27,15 +28,6 @@ type Selection = { type: 'category' | 'system' | 'item'; id: string }
 function formatTime(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-TW')
-}
-
-function forbidden(error: unknown): boolean {
-  return error instanceof ProjectTemplatesApiError
-    ? error.status === 403
-    : typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        error.status === 403
 }
 
 function numericStandardText(
@@ -180,7 +172,7 @@ export default function ProjectTemplatesPage() {
       .catch((caught: unknown) => {
         if (!active) return
         setError(templateErrorMessage(caught))
-        if (forbidden(caught)) {
+        if (isForbidden(caught)) {
           setReadOnly(true)
           setReadDenied(true)
         }
@@ -202,7 +194,7 @@ export default function ProjectTemplatesPage() {
       .catch((caught: unknown) => {
         if (!active) return
         setError(templateErrorMessage(caught))
-        if (forbidden(caught)) setItemsDenied(true)
+        if (isForbidden(caught)) setItemsDenied(true)
       })
       .finally(() => {
         if (active) setItemsLoading(false)
@@ -231,7 +223,7 @@ export default function ProjectTemplatesPage() {
         setLoadedCategories((current) => new Set(current).add(next.id))
       } catch (caught) {
         setError(templateErrorMessage(caught))
-        if (forbidden(caught)) setReadOnly(true)
+        if (isForbidden(caught)) setReadOnly(true)
       }
     } else if (next.type === 'system') {
       setSelected(next)
@@ -244,7 +236,7 @@ export default function ProjectTemplatesPage() {
         setLoadedSystems((current) => new Set(current).add(next.id))
       } catch (caught) {
         setError(templateErrorMessage(caught))
-        if (forbidden(caught)) setReadOnly(true)
+        if (isForbidden(caught)) setReadOnly(true)
       }
     } else setSelected(next)
   }
@@ -323,7 +315,7 @@ export default function ProjectTemplatesPage() {
           ? (caught.code ?? '')
           : '',
       )
-      if (forbidden(caught)) setReadOnly(true)
+      if (isForbidden(caught)) setReadOnly(true)
     } finally {
       setBusy(false)
       setApplyConfirm(false)
@@ -369,7 +361,7 @@ export default function ProjectTemplatesPage() {
           ? (caught.code ?? '')
           : '',
       )
-      if (forbidden(caught)) setSaveDenied(true)
+      if (isForbidden(caught)) setSaveDenied(true)
     } finally {
       setBusy(false)
     }

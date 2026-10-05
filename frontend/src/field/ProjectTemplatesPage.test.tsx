@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -429,11 +435,14 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '已套用過『管線查核』，本次沒有新增任何項目。',
     )
-    expect(
-      within(screen.getByRole('alert')).getByRole('button', {
-        name: '改選其他範本',
-      }),
-    ).toHaveFocus()
+    // 聚焦在 useEffect 裡；alert 插入 DOM 後才聚焦，所以要等。
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('alert')).getByRole('button', {
+          name: '改選其他範本',
+        }),
+      ).toHaveFocus(),
+    )
     expect(
       screen.getByRole('button', { name: '改選其他範本' }),
     ).toBeInTheDocument()
@@ -506,9 +515,12 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(conflict).toHaveTextContent(
       '這個系統已有「管線查核」，沒有存入範本。請改選其他系統。',
     )
-    expect(
-      within(conflict).getByRole('button', { name: '改選系統' }),
-    ).toHaveFocus()
+    // 聚焦在 useEffect 裡；alert 插入 DOM 後才聚焦，所以要等。
+    await waitFor(() =>
+      expect(
+        within(conflict).getByRole('button', { name: '改選系統' }),
+      ).toHaveFocus(),
+    )
     expect(
       within(nav).getByRole('button', { name: '電氣' }),
     ).toBeInTheDocument()

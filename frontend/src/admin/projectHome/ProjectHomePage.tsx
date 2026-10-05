@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router'
 
-import { ManagementApiError, managementErrorMessage } from '../api'
+import { isForbidden } from '../../http'
+import { managementErrorMessage } from '../api'
 import ProjectSectionShell from './ProjectSectionShell'
 import ProjectDeniedPage from './ProjectDeniedPage'
 import {
@@ -66,8 +67,7 @@ export default function ProjectHomePage() {
         if (active) {
           setResult({
             projectId,
-            denied:
-              caught instanceof ManagementApiError && caught.status === 403,
+            denied: isForbidden(caught),
             error: managementErrorMessage(caught),
           })
         }

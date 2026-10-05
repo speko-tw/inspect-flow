@@ -4,7 +4,6 @@ import {
   createTemplateItem,
   deleteTemplateItem,
   getSystemTemplates,
-  putSystemTemplates,
   updateTemplateItem,
 } from './api'
 
@@ -40,39 +39,6 @@ describe('template API', () => {
       expect.objectContaining({ credentials: 'same-origin' }),
     )
     expect(fetchMock.mock.calls[1][0]).toContain('cursor=next-page')
-  })
-
-  it('replaces the full system collection with item structures', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [] }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    await putSystemTemplates('system-1', [
-      {
-        system_id: 'system-1',
-        sequence: 1,
-        title: '欄杆檢查',
-        instruction: '',
-        inspection_points: [],
-      },
-    ])
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/template-systems/system-1/templates',
-      expect.objectContaining({
-        method: 'PUT',
-        body: JSON.stringify({
-          items: [
-            {
-              system_id: 'system-1',
-              sequence: 1,
-              title: '欄杆檢查',
-              instruction: '',
-              inspection_points: [],
-            },
-          ],
-        }),
-      }),
-    )
   })
 
   it('uses single-item endpoints for create, update, and delete', async () => {
