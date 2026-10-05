@@ -3,12 +3,12 @@
 // 與 `../api.ts` 共用同一個錯誤類別與通用訊息，只在這裡補角色專屬的
 // 錯誤碼訊息。
 
-import { ManagementApiError, managementErrorMessage } from '../api'
-
-const API_BASE = '/api/v1'
-
-// 一次最多取回的筆數（後端上限 100）；頁面不分頁，所以逐頁取完。
-const PAGE_SIZE = 100
+import {
+  listAllPages,
+  ManagementApiError,
+  managementErrorMessage,
+  request,
+} from '../api'
 
 export interface Role {
   id: string
@@ -31,54 +31,9 @@ export interface RoleInput {
   permission_codes?: string[]
 }
 
-interface RolePage {
-  items: Role[]
-  next_cursor: string | null
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
-    },
-  })
-
-  if (!response.ok) {
-    let code: string | undefined
-    try {
-      const body = (await response.json()) as {
-        error?: { code?: string }
-      }
-      code = body.error?.code
-    } catch {
-      // 非 JSON 錯誤回應使用通用訊息。
-    }
-    throw new ManagementApiError(response.status, code)
-  }
-
-  if (response.status === 204) {
-    return undefined as T
-  }
-  return (await response.json()) as T
-}
-
 /** 依序取回所有分頁，頁面本身不做分頁（分頁屬 #107）。 */
-export async function listRoles(): Promise<Role[]> {
-  const roles: Role[] = []
-  let cursor: string | null = null
-  do {
-    const query: string = new URLSearchParams({
-      limit: String(PAGE_SIZE),
-      ...(cursor ? { cursor } : {}),
-    }).toString()
-    const page: RolePage = await request(`/roles?${query}`)
-    roles.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return roles
+export function listRoles(): Promise<Role[]> {
+  return listAllPages<Role>('/roles')
 }
 
 export function getRole(id: string): Promise<Role> {

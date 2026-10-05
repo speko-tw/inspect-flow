@@ -1,6 +1,12 @@
 // 使用者與公司管理 API（DOM-R04、DOM-R05、DOM-R06、DOM-R14）。
 
-const API_BASE = '/api/v1'
+import {
+  HttpError,
+  httpErrorMessage,
+  listAllPages as listAllHttpPages,
+  request as httpRequest,
+  type PageParams,
+} from '../http'
 
 export interface User {
   id: string
@@ -63,48 +69,23 @@ export interface CreatedUser extends User {
 }
 
 /** API 管理錯誤的 code 是錯誤 envelope 內的 `error.code`。 */
-export class ManagementApiError extends Error {
-  readonly status: number
-  readonly code?: string
-
-  constructor(status: number, code?: string) {
-    super(`管理 API 錯誤（狀態碼 ${status}）`)
+export class ManagementApiError extends HttpError {
+  constructor(status: number, code?: string, details?: unknown) {
+    super(status, code, details)
     this.name = 'ManagementApiError'
-    this.status = status
-    this.code = code
   }
 }
 
-export async function request<T>(
+export function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return httpRequest<T>(path, init, ManagementApiError)
+}
+
+/** 走完分頁，失敗拋 `ManagementApiError`（其他功能區共用）。 */
+export function listAllPages<T>(
   path: string,
-  init?: RequestInit,
-): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
-    },
-  })
-
-  if (!response.ok) {
-    let code: string | undefined
-    try {
-      const body = (await response.json()) as {
-        error?: { code?: string }
-      }
-      code = body.error?.code
-    } catch {
-      // 非 JSON 錯誤回應使用通用訊息。
-    }
-    throw new ManagementApiError(response.status, code)
-  }
-
-  if (response.status === 204) {
-    return undefined as T
-  }
-  return (await response.json()) as T
+  params?: PageParams,
+): Promise<T[]> {
+  return listAllHttpPages<T>(path, params, ManagementApiError)
 }
 
 function listPath(path: string, options: ListPageOptions = {}): string {
@@ -123,7 +104,7 @@ export function listUsersPage(
 }
 
 export async function listUsers(): Promise<User[]> {
-  return listAllPages((options) => listUsersPage(options))
+  return listAllPages('/users')
 }
 
 export function createUser(input: UserInput): Promise<CreatedUser> {
@@ -175,20 +156,7 @@ export function listCompaniesPage(
 }
 
 export async function listCompanies(): Promise<Company[]> {
-  return listAllPages((options) => listCompaniesPage(options))
-}
-
-async function listAllPages<T>(
-  fetchPage: (options: ListPageOptions) => Promise<Page<T>>,
-): Promise<T[]> {
-  const items: T[] = []
-  let cursor: string | null = null
-  do {
-    const page = await fetchPage({ cursor, limit: 100 })
-    items.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return items
+  return listAllPages('/companies')
 }
 
 export function createCompany(name: string): Promise<Company> {
@@ -228,8 +196,6 @@ export function listActiveCompanyUsers(
 const ERROR_MESSAGES: Record<string, string> = {
   'request.validation_failed': '資料格式不正確，請檢查輸入內容。',
   'resource.not_found': '找不到這筆資料，請重新整理後再試。',
-  'server.internal_error': '系統發生錯誤，請稍後再試。',
-  'permission.denied': '你沒有權限執行這項操作。',
   'user.builtin_protected': '內建 admin 帳號不可修改或停用。',
   'user.last_admin': '系統至少要保留一位啟用中的管理者。',
   'user.external_managed': '此帳號的基本資料由外部來源管理。',
@@ -243,17 +209,5 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 export function managementErrorMessage(error: unknown): string {
-  if (!(error instanceof ManagementApiError)) {
-    return '無法連線到伺服器，請稍後再試。'
-  }
-  if (error.code && ERROR_MESSAGES[error.code]) {
-    return ERROR_MESSAGES[error.code]
-  }
-  if (error.status === 401) {
-    return '登入狀態已失效，請重新登入。'
-  }
-  if (error.status === 403) {
-    return '你沒有權限執行這項操作。'
-  }
-  return '操作失敗，請稍後再試。'
+  return httpErrorMessage(error, { codes: ERROR_MESSAGES })
 }

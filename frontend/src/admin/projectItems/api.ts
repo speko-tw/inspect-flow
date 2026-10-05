@@ -1,4 +1,5 @@
-import { ManagementApiError, request, type Page } from '../api'
+import { isForbidden } from '../../http'
+import { listAllPages, ManagementApiError, request } from '../api'
 import type { InspectionPoint } from '../templates/api'
 
 export type TaskStatus =
@@ -84,23 +85,10 @@ export interface ProjectItemApi {
   ): Promise<ProjectItemChangeResult>
 }
 
-async function allPages<T>(path: string): Promise<T[]> {
-  const rows: T[] = []
-  let cursor: string | null = null
-  do {
-    const params = new URLSearchParams({ limit: '100' })
-    if (cursor) params.set('cursor', cursor)
-    const page = await request<Page<T>>(`${path}?${params}`)
-    rows.push(...page.items)
-    cursor = page.next_cursor
-  } while (cursor)
-  return rows
-}
-
 export function listProjectItems(
   projectId: string,
 ): Promise<ProjectItemData[]> {
-  return allPages(`/projects/${projectId}/inspection-items`)
+  return listAllPages(`/projects/${projectId}/inspection-items`)
 }
 
 function patchPoints(points: InspectionPoint[]) {
@@ -143,9 +131,9 @@ export const projectItemApi: ProjectItemApi = {
     let tasks: ImpactTask[] = []
     let readOnly = false
     try {
-      tasks = await allPages<ImpactTask>(`${path}/${itemId}/tasks`)
+      tasks = await listAllPages<ImpactTask>(`${path}/${itemId}/tasks`)
     } catch (caught) {
-      if (!(caught instanceof ManagementApiError) || caught.status !== 403) {
+      if (!isForbidden(caught)) {
         throw caught
       }
       readOnly = true
