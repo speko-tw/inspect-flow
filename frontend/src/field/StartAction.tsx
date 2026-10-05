@@ -77,7 +77,7 @@ export default function StartAction({
     }
     const message = {
       CANCELLED: startMessages.cancelled(latest.cancellation_reason),
-      IN_PROGRESS: startMessages.startedByOther(latest.started_by),
+      IN_PROGRESS: startMessages.startedByOther,
       COMPLETED: startMessages.completed,
       PENDING: startMessages.unchanged,
     }[latest.status]

@@ -19,10 +19,8 @@ export const startMessages = {
   archived:
     '這筆任務所屬的查核計畫已被內業封存，封存後任務只能查看，所以無法開始。' +
     `請洽內業確認是否取消封存。${REFRESH_HINT}`,
-  startedByOther(person: FieldPerson | null): string {
-    const who = person?.name_zh ?? '同專案的其他成員'
-    return `這筆任務已由${who}開始，所以不需要再開始。${REFRESH_HINT}`
-  },
+  // 開始者姓名只在「實際開始者」顯示一次，錯誤文案不重複。
+  startedByOther: `這筆任務已經有人開始，所以不需要再開始。${REFRESH_HINT}`,
   completed: `這筆任務已經完成，所以無法開始。${REFRESH_HINT}`,
   unchanged:
     '系統拒絕了這次操作，任務目前的狀態不能開始。' +

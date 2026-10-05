@@ -284,7 +284,7 @@ describe('開始查核：失敗文案、位置與聚焦', () => {
     expect(posts()).toHaveLength(1)
   })
 
-  it('已由他人開始：說明是誰開始，不重複開始', async () => {
+  it('已由他人開始：錯誤不重複姓名，姓名只在實際開始者顯示一次', async () => {
     const byOther = {
       ...PENDING,
       status: 'IN_PROGRESS',
@@ -299,9 +299,10 @@ describe('開始查核：失敗文案、位置與聚焦', () => {
     })
     await confirm()
     await expectError(
-      '這筆任務已由示範查核員乙開始，所以不需要再開始。返回任務清單會看到最新內容。',
+      '這筆任務已經有人開始，所以不需要再開始。返回任務清單會看到最新內容。',
     )
     expect(screen.getByText('實際開始者：示範查核員乙')).toBeInTheDocument()
+    expect(screen.getAllByText(/示範查核員乙/)).toHaveLength(1)
     expect(onListChange).toHaveBeenCalledWith({
       id: 'task-1',
       status: 'IN_PROGRESS',
