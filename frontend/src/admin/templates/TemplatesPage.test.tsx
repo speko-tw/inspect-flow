@@ -1059,9 +1059,20 @@ describe('TemplatesPage', () => {
     expect(
       fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
     ).toBe(false)
-    expect(document.getElementById('lower-0')).toHaveFocus()
-    fireEvent.click(screen.getByRole('button', { name: '下限不能大於上限' }))
-    expect(document.getElementById('lower-0')).toHaveFocus()
+    // 焦點在 setTimeout(0) 裡設定，所以要等。
+    await waitFor(() =>
+      expect(document.getElementById('lower-0')).toHaveFocus(),
+    )
+    // 先把焦點移到錯誤按鈕（如同使用者點擊），才驗得出點擊後焦點回到欄位。
+    const rangeError = screen.getByRole('button', {
+      name: '下限不能大於上限',
+    })
+    rangeError.focus()
+    expect(rangeError).toHaveFocus()
+    fireEvent.click(rangeError)
+    await waitFor(() =>
+      expect(document.getElementById('lower-0')).toHaveFocus(),
+    )
   })
 
   it('keeps unresolved errors while revalidating after the first save', async () => {
@@ -1153,7 +1164,10 @@ describe('TemplatesPage', () => {
 
     expect(await screen.findAllByText('請填寫項次標題')).toHaveLength(2)
     expect(screen.getByRole('alert')).toHaveTextContent('尚有')
-    expect(screen.getByLabelText(/項次標題/)).toHaveFocus()
+    // 焦點在 setTimeout(0) 裡設定，所以要等。
+    await waitFor(() =>
+      expect(screen.getByLabelText(/項次標題/)).toHaveFocus(),
+    )
     expect(screen.getAllByText(/照片 1 張/).length).toBeGreaterThan(0)
     fireEvent.change(screen.getByLabelText(/項次標題/), {
       target: { value: '橋面坡度' },
