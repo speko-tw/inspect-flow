@@ -51,8 +51,8 @@ const task = {
   plan_id: 'plan-1',
   status: 'COMPLETED',
   zone_id: null,
-  zone: null,
-  location_text: null,
+  zone: { id: 'zone-1', name: '地下室北區' },
+  location_text: 'B1 柱旁',
   assignee_id: null,
   assignee: null,
   started_by: null,
@@ -114,6 +114,8 @@ describe('projectItemApi', () => {
       id: 'task-1',
       name: '混凝土表面',
       planName: '地下室計畫',
+      zoneName: '地下室北區',
+      locationText: 'B1 柱旁',
       preservedItemTitles: ['鋼筋間距'],
     })
     expect(fetchMock.mock.calls[2][0]).toContain('cursor=next')

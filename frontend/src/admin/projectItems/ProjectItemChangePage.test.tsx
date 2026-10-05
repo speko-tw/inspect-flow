@@ -34,6 +34,8 @@ const preview: ProjectItemPreview = {
       id: 'draft',
       name: '地下室抽查',
       planName: '地下室查核計畫',
+      zoneName: '地下室北區',
+      locationText: 'B1 柱旁',
       status: 'DRAFT',
       planArchived: false,
       hasResult: false,
@@ -43,6 +45,8 @@ const preview: ProjectItemPreview = {
       id: 'complete',
       name: '二樓巡檢',
       planName: '樓層巡檢計畫',
+      zoneName: '二樓東側',
+      locationText: null,
       status: 'COMPLETED',
       planArchived: false,
       hasResult: false,
@@ -52,6 +56,8 @@ const preview: ProjectItemPreview = {
       id: 'cancelled',
       name: '屋頂抽查',
       planName: '屋頂查核計畫',
+      zoneName: null,
+      locationText: '水塔旁',
       status: 'CANCELLED',
       planArchived: false,
       hasResult: false,
@@ -89,6 +95,14 @@ const changed: ProjectItemChangeResult = {
   ],
 }
 
+const reinspectChoice = /要，作廢受影響項目/
+const noReinspectChoice = /不要，只更正文字/
+
+function choiceName(choice: 'yes' | 'no') {
+  if (choice === 'yes') return reinspectChoice
+  return noReinspectChoice
+}
+
 function apiWith(overrides: Partial<ProjectItemApi> = {}): ProjectItemApi {
   return {
     loadPreview: vi.fn(async () => structuredClone(preview)),
@@ -117,11 +131,8 @@ async function confirm(choice?: 'yes' | 'no') {
     }),
   )
   if (choice) {
-    fireEvent.click(
-      screen.getByRole('radio', {
-        name: choice === 'yes' ? /要，作廢受影響項目/ : /不要，只更正文字/,
-      }),
-    )
+    const name = choiceName(choice)
+    fireEvent.click(screen.getByRole('radio', { name }))
   }
   fireEvent.click(screen.getByRole('button', { name: '確認儲存' }))
 }
@@ -136,7 +147,24 @@ describe('ProjectItemChangePage', () => {
     fireEvent.change(screen.getByLabelText('文字標準 *'), {
       target: { value: '不得有裂縫或剝落' },
     })
-    await confirm('yes')
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    const intro = screen.getByText(
+      /選擇「要」重新查核時，各任務會有以下狀態變化/,
+    )
+    const taskHeading = screen.getByRole('heading', {
+      name: '使用此項目的任務',
+    })
+    expect(
+      intro.compareDocumentPosition(taskHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(intro).toHaveTextContent(/選擇「不要」時/)
+    expect(intro).toHaveTextContent(/各任務狀態維持不變/)
+    expect(screen.getByText(/地下室北區・B1 柱旁/)).toBeInTheDocument()
+    expect(screen.getByText(/二樓東側/)).toBeInTheDocument()
+    expect(screen.getByText(/水塔旁/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(screen.getByRole('button', { name: '確認儲存' }))
     expect(api.update).toHaveBeenCalledWith('p', 'item-1', {
       title: '新版檢查項目',
       instruction: '檢查混凝土表面狀況',
@@ -148,12 +176,12 @@ describe('ProjectItemChangePage', () => {
       ],
       reinspect: true,
     })
-    expect(await screen.findByText(/已完成任務退回進行中/)).toHaveTextContent(
-      '鋼筋間距',
-    )
-    expect(screen.getByText(/已完成任務退回進行中/)).toHaveTextContent(
-      '舊需求與 Snapshot 已作廢',
-    )
+    expect(
+      await screen.findByText(/二樓東側.*已完成任務退回進行中/),
+    ).toHaveTextContent('鋼筋間距')
+    expect(
+      screen.getByText(/二樓東側.*已完成任務退回進行中/),
+    ).toHaveTextContent('舊需求與 Snapshot 已作廢')
     expect(screen.getByText(/草稿任務原位更新/)).toBeInTheDocument()
     expect(screen.getByText(/恢復時套用目前標準/)).toBeInTheDocument()
     expect(api.loadPreview).toHaveBeenCalledTimes(2)
@@ -175,6 +203,9 @@ describe('ProjectItemChangePage', () => {
     await confirm('no')
     expect(
       await screen.findByText('已更正文字，沒有重新查核。'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/地下室北區・B1 柱旁.*任務狀態維持/),
     ).toBeInTheDocument()
     expect(api.update).toHaveBeenCalledWith(
       'p',

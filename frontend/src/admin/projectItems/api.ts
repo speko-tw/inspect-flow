@@ -20,6 +20,8 @@ interface TaskItem {
 interface ImpactTask {
   id: string
   status: TaskStatus
+  zone: { id: string; name: string } | null
+  location_text: string | null
   plan_name: string | null
   plan_archived: boolean
   has_result: boolean
@@ -30,6 +32,8 @@ export interface AffectedTask {
   id: string
   name: string
   planName: string
+  zoneName: string | null
+  locationText: string | null
   status: TaskStatus
   planArchived: boolean
   hasResult: boolean
@@ -153,6 +157,8 @@ export const projectItemApi: ProjectItemApi = {
           task.items.find((entry) => entry.id === itemId)?.current_snapshot
             ?.title ?? item.title,
         planName: task.plan_name ?? '未命名計畫',
+        zoneName: task.zone?.name ?? null,
+        locationText: task.location_text,
         status: task.status,
         planArchived: task.plan_archived,
         hasResult: task.has_result,

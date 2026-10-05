@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
 import {
+  type AffectedTask,
   type ProjectItemApi,
   type ProjectItemChange,
   type ProjectItemChangeResult,
@@ -27,6 +28,12 @@ const REINSPECTION_CHOICE_ERROR = [
 const ARCHIVED_PLAN_ERROR = [
   '此項目有任務位於封存計畫，',
   '取消封存後才能修改。',
+].join('')
+
+const REINSPECTION_RESULT_TEXT = [
+  '已派出且未取消任務中，受影響項目的舊需求與 Snapshot ',
+  '已標記作廢並保留可查；只有已有結果的項目，',
+  '才另外作廢舊結果與照片並列為待重查。',
 ].join('')
 
 function isForbidden(error: unknown): boolean {
@@ -82,6 +89,17 @@ function taskConsequence(status: TaskStatus): string {
     return '恢復時套用新標準；原有結果若受影響才待重查'
   }
   return '維持目前狀態'
+}
+
+function taskLocation(task: AffectedTask): string {
+  return (
+    [task.zoneName, task.locationText].filter(Boolean).join('・') ||
+    '地點未指定'
+  )
+}
+
+function taskLabel(task: AffectedTask): string {
+  return `${task.name}（${task.planName}；${taskLocation(task)}）`
 }
 
 export default function ProjectItemChangePage({
@@ -382,6 +400,13 @@ export default function ProjectItemChangePage({
                 {'完成補查前不得完成。'}
                 {'已核發報告不受影響。'}
               </p>
+              {preview.affectedTasks.length > 0 && (
+                <p>
+                  {'選擇「要」重新查核時，'}
+                  {'各任務會有以下狀態變化；'}
+                  {'選擇「不要」時，各任務狀態維持不變。'}
+                </p>
+              )}
               <h3>使用此項目的任務</h3>
               {preview.affectedTasks.length === 0 ? (
                 <p>
@@ -392,18 +417,12 @@ export default function ProjectItemChangePage({
                 <ul>
                   {preview.affectedTasks.map((task) => (
                     <li key={task.id}>
-                      {task.name}（{task.planName}；
+                      {task.name}（{task.planName}；{taskLocation(task)}；
                       {TASK_STATUS_LABELS[task.status]}）：
                       {taskConsequence(task.status)}
                     </li>
                   ))}
                 </ul>
-              )}
-              {preview.affectedTasks.length > 0 && (
-                <p>
-                  {'選擇「要」重新查核時，'}
-                  {'各任務會有以下狀態變化：'}
-                </p>
               )}
               {preview.affectedTasks.length > 0 && (
                 <fieldset disabled={readOnly}>
@@ -458,11 +477,7 @@ export default function ProjectItemChangePage({
                   : '已更正文字，沒有重新查核。'}
               </p>
               {result.reinspection_selected && (
-                <p>
-                  已派出且未取消任務中，受影響項目的舊需求與 Snapshot
-                  已標記作廢並保留可查；只有已有結果的項目，才另外作廢
-                  舊結果與照片並列為待重查。
-                </p>
+                <p>{REINSPECTION_RESULT_TEXT}</p>
               )}
               <h3>受影響任務的實際處理</h3>
               {result.affected_tasks.length ? (
@@ -473,8 +488,10 @@ export default function ProjectItemChangePage({
                     )
                     return (
                       <li key={task.task_id}>
-                        {before?.name ?? task.task_id}：
-                        {task.action === 'draft_updated' && '草稿任務原位更新'}
+                        {before ? taskLabel(before) : task.task_id}：
+                        {task.action === 'draft_updated' && (
+                          <>草稿任務原位更新</>
+                        )}
                         {task.action === 'returned_to_in_progress' &&
                           '已完成任務退回進行中'}
                         {task.action === 'needs_reinspection' &&
@@ -485,8 +502,12 @@ export default function ProjectItemChangePage({
                           '取消狀態維持，恢復時套用目前標準'}
                         {result.reinspection_selected &&
                           task.prior_status !== 'DRAFT' &&
-                          task.prior_status !== 'CANCELLED' &&
-                          '；此項目的舊需求與 Snapshot 已作廢並保留可查'}
+                          task.prior_status !== 'CANCELLED' && (
+                            <>
+                              {'；此項目的舊需求與 Snapshot '}
+                              {'已作廢並保留可查'}
+                            </>
+                          )}
                         {task.needs_reinspection && '；須重新查核'}
                         {before && before.preservedItemTitles.length > 0 && (
                           <>
