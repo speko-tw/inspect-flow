@@ -27,7 +27,7 @@ from app.models import (
     SystemRoleCode,
     User,
 )
-from app.services.permissions import effective_permissions
+from app.services.inspection_planning import PlanningError
 from app.services.project_members import (
     add_project_member,
     list_project_members,
@@ -80,15 +80,35 @@ class ProjectPlanningResponse(BaseModel):
 class WorkflowCount(BaseModel):
     code: str
     count: int
+    pending: bool
+
+
+class WorkflowTaskCounts(BaseModel):
+    DRAFT: int
+    PENDING: int
+    IN_PROGRESS: int
+    COMPLETED: int
+    CANCELLED: int
+
+
+class WorkflowProjectIdentity(BaseModel):
+    id: UUID
+    project_code: str
+    name: str
 
 
 class ProjectWorkflowSummaryResponse(BaseModel):
+    project: WorkflowProjectIdentity
+    viewer_permission_codes: list[str]
     member_count: int
     inspection_item_count: int
     zone_count: int
     plan_count: int
-    task_counts: dict[str, int]
+    task_counts: WorkflowTaskCounts
+    task_counts_visible: bool
     pending_reinspection_task_count: int
+    draft_tasks_missing_assignee: int
+    primary_step: str | None
     next_steps: list[WorkflowCount]
 
 
@@ -308,47 +328,33 @@ def get_workflow_summary(
     user: User = Depends(require_login_access),  # noqa: B008
 ) -> ProjectWorkflowSummaryResponse:
     """Return aggregate workflow counts to members with project read access."""
-    permissions = (
-        frozenset()
-        if user.is_admin
-        else effective_permissions(db, user_id=user.id, project_id=project_id)
-    )
-    readable_permissions = {
-        "inspection_plan.read",
-        "project_zone.read",
-        "inspection_task.read",
-        "inspection_task.inspect",
-    }
-    if not user.is_admin and not readable_permissions.intersection(
-        permissions
-    ):
-        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-    _get_project(db, project_id)
-    summary = get_project_workflow_summary(
-        db,
-        project_id=project_id,
-        can_read_drafts=(
-            user.is_admin or "inspection_task.read" in permissions
-        ),
-        can_read_tasks=(
-            user.is_admin
-            or bool(
-                {
-                    "inspection_task.read",
-                    "inspection_task.inspect",
-                }.intersection(permissions)
-            )
-        ),
-    )
+    if user.is_admin:
+        _get_project(db, project_id)
+    try:
+        summary = get_project_workflow_summary(
+            db,
+            project_id=project_id,
+        )
+    except PlanningError as exc:
+        if exc.code == "authorization.forbidden":
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
+        if exc.code == ErrorCode.RESOURCE_NOT_FOUND.value:
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404) from exc
+        raise
     return ProjectWorkflowSummaryResponse(
+        project=WorkflowProjectIdentity(**summary["project"]),
+        viewer_permission_codes=summary["viewer_permission_codes"],
         member_count=summary["member_count"],
         inspection_item_count=summary["inspection_item_count"],
         zone_count=summary["zone_count"],
         plan_count=summary["plan_count"],
-        task_counts=summary["task_counts"],
+        task_counts=WorkflowTaskCounts(**summary["task_counts"]),
+        task_counts_visible=summary["task_counts_visible"],
         pending_reinspection_task_count=(
             summary["pending_reinspection_task_count"]
         ),
+        draft_tasks_missing_assignee=summary["draft_tasks_missing_assignee"],
+        primary_step=summary["primary_step"],
         next_steps=[WorkflowCount(**step) for step in summary["next_steps"]],
     )
 
