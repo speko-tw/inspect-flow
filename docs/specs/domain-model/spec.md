@@ -238,8 +238,8 @@
 
 | 方法與路徑 | 行為 | 存取層級 |
 |---|---|---|
-| `GET /api/v1/projects` | 列出專案 | 需 Admin（AUT-R20） |
-| `GET /api/v1/projects/{project_id}` | 取得專案 | 需 Admin（AUT-R20） |
+| `GET /api/v1/projects/{project_id}` | `inspection_plan.read` 專案成員讀取基本欄位；Admin 取得完整資料；Project 不設狀態欄位（DOM-R43） | 需專案權限 `inspection_plan.read`；Admin 依 AUT-R19 放行 |
+| `GET /api/v1/projects?q=&cursor=&limit=` | `{items: [既有 Project 欄位], next_cursor}`；依 `(name,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `name`、`project_code`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | 沿用 Admin 或 `template_admin` 系統角色（AUT-R20、AUT-R19） |
 | `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
 | `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
@@ -459,3 +459,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 範圍變更（負責人裁定）：DOM-R55 的角色回應新增 `user_count`（不重複使用者數）、`project_count`，供角色管理頁在修改與刪除前顯示影響範圍（PR-18）；不改既有欄位與錯誤碼 — [#276](https://github.com/speko-tw/inspect-flow/issues/276)；裁定紀錄：[#276 留言](https://github.com/speko-tw/inspect-flow/issues/276#issuecomment-5932231697)
 - 範圍變更（負責人裁定）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/members`（成員列表，權限同其他成員端點），回應含使用者顯示欄位；供專案與成員管理頁顯示現有成員；裁定原文：[#277 留言](https://github.com/speko-tw/inspect-flow/issues/277#issuecomment-5932232205) — [#277](https://github.com/speko-tw/inspect-flow/issues/277)
 - 範圍變更（負責人指示，#290）：介面新增 `GET /api/v1/me/projects`（我的專案 API）與 DOM-AC50，回傳目前使用者參與的專案與自己的角色名稱，供我的工作台使用；不改既有欄位與錯誤碼 — [#290](https://github.com/speko-tw/inspect-flow/issues/290)
+- 範圍變更（負責人指示，#407）：既有專案列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依 `(name,id)` 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。

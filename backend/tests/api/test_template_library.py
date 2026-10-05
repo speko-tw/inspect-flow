@@ -612,6 +612,35 @@ def test_structure_replace_and_validation(clients, db_session):
     assert manager.get(f"/api/v1/templates/{template_id}").status_code == 200
 
 
+def test_system_put_accepts_frontend_numeric_unit_payload(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    item = _template(system_id, "Frontend numeric payload")
+    point = item["inspection_points"][0]
+    bound_client_id = point["numeric_standard"]["measurement_field_client_id"]
+    for field in point["measurement_fields"]:
+        if field["client_id"] == bound_client_id:
+            field["unit"] = None
+
+    saved = manager.put(
+        f"/api/v1/template-systems/{system_id}/templates",
+        json={"items": [item]},
+    )
+    assert saved.status_code == 200, saved.text
+    saved_point = saved.json()["items"][0]["inspection_points"][0]
+    assert saved_point["numeric_standard"]["unit"] == "mm"
+    assert [field["unit"] for field in saved_point["measurement_fields"]] == [
+        "mm",
+        None,
+        "cm",
+    ]
+
+    fetched = manager.get(f"/api/v1/template-systems/{system_id}/templates")
+    assert fetched.status_code == 200, fetched.text
+    fetched_point = fetched.json()["items"][0]["inspection_points"][0]
+    assert fetched_point == saved_point
+
+
 def test_photo_requirements_are_required_unbounded_and_photo_only(clients):
     manager = clients["manager"]
     _, system_id = _tree(manager)

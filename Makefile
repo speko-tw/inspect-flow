@@ -77,13 +77,22 @@ run-frontend:
 # `mkcert -install`, which changes the system trust store; it only
 # prints that hint. run-frontend-https passes the certificate paths
 # to Vite through the INSPECTFLOW_DEV_HTTPS_* variables
-# (frontend/vite.config.ts). FRONTEND_PORT overrides the port; the
-# port is strict, so an occupied one fails instead of moving.
-# LAN access and iPhone trust stay manual (README, #231).
+# (frontend/vite.config.ts). Set INSPECTFLOW_DEV_HOST and
+# INSPECTFLOW_DEV_ALLOWED_CIDR together to enable guarded LAN access.
+# FRONTEND_PORT overrides the port; the port is strict, so an occupied
+# one fails instead of moving. iPhone certificate trust stays manual.
 CERT_DIR := $(CURDIR)/frontend/.cert
 CERT_FILE := $(CERT_DIR)/dev.pem
 KEY_FILE := $(CERT_DIR)/dev-key.pem
 FRONTEND_PORT ?= 5173
+INSPECTFLOW_DEV_HOST ?=
+INSPECTFLOW_DEV_ALLOWED_CIDR ?=
+ifneq ($(strip $(INSPECTFLOW_DEV_HOST)),)
+export INSPECTFLOW_DEV_HOST
+endif
+ifneq ($(strip $(INSPECTFLOW_DEV_ALLOWED_CIDR)),)
+export INSPECTFLOW_DEV_ALLOWED_CIDR
+endif
 
 dev-cert:
 	@if [ -f "$(CERT_FILE)" ] && [ -f "$(KEY_FILE)" ]; then \
@@ -189,4 +198,5 @@ check-frontend:
 	cd frontend && npm run typecheck
 	cd frontend && npm run test
 	cd frontend && npm run build
+	cd frontend && node scripts/check-pwa.mjs
 	cd frontend && npm run check:split

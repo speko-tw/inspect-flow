@@ -127,11 +127,11 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         if info.path.startswith("/api/v1/projects")
     }
     admin_routes = {
-        ("GET", "/api/v1/projects/{project_id}"),
         ("POST", "/api/v1/projects"),
         ("PATCH", "/api/v1/projects/{project_id}"),
     }
     template_admin_list = ("GET", "/api/v1/projects")
+    planning_project_get = ("GET", "/api/v1/projects/{project_id}")
     member_routes = {
         ("GET", "/api/v1/projects/{project_id}/members"),
         ("POST", "/api/v1/projects/{project_id}/members"),
@@ -150,13 +150,43 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         "GET",
         "/api/v1/projects/{project_id}/inspection-items",
     )
-
-    assert set(routes) == admin_routes | member_routes | {
-        template_admin_list,
-        apply_template,
-        save_template,
-        list_inspection_items,
+    planning_routes = {
+        ("GET", "/api/v1/projects/{project_id}/inspection-plans"),
+        ("POST", "/api/v1/projects/{project_id}/inspection-plans"),
+        ("GET", "/api/v1/projects/{project_id}/zones"),
+        ("POST", "/api/v1/projects/{project_id}/zones"),
+        ("PATCH", "/api/v1/projects/{project_id}/zones/{zone_id}"),
+        ("DELETE", "/api/v1/projects/{project_id}/zones/{zone_id}"),
+        ("GET", "/api/v1/projects/{project_id}/inspection-tasks"),
+        (
+            "GET",
+            "/api/v1/projects/{project_id}/inspection-items/"
+            "{project_inspection_item_id}/tasks",
+        ),
+        (
+            "GET",
+            "/api/v1/projects/{project_id}/inspection-task-assignees",
+        ),
+        (
+            "PATCH",
+            "/api/v1/projects/{project_id}/inspection-items/"
+            "{project_inspection_item_id}",
+        ),
     }
+
+    assert (
+        set(routes)
+        == admin_routes
+        | member_routes
+        | {
+            template_admin_list,
+            planning_project_get,
+            apply_template,
+            save_template,
+            list_inspection_items,
+        }
+        | planning_routes
+    )
     for route in admin_routes:
         declaration = routes[route]
         assert declaration is not None
@@ -165,6 +195,10 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     assert declaration is not None
     assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
     assert declaration.permission_code == "template_admin"
+    declaration = routes[planning_project_get]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.PROJECT_PERMISSION
+    assert declaration.permission_code == "inspection_plan.read"
     for route in member_routes:
         declaration = routes[route]
         assert declaration is not None
@@ -181,6 +215,64 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     declaration = routes[list_inspection_items]
     assert declaration is not None
     assert declaration.level is AccessLevel.LOGIN_REQUIRED
+    for route in planning_routes:
+        declaration = routes[route]
+        assert declaration is not None
+        if route[1].endswith("/inspection-plans"):
+            assert declaration.level is AccessLevel.PROJECT_PERMISSION
+            assert declaration.permission_code == (
+                "inspection_plan.read"
+                if route[0] == "GET"
+                else "inspection_plan.create"
+            )
+        elif route[0] in {"POST", "PATCH", "DELETE"} and "/zones" in route[1]:
+            assert declaration.level is AccessLevel.PROJECT_PERMISSION
+            assert declaration.permission_code == "project_zone.manage"
+        elif route[0] == "GET" and "/inspection-items/" in route[1]:
+            assert declaration.level is AccessLevel.PROJECT_PERMISSION
+            assert (
+                declaration.permission_code == "project_inspection_item.edit"
+            )
+        elif route[0] == "PATCH" and "/inspection-items/" in route[1]:
+            assert declaration.level is AccessLevel.PROJECT_PERMISSION
+            assert (
+                declaration.permission_code == "project_inspection_item.edit"
+            )
+        else:
+            assert declaration.level is AccessLevel.LOGIN_REQUIRED
+
+
+def test_issue_361_plan_and_task_routes_declare_login_access() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if "/inspection-plans/" in info.path
+        or "/inspection-tasks/" in info.path
+    }
+    assert routes
+    for declaration in routes.values():
+        assert declaration is not None
+        assert declaration.level is AccessLevel.LOGIN_REQUIRED
+
+
+def test_issue_361_does_not_expose_result_photo_or_manual_reopen_routes() -> (
+    None
+):
+    app = create_app()
+    paths = {
+        info.path
+        for info in iter_route_access(app)
+        if "inspection-task" in info.path
+    }
+    assert paths
+    assert not any(
+        "/results" in path
+        or "/photos" in path
+        or ":reopen" in path
+        or "reopen" in path
+        for path in paths
+    )
 
 
 def test_system_role_assignment_routes_require_admin() -> None:

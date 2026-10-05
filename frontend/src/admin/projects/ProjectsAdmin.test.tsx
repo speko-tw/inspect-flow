@@ -120,8 +120,22 @@ function projectFetch({
           { status: failWith.status },
         )
       }
-      if (url.endsWith('/projects') && method === 'GET') {
-        return Response.json(projectRows)
+      const parsed = new URL(url, 'http://testserver')
+      if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
+        const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
+        const filtered = projectRows.filter((project) =>
+          `${project.name} ${project.project_code}`
+            .toLowerCase()
+            .includes(query),
+        )
+        const start = Number(parsed.searchParams.get('cursor') ?? 0)
+        const limit = Number(parsed.searchParams.get('limit') ?? 50)
+        const items = filtered.slice(start, start + limit)
+        return Response.json({
+          items,
+          next_cursor:
+            start + limit < filtered.length ? String(start + limit) : null,
+        })
       }
       if (url.endsWith('/projects') && method === 'POST') {
         const created = makeProject({
@@ -136,7 +150,7 @@ function projectFetch({
         projectRows.push(created)
         return Response.json(created, { status: 201 })
       }
-      const projectMatch = /\/projects\/([^/]+)$/.exec(url)
+      const projectMatch = /\/projects\/([^/?]+)$/.exec(url)
       if (projectMatch && method === 'GET') {
         return Response.json(
           projectRows.find((row) => row.id === projectMatch[1]),
@@ -183,8 +197,11 @@ function projectFetch({
         memberRows.splice(index, 1)
         return new Response(null, { status: 204 })
       }
-      if (url.endsWith('/users')) {
-        return Response.json([systemAdmin, anna, bob, inactive])
+      if (parsed.pathname === '/api/v1/users') {
+        return Response.json({
+          items: [systemAdmin, anna, bob, inactive],
+          next_cursor: null,
+        })
       }
       if (url.includes('/roles')) {
         const cursor = new URL(url, 'http://x').searchParams.get('cursor')
@@ -270,6 +287,45 @@ describe('admin projects page', () => {
       'href',
       '/admin/projects/project-1/planning',
     )
+  })
+
+  it('searches projects and loads the next cursor page', async () => {
+    const projects = Array.from({ length: 51 }, (_, index) =>
+      makeProject({
+        id: `project-${index}`,
+        project_code: `DEMO-${String(index).padStart(3, '0')}`,
+        name: index === 50 ? '目標工程' : `示範工程${index}`,
+      }),
+    )
+    projectFetch({ projects })
+    renderAt('/admin/projects')
+
+    expect(await screen.findByText('示範工程0')).toBeInTheDocument()
+    expect(screen.queryByText('目標工程')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    expect(await screen.findByText('目標工程')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('搜尋專案'), {
+      target: { value: 'demo-050' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    expect(await screen.findByText('目標工程')).toBeInTheDocument()
+    expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
+  })
+
+  it('reloads projects when searching the same query repeatedly', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+
+    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    const search = screen.getByRole('button', { name: '搜尋' })
+    fireEvent.click(search)
+    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(search).toBeEnabled()
+
+    fireEvent.click(search)
+    expect(await screen.findByText('示範工程')).toBeInTheDocument()
+    expect(search).toBeEnabled()
   })
 
   it('creates a project with optional dates left empty', async () => {

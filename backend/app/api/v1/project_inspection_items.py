@@ -23,17 +23,14 @@ from app.auth.access import (
 from app.auth.dependencies import get_db
 from app.models import (
     Project,
-    ProjectEvidenceRequirement,
     ProjectInspectionItem,
-    ProjectInspectionPoint,
-    ProjectMeasurementField,
     ProjectMember,
-    ProjectNumericStandard,
-    ProjectTextStandard,
     SystemRoleCode,
     User,
 )
-from app.services.inspection_details import inspection_points_detail
+from app.services.inspection_details import (
+    project_inspection_item_detail,
+)
 from app.services.project_templates import (
     DuplicateProjectItemError,
     apply_template,
@@ -70,31 +67,6 @@ class CreateTemplateFromProjectRequest(BaseModel):
 
     project_inspection_item_id: UUID
     system_id: UUID
-
-
-def _project_item_detail(db: Session, item: ProjectInspectionItem) -> dict:
-    points = db.scalars(
-        select(ProjectInspectionPoint)
-        .where(ProjectInspectionPoint.project_inspection_item_id == item.id)
-        .order_by(ProjectInspectionPoint.sequence, ProjectInspectionPoint.id)
-    ).all()
-    return {
-        "id": item.id,
-        "project_id": item.project_id,
-        "sequence": item.sequence,
-        "title": item.title,
-        "instruction": item.instruction,
-        "source_template_name": item.source_template_name,
-        "applied_at": format_utc(item.applied_at),
-        "inspection_points": inspection_points_detail(
-            db,
-            points,
-            measurement_field_model=ProjectMeasurementField,
-            text_standard_model=ProjectTextStandard,
-            numeric_standard_model=ProjectNumericStandard,
-            evidence_requirement_model=ProjectEvidenceRequirement,
-        ),
-    }
 
 
 @router.post(
@@ -194,5 +166,5 @@ def list_project_inspection_items(
         cursor=cursor,
         limit=limit,
         filters=(ProjectInspectionItem.project_id == project_id,),
-        serialize=lambda item: _project_item_detail(db, item),
+        serialize=lambda item: project_inspection_item_detail(db, item),
     )

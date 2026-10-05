@@ -4,13 +4,14 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.pagination import ilike_contains, page_by_text_key
 from app.auth.access import (
     require_admin,
     require_admin_or_system_role,
@@ -40,6 +41,9 @@ from app.services.projects import (
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+_PROJECT_PLANNING_READ_ACCESS = Depends(
+    require_project_permission("inspection_plan.read")
+)
 _PROJECT_MEMBER_ACCESS = Depends(
     require_project_permission("project_member.manage")
 )
@@ -60,6 +64,19 @@ class ProjectResponse(BaseModel):
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
+
+
+class ProjectPlanningResponse(BaseModel):
+    id: UUID
+    project_code: str
+    name: str
+    planned_start_date: date | None
+    planned_completion_date: date | None
+
+
+class ProjectListResponse(BaseModel):
+    items: list[ProjectResponse]
+    next_cursor: str | None
 
 
 class CreateProjectRequest(BaseModel):
@@ -203,17 +220,26 @@ def _member_conflict(exc: IntegrityError) -> bool:
 
 @router.get(
     "",
-    response_model=list[ProjectResponse],
+    response_model=ProjectListResponse,
     dependencies=[
         Depends(require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN))
     ],
 )
 def list_projects(
+    q: str | None = Query(default=None, max_length=256),
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),  # noqa: B008
-) -> list[ProjectResponse]:
-    projects = db.scalars(
-        select(Project).order_by(Project.name, Project.id)
-    ).all()
+) -> ProjectListResponse:
+    filters = []
+    query = (q or "").strip()
+    if query:
+        filters.append(
+            or_(
+                ilike_contains(Project.name, query),
+                ilike_contains(Project.project_code, query),
+            )
+        )
     duplicate_codes = set(
         db.scalars(
             select(Project.project_code)
@@ -221,22 +247,37 @@ def list_projects(
             .having(func.count(Project.id) > 1)
         )
     )
-    return [
-        _project_response(project, project.project_code in duplicate_codes)
-        for project in projects
-    ]
+    result = page_by_text_key(
+        db,
+        Project,
+        sort_key=Project.name,
+        key_name="name",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda project: _project_response(
+            project, project.project_code in duplicate_codes
+        ),
+        filters=filters,
+    )
+    return ProjectListResponse(**result)
 
 
-@router.get(
-    "/{project_id}",
-    response_model=ProjectResponse,
-    dependencies=[Depends(require_admin)],
-)
+@router.get("/{project_id}")
 def get_project(
     project_id: UUID,
     db: Session = Depends(get_db),  # noqa: B008
-) -> ProjectResponse:
-    return _single_project_response(db, _get_project(db, project_id))
+    user: User = _PROJECT_PLANNING_READ_ACCESS,
+) -> ProjectResponse | ProjectPlanningResponse:
+    project = _get_project(db, project_id)
+    if user.is_admin:
+        return _single_project_response(db, project)
+    return ProjectPlanningResponse(
+        id=project.id,
+        project_code=project.project_code,
+        name=project.name,
+        planned_start_date=project.planned_start_date,
+        planned_completion_date=project.planned_completion_date,
+    )
 
 
 @router.post(

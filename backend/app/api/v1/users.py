@@ -3,13 +3,14 @@
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.pagination import ilike_contains, page_by_text_key
 from app.api.v1._management_errors import (
     integrity_error_code,
     management_error_status,
@@ -60,6 +61,11 @@ class UserResponse(BaseModel):
     is_active: bool
     is_admin: bool
     is_system: bool
+
+
+class UserListResponse(BaseModel):
+    items: list[UserResponse]
+    next_cursor: str | None
 
 
 class CreateUserRequest(BaseModel):
@@ -156,9 +162,36 @@ def _check_company_exists(db: Session, company_id: UUID | None) -> None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
 
-@router.get("", response_model=list[UserResponse])
-def list_users(db: Session = Depends(get_db)) -> list[User]:  # noqa: B008
-    return list(db.scalars(select(User).order_by(User.username)))
+@router.get("", response_model=UserListResponse)
+def list_users(
+    q: str | None = Query(default=None, max_length=256),
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),  # noqa: B008
+) -> UserListResponse:
+    filters = []
+    query = (q or "").strip()
+    if query:
+        filters.append(
+            or_(
+                ilike_contains(User.username, query),
+                ilike_contains(User.name_zh, query),
+                ilike_contains(User.name_en, query),
+                ilike_contains(User.email, query),
+                ilike_contains(User.employee_no, query),
+            )
+        )
+    result = page_by_text_key(
+        db,
+        User,
+        sort_key=User.username,
+        key_name="username",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda user: UserResponse.model_validate(user),
+        filters=filters,
+    )
+    return UserListResponse(**result)
 
 
 @router.get("/{user_id}", response_model=UserResponse)
