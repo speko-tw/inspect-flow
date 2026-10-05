@@ -33,6 +33,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from alembic.config import Config
@@ -63,6 +64,7 @@ from app.services.audit import (
     register_audit_event,
 )
 from app.services.companies import create_company, update_company
+from app.services.operator import OperatorNotFoundError
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 
 PASSWORD = DEFAULT_TEST_PASSWORD
@@ -583,6 +585,22 @@ class TestAlgAc12SystemEventAndAlwaysWriteFlags:
     (neither flag) still require a logged-in operator; identical
     before/after does not stop ``user.password_set`` from writing.
     """
+
+    def test_system_event_without_builtin_operator_raises_not_found(
+        self, session, monkeypatch
+    ):
+        query_result = Mock()
+        query_result.one_or_none.return_value = None
+        monkeypatch.setattr(session, "scalars", lambda *_args: query_result)
+
+        with pytest.raises(OperatorNotFoundError):
+            record_audit_event(
+                session,
+                "user.locked",
+                entity_id=uuid7(),
+                before=None,
+                after={"locked_until": "2026-03-03T00:00:00Z"},
+            )
 
     def test_system_event_and_always_write_flags(
         self, session, operator, migrated_url

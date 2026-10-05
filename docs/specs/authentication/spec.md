@@ -132,7 +132,7 @@
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
 | AUT-R27 | 「驗證身分」與「建立登入狀態」**應**是兩個分開的步驟：密碼驗證只負責確認一個 `User`；建立 `AuthSession`、Cookie、AUT-R14 的檢查不依賴密碼。日後外部身分來源只需新增一種驗證方式，驗證成功後沿用同一套登入狀態 | 應 | [KD-30](../../intents/03-decisions-and-stack.md#kd-30) 的理由（外部來源登入成功後一樣建立伺服器端登入狀態）、[KD-20](../../intents/03-decisions-and-stack.md#kd-20) |
-| AUT-R28 | 後端**必須**依帳號（`User`）計算密碼驗證失敗：同一帳號在 15 分鐘內失敗 10 次，第 10 次失敗起鎖定 15 分鐘，時間到自動解鎖，不需 Admin 操作。計入的入口有兩個，共用同一個計數：登入 API（AUT-R05）與變更密碼 API 驗證目前密碼（AUT-R34）。細節：（1）「15 分鐘內」從當下往回算，經過時間大於或等於 15 分鐘的失敗不再計入；（2）鎖定從第 10 次失敗的時間起算，經過時間大於或等於 15 分鐘即解鎖，解鎖後重新計數；（3）鎖定期間的嘗試不論密碼對錯都拒絕，不計入、不延長鎖定；（4）任一入口密碼驗證成功時，該帳號的失敗計數清零；（5）帳號不存在時不記錄；用帳號名稱或用 email 登入指向同一個帳號，計入同一個計數；（6）經設定密碼的 Service 入口（AUT-R36）重設密碼時（含 `admin` 重設指令與 Admin 設定臨時密碼），不論是否知道目前密碼、也不論是否鎖定中，都視同該帳號驗證成功：清除失敗計數並解除鎖定。鎖定期間的回應**必須**與該入口的一般失敗相同：登入回 AUT-R06 的 401 `auth.invalid_credentials`，變更密碼回 400 `auth.current_password_incorrect`、資料不變；**不得**另有錯誤碼、訊息或標頭透露帳號被鎖。三個數值（10 次、15 分鐘、15 分鐘）**應**集中在一處常數，並比照 AUT-R15 可由環境變數覆寫（未設定或空值時用上述預設值）。被鎖時寫稽核紀錄，見 AUT-R39。首次登入碼的失敗鎖定另立（AUT-R45），計數與這裡分開，被鎖只寫應用程式日誌 | 必須（門檻、期間、自動解鎖、兩個入口共用計數、重設密碼解鎖、回應不透露）；應（常數集中、環境變數覆寫） | [AUT-Q5](#aut-q5) 裁定（負責人，[#147](https://github.com/speko-tw/inspect-flow/issues/147)，2026-09-27）；細節（1）～（5）是本規格的推導，依 OWASP Authentication Cheat Sheet（依帳號計算、成功後重設計數、鎖定可能被用來阻擋他人，因此不延長）；細節（6）為負責人裁定（[#192](https://github.com/speko-tw/inspect-flow/issues/192) 留言，2026-09-27）：重設密碼的人已確認過本人身分，繼續鎖著只會讓人乾等；落地由 T11 的 Service 入口負責清除，實際計數與解鎖由 T8 的鎖定模組實作，見計畫 T8「與 T11 的銜接」。環境變數覆寫比照 AUT-R15 的慣例 |
+| AUT-R28 | 後端**必須**依帳號（`User`）計算密碼驗證失敗：同一帳號在 15 分鐘內失敗 10 次，第 10 次失敗起鎖定 15 分鐘，時間到自動解鎖，不需 Admin 操作。計入的入口有兩個，共用同一個計數：登入 API（AUT-R05）與變更密碼 API 驗證目前密碼（AUT-R34）。細節：（1）「15 分鐘內」從當下往回算，經過時間大於或等於 15 分鐘的失敗不再計入；（2）鎖定從第 10 次失敗的時間起算，經過時間大於或等於 15 分鐘即解鎖，解鎖後重新計數；（3）鎖定期間的嘗試不論密碼對錯都拒絕，不計入、不延長鎖定；（4）任一入口密碼驗證成功時，該帳號的失敗計數清零；（5）帳號不存在時不記錄；用帳號名稱或用 email 登入指向同一個帳號，計入同一個計數；（6）經設定密碼的 Service 入口（AUT-R36）重設密碼時（含 `admin` 重設指令與 Admin 設定臨時密碼），不論是否知道目前密碼、也不論是否鎖定中，都視同該帳號驗證成功：清除失敗計數並解除鎖定。鎖定期間的回應**必須**與該入口的一般失敗相同：登入回 AUT-R06 的 401 `auth.invalid_credentials`，變更密碼回 400 `auth.current_password_incorrect`、資料不變；**不得**另有錯誤碼、訊息或標頭透露帳號被鎖。SQLite 寫鎖等待逾時時，不論帳號已知、未知或已鎖定，登入**必須**回 503 `server.temporarily_unavailable`、`Retry-After: 5` 且不設定 Cookie；逾時不得留下登入狀態、失敗計數或 `auth.login_failed` 日誌。三個鎖定數值（10 次、15 分鐘、15 分鐘）**應**集中在一處常數，並比照 AUT-R15 可由環境變數覆寫（未設定或空值時用上述預設值）。被鎖時寫稽核紀錄，見 AUT-R39。首次登入碼的失敗鎖定另立（AUT-R45），計數與這裡分開，被鎖只寫應用程式日誌 | 必須（門檻、期間、自動解鎖、兩個入口共用計數、重設密碼解鎖、回應不透露、SQLite 寫鎖等待逾時回應一致）；應（常數集中、環境變數覆寫） | [AUT-Q5](#aut-q5) 裁定（負責人，[#147](https://github.com/speko-tw/inspect-flow/issues/147)，2026-09-27）；細節（1）～（5）是本規格的推導，依 OWASP Authentication Cheat Sheet（依帳號計算、成功後重設計數、鎖定可能被用來阻擋他人，因此不延長）；細節（6）為負責人裁定（[#192](https://github.com/speko-tw/inspect-flow/issues/192) 留言，2026-09-27）：重設密碼的人已確認過本人身分，繼續鎖著只會讓人乾等；SQLite 登入等待上限與逾時回應依負責人裁定（[#320](https://github.com/speko-tw/inspect-flow/issues/320)、[#321](https://github.com/speko-tw/inspect-flow/issues/321)）。落地由 T11 的 Service 入口負責清除，實際計數與解鎖由 T8 的鎖定模組實作，見計畫 T8「與 T11 的銜接」。環境變數覆寫比照 AUT-R15 的慣例 |
 
 ### 稽核紀錄與日誌
 
@@ -181,6 +181,8 @@
 | `POST` | `/api/v1/auth/password` | 本人變更密碼，本體 `{"current_password": "…", "new_password": "…"}`；成功 204，並以 `Set-Cookie` 換發新的登入 Cookie；目前密碼錯誤 400 `auth.current_password_incorrect`；新密碼不符規則 422 `auth.password_invalid`；臨時密碼改成同一組 422 `auth.password_unchanged`；外部帳號 403 `permission.denied` | 需登入（臨時密碼未變更時仍放行） |
 | `GET` | `/api/v1/setup/status` | 回傳 `{"setup_required": true \| false}`；`admin` 尚未設定密碼時為 `true` | 公開（AUT-R44） |
 | `POST` | `/api/v1/setup/admin-password` | 本體 `{"code": "…", "password": "…"}`；成功 204，設定 `admin` 密碼、作廢首次登入碼、設定登入 Cookie；碼錯誤、過期、作廢或被鎖 401 `setup.invalid_code`；已設定過密碼 409 `setup.already_completed`；密碼不符規則 422 `auth.password_invalid` | 公開（AUT-R44） |
+| `GET` | `/api/v1/users?q=&cursor=&limit=` | `{items: [既有 User 欄位], next_cursor}`；依 `(username,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `username`、`name_zh`、`name_en`、`email`、`employee_no`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | 需 Admin（AUT-R20） |
+| `GET` | `/api/v1/companies?q=&cursor=&limit=` | `{items: [既有 Company 欄位], next_cursor}`；依 `(name,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；`q` 省略或空白時不篩選，否則以不分大小寫子字串搜尋 `name`；無效 cursor、超長 `q` 或超出範圍的 `limit` 回 422 | 需 Admin（AUT-R20） |
 
 | 其他介面 | 內容 | 對應需求 |
 |---|---|---|
@@ -194,6 +196,7 @@
 | 環境變數 | 登入狀態的絕對期限與閒置期限（名稱由計畫決定，並寫入 `.env.example`） | AUT-R15 |
 | 環境變數 | 登入失敗鎖定的門檻、計算期間、鎖定時間（名稱由計畫決定，並寫入 `.env.example`） | AUT-R28 |
 | 環境變數 | 首次登入碼的失敗鎖定門檻、計算期間、鎖定時間（名稱由計畫決定，並寫入 `.env.example`） | AUT-R45 |
+| 環境變數 | `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS`：SQLite 登入寫鎖等待上限，預設 5000 毫秒，範圍 1～60000 毫秒；非正整數或超出範圍時後端啟動必須拒絕 | #320、#321 |
 | 日誌 | 登入成功、失敗、登出，以及首次登入碼被鎖的應用程式日誌：固定 logger 名稱與結構化欄位（名稱由計畫決定） | AUT-R40、AUT-R41、AUT-R45 |
 | 畫面 | 前端 `/login` 登入頁（帳號名稱或 email）、`/setup` 首次設定頁；Admin Web、Field Web 的登出操作 | AUT-R29、AUT-R30 |
 | 畫面 | 前端 `/change-password` 變更密碼頁；臨時密碼未變更時導向此頁 | AUT-R38 |
@@ -296,6 +299,9 @@
 | AUT-AC47 | 同 AUT-AC27 的 U，已登入；可控時間 | 以錯誤的目前密碼呼叫變更密碼 API 5 次，再以錯誤密碼登入 5 次；接著以 P 登入，並以正確的目前密碼 P 與有效新密碼呼叫變更密碼 API | 以 P 登入回 401；變更密碼回 400 `auth.current_password_incorrect`，回應與一般的目前密碼錯誤相同；`UserPassword` 與登入狀態筆數不變 | AUT-R28、AUT-R34 |
 | AUT-AC48 | 預設的環境（未設定鎖定相關環境變數），以及分別設定這三個環境變數的環境 | 讀取後端的鎖定設定 | 未設定時為 10 次、15 分鐘、15 分鐘；有設定時等於設定值；`.env.example` 列出這三個變數 | AUT-R28 |
 | AUT-AC53 | 同 AUT-AC27 的 U；依 AUT-AC27 觸發鎖定（第 10 次在時間 L），鎖定仍在生效中 | 在鎖定期間，經設定密碼的 Service 入口（Admin 設定臨時密碼的畫面，或以測試直接呼叫入口）替 U 重設密碼 | 重設後立即以新密碼登入回 200（鎖定已解除、失敗計數已歸零）；重設前後 `AuthSession` 與 `UserPassword` 的筆數、`updated_by` 符合 AUT-R36 的一般寫入行為 | AUT-R28、AUT-R36 |
+| AUT-AC67 | SQLite 資料庫；一個已知帳號（含密碼錯誤與正確密碼）、一個已鎖定帳號，以及一個未知帳號；以較短的 `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 設定重現另一連線持有寫鎖 | 寫鎖仍被持有時分別呼叫三種登入情境；釋放寫鎖後再次登入未知與已鎖定帳號 | 寫鎖等待逾時的所有情境都回 503 `server.temporarily_unavailable`、`Retry-After: 5`，回應本體相同且沒有 `Set-Cookie`；逾時沒有新增或改變失敗計數、沒有建立 `AuthSession`，也沒有 `auth.login_failed` 日誌；鎖釋放後，未知與已鎖定帳號都回 401 `auth.invalid_credentials`、沒有 Cookie，且各記一筆對應的失敗日誌 | AUT-R28；`test_sqlite_write_lock_timeout_returns_retryable_error`、`test_locked_account_and_unknown_login_share_sqlite_timeout` |
+| AUT-AC68 | `INSPECTFLOW_SQLITE_BUSY_TIMEOUT_MS` 分別設為 `1`、`60000`、`60001` 毫秒 | 啟動後端應用程式 | 1 與 60000 毫秒可啟動；60001 毫秒啟動失敗並指出變數名稱 | AUT-R28；`test_sqlite_busy_timeout_accepts_bounds`、`test_sqlite_busy_timeout_rejects_above_maximum` |
+| AUT-AC69 | 專案 P；成員 U 有 `inspection_plan.read`；成員 F 只有 `inspection_task.inspect`；非成員 N；Admin A 不屬於 P | U、F、N、A 讀取 `GET /api/v1/projects/{project_id}`；A 另讀取不存在的專案 | U 回 200 且只含基本欄位；F、N 回 403 `permission.denied`；A 回完整欄位；不存在的專案回 404 `resource.not_found` | AUT-R19、DOM-R43 |
 
 ### 稽核紀錄與日誌
 
@@ -386,6 +392,7 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 依 AUT-Q4 裁定，AUT-R24 可指定內建 `admin`，新增臨時密碼與首次登入強制變更（AUT-R32～AUT-R38、AUT-AC32～AUT-AC43），AUT-R08、AUT-AC08 的目前使用者回應加上 `must_change_password`，「不包含」改寫 Admin 設定臨時密碼的歸屬並排除臨時密碼的有效期限 — [#146](https://github.com/speko-tw/inspect-flow/issues/146)
 - 依 AUT-Q2 裁定，AUT-R19 改為 Admin 通過所有專案權限代碼（含新增、刪除與特殊動作），AUT-R22 改引用 AUT-R19，新增 AUT-AC44 — [#144](https://github.com/speko-tw/inspect-flow/issues/144)
 - 依 AUT-Q5 裁定，AUT-R28 定為依帳號 15 分鐘內失敗 10 次鎖定 15 分鐘、自動解鎖，登入與變更密碼共用計數；AUT-AC27 改為具體邊界，新增 AUT-AC45～AUT-AC48 — [#147](https://github.com/speko-tw/inspect-flow/issues/147)
+- 範圍變更（負責人指示，#407）：既有使用者與公司列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依各自欄位與 UUID 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。
 - 依 AUT-Q6 裁定，新增 AUT-R39～AUT-R41（設定密碼與帳號被鎖寫稽核紀錄；登入、登出寫應用程式日誌；紀錄不得含密碼或 token）與 AUT-AC49～AUT-AC52，「範圍」的稽核紀錄段改寫 — [#148](https://github.com/speko-tw/inspect-flow/issues/148)
 - 負責人裁定：AUT-R28 補上細節（6），經設定密碼的 Service 入口重設密碼（指令、Admin 設定臨時密碼）時一併清除失敗計數並解鎖；新增 AUT-AC53；落地由 T11 的 Service 入口留呼叫點，實際計數、解鎖與測試由 T8 接上 — [#192](https://github.com/speko-tw/inspect-flow/issues/192#issuecomment-5853201917) 裁定
 - 範圍變更（admin 與帳號重新設計）：新增首次登入碼、首次設定公開路由、首次登入碼失敗鎖定、新增使用者的臨時密碼與勾選框、`admin` 重設指令（AUT-R42～AUT-R47、AUT-AC54～AUT-AC66、`SetupCode`、AUT-Q7）；AUT-R24、AUT-AC23、AUT-AC32 已被取代（一般使用者的設定密碼指令移除）；改寫 AUT-R04～AUT-R06、AUT-R08、AUT-R09、AUT-R18、AUT-R20、AUT-R26、AUT-R28、AUT-R29、AUT-R36、AUT-R37、AUT-R39、AUT-R41 與對應驗收；AUT-Q4 第二題標為已被取代；目的、範圍、不包含、使用情境與介面同步改寫；人員與公司的簡易管理改屬 0.2.x（#263、#265） — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
@@ -394,4 +401,5 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 規格澄清：AUT-AC57 的 SetupCode 不變不包含 AUT-R45 的失敗計數與鎖定欄位；隨機錯碼仍計入目前有效碼的鎖定計數 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
 - 規格澄清：首次設定成功並建立登入狀態時，也寫 `auth.login_succeeded` 應用程式日誌，比照 AUT-R40 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
 - 負責人裁定（#261，2026-09-29）：初始化不再預建三個範本角色，角色由 Admin 之後在系統內新增；更新初始化流程的裁定紀錄，權限模型與首次登入碼流程不變 — [#261](https://github.com/speko-tw/inspect-flow/issues/261)
+- 規格澄清（#320、#321）：新增可設定且啟動時驗證的 SQLite 登入寫鎖等待上限；明定已知、未知與已鎖定帳號逾時都回 503、`Retry-After: 5`、不設 Cookie，且不新增登入失敗副作用 — [#320](https://github.com/speko-tw/inspect-flow/issues/320)、[#321](https://github.com/speko-tw/inspect-flow/issues/321)
 - 範圍變更（負責人指示，#290）：AUT-R08、AUT-AC08 與介面表的目前使用者 API 新增 `company`（`{id, name}`，可為 `null`）、`department`、`location`、`employee_no`，供我的工作台顯示「我的公司」；登入 API 的成功回應與目前使用者 API 完全相同，也帶這四個欄位（審查第 1 輪裁定） — [#290](https://github.com/speko-tw/inspect-flow/issues/290)

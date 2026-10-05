@@ -33,6 +33,9 @@ function stubAuthenticatedFetch() {
           must_change_password: false,
         })
       }
+      if (/\/(users|companies|projects)\?/.test(url)) {
+        return Response.json({ items: [], next_cursor: null })
+      }
       return Response.json([])
     }),
   )
@@ -62,6 +65,9 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: '使用者管理' }),
     ).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
     expect(screen.queryByText('我的工作台')).not.toBeInTheDocument()
   })
 
@@ -75,6 +81,41 @@ describe('App routing', () => {
     expect(
       await screen.findByRole('heading', { name: '我的工作台' }),
     ).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
     expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
+  })
+
+  it('shows the release version on the login page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: '登入' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
+  })
+
+  it('shows the release version on the first setup page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ setup_required: true })),
+    )
+    render(
+      <MemoryRouter initialEntries={['/setup']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('首次登入碼')).toBeInTheDocument()
+    expect(
+      await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
+    ).toBeInTheDocument()
   })
 })

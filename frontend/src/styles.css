@@ -95,6 +95,26 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+.app-root {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.version-footer {
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 /* ---- 文字 ---- */
 
 h1,
@@ -335,6 +355,16 @@ table {
   font-size: 0.95rem;
 }
 
+.users-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.users-table-scroll table {
+  min-width: 58rem;
+}
+
 th,
 td {
   padding: var(--space-2) var(--space-3);
@@ -482,8 +512,7 @@ output {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  min-height: 100dvh;
+  flex: 1;
   max-width: none;
   padding: var(--space-5) var(--space-4);
 }

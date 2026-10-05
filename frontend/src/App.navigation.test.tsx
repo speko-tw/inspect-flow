@@ -66,24 +66,27 @@ function stubBackend(me: CurrentUserBody, loginAs = ADMIN): Backend {
       if (url.endsWith('/auth/password') && method === 'POST') {
         return new Response(null, { status: 204 })
       }
-      if (url.endsWith('/users')) {
-        return Response.json([
-          {
-            id: ADMIN.id,
-            username: ADMIN.username,
-            email: ADMIN.email,
-            name_zh: ADMIN.name_zh,
-            name_en: null,
-            company_id: null,
-            department: null,
-            location: null,
-            employee_no: null,
-            auth_source: 'local',
-            is_active: true,
-            is_admin: backend.me?.is_admin ?? false,
-            is_system: false,
-          },
-        ])
+      if (url.includes('/users?') || url.endsWith('/users')) {
+        return Response.json({
+          items: [
+            {
+              id: ADMIN.id,
+              username: ADMIN.username,
+              email: ADMIN.email,
+              name_zh: ADMIN.name_zh,
+              name_en: null,
+              company_id: null,
+              department: null,
+              location: null,
+              employee_no: null,
+              auth_source: 'local',
+              is_active: true,
+              is_admin: backend.me?.is_admin ?? false,
+              is_system: false,
+            },
+          ],
+          next_cursor: null,
+        })
       }
       if (url.endsWith(`/users/${ADMIN.id}/admin`) && method === 'PUT') {
         // 收回後，列表與目前使用者 API 都不再是管理者。

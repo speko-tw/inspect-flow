@@ -50,7 +50,7 @@ def clients(db_session, make_client):
         updated_by=admin.id,
     )
     role = Role(
-        name="Template editor",
+        name="Project manager",
         created_by=admin.id,
         updated_by=admin.id,
     )
@@ -339,9 +339,9 @@ def test_access_and_name_conflicts(clients):
     )
     assert (
         clients["admin"]
-        .post("/api/v1/template-categories", json={"name": "Admin denied"})
+        .post("/api/v1/template-categories", json={"name": "Admin allowed"})
         .status_code
-        == 403
+        == 201
     )
 
     duplicate = manager.post(
@@ -398,6 +398,115 @@ def test_access_and_name_conflicts(clients):
     assert manager.delete(f"/api/v1/template-systems/{system_id}").json() == {
         "error": {"code": "template.system_not_empty"}
     }
+
+
+def test_admin_can_perform_all_template_library_writes(clients):
+    admin = clients["admin"]
+    member = clients["editor"]
+    category = admin.post(
+        "/api/v1/template-categories", json={"name": "Admin category"}
+    )
+    assert category.status_code == 201, category.text
+    category_id = category.json()["id"]
+    system = admin.post(
+        f"/api/v1/template-categories/{category_id}/systems",
+        json={"name": "Admin system"},
+    )
+    assert system.status_code == 201, system.text
+    system_id = system.json()["id"]
+    template = admin.post(
+        "/api/v1/templates", json=_template(system_id, "Admin template")
+    )
+    assert template.status_code == 201, template.text
+    template_id = template.json()["id"]
+
+    empty_category = admin.post(
+        "/api/v1/template-categories", json={"name": "Empty category"}
+    ).json()["id"]
+    empty_system = admin.post(
+        f"/api/v1/template-categories/{category_id}/systems",
+        json={"name": "Empty system"},
+    ).json()["id"]
+
+    writes = [
+        ("POST", "/api/v1/template-categories", {"name": "Member cat"}),
+        (
+            "PATCH",
+            f"/api/v1/template-categories/{category_id}",
+            {"name": "Member category"},
+        ),
+        ("DELETE", f"/api/v1/template-categories/{empty_category}", None),
+        (
+            "POST",
+            f"/api/v1/template-categories/{category_id}/systems",
+            {"name": "Member system"},
+        ),
+        (
+            "PATCH",
+            f"/api/v1/template-systems/{system_id}",
+            {"name": "Member system"},
+        ),
+        ("DELETE", f"/api/v1/template-systems/{empty_system}", None),
+        (
+            "POST",
+            "/api/v1/templates",
+            _template(system_id, "Member template"),
+        ),
+        (
+            "PUT",
+            f"/api/v1/templates/{template_id}",
+            _template(system_id, "Member template"),
+        ),
+        ("DELETE", f"/api/v1/templates/{template_id}", None),
+        (
+            "PUT",
+            f"/api/v1/template-systems/{system_id}/templates",
+            {"items": []},
+        ),
+    ]
+    for method, path, body in writes:
+        response = member.request(method, path, json=body)
+        assert response.status_code == 403, (method, path, response.text)
+
+    assert (
+        admin.patch(
+            f"/api/v1/template-categories/{category_id}",
+            json={"name": "Renamed category"},
+        ).status_code
+        == 200
+    )
+    assert (
+        admin.delete(
+            f"/api/v1/template-categories/{empty_category}"
+        ).status_code
+        == 204
+    )
+    assert (
+        admin.patch(
+            f"/api/v1/template-systems/{system_id}",
+            json={"name": "Renamed system"},
+        ).status_code
+        == 200
+    )
+    assert (
+        admin.delete(f"/api/v1/template-systems/{empty_system}").status_code
+        == 204
+    )
+    replacement = _template(system_id, "Admin replacement")
+    replacement["id"] = template_id
+    bulk = admin.put(
+        f"/api/v1/template-systems/{system_id}/templates",
+        json={"items": [replacement]},
+    )
+    assert bulk.status_code == 200, bulk.text
+    assert (
+        admin.put(
+            f"/api/v1/templates/{template_id}",
+            json=_template(system_id, "Updated by Admin"),
+        ).status_code
+        == 200
+    )
+    assert admin.delete(f"/api/v1/templates/{template_id}").status_code == 204
 
 
 def test_structure_replace_and_validation(clients, db_session):
@@ -501,6 +610,35 @@ def test_structure_replace_and_validation(clients, db_session):
     invalid["result"] = "pass"
     assert manager.post("/api/v1/templates", json=invalid).status_code == 422
     assert manager.get(f"/api/v1/templates/{template_id}").status_code == 200
+
+
+def test_system_put_accepts_frontend_numeric_unit_payload(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    item = _template(system_id, "Frontend numeric payload")
+    point = item["inspection_points"][0]
+    bound_client_id = point["numeric_standard"]["measurement_field_client_id"]
+    for field in point["measurement_fields"]:
+        if field["client_id"] == bound_client_id:
+            field["unit"] = None
+
+    saved = manager.put(
+        f"/api/v1/template-systems/{system_id}/templates",
+        json={"items": [item]},
+    )
+    assert saved.status_code == 200, saved.text
+    saved_point = saved.json()["items"][0]["inspection_points"][0]
+    assert saved_point["numeric_standard"]["unit"] == "mm"
+    assert [field["unit"] for field in saved_point["measurement_fields"]] == [
+        "mm",
+        None,
+        "cm",
+    ]
+
+    fetched = manager.get(f"/api/v1/template-systems/{system_id}/templates")
+    assert fetched.status_code == 200, fetched.text
+    fetched_point = fetched.json()["items"][0]["inspection_points"][0]
+    assert fetched_point == saved_point
 
 
 def test_photo_requirements_are_required_unbounded_and_photo_only(clients):

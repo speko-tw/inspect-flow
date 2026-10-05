@@ -15,25 +15,22 @@ from app.api.v1.template_library import (
     template_write_call,
 )
 from app.auth.access import (
+    is_admin_or_system_role,
+    require_admin_or_system_role,
     require_login_access,
     require_project_permission,
-    require_system_role,
 )
 from app.auth.dependencies import get_db
 from app.models import (
     Project,
-    ProjectEvidenceRequirement,
     ProjectInspectionItem,
-    ProjectInspectionPoint,
-    ProjectMeasurementField,
     ProjectMember,
-    ProjectNumericStandard,
-    ProjectTextStandard,
-    SystemRoleAssignment,
     SystemRoleCode,
     User,
 )
-from app.services.inspection_details import inspection_points_detail
+from app.services.inspection_details import (
+    project_inspection_item_detail,
+)
 from app.services.project_templates import (
     DuplicateProjectItemError,
     apply_template,
@@ -41,7 +38,9 @@ from app.services.project_templates import (
 )
 
 router = APIRouter(prefix="/projects", tags=["project-inspection-items"])
-_TEMPLATE_WRITE = Depends(require_system_role(SystemRoleCode.TEMPLATE_ADMIN))
+_TEMPLATE_WRITE = Depends(
+    require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN)
+)
 
 
 class ApplyTemplateRequest(BaseModel):
@@ -68,46 +67,6 @@ class CreateTemplateFromProjectRequest(BaseModel):
 
     project_inspection_item_id: UUID
     system_id: UUID
-
-
-def _project_item_detail(db: Session, item: ProjectInspectionItem) -> dict:
-    points = db.scalars(
-        select(ProjectInspectionPoint)
-        .where(ProjectInspectionPoint.project_inspection_item_id == item.id)
-        .order_by(ProjectInspectionPoint.sequence, ProjectInspectionPoint.id)
-    ).all()
-    return {
-        "id": item.id,
-        "project_id": item.project_id,
-        "sequence": item.sequence,
-        "title": item.title,
-        "instruction": item.instruction,
-        "source_template_name": item.source_template_name,
-        "applied_at": format_utc(item.applied_at),
-        "inspection_points": inspection_points_detail(
-            db,
-            points,
-            measurement_field_model=ProjectMeasurementField,
-            text_standard_model=ProjectTextStandard,
-            numeric_standard_model=ProjectNumericStandard,
-            evidence_requirement_model=ProjectEvidenceRequirement,
-        ),
-    }
-
-
-def _can_read_all_projects(db: Session, user: User) -> bool:
-    if user.is_admin:
-        return True
-    return (
-        db.scalar(
-            select(SystemRoleAssignment.id).where(
-                SystemRoleAssignment.user_id == user.id,
-                SystemRoleAssignment.role_code
-                == SystemRoleCode.TEMPLATE_ADMIN.value,
-            )
-        )
-        is not None
-    )
 
 
 @router.post(
@@ -189,7 +148,7 @@ def list_project_inspection_items(
     db: Session = Depends(get_db),  # noqa: B008
     user: User = Depends(require_login_access),  # noqa: B008
 ) -> dict:
-    if not _can_read_all_projects(db, user):
+    if not is_admin_or_system_role(db, user, SystemRoleCode.TEMPLATE_ADMIN):
         membership = db.scalar(
             select(ProjectMember.id).where(
                 ProjectMember.project_id == project_id,
@@ -207,5 +166,5 @@ def list_project_inspection_items(
         cursor=cursor,
         limit=limit,
         filters=(ProjectInspectionItem.project_id == project_id,),
-        serialize=lambda item: _project_item_detail(db, item),
+        serialize=lambda item: project_inspection_item_detail(db, item),
     )

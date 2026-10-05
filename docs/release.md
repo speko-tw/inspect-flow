@@ -21,24 +21,25 @@
 
 1. **開 Release 追蹤 issue**：每個版本一個（例：#211），標題 `Release v0.X.Y`，放在該版本的 Milestone，列出發版前必須完成的 issue 清單。
 2. **完成功能**：清單上的功能 issue 都關閉。
-   - **負責人實機操作**（MINOR 版必做）：功能都合併後、發版前檢查之前，agent 逐步帶負責人實際啟動並操作系統（給指令、等回報，必要時一起查資料庫）。負責人的意見開成 issue、放在同一個 Milestone；要在這版修的修完，重新操作相關部分，才進入第 3 步。PATCH 版得省略。
+   - **負責人實機操作**（每版必做）：功能都合併後、發版前檢查之前，agent **先列出本版試用重點給負責人**，再逐步帶負責人實際啟動並操作系統（給指令、等回報，必要時一起查資料庫）。試用中發現難以完成任務或容易誤操作的問題，開成 issue、放在同一個 Milestone，列為該版必修；修完並重新操作相關部分，才進入第 3 步。每版親自試用並預告重點依[負責人指示（2026-10-04，#378）](https://github.com/speko-tw/inspect-flow/issues/378#issuecomment-5978114511)，試用問題列該版必修依[負責人指示（2026-10-04，#431）](https://github.com/speko-tw/inspect-flow/issues/431)；架構基準 §5.3、§6.1–6.2、§31。
 3. **發版前檢查（程式碼優化與安全性檢查）**：每個版本開一個檢查 issue（第一次是 #222），放在同一個 Milestone，功能都完成後才開始。
    1. 先盤點問題，每項標嚴重度與建議處理，列成清單貼在檢查 issue，給負責人確認。
    2. 負責人確認要修的項目，以小 PR 逐項（或同類一組）修正。
    3. 這次不修的項目，開 issue 並設 Milestone 追蹤，不可只記在留言。
    4. 完成條件：清單全部處理完、`make check` 與 CI 通過、手動驗收重跑通過；檢查 issue 關閉。
    - PATCH 版（例：`v0.2.1`）得只檢查這次變更的部分。
-4. **確認可以發**：
+4. **用 PR 更新發布版本**：建立 tag 前，開 PR 將根目錄 `VERSION` 更新為本次完整版號（例如 `0.3.0`），並同步更新 `backend/pyproject.toml` 與 `frontend/package.json`。PR 的 `make check` 必須確認三處一致；PR 合併後才進行下一步。
+5. **確認可以發**：
    - Release 追蹤 issue 的清單全部關閉（含檢查 issue）。
    - 取得 `main` 最新 commit，確認它的 CI 綠燈並記下來，這個 commit 就是要打 tag 的對象：
      ```bash
      git fetch origin
      git rev-parse origin/main
      ```
-5. **準備 Release Notes 草稿**：agent 依下方格式撰寫，貼在 Release 追蹤 issue 的留言。
-6. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
+6. **準備 Release Notes 草稿**：agent 依下方格式撰寫，貼在 Release 追蹤 issue 的留言。
+7. **建立 tag 與 Release**（負責人）：先把確認後的草稿存成 `release-notes.md`，再執行：
    ```bash
-   RELEASE_SHA=0123abcd   # 換成第 4 步記下的 commit；v0.X.Y 換成版號
+   RELEASE_SHA=0123abcd   # 換成第 5 步記下的 commit；v0.X.Y 換成版號
    if git fetch origin &&
      [ "$(git rev-parse origin/main)" = "$(git rev-parse "$RELEASE_SHA")" ]
    then
@@ -50,8 +51,8 @@
      echo "fetch 失敗或 main 已變動，未建 tag"
    fi
    ```
-   印出「fetch 失敗或 main 已變動」時不會建 tag 或 Release：fetch 失敗就排除網路或權限問題後重跑；`main` 已變動（第 4 步之後又有合併）就回到第 4 步。建 tag 之後任一行失敗也會停在該行；不要整段重跑，先用 `git rev-parse v0.X.Y^{commit}` 確認 tag 指向第 4 步的 commit，再從中斷的那行（push 或 `gh release create`）接著執行。tag 指向別的 commit 就停下，找負責人處理。
-7. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
+   印出「fetch 失敗或 main 已變動」時不會建 tag 或 Release：fetch 失敗就排除網路或權限問題後重跑；`main` 已變動（第 5 步之後又有合併）就回到第 5 步。建 tag 之後任一行失敗也會停在該行；不要整段重跑，先用 `git rev-parse v0.X.Y^{commit}` 確認 tag 指向第 5 步的 commit，再從中斷的那行（push 或 `gh release create`）接著執行。tag 指向別的 commit 就停下，找負責人處理。
+8. **收尾**：關閉 Release 追蹤 issue，留言附 Release 連結。
    - Milestone `0.X.x` 保持開啟，之後的 PATCH（例：`v0.2.1`）照樣放在同一個 Milestone；確定這個系列不用再修 bug，或確認沒問題要進入下一個階段後才關閉。
 
 ## Release Notes 格式

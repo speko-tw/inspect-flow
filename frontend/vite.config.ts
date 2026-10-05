@@ -1,5 +1,7 @@
 import fs from 'node:fs'
+import { isIPv4 } from 'node:net'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 import react from '@vitejs/plugin-react'
 import { loadEnv } from 'vite'
@@ -116,24 +118,168 @@ function chunkModulesReportPlugin(): Plugin {
  *
  * - INSPECTFLOW_DEV_HTTPS_CERT、INSPECTFLOW_DEV_HTTPS_KEY：憑證與
  *   私鑰的檔案路徑，兩個都設才啟用 HTTPS；都不設就維持 HTTP。
- * - INSPECTFLOW_DEV_HOST：開發伺服器綁定的位址（例如 0.0.0.0，
- *   讓同網段的 iPhone 連進來）。只在 HTTPS 模式下接受，避免在
- *   HTTP 下意外對外開放；未設定時沿用 Vite 預設（只綁本機）。
+ * - INSPECTFLOW_DEV_HOST：開發伺服器綁定的 IPv4 網卡位址；與
+ *   CIDR 限制允許來源；HOST 限制綁定網卡。
+ *   兩者只在 HTTPS 模式接受；未設定時只綁本機。
  *
  * 不用 VITE_ 前綴，這些值才不會被 Vite 帶進前端程式。
  */
-function resolveDevHttps(env: Record<string, string>): {
+function parseIpv4Cidr(cidr: string): {
+  network: number
+  mask: number
+} {
+  const match = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d|[12]\d|3[0-2])$/.exec(cidr)
+  if (!match || !isIPv4(match[1])) {
+    throw new Error(
+      'INSPECTFLOW_DEV_ALLOWED_CIDR 必須是 IPv4 CIDR，' +
+        '例如 192.168.1.0/24',
+    )
+  }
+  const prefix = Number(match[2])
+  if (prefix < 1) {
+    throw new Error('INSPECTFLOW_DEV_ALLOWED_CIDR 不可使用 /0')
+  }
+  const network =
+    match[1]
+      .split('.')
+      .reduce((value, octet) => (value << 8) | Number(octet), 0) >>> 0
+  const mask = (0xffffffff << (32 - prefix)) >>> 0
+  return { network: (network & mask) >>> 0, mask }
+}
+
+export function isIpv4InCidr(address: string, cidr: string): boolean {
+  const normalized = normalizeIpv4Address(address)
+  if (!normalized) {
+    return false
+  }
+  const { network, mask } = parseIpv4Cidr(cidr)
+  const value =
+    normalized
+      .split('.')
+      .reduce((result, octet) => (result << 8) | Number(octet), 0) >>> 0
+  return (value & mask) >>> 0 === network
+}
+
+function normalizeIpv4Address(address: string): string | undefined {
+  if (isIPv4(address)) {
+    return address
+  }
+  const mapped = /^(?:::ffff:)(.+)$/i.exec(address)
+  if (!mapped) {
+    return undefined
+  }
+  if (isIPv4(mapped[1])) {
+    return mapped[1]
+  }
+  const hex = /^([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(mapped[1])
+  if (!hex) {
+    return undefined
+  }
+  const high = Number.parseInt(hex[1], 16)
+  const low = Number.parseInt(hex[2], 16)
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff].join('.')
+}
+
+function isAllowedHost(hostHeader: string | undefined, host: string): boolean {
+  if (!hostHeader) {
+    return false
+  }
+  try {
+    return new URL(`http://${hostHeader}`).hostname === host
+  } catch {
+    return false
+  }
+}
+
+function isAllowedConnection(
+  address: string | undefined,
+  hostHeader: string | undefined,
+  cidr: string,
+  host: string,
+): boolean {
+  return isIpv4InCidr(address || '', cidr) && isAllowedHost(hostHeader, host)
+}
+
+function rejectUpgrade(socket: NodeJS.WritableStream): void {
+  socket.end(
+    'HTTP/1.1 403 Forbidden\r\n' +
+      'Connection: close\r\n' +
+      'Content-Length: 0\r\n\r\n',
+  )
+}
+
+export function createLanAccessPlugin(cidr: string, host: string): Plugin {
+  parseIpv4Cidr(cidr)
+  return {
+    name: 'inspectflow-lan-access-guard',
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const address = request.socket.remoteAddress || ''
+        if (!isAllowedConnection(address, request.headers.host, cidr, host)) {
+          response.statusCode = 403
+          response.end('LAN source or Host is not allowed')
+          return
+        }
+        next()
+      })
+      server.httpServer?.prependListener('upgrade', (request, socket) => {
+        if (
+          isAllowedConnection(
+            socket.remoteAddress,
+            request.headers.host,
+            cidr,
+            host,
+          )
+        ) {
+          return
+        }
+        delete request.headers['sec-websocket-protocol']
+        rejectUpgrade(socket)
+      })
+    },
+  }
+}
+
+export function resolveDevHttps(env: Record<string, string>): {
   https?: { cert: Buffer; key: Buffer }
   host?: string
+  allowedHosts?: string[]
+  lanAccessPlugin?: Plugin
 } {
   const certPath = env.INSPECTFLOW_DEV_HTTPS_CERT
   const keyPath = env.INSPECTFLOW_DEV_HTTPS_KEY
   const host = env.INSPECTFLOW_DEV_HOST
+  const allowedCidr = env.INSPECTFLOW_DEV_ALLOWED_CIDR
+
+  if (allowedCidr && !host) {
+    throw new Error(
+      '設定 INSPECTFLOW_DEV_ALLOWED_CIDR 時，' +
+        '必須同時設定 INSPECTFLOW_DEV_HOST',
+    )
+  }
+  if (host && !allowedCidr) {
+    throw new Error(
+      '設定 INSPECTFLOW_DEV_HOST 時，' +
+        '必須同時設定 INSPECTFLOW_DEV_ALLOWED_CIDR',
+    )
+  }
+  if (
+    host &&
+    (!isIPv4(host) || host === '0.0.0.0' || host.startsWith('127.'))
+  ) {
+    throw new Error(
+      'INSPECTFLOW_DEV_HOST 必須是指定的非 loopback IPv4 網卡位址',
+    )
+  }
+  if (allowedCidr) {
+    parseIpv4Cidr(allowedCidr)
+  }
 
   if (!certPath && !keyPath) {
-    if (host) {
+    if (host || allowedCidr) {
       throw new Error(
-        'INSPECTFLOW_DEV_HOST 只能在 HTTPS 模式使用，' +
+        'INSPECTFLOW_DEV_HOST 與 INSPECTFLOW_DEV_ALLOWED_CIDR ' +
+          '只能在 HTTPS 模式使用，' +
           '請同時設定 INSPECTFLOW_DEV_HTTPS_CERT 與 ' +
           'INSPECTFLOW_DEV_HTTPS_KEY',
       )
@@ -153,6 +299,11 @@ function resolveDevHttps(env: Record<string, string>): {
       key: fs.readFileSync(keyPath),
     },
     host: host || undefined,
+    allowedHosts: host ? [host] : undefined,
+    lanAccessPlugin:
+      host && allowedCidr
+        ? createLanAccessPlugin(allowedCidr, host)
+        : undefined,
   }
 }
 
@@ -163,18 +314,54 @@ export default defineConfig(({ mode, command, isPreview }) => {
   // VITE_BACKEND_URL 覆寫，不需改這個檔案就能切換到不同的後端。
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8000'
+  const repoRoot = path.resolve(process.cwd(), '..')
+  let version = env.INSPECTFLOW_VERSION
+  if (!version) {
+    const versionPath = path.join(repoRoot, 'VERSION')
+    try {
+      version = fs.readFileSync(versionPath, 'utf8').trim()
+    } catch (error) {
+      throw new Error(`Unable to read release version from ${versionPath}`, {
+        cause: error,
+      })
+    }
+    if (!version) {
+      throw new Error(`Release version is empty in ${versionPath}`)
+    }
+  }
+  let commit = env.INSPECTFLOW_COMMIT || ''
+  if (!commit) {
+    try {
+      commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim()
+    } catch {
+      commit = ''
+    }
+  }
   // 只有開發伺服器（vite serve）才讀憑證；build、preview 與 vitest
   // 不受影響（preview 的 command 也是 serve，要另外排除）。
   const isDevServer = command === 'serve' && !isPreview && mode !== 'test'
   const devHttps = isDevServer ? resolveDevHttps(env) : {}
+  const { lanAccessPlugin, ...devServerOptions } = devHttps
 
   return {
-    plugins: [react(), chunkModulesReportPlugin()],
+    define: {
+      __INSPECTFLOW_VERSION__: JSON.stringify(version),
+      __INSPECTFLOW_COMMIT__: JSON.stringify(commit),
+    },
+    plugins: [
+      react(),
+      chunkModulesReportPlugin(),
+      ...(lanAccessPlugin ? [lanAccessPlugin] : []),
+    ],
     build: {
       manifest: true,
     },
     server: {
-      ...devHttps,
+      ...devServerOptions,
       proxy: {
         // 讓前端以同一個 origin 呼叫後端 API，開發環境不需要
         // CORS；同時符合 AUT-R30：Cookie 由瀏覽器依同源規則

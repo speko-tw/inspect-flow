@@ -2,13 +2,13 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.pagination import ilike_contains, page_by_text_key
 from app.api.v1._management_errors import (
     integrity_error_code,
     management_error_status,
@@ -43,6 +43,11 @@ class CompanyResponse(BaseModel):
     is_active: bool
 
 
+class CompanyListResponse(BaseModel):
+    items: list[CompanyResponse]
+    next_cursor: str | None
+
+
 class CreateCompanyRequest(BaseModel):
     name: str
 
@@ -74,11 +79,28 @@ def _get_company(db: Session, company_id: UUID) -> Company:
     return company
 
 
-@router.get("", response_model=list[CompanyResponse])
+@router.get("", response_model=CompanyListResponse)
 def list_companies(
+    q: str | None = Query(default=None, max_length=256),
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),  # noqa: B008
-) -> list[Company]:
-    return list(db.scalars(select(Company).order_by(Company.name)))
+) -> CompanyListResponse:
+    filters = []
+    query = (q or "").strip()
+    if query:
+        filters.append(ilike_contains(Company.name, query))
+    result = page_by_text_key(
+        db,
+        Company,
+        sort_key=Company.name,
+        key_name="name",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda company: CompanyResponse.model_validate(company),
+        filters=filters,
+    )
+    return CompanyListResponse(**result)
 
 
 @router.get("/{company_id}", response_model=CompanyResponse)

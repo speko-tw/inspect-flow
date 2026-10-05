@@ -8,6 +8,8 @@ an equivalent table.
 """
 
 import logging
+import traceback
+import uuid
 from enum import StrEnum
 
 from fastapi import FastAPI, Request
@@ -150,6 +152,78 @@ class ErrorCode(DescribedStrEnum):
         "project.member_conflict",
         "The user is already a member of this project.",
     )
+    INSPECTION_PLAN_NOT_FOUND = (
+        "inspection_plan.not_found",
+        "The inspection plan was not found.",
+    )
+    INSPECTION_PLAN_INVALID_NAME = (
+        "inspection_plan.invalid_name",
+        "The inspection plan name is invalid.",
+    )
+    INSPECTION_PLAN_ARCHIVED = (
+        "inspection_plan.archived",
+        "The inspection plan is archived.",
+    )
+    INSPECTION_TASK_NOT_FOUND = (
+        "inspection_task.not_found",
+        "The inspection task was not found.",
+    )
+    INSPECTION_TASK_INVALID_TRANSITION = (
+        "inspection_task.invalid_transition",
+        "The inspection task cannot make this transition.",
+    )
+    INSPECTION_TASK_LOCATION_LOCKED = (
+        "inspection_task.location_locked",
+        "The task location is read-only.",
+    )
+    INSPECTION_TASK_ITEMS_REQUIRED = (
+        "inspection_task.items_required",
+        "At least one project inspection item is required.",
+    )
+    INSPECTION_TASK_INVALID_ITEM = (
+        "inspection_task.invalid_project_item",
+        "A selected item does not belong to this project.",
+    )
+    INSPECTION_TASK_INVALID_ZONE = (
+        "inspection_task.invalid_zone",
+        "The selected zone is invalid for this project.",
+    )
+    INSPECTION_TASK_INVALID_ASSIGNEE = (
+        "inspection_task.invalid_assignee",
+        "The suggested assignee is not a project member.",
+    )
+    INSPECTION_TASK_INVALID_LOCATION = (
+        "inspection_task.invalid_location",
+        "The task location text is invalid.",
+    )
+    INSPECTION_TASK_ITEMS_INCOMPLETE = (
+        "inspection_task.items_incomplete",
+        "Task items requiring reinspection are incomplete.",
+    )
+    PROJECT_ZONE_NOT_FOUND = (
+        "project_zone.not_found",
+        "The project zone was not found.",
+    )
+    PROJECT_ZONE_INVALID_NAME = (
+        "project_zone.invalid_name",
+        "The project zone name is invalid.",
+    )
+    PROJECT_ZONE_NAME_CONFLICT = (
+        "project_zone.name_conflict",
+        "The project already has a zone with this name.",
+    )
+    PROJECT_ZONE_IN_USE = (
+        "project_zone.in_use",
+        "The project zone is referenced by a task.",
+    )
+    INSPECTION_TASK_REASON_REQUIRED = (
+        "inspection_task.reason_required",
+        "A cancellation reason is required.",
+    )
+    PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED = (
+        "project_inspection_item.reinspection_choice_required",
+        "Choose whether affected tasks must be reinspected.",
+    )
     TEMPLATE_NAME_CONFLICT = (
         "template.name_conflict",
         "A template library name is already in use at this level.",
@@ -273,27 +347,34 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_unhandled_exception(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        # Deliberately omit the exception message and traceback
-        # (no ``exc_info``, no ``str(exc)``): an unhandled
-        # exception's message may embed request data such as an
-        # authorization token, and logging it would leak that
-        # value (RG-M17 forbids logging authorization tokens).
-        # The actual request path is also omitted -- a path
-        # parameter's value may itself be sensitive (RG-M17) -- so
-        # only the route template (e.g. ``/leaky/{token}``) is
-        # recorded, not the resolved path. Only the exception type,
-        # the method and the route template are safe to record.
+        # Do not format the exception, traceback source lines, locals,
+        # request path, headers, or body: any can contain credentials.
+        # Frame metadata provides actionable stack locations without
+        # serializing application data (RG-M17).
         route = request.scope.get("route")
         template = getattr(route, "path", None)
         if not isinstance(template, str):
             template = "<unmatched>"
+        request_id = uuid.uuid4().hex
+        frames = []
+        if exc.__traceback__ is not None:
+            for frame, line_number in traceback.walk_tb(exc.__traceback__):
+                frames.append(
+                    f"{frame.f_code.co_filename.rsplit('/', 1)[-1]}:"
+                    f"{line_number} in {frame.f_code.co_name}"
+                )
+        safe_traceback = " -> ".join(frames) or "<no frames>"
         logger.error(
-            "Unhandled %s during %s %s",
-            type(exc).__name__,
+            "Unhandled exception request_id=%s method=%s type=%s "
+            "route=%s traceback=%s",
+            request_id,
             request.method,
+            type(exc).__name__,
             template,
+            safe_traceback,
         )
         return JSONResponse(
             status_code=500,
             content={"error": {"code": ErrorCode.SERVER_INTERNAL_ERROR.value}},
+            headers={"X-Request-ID": request_id},
         )

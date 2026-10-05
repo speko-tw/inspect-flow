@@ -163,6 +163,13 @@ def _has_system_role(
     return assignment_id is not None
 
 
+def is_admin_or_system_role(
+    db: Session, user: User, role_code: SystemRoleCode
+) -> bool:
+    """Return whether the user is Admin or has the selected system role."""
+    return user.is_admin or _has_system_role(db, user, role_code)
+
+
 # -- 公開 (AUT-R18) -----------------------------------------------
 
 
@@ -188,12 +195,12 @@ _mark(_public_marker, RouteAccessDeclaration(level=AccessLevel.PUBLIC))
 PUBLIC: Any = Depends(_public_marker)
 
 # AUT-R18/plan.md's risk section: the single, centralized list of
-# routes allowed to declare 公開. Currently exactly the health check,
-# login and logout -- a new public route must be added here too, or
-# AUT-AC16 fails and the addition is visible in review.
+# routes allowed to declare 公開. A new public route must be added
+# here too, or AUT-AC16 fails and the addition is visible in review.
 PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         ("GET", "/api/v1/health"),
+        ("GET", "/api/v1/version"),
         ("POST", "/api/v1/auth/login"),
         ("POST", "/api/v1/auth/logout"),
         ("GET", "/api/v1/setup/status"),
@@ -270,9 +277,7 @@ def require_admin_or_system_role(
         user: User = Depends(require_login),  # noqa: B008
         db: Session = Depends(get_db),  # noqa: B008
     ) -> User:
-        if user.is_admin:
-            return user
-        if not _has_system_role(db, user, role_code):
+        if not is_admin_or_system_role(db, user, role_code):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 

@@ -46,17 +46,17 @@ docs/specs/
 | [`skeleton`](skeleton/spec.md) | P1 | 功能 | 已完成 | — |
 | [`api-conventions`](api-conventions/spec.md) | 全部 | 共用 | 已完成 | — |
 | [`database-foundation`](database-foundation/spec.md) | P1、P3 | 功能 | 已凍結 | 無；範本與最小專案副本 schema 依 `template-system` 凍結，P4 擴充副本欄位及流程；MVP 不設 interval，未來選用功能依 [G-01](../intents/05-open-questions.md#g-01) 另行處理 |
-| [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P8 | 共用 | 部分凍結 | 凍結範圍含既有 User／Company／Role／ProjectMember／Project 與初始化、角色 API，以及 `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯、`Task Requirement Snapshot`（DOM-R56～R58、DOM-AC51～AC53）；其餘 Evidence／Result／Report 實體依各自門檻維持草稿，詳見[逐項比對](domain-model/spec.md#projectzone-plan-task-門檻比對) |
-| [`state-machines`](state-machines/spec.md) | P4、P6、P7、P8 | 共用 | 部分凍結 | Plan／Task 狀態行為依標頭凍結範圍凍結；Evidence／Report 的需求與 AC 維持草稿，分別受 [G-05](../intents/05-open-questions.md#g-05)、[G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07) 阻擋。Plan／Task 資料模型已由 `domain-model` DOM-R56～DOM-R57 凍結 |
+| [`domain-model`](domain-model/spec.md) | P1、P3、P4、P6、P8 | 共用 | 部分凍結 | 凍結範圍含既有 User／Company／Role／ProjectMember／Project 與初始化、角色 API，以及 `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯、`Task Requirement Snapshot`（DOM-R56～R58、DOM-AC51～AC53）；其餘 Evidence／Result／Report 實體依各自門檻維持草稿，詳見[逐項比對](domain-model/spec.md#projectzone-plan-task-門檻比對)。G-03、G-05 已由維護者依負責人授權決定（#388），見 [KD-61](../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../intents/03-decisions-and-stack.md#kd-62) |
+| [`state-machines`](state-machines/spec.md) | P4、P6、P7、P8 | 共用 | 部分凍結 | Plan／Task 狀態行為依標頭凍結範圍凍結；Evidence 相關政策已由維護者依負責人授權決定（#388），見 [KD-61](../intents/03-decisions-and-stack.md#kd-61)、[KD-62](../intents/03-decisions-and-stack.md#kd-62)，但 Evidence 需求與 AC 仍維持草稿；Report 需求與 AC 維持草稿，狀態及快照邊界受 [G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07) 阻擋。Plan／Task 資料模型已由 `domain-model` DOM-R56～DOM-R57 凍結 |
 | [`authentication`](authentication/spec.md) | P2 | 功能 | 已凍結 | 無；登入機制與密碼雜湊已裁定，見 [OQ-13](../intents/05-open-questions.md#oq-13)（已裁定）；角色與權限機制已裁定，見 [OQ-08](../intents/05-open-questions.md#oq-08)（已裁定）；首次登入碼與帳號名稱登入依 [#259](https://github.com/speko-tw/inspect-flow/issues/259) 變更，[AUT-Q7](authentication/spec.md#aut-q7) 已裁定 |
-| [`audit-log`](audit-log/spec.md) | P2 | 共用 | 已凍結 | 無；[ALG-Q1](audit-log/spec.md#alg-q1)～[ALG-Q5](audit-log/spec.md#alg-q5) 待負責人決定，不擋凍結（ALG-Q5 若選 B，另加一支 migration 新增可空值欄位）；[ALG-Q6](audit-log/spec.md#alg-q6) 已裁定 |
+| [`audit-log`](audit-log/spec.md) | P2 | 共用 | 已凍結 | 無；[ALG-Q1](audit-log/spec.md#alg-q1)、[ALG-Q3](audit-log/spec.md#alg-q3)～[ALG-Q5](audit-log/spec.md#alg-q5) 待負責人決定，不擋凍結（ALG-Q5 若選 B，另加一支 migration 新增可空值欄位）；[ALG-Q2](audit-log/spec.md#alg-q2)、[ALG-Q6](audit-log/spec.md#alg-q6) 已裁定。Evidence 刪除政策另依已決定的 [KD-62](../intents/03-decisions-and-stack.md#kd-62)，不影響本規格 |
 | `external-identity-sync`（外部身分同步） | 延後 | 功能 | 未開始 | — |
 | [`template-system`](template-system/spec.md) | P3 | 功能 | 已完成 | 無；TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 已依規格設計定案，含最小專案查核項目副本表；OQ-06、OQ-20 已裁定，副本後續欄位及作廢／重查／更正流程由 P4 `inspection-planning` 定義；現場照片覆蓋與總覽照行為由 P6 `field-evidence` #105 驗收 |
 | [`inspection-planning`](inspection-planning/spec.md) | P4 | 功能 | 已凍結 | 無；`ProjectZone`／Task 地點依 KD-58、OQ-03 凍結；Evidence／Report 不屬本規格範圍 |
-| `field-ui` | P5 | 功能 | 未開始 | [OQ-09](../intents/05-open-questions.md#oq-09) |
-| `field-evidence` | P6 | 功能 | 未開始 | [G-03](../intents/05-open-questions.md#g-03)、[G-05](../intents/05-open-questions.md#g-05)、[OQ-14](../intents/05-open-questions.md#oq-14)、[OQ-17](../intents/05-open-questions.md#oq-17) |
+| [`field-ui`](field-ui/spec.md) | P5 | 功能 | 草稿 | 無待裁定 OQ；Field 清單與草稿安全詳情 API 依賴 #361，範本頁搬遷依賴 `admin-dashboard`；Evidence 上傳與完成驗證不屬本階段 |
+| `field-evidence` | P6 | 功能 | 未開始 | — |
 | `completion-validation` | P7 | 功能 | 未開始 | — |
-| `admin-dashboard` | P5 | 功能 | 未開始 | — |
+| [`admin-dashboard`](admin-dashboard/spec.md) | P5 | 功能 | 草稿 | 無 OQ／G；全公司角色與權限畫面依賴 [#387](https://github.com/speko-tw/inspect-flow/issues/387)、[#390](https://github.com/speko-tw/inspect-flow/issues/390) 與前置規格更新；ALG-Q2 已由負責人[裁定選 C](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)，T5a 同步至 `audit-log` 後由 T5b 實作 |
 | `report-delivery` | P8 | 功能 | 未開始 | [G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
 | `pilot-deployment` | P9 | 功能 | 未開始 | [OQ-18](../intents/05-open-questions.md#oq-18) |
 | （尚無專屬規格） | P10 | 功能 | 未開始 | — |
@@ -106,6 +106,13 @@ flowchart TD
 5. **收尾**：最後一個任務的 PR 把規格改為「已完成」並更新索引；最後一個任務沒有 PR 時，另開收尾 task 修改。
 
 計畫只記「為什麼這樣拆」；進度只看 issue，不回頭在計畫裡打勾。
+
+<a id="ui-prototype-gate"></a>
+### 重大畫面的實作前原型關卡
+
+重大新畫面或既有畫面改版，**必須**先由維護者與顧問討論設計方案，以「好用、業界常見、不易犯錯」評選，再提供可點的互動原型與具體試用腳本；**必須**由負責人親手操作並核可，才開始實作。原型與腳本應涵蓋主要任務、錯誤修正與手機操作，讓使用者能在投入程式碼前發現難用處。一般小型文案或欄位修正不屬於重大新畫面或改版；介面共同要求見 [PR-19](../intents/02-principles.md#pr-19)。
+
+理由：v0.3.0 範本頁在實機試用時才暴露誤改與無法儲存問題；先核可原型可在投入實作前修正操作流程。依據：架構基準 §5.3、§6.1–6.2、§31（介面與行動操作）；具體關卡為[負責人指示（2026-10-04，#431）](https://github.com/speko-tw/inspect-flow/issues/431)。發版前的實機試用另見[發布流程](../release.md#步驟)。
 
 ### 不屬於任何規格的工作
 

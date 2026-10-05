@@ -1,7 +1,7 @@
 .PHONY: help setup setup-backend setup-frontend check \
-	check-env check-backend check-postgres check-frontend \
+	check-env check-version check-backend check-postgres check-frontend \
 	migrate init reset-admin-password run-backend run-frontend \
-	dev-cert run-frontend-https
+	dev-cert run-frontend-https version
 
 # Installs backend and frontend dependencies.
 setup: setup-backend setup-frontend
@@ -14,6 +14,7 @@ help:
 		'  make migrate                Apply database migrations' \
 		'  make init                   Create admin and first-login code' \
 		'  make reset-admin-password   Reset the built-in admin password' \
+		'  make version                Show the release version and commit' \
 		'  make run-backend            Start the backend development server' \
 		'  make run-frontend           Start the frontend development server' \
 		'  make dev-cert               Create the local HTTPS certificate' \
@@ -62,6 +63,10 @@ run-backend:
 	cd backend && uv run --locked uvicorn app.main:app --reload \
 		--host 127.0.0.1 --port 8000
 
+# Print the same release identity as the backend startup log and API.
+version:
+	cd backend && uv run --locked python -m app version
+
 run-frontend:
 	cd frontend && npm run dev
 
@@ -72,13 +77,22 @@ run-frontend:
 # `mkcert -install`, which changes the system trust store; it only
 # prints that hint. run-frontend-https passes the certificate paths
 # to Vite through the INSPECTFLOW_DEV_HTTPS_* variables
-# (frontend/vite.config.ts). FRONTEND_PORT overrides the port; the
-# port is strict, so an occupied one fails instead of moving.
-# LAN access and iPhone trust stay manual (README, #231).
+# (frontend/vite.config.ts). Set INSPECTFLOW_DEV_HOST and
+# INSPECTFLOW_DEV_ALLOWED_CIDR together to enable guarded LAN access.
+# FRONTEND_PORT overrides the port; the port is strict, so an occupied
+# one fails instead of moving. iPhone certificate trust stays manual.
 CERT_DIR := $(CURDIR)/frontend/.cert
 CERT_FILE := $(CERT_DIR)/dev.pem
 KEY_FILE := $(CERT_DIR)/dev-key.pem
 FRONTEND_PORT ?= 5173
+INSPECTFLOW_DEV_HOST ?=
+INSPECTFLOW_DEV_ALLOWED_CIDR ?=
+ifneq ($(strip $(INSPECTFLOW_DEV_HOST)),)
+export INSPECTFLOW_DEV_HOST
+endif
+ifneq ($(strip $(INSPECTFLOW_DEV_ALLOWED_CIDR)),)
+export INSPECTFLOW_DEV_ALLOWED_CIDR
+endif
 
 dev-cert:
 	@if [ -f "$(CERT_FILE)" ] && [ -f "$(KEY_FILE)" ]; then \
@@ -117,6 +131,7 @@ run-frontend-https: dev-cert
 # the later ones.
 check:
 	$(MAKE) --no-print-directory check-env
+	$(MAKE) --no-print-directory check-version
 	$(MAKE) --no-print-directory check-backend
 	$(MAKE) --no-print-directory check-postgres
 	$(MAKE) --no-print-directory check-frontend
@@ -137,6 +152,10 @@ check-env:
 	fi
 	@test -f .env.example || \
 		(echo ".env.example is missing" && exit 1)
+
+# VERSION is the source of truth; keep both package manifests aligned.
+check-version:
+	python3 scripts/check-version.py
 
 check-backend:
 	cd backend && uv run --locked ruff format --check .
@@ -179,4 +198,5 @@ check-frontend:
 	cd frontend && npm run typecheck
 	cd frontend && npm run test
 	cd frontend && npm run build
+	cd frontend && node scripts/check-pwa.mjs
 	cd frontend && npm run check:split
