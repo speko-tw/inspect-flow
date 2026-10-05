@@ -12,6 +12,14 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.limits import (
+    ITEM_IDS_MAX,
+    LOCATION_TEXT_MAX,
+    LONG_TEXT_MAX,
+    PLANNING_NAME_MAX,
+    POINTS_MAX,
+    TITLE_MAX,
+)
 from app.api.pagination import encode_page_cursor, page, page_cursor_key
 from app.api.time_format import format_utc
 from app.api.v1.template_library import PointBody
@@ -86,13 +94,15 @@ class StrictBody(BaseModel):
 
 
 class NameBody(StrictBody):
-    name: str
+    name: str = Field(max_length=PLANNING_NAME_MAX)
 
 
 class TaskCreateBody(StrictBody):
-    item_ids: list[UUID]
+    item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
     zone_id: UUID | None = None
-    location_text: str | None = None
+    location_text: str | None = Field(
+        default=None, max_length=LOCATION_TEXT_MAX
+    )
     suggested_assignee_id: UUID | None = None
 
 
@@ -101,18 +111,20 @@ class AssignBody(StrictBody):
 
 
 class CancelBody(StrictBody):
-    reason: str = ""
+    reason: str = Field(default="", max_length=LONG_TEXT_MAX)
 
 
 class LocationBody(StrictBody):
     zone_id: UUID | None
-    location_text: str | None
+    location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
 
 
 class ProjectItemPatchBody(StrictBody):
-    title: str | None = Field(default=None, min_length=1)
-    instruction: str | None = None
-    inspection_points: list[PointBody] | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
+    instruction: str | None = Field(default=None, max_length=LONG_TEXT_MAX)
+    inspection_points: list[PointBody] | None = Field(
+        default=None, max_length=POINTS_MAX
+    )
     reinspect: bool | None = None
 
 

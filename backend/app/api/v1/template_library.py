@@ -19,6 +19,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.limits import (
+    EVIDENCE_REQUIREMENTS_MAX,
+    LONG_TEXT_MAX,
+    MEASUREMENT_FIELDS_MAX,
+    MIN_PHOTO_COUNT_MAX,
+    NUMBER_TEXT_MAX,
+    POINTS_MAX,
+    TEMPLATES_MAX,
+    TITLE_MAX,
+    UNIT_MAX,
+)
 from app.api.pagination import page, write_call
 from app.auth.access import (
     require_admin_or_system_role,
@@ -76,7 +87,7 @@ class StrictBody(BaseModel):
 
 
 class NameBody(StrictBody):
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=TITLE_MAX)
 
     @field_validator("name")
     @classmethod
@@ -87,17 +98,17 @@ class NameBody(StrictBody):
 
 
 class TextStandardBody(StrictBody):
-    text: str
+    text: str = Field(max_length=LONG_TEXT_MAX)
 
 
 class NumericStandardBody(StrictBody):
-    value: str | None = None
+    value: str | None = Field(default=None, max_length=NUMBER_TEXT_MAX)
     condition: Literal["<=", ">=", "=", "range"]
-    unit: str = Field(min_length=1)
-    tolerance: str | None = None
+    unit: str = Field(min_length=1, max_length=UNIT_MAX)
+    tolerance: str | None = Field(default=None, max_length=NUMBER_TEXT_MAX)
     range_form: Literal["interval", "tolerance"] | None = None
-    lower_bound: str | None = None
-    upper_bound: str | None = None
+    lower_bound: str | None = Field(default=None, max_length=NUMBER_TEXT_MAX)
+    upper_bound: str | None = Field(default=None, max_length=NUMBER_TEXT_MAX)
     measurement_field_client_id: UUID
 
     @model_validator(mode="before")
@@ -176,9 +187,9 @@ class NumericStandardBody(StrictBody):
 
 class MeasurementFieldBody(StrictBody):
     client_id: UUID
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=TITLE_MAX)
     field_type: Literal["text", "number"]
-    unit: str | None = None
+    unit: str | None = Field(default=None, max_length=UNIT_MAX)
 
     @field_validator("unit")
     @classmethod
@@ -192,19 +203,21 @@ class MeasurementFieldBody(StrictBody):
 
 
 class EvidenceRequirementBody(StrictBody):
-    min_count: int = Field(default=1, ge=1)
+    min_count: int = Field(default=1, ge=1, le=MIN_PHOTO_COUNT_MAX)
 
 
 class PointBody(StrictBody):
     sequence: int = Field(ge=1, le=32767)
-    title: str
-    instruction: str
+    title: str = Field(max_length=TITLE_MAX)
+    instruction: str = Field(max_length=LONG_TEXT_MAX)
     text_standard: TextStandardBody | None = None
     numeric_standard: NumericStandardBody | None = None
     measurement_fields: list[MeasurementFieldBody] = Field(
-        default_factory=list
+        default_factory=list, max_length=MEASUREMENT_FIELDS_MAX
     )
-    evidence_requirements: list[EvidenceRequirementBody] = Field(min_length=1)
+    evidence_requirements: list[EvidenceRequirementBody] = Field(
+        min_length=1, max_length=EVIDENCE_REQUIREMENTS_MAX
+    )
 
     @model_validator(mode="after")
     def one_standard(self):
@@ -219,9 +232,11 @@ class PointBody(StrictBody):
 class TemplateBody(StrictBody):
     system_id: UUID
     sequence: int = Field(ge=1, le=32767)
-    title: str = Field(min_length=1)
-    instruction: str
-    inspection_points: list[PointBody] = Field(default_factory=list)
+    title: str = Field(min_length=1, max_length=TITLE_MAX)
+    instruction: str = Field(max_length=LONG_TEXT_MAX)
+    inspection_points: list[PointBody] = Field(
+        default_factory=list, max_length=POINTS_MAX
+    )
 
     @field_validator("title")
     @classmethod
@@ -236,7 +251,7 @@ class SystemTemplateBody(TemplateBody):
 
 
 class SystemTemplatesBody(StrictBody):
-    items: list[SystemTemplateBody]
+    items: list[SystemTemplateBody] = Field(max_length=TEMPLATES_MAX)
 
 
 def _category(db: Session, category_id: UUID) -> TemplateCategory:
