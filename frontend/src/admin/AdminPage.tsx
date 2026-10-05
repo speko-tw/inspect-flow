@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   Navigate,
   NavLink,
@@ -6,6 +6,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
 } from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
@@ -20,6 +21,17 @@ import { projectItemApi } from './projectItems/api'
 import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
+
+const PlanningPage = lazy(() => import('./planning/PlanningPage'))
+
+function ProjectPlanningRoute() {
+  const { projectId } = useParams()
+  return (
+    <Suspense fallback={<p>載入中…</p>}>
+      <PlanningPage key={projectId} initialProjectId={projectId} />
+    </Suspense>
+  )
+}
 
 const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
@@ -62,8 +74,30 @@ function AdminPageContent() {
     )
   }
 
+  const isProjectPlanning = /^\/admin\/projects\/[^/]+\/planning\/?$/.test(
+    location.pathname,
+  )
+  const isProjectSectionRoute =
+    /^\/admin\/projects\/[^/]+(?:\/(?:members|inspection-items(?:\/[^/]+)?|zones|progress))?\/?$/.test(
+      location.pathname,
+    )
+
+  if (!user.is_admin && isProjectPlanning) {
+    return (
+      <main>
+        <Routes>
+          <Route
+            element={<ProjectPlanningRoute />}
+            path="projects/:projectId/planning"
+          />
+        </Routes>
+        <NavLink to="/field">返回工作台</NavLink>
+      </main>
+    )
+  }
+
   if (!user.is_admin) {
-    if (location.pathname.startsWith('/admin/projects/')) {
+    if (isProjectSectionRoute) {
       return (
         <main>
           <Routes>
@@ -202,7 +236,11 @@ function AdminPageContent() {
             />
             <Route
               path="projects/:projectId/planning"
-              element={<ProjectSectionPage section="planning" />}
+              element={
+                <ProjectSectionPage section="planning">
+                  <ProjectPlanningRoute />
+                </ProjectSectionPage>
+              }
             />
             <Route
               path="projects/:projectId/progress"

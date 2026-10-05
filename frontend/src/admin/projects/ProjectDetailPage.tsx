@@ -156,6 +156,11 @@ export default function ProjectDetailPage() {
             專案代號 {project.project_code}；業主／委託單位{' '}
             {project.client_name}；工程地點 {project.site_location}
           </p>
+          <p>
+            <Link to={`/admin/projects/${project.id}/planning`}>
+              計畫與任務
+            </Link>
+          </p>
           <h2>成員列表</h2>
           {members.length === 0 ? <p>目前沒有成員。</p> : null}
           {members.length > 0 && (

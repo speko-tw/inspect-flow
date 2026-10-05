@@ -374,7 +374,9 @@ export default function ProjectsPage() {
           </button>
         )}
         <label>
-          <span className="project-required-label">專案代號</span>
+          <span className="required-label">
+            專案代號 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={32}
             onChange={(event) => change('project_code', event.target.value)}
@@ -383,7 +385,9 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          <span className="project-required-label">工程名稱</span>
+          <span className="required-label">
+            工程名稱 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={128}
             onChange={(event) => change('name', event.target.value)}
@@ -392,7 +396,9 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          <span className="project-required-label">業主／委託單位</span>
+          <span className="required-label">
+            業主／委託單位 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={128}
             onChange={(event) => change('client_name', event.target.value)}
@@ -401,7 +407,9 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          <span className="project-required-label">整體工程地點</span>
+          <span className="required-label">
+            整體工程地點 <span aria-hidden="true">*</span>
+          </span>
           <input
             maxLength={256}
             onChange={(event) => change('site_location', event.target.value)}
