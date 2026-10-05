@@ -70,7 +70,12 @@ export async function request<T>(
   if (response.status === 204) {
     return undefined as T
   }
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch {
+    // 成功狀態碼但本文不是 JSON：是伺服器回應異常，不是連不上。
+    throw new ErrorClass(response.status)
+  }
 }
 
 /** 沿著 `next_cursor` 逐頁取完；`fetchPage` 自己決定怎麼送出請求。 */

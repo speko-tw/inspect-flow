@@ -71,6 +71,16 @@ describe('request', () => {
     })
   })
 
+  it('reports a 200 response whose body is not JSON as an API error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('<html>', { status: 200 })),
+    )
+    const error = await request('/things').catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(HttpError)
+    expect(httpErrorMessage(error)).toBe(GENERIC_FAILURE_MESSAGE)
+  })
+
   it('keeps only the status when the error body is not JSON', async () => {
     vi.stubGlobal(
       'fetch',
