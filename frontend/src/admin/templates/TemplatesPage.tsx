@@ -350,7 +350,17 @@ export default function TemplatesPage() {
     item: TemplateItem,
     nextMode: 'create-item' | 'edit-item',
   ): void {
-    const normalized = localizeFields(item)
+    const localized = localizeFields(item)
+    const normalized = {
+      ...localized,
+      inspection_points: localized.inspection_points.map((point) => ({
+        ...point,
+        measurement_fields: point.measurement_fields.map((field) => ({
+          ...field,
+          nameLinked: field.name === point.title,
+        })),
+      })),
+    }
     const photos = Object.fromEntries(
       normalized.inspection_points.map((point, index) => [
         String(index),
@@ -436,8 +446,19 @@ export default function TemplatesPage() {
         ? {
             ...current,
             inspection_points: current.inspection_points.map(
-              (point, position) =>
-                position === index ? { ...point, ...changes } : point,
+              (point, position) => {
+                if (position !== index) return point
+                const next = { ...point, ...changes }
+                if (changes.title !== undefined) {
+                  next.measurement_fields = next.measurement_fields.map(
+                    (field) =>
+                      field.nameLinked
+                        ? { ...field, name: changes.title!.trim() }
+                        : field,
+                  )
+                }
+                return next
+              },
             ),
           }
         : current,
@@ -463,6 +484,7 @@ export default function TemplatesPage() {
         ? {
             ...row,
             ...changes,
+            nameLinked: changes.name === undefined && row.nameLinked,
             unit:
               changes.field_type === 'text'
                 ? null
@@ -638,16 +660,25 @@ export default function TemplatesPage() {
     }
   }
 
-  async function saveItem(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function saveItem(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<number[] | null> {
     event.preventDefault()
-    if (!itemDraft) return
+    if (!itemDraft) return null
     setAttemptedSave(true)
     const found = validateItem()
     if (Object.keys(found).length) {
       setErrors(found)
       setError('')
       focusFirstError(found)
-      return
+      return [
+        ...new Set(
+          Object.keys(found)
+            .map((key) => /^point:(\d+):/.exec(key)?.[1])
+            .filter((index): index is string => index !== undefined)
+            .map(Number),
+        ),
+      ]
     }
     try {
       const input = wireItem({ ...itemDraft, system_id: systemId })
@@ -664,8 +695,10 @@ export default function TemplatesPage() {
       setSelected({ type: 'item', id: result.id ?? '' })
       resetMode()
       showNotice('查核項目已儲存')
+      return null
     } catch (caught) {
       fail(caught)
+      return null
     }
   }
 

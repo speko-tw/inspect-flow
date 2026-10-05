@@ -61,6 +61,7 @@ export function MeasurementFieldEditor({
               onChange={(event) =>
                 updateField(pointIndex, fieldIndex, {
                   name: event.target.value,
+                  nameLinked: false,
                 })
               }
               value={field.name}
@@ -162,20 +163,30 @@ export function MeasurementFieldEditor({
         )
       })}
       <button
-        onClick={() =>
+        onClick={() => {
           updatePoint(pointIndex, {
             measurement_fields: [
               ...point.measurement_fields,
               {
                 ...localizeField({
-                  name: '',
+                  name: point.measurement_fields.length
+                    ? ''
+                    : point.title.trim(),
+                  nameLinked: point.measurement_fields.length === 0,
                   field_type: 'number',
                   unit: '',
                 }),
               },
             ],
           })
-        }
+          window.setTimeout(() => {
+            document
+              .getElementById(
+                `field-${pointIndex}-${point.measurement_fields.length}-name`,
+              )
+              ?.focus()
+          }, 0)
+        }}
         type="button"
       >
         新增實測欄位

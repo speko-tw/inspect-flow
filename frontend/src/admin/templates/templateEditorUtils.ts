@@ -29,7 +29,8 @@ export function addNumberField(point: InspectionPoint): InspectionPoint {
   const field: MeasurementField = {
     client_id: clientKey,
     clientKey,
-    name: '',
+    name: point.measurement_fields.length ? '' : point.title.trim(),
+    nameLinked: point.measurement_fields.length === 0,
     field_type: 'number',
     unit: '',
   }
