@@ -350,7 +350,17 @@ export default function TemplatesPage() {
     item: TemplateItem,
     nextMode: 'create-item' | 'edit-item',
   ): void {
-    const normalized = localizeFields(item)
+    const localized = localizeFields(item)
+    const normalized = {
+      ...localized,
+      inspection_points: localized.inspection_points.map((point) => ({
+        ...point,
+        measurement_fields: point.measurement_fields.map((field) => ({
+          ...field,
+          nameLinked: field.name === point.title,
+        })),
+      })),
+    }
     const photos = Object.fromEntries(
       normalized.inspection_points.map((point, index) => [
         String(index),
@@ -436,8 +446,19 @@ export default function TemplatesPage() {
         ? {
             ...current,
             inspection_points: current.inspection_points.map(
-              (point, position) =>
-                position === index ? { ...point, ...changes } : point,
+              (point, position) => {
+                if (position !== index) return point
+                const next = { ...point, ...changes }
+                if (changes.title !== undefined) {
+                  next.measurement_fields = next.measurement_fields.map(
+                    (field) =>
+                      field.nameLinked
+                        ? { ...field, name: changes.title!.trim() }
+                        : field,
+                  )
+                }
+                return next
+              },
             ),
           }
         : current,
@@ -463,6 +484,7 @@ export default function TemplatesPage() {
         ? {
             ...row,
             ...changes,
+            nameLinked: changes.name === undefined && row.nameLinked,
             unit:
               changes.field_type === 'text'
                 ? null

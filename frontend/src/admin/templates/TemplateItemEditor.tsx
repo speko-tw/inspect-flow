@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 
 import { MeasurementFieldEditor } from './MeasurementFieldEditor'
 import { NumericStandardEditor } from './NumericStandardEditor'
@@ -68,8 +68,20 @@ export function TemplateItemEditor({
   confirmField,
   setConfirmField,
 }: Props) {
+  const [openPoint, setOpenPoint] = useState<number | null>(0)
   if (!itemDraft) return null
   const inputError = (key: string) => errors[key]
+  const errorPoints = new Set(
+    Object.keys(errors)
+      .filter((key) => key.startsWith('point:'))
+      .map((key) => Number(key.split(':')[1]))
+      .filter((index) => Number.isInteger(index)),
+  )
+  const focusPointTitle = (index: number) => {
+    window.setTimeout(() => {
+      document.getElementById(`point-${index}-title`)?.focus()
+    }, 0)
+  }
   const fieldForError = (key: string): HTMLElement | null => {
     const fieldKey = key.endsWith(':range')
       ? key.slice(0, -':range'.length) + ':lower'
@@ -181,14 +193,37 @@ export function TemplateItemEditor({
               每張卡片是一個現場查核步驟。實測欄位可以留空。
             </p>
             {itemDraft.inspection_points.map((point, index) => (
-              <details className="tpl-point-card" key={point.id ?? index} open>
-                <summary>
+              <details
+                className="tpl-point-card"
+                key={point.id ?? index}
+                open={openPoint === index || errorPoints.has(index)}
+              >
+                <summary
+                  onClick={(event) => {
+                    event.preventDefault()
+                    const opening = openPoint !== index
+                    setOpenPoint(opening ? index : null)
+                    if (opening) focusPointTitle(index)
+                  }}
+                >
                   <span>
                     項次 {index + 1}：{point.title || '未命名項次'}
                   </span>
                   <span className="tpl-point-summary">
                     {pointSummary(point, photoDraft[String(index)] ?? '1')}
                   </span>
+                  {Array.from(Object.keys(errors)).filter((key) =>
+                    key.startsWith(`point:${index}:`),
+                  ).length > 0 && (
+                    <span className="tpl-point-errors">
+                      待修正{' '}
+                      {
+                        Object.keys(errors).filter((key) =>
+                          key.startsWith(`point:${index}:`),
+                        ).length
+                      }
+                    </span>
+                  )}
                 </summary>
                 <label htmlFor={`point-${index}-title`}>
                   項次標題{' '}
@@ -221,7 +256,18 @@ export function TemplateItemEditor({
                   value={point.instruction}
                 />
                 <div className="tpl-actions">
-                  <button onClick={() => removePoint(index)} type="button">
+                  <button
+                    onClick={() => {
+                      removePoint(index)
+                      setOpenPoint((current) => {
+                        if (current === null) return null
+                        if (current > index) return current - 1
+                        if (current === index) return null
+                        return current
+                      })
+                    }}
+                    type="button"
+                  >
                     移除此項次
                   </button>
                 </div>
@@ -276,7 +322,15 @@ export function TemplateItemEditor({
                 {errors.points}
               </p>
             )}
-            <button onClick={addPoint} type="button">
+            <button
+              onClick={() => {
+                const index = itemDraft.inspection_points.length
+                addPoint()
+                setOpenPoint(index)
+                focusPointTitle(index)
+              }}
+              type="button"
+            >
               新增查核項次
             </button>
           </section>

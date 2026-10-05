@@ -20,6 +20,7 @@ export interface MeasurementField {
   id?: string
   client_id?: string
   clientKey?: string
+  nameLinked?: boolean
   name: string
   field_type: 'text' | 'number'
   unit: string | null
