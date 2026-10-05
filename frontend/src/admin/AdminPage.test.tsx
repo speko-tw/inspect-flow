@@ -111,10 +111,12 @@ function managementFetch({
   userRows = [builtInUser, regularUser],
   companyRows = [company],
   onCreate,
+  failAdminAction = false,
 }: {
   userRows?: User[]
   companyRows?: Company[]
   onCreate?: (body: Record<string, unknown>) => CreatedUser
+  failAdminAction?: boolean
 } = {}) {
   const rows = userRows.map((user) => ({ ...user }))
   const companies = companyRows.map((row) => ({ ...row }))
@@ -250,6 +252,12 @@ function managementFetch({
         return Response.json(row)
       }
       if (url.endsWith('/users/user-1/admin')) {
+        if (failAdminAction) {
+          return Response.json(
+            { error: { code: 'user.builtin_protected' } },
+            { status: 403 },
+          )
+        }
         const row = rows.find((user) => user.id === 'user-1')
         if (row) {
           row.is_admin = Boolean(
@@ -456,6 +464,7 @@ describe('admin user and company pages', () => {
     const passwordHeading = await screen.findByRole('heading', {
       name: '使用者已新增',
     })
+    expect(passwordHeading).toHaveFocus()
     expect(passwordHeading.closest('section')).toHaveAttribute(
       'role',
       'status',
@@ -746,6 +755,27 @@ describe('admin user and company pages', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Email 已被使用。',
     )
+  })
+
+  it('keeps a failed admin action beside its confirmation', async () => {
+    managementFetch({ failAdminAction: true })
+    renderAdmin()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '指派管理者' }))
+    const confirmation = screen.getByRole('region', { name: '操作確認' })
+    expect(
+      within(confirmation).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    fireEvent.click(
+      within(confirmation).getByRole('button', {
+        name: '確認',
+      }),
+    )
+    expect(await within(confirmation).findByRole('alert')).toHaveTextContent(
+      '內建 admin 帳號不可修改或停用。',
+    )
+    expect(confirmation).toBeInTheDocument()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('edits users and toggles admin and active status', async () => {

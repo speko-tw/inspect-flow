@@ -38,12 +38,24 @@ export default function UsersPage({
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   )
+  const [actionError, setActionError] = useState('')
+  const confirmationRef = useRef<HTMLElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
   const [listError, setListError] = useState('')
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+
+  useEffect(() => {
+    if (!pendingAction) return
+    confirmationRef.current?.scrollIntoView?.({
+      block: 'center',
+      inline: 'start',
+    })
+    cancelRef.current?.focus()
+  }, [pendingAction])
 
   async function loadUserPage(
     search: string,
@@ -192,27 +204,36 @@ export default function UsersPage({
   async function confirmAction() {
     if (!pendingAction) return
     const { user, kind } = pendingAction
-    setPendingAction(null)
+    setActionError('')
     if (kind === 'admin' && user.is_admin && user.id === currentUser.id) {
-      setError('')
       setBusyUser(user.id)
       try {
         await setUserAdmin(user.id, false)
+        setPendingAction(null)
         navigate('/field', {
           replace: true,
           state: { notice: SELF_REVOKED_NOTICE },
         })
       } catch (caught) {
-        setError(managementErrorMessage(caught))
+        setActionError(managementErrorMessage(caught))
         setBusyUser(null)
       }
       return
     }
-    void act(user.id, () =>
-      kind === 'admin'
+    setBusyUser(user.id)
+    try {
+      await (kind === 'admin'
         ? setUserAdmin(user.id, !user.is_admin)
-        : setUserActive(user.id, false),
-    )
+        : setUserActive(user.id, false))
+      setPendingAction(null)
+      setEditingUser(null)
+      setEditingCompany(null)
+      await reload()
+    } catch (caught) {
+      setActionError(managementErrorMessage(caught))
+    } finally {
+      setBusyUser(null)
+    }
   }
 
   function actionMessage({ user, kind }: PendingAction): string {
@@ -229,6 +250,7 @@ export default function UsersPage({
 
   function requestAction(user: User, kind: PendingAction['kind']) {
     if (kind === 'admin' || (kind === 'deactivate' && user.is_active)) {
+      setActionError('')
       setPendingAction({ user, kind })
       return
     }
@@ -236,11 +258,12 @@ export default function UsersPage({
   }
 
   function toggleAdmin(user: User) {
-    setPendingAction({ user, kind: 'admin' })
+    requestAction(user, 'admin')
   }
 
   function cancelPendingAction() {
     setPendingAction(null)
+    setActionError('')
   }
 
   function created(user: { username: string; temporary_password: string }) {
@@ -359,12 +382,15 @@ export default function UsersPage({
                           <section
                             aria-label="操作確認"
                             className="inline-confirmation"
+                            ref={confirmationRef}
                             role="region"
                           >
                             <p>{actionMessage(pendingAction)}</p>
+                            {actionError && <p role="alert">{actionError}</p>}
                             <button
                               disabled={busyUser === user.id}
                               onClick={cancelPendingAction}
+                              ref={cancelRef}
                               type="button"
                             >
                               取消

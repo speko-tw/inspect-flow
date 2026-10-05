@@ -65,11 +65,19 @@ export default function ProjectsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+  const transitionRef = useRef<HTMLElement>(null)
+  const keepEditingRef = useRef<HTMLButtonElement>(null)
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
   const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
     (key) =>
       form[key as keyof FormState] !== originalForm[key as keyof FormState],
   )
+
+  useEffect(() => {
+    if (!transition) return
+    transitionRef.current?.scrollIntoView?.({ block: 'center' })
+    keepEditingRef.current?.focus()
+  }, [transition])
 
   useEffect(() => {
     let active = true
@@ -228,10 +236,15 @@ export default function ProjectsPage() {
         <section
           aria-label="未儲存變更"
           className="inline-confirmation"
+          ref={transitionRef}
           role="region"
         >
           <p>目前的專案內容尚未儲存，要保留編輯或捨棄？</p>
-          <button onClick={() => setTransition(null)} type="button">
+          <button
+            onClick={() => setTransition(null)}
+            ref={keepEditingRef}
+            type="button"
+          >
             保留編輯
           </button>
           <button onClick={() => applyTransition(transition)} type="button">
@@ -342,7 +355,7 @@ export default function ProjectsPage() {
           </button>
         )}
         <label>
-          專案代號
+          <span className="project-required-label">專案代號</span>
           <input
             maxLength={32}
             onChange={(event) => change('project_code', event.target.value)}
@@ -351,7 +364,7 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          工程名稱
+          <span className="project-required-label">工程名稱</span>
           <input
             maxLength={128}
             onChange={(event) => change('name', event.target.value)}
@@ -360,7 +373,7 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          業主／委託單位
+          <span className="project-required-label">業主／委託單位</span>
           <input
             maxLength={128}
             onChange={(event) => change('client_name', event.target.value)}
@@ -369,7 +382,7 @@ export default function ProjectsPage() {
           />
         </label>
         <label>
-          整體工程地點
+          <span className="project-required-label">整體工程地點</span>
           <input
             maxLength={256}
             onChange={(event) => change('site_location', event.target.value)}

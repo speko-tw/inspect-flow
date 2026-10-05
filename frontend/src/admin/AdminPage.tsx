@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Navigate,
   NavLink,
@@ -50,6 +50,11 @@ function AdminPageContent() {
     password: string
     locationKey: string
   } | null>(null)
+  const resultHeadingRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    if (temporaryPassword) resultHeadingRef.current?.focus()
+  }, [temporaryPassword])
 
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
@@ -122,7 +127,13 @@ function AdminPageContent() {
             className="temporary-password-result"
             role="status"
           >
-            <h2 id="temporary-password-heading">使用者已新增</h2>
+            <h2
+              id="temporary-password-heading"
+              ref={resultHeadingRef}
+              tabIndex={-1}
+            >
+              使用者已新增
+            </h2>
             <p>帳號：{temporaryPassword.username}</p>
             <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
             <TemporaryPassword password={temporaryPassword.password} />
