@@ -1,11 +1,14 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
+import time
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from sqlalchemy import event, func, select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import base as db_base
 from app.db.base import uuid7
 from app.db.clock import reset_clock, set_clock
 from app.db.engine import get_engine
@@ -743,6 +746,59 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         )
         assert len(first_default_page.json()["items"]) == 50
         assert first_default_page.json()["next_cursor"]
+    finally:
+        reset_clock()
+
+
+def test_field_task_items_keep_request_order_within_one_millisecond(
+    db_session, make_client, monkeypatch
+):
+    # #475: a task's items share created_at under a frozen clock, so the
+    # list summary and the detail fall back to the id tie-break. Pin
+    # every id to one millisecond to cover a fast database.
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    field = world["field"]
+    item, item_two = world["item"], world["item_two"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": "Item order"},
+    )
+    assert plan.status_code == 201, plan.text
+    now_ns = time.time_ns()
+    monkeypatch.setattr(
+        db_base, "time", SimpleNamespace(time_ns=lambda: now_ns)
+    )
+    frozen = datetime.now(UTC).replace(microsecond=0)
+    set_clock(lambda: frozen)
+    try:
+        expected = {}
+        for order in [(item, item_two), (item_two, item)] * 3:
+            created = admin.post(
+                f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+                json={
+                    "item_ids": [str(row.id) for row in order],
+                    "suggested_assignee_id": str(world["field_user"].id),
+                },
+            )
+            assert created.status_code == 201, created.text
+            task_id = created.json()["id"]
+            dispatched = admin.post(
+                f"/api/v1/inspection-tasks/{task_id}:dispatch"
+            )
+            assert dispatched.status_code == 200, dispatched.text
+            expected[task_id] = [row.title for row in order]
+
+        listed = field.get("/api/v1/field/inspection-tasks")
+        assert listed.status_code == 200, listed.text
+        assert {
+            row["id"]: row["item_summary"]["first_title"]
+            for row in listed.json()["items"]
+        } == {task_id: titles[0] for task_id, titles in expected.items()}
+        for task_id, titles in expected.items():
+            detail = field.get(f"/api/v1/field/inspection-tasks/{task_id}")
+            assert detail.status_code == 200, detail.text
+            assert [row["title"] for row in detail.json()["items"]] == titles
     finally:
         reset_clock()
 
