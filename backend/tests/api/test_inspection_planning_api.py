@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.base import uuid7
@@ -13,6 +13,7 @@ from app.db.engine import get_engine
 from app.models import (
     InspectionTask,
     Project,
+    ProjectEvidenceRequirement,
     ProjectInspectionItem,
     ProjectMember,
     ProjectMemberRole,
@@ -1699,3 +1700,108 @@ def test_cancelled_task_restore_uses_current_item_standard(
     assert restored.json()["items"][0]["current_snapshot"]["title"] == (
         "目前採用標準"
     )
+
+
+def _item_point(rows: list[dict], sequence: int = 1) -> dict:
+    return {
+        "sequence": sequence,
+        "title": "外觀",
+        "instruction": "拍照",
+        "text_standard": {"text": "無破損"},
+        "evidence_requirements": rows,
+    }
+
+
+def test_project_item_patch_rejects_invalid_point_structure(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    item_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        f"/inspection-items/{world['item'].id}"
+    )
+    validation = {"error": {"code": "request.validation_failed"}}
+
+    two_rows = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                _item_point([{"min_count": 1}, {"min_count": 2}])
+            ]
+        },
+    )
+    assert two_rows.status_code == 422, two_rows.text
+    assert two_rows.json() == validation
+    no_rows = admin.patch(
+        item_url, json={"inspection_points": [_item_point([])]}
+    )
+    assert no_rows.status_code == 422, no_rows.text
+    repeated_sequence = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                _item_point([{"min_count": 1}]),
+                _item_point([{"min_count": 1}]),
+            ]
+        },
+    )
+    assert repeated_sequence.status_code == 422, repeated_sequence.text
+    assert repeated_sequence.json() == validation
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(ProjectEvidenceRequirement)
+        )
+        == 0
+    )
+    unchanged = db_session.get(ProjectInspectionItem, world["item"].id)
+    assert unchanged is not None
+    assert unchanged.standard_revision == 1
+
+
+def test_one_photo_requirement_keeps_task_flows_working(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project_id = world["project"].id
+    item_url = (
+        f"/api/v1/projects/{project_id}/inspection-items/{world['item'].id}"
+    )
+    patched = admin.patch(
+        item_url,
+        json={"inspection_points": [_item_point([{"min_count": 3}])]},
+    )
+    assert patched.status_code == 200, patched.text
+    plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "單一照片需求"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task.status_code == 201, task.text
+
+    used_by_draft = admin.patch(
+        item_url,
+        json={
+            "reinspect": False,
+            "inspection_points": [_item_point([{"min_count": 2}])],
+        },
+    )
+    assert used_by_draft.status_code == 200, used_by_draft.text
+    assert used_by_draft.json()["affected_tasks"][0]["action"] == (
+        "draft_updated"
+    )
+
+    task_path = f"/api/v1/inspection-tasks/{task.json()['id']}"
+    assert admin.post(f"{task_path}:dispatch").status_code == 200
+    assert admin.post(f"{task_path}:start").status_code == 200
+    cancelled = admin.post(f"{task_path}:cancel", json={"reason": "暫停"})
+    assert cancelled.status_code == 200, cancelled.text
+    restored = admin.post(f"{task_path}:restore")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["status"] == "IN_PROGRESS"
