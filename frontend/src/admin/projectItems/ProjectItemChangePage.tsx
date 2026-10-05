@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 
+import { httpErrorMessage, isForbidden } from '../../http'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
 import {
@@ -36,10 +37,6 @@ const REINSPECTION_RESULT_TEXT = [
   '才另外作廢舊結果與照片並列為待重查。',
 ].join('')
 
-function isForbidden(error: unknown): boolean {
-  return error instanceof ManagementApiError && error.status === 403
-}
-
 function isReinspectionChoiceRequired(error: unknown): boolean {
   return (
     error instanceof ManagementApiError &&
@@ -55,21 +52,16 @@ function errorMessage(error: unknown): string {
   if (isReinspectionChoiceRequired(error)) {
     return REINSPECTION_CHOICE_ERROR
   }
-  if (error instanceof ManagementApiError) {
-    if (error.code === 'inspection_plan.archived') {
-      return ARCHIVED_PLAN_ERROR
-    }
-    if (error.code === 'resource.not_found') {
-      return '找不到此查核項目，請返回專案重新選擇。'
-    }
-    if (error.code === 'request.validation_failed') {
-      return '請檢查項目名稱與查核項次的必填欄位。'
-    }
-    if (error.code === 'inspection_task.invalid_transition') {
-      return '任務狀態已變更，請重新載入後再試。'
-    }
-  }
-  return '載入或儲存失敗，請稍後再試。'
+  return httpErrorMessage(error, {
+    codes: {
+      'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
+      'resource.not_found': '找不到此查核項目，請返回專案重新選擇。',
+      'request.validation_failed': '請檢查項目名稱與查核項次的必填欄位。',
+      'inspection_task.invalid_transition':
+        '任務狀態已變更，請重新載入後再試。',
+    },
+    fallback: '載入或儲存失敗，請稍後再試。',
+  })
 }
 
 function updatePoint(

@@ -1,26 +1,17 @@
 // Field 清單請求使用同站 Cookie；回應欄位在此檢查後交給畫面。
 
-const API_BASE = '/api/v1'
+import { HttpError, request } from '../http'
 
 /** 工作台的 API 回傳非預期狀態碼時拋出。 */
-export class FieldApiError extends Error {
-  readonly status: number
-
-  constructor(status: number) {
-    super(`API 錯誤（狀態碼 ${status}）`)
+export class FieldApiError extends HttpError {
+  constructor(status: number, code?: string, details?: unknown) {
+    super(status, code, details)
     this.name = 'FieldApiError'
-    this.status = status
   }
 }
 
-async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: 'same-origin',
-  })
-  if (!response.ok) {
-    throw new FieldApiError(response.status)
-  }
-  return (await response.json()) as T
+function getJson<T>(path: string): Promise<T> {
+  return request<T>(path, undefined, FieldApiError)
 }
 
 export interface FieldTask {

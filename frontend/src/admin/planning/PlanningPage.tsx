@@ -6,7 +6,7 @@ import {
   type KeyboardEvent,
 } from 'react'
 
-import { ManagementApiError } from '../api'
+import { collectPages, HttpError, isForbidden } from '../../http'
 import { planningClient, planningErrorMessage } from './api'
 import type {
   InspectionPlan,
@@ -174,12 +174,9 @@ export default function PlanningPage({
         }
       } catch (caught) {
         if (!active) return
-        if (caught instanceof ManagementApiError && caught.status === 403) {
+        if (isForbidden(caught)) {
           setAccessDenied(true)
-        } else if (
-          caught instanceof ManagementApiError &&
-          caught.status === 404
-        ) {
+        } else if (caught instanceof HttpError && caught.status === 404) {
           setProjectNotFound(true)
         }
         setError(planningErrorMessage(caught))
@@ -201,16 +198,10 @@ export default function PlanningPage({
       setErrorContext('page')
       setZonesDenied(false)
       setMembersDenied(false)
-      const allPlans = async () => {
-        const all: InspectionPlan[] = []
-        let cursor: string | null = null
-        do {
-          const page = await client.listPlans(projectId, cursor)
-          all.push(...page.items)
-          cursor = page.next_cursor
-        } while (cursor)
-        return all
-      }
+      const allPlans = () =>
+        collectPages<InspectionPlan>((cursor) =>
+          client.listPlans(projectId, cursor),
+        )
       const results = await Promise.allSettled([
         client.listProjectItems(projectId),
         client.listProjectZones(projectId),
@@ -229,10 +220,7 @@ export default function PlanningPage({
           setZones(zonesResult.value)
         } else {
           setZones([])
-          if (
-            zonesResult.reason instanceof ManagementApiError &&
-            zonesResult.reason.status === 403
-          ) {
+          if (isForbidden(zonesResult.reason)) {
             setZonesDenied(true)
           } else {
             setError(planningErrorMessage(zonesResult.reason))
@@ -242,10 +230,7 @@ export default function PlanningPage({
           setMembers(membersResult.value)
         } else {
           setMembers([])
-          if (
-            membersResult.reason instanceof ManagementApiError &&
-            membersResult.reason.status === 403
-          ) {
+          if (isForbidden(membersResult.reason)) {
             setMembersDenied(true)
           } else {
             setError(planningErrorMessage(membersResult.reason))
@@ -255,10 +240,7 @@ export default function PlanningPage({
           setPlans(plansResult.value)
         } else {
           setPlans([])
-          if (
-            plansResult.reason instanceof ManagementApiError &&
-            plansResult.reason.status === 403
-          ) {
+          if (isForbidden(plansResult.reason)) {
             setAccessDenied(true)
           } else {
             setError(planningErrorMessage(plansResult.reason))
@@ -286,7 +268,7 @@ export default function PlanningPage({
       (caught: unknown) => {
         if (active) {
           setErrorContext('page')
-          if (caught instanceof ManagementApiError && caught.status === 403) {
+          if (isForbidden(caught)) {
             setAccessDenied(true)
           } else {
             setError(planningErrorMessage(caught))
@@ -350,7 +332,7 @@ export default function PlanningPage({
       setReloadKey((key) => key + 1)
       return true
     } catch (caught) {
-      if (caught instanceof ManagementApiError && caught.status === 403) {
+      if (isForbidden(caught)) {
         setReadOnly(true)
       }
       setError(planningErrorMessage(caught))

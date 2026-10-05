@@ -13,11 +13,11 @@ import {
   managementErrorMessage,
   type User,
 } from '../api'
+import { listRoles } from '../roles/api'
 import MemberRoleFields, { RequiredMark } from './MemberRoleFields'
 import {
   addProjectMember,
   getProject,
-  listAllRoles,
   listProjectMembers,
   personLabel,
   removeProjectMember,
@@ -89,7 +89,7 @@ export default function ProjectDetailPage() {
             getProject(projectId),
             listProjectMembers(projectId),
             listUsers(),
-            listAllRoles(),
+            listRoles(),
           ])
         if (active) {
           setProject(nextProject)
