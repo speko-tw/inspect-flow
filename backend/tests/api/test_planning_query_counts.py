@@ -114,7 +114,9 @@ def _urls(world) -> dict[str, str]:
     }
 
 
-@pytest.mark.parametrize("name", ["project tasks", "plan tasks", "item tasks"])
+@pytest.mark.parametrize(
+    "name", ["project tasks", "plan tasks", "item tasks", "project items"]
+)
 def test_list_select_count_does_not_grow_with_page_size(world, name):
     url = _urls(world)[name]
     admin = world["admin"]

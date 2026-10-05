@@ -1,5 +1,6 @@
 """Category, system and inspection template endpoints (TPL T3)."""
 
+from collections.abc import Sequence
 from decimal import Decimal, InvalidOperation
 from functools import partial
 from typing import Any, Literal
@@ -35,7 +36,7 @@ from app.models import (
     TemplateSystem,
     TemplateTextStandard,
 )
-from app.services.inspection_details import inspection_points_detail
+from app.services.inspection_details import inspection_points_by_item
 from app.services.template_library import (
     InvalidTemplateError,
     create_category,
@@ -326,22 +327,33 @@ def _summary(row) -> dict:
     return data
 
 
-def template_item_detail(db: Session, item: TemplateItem) -> dict:
-    data = _summary(item)
-    points = db.scalars(
-        select(TemplateInspectionPoint)
-        .where(TemplateInspectionPoint.template_item_id == item.id)
-        .order_by(TemplateInspectionPoint.sequence)
-    ).all()
-    data["inspection_points"] = inspection_points_detail(
+def template_item_details(
+    db: Session, items: Sequence[TemplateItem]
+) -> list[dict]:
+    """Serialize template items with batched point queries."""
+    points = inspection_points_by_item(
         db,
-        points,
+        [item.id for item in items],
+        point_item_column=TemplateInspectionPoint.template_item_id,
+        point_order_by=(
+            TemplateInspectionPoint.sequence,
+            TemplateInspectionPoint.id,
+        ),
         measurement_field_model=TemplateMeasurementField,
         text_standard_model=TemplateTextStandard,
         numeric_standard_model=TemplateNumericStandard,
         evidence_requirement_model=TemplateEvidenceRequirement,
     )
-    return data
+    result = []
+    for item in items:
+        data = _summary(item)
+        data["inspection_points"] = points.get(item.id, [])
+        result.append(data)
+    return result
+
+
+def template_item_detail(db: Session, item: TemplateItem) -> dict:
+    return template_item_details(db, [item])[0]
 
 
 @category_router.get("", dependencies=[_read])
@@ -509,7 +521,7 @@ def get_system_templates(
         cursor=cursor,
         limit=limit,
         filters=(TemplateItem.system_id == system_id,),
-        serialize=lambda item: template_item_detail(db, item),
+        serialize_batch=lambda items: template_item_details(db, items),
     )
 
 
@@ -539,7 +551,7 @@ def put_system_templates(
     for item in existing:
         if item.id not in ids:
             delete_template(db, item)
-    result = []
+    saved = []
     for entry, data in zip(entries, payloads, strict=True):
         if entry.id is None:
             item = template_write_call(create_template, db, data)
@@ -547,5 +559,5 @@ def put_system_templates(
             item = template_write_call(
                 replace_template, db, by_id[entry.id], data
             )
-        result.append(template_item_detail(db, item))
-    return {"items": result}
+        saved.append(item)
+    return {"items": template_item_details(db, saved)}

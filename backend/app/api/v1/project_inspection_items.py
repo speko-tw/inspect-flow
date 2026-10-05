@@ -29,7 +29,7 @@ from app.models import (
     User,
 )
 from app.services.inspection_details import (
-    project_inspection_item_detail,
+    project_inspection_item_details,
 )
 from app.services.project_templates import (
     DuplicateProjectItemError,
@@ -166,5 +166,7 @@ def list_project_inspection_items(
         cursor=cursor,
         limit=limit,
         filters=(ProjectInspectionItem.project_id == project_id,),
-        serialize=lambda item: project_inspection_item_detail(db, item),
+        serialize_batch=lambda items: project_inspection_item_details(
+            db, items
+        ),
     )
