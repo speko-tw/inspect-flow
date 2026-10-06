@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -183,10 +189,58 @@ describe('ProjectItemChangePage', () => {
     ).toHaveTextContent('鋼筋間距')
     expect(
       screen.getByText(/二樓東側.*已完成任務退回進行中/),
-    ).toHaveTextContent('舊需求與 Snapshot 已作廢')
-    expect(screen.getByText(/草稿任務原位更新/)).toBeInTheDocument()
+    ).toHaveTextContent('此項目的舊內容已作廢')
+    expect(screen.getByText(/草稿任務已更新為新內容/)).toBeInTheDocument()
     expect(screen.getByText(/恢復時套用目前標準/)).toBeInTheDocument()
     expect(api.loadPreview).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks no question when only draft Tasks use the item (#487)', async () => {
+    const drafts = structuredClone(preview)
+    drafts.affectedTasks = [drafts.affectedTasks[0]]
+    const api = apiWith({
+      loadPreview: vi.fn(async () => structuredClone(drafts)),
+      update: vi.fn(async () => ({
+        ...changed,
+        reinspection_selected: false,
+        affected_tasks: [changed.affected_tasks[0]],
+      })),
+    })
+    renderPage(api)
+    fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+    const dialog = screen.getByRole('dialog')
+    expect(
+      within(dialog).getByText(/草稿任務會直接更新為新內容/),
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByRole('radio')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/是否重新查核/)).not.toBeInTheDocument()
+    expect(dialog.textContent).not.toMatch(/Snapshot|Task/)
+    fireEvent.click(within(dialog).getByRole('button', { name: '確認儲存' }))
+    expect(api.update).toHaveBeenCalledWith(
+      'p',
+      'item-1',
+      expect.objectContaining({ reinspect: false }),
+    )
+    expect(
+      await screen.findByText('草稿任務已直接更新為新內容，沒有重新查核。'),
+    ).toBeInTheDocument()
+  })
+
+  it('explains each choice in plain words when dispatched Tasks exist (#487)', async () => {
+    renderPage(apiWith())
+    fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.textContent).not.toMatch(/Snapshot|Task/)
+    expect(
+      screen.getByRole('radio', { name: reinspectChoice }),
+    ).toHaveAccessibleDescription(/已完成的任務會退回進行中/)
+    expect(
+      screen.getByRole('radio', { name: noReinspectChoice }),
+    ).toHaveAccessibleDescription(/任務狀態、已填的結果與照片都不變/)
+    expect(screen.getByRole('button', { name: '確認儲存' })).toBeDisabled()
+    expect(
+      within(dialog).getByText(/二樓東側.*退回進行中，受影響項目改列待重查/),
+    ).toBeInTheDocument()
   })
 
   it('corrects text without reinspection', async () => {

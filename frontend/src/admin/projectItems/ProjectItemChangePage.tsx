@@ -33,10 +33,19 @@ const ARCHIVED_PLAN_ERROR = [
 ].join('')
 
 const REINSPECTION_RESULT_TEXT = [
-  '已派出且未取消任務中，受影響項目的舊需求與 Snapshot ',
-  '已標記作廢並保留可查；只有已有結果的項目，',
-  '才另外作廢舊結果與照片並列為待重查。',
+  '已派出且未取消的任務中，受影響項目的舊內容已標記作廢並保留可查；',
+  '只有已有結果的項目，才另外作廢舊結果與照片，並列為待重查。',
 ].join('')
+
+const DRAFT_ONLY_RESULT_TEXT = '草稿任務已直接更新為新內容，沒有重新查核。'
+
+const REINSPECT_YES_HINT = [
+  '受影響項目的舊內容會保留可查；已有結果的項目會作廢舊結果與照片、',
+  '改列為待重查，已完成的任務會退回進行中，補查完成前不能再完成。',
+].join('')
+
+const REINSPECT_NO_HINT =
+  '只更正項目的文字，任務狀態、已填的結果與照片都不變。'
 
 function isReinspectionChoiceRequired(error: unknown): boolean {
   return (
@@ -76,12 +85,17 @@ function updatePoint(
 }
 
 function taskConsequence(status: TaskStatus): string {
-  if (status === 'DRAFT') return '標準在原任務內更新'
-  if (status === 'COMPLETED') return '退回進行中'
-  if (status === 'CANCELLED') {
-    return '恢復時套用新標準；原有結果若受影響才待重查'
-  }
-  return '維持目前狀態'
+  if (status === 'DRAFT') return '草稿任務會直接更新為新內容'
+  if (status === 'PENDING') return '維持待開始'
+  if (status === 'IN_PROGRESS') return '維持進行中，已有結果的項目改列待重查'
+  if (status === 'COMPLETED') return '退回進行中，受影響項目改列待重查'
+  return '維持已取消；恢復時才套用新內容，原有結果若受影響才待重查'
+}
+
+// 後端只要有任務使用此項目就要求帶 `reinspect`；草稿任務一律在原任務內
+// 更新、不產生待重查，所以全部是草稿時不需要使用者選擇。
+function isDraftOnly(tasks: AffectedTask[]): boolean {
+  return tasks.length > 0 && tasks.every((task) => task.status === 'DRAFT')
 }
 
 function taskLocation(task: AffectedTask): string {
@@ -262,6 +276,11 @@ export default function ProjectItemChangePage({
 
   if (loading) return <p>載入中…</p>
 
+  const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
+  const needsChoice = preview
+    ? preview.affectedTasks.length > 0 && !draftOnly
+    : false
+
   return (
     <section aria-labelledby="project-item-heading">
       <h2 id="project-item-heading">修改專案查核項目</h2>
@@ -372,77 +391,88 @@ export default function ProjectItemChangePage({
               role="dialog"
             >
               <h2 id="reinspect-heading" ref={dialogHeadingRef} tabIndex={-1}>
-                儲存前確認重新查核
+                {needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
               </h2>
-              <p>
-                {'選擇「要」會將已派出且未取消任務中，'}
-                {'受影響項目的舊需求與 Snapshot 標示為'}
-                {'「標準變更作廢」並保留歷史。'}
-                {'只有已有結果的項目會另外作廢舊結果'}
-                {'與照片，'}
-                {'並列為待重查；尚無結果的項目'}
-                {'直接使用新 Snapshot。'}
-                {'原為草稿的任務會在原任務內更新。'}
-                {'選擇「不要」只更正 Snapshot 文字，'}
-                {'任務狀態、結果與照片不變。'}
-                {'已有待重查項目的 Task '}
-                {'完成補查前不得完成。'}
-                {'已核發報告不受影響。'}
-              </p>
-              {preview.affectedTasks.length > 0 && (
+              {needsChoice && (
+                <>
+                  <p>
+                    {'有任務已經派出，請先選擇這次修改要不要重新查核。'}
+                    {'草稿任務不受選擇影響，會直接更新為新內容；'}
+                    {'已核發的報告也不受影響。'}
+                  </p>
+                  <p>
+                    {'選擇「要」重新查核時，'}
+                    {'各任務會有以下狀態變化；'}
+                    {'選擇「不要」時，各任務狀態維持不變。'}
+                  </p>
+                </>
+              )}
+              {draftOnly && (
                 <p>
-                  {'選擇「要」重新查核時，'}
-                  {'各任務會有以下狀態變化；'}
-                  {'選擇「不要」時，各任務狀態維持不變。'}
+                  {'使用此項目的任務都還是草稿，'}
+                  {'儲存後草稿任務會直接更新為新內容，'}
+                  {'不需要重新查核。'}
                 </p>
               )}
               <h3>使用此項目的任務</h3>
               {preview.affectedTasks.length === 0 ? (
                 <p>
                   {'目前沒有任務使用此項目，'}
-                  {'確認後只儲存項目標準。'}
+                  {'確認後只儲存項目內容。'}
                 </p>
               ) : (
                 <ul>
                   {preview.affectedTasks.map((task) => (
                     <li key={task.id}>
                       {task.name}（{task.planName}；{taskLocation(task)}；
-                      {TASK_STATUS_LABELS[task.status]}）：
-                      {taskConsequence(task.status)}
+                      {TASK_STATUS_LABELS[task.status]}）
+                      {needsChoice && <>：{taskConsequence(task.status)}</>}
                     </li>
                   ))}
                 </ul>
               )}
-              {preview.affectedTasks.length > 0 && (
+              {needsChoice && (
                 <fieldset disabled={readOnly}>
                   <legend>是否重新查核？</legend>
-                  <label>
-                    <input
-                      checked={reinspect === true}
-                      onChange={() => setReinspect(true)}
-                      name="reinspect"
-                      type="radio"
-                    />
-                    要，作廢受影響項目並重新查核
-                  </label>
-                  <label>
-                    <input
-                      checked={reinspect === false}
-                      onChange={() => setReinspect(false)}
-                      name="reinspect"
-                      type="radio"
-                    />
-                    不要，只更正文字
-                  </label>
+                  <div>
+                    <label>
+                      <input
+                        aria-describedby="reinspect-yes-hint"
+                        checked={reinspect === true}
+                        onChange={() => setReinspect(true)}
+                        name="reinspect"
+                        type="radio"
+                      />
+                      要，作廢受影響項目並重新查核
+                    </label>
+                    <p className="tpl-hint" id="reinspect-yes-hint">
+                      {REINSPECT_YES_HINT}
+                    </p>
+                  </div>
+                  <div>
+                    <label>
+                      <input
+                        aria-describedby="reinspect-no-hint"
+                        checked={reinspect === false}
+                        onChange={() => setReinspect(false)}
+                        name="reinspect"
+                        type="radio"
+                      />
+                      不要，只更正文字
+                    </label>
+                    <p className="tpl-hint" id="reinspect-no-hint">
+                      {REINSPECT_NO_HINT}
+                    </p>
+                  </div>
                 </fieldset>
               )}
               <button
                 disabled={
-                  readOnly ||
-                  busy ||
-                  (preview.affectedTasks.length > 0 && reinspect === null)
+                  readOnly || busy || (needsChoice && reinspect === null)
                 }
-                onClick={() => void save(reinspect ?? undefined)}
+                onClick={() =>
+                  void save(draftOnly ? false : (reinspect ?? undefined))
+                }
                 type="button"
               >
                 確認儲存
@@ -463,7 +493,11 @@ export default function ProjectItemChangePage({
               <p>
                 {result.reinspection_selected
                   ? '已選擇重新查核。'
-                  : '已更正文字，沒有重新查核。'}
+                  : result.affected_tasks.length === 0
+                    ? '已儲存項目內容。'
+                    : isDraftOnly(resultTasks)
+                      ? DRAFT_ONLY_RESULT_TEXT
+                      : '已更正文字，沒有重新查核。'}
               </p>
               {result.reinspection_selected && (
                 <p>{REINSPECTION_RESULT_TEXT}</p>
@@ -479,7 +513,7 @@ export default function ProjectItemChangePage({
                       <li key={task.task_id}>
                         {before ? taskLabel(before) : task.task_id}：
                         {task.action === 'draft_updated' && (
-                          <>草稿任務原位更新</>
+                          <>草稿任務已更新為新內容</>
                         )}
                         {task.action === 'returned_to_in_progress' &&
                           '已完成任務退回進行中'}
@@ -492,10 +526,7 @@ export default function ProjectItemChangePage({
                         {result.reinspection_selected &&
                           task.prior_status !== 'DRAFT' &&
                           task.prior_status !== 'CANCELLED' && (
-                            <>
-                              {'；此項目的舊需求與 Snapshot '}
-                              {'已作廢並保留可查'}
-                            </>
+                            <>{'；此項目的舊內容已作廢並保留可查'}</>
                           )}
                         {task.needs_reinspection && '；須重新查核'}
                         {before && before.preservedItemTitles.length > 0 && (
