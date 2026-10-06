@@ -34,6 +34,8 @@ const TASK_STATUS: Record<InspectionTask['status'], string> = {
   CANCELLED: '已取消',
 }
 
+type NoticeArea = 'zones' | 'plans' | 'plan-detail' | 'tasks'
+
 function taskTitle(task: InspectionTask): string {
   return task.items
     .map((item) => item.current_snapshot?.title ?? '')
@@ -63,6 +65,11 @@ export default function PlanningPage({
   const [membersDenied, setMembersDenied] = useState(false)
   const [error, setError] = useState('')
   const [errorContext, setErrorContext] = useState('page')
+  // 操作成功後的提示，顯示在該操作所屬的區塊旁，下一次操作就清掉。
+  const [notice, setNotice] = useState<{
+    area: NoticeArea
+    text: string
+  } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [planName, setPlanName] = useState('')
   const [editingPlanName, setEditingPlanName] = useState(false)
@@ -88,6 +95,7 @@ export default function PlanningPage({
   const [confirmation, setConfirmation] = useState<{
     title: string
     action: () => Promise<unknown>
+    success: { area: NoticeArea; text: string }
   } | null>(null)
   const confirmationTrigger = useRef<HTMLElement | null>(null)
   const confirmationHeading = useRef<HTMLHeadingElement | null>(null)
@@ -286,11 +294,16 @@ export default function PlanningPage({
     selectedPlan && selectedPlan.status !== 'ARCHIVED',
   )
 
-  function confirm(title: string, action: () => Promise<unknown>): void {
+  function confirm(
+    title: string,
+    action: () => Promise<unknown>,
+    success: { area: NoticeArea; text: string },
+  ): void {
     setError('')
+    setNotice(null)
     setErrorContext('dialog')
     confirmationTrigger.current = document.activeElement as HTMLElement
-    setConfirmation({ title, action })
+    setConfirmation({ title, action, success })
   }
 
   function closeDialogs(): void {
@@ -308,9 +321,11 @@ export default function PlanningPage({
 
   async function act(
     operation: () => Promise<unknown>,
+    success: { area: NoticeArea; text: string },
     context?: string,
   ): Promise<boolean> {
     setError('')
+    setNotice(null)
     setErrorContext(
       context ??
         (document.activeElement?.closest('[role="dialog"]')
@@ -322,6 +337,7 @@ export default function PlanningPage({
     setBusy(true)
     try {
       await operation()
+      setNotice(success)
       setConfirmation(null)
       setCancelTask(null)
       setCancelReason('')
@@ -346,6 +362,7 @@ export default function PlanningPage({
     event.preventDefault()
     const created = await act(
       () => client.createPlan(projectId, { name: planName }),
+      { area: 'plans', text: `已建立計畫「${planName.trim()}」。` },
       'plan-create',
     )
     if (created) setPlanName('')
@@ -355,6 +372,7 @@ export default function PlanningPage({
     event.preventDefault()
     const saved = await act(
       () => client.createZone(projectId, zoneName),
+      { area: 'zones', text: `已新增分區「${zoneName.trim()}」。` },
       'zone',
     )
     if (saved) {
@@ -368,6 +386,7 @@ export default function PlanningPage({
     if (!renamingZone) return
     const saved = await act(
       () => client.renameZone(projectId, renamingZone.id, zoneName),
+      { area: 'zones', text: `已將分區改名為「${zoneName.trim()}」。` },
       'zone',
     )
     if (saved) {
@@ -387,6 +406,7 @@ export default function PlanningPage({
           zone_id: zones.length ? taskZoneId || null : null,
           location_text: taskLocation.trim() || null,
         }),
+      { area: 'tasks', text: '已建立草稿任務，派出後現場才看得到。' },
       'task',
     )
     if (created) {
@@ -402,6 +422,13 @@ export default function PlanningPage({
       checked ? [...current, id] : current.filter((item) => item !== id),
     )
   }
+
+  const noticeFor = (area: NoticeArea) =>
+    notice?.area === area ? (
+      <p className="tpl-notice tpl-notice-ok" role="status">
+        {notice.text}
+      </p>
+    ) : null
 
   if (accessDenied) {
     return (
@@ -449,6 +476,7 @@ export default function PlanningPage({
         <>
           <section aria-labelledby="zones-heading">
             <h2 id="zones-heading">專案分區</h2>
+            {noticeFor('zones')}
             {zonesDenied && (
               <p role="status">沒有讀取分區的權限；其他計畫功能仍可使用。</p>
             )}
@@ -525,8 +553,10 @@ export default function PlanningPage({
                 <button
                   disabled={busy || readOnly}
                   onClick={() =>
-                    confirm(`刪除分區「${zone.name}」？`, () =>
-                      client.deleteZone(projectId, zone.id),
+                    confirm(
+                      `刪除分區「${zone.name}」？`,
+                      () => client.deleteZone(projectId, zone.id),
+                      { area: 'zones', text: `已刪除分區「${zone.name}」。` },
                     )
                   }
                   type="button"
@@ -604,13 +634,17 @@ export default function PlanningPage({
 
           <section aria-labelledby="plans-heading">
             <h2 id="plans-heading">查核計畫</h2>
+            {noticeFor('plans')}
             {plans.length === 0 ? <p>目前沒有計畫。</p> : null}
             <ul>
               {plans.map((plan) => (
                 <li key={plan.id}>
                   <button
                     aria-current={selectedPlanId === plan.id}
-                    onClick={() => setSelectedPlanId(plan.id)}
+                    onClick={() => {
+                      setNotice(null)
+                      setSelectedPlanId(plan.id)
+                    }}
                     type="button"
                   >
                     {plan.name}（{PLAN_STATUS[plan.status]}）
@@ -663,6 +697,7 @@ export default function PlanningPage({
             <section aria-labelledby="plan-detail-heading">
               <h2 id="plan-detail-heading">{selectedPlanDetail.name}</h2>
               <p>計畫狀態：{PLAN_STATUS[selectedPlanDetail.status]}</p>
+              {noticeFor('plan-detail')}
               {!readOnly && (
                 <>
                   <button
@@ -687,6 +722,13 @@ export default function PlanningPage({
                           selectedPlan.status === 'ARCHIVED'
                             ? client.unarchivePlan(selectedPlan.id)
                             : client.archivePlan(selectedPlan.id),
+                        {
+                          area: 'plan-detail',
+                          text:
+                            selectedPlan.status === 'ARCHIVED'
+                              ? '已取消封存計畫。'
+                              : '已封存計畫。',
+                        },
                       )
                     }
                     type="button"
@@ -707,6 +749,7 @@ export default function PlanningPage({
                         client.updatePlan(selectedPlan.id, {
                           name: updatedPlanName,
                         }),
+                      { area: 'plan-detail', text: '已更新計畫名稱。' },
                       'plan-rename',
                     )
                   }}
@@ -754,6 +797,7 @@ export default function PlanningPage({
               )}
 
               <h3>任務</h3>
+              {noticeFor('tasks')}
               {(selectedPlanDetail.tasks ?? []).length === 0 ? (
                 <p>尚未建立任務。</p>
               ) : null}
@@ -787,6 +831,10 @@ export default function PlanningPage({
                                   confirm(
                                     '派出此任務？派出後現場即可查看。',
                                     () => client.dispatchTask(task.id),
+                                    {
+                                      area: 'tasks',
+                                      text: '已派出任務，現場可以查看了。',
+                                    },
                                   )
                                 }
                                 type="button"
@@ -796,8 +844,13 @@ export default function PlanningPage({
                               <button
                                 disabled={busy}
                                 onClick={() =>
-                                  confirm('永久刪除此草稿任務？', () =>
-                                    client.deleteDraftTask(task.id),
+                                  confirm(
+                                    '永久刪除此草稿任務？',
+                                    () => client.deleteDraftTask(task.id),
+                                    {
+                                      area: 'tasks',
+                                      text: '已刪除草稿任務。',
+                                    },
                                   )
                                 }
                                 type="button"
@@ -855,8 +908,10 @@ export default function PlanningPage({
                             <button
                               disabled={busy}
                               onClick={() =>
-                                confirm('恢復此任務至取消前狀態？', () =>
-                                  client.restoreTask(task.id),
+                                confirm(
+                                  '恢復此任務至取消前狀態？',
+                                  () => client.restoreTask(task.id),
+                                  { area: 'tasks', text: '已恢復任務。' },
                                 )
                               }
                               type="button"
@@ -881,6 +936,7 @@ export default function PlanningPage({
                                     editingLocation.locationText.trim() ||
                                     null,
                                 }),
+                              { area: 'tasks', text: '已更新任務地點。' },
                               'location',
                             )
                           }}
@@ -940,11 +996,13 @@ export default function PlanningPage({
                         <form
                           onSubmit={(event) => {
                             event.preventDefault()
-                            void act(() =>
-                              client.setSuggestedAssignee(
-                                task.id,
-                                editingAssignee.assigneeId || null,
-                              ),
+                            void act(
+                              () =>
+                                client.setSuggestedAssignee(
+                                  task.id,
+                                  editingAssignee.assigneeId || null,
+                                ),
+                              { area: 'tasks', text: '已更新建議指派。' },
                             )
                           }}
                         >
@@ -998,7 +1056,7 @@ export default function PlanningPage({
                           type="checkbox"
                           value={item.id}
                         />
-                        {item.sequence}. {item.title} — {item.instruction}
+                        {item.title} — {item.instruction}
                       </label>
                     ))}
                   </fieldset>
@@ -1084,6 +1142,7 @@ export default function PlanningPage({
               event.preventDefault()
               void act(
                 () => client.cancelTask(cancelTask.id, cancelReason),
+                { area: 'tasks', text: '已取消任務，之後可以恢復。' },
                 'dialog',
               )
             }}
@@ -1133,7 +1192,7 @@ export default function PlanningPage({
           )}
           <button
             disabled={busy || readOnly}
-            onClick={() => void act(confirmation.action)}
+            onClick={() => void act(confirmation.action, confirmation.success)}
             type="button"
           >
             確認
