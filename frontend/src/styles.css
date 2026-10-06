@@ -342,6 +342,55 @@
   min-height: 44px;
   margin: 12px 0;
 }
+.field-action-panel button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.field-action-panel button.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+.field-action-panel .button-link {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  margin: 12px 0;
+}
+.field-confirm {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+}
+.field-confirm h3 {
+  margin: 0 0 6px;
+}
+.field-confirm p {
+  margin: 0 0 8px;
+}
+.field-inline-error {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.field-action-panel .field-inline-error {
+  margin: 12px 0 0;
+  color: var(--error-text);
+}
+.field-start-ok {
+  margin: 12px 0;
+}
+.field-start-ok h3 {
+  margin: 0 0 4px;
+}
+.field-action-panel .field-start-ok p {
+  margin: 0;
+  color: inherit;
+}
+.field-detail-meta small {
+  color: var(--text-muted);
+}
 .field-profile {
   margin-top: 24px;
   border-top: 1px solid var(--border);

@@ -30,11 +30,22 @@ export interface FieldTaskPage {
   next_cursor: string | null
 }
 
+/** 詳情只給顯示名稱與「是否為本人」，不給使用者 ID 或帳號。 */
+export interface FieldPerson {
+  name_zh: string | null
+  is_me: boolean
+}
+
 export interface FieldTaskDetail extends Omit<
   FieldTask,
-  'item_summary' | 'status'
+  'item_summary' | 'status' | 'suggested_assignee'
 > {
   status: FieldTask['status'] | 'COMPLETED' | 'CANCELLED'
+  suggested_assignee: FieldPerson | null
+  /** 實際開始者；尚未開始為 null。 */
+  started_by: FieldPerson | null
+  /** 僅 CANCELLED 任務有值。 */
+  cancellation_reason: string | null
   items: Array<{
     title: string
     instruction: string | null
@@ -181,9 +192,21 @@ function isPoint(value: unknown): boolean {
   )
 }
 
+function isFieldPerson(value: unknown): value is FieldPerson {
+  return (
+    isRecord(value) &&
+    optionalText(value.name_zh) &&
+    typeof value.is_me === 'boolean'
+  )
+}
+
 function isFieldTaskDetail(value: unknown): value is FieldTaskDetail {
   if (!isRecord(value)) return false
   return (
+    (value.suggested_assignee === null ||
+      isFieldPerson(value.suggested_assignee)) &&
+    (value.started_by === null || isFieldPerson(value.started_by)) &&
+    optionalText(value.cancellation_reason) &&
     isFieldTask({
       ...value,
       status: 'PENDING',
@@ -217,6 +240,34 @@ export async function fetchFieldTaskDetail(
     throw new Error('Field task detail response has an unexpected shape')
   }
   return body
+}
+
+/**
+ * 開始查核（`POST /api/v1/inspection-tasks/{id}:start`）。後端覆核狀態、
+ * 權限與計畫封存；非 2xx 拋出帶 `status` 與 `code` 的 `FieldApiError`。
+ * 成功時只回傳後端確認的狀態，畫面不做樂觀更新。
+ */
+export async function startFieldTask(
+  taskId: string,
+): Promise<{ id: string; status: FieldTaskDetail['status'] }> {
+  const body = await request<unknown>(
+    `/inspection-tasks/${encodeURIComponent(taskId)}:start`,
+    { method: 'POST' },
+    FieldApiError,
+  )
+  if (
+    !isRecord(body) ||
+    typeof body.id !== 'string' ||
+    !['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(
+      String(body.status),
+    )
+  ) {
+    throw new Error('Start task response has an unexpected shape')
+  }
+  return {
+    id: body.id,
+    status: body.status as FieldTaskDetail['status'],
+  }
 }
 
 export async function fetchFieldTasks(params: {

@@ -6,6 +6,7 @@ import {
   FieldApiError,
   type FieldTaskDetail,
 } from './api'
+import StartAction, { type TaskListChange } from './StartAction'
 
 function standardText(
   point: FieldTaskDetail['items'][number]['inspection_points'][number],
@@ -47,7 +48,13 @@ function fieldLabel(field: { name: string; unit: string | null }) {
   return `${field.name}${field.unit ? `（${field.unit}）` : ''}`
 }
 
-export default function TaskDetail({ taskId }: { taskId: string }) {
+export default function TaskDetail({
+  taskId,
+  onListChange,
+}: {
+  taskId: string
+  onListChange?: (change: TaskListChange) => void
+}) {
   const location = useLocation()
   const navigate = useNavigate()
   const [task, setTask] = useState<FieldTaskDetail | null>(null)
@@ -56,6 +63,13 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
   )
   const [retry, setRetry] = useState(0)
   const back = `/field/${location.search}`
+  const heading = task
+    ? task.items.length
+      ? task.items.length > 1
+        ? `${task.items[0].title} 等 ${task.items.length} 項`
+        : task.items[0].title
+      : '查核任務'
+    : ''
 
   useEffect(() => {
     let active = true
@@ -143,13 +157,7 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
                 }[task.status]
               }
             </span>
-            <h1>
-              {task.items.length
-                ? task.items.length > 1
-                  ? `${task.items[0].title} 等 ${task.items.length} 項`
-                  : task.items[0].title
-                : '查核任務'}
-            </h1>
+            <h1>{heading}</h1>
             <p className="field-detail-project">{task.project_name}</p>
             <div className="field-detail-meta">
               <strong>查核地點</strong>
@@ -161,6 +169,11 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
             <div className="field-detail-meta">
               <strong>建議指派</strong>
               <span>{task.suggested_assignee?.name_zh ?? '未指定'}</span>
+              {task.status === 'PENDING' &&
+                task.suggested_assignee &&
+                !task.suggested_assignee.is_me && (
+                  <small>你也可以協助開始此任務；會記錄實際開始者。</small>
+                )}
             </div>
             <div className="field-detail-meta">
               <strong>派送時間</strong>
@@ -215,21 +228,18 @@ export default function TaskDetail({ taskId }: { taskId: string }) {
           ))}
           <section className="field-action-panel" aria-label="任務操作">
             <h2>任務操作</h2>
-            <p>
-              {
-                {
-                  PENDING: '看完需求後開始查核。',
-                  IN_PROGRESS: '查核進行中。',
-                  COMPLETED: '查核已完成，可查看需求。',
-                  CANCELLED: '任務已取消，可查看需求。',
-                }[task.status]
+            <StartAction
+              task={task}
+              title={heading}
+              back={back}
+              onTask={setTask}
+              onListChange={onListChange}
+              onUnauthorized={() =>
+                navigate('/login', {
+                  state: { from: location.pathname + location.search },
+                })
               }
-            </p>
-            {task.status === 'PENDING' && (
-              <button type="button" disabled>
-                開始查核（下一步開放）
-              </button>
-            )}
+            />
             <p>填寫結果與照片上傳將在後續版本提供。</p>
           </section>
         </>

@@ -5,6 +5,7 @@ import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { isForbidden } from '../http'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
+import type { TaskListChange } from './StartAction'
 import TaskDetail from './TaskDetail'
 
 type Scope = 'mine' | 'all'
@@ -17,6 +18,27 @@ type ListState = {
 }
 
 const PAGE_SIZE = 10
+
+/**
+ * 把詳情頁已由後端確認的結果套到清單記憶，返回時卡片狀態正確，
+ * 同時保留範圍、狀態、已載入頁數與捲動位置。
+ */
+function applyListChange(
+  memory: Map<string, ListState>,
+  change: TaskListChange,
+) {
+  for (const [key, saved] of memory) {
+    const filter = key.split(':')[2]
+    const items = saved.items.flatMap((task) => {
+      if (task.id !== change.id) return [task]
+      if ('removed' in change) return []
+      // 待開始篩選裡的任務開始後已不符合篩選，與後端查詢結果一致。
+      if (filter === 'PENDING') return []
+      return [{ ...task, status: change.status }]
+    })
+    memory.set(key, { ...saved, items })
+  }
+}
 
 function taskTitle(task: FieldTask) {
   const { first_title: first, item_count: count } = task.item_summary
@@ -59,7 +81,11 @@ export default function FieldPage() {
       <main>
         {typeof notice === 'string' && <p role="status">{notice}</p>}
         {detailId ? (
-          <TaskDetail key={detailId} taskId={detailId} />
+          <TaskDetail
+            key={detailId}
+            taskId={detailId}
+            onListChange={(change) => applyListChange(listMemory, change)}
+          />
         ) : (
           <TaskList
             key={`${user.id}:${location.search}`}
