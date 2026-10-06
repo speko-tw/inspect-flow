@@ -873,6 +873,36 @@ describe('admin project members', () => {
     expect(screen.getByLabelText(/使用者/)).toHaveValue(anna.id)
   })
 
+  it('maps the server company mismatch 422 to the user field', async () => {
+    // 前端候選清單已限制同公司；伺服器仍會再檢查一次（例如對方剛換公司）。
+    projectFetch({
+      office: true,
+      failWith: {
+        match: /\/members$/,
+        method: 'POST',
+        code: contract.company_mismatch_error.code,
+        status: contract.company_mismatch_error.status,
+      },
+    })
+    renderAt('/admin/projects/project-1/members', officeUser)
+    await screen.findByText('目前沒有成員。')
+
+    fireEvent.change(screen.getByLabelText(/使用者/), {
+      target: { value: anna.id },
+    })
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(
+      await screen.findByText('只能加入和你同公司的使用者，請重新選擇。'),
+    ).toBeVisible()
+    expect(screen.getByLabelText(/使用者/)).toHaveFocus()
+    expect(screen.getByLabelText('查核員')).toBeChecked()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('edits roles on a separate screen and requires at least one role', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/admin/projects/project-1/members')

@@ -29,6 +29,8 @@ import './ProjectMembers.css'
 
 const ROLES_REQUIRED_CODE = 'project.member_roles_required'
 const ROLES_REQUIRED_TEXT = '請至少選一個角色。'
+const COMPANY_MISMATCH_CODE = 'project.member_company_mismatch'
+const COMPANY_MISMATCH_TEXT = '只能加入和你同公司的使用者，請重新選擇。'
 
 // 訊息只顯示在發生的地方，並在下一次操作前清掉，不殘留舊訊息。
 type Scope = 'add' | 'edit' | 'remove'
@@ -63,6 +65,13 @@ function failure(caught: unknown): Loaded<never> {
 
 function dataOf<T>(state: Loaded<T[]>): T[] {
   return state.status === 'ready' ? state.data : []
+}
+
+function isCompanyMismatch(caught: unknown): boolean {
+  return (
+    caught instanceof ManagementApiError &&
+    caught.code === COMPANY_MISMATCH_CODE
+  )
 }
 
 function sameSet(a: string[], b: string[]): boolean {
@@ -178,6 +187,10 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       if (isRolesRequired(caught)) {
         setRolesError(ROLES_REQUIRED_TEXT)
         addRolesRef.current?.focus()
+      } else if (isCompanyMismatch(caught)) {
+        // 伺服器端的同公司檢查：錯誤顯示在使用者欄，已選的角色保留。
+        setUserError(COMPANY_MISMATCH_TEXT)
+        userRef.current?.focus()
       } else {
         setMessage({ scope: 'add', text: managementErrorMessage(caught) })
       }
