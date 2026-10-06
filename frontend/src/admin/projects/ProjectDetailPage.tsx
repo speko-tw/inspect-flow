@@ -312,6 +312,17 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     )
   }
 
+  // 成員列表是判斷權限的依據（沒有管理權限時它回 403）；先等它回來，
+  // 避免候選、角色的失敗訊息在權限訊息出現前閃一下。
+  if (membersState.status === 'loading' && !editing) {
+    return (
+      <section aria-labelledby="project-heading">
+        <h2 id="project-heading">成員</h2>
+        <p>載入中…</p>
+      </section>
+    )
+  }
+
   if (editing) {
     return (
       <section aria-labelledby="project-heading">
