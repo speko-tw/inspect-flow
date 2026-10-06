@@ -68,7 +68,7 @@
 | ADM-AC19 | 專案清單測試建立成功導向新首頁、重複代號仍已儲存警告顯示且可關閉、每列「開啟專案」及「成員」各自連至正確區段 |
 | ADM-AC20 | `backend/tests/api/test_projects.py`：零角色加入／取代回 422 且資料不變、帶角色成功、無權限先 403；同檔契約測試讀取 `frontend/src/admin/projects/fixtures/member-roles-contract.json`，驗證真 API 的欄位集合與錯誤碼和前端 mock 一致（RG-M22） |
 | ADM-AC21、22 | `ProjectsAdmin.test.tsx` 與 `roleDescriptions.test.ts`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、角色白話說明、修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
-| ADM-AC23 | `backend/tests/api/test_projects.py`：同公司／跨公司不洩漏、已加入與停用者排除、無公司呼叫者為空、Admin 看全部、欄位與契約 fixture 一致、cursor、權限（401／403／他專案 403／404）、全域 `/users`、`/roles` 仍 403、查詢數不隨資料增加；`test_route_access.py` 登記兩條新路由；`ProjectsAdmin.test.tsx`：內業以點擊加入（必選角色）、修改角色、移出，全程不呼叫全域 `/users`、`/roles`，候選或角色失敗時成員列表仍顯示並可重新載入，無權限者看不到操作；SQLite 真後端、Vite 與無頭瀏覽器以內業帳號走查 1280px／360px，記錄 HTTP 狀態與截圖 |
+| ADM-AC23 | `backend/tests/api/test_projects.py`：同公司／跨公司不洩漏、已加入與停用者排除、無公司呼叫者為空、Admin 看全部、欄位與契約 fixture 一致、cursor、權限（401／403／他專案 403／404）、全域 `/users`、`/roles` 仍 403、非 Admin 加入他公司或無公司對象回 422 與專用錯誤碼 而 Admin 不受限、查詢數不隨資料增加；`test_route_access.py` 登記兩條新路由；`ProjectsAdmin.test.tsx`：內業以點擊加入（必選角色）、修改角色、移出，全程不呼叫全域 `/users`、`/roles`，伺服器 422 公司不符對應到使用者欄；候選或角色失敗時成員列表仍顯示並可重新載入，無權限者看不到操作；SQLite 真後端、Vite 與無頭瀏覽器以內業帳號走查 1280px／360px，記錄 HTTP 狀態與截圖 |
 | ADM-AC14 | UI 測試驗證一次性密碼結果／離頁清除、三種高風險操作的取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通流程並記錄 HTTP 狀態與桌面／360px 截圖 |
 
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。
