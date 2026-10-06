@@ -42,6 +42,29 @@ describe('landingPath (#480)', () => {
       '/field',
     ],
     [
+      'template admin only',
+      {
+        has_office_access: false,
+        has_field_access: false,
+        has_template_access: true,
+      },
+      '/admin/templates',
+    ],
+    [
+      'template admin who also has field access',
+      {
+        has_office_access: false,
+        has_field_access: true,
+        has_template_access: true,
+      },
+      '/field',
+    ],
+    [
+      'template admin who also has office access',
+      { has_office_access: true, has_template_access: true },
+      '/admin/projects',
+    ],
+    [
       'admin who also has office access',
       { is_admin: true, has_office_access: true },
       '/admin',

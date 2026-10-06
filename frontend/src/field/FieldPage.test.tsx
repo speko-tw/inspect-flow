@@ -117,6 +117,35 @@ describe('今日任務首頁', () => {
     expect(screen.queryByRole('link', { name: '專案管理' })).toBeNull()
   })
 
+  it('範本管理權限在頂端列與無權限區塊各有入口，兩種權限都有就都顯示（#480）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        ),
+      ),
+    )
+    renderPage({
+      user: {
+        has_field_access: false,
+        has_office_access: true,
+        has_template_access: true,
+      },
+    })
+
+    expect(
+      await screen.findByRole('link', { name: '前往專案管理' }),
+    ).toHaveAttribute('href', '/admin/projects')
+    expect(screen.getByRole('link', { name: '前往範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
+    expect(screen.getByRole('link', { name: '專案管理' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '範本管理' })).toBeVisible()
+  })
+
   it('預設查本人，切換範圍與狀態會傳後端參數', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toContain('/api/v1/field/inspection-tasks')

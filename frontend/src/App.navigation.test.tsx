@@ -58,6 +58,13 @@ const BOTH = {
   has_field_access: true,
   has_template_access: false,
 }
+const TEMPLATE_ONLY = {
+  ...NON_ADMIN,
+  has_office_access: false,
+  has_field_access: false,
+  has_template_access: true,
+}
+const TEMPLATE_FIELD = { ...TEMPLATE_ONLY, has_field_access: true }
 const NOBODY = {
   ...NON_ADMIN,
   has_office_access: false,
@@ -351,6 +358,8 @@ describe('依後端存取摘要決定落點（#480）', () => {
     ['純現場', MEMBER, '今日任務'],
     ['兩者皆有', BOTH, '我的專案'],
     ['兩者皆無', NOBODY, '今日任務'],
+    ['只有範本管理員', TEMPLATE_ONLY, '範本管理'],
+    ['範本管理員兼現場', TEMPLATE_FIELD, '今日任務'],
   ] as const
 
   async function changePassword() {
@@ -427,6 +436,28 @@ describe('依後端存取摘要決定落點（#480）', () => {
     ])
   })
 
+  it('範本管理員兼現場：現場頁有範本管理入口，點了進得去（#480）', async () => {
+    stubBackend(TEMPLATE_FIELD)
+    renderApp('/')
+
+    await screen.findByRole('heading', { name: '今日任務' })
+    expect(screen.queryByRole('link', { name: '專案管理' })).toBeNull()
+    fireEvent.click(screen.getByRole('link', { name: '範本管理' }))
+    expect(
+      await screen.findByRole('heading', { name: '範本管理' }),
+    ).toBeVisible()
+  })
+
+  it('只有範本管理員的 /field 說明頁有前往範本管理，沒有前往專案管理', async () => {
+    stubBackend(TEMPLATE_ONLY)
+    renderApp('/field')
+
+    expect(
+      await screen.findByRole('link', { name: '前往範本管理' }),
+    ).toHaveAttribute('href', '/admin/templates')
+    expect(screen.queryByRole('link', { name: '前往專案管理' })).toBeNull()
+  })
+
   it('兩者皆無的帳號在 /field 看到權限說明，沒有前往專案管理', async () => {
     stubBackend(NOBODY)
     renderApp('/')
@@ -445,6 +476,7 @@ describe('出路與 404（#480）', () => {
     ['純現場', MEMBER, '返回今日任務', '/field'],
     ['兩者皆有', BOTH, '返回我的專案', '/admin/projects'],
     ['兩者皆無', NOBODY, '返回今日任務', '/field'],
+    ['只有範本管理員', TEMPLATE_ONLY, '返回範本管理', '/admin/templates'],
   ] as const)('變更密碼頁的返回連結：%s', async (_n, user, name, href) => {
     stubBackend(user)
     renderApp('/change-password')

@@ -1123,6 +1123,19 @@ describe('admin user and company pages', () => {
       )
     })
 
+    it('explains template management access on /admin/templates', () => {
+      managementFetch()
+      renderAdmin('/admin/templates', false, {
+        has_office_access: true,
+        has_field_access: false,
+        has_template_access: false,
+      })
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '只有系統管理者或範本管理員可以使用範本管理。',
+      )
+    })
+
     it('does not route to template management without access', () => {
       managementFetch()
       renderAdmin('/admin/templates', false, {

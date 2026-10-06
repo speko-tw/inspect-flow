@@ -11,7 +11,7 @@ import {
 
 import type { CurrentUser } from '../auth/api'
 import LogoutButton from '../auth/LogoutButton'
-import { landingLabel } from '../auth/landing'
+import { landingLabel, landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
@@ -217,11 +217,7 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     user.has_field_access ? { to: '/field', label: '現場任務' } : null,
     { to: '/change-password', label: '變更密碼' },
   ].filter((item): item is { to: string; label: string } => item !== null)
-  const indexTarget = user.has_office_access
-    ? '/admin/projects'
-    : user.has_template_access
-      ? '/admin/templates'
-      : '/field'
+  const indexTarget = landingPath(user)
   const projectRoutes = (
     <>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
@@ -297,7 +293,11 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
             element={
               <>
                 <h1>無權限</h1>
-                <p role="alert">只有系統管理者可以使用這個管理頁面。</p>
+                <p role="alert">
+                  {location.pathname.startsWith('/admin/templates')
+                    ? '只有系統管理者或範本管理員可以使用範本管理。'
+                    : '只有系統管理者可以使用這個管理頁面。'}
+                </p>
                 <NavLink className="button-link" to={indexTarget}>
                   返回{landingLabel(indexTarget)}
                 </NavLink>

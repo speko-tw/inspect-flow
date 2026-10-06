@@ -75,6 +75,9 @@ export default function FieldPage() {
           {user.has_office_access && (
             <Link to="/admin/projects">專案管理</Link>
           )}
+          {user.has_template_access && (
+            <Link to="/admin/templates">範本管理</Link>
+          )}
           <Link to="/change-password" state={{ from }}>
             變更密碼
           </Link>
@@ -276,6 +279,11 @@ function TaskList({
           {user.has_office_access && (
             <Link className="button-link" to="/admin/projects">
               前往專案管理
+            </Link>
+          )}
+          {user.has_template_access && (
+            <Link className="button-link" to="/admin/templates">
+              前往範本管理
             </Link>
           )}
         </section>
