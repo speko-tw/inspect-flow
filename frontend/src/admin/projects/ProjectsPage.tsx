@@ -238,7 +238,7 @@ export default function ProjectsPage() {
 
   return (
     <section aria-labelledby="projects-heading">
-      <h1 id="projects-heading">專案管理</h1>
+      <h1 id="projects-heading">專案</h1>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
       {transition && (
