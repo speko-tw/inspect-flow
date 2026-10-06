@@ -9,11 +9,13 @@ import {
   type TemplateItem,
   type TemplateSystem,
 } from '../admin/templates/api'
+import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden } from '../http'
 import { fetchMyProjects } from './api'
 import {
   applyTemplate,
+  fetchMyPermissions,
   listAllProjects,
   listProjectInspectionItems,
   ProjectTemplatesApiError,
@@ -28,21 +30,6 @@ type Selection = { type: 'category' | 'system' | 'item'; id: string }
 function formatTime(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-TW')
-}
-
-function numericStandardText(
-  standard: TemplateItem['inspection_points'][number]['numeric_standard'],
-): string | null {
-  if (!standard) return null
-  const unit = standard.unit ? ` ${standard.unit}` : ''
-  if (standard.condition === 'range') {
-    return standard.range_form === 'interval'
-      ? `${standard.lower_bound ?? ''}～${standard.upper_bound ?? ''}${unit}`
-      : `${standard.value ?? ''} ± ${standard.tolerance ?? ''}${unit}`
-  }
-  const operator =
-    standard.condition === '<=' ? '≤' : standard.condition === '>=' ? '≥' : '='
-  return `${operator} ${standard.value ?? ''}${unit}`
 }
 
 function pointEvidenceText(
@@ -129,30 +116,35 @@ export default function ProjectTemplatesPage() {
   useEffect(() => {
     let active = true
     async function loadProject() {
+      // TPL-R09: only Admin or a template manager may save as a template.
+      // The server says which; any failure to learn it means "not allowed".
+      const canManage = await fetchMyPermissions().then(
+        (permissions) => permissions.can_manage_templates,
+        () => false,
+      )
+      if (!active) return
+      setSaveAllowed(canManage)
       try {
-        const projects = await listAllProjects()
-        if (!active) return
-        setProject(projects.find((item) => item.id === projectId) ?? null)
-        setSaveAllowed(true)
-      } catch {
-        try {
-          const projects = await fetchMyProjects()
-          if (active) {
-            const found = projects.find((item) => item.id === projectId)
-            if (found) setSaveAllowed(true)
-            setProject(
-              found
-                ? {
-                    id: found.id,
-                    project_code: found.project_code,
-                    name: found.name,
-                  }
-                : null,
-            )
-          }
-        } catch {
-          if (active) setProject(null)
+        // `GET /projects` is 403 for everyone else, so only managers use
+        // it; members read their own projects instead of falling back
+        // after a 403.
+        const projects = canManage
+          ? await listAllProjects()
+          : await fetchMyProjects()
+        if (active) {
+          const found = projects.find((item) => item.id === projectId)
+          setProject(
+            found
+              ? {
+                  id: found.id,
+                  project_code: found.project_code,
+                  name: found.name,
+                }
+              : null,
+          )
         }
+      } catch {
+        if (active) setProject(null)
       } finally {
         if (active) setProjectLoading(false)
       }
@@ -652,9 +644,7 @@ export default function ProjectTemplatesPage() {
                                   {point.numeric_standard && (
                                     <p>
                                       數值標準：{point.title}{' '}
-                                      {numericStandardText(
-                                        point.numeric_standard,
-                                      )}
+                                      {numericSummary(point)}
                                     </p>
                                   )}
                                   {point.text_standard && (

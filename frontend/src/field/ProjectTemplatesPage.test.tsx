@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
+import permissionsContract from './fixtures/my-permissions-contract.json'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
 import {
   ProjectTemplatesApiError,
@@ -78,6 +79,7 @@ function mockApi(
     templates?: (typeof TEMPLATE)[]
     projectItems?: ProjectInspectionItem[]
     canSave?: boolean
+    permissions?: 'error' | 'malformed'
     denyCategories?: boolean
     secondSystemTemplate?: boolean
   } = {},
@@ -85,6 +87,25 @@ function mockApi(
   let saveRequests = 0
   const calls = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
+    if (url === '/api/v1/me/permissions') {
+      if (options.permissions === 'error') {
+        return Response.json(
+          { error: { code: 'internal.error' } },
+          { status: 500 },
+        )
+      }
+      // The body is built from the contract fixture shared with the
+      // backend test, so a drifting key set fails both sides (RG-M22).
+      const body = Object.fromEntries(
+        permissionsContract.response_keys.map((key) => [
+          key,
+          options.permissions === 'malformed'
+            ? 'yes'
+            : Boolean(options.canSave),
+        ]),
+      )
+      return Response.json(body)
+    }
     if (url === '/api/v1/projects?limit=100') {
       return options.canSave
         ? Response.json({
@@ -578,9 +599,9 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
   })
 
-  it('專案成員可發起存為範本，寫入 403 後停用並顯示權限訊息', async () => {
+  it('有權限者在權限被收回後寫入 403，停用並顯示權限訊息', async () => {
     mockApi({
-      canSave: false,
+      canSave: true,
       projectItems: [PROJECT_ITEM],
       saveResponse: Response.json(
         { error: { code: 'permission.denied' } },
@@ -600,5 +621,56 @@ describe('專案範本套用與存為範本（#429）', () => {
       '目前只能瀏覽查核項目。',
     )
     expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
+  })
+
+  describe('存為範本的顯示權限（#482，TPL-R09）', () => {
+    const urls = (calls: ReturnType<typeof mockApi>) =>
+      calls.mock.calls.map(([input]) => String(input))
+
+    it('一般專案成員看不到存為範本，且不靠 403 降級讀專案', async () => {
+      const calls = mockApi({ canSave: false, projectItems: [PROJECT_ITEM] })
+      renderPage()
+      expect(await screen.findByText('管線查核')).toBeInTheDocument()
+      expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: '存為範本' }),
+      ).not.toBeInTheDocument()
+      expect(urls(calls)).toContain('/api/v1/me/projects')
+      expect(urls(calls)).not.toContain('/api/v1/projects?limit=100')
+    })
+
+    it('Admin 或範本管理員（後端回可管理）看得到存為範本', async () => {
+      const calls = mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+      renderPage()
+      expect(
+        await screen.findByRole('button', { name: '存為範本' }),
+      ).toBeInTheDocument()
+      expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+      expect(urls(calls)).toContain('/api/v1/projects?limit=100')
+      expect(urls(calls)).not.toContain('/api/v1/me/projects')
+    })
+
+    it.each(['error', 'malformed'] as const)(
+      '權限查詢失敗（%s）時一律不顯示存為範本',
+      async (permissions) => {
+        mockApi({
+          canSave: true,
+          permissions,
+          projectItems: [PROJECT_ITEM],
+        })
+        renderPage()
+        expect(await screen.findByText('管線查核')).toBeInTheDocument()
+        expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+        expect(
+          screen.queryByRole('button', { name: '存為範本' }),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    it('權限回應鍵集合與後端契約一致', () => {
+      expect(permissionsContract.response_keys).toEqual([
+        'can_manage_templates',
+      ])
+    })
   })
 })

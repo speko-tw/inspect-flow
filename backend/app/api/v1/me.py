@@ -8,9 +8,16 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.access import require_login_access
+from app.auth.access import is_admin_or_system_role, require_login_access
 from app.auth.dependencies import get_db
-from app.models import Project, ProjectMember, ProjectMemberRole, Role, User
+from app.models import (
+    Project,
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    SystemRoleCode,
+    User,
+)
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -66,3 +73,26 @@ def list_my_projects(
             )
         )
     return result
+
+
+class MyPermissionsResponse(BaseModel):
+    """What the current user may do across projects (#482)."""
+
+    can_manage_templates: bool
+
+
+@router.get("/permissions", response_model=MyPermissionsResponse)
+def get_my_permissions(
+    user: User = Depends(require_login_access),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+) -> MyPermissionsResponse:
+    """``can_manage_templates`` is true for Admin and for a holder of
+    the fixed ``template_admin`` system role -- the same check that
+    guards saving a project item as a template and listing all
+    projects (TPL-R09).
+    """
+    return MyPermissionsResponse(
+        can_manage_templates=is_admin_or_system_role(
+            db, user, SystemRoleCode.TEMPLATE_ADMIN
+        )
+    )

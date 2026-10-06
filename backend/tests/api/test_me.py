@@ -2,22 +2,26 @@
 profile fields and ``GET /me/projects`` (permission and data scope).
 """
 
+import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import User
+from app.models import SystemRoleCode, User
 from app.services.companies import create_company
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
+from app.services.system_roles import assign_system_role
 from app.services.users import create_user
 from tests.db.conftest import create_root_user_with_company
 
 ME_PROJECTS = "/api/v1/me/projects"
+ME_PERMISSIONS = "/api/v1/me/permissions"
 
 
 def _client_for(db_session: Session, make_client, user: User) -> TestClient:
@@ -195,3 +199,44 @@ def test_my_projects_is_empty_for_admin_without_membership(seed):
 
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_my_permissions_requires_login(seed):
+    resp = seed["anonymous_client"].get(ME_PERMISSIONS)
+
+    assert resp.status_code == 401
+    assert resp.json()["error"]["code"] == "auth.not_authenticated"
+
+
+def test_my_permissions_template_management_follows_admin_or_role(
+    seed, db_session
+):
+    # Project members (alice, even with a project role) cannot manage
+    # templates; Admin can; a template_admin holder can (#482).
+    assert seed["alice_client"].get(ME_PERMISSIONS).json() == {
+        "can_manage_templates": False
+    }
+    assert seed["admin_client"].get(ME_PERMISSIONS).json() == {
+        "can_manage_templates": True
+    }
+
+    assign_system_role(
+        db_session, seed["bob"].id, SystemRoleCode.TEMPLATE_ADMIN
+    )
+    db_session.commit()
+
+    assert seed["bob_client"].get(ME_PERMISSIONS).json() == {
+        "can_manage_templates": True
+    }
+
+
+def test_my_permissions_keys_match_the_frontend_contract_fixture(seed):
+    fixture = (
+        Path(__file__).parents[3]
+        / "frontend/src/field/fixtures/my-permissions-contract.json"
+    )
+    expected = json.loads(fixture.read_text(encoding="utf-8"))
+
+    body = seed["alice_client"].get(ME_PERMISSIONS).json()
+
+    assert sorted(body) == sorted(expected["response_keys"])

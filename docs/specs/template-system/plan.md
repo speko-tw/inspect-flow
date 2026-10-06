@@ -29,6 +29,7 @@
 - #389（負責人依 #387 指示）：Admin 與範本管理員可管理範本庫、存成範本及跨專案瀏覽；一般專案成員維持 403。此變更採用 `backend/app/auth/access.py` 的共用授權判斷，並由 TPL-AC08 API／契約測試及前端 Admin 控制項測試驗證。
 - TPL-AC07 在本規格只驗收範本端每項次恰好一筆必填照片需求（多送一筆回 422）、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。
+- #482（v0.3.0 走查缺陷修正）：新增 `GET /api/v1/me/permissions` 與 TPL-AC23～TPL-AC24；驗證由 `backend/tests/api/test_me.py`、`backend/tests/contract/test_route_access.py`、`ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx` 負責，契約鍵集合由 `frontend/src/field/fixtures/my-permissions-contract.json` 前後端共用。
 
 ## 並行分組
 
