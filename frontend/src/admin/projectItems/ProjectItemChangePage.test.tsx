@@ -283,3 +283,82 @@ describe('ProjectItemChangePage', () => {
     expect(body).not.toHaveProperty('reinspect')
   })
 })
+
+describe('ProjectItemChangePage numeric standard display (#482)', () => {
+  function numericPoint(
+    standard: Partial<NonNullable<InspectionPoint['numeric_standard']>>,
+  ): InspectionPoint {
+    // Read shape of a project item: ids are persisted ids and the
+    // standard is bound to one number field (TPL-R11).
+    return {
+      id: 'point-1',
+      sequence: 1,
+      title: '坡度',
+      instruction: '',
+      text_standard: null,
+      numeric_standard: {
+        value: null,
+        condition: 'range',
+        unit: '%',
+        tolerance: null,
+        range_form: 'interval',
+        lower_bound: '1.0',
+        upper_bound: '2.0',
+        measurement_field_id: 'field-1',
+        ...standard,
+      },
+      measurement_fields: [
+        {
+          id: 'field-1',
+          name: '坡度',
+          field_type: 'number',
+          unit: '%',
+        },
+      ],
+      evidence_requirements: [{ min_count: 1 }],
+    }
+  }
+
+  async function showStandard(standardPoint: InspectionPoint) {
+    const api = apiWith({
+      loadPreview: vi.fn(async () => ({
+        ...structuredClone(preview),
+        item: { ...preview.item, inspection_points: [standardPoint] },
+      })),
+    })
+    renderPage(api)
+    return screen.findByText(/^數值標準：/)
+  }
+
+  it('shows an interval standard as lower～upper with its unit', async () => {
+    const line = await showStandard(numericPoint({}))
+    expect(line).toHaveTextContent('數值標準：1.0～2.0 %')
+    expect(line).not.toHaveTextContent('未指定')
+  })
+
+  it('shows a tolerance standard as value ± tolerance', async () => {
+    const line = await showStandard(
+      numericPoint({
+        range_form: 'tolerance',
+        value: '10',
+        tolerance: '0.5',
+        lower_bound: null,
+        upper_bound: null,
+      }),
+    )
+    expect(line).toHaveTextContent('數值標準：10 ± 0.5 %')
+  })
+
+  it('shows single-sided standards with their operator', async () => {
+    const line = await showStandard(
+      numericPoint({
+        condition: '>=',
+        value: '5',
+        range_form: null,
+        lower_bound: null,
+        upper_bound: null,
+      }),
+    )
+    expect(line).toHaveTextContent('數值標準：≥ 5 %')
+  })
+})
