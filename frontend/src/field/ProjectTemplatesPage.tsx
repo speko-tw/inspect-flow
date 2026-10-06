@@ -323,6 +323,24 @@ export default function ProjectTemplatesPage() {
     setMobilePane('list')
   }
 
+  // 存為範本後重新載入目標系統的範本，範本樹的項目數才會跟著更新；
+  // 重新載入失敗就先隱藏該系統的數字，下次選取時再載入，不顯示舊數字。
+  async function refreshSystemTemplates(systemId: string) {
+    try {
+      const result = await getSystemTemplates(systemId)
+      setTemplatesBySystem((current) => ({
+        ...current,
+        [systemId]: result.items,
+      }))
+    } catch {
+      setLoadedSystems((current) => {
+        const next = new Set(current)
+        next.delete(systemId)
+        return next
+      })
+    }
+  }
+
   async function submitSave() {
     if (!saveSource || selected?.type !== 'system' || busy || saveDenied) {
       return
@@ -332,6 +350,7 @@ export default function ProjectTemplatesPage() {
     setNotice('')
     try {
       await saveProjectItemAsTemplate(projectId, saveSource.id, selected.id)
+      await refreshSystemTemplates(selected.id)
       const destination = systems.find((system) => system.id === selected.id)
       const category = categories.find(
         (item) => item.id === destination?.category_id,
