@@ -277,6 +277,9 @@ export default function ProjectItemChangePage({
   if (loading) return <p>載入中…</p>
 
   const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
+  const hasDraft = preview
+    ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
+    : false
   const needsChoice = preview
     ? preview.affectedTasks.length > 0 && !draftOnly
     : false
@@ -397,7 +400,7 @@ export default function ProjectItemChangePage({
                 <>
                   <p>
                     {'有任務已經派出，請先選擇這次修改要不要重新查核。'}
-                    {'草稿任務不受選擇影響，會直接更新為新內容；'}
+                    {hasDraft && '草稿任務不受選擇影響，會直接更新為新內容；'}
                     {'已核發的報告也不受影響。'}
                   </p>
                   <p>

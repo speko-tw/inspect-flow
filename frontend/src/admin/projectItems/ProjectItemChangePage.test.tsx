@@ -243,6 +243,39 @@ describe('ProjectItemChangePage', () => {
     ).toBeInTheDocument()
   })
 
+  it('mentions drafts only when a draft Task is affected (#487)', async () => {
+    const pendingOnly = structuredClone(preview)
+    pendingOnly.affectedTasks = [
+      { ...pendingOnly.affectedTasks[0], id: 'pending', status: 'PENDING' },
+    ]
+    const first = renderPage(
+      apiWith({
+        loadPreview: vi.fn(async () => structuredClone(pendingOnly)),
+      }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      '有任務已經派出，請先選擇',
+    )
+    expect(screen.getByRole('dialog')).not.toHaveTextContent(
+      '草稿任務不受選擇影響',
+    )
+    first.unmount()
+
+    const mixed = structuredClone(preview)
+    mixed.affectedTasks = [
+      mixed.affectedTasks[0],
+      { ...mixed.affectedTasks[0], id: 'pending', status: 'PENDING' },
+    ]
+    renderPage(
+      apiWith({ loadPreview: vi.fn(async () => structuredClone(mixed)) }),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      '草稿任務不受選擇影響',
+    )
+  })
+
   it('corrects text without reinspection', async () => {
     const api = apiWith({
       update: vi.fn(async () => ({
