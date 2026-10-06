@@ -27,6 +27,7 @@ from app.models import (
     SystemRoleCode,
     User,
 )
+from app.services.companies import create_company
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
@@ -1018,3 +1019,228 @@ def test_list_members_permission_and_missing_project(project_api):
     )
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "resource.not_found"
+
+
+def _contract_fixture() -> dict:
+    return json.loads(
+        (
+            Path(__file__).parents[3]
+            / "frontend/src/admin/projects/fixtures"
+            / "member-roles-contract.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
+def _candidate_world(db_session: Session, project_api: ProjectApiContext):
+    """The manager joins company A; users around them cover each rule."""
+    company_a = create_company(db_session, name="示範公司甲")
+    company_b = create_company(db_session, name="示範公司乙")
+    actor = project_api["actor"]
+    project = project_api["project"]
+    assert isinstance(actor, User)
+    assert isinstance(project, Project)
+    actor.company_id = company_a.id
+    users = {}
+    for key, company, active in (
+        ("same_b", company_a, True),
+        ("same_a", company_a, True),
+        ("same_joined", company_a, True),
+        ("same_inactive", company_a, False),
+        ("other_company", company_b, True),
+    ):
+        users[key] = create_user(
+            db_session,
+            username=f"cand.{key}",
+            email=f"cand.{key}@demo.example",
+            name_zh=f"候選 {key}",
+            company_id=company.id,
+            is_active=active,
+        )
+    add_project_member(
+        db_session, project_id=project.id, user_id=users["same_joined"].id
+    )
+    db_session.commit()
+    return users
+
+
+def test_member_candidates_are_company_scoped_for_non_admin(
+    project_api, db_session: Session
+):
+    users = _candidate_world(db_session, project_api)
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    url = f"/api/v1/projects/{project.id}/member-candidates"
+
+    response = project_api["actor_client"].get(url)
+    assert response.status_code == 200
+    body = response.json()
+    assert sorted(body) == _contract_fixture()["candidate_page_keys"]
+    # Same company only; members, inactive and other-company users are
+    # left out, and so is the caller (already a member).
+    assert [row["username"] for row in body["items"]] == [
+        "cand.same_a",
+        "cand.same_b",
+    ]
+    assert body["next_cursor"] is None
+    expected_keys = _contract_fixture()["member_candidate_item_keys"]
+    assert all(sorted(row) == expected_keys for row in body["items"])
+    assert body["items"][0]["id"] == str(users["same_a"].id)
+    assert body["items"][0]["name_zh"] == "候選 same_a"
+    serialized = json.dumps(body)
+    assert "demo.example" not in serialized
+    assert "other_company" not in serialized
+
+
+def test_member_candidates_for_admin_cover_every_company(
+    project_api, db_session: Session
+):
+    _candidate_world(db_session, project_api)
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    response = project_api["admin_client"].get(
+        f"/api/v1/projects/{project.id}/member-candidates"
+    )
+    assert response.status_code == 200
+    names = [row["username"] for row in response.json()["items"]]
+    assert "cand.other_company" in names
+    assert "cand.same_a" in names
+    assert "cand.same_joined" not in names
+    assert "cand.same_inactive" not in names
+    assert "admin" not in names
+    assert "project.manager" not in names
+
+
+def test_member_candidates_are_empty_for_a_caller_without_company(
+    project_api,
+):
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    # The default manager has no company: nobody can be offered.
+    response = project_api["actor_client"].get(
+        f"/api/v1/projects/{project.id}/member-candidates"
+    )
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "next_cursor": None}
+
+
+def test_member_candidates_follow_cursor_pages(
+    project_api, db_session: Session
+):
+    _candidate_world(db_session, project_api)
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    client = project_api["actor_client"]
+    url = f"/api/v1/projects/{project.id}/member-candidates"
+    first = client.get(url, params={"limit": 1})
+    assert [row["username"] for row in first.json()["items"]] == [
+        "cand.same_a"
+    ]
+    cursor = first.json()["next_cursor"]
+    assert cursor
+    second = client.get(url, params={"limit": 1, "cursor": cursor})
+    assert [row["username"] for row in second.json()["items"]] == [
+        "cand.same_b"
+    ]
+    assert second.json()["next_cursor"] is None
+    assert client.get(url, params={"cursor": "bad"}).status_code == 422
+    assert client.get(url, params={"limit": 0}).status_code == 422
+
+
+def test_assignable_roles_expose_only_display_fields(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(role, Role)
+    extra = create_role(
+        db_session,
+        name="現場查核",
+        permission_codes=["report.read", "evidence.read"],
+    )
+    db_session.commit()
+    url = f"/api/v1/projects/{project.id}/assignable-roles"
+
+    response = project_api["actor_client"].get(url)
+    assert response.status_code == 200
+    body = response.json()
+    assert sorted(body) == _contract_fixture()["candidate_page_keys"]
+    expected_keys = _contract_fixture()["assignable_role_item_keys"]
+    assert all(sorted(row) == expected_keys for row in body["items"])
+    by_id = {row["id"]: row for row in body["items"]}
+    assert by_id[str(role.id)]["permission_codes"] == ["project_member.manage"]
+    assert by_id[str(extra.id)]["permission_codes"] == [
+        "evidence.read",
+        "report.read",
+    ]
+    # Admin gets the same list.
+    admin = project_api["admin_client"].get(url)
+    assert admin.json() == body
+
+    first = project_api["actor_client"].get(url, params={"limit": 1})
+    assert len(first.json()["items"]) == 1
+    cursor = first.json()["next_cursor"]
+    second = project_api["actor_client"].get(
+        url, params={"limit": 1, "cursor": cursor}
+    )
+    assert first.json()["items"][0]["id"] != second.json()["items"][0]["id"]
+
+
+def test_candidate_endpoints_require_member_manage_permission(project_api):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    assert isinstance(project, Project)
+    assert isinstance(other_project, Project)
+    suffixes = ("member-candidates", "assignable-roles")
+    for suffix in suffixes:
+        path = f"/api/v1/projects/{project.id}/{suffix}"
+        assert project_api["plain_client"].get(path).status_code == 403
+        assert project_api["anonymous_client"].get(path).status_code == 401
+        # Holding the permission on one project does not cover another.
+        other = project_api["actor_client"].get(
+            f"/api/v1/projects/{other_project.id}/{suffix}"
+        )
+        assert other.status_code == 403
+        missing = project_api["admin_client"].get(
+            f"/api/v1/projects/00000000-0000-7000-8000-000000000001/{suffix}"
+        )
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "resource.not_found"
+
+
+def test_global_user_and_role_lists_stay_admin_only(project_api):
+    actor_client = project_api["actor_client"]
+    assert actor_client.get("/api/v1/users").status_code == 403
+    assert actor_client.get("/api/v1/roles").status_code == 403
+
+
+def test_candidate_endpoints_query_count_does_not_grow(
+    project_api, db_session: Session
+):
+    _candidate_world(db_session, project_api)
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    client = project_api["actor_client"]
+    company_id = project_api["actor"].company_id
+    for suffix in ("member-candidates", "assignable-roles"):
+        path = f"/api/v1/projects/{project.id}/{suffix}"
+        with _select_statements(get_engine()) as baseline:
+            assert client.get(path).status_code == 200
+        for index in range(6):
+            create_user(
+                db_session,
+                username=f"perf.{suffix}.{index}",
+                email=f"perf.{suffix}.{index}@demo.example",
+                name_zh=f"效能 {index}",
+                company_id=company_id,
+            )
+            create_role(
+                db_session,
+                name=f"效能角色 {suffix} {index}",
+                permission_codes=["report.read"],
+            )
+        db_session.commit()
+        with _select_statements(get_engine()) as expanded:
+            assert client.get(path).status_code == 200
+        assert baseline
+        assert len(expanded) == len(baseline)

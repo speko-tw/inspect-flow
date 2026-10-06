@@ -1,17 +1,18 @@
 """Project and project-member management API (DOM-R25, DOM-R40-R44)."""
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import ilike_contains, page_by_text_key
+from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
     require_admin,
     require_admin_or_system_role,
@@ -24,6 +25,7 @@ from app.models import (
     Project,
     ProjectMember,
     Role,
+    RolePermission,
     SystemRoleCode,
     User,
 )
@@ -159,6 +161,32 @@ class ProjectMemberDetailResponse(ProjectMemberResponse):
     company_id: UUID | None
     company_name: str | None
     is_active: bool
+
+
+class MemberCandidateResponse(BaseModel):
+    """A user who can be added to the project (display fields only)."""
+
+    id: UUID
+    username: str
+    name_zh: str | None
+
+
+class MemberCandidateListResponse(BaseModel):
+    items: list[MemberCandidateResponse]
+    next_cursor: str | None
+
+
+class AssignableRoleResponse(BaseModel):
+    """A role that can be assigned; codes feed the plain-language text."""
+
+    id: UUID
+    name: str
+    permission_codes: list[str]
+
+
+class AssignableRoleListResponse(BaseModel):
+    items: list[AssignableRoleResponse]
+    next_cursor: str | None
 
 
 def _get_project(db: Session, project_id: UUID) -> Project:
@@ -437,6 +465,97 @@ def list_members(
         _member_detail_response(member, *users[member.user_id])
         for member in members
     ]
+
+
+@router.get(
+    "/{project_id}/member-candidates",
+    response_model=MemberCandidateListResponse,
+)
+def list_member_candidates(
+    project_id: UUID,
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),  # noqa: B008
+    user: User = _PROJECT_MEMBER_ACCESS,
+) -> MemberCandidateListResponse:
+    """List users who can still join the project.
+
+    Active, non-system users who are not yet members. A non-Admin
+    caller only sees users of their own company (nobody when the
+    caller has no company); Admin sees every company.
+    """
+    _get_project(db, project_id)
+    filters = [
+        User.is_active.is_(True),
+        User.is_system.is_(False),
+        ~exists().where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == User.id,
+        ),
+    ]
+    if not user.is_admin:
+        if user.company_id is None:
+            return MemberCandidateListResponse(items=[], next_cursor=None)
+        filters.append(User.company_id == user.company_id)
+    result = page_by_text_key(
+        db,
+        User,
+        sort_key=User.username,
+        key_name="username",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda row: MemberCandidateResponse(
+            id=row.id, username=row.username, name_zh=row.name_zh
+        ),
+        filters=filters,
+    )
+    return MemberCandidateListResponse(**result)
+
+
+@router.get(
+    "/{project_id}/assignable-roles",
+    response_model=AssignableRoleListResponse,
+    dependencies=[_PROJECT_MEMBER_ACCESS],
+)
+def list_assignable_roles(
+    project_id: UUID,
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),  # noqa: B008
+) -> AssignableRoleListResponse:
+    """List the roles that can be assigned to project members.
+
+    Roles are system-wide (DOM-R19), so every role is assignable; this
+    only exposes the fields the member page needs, one extra query per
+    page for the permission codes.
+    """
+    _get_project(db, project_id)
+
+    def render(roles: Sequence[Role]) -> list[AssignableRoleResponse]:
+        codes: dict[UUID, list[str]] = {role.id: [] for role in roles}
+        if codes:
+            rows = db.execute(
+                select(RolePermission.role_id, RolePermission.code)
+                .where(RolePermission.role_id.in_(codes))
+                .order_by(RolePermission.code)
+            )
+            for role_id, code in rows:
+                codes[role_id].append(code)
+        return [
+            AssignableRoleResponse(
+                id=role.id, name=role.name, permission_codes=codes[role.id]
+            )
+            for role in roles
+        ]
+
+    result = page(
+        db,
+        Role,
+        cursor=cursor,
+        limit=limit,
+        serialize_batch=render,
+    )
+    return AssignableRoleListResponse(**result)
 
 
 @router.post(

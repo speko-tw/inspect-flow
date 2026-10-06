@@ -16,5 +16,8 @@
   "zero_role_error": {
     "status": 422,
     "code": "project.member_roles_required"
-  }
+  },
+  "candidate_page_keys": ["items", "next_cursor"],
+  "member_candidate_item_keys": ["id", "name_zh", "username"],
+  "assignable_role_item_keys": ["id", "name", "permission_codes"]
 }
