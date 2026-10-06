@@ -32,6 +32,9 @@ import { useCurrentUser } from './useCurrentUser'
 const PASSWORD_MIN_LENGTH = 8
 const PASSWORD_MAX_LENGTH = 128
 
+const PASSWORD_RULE_TEXT =
+  `新密碼長度為 ${PASSWORD_MIN_LENGTH}～${PASSWORD_MAX_LENGTH} 個字元，` +
+  '不限大小寫、數字或符號，也不能和目前密碼相同。'
 const MISMATCH_MESSAGE = '兩次輸入的新密碼不一致，請重新輸入。'
 const CURRENT_PASSWORD_INCORRECT_MESSAGE = '目前密碼錯誤，請再試一次。'
 const PASSWORD_INVALID_MESSAGE =
@@ -119,10 +122,14 @@ export default function ChangePasswordPage() {
             name="new-password"
             type="password"
             autoComplete="new-password"
+            aria-describedby="change-password-rule"
             required
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
           />
+          <p className="tpl-hint" id="change-password-rule">
+            {PASSWORD_RULE_TEXT}
+          </p>
         </div>
         <div>
           <label htmlFor="change-password-confirm">再輸入一次新密碼</label>
