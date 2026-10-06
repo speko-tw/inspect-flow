@@ -283,6 +283,9 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     roles.find((role) => role.id === id)?.name ??
     (rolesState.status === 'ready' ? '（未知角色）' : '（角色名稱無法顯示）')
   const reload = () => setReloadKey((key) => key + 1)
+  // 沒有可加入的人時，只顯示說明；角色勾選與加入按鈕都沒有意義。
+  const noCandidates =
+    candidatesState.status === 'ready' && candidates.length === 0
 
   const alertFor = (scope: Scope) =>
     message?.scope === scope ? <p role="alert">{message.text}</p> : null
@@ -464,54 +467,58 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
             )}
           </div>
         )}
-        {rolesState.status === 'failed' ? (
-          <div className="member-load-error">
-            <p role="alert">無法載入角色：{rolesState.message}</p>
-            <button onClick={reload} type="button">
-              重新載入
-            </button>
-          </div>
-        ) : rolesState.status === 'loading' ? (
-          <p>載入角色…</p>
-        ) : roles.length === 0 ? (
+        {!noCandidates && (
           <>
-            <p>目前沒有角色。</p>
-            <p className="member-hint">
-              {isAdmin ? (
-                <>
-                  請先到<Link to="/admin/roles">角色</Link>
-                  建立角色，才能把人加入專案。
-                </>
-              ) : (
-                '還沒有可指派的角色，請洽系統管理者建立。'
-              )}
-            </p>
+            {rolesState.status === 'failed' ? (
+              <div className="member-load-error">
+                <p role="alert">無法載入角色：{rolesState.message}</p>
+                <button onClick={reload} type="button">
+                  重新載入
+                </button>
+              </div>
+            ) : rolesState.status === 'loading' ? (
+              <p>載入角色…</p>
+            ) : roles.length === 0 ? (
+              <>
+                <p>目前沒有角色。</p>
+                <p className="member-hint">
+                  {isAdmin ? (
+                    <>
+                      請先到<Link to="/admin/roles">角色</Link>
+                      建立角色，才能把人加入專案。
+                    </>
+                  ) : (
+                    '還沒有可指派的角色，請洽系統管理者建立。'
+                  )}
+                </p>
+              </>
+            ) : (
+              <MemberRoleFields
+                error={rolesError}
+                firstRef={addRolesRef}
+                onChange={(next) => {
+                  setNewRoleIds(next)
+                  setRolesError('')
+                }}
+                roles={roles}
+                selected={newRoleIds}
+              />
+            )}
+            <button
+              disabled={
+                busy ||
+                !candidatesReady ||
+                !rolesReady ||
+                candidates.length === 0 ||
+                roles.length === 0
+              }
+              type="submit"
+            >
+              加入成員
+            </button>
           </>
-        ) : (
-          <MemberRoleFields
-            error={rolesError}
-            firstRef={addRolesRef}
-            onChange={(next) => {
-              setNewRoleIds(next)
-              setRolesError('')
-            }}
-            roles={roles}
-            selected={newRoleIds}
-          />
         )}
         {alertFor('add')}
-        <button
-          disabled={
-            busy ||
-            !candidatesReady ||
-            !rolesReady ||
-            candidates.length === 0 ||
-            roles.length === 0
-          }
-          type="submit"
-        >
-          加入成員
-        </button>
       </form>
 
       <h3>成員列表</h3>
