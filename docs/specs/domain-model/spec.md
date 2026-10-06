@@ -269,7 +269,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 
 | 方法與路徑 | 行為 | 存取層級 |
 |---|---|---|
-| `GET /api/v1/me/projects` | 回傳 `ProjectMember` 屬於目前使用者的專案陣列，不分頁，依 `project_code`、`name`、`id` 排序。每筆含專案 UUID `id`、`project_code`、`name`、`client_name`、`site_location`、選填的 `planned_start_date`、`planned_completion_date`，以及 `role_names`（只含目前使用者在該專案的角色名稱，依名稱排序；沒有角色時為空陣列，DOM-R36）。不含他人的專案與他人的角色；Admin 也只看到自己參與的專案 | 需登入（AUT-R18）；未登入回 HTTP 401（AUT-R18 的未登入回應） |
+| `GET /api/v1/me/projects` | 回傳 `ProjectMember` 屬於目前使用者的專案陣列，不分頁，依 `project_code`、`name`、`id` 排序。每筆含專案 UUID `id`、`project_code`、`name`、`client_name`、`site_location`、選填的 `planned_start_date`、`planned_completion_date`，`has_office_access`（布林，目前使用者在該專案是否有內業權限碼，分類見 AUT-R08；供內業專案清單只列有內業權限的專案），以及 `role_names`（只含目前使用者在該專案的角色名稱，依名稱排序；沒有角色時為空陣列，DOM-R36）。不含他人的專案與他人的角色；Admin 也只看到自己參與的專案 | 需登入（AUT-R18）；未登入回 HTTP 401（AUT-R18 的未登入回應） |
 
 角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）。
 ### 管理介面錯誤
@@ -359,7 +359,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 | DOM-AC47 | 已登入的 Admin、一般使用者；資料庫有角色 R；資料庫另有一筆專案成員同時持有 R 與另一角色 R2 | Admin 依序列出角色、取得 R、新增 R3、修改 R3 的名稱與權限集合、刪除 R；一般使用者與未登入者呼叫所有角色端點；再取得已刪除的 R | Admin 的列表/單筆/新增/修改成功；刪除回 204，R 不存在、成員仍存在且只保留 R2；建立、修改、刪除各有恰好一筆對應 `role.*` 稽核事件；一般使用者回 403、未登入回 401、取得已刪除角色回 404；錯誤代碼依角色 API 契約 | DOM-R21、DOM-R22、DOM-R55、AUT-R20 |
 | DOM-AC48 | Admin；已有名稱 `Viewer` 的角色；登記表含 `report.read`，不含 `reprot.read` | 新增或修改角色為重複名稱 `viewer`；分別以未登記碼 `reprot.read`、格式錯誤碼 `Report.read` 設定權限；以未改欄位 PATCH；送出重複碼清單 | 重複名稱回 409；無效代碼與空更新回 422；拒絕的請求不改角色、不新增稽核；重複代碼輸入作為集合去重後成功，資料庫不會出現重複代碼；錯誤代碼依角色 API 契約 | DOM-R30、DOM-R34、DOM-R35、DOM-R55 |
 | DOM-AC49 | Admin；權限代碼登記表為空，再以測試登記 `report.read`、`report.approve` | 呼叫權限代碼清單端點 | 空表回 `{items: []}`；測試登記後回傳各代碼及描述，依代碼排序；權限代碼清單與角色端點皆只允許 Admin | DOM-R35、DOM-R55、AUT-R20 |
-| DOM-AC50 | 使用者 A 參與專案 P1（角色 R1、R2）與 P2（沒有角色）；使用者 B 參與 P3（角色 R3）；A 沒有參與 P3；另有內建 `admin` 未參與任何專案 | 以 A 呼叫 `GET /api/v1/me/projects`；以 B 呼叫；以 `admin` 呼叫；不帶 Cookie 呼叫 | A 得到 P1、P2 兩筆，依 `project_code` 排序，P1 的 `role_names` 為 R1、R2（依名稱排序），P2 為空陣列，且不含 P3 與 R3；B 只得到 P3 與 R3；`admin` 得到空陣列；未登入回 401（AUT-R18 的未登入回應） | DOM-R36、AUT-R18 |
+| DOM-AC50 | 使用者 A 參與專案 P1（角色 R1、R2）與 P2（沒有角色）；使用者 B 參與 P3（角色 R3）；A 沒有參與 P3；另有內建 `admin` 未參與任何專案 | 以 A 呼叫 `GET /api/v1/me/projects`；以 B 呼叫；以 `admin` 呼叫；不帶 Cookie 呼叫 | A 得到 P1、P2 兩筆，依 `project_code` 排序，P1 的 `role_names` 為 R1、R2（依名稱排序），P2 為空陣列，且每筆含 `has_office_access`（R1 含內業權限碼時 P1 為 `true`，P2 為 `false`），且不含 P3 與 R3；B 只得到 P3 與 R3；`admin` 得到空陣列；未登入回 401（AUT-R18 的未登入回應） | DOM-R36、AUT-R18 |
 | DOM-AC51 | 專案 P1、P2；Plan PL1 關聯 P1；Plan PL2 關聯 P2；Task T1、T2 | 建立 PL1、PL2，分別建立 T1、T2；再嘗試以不存在的 Plan UUID 建立另一筆 Task | T1 關聯 PL1，T2 關聯 PL2；無效 Plan 外鍵遭拒絕；Plan／Task 狀態依 state-machines 規則保存 | DOM-R56 |
 | DOM-AC52 | 專案項目 I1、I2 有各自有效需求；Plan PL1、Task T1 | 建立 T1 並明確選取 I1、I2；之後修改 I1 的來源需求，分別選 KD-55「要」及「不要」重新查核，再讀取 T1 的項目關聯與 Snapshot | T1 有兩筆獨立項目關聯；每筆快照保留建立時需求；選「要」保留並標記受影響舊需求歷史，選「不要」只更正 Snapshot 文字且記錄變更，兩者皆不影響 I2 歷史 | DOM-R57 |
 | DOM-AC53 | 專案 P 有分區 Z1、專案 Q 有分區 Z2、專案 R 無分區；P、R 各有一筆尚無 Task 的 Plan；具／不具 `project_zone.manage` 權限的成員 | 以 Service/API 新增 P 的未引用分區 Z3、修改 Z3 名稱並刪除 Z3；嘗試新增同名分區與只含空白的分區；建立 P 的 T1 並分別提供同專案 Z1、Q 的 Z2、未提供分區；在 R 的 Plan 建立 T2 且不提供分區；最後嘗試刪除被 T1 引用的 Z1 | Z3 新增、修改與未引用刪除成功；同專案重名、trim 後空白及無權限操作拒絕；P 有分區時建立 Task 必須指定 Z1，且不得引用 Q 的 Z2；R 無分區時不得指定 `zone_id`；Task 引用時 Z1 不得刪除。名稱 Unicode casefold/trim 與長度依 inspection-planning 規則驗收 | DOM-R58 |
@@ -465,3 +465,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 規格設計（非負責人裁定，#416）：Task 新增可空、timezone-aware 的 `dispatched_at`；首次派送記錄伺服器時間，既有非 DRAFT 以 `created_at` 近似回填，DRAFT 保持空值 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 - 範圍變更（負責人指示，#407）：既有專案列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依 `(name,id)` 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。
 - 範圍變更（負責人核可 #445 原型，#449）：專案管理 API 的成員加入與角色集合取代必須至少一個角色，零角色回 422 `project.member_roles_required`；DOM-R36「成員得沒有角色」仍指資料層與 service 層（舊資料、移除角色的內部流程），不改需求與 AC — [#445 負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)、[原型核可](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988590932)、[#449](https://github.com/speko-tw/inspect-flow/issues/449)
+- 規格設計（非負責人裁定，#480）：`GET /api/v1/me/projects` 每筆新增 `has_office_access`，供內業專案清單只列有內業權限的專案；DOM-AC50 補欄位 — [#480](https://github.com/speko-tw/inspect-flow/issues/480)
