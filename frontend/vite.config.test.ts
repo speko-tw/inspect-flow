@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createLanAccessPlugin,
+  getRequestHost,
   isIpv4InCidr,
   resolveDevHttps,
 } from './vite.config'
@@ -107,6 +108,58 @@ describe('LAN development server access', () => {
     expect(response.statusCode).toBe(403)
   })
 
+  it.each([
+    ['HTTP/1.1 (host only)', { host: '192.168.1.20:5173' }, 200],
+    ['HTTP/2 (:authority only)', { ':authority': '192.168.1.20:5173' }, 200],
+    ['neither host nor :authority', {}, 403],
+    [
+      'HTTP/2 with a disallowed :authority and an allowed host',
+      { ':authority': 'evil.example:5173', host: '192.168.1.20:5173' },
+      403,
+    ],
+    [
+      'HTTP/2 with an empty :authority and an allowed host',
+      { ':authority': '', host: '192.168.1.20:5173' },
+      403,
+    ],
+    [
+      'HTTP/2 with a disallowed :authority',
+      { ':authority': 'evil:5173' },
+      403,
+    ],
+  ])('handles %s', (_name, headers, status) => {
+    const middleware = getLanMiddleware('192.168.1.0/24')
+    const response: Response = { statusCode: 200, end: () => undefined }
+    let nextCalled = false
+
+    middleware(
+      { socket: { remoteAddress: '192.168.1.42' }, headers },
+      response,
+      () => {
+        nextCalled = true
+      },
+    )
+
+    expect(response.statusCode).toBe(status)
+    expect(nextCalled).toBe(status === 200)
+  })
+
+  it('still requires the subnet for an allowed HTTP/2 :authority', () => {
+    const middleware = getLanMiddleware('192.168.1.0/24')
+    const response: Response = { statusCode: 200, end: () => undefined }
+
+    middleware(
+      {
+        socket: { remoteAddress: '192.168.2.42' },
+        headers: { ':authority': '192.168.1.20:5173' },
+      },
+      response,
+      () => undefined,
+    )
+
+    expect(response.statusCode).toBe(403)
+  })
+
   it('rejects a network that would allow every IPv4 source', () => {
     expect(() => createLanAccessPlugin('0.0.0.0/0', '192.168.1.20')).toThrow(
       '/0',
@@ -171,5 +224,15 @@ describe('LAN development server access', () => {
 
     expect(config.host).toBe('192.168.1.20')
     expect(config.allowedHosts).toEqual(['192.168.1.20'])
+  })
+})
+
+describe('getRequestHost', () => {
+  it('prefers :authority, falls back to host, else undefined', () => {
+    expect(getRequestHost({ ':authority': 'a:1', host: 'b:2' })).toBe('a:1')
+    expect(getRequestHost({ host: 'b:2' })).toBe('b:2')
+    expect(getRequestHost({ ':authority': '' })).toBe('')
+    expect(getRequestHost({})).toBeUndefined()
+    expect(getRequestHost({ host: ['x', 'y'] })).toBeUndefined()
   })
 })
