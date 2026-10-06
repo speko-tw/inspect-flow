@@ -101,7 +101,8 @@ make run-frontend-https  # 以 HTTPS 啟動前端
   ```
 
   請將範例 IP 換成憑證使用的區網 IP，並將 CIDR 換成實際允許的
-  子網。伺服器只會綁定該網卡，區網防護也只接受該 Host；網段外的
+  子網。伺服器只會綁定該網卡，區網防護也只接受該 Host（HTTP/1.1 看 `Host` 標頭，手機走 HTTPS 時
+  用的 HTTP/2 看 `:authority`）；網段外的
   請求會收到 HTTP 403。
   `INSPECTFLOW_DEV_HOST` 與 `INSPECTFLOW_DEV_ALLOWED_CIDR` 只能在 HTTPS
   模式下使用，且必須一起設定；未設定時 Vite 只監聽本機。後端仍只
