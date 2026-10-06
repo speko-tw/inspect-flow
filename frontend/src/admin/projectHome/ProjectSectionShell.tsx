@@ -14,6 +14,10 @@ const SECTIONS = [
   { id: 'progress', label: '進度', suffix: '/progress' },
 ]
 
+// 分區與進度目前只是佔位頁（正式內容見 #451、#452），v0.3.0 先從導覽
+// 隱藏；分區管理實際在「計畫與任務」頁裡。
+const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['zones', 'progress'])
+
 const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   home: [],
   members: ['project_member.manage'],
@@ -60,10 +64,11 @@ export default function ProjectSectionShell({
     <nav aria-label="專案區段" className="project-section-nav">
       {SECTIONS.filter(
         (section) =>
-          section.id === 'home' ||
-          SECTION_PERMISSIONS[section.id].some((permission) =>
-            viewerPermissions.includes(permission),
-          ),
+          !HIDDEN_SECTIONS.has(section.id) &&
+          (section.id === 'home' ||
+            SECTION_PERMISSIONS[section.id].some((permission) =>
+              viewerPermissions.includes(permission),
+            )),
       ).map((section) => (
         <NavLink
           aria-current={activeSection === section.id ? 'page' : undefined}

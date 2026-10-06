@@ -23,6 +23,9 @@ const officeUser: CurrentUser = {
   name_zh: '示範內業',
   is_admin: false,
   must_change_password: false,
+  has_office_access: true,
+  has_field_access: false,
+  has_template_access: false,
 }
 
 const adminUser: CurrentUser = {
@@ -33,6 +36,9 @@ const adminUser: CurrentUser = {
   name_zh: null,
   is_admin: true,
   must_change_password: false,
+  has_office_access: true,
+  has_field_access: true,
+  has_template_access: true,
 }
 
 function makeProject(overrides: Partial<Project> = {}): Project {

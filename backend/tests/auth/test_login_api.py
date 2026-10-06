@@ -124,6 +124,9 @@ class TestAutAc05LoginCookieAndBody:
                 "department": user.department,
                 "location": user.location,
                 "employee_no": user.employee_no,
+                "has_office_access": False,
+                "has_field_access": False,
+                "has_template_access": False,
             }
 
             # AUT-R05: the login body is identical to ``me``'s.
@@ -237,6 +240,9 @@ class TestAutAc08CurrentUser:
             "department",
             "location",
             "employee_no",
+            "has_office_access",
+            "has_field_access",
+            "has_template_access",
         }
         for account in (user, admin):
             account_client = make_client()

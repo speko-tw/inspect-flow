@@ -23,6 +23,9 @@ const TEMP_PASSWORD_USER = {
   name_zh: '測試使用者',
   is_admin: false,
   must_change_password: true,
+  has_office_access: false,
+  has_field_access: true,
+  has_template_access: false,
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
