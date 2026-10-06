@@ -66,6 +66,21 @@
   margin: 0;
 }
 
+.member-load-error {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.member-load-error p {
+  margin: 0;
+}
+
+.member-load-error button {
+  min-height: 44px;
+}
+
 .member-actions {
   display: flex;
   flex-wrap: wrap;

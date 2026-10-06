@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { CurrentUser } from '../../auth/api'
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import type { Project } from '../projects/api'
 import { ManagementApiError } from '../api'
 import ProjectHomePage from './ProjectHomePage'
@@ -21,6 +24,25 @@ vi.mock('../projects/api', async (importOriginal) => ({
 vi.mock('./api', () => ({
   getWorkflowSummary: mocks.getWorkflowSummary,
 }))
+
+const adminUser: CurrentUser = {
+  id: 'admin-id',
+  username: 'admin',
+  email: null,
+  name_en: null,
+  name_zh: null,
+  is_admin: true,
+  must_change_password: false,
+}
+
+// 成員區段會讀目前使用者（決定提示文字），其餘頁面不受影響。
+function withCurrentUser({ children }: { children: ReactNode }) {
+  return (
+    <CurrentUserProvider value={{ user: adminUser, clear: vi.fn() }}>
+      {children}
+    </CurrentUserProvider>
+  )
+}
 
 const project: Project = {
   id: 'project-1',
@@ -114,6 +136,7 @@ function renderAt(path = '/admin/projects/project-1') {
         </Routes>
       </main>
     </MemoryRouter>,
+    { wrapper: withCurrentUser },
   )
 }
 
