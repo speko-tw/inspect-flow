@@ -57,10 +57,6 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     }
 )
 TASK_READ_ONLY_CODES: frozenset[str] = frozenset({"inspection_task.read"})
-# The template library is readable with this code in any project
-# (same rule as ``require_system_role_or_any_project_permission`` on
-# the template routes).
-TEMPLATE_READ_PERMISSION_CODE = "project_inspection_item.edit"
 
 
 @dataclass(frozen=True)
@@ -97,8 +93,11 @@ def permission_codes_by_project(
 
 def summarize_access(session: Session, user: User) -> AccessSummary:
     """Admin holds every area; others get the union over their
-    projects. ``has_template_access`` also covers the template admin
-    system role.
+    projects. ``has_template_access`` is the template library
+    management area (``/admin/templates``): Admin or the template admin
+    system role, the same rule the template write routes use. Reading
+    templates to apply them to a project needs no summary flag; it
+    lives inside the project pages.
     """
     if user.is_admin:
         return AccessSummary(True, True, True)
@@ -121,6 +120,5 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
     return AccessSummary(
         has_office_access=bool(codes & OFFICE_PERMISSION_CODES),
         has_field_access=bool(codes & FIELD_PERMISSION_CODES),
-        has_template_access=is_template_admin
-        or TEMPLATE_READ_PERMISSION_CODE in codes,
+        has_template_access=is_template_admin,
     )

@@ -2,6 +2,9 @@
 access summary so the frontend never guesses the landing page.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -215,7 +218,8 @@ def test_permission_classification_covers_every_registered_code() -> None:
         ("reader", (False, False, False)),
         # system template admin without any project membership.
         ("tpladmin", (False, False, True)),
-        ("editor", (True, False, True)),
+        # project_inspection_item.edit alone does not manage the library.
+        ("editor", (True, False, False)),
     ],
 )
 def test_me_reports_access_summary(world, who, expected) -> None:
@@ -243,3 +247,23 @@ def test_my_projects_flags_office_access_per_project(world) -> None:
         "DEMO-480-A": True,
         "DEMO-480-B": False,
     }
+
+
+def test_responses_match_frontend_contract_fixture(world) -> None:
+    """RG-M22: the shapes the frontend tests mock are the real ones."""
+    contract = json.loads(
+        (
+            Path(__file__).parents[3]
+            / "frontend/src/auth/fixtures"
+            / "current-user-contract.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    for who in ("admin", "office", "field", "nobody"):
+        assert (
+            sorted(world[who].get(ME).json()) == contract["current_user_keys"]
+        )
+    projects = world["split"].get(ME_PROJECTS).json()
+    assert projects
+    for item in projects:
+        assert sorted(item) == contract["my_project_keys"]
