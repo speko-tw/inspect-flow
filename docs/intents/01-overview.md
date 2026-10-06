@@ -160,7 +160,7 @@ Corporate SSO                            檢查時機／停留點
 
 ## 架構占位（placeholder）與業務決策的界線
 
-專案、人員、地點、工項欄位，以及查核規則、報表版面與簽核流程仍待決議；Result 的三種結果與必填內容已裁定（見 [KD-54](03-decisions-and-stack.md#kd-54)）；不符合後的簡易改善追蹤已決定排入 0.7.x（見 [KD-65](03-decisions-and-stack.md#kd-65)），完整缺失（Defect）管理、限期複查、嚴重度對任務完成與報告的影響、自動判定等仍未裁定（見 [OQ-06](05-open-questions.md#oq-06)）。來源範例不是定案規格；完整清單見 [05-open-questions.md](05-open-questions.md)（依據：架構基準 §0、§12、§38–39）。
+專案、人員、地點、工項欄位，以及查核規則、報表版面與簽核流程仍待決議；Result 的三種結果與必填內容已裁定（見 [KD-54](03-decisions-and-stack.md#kd-54)）；不符合後的簡易改善追蹤已決定排入 0.7.x（見 [KD-65](03-decisions-and-stack.md#kd-65)），KD-65 不做限期提醒與自動通知，也不依標準值自動判定，嚴重度不阻擋任務完成；完整缺失（Defect）管理與更進階的改善流程不在 KD-65 範圍（見 [OQ-06](05-open-questions.md#oq-06)），報告如何呈現見 [OQ-07](05-open-questions.md#oq-07)。來源範例不是定案規格；完整清單見 [05-open-questions.md](05-open-questions.md)（依據：架構基準 §0、§12、§38–39）。
 
 ## 架構總圖
 
