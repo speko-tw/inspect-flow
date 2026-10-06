@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
+import { currentUserFixture } from '../../testing/contractFixtures'
 import type { Project } from '../projects/api'
 import { ManagementApiError } from '../api'
 import ProjectHomePage from './ProjectHomePage'
@@ -73,46 +75,57 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
   }
 }
 
-function renderAt(path = '/admin/projects/project-1') {
+function renderAt(
+  path = '/admin/projects/project-1',
+  access: { has_office_access: boolean; has_field_access: boolean } = {
+    has_office_access: false,
+    has_field_access: true,
+  },
+) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <main>
-        <Routes>
-          <Route
-            element={<ProjectHomePage />}
-            path="/admin/projects/:projectId"
-          />
-          <Route
-            element={<ProjectSectionPage section="members" />}
-            path="/admin/projects/:projectId/members"
-          />
-          <Route
-            element={<ProjectSectionPage section="inspection-items" />}
-            path="/admin/projects/:projectId/inspection-items"
-          />
-          <Route
-            element={<ProjectSectionPage section="zones" />}
-            path="/admin/projects/:projectId/zones"
-          />
-          <Route
-            element={<ProjectSectionPage section="planning" />}
-            path="/admin/projects/:projectId/planning"
-          />
-          <Route
-            element={<ProjectSectionPage section="progress" />}
-            path="/admin/projects/:projectId/progress"
-          />
-          <Route
-            element={
-              <ProjectSectionPage section="inspection-items">
-                <p>查核項目細節</p>
-              </ProjectSectionPage>
-            }
-            path="/admin/projects/:projectId/inspection-items/:itemId"
-          />
-          <Route element={<p>Field 工作台</p>} path="/field" />
-        </Routes>
-      </main>
+      <CurrentUserProvider
+        value={{ user: currentUserFixture(access), clear: vi.fn() }}
+      >
+        <main>
+          <Routes>
+            <Route
+              element={<ProjectHomePage />}
+              path="/admin/projects/:projectId"
+            />
+            <Route
+              element={<ProjectSectionPage section="members" />}
+              path="/admin/projects/:projectId/members"
+            />
+            <Route
+              element={<ProjectSectionPage section="inspection-items" />}
+              path="/admin/projects/:projectId/inspection-items"
+            />
+            <Route
+              element={<ProjectSectionPage section="zones" />}
+              path="/admin/projects/:projectId/zones"
+            />
+            <Route
+              element={<ProjectSectionPage section="planning" />}
+              path="/admin/projects/:projectId/planning"
+            />
+            <Route
+              element={<ProjectSectionPage section="progress" />}
+              path="/admin/projects/:projectId/progress"
+            />
+            <Route
+              element={
+                <ProjectSectionPage section="inspection-items">
+                  <p>查核項目細節</p>
+                </ProjectSectionPage>
+              }
+              path="/admin/projects/:projectId/inspection-items/:itemId"
+            />
+            <Route element={<p>Field 工作台</p>} path="/field" />
+            <Route element={<p>我的專案清單</p>} path="/admin/projects" />
+          </Routes>
+        </main>
+      </CurrentUserProvider>
     </MemoryRouter>,
   )
 }
@@ -150,9 +163,7 @@ describe('project home', () => {
     ['/admin/projects/project-1', '專案首頁'],
     ['/admin/projects/project-1/members', '成員'],
     ['/admin/projects/project-1/inspection-items', '查核項目'],
-    ['/admin/projects/project-1/zones', '分區'],
     ['/admin/projects/project-1/planning', '計畫與任務'],
-    ['/admin/projects/project-1/progress', '進度'],
   ])('marks only %s as the current project section', async (path, label) => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
@@ -182,11 +193,22 @@ describe('project home', () => {
     expect(
       screen.queryByRole('link', { name: '查核項目' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '分區' })).toBeVisible()
     expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
     expect(
       screen.queryByRole('link', { name: '進度' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('hides the placeholder zones and progress sections (#451, #452)', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expect(screen.queryByRole('link', { name: '分區' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '進度' })).toBeNull()
+    expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
   })
 
   it.each([
@@ -218,17 +240,16 @@ describe('project home', () => {
     expect(screen.queryByText('待重查')).not.toBeInTheDocument()
   })
 
-  it('shows progress as the next action when all steps are complete', async () => {
+  it('sends all-complete projects to planning, never to a placeholder', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary({ primary_step: null }))
 
     renderAt()
 
     expect(await screen.findByText('目前沒有待處理的下一步。')).toBeVisible()
-    expect(screen.getByRole('link', { name: '追蹤進度' })).toHaveAttribute(
-      'href',
-      '/admin/projects/project-1/progress',
-    )
+    expect(
+      screen.getByRole('link', { name: '查看計畫與任務' }),
+    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
   })
 
   it('routes field-only permission sets to Field and skips project detail reads', async () => {
@@ -245,6 +266,32 @@ describe('project home', () => {
 
     expect(await screen.findByText('Field 工作台')).toBeVisible()
     expect(mocks.getProject).not.toHaveBeenCalled()
+  })
+
+  it('complete_reinspection step points at planning, not progress', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ primary_step: 'complete_reinspection' }),
+    )
+
+    renderAt()
+
+    expect(
+      await screen.findByRole('link', { name: '前往追蹤任務進度' }),
+    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+  })
+
+  it('sends an office user with field-only rights in this project to the project list', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
+    )
+
+    renderAt('/admin/projects/project-1', {
+      has_office_access: true,
+      has_field_access: true,
+    })
+
+    expect(await screen.findByText('我的專案清單')).toBeVisible()
   })
 
   it('opens the mobile section menu with keyboard-accessible links', async () => {
@@ -304,6 +351,11 @@ describe('project home', () => {
     ).toBeVisible()
     expect(screen.getByRole('alert')).toHaveTextContent(
       '你沒有權限執行這項操作。',
+    )
+    // 有出路：依權限回到落點，不再固定回 /field（#480）。
+    expect(screen.getByRole('link', { name: '返回今日任務' })).toHaveAttribute(
+      'href',
+      '/field',
     )
   })
 })

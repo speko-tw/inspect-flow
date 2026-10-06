@@ -25,6 +25,9 @@ const USER: CurrentUser = {
   name_zh: null,
   is_admin: false,
   must_change_password: false,
+  has_office_access: true,
+  has_field_access: false,
+  has_template_access: true,
 }
 
 const PROJECT_ITEM: ProjectInspectionItem = {

@@ -9,12 +9,15 @@ import {
   useParams,
 } from 'react-router'
 
+import type { CurrentUser } from '../auth/api'
 import LogoutButton from '../auth/LogoutButton'
+import { landingLabel } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
+import MyProjectsPage from './projects/MyProjectsPage'
 import ProjectsPage from './projects/ProjectsPage'
 import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
 import ProjectTemplatesPage from '../field/ProjectTemplatesPage'
@@ -66,73 +69,13 @@ function AdminPageContent() {
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
-  if (!user.is_admin && location.pathname.startsWith('/admin/templates')) {
-    return (
-      <main>
-        <TemplatesPage />
-        <NavLink to="/">返回工作台</NavLink>
-      </main>
-    )
-  }
-
   const isProjectSectionRoute =
     /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
       location.pathname,
     )
 
   if (!user.is_admin) {
-    if (isProjectSectionRoute) {
-      return (
-        <main>
-          <Routes>
-            <Route element={<ProjectHomePage />} path="projects/:projectId" />
-            <Route
-              element={<ProjectTemplatesPage />}
-              path="projects/:projectId/templates"
-            />
-            <Route
-              element={<ProjectSectionPage section="members" />}
-              path="projects/:projectId/members"
-            />
-            <Route
-              element={<ProjectSectionPage section="inspection-items" />}
-              path="projects/:projectId/inspection-items"
-            />
-            <Route
-              element={<ProjectSectionPage section="zones" />}
-              path="projects/:projectId/zones"
-            />
-            <Route
-              element={
-                <ProjectSectionPage section="planning">
-                  <ProjectPlanningRoute />
-                </ProjectSectionPage>
-              }
-              path="projects/:projectId/planning"
-            />
-            <Route
-              element={<ProjectSectionPage section="progress" />}
-              path="projects/:projectId/progress"
-            />
-            <Route
-              element={
-                <ProjectSectionPage section="inspection-items">
-                  <ProjectItemChangePage api={projectItemApi} />
-                </ProjectSectionPage>
-              }
-              path="projects/:projectId/inspection-items/:itemId"
-            />
-          </Routes>
-          <NavLink to="/field">返回工作台</NavLink>
-        </main>
-      )
-    }
-    return (
-      <main>
-        <h1>無權限</h1>
-        <p role="alert">只有系統管理者可以使用管理頁面。</p>
-      </main>
-    )
+    return <MemberAdminShell user={user} />
   }
 
   return (
@@ -254,6 +197,114 @@ function AdminPageContent() {
             <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
           </Routes>
         )}
+      </main>
+    </div>
+  )
+}
+
+// 非系統管理者的管理頁外殼（#480）：頂部導覽只列後端存取摘要確認
+// 有權限的項目，不出現點了才 403 的入口；使用者、公司、角色管理
+// 只屬系統管理者，這裡一律不列。
+function MemberAdminShell({ user }: { user: CurrentUser }) {
+  const location = useLocation()
+  const navItems = [
+    user.has_office_access || !user.has_template_access
+      ? { to: '/admin/projects', label: '專案' }
+      : null,
+    user.has_template_access
+      ? { to: '/admin/templates', label: '範本管理' }
+      : null,
+    user.has_field_access ? { to: '/field', label: '現場任務' } : null,
+    { to: '/change-password', label: '變更密碼' },
+  ].filter((item): item is { to: string; label: string } => item !== null)
+  const indexTarget = user.has_office_access
+    ? '/admin/projects'
+    : user.has_template_access
+      ? '/admin/templates'
+      : '/field'
+  const projectRoutes = (
+    <>
+      <Route element={<ProjectHomePage />} path="projects/:projectId" />
+      <Route
+        element={<ProjectTemplatesPage />}
+        path="projects/:projectId/templates"
+      />
+      <Route
+        element={<ProjectSectionPage section="members" />}
+        path="projects/:projectId/members"
+      />
+      <Route
+        element={<ProjectSectionPage section="inspection-items" />}
+        path="projects/:projectId/inspection-items"
+      />
+      <Route
+        element={<ProjectSectionPage section="zones" />}
+        path="projects/:projectId/zones"
+      />
+      <Route
+        element={
+          <ProjectSectionPage section="planning">
+            <ProjectPlanningRoute />
+          </ProjectSectionPage>
+        }
+        path="projects/:projectId/planning"
+      />
+      <Route
+        element={<ProjectSectionPage section="progress" />}
+        path="projects/:projectId/progress"
+      />
+      <Route
+        element={
+          <ProjectSectionPage section="inspection-items">
+            <ProjectItemChangePage api={projectItemApi} />
+          </ProjectSectionPage>
+        }
+        path="projects/:projectId/inspection-items/:itemId"
+      />
+    </>
+  )
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <span className="topbar-brand">InspectFlow 工程查核系統</span>
+        <nav aria-label="管理功能">
+          {navItems.map((item) => (
+            <NavLink key={item.to} to={item.to}>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <span className="topbar-user">
+          登入者：{user.name_zh ?? user.username}
+        </span>
+        <LogoutButton />
+      </header>
+      <main>
+        <Routes>
+          <Route
+            index
+            element={
+              <Navigate replace state={location.state} to={indexTarget} />
+            }
+          />
+          <Route path="projects" element={<MyProjectsPage />} />
+          {projectRoutes}
+          {user.has_template_access && (
+            <Route path="templates" element={<TemplatesPage />} />
+          )}
+          <Route
+            path="*"
+            element={
+              <>
+                <h1>無權限</h1>
+                <p role="alert">只有系統管理者可以使用這個管理頁面。</p>
+                <NavLink className="button-link" to={indexTarget}>
+                  返回{landingLabel(indexTarget)}
+                </NavLink>
+              </>
+            }
+          />
+        </Routes>
       </main>
     </div>
   )
