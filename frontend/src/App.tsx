@@ -5,6 +5,7 @@ import ChangePasswordPage from './auth/ChangePasswordPage'
 import HomeRedirect from './auth/HomeRedirect'
 import LoginPage from './auth/LoginPage'
 import RequireAuth from './auth/RequireAuth'
+import NotFoundPage from './NotFoundPage'
 import SetupGate from './setup/SetupGate'
 import VersionFooter from './VersionFooter'
 
@@ -84,6 +85,7 @@ export default function App() {
                 </RequireAuth>
               }
             />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </Suspense>
       </div>

@@ -15,6 +15,11 @@ export interface CurrentUser {
   name_zh: string | null
   is_admin: boolean
   must_change_password: boolean
+  // 後端依有效權限算好的存取摘要（#480）：登入落點與管理頁導覽
+  // 只讀這三個值，前端不自行猜測；系統管理者三者皆為 true。
+  has_office_access: boolean
+  has_field_access: boolean
+  has_template_access: boolean
   // 登入與 `me` 回傳同一份本體（AUT-R05、AUT-R08）；這四個公司欄位
   // 由我的工作台讀取，其他呼叫端不需要，所以型別上選填。
   company?: { id: string; name: string } | null

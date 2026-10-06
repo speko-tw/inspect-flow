@@ -31,6 +31,9 @@ function stubAuthenticatedFetch() {
           name_zh: '測試使用者',
           is_admin: true,
           must_change_password: false,
+          has_office_access: true,
+          has_field_access: true,
+          has_template_access: true,
         })
       }
       if (/\/(users|companies|projects)\?/.test(url)) {

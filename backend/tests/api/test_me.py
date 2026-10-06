@@ -165,6 +165,7 @@ def test_my_projects_lists_only_own_projects_with_own_roles(seed):
             "planned_start_date": "2026-10-01",
             "planned_completion_date": "2027-04-01",
             "role_names": ["審核員", "查核員"],
+            "has_office_access": True,
         },
         {
             "id": str(seed["also_mine"].id),
@@ -175,6 +176,7 @@ def test_my_projects_lists_only_own_projects_with_own_roles(seed):
             "planned_start_date": None,
             "planned_completion_date": None,
             "role_names": [],
+            "has_office_access": False,
         },
     ]
 

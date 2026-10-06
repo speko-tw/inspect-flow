@@ -56,6 +56,9 @@ function renderPage(
     email: null,
     is_admin: false,
     must_change_password: false,
+    has_office_access: false,
+    has_field_access: true,
+    has_template_access: false,
   }
   const clear = vi.fn()
   const currentUser = { ...user, ...options.user }
@@ -97,6 +100,50 @@ describe('今日任務首頁', () => {
     expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument()
     expect(screen.getByText('我的資料')).toBeInTheDocument()
     expect(screen.queryByText(/範本/)).not.toBeInTheDocument()
+  })
+
+  it('兩種權限都有的帳號可從現場頁回專案管理；純現場沒有（#480）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ items: [], next_cursor: null })),
+    )
+    const mixed = renderPage({ user: { has_office_access: true } })
+    expect(
+      await screen.findByRole('link', { name: '專案管理' }),
+    ).toHaveAttribute('href', '/admin/projects')
+    mixed.unmount()
+    renderPage()
+    await screen.findByRole('heading', { name: '今日任務' })
+    expect(screen.queryByRole('link', { name: '專案管理' })).toBeNull()
+  })
+
+  it('範本管理權限在頂端列與無權限區塊各有入口，兩種權限都有就都顯示（#480）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        ),
+      ),
+    )
+    renderPage({
+      user: {
+        has_field_access: false,
+        has_office_access: true,
+        has_template_access: true,
+      },
+    })
+
+    expect(
+      await screen.findByRole('link', { name: '前往專案管理' }),
+    ).toHaveAttribute('href', '/admin/projects')
+    expect(screen.getByRole('link', { name: '前往範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
+    expect(screen.getByRole('link', { name: '專案管理' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '範本管理' })).toBeVisible()
   })
 
   it('預設查本人，切換範圍與狀態會傳後端參數', async () => {
@@ -314,6 +361,43 @@ describe('今日任務首頁', () => {
     expect(
       screen.getByRole('button', { name: '查看全部任務' }),
     ).toBeInTheDocument()
+  })
+
+  it('沒有現場權限但有內業權限時，提供前往專案管理（#480）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        ),
+      ),
+    )
+    renderPage({
+      user: { has_office_access: true, has_field_access: false },
+    })
+
+    const link = await screen.findByRole('link', { name: '前往專案管理' })
+    expect(link).toHaveAttribute('href', '/admin/projects')
+    expect(link).toHaveClass('button-link')
+  })
+
+  it('沒有現場權限也沒有內業權限時，只有說明沒有入口（#480）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        ),
+      ),
+    )
+    renderPage({ user: { has_field_access: false } })
+
+    expect(await screen.findByText('目前無法查看現場任務')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '前往專案管理' }),
+    ).not.toBeInTheDocument()
   })
 
   it('403 與一般錯誤分開顯示', async () => {

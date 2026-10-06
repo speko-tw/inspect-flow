@@ -46,6 +46,9 @@ const currentUser: CurrentUser = {
   name_zh: null,
   is_admin: true,
   must_change_password: false,
+  has_office_access: true,
+  has_field_access: true,
+  has_template_access: true,
 }
 
 function renderRoles(path = '/admin/roles') {
