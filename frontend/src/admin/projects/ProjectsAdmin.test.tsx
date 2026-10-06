@@ -372,6 +372,9 @@ describe('admin projects page', () => {
     renderAt('/admin')
     fireEvent.click(await screen.findByRole('link', { name: '專案' }))
 
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '專案' }),
+    ).toBeVisible()
     expect(await screen.findAllByText('示範業主')).toHaveLength(2)
     expect(screen.getAllByText('2026-10-01', { selector: 'td' })).toHaveLength(
       2,
@@ -800,6 +803,10 @@ describe('admin project members', () => {
     })
     expect(screen.getByRole('status')).toHaveTextContent(
       '已加入「林鮑伯（bob.lin）」。',
+    )
+    expect(screen.getByRole('status')).toHaveClass(
+      'tpl-notice',
+      'tpl-notice-ok',
     )
     expect(screen.getByText('沒有可加入的使用者。')).toBeVisible()
     // 全部都加完後，角色勾選與加入按鈕一起隱藏，只剩說明（#487）。
