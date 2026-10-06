@@ -144,6 +144,8 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             "/api/v1/projects/{project_id}/members/{user_id}/roles",
         ),
         ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
+        ("GET", "/api/v1/projects/{project_id}/member-candidates"),
+        ("GET", "/api/v1/projects/{project_id}/assignable-roles"),
     }
     apply_template = (
         "POST",

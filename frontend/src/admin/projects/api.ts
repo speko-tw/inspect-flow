@@ -1,6 +1,6 @@
 // 專案與專案成員管理 API（DOM-R40～DOM-R44、專案管理 API 介面段）。
 
-import { request } from '../api'
+import { listAllPages, request } from '../api'
 
 export interface ProjectWarning {
   code: string
@@ -47,6 +47,13 @@ export interface Role {
   id: string
   name: string
   permission_codes: string[]
+}
+
+/** 可加入此專案的使用者；只含畫面需要的欄位（不含 email、公司）。 */
+export interface MemberCandidate {
+  id: string
+  username: string
+  name_zh: string | null
 }
 
 export const DUPLICATE_CODE_WARNING = 'project_code.duplicate'
@@ -97,6 +104,17 @@ export function listProjectMembers(
   projectId: string,
 ): Promise<ProjectMember[]> {
   return request(`/projects/${projectId}/members`)
+}
+
+/** 專案範圍的候選清單，權限同 `project_member.manage`（#481）。 */
+export function listMemberCandidates(
+  projectId: string,
+): Promise<MemberCandidate[]> {
+  return listAllPages(`/projects/${projectId}/member-candidates`)
+}
+
+export function listAssignableRoles(projectId: string): Promise<Role[]> {
+  return listAllPages(`/projects/${projectId}/assignable-roles`)
 }
 
 export function addProjectMember(

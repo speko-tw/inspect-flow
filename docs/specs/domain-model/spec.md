@@ -243,7 +243,9 @@
 | `POST /api/v1/projects` | 新增專案 | 需 Admin（AUT-R20） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | 需 Admin（AUT-R20） |
 | `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
-| `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，**必須**同時指定至少一個角色；零個角色回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20） | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `GET /api/v1/projects/{project_id}/member-candidates?cursor=&limit=` | `{items: [{id, username, name_zh}], next_cursor}`；可加入該專案的使用者：啟用、非系統帳號、尚未是成員；非 Admin 呼叫者只含同公司的人（呼叫者沒有公司時回空清單），Admin 含全部公司；依 `(username,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/users` |
+| `GET /api/v1/projects/{project_id}/assignable-roles?cursor=&limit=` | `{items: [{id, name, permission_codes}], next_cursor}`；全部角色（角色是全系統共用，DOM-R19），`permission_codes` 依字母排序；依 `(created_at,id)` 升冪 cursor 分頁，分頁參數同上；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/roles` |
+| `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，**必須**同時指定至少一個角色；零個角色回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20）；非 Admin 呼叫者只能加入同公司的人，被加入者公司不同、沒有公司，或呼叫者沒有公司，回 422 與專用錯誤碼（與 `member-candidates` 同一套規則；資源不存在的 404 先於此檢查，此檢查先於零角色檢查；Admin 不受限） | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；集合**必須**至少一個角色，空集合回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20）；既有沒有角色的舊成員不受影響，改角色時才需補上 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `DELETE /api/v1/projects/{project_id}/members/{user_id}` | 將人員移出專案 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 
@@ -285,6 +287,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - `user.employee_no_conflict` — HTTP 409：指派或變更公司連結時，同一家公司已有相同工號。
 - `company.name_conflict` — HTTP 409：新增或修改公司名稱時，名稱已被其他公司使用（不分大小寫）。
 - `project.member_conflict` — HTTP 409：同一人已是該專案成員。
+- `project.member_company_mismatch` — HTTP 422：非 Admin 呼叫者加入的使用者不是同一家公司，或呼叫者沒有公司（#481）。
 - `project.member_roles_required` — HTTP 422：加入成員或取代角色集合時沒有指定任何角色（ADM-R20；資料層仍允許沒有角色，見 DOM-R36）。
 
 ## 驗收條件
@@ -466,3 +469,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 範圍變更（負責人指示，#407）：既有專案列表加入 `q` 搜尋及 cursor 分頁，回應改為 `{items,next_cursor}`，依 `(name,id)` 穩定排序 — [#407 維護者留言](https://github.com/speko-tw/inspect-flow/issues/407#issuecomment-5979672050)。
 - 範圍變更（負責人核可 #445 原型，#449）：專案管理 API 的成員加入與角色集合取代必須至少一個角色，零角色回 422 `project.member_roles_required`；DOM-R36「成員得沒有角色」仍指資料層與 service 層（舊資料、移除角色的內部流程），不改需求與 AC — [#445 負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)、[原型核可](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988590932)、[#449](https://github.com/speko-tw/inspect-flow/issues/449)
 - 範圍變更（負責人指示，#480）：`GET /api/v1/me/projects` 每筆新增 `has_office_access`，供內業專案清單只列有內業權限的專案；DOM-AC50 補欄位；欄位細節為規格設計（非負責人裁定） — [#480](https://github.com/speko-tw/inspect-flow/issues/480#issuecomment-6013263124)
+- 範圍變更（負責人指示，#481）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/member-candidates`（可加入的使用者）與 `GET /api/v1/projects/{project_id}/assignable-roles`（可指派的角色），權限同其他成員端點，只回傳顯示需要的欄位；`POST /api/v1/projects/{project_id}/members` 對非 Admin 呼叫者加入同公司檢查，錯誤碼 `project.member_company_mismatch`。讓只有 `project_member.manage`、不是 Admin 的內業使用成員頁，不放寬全域 `/users`、`/roles`。同公司的判讀、路徑與伺服器端檢查為規格設計（非負責人裁定）；不新增 migration — [負責人指示](https://github.com/speko-tw/inspect-flow/issues/481#issuecomment-6013263458)、[#481](https://github.com/speko-tw/inspect-flow/issues/481)

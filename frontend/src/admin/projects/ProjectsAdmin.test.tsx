@@ -15,6 +15,19 @@ import type { User } from '../api'
 import type { Project, ProjectMember, Role } from './api'
 import contract from './fixtures/member-roles-contract.json'
 
+const officeUser: CurrentUser = {
+  id: 'office-id',
+  username: 'demo-office',
+  email: null,
+  name_en: null,
+  name_zh: '示範內業',
+  is_admin: false,
+  must_change_password: false,
+  has_office_access: true,
+  has_field_access: false,
+  has_template_access: false,
+}
+
 const adminUser: CurrentUser = {
   id: 'admin-id',
   username: 'admin',
@@ -92,13 +105,13 @@ const systemAdmin = {
   is_system: true,
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, user: CurrentUser = adminUser) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           element={
-            <CurrentUserProvider value={{ user: adminUser, clear: vi.fn() }}>
+            <CurrentUserProvider value={{ user, clear: vi.fn() }}>
               <AdminPage />
             </CurrentUserProvider>
           }
@@ -117,11 +130,14 @@ function projectFetch({
   projects = [makeProject()],
   members = [] as ProjectMember[],
   rolePages = [[roleA, roleB]] as Role[][],
+  office = false,
   failWith,
 }: {
   projects?: Project[]
   members?: ProjectMember[]
   rolePages?: Role[][]
+  /** 內業（非管理者、有 project_member.manage）：全域 API 一律 403。 */
+  office?: boolean
   failWith?: { match: RegExp; method: string; code: string; status: number }
 } = {}) {
   const projectRows = projects.map((row) => ({ ...row }))
@@ -137,6 +153,18 @@ function projectFetch({
         )
       }
       const parsed = new URL(url, 'http://testserver')
+      // 與後端相同：內業不能讀全域 /users、/roles、/projects（#481）。
+      if (
+        office &&
+        method === 'GET' &&
+        (/^\/api\/v1\/(users|roles|projects)$/.test(parsed.pathname) ||
+          /^\/api\/v1\/projects\/[^/]+$/.test(parsed.pathname))
+      ) {
+        return Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        )
+      }
       if (parsed.pathname.endsWith('/inspection-items') && method === 'GET') {
         return Response.json({ items: [], next_cursor: null })
       }
@@ -167,7 +195,9 @@ function projectFetch({
           primary_step: null,
           task_counts_visible: true,
           draft_tasks_missing_assignee: 0,
-          viewer_permission_codes: ['inspection_plan.read'],
+          viewer_permission_codes: office
+            ? ['project_member.manage', 'inspection_plan.read']
+            : ['inspection_plan.read'],
         })
       }
       if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
@@ -268,17 +298,26 @@ function projectFetch({
         memberRows.splice(index, 1)
         return new Response(null, { status: 204 })
       }
-      if (parsed.pathname === '/api/v1/users') {
-        return Response.json({
-          items: [systemAdmin, anna, bob, inactive],
-          next_cursor: null,
-        })
+      if (/\/projects\/[^/]+\/member-candidates$/.test(parsed.pathname)) {
+        // 與後端相同：啟用、非系統帳號、尚未加入（欄位見契約檔）。
+        const joined = new Set(memberRows.map((row) => row.user_id))
+        const items = [systemAdmin, anna, bob, inactive]
+          .filter(
+            (user) =>
+              user.is_active && !user.is_system && !joined.has(user.id),
+          )
+          .map(({ id, username, name_zh }) => ({ id, username, name_zh }))
+        return Response.json({ items, next_cursor: null })
       }
-      if (url.includes('/roles')) {
-        const cursor = new URL(url, 'http://x').searchParams.get('cursor')
+      if (/\/projects\/[^/]+\/assignable-roles$/.test(parsed.pathname)) {
+        const cursor = parsed.searchParams.get('cursor')
         const index = cursor ? Number(cursor) : 0
         return Response.json({
-          items: rolePages[index],
+          items: rolePages[index].map(({ id, name, permission_codes }) => ({
+            id,
+            name,
+            permission_codes,
+          })),
           next_cursor: index + 1 < rolePages.length ? String(index + 1) : null,
         })
       }
@@ -840,6 +879,36 @@ describe('admin project members', () => {
     expect(screen.getByLabelText(/使用者/)).toHaveValue(anna.id)
   })
 
+  it('maps the server company mismatch 422 to the user field', async () => {
+    // 前端候選清單已限制同公司；伺服器仍會再檢查一次（例如對方剛換公司）。
+    projectFetch({
+      office: true,
+      failWith: {
+        match: /\/members$/,
+        method: 'POST',
+        code: contract.company_mismatch_error.code,
+        status: contract.company_mismatch_error.status,
+      },
+    })
+    renderAt('/admin/projects/project-1/members', officeUser)
+    await screen.findByText('目前沒有成員。')
+
+    fireEvent.change(screen.getByLabelText(/使用者/), {
+      target: { value: anna.id },
+    })
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    expect(
+      await screen.findByText('只能加入和你同公司的使用者，請重新選擇。'),
+    ).toBeVisible()
+    expect(screen.getByLabelText(/使用者/)).toHaveFocus()
+    expect(screen.getByLabelText('查核員')).toBeChecked()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('edits roles on a separate screen and requires at least one role', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/admin/projects/project-1/members')
@@ -1017,13 +1086,39 @@ describe('admin project members', () => {
     )
   })
 
+  it('uses candidate and role mocks that match the backend schema', async () => {
+    projectFetch({ members: [memberAnna] })
+    const base = '/api/v1/projects/project-1'
+    const candidates = (await (
+      await fetch(`${base}/member-candidates`)
+    ).json()) as { items: Record<string, unknown>[] }
+    expect(Object.keys(candidates).sort()).toEqual(
+      contract.candidate_page_keys,
+    )
+    expect(candidates.items.length).toBeGreaterThan(0)
+    for (const row of candidates.items) {
+      expect(Object.keys(row).sort()).toEqual(
+        contract.member_candidate_item_keys,
+      )
+    }
+    const roles = (await (await fetch(`${base}/assignable-roles`)).json()) as {
+      items: Record<string, unknown>[]
+    }
+    expect(Object.keys(roles).sort()).toEqual(contract.candidate_page_keys)
+    for (const row of roles.items) {
+      expect(Object.keys(row).sort()).toEqual(
+        contract.assignable_role_item_keys,
+      )
+    }
+  })
+
   it('follows role pagination until every role is loaded', async () => {
     const fetchMock = projectFetch({ rolePages: [[roleA], [roleB]] })
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
     expect(screen.getByLabelText('審核者')).toBeVisible()
-    expect(calls(fetchMock, 'GET', /\/roles/)).toHaveLength(2)
+    expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(2)
   })
 
   it('shows the not-found message when the project is missing', async () => {
@@ -1040,5 +1135,198 @@ describe('admin project members', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '找不到這筆資料',
     )
+  })
+})
+
+describe('project members for an office user (not admin, #481)', () => {
+  const path = '/admin/projects/project-1/members'
+  const globalReads = /\/api\/v1\/(users|roles)(\?|$)/
+
+  it('shows the member list without any global admin API call', async () => {
+    const fetchMock = projectFetch({ office: true, members: [memberAnna] })
+    renderAt(path, officeUser)
+
+    expect(await screen.findByText('鄧安娜')).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(calls(fetchMock, 'GET', globalReads)).toHaveLength(0)
+    expect(calls(fetchMock, 'GET', /\/projects\/project-1$/)).toHaveLength(0)
+    expect(calls(fetchMock, 'GET', /\/member-candidates/)).toHaveLength(1)
+    expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(1)
+    // 角色說明仍依權限碼產生，不顯示代碼（#449）。
+    expect(screen.getByLabelText('查核員')).toHaveAccessibleDescription(
+      '可查看任務、到現場查核',
+    )
+  })
+
+  it('adds a member by clicking, with a required role', async () => {
+    const fetchMock = projectFetch({ office: true, members: [memberAnna] })
+    renderAt(path, officeUser)
+    await screen.findByText('鄧安娜')
+
+    const select = screen.getByLabelText(/使用者/)
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['請選擇使用者', '林鮑伯（bob.lin）'])
+    fireEvent.change(select, { target: { value: bob.id } })
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+    // 沒選角色：擋下，錯誤在角色欄（沿用 #449）。
+    expect(await screen.findByText('請至少選一個角色。')).toBeVisible()
+    expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(0)
+
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+    expect(await screen.findByText('林鮑伯', { selector: 'p' })).toBeVisible()
+    expect(
+      JSON.parse(String(calls(fetchMock, 'POST', /\/members$/)[0][1]?.body)),
+    ).toEqual({ user_id: bob.id, role_ids: [roleA.id] })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '已加入「林鮑伯（bob.lin）」。',
+    )
+    // 加入後這個人不再是候選；沒有人可加時改顯示說明。
+    expect(await screen.findByText('沒有可加入的使用者。')).toBeVisible()
+  })
+
+  it('changes roles on the separate screen by clicking', async () => {
+    const fetchMock = projectFetch({ office: true, members: [memberAnna] })
+    renderAt(path, officeUser)
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    expect(
+      await screen.findByRole('heading', { name: /修改「.*」的角色/ }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByLabelText('審核者'))
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+
+    expect(await screen.findByText(/已更新「.*」的角色/)).toBeVisible()
+    expect(
+      JSON.parse(
+        String(calls(fetchMock, 'PUT', /\/members\/.*\/roles$/)[0][1]?.body),
+      ),
+    ).toEqual({ role_ids: [roleA.id, roleB.id] })
+  })
+
+  it('removes a member after confirming', async () => {
+    const fetchMock = projectFetch({ office: true, members: [memberAnna] })
+    renderAt(path, officeUser)
+    await screen.findByText('鄧安娜')
+
+    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    expect(calls(fetchMock, 'DELETE', /\/members\//)).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: '確認移出' }))
+
+    expect(await screen.findByText(/已將「.*」移出專案/)).toBeVisible()
+    expect(calls(fetchMock, 'DELETE', /\/members\/user-1$/)).toHaveLength(1)
+    expect(await screen.findByText('目前沒有成員。')).toBeVisible()
+  })
+
+  it('keeps the member list when the candidate list fails', async () => {
+    projectFetch({
+      office: true,
+      members: [memberAnna],
+      failWith: {
+        match: /\/member-candidates/,
+        method: 'GET',
+        code: 'internal.error',
+        status: 500,
+      },
+    })
+    renderAt(path, officeUser)
+
+    expect(await screen.findByText('鄧安娜')).toBeVisible()
+    expect(await screen.findByText(/無法載入可加入的使用者/)).toBeVisible()
+    expect(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    ).toBeDisabled()
+    // 角色區塊與成員操作不受影響。
+    expect(within(addForm()).getByLabelText('查核員')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /修改「.*」的角色/ }),
+    ).toBeEnabled()
+  })
+
+  it('keeps the member list when the role list fails', async () => {
+    projectFetch({
+      office: true,
+      members: [memberAnna],
+      failWith: {
+        match: /\/assignable-roles/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt(path, officeUser)
+
+    expect(await screen.findByText('鄧安娜')).toBeVisible()
+    expect(await screen.findByText(/無法載入角色/)).toBeVisible()
+    expect(screen.getByText('（角色名稱無法顯示）')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /修改「.*」的角色/ }),
+    ).toBeDisabled()
+    expect(screen.getByLabelText(/使用者/)).toBeVisible()
+  })
+
+  it('retries every failed block with the reload button', async () => {
+    let failing = true
+    const base = projectFetch({ office: true, members: [memberAnna] })
+    const inner = base.getMockImplementation()
+    base.mockImplementation(async (input, init) => {
+      if (failing && /\/member-candidates/.test(String(input))) {
+        return Response.json({ error: { code: 'x' } }, { status: 500 })
+      }
+      return (inner as NonNullable<typeof inner>)(input, init)
+    })
+    renderAt(path, officeUser)
+    await screen.findByText(/無法載入可加入的使用者/)
+
+    failing = false
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+    expect(await screen.findByLabelText(/使用者/)).toBeVisible()
+    expect(screen.queryByText(/無法載入可加入的使用者/)).toBeNull()
+  })
+
+  it('shows no member actions without the manage permission', async () => {
+    projectFetch({
+      office: true,
+      members: [memberAnna],
+      failWith: {
+        match: /\/projects\/project-1\/members$/,
+        method: 'GET',
+        code: 'permission.denied',
+        status: 403,
+      },
+    })
+    renderAt(path, officeUser)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '你沒有權限管理這個專案的成員',
+    )
+    expect(screen.queryByRole('button', { name: '加入成員' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /修改「/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /移出專案/ })).toBeNull()
+    expect(screen.queryByText('鄧安娜')).toBeNull()
+  })
+
+  it('tells an office user without candidates who to ask', async () => {
+    projectFetch({
+      office: true,
+      members: [
+        memberAnna,
+        { ...memberAnna, id: 'member-2', user_id: bob.id },
+      ],
+    })
+    renderAt(path, officeUser)
+
+    expect(await screen.findByText('沒有可加入的使用者。')).toBeVisible()
+    expect(screen.getByText(/同公司/)).toBeVisible()
+    // 內業沒有系統管理頁，不放連結。
+    expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
   })
 })
