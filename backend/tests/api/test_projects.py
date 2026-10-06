@@ -157,6 +157,21 @@ def project_api(
     }
 
 
+def _same_company(db_session: Session, project_api: ProjectApiContext):
+    """Put the manager and the add-target in one company (#481).
+
+    A non-Admin may only add people of their own company, so tests that
+    add the target as the manager need them to share one.
+    """
+    company = create_company(db_session, name="示範同公司")
+    for key in ("actor", "target"):
+        user = project_api[key]
+        assert isinstance(user, User)
+        user.company_id = company.id
+    db_session.commit()
+    return company
+
+
 def test_project_crud_duplicate_code_warning_and_dates(project_api):
     client = project_api["admin_client"]
     first = client.post(
@@ -522,6 +537,7 @@ def test_concurrent_duplicate_template_admin_assignment_is_idempotent(
 def test_member_operations_require_project_permission_and_audit(
     project_api, db_session: Session
 ):
+    _same_company(db_session, project_api)
     client = project_api["actor_client"]
     plain_client = project_api["plain_client"]
     project = project_api["project"]
@@ -530,7 +546,6 @@ def test_member_operations_require_project_permission_and_audit(
     assert isinstance(project, Project)
     assert isinstance(target, User)
     assert isinstance(role, Role)
-    assert target.company_id is None
 
     denied_writes = [
         plain_client.post(
@@ -652,7 +667,10 @@ def test_admin_can_manage_members_and_anonymous_is_rejected(project_api):
     assert added.json()["role_ids"] == [str(project_api["role"].id)]
 
 
-def test_member_conflict_and_unknown_role_errors(project_api):
+def test_member_conflict_and_unknown_role_errors(
+    project_api, db_session: Session
+):
+    _same_company(db_session, project_api)
     client = project_api["actor_client"]
     project = project_api["project"]
     actor = project_api["actor"]
@@ -684,6 +702,7 @@ def test_member_roles_are_required_on_create_and_update(
     project_api, db_session: Session
 ):
     """ADM-AC20: zero-role writes are 422 and change nothing."""
+    _same_company(db_session, project_api)
     client = project_api["actor_client"]
     project = project_api["project"]
     target = project_api["target"]
@@ -746,8 +765,11 @@ def test_member_roles_are_required_on_create_and_update(
     )
 
 
-def test_member_api_matches_frontend_contract_fixture(project_api):
+def test_member_api_matches_frontend_contract_fixture(
+    project_api, db_session: Session
+):
     """RG-M22: the shapes the member page's tests mock are the real ones."""
+    _same_company(db_session, project_api)
     fixture = json.loads(
         (
             Path(__file__).parents[3]
@@ -785,14 +807,17 @@ def test_member_api_matches_frontend_contract_fixture(project_api):
 
     refused = client.post(
         members_url,
-        json={"user_id": str(project_api["admin"].id), "role_ids": []},
+        json={"user_id": str(target.id), "role_ids": []},
     )
     expected = fixture["zero_role_error"]
     assert refused.status_code == expected["status"]
     assert refused.json()["error"]["code"] == expected["code"]
 
 
-def test_member_missing_resources_and_duplicate_roles(project_api):
+def test_member_missing_resources_and_duplicate_roles(
+    project_api, db_session: Session
+):
+    _same_company(db_session, project_api)
     client = project_api["actor_client"]
     project = project_api["project"]
     target = project_api["target"]
@@ -1244,3 +1269,119 @@ def test_candidate_endpoints_query_count_does_not_grow(
             assert client.get(path).status_code == 200
         assert baseline
         assert len(expanded) == len(baseline)
+
+
+def test_non_admin_can_only_add_users_of_their_own_company(
+    project_api, db_session: Session
+):
+    users = _candidate_world(db_session, project_api)
+    project = project_api["project"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(role, Role)
+    url = f"/api/v1/projects/{project.id}/members"
+    client = project_api["actor_client"]
+
+    for key in ("other_company",):
+        refused = client.post(
+            url,
+            json={"user_id": str(users[key].id), "role_ids": [str(role.id)]},
+        )
+        assert refused.status_code == 422
+        assert (
+            refused.json()["error"]["code"]
+            == ErrorCode.PROJECT_MEMBER_COMPANY_MISMATCH.value
+            == _contract_fixture()["company_mismatch_error"]["code"]
+        )
+        assert (
+            refused.status_code
+            == _contract_fixture()["company_mismatch_error"]["status"]
+        )
+    # A user without a company is not "the same company" either.
+    refused = client.post(
+        url,
+        json={
+            "user_id": str(project_api["target"].id),
+            "role_ids": [str(role.id)],
+        },
+    )
+    assert refused.status_code == 422
+    assert refused.json()["error"]["code"] == "project.member_company_mismatch"
+    # The company rule comes before the zero-role rule, after existence.
+    mismatch_first = client.post(
+        url, json={"user_id": str(users["other_company"].id)}
+    )
+    assert mismatch_first.json()["error"]["code"] == (
+        "project.member_company_mismatch"
+    )
+    missing = client.post(
+        url, json={"user_id": "00000000-0000-7000-8000-000000000004"}
+    )
+    assert missing.status_code == 404
+    db_session.expire_all()
+    joined = set(
+        db_session.scalars(
+            select(ProjectMember.user_id).where(
+                ProjectMember.project_id == project.id
+            )
+        )
+    )
+    assert users["other_company"].id not in joined
+    assert project_api["target"].id not in joined
+
+    ok = client.post(
+        url,
+        json={"user_id": str(users["same_a"].id), "role_ids": [str(role.id)]},
+    )
+    assert ok.status_code == 201
+    # Everyone offered by member-candidates is accepted by the write.
+    offered = client.get(
+        f"/api/v1/projects/{project.id}/member-candidates"
+    ).json()["items"]
+    assert offered
+    for row in offered:
+        accepted = client.post(
+            url, json={"user_id": row["id"], "role_ids": [str(role.id)]}
+        )
+        assert accepted.status_code == 201, row
+
+
+def test_non_admin_without_company_cannot_add_anyone(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(role, Role)
+    company = create_company(db_session, name="示範公司丙")
+    assert project_api["actor"].company_id is None
+    member = create_user(
+        db_session,
+        username="cand.companyless_target",
+        email="cand.companyless_target@demo.example",
+        name_zh="候選",
+        company_id=company.id,
+    )
+    db_session.commit()
+    refused = project_api["actor_client"].post(
+        f"/api/v1/projects/{project.id}/members",
+        json={"user_id": str(member.id), "role_ids": [str(role.id)]},
+    )
+    assert refused.status_code == 422
+    assert refused.json()["error"]["code"] == "project.member_company_mismatch"
+
+
+def test_admin_can_add_users_of_any_company(project_api, db_session: Session):
+    users = _candidate_world(db_session, project_api)
+    project = project_api["project"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(role, Role)
+    added = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members",
+        json={
+            "user_id": str(users["other_company"].id),
+            "role_ids": [str(role.id)],
+        },
+    )
+    assert added.status_code == 201

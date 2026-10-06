@@ -562,17 +562,23 @@ def list_assignable_roles(
     "/{project_id}/members",
     response_model=ProjectMemberResponse,
     status_code=201,
-    dependencies=[_PROJECT_MEMBER_ACCESS],
 )
 def add_member(
     project_id: UUID,
     body: AddProjectMemberRequest,
     db: Session = Depends(get_db),  # noqa: B008
+    caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> ProjectMemberResponse:
     _get_project(db, project_id)
     user = db.get(User, body.user_id)
     if user is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    # Same rule as member-candidates: a non-Admin caller can only add
+    # people of their own company (nobody without a company).
+    if not caller.is_admin and (
+        caller.company_id is None or user.company_id != caller.company_id
+    ):
+        raise APIError(ErrorCode.PROJECT_MEMBER_COMPANY_MISMATCH, 422)
     _require_roles(body.role_ids)
     role_ids = _checked_role_ids(db, body.role_ids)
     try:

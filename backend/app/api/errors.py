@@ -152,6 +152,10 @@ class ErrorCode(DescribedStrEnum):
         "project.member_conflict",
         "The user is already a member of this project.",
     )
+    PROJECT_MEMBER_COMPANY_MISMATCH = (
+        "project.member_company_mismatch",
+        "A non-admin can only add users of their own company.",
+    )
     PROJECT_MEMBER_ROLES_REQUIRED = (
         "project.member_roles_required",
         "A project member must have at least one role.",
