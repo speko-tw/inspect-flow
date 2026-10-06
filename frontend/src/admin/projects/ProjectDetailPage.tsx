@@ -405,7 +405,11 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           {projectInfo.client_name}；工程地點 {projectInfo.site_location}
         </p>
       )}
-      {notice && <p role="status">{notice}</p>}
+      {notice && (
+        <p className="tpl-notice tpl-notice-ok" role="status">
+          {notice}
+        </p>
+      )}
 
       <form className="member-add-form" noValidate onSubmit={submitAdd}>
         <h3>加入成員</h3>
