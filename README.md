@@ -116,7 +116,9 @@ stays on plain HTTP.
 
   Replace the example host with the LAN IP used in the certificate, and
   replace the CIDR with the actual allowed subnet. The server binds only
-  to that interface, and the LAN guard accepts only that Host value;
+  to that interface, and the LAN guard accepts only that Host value (the
+  `Host` header for HTTP/1.1, `:authority` for HTTP/2, which phones use over
+  HTTPS);
   requests from outside the CIDR receive HTTP 403. `INSPECTFLOW_DEV_HOST` and
   `INSPECTFLOW_DEV_ALLOWED_CIDR` are accepted only with HTTPS and must be
   set together. Without them, Vite stays on loopback. The backend still
