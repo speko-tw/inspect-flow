@@ -9,6 +9,8 @@ import {
   type TemplateItem,
   type TemplateSystem,
 } from '../admin/templates/api'
+import { useCurrentUser } from '../auth/useCurrentUser'
+import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden } from '../http'
 import { fetchMyProjects } from './api'
@@ -30,21 +32,6 @@ function formatTime(value: string): string {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-TW')
 }
 
-function numericStandardText(
-  standard: TemplateItem['inspection_points'][number]['numeric_standard'],
-): string | null {
-  if (!standard) return null
-  const unit = standard.unit ? ` ${standard.unit}` : ''
-  if (standard.condition === 'range') {
-    return standard.range_form === 'interval'
-      ? `${standard.lower_bound ?? ''}～${standard.upper_bound ?? ''}${unit}`
-      : `${standard.value ?? ''} ± ${standard.tolerance ?? ''}${unit}`
-  }
-  const operator =
-    standard.condition === '<=' ? '≤' : standard.condition === '>=' ? '≥' : '='
-  return `${operator} ${standard.value ?? ''}${unit}`
-}
-
 function pointEvidenceText(
   point: TemplateItem['inspection_points'][number],
 ): string[] {
@@ -58,6 +45,7 @@ function pointEvidenceText(
 
 export default function ProjectTemplatesPage() {
   const { projectId = '' } = useParams()
+  const { user } = useCurrentUser()
   const navigate = useNavigate()
   const [project, setProject] = useState<ProjectSummary | null>(null)
   const [categories, setCategories] = useState<TemplateCategory[]>([])
@@ -129,30 +117,31 @@ export default function ProjectTemplatesPage() {
   useEffect(() => {
     let active = true
     async function loadProject() {
+      // TPL-R09: only Admin or a template manager may save as a template.
+      // The server computes it (`has_template_access`); the page never
+      // guesses, and `GET /projects` is 403 for everyone else.
+      const canManage = user.has_template_access === true
+      setSaveAllowed(canManage)
       try {
-        const projects = await listAllProjects()
-        if (!active) return
-        setProject(projects.find((item) => item.id === projectId) ?? null)
-        setSaveAllowed(true)
-      } catch {
-        try {
-          const projects = await fetchMyProjects()
-          if (active) {
-            const found = projects.find((item) => item.id === projectId)
-            if (found) setSaveAllowed(true)
-            setProject(
-              found
-                ? {
-                    id: found.id,
-                    project_code: found.project_code,
-                    name: found.name,
-                  }
-                : null,
-            )
-          }
-        } catch {
-          if (active) setProject(null)
+        // Members read their own projects instead of falling back after
+        // a 403 from `GET /projects`.
+        const projects = canManage
+          ? await listAllProjects()
+          : await fetchMyProjects()
+        if (active) {
+          const found = projects.find((item) => item.id === projectId)
+          setProject(
+            found
+              ? {
+                  id: found.id,
+                  project_code: found.project_code,
+                  name: found.name,
+                }
+              : null,
+          )
         }
+      } catch {
+        if (active) setProject(null)
       } finally {
         if (active) setProjectLoading(false)
       }
@@ -161,7 +150,7 @@ export default function ProjectTemplatesPage() {
     return () => {
       active = false
     }
-  }, [projectId])
+  }, [projectId, user.has_template_access])
 
   useEffect(() => {
     let active = true
@@ -652,9 +641,7 @@ export default function ProjectTemplatesPage() {
                                   {point.numeric_standard && (
                                     <p>
                                       數值標準：{point.title}{' '}
-                                      {numericStandardText(
-                                        point.numeric_standard,
-                                      )}
+                                      {numericSummary(point)}
                                     </p>
                                   )}
                                   {point.text_standard && (

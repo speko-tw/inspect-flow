@@ -4,6 +4,7 @@ import { useParams } from 'react-router'
 import { httpErrorMessage, isForbidden } from '../../http'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
+import { numericSummary } from '../templates/templateEditorUtils'
 import {
   type AffectedTask,
   type ProjectItemApi,
@@ -337,8 +338,7 @@ export default function ProjectItemChangePage({
                   {point.numeric_standard && (
                     <p>
                       數值標準：
-                      {point.numeric_standard.value ?? '未指定'}{' '}
-                      {point.numeric_standard.unit}
+                      {numericSummary(point)}
                     </p>
                   )}
                   {point.measurement_fields.length > 0 && (

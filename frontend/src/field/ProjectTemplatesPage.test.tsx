@@ -27,7 +27,7 @@ const USER: CurrentUser = {
   must_change_password: false,
   has_office_access: true,
   has_field_access: false,
-  has_template_access: true,
+  has_template_access: false,
 }
 
 const PROJECT_ITEM: ProjectInspectionItem = {
@@ -74,6 +74,10 @@ const TEMPLATE = {
   ],
 }
 
+// The server decides `has_template_access` and `GET /projects` access
+// from the same rule, so the mock keeps them in step via `canSave`.
+let managerMock = false
+
 function mockApi(
   options: {
     applyResponse?: Response
@@ -86,6 +90,7 @@ function mockApi(
   } = {},
 ) {
   let saveRequests = 0
+  managerMock = Boolean(options.canSave)
   const calls = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
     if (url === '/api/v1/projects?limit=100') {
@@ -230,10 +235,12 @@ function mockApi(
   return calls
 }
 
-function renderPage() {
+function renderPage(
+  user: CurrentUser = { ...USER, has_template_access: managerMock },
+) {
   return render(
     <MemoryRouter initialEntries={['/admin/projects/project-1/templates']}>
-      <CurrentUserProvider value={{ user: USER, clear: vi.fn() }}>
+      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         <Routes>
           <Route
             element={<ProjectTemplatesPage />}
@@ -581,9 +588,9 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
   })
 
-  it('專案成員可發起存為範本，寫入 403 後停用並顯示權限訊息', async () => {
+  it('有權限者在權限被收回後寫入 403，停用並顯示權限訊息', async () => {
     mockApi({
-      canSave: false,
+      canSave: true,
       projectItems: [PROJECT_ITEM],
       saveResponse: Response.json(
         { error: { code: 'permission.denied' } },
@@ -603,5 +610,59 @@ describe('專案範本套用與存為範本（#429）', () => {
       '目前只能瀏覽查核項目。',
     )
     expect(screen.getByRole('button', { name: '存入這個系統' })).toBeDisabled()
+  })
+
+  describe('存為範本的顯示權限（#482，TPL-R09）', () => {
+    const urls = (calls: ReturnType<typeof mockApi>) =>
+      calls.mock.calls.map(([input]) => String(input))
+
+    it('一般專案成員看不到存為範本，且不靠 403 降級讀專案', async () => {
+      const calls = mockApi({ canSave: false, projectItems: [PROJECT_ITEM] })
+      renderPage()
+      expect(await screen.findByText('管線查核')).toBeInTheDocument()
+      expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: '存為範本' }),
+      ).not.toBeInTheDocument()
+      expect(urls(calls)).toContain('/api/v1/me/projects')
+      expect(urls(calls)).not.toContain('/api/v1/projects?limit=100')
+    })
+
+    it('範本管理員（has_template_access）看得到存為範本', async () => {
+      const calls = mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+      renderPage({ ...USER, has_template_access: true })
+      expect(
+        await screen.findByRole('button', { name: '存為範本' }),
+      ).toBeInTheDocument()
+      expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+      expect(urls(calls)).toContain('/api/v1/projects?limit=100')
+      expect(urls(calls)).not.toContain('/api/v1/me/projects')
+    })
+
+    it('Admin（三項存取皆 true）看得到存為範本', async () => {
+      mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+      renderPage({
+        ...USER,
+        is_admin: true,
+        has_office_access: true,
+        has_field_access: true,
+        has_template_access: true,
+      })
+      expect(
+        await screen.findByRole('button', { name: '存為範本' }),
+      ).toBeInTheDocument()
+    })
+
+    it('has_template_access 缺值（fallback）時不顯示存為範本', async () => {
+      mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+      const partial: Partial<CurrentUser> = { ...USER }
+      delete partial.has_template_access
+      renderPage(partial as CurrentUser)
+      expect(await screen.findByText('管線查核')).toBeInTheDocument()
+      expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: '存為範本' }),
+      ).not.toBeInTheDocument()
+    })
   })
 })
