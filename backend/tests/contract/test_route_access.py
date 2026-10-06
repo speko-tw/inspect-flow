@@ -365,15 +365,10 @@ def test_issue_290_my_projects_route_requires_login() -> None:
         if info.path.startswith("/api/v1/me")
     }
 
-    expected = {
-        ("GET", "/api/v1/me/projects"),
-        ("GET", "/api/v1/me/permissions"),
-    }
-    assert set(declarations) == expected
-    for key in expected:
-        declaration = declarations[key]
-        assert declaration is not None
-        assert declaration.level is AccessLevel.LOGIN_REQUIRED
+    assert set(declarations) == {("GET", "/api/v1/me/projects")}
+    declaration = declarations[("GET", "/api/v1/me/projects")]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
 def test_issue_416_field_routes_declare_their_access_contract() -> None:

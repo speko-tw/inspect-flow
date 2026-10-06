@@ -57,27 +57,6 @@ export function listTemplateSystems(
   return allPages(`/template-categories/${categoryId}/systems`)
 }
 
-export interface MyPermissions {
-  can_manage_templates: boolean
-}
-
-/**
- * What the current user may do across projects (`GET /me/permissions`).
- * Only an explicit boolean `true` from the server allows saving as a
- * template (TPL-R09); a malformed body is an error, never a grant.
- */
-export async function fetchMyPermissions(): Promise<MyPermissions> {
-  const body = await request<unknown>('/me/permissions')
-  if (
-    typeof body !== 'object' ||
-    body === null ||
-    typeof (body as MyPermissions).can_manage_templates !== 'boolean'
-  ) {
-    throw new Error('Permissions response has an unexpected shape')
-  }
-  return { can_manage_templates: (body as MyPermissions).can_manage_templates }
-}
-
 export function listAllProjects(): Promise<ProjectSummary[]> {
   return allPages('/projects')
 }

@@ -240,6 +240,7 @@
 .field-error p {
   color: inherit;
 }
+.field-notice .button-link,
 .field-detail-error .button-link,
 .field-detail-error button {
   display: inline-flex;

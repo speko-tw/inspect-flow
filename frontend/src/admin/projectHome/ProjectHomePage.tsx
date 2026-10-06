@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router'
 
+import { landingPath } from '../../auth/landing'
+import { useCurrentUser } from '../../auth/useCurrentUser'
 import { isForbidden } from '../../http'
 import { managementErrorMessage } from '../api'
 import ProjectSectionShell from './ProjectSectionShell'
@@ -39,12 +41,14 @@ const STEP_CONTENT: Record<
   complete_reinspection: {
     label: '追蹤任務進度',
     action: '前往追蹤任務進度',
-    suffix: '/progress',
+    // 進度區段的正式內容由 #452 提供；在那之前任務進度看計畫與任務頁。
+    suffix: '/planning',
   },
 }
 
 export default function ProjectHomePage() {
   const { projectId = '' } = useParams()
+  const { user } = useCurrentUser()
   const location = useLocation()
   const [duplicateWarningDismissed, setDuplicateWarningDismissed] =
     useState(false)
@@ -89,7 +93,7 @@ export default function ProjectHomePage() {
   )?.duplicateProjectCode
 
   if (summary && !canViewIndoorSections(summary)) {
-    return <Navigate replace to="/field" />
+    return <Navigate replace to={landingPath(user)} />
   }
 
   if (denied) return <ProjectDeniedPage />
@@ -138,8 +142,8 @@ export default function ProjectHomePage() {
               ) : (
                 <>
                   <p>目前沒有待處理的下一步。</p>
-                  <Link className="button-link" to={`${base}/progress`}>
-                    追蹤進度
+                  <Link className="button-link" to={`${base}/planning`}>
+                    查看計畫與任務
                   </Link>
                 </>
               )}

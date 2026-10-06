@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Navigate, useParams } from 'react-router'
 
+import { landingPath } from '../../auth/landing'
+import { useCurrentUser } from '../../auth/useCurrentUser'
 import { isForbidden } from '../../http'
 import { managementErrorMessage } from '../api'
 import ProjectItemLinks from '../projectItems/ProjectItemLinks'
@@ -29,6 +31,7 @@ export default function ProjectSectionPage({
   children?: ReactNode
 }) {
   const { projectId = '' } = useParams()
+  const { user } = useCurrentUser()
   const [result, setResult] = useState<{
     projectId: string
     project: { project_code: string; name: string }
@@ -77,7 +80,7 @@ export default function ProjectSectionPage({
     !currentResult.canViewIndoor &&
     currentResult.error === undefined
   ) {
-    return <Navigate replace to="/field" />
+    return <Navigate replace to={landingPath(user)} />
   }
   if (currentResult?.error) {
     if (currentResult.denied) return <ProjectDeniedPage />

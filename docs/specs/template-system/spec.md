@@ -89,7 +89,6 @@
 | POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | Admin 或範本管理員 |
 | GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 該專案成員、Admin 或範本管理員；跨專案瀏覽限 Admin 或範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
-| GET | `/api/v1/me/permissions` | 回傳目前使用者的跨專案能力 `{can_manage_templates}`；Admin 與範本管理員為 `true`，其他人為 `false`。前端只依此顯示「存為範本」，並決定專案名稱讀 `GET /projects`（`true`）或 `GET /me/projects`（`false`） | 需登入；未登入回 401 |
 | PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204 | Admin |
 | DELETE | `/api/v1/system-role-assignments/template_admin/{user_id}` | 收回使用者的 `template_admin` 指派；尚未指派時回 404 | Admin |
 
@@ -149,7 +148,7 @@
 | TPL-AC20 | 查核項次 1、3 有驗證錯誤，項次 2 無錯誤；目前展開項次可為項次 1，也可為 `null` | 儲存後分別在項次 1（目前展開）及項次 1（目前展開為 `null`）連續輸入 `AB`，另在項次 3 連續輸入 `XY`；修正項次 3 後展開項次 2；手動收合一張仍有錯誤的卡片 | 儲存失敗後項次 1、3 展開並聚焦第一個錯誤；輸入期間標題完整保留、卡片保持展開且焦點仍在輸入框；展開項次 2 後仍有錯誤的項次 1 保持展開，已修正的項次 3 收合；使用者可手動收合錯誤卡片 | TPL-R22 |
 | TPL-AC21 | 專案有可套用項目，且使用者有 `project_inspection_item.edit` 權限；另有專案內同名項目 | 以 1280px 和 360px 檢視套用頁，分別預覽並套用單項、預覽含多項的整個系統、觸發同名 409，再使用兩個出口 | 頁首只顯示專案代號及名稱；預覽列出新增數量、白話項目摘要、項次文字／數值標準、照片需求及副本固定說明；多項系統出現頁內確認且確認後才送出；成功回到專案並看見新項目；手機使用清單→詳情單欄導覽，返回後保留樹狀展開／選取；409 顯示「已套用過『X』，本次沒有新增任何項目」，改選可重新選取，返回可回專案；403 後維持唯讀且不得送出 | TPL-R08、TPL-R09、TPL-R14、TPL-R23 |
 | TPL-AC22 | 專案含可存為範本的查核項目，且目標系統含同名範本；內業專案清單含專案 | 從專案項目啟動存為範本，選擇衝突系統後改選其他系統；在 360px 開啟專案工作台 | 標題顯示來源項目且沒有名稱欄；導覽最多展開到系統層，目的地預覽正確；手機以清單→詳情單欄導覽並可返回選擇；409 後來源與系統選取保留，改選系統後衝突訊息清除且可成功存入；手機每個專案以獨立卡片呈現，主要「套用範本」按鈕可見且不需水平捲動；Field 首頁無範本入口 | TPL-R09、TPL-R23 |
-| TPL-AC23 | 內業帳號（非 Admin、非範本管理員）、範本管理員與 Admin 各一，專案有已套用的查核項目 | 各自開啟套用頁；另模擬 `GET /me/permissions` 失敗或回傳格式不符 | 內業帳號看不到「存為範本」，且載入專案時不呼叫 `GET /projects`（不靠 403 降級）；範本管理員與 Admin 看得到；權限查詢失敗或格式不符時一律不顯示；後端 `GET /me/permissions` 對 Admin 與範本管理員回 `true`、對專案成員回 `false`、未登入回 401 | TPL-R09、TPL-R23 |
+| TPL-AC23 | 內業帳號（非 Admin、非範本管理員）、範本管理員與 Admin 各一，專案有已套用的查核項目 | 各自登入後開啟套用頁；另模擬登入本體缺少 `has_template_access` | 內業帳號看不到「存為範本」，且載入專案時改讀 `GET /me/projects`、不呼叫 `GET /projects`（不靠 403 降級）；範本管理員與 Admin（`has_template_access` 為 `true`）看得到，並用 `GET /projects` 讀專案；`has_template_access` 缺值時一律不顯示 | TPL-R09、TPL-R23、AUT-R08 |
 | TPL-AC24 | 專案查核項目的數值標準分別為區間（`lower_bound`、`upper_bound`，`value` 為空）、標準值加減誤差與單側條件 | 開啟專案查核項目修改頁與套用頁預覽 | 區間顯示「下限～上限 單位」，公差顯示「標準值 ± 誤差 單位」，單側顯示「≤／≥／＝ 值 單位」；不得出現「未指定」；各頁與範本編輯器共用同一個格式化函式 | TPL-R06、TPL-R13 |
 
 <a id="design-decisions"></a>
@@ -190,4 +189,4 @@
 - TPL-R19 的排序需求屬規格設計（非負責人裁定），為 #427 審查中發現的缺陷修正；TPL-AC17 增列含資料 upgrade、downgrade、再 upgrade 遷移測試 — [PR #441 第 2 輪審查](https://github.com/speko-tw/inspect-flow/pull/441#pullrequestreview-5407786064)。
 - 規格澄清（規格設計，非負責人裁定，#462）：範本與專案項目列表、範本詳情改以批次載入項次子資料，查詢數不隨項目數成長；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
 - 規格澄清（規格設計，非負責人裁定，#464）：TPL-R07、TPL-AC07 由「每個項次至少一筆照片需求」改為「恰好一筆，多送一筆回 422」，專案查核項目 PATCH 也套用同一套結構驗證（重複 `sequence` 等改回 422）。理由：依 KD-50 張數用 `min_count` 表達，UI 與快照表原本就是每個項次一筆，照正常操作的行為不變；多筆照片需求只能由直接呼叫 API 寫入，且會讓之後建立任務、恢復任務與修改被草稿任務使用的項目回 500。升級時既有的重複照片需求會合併為最大張數 — [#464](https://github.com/speko-tw/inspect-flow/issues/464)
-- 規格澄清（規格設計，非負責人裁定，#482）：新增 `GET /api/v1/me/permissions`（`can_manage_templates`）供前端判斷是否顯示「存為範本」，權限查詢失敗一律視為不允許，不再於 403 降級時預設允許；修改頁數值標準改用範本編輯器的格式化函式，修正區間形式顯示「未指定」。合法請求的既有行為不變，只新增唯讀端點與 TPL-AC23～TPL-AC24 — [#482](https://github.com/speko-tw/inspect-flow/issues/482)
+- 範圍變更（負責人指示，#482）：套用頁「存為範本」只依登入本體的 `has_template_access`（#484 已提供）顯示，缺值視為不允許，非管理者改讀 `GET /me/projects`；不新增端點。修改頁數值標準改用範本編輯器的格式化函式，修正區間形式顯示「未指定」；新增 TPL-AC23～TPL-AC24 — [#482 負責人指示](https://github.com/speko-tw/inspect-flow/issues/482#issuecomment-6013263921)

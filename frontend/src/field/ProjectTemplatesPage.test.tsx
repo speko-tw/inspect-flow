@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
-import permissionsContract from './fixtures/my-permissions-contract.json'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
 import {
   ProjectTemplatesApiError,
@@ -26,6 +25,9 @@ const USER: CurrentUser = {
   name_zh: null,
   is_admin: false,
   must_change_password: false,
+  has_office_access: true,
+  has_field_access: false,
+  has_template_access: false,
 }
 
 const PROJECT_ITEM: ProjectInspectionItem = {
@@ -72,6 +74,10 @@ const TEMPLATE = {
   ],
 }
 
+// The server decides `has_template_access` and `GET /projects` access
+// from the same rule, so the mock keeps them in step via `canSave`.
+let managerMock = false
+
 function mockApi(
   options: {
     applyResponse?: Response
@@ -79,33 +85,14 @@ function mockApi(
     templates?: (typeof TEMPLATE)[]
     projectItems?: ProjectInspectionItem[]
     canSave?: boolean
-    permissions?: 'error' | 'malformed'
     denyCategories?: boolean
     secondSystemTemplate?: boolean
   } = {},
 ) {
   let saveRequests = 0
+  managerMock = Boolean(options.canSave)
   const calls = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
-    if (url === '/api/v1/me/permissions') {
-      if (options.permissions === 'error') {
-        return Response.json(
-          { error: { code: 'internal.error' } },
-          { status: 500 },
-        )
-      }
-      // The body is built from the contract fixture shared with the
-      // backend test, so a drifting key set fails both sides (RG-M22).
-      const body = Object.fromEntries(
-        permissionsContract.response_keys.map((key) => [
-          key,
-          options.permissions === 'malformed'
-            ? 'yes'
-            : Boolean(options.canSave),
-        ]),
-      )
-      return Response.json(body)
-    }
     if (url === '/api/v1/projects?limit=100') {
       return options.canSave
         ? Response.json({
@@ -248,10 +235,12 @@ function mockApi(
   return calls
 }
 
-function renderPage() {
+function renderPage(
+  user: CurrentUser = { ...USER, has_template_access: managerMock },
+) {
   return render(
     <MemoryRouter initialEntries={['/admin/projects/project-1/templates']}>
-      <CurrentUserProvider value={{ user: USER, clear: vi.fn() }}>
+      <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         <Routes>
           <Route
             element={<ProjectTemplatesPage />}
@@ -639,9 +628,9 @@ describe('專案範本套用與存為範本（#429）', () => {
       expect(urls(calls)).not.toContain('/api/v1/projects?limit=100')
     })
 
-    it('Admin 或範本管理員（後端回可管理）看得到存為範本', async () => {
+    it('範本管理員（has_template_access）看得到存為範本', async () => {
       const calls = mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
-      renderPage()
+      renderPage({ ...USER, has_template_access: true })
       expect(
         await screen.findByRole('button', { name: '存為範本' }),
       ).toBeInTheDocument()
@@ -650,27 +639,30 @@ describe('專案範本套用與存為範本（#429）', () => {
       expect(urls(calls)).not.toContain('/api/v1/me/projects')
     })
 
-    it.each(['error', 'malformed'] as const)(
-      '權限查詢失敗（%s）時一律不顯示存為範本',
-      async (permissions) => {
-        mockApi({
-          canSave: true,
-          permissions,
-          projectItems: [PROJECT_ITEM],
-        })
-        renderPage()
-        expect(await screen.findByText('管線查核')).toBeInTheDocument()
-        expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
-        expect(
-          screen.queryByRole('button', { name: '存為範本' }),
-        ).not.toBeInTheDocument()
-      },
-    )
+    it('Admin（三項存取皆 true）看得到存為範本', async () => {
+      mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+      renderPage({
+        ...USER,
+        is_admin: true,
+        has_office_access: true,
+        has_field_access: true,
+        has_template_access: true,
+      })
+      expect(
+        await screen.findByRole('button', { name: '存為範本' }),
+      ).toBeInTheDocument()
+    })
 
-    it('權限回應鍵集合與後端契約一致', () => {
-      expect(permissionsContract.response_keys).toEqual([
-        'can_manage_templates',
-      ])
+    it('has_template_access 缺值（fallback）時不顯示存為範本', async () => {
+      mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+      const partial: Partial<CurrentUser> = { ...USER }
+      delete partial.has_template_access
+      renderPage(partial as CurrentUser)
+      expect(await screen.findByText('管線查核')).toBeInTheDocument()
+      expect(await screen.findByText(/試用專案 A/)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: '存為範本' }),
+      ).not.toBeInTheDocument()
     })
   })
 })

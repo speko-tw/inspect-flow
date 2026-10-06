@@ -72,6 +72,12 @@ export default function FieldPage() {
           <span>{user.name_zh ?? user.username}</span>
         </div>
         <nav className="field-top-actions" aria-label="我的功能">
+          {user.has_office_access && (
+            <Link to="/admin/projects">專案管理</Link>
+          )}
+          {user.has_template_access && (
+            <Link to="/admin/templates">範本管理</Link>
+          )}
           <Link to="/change-password" state={{ from }}>
             變更密碼
           </Link>
@@ -137,6 +143,7 @@ function TaskList({
   const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
+  const { user } = useCurrentUser()
 
   useEffect(() => {
     let active = true
@@ -269,6 +276,16 @@ function TaskList({
         <section className="field-notice field-error" role="alert">
           <h2>目前無法查看現場任務</h2>
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
+          {user.has_office_access && (
+            <Link className="button-link" to="/admin/projects">
+              前往專案管理
+            </Link>
+          )}
+          {user.has_template_access && (
+            <Link className="button-link" to="/admin/templates">
+              前往範本管理
+            </Link>
+          )}
         </section>
       )}
       {error === 'other' && !state?.nextCursor && (

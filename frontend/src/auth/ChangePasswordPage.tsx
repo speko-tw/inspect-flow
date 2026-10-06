@@ -17,12 +17,14 @@
 // 在改密碼，仍可登出（AUT-R30、AUT-R33 允許登出）。
 
 import { useState, type FormEvent } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { ApiError, changePassword } from './api'
 import AuthLayout from './AuthLayout'
+import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
+import { useCurrentUser } from './useCurrentUser'
 
 // AUT-R04：新密碼長度必須介於 8～128 個字元（含兩端），以 Unicode
 // code point 計算；集中成常數只為了組出下面的錯誤訊息，前端不會
@@ -56,6 +58,8 @@ interface RedirectState {
 export default function ChangePasswordPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useCurrentUser()
+  const target = landingPath(user)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -137,6 +141,13 @@ export default function ChangePasswordPage() {
           變更密碼
         </button>
       </form>
+      {!user.must_change_password && (
+        <p>
+          <Link className="button-link" to={target}>
+            返回{landingLabel(target)}
+          </Link>
+        </p>
+      )}
       <LogoutButton />
     </AuthLayout>
   )

@@ -38,6 +38,7 @@ from app.auth.sessions import (
     set_session_cookie,
 )
 from app.models import AuthSession, Company, User, UserPassword
+from app.services.access_summary import summarize_access
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -97,6 +98,11 @@ class MeResponse(CurrentUserResponse):
     department: str | None
     location: str | None
     employee_no: str | None
+    # #480: which UI areas the user can use, computed by the backend so
+    # the frontend never guesses from ``is_admin`` alone.
+    has_office_access: bool
+    has_field_access: bool
+    has_template_access: bool
 
 
 def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
@@ -118,6 +124,7 @@ def _me_response(db: Session, user: User) -> MeResponse:
         else None
     )
     base = _current_user_response(db, user)
+    access = summarize_access(db, user)
     return MeResponse(
         **base.model_dump(),
         company=(
@@ -128,6 +135,9 @@ def _me_response(db: Session, user: User) -> MeResponse:
         department=user.department,
         location=user.location,
         employee_no=user.employee_no,
+        has_office_access=access.has_office_access,
+        has_field_access=access.has_field_access,
+        has_template_access=access.has_template_access,
     )
 
 

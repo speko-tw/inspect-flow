@@ -70,10 +70,22 @@ const currentUser: CurrentUser = {
   name_zh: null,
   is_admin: true,
   must_change_password: false,
+  has_office_access: true,
+  has_field_access: true,
+  has_template_access: true,
 }
 
-function renderAdmin(path = '/admin/users', isAdmin = true) {
-  const signedInUser = { ...currentUser, is_admin: isAdmin }
+function renderAdmin(
+  path = '/admin/users',
+  isAdmin = true,
+  access: Partial<
+    Pick<
+      CurrentUser,
+      'has_office_access' | 'has_field_access' | 'has_template_access'
+    >
+  > = {},
+) {
+  const signedInUser = { ...currentUser, is_admin: isAdmin, ...access }
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
@@ -1000,8 +1012,8 @@ describe('admin user and company pages', () => {
   })
 
   it.each([
-    '/admin/projects',
     '/admin/companies',
+    '/admin/roles',
     '/admin/projects/project-demo-1/planning/extra',
   ])('denies non-admin access to protected route %s', (path) => {
     managementFetch()
@@ -1057,11 +1069,86 @@ describe('admin user and company pages', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '你沒有權限瀏覽範本庫。',
     )
-    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
-      'href',
-      '/',
-    )
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+  })
+
+  describe('non-admin navigation (#480)', () => {
+    const nav = () => screen.getByRole('navigation', { name: '管理功能' })
+    const labels = () =>
+      within(nav())
+        .getAllByRole('link')
+        .map((link) => link.textContent)
+
+    it('office-only users see projects and change password only', async () => {
+      managementFetch()
+      renderAdmin('/admin/projects', false, {
+        has_office_access: true,
+        has_field_access: false,
+        has_template_access: false,
+      })
+
+      expect(labels()).toEqual(['專案', '變更密碼'])
+      expect(
+        await screen.findByRole('heading', { name: '我的專案' }),
+      ).toBeInTheDocument()
+    })
+
+    it('never lists admin-only entries for any non-admin', () => {
+      managementFetch()
+      renderAdmin('/admin/projects', false)
+
+      for (const name of ['使用者', '公司', '角色']) {
+        expect(within(nav()).queryByRole('link', { name })).toBeNull()
+      }
+    })
+
+    it('shows templates only with template access', () => {
+      managementFetch()
+      renderAdmin('/admin/projects', false, { has_template_access: true })
+      expect(labels()).toContain('範本管理')
+    })
+
+    it('shows the field link only with field access', () => {
+      managementFetch()
+      renderAdmin('/admin/projects', false, {
+        has_office_access: true,
+        has_field_access: true,
+        has_template_access: false,
+      })
+
+      expect(labels()).toEqual(['專案', '現場任務', '變更密碼'])
+      expect(screen.getByRole('link', { name: '現場任務' })).toHaveAttribute(
+        'href',
+        '/field',
+      )
+    })
+
+    it('explains template management access on /admin/templates', () => {
+      managementFetch()
+      renderAdmin('/admin/templates', false, {
+        has_office_access: true,
+        has_field_access: false,
+        has_template_access: false,
+      })
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '只有系統管理者或範本管理員可以使用範本管理。',
+      )
+    })
+
+    it('does not route to template management without access', () => {
+      managementFetch()
+      renderAdmin('/admin/templates', false, {
+        has_office_access: true,
+        has_field_access: false,
+        has_template_access: false,
+      })
+
+      expect(
+        screen.getByRole('heading', { name: '無權限' }),
+      ).toBeInTheDocument()
+      expect(labels()).toEqual(['專案', '變更密碼'])
+    })
   })
 
   it('lets members read items when edit permission is denied', async () => {

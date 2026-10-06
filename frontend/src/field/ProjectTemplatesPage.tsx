@@ -9,13 +9,13 @@ import {
   type TemplateItem,
   type TemplateSystem,
 } from '../admin/templates/api'
+import { useCurrentUser } from '../auth/useCurrentUser'
 import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden } from '../http'
 import { fetchMyProjects } from './api'
 import {
   applyTemplate,
-  fetchMyPermissions,
   listAllProjects,
   listProjectInspectionItems,
   ProjectTemplatesApiError,
@@ -45,6 +45,7 @@ function pointEvidenceText(
 
 export default function ProjectTemplatesPage() {
   const { projectId = '' } = useParams()
+  const { user } = useCurrentUser()
   const navigate = useNavigate()
   const [project, setProject] = useState<ProjectSummary | null>(null)
   const [categories, setCategories] = useState<TemplateCategory[]>([])
@@ -117,17 +118,13 @@ export default function ProjectTemplatesPage() {
     let active = true
     async function loadProject() {
       // TPL-R09: only Admin or a template manager may save as a template.
-      // The server says which; any failure to learn it means "not allowed".
-      const canManage = await fetchMyPermissions().then(
-        (permissions) => permissions.can_manage_templates,
-        () => false,
-      )
-      if (!active) return
+      // The server computes it (`has_template_access`); the page never
+      // guesses, and `GET /projects` is 403 for everyone else.
+      const canManage = user.has_template_access === true
       setSaveAllowed(canManage)
       try {
-        // `GET /projects` is 403 for everyone else, so only managers use
-        // it; members read their own projects instead of falling back
-        // after a 403.
+        // Members read their own projects instead of falling back after
+        // a 403 from `GET /projects`.
         const projects = canManage
           ? await listAllProjects()
           : await fetchMyProjects()
@@ -153,7 +150,7 @@ export default function ProjectTemplatesPage() {
     return () => {
       active = false
     }
-  }, [projectId])
+  }, [projectId, user.has_template_access])
 
   useEffect(() => {
     let active = true

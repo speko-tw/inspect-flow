@@ -1,0 +1,29 @@
+{
+  "current_user_keys": [
+    "company",
+    "department",
+    "email",
+    "employee_no",
+    "has_field_access",
+    "has_office_access",
+    "has_template_access",
+    "id",
+    "is_admin",
+    "location",
+    "must_change_password",
+    "name_en",
+    "name_zh",
+    "username"
+  ],
+  "my_project_keys": [
+    "client_name",
+    "has_office_access",
+    "id",
+    "name",
+    "planned_completion_date",
+    "planned_start_date",
+    "project_code",
+    "role_names",
+    "site_location"
+  ]
+}

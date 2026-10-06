@@ -138,3 +138,21 @@ export function personLabel(person: {
     ? `${person.name_zh}（${person.username}）`
     : person.username
 }
+
+/** `GET /me/projects` 的一筆：我參與的專案（#290、#480）。 */
+export interface MyProject {
+  id: string
+  project_code: string
+  name: string
+  client_name: string
+  site_location: string
+  planned_start_date: string | null
+  planned_completion_date: string | null
+  role_names: string[]
+  /** 我在這個專案有內業權限碼；內業專案清單只列 true 的專案。 */
+  has_office_access: boolean
+}
+
+export function listMyProjects(): Promise<MyProject[]> {
+  return request('/me/projects')
+}
