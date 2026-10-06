@@ -191,6 +191,20 @@ function isAllowedHost(hostHeader: string | undefined, host: string): boolean {
   }
 }
 
+// HTTP/2 沒有 host header，Host 放在 :authority 偽標頭（Node 相容層
+// 會把它放進 request.headers[':authority']）；HTTP/1.1 才用 host。
+// 有 :authority 時只看它，不退回 host（RFC 9113 §8.3.1）。
+export function getRequestHost(headers: {
+  [name: string]: string | string[] | undefined
+}): string | undefined {
+  const authority = headers[':authority']
+  if (typeof authority === 'string') {
+    return authority
+  }
+  const host = headers.host
+  return typeof host === 'string' ? host : undefined
+}
+
 function isAllowedConnection(
   address: string | undefined,
   hostHeader: string | undefined,
@@ -215,7 +229,8 @@ export function createLanAccessPlugin(cidr: string, host: string): Plugin {
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const address = request.socket.remoteAddress || ''
-        if (!isAllowedConnection(address, request.headers.host, cidr, host)) {
+        const hostHeader = getRequestHost(request.headers)
+        if (!isAllowedConnection(address, hostHeader, cidr, host)) {
           response.statusCode = 403
           response.end('LAN source or Host is not allowed')
           return
@@ -226,7 +241,7 @@ export function createLanAccessPlugin(cidr: string, host: string): Plugin {
         if (
           isAllowedConnection(
             socket.remoteAddress,
-            request.headers.host,
+            getRequestHost(request.headers),
             cidr,
             host,
           )
