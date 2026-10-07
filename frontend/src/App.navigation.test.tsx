@@ -441,31 +441,31 @@ describe('依後端存取摘要決定落點（#480）', () => {
     renderApp('/')
 
     await screen.findByRole('heading', { name: '今日任務' })
-    expect(screen.queryByRole('link', { name: '專案管理' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
     fireEvent.click(screen.getByRole('link', { name: '範本管理' }))
     expect(
       await screen.findByRole('heading', { name: '範本管理' }),
     ).toBeVisible()
   })
 
-  it('只有範本管理員的 /field 說明頁有前往範本管理，沒有前往專案管理', async () => {
+  it('只有範本管理員的 /field 說明頁有前往範本管理，沒有前往我的專案', async () => {
     stubBackend(TEMPLATE_ONLY)
     renderApp('/field')
 
     expect(
       await screen.findByRole('link', { name: '前往範本管理' }),
     ).toHaveAttribute('href', '/admin/templates')
-    expect(screen.queryByRole('link', { name: '前往專案管理' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '前往我的專案' })).toBeNull()
   })
 
-  it('兩者皆無的帳號在 /field 看到權限說明，沒有前往專案管理', async () => {
+  it('兩者皆無的帳號在 /field 看到權限說明，沒有前往我的專案', async () => {
     stubBackend(NOBODY)
     renderApp('/')
 
     expect(
       await screen.findByRole('heading', { name: '目前無法查看現場任務' }),
     ).toBeVisible()
-    expect(screen.queryByRole('link', { name: '前往專案管理' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '前往我的專案' })).toBeNull()
   })
 })
 
@@ -534,7 +534,7 @@ describe('出路與 404（#480）', () => {
       expect(screen.queryByRole('link', { name })).toBeNull()
     }
 
-    fireEvent.click(within(bar).getByRole('link', { name: '專案' }))
+    fireEvent.click(within(bar).getByRole('link', { name: '我的專案' }))
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()

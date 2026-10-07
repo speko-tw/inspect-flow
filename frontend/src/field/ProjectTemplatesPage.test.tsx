@@ -87,9 +87,11 @@ function mockApi(
     canSave?: boolean
     denyCategories?: boolean
     secondSystemTemplate?: boolean
+    secondSystemGrowsAfterSave?: boolean
   } = {},
 ) {
   let saveRequests = 0
+  let saved = false
   managerMock = Boolean(options.canSave)
   const calls = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -189,6 +191,16 @@ function mockApi(
                   system_id: 'system-2',
                   title: '電力查核',
                 },
+                ...(options.secondSystemGrowsAfterSave && saved
+                  ? [
+                      {
+                        ...TEMPLATE,
+                        id: 'template-new',
+                        system_id: 'system-2',
+                        title: '管線查核',
+                      },
+                    ]
+                  : []),
               ],
         next_cursor: null,
       })
@@ -214,6 +226,7 @@ function mockApi(
     }
     if (url.endsWith('/projects/project-1/templates')) {
       saveRequests += 1
+      saved = true
       return options.saveResponse && saveRequests === 1
         ? options.saveResponse
         : Response.json(
@@ -553,6 +566,35 @@ describe('專案範本套用與存為範本（#429）', () => {
           system_id: 'system-3',
         }),
       }),
+    )
+  })
+
+  it('存為範本後，目標系統在範本樹的項目數會重新載入（#487）', async () => {
+    mockApi({
+      canSave: true,
+      projectItems: [PROJECT_ITEM],
+      secondSystemGrowsAfterSave: true,
+    })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    await waitFor(() =>
+      expect(
+        within(nav).getByRole('button', { name: '電氣' }),
+      ).toHaveTextContent('1 個查核項目'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已將「管線查核」存入「建築工程 / 電氣」。',
+    )
+    await waitFor(() =>
+      expect(
+        within(nav).getByRole('button', { name: '電氣' }),
+      ).toHaveTextContent('2 個查核項目'),
     )
   })
 

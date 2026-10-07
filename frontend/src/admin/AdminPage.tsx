@@ -102,7 +102,11 @@ function AdminPageContent() {
         {!temporaryPassword && <LogoutButton />}
       </header>
       <main>
-        {typeof notice === 'string' && <p role="status">{notice}</p>}
+        {typeof notice === 'string' && (
+          <p className="tpl-notice tpl-notice-ok" role="status">
+            {notice}
+          </p>
+        )}
         {temporaryPassword &&
         location.pathname === '/admin/users' &&
         location.key === temporaryPassword.locationKey ? (
@@ -207,14 +211,16 @@ function AdminPageContent() {
 // 只屬系統管理者，這裡一律不列。
 function MemberAdminShell({ user }: { user: CurrentUser }) {
   const location = useLocation()
+  // 從別頁導來時帶的提示（例如套用範本成功後）。
+  const notice = (location.state as { notice?: unknown } | null)?.notice
   const navItems = [
     user.has_office_access || !user.has_template_access
-      ? { to: '/admin/projects', label: '專案' }
+      ? { to: '/admin/projects', label: '我的專案' }
       : null,
     user.has_template_access
       ? { to: '/admin/templates', label: '範本管理' }
       : null,
-    user.has_field_access ? { to: '/field', label: '現場任務' } : null,
+    user.has_field_access ? { to: '/field', label: '今日任務' } : null,
     { to: '/change-password', label: '變更密碼' },
   ].filter((item): item is { to: string; label: string } => item !== null)
   const indexTarget = landingPath(user)
@@ -276,6 +282,11 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
         <LogoutButton />
       </header>
       <main>
+        {typeof notice === 'string' && (
+          <p className="tpl-notice tpl-notice-ok" role="status">
+            {notice}
+          </p>
+        )}
         <Routes>
           <Route
             index

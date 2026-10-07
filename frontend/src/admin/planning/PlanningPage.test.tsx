@@ -11,6 +11,13 @@ import { ManagementApiError } from '../api'
 import { createMockPlanningClient } from './api.mock'
 import PlanningPage from './PlanningPage'
 
+// 操作成功後的提示要用 role="status" 讓報讀軟體讀出來（#487）。
+async function expectNotice(text: string) {
+  const notice = await screen.findByText(text)
+  expect(notice).toHaveAttribute('role', 'status')
+  return notice
+}
+
 describe('planning management page', () => {
   it(
     'manages zones, plans, multi-item tasks, dispatch, cancel, ' +
@@ -28,6 +35,7 @@ describe('planning management page', () => {
       })
       fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
       await screen.findByText('北區')
+      await expectNotice('已新增分區「北區」。')
 
       fireEvent.change(screen.getByLabelText(/計畫名稱/), {
         target: { value: '橋梁查核' },
@@ -36,6 +44,8 @@ describe('planning management page', () => {
       const planButton = await screen.findByRole('button', {
         name: '橋梁查核（草稿）',
       })
+      await expectNotice('已建立計畫「橋梁查核」。')
+      expect(screen.queryByText('已新增分區「北區」。')).toBeNull()
       fireEvent.click(planButton)
 
       fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
@@ -56,6 +66,7 @@ describe('planning management page', () => {
       const taskHeading = await screen.findByRole('heading', {
         name: /混凝土外觀、鋼筋保護層\s+（草稿）/,
       })
+      await expectNotice('已建立草稿任務，派出後現場才看得到。')
       const taskArticle = taskHeading.closest('article')
       expect(taskArticle).not.toBeNull()
       expect(
@@ -83,6 +94,7 @@ describe('planning management page', () => {
         }),
       )
       const locatedTask = await screen.findByText('補充地點：東側三樓')
+      await expectNotice('已更新任務地點。')
       const taskWithLocation = locatedTask.closest('article') as HTMLElement
 
       fireEvent.click(
@@ -94,6 +106,7 @@ describe('planning management page', () => {
       await screen.findByRole('heading', {
         name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
       })
+      await expectNotice('已派出任務，現場可以查看了。')
 
       const refreshedTask = screen
         .getByRole('heading', {
@@ -115,6 +128,7 @@ describe('planning management page', () => {
       })
       fireEvent.click(screen.getByRole('button', { name: '確認取消' }))
       await screen.findByText('取消原因：現場順序調整')
+      await expectNotice('已取消任務，之後可以恢復。')
 
       const cancelledTask = screen
         .getByRole('heading', {
@@ -130,6 +144,7 @@ describe('planning management page', () => {
       await screen.findByRole('heading', {
         name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
       })
+      await expectNotice('已恢復任務。')
     },
     15_000,
   )
@@ -354,6 +369,22 @@ describe('planning management page', () => {
     ).toHaveFocus()
     fireEvent.click(within(dialog).getByRole('button', { name: '確認' }))
     expect(await screen.findByText('尚未建立任務。')).toBeInTheDocument()
+    await expectNotice('已刪除草稿任務。')
+  })
+
+  it('lists items to choose without per-template numbers (#487)', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '項次檢查' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '項次檢查（草稿）' }),
+    )
+    const label = (await screen.findByLabelText(/混凝土外觀/)).closest('label')
+    expect(label?.textContent).toMatch(/^混凝土外觀/)
   })
 
   it('closes dialogs on Escape and returns focus to the trigger', async () => {
@@ -412,6 +443,7 @@ describe('planning management page', () => {
       within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
     )
     await screen.findByText('計畫狀態：已封存')
+    await expectNotice('已封存計畫。')
     expect(
       within(article).queryByRole('button', { name: '修改地點' }),
     ).toBeNull()
@@ -425,6 +457,7 @@ describe('planning management page', () => {
     expect(
       await within(article).findByRole('button', { name: '修改地點' }),
     ).toBeInTheDocument()
+    await expectNotice('已取消封存計畫。')
   })
 
   it('clears project A data when project B loading fails', async () => {

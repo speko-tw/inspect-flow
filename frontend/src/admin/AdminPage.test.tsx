@@ -76,7 +76,7 @@ const currentUser: CurrentUser = {
 }
 
 function renderAdmin(
-  path = '/admin/users',
+  path: string | { pathname: string; state: unknown } = '/admin/users',
   isAdmin = true,
   access: Partial<
     Pick<
@@ -1087,10 +1087,25 @@ describe('admin user and company pages', () => {
         has_template_access: false,
       })
 
-      expect(labels()).toEqual(['專案', '變更密碼'])
+      expect(labels()).toEqual(['我的專案', '變更密碼'])
       expect(
         await screen.findByRole('heading', { name: '我的專案' }),
       ).toBeInTheDocument()
+    })
+
+    it('shows the notice carried by the previous page (#487)', async () => {
+      managementFetch()
+      renderAdmin(
+        {
+          pathname: '/admin/projects',
+          state: { notice: '已新增 3 個項目到「示範工程」。' },
+        },
+        false,
+        { has_office_access: true, has_field_access: false },
+      )
+
+      const notice = await screen.findByText('已新增 3 個項目到「示範工程」。')
+      expect(notice).toHaveAttribute('role', 'status')
     })
 
     it('never lists admin-only entries for any non-admin', () => {
@@ -1116,8 +1131,8 @@ describe('admin user and company pages', () => {
         has_template_access: false,
       })
 
-      expect(labels()).toEqual(['專案', '現場任務', '變更密碼'])
-      expect(screen.getByRole('link', { name: '現場任務' })).toHaveAttribute(
+      expect(labels()).toEqual(['我的專案', '今日任務', '變更密碼'])
+      expect(screen.getByRole('link', { name: '今日任務' })).toHaveAttribute(
         'href',
         '/field',
       )
@@ -1147,7 +1162,7 @@ describe('admin user and company pages', () => {
       expect(
         screen.getByRole('heading', { name: '無權限' }),
       ).toBeInTheDocument()
-      expect(labels()).toEqual(['專案', '變更密碼'])
+      expect(labels()).toEqual(['我的專案', '變更密碼'])
     })
   })
 

@@ -73,7 +73,7 @@ export default function FieldPage() {
         </div>
         <nav className="field-top-actions" aria-label="我的功能">
           {user.has_office_access && (
-            <Link to="/admin/projects">專案管理</Link>
+            <Link to="/admin/projects">我的專案</Link>
           )}
           {user.has_template_access && (
             <Link to="/admin/templates">範本管理</Link>
@@ -278,7 +278,7 @@ function TaskList({
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
           {user.has_office_access && (
             <Link className="button-link" to="/admin/projects">
-              前往專案管理
+              前往我的專案
             </Link>
           )}
           {user.has_template_access && (

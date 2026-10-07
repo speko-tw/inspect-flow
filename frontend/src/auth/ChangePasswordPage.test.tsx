@@ -125,6 +125,11 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'password',
     )
 
+    // 事先顯示密碼規則（#487），並連到新密碼欄位。
+    expect(screen.getByLabelText('新密碼')).toHaveAccessibleDescription(
+      /8～128 個字元/,
+    )
+
     // 第一次：兩次新密碼不一致，不呼叫變更密碼 API。
     fillAndSubmit('current-pw', 'new-password-1', 'new-password-2')
     let alert = await screen.findByRole('alert')
