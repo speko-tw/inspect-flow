@@ -7,6 +7,7 @@ import {
   HttpError,
   httpErrorMessage,
   isForbidden,
+  isNotFound,
   listAllPages,
   NETWORK_ERROR_MESSAGE,
   request,
@@ -180,5 +181,21 @@ describe('httpErrorMessage', () => {
     expect(httpErrorMessage(new HttpError(401), options)).toBe(
       SESSION_EXPIRED_MESSAGE,
     )
+  })
+})
+
+describe('isNotFound', () => {
+  it.each([404, 422])('treats status %i as not found', (status) => {
+    expect(isNotFound(new HttpError(status))).toBe(true)
+    expect(isNotFound(new CustomError(status))).toBe(true)
+  })
+
+  it.each([400, 401, 403, 409, 500])('ignores status %i', (status) => {
+    expect(isNotFound(new HttpError(status))).toBe(false)
+  })
+
+  it('ignores errors that are not HTTP errors', () => {
+    expect(isNotFound(new Error('network'))).toBe(false)
+    expect(isNotFound(undefined)).toBe(false)
   })
 })

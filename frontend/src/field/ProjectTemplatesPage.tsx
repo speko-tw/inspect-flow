@@ -12,7 +12,8 @@ import {
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
-import { isForbidden } from '../http'
+import { isForbidden, isNotFound } from '../http'
+import { ProjectNotFound } from '../RouteNotFound'
 import { fetchMyProjects } from './api'
 import {
   applyTemplate,
@@ -74,6 +75,7 @@ export default function ProjectTemplatesPage() {
   const [readOnly, setReadOnly] = useState(false)
   const [readDenied, setReadDenied] = useState(false)
   const [itemsDenied, setItemsDenied] = useState(false)
+  const [projectMissing, setProjectMissing] = useState(false)
   const [saveAllowed, setSaveAllowed] = useState(false)
   const [saveDenied, setSaveDenied] = useState(false)
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
@@ -182,6 +184,8 @@ export default function ProjectTemplatesPage() {
       })
       .catch((caught: unknown) => {
         if (!active) return
+        // 專案 id 格式不對或不存在：整頁顯示找不到。
+        if (isNotFound(caught)) setProjectMissing(true)
         setError(templateErrorMessage(caught))
         if (isForbidden(caught)) setItemsDenied(true)
       })
@@ -408,6 +412,8 @@ export default function ProjectTemplatesPage() {
       systems={systems}
     />
   )
+
+  if (projectMissing) return <ProjectNotFound />
 
   return (
     <div className="app-shell">

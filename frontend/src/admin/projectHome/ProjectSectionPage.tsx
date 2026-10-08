@@ -4,8 +4,9 @@ import { Navigate, useParams } from 'react-router'
 
 import { landingPath } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
-import { isForbidden } from '../../http'
+import { isForbidden, isNotFound } from '../../http'
 import { managementErrorMessage } from '../api'
+import { ProjectNotFound } from '../../RouteNotFound'
 import ProjectItemLinks from '../projectItems/ProjectItemLinks'
 import ProjectDetailPage from '../projects/ProjectDetailPage'
 import ProjectSectionShell, {
@@ -39,6 +40,7 @@ export default function ProjectSectionPage({
     canViewIndoor: boolean
     error?: string
     denied?: boolean
+    notFound?: boolean
   } | null>(null)
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export default function ProjectSectionPage({
             project: { project_code: '', name: '' },
             viewerPermissions: [],
             denied: isForbidden(caught),
+            notFound: isNotFound(caught),
             error: managementErrorMessage(caught),
           })
         }
@@ -84,6 +87,7 @@ export default function ProjectSectionPage({
   }
   if (currentResult?.error) {
     if (currentResult.denied) return <ProjectDeniedPage />
+    if (currentResult.notFound) return <ProjectNotFound />
     return <p role="alert">{currentResult.error}</p>
   }
   if (!currentResult) {
