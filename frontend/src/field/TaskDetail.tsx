@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
+import { isNotFound } from '../http'
 import {
   fetchFieldTaskDetail,
   FieldApiError,
@@ -50,9 +51,12 @@ function fieldLabel(field: { name: string; unit: string | null }) {
 
 export default function TaskDetail({
   taskId,
+  homePath = '/field',
   onListChange,
 }: {
   taskId: string
+  /** 這個帳號的落點（`landing.ts`）；找不到任務時的「回首頁」。 */
+  homePath?: string
   onListChange?: (change: TaskListChange) => void
 }) {
   const location = useLocation()
@@ -85,9 +89,10 @@ export default function TaskDetail({
           })
           return
         }
-        // Field 詳情以 404 隱藏不可見任務；403 僅防禦其他閘道拒絕。
+        // Field 詳情以 404 隱藏不可見任務，任務 id 格式不對是 422，兩者都
+        // 顯示找不到；403 僅防禦其他閘道拒絕。
         setError(
-          cause instanceof FieldApiError && cause.status === 404
+          isNotFound(cause)
             ? 'missing'
             : cause instanceof FieldApiError && cause.status === 403
               ? 'forbidden'
@@ -135,13 +140,19 @@ export default function TaskDetail({
               重試
             </button>
           )}
-          <Link
-            className="button-link"
-            to={back}
-            state={{ restoreTaskList: true }}
-          >
-            返回任務清單
-          </Link>
+          {error === 'missing' && homePath !== '/field' ? (
+            <Link className="button-link" to={homePath}>
+              回首頁
+            </Link>
+          ) : (
+            <Link
+              className="button-link"
+              to={back}
+              state={{ restoreTaskList: true }}
+            >
+              返回任務清單
+            </Link>
+          )}
         </section>
       )}
       {task && (

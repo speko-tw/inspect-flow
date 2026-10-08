@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
 import LogoutButton from '../auth/LogoutButton'
+import { landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { isForbidden } from '../http'
+import RouteNotFound from '../RouteNotFound'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
 import type { TaskListChange } from './StartAction'
 import TaskDetail from './TaskDetail'
@@ -62,6 +64,8 @@ export default function FieldPage() {
   const [returnKeys] = useState(() => new Set<string>())
   const location = useLocation()
   const detailId = location.pathname.match(/^\/field\/tasks\/([^/]+)\/?$/)?.[1]
+  // `/field` 以外、也不是任務詳情的網址（例如 `/field/abc123`）：找不到。
+  const unknownPath = !detailId && !/^\/field\/?$/.test(location.pathname)
   const from = `${location.pathname}${location.search}${location.hash}`
   const notice = (location.state as { notice?: unknown } | null)?.notice
   return (
@@ -90,8 +94,11 @@ export default function FieldPage() {
           <TaskDetail
             key={detailId}
             taskId={detailId}
+            homePath={landingPath(user)}
             onListChange={(change) => applyListChange(listMemory, change)}
           />
+        ) : unknownPath ? (
+          <RouteNotFound />
         ) : (
           <TaskList
             key={`${user.id}:${location.search}`}
@@ -101,7 +108,7 @@ export default function FieldPage() {
           />
         )}
       </main>
-      {!detailId && (
+      {!detailId && !unknownPath && (
         <details className="field-profile">
           <summary>我的資料</summary>
           <p>帳號名稱：{user.username}</p>

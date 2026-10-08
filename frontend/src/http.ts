@@ -123,6 +123,18 @@ export function isForbidden(error: unknown): boolean {
   )
 }
 
+/**
+ * 網址裡的 id 找不到（404）或格式不對（422）：讀取單筆資料的頁面用它
+ * 判斷要顯示「找不到」頁，而不是一句通用的錯誤文字。只用在 GET 載入；
+ * 寫入請求的 422 是欄位驗證錯誤，不是找不到。
+ */
+export function isNotFound(error: unknown): boolean {
+  return (
+    error instanceof HttpError &&
+    (error.status === 404 || error.status === 422)
+  )
+}
+
 export interface ErrorMessageOptions {
   /** 各頁自己的 `error.code` 特例；優先於狀態碼對應。 */
   codes?: Record<string, string>

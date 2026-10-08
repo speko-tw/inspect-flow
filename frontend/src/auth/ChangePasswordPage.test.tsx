@@ -333,7 +333,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
     await submitChange()
 
-    await screen.findByText('這個管理頁面尚未提供。')
+    await screen.findByRole('heading', { name: '找不到這個頁面' })
     expect(screen.getByRole('status').textContent).toBe('密碼已變更。')
   })
 
