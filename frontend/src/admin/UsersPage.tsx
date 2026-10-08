@@ -2,6 +2,9 @@ import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
+import { StatusBadge } from '../ui/Badge'
+import { ConfirmBox } from '../ui/ConfirmBox'
+import { activeStatus } from '../ui/statusBadge'
 import {
   linkUserCompany,
   listCompanies,
@@ -39,8 +42,7 @@ export default function UsersPage({
     null,
   )
   const [actionError, setActionError] = useState('')
-  const confirmationRef = useRef<HTMLElement>(null)
-  const cancelRef = useRef<HTMLButtonElement>(null)
+  const confirmationRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
   const [listError, setListError] = useState('')
@@ -54,7 +56,6 @@ export default function UsersPage({
       block: 'center',
       inline: 'start',
     })
-    cancelRef.current?.focus()
   }, [pendingAction])
 
   async function loadUserPage(
@@ -332,7 +333,9 @@ export default function UsersPage({
                       <td>{user.name_zh ?? '—'}</td>
                       <td>{companyLabel(user, companies)}</td>
                       <td>{user.is_admin ? '是' : '否'}</td>
-                      <td>{user.is_active ? '啟用' : '停用'}</td>
+                      <td>
+                        <StatusBadge status={activeStatus(user.is_active)} />
+                      </td>
                       <td>
                         <button
                           disabled={
@@ -379,36 +382,24 @@ export default function UsersPage({
                     {pendingAction?.user.id === user.id && (
                       <tr className="row-detail">
                         <td colSpan={6}>
-                          <section
-                            aria-label="操作確認"
-                            className="inline-confirmation"
-                            ref={confirmationRef}
+                          <ConfirmBox
+                            busy={busyUser === user.id}
+                            confirmLabel="確認"
+                            label="操作確認"
+                            onCancel={cancelPendingAction}
+                            onConfirm={() => void confirmAction()}
                             role="region"
+                            rootRef={confirmationRef}
+                            variant={
+                              pendingAction.kind === 'deactivate' ||
+                              user.is_admin
+                                ? 'danger'
+                                : 'neutral'
+                            }
                           >
                             <p>{actionMessage(pendingAction)}</p>
                             {actionError && <p role="alert">{actionError}</p>}
-                            <button
-                              disabled={busyUser === user.id}
-                              onClick={cancelPendingAction}
-                              ref={cancelRef}
-                              type="button"
-                            >
-                              取消
-                            </button>
-                            <button
-                              className={
-                                pendingAction.kind === 'deactivate' ||
-                                user.is_admin
-                                  ? 'btn-danger'
-                                  : 'btn-primary'
-                              }
-                              disabled={busyUser === user.id}
-                              onClick={() => void confirmAction()}
-                              type="button"
-                            >
-                              確認
-                            </button>
-                          </section>
+                          </ConfirmBox>
                         </td>
                       </tr>
                     )}

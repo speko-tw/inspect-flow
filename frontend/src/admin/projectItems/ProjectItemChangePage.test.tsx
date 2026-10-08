@@ -280,6 +280,9 @@ describe('ProjectItemChangePage', () => {
     renderPage(api)
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
     const dialog = screen.getByRole('dialog')
+    // 儲存前確認是原地展開的確認框，不是蓋住整頁的 modal（#501）。
+    expect(dialog).toHaveClass('confirm-box', 'confirm-box-neutral')
+    expect(dialog).not.toHaveClass('confirm-box-modal')
     expect(
       within(dialog).getByText(/草稿任務會直接更新為新內容/),
     ).toBeInTheDocument()

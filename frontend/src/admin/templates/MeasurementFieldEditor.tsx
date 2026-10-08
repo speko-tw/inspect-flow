@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import type { InspectionPoint, MeasurementField } from './api'
-import { InlineConfirm } from './InlineConfirm'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { boundField, localizeField } from './templateEditorUtils'
 
 type Props = {
@@ -128,13 +128,15 @@ export function MeasurementFieldEditor({
             )}
             {bound && <p className="tpl-hint">此欄位用於數值標準。</p>}
             {confirmField === `${pointIndex}:${fieldIndex}` ? (
-              <InlineConfirm
+              <ConfirmBox
                 confirmLabel="移除欄位"
+                label="移除欄位確認"
                 onCancel={() => setConfirmField('')}
                 onConfirm={removeField}
+                variant="danger"
               >
-                確定移除「{field.name || '未命名欄位'}」？
-              </InlineConfirm>
+                <p>確定移除「{field.name || '未命名欄位'}」？</p>
+              </ConfirmBox>
             ) : (
               <button
                 onClick={() => {

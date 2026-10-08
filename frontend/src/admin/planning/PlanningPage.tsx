@@ -1,13 +1,9 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { collectPages, HttpError, isForbidden } from '../../http'
+import { StatusBadge } from '../../ui/Badge'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { planningClient, planningErrorMessage } from './api'
 import type {
   InspectionPlan,
@@ -18,22 +14,6 @@ import type {
   ProjectInspectionItem,
   ProjectZone,
 } from './api'
-
-const PLAN_STATUS: Record<InspectionPlan['status'], string> = {
-  DRAFT: '草稿',
-  IN_PROGRESS: '進行中',
-  COMPLETED: '已完成',
-  CANCELLED: '已取消',
-  ARCHIVED: '已封存',
-}
-
-const TASK_STATUS: Record<InspectionTask['status'], string> = {
-  DRAFT: '草稿',
-  PENDING: '待開始',
-  IN_PROGRESS: '進行中',
-  COMPLETED: '已完成',
-  CANCELLED: '已取消',
-}
 
 type NoticeArea = 'zones' | 'plans' | 'plan-detail' | 'tasks'
 
@@ -350,13 +330,6 @@ export default function PlanningPage({
     setConfirmation(null)
     setCancelTask(null)
     setCancelReason('')
-  }
-
-  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>): void {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeDialogs()
-    }
   }
 
   async function act(
@@ -786,7 +759,8 @@ export default function PlanningPage({
                     }}
                     type="button"
                   >
-                    {plan.name}（{PLAN_STATUS[plan.status]}）
+                    {plan.name}
+                    <StatusBadge parenthesized status={plan.status} />
                   </button>
                 </li>
               ))}
@@ -849,7 +823,10 @@ export default function PlanningPage({
           {selectedPlan && selectedPlanDetail && (
             <section aria-labelledby="plan-detail-heading">
               <h2 id="plan-detail-heading">{selectedPlanDetail.name}</h2>
-              <p>計畫狀態：{PLAN_STATUS[selectedPlanDetail.status]}</p>
+              <p>
+                計畫狀態：
+                <StatusBadge status={selectedPlanDetail.status} />
+              </p>
               {noticeFor('plan-detail')}
               {!readOnly && (
                 <>
@@ -984,7 +961,8 @@ export default function PlanningPage({
                   <li key={task.id}>
                     <article>
                       <h4>
-                        {taskTitle(task)} （{TASK_STATUS[task.status]}）
+                        {taskTitle(task)}{' '}
+                        <StatusBadge parenthesized status={task.status} />
                       </h4>
                       {task.zone && <p>分區：{task.zone.name}</p>}
                       {task.location_text && (
@@ -1352,93 +1330,70 @@ export default function PlanningPage({
         </>
       )}
       {cancelTask && (
-        <section
-          aria-labelledby="cancel-task-heading"
-          aria-modal="true"
-          className="planning-dialog"
-          onKeyDown={handleDialogKeyDown}
+        <ConfirmBox
+          asForm
+          busy={busy}
+          confirmDisabled={!cancelReason.trim()}
+          confirmLabel="確認取消"
+          headingRef={cancelHeading}
+          initialFocus="none"
+          modal
+          onCancel={closeDialogs}
+          onConfirm={() =>
+            void act(
+              () => client.cancelTask(cancelTask.id, cancelReason),
+              { area: 'tasks', text: '已取消任務，之後可以恢復。' },
+              'dialog',
+            )
+          }
           role="dialog"
+          title="取消任務"
+          variant="danger"
         >
-          <h2 id="cancel-task-heading" ref={cancelHeading} tabIndex={-1}>
-            取消任務
-          </h2>
           <p>取消後會保留任務資料；之後可以恢復到取消前狀態。</p>
           {error && errorContext === 'dialog' && (
             <p ref={errorMessage} role="alert" tabIndex={-1}>
               {error}
             </p>
           )}
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              void act(
-                () => client.cancelTask(cancelTask.id, cancelReason),
-                { area: 'tasks', text: '已取消任務，之後可以恢復。' },
-                'dialog',
-              )
-            }}
-          >
-            <label>
-              <span className="required-label">
-                取消原因 <span aria-hidden="true">*</span>
-              </span>
-              <textarea
-                aria-describedby="cancel-reason-hint"
-                onChange={(event) => setCancelReason(event.target.value)}
-                required
-                value={cancelReason}
-              />
-            </label>
-            <span className="field-hint" id="cancel-reason-hint">
-              必填，寫下取消這個任務的原因。
+          <label>
+            <span className="required-label">
+              取消原因 <span aria-hidden="true">*</span>
             </span>
-            <button disabled={busy} onClick={closeDialogs} type="button">
-              取消
-            </button>{' '}
-            <button
-              className="btn-danger"
-              disabled={busy || !cancelReason.trim()}
-              type="submit"
-            >
-              確認取消
-            </button>
-          </form>
-        </section>
+            <textarea
+              aria-describedby="cancel-reason-hint"
+              onChange={(event) => setCancelReason(event.target.value)}
+              required
+              value={cancelReason}
+            />
+          </label>
+          <span className="field-hint" id="cancel-reason-hint">
+            必填，寫下取消這個任務的原因。
+          </span>
+        </ConfirmBox>
       )}
 
       {confirmation && (
-        <section
-          aria-labelledby="confirm-action-heading"
-          aria-modal="true"
-          className="planning-dialog"
-          onKeyDown={handleDialogKeyDown}
+        <ConfirmBox
+          busy={busy}
+          confirmDisabled={readOnly}
+          confirmLabel={confirmation.danger?.label ?? '確認'}
+          headingRef={confirmationHeading}
+          initialFocus="none"
+          modal
+          onCancel={closeDialogs}
+          onConfirm={() => void act(confirmation.action, confirmation.success)}
           role="dialog"
+          title="請確認操作"
+          variant={confirmation.danger ? 'danger' : 'neutral'}
         >
-          <h2
-            id="confirm-action-heading"
-            ref={confirmationHeading}
-            tabIndex={-1}
-          >
-            請確認操作
-          </h2>
           <p>{confirmation.title}</p>
           {error && errorContext === 'dialog' && (
             <p ref={errorMessage} role="alert" tabIndex={-1}>
               {error}
             </p>
           )}
-          <button disabled={busy} onClick={closeDialogs} type="button">
-            取消
-          </button>{' '}
-          <button
-            className={confirmation.danger ? 'btn-danger' : 'btn-primary'}
-            disabled={busy || readOnly}
-            onClick={() => void act(confirmation.action, confirmation.success)}
-            type="button"
-          >
-            {confirmation.danger?.label ?? '確認'}
-          </button>
-        </section>
+        </ConfirmBox>
       )}
     </section>
   )

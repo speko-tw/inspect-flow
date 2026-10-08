@@ -1340,12 +1340,14 @@ describe('admin user and company pages', () => {
       name: '確認停用公司',
     })
     expect(deactivateCompany).toHaveClass('btn-danger')
-    expect(deactivateCompany.closest('section')).toHaveClass(
-      'inline-confirmation',
+    expect(deactivateCompany.closest('.confirm-box')).toHaveClass(
+      'confirm-box-danger',
     )
     fireEvent.click(deactivateCompany)
     await waitFor(() => {
-      expect(screen.getByText('停用', { selector: 'td' })).toBeInTheDocument()
+      expect(
+        screen.getByText('停用', { selector: '.badge' }),
+      ).toBeInTheDocument()
     })
   })
 

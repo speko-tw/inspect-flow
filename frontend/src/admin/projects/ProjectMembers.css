@@ -47,23 +47,15 @@
 
 .member-card-actions button,
 .member-actions button,
-.member-confirm button,
 .member-add-form button,
 .member-edit-view button {
   min-height: 44px;
 }
 
-.member-confirm {
+.member-card > .confirm-box,
+.member-edit-view .confirm-box {
   flex: 1 1 100%;
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius-sm);
-}
-
-.member-confirm p {
-  margin: 0;
+  margin-block: 0;
 }
 
 .member-load-error {

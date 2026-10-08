@@ -389,6 +389,9 @@ describe('planning management page', () => {
     fireEvent.click(within(article).getByRole('button', { name: '刪除草稿' }))
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
+    // 計畫頁是唯一保留 modal 的確認框（#501）：蓋住整頁、背景 inert。
+    expect(dialog).toHaveClass('confirm-box', 'confirm-box-modal')
+    expect(dialog).toHaveClass('confirm-box-danger')
     expect(
       within(dialog).getByRole('heading', { name: '請確認操作' }),
     ).toHaveFocus()
@@ -502,7 +505,11 @@ describe('planning management page', () => {
     fireEvent.click(
       within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
     )
-    await screen.findByText('計畫狀態：已封存')
+    await waitFor(() =>
+      expect(screen.getByText(/計畫狀態：/)).toHaveTextContent(
+        '計畫狀態：已封存',
+      ),
+    )
     await expectNotice('已封存計畫。')
     expect(
       within(article).queryByRole('button', { name: '修改地點' }),

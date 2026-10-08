@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { managementErrorMessage } from '../api'
 import {
   createProject,
@@ -65,8 +66,7 @@ export default function ProjectsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
-  const transitionRef = useRef<HTMLElement>(null)
-  const keepEditingRef = useRef<HTMLButtonElement>(null)
+  const transitionRef = useRef<HTMLDivElement>(null)
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
   const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
     (key) =>
@@ -76,7 +76,6 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (!transition) return
     transitionRef.current?.scrollIntoView?.({ block: 'center' })
-    keepEditingRef.current?.focus()
   }, [transition])
 
   useEffect(() => {
@@ -246,28 +245,18 @@ export default function ProjectsPage() {
         </p>
       )}
       {transition && (
-        <section
-          aria-label="未儲存變更"
-          className="inline-confirmation"
-          ref={transitionRef}
+        <ConfirmBox
+          cancelLabel="保留編輯"
+          confirmLabel="捨棄"
+          label="未儲存變更"
+          onCancel={() => setTransition(null)}
+          onConfirm={() => applyTransition(transition)}
           role="region"
+          rootRef={transitionRef}
+          variant="danger"
         >
           <p>目前的專案內容尚未儲存，要保留編輯或捨棄？</p>
-          <button
-            onClick={() => setTransition(null)}
-            ref={keepEditingRef}
-            type="button"
-          >
-            保留編輯
-          </button>
-          <button
-            className="btn-danger"
-            onClick={() => applyTransition(transition)}
-            type="button"
-          >
-            捨棄
-          </button>
-        </section>
+        </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
       <form onSubmit={searchProjects}>

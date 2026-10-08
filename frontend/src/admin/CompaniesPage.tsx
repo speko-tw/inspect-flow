@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
+import { StatusBadge } from '../ui/Badge'
+import { ConfirmBox } from '../ui/ConfirmBox'
+import { activeStatus } from '../ui/statusBadge'
 import {
   createCompany,
   listActiveCompanyUsers,
@@ -221,13 +224,15 @@ export default function CompaniesPage() {
       <h1 id="companies-heading">公司管理</h1>
       {error && <p role="alert">{error}</p>}
       {deactivating && (
-        <section
-          aria-labelledby="deactivate-company-heading"
-          className="inline-confirmation"
+        <ConfirmBox
+          busy={saving}
+          role="region"
+          confirmLabel="確認停用公司"
+          onCancel={() => setDeactivating(null)}
+          onConfirm={() => void confirmDeactivation()}
+          title={`停用「${deactivating.company.name}」`}
+          variant="danger"
         >
-          <h2 id="deactivate-company-heading">
-            停用「{deactivating.company.name}」
-          </h2>
           <p>還有 {deactivating.count} 位啟用中的人員</p>
           <fieldset>
             <legend>選擇要一併停用的人員</legend>
@@ -253,22 +258,7 @@ export default function CompaniesPage() {
               </label>
             ))}
           </fieldset>
-          <button
-            disabled={saving}
-            onClick={() => setDeactivating(null)}
-            type="button"
-          >
-            取消
-          </button>
-          <button
-            className="btn-danger"
-            disabled={saving}
-            onClick={() => void confirmDeactivation()}
-            type="button"
-          >
-            確認停用公司
-          </button>
-        </section>
+        </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
       <form onSubmit={searchCompanies}>
@@ -309,7 +299,9 @@ export default function CompaniesPage() {
             {companies.map((company) => (
               <tr key={company.id}>
                 <th scope="row">{company.name}</th>
-                <td>{company.is_active ? '啟用' : '停用'}</td>
+                <td>
+                  <StatusBadge status={activeStatus(company.is_active)} />
+                </td>
                 <td>
                   <button
                     onClick={() => {

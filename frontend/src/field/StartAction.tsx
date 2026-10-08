@@ -7,6 +7,7 @@ import {
   startFieldTask,
   type FieldTaskDetail,
 } from './api'
+import { ConfirmBox } from '../ui/ConfirmBox'
 import { personLabel, startMessages } from './startMessages'
 
 /** 讓清單記憶跟上詳情頁已確認的結果（保留篩選、頁數與捲動）。 */
@@ -196,8 +197,17 @@ export default function StartAction({
       {failed ? (
         <TaskListLink back={back} />
       ) : confirming ? (
-        <div className="field-confirm">
-          <h3>確認開始「{title}」？</h3>
+        <ConfirmBox
+          busy={submitting}
+          confirmLabel={submitting ? '開始中…' : '確認開始查核'}
+          headingLevel={3}
+          onCancel={() => {
+            setConfirming(false)
+            setFailure(null)
+          }}
+          onConfirm={() => void confirmStart()}
+          title={`確認開始「${title}」？`}
+        >
           <p>開始後會改為進行中，並記錄你是實際開始者。</p>
           {assignee && !assignee.is_me && (
             <p>
@@ -205,25 +215,7 @@ export default function StartAction({
               執行。你仍可以開始，系統會記錄你是實際開始者。
             </p>
           )}
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => {
-              setConfirming(false)
-              setFailure(null)
-            }}
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={submitting}
-            onClick={() => void confirmStart()}
-          >
-            {submitting ? '開始中…' : '確認開始查核'}
-          </button>
-        </div>
+        </ConfirmBox>
       ) : (
         <>
           <p>看完需求後開始查核。</p>

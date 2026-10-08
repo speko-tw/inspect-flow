@@ -330,7 +330,7 @@ describe('admin role management page', () => {
     )
     expect(confirmation).toHaveTextContent('角色指派都會一併移除')
     // 確認區沿用共用的確認框樣式，[取消][確認] 兩顆按鈕之間有間距（#500）。
-    expect(confirmation).toHaveClass('inline-confirmation')
+    expect(confirmation).toHaveClass('confirm-box-danger')
     expect(
       within(confirmation)
         .getAllByRole('button')

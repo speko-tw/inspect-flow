@@ -460,6 +460,27 @@ describe('今日任務首頁', () => {
   })
 })
 
+describe('狀態標籤', () => {
+  it('同一個狀態在清單與詳情是同一個顏色（#501）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/field/inspection-tasks/task-1')
+          ? Response.json(DETAIL)
+          : Response.json({ items: [TASK], next_cursor: null }),
+      ),
+    )
+    renderPage()
+    const card = await screen.findByRole('link', { name: /查看任務/ })
+    const inList = within(card).getByText('待開始')
+    expect(inList).toHaveClass('badge', 'badge-warning')
+    fireEvent.click(card)
+    await screen.findByRole('button', { name: '開始查核' })
+    const inDetail = screen.getByText('待開始')
+    expect(inDetail.className).toBe(inList.className)
+  })
+})
+
 describe('開始查核後返回清單', () => {
   const STARTED = {
     ...DETAIL,
