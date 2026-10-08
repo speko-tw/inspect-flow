@@ -42,6 +42,13 @@ function taskTitle(task: InspectionTask): string {
     .join('、')
 }
 
+// 刪除確認用：查核項目名加上分區與補充地點，讓人知道刪的是哪一筆。
+function draftTaskSummary(task: InspectionTask): string {
+  const places = [task.zone?.name, task.location_text].filter(Boolean)
+  const title = `「${taskTitle(task) || '未命名任務'}」`
+  return places.length ? `${title}，位置：${places.join('・')}` : title
+}
+
 export default function PlanningPage({
   client = planningClient,
   initialProjectId = '',
@@ -96,6 +103,7 @@ export default function PlanningPage({
     title: string
     action: () => Promise<unknown>
     success: { area: NoticeArea; text: string }
+    danger?: { label: string }
   } | null>(null)
   const confirmationTrigger = useRef<HTMLElement | null>(null)
   const confirmationHeading = useRef<HTMLHeadingElement | null>(null)
@@ -298,12 +306,13 @@ export default function PlanningPage({
     title: string,
     action: () => Promise<unknown>,
     success: { area: NoticeArea; text: string },
+    danger?: { label: string },
   ): void {
     setError('')
     setNotice(null)
     setErrorContext('dialog')
     confirmationTrigger.current = document.activeElement as HTMLElement
-    setConfirmation({ title, action, success })
+    setConfirmation({ title, action, success, danger })
   }
 
   function closeDialogs(): void {
@@ -845,12 +854,16 @@ export default function PlanningPage({
                                 disabled={busy}
                                 onClick={() =>
                                   confirm(
-                                    '永久刪除此草稿任務？',
+                                    [
+                                      `永久刪除草稿任務${draftTaskSummary(task)}？`,
+                                      '刪除後無法復原。',
+                                    ].join(''),
                                     () => client.deleteDraftTask(task.id),
                                     {
                                       area: 'tasks',
                                       text: '已刪除草稿任務。',
                                     },
+                                    { label: '刪除' },
                                   )
                                 }
                                 type="button"
@@ -1191,11 +1204,12 @@ export default function PlanningPage({
             </p>
           )}
           <button
+            className={confirmation.danger ? 'btn-danger' : undefined}
             disabled={busy || readOnly}
             onClick={() => void act(confirmation.action, confirmation.success)}
             type="button"
           >
-            確認
+            {confirmation.danger?.label ?? '確認'}
           </button>{' '}
           <button disabled={busy} onClick={closeDialogs} type="button">
             返回

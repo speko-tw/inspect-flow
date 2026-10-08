@@ -189,10 +189,31 @@ describe('ProjectItemChangePage', () => {
     ).toHaveTextContent('鋼筋間距')
     expect(
       screen.getByText(/二樓東側.*已完成任務退回進行中/),
-    ).toHaveTextContent('此項目的舊內容已作廢')
+    ).toHaveTextContent('尚未填寫結果，直接改用新標準')
+    expect(
+      screen.getByText('任務尚未填寫結果，直接改用新標準。'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/已標記作廢/)).toBeNull()
     expect(screen.getByText(/草稿任務已更新為新內容/)).toBeInTheDocument()
     expect(screen.getByText(/恢復時套用目前標準/)).toBeInTheDocument()
     expect(api.loadPreview).toHaveBeenCalledTimes(2)
+  })
+
+  it('explains kept old results when a Task already has one (#491)', async () => {
+    const withResult = structuredClone(preview)
+    withResult.affectedTasks[1].hasResult = true
+    const api = apiWith({ loadPreview: vi.fn(async () => withResult) })
+    renderPage(api)
+    await confirm('yes')
+    expect(
+      await screen.findByText(
+        '已填的舊結果與照片會保留供查詢，任務需要重新查核。',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/二樓東側.*舊結果與照片保留供查詢/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/已標記作廢/)).toBeNull()
   })
 
   it('asks no question when only draft Tasks use the item (#487)', async () => {
