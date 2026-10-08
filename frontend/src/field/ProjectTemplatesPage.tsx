@@ -723,7 +723,7 @@ export default function ProjectTemplatesPage() {
                       >
                         <p id="apply-confirm-title">
                           一次新增 {selectedTemplates.length} 個項目到專案？
-                          目前專案項目無法刪除或改名。
+                          套用後可在查核項目修改內容，目前無法刪除。
                         </p>
                         <div className="tpl-actions">
                           <button

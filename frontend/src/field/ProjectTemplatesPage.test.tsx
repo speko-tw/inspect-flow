@@ -429,6 +429,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
     const dialog = screen.getByRole('alertdialog')
     expect(dialog).toHaveTextContent('一次新增 2 個項目')
+    expect(dialog).toHaveTextContent(
+      '套用後可在查核項目修改內容，目前無法刪除',
+    )
+    expect(dialog).not.toHaveTextContent('改名')
     fireEvent.click(within(dialog).getByRole('button', { name: '確定套用' }))
     expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(
