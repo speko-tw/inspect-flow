@@ -242,6 +242,7 @@ export default function RolesPage() {
       {deleting && (
         <ConfirmBox
           busy={saving}
+          key={deleting.id}
           role="region"
           confirmLabel="確認刪除角色"
           onCancel={() => setDeleting(null)}
@@ -258,6 +259,7 @@ export default function RolesPage() {
       {pending && (
         <ConfirmBox
           busy={saving}
+          key={pending.role.id}
           role="region"
           confirmLabel="確認修改角色"
           onCancel={() => setPending(null)}

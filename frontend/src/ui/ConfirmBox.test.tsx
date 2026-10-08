@@ -120,6 +120,24 @@ describe('ConfirmBox', () => {
     expect(outer).not.toHaveBeenCalled()
   })
 
+  it('ignores Esc while busy, like the disabled cancel button', () => {
+    const onCancel = vi.fn()
+    render(
+      <ConfirmBox
+        busy
+        confirmLabel="確認"
+        label="x"
+        onCancel={onCancel}
+        onConfirm={vi.fn()}
+      >
+        <p role="alert">送出失敗</p>
+      </ConfirmBox>,
+    )
+    fireEvent.keyDown(screen.getByRole('group'), { key: 'Escape' })
+    expect(onCancel).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('送出失敗')
+  })
+
   it('names the container by its title, else by label', () => {
     const { unmount } = render(
       <ConfirmBox

@@ -27,6 +27,13 @@ type Transition =
   | { kind: 'edit'; project: Project }
   | { kind: 'navigate'; to: string }
 
+// 換成另一個轉換時要重新掛載確認框，焦點才會回到「保留編輯」。
+function transitionKey(transition: Transition): string {
+  if (transition.kind === 'edit') return `edit:${transition.project.id}`
+  if (transition.kind === 'navigate') return `navigate:${transition.to}`
+  return 'new'
+}
+
 function toForm(project: Project): FormState {
   return {
     project_code: project.project_code,
@@ -246,6 +253,7 @@ export default function ProjectsPage() {
       )}
       {transition && (
         <ConfirmBox
+          key={transitionKey(transition)}
           cancelLabel="保留編輯"
           confirmLabel="捨棄"
           label="未儲存變更"

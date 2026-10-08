@@ -384,6 +384,7 @@ export default function UsersPage({
                         <td colSpan={6}>
                           <ConfirmBox
                             busy={busyUser === user.id}
+                            key={`${user.id}:${pendingAction.kind}`}
                             confirmLabel="確認"
                             label="操作確認"
                             onCancel={cancelPendingAction}

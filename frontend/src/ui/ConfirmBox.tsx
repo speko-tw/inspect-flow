@@ -85,7 +85,8 @@ export function ConfirmBox({
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
-      onCancel()
+      // 送出中取消鈕是停用的，Esc 要一致；否則錯誤訊息會跟著確認框消失。
+      if (!busy) onCancel()
     }
   }
 

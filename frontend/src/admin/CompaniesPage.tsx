@@ -226,6 +226,7 @@ export default function CompaniesPage() {
       {deactivating && (
         <ConfirmBox
           busy={saving}
+          key={deactivating.company.id}
           role="region"
           confirmLabel="確認停用公司"
           onCancel={() => setDeactivating(null)}

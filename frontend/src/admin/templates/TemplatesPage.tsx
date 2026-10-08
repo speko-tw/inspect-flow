@@ -894,6 +894,7 @@ export default function TemplatesPage() {
     if (guard) {
       return (
         <ConfirmBox
+          key={`${guard.type}:${guard.id}`}
           cancelLabel="保留編輯"
           confirmLabel="捨棄變更"
           label="尚未儲存的變更"
