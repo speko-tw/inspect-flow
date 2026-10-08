@@ -3,12 +3,16 @@ import { listAllPages, request } from '../api'
 export interface TemplateCategory {
   id: string
   name: string
+  // 列表與寫入回應都會帶；範本樹用它顯示還沒展開的類別的系統數。
+  system_count?: number
 }
 
 export interface TemplateSystem {
   id: string
   category_id: string
   name: string
+  // 列表與寫入回應都會帶；範本樹用它顯示還沒展開的系統的項目數。
+  item_count?: number
 }
 
 export interface MeasurementField {

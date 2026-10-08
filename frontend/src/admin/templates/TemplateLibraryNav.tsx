@@ -56,6 +56,11 @@ export function TemplateLibraryNav({
         <ul className="tpl-tree">
           {categories.map((category) => {
             const categoryOpen = expanded.has(category.id)
+            // 已載入就以實際資料為準；還沒載入用列表回應帶的數量。
+            // 兩者都沒有就不顯示，不顯示過期的數字。
+            const systemCount = loadedCategoryIds.has(category.id)
+              ? systems.filter((row) => row.category_id === category.id).length
+              : category.system_count
             return (
               <li key={category.id}>
                 <button
@@ -76,14 +81,9 @@ export function TemplateLibraryNav({
                 >
                   <span aria-hidden="true">{categoryOpen ? '▾' : '▸'}</span>
                   <span>{category.name}</span>
-                  {loadedCategoryIds.has(category.id) && (
+                  {systemCount !== undefined && (
                     <span aria-hidden="true" className="tpl-tree-count">
-                      {
-                        systems.filter(
-                          (row) => row.category_id === category.id,
-                        ).length
-                      }{' '}
-                      個系統
+                      {systemCount} 個系統
                     </span>
                   )}
                 </button>
@@ -92,6 +92,10 @@ export function TemplateLibraryNav({
                     {systems.map((system) => {
                       if (system.category_id !== category.id) return null
                       const systemOpen = expanded.has(system.id)
+                      const itemCount = loadedSystemIds.has(system.id)
+                        ? items.filter((item) => item.system_id === system.id)
+                            .length
+                        : system.item_count
                       return (
                         <li key={system.id}>
                           <button
@@ -116,17 +120,12 @@ export function TemplateLibraryNav({
                               {selectSystemOnly ? '•' : systemOpen ? '▾' : '▸'}
                             </span>
                             <span>{system.name}</span>
-                            {loadedSystemIds.has(system.id) && (
+                            {itemCount !== undefined && (
                               <span
                                 aria-hidden="true"
                                 className="tpl-tree-count"
                               >
-                                {
-                                  items.filter(
-                                    (item) => item.system_id === system.id,
-                                  ).length
-                                }{' '}
-                                個查核項目
+                                {itemCount} 個查核項目
                               </span>
                             )}
                           </button>
