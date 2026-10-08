@@ -88,6 +88,8 @@ function mockApi(
     denyCategories?: boolean
     secondSystemTemplate?: boolean
     secondSystemGrowsAfterSave?: boolean
+    reloadFailsAfterSave?: boolean
+    listCounts?: boolean
   } = {},
 ) {
   let saveRequests = 0
@@ -154,8 +156,18 @@ function mockApi(
     if (url.includes('/category-1/systems?limit=100')) {
       return Response.json({
         items: [
-          { id: 'system-1', category_id: 'category-1', name: '給排水' },
-          { id: 'system-2', category_id: 'category-1', name: '電氣' },
+          {
+            id: 'system-1',
+            category_id: 'category-1',
+            name: '給排水',
+            ...(options.listCounts ? { item_count: 2 } : {}),
+          },
+          {
+            id: 'system-2',
+            category_id: 'category-1',
+            name: '電氣',
+            ...(options.listCounts ? { item_count: 1 } : {}),
+          },
         ],
         next_cursor: null,
       })
@@ -180,6 +192,12 @@ function mockApi(
       })
     }
     if (url.includes('/template-systems/system-2/templates?limit=100')) {
+      if (options.reloadFailsAfterSave && saved) {
+        return Response.json(
+          { error: { code: 'internal_error' } },
+          { status: 500 },
+        )
+      }
       return Response.json({
         items:
           options.secondSystemTemplate === false
@@ -429,6 +447,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
     const dialog = screen.getByRole('alertdialog')
     expect(dialog).toHaveTextContent('一次新增 2 個項目')
+    expect(dialog).toHaveTextContent(
+      '套用後可在查核項目修改內容，目前無法刪除',
+    )
+    expect(dialog).not.toHaveTextContent('改名')
     fireEvent.click(within(dialog).getByRole('button', { name: '確定套用' }))
     expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(
@@ -596,6 +618,45 @@ describe('專案範本套用與存為範本（#429）', () => {
         within(nav).getByRole('button', { name: '電氣' }),
       ).toHaveTextContent('2 個查核項目'),
     )
+  })
+
+  async function saveIntoSecondSystem(): Promise<HTMLElement> {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    await waitFor(() =>
+      expect(
+        within(nav).getByRole('button', { name: '電氣' }),
+      ).toHaveTextContent('1 個查核項目'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已將「管線查核」存入「建築工程 / 電氣」。',
+    )
+    return nav
+  }
+
+  it('存檔後重新載入失敗時，目標系統的數量加 1，不退回存檔前的數字（#492）', async () => {
+    mockApi({
+      canSave: true,
+      projectItems: [PROJECT_ITEM],
+      reloadFailsAfterSave: true,
+      listCounts: true,
+    })
+    const nav = await saveIntoSecondSystem()
+    await waitFor(() =>
+      expect(
+        within(nav).getByRole('button', { name: '電氣' }),
+      ).toHaveTextContent('2 個查核項目'),
+    )
+    // 沒動到的系統維持列表帶回的數量。
+    expect(
+      within(nav).getByRole('button', { name: '給排水' }),
+    ).toHaveTextContent('2 個查核項目')
   })
 
   it('範本讀取 403 時切成唯讀，仍保留既有專案項目', async () => {

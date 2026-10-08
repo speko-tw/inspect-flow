@@ -214,7 +214,7 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
   // 從別頁導來時帶的提示（例如套用範本成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const navItems = [
-    user.has_office_access || !user.has_template_access
+    user.has_office_access
       ? { to: '/admin/projects', label: '我的專案' }
       : null,
     user.has_template_access
@@ -294,7 +294,18 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
               <Navigate replace state={location.state} to={indexTarget} />
             }
           />
-          <Route path="projects" element={<MyProjectsPage />} />
+          <Route
+            path="projects"
+            element={
+              // 沒有內業權限的人直接開這個網址：導回自己的落點，不顯示
+              // 一份空清單或 403（#489）。
+              user.has_office_access ? (
+                <MyProjectsPage />
+              ) : (
+                <Navigate replace to={indexTarget} />
+              )
+            }
+          />
           {projectRoutes}
           {user.has_template_access && (
             <Route path="templates" element={<TemplatesPage />} />

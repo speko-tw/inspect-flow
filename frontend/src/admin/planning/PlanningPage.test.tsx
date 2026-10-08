@@ -348,6 +348,12 @@ describe('planning management page', () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
+      target: { value: '北區' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+    await screen.findByText('北區')
     fireEvent.change(screen.getByLabelText(/計畫名稱/), {
       target: { value: '草稿刪除' },
     })
@@ -356,6 +362,15 @@ describe('planning management page', () => {
       await screen.findByRole('button', { name: '草稿刪除（草稿）' }),
     )
     fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
+    const zone = (await client.listProjectZones('project-demo-1')).find(
+      (entry) => entry.name === '北區',
+    )!
+    fireEvent.change(screen.getByLabelText(/任務分區/), {
+      target: { value: zone.id },
+    })
+    fireEvent.change(screen.getByLabelText('補充地點'), {
+      target: { value: '東側二樓' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
     const task = await screen.findByRole('heading', {
       name: /混凝土外觀\s+（草稿）/,
@@ -367,7 +382,14 @@ describe('planning management page', () => {
     expect(
       within(dialog).getByRole('heading', { name: '請確認操作' }),
     ).toHaveFocus()
-    fireEvent.click(within(dialog).getByRole('button', { name: '確認' }))
+    expect(dialog).toHaveTextContent(
+      `永久刪除草稿任務「混凝土外觀」，位置：${zone.name}・東側二樓？`,
+    )
+    expect(dialog).toHaveTextContent('刪除後無法復原')
+    expect(within(dialog).queryByRole('button', { name: '確認' })).toBeNull()
+    const remove = within(dialog).getByRole('button', { name: '刪除' })
+    expect(remove).toHaveClass('btn-danger')
+    fireEvent.click(remove)
     expect(await screen.findByText('尚未建立任務。')).toBeInTheDocument()
     await expectNotice('已刪除草稿任務。')
   })
