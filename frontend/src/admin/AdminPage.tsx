@@ -13,6 +13,7 @@ import type { CurrentUser } from '../auth/api'
 import { landingLabel, landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
+import RouteNotFound from '../RouteNotFound'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
@@ -192,7 +193,7 @@ function AdminPageContent() {
               }
             />
             <Route path="templates" element={<TemplatesPage />} />
-            <Route path="*" element={<p>這個管理頁面尚未提供。</p>} />
+            <Route path="*" element={<RouteNotFound />} />
           </Routes>
         )}
       </main>
@@ -208,6 +209,10 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
   // 從別頁導來時帶的提示（例如套用範本成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
+  const restrictedPage =
+    /^\/admin\/(?:users|companies|roles)(?:\/|$)/.test(location.pathname) ||
+    (!user.has_template_access &&
+      /^\/admin\/templates(?:\/|$)/.test(location.pathname))
   const projectRoutes = (
     <>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
@@ -288,17 +293,24 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
           <Route
             path="*"
             element={
-              <>
-                <h1>無權限</h1>
-                <p role="alert">
-                  {location.pathname.startsWith('/admin/templates')
-                    ? '只有系統管理者或範本管理員可以使用範本管理。'
-                    : '只有系統管理者可以使用這個管理頁面。'}
-                </p>
-                <NavLink className="button-link" to={indexTarget}>
-                  返回{landingLabel(indexTarget)}
-                </NavLink>
-              </>
+              // 使用者、公司、角色是管理者專用頁，其下任何路徑（例如
+              // /admin/users/abc）沿用無權限頁；其他不存在的網址一律
+              // 顯示找不到（#493）。
+              restrictedPage ? (
+                <>
+                  <h1>無權限</h1>
+                  <p role="alert">
+                    {location.pathname.startsWith('/admin/templates')
+                      ? '只有系統管理者或範本管理員可以使用範本管理。'
+                      : '只有系統管理者可以使用這個管理頁面。'}
+                  </p>
+                  <NavLink className="button-link" to={indexTarget}>
+                    返回{landingLabel(indexTarget)}
+                  </NavLink>
+                </>
+              ) : (
+                <RouteNotFound />
+              )
             }
           />
         </Routes>

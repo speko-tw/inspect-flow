@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useParams } from 'react-router'
 
 import { landingPath } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
-import { isForbidden } from '../../http'
+import { isForbidden, isNotFound } from '../../http'
 import { managementErrorMessage } from '../api'
 import ProjectSectionShell from './ProjectSectionShell'
 import ProjectDeniedPage from './ProjectDeniedPage'
@@ -12,6 +12,7 @@ import {
   type WorkflowStepCode,
   type WorkflowSummary,
 } from './api'
+import { ProjectNotFound } from '../../RouteNotFound'
 import { canViewIndoorSections } from './permissions'
 
 const STEP_CONTENT: Record<
@@ -57,6 +58,7 @@ export default function ProjectHomePage() {
     summary?: WorkflowSummary
     error?: string
     denied?: boolean
+    notFound?: boolean
   } | null>(null)
 
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function ProjectHomePage() {
           setResult({
             projectId,
             denied: isForbidden(caught),
+            notFound: isNotFound(caught),
             error: managementErrorMessage(caught),
           })
         }
@@ -97,6 +100,9 @@ export default function ProjectHomePage() {
   }
 
   if (denied) return <ProjectDeniedPage />
+
+  // 專案 id 格式不對或不存在：整頁找不到，不留空的專案頁框。
+  if (currentResult?.notFound) return <ProjectNotFound />
 
   return (
     <ProjectSectionShell

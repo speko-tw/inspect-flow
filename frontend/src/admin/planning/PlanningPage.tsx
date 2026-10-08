@@ -36,6 +36,23 @@ const TASK_STATUS: Record<InspectionTask['status'], string> = {
 
 type NoticeArea = 'zones' | 'plans' | 'plan-detail' | 'tasks'
 
+// 必填欄位在送出時才檢查；沒填就在欄位下方顯示錯誤並把焦點移到欄位。
+// 說明文字（field-hint）常駐，錯誤（tpl-field-error）只在送出後才出現。
+type FieldKey =
+  'zone-name' | 'plan-name' | 'plan-rename' | 'task-zone' | 'location-zone'
+
+const FIELD_ERROR: Record<FieldKey, string> = {
+  'zone-name': '請輸入分區名稱。',
+  'plan-name': '請輸入計畫名稱。',
+  'plan-rename': '請輸入計畫名稱。',
+  'task-zone': '請選擇任務分區。',
+  'location-zone': '請選擇任務分區。',
+}
+
+function describedBy(...ids: (string | false)[]): string {
+  return ids.filter(Boolean).join(' ')
+}
+
 function taskTitle(task: InspectionTask): string {
   return task.items
     .map((item) => item.current_snapshot?.title ?? '')
@@ -72,6 +89,9 @@ export default function PlanningPage({
   const [membersDenied, setMembersDenied] = useState(false)
   const [error, setError] = useState('')
   const [errorContext, setErrorContext] = useState('page')
+  const [fieldError, setFieldError] = useState<{ field: FieldKey } | null>(
+    null,
+  )
   // 操作成功後的提示，顯示在該操作所屬的區塊旁，下一次操作就清掉。
   const [notice, setNotice] = useState<{
     area: NoticeArea
@@ -114,6 +134,9 @@ export default function PlanningPage({
   const errorMessage = useRef<HTMLParagraphElement | null>(null)
   const addZoneTrigger = useRef<HTMLButtonElement | null>(null)
   const renameZoneTrigger = useRef<HTMLButtonElement | null>(null)
+  // Enter 用 requestSubmit() 送出時不會被停用的按鈕擋住，所以連按兩次 Enter
+  // 會送出兩次；用 ref 擋掉進行中的第二次送出。
+  const inFlight = useRef(false)
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
   const previousAddingZone = useRef(false)
@@ -123,6 +146,13 @@ export default function PlanningPage({
   useEffect(() => {
     if (error) errorMessage.current?.focus()
   }, [error, errorContext])
+
+  useEffect(() => {
+    if (!fieldError) return
+    pageContent.current
+      ?.querySelector<HTMLElement>(`[data-field="${fieldError.field}"]`)
+      ?.focus()
+  }, [fieldError])
 
   useEffect(() => {
     if (previousAddingZone.current && !addingZone) {
@@ -333,7 +363,10 @@ export default function PlanningPage({
     success: { area: NoticeArea; text: string },
     context?: string,
   ): Promise<boolean> {
+    if (inFlight.current) return false
+    inFlight.current = true
     setError('')
+    setFieldError(null)
     setNotice(null)
     setErrorContext(
       context ??
@@ -363,12 +396,32 @@ export default function PlanningPage({
       setError(planningErrorMessage(caught))
       return false
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
 
+  const hasFieldError = (field: FieldKey) => fieldError?.field === field
+  const fieldErrorId = (field: FieldKey) => `${field}-field-error`
+  const fieldErrorText = (field: FieldKey) =>
+    hasFieldError(field) ? (
+      <p className="tpl-field-error" id={fieldErrorId(field)}>
+        {FIELD_ERROR[field]}
+      </p>
+    ) : null
+
+  // 必填欄位空白時回報 true，並顯示欄位錯誤、聚焦。
+  function rejectBlank(field: FieldKey, blank: boolean): boolean {
+    if (!blank) return false
+    setError('')
+    setNotice(null)
+    setFieldError({ field })
+    return true
+  }
+
   async function createPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (rejectBlank('plan-name', !planName.trim())) return
     const created = await act(
       () => client.createPlan(projectId, { name: planName }),
       { area: 'plans', text: `已建立計畫「${planName.trim()}」。` },
@@ -379,6 +432,7 @@ export default function PlanningPage({
 
   async function saveZone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (rejectBlank('zone-name', !zoneName.trim())) return
     const saved = await act(
       () => client.createZone(projectId, zoneName),
       { area: 'zones', text: `已新增分區「${zoneName.trim()}」。` },
@@ -393,6 +447,7 @@ export default function PlanningPage({
   async function renameZone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!renamingZone) return
+    if (rejectBlank('zone-name', !zoneName.trim())) return
     const saved = await act(
       () => client.renameZone(projectId, renamingZone.id, zoneName),
       { area: 'zones', text: `已將分區改名為「${zoneName.trim()}」。` },
@@ -407,6 +462,11 @@ export default function PlanningPage({
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedPlan) return
+    if (
+      rejectBlank('task-zone', zones.length > 0 && !zonesDenied && !taskZoneId)
+    ) {
+      return
+    }
     const created = await act(
       () =>
         client.createTask(selectedPlan.id, {
@@ -503,6 +563,7 @@ export default function PlanningPage({
                 {renamingZone?.id === zone.id ? (
                   <form
                     data-error-context="zone"
+                    noValidate
                     onSubmit={(event) => void renameZone(event)}
                   >
                     <label>
@@ -510,26 +571,48 @@ export default function PlanningPage({
                         分區名稱 <span aria-hidden="true">*</span>
                       </span>
                       <input
-                        aria-describedby="zone-name-hint"
+                        aria-describedby={describedBy(
+                          'zone-name-hint',
+                          hasFieldError('zone-name') &&
+                            fieldErrorId('zone-name'),
+                        )}
+                        aria-invalid={hasFieldError('zone-name')}
                         autoFocus
                         maxLength={128}
-                        onChange={(event) => setZoneName(event.target.value)}
+                        onChange={(event) => {
+                          setZoneName(event.target.value)
+                          setFieldError(null)
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Escape') {
                             event.preventDefault()
                             setRenamingZone(null)
                             setZoneName('')
                             setError('')
+                            setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
+                            // 輸入法選字的 Enter 只是確認選字，不送出。
+                            // Safari 這一下 isComposing 是 false，
+                            // 但 keyCode 是 229。
+                            if (
+                              event.nativeEvent.isComposing ||
+                              event.keyCode === 229
+                            ) {
+                              return
+                            }
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
+                        data-field="zone-name"
                         required
                         value={zoneName}
                       />
                     </label>
-                    <span id="zone-name-hint">請輸入分區名稱。</span>
+                    <span className="field-hint" id="zone-name-hint">
+                      必填，最多 128 字。
+                    </span>
+                    {fieldErrorText('zone-name')}
                     {error && errorContext === 'zone' && (
                       <p ref={errorMessage} role="alert" tabIndex={-1}>
                         {error}
@@ -543,6 +626,7 @@ export default function PlanningPage({
                         setRenamingZone(null)
                         setZoneName('')
                         setError('')
+                        setFieldError(null)
                       }}
                       type="button"
                     >
@@ -556,6 +640,7 @@ export default function PlanningPage({
                       disabled={busy || readOnly}
                       onClick={() => {
                         setError('')
+                        setFieldError(null)
                         renameZoneTrigger.current =
                           document.activeElement as HTMLButtonElement
                         setZoneName(zone.name)
@@ -588,6 +673,7 @@ export default function PlanningPage({
                   ref={addZoneTrigger}
                   onClick={() => {
                     setError('')
+                    setFieldError(null)
                     setAddingZone(true)
                     setZoneName('')
                   }}
@@ -598,6 +684,7 @@ export default function PlanningPage({
                 {addingZone && (
                   <form
                     data-error-context="zone"
+                    noValidate
                     onSubmit={(event) => void saveZone(event)}
                   >
                     <label>
@@ -605,26 +692,48 @@ export default function PlanningPage({
                         分區名稱 <span aria-hidden="true">*</span>
                       </span>
                       <input
-                        aria-describedby="zone-name-hint"
+                        aria-describedby={describedBy(
+                          'zone-name-hint',
+                          hasFieldError('zone-name') &&
+                            fieldErrorId('zone-name'),
+                        )}
+                        aria-invalid={hasFieldError('zone-name')}
                         autoFocus
                         maxLength={128}
-                        onChange={(event) => setZoneName(event.target.value)}
+                        onChange={(event) => {
+                          setZoneName(event.target.value)
+                          setFieldError(null)
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Escape') {
                             event.preventDefault()
                             setAddingZone(false)
                             setZoneName('')
                             setError('')
+                            setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
+                            // 輸入法選字的 Enter 只是確認選字，不送出。
+                            // Safari 這一下 isComposing 是 false，
+                            // 但 keyCode 是 229。
+                            if (
+                              event.nativeEvent.isComposing ||
+                              event.keyCode === 229
+                            ) {
+                              return
+                            }
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
+                        data-field="zone-name"
                         required
                         value={zoneName}
                       />
                     </label>
-                    <span id="zone-name-hint">請輸入分區名稱。</span>
+                    <span className="field-hint" id="zone-name-hint">
+                      必填，最多 128 字。
+                    </span>
+                    {fieldErrorText('zone-name')}
                     {error && errorContext === 'zone' && (
                       <p ref={errorMessage} role="alert" tabIndex={-1}>
                         {error}
@@ -638,6 +747,7 @@ export default function PlanningPage({
                         setAddingZone(false)
                         setZoneName('')
                         setError('')
+                        setFieldError(null)
                       }}
                       type="button"
                     >
@@ -660,6 +770,7 @@ export default function PlanningPage({
                     aria-current={selectedPlanId === plan.id}
                     onClick={() => {
                       setNotice(null)
+                      setFieldError(null)
                       setSelectedPlanId(plan.id)
                     }}
                     type="button"
@@ -672,6 +783,7 @@ export default function PlanningPage({
             {!readOnly && (
               <form
                 data-error-context="plan-create"
+                noValidate
                 onSubmit={(event) => void createPlan(event)}
               >
                 <h3>建立計畫</h3>
@@ -680,19 +792,31 @@ export default function PlanningPage({
                     計畫名稱 <span aria-hidden="true">*</span>
                   </span>
                   <input
-                    aria-describedby={
-                      errorContext === 'plan-create'
-                        ? 'plan-name-hint plan-name-error'
-                        : 'plan-name-hint'
+                    aria-describedby={describedBy(
+                      'plan-name-hint',
+                      hasFieldError('plan-name') && fieldErrorId('plan-name'),
+                      errorContext === 'plan-create' &&
+                        !!error &&
+                        'plan-name-error',
+                    )}
+                    aria-invalid={
+                      hasFieldError('plan-name') ||
+                      (errorContext === 'plan-create' && !!error)
                     }
-                    aria-invalid={errorContext === 'plan-create' && !!error}
                     maxLength={128}
-                    onChange={(event) => setPlanName(event.target.value)}
+                    onChange={(event) => {
+                      setPlanName(event.target.value)
+                      setFieldError(null)
+                    }}
+                    data-field="plan-name"
                     required
                     value={planName}
                   />
                 </label>
-                <span id="plan-name-hint">請輸入計畫名稱。</span>
+                <span className="field-hint" id="plan-name-hint">
+                  必填，最多 128 字。
+                </span>
+                {fieldErrorText('plan-name')}
                 {error && errorContext === 'plan-create' && (
                   <p
                     id="plan-name-error"
@@ -721,6 +845,7 @@ export default function PlanningPage({
                     disabled={busy || selectedPlan.status === 'ARCHIVED'}
                     onClick={() => {
                       setError('')
+                      setFieldError(null)
                       setEditingPlanName(true)
                       setUpdatedPlanName(selectedPlan.name)
                     }}
@@ -759,8 +884,12 @@ export default function PlanningPage({
               {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
                 <form
                   data-error-context="plan-rename"
+                  noValidate
                   onSubmit={(event) => {
                     event.preventDefault()
+                    if (rejectBlank('plan-rename', !updatedPlanName.trim())) {
+                      return
+                    }
                     void act(
                       () =>
                         client.updatePlan(selectedPlan.id, {
@@ -776,21 +905,32 @@ export default function PlanningPage({
                       計畫名稱 <span aria-hidden="true">*</span>
                     </span>
                     <input
-                      aria-describedby={
-                        errorContext === 'plan-rename'
-                          ? 'updated-plan-name-hint updated-plan-name-error'
-                          : 'updated-plan-name-hint'
+                      aria-describedby={describedBy(
+                        'updated-plan-name-hint',
+                        hasFieldError('plan-rename') &&
+                          fieldErrorId('plan-rename'),
+                        errorContext === 'plan-rename' &&
+                          !!error &&
+                          'updated-plan-name-error',
+                      )}
+                      aria-invalid={
+                        hasFieldError('plan-rename') ||
+                        (errorContext === 'plan-rename' && !!error)
                       }
-                      aria-invalid={errorContext === 'plan-rename' && !!error}
                       maxLength={128}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setUpdatedPlanName(event.target.value)
-                      }
+                        setFieldError(null)
+                      }}
+                      data-field="plan-rename"
                       required
                       value={updatedPlanName}
                     />
                   </label>
-                  <span id="updated-plan-name-hint">請輸入計畫名稱。</span>
+                  <span className="field-hint" id="updated-plan-name-hint">
+                    必填，最多 128 字。
+                  </span>
+                  {fieldErrorText('plan-rename')}
                   {error && errorContext === 'plan-rename' && (
                     <p
                       id="updated-plan-name-error"
@@ -805,7 +945,10 @@ export default function PlanningPage({
                     儲存計畫名稱
                   </button>
                   <button
-                    onClick={() => setEditingPlanName(false)}
+                    onClick={() => {
+                      setEditingPlanName(false)
+                      setFieldError(null)
+                    }}
                     type="button"
                   >
                     取消編輯
@@ -886,13 +1029,14 @@ export default function PlanningPage({
                             <>
                               <button
                                 disabled={busy}
-                                onClick={() =>
+                                onClick={() => {
+                                  setFieldError(null)
                                   setEditingLocation({
                                     task,
                                     zoneId: task.zone_id ?? '',
                                     locationText: task.location_text ?? '',
                                   })
-                                }
+                                }}
                                 type="button"
                               >
                                 修改地點
@@ -945,8 +1089,19 @@ export default function PlanningPage({
                       {editingLocation?.task.id === task.id && (
                         <form
                           data-error-context="location"
+                          noValidate
                           onSubmit={(event) => {
                             event.preventDefault()
+                            if (
+                              rejectBlank(
+                                'location-zone',
+                                zones.length > 0 &&
+                                  !zonesDenied &&
+                                  !editingLocation.zoneId,
+                              )
+                            ) {
+                              return
+                            }
                             void act(
                               () =>
                                 client.updateLocation(task.id, {
@@ -963,32 +1118,45 @@ export default function PlanningPage({
                           }}
                         >
                           {zones.length > 0 && !zonesDenied && (
-                            <label>
-                              <span className="required-label">
-                                分區 <span aria-hidden="true">*</span>
-                              </span>
-                              <select
-                                aria-describedby="location-zone-hint"
-                                onChange={(event) =>
-                                  setEditingLocation({
-                                    ...editingLocation,
-                                    zoneId: event.target.value,
-                                  })
-                                }
-                                required
-                                value={editingLocation.zoneId}
+                            <div>
+                              <label>
+                                <span className="required-label">
+                                  分區 <span aria-hidden="true">*</span>
+                                </span>
+                                <select
+                                  aria-describedby={describedBy(
+                                    'location-zone-hint',
+                                    hasFieldError('location-zone') &&
+                                      fieldErrorId('location-zone'),
+                                  )}
+                                  aria-invalid={hasFieldError('location-zone')}
+                                  onChange={(event) => {
+                                    setEditingLocation({
+                                      ...editingLocation,
+                                      zoneId: event.target.value,
+                                    })
+                                    setFieldError(null)
+                                  }}
+                                  data-field="location-zone"
+                                  required
+                                  value={editingLocation.zoneId}
+                                >
+                                  <option value="">請選擇分區</option>
+                                  {zones.map((zone) => (
+                                    <option key={zone.id} value={zone.id}>
+                                      {zone.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <span
+                                className="field-hint"
+                                id="location-zone-hint"
                               >
-                                <option value="">請選擇分區</option>
-                                {zones.map((zone) => (
-                                  <option key={zone.id} value={zone.id}>
-                                    {zone.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <span id="location-zone-hint">
-                                請選擇任務分區。
+                                必填，從專案分區中選一個。
                               </span>
-                            </label>
+                              {fieldErrorText('location-zone')}
+                            </div>
                           )}
                           <label>
                             補充地點
@@ -1059,6 +1227,7 @@ export default function PlanningPage({
               {canEditPlan && !readOnly && (
                 <form
                   data-error-context="task"
+                  noValidate
                   onSubmit={(event) => void createTask(event)}
                 >
                   <h3>建立任務</h3>
@@ -1066,7 +1235,7 @@ export default function PlanningPage({
                     <legend>
                       選擇一筆以上查核項目 <span aria-hidden="true">*</span>
                     </legend>
-                    <p>至少選擇一筆查核項目。</p>
+                    <p className="field-hint">至少選擇一筆查核項目。</p>
                     {items.map((item) => (
                       <label key={item.id}>
                         <input
@@ -1082,25 +1251,39 @@ export default function PlanningPage({
                     ))}
                   </fieldset>
                   {zones.length > 0 && !zonesDenied && (
-                    <label>
-                      <span className="required-label">
-                        任務分區 <span aria-hidden="true">*</span>
+                    <div>
+                      <label>
+                        <span className="required-label">
+                          任務分區 <span aria-hidden="true">*</span>
+                        </span>
+                        <select
+                          aria-describedby={describedBy(
+                            'task-zone-hint',
+                            hasFieldError('task-zone') &&
+                              fieldErrorId('task-zone'),
+                          )}
+                          aria-invalid={hasFieldError('task-zone')}
+                          onChange={(event) => {
+                            setTaskZoneId(event.target.value)
+                            setFieldError(null)
+                          }}
+                          data-field="task-zone"
+                          required
+                          value={taskZoneId}
+                        >
+                          <option value="">請選擇分區</option>
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <span className="field-hint" id="task-zone-hint">
+                        必填，從專案分區中選一個。
                       </span>
-                      <select
-                        aria-describedby="task-zone-hint"
-                        onChange={(event) => setTaskZoneId(event.target.value)}
-                        required
-                        value={taskZoneId}
-                      >
-                        <option value="">請選擇分區</option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
-                      <span id="task-zone-hint">請選擇任務分區。</span>
-                    </label>
+                      {fieldErrorText('task-zone')}
+                    </div>
                   )}
                   {error && errorContext === 'task' && (
                     <p ref={errorMessage} role="alert" tabIndex={-1}>
@@ -1179,7 +1362,9 @@ export default function PlanningPage({
                 value={cancelReason}
               />
             </label>
-            <span id="cancel-reason-hint">請填寫取消原因。</span>
+            <span className="field-hint" id="cancel-reason-hint">
+              必填，寫下取消這個任務的原因。
+            </span>
             <button disabled={busy || !cancelReason.trim()} type="submit">
               確認取消
             </button>{' '}

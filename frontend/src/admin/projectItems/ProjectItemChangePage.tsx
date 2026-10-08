@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router'
 
-import { httpErrorMessage, isForbidden } from '../../http'
+import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
+import RouteNotFound from '../../RouteNotFound'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
 import { numericSummary } from '../templates/templateEditorUtils'
@@ -153,6 +154,7 @@ export default function ProjectItemChangePage({
   const [confirming, setConfirming] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -181,6 +183,8 @@ export default function ProjectItemChangePage({
       })
       .catch((caught: unknown) => {
         if (!active) return
+        // 項目 id 格式不對或不存在：顯示找不到，不顯示空表單與錯誤句。
+        if (isNotFound(caught)) setNotFound(true)
         if (isForbidden(caught)) setReadOnly(true)
         setError(errorMessage(caught))
       })
@@ -299,6 +303,16 @@ export default function ProjectItemChangePage({
   }
 
   if (loading) return <p>載入中…</p>
+
+  if (notFound) {
+    return (
+      <RouteNotFound
+        headingLevel={2}
+        message="網址可能輸入錯誤，或這個查核項目已不存在。"
+        title="找不到這個查核項目"
+      />
+    )
+  }
 
   const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
   const hasDraft = preview

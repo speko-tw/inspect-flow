@@ -165,7 +165,6 @@ describe('現場任務詳情', () => {
   })
 
   it.each([
-    [404, '找不到這筆任務'],
     [403, '無法查看任務'],
     [500, '無法載入任務詳情'],
   ])('狀態 %i 顯示對應錯誤與返回連結', async (status, heading) => {
@@ -182,6 +181,23 @@ describe('現場任務詳情', () => {
     fireEvent.click(back)
     expect(screen.getByText('任務清單')).toBeInTheDocument()
   })
+
+  it.each([404, 422])(
+    '狀態 %i（不存在或 id 格式不對）顯示找不到與回首頁',
+    async (status) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ error: 'failed' }, { status })),
+      )
+      renderDetail()
+      expect(
+        await screen.findByRole('heading', { name: '找不到這筆任務' }),
+      ).toBeInTheDocument()
+      const home = screen.getByRole('link', { name: '回首頁' })
+      expect(home).toHaveClass('button-link')
+      expect(home).toHaveAttribute('href', '/field')
+    },
+  )
 
   it('其他錯誤的重試按鈕留在錯誤區', async () => {
     vi.stubGlobal(
