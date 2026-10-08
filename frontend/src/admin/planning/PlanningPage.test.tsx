@@ -851,6 +851,8 @@ describe('planning management page', () => {
       const input = screen.getByLabelText(/分區名稱/)
       fireEvent.change(input, { target: { value: '一樓' } })
       fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      // Safari 選字後的 Enter：isComposing 是 false，keyCode 是 229。
+      fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
 
       expect(createZone).not.toHaveBeenCalled()
       expect(screen.getByLabelText(/分區名稱/)).toHaveValue('一樓')

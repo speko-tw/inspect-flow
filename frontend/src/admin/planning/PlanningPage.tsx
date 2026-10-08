@@ -584,8 +584,14 @@ export default function PlanningPage({
                             setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
-                            // 注音等輸入法選字時的 Enter 只是確認選字，不是送出。
-                            if (event.nativeEvent.isComposing) return
+                            // 注音等輸入法選字時的 Enter 只是確認選字，不是送出
+                            // （Safari 的這一下 isComposing 已是 false，但 keyCode 是 229）。
+                            if (
+                              event.nativeEvent.isComposing ||
+                              event.keyCode === 229
+                            ) {
+                              return
+                            }
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
@@ -698,8 +704,14 @@ export default function PlanningPage({
                             setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
-                            // 注音等輸入法選字時的 Enter 只是確認選字，不是送出。
-                            if (event.nativeEvent.isComposing) return
+                            // 注音等輸入法選字時的 Enter 只是確認選字，不是送出
+                            // （Safari 的這一下 isComposing 已是 false，但 keyCode 是 229）。
+                            if (
+                              event.nativeEvent.isComposing ||
+                              event.keyCode === 229
+                            ) {
+                              return
+                            }
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
