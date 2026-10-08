@@ -624,6 +624,15 @@ describe('TemplatesPage', () => {
     fireEvent.change(screen.getByLabelText(/名稱/), {
       target: { value: '橋梁工程' },
     })
+    // 表單按鈕固定排成 [取消][儲存]，只有儲存是主要按鈕（#500）。
+    const form = screen.getByLabelText(/名稱/).closest('form') as HTMLElement
+    const formButtons = within(form).getAllByRole('button')
+    expect(formButtons.map((button) => button.textContent)).toEqual([
+      '取消',
+      '儲存',
+    ])
+    expect(formButtons[0]).not.toHaveClass('btn-primary')
+    expect(formButtons[1]).toHaveClass('btn-primary')
     fireEvent.click(screen.getByRole('button', { name: '儲存' }))
 
     expect(
@@ -646,7 +655,16 @@ describe('TemplatesPage', () => {
     fireEvent.click(
       await within(navigation).findByRole('button', { name: '建築工程' }),
     )
-    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    // 刪除是觸發鈕（次要）；不可復原的最終確認才用 btn-danger（#500）。
+    const trigger = screen.getByRole('button', { name: '刪除' })
+    expect(trigger).not.toHaveClass('btn-danger')
+    fireEvent.click(trigger)
+    const confirmBox = screen.getByRole('group', { name: '刪除確認' })
+    expect(
+      within(confirmBox)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['取消', '確認刪除'])
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
 
     expect(
@@ -1426,11 +1444,17 @@ describe('TemplatesPage', () => {
       target: { value: '未儲存項目' },
     })
     fireEvent.click(screen.getByRole('button', { name: '建築工程' }))
-    expect(
-      screen.getByRole('alertdialog', {
-        name: '尚未儲存的變更',
-      }),
-    ).toBeInTheDocument()
+    const guard = screen.getByRole('alertdialog', {
+      name: '尚未儲存的變更',
+    })
+    // [取消][確認]：保留編輯是次要，捨棄變更才是危險色（#500）。
+    const guardButtons = within(guard).getAllByRole('button')
+    expect(guardButtons.map((button) => button.textContent)).toEqual([
+      '保留編輯',
+      '捨棄變更',
+    ])
+    expect(guardButtons[0]).not.toHaveClass('btn-primary', 'btn-danger')
+    expect(guardButtons[1]).toHaveClass('btn-danger')
     fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('未儲存項目')
   })
@@ -1447,7 +1471,9 @@ describe('TemplatesPage', () => {
       'data-pane',
       'detail',
     )
-    fireEvent.click(screen.getByRole('button', { name: '‹ 返回清單' }))
+    const back = screen.getByRole('button', { name: '返回清單' })
+    expect(back).toHaveClass('back-link')
+    fireEvent.click(back)
     expect(document.querySelector('.tpl-layout')).toHaveAttribute(
       'data-pane',
       'list',

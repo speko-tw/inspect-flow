@@ -111,7 +111,7 @@ async function confirm() {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('開始查核：確認步驟', () => {
-  it('按下開始查核只展開確認，不送出請求；返回查看需求可收起', async () => {
+  it('按下開始查核只展開確認，不送出請求；取消可收起', async () => {
     const { posts } = setup({
       details: [PENDING],
       start: () => Response.json(START_RESPONSE),
@@ -124,7 +124,18 @@ describe('開始查核：確認步驟', () => {
       screen.getByText('開始後會改為進行中，並記錄你是實際開始者。'),
     ).toBeInTheDocument()
     expect(posts()).toHaveLength(0)
-    fireEvent.click(screen.getByRole('button', { name: '返回查看需求' }))
+    // [取消][確認]：只有確認是主要按鈕（#500）。
+    const panel = screen.getByRole('heading', {
+      name: '確認開始「外牆鋼筋查核」？',
+    }).parentElement as HTMLElement
+    const buttons = within(panel).getAllByRole('button')
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      '取消',
+      '確認開始查核',
+    ])
+    expect(buttons[0]).not.toHaveClass('btn-primary')
+    expect(buttons[1]).toHaveClass('btn-primary')
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByText(/確認開始/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '開始查核' })).toBeEnabled()
     expect(posts()).toHaveLength(0)
@@ -214,7 +225,7 @@ describe('開始查核：成功', () => {
     await confirm()
     const busy = screen.getByRole('button', { name: '開始中…' })
     expect(busy).toBeDisabled()
-    expect(screen.getByRole('button', { name: '返回查看需求' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '取消' })).toBeDisabled()
     fireEvent.click(busy)
     expect(posts()).toHaveLength(1)
     expect(screen.getByText('待開始')).toBeInTheDocument()
@@ -369,7 +380,7 @@ describe('開始查核：失敗文案、位置與聚焦', () => {
       screen.queryByRole('button', { name: /開始查核/ }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '返回任務清單' })).toHaveClass(
-      'button-link',
+      'btn',
     )
   })
 
@@ -486,7 +497,7 @@ describe('開始查核：失敗文案、位置與聚焦', () => {
     })
     await confirm()
     await expectError('這筆任務還沒有開始')
-    fireEvent.click(screen.getByRole('button', { name: '返回查看需求' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -525,7 +536,7 @@ describe('開始查核：失敗文案、位置與聚焦', () => {
     })
     await confirm()
     await screen.findByRole('alert')
-    fireEvent.click(screen.getByRole('button', { name: '返回查看需求' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
     await openConfirm()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(attempts).toBe(1)

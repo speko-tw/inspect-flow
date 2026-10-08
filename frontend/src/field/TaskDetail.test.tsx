@@ -177,7 +177,7 @@ describe('現場任務詳情', () => {
       await screen.findByRole('heading', { name: heading }),
     ).toBeInTheDocument()
     const back = screen.getByRole('link', { name: '返回任務清單' })
-    expect(back).toHaveClass('button-link')
+    expect(back).toHaveClass('btn')
     fireEvent.click(back)
     expect(screen.getByText('任務清單')).toBeInTheDocument()
   })
@@ -194,7 +194,7 @@ describe('現場任務詳情', () => {
         await screen.findByRole('heading', { name: '找不到這筆任務' }),
       ).toBeInTheDocument()
       const home = screen.getByRole('link', { name: '回首頁' })
-      expect(home).toHaveClass('button-link')
+      expect(home).toHaveClass('btn')
       expect(home).toHaveAttribute('href', '/field')
     },
   )

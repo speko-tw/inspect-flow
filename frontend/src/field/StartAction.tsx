@@ -162,7 +162,7 @@ export default function StartAction({
           <h3>查核進行中</h3>
           <p>實際開始者：{personLabel(task.started_by)}</p>
         </div>
-        {failure && <BackLink back={back} />}
+        {failure && <TaskListLink back={back} />}
       </>
     )
   }
@@ -173,7 +173,7 @@ export default function StartAction({
         {failure ? (
           <>
             <FailureBox failure={failure} errorRef={errorRef} />
-            <BackLink back={back} />
+            <TaskListLink back={back} />
           </>
         ) : (
           <p>
@@ -194,7 +194,7 @@ export default function StartAction({
     <>
       {failure && <FailureBox failure={failure} errorRef={errorRef} />}
       {failed ? (
-        <BackLink back={back} />
+        <TaskListLink back={back} />
       ) : confirming ? (
         <div className="field-confirm">
           <h3>確認開始「{title}」？</h3>
@@ -207,21 +207,21 @@ export default function StartAction({
           )}
           <button
             type="button"
-            className="primary"
-            disabled={submitting}
-            onClick={() => void confirmStart()}
-          >
-            {submitting ? '開始中…' : '確認開始查核'}
-          </button>
-          <button
-            type="button"
             disabled={submitting}
             onClick={() => {
               setConfirming(false)
               setFailure(null)
             }}
           >
-            返回查看需求
+            取消
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={submitting}
+            onClick={() => void confirmStart()}
+          >
+            {submitting ? '開始中…' : '確認開始查核'}
           </button>
         </div>
       ) : (
@@ -229,7 +229,7 @@ export default function StartAction({
           <p>看完需求後開始查核。</p>
           <button
             type="button"
-            className="primary"
+            className="btn-primary"
             onClick={() => {
               setFailure(null)
               setConfirming(true)
@@ -262,9 +262,9 @@ function FailureBox({
   )
 }
 
-function BackLink({ back }: { back: string }) {
+function TaskListLink({ back }: { back: string }) {
   return (
-    <Link className="button-link" to={back} state={{ restoreTaskList: true }}>
+    <Link className="btn" to={back} state={{ restoreTaskList: true }}>
       返回任務清單
     </Link>
   )

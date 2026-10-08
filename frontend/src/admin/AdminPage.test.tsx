@@ -814,6 +814,14 @@ describe('admin user and company pages', () => {
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(within(row).getByRole('button', { name: '指派管理者' }))
     const confirmation = screen.getByRole('region', { name: '操作確認' })
+    // 確認與取消固定排成 [取消][確認]，只有最終確認是危險色（#500）。
+    const buttons = within(confirmation).getAllByRole('button')
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      '取消',
+      '確認',
+    ])
+    expect(buttons[1]).toHaveClass('btn-danger')
+    expect(buttons[0]).not.toHaveClass('btn-danger')
     expect(
       within(confirmation).getByRole('button', { name: '取消' }),
     ).toHaveFocus()

@@ -30,7 +30,7 @@ export default function NotFoundPage({
     <>
       <Heading>{title}</Heading>
       <p>{message}</p>
-      <Link className="button-link" to={homeTo}>
+      <Link className="btn" to={homeTo}>
         回首頁
       </Link>
     </>

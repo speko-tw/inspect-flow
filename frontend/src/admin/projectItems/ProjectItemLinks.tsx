@@ -48,7 +48,7 @@ export default function ProjectItemLinks({
     <section aria-labelledby="project-items-heading">
       <h2 id="project-items-heading">專案查核項目</h2>
       <Link
-        className="standalone-link"
+        className="btn btn-primary"
         to={`/admin/projects/${projectId}/templates`}
       >
         套用範本

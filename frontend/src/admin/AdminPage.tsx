@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
+  Link,
   Navigate,
-  NavLink,
   Route,
   Routes,
   useLocation,
@@ -304,9 +304,9 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
                       ? '只有系統管理者或範本管理員可以使用範本管理。'
                       : '只有系統管理者可以使用這個管理頁面。'}
                   </p>
-                  <NavLink className="button-link" to={indexTarget}>
+                  <Link className="btn" to={indexTarget}>
                     返回{landingLabel(indexTarget)}
-                  </NavLink>
+                  </Link>
                 </>
               ) : (
                 <RouteNotFound />

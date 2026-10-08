@@ -8,6 +8,7 @@ import {
 } from 'react'
 
 import { HttpError, isForbidden } from '../../http'
+import { BackButton } from '../../layout/BackLink'
 import { managementErrorMessage } from '../api'
 import { InlineConfirm } from './InlineConfirm'
 import { InspectionPointCard } from './InspectionPointCard'
@@ -832,15 +833,15 @@ export default function TemplatesPage() {
         )}
         <p className="tpl-hint">同一層名稱不可重複。</p>
         <div className="tpl-actions">
+          <button onClick={resetMode} type="button">
+            取消
+          </button>
           <button
             className="btn-primary"
             disabled={Boolean(duplicate)}
             type="submit"
           >
             儲存
-          </button>
-          <button onClick={resetMode} type="button">
-            取消
           </button>
           <span className="tpl-hint">Enter 儲存，Esc 取消</span>
         </div>
@@ -899,11 +900,7 @@ export default function TemplatesPage() {
             <strong>這裡有尚未儲存的變更。</strong>
             要保留編輯，還是捨棄變更？
           </p>
-          <button
-            className="btn-primary"
-            onClick={() => setGuard(null)}
-            type="button"
-          >
+          <button onClick={() => setGuard(null)} type="button">
             保留編輯
           </button>
           <button
@@ -966,7 +963,6 @@ export default function TemplatesPage() {
                   重新命名
                 </button>
                 <button
-                  className="btn-danger"
                   onClick={() => {
                     setNotice('')
                     setActionError(
@@ -1054,7 +1050,6 @@ export default function TemplatesPage() {
                   重新命名
                 </button>
                 <button
-                  className="btn-danger"
                   onClick={() => {
                     setNotice('')
                     setActionError(
@@ -1138,7 +1133,6 @@ export default function TemplatesPage() {
                   編輯查核項目
                 </button>
                 <button
-                  className="btn-danger"
                   onClick={() => {
                     setActionError('')
                     setMode('delete-item')
@@ -1193,15 +1187,6 @@ export default function TemplatesPage() {
       ) : (
         <div className="tpl-layout" data-pane={mobilePane}>
           <div className="tpl-list-pane">
-            {mobilePane === 'detail' && (
-              <button
-                className="tpl-mobile-back"
-                onClick={() => setMobilePane('list')}
-                type="button"
-              >
-                ‹ 返回
-              </button>
-            )}
             <TemplateLibraryNav
               categories={categories}
               expanded={expanded}
@@ -1227,13 +1212,12 @@ export default function TemplatesPage() {
           </div>
           <section className="tpl-detail-pane" aria-label="範本詳情">
             {mobilePane === 'detail' && (
-              <button
+              <BackButton
                 className="tpl-mobile-back"
                 onClick={() => setMobilePane('list')}
-                type="button"
               >
-                ‹ 返回清單
-              </button>
+                返回清單
+              </BackButton>
             )}
             {guard ? (
               renderDetail()

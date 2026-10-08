@@ -45,6 +45,35 @@ function renderHeader(
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('AppHeader 窄螢幕導覽（#500）', () => {
+  it('導覽是單列可滑動的一個 nav，目前的分頁被捲進可見範圍', () => {
+    // jsdom 不做版面：用假的尺寸模擬「目前分頁在可視範圍右側之外」。
+    const offsetLeft = vi
+      .spyOn(HTMLElement.prototype, 'offsetLeft', 'get')
+      .mockReturnValue(500)
+    const offsetWidth = vi
+      .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
+      .mockReturnValue(80)
+    const clientWidth = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockReturnValue(328)
+    try {
+      renderHeader(ADMIN, {}, '/change-password')
+      const nav = screen.getByRole('navigation', { name: '管理功能' })
+      expect(nav).toHaveClass('app-header-nav')
+      expect(
+        within(nav).getByRole('link', { name: '變更密碼' }),
+      ).toHaveAttribute('aria-current', 'page')
+      // 目前分頁右緣 580，可視寬度 328：往右捲到右緣對齊再留 8px。
+      expect(nav.scrollLeft).toBe(580 - 328 + 8)
+    } finally {
+      offsetLeft.mockRestore()
+      offsetWidth.mockRestore()
+      clientWidth.mockRestore()
+    }
+  })
+})
+
 describe('AppHeader', () => {
   it.each([
     ['系統管理者', ADMIN, '/admin'],

@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
+import { Link } from 'react-router'
 
 import { collectPages, HttpError, isForbidden } from '../../http'
 import { planningClient, planningErrorMessage } from './api'
@@ -504,9 +505,9 @@ export default function PlanningPage({
       <section>
         <h2>無權限</h2>
         <p role="alert">你沒有這個專案的查核計畫讀取權限。</p>
-        <p>
-          <a href="/">返回工作台</a>
-        </p>
+        <Link className="btn" to="/admin/projects">
+          返回專案清單
+        </Link>
       </section>
     )
   }
@@ -516,9 +517,9 @@ export default function PlanningPage({
       <section>
         <h2>找不到專案</h2>
         <p role="alert">網址中的專案不存在或已刪除。</p>
-        <p>
-          <a href="/">返回工作台</a>
-        </p>
+        <Link className="btn" to="/admin/projects">
+          返回專案清單
+        </Link>
       </section>
     )
   }
@@ -618,10 +619,8 @@ export default function PlanningPage({
                         {error}
                       </p>
                     )}
-                    <button disabled={busy} type="submit">
-                      儲存名稱
-                    </button>
                     <button
+                      aria-label="取消編輯"
                       onClick={() => {
                         setRenamingZone(null)
                         setZoneName('')
@@ -630,7 +629,14 @@ export default function PlanningPage({
                       }}
                       type="button"
                     >
-                      取消編輯
+                      取消
+                    </button>
+                    <button
+                      className="btn-primary"
+                      disabled={busy}
+                      type="submit"
+                    >
+                      儲存名稱
                     </button>
                   </form>
                 ) : (
@@ -739,9 +745,6 @@ export default function PlanningPage({
                         {error}
                       </p>
                     )}
-                    <button disabled={busy} type="submit">
-                      新增分區
-                    </button>
                     <button
                       onClick={() => {
                         setAddingZone(false)
@@ -753,6 +756,13 @@ export default function PlanningPage({
                     >
                       取消
                     </button>
+                    <button
+                      className="btn-primary"
+                      disabled={busy}
+                      type="submit"
+                    >
+                      新增分區
+                    </button>
                   </form>
                 )}
               </>
@@ -763,7 +773,7 @@ export default function PlanningPage({
             <h2 id="plans-heading">查核計畫</h2>
             {noticeFor('plans')}
             {plans.length === 0 ? <p>目前沒有計畫。</p> : null}
-            <ul>
+            <ul className="plan-list">
               {plans.map((plan) => (
                 <li key={plan.id}>
                   <button
@@ -828,7 +838,7 @@ export default function PlanningPage({
                     {error}
                   </p>
                 )}
-                <button disabled={busy} type="submit">
+                <button className="btn-primary" disabled={busy} type="submit">
                   建立計畫
                 </button>
               </form>
@@ -943,17 +953,22 @@ export default function PlanningPage({
                       {error}
                     </p>
                   )}
-                  <button disabled={busy} type="submit">
-                    儲存計畫名稱
-                  </button>
                   <button
+                    aria-label="取消編輯"
                     onClick={() => {
                       setEditingPlanName(false)
                       setFieldError(null)
                     }}
                     type="button"
                   >
-                    取消編輯
+                    取消
+                  </button>
+                  <button
+                    className="btn-primary"
+                    disabled={busy}
+                    type="submit"
+                  >
+                    儲存計畫名稱
                   </button>
                 </form>
               )}
@@ -1173,7 +1188,11 @@ export default function PlanningPage({
                               value={editingLocation.locationText}
                             />
                           </label>
-                          <button disabled={busy} type="submit">
+                          <button
+                            className="btn-primary"
+                            disabled={busy}
+                            type="submit"
+                          >
                             儲存地點
                           </button>
                           {error && errorContext === 'location' && (
@@ -1216,7 +1235,11 @@ export default function PlanningPage({
                               ))}
                             </select>
                           </label>
-                          <button disabled={busy} type="submit">
+                          <button
+                            className="btn-primary"
+                            disabled={busy}
+                            type="submit"
+                          >
                             儲存指派
                           </button>
                         </form>
@@ -1315,6 +1338,7 @@ export default function PlanningPage({
                     </select>
                   </label>
                   <button
+                    className="btn-primary"
                     disabled={busy || taskItems.length === 0}
                     type="submit"
                   >
@@ -1367,11 +1391,15 @@ export default function PlanningPage({
             <span className="field-hint" id="cancel-reason-hint">
               必填，寫下取消這個任務的原因。
             </span>
-            <button disabled={busy || !cancelReason.trim()} type="submit">
-              確認取消
-            </button>{' '}
             <button disabled={busy} onClick={closeDialogs} type="button">
-              返回
+              取消
+            </button>{' '}
+            <button
+              className="btn-danger"
+              disabled={busy || !cancelReason.trim()}
+              type="submit"
+            >
+              確認取消
             </button>
           </form>
         </section>
@@ -1398,16 +1426,16 @@ export default function PlanningPage({
               {error}
             </p>
           )}
+          <button disabled={busy} onClick={closeDialogs} type="button">
+            取消
+          </button>{' '}
           <button
-            className={confirmation.danger ? 'btn-danger' : undefined}
+            className={confirmation.danger ? 'btn-danger' : 'btn-primary'}
             disabled={busy || readOnly}
             onClick={() => void act(confirmation.action, confirmation.success)}
             type="button"
           >
             {confirmation.danger?.label ?? '確認'}
-          </button>{' '}
-          <button disabled={busy} onClick={closeDialogs} type="button">
-            返回
           </button>
         </section>
       )}

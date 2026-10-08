@@ -277,12 +277,12 @@ function TaskList({
           <h2>目前無法查看現場任務</h2>
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
           {user.has_office_access && (
-            <Link className="button-link" to="/admin/projects">
+            <Link className="btn" to="/admin/projects">
               前往我的專案
             </Link>
           )}
           {user.has_template_access && (
-            <Link className="button-link" to="/admin/templates">
+            <Link className="btn" to="/admin/templates">
               前往範本管理
             </Link>
           )}

@@ -195,7 +195,7 @@ export default function UserForm({
         />
         指派系統管理者權限
       </label>
-      <button disabled={saving} type="submit">
+      <button className="btn-primary" disabled={saving} type="submit">
         {saving ? '建立中…' : '新增使用者'}
       </button>
     </form>

@@ -10,7 +10,7 @@
 // 行中不能因此被導走。
 
 import { Fragment, useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router'
+import { Link, Navigate } from 'react-router'
 
 import { listCompanies, type Company, type CreatedUser } from '../admin/api'
 import TemporaryPassword from '../admin/TemporaryPassword'
@@ -77,7 +77,6 @@ function StepIndicator({ current }: { current: number }) {
 }
 
 export default function SetupPage() {
-  const navigate = useNavigate()
   const [step, setStep] = useState<Step>({ kind: 'checking' })
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
@@ -200,13 +199,9 @@ export default function SetupPage() {
           </p>
           <TemporaryPassword password={step.user.temporary_password} />
         </section>
-        <button
-          className="btn-primary"
-          onClick={() => navigate('/admin')}
-          type="button"
-        >
+        <Link className="btn btn-primary" to="/admin">
           已抄下，進入管理頁
-        </button>
+        </Link>
       </AuthLayout>
     )
   }
@@ -226,9 +221,9 @@ export default function SetupPage() {
           companies={companies}
           onCreated={(user) => setStep({ kind: 'created', user })}
         />
-        <button onClick={() => navigate('/admin')} type="button">
+        <Link className="btn" to="/admin">
           略過，進入管理頁
-        </button>
+        </Link>
       </AuthLayout>
     )
   }
@@ -255,7 +250,9 @@ export default function SetupPage() {
             />
           </div>
           {error && <p role="alert">{error}</p>}
-          <button type="submit">下一步</button>
+          <button className="btn-primary" type="submit">
+            下一步
+          </button>
         </form>
       </AuthLayout>
     )
@@ -294,9 +291,6 @@ export default function SetupPage() {
         </div>
         {error && <p role="alert">{error}</p>}
         {completed && <Link to="/login">前往登入頁</Link>}
-        <button type="submit" disabled={submitting}>
-          {submitting ? '設定中…' : '設定密碼'}
-        </button>
         <button
           disabled={submitting}
           onClick={() => {
@@ -306,6 +300,9 @@ export default function SetupPage() {
           type="button"
         >
           上一步
+        </button>
+        <button className="btn-primary" type="submit" disabled={submitting}>
+          {submitting ? '設定中…' : '設定密碼'}
         </button>
       </form>
     </AuthLayout>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import { isNotFound } from '../http'
+import { BackLink } from '../layout/BackLink'
 import {
   fetchFieldTaskDetail,
   FieldApiError,
@@ -106,9 +107,9 @@ export default function TaskDetail({
 
   return (
     <>
-      <Link className="field-back" to={back} state={{ restoreTaskList: true }}>
-        ‹ 返回任務
-      </Link>
+      <BackLink to={back} state={{ restoreTaskList: true }}>
+        返回任務
+      </BackLink>
       {!task && !error && <p role="status">載入任務詳情中…</p>}
       {error && (
         <section
@@ -141,15 +142,11 @@ export default function TaskDetail({
             </button>
           )}
           {error === 'missing' ? (
-            <Link className="button-link" to={homePath}>
+            <Link className="btn" to={homePath}>
               回首頁
             </Link>
           ) : (
-            <Link
-              className="button-link"
-              to={back}
-              state={{ restoreTaskList: true }}
-            >
+            <Link className="btn" to={back} state={{ restoreTaskList: true }}>
               返回任務清單
             </Link>
           )}

@@ -24,11 +24,11 @@ export function InlineConfirm({
       aria-label="刪除確認"
     >
       <span>{children}</span>
-      <button className="btn-danger" onClick={onConfirm} type="button">
-        {confirmLabel}
-      </button>
       <button onClick={onCancel} type="button">
         取消
+      </button>
+      <button className="btn-danger" onClick={onConfirm} type="button">
+        {confirmLabel}
       </button>
     </div>
   )

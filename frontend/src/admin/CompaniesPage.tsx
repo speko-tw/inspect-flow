@@ -250,15 +250,20 @@ export default function CompaniesPage() {
               </label>
             ))}
           </fieldset>
-          <button disabled={saving} onClick={() => void confirmDeactivation()}>
-            確認停用公司
-          </button>
           <button
             disabled={saving}
             onClick={() => setDeactivating(null)}
             type="button"
           >
             取消
+          </button>
+          <button
+            className="btn-danger"
+            disabled={saving}
+            onClick={() => void confirmDeactivation()}
+            type="button"
+          >
+            確認停用公司
           </button>
         </section>
       )}
@@ -348,9 +353,6 @@ export default function CompaniesPage() {
             value={renamingId ? renameValue : name}
           />
         </label>
-        <button disabled={saving} type="submit">
-          {renamingId ? '儲存名稱' : '新增公司'}
-        </button>
         {renamingId && (
           <button
             onClick={() => {
@@ -362,6 +364,9 @@ export default function CompaniesPage() {
             取消
           </button>
         )}
+        <button className="btn-primary" disabled={saving} type="submit">
+          {renamingId ? '儲存名稱' : '新增公司'}
+        </button>
       </form>
     </section>
   )

@@ -17,8 +17,9 @@
 // 在改密碼，仍可登出（AUT-R30、AUT-R33 允許登出）。
 
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 
+import { BackLink } from '../layout/BackLink'
 import { ApiError, changePassword } from './api'
 import AuthLayout from './AuthLayout'
 import { landingLabel, landingPath } from './landing'
@@ -101,7 +102,15 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <AuthLayout title="變更密碼" lead="請輸入目前密碼，並設定新的密碼。">
+    <AuthLayout
+      back={
+        user.must_change_password ? undefined : (
+          <BackLink to={target}>返回{landingLabel(target)}</BackLink>
+        )
+      }
+      title="變更密碼"
+      lead="請輸入目前密碼，並設定新的密碼。"
+    >
       <form onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="change-password-current">目前密碼</label>
@@ -144,17 +153,10 @@ export default function ChangePasswordPage() {
           />
         </div>
         {error !== null ? <p role="alert">{error}</p> : null}
-        <button type="submit" disabled={submitting}>
+        <button className="btn-primary" type="submit" disabled={submitting}>
           變更密碼
         </button>
       </form>
-      {!user.must_change_password && (
-        <p>
-          <Link className="button-link" to={target}>
-            返回{landingLabel(target)}
-          </Link>
-        </p>
-      )}
       <LogoutButton />
     </AuthLayout>
   )

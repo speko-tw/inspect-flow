@@ -419,7 +419,11 @@ export default function ProjectItemChangePage({
                 </fieldset>
               ))}
             </fieldset>
-            <button disabled={readOnly || busy} type="submit">
+            <button
+              className="btn-primary"
+              disabled={readOnly || busy}
+              type="submit"
+            >
               儲存變更
             </button>
             {error && (
@@ -512,6 +516,14 @@ export default function ProjectItemChangePage({
                 </fieldset>
               )}
               <button
+                disabled={busy}
+                onClick={() => setConfirming(false)}
+                type="button"
+              >
+                取消
+              </button>
+              <button
+                className="btn-primary"
                 disabled={
                   readOnly || busy || (needsChoice && reinspect === null)
                 }
@@ -521,13 +533,6 @@ export default function ProjectItemChangePage({
                 type="button"
               >
                 確認儲存
-              </button>
-              <button
-                disabled={busy}
-                onClick={() => setConfirming(false)}
-                type="button"
-              >
-                返回編輯
               </button>
             </section>
           )}

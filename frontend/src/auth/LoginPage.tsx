@@ -77,7 +77,7 @@ export default function LoginPage() {
           />
         </div>
         {error !== null ? <p role="alert">{error}</p> : null}
-        <button type="submit" disabled={submitting}>
+        <button className="btn-primary" type="submit" disabled={submitting}>
           登入
         </button>
       </form>

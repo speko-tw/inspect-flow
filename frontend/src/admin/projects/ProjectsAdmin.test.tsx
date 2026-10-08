@@ -358,6 +358,14 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// 確認與取消固定排成 [取消][確認]；只有最終確認用 btn-danger（#500）。
+function expectCancelThenDanger(scope: HTMLElement, labels: [string, string]) {
+  const buttons = within(scope).getAllByRole('button')
+  expect(buttons.map((button) => button.textContent)).toEqual(labels)
+  expect(buttons[0]).not.toHaveClass('btn-danger')
+  expect(buttons[1]).toHaveClass('btn-danger')
+}
+
 describe('admin projects page', () => {
   it('lists projects and links from the admin navigation', async () => {
     projectFetch({
@@ -397,7 +405,25 @@ describe('admin projects page', () => {
       screen.getAllByRole('link', { name: '開啟專案' })[0],
     ).toHaveAttribute('href', '/admin/projects/project-1')
     expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveClass(
-      'button-link',
+      'btn',
+      'btn-sm',
+    )
+    // 同一個目的地只叫「開啟專案」（卡片與表格各一個）；每張卡片一主
+    // （套用範本）一次（開啟專案），搜尋的 submit 是次要按鈕。
+    expect(screen.queryByText('查看專案')).toBeNull()
+    expect(screen.queryByText('進入專案')).toBeNull()
+    expect(screen.getAllByRole('link', { name: '開啟專案' })).toHaveLength(4)
+    expect(screen.getAllByRole('link', { name: '套用範本' })[0]).toHaveClass(
+      'btn-primary',
+    )
+    expect(
+      screen.getAllByRole('link', { name: '開啟專案' })[0],
+    ).not.toHaveClass('btn-primary')
+    expect(screen.getByRole('button', { name: '搜尋' })).not.toHaveClass(
+      'btn-primary',
+    )
+    expect(screen.getByRole('button', { name: '新增專案' })).toHaveClass(
+      'btn-primary',
     )
   })
 
@@ -590,6 +616,7 @@ describe('admin projects page', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '編輯' })[0])
 
     const prompt = screen.getByRole('region', { name: '未儲存變更' })
+    expectCancelThenDanger(prompt, ['保留編輯', '捨棄'])
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
@@ -989,6 +1016,7 @@ describe('admin project members', () => {
     fireEvent.click(screen.getByLabelText('審核者'))
     fireEvent.keyDown(screen.getByLabelText('審核者'), { key: 'Escape' })
     const prompt = screen.getByRole('group', { name: '捨棄確認' })
+    expectCancelThenDanger(prompt, ['繼續編輯', '捨棄修改'])
     fireEvent.click(within(prompt).getByRole('button', { name: '繼續編輯' }))
     expect(screen.getByLabelText('審核者')).toBeChecked()
 
@@ -1011,6 +1039,7 @@ describe('admin project members', () => {
     fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
     expect(calls(fetchMock, 'DELETE', /members/)).toHaveLength(0)
     const confirm = screen.getByRole('group', { name: '移出確認' })
+    expectCancelThenDanger(confirm, ['取消', '確認移出'])
     expect(within(confirm).getByRole('button', { name: '取消' })).toHaveFocus()
     fireEvent.click(within(confirm).getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('button', { name: '確認移出' })).toBeNull()
