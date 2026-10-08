@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
 import { fetchCurrentUser, type CurrentUser } from './api'
+import { forgetUser, rememberUser } from './sessionMemory'
 import { CurrentUserProvider } from './useCurrentUser'
 
 /**
@@ -35,6 +36,9 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
       .then((user) => {
         if (cancelled) {
           return
+        }
+        if (user !== null) {
+          rememberUser(user.id)
         }
         setStatus(
           user === null
@@ -91,7 +95,12 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
     <CurrentUserProvider
       value={{
         user: status.user,
-        clear: () => setStatus({ kind: 'loggedOut' }),
+        clear: () => {
+          // 主動登出：不留「上一位使用者」，下一位登入者不沿用任何
+          // 原頁面（#489）。
+          forgetUser()
+          setStatus({ kind: 'loggedOut' })
+        },
       }}
     >
       {children}
