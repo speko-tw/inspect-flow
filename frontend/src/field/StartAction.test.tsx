@@ -547,3 +547,45 @@ describe('開始查核：失敗文案、位置與聚焦', () => {
     )
   })
 })
+
+describe('開始查核：防連點（#507）', () => {
+  it('連點「確認開始查核」只送出一次開始請求', async () => {
+    let release: (value: Response) => void = () => undefined
+    const pending = new Promise<Response>((resolve) => {
+      release = resolve
+    })
+    const { posts } = setup({
+      details: [PENDING, STARTED_BY_ME],
+      start: () => pending,
+    })
+    await openConfirm()
+    const button = screen.getByRole('button', { name: '確認開始查核' })
+
+    fireEvent.click(button)
+    fireEvent.click(button)
+    release(Response.json(START_RESPONSE))
+
+    expect(await screen.findByText('查核進行中')).toBeInTheDocument()
+    expect(posts()).toHaveLength(1)
+  })
+
+  it('可重試的失敗之後可以再送出', async () => {
+    const { posts } = setup({
+      details: [PENDING],
+      start: () => Response.json(errorBody('server.error'), { status: 500 }),
+    })
+    await confirm()
+    await screen.findByRole('alert')
+
+    fireEvent.click(screen.getByRole('button', { name: '確認開始查核' }))
+
+    await waitFor(() => expect(posts()).toHaveLength(2))
+  })
+
+  it('這一頁沒有 form 與 Enter 處理，輸入法 Enter 不適用', async () => {
+    setup({ details: [PENDING], start: () => Response.json(START_RESPONSE) })
+    await openConfirm()
+
+    expect(document.querySelector('form')).toBeNull()
+  })
+})

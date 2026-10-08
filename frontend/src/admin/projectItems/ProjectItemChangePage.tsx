@@ -5,6 +5,7 @@ import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
 import RouteNotFound from '../../RouteNotFound'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
 import { numericSummary } from '../templates/templateEditorUtils'
@@ -150,6 +151,7 @@ export default function ProjectItemChangePage({
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [busy, setBusy] = useState(false)
+  const guard = useSubmitGuard()
   const [error, setError] = useState('')
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
@@ -212,6 +214,7 @@ export default function ProjectItemChangePage({
 
   async function save(selectedReinspect?: boolean) {
     if (!projectId || !itemId) return
+    if (!guard.enter()) return
     setError('')
     setBusy(true)
     const change: ProjectItemChange = {
@@ -274,6 +277,7 @@ export default function ProjectItemChangePage({
       }
       setError(errorMessage(caught))
     } finally {
+      guard.leave()
       setBusy(false)
     }
   }
@@ -327,7 +331,7 @@ export default function ProjectItemChangePage({
       {error && !preview && <p role="alert">{error}</p>}
       {preview && (
         <>
-          <form onSubmit={submit}>
+          <form onKeyDown={blockImeEnter} onSubmit={submit}>
             <label>
               項目名稱 *
               <input
@@ -436,7 +440,7 @@ export default function ProjectItemChangePage({
               initialFocus="none"
               onCancel={() => setConfirming(false)}
               onConfirm={() =>
-                void save(draftOnly ? false : (reinspect ?? undefined))
+                save(draftOnly ? false : (reinspect ?? undefined))
               }
               role="dialog"
               title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}

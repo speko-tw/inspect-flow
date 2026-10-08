@@ -6,6 +6,7 @@ import {
   type Company,
   type CreatedUser,
 } from './api'
+import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
 
 const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ -'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
@@ -37,6 +38,7 @@ export default function UserForm({
   const [isAdmin, setIsAdmin] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const guard = useSubmitGuard()
 
   const fieldsDisabled = companyId === ''
   const usernameRuleId = useId()
@@ -44,6 +46,7 @@ export default function UserForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!guard.enter()) return
     setError('')
     setSaving(true)
     try {
@@ -71,6 +74,7 @@ export default function UserForm({
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      guard.leave()
       setSaving(false)
     }
   }
@@ -85,7 +89,7 @@ export default function UserForm({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onKeyDown={blockImeEnter} onSubmit={submit}>
       <h2>新增使用者</h2>
       {error && <p role="alert">{error}</p>}
       <div>

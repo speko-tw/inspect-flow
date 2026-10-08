@@ -5,6 +5,7 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { activeStatus } from '../ui/statusBadge'
+import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
 import {
   linkUserCompany,
   listCompanies,
@@ -49,6 +50,8 @@ export default function UsersPage({
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+  const searchGuard = useSubmitGuard()
+  const actionGuard = useSubmitGuard()
 
   useEffect(() => {
     if (!pendingAction) return
@@ -124,6 +127,7 @@ export default function UsersPage({
 
   async function searchUsers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!searchGuard.enter()) return
     const search = query.trim()
     setAppliedQuery(search)
     const id = ++requestId.current
@@ -142,6 +146,7 @@ export default function UsersPage({
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
+      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -185,6 +190,7 @@ export default function UsersPage({
   }
 
   async function act(userId: string, operation: () => Promise<User>) {
+    if (!actionGuard.enter()) return
     setError('')
     setBusyUser(userId)
     try {
@@ -195,6 +201,7 @@ export default function UsersPage({
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      actionGuard.leave()
       setBusyUser(null)
     }
   }
@@ -202,7 +209,11 @@ export default function UsersPage({
   // 收回「自己」的管理者權限：先確認；成功後不能再重新載入列表
   // （會被 403 擋下），改為導離管理頁並帶提示，目標頁的守衛會重新
   // 取得目前使用者。
-  async function confirmAction() {
+  function confirmAction() {
+    return actionGuard.run(confirmActionOnce)
+  }
+
+  async function confirmActionOnce() {
     if (!pendingAction) return
     const { user, kind } = pendingAction
     setActionError('')
@@ -279,7 +290,7 @@ export default function UsersPage({
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
-        <form onSubmit={searchUsers}>
+        <form onKeyDown={blockImeEnter} onSubmit={searchUsers}>
           <label>
             搜尋使用者
             <input
@@ -388,7 +399,7 @@ export default function UsersPage({
                             confirmLabel="確認"
                             label="操作確認"
                             onCancel={cancelPendingAction}
-                            onConfirm={() => void confirmAction()}
+                            onConfirm={confirmAction}
                             role="region"
                             rootRef={confirmationRef}
                             variant={
@@ -501,7 +512,7 @@ function UserDetailsForm({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onKeyDown={blockImeEnter} onSubmit={submit}>
       <h3>修改使用者資料</h3>
       <label>
         帳號名稱
@@ -580,6 +591,7 @@ function CompanyLinkForm({
 
   return (
     <form
+      onKeyDown={blockImeEnter}
       onSubmit={(event) => {
         event.preventDefault()
         onSave(companyId || null, {

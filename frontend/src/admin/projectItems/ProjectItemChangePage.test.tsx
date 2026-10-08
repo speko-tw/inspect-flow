@@ -8,6 +8,7 @@ import {
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
+import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
 import {
@@ -521,5 +522,73 @@ describe('ProjectItemChangePage numeric standard display (#482)', () => {
       }),
     )
     expect(line).toHaveTextContent('數值標準：≥ 5 %')
+  })
+})
+
+describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
+  it('saves once when the confirm button is clicked twice', async () => {
+    const gate = deferred<ProjectItemChangeResult>()
+    const api = apiWith({ update: vi.fn(() => gate.promise) })
+    renderPage(api)
+    fireEvent.change(await screen.findByLabelText('項目名稱 *'), {
+      target: { value: '新版檢查項目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
+    const confirmButton = screen.getByRole('button', { name: '確認儲存' })
+
+    fireEvent.click(confirmButton)
+    fireEvent.click(confirmButton)
+    gate.resolve(changed)
+
+    await screen.findByText(/二樓東側.*已完成任務退回進行中/)
+    expect(api.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts another save after a failed one', async () => {
+    const api = apiWith({
+      update: vi.fn(async () => {
+        throw new ManagementApiError(500, 'server.error')
+      }),
+    })
+    renderPage(api)
+    fireEvent.change(await screen.findByLabelText('項目名稱 *'), {
+      target: { value: '新版檢查項目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
+    const confirmButton = screen.getByRole('button', { name: '確認儲存' })
+
+    fireEvent.click(confirmButton)
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1))
+    await screen.findAllByRole('alert')
+    fireEvent.click(screen.getByRole('button', { name: '確認儲存' }))
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2))
+  })
+
+  it('does not open the confirmation when Enter only confirms an IME choice', async () => {
+    const api = apiWith()
+    renderPage(api)
+    const title = await screen.findByLabelText('項目名稱 *')
+    fireEvent.change(title, { target: { value: '新版檢查項目' } })
+
+    expectImeEnterIgnored(title)
+
+    expect(screen.queryByRole('button', { name: '確認儲存' })).toBeNull()
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('opening the confirmation is synchronous, so a repeated submit changes nothing (double submit not applicable)', async () => {
+    const api = apiWith()
+    renderPage(api)
+    const title = await screen.findByLabelText('項目名稱 *')
+    const form = title.closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    expect(screen.getAllByRole('button', { name: '確認儲存' })).toHaveLength(1)
+    expect(api.update).not.toHaveBeenCalled()
   })
 })

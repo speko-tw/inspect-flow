@@ -9,6 +9,11 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
+import {
+  deferred,
+  expectImeEnterIgnored,
+  type Deferred,
+} from '../../testing/submitGuard'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import AdminPage from '../AdminPage'
 import type { User } from '../api'
@@ -1375,5 +1380,223 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(screen.getByText(/同公司/)).toBeVisible()
     // 內業沒有系統管理頁，不放連結。
     expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
+  })
+})
+
+// 防連點與輸入法選字的 Enter（#507）。
+// 請求還沒回來時再送出只會送一次；選字的 Enter 不送出。
+function holdRequests(
+  fetchMock: ReturnType<typeof projectFetch>,
+  method: string,
+  pattern: RegExp,
+): Deferred<void> {
+  const gate = deferred()
+  const original = fetchMock.getMockImplementation()
+  fetchMock.mockImplementation(async (input, init) => {
+    if ((init?.method ?? 'GET') === method && pattern.test(String(input))) {
+      await gate.promise
+    }
+    return (original as NonNullable<typeof original>)(input, init)
+  })
+  return gate
+}
+
+function formOf(element: HTMLElement): HTMLFormElement {
+  return element.closest('form') as HTMLFormElement
+}
+
+describe('projects page forms guard (#507)', () => {
+  it('searches once when Enter is pressed twice quickly', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    const search = async (query: string, times: number) => {
+      const gate = holdRequests(fetchMock, 'GET', /\/projects\?.*q=/)
+      fireEvent.change(screen.getByLabelText('搜尋專案'), {
+        target: { value: query },
+      })
+      const form = formOf(screen.getByLabelText('搜尋專案'))
+      for (let i = 0; i < times; i += 1) fireEvent.submit(form)
+      gate.resolve()
+      await waitFor(() => expect(screen.queryByText('載入中…')).toBeNull())
+      return calls(fetchMock, 'GET', new RegExp(`q=${query}`)).length
+    }
+
+    // 一次搜尋本來就會讓列表重抓（搜尋與查詢條件的 effect 各一次）；
+    // 連按兩次的請求數必須和只按一次相同。
+    const single = await search('demo', 1)
+    const double = await search('demo2', 2)
+
+    expect(double).toBe(single)
+  })
+
+  it('does not search when Enter only confirms an IME choice', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    fireEvent.change(screen.getByLabelText('搜尋專案'), {
+      target: { value: 'demo' },
+    })
+
+    expectImeEnterIgnored(screen.getByLabelText('搜尋專案'))
+
+    expect(calls(fetchMock, 'GET', /q=demo/)).toHaveLength(0)
+  })
+
+  it('creates one project when Enter is pressed twice quickly', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    fillProjectForm()
+    const gate = holdRequests(fetchMock, 'POST', /\/projects$/)
+    const form = formOf(screen.getByLabelText(/專案代號/))
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await screen.findByRole('heading', { name: 'DEMO-002｜第二示範工程' })
+    expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(1)
+  })
+
+  it('accepts another save after a failed one', async () => {
+    const fetchMock = projectFetch({
+      failWith: {
+        match: /\/projects$/,
+        method: 'POST',
+        code: 'server.error',
+        status: 500,
+      },
+    })
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    fillProjectForm()
+    const form = formOf(screen.getByLabelText(/專案代號/))
+
+    fireEvent.submit(form)
+    await screen.findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(2),
+    )
+  })
+
+  it('does not save when Enter only confirms an IME choice', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    fillProjectForm()
+
+    expectImeEnterIgnored(screen.getByLabelText(/專案代號/))
+    expectImeEnterIgnored(screen.getByLabelText(/工程名稱/))
+
+    expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(0)
+  })
+})
+
+describe('project members forms guard (#507)', () => {
+  async function fillAdd() {
+    fireEvent.change(screen.getByLabelText(/使用者/), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(within(addForm()).getByLabelText('查核員'))
+  }
+
+  it('adds one member when Enter is pressed twice quickly', async () => {
+    const fetchMock = projectFetch({ members: [memberAnna] })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await fillAdd()
+    const gate = holdRequests(fetchMock, 'POST', /\/members$/)
+    const form = formOf(addForm())
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('已加入')
+    expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('accepts another add after a failed one', async () => {
+    const fetchMock = projectFetch({
+      members: [memberAnna],
+      failWith: {
+        match: /\/members$/,
+        method: 'POST',
+        code: 'server.error',
+        status: 500,
+      },
+    })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await fillAdd()
+    const form = formOf(addForm())
+
+    fireEvent.submit(form)
+    await screen.findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(2),
+    )
+  })
+
+  it('does not add when Enter only confirms an IME choice', async () => {
+    const fetchMock = projectFetch({ members: [memberAnna] })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    await fillAdd()
+
+    expectImeEnterIgnored(screen.getByLabelText(/使用者/))
+
+    expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(0)
+  })
+
+  it('saves roles once when Enter is pressed twice quickly', async () => {
+    const fetchMock = projectFetch({ members: [memberAnna] })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByLabelText('審核者'))
+    const gate = holdRequests(fetchMock, 'PUT', /\/roles$/)
+    const form = formOf(screen.getByRole('button', { name: '儲存角色' }))
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    expect(await screen.findByRole('status')).toHaveTextContent('已更新')
+    expect(calls(fetchMock, 'PUT', /\/roles$/)).toHaveLength(1)
+  })
+
+  it('does not save roles when Enter only confirms an IME choice', async () => {
+    const fetchMock = projectFetch({ members: [memberAnna] })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+    fireEvent.click(screen.getByLabelText('審核者'))
+
+    expectImeEnterIgnored(screen.getByLabelText('審核者'))
+
+    expect(calls(fetchMock, 'PUT', /\/roles$/)).toHaveLength(0)
+  })
+
+  it('removes once when the confirm button is clicked twice', async () => {
+    const fetchMock = projectFetch({ members: [memberAnna] })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('鄧安娜')
+    fireEvent.click(screen.getByRole('button', { name: /移出專案/ }))
+    const gate = holdRequests(fetchMock, 'DELETE', /\/members\//)
+    const confirm = screen.getByRole('button', { name: '確認移出' })
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    gate.resolve()
+
+    expect(await screen.findByText('目前沒有成員。')).toBeVisible()
+    expect(calls(fetchMock, 'DELETE', /\/members\//)).toHaveLength(1)
   })
 })

@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 import { ConfirmBox } from './ConfirmBox'
 
 function setup(props: Partial<Parameters<typeof ConfirmBox>[0]> = {}) {
@@ -247,5 +248,61 @@ describe('ConfirmBox', () => {
     expect(
       screen.getAllByRole('button').map((button) => button.textContent),
     ).toEqual(['保留編輯', '捨棄'])
+  })
+  describe('double submit and IME Enter (#507)', () => {
+    it('confirms once when clicked twice while the confirm is pending', async () => {
+      const gate = deferred()
+      const onConfirm = vi.fn(() => gate.promise)
+      setup({ onConfirm })
+      const button = screen.getByRole('button', { name: '確認刪除' })
+
+      fireEvent.click(button)
+      fireEvent.click(button)
+      expect(onConfirm).toHaveBeenCalledTimes(1)
+
+      await act(async () => gate.resolve())
+      fireEvent.click(button)
+      expect(onConfirm).toHaveBeenCalledTimes(2)
+    })
+
+    it('asForm confirms once when submitted twice while pending', async () => {
+      const gate = deferred()
+      const onConfirm = vi.fn(() => gate.promise)
+      render(
+        <ConfirmBox
+          asForm
+          confirmLabel="確認取消"
+          label="a"
+          onCancel={vi.fn()}
+          onConfirm={onConfirm}
+        >
+          <input aria-label="原因" />
+        </ConfirmBox>,
+      )
+      const form = screen.getByRole('group')
+
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+      expect(onConfirm).toHaveBeenCalledTimes(1)
+      await act(async () => gate.resolve())
+    })
+
+    it('asForm ignores an Enter that only confirms an IME choice', () => {
+      const onConfirm = vi.fn()
+      render(
+        <ConfirmBox
+          asForm
+          confirmLabel="確認取消"
+          label="a"
+          onCancel={vi.fn()}
+          onConfirm={onConfirm}
+        >
+          <input aria-label="原因" />
+        </ConfirmBox>,
+      )
+
+      expectImeEnterIgnored(screen.getByLabelText('原因'))
+      expect(onConfirm).not.toHaveBeenCalled()
+    })
   })
 })

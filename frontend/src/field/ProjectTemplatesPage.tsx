@@ -15,6 +15,7 @@ import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden, isNotFound } from '../http'
 import { BackButton, BackLink } from '../layout/BackLink'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { useSubmitGuard } from '../ui/submitGuard'
 import { ProjectNotFound } from '../RouteNotFound'
 import { fetchMyProjects } from './api'
 import {
@@ -74,6 +75,7 @@ export default function ProjectTemplatesPage() {
   const [projectLoading, setProjectLoading] = useState(true)
   const [itemsLoading, setItemsLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const guard = useSubmitGuard()
   const [readOnly, setReadOnly] = useState(false)
   const [readDenied, setReadDenied] = useState(false)
   const [itemsDenied, setItemsDenied] = useState(false)
@@ -279,6 +281,7 @@ export default function ProjectTemplatesPage() {
     if (!selectedSystem || !hasSelection || busy || itemsDenied || readOnly) {
       return
     }
+    if (!guard.enter()) return
     setBusy(true)
     setApplyError('')
     try {
@@ -307,6 +310,7 @@ export default function ProjectTemplatesPage() {
       )
       if (isForbidden(caught)) setReadOnly(true)
     } finally {
+      guard.leave()
       setBusy(false)
       setApplyConfirm(false)
     }
@@ -361,6 +365,7 @@ export default function ProjectTemplatesPage() {
     if (!saveSource || selected?.type !== 'system' || busy || saveDenied) {
       return
     }
+    if (!guard.enter()) return
     setBusy(true)
     setSaveError('')
     setNotice('')
@@ -387,6 +392,7 @@ export default function ProjectTemplatesPage() {
       )
       if (isForbidden(caught)) setSaveDenied(true)
     } finally {
+      guard.leave()
       setBusy(false)
     }
   }
@@ -733,7 +739,7 @@ export default function ProjectTemplatesPage() {
                       confirmLabel="確定套用"
                       label="套用確認"
                       onCancel={() => setApplyConfirm(false)}
-                      onConfirm={() => void submitApply()}
+                      onConfirm={submitApply}
                       role="alertdialog"
                     >
                       <p>

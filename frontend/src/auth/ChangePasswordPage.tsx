@@ -26,6 +26,7 @@ import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 import { useCurrentUser } from './useCurrentUser'
+import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
 
 // AUT-R04：新密碼長度必須介於 8～128 個字元（含兩端），以 Unicode
 // code point 計算；集中成常數只為了組出下面的錯誤訊息，前端不會
@@ -69,6 +70,7 @@ export default function ChangePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const guard = useSubmitGuard()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -79,6 +81,7 @@ export default function ChangePasswordPage() {
       return
     }
 
+    if (!guard.enter()) return
     setSubmitting(true)
 
     try {
@@ -97,6 +100,7 @@ export default function ChangePasswordPage() {
           GENERIC_ERROR_MESSAGE,
       )
     } finally {
+      guard.leave()
       setSubmitting(false)
     }
   }
@@ -111,7 +115,7 @@ export default function ChangePasswordPage() {
       title="變更密碼"
       lead="請輸入目前密碼，並設定新的密碼。"
     >
-      <form onSubmit={handleSubmit} noValidate>
+      <form onKeyDown={blockImeEnter} onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="change-password-current">目前密碼</label>
           <input

@@ -7,7 +7,9 @@
 //   - 預設把焦點放在取消（`initialFocus`），按 Esc 等同取消。
 //   - 預設是原地展開的非 modal 區塊；只有真的要蓋住整頁的地方
 //     （計畫頁，背景要 inert）才傳 `modal`。
-// 送出邏輯留在各頁，這裡只負責外觀、焦點與鍵盤。
+// 送出邏輯留在各頁，這裡只負責外觀、焦點與鍵盤；另外擋掉兩種誤送出（#507）：
+//   - 確認進行中（`onConfirm` 回傳的 Promise 還沒完成）不接受第二次確認。
+//   - 輸入法選字時按的 Enter 不會送出 asForm 的表單。
 
 import {
   type FormEvent,
@@ -18,6 +20,8 @@ import {
   useId,
   useRef,
 } from 'react'
+
+import { blockImeEnter, useSubmitGuard } from './submitGuard'
 
 export type ConfirmVariant = 'danger' | 'neutral'
 
@@ -46,7 +50,8 @@ export type ConfirmBoxProps = {
   busy?: boolean
   confirmDisabled?: boolean
   onCancel: () => void
-  onConfirm: () => void
+  /** 回傳 Promise 時，到它完成為止都不接受第二次確認。 */
+  onConfirm: () => void | Promise<unknown>
   children?: ReactNode
 }
 
@@ -73,6 +78,7 @@ export function ConfirmBox({
   const headingId = useId()
   const localCancel = useRef<HTMLButtonElement | null>(null)
   const localHeading = useRef<HTMLHeadingElement | null>(null)
+  const guard = useSubmitGuard()
 
   useEffect(() => {
     if (initialFocus === 'cancel') localCancel.current?.focus()
@@ -81,7 +87,13 @@ export function ConfirmBox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function confirm() {
+    return guard.run(onConfirm)
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    // 選字中的 Enter 只是確認選字；取消預設動作，避免瀏覽器隱含送出。
+    if (blockImeEnter(event)) return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -130,7 +142,7 @@ export function ConfirmBox({
         <button
           className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}
           disabled={busy || confirmDisabled}
-          onClick={asForm ? undefined : onConfirm}
+          onClick={asForm ? undefined : confirm}
           type={asForm ? 'submit' : 'button'}
         >
           {confirmLabel}
@@ -154,7 +166,7 @@ export function ConfirmBox({
         {...common}
         onSubmit={(event: FormEvent<HTMLFormElement>) => {
           event.preventDefault()
-          onConfirm()
+          void confirm()
         }}
         ref={rootRef as Ref<HTMLFormElement>}
       >

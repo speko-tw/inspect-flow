@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { collectPages, HttpError, isForbidden } from '../../http'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { planningClient, planningErrorMessage } from './api'
 import type {
   InspectionPlan,
@@ -116,8 +117,8 @@ export default function PlanningPage({
   const addZoneTrigger = useRef<HTMLButtonElement | null>(null)
   const renameZoneTrigger = useRef<HTMLButtonElement | null>(null)
   // Enter 用 requestSubmit() 送出時不會被停用的按鈕擋住，所以連按兩次 Enter
-  // 會送出兩次；用 ref 擋掉進行中的第二次送出。
-  const inFlight = useRef(false)
+  // 會送出兩次；用防護擋掉進行中的第二次送出（#490、#507）。
+  const guard = useSubmitGuard()
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
   const previousAddingZone = useRef(false)
@@ -337,8 +338,7 @@ export default function PlanningPage({
     success: { area: NoticeArea; text: string },
     context?: string,
   ): Promise<boolean> {
-    if (inFlight.current) return false
-    inFlight.current = true
+    if (!guard.enter()) return false
     setError('')
     setFieldError(null)
     setNotice(null)
@@ -370,7 +370,7 @@ export default function PlanningPage({
       setError(planningErrorMessage(caught))
       return false
     } finally {
-      inFlight.current = false
+      guard.leave()
       setBusy(false)
     }
   }
@@ -536,6 +536,7 @@ export default function PlanningPage({
               <div key={zone.id}>
                 {renamingZone?.id === zone.id ? (
                   <form
+                    onKeyDown={blockImeEnter}
                     data-error-context="zone"
                     noValidate
                     onSubmit={(event) => void renameZone(event)}
@@ -558,6 +559,8 @@ export default function PlanningPage({
                           setFieldError(null)
                         }}
                         onKeyDown={(event) => {
+                          // 輸入法選字的 Enter 只是確認選字，不送出。
+                          if (blockImeEnter(event)) return
                           if (event.key === 'Escape') {
                             event.preventDefault()
                             setRenamingZone(null)
@@ -566,15 +569,6 @@ export default function PlanningPage({
                             setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
-                            // 輸入法選字的 Enter 只是確認選字，不送出。
-                            // Safari 這一下 isComposing 是 false，
-                            // 但 keyCode 是 229。
-                            if (
-                              event.nativeEvent.isComposing ||
-                              event.keyCode === 229
-                            ) {
-                              return
-                            }
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
@@ -663,6 +657,7 @@ export default function PlanningPage({
                 </button>
                 {addingZone && (
                   <form
+                    onKeyDown={blockImeEnter}
                     data-error-context="zone"
                     noValidate
                     onSubmit={(event) => void saveZone(event)}
@@ -685,6 +680,8 @@ export default function PlanningPage({
                           setFieldError(null)
                         }}
                         onKeyDown={(event) => {
+                          // 輸入法選字的 Enter 只是確認選字，不送出。
+                          if (blockImeEnter(event)) return
                           if (event.key === 'Escape') {
                             event.preventDefault()
                             setAddingZone(false)
@@ -693,15 +690,6 @@ export default function PlanningPage({
                             setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
-                            // 輸入法選字的 Enter 只是確認選字，不送出。
-                            // Safari 這一下 isComposing 是 false，
-                            // 但 keyCode 是 229。
-                            if (
-                              event.nativeEvent.isComposing ||
-                              event.keyCode === 229
-                            ) {
-                              return
-                            }
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
@@ -767,6 +755,7 @@ export default function PlanningPage({
             </ul>
             {!readOnly && (
               <form
+                onKeyDown={blockImeEnter}
                 data-error-context="plan-create"
                 noValidate
                 onSubmit={(event) => void createPlan(event)}
@@ -872,6 +861,7 @@ export default function PlanningPage({
               )}
               {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
                 <form
+                  onKeyDown={blockImeEnter}
                   data-error-context="plan-rename"
                   noValidate
                   onSubmit={(event) => {
@@ -1084,6 +1074,7 @@ export default function PlanningPage({
                       )}
                       {editingLocation?.task.id === task.id && (
                         <form
+                          onKeyDown={blockImeEnter}
                           data-error-context="location"
                           noValidate
                           onSubmit={(event) => {
@@ -1183,6 +1174,7 @@ export default function PlanningPage({
                       )}
                       {editingAssignee?.task.id === task.id && (
                         <form
+                          onKeyDown={blockImeEnter}
                           onSubmit={(event) => {
                             event.preventDefault()
                             void act(
@@ -1230,6 +1222,7 @@ export default function PlanningPage({
 
               {canEditPlan && !readOnly && (
                 <form
+                  onKeyDown={blockImeEnter}
                   data-error-context="task"
                   noValidate
                   onSubmit={(event) => void createTask(event)}
@@ -1340,7 +1333,7 @@ export default function PlanningPage({
           modal
           onCancel={closeDialogs}
           onConfirm={() =>
-            void act(
+            act(
               () => client.cancelTask(cancelTask.id, cancelReason),
               { area: 'tasks', text: '已取消任務，之後可以恢復。' },
               'dialog',
@@ -1382,7 +1375,7 @@ export default function PlanningPage({
           initialFocus="none"
           modal
           onCancel={closeDialogs}
-          onConfirm={() => void act(confirmation.action, confirmation.success)}
+          onConfirm={() => act(confirmation.action, confirmation.success)}
           role="dialog"
           title="請確認操作"
           variant={confirmation.danger ? 'danger' : 'neutral'}

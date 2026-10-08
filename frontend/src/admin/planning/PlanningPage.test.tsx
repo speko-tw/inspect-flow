@@ -9,7 +9,9 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
+import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
 import { ManagementApiError } from '../api'
+import type { PlanningClient } from './api'
 import { createMockPlanningClient } from './api.mock'
 import PlanningPage from './PlanningPage'
 
@@ -977,5 +979,337 @@ describe('planning management page', () => {
         screen.getByRole('button', { name: '建立草稿任務' }),
       ).toBeDisabled()
     })
+  })
+})
+
+// 計畫頁所有表單與確認框的防連點與輸入法 Enter（#507）。
+// 分區新增的連按與輸入法測試在上方 #490。
+describe('planning forms guard (#507)', () => {
+  type Method = Exclude<
+    {
+      [K in keyof PlanningClient]: PlanningClient[K] extends (
+        ...args: never[]
+      ) => Promise<unknown>
+        ? K
+        : never
+    }[keyof PlanningClient],
+    never
+  >
+
+  // 讓指定的 client 方法等到 gate 完成才回應，並記錄呼叫次數。
+  function hold(client: PlanningClient, method: Method) {
+    const gate = deferred()
+    const original = client[method] as (...args: unknown[]) => Promise<unknown>
+    const spy = vi.fn(async (...args: unknown[]) => {
+      await gate.promise
+      return original.apply(client, args)
+    })
+    ;(client as unknown as Record<string, unknown>)[method] = spy
+    return { gate, spy }
+  }
+
+  function watch(client: PlanningClient, method: Method) {
+    const original = client[method] as (...args: unknown[]) => Promise<unknown>
+    const spy = vi.fn((...args: unknown[]) => original.apply(client, args))
+    ;(client as unknown as Record<string, unknown>)[method] = spy
+    return spy
+  }
+
+  async function seeded(dispatched = false) {
+    const client = createMockPlanningClient()
+    const zone = await client.createZone('project-demo-1', '北區')
+    const plan = await client.createPlan('project-demo-1', {
+      name: '橋梁查核',
+    })
+    const items = await client.listProjectItems('project-demo-1')
+    const task = await client.createTask(plan.id, {
+      item_ids: [items[0].id],
+      suggested_assignee_id: null,
+      zone_id: zone.id,
+      location_text: null,
+    })
+    if (dispatched) await client.dispatchTask(task.id)
+    return { client, zone, plan, task }
+  }
+
+  async function openPlan(client: PlanningClient) {
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+    return (
+      await screen.findByRole('heading', { name: /混凝土外觀/ })
+    ).closest('article') as HTMLElement
+  }
+
+  const formByContext = (context: string) =>
+    document.querySelector(
+      `[data-error-context="${context}"]`,
+    ) as HTMLFormElement
+
+  it('creates one plan when the form is submitted twice quickly', async () => {
+    const client = createMockPlanningClient()
+    const { gate, spy } = hold(client, 'createPlan')
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '查核計畫' })
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '橋梁查核' },
+    })
+    const form = formByContext('plan-create')
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await expectNotice('已建立計畫「橋梁查核」。')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('does not create a plan when Enter only confirms an IME choice', async () => {
+    const client = createMockPlanningClient()
+    const spy = watch(client, 'createPlan')
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '查核計畫' })
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '橋梁查核' },
+    })
+
+    expectImeEnterIgnored(screen.getByLabelText(/計畫名稱/))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('accepts another plan after a failed one', async () => {
+    const client = createMockPlanningClient()
+    const spy = vi.fn(async () => {
+      throw new ManagementApiError(500, 'server.error')
+    })
+    client.createPlan = spy
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '查核計畫' })
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '橋梁查核' },
+    })
+    const form = formByContext('plan-create')
+
+    fireEvent.submit(form)
+    await within(form).findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2))
+  })
+
+  it('renames a zone once when Enter is pressed twice quickly', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone('project-demo-1', '北區')
+    const { gate, spy } = hold(client, 'renameZone')
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    const zone = await screen.findByText('北區')
+    fireEvent.click(
+      within(zone.parentElement as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    )
+    const input = screen.getByLabelText(/分區名稱/)
+    fireEvent.change(input, { target: { value: '北側' } })
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    gate.resolve()
+
+    await expectNotice('已將分區改名為「北側」。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not rename a zone when Enter only confirms an IME choice', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone('project-demo-1', '北區')
+    const spy = watch(client, 'renameZone')
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    const zone = await screen.findByText('北區')
+    fireEvent.click(
+      within(zone.parentElement as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    )
+    const input = screen.getByLabelText(/分區名稱/)
+    fireEvent.change(input, { target: { value: '北側' } })
+
+    expectImeEnterIgnored(input)
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('renames the plan once when the form is submitted twice quickly', async () => {
+    const { client } = await seeded()
+    const { gate, spy } = hold(client, 'updatePlan')
+    await openPlan(client)
+    fireEvent.click(screen.getByRole('button', { name: '修改計畫名稱' }))
+    const form = formByContext('plan-rename')
+    fireEvent.change(within(form).getByLabelText(/計畫名稱/), {
+      target: { value: '橋梁查核二版' },
+    })
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await expectNotice('已更新計畫名稱。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not rename the plan when Enter only confirms an IME choice', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'updatePlan')
+    await openPlan(client)
+    fireEvent.click(screen.getByRole('button', { name: '修改計畫名稱' }))
+    const form = formByContext('plan-rename')
+    fireEvent.change(within(form).getByLabelText(/計畫名稱/), {
+      target: { value: '橋梁查核二版' },
+    })
+
+    expectImeEnterIgnored(within(form).getByLabelText(/計畫名稱/))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('creates one task when the form is submitted twice quickly', async () => {
+    const { client, zone } = await seeded()
+    const { gate, spy } = hold(client, 'createTask')
+    await openPlan(client)
+    const form = formByContext('task')
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    fireEvent.change(within(form).getByLabelText(/任務分區/), {
+      target: { value: zone.id },
+    })
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await expectNotice('已建立草稿任務，派出後現場才看得到。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not create a task when Enter only confirms an IME choice', async () => {
+    const { client, zone } = await seeded()
+    const spy = watch(client, 'createTask')
+    await openPlan(client)
+    const form = formByContext('task')
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    fireEvent.change(within(form).getByLabelText(/任務分區/), {
+      target: { value: zone.id },
+    })
+
+    expectImeEnterIgnored(within(form).getByLabelText('補充地點'))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('saves the location once when the form is submitted twice quickly', async () => {
+    const { client } = await seeded()
+    const { gate, spy } = hold(client, 'updateLocation')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '修改地點' }))
+    const form = formByContext('location')
+    fireEvent.change(within(form).getByLabelText('補充地點'), {
+      target: { value: '東側三樓' },
+    })
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await expectNotice('已更新任務地點。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not save the location when Enter only confirms an IME choice', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'updateLocation')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '修改地點' }))
+    const form = formByContext('location')
+
+    expectImeEnterIgnored(within(form).getByLabelText('補充地點'))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('saves the assignee once when the form is submitted twice quickly', async () => {
+    const { client } = await seeded()
+    const { gate, spy } = hold(client, 'setSuggestedAssignee')
+    const article = await openPlan(client)
+    fireEvent.click(
+      within(article).getByRole('button', { name: '修改建議指派' }),
+    )
+    const form = within(article)
+      .getByRole('button', { name: '儲存指派' })
+      .closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await expectNotice('已更新建議指派。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not save the assignee when Enter only confirms an IME choice', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'setSuggestedAssignee')
+    const article = await openPlan(client)
+    fireEvent.click(
+      within(article).getByRole('button', { name: '修改建議指派' }),
+    )
+
+    expectImeEnterIgnored(within(article).getByLabelText('建議指派人'))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('dispatches once when the confirm button is clicked twice', async () => {
+    const { client } = await seeded()
+    const { gate, spy } = hold(client, 'dispatchTask')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '派出任務' }))
+    const confirm = screen.getByRole('button', { name: '確認' })
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    gate.resolve()
+
+    await expectNotice('已派出任務，現場可以查看了。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a task once when the dialog form is submitted twice', async () => {
+    const { client } = await seeded(true)
+    const { gate, spy } = hold(client, 'cancelTask')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '取消任務' }))
+    fireEvent.change(screen.getByLabelText(/取消原因/), {
+      target: { value: '現場順序調整' },
+    })
+    const form = screen.getByRole('dialog')
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await expectNotice('已取消任務，之後可以恢復。')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('the cancel dialog only has a textarea, where Enter is a line break (IME Enter not applicable)', async () => {
+    const { client } = await seeded(true)
+    const spy = watch(client, 'cancelTask')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '取消任務' }))
+    fireEvent.change(screen.getByLabelText(/取消原因/), {
+      target: { value: '現場順序調整' },
+    })
+
+    expect(screen.getByLabelText(/取消原因/).tagName).toBe('TEXTAREA')
+    expect(spy).not.toHaveBeenCalled()
   })
 })

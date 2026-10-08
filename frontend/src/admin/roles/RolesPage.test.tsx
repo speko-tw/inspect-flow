@@ -9,6 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
+import { expectImeEnterIgnored, holdRequests } from '../../testing/submitGuard'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import AdminPage from '../AdminPage'
 import { ManagementApiError } from '../api'
@@ -480,5 +481,140 @@ describe('roleErrorMessage', () => {
     expect(roleErrorMessage(new Error('network'))).toBe(
       '無法連線到伺服器，請稍後再試。',
     )
+  })
+})
+
+describe('role forms guard (#507)', () => {
+  it('creates one role when Enter is pressed twice quickly', async () => {
+    const fetchMock = rolesFetch()
+    renderRoles()
+    fireEvent.change(await screen.findByLabelText('角色名稱'), {
+      target: { value: 'Site Lead' },
+    })
+    const gate = holdRequests(fetchMock, 'POST', /\/roles$/)
+    const form = screen.getByLabelText('角色名稱').closest('form')
+    expect(form).not.toBeNull()
+
+    fireEvent.submit(form as HTMLFormElement)
+    fireEvent.submit(form as HTMLFormElement)
+    gate.resolve()
+
+    await screen.findByRole('row', { name: /Site Lead/ })
+    expect(calls(fetchMock, 'POST')).toHaveLength(1)
+  })
+
+  it('accepts another submit after a failed one', async () => {
+    const fetchMock = rolesFetch({
+      failures: { 'POST /roles': { status: 500, code: 'server.error' } },
+    })
+    renderRoles()
+    fireEvent.change(await screen.findByLabelText('角色名稱'), {
+      target: { value: 'Site Lead' },
+    })
+    const form = screen
+      .getByLabelText('角色名稱')
+      .closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    await screen.findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(2))
+  })
+
+  it('does not submit when Enter only confirms an IME choice', async () => {
+    const fetchMock = rolesFetch()
+    renderRoles()
+    fireEvent.change(await screen.findByLabelText('角色名稱'), {
+      target: { value: 'Site Lead' },
+    })
+
+    expectImeEnterIgnored(screen.getByLabelText('角色名稱'))
+
+    expect(calls(fetchMock, 'POST')).toHaveLength(0)
+  })
+
+  it('opens the update confirmation once when Enter is pressed twice', async () => {
+    const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改角色 Viewer' }),
+    )
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: 'Reader' },
+    })
+    const gate = holdRequests(fetchMock, 'GET', /\/roles\/r1$/)
+    const form = screen
+      .getByLabelText('角色名稱')
+      .closest('form') as HTMLFormElement
+    const before = calls(fetchMock, 'GET').length
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await screen.findByRole('region', { name: '修改「Viewer」' })
+    expect(calls(fetchMock, 'GET')).toHaveLength(before + 1)
+  })
+
+  it('saves once when the update confirmation is clicked twice', async () => {
+    const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改角色 Viewer' }),
+    )
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: 'Reader' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+    const confirm = await screen.findByRole('button', {
+      name: '確認修改角色',
+    })
+    const gate = holdRequests(fetchMock, 'PATCH', /\/roles\/r1$/)
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    gate.resolve()
+
+    await screen.findByRole('row', { name: /Reader/ })
+    expect(calls(fetchMock, 'PATCH')).toHaveLength(1)
+  })
+
+  it('looks up the impact once when the delete button is clicked twice', async () => {
+    const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+    const button = await screen.findByRole('button', {
+      name: '刪除角色 Viewer',
+    })
+    const gate = holdRequests(fetchMock, 'GET', /\/roles\/r1$/)
+    const before = calls(fetchMock, 'GET').length
+
+    fireEvent.click(button)
+    fireEvent.click(button)
+    gate.resolve()
+
+    await screen.findByRole('region', { name: '刪除「Viewer」' })
+    expect(calls(fetchMock, 'GET')).toHaveLength(before + 1)
+  })
+
+  it('deletes once when the delete confirmation is clicked twice', async () => {
+    const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
+    renderRoles()
+    fireEvent.click(
+      await screen.findByRole('button', { name: '刪除角色 Viewer' }),
+    )
+    const confirm = await screen.findByRole('button', {
+      name: '確認刪除角色',
+    })
+    const gate = holdRequests(fetchMock, 'DELETE', /\/roles\/r1$/)
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    gate.resolve()
+
+    await waitFor(() =>
+      expect(screen.queryByRole('row', { name: /Viewer/ })).toBeNull(),
+    )
+    expect(calls(fetchMock, 'DELETE')).toHaveLength(1)
   })
 })
