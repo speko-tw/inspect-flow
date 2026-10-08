@@ -57,7 +57,7 @@ export function TemplateLibraryNav({
           {categories.map((category) => {
             const categoryOpen = expanded.has(category.id)
             // 已載入就以實際資料為準；還沒載入用列表回應帶的數量。
-            // 兩者都沒有就不顯示，不顯示過期的數字。
+            // 兩者都沒有就不顯示。
             const systemCount = loadedCategoryIds.has(category.id)
               ? systems.filter((row) => row.category_id === category.id).length
               : category.system_count
