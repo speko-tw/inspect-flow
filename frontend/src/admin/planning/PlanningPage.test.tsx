@@ -109,6 +109,9 @@ describe('planning management page', () => {
           name: '派出任務',
         }),
       )
+      expect(screen.getByRole('button', { name: '確認' })).toHaveClass(
+        'btn-primary',
+      )
       fireEvent.click(screen.getByRole('button', { name: '確認' }))
       await screen.findByRole('heading', {
         name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
@@ -680,9 +683,14 @@ describe('planning management page', () => {
         name: '刪除',
       }),
     )
-    fireEvent.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
+    // 刪除分區不可復原：最終確認用危險色；其他確認（封存、派出、恢復
+    // 等）維持主要色（#500）。
+    const confirmDelete = within(screen.getByRole('dialog')).getByRole(
+      'button',
+      { name: '確認刪除' },
     )
+    expect(confirmDelete).toHaveClass('btn-danger')
+    fireEvent.click(confirmDelete)
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '分區已有任務使用，無法刪除。',
     )

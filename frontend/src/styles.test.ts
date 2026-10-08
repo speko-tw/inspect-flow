@@ -137,4 +137,12 @@ describe('app header navigation', () => {
     expect(rule).toContain('flex-wrap: nowrap')
     expect(rule).toContain('overflow-x: auto')
   })
+
+  it('fades the edge that still has hidden tabs, only when scrollable', () => {
+    expect(css).toContain('.app-header [data-more-end] {')
+    expect(css).toContain('.app-header [data-more-start] {')
+    expect(css).toContain('.app-header [data-more-start][data-more-end] {')
+    const start = css.indexOf('.app-header [data-more-end] {')
+    expect(css.slice(start, css.indexOf('}', start))).toContain('mask-image')
+  })
 })

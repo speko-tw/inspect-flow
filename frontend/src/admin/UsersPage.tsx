@@ -396,7 +396,12 @@ export default function UsersPage({
                               取消
                             </button>
                             <button
-                              className="btn-danger"
+                              className={
+                                pendingAction.kind === 'deactivate' ||
+                                user.is_admin
+                                  ? 'btn-danger'
+                                  : 'btn-primary'
+                              }
                               disabled={busyUser === user.id}
                               onClick={() => void confirmAction()}
                               type="button"

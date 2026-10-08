@@ -239,7 +239,10 @@ export default function RolesPage() {
       <h1 id="roles-heading">角色管理</h1>
       {error && <p role="alert">{error}</p>}
       {deleting && (
-        <section aria-labelledby="delete-role-heading">
+        <section
+          aria-labelledby="delete-role-heading"
+          className="inline-confirmation"
+        >
           <h2 id="delete-role-heading">刪除「{deleting.name}」</h2>
           <p>
             刪除{describeImpact(deleting)}
@@ -263,7 +266,10 @@ export default function RolesPage() {
         </section>
       )}
       {pending && (
-        <section aria-labelledby="update-role-heading">
+        <section
+          aria-labelledby="update-role-heading"
+          className="inline-confirmation"
+        >
           <h2 id="update-role-heading">修改「{pending.role.name}」</h2>
           <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
           <button

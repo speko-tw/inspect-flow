@@ -74,6 +74,64 @@ describe('AppHeader 窄螢幕導覽（#500）', () => {
   })
 })
 
+describe('AppHeader 導覽的「還有更多」提示（#500）', () => {
+  // jsdom 不做版面：用假的尺寸模擬一條放不下的導覽列。
+  function withLayout(scrollWidth: number, clientWidth: number) {
+    const proto = HTMLElement.prototype
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => scrollWidth,
+    })
+    Object.defineProperty(proto, 'clientWidth', {
+      configurable: true,
+      get: () => clientWidth,
+    })
+    return () => {
+      Reflect.deleteProperty(proto, 'scrollWidth')
+      Reflect.deleteProperty(proto, 'clientWidth')
+    }
+  }
+
+  it('放不下且在最左：只有右緣提示；捲到底後只剩左緣提示', () => {
+    const restore = withLayout(700, 328)
+    try {
+      renderHeader(ADMIN, {}, '/admin/projects')
+      const nav = screen.getByRole('navigation', { name: '管理功能' })
+      expect(nav).toHaveAttribute('data-more-end')
+      expect(nav).not.toHaveAttribute('data-more-start')
+      nav.scrollLeft = 700 - 328
+      fireEvent.scroll(nav)
+      expect(nav).toHaveAttribute('data-more-start')
+      expect(nav).not.toHaveAttribute('data-more-end')
+    } finally {
+      restore()
+    }
+  })
+
+  it('放得下：沒有任何提示', () => {
+    const restore = withLayout(300, 328)
+    try {
+      renderHeader(ADMIN)
+      const nav = screen.getByRole('navigation', { name: '管理功能' })
+      expect(nav).not.toHaveAttribute('data-more-start')
+      expect(nav).not.toHaveAttribute('data-more-end')
+    } finally {
+      restore()
+    }
+  })
+
+  it('鎖定模式（臨時密碼頁）灰色分頁那一列同樣有提示', () => {
+    const restore = withLayout(700, 328)
+    try {
+      renderHeader(ADMIN, { locked: true, lockedNote: '請先抄下臨時密碼' })
+      const tabs = document.querySelector('.app-header-tabs')
+      expect(tabs).toHaveAttribute('data-more-end')
+    } finally {
+      restore()
+    }
+  })
+})
+
 describe('AppHeader', () => {
   it.each([
     ['系統管理者', ADMIN, '/admin'],

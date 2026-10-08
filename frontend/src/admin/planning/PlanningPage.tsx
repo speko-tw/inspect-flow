@@ -665,6 +665,7 @@ export default function PlanningPage({
                       `刪除分區「${zone.name}」？`,
                       () => client.deleteZone(projectId, zone.id),
                       { area: 'zones', text: `已刪除分區「${zone.name}」。` },
+                      { label: '確認刪除' },
                     )
                   }
                   type="button"

@@ -221,7 +221,10 @@ export default function CompaniesPage() {
       <h1 id="companies-heading">公司管理</h1>
       {error && <p role="alert">{error}</p>}
       {deactivating && (
-        <section aria-labelledby="deactivate-company-heading">
+        <section
+          aria-labelledby="deactivate-company-heading"
+          className="inline-confirmation"
+        >
           <h2 id="deactivate-company-heading">
             停用「{deactivating.company.name}」
           </h2>

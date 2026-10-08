@@ -59,6 +59,13 @@ export function memberNavItems(
   return items
 }
 
+/** 依目前捲動位置設定兩端的漸層提示（`data-more-start`／`data-more-end`）。 */
+function updateScrollHints(el: HTMLElement) {
+  const max = el.scrollWidth - el.clientWidth
+  el.toggleAttribute('data-more-start', el.scrollLeft > 1)
+  el.toggleAttribute('data-more-end', el.scrollLeft < max - 1)
+}
+
 export default function AppHeader({
   user,
   navLabel,
@@ -80,12 +87,13 @@ export default function AppHeader({
   onNavigate?: () => void
 }) {
   const [logoutError, setLogoutError] = useState<string | null>(null)
-  const navRef = useRef<HTMLElement>(null)
+  // 可橫向滑動的那一列：一般模式是 <nav>，鎖定模式是灰色分頁那一列。
+  const scrollerRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
   // 窄螢幕導覽列可橫向滑動：換頁後把目前的分頁捲進可見範圍。只動導覽列
   // 自己的 scrollLeft，不會讓整個頁面跟著捲。
   useEffect(() => {
-    const nav = navRef.current
+    const nav = scrollerRef.current
     const tab = nav?.querySelector<HTMLElement>('[aria-current="page"]')
     if (!nav || !tab) return
     const margin = 8
@@ -96,7 +104,21 @@ export default function AppHeader({
     } else if (right > nav.scrollLeft + nav.clientWidth) {
       nav.scrollLeft = right - nav.clientWidth + margin
     }
+    updateScrollHints(nav)
   }, [pathname])
+  // 「還有更多」的漸層提示：只在可捲動、且還沒捲到那一端時顯示。
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const update = () => updateScrollHints(scroller)
+    update()
+    scroller.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      scroller.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [locked, navItems.length])
   const name = user.name_zh ?? user.username
   return (
     <>
@@ -117,7 +139,11 @@ export default function AppHeader({
         </div>
         {locked ? (
           <div className="app-header-nav app-header-nav-locked">
-            <span aria-hidden="true" className="app-header-tabs">
+            <span
+              aria-hidden="true"
+              className="app-header-tabs"
+              ref={scrollerRef}
+            >
               {navItems.map((item) => (
                 <span className="app-header-tab" key={item.to}>
                   {item.label}
@@ -129,7 +155,11 @@ export default function AppHeader({
             )}
           </div>
         ) : (
-          <nav aria-label={navLabel} className="app-header-nav" ref={navRef}>
+          <nav
+            aria-label={navLabel}
+            className="app-header-nav"
+            ref={scrollerRef}
+          >
             {navItems.map((item) => (
               <NavLink
                 className="app-header-tab"

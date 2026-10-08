@@ -1259,6 +1259,43 @@ a.topbar-brand:hover {
   white-space: nowrap;
 }
 
+/* 「還有更多」提示：導覽列可捲動、且還沒捲到那一端時，那一端用漸層淡出
+ * （AppHeader 依捲動位置設定 data-more-start／data-more-end）。 */
+.app-header [data-more-end] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.app-header [data-more-start] {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+
+.app-header [data-more-start][data-more-end] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent
+  );
+}
+
 /* 導覽列會裁切內容，焦點框畫在分頁內側才不會被切掉。 */
 .app-header-tab:focus-visible {
   outline-offset: -3px;

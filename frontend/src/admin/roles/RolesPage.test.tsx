@@ -329,6 +329,13 @@ describe('admin role management page', () => {
       '刪除會影響 2 個專案中的 1 位使用者',
     )
     expect(confirmation).toHaveTextContent('角色指派都會一併移除')
+    // 確認區沿用共用的確認框樣式，[取消][確認] 兩顆按鈕之間有間距（#500）。
+    expect(confirmation).toHaveClass('inline-confirmation')
+    expect(
+      within(confirmation)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['取消', '確認刪除角色'])
     expect(calls(fetchMock, 'DELETE')).toHaveLength(0)
 
     fireEvent.click(within(confirmation).getByRole('button', { name: '取消' }))
