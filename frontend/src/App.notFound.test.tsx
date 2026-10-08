@@ -281,16 +281,16 @@ describe('任務 id 無效或不存在', () => {
   it.each([
     ['格式不對（422）', 'bad'],
     ['不存在（404）', 'gone'],
-  ])('現場帳號：任務 id %s 顯示找不到，可回任務清單', async (_n, id) => {
+  ])('現場帳號：任務 id %s 顯示找不到，可回首頁', async (_n, id) => {
     stubBackend(FIELD)
     renderApp(`/field/tasks/${id}`)
 
     expect(
       await screen.findByRole('heading', { name: '找不到這筆任務' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '返回任務清單' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/field/',
+      '/field',
     )
   })
 

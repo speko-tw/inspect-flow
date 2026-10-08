@@ -140,7 +140,7 @@ export default function TaskDetail({
               重試
             </button>
           )}
-          {error === 'missing' && homePath !== '/field' ? (
+          {error === 'missing' ? (
             <Link className="button-link" to={homePath}>
               回首頁
             </Link>
