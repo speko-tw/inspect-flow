@@ -250,7 +250,7 @@ describe('ConfirmBox', () => {
     ).toEqual(['保留編輯', '捨棄'])
   })
   describe('double submit and IME Enter (#507)', () => {
-    it('confirms once when clicked twice while the confirm is pending', async () => {
+    it('confirms once on a double click while pending', async () => {
       const gate = deferred()
       const onConfirm = vi.fn(() => gate.promise)
       setup({ onConfirm })

@@ -534,7 +534,7 @@ describe('role forms guard (#507)', () => {
     expect(calls(fetchMock, 'POST')).toHaveLength(0)
   })
 
-  it('opens the update confirmation once when Enter is pressed twice', async () => {
+  it('opens the update confirmation once on a double submit', async () => {
     const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
     renderRoles()
     fireEvent.click(
@@ -580,7 +580,7 @@ describe('role forms guard (#507)', () => {
     expect(calls(fetchMock, 'PATCH')).toHaveLength(1)
   })
 
-  it('looks up the impact once when the delete button is clicked twice', async () => {
+  it('looks up the impact once on a double click', async () => {
     const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
     renderRoles()
     const button = await screen.findByRole('button', {
@@ -597,7 +597,7 @@ describe('role forms guard (#507)', () => {
     expect(calls(fetchMock, 'GET')).toHaveLength(before + 1)
   })
 
-  it('deletes once when the delete confirmation is clicked twice', async () => {
+  it('deletes once on a double confirm click', async () => {
     const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
     renderRoles()
     fireEvent.click(

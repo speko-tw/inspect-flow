@@ -133,7 +133,7 @@ describe('isImeEnter and blockImeEnter', () => {
     expect(fireEvent.keyDown(input, { key: 'a', keyCode: 229 })).toBe(true)
   })
 
-  it('does not cancel Enter in a textarea (it only inserts a line break)', () => {
+  it('leaves Enter in a textarea alone (line break)', () => {
     const results: boolean[] = []
     const { getByLabelText } = render(
       <Probe onResult={(v) => results.push(v)} />,

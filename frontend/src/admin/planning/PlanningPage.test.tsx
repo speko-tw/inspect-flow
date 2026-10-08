@@ -1064,7 +1064,7 @@ describe('planning forms guard (#507)', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('does not create a plan when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the plan form', async () => {
     const client = createMockPlanningClient()
     const spy = watch(client, 'createPlan')
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
@@ -1120,7 +1120,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('does not rename a zone when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the zone rename', async () => {
     const client = createMockPlanningClient()
     await client.createZone('project-demo-1', '北區')
     const spy = watch(client, 'renameZone')
@@ -1139,7 +1139,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it('renames the plan once when the form is submitted twice quickly', async () => {
+  it('renames the plan once on a double submit', async () => {
     const { client } = await seeded()
     const { gate, spy } = hold(client, 'updatePlan')
     await openPlan(client)
@@ -1157,7 +1157,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('does not rename the plan when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the plan rename', async () => {
     const { client } = await seeded()
     const spy = watch(client, 'updatePlan')
     await openPlan(client)
@@ -1190,7 +1190,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('does not create a task when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the task form', async () => {
     const { client, zone } = await seeded()
     const spy = watch(client, 'createTask')
     await openPlan(client)
@@ -1205,7 +1205,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it('saves the location once when the form is submitted twice quickly', async () => {
+  it('saves the location once on a double submit', async () => {
     const { client } = await seeded()
     const { gate, spy } = hold(client, 'updateLocation')
     const article = await openPlan(client)
@@ -1223,7 +1223,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('does not save the location when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the location form', async () => {
     const { client } = await seeded()
     const spy = watch(client, 'updateLocation')
     const article = await openPlan(client)
@@ -1235,7 +1235,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it('saves the assignee once when the form is submitted twice quickly', async () => {
+  it('saves the assignee once on a double submit', async () => {
     const { client } = await seeded()
     const { gate, spy } = hold(client, 'setSuggestedAssignee')
     const article = await openPlan(client)
@@ -1254,7 +1254,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('does not save the assignee when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the assignee form', async () => {
     const { client } = await seeded()
     const spy = watch(client, 'setSuggestedAssignee')
     const article = await openPlan(client)
@@ -1282,7 +1282,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('cancels a task once when the dialog form is submitted twice', async () => {
+  it('cancels a task once on a double submit', async () => {
     const { client } = await seeded(true)
     const { gate, spy } = hold(client, 'cancelTask')
     const article = await openPlan(client)
@@ -1300,7 +1300,7 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
-  it('the cancel dialog only has a textarea, where Enter is a line break (IME Enter not applicable)', async () => {
+  it('cancel dialog is a textarea only (IME Enter n/a)', async () => {
     const { client } = await seeded(true)
     const spy = watch(client, 'cancelTask')
     const article = await openPlan(client)

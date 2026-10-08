@@ -71,8 +71,10 @@ function stubBackend(
   options: {
     hold?: (call: Call) => Deferred<void> | undefined
     fail?: (call: Call) => boolean
+    users?: User[]
   } = {},
 ) {
+  const users = options.users ?? [regularUser]
   const calls: Call[] = []
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -86,7 +88,7 @@ function stubBackend(
       }
       if (call.method === 'GET') {
         if (call.path === '/api/v1/users') {
-          return Response.json({ items: [regularUser], next_cursor: null })
+          return Response.json({ items: users, next_cursor: null })
         }
         if (call.path === '/api/v1/companies') {
           return Response.json({ items: [company], next_cursor: null })
@@ -101,7 +103,10 @@ function stubBackend(
         }
       }
       if (call.path.startsWith('/api/v1/users/')) {
-        return Response.json(regularUser)
+        const id = call.path.split('/')[4]
+        return Response.json(
+          users.find((user) => user.id === id) ?? regularUser,
+        )
       }
       return Response.json(company)
     },
@@ -303,6 +308,55 @@ describe('UsersPage 操作確認框（#507）', () => {
     const box = await openConfirm()
 
     expect(box.tagName).toBe('DIV')
+  })
+})
+
+describe('UsersPage 進行中停用整張列表的動作按鈕（#507）', () => {
+  const bob: User = {
+    ...regularUser,
+    id: 'user-2',
+    username: 'bob.lin',
+    email: 'bob@example.com',
+    name_zh: '林鮑伯',
+  }
+
+  it('一個動作進行中，別列的動作按鈕與儲存鈕都停用，完成後恢復', async () => {
+    const gate = deferred()
+    stubBackend({
+      users: [regularUser, bob],
+      hold: (call) => (call.method === 'PUT' ? gate : undefined),
+    })
+    renderUsers()
+    const bobRow = await screen.findByRole('row', { name: /bob\.lin/ })
+    fireEvent.click(within(bobRow).getByRole('button', { name: '修改資料' }))
+    const save = screen.getByRole('button', { name: '儲存資料' })
+    const annaRow = screen.getByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(
+      within(annaRow).getByRole('button', { name: '指派管理者' }),
+    )
+    const box = screen.getByRole('region', { name: '操作確認' })
+    expect(
+      within(bobRow).getByRole('button', { name: '指派管理者' }),
+    ).toBeEnabled()
+    expect(save).toBeEnabled()
+
+    fireEvent.click(within(box).getByRole('button', { name: '確認' }))
+
+    expect(
+      within(bobRow).getByRole('button', { name: '指派管理者' }),
+    ).toBeDisabled()
+    expect(within(bobRow).getByRole('button', { name: '停用' })).toBeDisabled()
+    expect(save).toBeDisabled()
+    gate.resolve()
+    // 完成後列表會重新載入，列重新長出來，按鈕都恢復可按。
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('row', { name: /bob\.lin/ })).getByRole(
+          'button',
+          { name: '指派管理者' },
+        ),
+      ).toBeEnabled(),
+    )
   })
 })
 

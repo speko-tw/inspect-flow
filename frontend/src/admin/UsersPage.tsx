@@ -375,14 +375,14 @@ export default function UsersPage({
                           公司連結
                         </button>
                         <button
-                          disabled={user.is_system || busyUser === user.id}
+                          disabled={user.is_system || busyUser !== null}
                           onClick={() => void toggleAdmin(user)}
                           type="button"
                         >
                           {user.is_admin ? '收回管理者' : '指派管理者'}
                         </button>
                         <button
-                          disabled={user.is_system || busyUser === user.id}
+                          disabled={user.is_system || busyUser !== null}
                           onClick={() => requestAction(user, 'deactivate')}
                           type="button"
                         >
@@ -421,6 +421,7 @@ export default function UsersPage({
                         <td colSpan={6}>
                           {editingUser === user.id && (
                             <UserDetailsForm
+                              busy={busyUser !== null}
                               onCancel={() => setEditingUser(null)}
                               onSave={(fields) =>
                                 void act(user.id, () =>
@@ -432,6 +433,7 @@ export default function UsersPage({
                           )}
                           {editingCompany === user.id && (
                             <CompanyLinkForm
+                              busy={busyUser !== null}
                               companies={companies}
                               onCancel={() => setEditingCompany(null)}
                               onSave={(companyId, fields) =>
@@ -484,10 +486,13 @@ function companyLabel(user: User, companies: Company[]): string {
 
 function UserDetailsForm({
   user,
+  busy,
   onCancel,
   onSave,
 }: {
   user: User
+  /** 任何一個動作進行中就停用儲存，與送出防護的範圍一致。 */
+  busy: boolean
   onCancel: () => void
   onSave: (fields: {
     username: string
@@ -549,7 +554,7 @@ function UserDetailsForm({
       <button onClick={onCancel} type="button">
         取消
       </button>
-      <button className="btn-primary" type="submit">
+      <button className="btn-primary" disabled={busy} type="submit">
         儲存資料
       </button>
     </form>
@@ -558,11 +563,14 @@ function UserDetailsForm({
 
 function CompanyLinkForm({
   user,
+  busy,
   companies,
   onCancel,
   onSave,
 }: {
   user: User
+  /** 任何一個動作進行中就停用儲存，與送出防護的範圍一致。 */
+  busy: boolean
   companies: Company[]
   onCancel: () => void
   onSave: (
@@ -646,7 +654,7 @@ function CompanyLinkForm({
       <button onClick={onCancel} type="button">
         取消
       </button>
-      <button className="btn-primary" type="submit">
+      <button className="btn-primary" disabled={busy} type="submit">
         儲存公司連結
       </button>
     </form>

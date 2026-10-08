@@ -1603,7 +1603,7 @@ describe('template forms guard (#507)', () => {
     )
   })
 
-  it('does not save the name when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the name form', async () => {
     const fetchMock = templateFetch()
     const input = await startRename()
 
@@ -1669,7 +1669,7 @@ describe('template forms guard (#507)', () => {
     )
   })
 
-  it('does not save the item when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the item editor', async () => {
     const fetchMock = templateFetch({ items: [] })
     render(<TemplatesPage />)
     await fillNewItem()

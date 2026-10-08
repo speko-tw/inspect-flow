@@ -567,7 +567,7 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
     await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2))
   })
 
-  it('does not open the confirmation when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter in the item form', async () => {
     const api = apiWith()
     renderPage(api)
     const title = await screen.findByLabelText('項目名稱 *')
@@ -579,7 +579,7 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
     expect(api.update).not.toHaveBeenCalled()
   })
 
-  it('opening the confirmation is synchronous, so a repeated submit changes nothing (double submit not applicable)', async () => {
+  it('a repeated submit opens one confirmation (n/a)', async () => {
     const api = apiWith()
     renderPage(api)
     const title = await screen.findByLabelText('項目名稱 *')

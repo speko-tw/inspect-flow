@@ -1572,7 +1572,7 @@ describe('project members forms guard (#507)', () => {
     expect(calls(fetchMock, 'PUT', /\/roles$/)).toHaveLength(1)
   })
 
-  it('does not save roles when Enter only confirms an IME choice', async () => {
+  it('ignores IME Enter when saving roles', async () => {
     const fetchMock = projectFetch({ members: [memberAnna] })
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('鄧安娜')
