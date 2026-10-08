@@ -323,8 +323,10 @@ export default function ProjectTemplatesPage() {
     setMobilePane('list')
   }
 
-  // 存為範本後重新載入目標系統的範本，範本樹的項目數才會跟著更新；
-  // 重新載入失敗就先隱藏該系統的數字，下次選取時再載入，不顯示舊數字。
+  // 存為範本後重新載入目標系統的範本，範本樹的項目數才會跟著更新。
+  // 重新載入失敗時，存檔已成功、系統多了一筆：用存檔前已載入的項目數
+  // （沒有就用列表帶回的 item_count）加 1 當數量，不顯示存檔前的舊數字；
+  // 兩者都沒有就隱藏數字。下次選取該系統會重新載入並以實際資料為準。
   async function refreshSystemTemplates(systemId: string) {
     try {
       const result = await getSystemTemplates(systemId)
@@ -333,6 +335,19 @@ export default function ProjectTemplatesPage() {
         [systemId]: result.items,
       }))
     } catch {
+      const known =
+        templatesBySystem[systemId]?.length ??
+        systems.find((system) => system.id === systemId)?.item_count
+      setSystems((current) =>
+        current.map((system) =>
+          system.id === systemId
+            ? {
+                ...system,
+                item_count: known === undefined ? undefined : known + 1,
+              }
+            : system,
+        ),
+      )
       setLoadedSystems((current) => {
         const next = new Set(current)
         next.delete(systemId)
