@@ -103,7 +103,7 @@ const changed: ProjectItemChangeResult = {
   ],
 }
 
-const reinspectChoice = /要，作廢受影響項目/
+const reinspectChoice = /要，用新標準重新查核/
 const noReinspectChoice = /不要，只更正文字/
 
 function choiceName(choice: 'yes' | 'no') {
@@ -207,13 +207,63 @@ describe('ProjectItemChangePage', () => {
     await confirm('yes')
     expect(
       await screen.findByText(
-        '已填的舊結果與照片會保留供查詢，任務需要重新查核。',
+        '已填的舊結果與照片會保留供查詢，但不再算數，任務需要重新查核。',
       ),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/二樓東側.*舊結果與照片保留供查詢/),
+      screen.getByText(/二樓東側.*舊結果與照片保留供查詢，但不再算數/),
     ).toBeInTheDocument()
     expect(screen.queryByText(/已標記作廢/)).toBeNull()
+  })
+
+  it('names both kinds when Tasks with and without results mix (#491)', async () => {
+    const mixed = structuredClone(preview)
+    mixed.affectedTasks[1].hasResult = true
+    mixed.affectedTasks.push({
+      ...mixed.affectedTasks[1],
+      id: 'pending',
+      name: '三樓巡檢',
+      zoneName: '三樓西側',
+      status: 'PENDING',
+      hasResult: false,
+      preservedItemTitles: [],
+    })
+    const api = apiWith({ loadPreview: vi.fn(async () => mixed) })
+    renderPage(api)
+    await confirm('yes')
+    expect(
+      await screen.findByText(
+        [
+          '已有結果的任務：已填的舊結果與照片會保留供查詢，',
+          '但不再算數，任務需要重新查核；',
+          '尚未填寫結果的任務：直接改用新標準。',
+        ].join(''),
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('ignores draft and cancelled Tasks in the result text (#491)', async () => {
+    const filtered = structuredClone(preview)
+    filtered.affectedTasks[0].hasResult = true
+    filtered.affectedTasks[2].hasResult = true
+    const api = apiWith({ loadPreview: vi.fn(async () => filtered) })
+    renderPage(api)
+    await confirm('yes')
+    expect(
+      await screen.findByText('任務尚未填寫結果，直接改用新標準。'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/保留供查詢/)).toBeNull()
+  })
+
+  it('describes the reinspect option in plain words (#491)', async () => {
+    renderPage(apiWith())
+    await confirm()
+    const yes = await screen.findByRole('radio', { name: reinspectChoice })
+    expect(yes).toHaveAccessibleDescription(
+      /舊結果與照片會保留供查詢，但不再算數/,
+    )
+    expect(yes).not.toHaveAccessibleDescription(/作廢/)
+    expect(screen.queryByText(/要，作廢/)).toBeNull()
   })
 
   it('asks no question when only draft Tasks use the item (#487)', async () => {
@@ -375,7 +425,7 @@ describe('ProjectItemChangePage', () => {
     await confirm()
     expect(
       await screen.findByRole('radio', {
-        name: /要，作廢受影響項目/,
+        name: reinspectChoice,
       }),
     ).not.toBeChecked()
     expect(screen.getByRole('button', { name: '確認儲存' })).toBeDisabled()

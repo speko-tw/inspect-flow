@@ -948,7 +948,7 @@ function applyPanelHTML() {
   }).join('') + '</ul>';
   h += '<p class="hint">之後修改範本不會更新已套用的項目。套用後是專案自己的副本。</p>';
   if (S.aConfirm) {
-    h += '<div class="confirm" role="alertdialog" aria-labelledby="acf-t"><p id="acf-t"><strong>一次新增 ' + n + ' 個項目到專案？</strong>目前專案項目無法刪除或改名。</p>' +
+    h += '<div class="confirm" role="alertdialog" aria-labelledby="acf-t"><p id="acf-t"><strong>一次新增 ' + n + ' 個項目到專案？</strong>套用後可在查核項目修改內容，目前無法刪除。</p>' +
       '<div class="btns"><button type="button" class="btn primary" id="btn-a-yes" data-act="a-yes">確定套用</button>' +
       '<button type="button" class="btn" id="btn-a-no" data-act="a-no">取消</button></div></div>';
   } else {
