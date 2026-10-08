@@ -112,7 +112,7 @@ describe('selected rules', () => {
   const start = css.indexOf(':is(\n    .project-section-nav a')
   const rule = css.slice(start, css.indexOf('}', start))
 
-  it('uses one rule for the sidebar, the plan list and the template tree', () => {
+  it('uses one rule for sidebar, plan list and template tree', () => {
     expect(start).toBeGreaterThan(0)
     expect(rule).toContain('.project-section-nav a')
     expect(rule).toContain('.plan-list button')

@@ -410,7 +410,7 @@ describe('planning management page', () => {
     await expectNotice('已刪除草稿任務。')
   })
 
-  it('marks the selected plan in the plan list and keeps one primary per form (#500)', async () => {
+  it('marks the selected plan in the plan list (#500)', async () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     await screen.findByRole('heading', { name: '專案分區' })

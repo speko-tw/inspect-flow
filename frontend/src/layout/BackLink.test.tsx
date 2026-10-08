@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { BackButton, BackLink } from './BackLink'
 
 describe('BackLink', () => {
-  it('is a router link named 返回X, with the chevron hidden from readers', () => {
+  it('is a router link named 返回X with a hidden chevron', () => {
     render(
       <MemoryRouter>
         <BackLink to="/admin/projects">返回專案清單</BackLink>
@@ -42,7 +42,7 @@ describe('BackLink', () => {
 })
 
 describe('BackButton', () => {
-  it('looks like the link but switches a panel without changing the URL', () => {
+  it('switches a panel without changing the URL', () => {
     const onClick = vi.fn()
     render(<BackButton onClick={onClick}>返回清單</BackButton>)
     const button = screen.getByRole('button', { name: '返回清單' })
