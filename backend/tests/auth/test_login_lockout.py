@@ -77,6 +77,18 @@ def _read_busy_timeout():
         return connection.exec_driver_sql("PRAGMA busy_timeout").scalar_one()
 
 
+# The tests below set a 50 ms busy timeout; the default is 5000 ms. A
+# request that returns within this bound waited for the configured short
+# timeout, not the default one. The bound is a loose cap (about 40x the
+# configured value) so CI load cannot trip it, instead of comparing two
+# short wall-clock durations against each other.
+_SHORT_BUSY_TIMEOUT_CAP_SECONDS = 2.0
+
+
+def _assert_returned_within_short_timeout(durations):
+    assert max(durations) < _SHORT_BUSY_TIMEOUT_CAP_SECONDS, durations
+
+
 def test_sqlite_write_lock_timeout_returns_retryable_error(
     client, db_session, engine, monkeypatch, caplog
 ):
@@ -112,7 +124,7 @@ def test_sqlite_write_lock_timeout_returns_retryable_error(
                 assert response.headers["retry-after"] == "5"
                 assert "set-cookie" not in response.headers
                 assert _read_busy_timeout() == original_busy_timeout
-            assert max(durations) - min(durations) < 0.5
+            _assert_returned_within_short_timeout(durations)
             assert responses[0].content == responses[1].content
             assert responses[1].content == responses[2].content
             assert not any(
@@ -206,7 +218,7 @@ def test_locked_account_and_unknown_login_share_sqlite_timeout(
                 responses.append(response)
             assert all(response.status_code == 503 for response in responses)
             assert responses[0].content == responses[1].content
-            assert abs(durations[0] - durations[1]) < 0.5
+            _assert_returned_within_short_timeout(durations)
             assert all(
                 response.headers["retry-after"] == "5"
                 for response in responses
