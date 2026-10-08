@@ -1240,15 +1240,15 @@ export default function TemplatesPage() {
             ) : (
               <>
                 {error && mode !== 'create-item' && mode !== 'edit-item' && (
-                  <p
-                    className="tpl-detail-notice tpl-notice-error"
-                    role="alert"
-                  >
+                  <p className="tpl-detail-notice notice-error" role="alert">
                     {error}
                   </p>
                 )}
                 {notice && (
-                  <p className="tpl-detail-notice tpl-notice-ok" role="status">
+                  <p
+                    className="tpl-detail-notice notice-success"
+                    role="status"
+                  >
                     {notice}
                   </p>
                 )}

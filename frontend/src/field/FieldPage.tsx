@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
-import LogoutButton from '../auth/LogoutButton'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { isForbidden } from '../http'
+import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
 import type { TaskListChange } from './StartAction'
 import TaskDetail from './TaskDetail'
@@ -65,52 +65,45 @@ export default function FieldPage() {
   const from = `${location.pathname}${location.search}${location.hash}`
   const notice = (location.state as { notice?: unknown } | null)?.notice
   return (
-    <div className="field-shell">
-      <header className="field-top">
-        <div className="field-brand">
-          <strong>InspectFlow 工程查核系統</strong>
-          <span>{user.name_zh ?? user.username}</span>
-        </div>
-        <nav className="field-top-actions" aria-label="我的功能">
-          {user.has_office_access && (
-            <Link to="/admin/projects">我的專案</Link>
+    <>
+      <AppHeader
+        navItems={memberNavItems(user, { from })}
+        navLabel="我的功能"
+        user={user}
+      />
+      <div className="field-shell">
+        <main>
+          {typeof notice === 'string' && (
+            <p className="notice-success" role="status">
+              {notice}
+            </p>
           )}
-          {user.has_template_access && (
-            <Link to="/admin/templates">範本管理</Link>
+          {detailId ? (
+            <TaskDetail
+              key={detailId}
+              taskId={detailId}
+              onListChange={(change) => applyListChange(listMemory, change)}
+            />
+          ) : (
+            <TaskList
+              key={`${user.id}:${location.search}`}
+              userId={user.id}
+              memory={listMemory}
+              returnKeys={returnKeys}
+            />
           )}
-          <Link to="/change-password" state={{ from }}>
-            變更密碼
-          </Link>
-          <LogoutButton />
-        </nav>
-      </header>
-      <main>
-        {typeof notice === 'string' && <p role="status">{notice}</p>}
-        {detailId ? (
-          <TaskDetail
-            key={detailId}
-            taskId={detailId}
-            onListChange={(change) => applyListChange(listMemory, change)}
-          />
-        ) : (
-          <TaskList
-            key={`${user.id}:${location.search}`}
-            userId={user.id}
-            memory={listMemory}
-            returnKeys={returnKeys}
-          />
+        </main>
+        {!detailId && (
+          <details className="field-profile">
+            <summary>我的資料</summary>
+            <p>帳號名稱：{user.username}</p>
+            <p>中文姓名：{user.name_zh ?? '—'}</p>
+            <p>英文姓名：{user.name_en ?? '—'}</p>
+            <p>Email：{user.email ?? '—'}</p>
+          </details>
         )}
-      </main>
-      {!detailId && (
-        <details className="field-profile">
-          <summary>我的資料</summary>
-          <p>帳號名稱：{user.username}</p>
-          <p>中文姓名：{user.name_zh ?? '—'}</p>
-          <p>英文姓名：{user.name_en ?? '—'}</p>
-          <p>Email：{user.email ?? '—'}</p>
-        </details>
-      )}
-    </div>
+      </div>
+    </>
   )
 }
 

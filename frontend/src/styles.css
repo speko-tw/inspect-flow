@@ -5,7 +5,7 @@
  *     是主要；`.btn-danger` 是危險操作。按鈕依內容寬度、靠左排列；
  *     只有 `.auth-card` 內的按鈕是全寬。`.button-link` 讓連結長得像按鈕。
  *   - 版面：`.auth-page`／`.auth-card`（登入、變更密碼、首次設定）、
- *     `.app-shell`／`.topbar`（管理頁頂部列）、`.steps`（步驟列）。
+ *     `.app-header`（登入後各頁共用的頁首）、`.steps`（步驟列）。
  * 不引入 UI 套件與外部字型；中文字型以系統字型為後備。
  */
 
@@ -53,6 +53,9 @@
   --warning-bg: #fff4dc;
   --warning-text: #5c3d00;
   --warning-border: #e2c071;
+  --info-bg: #e8f1fc;
+  --info-text: #12427f;
+  --info-border: #a9c7ee;
   --focus: #1b5ec2;
   --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 4px 16px rgb(16 24 40 / 6%);
 }
@@ -63,37 +66,6 @@
   min-height: 100vh;
   margin: 0 auto;
   padding: 0 16px 32px;
-}
-.field-top {
-  padding: 14px 0 12px;
-  border-bottom: 1px solid var(--border);
-}
-.field-brand {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-.field-brand strong {
-  color: var(--text);
-}
-.field-top-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-.field-top-actions > * {
-  flex: 1;
-  min-height: 44px;
-  text-align: center;
-}
-.field-top-actions a {
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  color: var(--text);
 }
 .field-heading {
   margin: 18px 0 3px;
@@ -439,6 +411,9 @@
     --warning-bg: #33290f;
     --warning-text: #f3d994;
     --warning-border: #6b5520;
+    --info-bg: #12273f;
+    --info-text: #b7d4ff;
+    --info-border: #2c5a94;
     --focus: #8fbfff;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 16px rgb(0 0 0 / 30%);
   }
@@ -938,9 +913,13 @@ tbody tr.row-detail:nth-child(even) {
   text-decoration: none;
 }
 
-/* ---- 訊息 ---- */
+/* ---- 訊息 ----
+ * 外觀由 role 提供預設：alert 是錯誤、status 是中性（載入中、唯讀、
+ * 權限說明等不是成功的狀態訊息）。用 :where 讓預設的特異性為 0，
+ * 元件自己的 class（例如 .field-notice）一定能蓋過，不會被 role 規則
+ * 偷偷改掉內距或邊框。要明確指定種類時加 .notice-*，role 照舊保留。 */
 
-[role='alert'] {
+:where([role='alert'], [role='status']) {
   margin: 0 0 var(--space-3);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--error-border);
@@ -950,23 +929,82 @@ tbody tr.row-detail:nth-child(even) {
   color: var(--error-text);
 }
 
-[role='status'] {
-  margin: 0 0 var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--success-border);
-  border-left-width: 4px;
-  border-radius: var(--radius-sm);
-  background: var(--success-bg);
-  color: var(--success-text);
+:where([role='status']) {
+  margin-bottom: var(--space-4);
+  border-color: var(--border-strong);
+  background: var(--surface-alt);
+  color: var(--text);
 }
 
-[role='status'] h2 {
+:where([role='status']) h2 {
   margin-top: 0;
   font-size: 1.05rem;
 }
 
-[role='status'] p:last-child {
+:where([role='status']) p:last-child {
   margin-bottom: 0;
+}
+
+.notice-success,
+.notice-info,
+.notice-warning,
+.notice-error {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.notice-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.notice-info {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.notice-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.notice-error {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.notice-success h2,
+.notice-info h2,
+.notice-warning h2,
+.notice-error h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+.notice-success > :last-child,
+.notice-info > :last-child,
+.notice-warning > :last-child,
+.notice-error > :last-child {
+  margin-bottom: 0;
+}
+
+/* 欄位錯誤：紅字貼在欄位下方，不套框（有沒有 role 外觀都一樣）。 */
+.tpl-field-error,
+.member-field-error {
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--error-text);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 output {
@@ -1106,28 +1144,42 @@ output {
   color: var(--primary);
 }
 
-/* ---- 管理頁頂部列 ---- */
+/* ---- 共用頁首（AppHeader） ---- */
 
-.topbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-5);
+.app-header {
   /* 內容對齊 main 的最大寬度，背景撐滿整列。 */
-  padding: var(--space-3)
+  padding: var(--space-2)
     max(
       var(--space-4),
       calc((100% - var(--content-width)) / 2 + var(--space-4))
-    );
+    )
+    0;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
 
-.topbar-brand {
-  font-weight: 700;
+.app-header-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
 }
 
-.topbar h1 {
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+a.topbar-brand:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.topbar-badge {
   margin: 0;
   padding: 0 var(--space-2);
   border: 1px solid var(--border-strong);
@@ -1138,47 +1190,85 @@ output {
   line-height: 1.6;
 }
 
-.topbar nav {
+/* 帳號區：名字與登出鈕是一組，窄螢幕換行時整組一起移動。 */
+.app-header-account {
   display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-}
-
-.topbar nav a {
-  display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
-  /* 觸控目標至少 44px（#449 審查）。 */
-  min-height: 44px;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-}
-
-.topbar nav a:hover {
-  background: var(--surface-alt);
-}
-
-/* 目前所在頁面：粗體加底色（由 aria-current 驅動）。 */
-.topbar nav a[aria-current='page'] {
-  background: var(--primary);
-  color: var(--on-primary);
-  font-weight: 700;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-left: auto;
 }
 
 .topbar-user {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-muted);
   font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.topbar button {
+.app-header-account button {
+  flex: none;
   min-height: 2rem;
   padding: var(--space-1) var(--space-3);
   font-size: 0.875rem;
 }
 
-.topbar [role='alert'] {
-  margin: 0;
+.app-header-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0 var(--space-1);
+}
+
+.app-header-tabs {
+  display: contents;
+}
+
+/* 分頁：目前所在頁面用底線加粗體（由 aria-current 驅動）。 */
+.app-header-tab {
+  display: inline-flex;
+  align-items: center;
+  /* 觸控目標至少 44px（#449 審查）。 */
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 3px solid transparent;
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.app-header-tab:hover {
+  background: var(--surface-alt);
+  text-decoration: none;
+}
+
+a.app-header-tab[aria-current='page'] {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* 必須先完成才能離開的畫面（臨時密碼結果頁）：導覽灰字、不能點。 */
+.app-header-nav-locked .app-header-tab {
+  color: var(--text-muted);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.app-header-locked-note {
+  flex-basis: 100%;
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.app-header-error {
+  max-width: var(--content-width);
+  margin: var(--space-3) auto 0;
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--space-4));
 }
 
 .temporary-password-result,
@@ -1217,13 +1307,8 @@ output {
     padding: var(--space-5) var(--space-4);
   }
 
-  .topbar {
-    gap: var(--space-2) var(--space-3);
-  }
-
-  .topbar nav {
-    flex-basis: 100%;
-    order: 3;
+  .app-header-bar {
+    gap: var(--space-1) var(--space-3);
   }
 
   table {
@@ -1372,6 +1457,7 @@ output {
   display: inline-block;
   margin: 0 var(--space-2) 0 0;
   padding: 0 var(--space-2);
+  border: 0;
   border-radius: var(--radius-sm);
   background: var(--primary);
   color: var(--on-primary);
@@ -1449,24 +1535,10 @@ output {
   margin: var(--space-3) 0 var(--space-5);
 }
 
-.tpl-notice {
-  margin-top: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid;
-  border-radius: var(--radius-sm);
-}
-
-.tpl-notice-error,
 .tpl-error-summary {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error-text);
-}
-
-.tpl-notice-ok {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success-text);
 }
 
 .project-workspace-grid {
@@ -1559,13 +1631,6 @@ output {
   align-items: baseline;
   gap: var(--space-1);
   margin: 0;
-}
-
-.tpl-field-error {
-  margin: calc(var(--space-1) * -1) 0 var(--space-2);
-  color: var(--error-text);
-  font-size: 0.9rem;
-  font-weight: 700;
 }
 
 .tpl-error-summary {
@@ -1780,7 +1845,7 @@ output {
 
 /*
  * ---- 觸控目標：窄螢幕一律 >= 44px（放在檔尾，蓋過前面各元件的較小值）----
- * 頂端導覽連結（.topbar nav a）與專案頁的「回專案清單」
+ * 頂端導覽分頁（.app-header-tab）與專案頁的「回專案清單」
  * （.project-home-header p a）已在各自的規則裡不分寬度固定 44px，不重複列在這裡。
  */
 
@@ -1790,7 +1855,7 @@ output {
   select,
   .button-link,
   td button,
-  .topbar button,
+  .app-header-account button,
   .standalone-link,
   .tpl-return-project,
   .tpl-tree-row,

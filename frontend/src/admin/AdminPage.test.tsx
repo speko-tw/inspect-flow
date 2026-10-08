@@ -526,6 +526,14 @@ describe('admin user and company pages', () => {
     expect(screen.queryByLabelText(/^帳號名稱/)).toBeNull()
     expect(screen.queryByRole('navigation', { name: '管理功能' })).toBeNull()
     expect(screen.queryByRole('button', { name: '登出' })).toBeNull()
+    // 保留頁首外殼（#494），但系統名稱與導覽都不能點：只能按「已抄下」離開。
+    const banner = screen.getByRole('banner')
+    expect(within(banner).queryByRole('link')).toBeNull()
+    expect(
+      within(banner).getByText('請先抄下臨時密碼，才能離開這一頁。'),
+    ).toBeVisible()
+    expect(within(banner).getByText('公司')).toBeVisible()
+    expect(within(banner).getByText(/登入者：/)).toBeVisible()
     fireEvent.click(
       screen.getByRole('button', { name: '已抄下，回到使用者列表' }),
     )

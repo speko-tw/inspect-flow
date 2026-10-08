@@ -240,7 +240,11 @@ export default function ProjectsPage() {
     <section aria-labelledby="projects-heading">
       <h1 id="projects-heading">專案</h1>
       {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {notice && (
+        <p className="notice-success" role="status">
+          {notice}
+        </p>
+      )}
       {transition && (
         <section
           aria-label="未儲存變更"

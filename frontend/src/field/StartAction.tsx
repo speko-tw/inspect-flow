@@ -154,7 +154,7 @@ export default function StartAction({
       <>
         {failure && <FailureBox failure={failure} errorRef={errorRef} />}
         <div
-          className="field-start-ok"
+          className="field-start-ok notice-success"
           role="status"
           tabIndex={-1}
           ref={startedRef}

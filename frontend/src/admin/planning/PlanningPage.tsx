@@ -434,7 +434,7 @@ export default function PlanningPage({
 
   const noticeFor = (area: NoticeArea) =>
     notice?.area === area ? (
-      <p className="tpl-notice tpl-notice-ok" role="status">
+      <p className="notice-success" role="status">
         {notice.text}
       </p>
     ) : null
@@ -470,9 +470,15 @@ export default function PlanningPage({
       </h2>
       <p>計畫狀態由任務狀態自動推導；任務派出後才會提供給現場。</p>
       {projects[0] && <p>專案：{projects[0].name}</p>}
-      {readOnly && <p role="status">目前為唯讀模式。</p>}
+      {readOnly && (
+        <p className="notice-info" role="status">
+          目前為唯讀模式。
+        </p>
+      )}
       {membersDenied && (
-        <p role="status">沒有讀取可指派人員清單的權限；可略過建議指派。</p>
+        <p className="notice-info" role="status">
+          沒有讀取可指派人員清單的權限；可略過建議指派。
+        </p>
       )}
       {error && errorContext === 'page' && (
         <p ref={errorMessage} role="alert" tabIndex={-1}>
@@ -487,7 +493,9 @@ export default function PlanningPage({
             <h2 id="zones-heading">專案分區</h2>
             {noticeFor('zones')}
             {zonesDenied && (
-              <p role="status">沒有讀取分區的權限；其他計畫功能仍可使用。</p>
+              <p className="notice-info" role="status">
+                沒有讀取分區的權限；其他計畫功能仍可使用。
+              </p>
             )}
             {zones.length === 0 ? <p>尚未設定分區。</p> : null}
             {zones.map((zone) => (

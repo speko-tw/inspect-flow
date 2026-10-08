@@ -10,9 +10,9 @@ import {
 } from 'react-router'
 
 import type { CurrentUser } from '../auth/api'
-import LogoutButton from '../auth/LogoutButton'
 import { landingLabel, landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
+import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
@@ -80,30 +80,24 @@ function AdminPageContent() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <span className="topbar-brand">InspectFlow 工程查核系統</span>
-        {isProjectSectionRoute ? <p>Admin</p> : <h1>Admin</h1>}
-        {!temporaryPassword && (
-          <nav aria-label="管理功能">
-            {NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.to}
-                onClick={() => setTemporaryPassword(null)}
-                to={item.to}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-        )}
-        <span className="topbar-user">
-          登入者：{user.name_zh ?? user.username}
-        </span>
-        {!temporaryPassword && <LogoutButton />}
-      </header>
+      <AppHeader
+        badge={
+          isProjectSectionRoute ? (
+            <p className="topbar-badge">Admin</p>
+          ) : (
+            <h1 className="topbar-badge">Admin</h1>
+          )
+        }
+        locked={temporaryPassword !== null}
+        lockedNote="請先抄下臨時密碼，才能離開這一頁。"
+        navItems={NAV_ITEMS}
+        navLabel="管理功能"
+        onNavigate={() => setTemporaryPassword(null)}
+        user={user}
+      />
       <main>
         {typeof notice === 'string' && (
-          <p className="tpl-notice tpl-notice-ok" role="status">
+          <p className="notice-success" role="status">
             {notice}
           </p>
         )}
@@ -112,7 +106,7 @@ function AdminPageContent() {
         location.key === temporaryPassword.locationKey ? (
           <section
             aria-labelledby="temporary-password-heading"
-            className="temporary-password-result"
+            className="temporary-password-result notice-success"
             role="status"
           >
             <h2
@@ -213,16 +207,6 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
   const location = useLocation()
   // 從別頁導來時帶的提示（例如套用範本成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
-  const navItems = [
-    user.has_office_access
-      ? { to: '/admin/projects', label: '我的專案' }
-      : null,
-    user.has_template_access
-      ? { to: '/admin/templates', label: '範本管理' }
-      : null,
-    user.has_field_access ? { to: '/field', label: '今日任務' } : null,
-    { to: '/change-password', label: '變更密碼' },
-  ].filter((item): item is { to: string; label: string } => item !== null)
   const indexTarget = landingPath(user)
   const projectRoutes = (
     <>
@@ -267,23 +251,14 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
   )
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <span className="topbar-brand">InspectFlow 工程查核系統</span>
-        <nav aria-label="管理功能">
-          {navItems.map((item) => (
-            <NavLink key={item.to} to={item.to}>
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <span className="topbar-user">
-          登入者：{user.name_zh ?? user.username}
-        </span>
-        <LogoutButton />
-      </header>
+      <AppHeader
+        navItems={memberNavItems(user)}
+        navLabel="管理功能"
+        user={user}
+      />
       <main>
         {typeof notice === 'string' && (
-          <p className="tpl-notice tpl-notice-ok" role="status">
+          <p className="notice-success" role="status">
             {notice}
           </p>
         )}

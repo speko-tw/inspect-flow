@@ -311,7 +311,11 @@ export default function ProjectItemChangePage({
   return (
     <section aria-labelledby="project-item-heading">
       <h2 id="project-item-heading">修改專案查核項目</h2>
-      {readOnly && <p role="status">唯讀瀏覽</p>}
+      {readOnly && (
+        <p className="notice-info" role="status">
+          唯讀瀏覽
+        </p>
+      )}
       {error && !preview && <p role="alert">{error}</p>}
       {preview && (
         <>
@@ -515,7 +519,11 @@ export default function ProjectItemChangePage({
           )}
 
           {result && (
-            <section aria-labelledby="change-result-heading" role="status">
+            <section
+              aria-labelledby="change-result-heading"
+              className="notice-success"
+              role="status"
+            >
               <h2 id="change-result-heading">修改結果</h2>
               <p>
                 {result.reinspection_selected

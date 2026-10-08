@@ -27,7 +27,7 @@ describe('touch target rules', () => {
     'select,',
     '.button-link,',
     'td button,',
-    '.topbar button,',
+    '.app-header-account button,',
     '.tpl-tree-row,',
   ])('raises %s to the touch target on narrow screens', (selector) => {
     expect(selectors).toContain(selector)
@@ -37,4 +37,30 @@ describe('touch target rules', () => {
     expect(labelRule).toContain("label:has(> input[type='checkbox'])")
     expect(labelRule).toContain("label:has(> input[type='radio'])")
   })
+})
+
+// 提示框（#494）：role 只給預設，不再把所有 status 畫成成功；
+// 種類由 .notice-* 決定。
+describe('notice rules', () => {
+  const statusRule = css.slice(
+    css.indexOf(":where([role='status']) {"),
+    css.indexOf(":where([role='status']) h2"),
+  )
+
+  it('draws role=status neutral, not as a success box', () => {
+    expect(statusRule).toContain('var(--surface-alt)')
+    expect(statusRule).not.toContain('--success')
+  })
+
+  it.each(['success', 'info', 'warning', 'error'])(
+    'defines .notice-%s with its own colours',
+    (kind) => {
+      const start = css.indexOf(`\n.notice-${kind} {\n  border-color`)
+      expect(start).toBeGreaterThan(0)
+      const rule = css.slice(start, css.indexOf('}', start))
+      expect(rule).toContain(`var(--${kind}-bg)`)
+      expect(rule).toContain(`var(--${kind}-text)`)
+      expect(rule).toContain(`var(--${kind}-border)`)
+    },
+  )
 })
