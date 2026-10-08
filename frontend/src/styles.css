@@ -1810,3 +1810,10 @@ output {
     align-items: center;
   }
 }
+
+/* 欄位說明文字：灰色一般字，和錯誤訊息分開（#490）。 */
+.field-hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
