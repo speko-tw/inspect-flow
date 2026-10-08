@@ -13,6 +13,7 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden, isNotFound } from '../http'
+import { BackButton, BackLink } from '../layout/BackLink'
 import { ProjectNotFound } from '../RouteNotFound'
 import { fetchMyProjects } from './api'
 import {
@@ -416,384 +417,372 @@ export default function ProjectTemplatesPage() {
   if (projectMissing) return <ProjectNotFound />
 
   return (
-    <div className="app-shell">
-      <main className="tpl-page">
-        <Link
-          className="tpl-return-project"
-          to={`/admin/projects/${projectId}`}
-        >
-          返回專案
-        </Link>
-        <p className="tpl-crumb">
-          {project?.project_code && <>{project.project_code} </>}
-          {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
+    <section className="tpl-page">
+      <BackLink to={`/admin/projects/${projectId}`}>返回專案</BackLink>
+      <p className="tpl-crumb">
+        {project?.project_code && <>{project.project_code} </>}
+        {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
+      </p>
+      {project && (
+        <h1>
+          {isSaveMode
+            ? `將「${saveSource?.title ?? ''}」存為範本`
+            : '套用範本到專案'}
+        </h1>
+      )}
+      {readOnly && (
+        <p className="notice-info" role="status">
+          {readDenied
+            ? '範本讀取權限不足，無法載入其他內容。'
+            : '目前只能瀏覽範本。'}
         </p>
-        {project && (
-          <h1>
-            {isSaveMode
-              ? `將「${saveSource?.title ?? ''}」存為範本`
-              : '套用範本到專案'}
-          </h1>
-        )}
-        {readOnly && (
-          <p className="notice-info" role="status">
-            {readDenied
-              ? '範本讀取權限不足，無法載入其他內容。'
-              : '目前只能瀏覽範本。'}
+      )}
+      {itemsDenied && (
+        <p className="notice-info" role="status">
+          目前只能瀏覽專案查核項目。
+        </p>
+      )}
+      {error && <p role="alert">{error}</p>}
+      {notice && (
+        <>
+          <p className="notice-success" role="status">
+            {notice}
           </p>
-        )}
-        {itemsDenied && (
-          <p className="notice-info" role="status">
-            目前只能瀏覽專案查核項目。
-          </p>
-        )}
-        {error && <p role="alert">{error}</p>}
-        {notice && (
-          <>
-            <p className="notice-success" role="status">
-              {notice}
-            </p>
-            {!isSaveMode && (
-              <button
-                onClick={() => navigate(`/admin/projects/${projectId}`)}
-                type="button"
-              >
-                返回專案
-              </button>
-            )}
-          </>
-        )}
-        <div className="tpl-layout" data-pane={mobilePane}>
-          <div className="tpl-list-pane">
-            {nav}
-            {!isSaveMode && (
-              <section className="tpl-nav tpl-project-items">
-                <h2>專案查核項目</h2>
-                {itemsLoading && <p>載入中…</p>}
-                {!itemsLoading && projectItems.length === 0 && (
-                  <p>目前沒有查核項目。</p>
-                )}
-                <ul>
-                  {projectItems.map((item) => (
-                    <li key={item.id}>
-                      <strong>{item.title}</strong>
-                      <span>來源：{item.source_template_name}</span>
-                      <time dateTime={item.applied_at}>
-                        {formatTime(item.applied_at)}
-                      </time>
-                      {saveAllowed &&
-                        !readDenied &&
-                        !saveDenied &&
-                        !itemsDenied && (
-                          <button
-                            disabled={busy}
-                            onClick={() => startSave(item)}
-                            type="button"
-                          >
-                            存為範本
-                          </button>
-                        )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-          </div>
-          <section aria-label="範本操作" className="tpl-detail-pane">
-            <button
-              className="tpl-mobile-back"
-              onClick={() => setMobilePane('list')}
-              type="button"
-            >
-              返回選擇
-            </button>
-            {loading && <p>載入範本庫…</p>}
-            {!loading && categories.length === 0 && !error && (
-              <p>範本庫還沒有工程類別，請先到範本管理新增。</p>
-            )}
-            {isSaveMode ? (
-              <>
-                <h2>選擇目標系統</h2>
-                {!selectedSystem && (
-                  <>
-                    <p>先選工程類別，再選要存入的系統。</p>
-                    {isMobile && selectedCategory && (
-                      <ul className="tpl-category-systems">
-                        {systems
-                          .filter(
-                            (system) =>
-                              system.category_id === selectedCategory.id,
-                          )
-                          .map((system) => (
-                            <li key={system.id}>
-                              <button
-                                onClick={() =>
-                                  void selectNode({
-                                    type: 'system',
-                                    id: system.id,
-                                  })
-                                }
-                                type="button"
-                              >
-                                {system.name}
-                              </button>
-                            </li>
-                          ))}
-                      </ul>
-                    )}
-                  </>
-                )}
-                {selectedSystem && selectedCategory && (
-                  <div className="tpl-card">
-                    <p>
-                      <strong>存入位置</strong>
-                    </p>
-                    <p>
-                      範本庫 / {selectedCategory.name} / {selectedSystem.name}
-                    </p>
-                    <p>
-                      將新增「{saveSource?.title}
-                      」，保留原項目的查核項次與標準。
-                    </p>
-                    <button
-                      disabled={!saveAllowed || saveDenied || busy}
-                      onClick={() => void submitSave()}
-                      type="button"
-                    >
-                      {busy ? '儲存中…' : '存入這個系統'}
-                    </button>
-                  </div>
-                )}
-                {saveError && (
-                  <div className="notice-error" role="alert">
-                    <p>{saveError}</p>
-                    <button
-                      ref={saveConflictActionRef}
-                      disabled={busy}
-                      onClick={() => {
-                        setSaveError('')
-                        setSaveErrorCode('')
-                        setSelected(null)
-                        setMobilePane('list')
-                      }}
-                      type="button"
-                    >
-                      改選系統
-                    </button>
-                  </div>
-                )}
-                {saveDenied && (
-                  <p className="notice-info" role="status">
-                    目前只能瀏覽查核項目。
+          {!isSaveMode && (
+            <Link className="btn" to={`/admin/projects/${projectId}`}>
+              返回專案
+            </Link>
+          )}
+        </>
+      )}
+      <div className="tpl-layout" data-pane={mobilePane}>
+        <div className="tpl-list-pane">
+          {nav}
+          {!isSaveMode && (
+            <section className="tpl-nav tpl-project-items">
+              <h2>專案查核項目</h2>
+              {itemsLoading && <p>載入中…</p>}
+              {!itemsLoading && projectItems.length === 0 && (
+                <p>目前沒有查核項目。</p>
+              )}
+              <ul>
+                {projectItems.map((item) => (
+                  <li key={item.id}>
+                    <strong>{item.title}</strong>
+                    <span>來源：{item.source_template_name}</span>
+                    <time dateTime={item.applied_at}>
+                      {formatTime(item.applied_at)}
+                    </time>
+                    {saveAllowed &&
+                      !readDenied &&
+                      !saveDenied &&
+                      !itemsDenied && (
+                        <button
+                          disabled={busy}
+                          onClick={() => startSave(item)}
+                          type="button"
+                        >
+                          存為範本
+                        </button>
+                      )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+        <section aria-label="範本操作" className="tpl-detail-pane">
+          <BackButton
+            className="tpl-mobile-back"
+            onClick={() => setMobilePane('list')}
+          >
+            返回選擇
+          </BackButton>
+          {loading && <p>載入範本庫…</p>}
+          {!loading && categories.length === 0 && !error && (
+            <p>範本庫還沒有工程類別，請先到範本管理新增。</p>
+          )}
+          {isSaveMode ? (
+            <>
+              <h2>選擇目標系統</h2>
+              {!selectedSystem && (
+                <>
+                  <p>先選工程類別，再選要存入的系統。</p>
+                  {isMobile && selectedCategory && (
+                    <ul className="tpl-category-systems">
+                      {systems
+                        .filter(
+                          (system) =>
+                            system.category_id === selectedCategory.id,
+                        )
+                        .map((system) => (
+                          <li key={system.id}>
+                            <button
+                              onClick={() =>
+                                void selectNode({
+                                  type: 'system',
+                                  id: system.id,
+                                })
+                              }
+                              type="button"
+                            >
+                              {system.name}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {selectedSystem && selectedCategory && (
+                <div className="tpl-card">
+                  <p>
+                    <strong>存入位置</strong>
                   </p>
-                )}
-              </>
-            ) : (
-              <>
-                {!selected && (
-                  <>
-                    <h2>選擇範本</h2>
-                    <p>展開工程類別與系統，再選擇要套用的範本。</p>
-                  </>
-                )}
-                {selectedCategory && !selectedSystem && (
-                  <>
-                    <h2>{selectedCategory.name}</h2>
-                    <p>請選這個類別底下的一個系統。</p>
-                    {isMobile && (
-                      <ul className="tpl-category-systems">
-                        {systems
-                          .filter(
-                            (system) =>
-                              system.category_id === selectedCategory.id,
-                          )
-                          .map((system) => (
-                            <li key={system.id}>
-                              <button
-                                onClick={() =>
-                                  void selectNode({
-                                    type: 'system',
-                                    id: system.id,
-                                  })
-                                }
-                                type="button"
-                              >
-                                {system.name}
-                              </button>
-                            </li>
-                          ))}
-                      </ul>
-                    )}
-                  </>
-                )}
-                {selectedSystem && (
-                  <>
-                    <p className="tpl-crumb">
-                      {selectedCategory?.name} / {selectedSystem.name}
-                    </p>
-                    <h2>套用範本：{selectedSystem.name}</h2>
-                    <fieldset>
-                      <legend>要套用什麼</legend>
-                      <label>
+                  <p>
+                    範本庫 / {selectedCategory.name} / {selectedSystem.name}
+                  </p>
+                  <p>
+                    將新增「{saveSource?.title}
+                    」，保留原項目的查核項次與標準。
+                  </p>
+                  <button
+                    className="btn-primary"
+                    disabled={!saveAllowed || saveDenied || busy}
+                    onClick={() => void submitSave()}
+                    type="button"
+                  >
+                    {busy ? '儲存中…' : '存入這個系統'}
+                  </button>
+                </div>
+              )}
+              {saveError && (
+                <div className="notice-error" role="alert">
+                  <p>{saveError}</p>
+                  <button
+                    ref={saveConflictActionRef}
+                    disabled={busy}
+                    onClick={() => {
+                      setSaveError('')
+                      setSaveErrorCode('')
+                      setSelected(null)
+                      setMobilePane('list')
+                    }}
+                    type="button"
+                  >
+                    改選系統
+                  </button>
+                </div>
+              )}
+              {saveDenied && (
+                <p className="notice-info" role="status">
+                  目前只能瀏覽查核項目。
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              {!selected && (
+                <>
+                  <h2>選擇範本</h2>
+                  <p>展開工程類別與系統，再選擇要套用的範本。</p>
+                </>
+              )}
+              {selectedCategory && !selectedSystem && (
+                <>
+                  <h2>{selectedCategory.name}</h2>
+                  <p>請選這個類別底下的一個系統。</p>
+                  {isMobile && (
+                    <ul className="tpl-category-systems">
+                      {systems
+                        .filter(
+                          (system) =>
+                            system.category_id === selectedCategory.id,
+                        )
+                        .map((system) => (
+                          <li key={system.id}>
+                            <button
+                              onClick={() =>
+                                void selectNode({
+                                  type: 'system',
+                                  id: system.id,
+                                })
+                              }
+                              type="button"
+                            >
+                              {system.name}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </>
+              )}
+              {selectedSystem && (
+                <>
+                  <p className="tpl-crumb">
+                    {selectedCategory?.name} / {selectedSystem.name}
+                  </p>
+                  <h2>套用範本：{selectedSystem.name}</h2>
+                  <fieldset>
+                    <legend>要套用什麼</legend>
+                    <label>
+                      <input
+                        checked={mode === 'system'}
+                        name="apply-target"
+                        onChange={() => {
+                          setSelected({
+                            type: 'system',
+                            id: selectedSystem.id,
+                          })
+                          setApplyError('')
+                          setApplyErrorCode('')
+                          setApplyConfirm(false)
+                        }}
+                        type="radio"
+                      />
+                      整個系統（{templates.length} 個項目）
+                    </label>
+                    {templates.map((item) => (
+                      <label key={item.id}>
                         <input
-                          checked={mode === 'system'}
+                          checked={mode === 'item' && selected?.id === item.id}
                           name="apply-target"
                           onChange={() => {
-                            setSelected({
-                              type: 'system',
-                              id: selectedSystem.id,
-                            })
+                            setSelected({ type: 'item', id: item.id ?? '' })
                             setApplyError('')
                             setApplyErrorCode('')
                             setApplyConfirm(false)
                           }}
                           type="radio"
                         />
-                        整個系統（{templates.length} 個項目）
+                        單一項目：{item.title}
                       </label>
-                      {templates.map((item) => (
-                        <label key={item.id}>
-                          <input
-                            checked={
-                              mode === 'item' && selected?.id === item.id
-                            }
-                            name="apply-target"
-                            onChange={() => {
-                              setSelected({ type: 'item', id: item.id ?? '' })
-                              setApplyError('')
-                              setApplyErrorCode('')
-                              setApplyConfirm(false)
-                            }}
-                            type="radio"
-                          />
-                          單一項目：{item.title}
-                        </label>
-                      ))}
-                    </fieldset>
-                    {selectedTemplates.length > 0 && (
-                      <>
-                        <h3>將新增 {selectedTemplates.length} 個項目</h3>
-                        <ul className="tpl-preview-list">
-                          {selectedTemplates.map((item) => (
-                            <li key={item.id}>
-                              <strong>{item.title}</strong>
-                              <p>{item.instruction}</p>
-                              {item.inspection_points.map((point) => (
-                                <div key={point.sequence}>
-                                  <strong>
-                                    項次 {point.sequence} {point.title}
-                                  </strong>
-                                  {point.instruction && (
-                                    <p>{point.instruction}</p>
-                                  )}
-                                  {point.numeric_standard && (
-                                    <p>
-                                      數值標準：{point.title}{' '}
-                                      {numericSummary(point)}
-                                    </p>
-                                  )}
-                                  {point.text_standard && (
-                                    <p>文字標準：{point.text_standard.text}</p>
-                                  )}
-                                  {pointEvidenceText(point).map((summary) => (
-                                    <p key={summary}>{summary}</p>
-                                  ))}
-                                </div>
-                              ))}
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="tpl-hint">
-                          之後修改範本不會更新已套用的項目。套用後是專案自己的副本。
-                        </p>
-                      </>
+                    ))}
+                  </fieldset>
+                  {selectedTemplates.length > 0 && (
+                    <>
+                      <h3>將新增 {selectedTemplates.length} 個項目</h3>
+                      <ul className="tpl-preview-list">
+                        {selectedTemplates.map((item) => (
+                          <li key={item.id}>
+                            <strong>{item.title}</strong>
+                            <p>{item.instruction}</p>
+                            {item.inspection_points.map((point) => (
+                              <div key={point.sequence}>
+                                <strong>
+                                  項次 {point.sequence} {point.title}
+                                </strong>
+                                {point.instruction && (
+                                  <p>{point.instruction}</p>
+                                )}
+                                {point.numeric_standard && (
+                                  <p>
+                                    數值標準：{point.title}{' '}
+                                    {numericSummary(point)}
+                                  </p>
+                                )}
+                                {point.text_standard && (
+                                  <p>文字標準：{point.text_standard.text}</p>
+                                )}
+                                {pointEvidenceText(point).map((summary) => (
+                                  <p key={summary}>{summary}</p>
+                                ))}
+                              </div>
+                            ))}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="tpl-hint">
+                        之後修改範本不會更新已套用的項目。套用後是專案自己的副本。
+                      </p>
+                    </>
+                  )}
+                  {templates.length === 0 &&
+                    loadedSystems.has(selectedSystem.id) && (
+                      <p className="notice-info" role="status">
+                        這個系統沒有查核項目。
+                      </p>
                     )}
-                    {templates.length === 0 &&
-                      loadedSystems.has(selectedSystem.id) && (
-                        <p className="notice-info" role="status">
-                          這個系統沒有查核項目。
-                        </p>
-                      )}
-                    {applyError && (
-                      <div className="notice-error" role="alert">
-                        <p>{applyError}</p>
-                        {applyConflict ? (
-                          <div className="tpl-actions">
-                            <button
-                              ref={conflictActionRef}
-                              onClick={() => {
-                                setSelected(null)
-                                setApplyError('')
-                                setApplyErrorCode('')
-                                setMobilePane('list')
-                              }}
-                              type="button"
-                            >
-                              改選其他範本
-                            </button>
-                            <button
-                              onClick={() =>
-                                navigate(`/admin/projects/${projectId}`)
-                              }
-                              type="button"
-                            >
-                              返回專案
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                    {applyConfirm ? (
-                      <div
-                        aria-labelledby="apply-confirm-title"
-                        className="tpl-card"
-                        role="alertdialog"
-                      >
-                        <p id="apply-confirm-title">
-                          一次新增 {selectedTemplates.length} 個項目到專案？
-                          套用後可在查核項目修改內容，目前無法刪除。
-                        </p>
+                  {applyError && (
+                    <div className="notice-error" role="alert">
+                      <p>{applyError}</p>
+                      {applyConflict ? (
                         <div className="tpl-actions">
                           <button
-                            disabled={busy}
-                            onClick={() => void submitApply()}
+                            ref={conflictActionRef}
+                            onClick={() => {
+                              setSelected(null)
+                              setApplyError('')
+                              setApplyErrorCode('')
+                              setMobilePane('list')
+                            }}
                             type="button"
                           >
-                            確定套用
+                            改選其他範本
                           </button>
-                          <button
-                            ref={cancelConfirmRef}
-                            onClick={() => setApplyConfirm(false)}
-                            type="button"
+                          <Link
+                            className="btn"
+                            to={`/admin/projects/${projectId}`}
                           >
-                            取消
-                          </button>
+                            返回專案
+                          </Link>
                         </div>
+                      ) : null}
+                    </div>
+                  )}
+                  {applyConfirm ? (
+                    <div
+                      aria-labelledby="apply-confirm-title"
+                      className="tpl-card"
+                      role="alertdialog"
+                    >
+                      <p id="apply-confirm-title">
+                        一次新增 {selectedTemplates.length} 個項目到專案？
+                        套用後可在查核項目修改內容，目前無法刪除。
+                      </p>
+                      <div className="tpl-actions">
+                        <button
+                          ref={cancelConfirmRef}
+                          onClick={() => setApplyConfirm(false)}
+                          type="button"
+                        >
+                          取消
+                        </button>
+                        <button
+                          className="btn-primary"
+                          disabled={busy}
+                          onClick={() => void submitApply()}
+                          type="button"
+                        >
+                          確定套用
+                        </button>
                       </div>
-                    ) : (
-                      <button
-                        disabled={
-                          !hasSelection || busy || readOnly || itemsDenied
+                    </div>
+                  ) : (
+                    <button
+                      className="btn-primary"
+                      disabled={
+                        !hasSelection || busy || readOnly || itemsDenied
+                      }
+                      onClick={() => {
+                        if (mode === 'system' && templates.length > 1) {
+                          setApplyConfirm(true)
+                        } else {
+                          void submitApply()
                         }
-                        onClick={() => {
-                          if (mode === 'system' && templates.length > 1) {
-                            setApplyConfirm(true)
-                          } else {
-                            void submitApply()
-                          }
-                        }}
-                        type="button"
-                      >
-                        {busy ? '套用中…' : '套用至專案'}
-                      </button>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </section>
-        </div>
-      </main>
-    </div>
+                      }}
+                      type="button"
+                    >
+                      {busy ? '套用中…' : '套用至專案'}
+                    </button>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+    </section>
   )
 }

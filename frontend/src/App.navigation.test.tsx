@@ -452,7 +452,7 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(screen.getByText('示範工程乙')).toBeVisible()
     expect(screen.queryByText('只有現場的工程')).toBeNull()
     expect(screen.queryByText('新增專案')).toBeNull()
-    const links = screen.getAllByRole('link', { name: '進入專案' })
+    const links = screen.getAllByRole('link', { name: '開啟專案' })
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/admin/projects/project-a',
       '/admin/projects/project-b',
@@ -537,7 +537,7 @@ describe('出路與 404（#480）', () => {
     await signIn()
 
     await screen.findByRole('heading', { name: '我的專案' })
-    fireEvent.click(await screen.findByRole('link', { name: '進入專案' }))
+    fireEvent.click(await screen.findByRole('link', { name: '開啟專案' }))
 
     // 專案頁有頂端列：帳號名稱、專案、變更密碼、登出。
     const bar = await screen.findByRole('navigation', { name: '管理功能' })

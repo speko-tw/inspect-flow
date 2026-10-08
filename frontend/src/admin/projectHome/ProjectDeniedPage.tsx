@@ -10,7 +10,7 @@ export default function ProjectDeniedPage() {
     <section aria-labelledby="project-denied-heading">
       <h1 id="project-denied-heading">無權限</h1>
       <p role="alert">你沒有權限執行這項操作。</p>
-      <Link className="button-link" to={target}>
+      <Link className="btn" to={target}>
         返回{landingLabel(target)}
       </Link>
     </section>

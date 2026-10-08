@@ -356,13 +356,6 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
               <p>角色還沒儲存，要捨棄這次的修改嗎？</p>
               <div className="member-actions">
                 <button
-                  className="btn-danger"
-                  onClick={() => setEditing(null)}
-                  type="button"
-                >
-                  捨棄修改
-                </button>
-                <button
                   onClick={() =>
                     setEditing((current) =>
                       current
@@ -374,15 +367,22 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 >
                   繼續編輯
                 </button>
+                <button
+                  className="btn-danger"
+                  onClick={() => setEditing(null)}
+                  type="button"
+                >
+                  捨棄修改
+                </button>
               </div>
             </div>
           ) : (
             <div className="member-actions">
-              <button disabled={busy} type="submit">
-                儲存角色
-              </button>
               <button disabled={busy} onClick={cancelEdit} type="button">
                 取消
+              </button>
+              <button className="btn-primary" disabled={busy} type="submit">
+                儲存角色
               </button>
             </div>
           )}
@@ -509,6 +509,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
               />
             )}
             <button
+              className="btn-primary"
               disabled={
                 busy ||
                 !candidatesReady ||
@@ -584,20 +585,20 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   {alertFor('remove')}
                   <div className="member-actions">
                     <button
-                      className="btn-danger"
-                      disabled={busy}
-                      onClick={() => void confirmRemove()}
-                      type="button"
-                    >
-                      確認移出
-                    </button>
-                    <button
                       disabled={busy}
                       onClick={() => setRemoving(null)}
                       ref={cancelRemoveRef}
                       type="button"
                     >
                       取消
+                    </button>
+                    <button
+                      className="btn-danger"
+                      disabled={busy}
+                      onClick={() => void confirmRemove()}
+                      type="button"
+                    >
+                      確認移出
                     </button>
                   </div>
                 </div>

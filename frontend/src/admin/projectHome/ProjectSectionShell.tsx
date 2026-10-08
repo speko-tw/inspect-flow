@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink, useLocation } from 'react-router'
+import { NavLink, useLocation } from 'react-router'
+
+import { BackLink } from '../../layout/BackLink'
 
 const SECTIONS = [
   { id: 'home', label: '專案首頁', suffix: '' },
@@ -91,9 +93,7 @@ export default function ProjectSectionShell({
   return (
     <div className="project-home-layout">
       <header className="project-home-header">
-        <p>
-          <Link to="/admin/projects">回專案清單</Link>
-        </p>
+        <BackLink to="/admin/projects">回專案清單</BackLink>
         <h1>
           {project ? `${project.project_code}｜${project.name}` : '專案'}
         </h1>

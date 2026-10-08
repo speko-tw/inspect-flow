@@ -72,10 +72,10 @@ export default function MyProjectsPage() {
                 <p>我的角色：{project.role_names.join('、')}</p>
               )}
               <Link
-                className="button-link primary-action"
+                className="btn btn-primary"
                 to={`/admin/projects/${project.id}`}
               >
-                進入專案
+                開啟專案
               </Link>
             </article>
           ))}

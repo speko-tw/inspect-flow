@@ -498,7 +498,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
       is_admin: false,
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '已抄下，進入管理頁' }))
+    fireEvent.click(screen.getByRole('link', { name: '已抄下，進入管理頁' }))
     expect(
       await screen.findByRole('heading', { name: '管理頁' }),
     ).toBeInTheDocument()
@@ -512,7 +512,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     fillPassword('code-123', VALID_PASSWORD)
     await screen.findByRole('heading', { name: '新增使用者' })
 
-    fireEvent.click(screen.getByRole('button', { name: '略過，進入管理頁' }))
+    fireEvent.click(screen.getByRole('link', { name: '略過，進入管理頁' }))
     expect(
       await screen.findByRole('heading', { name: '管理頁' }),
     ).toBeInTheDocument()

@@ -396,6 +396,12 @@ export default function UsersPage({
                               取消
                             </button>
                             <button
+                              className={
+                                pendingAction.kind === 'deactivate' ||
+                                user.is_admin
+                                  ? 'btn-danger'
+                                  : 'btn-primary'
+                              }
                               disabled={busyUser === user.id}
                               onClick={() => void confirmAction()}
                               type="button"
@@ -537,9 +543,11 @@ function UserDetailsForm({
           value={nameEn}
         />
       </label>
-      <button type="submit">儲存資料</button>
       <button onClick={onCancel} type="button">
         取消
+      </button>
+      <button className="btn-primary" type="submit">
+        儲存資料
       </button>
     </form>
   )
@@ -631,9 +639,11 @@ function CompanyLinkForm({
           value={employeeNo}
         />
       </label>
-      <button type="submit">儲存公司連結</button>
       <button onClick={onCancel} type="button">
         取消
+      </button>
+      <button className="btn-primary" type="submit">
+        儲存公司連結
       </button>
     </form>
   )

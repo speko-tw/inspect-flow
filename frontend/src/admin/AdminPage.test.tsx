@@ -814,6 +814,15 @@ describe('admin user and company pages', () => {
     const row = await screen.findByRole('row', { name: /anna\.deng/ })
     fireEvent.click(within(row).getByRole('button', { name: '指派管理者' }))
     const confirmation = screen.getByRole('region', { name: '操作確認' })
+    // 確認與取消固定排成 [取消][確認]，只有最終確認是危險色（#500）。
+    const buttons = within(confirmation).getAllByRole('button')
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      '取消',
+      '確認',
+    ])
+    // 指派管理者是授予權限，確認用主要色；停用與收回才用危險色。
+    expect(buttons[1]).toHaveClass('btn-primary')
+    expect(buttons[0]).not.toHaveClass('btn-danger', 'btn-primary')
     expect(
       within(confirmation).getByRole('button', { name: '取消' }),
     ).toHaveFocus()
@@ -862,6 +871,10 @@ describe('admin user and company pages', () => {
     const assignment = screen.getByRole('region', { name: '操作確認' })
     expect(assignment).toHaveTextContent('anna.new')
     expect(assignment).toHaveTextContent('系統全部權限')
+    // 授予權限用主要色；立刻剝奪他人存取的動作才用危險色（#500）。
+    expect(
+      within(assignment).getByRole('button', { name: '確認' }),
+    ).toHaveClass('btn-primary')
     fireEvent.click(within(assignment).getByRole('button', { name: '取消' }))
     expect(
       fetchMock.mock.calls.some(
@@ -889,6 +902,12 @@ describe('admin user and company pages', () => {
     expect(screen.getByRole('region', { name: '操作確認' })).toHaveTextContent(
       'anna.new',
     )
+    expect(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    ).toHaveClass('btn-danger')
     const adminActionsBeforeCancel = fetchMock.mock.calls.filter(
       ([url, init]) =>
         String(url).endsWith('/users/user-1/admin') && init?.method === 'PUT',
@@ -928,6 +947,9 @@ describe('admin user and company pages', () => {
     const deactivation = screen.getByRole('region', { name: '操作確認' })
     expect(deactivation).toHaveTextContent('anna.new')
     expect(deactivation).toHaveTextContent('無法登入')
+    expect(
+      within(deactivation).getByRole('button', { name: '確認' }),
+    ).toHaveClass('btn-danger')
     fireEvent.click(within(deactivation).getByRole('button', { name: '取消' }))
     expect(
       fetchMock.mock.calls.some(
@@ -1314,7 +1336,14 @@ describe('admin user and company pages', () => {
     ).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('王小明（worker）'))
     expect(screen.getByLabelText('王小明（worker）')).toBeChecked()
-    fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
+    const deactivateCompany = screen.getByRole('button', {
+      name: '確認停用公司',
+    })
+    expect(deactivateCompany).toHaveClass('btn-danger')
+    expect(deactivateCompany.closest('section')).toHaveClass(
+      'inline-confirmation',
+    )
+    fireEvent.click(deactivateCompany)
     await waitFor(() => {
       expect(screen.getByText('停用', { selector: 'td' })).toBeInTheDocument()
     })

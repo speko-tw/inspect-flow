@@ -1,9 +1,13 @@
 /*
  * 全域基礎樣式（簡易版）。以元素選擇器為主，各頁不必加 class 就
  * 會自動整齊；少數需要區分的地方才用 class：
- *   - 按鈕：預設是次要（外框）；`type="submit"` 與 `.btn-primary`
- *     是主要；`.btn-danger` 是危險操作。按鈕依內容寬度、靠左排列；
- *     只有 `.auth-card` 內的按鈕是全寬。`.button-link` 讓連結長得像按鈕。
+ *   - 按鈕（#500）：`button` 與 `.btn` 共用同一個基底，預設是次要
+ *     （外框）。`.btn` 讓連結（`<Link className="btn">`）長得像按鈕；
+ *     `.btn-primary` 是主要（每個區塊最多一個，`type="submit"` 不會
+ *     自動變主要）；`.btn-danger` 只給不可復原的最終確認，觸發鈕用次要
+ *     樣式；`.btn-sm` 是表格內的小尺寸。按鈕依內容寬度、靠左排列；
+ *     只有 `.auth-card` 內的按鈕是全寬。確認與取消固定排成 [取消][確認]。
+ *   - 返回上一層：`.back-link`（BackLink 元件，‹ 加「返回X」）。
  *   - 版面：`.auth-page`／`.auth-card`（登入、變更密碼、首次設定）、
  *     `.app-header`（登入後各頁共用的頁首）、`.steps`（步驟列）。
  * 不引入 UI 套件與外部字型；中文字型以系統字型為後備。
@@ -212,8 +216,8 @@
 .field-error p {
   color: inherit;
 }
-.field-notice .button-link,
-.field-detail-error .button-link,
+.field-notice .btn,
+.field-detail-error .btn,
 .field-detail-error button {
   display: inline-flex;
   align-items: center;
@@ -226,11 +230,6 @@
   width: 100%;
   min-height: 44px;
   margin: 15px 0 6px;
-}
-.field-back {
-  display: inline-grid;
-  place-items: center;
-  min-height: 44px;
 }
 .field-detail-hero,
 .field-detail-item,
@@ -315,16 +314,7 @@
   min-height: 44px;
   margin: 12px 0;
 }
-.field-action-panel button.primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--on-primary);
-}
-.field-action-panel button.primary:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
-}
-.field-action-panel .button-link {
+.field-action-panel .btn {
   display: flex;
   width: 100%;
   min-height: 44px;
@@ -424,16 +414,11 @@
   margin: 0 auto;
 }
 
+/* 頁面內縮由外層的 main 提供（#500）：這裡不再自己加左右內距，
+ * 讓專案頁與其他管理頁的內容對齊同一條線。 */
 .project-home-header {
-  padding: var(--space-4);
+  padding: 0 0 var(--space-3);
   border-bottom: 1px solid var(--border);
-}
-
-.project-home-header p a {
-  display: inline-flex;
-  align-items: center;
-  /* 觸控目標至少 44px（#449 審查）。 */
-  min-height: 44px;
 }
 
 .project-home-header h1 {
@@ -444,7 +429,7 @@
   display: grid;
   grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
   gap: var(--space-5);
-  padding: var(--space-4);
+  padding: var(--space-4) 0;
 }
 
 .project-section-nav {
@@ -462,10 +447,8 @@
   text-decoration: none;
 }
 
-.project-section-nav a[aria-current='page'] {
+.project-section-nav a:hover {
   background: var(--surface-alt);
-  color: var(--primary);
-  font-weight: 700;
 }
 
 .project-section-nav a:focus-visible,
@@ -528,7 +511,7 @@
 @media (max-width: 640px) {
   .project-home-body {
     display: block;
-    padding: var(--space-3);
+    padding: var(--space-3) 0;
   }
 
   .project-section-sidebar {
@@ -538,13 +521,13 @@
   .project-section-menu-button {
     display: block;
     min-height: 44px;
-    margin: var(--space-3);
+    margin: var(--space-3) 0;
     padding: var(--space-2) var(--space-3);
   }
 
   .project-section-drawer:not([hidden]) {
     display: block;
-    margin: 0 var(--space-3) var(--space-3);
+    margin: 0 0 var(--space-3);
     padding: var(--space-2);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -755,9 +738,10 @@ legend {
   font-weight: 600;
 }
 
-/* ---- 按鈕：預設次要；submit 與 .btn-primary 為主要 ---- */
+/* ---- 按鈕：button 與 .btn（連結）共用基底，預設次要 ---- */
 
-button {
+button,
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -769,27 +753,32 @@ button {
   color: var(--text);
   font: inherit;
   font-weight: 600;
+  text-align: center;
+  text-decoration: none;
   cursor: pointer;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.btn:hover {
   background: var(--surface-alt);
   border-color: var(--text-muted);
+  text-decoration: none;
 }
 
-button[type='submit'],
+/* 主要按鈕要明講；submit 不再自動變主要（搜尋、篩選等 submit 是次要）。 */
 .btn-primary {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-primary);
 }
 
-button[type='submit']:hover:not(:disabled),
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
+  color: var(--on-primary);
 }
 
+/* 只給不可復原的最終確認；打開確認框的觸發鈕用次要樣式。 */
 .btn-danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -799,11 +788,40 @@ button[type='submit']:hover:not(:disabled),
 .btn-danger:hover:not(:disabled) {
   background: var(--danger-hover);
   border-color: var(--danger-hover);
+  color: var(--on-danger);
+}
+
+/* 表格內與緊湊處的小尺寸（表格內的 button 自動套用同尺寸）。 */
+.btn-sm {
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.875rem;
 }
 
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* 返回上一層：頁首的「‹ 返回X」，連結與切換面板的按鈕外觀相同。 */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  font-weight: 400;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.back-link:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
 }
 
 /* ---- 表格 ---- */
@@ -890,27 +908,9 @@ tbody tr.row-detail:nth-child(even) {
   align-self: flex-end;
 }
 
-/* 看起來像按鈕的連結（與 td button 同尺寸）。 */
-.button-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2rem;
-  padding: var(--space-1) var(--space-3);
+/* 表格內的連結按鈕（.btn.btn-sm）與 td button 同間距。 */
+td .btn {
   margin: 0 var(--space-1) var(--space-1) 0;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.button-link:hover {
-  background: var(--surface-alt);
-  border-color: var(--text-muted);
-  text-decoration: none;
 }
 
 /* ---- 訊息 ----
@@ -1075,15 +1075,23 @@ output {
   margin-bottom: var(--space-4);
 }
 
-.auth-card button {
+.auth-card button,
+.auth-card .btn {
   width: 100%;
 }
 
-.auth-card > button {
+.auth-card .back-link {
+  width: auto;
+  margin-bottom: var(--space-2);
+}
+
+.auth-card > button,
+.auth-card > .btn {
   margin-top: var(--space-2);
 }
 
-.auth-card [role='status'] ~ button {
+.auth-card [role='status'] ~ button,
+.auth-card [role='status'] ~ .btn {
   margin-top: var(--space-3);
 }
 
@@ -1216,11 +1224,21 @@ a.topbar-brand:hover {
   font-size: 0.875rem;
 }
 
+/* 導覽分頁永遠是單列：放不下時在這一列內橫向滑動，頁面本身不會出現
+ * 橫向捲動；目前所在的分頁由 AppHeader 捲進可見範圍（#500）。 */
 .app-header-nav {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-end;
   gap: 0 var(--space-1);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.app-header-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .app-header-tabs {
@@ -1233,10 +1251,54 @@ a.topbar-brand:hover {
   align-items: center;
   /* 觸控目標至少 44px（#449 審查）。 */
   min-height: 44px;
+  flex: none;
   padding: var(--space-1) var(--space-3);
   border-bottom: 3px solid transparent;
   color: var(--text);
   text-decoration: none;
+  white-space: nowrap;
+}
+
+/* 「還有更多」提示：導覽列可捲動、且還沒捲到那一端時，那一端用漸層淡出
+ * （AppHeader 依捲動位置設定 data-more-start／data-more-end）。 */
+.app-header [data-more-end] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.app-header [data-more-start] {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+
+.app-header [data-more-start][data-more-end] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent
+  );
+}
+
+/* 導覽列會裁切內容，焦點框畫在分頁內側才不會被切掉。 */
+.app-header-tab:focus-visible {
+  outline-offset: -3px;
 }
 
 a.app-header-tab:hover {
@@ -1255,6 +1317,20 @@ a.app-header-tab[aria-current='page'] {
   color: var(--text-muted);
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* 鎖定時要讀完整句說明：導覽列允許換行，灰色分頁自成一列可橫向滑動。 */
+.app-header-nav-locked {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.app-header-nav-locked .app-header-tabs {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 0 var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .app-header-locked-note {
@@ -1336,15 +1412,9 @@ a.app-header-tab[aria-current='page'] {
 
 /* ---- 範本管理新版詳情流程（#427） ---- */
 
+/* 外層的 main 已提供最大寬度與內距，這裡不再重複（#500）。 */
 .tpl-page {
-  max-width: var(--content-width);
-  margin: 0 auto;
-  padding: var(--space-5) var(--space-4);
-}
-
-.tpl-return-project {
-  display: inline-flex;
-  margin-bottom: var(--space-3);
+  min-width: 0;
 }
 
 .tpl-page-heading,
@@ -1473,12 +1543,6 @@ a.app-header-tab[aria-current='page'] {
   background: var(--surface-alt);
 }
 
-.tpl-tree-row[aria-current='true'] {
-  border-left-color: var(--primary);
-  background: var(--surface-alt);
-  font-weight: 700;
-}
-
 .tpl-item-row {
   color: var(--text-muted);
 }
@@ -1569,15 +1633,14 @@ a.app-header-tab[aria-current='page'] {
   font-size: 0.9rem;
 }
 
-.project-workspace-card .primary-action {
-  justify-content: center;
-  margin-top: var(--space-2);
+/* 卡片內的按鈕：一主一次，各占一整列。 */
+.project-workspace-card .btn {
   padding: var(--space-3) var(--space-4);
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--on-primary, #fff);
+}
+
+.project-workspace-card .btn-primary {
+  margin-top: var(--space-2);
   font-weight: 700;
-  text-decoration: none;
 }
 
 .tpl-project-items ul,
@@ -1803,10 +1866,6 @@ a.app-header-tab[aria-current='page'] {
   .project-workspace-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .tpl-page {
-    padding: var(--space-4) var(--space-3);
-  }
-
   .tpl-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1843,21 +1902,54 @@ a.app-header-tab[aria-current='page'] {
   }
 }
 
+/* ---- 目前選取（#500）----
+ * 專案側欄、計畫清單、範本樹共用同一種 selected 樣式：底色、左邊條、
+ * 粗體。由 aria-current 驅動（值是 "false" 不算選取）。 */
+
+.plan-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.plan-list button {
+  width: 100%;
+  justify-content: flex-start;
+  border-color: var(--border);
+  text-align: left;
+}
+
+.project-section-nav a,
+.plan-list button,
+.tpl-tree-row {
+  border-left: 3px solid transparent;
+}
+
+:is(
+    .project-section-nav a,
+    .plan-list button,
+    .tpl-tree-row
+  )[aria-current]:not([aria-current='false']) {
+  border-left-color: var(--primary);
+  background: var(--surface-alt);
+  font-weight: 700;
+}
+
 /*
  * ---- 觸控目標：窄螢幕一律 >= 44px（放在檔尾，蓋過前面各元件的較小值）----
- * 頂端導覽分頁（.app-header-tab）與專案頁的「回專案清單」
- * （.project-home-header p a）已在各自的規則裡不分寬度固定 44px，不重複列在這裡。
+ * 頂端導覽分頁（.app-header-tab）與返回連結（.back-link）已在各自的規則裡
+ * 不分寬度固定 44px，不重複列在這裡。
  */
 
 @media (max-width: 40rem) {
   button,
   input:not([type='checkbox'], [type='radio']),
   select,
-  .button-link,
+  .btn,
   td button,
   .app-header-account button,
-  .standalone-link,
-  .tpl-return-project,
   .tpl-tree-row,
   .tpl-detail-list button {
     min-height: var(--touch-target);
@@ -1868,11 +1960,6 @@ a.app-header-tab[aria-current='page'] {
   label:has(> input[type='radio']),
   .tpl-radio-option {
     min-height: var(--touch-target);
-  }
-
-  .standalone-link {
-    display: inline-flex;
-    align-items: center;
   }
 }
 

@@ -1,15 +1,22 @@
 import {
   fireEvent,
-  render,
+  render as renderWithoutRouter,
   screen,
   waitFor,
   within,
 } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ManagementApiError } from '../api'
 import { createMockPlanningClient } from './api.mock'
 import PlanningPage from './PlanningPage'
+
+// 無權限與找不到專案的出口是站內連結（`Link`），需要 Router。
+function render(ui: ReactElement) {
+  return renderWithoutRouter(ui, { wrapper: MemoryRouter })
+}
 
 // 操作成功後的提示要用 role="status" 讓報讀軟體讀出來（#487）。
 async function expectNotice(text: string) {
@@ -102,6 +109,9 @@ describe('planning management page', () => {
           name: '派出任務',
         }),
       )
+      expect(screen.getByRole('button', { name: '確認' })).toHaveClass(
+        'btn-primary',
+      )
       fireEvent.click(screen.getByRole('button', { name: '確認' }))
       await screen.findByRole('heading', {
         name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
@@ -182,9 +192,9 @@ describe('planning management page', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       '沒有這個專案的查核計畫讀取權限',
     )
-    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '返回專案清單' })).toHaveAttribute(
       'href',
-      '/',
+      '/admin/projects',
     )
   })
 
@@ -389,9 +399,37 @@ describe('planning management page', () => {
     expect(within(dialog).queryByRole('button', { name: '確認' })).toBeNull()
     const remove = within(dialog).getByRole('button', { name: '刪除' })
     expect(remove).toHaveClass('btn-danger')
+    // 確認與取消固定排成 [取消][確認]，取消一律叫「取消」（#500）。
+    expect(
+      within(dialog)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['取消', '刪除'])
+    expect(
+      within(dialog).getByRole('button', { name: '取消' }),
+    ).not.toHaveClass('btn-danger')
     fireEvent.click(remove)
     expect(await screen.findByText('尚未建立任務。')).toBeInTheDocument()
     await expectNotice('已刪除草稿任務。')
+  })
+
+  it('marks the selected plan in the plan list (#500)', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      target: { value: '選取樣式' },
+    })
+    const create = screen.getByRole('button', { name: '建立計畫' })
+    expect(create).toHaveClass('btn-primary')
+    fireEvent.click(create)
+    const plan = await screen.findByRole('button', {
+      name: '選取樣式（草稿）',
+    })
+    expect(plan.closest('ul')).toHaveClass('plan-list')
+    expect(plan).toHaveAttribute('aria-current', 'false')
+    fireEvent.click(plan)
+    expect(plan).toHaveAttribute('aria-current', 'true')
   })
 
   it('lists items to choose without per-template numbers (#487)', async () => {
@@ -645,9 +683,14 @@ describe('planning management page', () => {
         name: '刪除',
       }),
     )
-    fireEvent.click(
-      within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
+    // 刪除分區不可復原：最終確認用危險色；其他確認（封存、派出、恢復
+    // 等）維持主要色（#500）。
+    const confirmDelete = within(screen.getByRole('dialog')).getByRole(
+      'button',
+      { name: '確認刪除' },
     )
+    expect(confirmDelete).toHaveClass('btn-danger')
+    fireEvent.click(confirmDelete)
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '分區已有任務使用，無法刪除。',
     )

@@ -260,7 +260,11 @@ export default function ProjectsPage() {
           >
             保留編輯
           </button>
-          <button onClick={() => applyTransition(transition)} type="button">
+          <button
+            className="btn-danger"
+            onClick={() => applyTransition(transition)}
+            type="button"
+          >
             捨棄
           </button>
         </section>
@@ -289,16 +293,13 @@ export default function ProjectsPage() {
                 <h3>{project.name}</h3>
                 <p>{project.site_location}</p>
                 <Link
-                  className="button-link primary-action"
+                  className="btn btn-primary"
                   to={`/admin/projects/${project.id}/templates`}
                 >
                   套用範本
                 </Link>
-                <Link
-                  className="standalone-link"
-                  to={`/admin/projects/${project.id}`}
-                >
-                  查看專案
+                <Link className="btn" to={`/admin/projects/${project.id}`}>
+                  開啟專案
                 </Link>
               </article>
             ))}
@@ -355,7 +356,7 @@ export default function ProjectsPage() {
                     編輯
                   </button>
                   <Link
-                    className="button-link"
+                    className="btn btn-sm"
                     onClick={(event) => {
                       if (!hasUnsavedChanges) return
                       event.preventDefault()
@@ -369,7 +370,7 @@ export default function ProjectsPage() {
                     成員
                   </Link>
                   <Link
-                    className="button-link"
+                    className="btn btn-sm"
                     onClick={(event) => {
                       if (!hasUnsavedChanges) return
                       event.preventDefault()
@@ -471,9 +472,6 @@ export default function ProjectsPage() {
             value={form.planned_completion_date}
           />
         </label>
-        <button disabled={saving} type="submit">
-          {editing ? '儲存專案' : '新增專案'}
-        </button>
         {editing && (
           <button
             onClick={() => requestTransition({ kind: 'new' })}
@@ -482,6 +480,9 @@ export default function ProjectsPage() {
             取消
           </button>
         )}
+        <button className="btn-primary" disabled={saving} type="submit">
+          {editing ? '儲存專案' : '新增專案'}
+        </button>
       </form>
     </section>
   )

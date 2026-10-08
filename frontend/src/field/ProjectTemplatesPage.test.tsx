@@ -491,11 +491,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.getByRole('button', { name: '改選其他範本' }),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: '返回專案' }),
-    ).toBeInTheDocument()
+    // 頁首的 BackLink 與錯誤框裡的出口各一個。
+    expect(screen.getAllByRole('link', { name: '返回專案' })).toHaveLength(2)
     fireEvent.click(
-      within(screen.getByRole('alert')).getByRole('button', {
+      within(screen.getByRole('alert')).getByRole('link', {
         name: '返回專案',
       }),
     )
@@ -576,9 +575,7 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       '已將「管線查核」存入「土木工程 / 基礎」。',
     )
-    expect(
-      screen.getByRole('button', { name: '返回專案' }),
-    ).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: '返回專案' })).toHaveLength(2)
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/templates',
       expect.objectContaining({

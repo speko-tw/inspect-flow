@@ -397,7 +397,7 @@ describe('今日任務首頁', () => {
 
     const link = await screen.findByRole('link', { name: '前往我的專案' })
     expect(link).toHaveAttribute('href', '/admin/projects')
-    expect(link).toHaveClass('button-link')
+    expect(link).toHaveClass('btn')
   })
 
   it('沒有現場權限也沒有內業權限時，只有說明沒有入口（#480）', async () => {

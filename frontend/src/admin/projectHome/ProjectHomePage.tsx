@@ -139,7 +139,7 @@ export default function ProjectHomePage() {
                 <>
                   <p>{STEP_CONTENT[primary].label}</p>
                   <Link
-                    className="button-link"
+                    className="btn btn-primary"
                     to={`${base}${STEP_CONTENT[primary].suffix}`}
                   >
                     {STEP_CONTENT[primary].action}
@@ -148,7 +148,7 @@ export default function ProjectHomePage() {
               ) : (
                 <>
                   <p>目前沒有待處理的下一步。</p>
-                  <Link className="button-link" to={`${base}/planning`}>
+                  <Link className="btn" to={`${base}/planning`}>
                     查看計畫與任務
                   </Link>
                 </>

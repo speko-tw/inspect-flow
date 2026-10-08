@@ -151,13 +151,14 @@ export function TemplateItemEditor({
           </h2>
         </div>
         <button
+          aria-label="取消編輯"
           onClick={() => {
             if (dirty) setGuard(selected ?? { type: 'system', id: systemId })
             else resetMode()
           }}
           type="button"
         >
-          取消編輯
+          取消
         </button>
       </div>
       {alert && (
@@ -428,9 +429,6 @@ export function TemplateItemEditor({
             {requestError}
           </p>
         )}
-        <button className="btn-primary" disabled={readOnly} type="submit">
-          儲存查核項目
-        </button>
         <button
           onClick={() => {
             if (dirty) setGuard(selected ?? { type: 'system', id: systemId })
@@ -439,6 +437,9 @@ export function TemplateItemEditor({
           type="button"
         >
           取消
+        </button>
+        <button className="btn-primary" disabled={readOnly} type="submit">
+          儲存查核項目
         </button>
       </div>
     </form>
