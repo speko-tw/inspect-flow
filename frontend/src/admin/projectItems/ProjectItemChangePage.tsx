@@ -32,16 +32,40 @@ const ARCHIVED_PLAN_ERROR = [
   '取消封存後才能修改。',
 ].join('')
 
-const REINSPECTION_RESULT_TEXT = [
-  '已派出且未取消的任務中，受影響項目的舊內容已標記作廢並保留可查；',
-  '只有已有結果的項目，才另外作廢舊結果與照片，並列為待重查。',
+const NO_RESULT_TEXT = '任務尚未填寫結果，直接改用新標準'
+
+const HAS_RESULT_TEXT = [
+  '已填的舊結果與照片會保留供查詢，但不再算數，',
+  '任務需要重新查核',
 ].join('')
+
+// 依實際影響說明：後端結果只帶任務動作，是否已有結果用修改前的
+// 影響預覽（`hasResult`）判斷；草稿與已取消任務不屬於重查範圍。
+function reinspectionResultText(tasks: AffectedTask[]): string {
+  const relevant = tasks.filter(
+    (task) => task.status !== 'DRAFT' && task.status !== 'CANCELLED',
+  )
+  const withResult = relevant.some((task) => task.hasResult)
+  const withoutResult = relevant.some((task) => !task.hasResult)
+  if (withResult && withoutResult) {
+    return [
+      `已有結果的任務：${HAS_RESULT_TEXT}；`,
+      '尚未填寫結果的任務：直接改用新標準。',
+    ].join('')
+  }
+  if (withResult) return `${HAS_RESULT_TEXT}。`
+  if (withoutResult) return `${NO_RESULT_TEXT}。`
+  return ''
+}
 
 const DRAFT_ONLY_RESULT_TEXT = '草稿任務已直接更新為新內容，沒有重新查核。'
 
+// 依 IP-R04：PENDING／IN_PROGRESS 維持原狀、COMPLETED 退回進行中；
+// 只有已有結果的項目才作廢舊結果並待重查，待重查項目補查前不能完成。
 const REINSPECT_YES_HINT = [
-  '受影響項目的舊內容會保留可查；已有結果的項目會作廢舊結果與照片、',
-  '改列為待重查，已完成的任務會退回進行中，補查完成前不能再完成。',
+  '已派出的任務會改用新標準；若已填過結果，',
+  '舊結果與照片會保留供查詢，但不再算數，該項目要重新查核。',
+  '已完成的任務會退回進行中，有待重查項目的任務補查完成前不能再完成。',
 ].join('')
 
 const REINSPECT_NO_HINT =
@@ -446,7 +470,7 @@ export default function ProjectItemChangePage({
                         name="reinspect"
                         type="radio"
                       />
-                      要，作廢受影響項目並重新查核
+                      要，用新標準重新查核
                     </label>
                     <p className="tpl-hint" id="reinspect-yes-hint">
                       {REINSPECT_YES_HINT}
@@ -502,9 +526,10 @@ export default function ProjectItemChangePage({
                       ? DRAFT_ONLY_RESULT_TEXT
                       : '已更正文字，沒有重新查核。'}
               </p>
-              {result.reinspection_selected && (
-                <p>{REINSPECTION_RESULT_TEXT}</p>
-              )}
+              {result.reinspection_selected &&
+                reinspectionResultText(resultTasks) && (
+                  <p>{reinspectionResultText(resultTasks)}</p>
+                )}
               <h3>受影響任務的實際處理</h3>
               {result.affected_tasks.length ? (
                 <ul>
@@ -529,7 +554,11 @@ export default function ProjectItemChangePage({
                         {result.reinspection_selected &&
                           task.prior_status !== 'DRAFT' &&
                           task.prior_status !== 'CANCELLED' && (
-                            <>{'；此項目的舊內容已作廢並保留可查'}</>
+                            <>
+                              {before?.hasResult
+                                ? '；舊結果與照片保留供查詢，但不再算數'
+                                : '；尚未填寫結果，直接改用新標準'}
+                            </>
                           )}
                         {task.needs_reinspection && '；須重新查核'}
                         {before && before.preservedItemTitles.length > 0 && (
