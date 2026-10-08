@@ -83,6 +83,11 @@ def _read_busy_timeout():
 # configured value) so CI load cannot trip it, instead of comparing two
 # short wall-clock durations against each other.
 _SHORT_BUSY_TIMEOUT_CAP_SECONDS = 2.0
+# Locked and unknown accounts must wait about the same (AUT-R06). Both
+# paths cost one password check plus the busy timeout, so the gap between
+# their fastest requests stays near zero; the limit leaves room for noise.
+_PATH_TIMING_ROUNDS = 5
+_PATH_FASTEST_GAP_SECONDS = 0.25
 
 
 def _assert_returned_within_short_timeout(durations):
@@ -203,22 +208,31 @@ def test_locked_account_and_unknown_login_share_sqlite_timeout(
     with engine.connect() as holder:
         holder.exec_driver_sql("BEGIN IMMEDIATE")
         try:
+            # Interleave the two paths so a load spike hits both. Compare
+            # the fastest request of each path: a single spike is ignored.
             responses = []
-            durations = []
-            for login, password in (
-                (user.email, P),
-                ("missing-user", "wrong-password"),
-            ):
-                started = time.monotonic()
-                response = client.post(
-                    "/api/v1/auth/login",
-                    json={"login": login, "password": password},
-                )
-                durations.append(time.monotonic() - started)
-                responses.append(response)
+            per_path = ([], [])
+            for _ in range(_PATH_TIMING_ROUNDS):
+                for index, (login, password) in enumerate(
+                    ((user.email, P), ("missing-user", "wrong-password"))
+                ):
+                    started = time.monotonic()
+                    response = client.post(
+                        "/api/v1/auth/login",
+                        json={"login": login, "password": password},
+                    )
+                    per_path[index].append(time.monotonic() - started)
+                    responses.append(response)
             assert all(response.status_code == 503 for response in responses)
-            assert responses[0].content == responses[1].content
-            _assert_returned_within_short_timeout(durations)
+            assert all(
+                response.content == responses[0].content
+                for response in responses
+            )
+            _assert_returned_within_short_timeout(per_path[0] + per_path[1])
+            assert (
+                abs(min(per_path[0]) - min(per_path[1]))
+                < _PATH_FASTEST_GAP_SECONDS
+            )
             assert all(
                 response.headers["retry-after"] == "5"
                 for response in responses
