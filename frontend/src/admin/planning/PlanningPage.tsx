@@ -819,6 +819,7 @@ export default function PlanningPage({
                 {fieldErrorText('plan-name')}
                 {error && errorContext === 'plan-create' && (
                   <p
+                    className="tpl-field-error"
                     id="plan-name-error"
                     ref={errorMessage}
                     role="alert"
@@ -933,6 +934,7 @@ export default function PlanningPage({
                   {fieldErrorText('plan-rename')}
                   {error && errorContext === 'plan-rename' && (
                     <p
+                      className="tpl-field-error"
                       id="updated-plan-name-error"
                       ref={errorMessage}
                       role="alert"
