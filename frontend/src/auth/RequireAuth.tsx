@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
 import { fetchCurrentUser, type CurrentUser } from './api'
-import { forgetUser, rememberUser } from './sessionMemory'
+import { markSignedOut, rememberUser } from './sessionMemory'
 import { CurrentUserProvider } from './useCurrentUser'
 
 /**
@@ -96,9 +96,8 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
       value={{
         user: status.user,
         clear: () => {
-          // 主動登出：不留「上一位使用者」，下一位登入者不沿用任何
-          // 原頁面（#489）。
-          forgetUser()
+          // 主動登出：之後的登入一律去落點，不沿用任何原頁面（#489）。
+          markSignedOut()
           setStatus({ kind: 'loggedOut' })
         },
       }}

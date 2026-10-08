@@ -47,33 +47,52 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
   })
 })
 
+const NOBODY_BEFORE = { kind: 'none' } as const
+const SIGNED_OUT = { kind: 'signedOut' } as const
+const user = (userId: string) => ({ kind: 'user', userId }) as const
+
 describe('loginTarget：登入後要去哪（#489）', () => {
-  it('沒有上一位使用者時，沿用看得到的原頁面', () => {
-    expect(loginTarget(OFFICE, '/admin/projects/p1', null)).toBe(
+  it('沒有任何記錄時（深層連結、重新整理後），沿用看得到的原頁面', () => {
+    expect(loginTarget(OFFICE, '/admin/projects/p1', NOBODY_BEFORE)).toBe(
       '/admin/projects/p1',
     )
   })
 
   it('上一位是同一個人時，沿用原頁面', () => {
-    expect(loginTarget(FIELD, '/field/tasks/t1', 'u1')).toBe('/field/tasks/t1')
+    expect(loginTarget(FIELD, '/field/tasks/t1', user('u1'))).toBe(
+      '/field/tasks/t1',
+    )
   })
 
   it('上一位是別人時，一律去新帳號的落點', () => {
-    expect(loginTarget(FIELD, '/field/tasks/t1', 'someone-else')).toBe(
+    expect(loginTarget(FIELD, '/field/tasks/t1', user('someone'))).toBe(
       '/field',
     )
-    expect(loginTarget(OFFICE, '/field', 'someone-else')).toBe(
+    expect(loginTarget(OFFICE, '/field', user('someone'))).toBe(
       landingPath(OFFICE),
     )
   })
 
+  it('剛主動登出時一律去落點，連同一個人與看得到的原頁面也一樣', () => {
+    expect(loginTarget(FIELD, '/field/tasks/t1', SIGNED_OUT)).toBe('/field')
+    expect(loginTarget(OFFICE, '/admin/projects/p1', SIGNED_OUT)).toBe(
+      '/admin/projects',
+    )
+  })
+
   it('原頁面新帳號看不到時，去落點', () => {
-    expect(loginTarget(FIELD, '/admin/projects', 'u1')).toBe('/field')
-    expect(loginTarget(TEMPLATE, '/field', null)).toBe('/admin/templates')
+    expect(loginTarget(FIELD, '/admin/projects', user('u1'))).toBe('/field')
+    expect(loginTarget(TEMPLATE, '/field', NOBODY_BEFORE)).toBe(
+      '/admin/templates',
+    )
   })
 
   it('沒有原頁面或不安全的路徑，去落點', () => {
-    expect(loginTarget(OFFICE, undefined, null)).toBe('/admin/projects')
-    expect(loginTarget(OFFICE, '//evil.example', null)).toBe('/admin/projects')
+    expect(loginTarget(OFFICE, undefined, NOBODY_BEFORE)).toBe(
+      '/admin/projects',
+    )
+    expect(loginTarget(OFFICE, '//evil.example', NOBODY_BEFORE)).toBe(
+      '/admin/projects',
+    )
   })
 })

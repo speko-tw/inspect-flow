@@ -11,6 +11,7 @@
 
 import type { CurrentUser } from './api'
 import { isSafeRedirectPath } from './safeRedirect'
+import type { PreviousSession } from './sessionMemory'
 
 type AccessSummary = Pick<
   CurrentUser,
@@ -64,17 +65,23 @@ export function canVisit(user: AccessSummary, path: string): boolean {
 }
 
 /**
- * 登入成功後要去哪裡。只有「沒有上一位使用者，或上一位就是同一個
- * 人」（例如逾時重新登入），且原頁面是新帳號看得到的，才回原頁；
- * 其他一律依新帳號的落點（#489）。
+ * 登入成功後要去哪裡（#489）：
+ *
+ * - 剛主動登出：一律去落點，登出後按上一頁也不例外；
+ * - 有上一位使用者：是同一人（例如逾時重新登入）才可回原頁，換人去落點；
+ * - 沒有任何記錄（深層連結、重新整理後）：照 AUT-R29 回原頁。
+ *
+ * 回原頁一律還要原頁面是新帳號看得到的，否則去落點。
  */
 export function loginTarget(
   user: AccessSummary & Pick<CurrentUser, 'id'>,
   from: unknown,
-  previousUserId: string | null,
+  previous: PreviousSession,
 ): string {
-  const sameUser = previousUserId === null || previousUserId === user.id
-  if (sameUser && isSafeRedirectPath(from) && canVisit(user, from)) {
+  const mayReturn =
+    previous.kind === 'none' ||
+    (previous.kind === 'user' && previous.userId === user.id)
+  if (mayReturn && isSafeRedirectPath(from) && canVisit(user, from)) {
     return from
   }
   return landingPath(user)

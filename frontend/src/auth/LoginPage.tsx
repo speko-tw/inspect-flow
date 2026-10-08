@@ -8,7 +8,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { ApiError, login } from './api'
 import AuthLayout from './AuthLayout'
 import { loginTarget } from './landing'
-import { recallUser } from './sessionMemory'
+import { previousSession } from './sessionMemory'
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'
@@ -34,7 +34,7 @@ export default function LoginPage() {
       const user = await login(account, password)
 
       const state = location.state as RedirectState | null
-      navigate(loginTarget(user, state?.from, recallUser()), {
+      navigate(loginTarget(user, state?.from, previousSession()), {
         replace: true,
       })
     } catch (caught) {

@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useNavigate } from 'react-router'
 import {
   afterEach,
   beforeAll,
@@ -22,7 +22,7 @@ import {
 
 import App from './App'
 import type { CurrentUser } from './auth/api'
-import { forgetUser, rememberUser } from './auth/sessionMemory'
+import { rememberUser, resetSessionMemory } from './auth/sessionMemory'
 import {
   currentUserFixture,
   myProjectFixture,
@@ -206,6 +206,25 @@ function renderApp(path: string, state?: unknown) {
   )
 }
 
+function BackButton() {
+  const navigate = useNavigate()
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      測試用上一頁
+    </button>
+  )
+}
+
+/** 有多筆歷史的畫面，可用「測試用上一頁」模擬瀏覽器的上一頁。 */
+function renderAppWithHistory(entries: string[]) {
+  return render(
+    <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
+      <BackButton />
+      <App />
+    </MemoryRouter>,
+  )
+}
+
 async function signIn() {
   fireEvent.change(await screen.findByLabelText('帳號名稱或 Email'), {
     target: { value: 'boss' },
@@ -219,7 +238,7 @@ async function signIn() {
 // 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
 beforeAll(preloadLazyRoutes)
 
-beforeEach(forgetUser)
+beforeEach(resetSessionMemory)
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -705,16 +724,47 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     expect(screen.queryByRole('heading', { name: '我的專案' })).toBeNull()
   })
 
-  it('逾時後換了另一個人登入，不帶去上一位的頁面', async () => {
-    // 上一位（內業）停在專案頁時工作階段逾時；現場帳號重新登入。
-    rememberUser(OFFICE.id)
+  const OTHER_FIELD = { ...MEMBER, id: 'member-2' }
+  const scopeAll = () => screen.getByRole('button', { name: '全部' })
+
+  it('逾時後換了另一個人登入，即使原頁面看得到也不帶過去', async () => {
+    // 上一位（現場乙）停在「全部」任務時逾時；現場帳號甲重新登入。
+    // 兩人都看得到 `from`，所以只有換人判斷能把他擋下。
+    rememberUser(OTHER_FIELD.id)
     stubBackend(null, MEMBER)
-    renderApp('/login', { from: '/admin/projects' })
+    renderApp('/login', { from: '/field?scope=all' })
     await signIn()
 
-    expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
-    ).toBeVisible()
+    await screen.findByRole('heading', { name: '今日任務' })
+    expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('沒有任何記錄時（直接開深層連結），登入後回到原頁面', async () => {
+    stubBackend(null, MEMBER)
+    renderAppWithHistory(['/field?scope=all'])
+    await signIn()
+
+    await screen.findByRole('heading', { name: '今日任務' })
+    expect(scopeAll()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it.each([
+    ['另一個現場帳號', OTHER_FIELD],
+    ['同一個帳號', MEMBER],
+  ])('登出後按上一頁，再由%s登入，落在落點', async (_name, next) => {
+    // 歷史：「全部」任務 → 今日任務（登出時被取代成 /login）。
+    stubWithLogout(MEMBER, next)
+    renderAppWithHistory(['/field?scope=all', '/field'])
+    await screen.findByRole('heading', { name: '今日任務' })
+
+    await logOut()
+    fireEvent.click(screen.getByRole('button', { name: '測試用上一頁' }))
+    // 回到登出前的深層頁，被導去登入並帶著 from。
+    await screen.findByRole('heading', { name: '登入' })
+    await signIn()
+
+    await screen.findByRole('heading', { name: '今日任務' })
+    expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('逾時後同一個人重新登入，回到原本的頁面', async () => {
