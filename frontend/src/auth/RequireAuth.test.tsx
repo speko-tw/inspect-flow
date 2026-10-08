@@ -1,9 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 
 import App from '../App'
 import { preloadLazyRoutes } from '../testing/preloadRoutes'
+import { resetSessionMemory } from './sessionMemory'
 
 const ADMIN_USER = {
   id: 'u1',
@@ -53,6 +62,8 @@ function renderApp(initialEntries: string[]) {
     </MemoryRouter>,
   )
 }
+
+beforeEach(resetSessionMemory)
 
 // 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
 beforeAll(preloadLazyRoutes)

@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import LoginPage from './LoginPage'
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
+import { resetSessionMemory } from './sessionMemory'
 
 const CURRENT_USER = {
   id: 'u1',
@@ -18,6 +19,8 @@ const CURRENT_USER = {
   has_field_access: true,
   has_template_access: false,
 }
+
+beforeEach(resetSessionMemory)
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'

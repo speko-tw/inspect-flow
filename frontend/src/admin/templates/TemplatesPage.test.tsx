@@ -144,8 +144,13 @@ function templateFetch(
     writeConflict?: boolean
     deleteSuccess?: boolean
     validateWire?: boolean
-    categories?: Array<{ id: string; name: string }>
-    systems?: Array<{ id: string; category_id: string; name: string }>
+    categories?: Array<{ id: string; name: string; system_count?: number }>
+    systems?: Array<{
+      id: string
+      category_id: string
+      name: string
+      item_count?: number
+    }>
     items?: Array<Record<string, unknown>>
   } = {},
 ) {
@@ -1367,6 +1372,49 @@ describe('TemplatesPage', () => {
     )
     fireEvent.click(within(navigation).getByRole('button', { name: '護欄' }))
     expect(await screen.findByText('查核項目（1）')).toBeInTheDocument()
+  })
+
+  it('shows the count on every node, including ones never opened (#492)', async () => {
+    const drainageItem = {
+      ...sampleItem,
+      id: 'template-2',
+      system_id: secondSystem.id,
+      title: '排水查核',
+    }
+    templateFetch({
+      categories: [
+        { ...category, system_count: 2 },
+        { ...otherCategory, system_count: 0 },
+      ],
+      systems: [
+        { ...system, item_count: 1 },
+        { ...secondSystem, item_count: 2 },
+      ],
+      items: [sampleItem, drainageItem],
+    })
+    render(<TemplatesPage />)
+    await openSystem()
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+
+    // 「排水」還沒點開過，仍顯示列表回應帶的數量。
+    expect(
+      await within(navigation).findByText('2 個查核項目'),
+    ).toBeInTheDocument()
+    expect(within(navigation).getByText('1 個查核項目')).toBeInTheDocument()
+    expect(within(navigation).getByText('2 個系統')).toBeInTheDocument()
+    expect(within(navigation).getByText('0 個系統')).toBeInTheDocument()
+
+    // 點開「排水」載入實際項目後，數字改以實際資料為準。
+    fireEvent.click(within(navigation).getByRole('button', { name: '排水' }))
+    expect(
+      await within(navigation).findByRole('button', { name: '排水查核' }),
+    ).toBeInTheDocument()
+    expect(within(navigation).getAllByText('1 個查核項目')).toHaveLength(2)
+    expect(
+      within(navigation).queryByText('2 個查核項目'),
+    ).not.toBeInTheDocument()
   })
 
   it('guards a dirty draft when switching selection', async () => {

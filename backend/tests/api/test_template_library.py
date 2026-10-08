@@ -1224,3 +1224,45 @@ def test_duplicate_photo_requirement_rows_are_blocked_by_the_database(
     with pytest.raises(IntegrityError):
         db_session.flush()
     db_session.rollback()
+
+
+def test_category_and_system_lists_carry_child_counts(clients):
+    manager = clients["manager"]
+    category_id, system_id = _tree(manager)
+    empty_system = manager.post(
+        f"/api/v1/template-categories/{category_id}/systems",
+        json={"name": "Drainage"},
+    )
+    assert empty_system.status_code == 201, empty_system.text
+    assert empty_system.json()["item_count"] == 0
+    other_category = manager.post(
+        "/api/v1/template-categories", json={"name": "Empty"}
+    )
+    assert other_category.json()["system_count"] == 0
+    for index in range(2):
+        body = _template(system_id, title=f"Template {index}")
+        body["sequence"] = index + 1
+        assert manager.post("/api/v1/templates", json=body).status_code == 201
+
+    categories = {
+        row["name"]: row
+        for row in manager.get("/api/v1/template-categories").json()["items"]
+    }
+    assert categories["Civil"]["system_count"] == 2
+    assert categories["Empty"]["system_count"] == 0
+    systems = {
+        row["name"]: row
+        for row in manager.get(
+            f"/api/v1/template-categories/{category_id}/systems"
+        ).json()["items"]
+    }
+    assert systems["Walls"]["item_count"] == 2
+    assert systems["Drainage"]["item_count"] == 0
+    renamed = manager.patch(
+        f"/api/v1/template-systems/{system_id}", json={"name": "Walls 2"}
+    )
+    assert renamed.json()["item_count"] == 2
+    renamed = manager.patch(
+        f"/api/v1/template-categories/{category_id}", json={"name": "Civil 2"}
+    )
+    assert renamed.json()["system_count"] == 2
