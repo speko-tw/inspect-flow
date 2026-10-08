@@ -14,6 +14,7 @@ import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden, isNotFound } from '../http'
 import { BackButton, BackLink } from '../layout/BackLink'
+import { ConfirmBox } from '../ui/ConfirmBox'
 import { ProjectNotFound } from '../RouteNotFound'
 import { fetchMyProjects } from './api'
 import {
@@ -90,7 +91,6 @@ export default function ProjectTemplatesPage() {
   const [saveErrorCode, setSaveErrorCode] = useState('')
   const conflictActionRef = useRef<HTMLButtonElement>(null)
   const saveConflictActionRef = useRef<HTMLButtonElement>(null)
-  const cancelConfirmRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
@@ -100,10 +100,6 @@ export default function ProjectTemplatesPage() {
     query.addEventListener?.('change', update)
     return () => query.removeEventListener?.('change', update)
   }, [])
-
-  useEffect(() => {
-    if (applyConfirm) cancelConfirmRef.current?.focus()
-  }, [applyConfirm])
 
   const applyConflict =
     applyErrorCode === 'project_inspection_item.duplicate_name'
@@ -732,33 +728,19 @@ export default function ProjectTemplatesPage() {
                     </div>
                   )}
                   {applyConfirm ? (
-                    <div
-                      aria-labelledby="apply-confirm-title"
-                      className="tpl-card"
+                    <ConfirmBox
+                      busy={busy}
+                      confirmLabel="確定套用"
+                      label="套用確認"
+                      onCancel={() => setApplyConfirm(false)}
+                      onConfirm={() => void submitApply()}
                       role="alertdialog"
                     >
-                      <p id="apply-confirm-title">
+                      <p>
                         一次新增 {selectedTemplates.length} 個項目到專案？
                         套用後可在查核項目修改內容，目前無法刪除。
                       </p>
-                      <div className="tpl-actions">
-                        <button
-                          ref={cancelConfirmRef}
-                          onClick={() => setApplyConfirm(false)}
-                          type="button"
-                        >
-                          取消
-                        </button>
-                        <button
-                          className="btn-primary"
-                          disabled={busy}
-                          onClick={() => void submitApply()}
-                          type="button"
-                        >
-                          確定套用
-                        </button>
-                      </div>
-                    </div>
+                    </ConfirmBox>
                   ) : (
                     <button
                       className="btn-primary"

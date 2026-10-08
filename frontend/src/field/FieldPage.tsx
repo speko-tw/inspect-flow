@@ -6,6 +6,7 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import { isForbidden } from '../http'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import RouteNotFound from '../RouteNotFound'
+import { StatusBadge } from '../ui/Badge'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
 import type { TaskListChange } from './StartAction'
 import TaskDetail from './TaskDetail'
@@ -344,9 +345,7 @@ function TaskList({
                 >
                   <span className="field-card-top">
                     <strong>{taskTitle(task)}</strong>
-                    <span className="field-status">
-                      {task.status === 'PENDING' ? '待開始' : '進行中'}
-                    </span>
+                    <StatusBadge status={task.status} />
                   </span>
                   <span className="field-card-project">
                     {task.project_name}

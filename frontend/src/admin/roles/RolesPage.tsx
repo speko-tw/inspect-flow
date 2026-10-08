@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 
 import { ManagementApiError } from '../api'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import {
   createRole,
   deleteRole,
@@ -239,55 +240,34 @@ export default function RolesPage() {
       <h1 id="roles-heading">角色管理</h1>
       {error && <p role="alert">{error}</p>}
       {deleting && (
-        <section
-          aria-labelledby="delete-role-heading"
-          className="inline-confirmation"
+        <ConfirmBox
+          busy={saving}
+          key={deleting.id}
+          role="region"
+          confirmLabel="確認刪除角色"
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => void confirmDelete()}
+          title={`刪除「${deleting.name}」`}
+          variant="danger"
         >
-          <h2 id="delete-role-heading">刪除「{deleting.name}」</h2>
           <p>
             刪除{describeImpact(deleting)}
             ：這些成員身上的這個角色指派都會一併移除，無法復原。
           </p>
-          <button
-            disabled={saving}
-            onClick={() => setDeleting(null)}
-            type="button"
-          >
-            取消
-          </button>
-          <button
-            className="btn-danger"
-            disabled={saving}
-            onClick={() => void confirmDelete()}
-            type="button"
-          >
-            確認刪除角色
-          </button>
-        </section>
+        </ConfirmBox>
       )}
       {pending && (
-        <section
-          aria-labelledby="update-role-heading"
-          className="inline-confirmation"
+        <ConfirmBox
+          busy={saving}
+          key={pending.role.id}
+          role="region"
+          confirmLabel="確認修改角色"
+          onCancel={() => setPending(null)}
+          onConfirm={() => void confirmUpdate()}
+          title={`修改「${pending.role.name}」`}
         >
-          <h2 id="update-role-heading">修改「{pending.role.name}」</h2>
           <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
-          <button
-            disabled={saving}
-            onClick={() => setPending(null)}
-            type="button"
-          >
-            取消
-          </button>
-          <button
-            className="btn-primary"
-            disabled={saving}
-            onClick={() => void confirmUpdate()}
-            type="button"
-          >
-            確認修改角色
-          </button>
-        </section>
+        </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
       {!loading && roles.length === 0 ? <p>目前沒有角色。</p> : null}

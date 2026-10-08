@@ -138,7 +138,7 @@
   border-radius: 7px;
 }
 .field-task-card.progress {
-  border-left-color: var(--success-text);
+  border-left-color: var(--info-text);
 }
 .field-task-card:hover {
   border-color: var(--primary);
@@ -152,22 +152,6 @@
   font-size: 1.08rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
-}
-.field-status {
-  flex: none;
-  padding: 2px 7px;
-  border-radius: 4px;
-  color: var(--success-text);
-  background: var(--success-bg);
-  border: 1px solid var(--success-border);
-  font-size: 0.78rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.field-task-card:not(.progress) .field-status {
-  color: var(--text);
-  background: var(--surface-alt);
-  border-color: var(--border-strong);
 }
 .field-card-project {
   display: block;
@@ -244,16 +228,6 @@
 .field-detail-hero h1 {
   margin: 8px 0 3px;
 }
-.field-detail-hero .field-status.pending {
-  color: var(--warning-text);
-  background: var(--warning-bg);
-  border-color: var(--warning-border);
-}
-.field-detail-hero .field-status.cancelled {
-  color: var(--text-muted);
-  background: var(--surface-alt);
-  border-color: var(--border-strong);
-}
 .field-detail-project,
 .field-detail-item > p,
 .field-detail-point > p,
@@ -319,19 +293,6 @@
   width: 100%;
   min-height: 44px;
   margin: 12px 0;
-}
-.field-confirm {
-  margin: 12px 0;
-  padding: 12px;
-  background: var(--surface-alt);
-  border: 1px solid var(--primary);
-  border-radius: 6px;
-}
-.field-confirm h3 {
-  margin: 0 0 6px;
-}
-.field-confirm p {
-  margin: 0 0 8px;
 }
 .field-inline-error {
   font-weight: 600;
@@ -1347,8 +1308,7 @@ a.app-header-tab[aria-current='page'] {
   width: calc(100% - 2 * var(--space-4));
 }
 
-.temporary-password-result,
-.inline-confirmation {
+.temporary-password-result {
   margin-block: var(--space-4);
   padding: var(--space-4);
   border: 1px solid var(--border-strong);
@@ -1361,11 +1321,7 @@ a.app-header-tab[aria-current='page'] {
   margin-inline: auto;
 }
 
-.inline-confirmation button + button {
-  margin-inline-start: var(--space-2);
-}
-
-.users-table-scroll .inline-confirmation {
+.users-table-scroll .confirm-box {
   box-sizing: border-box;
   width: min(32rem, calc(100vw - 4rem));
   overflow-wrap: anywhere;
@@ -1393,21 +1349,129 @@ a.app-header-tab[aria-current='page'] {
   }
 }
 
-.planning-dialog {
+/* ---- 確認框（#501）：全站唯一的確認框容器 ---- */
+
+.confirm-box {
+  display: grid;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  margin-block: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* 會立刻剝奪他人存取或無法復原：紅邊；授予、恢復與一般確認：藍邊。 */
+.confirm-box-danger {
+  border-color: var(--danger);
+}
+
+.confirm-box-neutral {
+  border-color: var(--primary);
+}
+
+.confirm-box-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.confirm-box-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.confirm-box-body > * {
+  margin: 0;
+}
+
+.confirm-box-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 只有計畫頁要蓋住整頁（背景 inert），其餘確認框都是原地展開。 */
+.confirm-box-modal {
   position: fixed;
   z-index: 1000;
   top: 50%;
   left: 50%;
   width: min(32rem, calc(100vw - 2rem));
   max-height: calc(100vh - 2rem);
+  margin: 0;
+  padding: var(--space-5);
   overflow: auto;
-  padding: 1.5rem;
   transform: translate(-50%, -50%);
-  border: 1px solid currentColor;
-  border-radius: 0.5rem;
-  background: Canvas;
-  color: CanvasText;
+  border-width: 1px 1px 1px 4px;
+  background: var(--surface);
   box-shadow: 0 0 0 100vmax rgb(0 0 0 / 45%);
+}
+
+/* 只給輔助科技讀的文字（畫面上看不到）。 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- 狀態標籤（#501）：五種變體，狀態對照表在 ui/statusBadge.ts ---- */
+
+.badge {
+  display: inline-block;
+  flex: none;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.badge:not(:first-child) {
+  margin-inline-start: var(--space-2);
+}
+
+.badge-neutral {
+  border-color: var(--border-strong);
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.badge-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.badge-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.badge-danger {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.badge-info {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 /* ---- 範本管理新版詳情流程（#427） ---- */
@@ -1830,28 +1894,6 @@ a.app-header-tab[aria-current='page'] {
   border-radius: var(--radius-sm);
   background: var(--surface-alt);
   overflow-wrap: anywhere;
-}
-
-.tpl-inline-confirm,
-.tpl-guard {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-3) 0;
-  padding: var(--space-3);
-  border: 2px solid var(--danger);
-  border-radius: var(--radius-sm);
-  background: var(--surface-alt);
-}
-
-.tpl-guard {
-  border-color: var(--border-strong);
-}
-
-.tpl-guard p {
-  flex-basis: 100%;
-  margin: 0;
 }
 
 .tpl-mobile-back {

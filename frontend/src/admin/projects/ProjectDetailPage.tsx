@@ -9,6 +9,7 @@ import { Link, useParams } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { isForbidden } from '../../http'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { ManagementApiError, managementErrorMessage } from '../api'
 import MemberRoleFields, { RequiredMark } from './MemberRoleFields'
 import {
@@ -120,7 +121,6 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
 
   const [removing, setRemoving] = useState<ProjectMember | null>(null)
-  const cancelRemoveRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     let active = true
@@ -150,10 +150,6 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     // 只在進入修改畫面時移動焦點，不隨勾選變動。
     if (editingMemberId) editHeadingRef.current?.focus()
   }, [editingMemberId])
-
-  useEffect(() => {
-    if (removing) cancelRemoveRef.current?.focus()
-  }, [removing])
 
   function clearMessages() {
     setMessage(null)
@@ -352,30 +348,20 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           />
           {alertFor('edit')}
           {editing.confirmDiscard ? (
-            <div className="member-confirm" role="group" aria-label="捨棄確認">
+            <ConfirmBox
+              cancelLabel="繼續編輯"
+              confirmLabel="捨棄修改"
+              label="捨棄確認"
+              onCancel={() =>
+                setEditing((current) =>
+                  current ? { ...current, confirmDiscard: false } : current,
+                )
+              }
+              onConfirm={() => setEditing(null)}
+              variant="danger"
+            >
               <p>角色還沒儲存，要捨棄這次的修改嗎？</p>
-              <div className="member-actions">
-                <button
-                  onClick={() =>
-                    setEditing((current) =>
-                      current
-                        ? { ...current, confirmDiscard: false }
-                        : current,
-                    )
-                  }
-                  type="button"
-                >
-                  繼續編輯
-                </button>
-                <button
-                  className="btn-danger"
-                  onClick={() => setEditing(null)}
-                  type="button"
-                >
-                  捨棄修改
-                </button>
-              </div>
-            </div>
+            </ConfirmBox>
           ) : (
             <div className="member-actions">
               <button disabled={busy} onClick={cancelEdit} type="button">
@@ -572,36 +558,20 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 </p>
               </div>
               {removing?.id === member.id ? (
-                <div
-                  className="member-confirm"
-                  onKeyDown={escapeTo(() => setRemoving(null))}
-                  role="group"
-                  aria-label="移出確認"
+                <ConfirmBox
+                  busy={busy}
+                  confirmLabel="確認移出"
+                  label="移出確認"
+                  onCancel={() => setRemoving(null)}
+                  onConfirm={() => void confirmRemove()}
+                  variant="danger"
                 >
                   <p>
                     要把「{personLabel(member)}」移出專案嗎？
                     移出後這個人在本專案的角色會一併移除；不影響他在其他專案的角色。
                   </p>
                   {alertFor('remove')}
-                  <div className="member-actions">
-                    <button
-                      disabled={busy}
-                      onClick={() => setRemoving(null)}
-                      ref={cancelRemoveRef}
-                      type="button"
-                    >
-                      取消
-                    </button>
-                    <button
-                      className="btn-danger"
-                      disabled={busy}
-                      onClick={() => void confirmRemove()}
-                      type="button"
-                    >
-                      確認移出
-                    </button>
-                  </div>
-                </div>
+                </ConfirmBox>
               ) : (
                 <div className="member-card-actions">
                   <button

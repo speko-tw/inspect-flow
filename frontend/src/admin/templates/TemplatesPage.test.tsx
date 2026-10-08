@@ -1480,6 +1480,33 @@ describe('TemplatesPage', () => {
     )
   })
 
+  it('shows the unsaved-changes box in the detail pane on mobile', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 360,
+    })
+    templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '未儲存項目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '返回清單' }))
+    expect(document.querySelector('.tpl-layout')).toHaveAttribute(
+      'data-pane',
+      'list',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '土木工程' }))
+    expect(
+      screen.getByRole('alertdialog', { name: '尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    expect(document.querySelector('.tpl-layout')).toHaveAttribute(
+      'data-pane',
+      'detail',
+    )
+  })
+
   it('keeps tolerance validation and previews the selected unit', async () => {
     const fetchMock = templateFetch({ items: [] })
     render(<TemplatesPage />)

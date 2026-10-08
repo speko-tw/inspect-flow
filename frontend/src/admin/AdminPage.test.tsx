@@ -875,7 +875,27 @@ describe('admin user and company pages', () => {
     expect(
       within(assignment).getByRole('button', { name: '確認' }),
     ).toHaveClass('btn-primary')
-    fireEvent.click(within(assignment).getByRole('button', { name: '取消' }))
+    // 同一列換另一個動作時確認框重新掛載，焦點回到取消（#501 審查）。
+    expect(
+      within(assignment).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    ;(document.activeElement as HTMLElement).blur()
+    fireEvent.click(within(userRow).getByRole('button', { name: '停用' }))
+    const switched = screen.getByRole('region', { name: '操作確認' })
+    expect(switched).toHaveTextContent('停用 anna.new')
+    expect(
+      within(switched).getByRole('button', { name: '取消' }),
+    ).toHaveFocus()
+    fireEvent.click(within(switched).getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(userRow).getByRole('button', { name: '指派管理者' }),
+    )
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '取消' },
+      ),
+    )
     expect(
       fetchMock.mock.calls.some(
         ([url, init]) =>
@@ -1340,12 +1360,14 @@ describe('admin user and company pages', () => {
       name: '確認停用公司',
     })
     expect(deactivateCompany).toHaveClass('btn-danger')
-    expect(deactivateCompany.closest('section')).toHaveClass(
-      'inline-confirmation',
+    expect(deactivateCompany.closest('.confirm-box')).toHaveClass(
+      'confirm-box-danger',
     )
     fireEvent.click(deactivateCompany)
     await waitFor(() => {
-      expect(screen.getByText('停用', { selector: 'td' })).toBeInTheDocument()
+      expect(
+        screen.getByText('停用', { selector: '.badge' }),
+      ).toBeInTheDocument()
     })
   })
 

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router'
 
 import { isNotFound } from '../http'
 import { BackLink } from '../layout/BackLink'
+import { StatusBadge } from '../ui/Badge'
 import {
   fetchFieldTaskDetail,
   FieldApiError,
@@ -155,16 +156,7 @@ export default function TaskDetail({
       {task && (
         <>
           <section className="field-detail-hero">
-            <span className={`field-status ${task.status.toLowerCase()}`}>
-              {
-                {
-                  PENDING: '待開始',
-                  IN_PROGRESS: '進行中',
-                  COMPLETED: '已完成',
-                  CANCELLED: '已取消',
-                }[task.status]
-              }
-            </span>
+            <StatusBadge status={task.status} />
             <h1>{heading}</h1>
             <p className="field-detail-project">{task.project_name}</p>
             <div className="field-detail-meta">

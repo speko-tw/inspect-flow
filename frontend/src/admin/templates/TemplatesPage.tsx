@@ -9,8 +9,8 @@ import {
 
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { managementErrorMessage } from '../api'
-import { InlineConfirm } from './InlineConfirm'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
@@ -323,6 +323,8 @@ export default function TemplatesPage() {
     setError('')
     if (dirty) {
       setGuard(next)
+      // 手機一次只顯示一個窗格；確認框在詳情窗格，要切過去才看得到。
+      setMobilePane('detail')
       return
     }
     resetMode()
@@ -891,32 +893,27 @@ export default function TemplatesPage() {
   function renderDetail(): ReactNode {
     if (guard) {
       return (
-        <div
-          className="tpl-guard"
+        <ConfirmBox
+          key={`${guard.type}:${guard.id}`}
+          cancelLabel="保留編輯"
+          confirmLabel="捨棄變更"
+          label="尚未儲存的變更"
+          onCancel={() => setGuard(null)}
+          onConfirm={() => {
+            const next = guard
+            setGuard(null)
+            resetMode()
+            setSelected(next)
+            setMobilePane('detail')
+          }}
           role="alertdialog"
-          aria-label="尚未儲存的變更"
+          variant="danger"
         >
           <p>
             <strong>這裡有尚未儲存的變更。</strong>
             要保留編輯，還是捨棄變更？
           </p>
-          <button onClick={() => setGuard(null)} type="button">
-            保留編輯
-          </button>
-          <button
-            className="btn-danger"
-            onClick={() => {
-              const next = guard
-              setGuard(null)
-              resetMode()
-              setSelected(next)
-              setMobilePane('detail')
-            }}
-            type="button"
-          >
-            捨棄變更
-          </button>
-        </div>
+        </ConfirmBox>
       )
     }
     if (
@@ -990,12 +987,15 @@ export default function TemplatesPage() {
             )}
           </div>
           {mode === 'delete-category' && (
-            <InlineConfirm
+            <ConfirmBox
+              confirmLabel="確認刪除"
+              label="刪除確認"
               onCancel={() => setMode('view')}
               onConfirm={() => void confirmDelete()}
+              variant="danger"
             >
-              刪除「{selectedCategory.name}」？刪除後無法復原。
-            </InlineConfirm>
+              <p>刪除「{selectedCategory.name}」？刪除後無法復原。</p>
+            </ConfirmBox>
           )}
           <h3>
             系統（
@@ -1082,12 +1082,15 @@ export default function TemplatesPage() {
             )}
           </div>
           {mode === 'delete-system' && (
-            <InlineConfirm
+            <ConfirmBox
+              confirmLabel="確認刪除"
+              label="刪除確認"
               onCancel={() => setMode('view')}
               onConfirm={() => void confirmDelete()}
+              variant="danger"
             >
-              刪除「{selectedSystem.name}」？刪除後無法復原。
-            </InlineConfirm>
+              <p>刪除「{selectedSystem.name}」？刪除後無法復原。</p>
+            </ConfirmBox>
           )}
           <h3>查核項目（{systemItems.length}）</h3>
           {systemItems.length === 0 ? (
@@ -1150,12 +1153,15 @@ export default function TemplatesPage() {
             )}
           </div>
           {mode === 'delete-item' && (
-            <InlineConfirm
+            <ConfirmBox
+              confirmLabel="確認刪除"
+              label="刪除確認"
               onCancel={() => setMode('view')}
               onConfirm={() => void confirmDelete()}
+              variant="danger"
             >
-              刪除「{selectedItem.title}」？刪除後無法復原。
-            </InlineConfirm>
+              <p>刪除「{selectedItem.title}」？刪除後無法復原。</p>
+            </ConfirmBox>
           )}
           <h3>查核項次（{selectedItem.inspection_points.length}）</h3>
           {selectedItem.inspection_points.map((point, index) => (

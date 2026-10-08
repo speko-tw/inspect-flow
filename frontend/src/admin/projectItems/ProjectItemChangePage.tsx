@@ -3,6 +3,8 @@ import { useParams } from 'react-router'
 
 import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
 import RouteNotFound from '../../RouteNotFound'
+import { StatusBadge } from '../../ui/Badge'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
 import { numericSummary } from '../templates/templateEditorUtils'
@@ -14,14 +16,6 @@ import {
   type ProjectItemPreview,
   type TaskStatus,
 } from './api'
-
-const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  DRAFT: '草稿',
-  PENDING: '待開始',
-  IN_PROGRESS: '進行中',
-  COMPLETED: '已完成',
-  CANCELLED: '已取消',
-}
 
 const REINSPECTION_CHOICE_ERROR = [
   '任務使用狀況已更新，',
@@ -434,14 +428,19 @@ export default function ProjectItemChangePage({
           </form>
 
           {confirming && (
-            <section
-              aria-labelledby="reinspect-heading"
-              aria-modal="true"
+            <ConfirmBox
+              busy={busy}
+              confirmDisabled={readOnly || (needsChoice && reinspect === null)}
+              confirmLabel="確認儲存"
+              headingRef={dialogHeadingRef}
+              initialFocus="none"
+              onCancel={() => setConfirming(false)}
+              onConfirm={() =>
+                void save(draftOnly ? false : (reinspect ?? undefined))
+              }
               role="dialog"
+              title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
             >
-              <h2 id="reinspect-heading" ref={dialogHeadingRef} tabIndex={-1}>
-                {needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
-              </h2>
               {needsChoice && (
                 <>
                   <p>
@@ -474,7 +473,7 @@ export default function ProjectItemChangePage({
                   {preview.affectedTasks.map((task) => (
                     <li key={task.id}>
                       {task.name}（{task.planName}；{taskLocation(task)}；
-                      {TASK_STATUS_LABELS[task.status]}）
+                      <StatusBadge status={task.status} />）
                       {needsChoice && <>：{taskConsequence(task.status)}</>}
                     </li>
                   ))}
@@ -515,26 +514,7 @@ export default function ProjectItemChangePage({
                   </div>
                 </fieldset>
               )}
-              <button
-                disabled={busy}
-                onClick={() => setConfirming(false)}
-                type="button"
-              >
-                取消
-              </button>
-              <button
-                className="btn-primary"
-                disabled={
-                  readOnly || busy || (needsChoice && reinspect === null)
-                }
-                onClick={() =>
-                  void save(draftOnly ? false : (reinspect ?? undefined))
-                }
-                type="button"
-              >
-                確認儲存
-              </button>
-            </section>
+            </ConfirmBox>
           )}
 
           {result && (

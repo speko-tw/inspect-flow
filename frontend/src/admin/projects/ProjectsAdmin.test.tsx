@@ -647,7 +647,16 @@ describe('admin projects page', () => {
       target: { value: '未儲存的新工程' },
     })
     fireEvent.click(screen.getAllByRole('link', { name: '成員' })[1])
+    expect(
+      screen.getByRole('region', { name: '未儲存變更' }),
+    ).toBeInTheDocument()
+    // 被另一個轉換覆蓋時確認框重新掛載，焦點回到保留編輯（#501 審查）。
+    ;(document.activeElement as HTMLElement).blur()
+    fireEvent.click(screen.getAllByRole('link', { name: '成員' })[0])
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    expect(
+      within(prompt).getByRole('button', { name: '保留編輯' }),
+    ).toHaveFocus()
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
