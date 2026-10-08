@@ -102,6 +102,24 @@ describe('今日任務首頁', () => {
     expect(screen.queryByText(/範本/)).not.toBeInTheDocument()
   })
 
+  it('共用頁首：登入者與登出鈕在帳號區、系統名稱回落點、今日任務為目前頁（#494）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ items: [], next_cursor: null })),
+    )
+    renderPage({ user: { has_office_access: true } })
+    await screen.findByRole('heading', { name: '今日任務' })
+    const banner = screen.getByRole('banner')
+    expect(
+      within(banner).getByRole('link', { name: 'InspectFlow 工程查核系統' }),
+    ).toHaveAttribute('href', '/admin/projects')
+    expect(within(banner).getByText(/登入者：示範查核員/)).toBeVisible()
+    expect(within(banner).getByRole('button', { name: '登出' })).toBeVisible()
+    expect(
+      within(banner).getByRole('link', { name: '今日任務' }),
+    ).toHaveAttribute('aria-current', 'page')
+  })
+
   it('兩種權限都有的帳號可從現場頁回我的專案；純現場沒有（#480）', async () => {
     vi.stubGlobal(
       'fetch',

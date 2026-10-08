@@ -804,10 +804,7 @@ describe('admin project members', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       '已加入「林鮑伯（bob.lin）」。',
     )
-    expect(screen.getByRole('status')).toHaveClass(
-      'tpl-notice',
-      'tpl-notice-ok',
-    )
+    expect(screen.getByRole('status')).toHaveClass('notice-success')
     expect(screen.getByText('沒有可加入的使用者。')).toBeVisible()
     // 全部都加完後，角色勾選與加入按鈕一起隱藏，只剩說明（#487）。
     expect(within(addForm()).queryByRole('checkbox')).toBeNull()

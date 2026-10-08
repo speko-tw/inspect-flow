@@ -114,7 +114,7 @@ export default function ProjectHomePage() {
       <section aria-labelledby="project-home-heading">
         <h2 id="project-home-heading">專案首頁</h2>
         {duplicateWarning && !duplicateWarningDismissed && (
-          <div role="alert">
+          <div className="notice-warning" role="alert">
             <p>
               警告：專案代號「{duplicateWarning}」與其他專案重複，仍已儲存。
             </p>

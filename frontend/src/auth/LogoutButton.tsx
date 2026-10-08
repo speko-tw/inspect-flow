@@ -12,7 +12,15 @@ import { useCurrentUser } from './useCurrentUser'
 
 const ERROR_MESSAGE = '登出失敗，請再試一次。'
 
-export default function LogoutButton() {
+export default function LogoutButton({
+  onErrorChange,
+}: {
+  /**
+   * 給了就由呼叫端顯示錯誤（例如頁首把錯誤放在整列下方）；沒給就
+   * 顯示在按鈕旁。
+   */
+  onErrorChange?: (message: string | null) => void
+} = {}) {
   const { clear } = useCurrentUser()
   const [loggingOut, setLoggingOut] = useState(false)
   const [error, setError] = useState(false)
@@ -20,11 +28,13 @@ export default function LogoutButton() {
   async function handleClick() {
     setLoggingOut(true)
     setError(false)
+    onErrorChange?.(null)
     try {
       await logout()
       clear()
     } catch {
       setError(true)
+      onErrorChange?.(ERROR_MESSAGE)
       setLoggingOut(false)
     }
   }
@@ -34,7 +44,7 @@ export default function LogoutButton() {
       <button type="button" onClick={handleClick} disabled={loggingOut}>
         登出
       </button>
-      {error && <p role="alert">{ERROR_MESSAGE}</p>}
+      {error && !onErrorChange && <p role="alert">{ERROR_MESSAGE}</p>}
     </>
   )
 }

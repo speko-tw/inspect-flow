@@ -406,7 +406,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         </p>
       )}
       {notice && (
-        <p className="tpl-notice tpl-notice-ok" role="status">
+        <p className="notice-success" role="status">
           {notice}
         </p>
       )}

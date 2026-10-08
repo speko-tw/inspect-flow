@@ -436,17 +436,21 @@ export default function ProjectTemplatesPage() {
           </h1>
         )}
         {readOnly && (
-          <p role="status">
+          <p className="notice-info" role="status">
             {readDenied
               ? '範本讀取權限不足，無法載入其他內容。'
               : '目前只能瀏覽範本。'}
           </p>
         )}
-        {itemsDenied && <p role="status">目前只能瀏覽專案查核項目。</p>}
+        {itemsDenied && (
+          <p className="notice-info" role="status">
+            目前只能瀏覽專案查核項目。
+          </p>
+        )}
         {error && <p role="alert">{error}</p>}
         {notice && (
           <>
-            <p className="tpl-notice tpl-notice-ok" role="status">
+            <p className="notice-success" role="status">
               {notice}
             </p>
             {!isSaveMode && (
@@ -561,7 +565,7 @@ export default function ProjectTemplatesPage() {
                   </div>
                 )}
                 {saveError && (
-                  <div className="tpl-notice tpl-notice-error" role="alert">
+                  <div className="notice-error" role="alert">
                     <p>{saveError}</p>
                     <button
                       ref={saveConflictActionRef}
@@ -578,7 +582,11 @@ export default function ProjectTemplatesPage() {
                     </button>
                   </div>
                 )}
-                {saveDenied && <p role="status">目前只能瀏覽查核項目。</p>}
+                {saveDenied && (
+                  <p className="notice-info" role="status">
+                    目前只能瀏覽查核項目。
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -702,13 +710,12 @@ export default function ProjectTemplatesPage() {
                     )}
                     {templates.length === 0 &&
                       loadedSystems.has(selectedSystem.id) && (
-                        <p role="status">這個系統沒有查核項目。</p>
+                        <p className="notice-info" role="status">
+                          這個系統沒有查核項目。
+                        </p>
                       )}
                     {applyError && (
-                      <div
-                        className="tpl-notice tpl-notice-error"
-                        role="alert"
-                      >
+                      <div className="notice-error" role="alert">
                         <p>{applyError}</p>
                         {applyConflict ? (
                           <div className="tpl-actions">

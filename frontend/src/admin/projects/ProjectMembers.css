@@ -120,12 +120,6 @@
   font-weight: 600;
 }
 
-.member-field-error {
-  margin: var(--space-2) 0 0;
-  color: var(--danger);
-  font-weight: 600;
-}
-
 .member-add-form,
 .member-edit-view {
   max-width: 40rem;

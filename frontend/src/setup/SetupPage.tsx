@@ -188,7 +188,11 @@ export default function SetupPage() {
   if (step.kind === 'created') {
     return (
       <AuthLayout title="首次設定" progress={<StepIndicator current={4} />}>
-        <section aria-labelledby="temporary-password-heading" role="status">
+        <section
+          aria-labelledby="temporary-password-heading"
+          className="notice-success"
+          role="status"
+        >
           <h2 id="temporary-password-heading">使用者已新增</h2>
           <p>
             請將以下臨時密碼交給 {step.user.username}
