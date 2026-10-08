@@ -70,11 +70,11 @@
 
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
-| GET | `/api/v1/template-categories` | 列出工程類別 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
+| GET | `/api/v1/template-categories` | 列出工程類別；每筆含 `system_count`（該類別下的系統總數，不分頁、不受載入狀態影響），建立與改名的回應同樣帶此欄位 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | POST | `/api/v1/template-categories` | 建立工程類別 | Admin 或範本管理員 |
 | PATCH | `/api/v1/template-categories/{category_id}` | 改名工程類別 | Admin 或範本管理員 |
 | DELETE | `/api/v1/template-categories/{category_id}` | 刪除工程類別；其下仍有系統時回 409 `template.category_not_empty` | Admin 或範本管理員 |
-| GET | `/api/v1/template-categories/{category_id}/systems` | 列出類別下系統 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
+| GET | `/api/v1/template-categories/{category_id}/systems` | 列出類別下系統；每筆含 `item_count`（該系統下的查核項目總數），建立與改名的回應同樣帶此欄位 | Admin、範本管理員或具任一專案查核項目編輯權限者 |
 | POST | `/api/v1/template-categories/{category_id}/systems` | 建立系統 | Admin 或範本管理員 |
 | PATCH | `/api/v1/template-systems/{system_id}` | 改名系統 | Admin 或範本管理員 |
 | DELETE | `/api/v1/template-systems/{system_id}` | 刪除系統；其下仍有查核項目時回 409 `template.system_not_empty` | Admin 或範本管理員 |
@@ -190,3 +190,4 @@
 - 規格澄清（規格設計，非負責人裁定，#462）：範本與專案項目列表、範本詳情改以批次載入項次子資料，查詢數不隨項目數成長；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
 - 規格澄清（規格設計，非負責人裁定，#464）：TPL-R07、TPL-AC07 由「每個項次至少一筆照片需求」改為「恰好一筆，多送一筆回 422」，專案查核項目 PATCH 也套用同一套結構驗證（重複 `sequence` 等改回 422）。理由：依 KD-50 張數用 `min_count` 表達，UI 與快照表原本就是每個項次一筆，照正常操作的行為不變；多筆照片需求只能由直接呼叫 API 寫入，且會讓之後建立任務、恢復任務與修改被草稿任務使用的項目回 500。升級時既有的重複照片需求會合併為最大張數 — [#464](https://github.com/speko-tw/inspect-flow/issues/464)
 - 範圍變更（負責人指示，#482）：套用頁「存為範本」只依登入本體的 `has_template_access`（#484 已提供）顯示，缺值視為不允許，非管理者改讀 `GET /me/projects`；不新增端點。修改頁數值標準改用範本編輯器的格式化函式，修正區間形式顯示「未指定」；新增 TPL-AC23～TPL-AC24 — [#482 負責人指示](https://github.com/speko-tw/inspect-flow/issues/482#issuecomment-6013263921)
+- 規格澄清（規格設計，非負責人裁定，#492）：類別回應新增 `system_count`、系統回應新增 `item_count`，讓範本樹在子層尚未載入時也能顯示每個節點的數量。只新增回應欄位，既有欄位與行為不變 — [#492](https://github.com/speko-tw/inspect-flow/issues/492)。

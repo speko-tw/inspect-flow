@@ -14,7 +14,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -346,6 +346,41 @@ def _summary(row) -> dict:
     return data
 
 
+def _category_summaries(
+    db: Session, rows: Sequence[TemplateCategory]
+) -> list[dict]:
+    """Category rows with ``system_count``, counted in one grouped query."""
+    counts = {
+        owner: total
+        for owner, total in db.execute(
+            select(TemplateSystem.category_id, func.count())
+            .where(TemplateSystem.category_id.in_([row.id for row in rows]))
+            .group_by(TemplateSystem.category_id)
+        )
+    }
+    return [
+        {**_summary(row), "system_count": counts.get(row.id, 0)}
+        for row in rows
+    ]
+
+
+def _system_summaries(
+    db: Session, rows: Sequence[TemplateSystem]
+) -> list[dict]:
+    """System rows with ``item_count``, counted in one grouped query."""
+    counts = {
+        owner: total
+        for owner, total in db.execute(
+            select(TemplateItem.system_id, func.count())
+            .where(TemplateItem.system_id.in_([row.id for row in rows]))
+            .group_by(TemplateItem.system_id)
+        )
+    }
+    return [
+        {**_summary(row), "item_count": counts.get(row.id, 0)} for row in rows
+    ]
+
+
 def template_item_details(
     db: Session, items: Sequence[TemplateItem]
 ) -> list[dict]:
@@ -386,13 +421,15 @@ def list_categories(
         TemplateCategory,
         cursor=cursor,
         limit=limit,
-        serialize=_summary,
+        serialize_batch=lambda rows: _category_summaries(db, rows),
     )
 
 
 @category_router.post("", status_code=201, dependencies=[_write])
 def add_category(body: NameBody, db: Session = _db_dependency) -> dict:
-    return _summary(template_write_call(create_category, db, body.name))
+    return _category_summaries(
+        db, [template_write_call(create_category, db, body.name)]
+    )[0]
 
 
 @category_router.patch("/{category_id}", dependencies=[_write])
@@ -400,9 +437,9 @@ def patch_category(
     category_id: UUID, body: NameBody, db: Session = _db_dependency
 ) -> dict:
     category = _category(db, category_id)
-    return _summary(
-        template_write_call(rename_category, db, category, body.name)
-    )
+    return _category_summaries(
+        db, [template_write_call(rename_category, db, category, body.name)]
+    )[0]
 
 
 @category_router.delete(
@@ -437,7 +474,7 @@ def list_systems(
         cursor=cursor,
         limit=limit,
         filters=(TemplateSystem.category_id == category_id,),
-        serialize=_summary,
+        serialize_batch=lambda rows: _system_summaries(db, rows),
     )
 
 
@@ -448,9 +485,9 @@ def add_system(
     category_id: UUID, body: NameBody, db: Session = _db_dependency
 ) -> dict:
     category = _category(db, category_id)
-    return _summary(
-        template_write_call(create_system, db, category, body.name)
-    )
+    return _system_summaries(
+        db, [template_write_call(create_system, db, category, body.name)]
+    )[0]
 
 
 @system_router.patch("/{system_id}", dependencies=[_write])
@@ -458,7 +495,9 @@ def patch_system(
     system_id: UUID, body: NameBody, db: Session = _db_dependency
 ) -> dict:
     system = _system(db, system_id)
-    return _summary(template_write_call(rename_system, db, system, body.name))
+    return _system_summaries(
+        db, [template_write_call(rename_system, db, system, body.name)]
+    )[0]
 
 
 @system_router.delete("/{system_id}", status_code=204, dependencies=[_write])
