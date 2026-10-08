@@ -814,6 +814,52 @@ describe('planning management page', () => {
     })
   })
 
+  describe('submitting a zone twice (#490)', () => {
+    it('sends one request when Enter is pressed twice quickly', async () => {
+      const client = createMockPlanningClient()
+      const createZone = client.createZone.bind(client)
+      const spy = vi.fn(async (projectId: string, name: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        return createZone(projectId, name)
+      })
+      client.createZone = spy
+      render(
+        <PlanningPage client={client} initialProjectId="project-demo-1" />,
+      )
+      await screen.findByRole('heading', { name: '專案分區' })
+      fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+      const input = screen.getByLabelText(/分區名稱/)
+      fireEvent.change(input, { target: { value: '一樓' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      await expectNotice('已新增分區「一樓」。')
+      expect(spy).toHaveBeenCalledTimes(1)
+      // 第二次 Enter 不會變成「名稱重複」的錯誤。
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(screen.queryByLabelText(/分區名稱/)).toBeNull()
+    })
+
+    it('does not submit when Enter only confirms an IME choice', async () => {
+      const client = createMockPlanningClient()
+      const createZone = vi.spyOn(client, 'createZone')
+      render(
+        <PlanningPage client={client} initialProjectId="project-demo-1" />,
+      )
+      await screen.findByRole('heading', { name: '專案分區' })
+      fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+      const input = screen.getByLabelText(/分區名稱/)
+      fireEvent.change(input, { target: { value: '一樓' } })
+      fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+
+      expect(createZone).not.toHaveBeenCalled()
+      expect(screen.getByLabelText(/分區名稱/)).toHaveValue('一樓')
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await expectNotice('已新增分區「一樓」。')
+      expect(createZone).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('add forms reset after success (#490)', () => {
     it('clears and closes the zone form and shows a notice', async () => {
       const client = createMockPlanningClient()

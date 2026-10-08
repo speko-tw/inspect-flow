@@ -134,6 +134,9 @@ export default function PlanningPage({
   const errorMessage = useRef<HTMLParagraphElement | null>(null)
   const addZoneTrigger = useRef<HTMLButtonElement | null>(null)
   const renameZoneTrigger = useRef<HTMLButtonElement | null>(null)
+  // Enter 用 requestSubmit() 送出時不會被停用的按鈕擋住，所以連按兩次 Enter
+  // 會送出兩次；用 ref 擋掉進行中的第二次送出。
+  const inFlight = useRef(false)
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
   const previousAddingZone = useRef(false)
@@ -360,6 +363,8 @@ export default function PlanningPage({
     success: { area: NoticeArea; text: string },
     context?: string,
   ): Promise<boolean> {
+    if (inFlight.current) return false
+    inFlight.current = true
     setError('')
     setFieldError(null)
     setNotice(null)
@@ -391,6 +396,7 @@ export default function PlanningPage({
       setError(planningErrorMessage(caught))
       return false
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -578,6 +584,8 @@ export default function PlanningPage({
                             setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
+                            // 注音等輸入法選字時的 Enter 只是確認選字，不是送出。
+                            if (event.nativeEvent.isComposing) return
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
@@ -690,6 +698,8 @@ export default function PlanningPage({
                             setFieldError(null)
                           } else if (event.key === 'Enter') {
                             event.preventDefault()
+                            // 注音等輸入法選字時的 Enter 只是確認選字，不是送出。
+                            if (event.nativeEvent.isComposing) return
                             event.currentTarget.form?.requestSubmit()
                           }
                         }}
