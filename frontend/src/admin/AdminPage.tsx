@@ -318,8 +318,9 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
           <Route
             path="*"
             element={
-              // 只有確實存在、但這個帳號不能用的管理頁才顯示無權限；
-              // 其他不存在的網址一律顯示找不到（#493）。
+              // 使用者、公司、角色是管理者專用頁，其下任何路徑（例如
+              // /admin/users/abc）沿用無權限頁；其他不存在的網址一律
+              // 顯示找不到（#493）。
               restrictedPage ? (
                 <>
                   <h1>無權限</h1>
