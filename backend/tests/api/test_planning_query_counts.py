@@ -1,5 +1,6 @@
 """List endpoints batch-load children instead of querying per row (#462)."""
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -9,6 +10,9 @@ from app.models import (
     Project,
     ProjectInspectionItem,
     ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
     User,
 )
 from tests.api.query_count import select_count
@@ -168,36 +172,118 @@ def test_field_task_permission_select_count_does_not_grow_with_projects(
     dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
     assert dispatched.status_code == 200, dispatched.text
 
+    inspect_role = db_session.scalar(
+        select(Role).where(Role.name == "API field inspector")
+    )
+    assert inspect_role is not None
+    no_inspect_role = Role(
+        name="Query count without inspection",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+        permission_codes=[RolePermission(code="inspection_plan.read")],
+    )
+    db_session.add(no_inspect_role)
+    db_session.flush()
+
+    # Project A has two roles: X lacks inspect, while Y grants it.
+    member_a = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == world["project"].id,
+            ProjectMember.user_id == world["field_user"].id,
+        )
+    )
+    assert member_a is not None
+    member_a.role_assignments.append(
+        ProjectMemberRole(role_id=no_inspect_role.id)
+    )
+
+    # Project B is a member project with a dispatched Task, but only role X.
+    project_b = _create_permission_test_project(
+        world,
+        db_session,
+        project_code="PERMISSION-COUNT-NEGATIVE",
+        role_id=no_inspect_role.id,
+    )
+    task_b_id = project_b["task_id"]
+
     url = "/api/v1/field/inspection-tasks"
     params = {"assigned_to_me": "false", "limit": 10}
     small, small_items = select_count(world["field"], url, **params)
     assert small_items == 1
 
-    user_id = world["field_user"].id
-    for sequence in range(8):
-        project = Project(
-            project_code=f"PERMISSION-COUNT-{sequence}",
-            name=f"查詢次數專案 {sequence}",
-            client_name="示範業主",
-            site_location="示範工地",
-            created_by=world["admin_user"].id,
-            updated_by=world["admin_user"].id,
-        )
-        db_session.add(project)
-        db_session.flush()
-        db_session.add(
-            ProjectMember(
-                project_id=project.id,
-                user_id=user_id,
-                created_by=world["admin_user"].id,
-                updated_by=world["admin_user"].id,
+    visible = world["field"].get(url, params=params)
+    assert visible.status_code == 200, visible.text
+    assert task_id in {item["id"] for item in visible.json()["items"]}
+    assert task_b_id not in {item["id"] for item in visible.json()["items"]}
+    denied = world["field"].get(
+        url, params={**params, "project_id": project_b["project_id"]}
+    )
+    assert denied.status_code == 403, denied.text
+
+    counts = [(small, small_items)]
+    for target_projects in (5, 9):
+        current_projects = counts[-1][1]
+        for index in range(current_projects, target_projects):
+            _create_permission_test_project(
+                world,
+                db_session,
+                project_code=f"PERMISSION-COUNT-{index}",
+                role_id=inspect_role.id,
             )
-        )
+        count, visible_tasks = select_count(world["field"], url, **params)
+        assert visible_tasks == target_projects
+        counts.append((count, visible_tasks))
+    assert [items for _, items in counts] == [1, 5, 9]
+    assert len({count for count, _ in counts}) == 1
+
+
+def _create_permission_test_project(
+    world, db_session, *, project_code, role_id
+):
+    admin = world["admin"]
+    creator = world["admin_user"]
+    project = Project(
+        project_code=project_code,
+        name=f"{project_code} project",
+        client_name="示範業主",
+        site_location="示範工地",
+        created_by=creator.id,
+        updated_by=creator.id,
+    )
+    db_session.add(project)
+    db_session.flush()
+    member = ProjectMember(
+        project_id=project.id,
+        user_id=world["field_user"].id,
+        created_by=creator.id,
+        updated_by=creator.id,
+        role_assignments=[ProjectMemberRole(role_id=role_id)],
+    )
+    item = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=1,
+        title="查核項目",
+        instruction="確認項目",
+        source_template_name="測試範本",
+        applied_at=creator.created_at,
+        created_by=creator.id,
+        updated_by=creator.id,
+    )
+    db_session.add_all([member, item])
     db_session.commit()
 
-    large, large_items = select_count(world["field"], url, **params)
-    assert large_items == 1
-    assert large == small
+    base = f"/api/v1/projects/{project.id}"
+    plan = admin.post(f"{base}/inspection-plans", json={"name": "測試計畫"})
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(item.id)]},
+    )
+    assert task.status_code == 201, task.text
+    task_id = task.json()["id"]
+    dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+    return {"project_id": str(project.id), "task_id": task_id}
 
 
 def test_assignee_query_count_and_cursor_page_do_not_grow_with_members(
@@ -207,35 +293,74 @@ def test_assignee_query_count_and_cursor_page_do_not_grow_with_members(
     small, small_items = select_count(world["admin"], url, limit=2)
     assert small_items == 2
 
+    inspect_role = db_session.scalar(
+        select(Role).where(Role.name == "API field inspector")
+    )
+    assert inspect_role is not None
+    added_users = []
     for sequence in range(8):
         person = create_root_user_with_company(db_session, f"PQ{sequence:02}")
-        db_session.add(
-            ProjectMember(
-                project_id=world["project"].id,
-                user_id=person.id,
-                created_by=world["admin_user"].id,
-                updated_by=world["admin_user"].id,
-            )
+        member = ProjectMember(
+            project_id=world["project"].id,
+            user_id=person.id,
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
         )
+        if sequence % 2 == 0:
+            member.role_assignments.append(
+                ProjectMemberRole(role_id=inspect_role.id)
+            )
+        db_session.add(member)
+        added_users.append(person)
+
+    # Interleave eligible and ineligible users in database ordering.
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    eligible = [
+        world["field_user"],
+        added_users[0],
+        world["field_user_two"],
+        added_users[2],
+        world["field_reader_user"],
+        added_users[4],
+        added_users[6],
+    ]
+    ineligible = [
+        added_users[1],
+        added_users[3],
+        added_users[5],
+        added_users[7],
+    ]
+    for index, person in enumerate(eligible):
+        person.created_at = timestamp + timedelta(minutes=index * 2)
+    for index, person in enumerate(ineligible):
+        person.created_at = timestamp + timedelta(minutes=index * 2 + 1)
     db_session.commit()
 
     large, large_items = select_count(world["admin"], url, limit=2)
     assert large_items == 2
     assert large == small
 
-    first = world["admin"].get(url, params={"limit": 2})
-    assert first.status_code == 200, first.text
-    assert len(first.json()["items"]) == 2
-    assert first.json()["next_cursor"]
-    second = world["admin"].get(
-        url,
-        params={"limit": 2, "cursor": first.json()["next_cursor"]},
-    )
-    assert second.status_code == 200, second.text
-    pages = first.json()["items"] + second.json()["items"]
+    pages = []
+    cursor = None
+    while True:
+        params = {"limit": 2}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = world["admin"].get(url, params=params)
+        assert response.status_code == 200, response.text
+        pages.extend(response.json()["items"])
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
     candidate_ids = {person["id"] for person in pages}
-    assert len(pages) == 3
-    assert len(candidate_ids) == 3
+    expected_ids = {
+        str(world[key].id)
+        for key in ("field_user", "field_user_two", "field_reader_user")
+    }
+    expected_ids.update(str(person.id) for person in added_users[::2])
+    assert len(pages) == len(expected_ids) == 7
+    assert candidate_ids == expected_ids
+    assert len(candidate_ids) == len(pages)
     expected_order = [
         str(person.id)
         for person in db_session.scalars(
@@ -249,4 +374,3 @@ def test_assignee_query_count_and_cursor_page_do_not_grow_with_members(
     assert str(world["field_user_two"].id) in candidate_ids
     assert str(world["plain_user"].id) not in candidate_ids
     assert str(world["admin_user"].id) not in candidate_ids
-    assert second.json()["next_cursor"] is None
