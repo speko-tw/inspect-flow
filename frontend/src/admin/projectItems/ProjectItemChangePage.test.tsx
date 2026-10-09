@@ -523,6 +523,22 @@ describe('ProjectItemChangePage numeric standard display (#482)', () => {
     )
     expect(line).toHaveTextContent('數值標準：≥ 5 %')
   })
+
+  it('shows a clear label when no standard is set', async () => {
+    const api = apiWith({
+      loadPreview: vi.fn(async () => ({
+        ...structuredClone(preview),
+        item: {
+          ...preview.item,
+          inspection_points: [
+            { ...point, text_standard: null, numeric_standard: null },
+          ],
+        },
+      })),
+    })
+    renderPage(api)
+    expect(await screen.findByText('標準未設定')).toBeInTheDocument()
+  })
 })
 
 describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {

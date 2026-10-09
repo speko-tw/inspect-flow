@@ -9,6 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
+import type { TemplateItem } from '../admin/templates/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
 import { holdRequests as holdFetch } from '../testing/submitGuard'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
@@ -41,7 +42,7 @@ const PROJECT_ITEM: ProjectInspectionItem = {
   applied_at: '2026-10-04T01:00:00Z',
 }
 
-const TEMPLATE = {
+const TEMPLATE: TemplateItem = {
   id: 'template-1',
   system_id: 'system-1',
   sequence: 1,
@@ -83,7 +84,7 @@ function mockApi(
   options: {
     applyResponse?: Response
     saveResponse?: Response
-    templates?: (typeof TEMPLATE)[]
+    templates?: TemplateItem[]
     projectItems?: ProjectInspectionItem[]
     canSave?: boolean
     denyCategories?: boolean
@@ -344,6 +345,17 @@ describe('專案範本套用與存為範本（#429）', () => {
         body: JSON.stringify({ template_id: 'template-1' }),
       }),
     )
+  })
+
+  it('預覽尚未設定標準的項次時顯示白話提示', async () => {
+    const item = structuredClone(TEMPLATE)
+    item.inspection_points[0].numeric_standard = null
+    item.inspection_points[0].text_standard = null
+    mockApi({ templates: [item] })
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    expect(screen.getByText('標準未設定')).toBeInTheDocument()
   })
 
   it('整個系統切換後從樹選單一項目，只送出該範本 ID', async () => {
