@@ -392,14 +392,30 @@ describe('admin user and company pages', () => {
   })
 
   it('searches users and loads the next cursor page', async () => {
-    const rows = Array.from({ length: 51 }, (_, index) => ({
+    const rows = [0, 50].map((index) => ({
       ...regularUser,
       id: `paging-${index}`,
       username: `paging.user.${index}`,
       email: `paging.${index}@demo.example`,
       name_zh: `人員${index}`,
     }))
-    managementFetch({ userRows: rows })
+    const fetchMock = managementFetch({ userRows: rows })
+    const pagingFetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), 'http://testserver')
+        if (url.pathname === '/api/v1/users' && !init?.method) {
+          const query = url.searchParams.get('q') ?? ''
+          const matches = rows.filter((row) => row.name_zh.includes(query))
+          const cursor = url.searchParams.get('cursor')
+          return Response.json({
+            items: cursor ? matches.slice(1) : matches.slice(0, 1),
+            next_cursor: !cursor && matches.length > 1 ? '1' : null,
+          })
+        }
+        return fetchMock(input, init)
+      },
+    )
+    vi.stubGlobal('fetch', pagingFetch)
     renderAdmin()
 
     expect(await screen.findByText('paging.user.0')).toBeInTheDocument()
@@ -418,6 +434,16 @@ describe('admin user and company pages', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('paging.user.50')).toBeInTheDocument()
+    expect(
+      pagingFetch.mock.calls.some(([input]) => {
+        const url = new URL(String(input), 'http://testserver')
+        return (
+          url.pathname === '/api/v1/users' &&
+          url.searchParams.get('q') === '人員' &&
+          url.searchParams.get('cursor') === '1'
+        )
+      }),
+    ).toBe(true)
   })
 
   it('reloads users when searching the same query repeatedly', async () => {
@@ -1354,8 +1380,15 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByText('還有 1 位啟用中的人員'),
     ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '確認停用公司' }),
+      ).toBeEnabled()
+    })
     fireEvent.click(screen.getByLabelText('王小明（worker）'))
-    expect(screen.getByLabelText('王小明（worker）')).toBeChecked()
+    await waitFor(() => {
+      expect(screen.getByLabelText('王小明（worker）')).toBeChecked()
+    })
     const deactivateCompany = screen.getByRole('button', {
       name: '確認停用公司',
     })
