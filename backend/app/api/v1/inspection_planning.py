@@ -188,9 +188,7 @@ def _is_project_member(
     )
 
 
-def _resource_permission(
-    resource_type: str, permission: str, *, hide_nonmember: bool = False
-):
+def _resource_permission(resource_type: str, permission: str):
     def check(
         request: Request,
         db: Session = Depends(get_db),  # noqa: B008
@@ -208,14 +206,14 @@ def _resource_permission(
             raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         if user.is_admin:
             return user
+        if not _is_project_member(
+            db, user_id=user.id, project_id=resource.project_id
+        ):
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         permissions = effective_permissions(
             db, user_id=user.id, project_id=resource.project_id
         )
         if permission not in permissions:
-            if hide_nonmember and not _is_project_member(
-                db, user_id=user.id, project_id=resource.project_id
-            ):
-                raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -716,11 +714,7 @@ def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
     "/inspection-plans/{plan_id}",
     dependencies=[
         Depends(require_login_access),
-        Depends(
-            _resource_permission(
-                "plan", "inspection_plan.read", hide_nonmember=True
-            )
-        ),
+        Depends(_resource_permission("plan", "inspection_plan.read")),
     ],
 )
 def get_plan(plan_id: UUID, db: Session = _db_dependency):
@@ -770,11 +764,7 @@ def add_task(
     "/inspection-plans/{plan_id}/tasks",
     dependencies=[
         Depends(require_login_access),
-        Depends(
-            _resource_permission(
-                "plan", "inspection_plan.read", hide_nonmember=True
-            )
-        ),
+        Depends(_resource_permission("plan", "inspection_plan.read")),
     ],
 )
 def plan_tasks(
@@ -1204,7 +1194,10 @@ def get_task(task_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-plans/{plan_id}:archive",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.archive")),
+    ],
 )
 def archive(plan_id: UUID, db: Session = _db_dependency):
     plan = _one_plan(db, plan_id)
@@ -1215,7 +1208,10 @@ def archive(plan_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-plans/{plan_id}:unarchive",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.unarchive")),
+    ],
 )
 def unarchive(plan_id: UUID, db: Session = _db_dependency):
     plan = _one_plan(db, plan_id)

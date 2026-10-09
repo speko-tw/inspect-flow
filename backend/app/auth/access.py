@@ -139,9 +139,8 @@ def _declaration_of(
 
 def _parse_uuid(raw: object) -> uuid.UUID | None:
     """Parse a path-parameter value as a UUID, or ``None`` if it is
-    missing or not a valid UUID -- AUT-R19/AUT-R21's "路徑參數不是合法
-    UUID 時 fail closed" (a deliberate, reviewable design choice
-    since the spec does not rule on this directly).
+    missing or invalid. This helper does not choose an HTTP response;
+    callers map parse failures to their route's error contract.
     """
     if not isinstance(raw, str):
         return None
