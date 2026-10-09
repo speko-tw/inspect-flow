@@ -1,4 +1,11 @@
-import { createContext, useContext, useRef, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import { useLocation } from 'react-router'
 
 import { getWorkflowSummary, type WorkflowSummary } from './api'
@@ -43,13 +50,9 @@ export function WorkflowSummaryProvider({
 function WorkflowSummaryCache({ children }: { children: ReactNode }) {
   const cache = useRef<CachedSummary | null>(null)
 
-  function loadHomeSummary(projectId: string) {
+  const loadHomeSummary = useCallback((projectId: string) => {
     const existing = cache.current
-    if (
-      existing?.projectId === projectId &&
-      (existing.settledAt === null ||
-        Date.now() - existing.settledAt <= MAX_AGE_MS)
-    ) {
+    if (existing?.projectId === projectId && existing.settledAt === null) {
       return existing.promise
     }
 
@@ -68,9 +71,9 @@ function WorkflowSummaryCache({ children }: { children: ReactNode }) {
       },
     )
     return entry.promise
-  }
+  }, [])
 
-  function loadSectionSummary(projectId: string) {
+  const loadSectionSummary = useCallback((projectId: string) => {
     const existing = cache.current
     if (existing?.projectId === projectId) {
       cache.current = null
@@ -81,13 +84,18 @@ function WorkflowSummaryCache({ children }: { children: ReactNode }) {
         return existing.promise
       }
     }
+    // StrictMode may rerun this effect in development after the first call
+    // consumed the one-time entry, so that second effect issues a new request.
     return getWorkflowSummary(projectId)
-  }
+  }, [])
+
+  const value = useMemo(
+    () => ({ loadHomeSummary, loadSectionSummary }),
+    [loadHomeSummary, loadSectionSummary],
+  )
 
   return (
-    <WorkflowSummaryContext.Provider
-      value={{ loadHomeSummary, loadSectionSummary }}
-    >
+    <WorkflowSummaryContext.Provider value={value}>
       {children}
     </WorkflowSummaryContext.Provider>
   )

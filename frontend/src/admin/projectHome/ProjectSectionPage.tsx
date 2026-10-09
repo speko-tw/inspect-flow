@@ -76,7 +76,7 @@ export default function ProjectSectionPage({
     return () => {
       active = false
     }
-  }, [loadSectionSummary, projectId])
+  }, [loadSectionSummary, projectId, section])
 
   const currentResult = result?.projectId === projectId ? result : null
   if (

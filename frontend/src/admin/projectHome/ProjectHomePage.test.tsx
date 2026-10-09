@@ -102,6 +102,18 @@ function renderAt(
             >
               開啟計畫區段
             </Link>
+            <Link
+              aria-label="測試導覽至成員區段"
+              to="/admin/projects/project-1/members"
+            >
+              開啟成員區段
+            </Link>
+            <Link aria-label="測試離開專案" to="/admin/projects">
+              離開專案
+            </Link>
+            <Link aria-label="測試返回專案首頁" to="/admin/projects/project-1">
+              返回專案首頁
+            </Link>
             <Routes>
               <Route
                 element={<ProjectHomePage />}
@@ -161,12 +173,84 @@ describe('project home', () => {
     renderAt()
 
     await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
-    fireEvent.click(screen.getByRole('link', { name: '計畫與任務' }))
+    fireEvent.click(screen.getByRole('link', { name: '測試導覽至計畫區段' }))
 
     expect(
       await screen.findByRole('heading', { name: '計畫與任務' }),
     ).toBeVisible()
     expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('loads a fresh summary when navigating from one section to another', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '計畫與任務' }))
+    await screen.findByRole('heading', { name: '計畫與任務' })
+    fireEvent.click(screen.getByRole('link', { name: '成員' }))
+
+    expect(await screen.findByRole('heading', { name: '成員' })).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears the summary after leaving and returning to a project route', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '測試離開專案' }))
+    expect(await screen.findByText('我的專案清單')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '測試返回專案首頁' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('shares a pending home summary with the first section request', async () => {
+    let resolveSummary!: (value: WorkflowSummary) => void
+    const pendingSummary = new Promise<WorkflowSummary>((resolve) => {
+      resolveSummary = resolve
+    })
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockReturnValue(pendingSummary)
+
+    renderAt()
+
+    await waitFor(() =>
+      expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1),
+    )
+    fireEvent.click(screen.getByRole('link', { name: '測試導覽至計畫區段' }))
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1)
+    resolveSummary(summary())
+
+    expect(
+      await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reuse a completed summary for a later home visit', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '測試離開專案' }))
+    expect(await screen.findByText('我的專案清單')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '測試返回專案首頁' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
   })
 
   it('does not share a summary between different project routes', async () => {
