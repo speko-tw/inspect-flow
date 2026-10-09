@@ -67,7 +67,7 @@
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| P | 存取層級：新增「需模組權限」「需模組委派」「模組權限或任一專案權限」宣告與檢查（AUT-R48、AUT-R49）、專案內檢查加模組「可使用」（AUT-R19）、經單一權限計算入口（AUT-R51）、被委派者用的最小欄位人員查詢、指派專案角色的限制（AUT-R22）、`me` 加 `can_create_project`、`module_permissions`、`delegated_modules`；路由宣告檢查納入新層級 | `domain-model` 任務 L（資料、Service 介面與單一入口）與任務 M（回填與轉換 migration）；兩層檢查不得早於 M 生效 | AUT-AC71～AUT-AC73、AUT-AC75、AUT-AC76；既有 AUT-AC18、AUT-AC19、AUT-AC44、AUT-AC70 補測試資料 | 待開 |
+| P | 存取層級：新增「需模組權限」「需模組委派」「模組權限或任一專案權限」宣告與檢查（AUT-R48、AUT-R49）、專案內檢查加模組「可使用」（AUT-R19）、經單一權限計算入口（AUT-R51）、被委派者用的最小欄位人員查詢、指派專案角色的限制（AUT-R22）、`me` 加 `can_create_project`、`has_project_access`、`is_external_collaborator`、`module_permissions`、`delegated_modules`，存取摘要的權限碼分類加「唯讀碼」（AUT-R08）；路由宣告檢查納入新層級 | `domain-model` 任務 L（資料、Service 介面與單一入口）與任務 M（回填與轉換 migration）；兩層檢查不得早於 M 生效 | AUT-AC71～AUT-AC73、AUT-AC75～AUT-AC77；既有 AUT-AC18、AUT-AC19、AUT-AC44、AUT-AC70 補測試資料 | 待開 |
 | Q | 模組權限端點的存取層級（AUT-R49）與過渡行為驗收：`template_admin` 轉換後前後逐人比對有效權限；舊系統角色層級在轉換完成後移除 | P、`domain-model` 任務 M、`template-system` 對應任務 | AUT-AC73、AUT-AC74 | 待開 |
 
 ## 並行分組
