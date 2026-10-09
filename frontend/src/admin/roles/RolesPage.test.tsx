@@ -198,7 +198,7 @@ describe('admin role management page', () => {
 
     const row = await screen.findByRole('row', { name: /示範內業/ })
     const button = within(row).getByRole('button', {
-      name: '展開「示範內業」完整權限',
+      name: '「示範內業」完整權限',
     })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(button)
@@ -479,7 +479,10 @@ describe('admin role management page', () => {
 
     expect(
       await screen.findByRole('row', { name: /Legacy/ }),
-    ).toHaveTextContent('report.read')
+    ).toHaveTextContent('可使用部分功能')
+    expect(screen.getByRole('row', { name: /Legacy/ })).not.toHaveTextContent(
+      'report.read',
+    )
     fireEvent.click(screen.getByRole('button', { name: '修改角色 Legacy' }))
     expect(
       screen.getByRole('checkbox', { name: /report\.read/ }),

@@ -810,10 +810,10 @@ describe('admin project members', () => {
     await screen.findByText('目前沒有成員。')
 
     expect(screen.getByLabelText('查核員')).toHaveAccessibleDescription(
-      '可查看任務、到現場查核',
+      '可執行現場查核、讀取查核任務',
     )
     expect(screen.getByLabelText('審核者')).toHaveAccessibleDescription(
-      '可建立計畫、建立任務、派出任務',
+      '可建立查核計畫、建立查核任務、派出查核任務',
     )
     expect(document.body.textContent).not.toMatch(/inspection_|project_/)
   })
@@ -1206,7 +1206,7 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(calls(fetchMock, 'GET', /\/assignable-roles/)).toHaveLength(1)
     // 角色說明仍依權限碼產生，不顯示代碼（#449）。
     expect(screen.getByLabelText('查核員')).toHaveAccessibleDescription(
-      '可查看任務、到現場查核',
+      '可執行現場查核、讀取查核任務',
     )
   })
 
@@ -1217,13 +1217,13 @@ describe('project members for an office user (not admin, #481)', () => {
 
     const checkbox = screen.getByLabelText('查核員')
     const button = screen.getByRole('button', {
-      name: '展開「查核員」完整權限',
+      name: '「查核員」完整權限',
     })
     expect(button).toHaveAttribute('aria-expanded', 'false')
     const checked = (checkbox as HTMLInputElement).checked
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('到現場查核')).toBeVisible()
+    expect(screen.getByText('執行現場查核')).toBeVisible()
     expect((checkbox as HTMLInputElement).checked).toBe(checked)
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'false')

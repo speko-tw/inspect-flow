@@ -21,22 +21,24 @@ export default function RolePermissionSummary({
   return (
     <div className="role-permission-summary">
       <span>
-        {codes.length === 0 && emptyText ? emptyText : summarizeRole(codes)}
+        {codes.length === 0 && emptyText
+          ? emptyText
+          : summarizeRole(codes, descriptions)}
       </span>
       {details.length > 0 && (
         <>
           <button
             aria-controls={listId}
             aria-expanded={expanded}
-            aria-label={`${expanded ? '收合' : '展開'}「${name}」完整權限`}
+            aria-label={`「${name}」完整權限`}
             onClick={() => setExpanded((value) => !value)}
             type="button"
           >
-            {expanded ? '收合權限' : '完整權限'}
+            完整權限
           </button>
           <ul hidden={!expanded} id={listId}>
-            {details.map((detail) => (
-              <li key={detail}>{detail}</li>
+            {details.map(({ code, label }) => (
+              <li key={code}>{label}</li>
             ))}
           </ul>
         </>
