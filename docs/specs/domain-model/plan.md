@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-R59～DOM-R70、DOM-AC01～DOM-AC50、DOM-AC55～DOM-AC66，已被取代的條目除外；DOM-R59～DOM-R70 由[兩層權限模型後續實作](#兩層權限模型後續實作)涵蓋）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
+本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-R59～DOM-R75、DOM-AC01～DOM-AC50、DOM-AC55～DOM-AC72，已被取代的條目除外；DOM-R59～DOM-R75 由[兩層權限模型後續實作](#兩層權限模型後續實作)涵蓋）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
 
 ## 任務
 
@@ -61,10 +61,10 @@
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| L | 權限登記表加範圍與所屬模組、補登 `project.update`、`project.read`、`project_inspection_item.read` 與模組權限代碼；新增 `UserModulePermission`（含 `source`）、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定、`Role.is_assignable` 的資料表與一支 migration；人員模組的 Service 介面（四種查詢、授予與收回、委派、組合、自動蘊含）；**單一權限計算入口**（DOM-R69），把 `access_summary`、`auth/access` 與只看成員身分的端點改走它；契約測試守住專案模組不直接讀人員資料與查核資料表；`Role` 拒絕模組範圍代碼；稽核事件寫入 | 本計畫 T3、T7；`audit-log` 新事件 | DOM-AC55～DOM-AC59、DOM-AC64 | 待開 |
+| L | 權限登記表加範圍與所屬模組、補登 `project.update`、`project.read`、`project_inspection_item.read` 與模組權限代碼；新增 `UserModulePermission`（含 `source`）、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定、`Role.is_assignable`、`Role.is_external_allowed`、`User.is_external_collaborator`（必選、無預設）、`User.account_expires_on` 與權限碼 `external_allowed` 屬性的資料表與一支 migration；集中的寫入口檢查函式（DOM-R72：外部協作人員、白名單與互斥，所有寫入口都呼叫）；人員模組的 Service 介面（四種查詢、授予與收回、委派、組合、自動蘊含）；**單一權限計算入口**（DOM-R69），把 `access_summary`、`auth/access` 與只看成員身分的端點改走它；契約測試守住專案模組不直接讀人員資料與查核資料表；`Role` 拒絕模組範圍代碼；稽核事件寫入 | 本計畫 T3、T7；`audit-log` 新事件 | DOM-AC55～DOM-AC59、DOM-AC64、DOM-AC67～DOM-AC70 | 待開 |
 | M | 預建專案角色、建立者角色設定與三組預設權限組合（初始化指令與 migration，以名稱冪等建立，DOM-R68）；上線自動回填：既有專案成員補專案與查核模組「可使用」、`template_admin` 轉為範本模組 `template.manage` 並含 `template.use`、可套用範本者補 `template.use`（`source = backfill`）；以自動化測試比對新舊有效權限一致（涵蓋示範與試用資料庫）；過渡期保留舊路由直到前端切換 | L | DOM-AC56、DOM-AC63；`authentication` AUT-AC74 | 待開 |
-| N | 專案新增與修改：非管理者同一交易加入建立者、Admin 不自動成為成員並可選填專案工程師、建立者角色保護（DOM-R64）、`project.update` 與 `project.read`、`GET /projects/{id}` 完整欄位、`project.created`／`project.updated` 事件；指派專案角色的限制（可指派角色、不能改自己、外部人員唯讀、最後一位管理者、`project_member.assignment_denied`，DOM-R70）；指派驗證排除已停用者 | L、M；`authentication` 任務 P | DOM-AC60、DOM-AC61、DOM-AC65、DOM-AC66 | 待開 |
-| O | 停用與重新啟用：停用前提醒唯一的專案工程師、重新啟用預覽與勾選恢復、`user.active_changed` 記下恢復與移除項目 | L | DOM-AC62 | 待開 |
+| N | 專案新增與修改：非管理者同一交易加入建立者、Admin 不自動成為成員並可選填建立者角色人選、建立者角色保護（DOM-R64）、`project.update` 與 `project.read`、`GET /projects/{id}` 完整欄位、`project.created`／`project.updated` 事件；指派專案角色的限制（可指派角色、不能改自己、外部人員唯讀、最後一位管理者、`project_member.assignment_denied`，DOM-R70）；指派驗證排除已停用者；外部協作人員的指派限制與改標記規則（DOM-R72、DOM-R73） | L、M；`authentication` 任務 P | DOM-AC60、DOM-AC61、DOM-AC65、DOM-AC66 | 待開 |
+| O | 停用與重新啟用：停用時刪除所有登入狀態、停用前提醒唯一的專案工程師、外部人員最後一個專案身分移除自動停用與到期日、「無專案的外部人員」與「無人管理的專案」清單、重新啟用預覽與勾選恢復、`user.active_changed` 記下恢復與移除項目 | L | DOM-AC62、DOM-AC71、DOM-AC72 | 待開 |
 
 L 與 M 都新增 migration，不同波；N、O 不新增 migration，N 與 O 改的檔案不重疊時可並行（開 issue 時確認）。
 
