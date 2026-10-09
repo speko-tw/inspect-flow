@@ -83,6 +83,8 @@ export default function ProjectsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
   const transitionRef = useRef<HTMLDivElement>(null)
+  const editHeadingRef = useRef<HTMLHeadingElement>(null)
+  const noticeRef = useRef<HTMLParagraphElement>(null)
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
   const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
     (key) =>
@@ -93,6 +95,18 @@ export default function ProjectsPage() {
     if (!transition) return
     transitionRef.current?.scrollIntoView?.({ block: 'center' })
   }, [transition])
+
+  useEffect(() => {
+    if (!editing) return
+    const heading = editHeadingRef.current
+    heading?.scrollIntoView?.({ block: 'start' })
+    heading?.focus()
+  }, [editing])
+
+  useEffect(() => {
+    if (!notice) return
+    noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [notice])
 
   useEffect(() => {
     let active = true
@@ -266,7 +280,7 @@ export default function ProjectsPage() {
       <h1 id="projects-heading">專案</h1>
       {error && <p role="alert">{error}</p>}
       {notice && (
-        <p className="notice-success" role="status">
+        <p className="notice-success" ref={noticeRef} role="status">
           {notice}
         </p>
       )}
@@ -428,7 +442,9 @@ export default function ProjectsPage() {
         </button>
       )}
       <form onKeyDown={blockImeEnter} onSubmit={save}>
-        <h2>{editing ? `編輯專案「${editing.name}」` : '新增專案'}</h2>
+        <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
+          {editing ? `編輯專案「${editing.name}」` : '新增專案'}
+        </h2>
         {editing && (
           <button
             onClick={() => requestTransition({ kind: 'new' })}

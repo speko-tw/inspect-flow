@@ -359,9 +359,44 @@ function fillProjectForm() {
   })
 }
 
+const restoreScrollMocks: Array<() => void> = []
+
 afterEach(() => {
+  restoreScrollMocks.splice(0).forEach((restore) => restore())
   vi.unstubAllGlobals()
 })
+
+function mockScrollIntoView() {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'scrollIntoView',
+  )
+  const scrollIntoView = vi.fn()
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  })
+  let restored = false
+  const restore = () => {
+    if (restored) return
+    restored = true
+    if (descriptor) {
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'scrollIntoView',
+        descriptor,
+      )
+    } else {
+      delete (HTMLElement.prototype as { scrollIntoView?: () => void })
+        .scrollIntoView
+    }
+  }
+  restoreScrollMocks.push(restore)
+  return {
+    restore,
+    scrollIntoView,
+  }
+}
 
 // 確認與取消固定排成 [取消][確認]；只有最終確認用 btn-danger（#500）。
 function expectCancelThenDanger(scope: HTMLElement, labels: [string, string]) {
@@ -589,6 +624,7 @@ describe('admin projects page', () => {
   })
 
   it('opens the card edit entry with the existing unsaved guard and saves', async () => {
+    const scroll = mockScrollIntoView()
     const fetchMock = projectFetch()
     renderAt('/admin/projects')
     await screen.findAllByText('示範工程')
@@ -599,9 +635,13 @@ describe('admin projects page', () => {
     })
     expect(edit).toHaveClass('project-workspace-edit')
     fireEvent.click(edit)
-    expect(
-      screen.getByRole('heading', { name: '編輯專案「示範工程」' }),
-    ).toBeVisible()
+    const heading = screen.getByRole('heading', {
+      name: '編輯專案「示範工程」',
+    })
+    expect(heading).toBeVisible()
+    await waitFor(() => expect(document.activeElement).toBe(heading))
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '尚未儲存的名稱' },
     })
@@ -619,7 +659,12 @@ describe('admin projects page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
     await screen.findAllByText('手機更新工程')
-    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(1)
+    const [, init] = calls(fetchMock, 'PATCH', /\/projects\/project-1$/)[0]
+    expect(JSON.parse(String(init?.body))).toEqual({
+      name: '手機更新工程',
+    })
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    scroll.restore()
   })
 
   it('guards card links after editing from the narrow-screen entry', async () => {
