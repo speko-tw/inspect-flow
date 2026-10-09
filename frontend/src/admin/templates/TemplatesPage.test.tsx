@@ -1210,6 +1210,7 @@ describe('TemplatesPage', () => {
     fireEvent.click(pointSummary as HTMLElement)
     expect(pointCard).not.toHaveAttribute('open')
     expect(pointSummary).toHaveTextContent('橋面坡度')
+    expect(pointSummary).toHaveTextContent('標準未設定')
     fireEvent.click(pointSummary as HTMLElement)
     expect(screen.getByLabelText(/項次標題/)).toHaveValue('橋面坡度')
   })

@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 
 import { blockImeEnter } from '../../ui/submitGuard'
+import { formatInspectionStandard } from '../../ui/inspectionStandard'
 import { MeasurementFieldEditor } from './MeasurementFieldEditor'
 import { NumericStandardEditor } from './NumericStandardEditor'
 import type { InspectionPoint, MeasurementField, TemplateItem } from './api'
-import { numericSummary } from './templateEditorUtils'
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 type Mode = 'create-item' | 'edit-item'
@@ -455,5 +455,5 @@ function pointSummary(point: InspectionPoint, photos: string): string {
       return `${name}${field.unit?.trim() ? `（${field.unit}）` : ''}`
     })
     .join('、')
-  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${numericSummary(point)}｜照片 ${photos.trim() || '？'} 張`
+  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${formatInspectionStandard(point)}｜照片 ${photos.trim() || '？'} 張`
 }
