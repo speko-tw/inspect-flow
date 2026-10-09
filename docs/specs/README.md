@@ -54,7 +54,7 @@ docs/specs/
 | [`template-system`](template-system/spec.md) | P3 | 功能 | 已完成 | 無；TPL-Q1～TPL-Q4、TPL-Q6～TPL-Q8 已依規格設計定案，含最小專案查核項目副本表；OQ-06、OQ-20 已裁定，副本後續欄位及作廢／重查／更正流程由 P4 `inspection-planning` 定義；現場照片覆蓋與總覽照行為由 P6 `field-evidence` #105 驗收 |
 | [`inspection-planning`](inspection-planning/spec.md) | P4 | 功能 | 已凍結 | 無；`ProjectZone`／Task 地點依 KD-58、OQ-03 凍結；Evidence／Report 不屬本規格範圍 |
 | [`field-ui`](field-ui/spec.md) | P5 | 功能 | 草稿 | 無待裁定 OQ；Field 清單與草稿安全詳情 API 依賴 #361，範本頁搬遷依賴 `admin-dashboard`；Evidence 上傳與完成驗證不屬本階段 |
-| `field-evidence` | P6 | 功能 | 未開始 | — |
+| [`field-evidence`](field-evidence/spec.md) | P6 | 功能 | 草稿 | 無；G-03、G-05、OQ-14、OQ-17 已由維護者依負責人授權決定（#388），見 [KD-61](../intents/03-decisions-and-stack.md#kd-61)～[KD-63](../intents/03-decisions-and-stack.md#kd-63)；[OQ-19](../intents/05-open-questions.md#oq-19)（報告是否標示「照片已調整」）與 [G-04](../intents/05-open-questions.md#g-04) 餘項屬 `report-delivery`，只列為依賴；UI 實作須先過[原型關卡](#ui-prototype-gate) |
 | `completion-validation` | P7 | 功能 | 未開始 | — |
 | [`admin-dashboard`](admin-dashboard/spec.md) | P5 | 功能 | 草稿 | 無 OQ／G；全公司角色與權限畫面依賴 [#387](https://github.com/speko-tw/inspect-flow/issues/387)、[#390](https://github.com/speko-tw/inspect-flow/issues/390) 與前置規格更新；ALG-Q2 已由負責人[裁定選 C](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)，T5a 同步至 `audit-log` 後由 T5b 實作 |
 | `report-delivery` | P8 | 功能 | 未開始 | [G-06](../intents/05-open-questions.md#g-06)、[G-07](../intents/05-open-questions.md#g-07)、[OQ-07](../intents/05-open-questions.md#oq-07)、[OQ-11](../intents/05-open-questions.md#oq-11)、[OQ-15](../intents/05-open-questions.md#oq-15) |
