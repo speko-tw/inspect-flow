@@ -50,12 +50,12 @@
 
 ## 兩層權限模型後續實作
 
-依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538，2026-10-09 與 2026-10-10，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進；規格合併後才開任務，每個任務一個 PR，先開 issue 再動工。
+依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09 與 2026-10-10，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進；規格合併後才開任務，每個任務一個 PR，先開 issue 再動工。
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| T6 | 事件目錄登記模組權限事件、專案事件、`user.external_flag_changed`，補 `user.active_changed` 的欄位與「得為系統事件」；授權拒絕與違規指派在獨立交易寫入（ALG-R25～ALG-R28）；授權事件含 `source` | `domain-model` 任務 L；本計畫 T2 | ALG-AC19～ALG-AC24、ALG-AC26 | 待開 |
-| T7 | 操作者身分快照：`AuditLog.actor_snapshot` 不可空值欄位的 migration（既有紀錄回填一次）與寫入入口組成快照（ALG-R29）；`domain-model` DOM-R74 的驗收 | T6；`domain-model` 任務 L（`User.is_external_collaborator`） | ALG-AC25、DOM-AC71 | 待開 |
+| T6 | 事件目錄登記模組權限事件、專案事件、`user.external_flag_changed`，補 `user.active_changed` 的欄位與「得為系統事件」；授權拒絕與違規指派在獨立交易寫入（ALG-R25～ALG-R28）；授權事件含 `source` | 本計畫 T2 | ALG-AC19～ALG-AC24、ALG-AC26、ALG-AC27 | 待開 |
+| T7 | 操作者身分快照：`AuditLog.actor_snapshot` 不可空值欄位的 migration（既有紀錄回填一次）與寫入入口組成快照（ALG-R29）；`domain-model` DOM-R74 的驗收 | T6；`domain-model` 任務 L（`User.is_external_collaborator`，快照需要此欄位） | ALG-AC25、DOM-AC71 | 待開 |
 
 ## 並行分組
 
