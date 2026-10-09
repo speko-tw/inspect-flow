@@ -75,9 +75,9 @@
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | ALG-R11 | 事件目錄**必須**至少包含[第一批事件](#第一批事件)，欄位依該表 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色的變更）；DOM-R22（事件範圍，含移出專案，[#125](https://github.com/speko-tw/inspect-flow/issues/125)）；[#126](https://github.com/speko-tw/inspect-flow/issues/126)（`is_admin` 的變更算權限變更） | ALG-AC07 |
-| ALG-R12 | 初始化指令（DOM-R53）**不得**寫稽核紀錄。初始化只建立內建 `admin` 與首次登入碼（AUT-R42）；依負責人裁定（#261，2026-09-29），不預建角色。這些是系統安裝資料，不含任何人工操作；之後由首次設定流程產生的事件依 ALG-R18 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（初始化是系統安裝，不是權限變更；資料本身已有建立紀錄）；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：初始化指令改寫為 DOM-R53，首次設定另算系統事件 | ALG-AC08 |
+| ALG-R12 | 初始化指令（DOM-R53）**不得**寫稽核紀錄。初始化建立內建 `admin`、首次登入碼（AUT-R42）與預建的專案角色、建立者角色設定、預設權限組合（DOM-R68；負責人裁定，[#538 第 10 點](https://github.com/speko-tw/inspect-flow/issues/538)）。這些是系統安裝資料，不含任何人工操作；之後由首次設定流程產生的事件依 ALG-R18 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（初始化是系統安裝，不是權限變更；資料本身已有建立紀錄）；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：初始化指令改寫為 DOM-R53，首次設定另算系統事件 | ALG-AC08 |
 | ALG-R13 | 外部來源的值覆蓋 `User` 基本欄位時，每次覆蓋**必須**寫一筆稽核紀錄；事件代碼與欄位由 `external-identity-sync` 登記進事件目錄。本規格的資料表與寫入入口**必須**不改 schema 就能登記新事件 | 必須 | [KD-20](../../intents/03-decisions-and-stack.md#kd-20)；「不改 schema」是本規格為預留所做的推導 | ALG-AC09（新增事件不需 migration）；覆蓋時寫紀錄由 `external-identity-sync` 驗收 |
-| ALG-R14 | DOM-R22 列出的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件的紀錄，內容依[第一批事件](#第一批事件)與[帳號與公司連結事件](#帳號與公司連結事件)；變更被拒絕或回滾時**不得**留下紀錄；DOM-R22 範圍外的變更（例如新增沒有角色的成員）不寫 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R22（由本規格驗收，範圍含帳號名稱修改與公司連結變更：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））；「恰好一筆」是本規格推導，理由：同一次變更寫多筆或漏寫都會讓紀錄對不上 | ALG-AC11；帳號名稱與公司連結的變更由 ALG-AC14、ALG-AC15 |
+| ALG-R14 | DOM-R22 列出的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件的紀錄，內容依[第一批事件](#第一批事件)與[帳號與公司連結事件](#帳號與公司連結事件)；變更被拒絕或回滾時**不得**留下紀錄（唯一的例外是被擋下的違規指派，見 ALG-R28）；DOM-R22 範圍外的變更（例如新增沒有角色的成員）不寫 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R22（由本規格驗收，範圍含帳號名稱修改與公司連結變更：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））；「恰好一筆」是本規格推導，理由：同一次變更寫多筆或漏寫都會讓紀錄對不上 | ALG-AC11；帳號名稱與公司連結的變更由 ALG-AC14、ALG-AC15 |
 | ALG-R15 | 事件目錄**得**把事件標為「系統事件」：由系統自動觸發、沒有登入者的事件（例如帳號被鎖）。系統事件的 `created_by` **必須**是內建 `admin`（`is_system = true`），不論是否在請求中、有沒有登入者；未標為系統事件的事件照 ALG-R05，請求中沒有登入者時仍拒絕 | 得（標記）；必須（操作者） | [AUT-Q6](../authentication/spec.md#aut-q6) 裁定（帳號被鎖寫稽核紀錄，[#148](https://github.com/speko-tw/inspect-flow/issues/148)）；鎖定發生在未登入的登入請求裡，照 ALG-R05 會被拒絕。用內建 `admin` 是本規格的推導，理由：它本來就是「不在請求中」時的系統操作者（DOM-R14）；只開放給標記的事件，漏掛需登入的一般寫入仍會被擋 | ALG-AC12 |
 | ALG-R16 | 事件目錄**得**把事件標為「每次都寫」：宣告的欄位一律記錄，`before`、`after` 相同也照寫，不適用 ALG-R09 的「只記有變動的欄位」與「無變動不寫」 | 得 | 本規格推導：設定密碼時旗標可能不變（例如本人把非臨時密碼換成另一組），但這仍是一次要留紀錄的事件，差別在雜湊，而雜湊不得記錄（ALG-R08） | ALG-AC12 |
 | ALG-R17 | 事件目錄**必須**包含 [`authentication` 事件](#authentication-事件)，欄位依該表 | 必須 | [AUT-Q6](../authentication/spec.md#aut-q6) 裁定；依 ALG-R13 只登記事件，不改資料表 | ALG-AC12 |
@@ -93,13 +93,16 @@
 | ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
 | ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定了篩選與唯讀畫面；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；查詢 API 的具體比對、時間邊界、排序、page size、錯誤與不存在專案空頁均為規格設計（非負責人裁定），細節見[查詢 API](#查詢-api) | ALG-AC18；ADM-AC07、ADM-AC13 |
 | ALG-R24 | 寫入入口在事件具專案脈絡時**必須**將事件當下的專案 UUID 寫入 `AuditLog.project_id`：已登記的 `project_member.*`、`project_zone.*`、`inspection_task.*`、`project_inspection_item.*` 取其所屬專案，`template_item.created_from_project` 取來源專案；日後登記的 Plan／Task 事件若具專案脈絡，同樣填入。無專案脈絡的 `role.*`、`user.*` 等寫空值。刪除或修改事件即使 `before`／`after` 未列 `project_id`，仍須從被操作資料的所屬專案取得。帶 `project_id` 篩選只回欄位相符的紀錄，排除空值；不帶時回全部。既有紀錄不回填，歷史事件的 `project_id` 為空，無法由專案篩選找回 | 必須 | 規格設計（非負責人裁定）：為 [ALG-Q2](#alg-q2) 的專案篩選建立明確、可索引且不依賴已刪除 entity 的依據；不回填避免猜測歷史事件的專案歸屬 | ALG-AC18 |
-| ALG-AC19 | 非 Admin 的使用者 U、已停用的 V、被停用公司 C 一併選中的兩位人員 | 停用 U；再啟用 U；對已啟用的 U 再次「啟用」；嘗試停用最後一位 Admin；停用公司 C 並一併停用兩位人員 | 停用與啟用各恰有一筆 `user.active_changed`（`before`、`after` 為 `is_active` 的前後值）；重複啟用與被拒絕的停用不寫；一併停用的兩位人員各一筆 | ALG-R25 |
-| ALG-AC20 | Admin A；被委派 `template` 的 D；使用者 W；事件目錄已登記模組權限事件 | A 為 W 授予 `template.use` 與重複授予一次；D 收回後重複收回；A 指派 D 的委派後重複指派；A 收回委派；D 授予時看紀錄的 `created_by`；D 嘗試授予專案模組代碼（被拒絕） | 每次成功的授予、收回、委派指派與收回各恰有一筆對應事件，欄位依[模組權限事件](#模組權限事件)；重複與被拒絕的操作不留紀錄；D 授予的紀錄 `created_by` 是 D；集合欄位為排序後的陣列 | ALG-R26 |
-| ALG-AC21 | Admin A；組合 B1（含三個代碼）；使用者 U（已有其中一個代碼）、使用者 U2（都沒有） | A 新增 B1、改名並修改內容、套用到 U、套用到 U2、再套用到已全數具備的 U2、刪除 B1；設定建立者角色後刪除該角色 | 新增、修改、刪除各一筆 `permission_bundle.*`；套用到 U 只寫一筆 `permission_bundle.applied`，`permission_codes` 為 U 實際新增的兩個；套用到 U2 一筆含三個；再次套用不寫；沒有任何逐項 `module_permission.granted`；`creator_role.changed` 在設定時與角色被刪除時各一筆 | ALG-R26 |
-| ALG-AC22 | 有 `system_role_assignment` 資料列的資料庫（過渡期資料） | 執行 `template_admin` 轉換 migration | 轉換前後每個人的有效範本管理權限一致；`audit_logs` 筆數不變；過渡期的 `system_role_assignment.*` 事件在 Admin 操作舊路由時仍照常寫入 | ALG-R27 |
-| ALG-R25 | `User.is_active` 改變（停用或啟用）成功時，**必須**在同一個交易裡寫恰好一筆 `user.active_changed`；改前改後相同不寫；被拒絕（例如停用最後一位 Admin、內建 `admin`）不寫。經由停用公司而一併停用的人員，逐人各寫一筆（DOM-R33） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 5：補停用與啟用稽核事件）；「恰好一筆」比照 ALG-R14；逐人各寫是依 DOM-R33 的規格推導 | ALG-AC19 |
-| ALG-R26 | 事件目錄**必須**包含[模組權限事件](#模組權限事件)；DOM-R59～DOM-R64 的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件；變更被拒絕、回滾或冪等（重複授予、重複收回）時**不得**留下紀錄。套用權限組合只寫 `permission_bundle.applied` 一筆 | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 5、補充裁定第 8 點：模組權限與委派的授予、收回都寫稽核）；權限組合與建立者角色設定的事件、套用組合只寫一筆是比照 [KD-29](../../intents/03-decisions-and-stack.md#kd-29) 與刪除角色只寫一筆（ALG-R14）的規格設計（非負責人裁定） | ALG-AC20、ALG-AC21 |
-| ALG-R27 | `template_admin` 改造為範本模組 `template.manage` 的資料轉換（migration）**不寫**稽核紀錄，與初始化指令同樣屬於系統搬遷、不含任何人工授權（ALG-R12）；轉換前後的有效權限比對由改造任務驗收（DOM-AC56） | 必須 | 規格設計（非負責人裁定）：比照 ALG-R12 的初始化規則；負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）要求遷移期間不得失去權限，見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69) | ALG-AC22 |
+| ALG-AC19 | 非 Admin 的使用者 U、已停用的 V、被停用公司 C 一併選中的兩位人員；U 有模組權限、專案成員身分與未完成任務 | 停用 U；對已啟用的 U 再次「啟用」；停用後重新啟用 U 並只勾選部分恢復項目；嘗試停用最後一位 Admin；停用公司 C 並一併停用兩位人員 | 停用與啟用各恰有一筆 `user.active_changed`（`before`、`after` 為 `is_active` 的前後值），重新啟用的事件另含恢復與移除的項目；重複啟用與被拒絕的停用不寫；一併停用的兩位人員各一筆 | ALG-R25 |
+| ALG-AC20 | Admin A；被委派 `template` 的 D；使用者 W；事件目錄已登記模組權限事件 | A 為 W 授予 `template.use` 與重複授予一次；A 授予 W `project.create`（自動蘊含 `project.use`）；D 收回後重複收回；A 指派 D 的委派後重複指派；A 收回委派；D 授予時看紀錄的 `created_by`；D 嘗試授予專案模組代碼與替自己授權（被拒絕） | 每次成功的授予、收回、委派指派與收回各恰有一筆對應事件，授權事件含 `source`；`project.create` 與蘊含的 `project.use` 各一筆；重複與被拒絕的操作不留紀錄；D 授予的紀錄 `created_by` 是 D；集合欄位為排序後的陣列 | ALG-R26 |
+| ALG-AC21 | Admin A；組合 B1（含三個代碼）；被委派 `template` 的 D；使用者 U（已有其中一個代碼）、U2（都沒有）、U3 | A 新增 B1、改名並修改內容、套用到 U、套用到 U2、再套用到已全數具備的 U2、D 套用含其他模組代碼的 B1 到 U3、刪除 B1 | 新增、修改、刪除各一筆 `permission_bundle.*`；套用到 U 只寫一筆 `permission_bundle.applied`，`permission_codes` 為 U 實際新增的兩個；套用到 U2 一筆含三個；再次套用不寫；D 的套用整組被拒絕、不寫；沒有任何逐項 `module_permission.granted` | ALG-R26 |
+| ALG-AC22 | 有 `system_role_assignment` 資料列與既有專案成員的資料庫（過渡期資料），以及空資料庫 | 執行初始化指令與 `template_admin` 轉換與回填 migration | 轉換前後每個人的有效權限一致，回填的權限 `source` 為 `backfill`；預建角色與組合建立；`audit_logs` 筆數不變；過渡期的 `system_role_assignment.*` 事件在 Admin 操作舊路由時仍照常寫入 | ALG-R27 |
+| ALG-AC23 | 非管理者 U 具 `project.create`；Admin A；專案 P | U 新增專案；A 新增專案；持 `project.update` 者修改 P 的名稱與預計日期，再以相同內容修改一次；新增時讓成員寫入失敗（故障注入） | `project.created` 各恰有一筆且與成員加入事件同一交易；`project.updated` 只記有變動的欄位，無變動不寫；故障注入時專案、成員與事件全數回滾 | ALG-R28 |
+| ALG-AC24 | 非管理者 M 持 `project_member.manage`；可指派角色與不可指派的角色；外部公司人員 Y；M 是專案最後一位管理者 | M 指派不可指派的角色；M 修改自己的角色；M 把 Y 指派為非唯讀的角色；M 移除最後一位管理者；M 做一次合法指派 | 前三種違規各寫一筆 `project_member.assignment_denied`（含原因代碼，請求回 422 後仍保留）；最後一位管理者規則被擋下不寫；合法指派寫 `project_member.roles_changed` 而不寫 denied | ALG-R28 |
+| ALG-R25 | `User.is_active` 改變（停用或啟用）成功時，**必須**在同一個交易裡寫恰好一筆 `user.active_changed`；改前改後相同不寫；被拒絕（例如停用最後一位 Admin、內建 `admin`）不寫。經由停用公司而一併停用的人員，逐人各寫一筆（DOM-R33）。重新啟用時，事件另記下 Admin 勾選的恢復項目與被移除的項目（DOM-R67） | 必須 | 負責人裁定（[#538 第 5 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 23 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（補停用與啟用稽核事件、重新啟用前勾選確認）；「恰好一筆」比照 ALG-R14；逐人各寫與恢復項目的記錄方式是規格設計（非負責人裁定） | ALG-AC19 |
+| ALG-R26 | 事件目錄**必須**包含[模組權限事件](#模組權限事件)；DOM-R59～DOM-R64 的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件，授權事件含 `source`；變更被拒絕、回滾或冪等（重複授予、重複收回）時**不得**留下紀錄。套用權限組合只寫 `permission_bundle.applied` 一筆，整組被拒絕時不寫；自動蘊含的授權（`project.create` 一併授予 `project.use`）各寫一筆 | 必須 | 負責人裁定（[#538 第 8 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 13 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 19 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（模組權限與委派的授予、收回都寫稽核、開設專案蘊含可使用、套用組合逐項驗權）；權限組合與建立者角色設定的事件、套用組合只寫一筆、標示授權來源是規格設計（非負責人裁定）（兩位專家審查建議）；比照 [KD-29](../../intents/03-decisions-and-stack.md#kd-29) 與刪除角色只寫一筆（ALG-R14） | ALG-AC20、ALG-AC21 |
+| ALG-R27 | 初始化指令的預建資料（三個專案角色、建立者角色設定、三組預設權限組合，DOM-R68）與改造 migration 的資料轉換（`template_admin` 轉為 `template.manage`、既有成員回填「可使用」，`source = backfill`）**不寫**稽核紀錄，與初始化指令同樣屬於系統搬遷、不含任何人工授權（ALG-R12）；轉換前後的有效權限比對由改造任務驗收（DOM-AC63、AUT-AC74）；回填的授權靠 `source` 欄位追溯 | 必須 | 負責人裁定（[#538 第 14 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（回填只寫在 migration、以自動化測試驗證）；不寫稽核與以 `source` 追溯是規格設計（非負責人裁定）（比照 ALG-R12 的初始化規則）；見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69) | ALG-AC22 |
+| ALG-R28 | 專案事件（[專案事件](#專案事件)）：新增專案**必須**在同一交易寫 `project.created`，修改專案基本欄位**必須**在同一交易寫 `project.updated`；非 Admin 的指派被 DOM-R70 的（1）（2）（4）擋下時，後端**必須**寫 `project_member.assignment_denied`，且在獨立交易寫入，使請求失敗（回 422）後仍保留，這是 ALG-R14「被拒絕不留紀錄」的唯一例外 | 必須 | 負責人裁定（[#538 第 18 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（後端擋下違規並寫稽核）；`project.created`、`project.updated` 與獨立交易的做法是規格設計（非負責人裁定）（兩位專家審查建議） | ALG-AC23、ALG-AC24 |
 
 ## 第一批事件
 
@@ -108,7 +111,7 @@
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
 | `role.created` | 新增 `Role` | `role` | 空值 | `name`、`permission_codes` |
-| `role.updated` | 改名或修改權限內容 | `role` | 有變動的 `name`、`permission_codes` | 同左 |
+| `role.updated` | 改名、修改權限內容或修改 `is_assignable`（DOM-R70） | `role` | 有變動的 `name`、`permission_codes`、`is_assignable` | 同左 |
 | `role.deleted` | 刪除 `Role`，連同移除所有指派（DOM-R21） | `role` | `name`、`permission_codes`、`project_member_ids`（被一併移除這個角色的成員） | 空值 |
 | `project_member.roles_changed` | 一筆 `ProjectMember` 的角色集合改變：加入專案時就指派角色、之後增減角色。加入時 `before.role_ids` 為空陣列；加入時沒有指派角色不寫（DOM-R22 範圍外，DOM-R36 允許沒有角色） | `project_member` | `role_ids`；一律記錄 `project_id`、`user_id` | 同左 |
 | `project_member.removed` | 把人移出專案，刪除 `ProjectMember` 與它的指派（DOM-R36）；成員沒有角色時也寫 | `project_member` | `project_id`、`user_id`、`role_ids` | 空值 |
@@ -133,23 +136,37 @@
 <a id="模組權限事件"></a>
 ## 模組權限事件
 
-依 DOM-R22（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）登記；本節事件是正式行為，隨 `domain-model` 任務 L 起的各實作任務生效，過渡期結束前 `system_role_assignment.*` 照舊。入口由 `domain-model` 的人員模組 Service 實作（DOM-R59～DOM-R64），寫入時機由本規格驗收（ALG-R26）。
+依 DOM-R22（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）登記；本節事件是正式行為，隨 `domain-model` 任務 L 起的各實作任務生效，過渡期結束前 `system_role_assignment.*` 照舊。入口由 `domain-model` 的人員模組 Service 實作（DOM-R59～DOM-R64），寫入時機由本規格驗收（ALG-R26）。改造 migration 回填的權限（`source = backfill`）與預建資料不寫事件（ALG-R27）。
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
-| `module_permission.granted` | 授予一項模組權限（DOM-R62）；已有時不寫 | `user_module_permission` | 空值 | `user_id`、`permission_code`、`module` |
-| `module_permission.revoked` | 收回一項模組權限（DOM-R62）；沒有時不寫 | `user_module_permission` | `user_id`、`permission_code`、`module` | 空值 |
+| `module_permission.granted` | 授予一項模組權限（DOM-R62）；已有時不寫；自動蘊含的 `project.use`（`source = implied`）同樣各寫一筆 | `user_module_permission` | 空值 | `user_id`、`permission_code`、`module`、`source` |
+| `module_permission.revoked` | 收回一項模組權限（DOM-R62）；沒有時不寫 | `user_module_permission` | `user_id`、`permission_code`、`module`、`source` | 空值 |
 | `module_delegation.granted` | Admin 指派模組委派者（DOM-R61）；已被委派時不寫 | `user_module_delegation` | 空值 | `user_id`、`module` |
 | `module_delegation.revoked` | Admin 收回模組委派者；沒有委派時不寫 | `user_module_delegation` | `user_id`、`module` | 空值 |
 | `permission_bundle.created` | 新增權限組合（DOM-R63） | `permission_bundle` | 空值 | `name`、`permission_codes` |
 | `permission_bundle.updated` | 改名或修改組合內容 | `permission_bundle` | 有變動的 `name`、`permission_codes` | 同左 |
 | `permission_bundle.deleted` | 刪除權限組合；已套用過的人不受影響 | `permission_bundle` | `name`、`permission_codes` | 空值 |
-| `permission_bundle.applied` | 把組合套用到一個人（DOM-R63）；只寫這一筆，不另寫逐項 `module_permission.granted` | `user` | 空值 | `user_id`、`bundle_id`、`bundle_name`、實際新增的 `permission_codes` |
-| `creator_role.changed` | 建立者角色設定改變（DOM-R64），含角色被刪除而回到空值 | `project_creation_setting` | `creator_role_id` | `creator_role_id` |
+| `permission_bundle.applied` | 把組合套用到一個人（DOM-R63），全部通過才寫；只寫這一筆，不另寫逐項 `module_permission.granted`；整組被拒絕時不寫 | `user` | 空值 | `user_id`、`bundle_id`、`bundle_name`、實際新增的 `permission_codes`（這些權限的 `source` 為 `bundle`） |
+| `creator_role.changed` | 建立者角色設定改變（DOM-R64） | `project_creation_setting` | `creator_role_id` | `creator_role_id` |
 
 - 授予與收回由被委派者執行時，`created_by` 仍是操作者本人，讓紀錄能看出是誰授予的；`permission_codes` 記整個集合並排序（ALG-R10）。
 - `permission_bundle.applied` 的 `permission_codes` 只含這次實際新增的代碼（已有的不重複記）；全部都已有時不寫。
 - 帳號停用與啟用事件 `user.active_changed` 見[帳號與公司連結事件](#帳號與公司連結事件)。
+
+<a id="專案事件"></a>
+## 專案事件
+
+依 DOM-R22（負責人裁定（[#538 第 3 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 18 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）登記；本節事件是正式行為，隨 `domain-model` 任務 N 生效。
+
+| 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
+|---|---|---|---|---|
+| `project.created` | 新增專案（DOM-R65），與建立者或專案工程師的 `project_member.roles_changed` 同一交易 | `project` | 空值 | `project_code`、`name`；Admin 帶 `engineer_user_id` 時另含該欄位 |
+| `project.updated` | 修改專案基本欄位（DOM-R66）；沒有變動不寫 | `project` | 有變動的欄位 | 同左 |
+| `project_member.assignment_denied` | 非 Admin 的指派被 DOM-R70 的（1）（2）（4）擋下：不可指派的角色、修改自己的角色、外部人員被指派非唯讀角色。屬安全事件，在獨立交易寫入，使請求失敗後仍保留；記錄被擋下的原因代碼 | `project_member` | 空值 | `project_id`、`user_id`（被指派的人）、`role_ids`（企圖指派的集合）、`reason`（錯誤碼） |
+
+- `project_member.assignment_denied` 是 ALG-R14「被拒絕不留紀錄」的例外：它記錄的是被擋下的違規嘗試，不是一次變更；最後一位管理者規則（DOM-R70 的（3））被擋下時不寫。
+- `project.created`、`project.updated` 與事件目錄其他事件一樣不得含密碼或 token（ALG-R08）。
 
 <a id="inspection-planning-事件"></a>
 ## `inspection-planning` 事件
@@ -190,7 +207,7 @@
 |---|---|---|---|---|
 | `user.username_changed` | `User.username` 被修改（DOM-R45）；只有具 Admin 權限的人能改，改前改後相同不寫 | `user` | `username` | `username` |
 | `user.company_changed` | `User.company_id` 改變：換公司、連結公司、解除連結（DOM-R47）；因此被清空的工號、部門、地點一併記下（ALG-R20） | `user` | `company_id`、`employee_no`、`department`、`location` | 同左 |
-| `user.active_changed` | `User.is_active` 改變：停用或啟用帳號（DOM-R67）；改前改後相同不寫；停用公司時選擇一併停用的人員逐一寫（DOM-R33） | `user` | `is_active` | `is_active` |
+| `user.active_changed` | `User.is_active` 改變：停用或啟用帳號（DOM-R67）；改前改後相同不寫；停用公司時選擇一併停用的人員逐一寫（DOM-R33）；重新啟用時另記下 Admin 勾選的恢復與被移除的項目 | `user` | `is_active` | `is_active`；重新啟用時另含 `restored_permission_codes`、`removed_permission_codes`、`restored_project_ids`、`removed_project_ids`、`cleared_task_ids`（皆為排序後的陣列） |
 
 - 值用 `username` 存放的小寫（DOM-R45）；`company_id` 沒有公司時是空值；欄位沒有值時記空值，不省略。
 - 本系統帳號與外部帳號都適用；外部身分同步覆蓋這些欄位時另依 ALG-R13 寫。
@@ -298,3 +315,4 @@
 - 登記 `template-system` 的固定範本管理員角色指派／收回事件及其稽核欄位 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
 - 澄清存成範本事件與範本建立同交易，並列明其來源與目標識別欄位 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)
 - 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914)、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：新增停用與啟用事件 `user.active_changed`（ALG-Q4 已裁定、ALG-R25）、模組權限事件（授予與收回、委派、權限組合、建立者角色，ALG-R26）與過渡期轉換不寫稽核（ALG-R27）；`system_role_assignment.*` 事件僅過渡期使用；ALG-R14、ALG-AC11 同步；新增 ALG-AC19～ALG-AC22；權限組合與建立者角色設定的事件為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
+- 意圖變更跟進（負責人裁定，[#538 第 10～24 點](https://github.com/speko-tw/inspect-flow/issues/538)）：授權事件加 `source`、`role.updated` 加 `is_assignable`、`user.active_changed` 加重新啟用的恢復與移除項目；新增「專案事件」（`project.created`、`project.updated`、`project_member.assignment_denied`）與 ALG-R28、ALG-AC23、ALG-AC24；ALG-R14 註明唯一例外；ALG-R25～R27 與 ALG-AC19～AC22 同步；`creator_role.changed` 不再有角色被刪除而回到空值；專案事件與 `source` 標示為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)

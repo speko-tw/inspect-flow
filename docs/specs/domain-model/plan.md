@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-R59～DOM-R67、DOM-AC01～DOM-AC50、DOM-AC55～DOM-AC62，已被取代的條目除外；DOM-R59～DOM-R67 由[兩層權限模型後續實作](#兩層權限模型後續實作)涵蓋）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
+本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-R59～DOM-R70、DOM-AC01～DOM-AC50、DOM-AC55～DOM-AC66，已被取代的條目除外；DOM-R59～DOM-R70 由[兩層權限模型後續實作](#兩層權限模型後續實作)涵蓋）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
 
 ## 任務
 
@@ -57,14 +57,14 @@
 
 ## 兩層權限模型後續實作
 
-依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進（角色只存在專案內、新增人員模組權限、委派、權限組合、建立者角色），規格合併後才開任務；每個任務一個 PR，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。**過渡期**：程式完成前，現行 `template_admin` 與 Admin 才能開設專案的行為不變。
+依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進；規格合併後才開任務，每個任務一個 PR，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。**過渡期結束＝`authentication` 任務 Q 合併**；在此之前現行 `template_admin` 與只有 Admin 能開設專案的行為不變。
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| L | 權限登記表加範圍與模組欄位並登記模組權限與 `project.update`；新增 `UserModulePermission`、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定的資料表與一支 migration；人員模組的 Service 介面（四種查詢、授予與收回、委派、組合）；契約測試守住專案模組不直接讀人員資料；`Role` 拒絕模組範圍代碼；稽核事件寫入（事件由 `audit-log` 登記） | 本計畫 T3、T7；`audit-log` 新事件 | DOM-AC55～DOM-AC60 | 待開 |
-| M | `template_admin`（`SystemRoleAssignment`）轉為範本模組 `template.manage`（是否同時取得 `template.use` 與既有專案成員是否回填 `project.use`、`inspection.use`，待負責人裁定 DOM-Q13，建議回填）：migration 逐人轉換與回填，前後逐人比對有效權限，轉換期間不得失去權限；過渡期保留舊路由直到前端切換 | L；`template-system` 對應任務 | DOM-AC56；`template-system` 驗收 | 待開 |
-| N | 開設專案同一交易加入建立者（建立者角色空值、Admin 是否自動成員、建立者角色是否含調整專案與管理成員、`project.create` 是否蘊含 `project.use`，分別待負責人裁定 DOM-Q10～DOM-Q12，裁定前不開工這些項目）（`project.create`、建立者角色）、修改專案改看 `project.update`、`GET /projects` 正式存取條件；登入者權限摘要改走人員模組介面，收斂跨邊界寫法 | L；`authentication` 新存取層級 | DOM-AC61 | 待開 |
-| O | 停用與啟用寫稽核、專案成員清單標已停用的驗收 | L | DOM-AC62 | 待開 |
+| L | 權限登記表加範圍與所屬模組、補登 `project.update`、`project.read`、`project_inspection_item.read` 與模組權限代碼；新增 `UserModulePermission`（含 `source`）、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定、`Role.is_assignable` 的資料表與一支 migration；人員模組的 Service 介面（四種查詢、授予與收回、委派、組合、自動蘊含）；**單一權限計算入口**（DOM-R69），把 `access_summary`、`auth/access` 與只看成員身分的端點改走它；契約測試守住專案模組不直接讀人員資料與查核資料表；`Role` 拒絕模組範圍代碼；稽核事件寫入 | 本計畫 T3、T7；`audit-log` 新事件 | DOM-AC55～DOM-AC59、DOM-AC64 | 待開 |
+| M | 預建專案角色、建立者角色設定與三組預設權限組合（初始化指令與 migration，以名稱冪等建立，DOM-R68）；上線自動回填：既有專案成員補專案與查核模組「可使用」、`template_admin` 轉為範本模組 `template.manage` 並含 `template.use`、可套用範本者補 `template.use`（`source = backfill`）；以自動化測試比對新舊有效權限一致（涵蓋示範與試用資料庫）；過渡期保留舊路由直到前端切換 | L | DOM-AC56、DOM-AC63；`authentication` AUT-AC74 | 待開 |
+| N | 專案新增與修改：非管理者同一交易加入建立者、Admin 不自動成為成員並可選填專案工程師、建立者角色保護（DOM-R64）、`project.update` 與 `project.read`、`GET /projects/{id}` 完整欄位、`project.created`／`project.updated` 事件；指派專案角色的限制（可指派角色、不能改自己、外部人員唯讀、最後一位管理者、`project_member.assignment_denied`，DOM-R70）；指派驗證排除已停用者 | L、M；`authentication` 任務 P | DOM-AC60、DOM-AC61、DOM-AC65、DOM-AC66 | 待開 |
+| O | 停用與重新啟用：停用前提醒唯一的專案工程師、重新啟用預覽與勾選恢復、`user.active_changed` 記下恢復與移除項目 | L | DOM-AC62 | 待開 |
 
 L 與 M 都新增 migration，不同波；N、O 不新增 migration，N 與 O 改的檔案不重疊時可並行（開 issue 時確認）。
 
