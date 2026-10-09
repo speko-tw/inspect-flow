@@ -140,8 +140,10 @@
 .field-task-card.progress {
   border-left-color: var(--info-text);
 }
-.field-task-card:hover {
-  border-color: var(--primary);
+@media (hover: hover) {
+  .field-task-card:hover {
+    border-color: var(--primary);
+  }
 }
 .field-card-top {
   display: flex;
@@ -408,8 +410,10 @@
   text-decoration: none;
 }
 
-.project-section-nav a:hover {
-  background: var(--surface-alt);
+@media (hover: hover) {
+  .project-section-nav a:hover {
+    background: var(--surface-alt);
+  }
 }
 
 .project-section-nav a:focus-visible,
@@ -567,8 +571,10 @@ a {
   text-underline-offset: 0.2em;
 }
 
-a:hover {
-  text-decoration-thickness: 2px;
+@media (hover: hover) {
+  a:hover {
+    text-decoration-thickness: 2px;
+  }
 }
 
 hr {
@@ -719,11 +725,13 @@ button,
   cursor: pointer;
 }
 
-button:hover:not(:disabled),
-.btn:hover {
-  background: var(--surface-alt);
-  border-color: var(--text-muted);
-  text-decoration: none;
+@media (hover: hover) {
+  button:hover:not(:disabled),
+  .btn:hover {
+    background: var(--surface-alt);
+    border-color: var(--text-muted);
+    text-decoration: none;
+  }
 }
 
 /* 主要按鈕要明講；submit 不再自動變主要（搜尋、篩選等 submit 是次要）。 */
@@ -733,10 +741,12 @@ button:hover:not(:disabled),
   color: var(--on-primary);
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
-  color: var(--on-primary);
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: var(--on-primary);
+  }
 }
 
 /* 只給不可復原的最終確認；打開確認框的觸發鈕用次要樣式。 */
@@ -746,10 +756,12 @@ button:hover:not(:disabled),
   color: var(--on-danger);
 }
 
-.btn-danger:hover:not(:disabled) {
-  background: var(--danger-hover);
-  border-color: var(--danger-hover);
-  color: var(--on-danger);
+@media (hover: hover) {
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger-hover);
+    border-color: var(--danger-hover);
+    color: var(--on-danger);
+  }
 }
 
 /* 表格內與緊湊處的小尺寸（表格內的 button 自動套用同尺寸）。 */
@@ -780,9 +792,11 @@ button:disabled {
   cursor: pointer;
 }
 
-.back-link:hover:not(:disabled) {
-  background: transparent;
-  text-decoration: underline;
+@media (hover: hover) {
+  .back-link:hover:not(:disabled) {
+    background: transparent;
+    text-decoration: underline;
+  }
 }
 
 /* ---- 表格 ---- */
@@ -1143,9 +1157,11 @@ output {
   text-decoration: none;
 }
 
-a.topbar-brand:hover {
-  color: var(--primary);
-  text-decoration: underline;
+@media (hover: hover) {
+  a.topbar-brand:hover {
+    color: var(--primary);
+    text-decoration: underline;
+  }
 }
 
 .topbar-badge {
@@ -1262,9 +1278,11 @@ a.topbar-brand:hover {
   outline-offset: -3px;
 }
 
-a.app-header-tab:hover {
-  background: var(--surface-alt);
-  text-decoration: none;
+@media (hover: hover) {
+  a.app-header-tab:hover {
+    background: var(--surface-alt);
+    text-decoration: none;
+  }
 }
 
 a.app-header-tab[aria-current='page'] {
@@ -1602,9 +1620,11 @@ a.app-header-tab[aria-current='page'] {
   margin-inline-end: var(--space-2);
 }
 
-.tpl-tree-row:hover,
-.tpl-detail-list button:hover {
-  background: var(--surface-alt);
+@media (hover: hover) {
+  .tpl-tree-row:hover,
+  .tpl-detail-list button:hover {
+    background: var(--surface-alt);
+  }
 }
 
 .tpl-item-row {

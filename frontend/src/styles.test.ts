@@ -146,3 +146,30 @@ describe('app header navigation', () => {
     expect(css.slice(start, css.indexOf('}', start))).toContain('mask-image')
   })
 })
+
+// 觸控裝置點一下後 :hover 會殘留（iOS Safari，#524），所以所有
+// :hover 規則都必須包在 @media (hover: hover) 裡，只給有滑鼠的裝置。
+describe('hover rules', () => {
+  it('keeps every :hover rule inside @media (hover: hover)', () => {
+    const lines = css.split('\n')
+    let inHoverMedia = false
+    const outside: string[] = []
+    lines.forEach((line, index) => {
+      if (line.startsWith('@media (hover: hover) {')) inHoverMedia = true
+      else if (inHoverMedia && line === '}') inHoverMedia = false
+      else if (
+        !inHoverMedia &&
+        line.includes(':hover') &&
+        !line.trimStart().startsWith('*') &&
+        !line.trimStart().startsWith('/*')
+      ) {
+        outside.push(`${index + 1}: ${line.trim()}`)
+      }
+    })
+    expect(outside).toEqual([])
+  })
+
+  it('has at least one :hover rule inside the media query', () => {
+    expect(css).toMatch(/@media \(hover: hover\) \{\n\s+a\.topbar-brand:hover/)
+  })
+})
