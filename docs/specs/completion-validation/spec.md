@@ -3,7 +3,7 @@
 **代碼**：`CMV`　**Phase**：P7　**狀態**：草稿
 **前置規格**：`field-evidence`（[PR #545](https://github.com/speko-tw/inspect-flow/pull/545)，尚未合併）、`field-ui`、`inspection-planning`、`state-machines`、`template-system`、`authentication`、`audit-log`、`domain-model`、`api-conventions`
 **引用意圖**：[PR-01](../../intents/02-principles.md#pr-01)、[PR-04](../../intents/02-principles.md#pr-04)、[PR-07](../../intents/02-principles.md#pr-07)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-10](../../intents/02-principles.md#pr-10)、[PR-16](../../intents/02-principles.md#pr-16)、[PR-17](../../intents/02-principles.md#pr-17)、[PR-18](../../intents/02-principles.md#pr-18)、[PR-19](../../intents/02-principles.md#pr-19)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-38](../../intents/03-decisions-and-stack.md#kd-38)、[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-50](../../intents/03-decisions-and-stack.md#kd-50)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[KD-66](../../intents/03-decisions-and-stack.md#kd-66)、[OQ-06](../../intents/05-open-questions.md#oq-06)
-**被擋議題**：無。[OQ-06](../../intents/05-open-questions.md#oq-06) 已裁定；改善追蹤範圍依 [KD-65](../../intents/03-decisions-and-stack.md#kd-65)（維護者依負責人授權決定，負責人可推翻）。[OQ-07](../../intents/05-open-questions.md#oq-07)（報告如何呈現三種結果與嚴重度）屬 0.8.x `report-delivery`，只寫成依賴，不擋本規格；逐項比對見[開工門檻比對](#開工門檻比對)。本規格依賴 `field-evidence` 的覆蓋計算與 `has_result` 定義，該規格合併前，本規格不凍結。
+**被擋議題**：無 OQ／G 擋點，但有待負責人裁定的前置項目，裁定前本規格只能維持草稿：點位與實測欄位的穩定身分（併 [PR #545](https://github.com/speko-tw/inspect-flow/pull/545) 的 FEV-Q12，見 [CMV-Q7](#cmv-q7)）、`has_result` 與已取消任務的作廢時點（跟隨 FEV-Q6、FEV-Q15，見 [CMV-Q6](#cmv-q6)）、上線前已完成任務重查的補查範圍（[CMV-Q5](#cmv-q5)）、`inspection-planning` 凍結契約的新增（[CMV-Q10](#cmv-q10)）、零項次項目（[CMV-Q12](#cmv-q12)）。[OQ-06](../../intents/05-open-questions.md#oq-06) 已裁定；改善追蹤範圍依 [KD-65](../../intents/03-decisions-and-stack.md#kd-65)（維護者依負責人授權決定，負責人可推翻）；[OQ-07](../../intents/05-open-questions.md#oq-07) 屬 0.8.x，只寫成依賴。逐項比對見[開工門檻比對](#開工門檻比對)。
 
 ## 目的
 
@@ -49,24 +49,24 @@
 | CMV-R01 | 每個查核項次**必須**各自選一個結果：符合、不符合、不適用；**不得**只替整個查核項目組選一個，**不得**預設任何結果，系統**不得**依標準值自動判定。數值落在標準值之內或之外都不影響可選的結果，也不產生警告判定。 | 必須／不得 | [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[OQ-06](../../intents/05-open-questions.md#oq-06) |
 | CMV-R02 | 各結果的必填內容：選「不符合」**必須**選嚴重度（輕微、一般、嚴重）並填註解；選「不適用」**必須**填原因，照片選填；選「符合」沒有額外必填。不屬於該結果的欄位（例如符合時帶嚴重度）**必須**拒絕。註解與原因去除前後空白後不得為空。 | 必須 | [KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[OQ-06](../../intents/05-open-questions.md#oq-06)；空白判定、不屬欄位拒絕與長度上限為規格設計（D4） |
 | CMV-R03 | 項次設有實測欄位時，選「符合」或「不符合」**必須**填滿該項次全部實測欄位；量不到時改選「不適用」並寫原因，此時實測欄位選填。數字欄位**只接受**有限的十進位數字，單位由需求快照帶入、請求**不得**另帶單位；文字欄位自由填寫。伺服器**不得**比對實測值與數值標準，也不因超出標準範圍而拒收或改變結果。單位換算由現場自行處理。 | 必須／不得 | [KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[TPL-R11](../template-system/spec.md#需求)；數字格式、字串保存與長度上限為規格設計（D4） |
-| CMV-R04 | 寫入結果**必須**由後端覆核：只在 Task 為 `IN_PROGRESS` 且所屬 Plan 未封存時允許；同專案具現場查核權限的成員皆得填寫，不限受指派者，系統**必須**記錄實際操作者。每次儲存**必須**當場套用 CMV-R01～R03 全部規則，不保存半成品；項次一次存一筆，同一項次的並行修改**必須**以版本號偵測衝突，不得靜默覆蓋他人資料。錯誤**必須**指出是哪一個欄位。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[PR-16](../../intents/02-principles.md#pr-16)、[STM-R11](../state-machines/spec.md#需求)、[PR-19](../../intents/02-principles.md#pr-19)；版本號衝突偵測與欄位錯誤格式為規格設計（D3、D5、D18） |
-| CMV-R05 | 每筆結果**必須**依任務需求快照的項次穩定識別（`source_point_id`）對應，並記錄作答時的快照修訂；同一任務同一項次**最多一筆有效**（未作廢）結果；作廢的結果保留不刪。每筆結果**必須**能追溯到查核項目明細、Task、Plan、Project，並記錄填寫者與時間（沿用建立與修改紀錄）。完成度檢查與報告一律讀任務自己的快照，**不得**讀目前範本或專案副本。 | 必須 | [PR-04](../../intents/02-principles.md#pr-04)、[PR-07](../../intents/02-principles.md#pr-07)、[PR-08](../../intents/02-principles.md#pr-08)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)；資料表與欄位為規格設計（D2） |
+| CMV-R04 | 寫入結果**必須**由後端覆核：只在 Task 為 `IN_PROGRESS` 且所屬 Plan 未封存時允許；同專案具現場查核權限的成員皆得填寫，不限受指派者，系統**必須**記錄實際操作者。每次儲存**必須**當場套用 CMV-R01～R03 全部規則，不保存半成品；項次一次存一筆，同一項次的並行修改**必須**以版本號偵測衝突，不得靜默覆蓋他人資料；寫入時**必須**確認該項次仍在目前快照內，並以固定鎖序（Plan、Task）與專案查核項目修改（KD-55）序列化，遇標準已變更時回報衝突而不寫入。錯誤**必須**指出是哪一個欄位。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[PR-16](../../intents/02-principles.md#pr-16)、[STM-R11](../state-machines/spec.md#需求)、[PR-19](../../intents/02-principles.md#pr-19)；版本號衝突偵測、鎖序、標準已變更的回報與欄位錯誤格式為規格設計（D3、D5、D8、D18） |
+| CMV-R05 | 每筆結果**必須**依任務需求快照的項次穩定識別（`source_point_id`）對應，並記錄作答時的快照修訂；同一任務同一項次**最多一筆有效**（未作廢）結果；作廢的結果保留不刪。每筆結果**必須**能追溯到查核項目明細、Task、Plan、Project，並記錄填寫者與時間（沿用建立與修改紀錄）。完成度檢查與報告一律讀任務自己的快照，**不得**讀目前範本或專案副本。**前置依賴**：現行專案查核項目修改會重建點位與實測欄位並換發識別，KD-55 選「不要」後舊結果會對不上；保留穩定身分的做法待負責人裁定（併 #545 的 FEV-Q12，見 [CMV-Q7](#cmv-q7)），裁定前本條的對應鍵與 CMV-AC22 不定案；不在目前快照的結果之處理見 [CMV-Q8](#cmv-q8)。 | 必須 | [PR-04](../../intents/02-principles.md#pr-04)、[PR-07](../../intents/02-principles.md#pr-07)、[PR-08](../../intents/02-principles.md#pr-08)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)；資料表與欄位為規格設計（D2） |
 | CMV-R06 | 系統**必須**提供讀取結果的 API：現場讀取「作答表」（每個查核項目、每個項次與其目前有效結果，未作答為空）；內業讀取含改善狀態的同一結構，另可查已作廢結果與更正紀錄。現場回應**不得**含資料庫關聯識別以外的技術資訊；`DRAFT` Task 對現場隱藏。 | 必須／不得 | [PR-10](../../intents/02-principles.md#pr-10)、[FUI-R06](../field-ui/spec.md#需求)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)；回應形狀為規格設計（D6） |
 | CMV-R07 | `POST /inspection-tasks/{id}:complete` **必須**由伺服器依該 Task 目前的需求快照核實：所有查核項目的**每個項次**都有一筆有效結果；每筆結果仍符合 CMV-R01～R03（對目前快照重新驗證）；沒有待重查的項目。任一不滿足即整筆拒絕。 | 必須 | [KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-38](../../intents/03-decisions-and-stack.md#kd-38)、[PR-04](../../intents/02-principles.md#pr-04)、[STM-R10](../state-machines/spec.md#需求)；對目前快照重新驗證為規格設計 |
 | CMV-R08 | 完成驗證**必須**核實照片覆蓋：結果為符合或不符合的項次，有效非總覽照片數**必須**達該項次需求快照的 `min_count`（至少 1）；結果為不適用的項次照片選填，不要求覆蓋；總覽照片、已刪除與已作廢的照片不計入。覆蓋數**必須**沿用 `field-evidence` 的覆蓋計算，不得另寫第二份。 | 必須／不得 | [KD-38](../../intents/03-decisions-and-stack.md#kd-38)、[KD-50](../../intents/03-decisions-and-stack.md#kd-50)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)（不適用照片選填）、`field-evidence` FEV-R04；不適用豁免的套用位置為規格設計（D7） |
 | CMV-R09 | 完成**必須**只由伺服器判定：完成端點不接受也不讀取前端回報的任何結果、覆蓋數或「已齊全」旗標；系統**必須**另提供唯讀的完成預檢，與完成端點共用同一個驗證函式；驗證失敗**必須**整筆不寫入（任務維持原狀、計畫不變），並一次回傳**全部**缺項，每項指出項目、項次與欄位；成功時在同一交易寫入完成者與時間並重算 Plan 狀態；完成與作答的並行**必須**序列化。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[PR-16](../../intents/02-principles.md#pr-16)、[SM-Q06](../state-machines/spec.md#sm-q06)、[STM-R10](../state-machines/spec.md#需求)；預檢端點、缺項格式與序列化方式為規格設計（D6、D8） |
 | CMV-R10 | 任務含「不符合」結果時，只要資料齊全就**必須**可以完成，嚴重度不阻擋完成；完成後任務清單與詳情**必須**明顯標示「有缺失」。「有缺失」是旗標、不是狀態值，**必須**由目前有效（未作廢）的不符合結果即時推導，不另存欄位。 | 必須 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)、[KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[STM-R10](../state-machines/spec.md#需求)；即時推導為規格設計（D9） |
-| CMV-R11 | 任務完成後，具更正權限的使用者（現場與內業皆得）**得**更正：結果的註解、不適用原因、實測值，以及照片的註記與現場版；**不得**更改結果、嚴重度，**不得**新增或刪除照片。更正**不得**使任務離開已完成狀態、不要求重新完成，**必須**記錄更正者、時間與改了什麼（前後值）。 | 得／不得／必須 | [KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[STM-R03](../state-machines/spec.md#需求)、[IP-R08](../inspection-planning/spec.md#需求)；可更正範圍與記錄方式為規格設計（D10、D11），見 [CMV-Q1](#cmv-q1)、[CMV-Q2](#cmv-q2) |
+| CMV-R11 | 任務完成後，具更正權限的使用者（現場與內業皆得）**得**更正資料（錯字、文字或圖片）；更正**不得**使任務離開已完成狀態、不要求重新完成，**必須**記錄更正者、時間與改了什麼（前後值）。可更正的範圍**應**為：結果的註解、不適用原因、實測值，以及照片的註記與現場版；**應**維持結果與嚴重度不變，也**不應**新增或刪除照片。取代現場版**必須**遵守 `field-evidence` 的已核發報告引用保護。範圍細節待確認，見 [CMV-Q1](#cmv-q1)、[CMV-Q2](#cmv-q2)。 | 得／必須／應 | [KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)、[STM-R03](../state-machines/spec.md#需求)、[IP-R08](../inspection-planning/spec.md#需求)；可更正範圍與記錄方式為規格設計（D10、D11、D21） |
 | CMV-R12 | 系統**不得**提供重新開啟已完成任務的端點，也**不得**取消已完成任務；需要重新查核只能走 KD-55（內業修改專案查核項目並選「要」）。本規格不新增任何會令 `COMPLETED` Task 離開完成狀態的端點。 | 不得 | [KD-56](../../intents/03-decisions-and-stack.md#kd-56)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[STM-R13](../state-machines/spec.md#需求)、[IP-R08](../inspection-planning/spec.md#需求) |
-| CMV-R13 | 內業**得**對已完成任務中、目前有效的「不符合」結果登記複查：結果為「已改善」或「尚未改善」，說明必填；登記「已改善」**必須**附至少一張照片，「尚未改善」照片選填。登記只增不改（歷史保留），最新一筆決定改善狀態：尚無登記為待改善、最新為尚未改善、最新為已改善。本規格**不得**做限期提醒、逾期、自動通知，**不得**依標準值自動判定改善結果；改善登記不改變原結果、嚴重度與任務完成。 | 得／必須／不得 | [KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)；兩種複查結果、照片張數規則、只增不改與三種狀態為規格設計（D12、D13），見 [CMV-Q3](#cmv-q3)、[CMV-Q4](#cmv-q4) |
-| CMV-R14 | 任務清單與詳情**必須**顯示改善狀態：`has_defects`、不符合項次數與已改善項次數；內業結果頁逐項次顯示改善狀態。作廢結果不計入。報告端如何呈現屬 `report-delivery`，本規格只保證資料可讀（以結果與快照為準）。 | 必須 | [KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；欄位名稱為規格設計（D9） |
-| CMV-R15 | 專案查核項目修改並選「要」重新查核時，被修改項目中**目前有效的結果**（連同其改善登記與改善照片）**必須**在同一交易標示「標準變更作廢」並保留；該項目需補查，補查完成（項目內每個項次都有新的有效結果）時待重查旗標**必須**由伺服器清除；同 Task 其他項目的結果不變。已取消 Task 恢復時，依恢復規則對受影響項目同樣作廢。選「不要」時結果與改善登記不變。「已有結果」的判斷（`has_result`）**必須**納入結果與有效照片。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[STM-R04](../state-machines/spec.md#需求)、[STM-R18](../state-machines/spec.md#需求)、[IP-R04](../inspection-planning/spec.md#需求)、[IP-R07](../inspection-planning/spec.md#需求)；待重查旗標清除時機與 `has_result` 定義為規格設計（D15、D16） |
+| CMV-R13 | 內業**得**對已完成任務中、目前有效的「不符合」結果登記複查，附說明與照片；清單與詳情**必須**顯示改善狀態。本規格**不得**做限期提醒、逾期、自動通知，**不得**依標準值自動判定改善結果；改善登記不改變原結果、嚴重度與任務完成。以下細節為規格設計，**應**如此：複查結果分「已改善」「尚未改善」，說明必填，「已改善」附至少一張照片，登記只增不改，最新一筆決定改善狀態（待改善、尚未改善、已改善），只在任務已完成時登記。待確認見 [CMV-Q3](#cmv-q3)、[CMV-Q4](#cmv-q4)、[CMV-Q9](#cmv-q9)。 | 得／必須／不得／應 | [KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-62](../../intents/03-decisions-and-stack.md#kd-62)；兩種複查結果、照片張數規則、只增不改與三種狀態為規格設計（D12、D13） |
+| CMV-R14 | 任務清單與詳情**必須**顯示改善狀態，內業結果頁逐項次顯示改善狀態；作廢結果不計入。呈現所需的 Task 回應新增欄位 `has_defects`、`defect_count`、`improved_count` 屬 `inspection-planning` 已凍結契約的範圍變更，**待負責人裁定**（[CMV-Q10](#cmv-q10)）。報告端如何呈現屬 `report-delivery`，本規格只保證資料可讀（以結果與快照為準）。 | 必須 | [KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)；欄位名稱為規格設計（D9） |
+| CMV-R15 | 專案查核項目修改並選「要」重新查核時，被修改項目**目前有效的結果**依 KD-55 與 IP-R04 **必須**在同一交易標示「標準變更作廢」並保留（連同其改善登記與改善照片）；同 Task 其他項目的結果不變；選「不要」時結果與改善登記不變。項目補查完成（每個項次都有新的有效結果）時，待重查旗標**必須**由伺服器清除。下列兩點**待負責人裁定**，本條跟隨 #545 的 FEV-Q6、FEV-Q15，選項見 [CMV-Q6](#cmv-q6)：「已有結果」是否把有效照片算進去（只有照片的項目是否作廢並標待重查）、已取消任務遇「要」時是在修改當下還是恢復時作廢；`has_result` 把結果納入屬範圍變更（[CMV-Q10](#cmv-q10)）。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[STM-R04](../state-machines/spec.md#需求)、[STM-R18](../state-machines/spec.md#需求)、[IP-R04](../inspection-planning/spec.md#需求)、[IP-R07](../inspection-planning/spec.md#需求)；待重查旗標清除時機為規格設計（D15） |
 | CMV-R16 | 後端**必須**對每個端點覆核專案內動作權限，預設拒絕：填寫結果、完成、現場讀取要求 `inspection_task.inspect`；內業讀取結果、作廢結果與更正紀錄要求 `inspection_result.read`；登記改善要求 `inspection_result.follow_up`；完成後更正要求 `inspection_task.correct`。Admin 依既有規則放行。本規格只引用專案角色的動作權限；人員模組權限與兩層判斷依 #538 後續規格，不在本規格重複定義。 | 必須 | [PR-01](../../intents/02-principles.md#pr-01)、[OQ-08](../../intents/05-open-questions.md#oq-08)、[KD-60](../../intents/03-decisions-and-stack.md#kd-60)、[STM-R11](../state-machines/spec.md#需求)、[DOM-R35](../domain-model/spec.md#需求)；三個新代碼為規格設計（D14） |
-| CMV-R17 | 完成後更正與改善登記**必須**各寫一筆稽核事件，與資料變更同一交易；事件代碼與欄位登記到 `audit-log` 事件目錄。 | 必須 | [KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[PR-08](../../intents/02-principles.md#pr-08)、[ALG-R07](../audit-log/spec.md)；事件代碼與欄位為規格設計（D19） |
-| CMV-R18 | 現場作答畫面**必須**在 360px、390px、768px 寬度以觸控完成，主要觸控目標至少 44×44 CSS px，內容不需水平捲動；一次呈現一個項次（標準、實測欄位、結果、依結果出現的嚴重度與註解或原因、照片入口），**不得**顯示資料庫 ID、儲存鍵、雜湊、metadata 等技術資訊；並遵守 PR-19：結果無預設、有依賴的欄位先出現再填、必填標示、錯誤顯示在欄位旁並聚焦、後端未提供欄位位置時保留草稿並顯示一般錯誤、完成前於頁內確認並說明後果、離開有未儲存項次的畫面前提示、全部功能有鍵盤操作路徑。完成後畫面唯讀，只提供更正入口。 | 必須／不得 | [PR-10](../../intents/02-principles.md#pr-10)、[PR-18](../../intents/02-principles.md#pr-18)、[PR-19](../../intents/02-principles.md#pr-19)、[FUI-R08](../field-ui/spec.md#需求)；畫面細節為規格設計，實作前須經原型關卡 |
-| CMV-R19 | 內業結果頁**必須**依查核項目呈現每個項次的標準、結果、嚴重度、註解、實測值、照片數與改善狀態，可依結果與改善狀態篩選，作廢結果有標示並可查；對不符合項次提供登記複查的入口（說明、結果、照片）；顯示更正紀錄。畫面同樣遵守 CMV-R18 的 PR-19 要求與 360px、觸控、鍵盤。 | 必須 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[PR-19](../../intents/02-principles.md#pr-19)；畫面細節為規格設計，實作前須經原型關卡 |
+| CMV-R17 | 完成後更正與改善登記**必須**各寫一筆稽核事件，與資料變更同一交易，並填 `project_id`；事件代碼與欄位登記到 `audit-log` 事件目錄。更正內容與現值相同時不寫事件。 | 必須 | [KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[PR-08](../../intents/02-principles.md#pr-08)、[ALG-R07](../audit-log/spec.md)、[ALG-R09](../audit-log/spec.md)；事件代碼與欄位為規格設計（D19） |
+| CMV-R18 | 現場作答畫面**必須**在 360px、390px、768px 寬度以觸控完成，主要觸控目標至少 44×44 CSS px，內容不需水平捲動，**不得**顯示資料庫 ID、儲存鍵、雜湊、metadata 等技術資訊，並遵守 PR-19：填寫與完成後更正是分開的入口、結果無預設、有依賴的欄位先出現再填、必填標示、錯誤顯示在欄位旁並聚焦、後端未提供欄位位置時保留草稿並顯示一般錯誤、完成前於頁內確認並說明後果、離開有未儲存項次的畫面前提示、全部功能有鍵盤操作路徑；完成後畫面唯讀，只提供更正入口。一次呈現一個項次（標準、實測欄位、結果、依結果出現的嚴重度與註解或原因、照片入口）的流程**應**如介面段「畫面」所述，細節待原型關卡核可。 | 必須／不得／應 | [PR-10](../../intents/02-principles.md#pr-10)、[PR-18](../../intents/02-principles.md#pr-18)、[PR-19](../../intents/02-principles.md#pr-19)、[FUI-R08](../field-ui/spec.md#需求)；一次一個項次的流程與畫面細節為規格設計，實作前須經原型關卡 |
+| CMV-R19 | 內業結果頁**必須**依查核項目呈現每個項次的標準、結果、嚴重度、註解、實測值、照片數與改善狀態，作廢結果有標示並可查；**應**可依結果與改善狀態篩選，對不符合項次提供登記複查的入口（說明、結果、照片），並顯示更正紀錄。登記複查與更正是分開的入口。畫面同樣遵守 CMV-R18 的 PR-19 要求與 360px、觸控、鍵盤。 | 必須／應 | [KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-65](../../intents/03-decisions-and-stack.md#kd-65)、[PR-19](../../intents/02-principles.md#pr-19)；篩選與畫面細節為規格設計，實作前須經原型關卡 |
 | CMV-R20 | 本規格上線後，任務變成 `COMPLETED` 的唯一路徑**必須**是通過 CMV-R07～R09 驗證的完成端點；管理儀表板的完成數與完成率沿用同一指標，改採此伺服器驗證的完成，不拆成兩個指標。 | 必須 | [KD-66](../../intents/03-decisions-and-stack.md#kd-66)、[PR-16](../../intents/02-principles.md#pr-16)；儀表板切換由 `admin-dashboard` 計畫 T8 實作 |
-| CMV-R21 | 本規格上線前已完成的任務**必須**維持已完成，不追溯補結果、不退回進行中；它們沒有逐項結果，畫面如實說明。本規格上線時進行中的任務，完成時須補齊結果與照片。 | 必須 | [PR-04](../../intents/02-principles.md#pr-04)（歷史不改寫）、[不可延後的意圖](../../intents/02-principles.md#costly-to-retrofit-intents)第 8 項（既有任務不得追溯改寫）；舊資料的呈現為規格設計（D17），見 [CMV-Q5](#cmv-q5) |
+| CMV-R21 | 本規格上線前已完成的任務**必須**維持已完成，不追溯補結果、不退回進行中；它們沒有逐項結果，畫面如實說明。本規格上線時進行中的任務，完成時須補齊結果與照片。這類舊任務遇 KD-55「要」時的補查範圍待裁定（[CMV-Q5](#cmv-q5)）。 | 必須 | [PR-04](../../intents/02-principles.md#pr-04)（歷史不改寫）、[不可延後的意圖](../../intents/02-principles.md#costly-to-retrofit-intents)第 8 項（既有任務不得追溯改寫）；舊資料的呈現為規格設計（D17），見 [CMV-Q13](#cmv-q13) |
 
 ## 資料
 
@@ -94,6 +94,9 @@
 
 | 議題 | 與本規格的關係 | 結論 |
 |---|---|---|
+| G-01 | interval 查核間距的歸屬與快照 | 部分裁定，MVP 不設 interval（KD-36）；結果與完成驗證不含 interval，不擋 |
+| G-08 | Result 欄位與缺失管理 | 已移轉：欄位依 OQ-06 裁定，改善追蹤依 KD-65，報告呈現移至 OQ-07；不擋 |
+| OQ-08 | 權限模型 | 已裁定；本規格登記的三個專案動作權限代碼為規格設計，兩層判斷依 #538，不擋 |
 | OQ-06 | 三種結果、嚴重度、註解、不適用原因、實測欄位型別與必填 | 已裁定，本規格的核心依據（[KD-54](../../intents/03-decisions-and-stack.md#kd-54)） |
 | OQ-07 | 報告如何呈現三種結果與嚴重度 | 未裁定，屬 0.8.x；本規格只提供可讀的結果與改善資料，不擋 |
 | OQ-09 | 完成後更正、重開、作廢路徑 | 已部分裁定（[KD-42](../../intents/03-decisions-and-stack.md#kd-42)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-56](../../intents/03-decisions-and-stack.md#kd-56)）；更正的可改範圍與記錄方式為規格設計，見 [CMV-Q1](#cmv-q1) |
@@ -112,7 +115,7 @@
 | GET | `/api/v1/field/inspection-tasks/{task_id}/completion-check` | 完成預檢（唯讀）：`ready`、全部缺項 `problems`、各結果計數 `summary` | 同上 |
 | PUT | `/api/v1/inspection-tasks/{task_id}/results/{point_id}` | 填寫或修改一個項次的結果；整筆取代；Task `IN_PROGRESS` | `inspection_task.inspect` |
 | POST | `/api/v1/inspection-tasks/{task_id}:complete` | 完成任務；沿用既有端點，不收 body；驗證失敗回 422 | `inspection_task.inspect`；Task `IN_PROGRESS` |
-| PATCH | `/api/v1/inspection-tasks/{task_id}/results/{point_id}` | 完成後更正註解、不適用原因、實測值；Task `COMPLETED` | `inspection_task.correct` |
+| PATCH | `/api/v1/inspection-tasks/{task_id}/results/{point_id}` | 完成後更正註解、不適用原因、實測值；需帶 `expected_revision`；Task `COMPLETED` | `inspection_task.correct` |
 | PUT | `/api/v1/inspection-tasks/{task_id}/photos/{photo_id}/caption` | 完成後更正照片註記；Task `COMPLETED` | `inspection_task.correct` |
 | PUT | `/api/v1/inspection-tasks/{task_id}/photos/{photo_id}/field-version` | 完成後以更正上傳取代現場版（multipart，驗證同 `field-evidence` 上傳）；Task `COMPLETED` | `inspection_task.correct` |
 | GET | `/api/v1/inspection-tasks/{task_id}/results` | 內業結果：與作答表同結構，另含改善狀態與計數 | `inspection_result.read` |
@@ -122,34 +125,52 @@
 | POST | `/api/v1/inspection-tasks/{task_id}/results/{point_id}/follow-up-photos` | 上傳一張改善照片（multipart，驗證與冪等同 `field-evidence` 上傳）；回照片識別，尚未掛到登記 | `inspection_result.follow_up`；Task `COMPLETED` |
 | POST | `/api/v1/inspection-tasks/{task_id}/results/{point_id}/follow-ups` | 登記複查：`outcome`、`note`、`photo_ids`；同一交易掛上照片 | `inspection_result.follow_up`；Task `COMPLETED` |
 
-沿用 `inspection-planning` 的 Task 讀取端點，回應**新增** `has_defects`、`defect_count`、`improved_count`（讀取權限不變，仍為 `inspection_task.read`）；Plan 詳情與 Task 清單內的 Task 摘要同樣帶這三個欄位。
+沿用 `inspection-planning` 的 Task 讀取端點，回應**新增** `has_defects`、`defect_count`（T3）與 `improved_count`（T6）；Plan 詳情與 Task 清單內的 Task 摘要同樣帶這三個欄位，讀取權限不變，仍為 `inspection_task.read`。這是對 `inspection-planning` 已凍結回應契約的新增，屬**範圍變更（待負責人裁定，見 [CMV-Q10](#cmv-q10)）**，裁定前不實作這三個欄位。
 
 **作答請求**（`PUT .../results/{point_id}`）：`outcome`（`PASS`、`FAIL`、`NA`，必填）、`severity`、`comment`、`na_reason`、`measurements`（`[{"field_id", "value"}]`，`value` 一律是字串）、`expected_revision`（建立新結果時省略；修改既有結果時必填，須等於目前 `revision`）。不收單位、不收項次以外的識別。建立回 201，修改回 200，回應為該項次完整結果。
 
+**欄位允許矩陣**（作答與完成驗證共用同一份規則）：
+
+| 欄位 | 符合 | 不符合 | 不適用 |
+|---|---|---|---|
+| `severity` | 不得 | 必填 | 不得 |
+| `comment` | 選填 | 必填 | 選填 |
+| `na_reason` | 不得 | 不得 | 必填 |
+| 實測值（項次設有實測欄位時） | 全部必填 | 全部必填 | 選填，可只填部分 |
+
+空值規則：必填欄位省略、為 `null` 或去除前後空白後為空，一律歸 `required`；「不得」欄位帶 `null` 或省略視為未提供，帶任何字串（含空字串）歸 `not_allowed`；選填欄位去除前後空白後為空則存為空；不適用的實測值為空字串視為未填、不保存。數字欄位去除前後空白後須符合數字格式，否則 `invalid_number`；超過長度上限歸 `too_long`；`field_id` 不屬於該項次歸 `unknown_field`；同一 `field_id` 重複歸 `duplicate`。
+
+**完成後更正請求**（皆要求 Task 為 `COMPLETED`、Plan 未封存、呼叫者具 `inspection_task.correct`）：
+
+- `PATCH .../results/{point_id}`：`expected_revision`（必填）、`comment`、`na_reason`、`measurements`（只列要改的 `field_id`）、`reason`（選填，上限 200 字元）；只改有帶的欄位，其餘不變；帶 `outcome` 或 `severity` 一律拒絕；更正後的內容仍須符合欄位允許矩陣（例如不符合的註解不能改成空白）；更正成功版本加 1。
+- `PUT .../photos/{photo_id}/caption`：`caption`、`expected_caption`（目前註記，無註記為 `null`）、`reason`（選填）。
+- `PUT .../photos/{photo_id}/field-version`：multipart，欄位同 `field-evidence` 的上傳（`file`、`sha256`、標頭冪等鍵、選填 `field_edit`），另帶 `expected_sha256`（目前現場版的雜湊）與選填 `reason`；被已核發報告引用的照片拒絕取代（呼叫 `field-evidence` 登記的引用檢查）。
+- 內容與現值完全相同時回「更正無變動」，不寫更正紀錄、不寫稽核事件、不加版本（與 [ALG-R09](../audit-log/spec.md) 的「前後相同不寫紀錄」一致）；`expected_*` 與目前值不符回「版本衝突」，回應帶目前內容，資料不變。
+
 **結果物件**：`point_id`、`outcome`、`severity`、`comment`、`na_reason`、`measurements`、`revision`、`recorded_by: {name_zh, is_me}`、`updated_at`；內業視圖另含 `follow_up: {status, count, latest}`、`voided_at`、`void_reason`，並以改善狀態（`OPEN` 待改善、`NOT_IMPROVED` 尚未改善、`IMPROVED` 已改善）表示。任何視圖都不含儲存鍵。
 
-**完成預檢與完成失敗的缺項**：`problems` 為陣列，每項 `{item_id, point_id, kind, field, reason, required, covered}`，只填適用的欄位。`kind`：`result_missing`（項次沒有有效結果）、`result_invalid`（有結果但不符合目前快照的規則，`field` 指到欄位、`reason` 說明）、`photos_insufficient`（`required`、`covered` 為需要與已有張數）、`needs_reinspection`（項目待重查，`point_id` 為空）。`summary` 含項次總數、已作答數與符合、不符合、不適用各自的數量，供完成前的確認說明使用。完成失敗回 422 `inspection_task.items_incomplete`，`error.details.problems` 與預檢的 `problems` 同格式。
+**完成預檢與完成失敗的缺項**：`problems` 為陣列，每項 `{item_id, point_id, kind, field, reason, required, covered}`，只填適用的欄位。`kind`：`result_missing`（項次沒有有效結果，只有照片也算）、`result_invalid`（有結果但不符合目前快照的規則，`field` 指到欄位、`reason` 說明）、`photos_insufficient`（`required`、`covered` 為需要與已有張數）、`needs_reinspection`（項目待重查，`point_id` 為空）。`summary` 含項次總數、已作答數與符合、不符合、不適用各自的數量，供完成前的確認說明使用。完成失敗回 422「完成缺項」，`error.details.problems` 與預檢的 `problems` 同格式。照片「已有 n／需要 m」的畫面提示來自 `field-evidence` 的覆蓋端點，完成預檢才是權威。
 
-**欄位錯誤**：作答與改善登記的業務規則失敗回 422，`error.details.fields` 為陣列 `{field, reason}`；`field` 是 `outcome`、`severity`、`comment`、`na_reason`、`measurements.<field_id>`、`note`、`photo_ids`；`reason` 是 `required`、`not_allowed`、`invalid_number`、`too_long`、`unknown_field`、`not_found`。型別或結構錯誤（例如缺少 `outcome`、`value` 不是字串）走共用的 `request.validation_failed`。
+**欄位錯誤**：作答、更正與改善登記的業務規則失敗回 422，`error.details.fields` 為陣列 `{field, reason}`；`field` 是 `outcome`、`severity`、`comment`、`na_reason`、`measurements.<field_id>`、`note`、`photo_ids`；`reason` 是 `required`、`not_allowed`、`invalid_number`、`too_long`、`unknown_field`、`duplicate`、`not_found`。型別或結構錯誤（例如缺少 `outcome`、`value` 不是字串）走共用的「結構驗證失敗」。`error.details` 為物件，是新增的共用慣例，與 `field-evidence` 同一條，列在計畫 T0，T2 依賴它。
 
-**錯誤**（遵守 [API-R07](../api-conventions/spec.md#需求)）：
+**錯誤**（遵守 [API-R07](../api-conventions/spec.md#需求)；以條列呈現，錯誤碼的唯一來源是程式的錯誤碼列舉，本段只是便於閱讀的說明；AC 與計畫以名稱稱呼）：
 
-| HTTP | `error.code` | 情境 |
-|---|---|---|
-| 422 | `inspection_result.invalid` | 作答違反 CMV-R01～R03，`error.details.fields` 指到欄位 |
-| 422 | `inspection_result.correction_not_allowed` | 更正請求帶了結果或嚴重度，或該項次沒有可更正的有效結果 |
-| 422 | `inspection_result.follow_up_invalid` | 登記複查違反 CMV-R13，`error.details.fields` 指到欄位 |
-| 422 | `inspection_result.follow_up_target_invalid` | 目標項次沒有有效的不符合結果 |
-| 422 | `inspection_task.items_incomplete` | 完成驗證失敗；既有錯誤碼，新增 `error.details.problems` |
-| 422 | `request.validation_failed` | 型別、結構、缺少必填欄位、請求長度超過上限 |
-| 409 | `inspection_result.revision_conflict` | `expected_revision` 與目前版本不符，或該項次已有結果卻沒帶版本；回應帶目前結果 |
-| 409 | `inspection_result.task_locked` | Task 狀態不允許此動作（見狀態矩陣） |
-| 409 | `inspection_plan.archived` | 所屬 Plan 已封存（既有錯誤碼） |
-| 409 | `inspection_task.invalid_transition` | 完成端點遇到非 `IN_PROGRESS` 的 Task（既有錯誤碼） |
-| 403 | `permission.denied` | 缺少所需專案權限 |
-| 404 | `resource.not_found` | Task、項次、照片不存在，`DRAFT` 對現場隱藏，或項次不屬於該 Task |
+- 「作答規則違反」：422 `inspection_result.invalid`，作答或更正違反欄位允許矩陣與 CMV-R01～R03，`error.details.fields` 指到欄位。
+- 「更正不允許」：422 `inspection_result.correction_not_allowed`，更正請求帶了結果或嚴重度，或該項次沒有可更正的有效結果。
+- 「更正無變動」：422 `inspection_result.correction_unchanged`，更正內容與現值相同。
+- 「改善登記不合法」：422 `inspection_result.follow_up_invalid`，違反改善登記規則，`error.details.fields` 指到欄位。
+- 「改善目標不合法」：422 `inspection_result.follow_up_target_invalid`，目標項次沒有有效的不符合結果。
+- 「完成缺項」：422 `inspection_task.items_incomplete`，完成驗證失敗；既有錯誤碼，新增 `error.details.problems`。
+- 「結構驗證失敗」：422 `request.validation_failed`，型別、結構、缺少必填欄位、請求長度超過上限。
+- 「版本衝突」：409 `inspection_result.revision_conflict`，`expected_*` 與目前值不符，或該項次已有結果卻沒帶版本；回應帶目前內容。
+- 「標準已變更」：409 `inspection_result.standard_changed`，作答的項次已不在目前快照（專案查核項目已被修改）。
+- 「狀態鎖定」：409 `inspection_result.task_locked`，Task 狀態不允許此動作（見狀態矩陣）。
+- 「計畫已封存」：409 `inspection_plan.archived`，既有錯誤碼。
+- 「非法轉換」：409 `inspection_task.invalid_transition`，完成端點遇到非 `IN_PROGRESS` 的 Task；既有錯誤碼。
+- 「權限不足」：403 `permission.denied`，缺少所需專案權限。
+- 「找不到」：404 `resource.not_found`，Task、項次、照片不存在，`DRAFT` 對現場隱藏，或項次不屬於該 Task。
 
-改善照片與現場版取代沿用 `field-evidence` 的上傳錯誤碼（`evidence.*`）。
+改善照片與現場版取代沿用 `field-evidence` 的上傳錯誤（含照片鎖定）。
 
 **狀態矩陣**：
 
@@ -172,7 +193,7 @@
 | `inspection_result.follow_up` | 專案 | 登記複查結果與改善照片 | 內業 |
 | `inspection_task.correct` | 專案 | 完成後更正結果文字、實測值與照片 | 現場工程師、內業 |
 
-**稽核事件**（登記到 `audit-log` 事件目錄，規格設計）：`inspection_task.corrected`（Task、更正目標、前後值、更正者、時間）、`inspection_result.follow_up_registered`（Task、項次、複查結果、說明、照片數）。作廢沿用 `project_inspection_item.updated`，不另寫新事件。
+**稽核事件**（登記到 `audit-log` 事件目錄，規格設計）：`inspection_task.corrected`（`project_id`、Task、更正目標、前後值、更正者、時間）、`inspection_result.follow_up_registered`（`project_id`、Task、項次、複查結果、說明、照片數）。兩者都不是「每次都寫」的事件：更正無變動時直接拒絕，不呼叫稽核入口。作廢沿用 `project_inspection_item.updated`，不另寫新事件。
 
 **畫面**（重大新畫面，實作前須先過[原型關卡](../README.md#ui-prototype-gate)；以下為規格設計）：
 
@@ -182,43 +203,44 @@
 
 ## 驗收條件
 
-以下 AC 的 API、權限與端對端驗收**必須**以真實後端驗證；mock 只可用於單元與元件呈現測試，不得單獨作為契約或端對端證據（[PR-19](../../intents/02-principles.md#pr-19)、[RG-M22](../../review-guidelines.md)）。UI 的 360px 驗收以 SQLite 真後端、Vite 與無頭瀏覽器從登入開始只靠點擊走查，並保存桌面與 360px 淺色模式截圖。
+以下 AC 的 API、權限與端對端驗收**必須**以真實後端驗證；mock 只可用於單元與元件呈現測試，不得單獨作為契約或端對端證據（[PR-19](../../intents/02-principles.md#pr-19)、[RG-M22](../../review-guidelines.md)）。UI 的 360px 驗收以 SQLite 真後端、Vite 與無頭瀏覽器從登入開始只靠點擊走查，並保存桌面與 360px 淺色模式截圖。表中的錯誤以名稱稱呼，名稱與錯誤碼的對照見介面段的「錯誤」清單；AC 表不重述錯誤碼。
 
 | 編號 | Given | When | Then | 對應需求 |
 |---|---|---|---|---|
-| CMV-AC01 | `IN_PROGRESS` Task，一個查核項目有三個項次；現場使用者具 `inspection_task.inspect` | 只為第一個項次 `PUT` 結果；另送不含 `outcome` 與 `outcome` 為其他值的請求 | 只有該項次有結果，另兩個項次在作答表中為 `null`，沒有任何預設結果，也沒有整組結果；缺少或不合法的 `outcome` 回 422 `request.validation_failed`，資料不變 | CMV-R01、R04 |
-| CMV-AC02 | 項次不含實測欄位 | 依序送出：符合（無額外欄位）；符合但帶嚴重度；不符合缺嚴重度；不符合缺註解或註解只有空白；不符合附完整嚴重度與註解（輕微、一般、嚴重各一次）；不適用缺原因；不適用附原因且不帶照片 | 符合、完整的不符合與不適用成功；其餘回 422 `inspection_result.invalid`，`error.details.fields` 指出 `severity`、`comment`、`na_reason` 的 `required` 或 `not_allowed`；不適用不要求照片；失敗時資料不變 | CMV-R02 |
-| CMV-AC03 | 項次有一個數字欄位（單位公尺）與一個文字欄位，並綁定數值標準 3.3 ± 0.3 | 送出：符合且兩欄俱全；符合缺一欄；不符合缺一欄；不適用不填；數字欄填 `abc`、`1e3`、`NaN`、`1,000`、空字串；請求帶單位；數值超出標準範圍仍選符合；數值在範圍內卻選不符合 | 俱全時成功，值以送入的字串保存（例如 `3.30`）；缺欄回 `measurements.<field_id>` 的 `required`；不適用成功；非法數字回 `invalid_number`；帶單位回 422 `request.validation_failed`；超出或在範圍內都照選的結果保存，沒有自動判定與警告 | CMV-R03、R01 |
-| CMV-AC04 | Task 分別為 `DRAFT`、`PENDING`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`，另有封存 Plan | 現場填寫結果；讀取作答表 | 依狀態矩陣：`IN_PROGRESS` 成功；`PENDING`、`COMPLETED`、`CANCELLED` 回 409 `inspection_result.task_locked`；封存 Plan 回 409 `inspection_plan.archived`；`DRAFT` 對僅具 `inspect` 者回 404；各狀態讀取皆可（`DRAFT` 現場除外）；被拒絕時資料不變 | CMV-R04 |
-| CMV-AC05 | 專案成員 U1 具 `inspection_task.inspect`、U2 只有 `inspection_task.read`、U3 非成員、內業 U4 具 `inspection_result.read`、Admin | 各自呼叫現場作答表、填寫、完成、內業結果 | U1 可讀寫與完成；U2、U3 在一般端點回 403 `permission.denied`，在 `/field/` 端點依 [FUI-R06](../field-ui/spec.md#需求) 回 404；U4 可讀內業結果但不能填寫或完成；Admin 全部放行；三個新權限代碼已登記，未登記的代碼無法指派給角色 | CMV-R16、R04 |
-| CMV-AC06 | 同專案另一位具 `inspection_task.inspect` 的 U6（非建議指派人）；同一項次已有結果 | U6 填寫一個項次；同一項次再以相同內容重送；以舊版本號修改；未帶版本號修改既有結果；兩個請求同時為尚無結果的同一項次建立結果 | 結果的建立與修改者是 U6，不是建議指派人；以正確版本號修改成功且版本加 1；舊版本號或未帶版本號回 409 `inspection_result.revision_conflict` 並帶目前結果，資料不變；並行建立只成功一筆，另一筆回 409 | CMV-R04、R05 |
+| CMV-AC01 | `IN_PROGRESS` Task，一個查核項目有三個項次；現場使用者具 `inspection_task.inspect` | 只為第一個項次 `PUT` 結果；另送不含 `outcome` 與 `outcome` 為其他值的請求 | 只有該項次有結果，另兩個項次在作答表中為 `null`，沒有任何預設結果，也沒有整組結果；缺少或不合法的 `outcome` 回 422 結構驗證失敗，資料不變 | CMV-R01、R04 |
+| CMV-AC02 | 項次不含實測欄位 | 依序送出：符合（無額外欄位）；符合但帶嚴重度；不符合缺嚴重度；不符合缺註解、註解只有空白、註解超過上限；不符合附完整嚴重度與註解（輕微、一般、嚴重各一次）；不適用缺原因或原因只有空白；不適用附原因且不帶照片；各結果帶不屬於它的欄位（含空字串） | 符合、完整的不符合與不適用成功；其餘回 422 作答規則違反，`error.details.fields` 依欄位允許矩陣指出 `severity`、`comment`、`na_reason` 的 `required`、`not_allowed` 或 `too_long`（空白與空字串歸 `required`，不屬於該結果的欄位帶任何字串歸 `not_allowed`）；不適用不要求照片；失敗時資料不變 | CMV-R02 |
+| CMV-AC03 | 項次有一個數字欄位（單位公尺）與一個文字欄位，並綁定數值標準 3.3 ± 0.3 | 送出：符合且兩欄俱全；符合缺一欄或值只有空白；不符合缺一欄；不適用不填；數字欄填 `abc`、`1e3`、`NaN`、`1,000`；文字欄超過上限；`field_id` 不屬於該項次、重複的 `field_id`；請求帶單位；數值超出標準範圍仍選符合；數值在範圍內卻選不符合 | 俱全時成功，值以送入的字串保存（例如 `3.30`）；缺欄回 `measurements.<field_id>` 的 `required`；不適用成功；非法數字回 `invalid_number`；超長回 `too_long`；不屬於該項次的欄位回 `unknown_field`；重複回 `duplicate`；帶單位回 422 結構驗證失敗；超出或在範圍內都照選的結果保存，沒有自動判定與警告 | CMV-R03、R01 |
+| CMV-AC04 | Task 分別為 `DRAFT`、`PENDING`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`，另有封存 Plan | 現場填寫結果；讀取作答表 | 依狀態矩陣：`IN_PROGRESS` 成功；`PENDING`、`COMPLETED`、`CANCELLED` 回 409 狀態鎖定；封存 Plan 回 409 計畫已封存；`DRAFT` 對僅具 `inspect` 者回 404；各狀態讀取皆可（`DRAFT` 現場除外）；被拒絕時資料不變 | CMV-R04 |
+| CMV-AC05 | 專案成員 U1 具 `inspection_task.inspect`、U2 只有 `inspection_task.read`、U3 非成員、內業 U4 具 `inspection_result.read`、Admin | 各自呼叫現場作答表、填寫、完成、內業結果 | U1 可讀寫與完成；U2、U3 在一般端點回 403 權限不足，在 `/field/` 端點依 [FUI-R06](../field-ui/spec.md#需求) 回 404；U4 可讀內業結果但不能填寫或完成；Admin 全部放行；三個新權限代碼已登記並已歸入存取分類（`inspection_task.correct` 單獨不算內業也不算現場，`inspection_result.read`、`inspection_result.follow_up` 屬內業），分類測試與前端內業區段判斷都涵蓋新代碼；未登記的代碼無法指派給角色 | CMV-R16、R04 |
+| CMV-AC06 | 同專案另一位具 `inspection_task.inspect` 的 U6（非建議指派人）；同一項次已有結果 | U6 填寫一個項次；同一項次再以相同內容重送；以舊版本號修改；未帶版本號修改既有結果；兩個請求同時為尚無結果的同一項次建立結果 | 結果的建立與修改者是 U6，不是建議指派人；以正確版本號修改成功且版本加 1；舊版本號或未帶版本號回 409 版本衝突並帶目前結果，資料不變；並行建立只成功一筆，另一筆回 409 版本衝突 | CMV-R04、R05 |
 | CMV-AC07 | Task 有兩個項目、多個項次，部分已作答，部分作廢；內業有 `inspection_result.read` | 現場讀作答表；內業讀結果、作廢結果清單 | 作答表列出每個項目與項次，未作答為 `null`，沒有儲存鍵、雜湊或 metadata；內業結果含改善狀態與計數；作廢結果只在作廢清單出現，含 `void_reason`；清單以 cursor 分頁且無重複遺漏 | CMV-R06 |
-| CMV-AC08 | `IN_PROGRESS` Task：部分項次未作答；另一項次的結果在需求快照更正後，已不符合目前規則（例如實測欄位集合改變）；另一項目待重查 | 呼叫完成 | 回 422 `inspection_task.items_incomplete`，`error.details.problems` 一次列出全部缺項（`result_missing`、`result_invalid` 含 `field` 與 `reason`、`needs_reinspection`）；Task 仍為 `IN_PROGRESS`，`completed_by` 與 `completed_at` 為空，Plan 狀態不變 | CMV-R07、R09 |
-| CMV-AC09 | 項次 A（`min_count` 1）、B（`min_count` 2），結果皆為符合；項次 C 為不適用；另有總覽照、已刪除照、已作廢照 | 在不同照片數下呼叫完成：A 無照片；A 有一張；B 只有一張；B 有兩張；C 無照片；只有總覽或已刪除或已作廢的照片 | 缺照片回 422 `photos_insufficient`，帶 `required` 與 `covered`；A、B 達標後成功；C 不要求照片；總覽、已刪除、已作廢不計入；覆蓋數與 `field-evidence` 的覆蓋計算結果一致（以同一函式驗證，不另算） | CMV-R08 |
-| CMV-AC10 | 資料庫的結果不齊全；前端送出的完成請求帶 `{"complete": true, "all_points_satisfied": true}` 之類的自報內容 | 呼叫完成；呼叫完成預檢；補齊後再次預檢與完成 | 完成仍回 422，自報內容無效；預檢回 `ready: false` 與和完成失敗相同的 `problems`，且不改變任何資料；補齊後預檢 `ready: true`，完成成功；預檢與完成使用同一個驗證函式（以測試斷言兩者結果一致） | CMV-R09 |
-| CMV-AC11 | Task 的項次含符合、不適用，以及嚴重度為輕微、一般、嚴重的不符合，資料齊全；該 Plan 只剩這個 Task 未完成 | 呼叫完成 | 成功（嚴重度不阻擋）；Task 為 `COMPLETED`，`completed_by` 是實際操作者；Plan 自動完成；Task 讀取、清單與 Plan 詳情的 `has_defects` 為 `true`，`defect_count` 為 3，`improved_count` 為 0 | CMV-R10、R07、R09 |
-| CMV-AC12 | 兩個已完成任務：一個全為符合與不適用；一個的不符合結果已被 KD-55 作廢 | 讀取 Task 與清單 | 前者 `has_defects` 為 `false`；後者作廢的不符合不計入（`defect_count` 為 0）；`has_defects` 由結果即時推導，資料表沒有對應的儲存欄位 | CMV-R10 |
-| CMV-AC13 | `COMPLETED` Task，一個符合結果有註解、一個不適用有原因、一個符合有文字與數字實測值；具 `inspection_task.correct` 的現場使用者 U1 與內業 U4 | 各更正註解、原因、文字實測值、數字實測值（一次一個，帶或不帶更正原因） | 皆回 200；Task 與 Plan 仍是原狀態，沒有重新完成；`GET corrections` 查得到更正者、時間、目標與前後值；數字更正仍須符合數字格式；結果、嚴重度與其他欄位不變 | CMV-R11 |
-| CMV-AC14 | `COMPLETED` Task，一張有註記的照片 | 更正照片註記；以更正上傳取代現場版（含不合法 JPEG、雜湊不符的情況） | 註記更正成功並留紀錄；取代現場版成功時儲存仍只有該照片的兩個檔案（現場版被取代、內業版重設為新現場版的初始複本）、雜湊已更新、紀錄只含雜湊與大小；不合法 JPEG 或雜湊不符回 `field-evidence` 的 `evidence.*` 錯誤且不留檔案、不改記錄 | CMV-R11 |
-| CMV-AC15 | `COMPLETED` Task | 嘗試：更正時帶 `outcome` 或 `severity`；對尚無結果的項次更正；新增或刪除照片；取消任務；尋找重開端點；在 `IN_PROGRESS` Task 使用更正端點 | 帶結果或嚴重度回 422 `inspection_result.correction_not_allowed`，資料不變；新增或刪除照片依 `field-evidence` 回 409 鎖定；取消回 409（[STM-AC11](../state-machines/spec.md#驗收條件)）；路由清單中沒有任何可令 `COMPLETED` 離開完成狀態的端點；`IN_PROGRESS` 使用更正端點回 409 `inspection_result.task_locked` | CMV-R11、R12 |
-| CMV-AC16 | `COMPLETED` Task；U1 具 `inspection_task.correct`、U2 只有 `inspection_task.read`、U3 非成員、內業 U4、Admin；`CANCELLED` Task 與封存 Plan | 各自更正與讀取更正紀錄 | U1、U4 可更正，U2、U3 回 403；`inspection_result.read` 者可讀更正紀錄；`CANCELLED` 與封存 Plan 更正被拒（409）；Admin 放行 | CMV-R11、R16 |
+| CMV-AC08 | `IN_PROGRESS` Task：部分項次未作答；一個項次只有照片沒有結果；另一項次的結果在需求快照更正後已不符合目前規則（例如實測欄位集合改變）；另一項目待重查 | 呼叫完成 | 回 422 完成缺項，`error.details.problems` 一次列出全部缺項（`result_missing`、只有照片的項次仍是 `result_missing`、`result_invalid` 含 `field` 與 `reason`、`needs_reinspection`）；Task 仍為 `IN_PROGRESS`，`completed_by` 與 `completed_at` 為空，Plan 狀態不變 | CMV-R07、R09 |
+| CMV-AC09 | 項次 A（`min_count` 1）、B（`min_count` 2），結果皆為符合；項次 C 為不適用；另有總覽照、已刪除照、已作廢照 | 在不同照片數下呼叫完成：A 無照片；A 有一張；B 只有一張；B 有兩張；C 無照片；只有總覽或已刪除或已作廢的照片 | 缺照片回 422 完成缺項並帶 `photos_insufficient`（含 `required` 與 `covered`）；A、B 達標後成功；C 不要求照片；總覽、已刪除、已作廢不計入；覆蓋數與 `field-evidence` 的覆蓋計算結果一致（以同一函式驗證，不另算） | CMV-R08 |
+| CMV-AC10 | 資料庫的結果不齊全；前端送出的完成請求帶 `{"complete": true, "all_points_satisfied": true}` 之類的自報內容 | 呼叫完成；呼叫完成預檢；補齊後再次預檢與完成 | 完成仍回 422 完成缺項，自報內容無效；預檢回 `ready: false` 與和完成失敗相同的 `problems`，且不改變任何資料；補齊後預檢 `ready: true`，完成成功；預檢與完成使用同一個驗證函式（以測試斷言兩者結果一致） | CMV-R09 |
+| CMV-AC11 | Task 的項次含符合、不適用，以及嚴重度為輕微、一般、嚴重的不符合，資料齊全；該 Plan 只剩這個 Task 未完成 | 呼叫完成 | 成功（嚴重度不阻擋）；Task 為 `COMPLETED`，`completed_by` 是實際操作者；Plan 自動完成；Task 讀取、清單與 Plan 詳情的 `has_defects` 為 `true`，`defect_count` 為 3 | CMV-R10、R07、R09 |
+| CMV-AC12 | 兩個已完成任務：一個全為符合與不適用；一個的不符合結果已被 KD-55 作廢 | 讀取 Task 與清單 | 前者 `has_defects` 為 `false`、`defect_count` 為 0；後者作廢的不符合不計入；`has_defects` 由結果即時推導，資料表沒有對應的儲存欄位 | CMV-R10 |
+| CMV-AC13 | `COMPLETED` Task，一個符合結果有註解、一個不適用有原因、一個符合有文字與數字實測值；具 `inspection_task.correct` 的現場使用者 U1 與內業 U4 | 各更正註解、原因、文字實測值、數字實測值（一次一個，帶或不帶更正原因）；送出與現值相同的內容；以舊版本號更正；對符合結果更正不適用原因 | 更正回 200 且版本加 1；Task 與 Plan 仍是原狀態，沒有重新完成；`GET corrections` 查得到更正者、時間、目標、前後值與原因；數字更正仍須符合數字格式；結果、嚴重度與其他欄位不變；內容與現值相同回 422 更正無變動，不寫更正紀錄、不寫稽核、版本不變；舊版本號回 409 版本衝突；不屬該結果的欄位回 422 作答規則違反 | CMV-R11 |
+| CMV-AC14 | `COMPLETED` Task，一張有註記的照片；另一張被（測試替身註冊的）已核發報告引用 | 更正照片註記；以更正上傳取代現場版（含不合法 JPEG、雜湊不符、`expected_sha256` 過期）；對被報告引用的照片取代現場版 | 註記更正成功並留紀錄；取代現場版成功時儲存仍只有該照片的兩個檔案（現場版被取代、內業版重設為新現場版的初始複本）、雜湊已更新、紀錄只含雜湊與大小；不合法 JPEG 或雜湊不符回 `field-evidence` 的上傳錯誤且不留檔案、不改記錄；`expected_sha256` 過期回 409 版本衝突；被已核發報告引用的照片不得取代現場版（回 `field-evidence` 的照片鎖定錯誤），資料與檔案不變 | CMV-R11 |
+| CMV-AC15 | `COMPLETED` Task | 嘗試：更正時帶 `outcome` 或 `severity`；對尚無結果的項次更正；新增或刪除照片；取消任務；檢查路由清單；在 `IN_PROGRESS` Task 使用更正端點 | 帶結果或嚴重度回 422 更正不允許，資料不變；新增或刪除照片依 `field-evidence` 回 409 鎖定；取消回 409（[STM-AC11](../state-machines/spec.md#驗收條件)）；路由清單中除專案查核項目修改選「要」（KD-55，由標準變更觸發而非人工重開）外，沒有任何可令 `COMPLETED` 離開完成狀態的端點；`IN_PROGRESS` 使用更正端點回 409 狀態鎖定 | CMV-R11、R12 |
+| CMV-AC16 | `COMPLETED` Task；U1 具 `inspection_task.correct`、U2 只有 `inspection_task.read`、U3 非成員、內業 U4、Admin；`CANCELLED` Task 與封存 Plan | 各自更正與讀取更正紀錄 | U1、U4 可更正，U2、U3 回 403 權限不足；`inspection_result.read` 者可讀更正紀錄；`CANCELLED` 與封存 Plan 更正被拒（409）；Admin 放行 | CMV-R11、R16 |
 | CMV-AC17 | `COMPLETED` Task 有三個不符合結果；內業具 `inspection_result.follow_up` | 對其一依序登記：說明加「尚未改善」；說明加「已改善」並附一張已上傳的改善照片；再登記一筆「尚未改善」 | 三次都成功並各留一筆歷史（只增不改不刪）；改善狀態依序為 `NOT_IMPROVED`、`IMPROVED`、`NOT_IMPROVED`（最新一筆決定）；原結果、嚴重度與任務完成狀態不變；`has_defects` 仍為 `true`；`improved_count` 隨最新狀態變動 | CMV-R13 |
-| CMV-AC18 | 同上；另有符合結果、不適用結果、已作廢的不符合結果 | 嘗試：已改善但不附照片；說明空白；未知或他人任務的照片識別；對符合、不適用或作廢結果登記；檢查所有回應與資料表 | 前四者回 422 `inspection_result.follow_up_invalid`，`error.details.fields` 指到 `note` 或 `photo_ids`；後者回 422 `inspection_result.follow_up_target_invalid`；資料不變；任何 API 回應與資料表都沒有期限、逾期、通知或自動判定欄位；改善照片不計入任何項次的覆蓋數 | CMV-R13 |
-| CMV-AC19 | 一個已完成任務有 3 個不符合、其中 1 個已改善；另一個 Plan 內有多個任務 | 讀取 Task、Task 清單、Plan 詳情與內業結果 | 各處的 `has_defects`、`defect_count`、`improved_count` 一致（3、1）；內業結果逐項次顯示 `OPEN`、`NOT_IMPROVED`、`IMPROVED`；作廢的不符合不計入；清單查詢數不隨任務數成長 | CMV-R14 |
-| CMV-AC20 | `COMPLETED` Task；U1 只有 `inspection_task.inspect`、內業 U4 具 `inspection_result.follow_up`、Admin；`IN_PROGRESS`、`CANCELLED` Task 與封存 Plan | 各自登記複查與上傳改善照片 | U4 與 Admin 成功；U1 回 403；`IN_PROGRESS`、`CANCELLED`、封存 Plan 回 409 | CMV-R13、R16 |
-| CMV-AC21 | 專案查核項目 X 被已派出 Task 使用，X 的項次已有結果（含一個已有改善登記的不符合）與照片；項目 Y 也有結果；Task 為 `COMPLETED`、Plan 已完成 | 內業修改 X 並選「要」重新查核；之後現場補查 X；請求中途失敗的一次嘗試 | 同一交易內 X 的有效結果標示 `STANDARD_CHANGED` 作廢並保留（連同改善登記與改善照片，不刪除）；作廢結果不出現在作答表與 `has_defects` 計算，內業可由作廢清單查到；Y 的結果不變；Task 回到 `IN_PROGRESS`、Plan 退回進行中；X 重新作答前完成回 422（`result_missing` 或 `needs_reinspection`）；X 每個項次都有新的有效結果時待重查旗標由伺服器清除，Task 可再完成；中途失敗時結果作廢、照片作廢與項目修改一併回滾 | CMV-R15、R07 |
-| CMV-AC22 | 專案查核項目 X 的任務：一個已有結果；另一個只有結果沒有照片；一個已取消且取消期間標準被修改；X 另一個任務尚無結果與照片 | 內業修改 X 並選「不要」；另一次選「要」；恢復已取消任務 | 選「不要」時結果與改善登記不變；選「要」時只有結果沒有照片的任務也標示待重查（`has_result` 含結果）；尚無結果與照片者直接使用新快照、不標待重查；已取消任務恢復時，受影響項目的有效結果作廢，其他項目不變；影響列表的 `has_result` 在結果或有效照片存在時為真 | CMV-R15 |
+| CMV-AC18 | 同上；另有符合結果、不適用結果、已作廢的不符合結果 | 嘗試：已改善但不附照片；說明空白；未知或他人任務的照片識別；對符合、不適用或作廢結果登記；檢查所有回應與資料表 | 前四者回 422 改善登記不合法，`error.details.fields` 指到 `note` 或 `photo_ids`；後者回 422 改善目標不合法；資料不變；任何 API 回應與資料表都沒有期限、逾期、通知或自動判定欄位；改善照片不計入任何項次的覆蓋數 | CMV-R13 |
+| CMV-AC19 | 一個已完成任務有 3 個不符合、其中 1 個已改善；另一個 Plan 內有多個任務 | 讀取 Task、Task 清單、Plan 詳情與內業結果 | 各處的 `has_defects`、`defect_count`、`improved_count` 一致（真、3、1）；內業結果逐項次顯示 `OPEN`、`NOT_IMPROVED`、`IMPROVED`；作廢的不符合不計入；清單查詢數不隨任務數成長 | CMV-R14 |
+| CMV-AC20 | `COMPLETED` Task；U1 只有 `inspection_task.inspect`、內業 U4 具 `inspection_result.follow_up`、Admin；`IN_PROGRESS`、`CANCELLED` Task 與封存 Plan | 各自登記複查與上傳改善照片 | U4 與 Admin 成功；U1 回 403 權限不足；`IN_PROGRESS`、`CANCELLED`、封存 Plan 回 409 | CMV-R13、R16 |
+| CMV-AC21 | 專案查核項目 X 被已派出 Task 使用，X 的項次已有結果（含一個已有改善登記的不符合）與照片；項目 Y 也有結果；Task 為 `COMPLETED`、Plan 已完成 | 內業修改 X 並選「要」重新查核；之後現場補查 X；請求中途失敗的一次嘗試 | 同一交易內 X 的有效結果標示作廢（`STANDARD_CHANGED`）並保留（連同改善登記與改善照片，不刪除）；作廢結果不出現在作答表與 `has_defects` 計算，內業可由作廢清單查到；Y 的結果不變；Task 回到 `IN_PROGRESS`、Plan 退回進行中；X 重新作答前完成回 422 完成缺項；X 每個項次都有新的有效結果時待重查旗標由伺服器清除，Task 可再完成；中途失敗時結果作廢、照片作廢與項目修改一併回滾 | CMV-R15、R07 |
+| CMV-AC22 | 專案查核項目 X 的任務：一個已有結果；另一個尚無結果與照片；一個已取消且取消期間標準被修改；點位與實測欄位的穩定身分已依裁定落地（前置，見 CMV-Q7） | 內業修改 X 並選「不要」；另一次選「要」；恢復已取消任務 | 選「不要」時結果與改善登記不變，仍對得上同一項次與實測欄位；選「要」時有結果的任務依 KD-55 作廢結果；尚無結果與照片者直接使用新快照、不標待重查；已取消任務遇「要」的作廢時點與只有照片的項目是否標待重查，依 CMV-Q6 的裁定驗收；`has_result` 的定義依同一裁定；不在目前快照的結果依 CMV-Q8 的裁定處理 | CMV-R15、R05 |
 | CMV-AC23 | 任一筆結果 | 以資料庫查詢追溯 | 可由結果找到查核項目明細與快照修訂、Task、Plan、Project；記錄填寫者與時間；同一任務同一項次在未作廢時只有一筆（重複寫入被約束擋下）；完成度檢查讀任務快照，修改範本或專案副本後驗證結果不變 | CMV-R05 |
-| CMV-AC24 | 升級前已存在的資料：一個 `COMPLETED` Task（沒有結果）、一個 `IN_PROGRESS` Task（沒有結果） | 執行 migration 後讀取；對進行中任務呼叫完成 | `COMPLETED` Task 與其 Plan 狀態不變、沒有補結果；內業結果與作答表回空結構，畫面說明「此任務於逐項結果上線前完成」；進行中任務完成須補齊結果與照片，否則回 422 | CMV-R21 |
+| CMV-AC24 | 升級前已存在的資料：一個 `COMPLETED` Task（沒有結果）、一個 `IN_PROGRESS` Task（沒有結果） | 執行 migration 後讀取；現場與內業開啟該已完成任務的畫面；對進行中任務呼叫完成 | `COMPLETED` Task 與其 Plan 狀態不變、沒有補結果；內業結果與作答表回空結構，現場與內業畫面都顯示「此任務於逐項結果上線前完成」的說明而不是空表；進行中任務完成須補齊結果與照片，否則回 422 完成缺項 | CMV-R21、R18、R19 |
 | CMV-AC25 | 後端全部路由；管理儀表板的完成數與完成率 | 檢查可改變 Task 狀態的端點；嘗試用通用更新把 Task 設為 `COMPLETED`；對照儀表板指標 | 只有 `:complete` 能使 Task 成為 `COMPLETED`，通用更新端點拒絕直接寫狀態；儀表板完成數與完成率的來源就是這個狀態，不另設第二個指標（切換由 `admin-dashboard` T8 驗收） | CMV-R20、R09 |
-| CMV-AC26 | 完成後更正與登記改善 | 檢查稽核紀錄；讓其中一次的寫入中途失敗 | 各寫一筆 `inspection_task.corrected`、`inspection_result.follow_up_registered`，內容含操作者、時間與前後值（或複查結果與說明）；與資料變更同一交易，失敗時一併回滾；事件已登記在 `audit-log` 目錄且欄位不含儲存鍵 | CMV-R17 |
-| CMV-AC27 | 360px、390px 與 768px 的現場任務詳情與項次填寫畫面；任務有文字與數字實測欄位的項次 | 以觸控一次填一個項次：選符合並填實測值；選不符合並補嚴重度與註解；選不適用並填原因；故意漏填；儲存並到下一項；離開未儲存的項次 | 觸控目標至少 44×44 CSS px、無水平捲動；結果初始都不選；嚴重度與註解只在選不符合後出現、原因只在選不適用後出現；必填有標示，錯誤顯示在欄位旁並聚焦第一個錯誤；數字欄位旁顯示單位與換算提示；伺服器未提供欄位位置的錯誤保留草稿並顯示一般錯誤；離開前有提示；全程可用鍵盤；畫面沒有資料庫 ID、儲存鍵、雜湊或 metadata；進度與各項次狀態與作答表一致 | CMV-R18、R01、R02、R03 |
+| CMV-AC26 | 完成後更正與登記改善 | 檢查稽核紀錄；讓其中一次的寫入中途失敗 | 各寫一筆 `inspection_task.corrected`、`inspection_result.follow_up_registered`，內容含 `project_id`、操作者、時間與前後值（或複查結果與說明）；與資料變更同一交易，失敗時一併回滾；事件已登記在 `audit-log` 目錄且欄位不含儲存鍵；更正無變動時不寫事件 | CMV-R17 |
+| CMV-AC27 | 360px、390px 與 768px 的現場任務詳情與項次填寫畫面；任務有文字與數字實測欄位的項次 | 以觸控一次填一個項次：選符合並填實測值；選不符合並補嚴重度與註解；選不適用並填原因；故意漏填；儲存並到下一項；離開未儲存的項次；確認填寫入口與完成後的更正入口是分開的 | 觸控目標至少 44×44 CSS px、無水平捲動；結果初始都不選；嚴重度與註解只在選不符合後出現、原因只在選不適用後出現；必填有標示，錯誤顯示在欄位旁並聚焦第一個錯誤；數字欄位旁顯示單位與換算提示；伺服器未提供欄位位置的錯誤保留草稿並顯示一般錯誤；離開前有提示；全程可用鍵盤；畫面沒有資料庫 ID、儲存鍵、雜湊或 metadata；進度與各項次狀態與作答表一致；填寫與更正是不同入口 | CMV-R18、R01、R02、R03 |
 | CMV-AC28 | 現場有缺項的 `IN_PROGRESS` 任務，另一個資料齊全且有不符合項次 | 按「完成查核」 | 頁內先說明後果（不能重開、只能更正錯字與照片、有 n 項不符合會標示「有缺失」），n 取自伺服器預檢；缺項時伺服器 422 的 `problems` 列在畫面並可跳到第一個缺項，指到項次與欄位，輸入不遺失；資料齊全時完成成功，畫面改為唯讀並顯示「有缺失」；不依前端自己的判斷放行 | CMV-R18、R09 |
-| CMV-AC29 | 已完成任務的現場詳情，具 `inspection_task.correct` | 進入更正；改註解、實測值、照片註記、換現場版；嘗試改結果 | 畫面唯讀，只有「更正」入口，且更正前說明「會留下紀錄、不會重新查核」；可改的欄位限於 CMV-R11 範圍，結果與嚴重度不可改；更正成功後顯示最新內容；不具權限者看不到更正入口 | CMV-R18、R11 |
-| CMV-AC30 | 內業任務頁的結果頁籤，桌面與 360px | 依項目查看結果、篩選不符合與待改善、檢視作廢結果與更正紀錄、對不符合項次登記複查（含上傳改善照片）、未儲存離開 | 結果依項目分組並顯示改善狀態；篩選與作廢標示可用；登記複查時「已改善」未附照片的錯誤顯示在欄位旁；成功後改善狀態與清單計數更新；離開未儲存的登記有提示；沒有限期、通知或自動判定控制項 | CMV-R19、R13、R14 |
+| CMV-AC29 | 已完成任務的現場詳情，具 `inspection_task.correct` | 進入更正；改註解、實測值、照片註記、換現場版；嘗試改結果 | 畫面唯讀，只有「更正」入口，且更正前說明「會留下紀錄、不會重新查核」；可改的欄位限於 CMV-R11 範圍，結果與嚴重度不可改；更正成功後顯示最新內容；版本衝突時保留自己的輸入並顯示最新內容；不具權限者看不到更正入口 | CMV-R18、R11 |
+| CMV-AC30 | 內業任務頁的結果頁籤，桌面與 360px | 依項目查看結果、篩選不符合與待改善、檢視作廢結果與更正紀錄、對不符合項次登記複查（含上傳改善照片）、確認登記複查與更正是分開的入口、未儲存離開 | 結果依項目分組並顯示改善狀態；篩選與作廢標示可用；登記複查時「已改善」未附照片的錯誤顯示在欄位旁；成功後改善狀態與清單計數更新；離開未儲存的登記有提示；沒有限期、通知或自動判定控制項；登記複查與更正是不同入口 | CMV-R19、R13、R14 |
 | CMV-AC31 | 前端與真實後端 | 以真實 API 完成填寫、讀回、完成預檢、完成、更正與登記複查 | 前端送出的欄位被後端接受並能讀回；缺項與欄位錯誤的 `error.details` 被前端正確對應；契約測試不依賴 mock 的回應 | CMV-R18、R19 |
-| CMV-AC32 | `IN_PROGRESS` Task，一個請求正在完成、另一個請求同時修改一個項次的結果 | 並行送出 | 兩者序列化：完成看到的是一致的資料；完成成功後，結果寫入回 409 `inspection_result.task_locked`；不會有完成後才寫入的結果，也不會完成在驗證通過之後被改壞的資料之上 | CMV-R09 |
+| CMV-AC32 | `IN_PROGRESS` Task，一個請求正在完成、另一個請求同時修改一個項次的結果 | 並行送出 | 兩者序列化：完成看到的是一致的資料；完成成功後，結果寫入回 409 狀態鎖定；不會有完成後才寫入的結果，也不會完成在驗證通過之後被改壞的資料之上 | CMV-R09 |
 | CMV-AC33 | 一個有缺失的已完成任務 | 在任務清單、現場詳情、內業結果頁與 Plan 頁檢視 | 「有缺失」標示在各處文字與樣式一致（`statusBadge`），不與「已完成」混淆；改善狀態文字一致 | CMV-R10、R14、R18、R19 |
+| CMV-AC34 | 專案查核項目 X 被 `IN_PROGRESS` Task 使用，現場正在填 X 的項次 | 內業的修改（選「要」）與現場的結果寫入並行送出；兩種先後順序各一次 | 兩者以固定鎖序（Plan、Task）序列化：先寫入者成功，後到者在修改之後才寫入時回 409 標準已變更且不寫入；修改在寫入之後時，該結果依 KD-55 作廢；不會有結果掛在已換發識別的舊項次上；SQLite 與 PostgreSQL 都驗證 | CMV-R04、R15 |
 
 ## 規格設計清單
 
@@ -233,45 +255,60 @@
 | D5 | 版本號 `revision` 作樂觀並行控制：建立省略、修改必帶，不符回 409 並附目前結果 | 多人可同時查同一任務（STM-R11），避免靜默覆蓋；畫面保留自己的草稿並顯示對方的內容 |
 | D6 | 作答表與預檢端點、回應形狀；作答表不內嵌照片覆蓋（沿用 `field-evidence` 的覆蓋端點）；預檢回 `ready`、`problems`、`summary` | 現場的心智模型是「還缺什麼」（PR-10）；預檢讓畫面不必自己重算規則；`summary` 供完成前的確認說明 |
 | D7 | 不適用項次的照片豁免在本規格的完成驗證裡套用，不改 `field-evidence` 的 `all_points_satisfied`（它不排除不適用項次） | KD-54 規定不適用時照片選填；覆蓋計算維持單一來源，豁免只是本規格對結果的取捨 |
-| D8 | 完成失敗一次列出全部缺項，欄位格式 `{item_id, point_id, kind, field, reason, required, covered}`；沿用既有錯誤碼 `inspection_task.items_incomplete`；完成與預檢共用同一函式；完成端點取 Plan 與 Task 的鎖，與作答寫入序列化 | 不讓現場一輪一輪補一個錯；沿用既有錯誤碼不破壞既有契約；鎖避免完成後才有人寫入 |
-| D9 | `has_defects`、`defect_count`、`improved_count` 由有效結果與最新改善登記即時聚合，不另存；`has_defects` 在全部改善後仍為真（結果是歷史事實），改善進度另外顯示 | 避免旗標與結果不同步；KD-56 規定有不符合就標示，KD-65 規定另顯示改善狀態，見 [CMV-Q6](#cmv-q6) |
+| D8 | 完成失敗一次列出全部缺項，欄位格式 `{item_id, point_id, kind, field, reason, required, covered}`；沿用既有錯誤「完成缺項」（既有錯誤碼）；完成與預檢共用同一函式；完成端點與結果寫入都依固定鎖序（Plan、Task）取鎖，並與專案查核項目修改序列化 | 不讓現場一輪一輪補一個錯；沿用既有錯誤碼不破壞既有契約；鎖避免完成後才有人寫入，固定鎖序避免與 KD-55 修改互相死結 |
+| D9 | `has_defects`、`defect_count`、`improved_count` 由有效結果與最新改善登記即時聚合，不另存；`has_defects` 在全部改善後仍為真（結果是歷史事實），改善進度另外顯示 | 避免旗標與結果不同步；KD-56 規定有不符合就標示，KD-65 規定另顯示改善狀態，見 [CMV-Q11](#cmv-q11) |
 | D10 | 更正可改：結果的註解、不適用原因、文字與數字實測值，照片註記與現場版；不可改：結果、嚴重度、項次對應；更正原因選填；紀錄存 `task_corrections` 並寫稽核事件 | KD-42 要求可改錯字與圖片、不重新查核；結果與嚴重度屬查核判斷，改它等於推翻查核，只能走 KD-55；更正者要在畫面上查得到，故另存而非只寫稽核；見 [CMV-Q1](#cmv-q1) |
 | D11 | 現場版取代只更新那一張照片唯一的現場版檔案，內業版重設為新現場版的初始複本（保留兩版模型），不新增版本；驗證與冪等沿用 `field-evidence` 上傳 | 符合 PR-05 只存兩版；內業編修參數相對於舊現場版，沿用會失效，重設最單純，內業可再編修 |
 | D12 | 改善登記只增不改不刪，歷史保留；三種狀態（待改善、尚未改善、已改善）由最新一筆推導；說明必填；已改善必附至少一張照片；只在任務已完成時登記 | 簡易版（KD-65）不需要流程狀態機；只增不改可追溯；錯誤登記以新的一筆更正 |
 | D13 | 改善照片分兩步：先上傳到項次、再於登記時一併掛上；沿用 `Evidence` 兩版模型與儲存抽象，新增可空的 `result_id`、`follow_up_id`；不計入覆蓋數；未掛上的照片由唯讀檢查指令列出 | 重用已驗證的上傳管線與 PR-05 模型；登記與照片同交易掛上，才能保證「已改善必附照片」 |
-| D14 | 新增 `inspection_result.read`、`inspection_result.follow_up`、`inspection_task.correct`；現場填寫與完成沿用 `inspection_task.inspect` | 內業讀取、登記與更正是不同責任；現場填寫與開始、完成同屬現場查核（STM-R11） |
-| D15 | KD-55 選「要」時，同一交易作廢被修改項目的有效結果與其改善登記；已取消任務於恢復時作廢；項目補查完成（每個項次都有新的有效結果）時伺服器清除待重查旗標與更新 `item_status` | 與 `field-evidence` 的照片作廢同一交易才不會只作廢一半；旗標由結果推導，不靠人工清除 |
-| D16 | `has_result` 為真的條件：項目有任何有效結果，或有任何有效（未刪除、未作廢）照片（含 `field-evidence` D16）；`inspection-planning` 的現行實作只在項目 `item_status` 為已完成時才標待重查，需改為依 `has_result` | 照片與結果先後存在，只看結果或只看照片都會漏掉另一種舊紀錄 |
+| D14 | 新增 `inspection_result.read`、`inspection_result.follow_up`、`inspection_task.correct`；現場填寫與完成沿用 `inspection_task.inspect`。存取分類依現行規則（現場只有 `inspection_task.inspect`，只有 `inspection_task.read` 者既非現場也非內業，其餘為內業）：`inspection_result.read`、`inspection_result.follow_up` 歸內業；`inspection_task.correct` 現場與內業角色都會持有，歸「既非現場也非內業」那一組，並加進前端的現場端代碼清單，避免現場角色因持有它被誤判為可看內業區段 | 內業讀取、登記與更正是不同責任；現場填寫與開始、完成同屬現場查核（STM-R11）；分類測試要求每個新代碼都要有歸屬 |
+| D15 | KD-55 選「要」時，同一交易作廢被修改項目的有效結果與其改善登記；項目補查完成（每個項次都有新的有效結果）時伺服器清除待重查旗標與更新 `item_status`。已取消任務的作廢時點、只有照片的項目是否標待重查，跟隨 FEV-Q6、FEV-Q15 的裁定，裁定前只實作結果的作廢 | 與 `field-evidence` 的照片作廢同一交易才不會只作廢一半；旗標由結果推導，不靠人工清除；未裁定的部分不先採用 |
+| D16 | `has_result` 把結果納入，由 `inspection-planning` 的現行實作只在項目 `item_status` 為已完成時才標待重查，改為依 `has_result`；是否同時納入有效照片依 [CMV-Q6](#cmv-q6) 的裁定。此為對 `inspection-planning` 凍結契約的範圍變更（[CMV-Q10](#cmv-q10)） | 結果與照片先後存在，只看其一會漏掉另一種舊紀錄；契約變更必須先裁定 |
 | D17 | 升級前的已完成任務維持原狀、沒有逐項結果；畫面說明；不追溯補資料 | PR-04 與不可延後意圖第 8 項；沒有現場資料可以補 |
 | D18 | 欄位錯誤統一格式 `error.details.fields[{field, reason}]`；前端依 `field` 對應欄位並聚焦，沒有 `field` 時顯示一般錯誤並保留草稿 | 滿足 PR-19 的「可定位錯誤顯示在欄位旁」與「不臆測位置」 |
-| D19 | 兩個稽核事件代碼；結果每次儲存不寫稽核事件（建立與修改者、時間已在資料列上） | 高頻寫入會淹沒稽核；只有更正與改善登記是事後的、需要追溯的操作 |
+| D19 | 兩個稽核事件代碼，皆填 `project_id`（ALG-R24）；結果每次儲存不寫稽核事件（建立與修改者、時間已在資料列上）；更正無變動時不寫事件 | 高頻寫入會淹沒稽核；只有更正與改善登記是事後的、需要追溯的操作；符合 ALG-R09 的無變動不寫 |
 | D20 | 畫面配置、文案、顏色與互動細節 | 實作前依原型關卡由負責人核可後定案 |
+| D21 | 更正請求本文與並行：結果更正帶 `expected_revision`，註記帶 `expected_caption`，現場版取代帶 `expected_sha256`；不符回「版本衝突」；內容相同回「更正無變動」；更正原因選填 | 與作答共用同一種並行策略，更正才不會悄悄覆蓋別人剛改的內容；無變動不寫紀錄符合 ALG-R09 |
+| D22 | 欄位允許矩陣與空值規則（必填缺漏或空白歸 `required`，不屬於該結果的欄位歸 `not_allowed`，不適用的空實測值視為未填） | 讓每種結果的資料形狀只有一種合法寫法，完成驗證與畫面錯誤定位才不會各說各話 |
 
 ## 待釐清
 
-本規格不自行拍板的問題。需要團隊裁定的，另開 `needs-decision` 議題。
+本規格不自行拍板的問題。以下各題先列選項與建議，需要團隊裁定的，另開 `needs-decision` 議題；裁定前，未標明來源的細節都只是規格設計。
 
 <a id="cmv-q1"></a>
-- **CMV-Q1**：完成後的更正範圍。規格採「可改註解、不適用原因、文字與數字實測值、照片註記與現場版；不可改結果與嚴重度」（D10）。後果：現場選錯結果（例如把不符合點成符合）完成後沒有修正路徑，只能走 KD-55 重新查核；數字實測值的更正是否也算「錯字」亦請確認。選項：A（預設）如上；B 允許內業在完成後更正結果與嚴重度並留紀錄，但這會改變查核判斷，需負責人裁定。
+- **CMV-Q1：完成後的更正範圍。** 選項：A 可改註解、不適用原因、文字與數字實測值、照片註記與現場版，不可改結果與嚴重度；B 另開放內業在完成後更正結果與嚴重度並留紀錄（會改變查核判斷）；C 只開放文字，不含數字實測值。建議 A。後果：現場選錯結果完成後沒有修正路徑，只能走 KD-55 重新查核；數字實測值的更正是否算「錯字」亦請確認。
 <a id="cmv-q2"></a>
-- **CMV-Q2**：完成後能否補拍漏掉的照片。KD-62 只說完成後不得刪除、只能依 KD-42 修正；規格採不新增、不刪除，只能取代現場版與改註記。若需要補拍，另行裁定。
+- **CMV-Q2：完成後能否補拍漏掉的照片。** KD-62 只說完成後不得刪除、只能依 KD-42 修正。選項：A 不新增、不刪除，只能取代現場版與改註記；B 開放內業補照片。建議 A。
 <a id="cmv-q3"></a>
-- **CMV-Q3**：登記「已改善」是否必附照片。KD-65 寫「附說明與照片」；規格採「已改善必附至少一張、尚未改善照片選填、說明一律必填」（D12）。
+- **CMV-Q3：登記「已改善」是否必附照片。** KD-65 寫「附說明與照片」。選項：A 已改善必附至少一張、尚未改善照片選填、說明一律必填；B 照片一律選填。建議 A。
 <a id="cmv-q4"></a>
-- **CMV-Q4**：複查結果是否需要「尚未改善」這一種。KD-65 只寫「已改善與複查結果」；規格保留兩種結果，讓複查發現仍未改善時有地方記錄，且最新一筆決定狀態。
+- **CMV-Q4：複查結果是否需要「尚未改善」。** KD-65 只寫「已改善與複查結果」。選項：A 保留兩種結果，最新一筆決定狀態；B 只有「已改善」。建議 A，讓複查發現仍未改善時有地方記錄。
 <a id="cmv-q5"></a>
-- **CMV-Q5**：本規格上線前已完成的任務沒有逐項結果，管理儀表板的完成數是否照舊計入（規格採計入，不拆指標，依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)），以及畫面是否需要標示「未經完成驗證」。
+- **CMV-Q5：上線前已完成的任務遇 KD-55「要」時的補查範圍。** 這類任務沒有任何逐項結果，退回進行中後完成驗證要求每個項次都有結果。選項：A 整個任務所有項次都須補齊；B 只補被修改項目，其餘項次視為已驗證（需要為舊任務加標記）。建議 A（不需新增舊資料標記），請負責人裁定。
 <a id="cmv-q6"></a>
-- **CMV-Q6**：全部不符合都改善後，任務是否還標「有缺失」。規格採仍標示（結果是歷史事實，不改寫），並在旁邊顯示「已改善 n／共 n」；若負責人希望全部改善後不再標示，需另行裁定。
+- **CMV-Q6：`has_result` 與已取消任務的作廢時點（跟隨 #545 的 FEV-Q6、FEV-Q15 裁定）。** 選項：（a）「已有結果」是否把有效照片也算進去，決定只有照片的項目選「要」時是否作廢並標待重查；（b）已取消任務遇「要」時，結果與照片是在修改當下作廢，或在恢復時才作廢（IP-R07 目前寫恢復時）。建議與 #545 的裁定一致；本規格先只實作「結果」的作廢，照片與時點待裁定。
 <a id="cmv-q7"></a>
-- **CMV-Q7**：查核項目沒有任何項次時，完成驗證視為無需作答。`template-system` 目前允許項次為零嗎，以及建立任務時是否應擋下全無項次的任務，屬 `template-system`、`inspection-planning` 的範圍，本規格不處理。
+- **CMV-Q7：點位與實測欄位的穩定身分（併 #545 的 FEV-Q12）。** 現行專案查核項目修改會刪光點位並換發識別（`PointBody` 無 `id`），KD-55 選「不要」後舊結果與實測值對不上。選項：A 修改時保留點位與實測欄位識別（修改請求帶識別，沒帶的視為新增，缺席的視為刪除）；B 以內容比對配對；C 不保留，舊結果隨之失效。建議 A。T1、T2 與 CMV-AC22 等這項裁定。
 <a id="cmv-q8"></a>
-- **CMV-Q8**：與 `field-evidence`（[PR #545](https://github.com/speko-tw/inspect-flow/pull/545)）需要對齊的地方，本規格不改該 PR 的檔案，列在 PR 說明與計畫 T0：（1）覆蓋計算需提供每個項次的達標資訊，不適用豁免由本規格套用；（2）`has_result` 需同時含結果與有效照片；（3）`Evidence` 的種類需放寬為「總覽、項次佐證、改善複查」三選一，並新增 `result_id`、`follow_up_id`，照片清單預設排除改善照片；（4）FEV-Q3 的完成後現場版與註記更正由本規格承接；（5）已取消任務恢復時，受影響項目的照片作廢方式（FEV-R11 只寫選「要」當下）；（6）完成後更正的現場版取代與改善照片上傳要共用 FEV 的上傳驗證函式。
+- **CMV-Q8：不在目前快照的結果如何處理**（點位被標準修改真的刪除時）。選項：A 保留為歷史結果，不計入驗證與有缺失，內業可查，不作廢；B 一律標「標準變更作廢」；C 擋下會移除已有結果的點位的修改。建議 A。
 <a id="cmv-q9"></a>
-- **CMV-Q9**：[OQ-07](../../intents/05-open-questions.md#oq-07)（報告如何呈現三種結果、嚴重度與改善狀態）屬 0.8.x；本規格只保證資料可由結果與快照讀取。
+- **CMV-Q9：改善登記是否只限已完成任務。** 選項：A 只限已完成任務（KD-65 描述的是完成後的不符合）；B 進行中的任務也可登記。建議 A。
 <a id="cmv-q10"></a>
-- **CMV-Q10**：`domain-model` 的 `Result` 草稿條目，與 `state-machines`（STM-R10、STM-AC08、完成與更正段落）、`inspection-planning`（`:complete` 的介面列、IP-R08、`has_result` 與項目影響列表）、`audit-log`（事件目錄）、`authentication`（權限代碼登記）、`admin-dashboard` 計畫 T8 的同步，待 [#538](https://github.com/speko-tw/inspect-flow/issues/538) 與 #545 的規格 PR 合併後處理，列在計畫 T0。
+- **CMV-Q10：`inspection-planning` 凍結契約的新增。** Task 回應新增 `has_defects`、`defect_count`、`improved_count`，以及 `has_result` 把結果納入，屬範圍變更。選項：A 另開 spec-change issue 與 PR，合併後再實作；B 負責人直接指示並在同一 PR 落地（見 [變更規則](../README.md#change)）。建議 A；裁定前計畫 T3、T4、T6 涉及這些欄位的部分不開工。
+<a id="cmv-q11"></a>
+- **CMV-Q11：全部不符合都改善後，任務是否還標「有缺失」。** 選項：A 仍標示（結果是歷史事實），另顯示「已改善 n／共 n」；B 全部改善後不再標示。建議 A。
+<a id="cmv-q12"></a>
+- **CMV-Q12：查核項目沒有任何項次。** 完成驗證對它視為無需作答。選項：A 允許；B 建立任務時擋下。這屬 `template-system`、`inspection-planning` 的範圍，本規格不處理，請負責人裁定。
+<a id="cmv-q13"></a>
+- **CMV-Q13：上線前已完成、沒有逐項結果的任務，儀表板是否照舊計入完成數。** 選項：A 照舊計入（不拆指標，依 [KD-66](../../intents/03-decisions-and-stack.md#kd-66)），畫面說明「逐項結果上線前完成」；B 另標「未經完成驗證」。建議 A。
+<a id="cmv-q14"></a>
+- **CMV-Q14：與 `field-evidence`（[PR #545](https://github.com/speko-tw/inspect-flow/pull/545)）需要對齊的地方。** 本規格不改該 PR 的檔案，列在 PR 說明與計畫 T0：（1）覆蓋計算需提供每個項次的達標資訊，不適用豁免由本規格套用；（2）`has_result` 的定義（見 CMV-Q6）；（3）`Evidence` 的種類需放寬為「總覽、項次佐證、改善複查」三選一，並新增 `result_id`、`follow_up_id`，照片清單預設排除改善照片；（4）FEV-Q3 的完成後現場版與註記更正由本規格承接；（5）已取消任務恢復時的照片作廢方式（見 CMV-Q6）；（6）完成後更正的現場版取代與改善照片上傳共用 FEV 的上傳驗證函式與已核發報告引用檢查註冊點；（7）`error.details` 物件慣例。
+<a id="cmv-q15"></a>
+- **CMV-Q15：** [OQ-07](../../intents/05-open-questions.md#oq-07)（報告如何呈現三種結果、嚴重度與改善狀態）屬 0.8.x；本規格只保證資料可由結果與快照讀取。
+<a id="cmv-q16"></a>
+- **CMV-Q16：** `domain-model` 的 `Result` 草稿條目，與 `state-machines`（STM-R10、STM-AC08、完成與更正段落）、`inspection-planning`（`:complete` 的介面列、IP-R08、`has_result` 與項目影響列表）、`audit-log`（事件目錄）、`admin-dashboard` 計畫 T8、`api-conventions`（`error.details`）的同步，待 [#538](https://github.com/speko-tw/inspect-flow/issues/538) 與 #545 的規格 PR 合併後處理，列在計畫 T0。
 
 ## 變更紀錄
 
 - 建立規格草稿：逐項次結果、伺服器完成驗證、有缺失、完成後更正、簡易改善追蹤與作答畫面 — [#106](https://github.com/speko-tw/inspect-flow/issues/106)；範圍依 [#104 完成裁定](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-5977723626)與 [#388 範圍補充](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-5978079288)
+- 依 PR #546 第 1 輪審查修訂：錯誤改以條列、補欄位允許矩陣與更正請求本文、未裁定內容改標待確認與範圍變更、新增穩定身分與並行鎖序的前置與驗收 — [#106](https://github.com/speko-tw/inspect-flow/issues/106)
