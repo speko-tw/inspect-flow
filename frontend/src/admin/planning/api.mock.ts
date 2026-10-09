@@ -21,6 +21,92 @@ interface MockPlan extends InspectionPlan {
   tasks: InspectionTask[]
 }
 
+interface PlanCursorKey {
+  createdAtMicros: number
+  id: string
+}
+
+const PLAN_PAGE_LIMIT = 100
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const PAGE_CURSOR_TIME_PATTERN =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d{6})\+00:00$/
+
+function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
+}
+
+function decodeBase64Url(value: string): string {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('invalid cursor')
+  const base64 = value.replaceAll('-', '+').replaceAll('_', '/')
+  const padding = (4 - (base64.length % 4)) % 4
+  const decoded = atob(base64 + '='.repeat(padding))
+  const bytes = Uint8Array.from(decoded, (character) =>
+    character.charCodeAt(0),
+  )
+  const result = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  if (encodeBase64Url(result) !== value) throw new Error('noncanonical cursor')
+  return result
+}
+
+function cursorTimestamp(createdAt: string): string {
+  const match = createdAt.match(
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(?:Z|\+00:00)$/,
+  )
+  if (!match) throw new Error('invalid mock plan timestamp')
+  return `${match[1]}.${(match[2] ?? '').padEnd(6, '0')}+00:00`
+}
+
+function timestampMicros(timestamp: string): number {
+  const match = timestamp.match(PAGE_CURSOR_TIME_PATTERN)
+  if (!match) throw new Error('invalid cursor timestamp')
+  const milliseconds = Date.parse(`${match[1]}Z`)
+  if (
+    Number(match[1].slice(0, 4)) === 0 ||
+    !Number.isFinite(milliseconds) ||
+    new Date(milliseconds).toISOString().slice(0, 19) !== match[1]
+  ) {
+    throw new Error('invalid cursor timestamp')
+  }
+  return milliseconds * 1000 + Number(match[2])
+}
+
+function encodePlanCursor(createdAt: string, id: string): string {
+  return encodeBase64Url(JSON.stringify({ t: cursorTimestamp(createdAt), id }))
+}
+
+function decodePlanCursor(cursor: string): PlanCursorKey {
+  try {
+    const payload: unknown = JSON.parse(decodeBase64Url(cursor))
+    if (
+      typeof payload !== 'object' ||
+      payload === null ||
+      Array.isArray(payload) ||
+      Object.keys(payload).length !== 2 ||
+      !('t' in payload) ||
+      !('id' in payload) ||
+      typeof payload.t !== 'string' ||
+      typeof payload.id !== 'string' ||
+      !UUID_PATTERN.test(payload.id)
+    ) {
+      throw new Error('invalid cursor payload')
+    }
+    const createdAtMicros = timestampMicros(payload.t)
+    if (encodePlanCursor(payload.t, payload.id) !== cursor) {
+      throw new Error('noncanonical cursor')
+    }
+    return { createdAtMicros, id: payload.id }
+  } catch {
+    throw new ManagementApiError(422, 'request.validation_failed')
+  }
+}
+
 const PROJECTS: PlanningProject[] = [
   { id: 'project-demo-1', name: '示範工程 A' },
   { id: 'project-demo-2', name: '示範工程 B' },
@@ -266,21 +352,54 @@ export function createMockPlanningClient(options?: {
     },
     async listPlans(projectId, cursor) {
       project(projectId)
-      const matching = plans.filter((entry) => entry.project_id === projectId)
-      const offset = cursor ? Number(cursor) : 0
-      const items = matching.slice(offset, offset + 20).map((entry) => ({
-        id: entry.id,
-        project_id: entry.project_id,
-        name: entry.name,
-        status: entry.status,
-        archived: entry.status === 'ARCHIVED',
-        created_at: entry.created_at,
-        updated_at: entry.updated_at,
+      const after = cursor == null ? null : decodePlanCursor(cursor)
+      const matching = plans
+        .filter((entry) => entry.project_id === projectId)
+        .map((plan) => {
+          const timestamp = cursorTimestamp(plan.created_at)
+          return {
+            plan,
+            key: {
+              createdAtMicros: timestampMicros(timestamp),
+              id: plan.id,
+            },
+          }
+        })
+        .sort((left, right) => {
+          if (left.key.createdAtMicros !== right.key.createdAtMicros) {
+            return left.key.createdAtMicros - right.key.createdAtMicros
+          }
+          return left.key.id < right.key.id
+            ? -1
+            : left.key.id > right.key.id
+              ? 1
+              : 0
+        })
+      const remaining = after
+        ? matching.filter(
+            ({ key }) =>
+              key.createdAtMicros > after.createdAtMicros ||
+              (key.createdAtMicros === after.createdAtMicros &&
+                key.id > after.id),
+          )
+        : matching
+      const page = remaining.slice(0, PLAN_PAGE_LIMIT)
+      const items = page.map(({ plan }) => ({
+        id: plan.id,
+        project_id: plan.project_id,
+        name: plan.name,
+        status: plan.status,
+        archived: plan.status === 'ARCHIVED',
+        created_at: plan.created_at,
+        updated_at: plan.updated_at,
       }))
-      const next = offset + items.length
+      const last = page.at(-1)?.plan
       return clone({
         items,
-        next_cursor: next < matching.length ? String(next) : null,
+        next_cursor:
+          last && remaining.length > PLAN_PAGE_LIMIT
+            ? encodePlanCursor(last.created_at, last.id)
+            : null,
       })
     },
     async getPlan(planId) {
