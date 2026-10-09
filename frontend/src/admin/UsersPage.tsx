@@ -22,7 +22,7 @@ import UserForm from './UserForm'
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 type PendingAction = {
   user: User
-  kind: 'admin' | 'deactivate'
+  kind: 'admin' | 'deactivate' | 'activate'
 }
 
 export default function UsersPage({
@@ -236,7 +236,7 @@ export default function UsersPage({
     try {
       await (kind === 'admin'
         ? setUserAdmin(user.id, !user.is_admin)
-        : setUserActive(user.id, false))
+        : setUserActive(user.id, kind === 'activate'))
       setPendingAction(null)
       setEditingUser(null)
       setEditingCompany(null)
@@ -252,6 +252,9 @@ export default function UsersPage({
     if (kind === 'deactivate') {
       return `停用 ${user.username} 後，該使用者將無法登入。`
     }
+    if (kind === 'activate') {
+      return `啟用 ${user.username} 後，該使用者可以再次登入。`
+    }
     if (user.is_admin) {
       return user.id === currentUser.id
         ? `收回 ${user.username} 的管理者權限後，你將無法再進入管理頁。`
@@ -261,12 +264,17 @@ export default function UsersPage({
   }
 
   function requestAction(user: User, kind: PendingAction['kind']) {
-    if (kind === 'admin' || (kind === 'deactivate' && user.is_active)) {
-      setActionError('')
-      setPendingAction({ user, kind })
-      return
-    }
-    void act(user.id, () => setUserActive(user.id, true))
+    setActionError('')
+    setPendingAction({ user, kind })
+  }
+
+  // 確認框的顏色看動作的效果：立刻拿掉他人權限或登入（停用、收回管理者）
+  // 用紅色；授予或恢復（啟用、指派管理者）用一般主色。管理者身分只影響
+  // 「管理者」動作，不影響啟用與停用。
+  function confirmVariant({ user, kind }: PendingAction) {
+    if (kind === 'deactivate') return 'danger'
+    if (kind === 'admin' && user.is_admin) return 'danger'
+    return 'neutral'
   }
 
   function toggleAdmin(user: User) {
@@ -383,7 +391,12 @@ export default function UsersPage({
                         </button>
                         <button
                           disabled={user.is_system || busyUser !== null}
-                          onClick={() => requestAction(user, 'deactivate')}
+                          onClick={() =>
+                            requestAction(
+                              user,
+                              user.is_active ? 'deactivate' : 'activate',
+                            )
+                          }
                           type="button"
                         >
                           {user.is_active ? '停用' : '啟用'}
@@ -402,12 +415,7 @@ export default function UsersPage({
                             onConfirm={confirmAction}
                             role="region"
                             rootRef={confirmationRef}
-                            variant={
-                              pendingAction.kind === 'deactivate' ||
-                              user.is_admin
-                                ? 'danger'
-                                : 'neutral'
-                            }
+                            variant={confirmVariant(pendingAction)}
                           >
                             <p>{actionMessage(pendingAction)}</p>
                             {actionError && <p role="alert">{actionError}</p>}
