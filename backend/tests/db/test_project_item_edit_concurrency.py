@@ -3,7 +3,7 @@
 from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Barrier, Event, Lock, get_ident
+from threading import Barrier, Event, Lock
 
 import pytest
 from alembic.config import Config
@@ -102,49 +102,55 @@ def test_concurrent_project_item_patches_preserve_revision_history(
     second_lock_attempted = Event()
     event_lock = Lock()
     lock_events: list[str] = []
-    connection_ids: dict[int, int] = {}
-    first_request_thread: int | None = None
+    item_lock_connection_ids: set[int] = set()
+    first_connection_id: int | None = None
+    second_connection_id: int | None = None
     item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
 
     def is_item_lock(statement: str) -> bool:
         normalized = statement.lower()
         return (
             "project_inspection_items" in normalized
-            and "for update" in normalized
+            and "for no key update" in normalized
         )
 
     def before_cursor_execute(
         connection, cursor, statement, parameters, context, executemany
     ) -> None:
-        nonlocal first_request_thread
+        nonlocal first_connection_id, second_connection_id
         if not is_item_lock(statement):
             return
-        thread_id = get_ident()
+        connection_id = id(connection)
         with event_lock:
-            connection_ids[thread_id] = id(connection)
-            if first_request_thread is None:
-                first_request_thread = thread_id
-            else:
-                assert thread_id != first_request_thread
+            item_lock_connection_ids.add(connection_id)
+            if first_connection_id is None:
+                first_connection_id = connection_id
+            elif second_connection_id is None:
+                second_connection_id = connection_id
+                assert second_connection_id != first_connection_id
                 lock_events.append("second_lock_attempted")
                 second_lock_attempted.set()
+            else:
+                assert connection_id == second_connection_id
 
     def after_cursor_execute(
         connection, cursor, statement, parameters, context, executemany
     ) -> None:
         if not is_item_lock(statement):
             return
-        thread_id = get_ident()
-        if thread_id == first_request_thread:
+        connection_id = id(connection)
+        if connection_id == first_connection_id:
             with event_lock:
                 lock_events.append("first_lock_acquired")
             assert second_lock_attempted.wait(timeout=10)
             return
+        assert connection_id == second_connection_id
         with event_lock:
             lock_events.append("second_lock_acquired")
 
     def on_commit(connection) -> None:
-        if get_ident() == first_request_thread:
+        connection_id = id(connection)
+        if connection_id == first_connection_id:
             with event_lock:
                 lock_events.append("first_transaction_commit")
 
@@ -176,13 +182,12 @@ def test_concurrent_project_item_patches_preserve_revision_history(
     assert [response.status_code for response in responses] == [200, 200], [
         response.text for response in responses
     ]
-    assert len(set(connection_ids.values())) == 2
-    assert lock_events == [
-        "first_lock_acquired",
-        "second_lock_attempted",
-        "first_transaction_commit",
-        "second_lock_acquired",
-    ]
+    assert len(item_lock_connection_ids) == 2
+    assert first_connection_id != second_connection_id
+    second_attempt = lock_events.index("second_lock_attempted")
+    first_commit = lock_events.index("first_transaction_commit")
+    second_acquire = lock_events.index("second_lock_acquired")
+    assert second_attempt < first_commit < second_acquire
 
     db_session.expire_all()
     stored_item = db_session.get(ProjectInspectionItem, item.id)
@@ -229,3 +234,47 @@ def test_concurrent_project_item_patches_preserve_revision_history(
         assert isinstance(audit_event.after, dict)
         event_titles.add(audit_event.after["title"])
     assert event_titles == {"並行修改甲", "並行修改乙"}
+
+
+def test_concurrent_project_item_patches_serialize_on_sqlite_session_touch(
+    engine: Engine,
+    db_session: Session,
+    make_client: Callable[[], TestClient],
+) -> None:
+    if engine.dialect.name != "sqlite":
+        pytest.skip("covers SQLite request serialization")
+
+    world = _planning_world(db_session, make_client)
+    item = world["item"]
+    project = world["project"]
+    token = world["admin"].cookies.get(SESSION_COOKIE_NAME)
+    assert token
+    clients = [make_client(), make_client()]
+    for client in clients:
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+
+    barrier = Barrier(2)
+    item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
+
+    def patch(client: TestClient, title: str):
+        barrier.wait(timeout=10)
+        return client.patch(
+            item_url,
+            json={"title": title, "reinspect": False},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(
+            executor.map(
+                lambda args: patch(*args),
+                zip(clients, ("SQLite 並行甲", "SQLite 並行乙"), strict=True),
+            )
+        )
+
+    assert [response.status_code for response in responses] == [200, 200], [
+        response.text for response in responses
+    ]
+    db_session.expire_all()
+    stored_item = db_session.get(ProjectInspectionItem, item.id)
+    assert stored_item is not None
+    assert stored_item.standard_revision == 3

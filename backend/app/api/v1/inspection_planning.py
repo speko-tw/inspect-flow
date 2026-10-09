@@ -1205,7 +1205,7 @@ def patch_project_item(
             ProjectInspectionItem.id == project_inspection_item_id,
             ProjectInspectionItem.project_id == project_id,
         )
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
     if item is None:
