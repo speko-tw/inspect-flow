@@ -642,6 +642,26 @@ describe('planning management page', () => {
     await screen.findByText('建議指派：專案 B 現場人員')
   })
 
+  it('lays each zone out as a named row with small actions (#526)', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
+      target: { value: '版面分區' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+    const name = await screen.findByText('版面分區')
+    expect(name).toHaveClass('named-row-name')
+    const row = name.closest('.named-row') as HTMLElement
+    expect(row.parentElement).toHaveClass('named-list')
+    for (const label of ['重新命名', '刪除']) {
+      const button = within(row).getByRole('button', { name: label })
+      expect(button).toHaveClass('btn-sm')
+      expect(button.closest('.named-row-actions')).not.toBeNull()
+    }
+  })
+
   it('renames zones and explains in-use deletion', async () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
@@ -689,10 +709,14 @@ describe('planning management page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
     await screen.findByRole('heading', { name: /混凝土外觀\s+（草稿）/ })
+    // 取消編輯後名稱列會重新建立，要重新取得。
+    const renamedRow = within(
+      document.querySelector('.named-list') as HTMLElement,
+    )
+      .getByText('北側')
+      .closest('.named-row')
     fireEvent.click(
-      within(renamed.parentElement as HTMLElement).getByRole('button', {
-        name: '刪除',
-      }),
+      within(renamedRow as HTMLElement).getByRole('button', { name: '刪除' }),
     )
     // 刪除分區不可復原：最終確認用危險色；其他確認（封存、派出、恢復
     // 等）維持主要色（#500）。

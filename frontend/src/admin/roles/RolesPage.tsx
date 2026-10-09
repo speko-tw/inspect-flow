@@ -282,7 +282,7 @@ export default function RolesPage() {
       {loading ? <p>載入中…</p> : null}
       {!loading && roles.length === 0 ? <p>目前沒有角色。</p> : null}
       {roles.length > 0 && (
-        <table>
+        <table className="roles-table">
           <thead>
             <tr>
               <th scope="col">角色名稱</th>

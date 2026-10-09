@@ -888,6 +888,55 @@ td .btn {
   margin: 0 var(--space-1) var(--space-1) 0;
 }
 
+/* ---- 名稱列：名稱是主角，次要動作靠右（#526） ----
+ * 名稱加粗、字級比內文大；按鈕用 .btn-sm 放右邊。列與列之間有分隔線，
+ * 窄螢幕按鈕換到名稱下方。列內若展開表單，表單占滿整列。 */
+
+.named-list {
+  margin: 0 0 var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.named-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.named-row-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.named-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.named-row > form {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+/* ---- 角色管理表：名稱欄不折行，長的權限清單在自己那欄折行（#526） ---- */
+
+.roles-table tbody th {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.roles-table td button {
+  white-space: nowrap;
+}
+
 /* ---- 訊息 ----
  * 外觀由 role 提供預設：alert 是錯誤、status 是中性（載入中、唯讀、
  * 權限說明等不是成功的狀態訊息）。用 :where 讓預設的特異性為 0，

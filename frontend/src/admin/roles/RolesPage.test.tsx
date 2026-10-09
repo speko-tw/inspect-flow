@@ -183,6 +183,13 @@ describe('admin role management page', () => {
     )
   })
 
+  it('keeps the role name column from wrapping (#526)', async () => {
+    rolesFetch({ roles: [makeRole('r1', '示範內業')] })
+    renderRoles()
+    const table = await screen.findByRole('table')
+    expect(table).toHaveClass('roles-table')
+  })
+
   it('shows a placeholder when no permission can be configured', async () => {
     rolesFetch({ permissions: [] })
     renderRoles()
