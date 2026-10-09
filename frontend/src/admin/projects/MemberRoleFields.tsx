@@ -1,5 +1,6 @@
 import { useId, type Ref } from 'react'
 
+import RolePermissionSummary from './RolePermissionSummary'
 import { describeRole } from './roleDescriptions'
 import type { Role } from './api'
 
@@ -41,32 +42,36 @@ export default function MemberRoleFields({
         const nameId = `${baseId}-name-${role.id}`
         const descId = `${baseId}-desc-${role.id}`
         return (
-          <label className="member-role-option" key={role.id}>
-            <input
-              aria-describedby={error ? `${descId} ${errorId}` : descId}
-              aria-invalid={error ? true : undefined}
-              aria-labelledby={nameId}
-              checked={selected.includes(role.id)}
-              onChange={(event) =>
-                onChange(
-                  event.target.checked
-                    ? [...selected, role.id]
-                    : selected.filter((id) => id !== role.id),
-                )
-              }
-              ref={index === 0 ? firstRef : undefined}
-              type="checkbox"
-              value={role.id}
-            />
-            <span className="member-role-text">
+          <div className="member-role-choice" key={role.id}>
+            <label className="member-role-option">
+              <input
+                aria-describedby={error ? `${descId} ${errorId}` : descId}
+                aria-invalid={error ? true : undefined}
+                aria-labelledby={nameId}
+                checked={selected.includes(role.id)}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? [...selected, role.id]
+                      : selected.filter((id) => id !== role.id),
+                  )
+                }
+                ref={index === 0 ? firstRef : undefined}
+                type="checkbox"
+                value={role.id}
+              />
               <span className="member-role-name" id={nameId}>
                 {role.name}
               </span>
-              <span className="member-hint" id={descId}>
-                {describeRole(role.permission_codes)}
-              </span>
+            </label>
+            <RolePermissionSummary
+              codes={role.permission_codes}
+              name={role.name}
+            />
+            <span className="visually-hidden" id={descId}>
+              {describeRole(role.permission_codes)}
             </span>
-          </label>
+          </div>
         )
       })}
       {error && (
