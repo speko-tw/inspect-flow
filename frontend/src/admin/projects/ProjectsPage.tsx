@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -197,6 +203,12 @@ export default function ProjectsPage() {
     requestTransition({ kind: 'edit', project })
   }
 
+  function guardProjectLink(event: MouseEvent<HTMLAnchorElement>, to: string) {
+    if (!hasUnsavedChanges) return
+    event.preventDefault()
+    setTransition({ kind: 'navigate', to })
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!saveGuard.enter()) return
@@ -298,13 +310,33 @@ export default function ProjectsPage() {
                 <p>{project.site_location}</p>
                 <Link
                   className="btn btn-primary"
+                  onClick={(event) =>
+                    guardProjectLink(
+                      event,
+                      `/admin/projects/${project.id}/templates`,
+                    )
+                  }
                   to={`/admin/projects/${project.id}/templates`}
                 >
                   套用範本
                 </Link>
-                <Link className="btn" to={`/admin/projects/${project.id}`}>
+                <Link
+                  className="btn"
+                  onClick={(event) =>
+                    guardProjectLink(event, `/admin/projects/${project.id}`)
+                  }
+                  to={`/admin/projects/${project.id}`}
+                >
                   開啟專案
                 </Link>
+                <button
+                  aria-label={`編輯專案「${project.name}」`}
+                  className="btn project-workspace-edit"
+                  onClick={() => startEdit(project)}
+                  type="button"
+                >
+                  編輯
+                </button>
               </article>
             ))}
           </div>
@@ -361,28 +393,21 @@ export default function ProjectsPage() {
                   </button>
                   <Link
                     className="btn btn-sm"
-                    onClick={(event) => {
-                      if (!hasUnsavedChanges) return
-                      event.preventDefault()
-                      setTransition({
-                        kind: 'navigate',
-                        to: `/admin/projects/${project.id}/members`,
-                      })
-                    }}
+                    onClick={(event) =>
+                      guardProjectLink(
+                        event,
+                        `/admin/projects/${project.id}/members`,
+                      )
+                    }
                     to={`/admin/projects/${project.id}/members`}
                   >
                     成員
                   </Link>
                   <Link
                     className="btn btn-sm"
-                    onClick={(event) => {
-                      if (!hasUnsavedChanges) return
-                      event.preventDefault()
-                      setTransition({
-                        kind: 'navigate',
-                        to: `/admin/projects/${project.id}`,
-                      })
-                    }}
+                    onClick={(event) =>
+                      guardProjectLink(event, `/admin/projects/${project.id}`)
+                    }
                     to={`/admin/projects/${project.id}`}
                   >
                     開啟專案

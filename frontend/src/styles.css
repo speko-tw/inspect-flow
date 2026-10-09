@@ -1766,7 +1766,7 @@ a.app-header-tab[aria-current='page'] {
   font-size: 0.9rem;
 }
 
-/* 卡片內的按鈕：一主一次，各占一整列。 */
+/* 卡片內的操作各占一整列；窄螢幕另顯示編輯入口。 */
 .project-workspace-card .btn {
   padding: var(--space-3) var(--space-4);
 }
@@ -1774,6 +1774,10 @@ a.app-header-tab[aria-current='page'] {
 .project-workspace-card .btn-primary {
   margin-top: var(--space-2);
   font-weight: 700;
+}
+
+.project-workspace-edit {
+  display: none;
 }
 
 .tpl-project-items ul,
@@ -1970,6 +1974,10 @@ a.app-header-tab[aria-current='page'] {
 }
 
 @media (max-width: 40rem) {
+  .project-workspace-edit {
+    display: block;
+  }
+
   .projects-admin-table {
     display: none;
   }
