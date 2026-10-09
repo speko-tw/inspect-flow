@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 
+import { blockImeEnter } from '../../ui/submitGuard'
 import { MeasurementFieldEditor } from './MeasurementFieldEditor'
 import { NumericStandardEditor } from './NumericStandardEditor'
 import type { InspectionPoint, MeasurementField, TemplateItem } from './api'
@@ -124,6 +125,7 @@ export function TemplateItemEditor({
       aria-label="查核項目編輯器"
       className="tpl-editor"
       onKeyDown={(event) => {
+        if (blockImeEnter(event)) return
         if (event.key !== 'Escape') return
         if (dirty) {
           setGuard(selected ?? { type: 'system', id: systemId })

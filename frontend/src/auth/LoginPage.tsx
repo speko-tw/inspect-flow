@@ -9,6 +9,7 @@ import { ApiError, login } from './api'
 import AuthLayout from './AuthLayout'
 import { loginTarget } from './landing'
 import { previousSession } from './sessionMemory'
+import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'
@@ -24,9 +25,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const guard = useSubmitGuard()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!guard.enter()) return
     setError(null)
     setSubmitting(true)
 
@@ -45,13 +48,14 @@ export default function LoginPage() {
           : GENERIC_ERROR_MESSAGE,
       )
     } finally {
+      guard.leave()
       setSubmitting(false)
     }
   }
 
   return (
     <AuthLayout title="登入" lead="請輸入帳號名稱或 Email 與密碼。">
-      <form onSubmit={handleSubmit} noValidate>
+      <form onKeyDown={blockImeEnter} onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="login-account">帳號名稱或 Email</label>
           <input

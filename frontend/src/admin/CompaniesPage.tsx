@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { activeStatus } from '../ui/statusBadge'
+import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
 import {
   createCompany,
   listActiveCompanyUsers,
@@ -27,6 +28,8 @@ export default function CompaniesPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+  const searchGuard = useSubmitGuard()
+  const saveGuard = useSubmitGuard()
   const [deactivating, setDeactivating] = useState<{
     company: Company
     users: Array<{ id: string; username: string; name_zh: string | null }>
@@ -83,6 +86,7 @@ export default function CompaniesPage() {
 
   async function searchCompanies(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!searchGuard.enter()) return
     const search = query.trim()
     setAppliedQuery(search)
     const id = ++requestId.current
@@ -101,6 +105,7 @@ export default function CompaniesPage() {
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
+      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -153,6 +158,7 @@ export default function CompaniesPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!saveGuard.enter()) return
     setSaving(true)
     setError('')
     try {
@@ -168,11 +174,13 @@ export default function CompaniesPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      saveGuard.leave()
       setSaving(false)
     }
   }
 
   async function toggleActive(company: Company) {
+    if (!saveGuard.enter()) return
     setError('')
     setSaving(true)
     try {
@@ -196,12 +204,14 @@ export default function CompaniesPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      saveGuard.leave()
       setSaving(false)
     }
   }
 
   async function confirmDeactivation() {
     if (!deactivating) return
+    if (!saveGuard.enter()) return
     setError('')
     setSaving(true)
     try {
@@ -215,6 +225,7 @@ export default function CompaniesPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      saveGuard.leave()
       setSaving(false)
     }
   }
@@ -230,7 +241,7 @@ export default function CompaniesPage() {
           role="region"
           confirmLabel="確認停用公司"
           onCancel={() => setDeactivating(null)}
-          onConfirm={() => void confirmDeactivation()}
+          onConfirm={confirmDeactivation}
           title={`停用「${deactivating.company.name}」`}
           variant="danger"
         >
@@ -262,7 +273,7 @@ export default function CompaniesPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <form onSubmit={searchCompanies}>
+      <form onKeyDown={blockImeEnter} onSubmit={searchCompanies}>
         <label>
           搜尋公司
           <input
@@ -335,7 +346,7 @@ export default function CompaniesPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <form onSubmit={save}>
+      <form onKeyDown={blockImeEnter} onSubmit={save}>
         <h2>{renamingId ? '修改公司名稱' : '新增公司'}</h2>
         <label>
           公司名稱

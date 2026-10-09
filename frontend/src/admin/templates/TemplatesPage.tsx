@@ -10,6 +10,7 @@ import {
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
@@ -158,6 +159,8 @@ export default function TemplatesPage() {
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
   const [guard, setGuard] = useState<Selection | null>(null)
   const [confirmField, setConfirmField] = useState('')
+  // 儲存與刪除共用一道防護：送出中不接受第二次送出（#507）。
+  const submitGuard = useSubmitGuard()
 
   const categoryId =
     selected?.type === 'category'
@@ -397,6 +400,7 @@ export default function TemplatesPage() {
       document.getElementById('tpl-name')?.focus()
       return
     }
+    if (!submitGuard.enter()) return
     try {
       if (mode === 'create-category') {
         const created = await createTemplateCategory(name)
@@ -427,6 +431,8 @@ export default function TemplatesPage() {
     } catch (caught) {
       fail(caught)
       if (isForbidden(caught)) setNameDraft(nameDraft)
+    } finally {
+      submitGuard.leave()
     }
   }
 
@@ -678,6 +684,7 @@ export default function TemplatesPage() {
         ),
       ]
     }
+    if (!submitGuard.enter()) return null
     try {
       const input = wireItem({ ...itemDraft, system_id: systemId })
       const result = itemDraft.id
@@ -697,10 +704,13 @@ export default function TemplatesPage() {
     } catch (caught) {
       fail(caught)
       return null
+    } finally {
+      submitGuard.leave()
     }
   }
 
   async function confirmDelete(): Promise<void> {
+    if (!submitGuard.enter()) return
     try {
       if (mode === 'delete-category' && selectedCategory) {
         await deleteTemplateCategory(selectedCategory.id)
@@ -741,6 +751,8 @@ export default function TemplatesPage() {
       setError('')
       setActionError(apiMessage(caught))
       setMode('view')
+    } finally {
+      submitGuard.leave()
     }
   }
 
@@ -798,6 +810,7 @@ export default function TemplatesPage() {
     return (
       <form
         className="tpl-name-form"
+        onKeyDown={blockImeEnter}
         onSubmit={(event) => void saveName(event)}
       >
         <h2>{heading}</h2>
@@ -819,6 +832,7 @@ export default function TemplatesPage() {
             setError('')
           }}
           onKeyDown={(event) => {
+            if (blockImeEnter(event)) return
             if (event.key === 'Escape') resetMode()
             if (event.key === 'Enter') {
               event.preventDefault()
@@ -991,7 +1005,7 @@ export default function TemplatesPage() {
               confirmLabel="確認刪除"
               label="刪除確認"
               onCancel={() => setMode('view')}
-              onConfirm={() => void confirmDelete()}
+              onConfirm={confirmDelete}
               variant="danger"
             >
               <p>刪除「{selectedCategory.name}」？刪除後無法復原。</p>
@@ -1086,7 +1100,7 @@ export default function TemplatesPage() {
               confirmLabel="確認刪除"
               label="刪除確認"
               onCancel={() => setMode('view')}
-              onConfirm={() => void confirmDelete()}
+              onConfirm={confirmDelete}
               variant="danger"
             >
               <p>刪除「{selectedSystem.name}」？刪除後無法復原。</p>
@@ -1157,7 +1171,7 @@ export default function TemplatesPage() {
               confirmLabel="確認刪除"
               label="刪除確認"
               onCancel={() => setMode('view')}
-              onConfirm={() => void confirmDelete()}
+              onConfirm={confirmDelete}
               variant="danger"
             >
               <p>刪除「{selectedItem.title}」？刪除後無法復原。</p>

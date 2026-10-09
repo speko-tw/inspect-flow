@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { expectImeEnterIgnored, holdRequests } from '../../testing/submitGuard'
 import TemplatesPage from './TemplatesPage'
 import wireFixture from './fixtures/template-item-payload.json'
 import type { TemplateItem } from './api'
@@ -1544,5 +1545,165 @@ describe('TemplatesPage', () => {
       screen.queryByRole('button', { name: '新增工程類別' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('唯讀瀏覽')).toBeInTheDocument()
+  })
+})
+
+describe('template forms guard (#507)', () => {
+  const writeCalls = (
+    fetchMock: ReturnType<typeof templateFetch>,
+    method: string,
+    pattern: RegExp,
+  ) =>
+    fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        (init?.method ?? 'GET') === method && pattern.test(String(url)),
+    )
+
+  async function startRename() {
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '土木工程' })
+    fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
+    const input = await screen.findByLabelText(/名稱/)
+    fireEvent.change(input, { target: { value: '土木工程新版' } })
+    return input
+  }
+
+  it('renames once when Enter is pressed twice quickly', async () => {
+    const fetchMock = templateFetch()
+    const input = await startRename()
+    const gate = holdRequests(fetchMock, 'PATCH', /template-categories/)
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    gate.resolve()
+
+    await screen.findByText(/已重新命名為「土木工程新版」/)
+    expect(writeCalls(fetchMock, 'PATCH', /template-categories/)).toHaveLength(
+      1,
+    )
+  })
+
+  it('accepts another save after a failed one', async () => {
+    const fetchMock = templateFetch({ writeConflict: true })
+    const input = await startRename()
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() =>
+      expect(
+        writeCalls(fetchMock, 'PATCH', /template-categories/),
+      ).toHaveLength(1),
+    )
+    await screen.findByRole('alert')
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() =>
+      expect(
+        writeCalls(fetchMock, 'PATCH', /template-categories/),
+      ).toHaveLength(2),
+    )
+  })
+
+  it('ignores IME Enter in the name form', async () => {
+    const fetchMock = templateFetch()
+    const input = await startRename()
+
+    expectImeEnterIgnored(input)
+
+    expect(writeCalls(fetchMock, 'PATCH', /template-categories/)).toHaveLength(
+      0,
+    )
+    expect(input).toHaveValue('土木工程新版')
+  })
+
+  async function fillNewItem() {
+    await startNewItem()
+    await waitFor(() =>
+      expect(screen.getByLabelText(/欄位名稱/)).toHaveFocus(),
+    )
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    return screen
+      .getByRole('button', { name: '儲存查核項目' })
+      .closest('form') as HTMLFormElement
+  }
+
+  it('saves the item once when Enter is pressed twice quickly', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    const form = await fillNewItem()
+    const gate = holdRequests(fetchMock, 'POST', /\/templates$/)
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    gate.resolve()
+
+    await screen.findByRole('status')
+    expect(writeCalls(fetchMock, 'POST', /\/templates$/)).toHaveLength(1)
+  })
+
+  it('accepts another item save after a failed one', async () => {
+    const fetchMock = templateFetch({ items: [], writeConflict: true })
+    render(<TemplatesPage />)
+    const form = await fillNewItem()
+
+    fireEvent.submit(form)
+    await waitFor(() =>
+      expect(writeCalls(fetchMock, 'POST', /\/templates$/)).toHaveLength(1),
+    )
+    await screen.findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(writeCalls(fetchMock, 'POST', /\/templates$/)).toHaveLength(2),
+    )
+  })
+
+  it('ignores IME Enter in the item editor', async () => {
+    const fetchMock = templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await fillNewItem()
+
+    expectImeEnterIgnored(screen.getByLabelText(/查核項目名稱/))
+    expectImeEnterIgnored(screen.getByLabelText(/項次標題/))
+
+    expect(writeCalls(fetchMock, 'POST', /\/templates$/)).toHaveLength(0)
+  })
+
+  it('deletes once when the confirmation is clicked twice', async () => {
+    const fetchMock = templateFetch({
+      categories: [category, otherCategory],
+      items: [],
+      deleteSuccess: true,
+    })
+    render(<TemplatesPage />)
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '刪除' }))
+    const confirm = screen.getByRole('button', { name: '確認刪除' })
+    const gate = holdRequests(fetchMock, 'DELETE', /template-categories/)
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    gate.resolve()
+
+    await screen.findByRole('status')
+    expect(
+      writeCalls(fetchMock, 'DELETE', /template-categories/),
+    ).toHaveLength(1)
   })
 })

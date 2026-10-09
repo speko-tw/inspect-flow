@@ -10,6 +10,7 @@ import { Link, useParams } from 'react-router'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { ManagementApiError, managementErrorMessage } from '../api'
 import MemberRoleFields, { RequiredMark } from './MemberRoleFields'
 import {
@@ -96,6 +97,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const [rolesState, setRolesState] = useState<Loaded<Role[]>>(LOADING)
   const [reloadKey, setReloadKey] = useState(0)
   const [busy, setBusy] = useState(false)
+  const guard = useSubmitGuard()
   const [message, setMessage] = useState<{
     scope: Scope
     text: string
@@ -171,6 +173,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       addRolesRef.current?.focus()
       return
     }
+    if (!guard.enter()) return
     setBusy(true)
     try {
       await addProjectMember(projectId, newUserId, newRoleIds)
@@ -191,6 +194,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         setMessage({ scope: 'add', text: managementErrorMessage(caught) })
       }
     } finally {
+      guard.leave()
       setBusy(false)
     }
   }
@@ -204,6 +208,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       editRolesRef.current?.focus()
       return
     }
+    if (!guard.enter()) return
     setBusy(true)
     try {
       await setProjectMemberRoles(
@@ -222,6 +227,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         setMessage({ scope: 'edit', text: managementErrorMessage(caught) })
       }
     } finally {
+      guard.leave()
       setBusy(false)
     }
   }
@@ -249,6 +255,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
 
   async function confirmRemove() {
     if (!removing) return
+    if (!guard.enter()) return
     clearMessages()
     setBusy(true)
     try {
@@ -259,12 +266,14 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     } catch (caught) {
       setMessage({ scope: 'remove', text: managementErrorMessage(caught) })
     } finally {
+      guard.leave()
       setBusy(false)
     }
   }
 
-  function escapeTo(action: () => void) {
+  function formKeyDown(action: () => void) {
     return (event: KeyboardEvent) => {
+      if (blockImeEnter(event)) return
       if (event.key === 'Escape') {
         event.stopPropagation()
         action()
@@ -329,7 +338,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         <form
           className="member-edit-view"
           noValidate
-          onKeyDown={escapeTo(cancelEdit)}
+          onKeyDown={formKeyDown(cancelEdit)}
           onSubmit={submitEdit}
         >
           <h3 ref={editHeadingRef} tabIndex={-1}>
@@ -397,7 +406,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      <form className="member-add-form" noValidate onSubmit={submitAdd}>
+      <form
+        className="member-add-form"
+        noValidate
+        onKeyDown={blockImeEnter}
+        onSubmit={submitAdd}
+      >
         <h3>加入成員</h3>
         {candidatesState.status === 'failed' ? (
           <div className="member-load-error">
@@ -563,7 +577,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   confirmLabel="確認移出"
                   label="移出確認"
                   onCancel={() => setRemoving(null)}
-                  onConfirm={() => void confirmRemove()}
+                  onConfirm={confirmRemove}
                   variant="danger"
                 >
                   <p>

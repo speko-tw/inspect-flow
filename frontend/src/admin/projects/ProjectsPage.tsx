@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
 import {
   createProject,
@@ -63,6 +64,8 @@ export default function ProjectsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
+  const searchGuard = useSubmitGuard()
+  const saveGuard = useSubmitGuard()
   const [editing, setEditing] = useState<Project | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [transition, setTransition] = useState<Transition | null>(null)
@@ -113,6 +116,7 @@ export default function ProjectsPage() {
 
   async function searchProjects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!searchGuard.enter()) return
     const search = query.trim()
     const id = ++requestId.current
     setProjects([])
@@ -131,6 +135,7 @@ export default function ProjectsPage() {
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
+      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -194,6 +199,7 @@ export default function ProjectsPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!saveGuard.enter()) return
     setError('')
     setNotice('')
     const input = toInput(form)
@@ -238,6 +244,7 @@ export default function ProjectsPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
+      saveGuard.leave()
       setSaving(false)
     }
   }
@@ -267,7 +274,7 @@ export default function ProjectsPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <form onSubmit={searchProjects}>
+      <form onKeyDown={blockImeEnter} onSubmit={searchProjects}>
         <label>
           搜尋專案
           <input
@@ -395,7 +402,7 @@ export default function ProjectsPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <form onSubmit={save}>
+      <form onKeyDown={blockImeEnter} onSubmit={save}>
         <h2>{editing ? `編輯專案「${editing.name}」` : '新增專案'}</h2>
         {editing && (
           <button

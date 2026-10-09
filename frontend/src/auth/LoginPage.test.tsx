@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 import LoginPage from './LoginPage'
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
@@ -319,5 +320,80 @@ describe('登入不碰 token／storage，登出會清狀態並導向 /login（AU
     expect(calledUrls.some((url) => url.endsWith('/api/v1/auth/logout'))).toBe(
       true,
     )
+  })
+})
+
+describe('LoginPage 防連點與輸入法 Enter（#507）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function fillForm() {
+    fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
+      target: { value: 'user@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('密碼'), {
+      target: { value: 'secret-password' },
+    })
+  }
+
+  function renderLogin() {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+  }
+
+  it('連按 Enter 只送出一次登入請求', async () => {
+    const gate = deferred<Response>()
+    const fetchMock = vi.fn(async () => gate.promise)
+    vi.stubGlobal('fetch', fetchMock)
+    renderLogin()
+    fillForm()
+    const form = screen
+      .getByRole('button', { name: '登入' })
+      .closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    gate.resolve(
+      jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
+    )
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      GENERIC_ERROR_MESSAGE,
+    )
+  })
+
+  it('失敗之後可以再送出', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderLogin()
+    fillForm()
+    const form = screen
+      .getByRole('button', { name: '登入' })
+      .closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    await screen.findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  })
+
+  it('輸入法選字的 Enter 不送出', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    renderLogin()
+    fillForm()
+
+    expectImeEnterIgnored(screen.getByLabelText('密碼'))
+    expectImeEnterIgnored(screen.getByLabelText('帳號名稱或 Email'))
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

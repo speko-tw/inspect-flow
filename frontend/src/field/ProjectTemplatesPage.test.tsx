@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
+import { holdRequests as holdFetch } from '../testing/submitGuard'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
 import {
   ProjectTemplatesApiError,
@@ -764,5 +765,113 @@ describe('專案範本套用與存為範本（#429）', () => {
         screen.queryByRole('button', { name: '存為範本' }),
       ).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('專案範本套用與存為範本：防連點（#507）', () => {
+  // mockApi 的替身只收 input；請求本身仍帶 init，攔截時需要看 method。
+  const holdRequests = (
+    calls: ReturnType<typeof mockApi>,
+    method: string,
+    pattern: RegExp,
+  ) =>
+    holdFetch(
+      calls as unknown as Parameters<typeof holdFetch>[0],
+      method,
+      pattern,
+    )
+
+  const applyCalls = (calls: ReturnType<typeof mockApi>) =>
+    calls.mock.calls.filter(([url]) =>
+      String(url).endsWith('/inspection-items:apply-template'),
+    )
+
+  it('單一項目連點「套用至專案」只送出一次', async () => {
+    const calls = mockApi()
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    const gate = holdRequests(calls, 'POST', /apply-template$/)
+    const apply = screen.getByRole('button', { name: '套用至專案' })
+
+    fireEvent.click(apply)
+    fireEvent.click(apply)
+    gate.resolve()
+
+    await screen.findByText('PROJECT_DETAIL')
+    expect(applyCalls(calls)).toHaveLength(1)
+  })
+
+  it('整系統套用的確認框連點「確定套用」只送出一次', async () => {
+    const calls = mockApi()
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByLabelText('整個系統（2 個項目）'))
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    const confirm = within(screen.getByRole('alertdialog')).getByRole(
+      'button',
+      { name: '確定套用' },
+    )
+    const gate = holdRequests(calls, 'POST', /apply-template$/)
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    gate.resolve()
+
+    await screen.findByText('PROJECT_DETAIL')
+    expect(applyCalls(calls)).toHaveLength(1)
+  })
+
+  it('套用失敗之後可以再套用', async () => {
+    const calls = mockApi({
+      applyResponse: Response.json(
+        { error: { code: 'internal_error' } },
+        { status: 500 },
+      ),
+    })
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+    await screen.findByRole('alert')
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+
+    await waitFor(() => expect(applyCalls(calls)).toHaveLength(2))
+  })
+
+  it('連點「存入這個系統」只送出一次', async () => {
+    const calls = mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '存為範本' }))
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
+    const gate = holdRequests(
+      calls,
+      'POST',
+      /\/projects\/project-1\/templates$/,
+    )
+    const save = screen.getByRole('button', { name: '存入這個系統' })
+
+    fireEvent.click(save)
+    fireEvent.click(save)
+    gate.resolve()
+
+    await screen.findByRole('status')
+    expect(
+      calls.mock.calls.filter(([url]) =>
+        String(url).endsWith('/projects/project-1/templates'),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('這一頁沒有 form 與 Enter 處理，輸入法 Enter 不適用', () => {
+    mockApi()
+    const { container } = renderPage()
+
+    expect(container.querySelector('form')).toBeNull()
   })
 })

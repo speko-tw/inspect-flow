@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { ManagementApiError } from '../api'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import {
   createRole,
   deleteRole,
@@ -38,6 +39,7 @@ export default function RolesPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const guard = useSubmitGuard()
 
   const descriptions = new Map(
     permissions.map((item) => [item.code, item.description]),
@@ -136,6 +138,7 @@ export default function RolesPage() {
       setError('請輸入角色名稱。')
       return
     }
+    if (!guard.enter()) return
     setSaving(true)
     setError('')
     try {
@@ -165,12 +168,14 @@ export default function RolesPage() {
       setError(roleErrorMessage(caught))
       await reload()
     } finally {
+      guard.leave()
       setSaving(false)
     }
   }
 
   async function confirmUpdate() {
     if (!pending) return
+    if (!guard.enter()) return
     setSaving(true)
     setError('')
     try {
@@ -190,11 +195,13 @@ export default function RolesPage() {
       }
       await reload()
     } finally {
+      guard.leave()
       setSaving(false)
     }
   }
 
   async function startDelete(role: Role) {
+    if (!guard.enter()) return
     setError('')
     setPending(null)
     setSaving(true)
@@ -204,12 +211,14 @@ export default function RolesPage() {
         setDeleting(fresh)
       }
     } finally {
+      guard.leave()
       setSaving(false)
     }
   }
 
   async function confirmDelete() {
     if (!deleting) return
+    if (!guard.enter()) return
     setSaving(true)
     setError('')
     try {
@@ -220,6 +229,7 @@ export default function RolesPage() {
     } catch (caught) {
       setError(roleErrorMessage(caught))
     } finally {
+      guard.leave()
       setDeleting(null)
       await reload()
       setSaving(false)
@@ -246,7 +256,7 @@ export default function RolesPage() {
           role="region"
           confirmLabel="確認刪除角色"
           onCancel={() => setDeleting(null)}
-          onConfirm={() => void confirmDelete()}
+          onConfirm={confirmDelete}
           title={`刪除「${deleting.name}」`}
           variant="danger"
         >
@@ -263,7 +273,7 @@ export default function RolesPage() {
           role="region"
           confirmLabel="確認修改角色"
           onCancel={() => setPending(null)}
-          onConfirm={() => void confirmUpdate()}
+          onConfirm={confirmUpdate}
           title={`修改「${pending.role.name}」`}
         >
           <p>此變更{describeImpact(pending.role)}，儲存後立即生效。</p>
@@ -308,7 +318,7 @@ export default function RolesPage() {
           </tbody>
         </table>
       )}
-      <form onSubmit={save}>
+      <form onKeyDown={blockImeEnter} onSubmit={save}>
         <h2>{editing ? `修改角色「${editing.name}」` : '新增角色'}</h2>
         <label>
           角色名稱

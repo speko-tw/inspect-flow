@@ -6,7 +6,7 @@
 // 替身沿用 `LogoutButton.test.tsx` 的寫法，連同
 // `/api/v1/auth/me` 一併模擬。
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +14,7 @@ import App from '../App'
 import ChangePasswordPage from './ChangePasswordPage'
 import RequireAuth from './RequireAuth'
 import { preloadLazyRoutes } from '../testing/preloadRoutes'
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const TEMP_PASSWORD_USER = {
   id: 'u1',
@@ -347,5 +348,96 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
       '目前密碼錯誤，請再試一次。',
     )
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+})
+
+describe('變更密碼頁：防連點與輸入法 Enter（#507）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function stubPasswordFetch(passwordResponse: () => Promise<Response>) {
+    const passwordCalls = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        if (url.endsWith('/api/v1/auth/me')) {
+          return jsonResponse(TEMP_PASSWORD_USER)
+        }
+        if (url.endsWith('/api/v1/auth/password') && init?.method === 'POST') {
+          passwordCalls()
+          return passwordResponse()
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      }),
+    )
+    return passwordCalls
+  }
+
+  function fillFields() {
+    fireEvent.change(screen.getByLabelText('目前密碼'), {
+      target: { value: 'current-pw' },
+    })
+    fireEvent.change(screen.getByLabelText('新密碼'), {
+      target: { value: 'new-password-1' },
+    })
+    fireEvent.change(screen.getByLabelText('再輸入一次新密碼'), {
+      target: { value: 'new-password-1' },
+    })
+  }
+
+  it('連按 Enter 只送出一次變更請求', async () => {
+    const gate = deferred<Response>()
+    const passwordCalls = stubPasswordFetch(() => gate.promise)
+    await renderReadyPage()
+    fillFields()
+    const form = screen
+      .getByRole('button', { name: '變更密碼' })
+      .closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    expect(passwordCalls).toHaveBeenCalledTimes(1)
+    gate.resolve(
+      jsonResponse(
+        { error: { code: 'auth.current_password_incorrect' } },
+        400,
+      ),
+    )
+    await screen.findByRole('alert')
+  })
+
+  it('失敗之後可以再送出', async () => {
+    const passwordCalls = stubPasswordFetch(async () =>
+      jsonResponse(
+        { error: { code: 'auth.current_password_incorrect' } },
+        400,
+      ),
+    )
+    await renderReadyPage()
+    fillFields()
+    const form = screen
+      .getByRole('button', { name: '變更密碼' })
+      .closest('form') as HTMLFormElement
+
+    fireEvent.submit(form)
+    await screen.findByRole('alert')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(passwordCalls).toHaveBeenCalledTimes(2))
+  })
+
+  it('輸入法選字的 Enter 不送出', async () => {
+    const passwordCalls = stubPasswordFetch(async () => jsonResponse({}))
+    await renderReadyPage()
+    fillFields()
+
+    expectImeEnterIgnored(screen.getByLabelText('目前密碼'))
+    expectImeEnterIgnored(screen.getByLabelText('新密碼'))
+    expectImeEnterIgnored(screen.getByLabelText('再輸入一次新密碼'))
+
+    expect(passwordCalls).not.toHaveBeenCalled()
   })
 })

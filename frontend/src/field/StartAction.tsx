@@ -8,6 +8,7 @@ import {
   type FieldTaskDetail,
 } from './api'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { useSubmitGuard } from '../ui/submitGuard'
 import { personLabel, startMessages } from './startMessages'
 
 /** 讓清單記憶跟上詳情頁已確認的結果（保留篩選、頁數與捲動）。 */
@@ -35,6 +36,7 @@ export default function StartAction({
   const [submitting, setSubmitting] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [started, setStarted] = useState(false)
+  const guard = useSubmitGuard()
   const errorRef = useRef<HTMLDivElement>(null)
   const startedRef = useRef<HTMLDivElement>(null)
 
@@ -116,7 +118,7 @@ export default function StartAction({
   }
 
   async function confirmStart() {
-    if (submitting) return
+    if (submitting || !guard.enter()) return
     setSubmitting(true)
     setFailure(null)
     try {
@@ -143,6 +145,7 @@ export default function StartAction({
         setConfirming(next.retryable)
       }
     } finally {
+      guard.leave()
       setSubmitting(false)
     }
   }
@@ -205,7 +208,7 @@ export default function StartAction({
             setConfirming(false)
             setFailure(null)
           }}
-          onConfirm={() => void confirmStart()}
+          onConfirm={confirmStart}
           title={`確認開始「${title}」？`}
         >
           <p>開始後會改為進行中，並記錄你是實際開始者。</p>
