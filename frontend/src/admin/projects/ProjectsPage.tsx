@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -77,6 +83,8 @@ export default function ProjectsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
   const transitionRef = useRef<HTMLDivElement>(null)
+  const editHeadingRef = useRef<HTMLHeadingElement>(null)
+  const noticeRef = useRef<HTMLParagraphElement>(null)
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
   const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
     (key) =>
@@ -87,6 +95,18 @@ export default function ProjectsPage() {
     if (!transition) return
     transitionRef.current?.scrollIntoView?.({ block: 'center' })
   }, [transition])
+
+  useEffect(() => {
+    if (!editing) return
+    const heading = editHeadingRef.current
+    heading?.scrollIntoView?.({ block: 'start' })
+    heading?.focus()
+  }, [editing])
+
+  useEffect(() => {
+    if (!notice) return
+    noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [notice])
 
   useEffect(() => {
     let active = true
@@ -197,6 +217,12 @@ export default function ProjectsPage() {
     requestTransition({ kind: 'edit', project })
   }
 
+  function guardProjectLink(event: MouseEvent<HTMLAnchorElement>, to: string) {
+    if (!hasUnsavedChanges) return
+    event.preventDefault()
+    setTransition({ kind: 'navigate', to })
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!saveGuard.enter()) return
@@ -254,7 +280,7 @@ export default function ProjectsPage() {
       <h1 id="projects-heading">專案</h1>
       {error && <p role="alert">{error}</p>}
       {notice && (
-        <p className="notice-success" role="status">
+        <p className="notice-success" ref={noticeRef} role="status">
           {notice}
         </p>
       )}
@@ -298,13 +324,33 @@ export default function ProjectsPage() {
                 <p>{project.site_location}</p>
                 <Link
                   className="btn btn-primary"
+                  onClick={(event) =>
+                    guardProjectLink(
+                      event,
+                      `/admin/projects/${project.id}/templates`,
+                    )
+                  }
                   to={`/admin/projects/${project.id}/templates`}
                 >
                   套用範本
                 </Link>
-                <Link className="btn" to={`/admin/projects/${project.id}`}>
+                <Link
+                  className="btn"
+                  onClick={(event) =>
+                    guardProjectLink(event, `/admin/projects/${project.id}`)
+                  }
+                  to={`/admin/projects/${project.id}`}
+                >
                   開啟專案
                 </Link>
+                <button
+                  aria-label={`編輯專案「${project.name}」`}
+                  className="btn project-workspace-edit"
+                  onClick={() => startEdit(project)}
+                  type="button"
+                >
+                  編輯
+                </button>
               </article>
             ))}
           </div>
@@ -361,28 +407,21 @@ export default function ProjectsPage() {
                   </button>
                   <Link
                     className="btn btn-sm"
-                    onClick={(event) => {
-                      if (!hasUnsavedChanges) return
-                      event.preventDefault()
-                      setTransition({
-                        kind: 'navigate',
-                        to: `/admin/projects/${project.id}/members`,
-                      })
-                    }}
+                    onClick={(event) =>
+                      guardProjectLink(
+                        event,
+                        `/admin/projects/${project.id}/members`,
+                      )
+                    }
                     to={`/admin/projects/${project.id}/members`}
                   >
                     成員
                   </Link>
                   <Link
                     className="btn btn-sm"
-                    onClick={(event) => {
-                      if (!hasUnsavedChanges) return
-                      event.preventDefault()
-                      setTransition({
-                        kind: 'navigate',
-                        to: `/admin/projects/${project.id}`,
-                      })
-                    }}
+                    onClick={(event) =>
+                      guardProjectLink(event, `/admin/projects/${project.id}`)
+                    }
                     to={`/admin/projects/${project.id}`}
                   >
                     開啟專案
@@ -403,7 +442,9 @@ export default function ProjectsPage() {
         </button>
       )}
       <form onKeyDown={blockImeEnter} onSubmit={save}>
-        <h2>{editing ? `編輯專案「${editing.name}」` : '新增專案'}</h2>
+        <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
+          {editing ? `編輯專案「${editing.name}」` : '新增專案'}
+        </h2>
         {editing && (
           <button
             onClick={() => requestTransition({ kind: 'new' })}
