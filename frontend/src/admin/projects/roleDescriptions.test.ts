@@ -46,6 +46,24 @@ describe('describeRole', () => {
     )
   })
 
+  it('formats mixed known and unknown codes without repeating 可', () => {
+    expect(
+      describeRole(['inspection_task.inspect', 'future.unknown_code']),
+    ).toBe('可執行現場查核、可使用部分功能')
+    expect(
+      summarizeRole(['inspection_task.inspect', 'future.unknown_code']),
+    ).toBe('可執行現場查核、可使用部分功能')
+    expect(
+      summarizeRole(['future.unknown_code', 'inspection_task.inspect']),
+    ).toBe('可使用部分功能、可執行現場查核')
+  })
+
+  it('collapses multiple unknown codes to the documented fallback', () => {
+    const unknownCodes = ['future.first_code', 'future.second_code']
+    expect(describeRole(unknownCodes)).toBe(UNKNOWN_PERMISSION_TEXT)
+    expect(summarizeRole(unknownCodes)).toBe(UNKNOWN_PERMISSION_TEXT)
+  })
+
   it('covers every code in the backend permission registry', () => {
     const registry = readFileSync(
       resolve(process.cwd(), '../backend/app/permission_codes.py'),
@@ -70,16 +88,17 @@ describe('summarizeRole', () => {
       'project_member.manage',
       'project_inspection_item.edit',
       'inspection_plan.create',
+      'inspection_task.create',
       'inspection_task.dispatch',
     ]
     const details = rolePermissionDetails(codes)
 
     expect(summarizeRole(codes)).toBe(
-      '可管理專案成員與其角色、編輯專案查核項目、建立查核計畫等共 4 項',
-    )
-    expect(details).toHaveLength(4)
-    expect(summarizeRole([...codes, 'inspection_task.create'])).toBe(
       '可管理專案成員與其角色、編輯專案查核項目、規劃與派出任務等共 5 項',
+    )
+    expect(details).toHaveLength(5)
+    expect(summarizeRole([...codes, 'inspection_task.assign'])).toBe(
+      '可管理專案成員與其角色、編輯專案查核項目、規劃與派出任務等共 6 項',
     )
   })
 

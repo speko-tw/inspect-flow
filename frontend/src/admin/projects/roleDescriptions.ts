@@ -78,16 +78,21 @@ export function describeRole(
   descriptions?: Map<string, string>,
 ): string {
   if (permissionCodes.length === 0) return NO_PERMISSION_TEXT
-  if (
-    permissionCodes.length === 1 &&
-    !descriptions?.has(permissionCodes[0] ?? '') &&
-    !PERMISSION_DESCRIPTIONS.some(([code]) => code === permissionCodes[0])
-  ) {
-    return UNKNOWN_PERMISSION_TEXT
-  }
-  return `可${rolePermissionDetails(permissionCodes, descriptions)
-    .map(({ label }) => label)
-    .join('、')}`
+  const labels = rolePermissionDetails(permissionCodes, descriptions).map(
+    ({ label }) => label,
+  )
+  return formatRoleLabels(labels)
+}
+
+function formatRoleLabels(labels: string[]): string {
+  const knownLabels = labels.filter(
+    (label) => label !== UNKNOWN_PERMISSION_TEXT,
+  )
+  if (knownLabels.length === 0) return UNKNOWN_PERMISSION_TEXT
+  if (knownLabels.length === labels.length) return `可${labels.join('、')}`
+  return labels
+    .map((label) => (label === UNKNOWN_PERMISSION_TEXT ? label : `可${label}`))
+    .join('、')
 }
 
 /** 畫面預設的一句摘要；完整說明留在可展開清單。 */
@@ -97,13 +102,6 @@ export function summarizeRole(
 ): string {
   const details = rolePermissionDetails(permissionCodes, descriptions)
   if (details.length === 0) return NO_PERMISSION_TEXT
-  if (
-    details.length === 1 &&
-    !PERMISSION_DESCRIPTIONS.some(([code]) => code === details[0]?.code) &&
-    !descriptions?.has(details[0]?.code ?? '')
-  ) {
-    return UNKNOWN_PERMISSION_TEXT
-  }
 
   const owned = new Set(details.map(({ code }) => code))
   const planningAndDispatch = [
@@ -125,7 +123,7 @@ export function summarizeRole(
     if (summarizedCodes.has(code)) return []
     return [mergedPhrases.get(code) ?? label]
   })
-  const visible = phrases.slice(0, 3).join('、')
-  if (details.length > 3) return `可${visible}等共 ${details.length} 項`
-  return `可${visible}`
+  const summary = formatRoleLabels(phrases.slice(0, 3))
+  if (details.length > 3) return `${summary}等共 ${details.length} 項`
+  return summary
 }

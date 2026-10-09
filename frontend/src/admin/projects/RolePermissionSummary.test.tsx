@@ -11,13 +11,14 @@ describe('RolePermissionSummary', () => {
           'project_member.manage',
           'project_inspection_item.edit',
           'inspection_plan.create',
+          'inspection_task.create',
           'inspection_task.dispatch',
         ]}
         name="示範內業"
       />,
     )
 
-    expect(screen.getByText(/等共 4 項/)).toBeVisible()
+    expect(screen.getByText(/等共 5 項/)).toBeVisible()
     const button = screen.getByRole('button', {
       name: '「示範內業」完整權限',
     })
@@ -30,7 +31,7 @@ describe('RolePermissionSummary', () => {
     expect(button).toHaveAttribute('aria-label', '「示範內業」完整權限')
     expect(button).toHaveAttribute('aria-expanded', 'true')
     expect(list).not.toHaveAttribute('hidden')
-    expect(within(list!).getAllByRole('listitem')).toHaveLength(4)
+    expect(within(list!).getAllByRole('listitem')).toHaveLength(5)
     fireEvent.click(button)
     expect(button).toHaveAttribute('aria-expanded', 'false')
     expect(list).toHaveAttribute('hidden')
