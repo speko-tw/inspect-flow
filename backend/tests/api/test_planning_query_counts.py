@@ -1,12 +1,19 @@
 """List endpoints batch-load children instead of querying per row (#462)."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
-from app.models import ProjectInspectionItem
+from app.models import (
+    Project,
+    ProjectInspectionItem,
+    ProjectMember,
+    User,
+)
 from tests.api.query_count import select_count
 from tests.api.test_inspection_planning_api import _planning_world
+from tests.db.conftest import create_root_user_with_company
 
 # Generous ceiling for the fixed number of statements one list request may
 # issue (auth, permission and batched child loads). A per-row query on any
@@ -149,3 +156,97 @@ def test_plan_detail_select_count_is_fixed_for_many_tasks(world):
     more_count, more_tasks = select_count(admin, url)
     assert more_tasks == _TASKS + 1
     assert more_count == count
+
+
+def test_field_task_permission_select_count_does_not_grow_with_projects(
+    world, db_session
+):
+    admin = world["admin"]
+    tasks = admin.get(_urls(world)["project tasks"], params={"limit": 1})
+    assert tasks.status_code == 200, tasks.text
+    task_id = tasks.json()["items"][0]["id"]
+    dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+
+    url = "/api/v1/field/inspection-tasks"
+    params = {"assigned_to_me": "false", "limit": 10}
+    small, small_items = select_count(world["field"], url, **params)
+    assert small_items == 1
+
+    user_id = world["field_user"].id
+    for sequence in range(8):
+        project = Project(
+            project_code=f"PERMISSION-COUNT-{sequence}",
+            name=f"查詢次數專案 {sequence}",
+            client_name="示範業主",
+            site_location="示範工地",
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
+        )
+        db_session.add(project)
+        db_session.flush()
+        db_session.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=user_id,
+                created_by=world["admin_user"].id,
+                updated_by=world["admin_user"].id,
+            )
+        )
+    db_session.commit()
+
+    large, large_items = select_count(world["field"], url, **params)
+    assert large_items == 1
+    assert large == small
+
+
+def test_assignee_query_count_and_cursor_page_do_not_grow_with_members(
+    world, db_session
+):
+    url = f"{world['base']}/inspection-task-assignees"
+    small, small_items = select_count(world["admin"], url, limit=2)
+    assert small_items == 2
+
+    for sequence in range(8):
+        person = create_root_user_with_company(db_session, f"PQ{sequence:02}")
+        db_session.add(
+            ProjectMember(
+                project_id=world["project"].id,
+                user_id=person.id,
+                created_by=world["admin_user"].id,
+                updated_by=world["admin_user"].id,
+            )
+        )
+    db_session.commit()
+
+    large, large_items = select_count(world["admin"], url, limit=2)
+    assert large_items == 2
+    assert large == small
+
+    first = world["admin"].get(url, params={"limit": 2})
+    assert first.status_code == 200, first.text
+    assert len(first.json()["items"]) == 2
+    assert first.json()["next_cursor"]
+    second = world["admin"].get(
+        url,
+        params={"limit": 2, "cursor": first.json()["next_cursor"]},
+    )
+    assert second.status_code == 200, second.text
+    pages = first.json()["items"] + second.json()["items"]
+    candidate_ids = {person["id"] for person in pages}
+    assert len(pages) == 3
+    assert len(candidate_ids) == 3
+    expected_order = [
+        str(person.id)
+        for person in db_session.scalars(
+            select(User)
+            .where(User.id.in_([UUID(value) for value in candidate_ids]))
+            .order_by(User.created_at, User.id)
+        ).all()
+    ]
+    assert [person["id"] for person in pages] == expected_order
+    assert str(world["field_user"].id) in candidate_ids
+    assert str(world["field_user_two"].id) in candidate_ids
+    assert str(world["plain_user"].id) not in candidate_ids
+    assert str(world["admin_user"].id) not in candidate_ids
+    assert second.json()["next_cursor"] is None
