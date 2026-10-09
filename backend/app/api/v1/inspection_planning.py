@@ -174,7 +174,23 @@ def _planning_error_response(
     return code, status_code
 
 
-def _resource_permission(resource_type: str, permission: str):
+def _is_project_member(
+    db: Session, *, user_id: UUID, project_id: UUID
+) -> bool:
+    return (
+        db.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id,
+            )
+        )
+        is not None
+    )
+
+
+def _resource_permission(
+    resource_type: str, permission: str, *, hide_nonmember: bool = False
+):
     def check(
         request: Request,
         db: Session = Depends(get_db),  # noqa: B008
@@ -186,7 +202,7 @@ def _resource_permission(resource_type: str, permission: str):
         try:
             parsed_id = UUID(str(resource_id))
         except ValueError as exc:
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
         resource = db.get(model, parsed_id)
         if resource is None:
             raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
@@ -196,6 +212,10 @@ def _resource_permission(resource_type: str, permission: str):
             db, user_id=user.id, project_id=resource.project_id
         )
         if permission not in permissions:
+            if hide_nonmember and not _is_project_member(
+                db, user_id=user.id, project_id=resource.project_id
+            ):
+                raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -222,6 +242,10 @@ def _task_read_permission():
             }
             & permissions
         ):
+            if not _is_project_member(
+                db, user_id=user.id, project_id=task.project_id
+            ):
+                raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         if (
             not user.is_admin
@@ -632,7 +656,13 @@ def add_zone(project_id: UUID, body: NameBody, db: Session = _db_dependency):
 
 @router.patch(
     "/projects/{project_id}/zones/{zone_id}",
-    dependencies=[Depends(require_project_permission("project_zone.manage"))],
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_zone.manage", uuid_path_params=("zone_id",)
+            )
+        )
+    ],
 )
 def patch_zone(
     project_id: UUID,
@@ -663,7 +693,13 @@ def _zone_response(zone: ProjectZone, *, include_project: bool = False):
 @router.delete(
     "/projects/{project_id}/zones/{zone_id}",
     status_code=204,
-    dependencies=[Depends(require_project_permission("project_zone.manage"))],
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_zone.manage", uuid_path_params=("zone_id",)
+            )
+        )
+    ],
 )
 def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
     zone = db.scalar(
@@ -680,7 +716,11 @@ def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
     "/inspection-plans/{plan_id}",
     dependencies=[
         Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.read")),
+        Depends(
+            _resource_permission(
+                "plan", "inspection_plan.read", hide_nonmember=True
+            )
+        ),
     ],
 )
 def get_plan(plan_id: UUID, db: Session = _db_dependency):
@@ -730,7 +770,11 @@ def add_task(
     "/inspection-plans/{plan_id}/tasks",
     dependencies=[
         Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.read")),
+        Depends(
+            _resource_permission(
+                "plan", "inspection_plan.read", hide_nonmember=True
+            )
+        ),
     ],
 )
 def plan_tasks(
@@ -783,7 +827,9 @@ def project_tasks(
     dependencies=[
         Depends(
             require_project_permission(
-                "project_inspection_item.edit", param_name="project_id"
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
             )
         )
     ],
@@ -1188,7 +1234,9 @@ def _project_exists(db: Session, project_id: UUID) -> None:
     dependencies=[
         Depends(
             require_project_permission(
-                "project_inspection_item.edit", param_name="project_id"
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
             )
         )
     ],
