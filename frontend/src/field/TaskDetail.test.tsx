@@ -298,6 +298,25 @@ describe('現場任務詳情', () => {
     expect(screen.queryByText(/null/)).not.toBeInTheDocument()
   })
 
+  it('shows a clear label when the snapshot has no standard', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          ...detail,
+          items: [
+            {
+              ...detail.items[0],
+              inspection_points: [{ ...basePoint, numeric_standard: null }],
+            },
+          ],
+        }),
+      ),
+    )
+    renderDetail()
+    expect(await screen.findByText('標準未設定')).toBeInTheDocument()
+  })
+
   it('拒絕錯誤的詳情回應形狀', async () => {
     vi.stubGlobal(
       'fetch',

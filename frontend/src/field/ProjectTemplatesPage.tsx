@@ -10,11 +10,11 @@ import {
   type TemplateSystem,
 } from '../admin/templates/api'
 import { useCurrentUser } from '../auth/useCurrentUser'
-import { numericSummary } from '../admin/templates/templateEditorUtils'
 import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
 import { isForbidden, isNotFound } from '../http'
 import { BackButton, BackLink } from '../layout/BackLink'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { formatInspectionStandard } from '../ui/inspectionStandard'
 import { useSubmitGuard } from '../ui/submitGuard'
 import { ProjectNotFound } from '../RouteNotFound'
 import { fetchMyProjects } from './api'
@@ -674,12 +674,16 @@ export default function ProjectTemplatesPage() {
                                 {point.numeric_standard && (
                                   <p>
                                     數值標準：{point.title}{' '}
-                                    {numericSummary(point)}
+                                    {formatInspectionStandard(point)}
                                   </p>
                                 )}
                                 {point.text_standard && (
                                   <p>文字標準：{point.text_standard.text}</p>
                                 )}
+                                {!point.numeric_standard &&
+                                  !point.text_standard && (
+                                    <p>{formatInspectionStandard(point)}</p>
+                                  )}
                                 {pointEvidenceText(point).map((summary) => (
                                   <p key={summary}>{summary}</p>
                                 ))}

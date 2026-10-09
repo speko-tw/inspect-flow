@@ -151,26 +151,3 @@ export function forWire(item: TemplateItem): TemplateItem {
     }),
   }
 }
-
-export function numericSummary(point: InspectionPoint): string {
-  const standard = point.numeric_standard
-  if (!standard) return point.text_standard?.text.trim() || '未設定標準'
-  const unit = boundField(point)?.unit ?? standard.unit
-  if (standard.condition === 'range') {
-    if ((standard.range_form ?? 'tolerance') === 'interval') {
-      const lower = standard.lower_bound ?? ''
-      const upper = standard.upper_bound ?? ''
-      if (!lower.trim() || !upper.trim()) return '？'
-      return `${lower}～${upper} ${unit}`
-    }
-    if (!standard.value?.trim() || !standard.tolerance?.trim()) return '？'
-    return `${standard.value ?? ''} ± ${standard.tolerance ?? ''} ${unit}`
-  }
-  if (!standard.value?.trim()) return '？'
-  const symbols = { '<=': '≤', '>=': '≥', '=': '＝', range: '範圍' }
-  const tolerance =
-    standard.condition === '=' && standard.tolerance?.trim()
-      ? ` ± ${standard.tolerance}`
-      : ''
-  return `${symbols[standard.condition]} ${standard.value}${tolerance} ${unit}`
-}

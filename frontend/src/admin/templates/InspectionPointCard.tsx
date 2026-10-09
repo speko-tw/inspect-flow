@@ -1,5 +1,5 @@
 import type { InspectionPoint } from './api'
-import { numericSummary } from './templateEditorUtils'
+import { formatInspectionStandard } from '../../ui/inspectionStandard'
 
 export function InspectionPointCard({
   index,
@@ -23,9 +23,7 @@ export function InspectionPointCard({
       </p>
       <p>
         判定標準：
-        {point.numeric_standard
-          ? numericSummary(point)
-          : point.text_standard?.text || '不設定標準'}
+        {formatInspectionStandard(point)}
       </p>
       <p>照片：至少 {point.evidence_requirements[0]?.min_count ?? 1} 張</p>
     </article>
