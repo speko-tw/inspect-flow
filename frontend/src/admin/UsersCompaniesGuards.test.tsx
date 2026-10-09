@@ -104,9 +104,14 @@ function stubBackend(
       }
       if (call.path.startsWith('/api/v1/users/')) {
         const id = call.path.split('/')[4]
-        return Response.json(
-          users.find((user) => user.id === id) ?? regularUser,
-        )
+        const target = users.find((user) => user.id === id)
+        if (target && call.method === 'PUT' && call.path.endsWith('/active')) {
+          // 讓列表重新載入後反映新狀態（#527：停用後再啟用）。
+          target.is_active = (
+            JSON.parse(String(init?.body)) as { is_active: boolean }
+          ).is_active
+        }
+        return Response.json(target ?? regularUser)
       }
       return Response.json(company)
     },
@@ -308,6 +313,96 @@ describe('UsersPage 操作確認框（#507）', () => {
     const box = await openConfirm()
 
     expect(box.tagName).toBe('DIV')
+  })
+})
+
+describe('UsersPage 確認框顏色依動作效果（#527）', () => {
+  const adminUser: User = {
+    ...regularUser,
+    id: 'user-9',
+    username: 'amy.admin',
+    email: 'amy@example.com',
+    is_admin: true,
+  }
+
+  async function openFor(
+    username: RegExp,
+    button: string,
+  ): Promise<HTMLElement> {
+    const row = await screen.findByRole('row', { name: username })
+    fireEvent.click(within(row).getByRole('button', { name: button }))
+    return screen.getByRole('region', { name: '操作確認' })
+  }
+
+  function confirmButton(box: HTMLElement) {
+    return within(box).getByRole('button', { name: '確認' })
+  }
+
+  it('停用是紅色', async () => {
+    stubBackend()
+    renderUsers()
+    const box = await openFor(/anna\.deng/, '停用')
+
+    expect(box).toHaveClass('confirm-box-danger')
+    expect(confirmButton(box)).toHaveClass('btn-danger')
+  })
+
+  it('啟用是一般主色，確認前不送出，確認後才送出', async () => {
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+    })
+    renderUsers()
+    const box = await openFor(/anna\.deng/, '啟用')
+
+    expect(box).toHaveClass('confirm-box-neutral')
+    expect(confirmButton(box)).toHaveClass('btn-primary')
+    expect(box).toHaveTextContent('可以再次登入')
+    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
+
+    fireEvent.click(confirmButton(box))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull(),
+    )
+    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(1)
+  })
+
+  it('指派管理者是一般主色', async () => {
+    stubBackend()
+    renderUsers()
+    const box = await openFor(/anna\.deng/, '指派管理者')
+
+    expect(box).toHaveClass('confirm-box-neutral')
+    expect(confirmButton(box)).toHaveClass('btn-primary')
+  })
+
+  it('收回管理者是紅色', async () => {
+    stubBackend({ users: [adminUser] })
+    renderUsers()
+    const box = await openFor(/amy\.admin/, '收回管理者')
+
+    expect(box).toHaveClass('confirm-box-danger')
+    expect(confirmButton(box)).toHaveClass('btn-danger')
+  })
+
+  it('管理者帳號停用是紅色，停用後再啟用是一般主色', async () => {
+    const backend = stubBackend({ users: [{ ...adminUser }] })
+    renderUsers()
+    const deactivation = await openFor(/amy\.admin/, '停用')
+    expect(deactivation).toHaveClass('confirm-box-danger')
+
+    fireEvent.click(confirmButton(deactivation))
+    await waitFor(() =>
+      expect(backend.count('PUT', '/api/v1/users/user-9/active')).toBe(1),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull(),
+    )
+
+    const activation = await openFor(/amy\.admin/, '啟用')
+    expect(activation).toHaveClass('confirm-box-neutral')
+    expect(confirmButton(activation)).toHaveClass('btn-primary')
+    expect(confirmButton(activation)).not.toHaveClass('btn-danger')
   })
 })
 
