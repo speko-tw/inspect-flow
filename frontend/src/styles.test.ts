@@ -173,3 +173,27 @@ describe('hover rules', () => {
     expect(css).toMatch(/@media \(hover: hover\) \{\n\s+a\.topbar-brand:hover/)
   })
 })
+
+// 名稱列與角色表（#526）：名稱是主角，動作靠右；角色名稱欄不折行。
+describe('named row rules', () => {
+  const block = (selector: string) => {
+    const start = css.indexOf(`\n${selector} {\n`)
+    expect(start).toBeGreaterThan(0)
+    return css.slice(start, css.indexOf('}', start))
+  }
+
+  it('makes the name bold and larger than the small row buttons', () => {
+    const rule = block('.named-row-name')
+    expect(rule).toContain('font-weight: 700')
+    expect(rule).toMatch(/font-size: 1\.\d+rem/)
+  })
+
+  it('separates rows with a line and pushes actions to the right', () => {
+    expect(block('.named-row')).toContain('border-bottom: 1px solid')
+    expect(block('.named-row')).toContain('justify-content: space-between')
+  })
+
+  it('keeps role names on one line while permissions wrap', () => {
+    expect(block('.roles-table tbody th')).toContain('white-space: nowrap')
+  })
+})

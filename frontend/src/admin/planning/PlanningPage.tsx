@@ -532,116 +532,125 @@ export default function PlanningPage({
               </p>
             )}
             {zones.length === 0 ? <p>尚未設定分區。</p> : null}
-            {zones.map((zone) => (
-              <div key={zone.id}>
-                {renamingZone?.id === zone.id ? (
-                  <form
-                    onKeyDown={blockImeEnter}
-                    data-error-context="zone"
-                    noValidate
-                    onSubmit={(event) => void renameZone(event)}
-                  >
-                    <label>
-                      <span className="required-label">
-                        分區名稱 <span aria-hidden="true">*</span>
+            <div className="named-list">
+              {zones.map((zone) => (
+                <div className="named-row" key={zone.id}>
+                  {renamingZone?.id === zone.id ? (
+                    <form
+                      onKeyDown={blockImeEnter}
+                      data-error-context="zone"
+                      noValidate
+                      onSubmit={(event) => void renameZone(event)}
+                    >
+                      <label>
+                        <span className="required-label">
+                          分區名稱 <span aria-hidden="true">*</span>
+                        </span>
+                        <input
+                          aria-describedby={describedBy(
+                            'zone-name-hint',
+                            hasFieldError('zone-name') &&
+                              fieldErrorId('zone-name'),
+                          )}
+                          aria-invalid={hasFieldError('zone-name')}
+                          autoFocus
+                          maxLength={128}
+                          onChange={(event) => {
+                            setZoneName(event.target.value)
+                            setFieldError(null)
+                          }}
+                          onKeyDown={(event) => {
+                            // 輸入法選字的 Enter 只是確認選字，不送出。
+                            if (blockImeEnter(event)) return
+                            if (event.key === 'Escape') {
+                              event.preventDefault()
+                              setRenamingZone(null)
+                              setZoneName('')
+                              setError('')
+                              setFieldError(null)
+                            } else if (event.key === 'Enter') {
+                              event.preventDefault()
+                              event.currentTarget.form?.requestSubmit()
+                            }
+                          }}
+                          data-field="zone-name"
+                          required
+                          value={zoneName}
+                        />
+                      </label>
+                      <span className="field-hint" id="zone-name-hint">
+                        必填，最多 128 字。
                       </span>
-                      <input
-                        aria-describedby={describedBy(
-                          'zone-name-hint',
-                          hasFieldError('zone-name') &&
-                            fieldErrorId('zone-name'),
-                        )}
-                        aria-invalid={hasFieldError('zone-name')}
-                        autoFocus
-                        maxLength={128}
-                        onChange={(event) => {
-                          setZoneName(event.target.value)
+                      {fieldErrorText('zone-name')}
+                      {error && errorContext === 'zone' && (
+                        <p ref={errorMessage} role="alert" tabIndex={-1}>
+                          {error}
+                        </p>
+                      )}
+                      <button
+                        aria-label="取消編輯"
+                        disabled={busy}
+                        onClick={() => {
+                          setRenamingZone(null)
+                          setZoneName('')
+                          setError('')
                           setFieldError(null)
                         }}
-                        onKeyDown={(event) => {
-                          // 輸入法選字的 Enter 只是確認選字，不送出。
-                          if (blockImeEnter(event)) return
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            setRenamingZone(null)
-                            setZoneName('')
+                        type="button"
+                      >
+                        取消
+                      </button>
+                      <button
+                        className="btn-primary"
+                        disabled={busy}
+                        type="submit"
+                      >
+                        儲存名稱
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <span className="named-row-name">{zone.name}</span>
+                      <span className="named-row-actions">
+                        <button
+                          className="btn-sm"
+                          disabled={busy || readOnly}
+                          onClick={() => {
                             setError('')
                             setFieldError(null)
-                          } else if (event.key === 'Enter') {
-                            event.preventDefault()
-                            event.currentTarget.form?.requestSubmit()
+                            renameZoneTrigger.current =
+                              document.activeElement as HTMLButtonElement
+                            setZoneName(zone.name)
+                            setRenamingZone(zone)
+                          }}
+                          type="button"
+                        >
+                          重新命名
+                        </button>
+                        <button
+                          className="btn-sm"
+                          disabled={busy || readOnly}
+                          onClick={() =>
+                            confirm(
+                              `刪除分區「${zone.name}」？`,
+                              () => client.deleteZone(projectId, zone.id),
+                              {
+                                area: 'zones',
+                                text: `已刪除分區「${zone.name}」。`,
+                              },
+                              { label: '確認刪除' },
+                            )
                           }
-                        }}
-                        data-field="zone-name"
-                        required
-                        value={zoneName}
-                      />
-                    </label>
-                    <span className="field-hint" id="zone-name-hint">
-                      必填，最多 128 字。
-                    </span>
-                    {fieldErrorText('zone-name')}
-                    {error && errorContext === 'zone' && (
-                      <p ref={errorMessage} role="alert" tabIndex={-1}>
-                        {error}
-                      </p>
-                    )}
-                    <button
-                      aria-label="取消編輯"
-                      disabled={busy}
-                      onClick={() => {
-                        setRenamingZone(null)
-                        setZoneName('')
-                        setError('')
-                        setFieldError(null)
-                      }}
-                      type="button"
-                    >
-                      取消
-                    </button>
-                    <button
-                      className="btn-primary"
-                      disabled={busy}
-                      type="submit"
-                    >
-                      儲存名稱
-                    </button>
-                  </form>
-                ) : (
-                  <>
-                    {zone.name}{' '}
-                    <button
-                      disabled={busy || readOnly}
-                      onClick={() => {
-                        setError('')
-                        setFieldError(null)
-                        renameZoneTrigger.current =
-                          document.activeElement as HTMLButtonElement
-                        setZoneName(zone.name)
-                        setRenamingZone(zone)
-                      }}
-                      type="button"
-                    >
-                      重新命名
-                    </button>{' '}
-                  </>
-                )}
-                <button
-                  disabled={busy || readOnly}
-                  onClick={() =>
-                    confirm(
-                      `刪除分區「${zone.name}」？`,
-                      () => client.deleteZone(projectId, zone.id),
-                      { area: 'zones', text: `已刪除分區「${zone.name}」。` },
-                      { label: '確認刪除' },
-                    )
-                  }
-                  type="button"
-                >
-                  刪除
-                </button>
-              </div>
-            ))}
+                          type="button"
+                        >
+                          刪除
+                        </button>
+                      </span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
             {!readOnly && !zonesDenied && !renamingZone && (
               <>
                 <button
