@@ -4,38 +4,13 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import { isNotFound } from '../http'
 import { BackLink } from '../layout/BackLink'
 import { StatusBadge } from '../ui/Badge'
+import { formatInspectionStandard } from '../ui/inspectionStandard'
 import {
   fetchFieldTaskDetail,
   FieldApiError,
   type FieldTaskDetail,
 } from './api'
 import StartAction, { type TaskListChange } from './StartAction'
-
-function standardText(
-  point: FieldTaskDetail['items'][number]['inspection_points'][number],
-) {
-  const standard = point.numeric_standard
-  if (!standard) return point.text_standard?.text || '未設定標準'
-  const unit =
-    point.measurement_fields.find(
-      (field) => field.id === standard.measurement_field_id,
-    )?.unit ?? standard.unit
-  const suffix = unit ? ` ${unit}` : ''
-  if (standard.condition === 'range') {
-    if (standard.range_form === 'interval') {
-      if (standard.lower_bound && standard.upper_bound) {
-        return `${standard.lower_bound}～${standard.upper_bound}${suffix}`
-      }
-      return standard.lower_bound
-        ? `≥ ${standard.lower_bound}${suffix}`
-        : `≤ ${standard.upper_bound}${suffix}`
-    }
-    return `${standard.value} ± ${standard.tolerance}${suffix}`
-  }
-  const symbol = { '<=': '≤', '>=': '≥', '=': '＝' }[standard.condition]
-  const tolerance = standard.tolerance ? ` ± ${standard.tolerance}` : ''
-  return `${symbol} ${standard.value}${tolerance}${suffix}`
-}
 
 function displayTime(value: string) {
   const date = new Date(value)
@@ -214,7 +189,7 @@ export default function TaskDetail({
                       </div>
                       <div>
                         <dt>判定標準</dt>
-                        <dd>{standardText(point)}</dd>
+                        <dd>{formatInspectionStandard(point)}</dd>
                       </div>
                       <div>
                         <dt>照片需求</dt>
