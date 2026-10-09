@@ -40,15 +40,12 @@ describe('mock planning client', () => {
       const base64 = cursor!.replaceAll('-', '+').replaceAll('_', '/')
       const padding = (4 - (base64.length % 4)) % 4
       const decoded = atob(base64 + '='.repeat(padding))
-      const payload = JSON.parse(
-        new TextDecoder().decode(
-          Uint8Array.from(decoded, (character) => character.charCodeAt(0)),
-        ),
+      const payload = new TextDecoder().decode(
+        Uint8Array.from(decoded, (character) => character.charCodeAt(0)),
       )
-      expect(payload).toEqual({
-        t: '2026-10-10T00:00:00.123000+00:00',
-        id: first.items.at(-1)?.id,
-      })
+      expect(payload).toBe(
+        `{"t":"2026-10-10T00:00:00.123000+00:00","id":"${first.items.at(-1)?.id}"}`,
+      )
 
       const sortedIds = created.map((plan) => plan.id).sort()
       expect(first.items.map((plan) => plan.id)).toEqual(
@@ -88,6 +85,32 @@ describe('mock planning client', () => {
     const page = await client.listPlans(PROJECT)
     expect(page.items).toHaveLength(100)
     expect(page.next_cursor).toBeNull()
+  })
+
+  it('paginates by increasing creation time without duplicates', async () => {
+    const client = createMockPlanningClient()
+    const created = []
+    vi.useFakeTimers()
+    try {
+      for (let index = 0; index < 101; index += 1) {
+        vi.setSystemTime(new Date(Date.UTC(2026, 9, 10, 0, 0, index)))
+        created.push(
+          await client.createPlan(PROJECT, { name: `遞增時間計畫 ${index}` }),
+        )
+      }
+
+      const first = await client.listPlans(PROJECT)
+      expect(first.items.map((plan) => plan.id)).toEqual(
+        created.slice(0, 100).map((plan) => plan.id),
+      )
+      expect(first.items.at(-1)?.created_at).not.toBe(created[100].created_at)
+
+      const second = await client.listPlans(PROJECT, first.next_cursor)
+      expect(second.items.map((plan) => plan.id)).toEqual([created[100].id])
+      expect(second.next_cursor).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects invalid plan cursors like the backend', async () => {
