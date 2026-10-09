@@ -29,6 +29,20 @@ const PHRASES: Array<[code: string, phrase: string]> = [
 
 export const NO_PERMISSION_TEXT = '尚未設定任何權限'
 
+export function rolePermissionDetails(
+  permissionCodes: string[],
+  descriptions?: Map<string, string>,
+): string[] {
+  return permissionCodes
+    .map(
+      (code) =>
+        descriptions?.get(code) ??
+        PHRASES.find(([known]) => known === code)?.[1] ??
+        (descriptions ? code : '其他權限'),
+    )
+    .filter((phrase, index, phrases) => phrases.indexOf(phrase) === index)
+}
+
 /** 回傳一行白話說明，例如「可建立任務、派出任務」。 */
 export function describeRole(permissionCodes: string[]): string {
   const owned = new Set(permissionCodes)
@@ -38,4 +52,32 @@ export function describeRole(permissionCodes: string[]): string {
   if (phrases.length > 0) return `可${phrases.join('、')}`
   if (permissionCodes.length > 0) return '可使用部分功能'
   return NO_PERMISSION_TEXT
+}
+
+/** 畫面預設的一句摘要；完整說明留在可展開清單。 */
+export function summarizeRole(permissionCodes: string[]): string {
+  const owned = new Set(permissionCodes)
+  const planningAndDispatch = [
+    'inspection_plan.create',
+    'inspection_task.create',
+    'inspection_task.dispatch',
+  ].every((code) => owned.has(code))
+  const phrases = PHRASES.flatMap(([code, phrase]) => {
+    if (!owned.has(code)) return []
+    if (planningAndDispatch && code === 'inspection_plan.create') {
+      return ['規劃與派出任務']
+    }
+    if (
+      planningAndDispatch &&
+      ['inspection_task.create', 'inspection_task.dispatch'].includes(code)
+    ) {
+      return []
+    }
+    if (code === 'project_member.manage') return ['管理成員']
+    if (code === 'project_inspection_item.edit') return ['編輯查核項目']
+    return [phrase]
+  })
+  if (phrases.length === 0) return describeRole(permissionCodes)
+  if (phrases.length <= 3) return `可${phrases.join('、')}`
+  return `可${phrases.slice(0, 3).join('、')}等 ${phrases.length} 項`
 }

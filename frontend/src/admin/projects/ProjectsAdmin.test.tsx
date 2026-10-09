@@ -1210,6 +1210,25 @@ describe('project members for an office user (not admin, #481)', () => {
     )
   })
 
+  it('expands and collapses role permissions without changing selection', async () => {
+    projectFetch({ office: true, members: [memberAnna] })
+    renderAt(path, officeUser)
+    await screen.findByText('鄧安娜')
+
+    const checkbox = screen.getByLabelText('查核員')
+    const button = screen.getByRole('button', {
+      name: '展開「查核員」完整權限',
+    })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    const checked = (checkbox as HTMLInputElement).checked
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('到現場查核')).toBeVisible()
+    expect((checkbox as HTMLInputElement).checked).toBe(checked)
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('adds a member by clicking, with a required role', async () => {
     const fetchMock = projectFetch({ office: true, members: [memberAnna] })
     renderAt(path, officeUser)

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { NO_PERMISSION_TEXT, describeRole } from './roleDescriptions'
+import {
+  NO_PERMISSION_TEXT,
+  describeRole,
+  summarizeRole,
+} from './roleDescriptions'
 
 describe('describeRole', () => {
   it('turns permission codes into one plain sentence', () => {
@@ -39,5 +43,32 @@ describe('describeRole', () => {
     expect(describeRole(['future.unknown_code'])).toBe('可使用部分功能')
     expect(describeRole(['future.unknown_code'])).not.toMatch(/future/)
     expect(describeRole([])).toBe(NO_PERMISSION_TEXT)
+  })
+})
+
+describe('summarizeRole', () => {
+  it('keeps at most three capabilities in the default sentence', () => {
+    expect(
+      summarizeRole([
+        'project_member.manage',
+        'project_inspection_item.edit',
+        'inspection_plan.create',
+        'inspection_task.dispatch',
+      ]),
+    ).toBe('可管理成員、編輯查核項目、建立計畫等 4 項')
+    expect(
+      summarizeRole([
+        'project_member.manage',
+        'project_inspection_item.edit',
+        'inspection_plan.create',
+        'inspection_task.create',
+        'inspection_task.dispatch',
+      ]),
+    ).toBe('可管理成員、編輯查核項目、規劃與派出任務')
+  })
+
+  it('keeps short and empty roles understandable', () => {
+    expect(summarizeRole(['inspection_task.inspect'])).toBe('可到現場查核')
+    expect(summarizeRole([])).toBe(NO_PERMISSION_TEXT)
   })
 })

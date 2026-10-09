@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { ManagementApiError } from '../api'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import RolePermissionSummary from '../projects/RolePermissionSummary'
 import {
   createRole,
   deleteRole,
@@ -236,15 +237,6 @@ export default function RolesPage() {
     }
   }
 
-  function permissionText(role: Role): string {
-    if (role.permission_codes.length === 0) {
-      return '（無）'
-    }
-    return role.permission_codes
-      .map((code) => descriptions.get(code) ?? code)
-      .join('、')
-  }
-
   return (
     <section aria-labelledby="roles-heading">
       <h1 id="roles-heading">角色管理</h1>
@@ -294,7 +286,14 @@ export default function RolesPage() {
             {roles.map((role) => (
               <tr key={role.id}>
                 <th scope="row">{role.name}</th>
-                <td>{permissionText(role)}</td>
+                <td>
+                  <RolePermissionSummary
+                    codes={role.permission_codes}
+                    descriptions={descriptions}
+                    emptyText="（無）"
+                    name={role.name}
+                  />
+                </td>
                 <td>
                   <button
                     aria-label={`修改角色 ${role.name}`}
