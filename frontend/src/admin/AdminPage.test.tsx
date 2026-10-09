@@ -1354,8 +1354,15 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByText('還有 1 位啟用中的人員'),
     ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '確認停用公司' }),
+      ).toBeEnabled()
+    })
     fireEvent.click(screen.getByLabelText('王小明（worker）'))
-    expect(screen.getByLabelText('王小明（worker）')).toBeChecked()
+    await waitFor(() => {
+      expect(screen.getByLabelText('王小明（worker）')).toBeChecked()
+    })
     const deactivateCompany = screen.getByRole('button', {
       name: '確認停用公司',
     })
