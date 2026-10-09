@@ -3,7 +3,7 @@
 **代碼**：`ALG`　**Phase**：P2　**狀態**：已凍結
 **前置規格**：`database-foundation`（UUID 主鍵、UTC 時間、`created_by` 外鍵，見 DBF-R08、DBF-R11、DBF-R14）、`domain-model`（`User`、`Role`、`ProjectMember`、目前操作者，見 DOM-R05、DOM-R14、DOM-R19～DOM-R25；帳號名稱與公司連結見 DOM-R45、DOM-R47、DOM-R53）、`api-conventions`（UUID 字串、時間格式，見 API-R06、API-R09）
 **引用意圖**：[PR-03](../../intents/02-principles.md#pr-03)、[PR-08](../../intents/02-principles.md#pr-08)、[PR-14](../../intents/02-principles.md#pr-14)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-20](../../intents/03-decisions-and-stack.md#kd-20)、[KD-24](../../intents/03-decisions-and-stack.md#kd-24)、[KD-43](../../intents/03-decisions-and-stack.md#kd-43)、[KD-45](../../intents/03-decisions-and-stack.md#kd-45)、[KD-46](../../intents/03-decisions-and-stack.md#kd-46)、[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、[04-glossary](../../intents/04-glossary.md)「稽核紀錄」
-**被擋議題**：無（[ALG-Q1](#alg-q1)、[ALG-Q3](#alg-q3)～[ALG-Q5](#alg-q5) 不擋凍結：Q1、Q3、Q4 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變；[ALG-Q2](#alg-q2)、[ALG-Q6](#alg-q6) 已裁定）
+**被擋議題**：無（[ALG-Q1](#alg-q1)、[ALG-Q3](#alg-q3)、[ALG-Q5](#alg-q5) 不擋凍結：Q1、Q3 不影響資料表；Q5 若選 B，另加一支 migration 新增可空值欄位，已凍結的欄位不變；[ALG-Q2](#alg-q2)、[ALG-Q4](#alg-q4)、[ALG-Q6](#alg-q6) 已裁定）
 
 ## 目的
 
@@ -18,6 +18,7 @@
 - 第一批事件：`Role` 的新增、修改、刪除；`ProjectMember` 的角色指派；把人移出專案；`User.is_admin` 的變更（[KD-29](../../intents/03-decisions-and-stack.md#kd-29)、DOM-R22、[#126](https://github.com/speko-tw/inspect-flow/issues/126)、[#125](https://github.com/speko-tw/inspect-flow/issues/125)）。
 - `authentication` 的兩種事件：設定密碼、帳號被鎖（[AUT-Q6](../authentication/spec.md#aut-q6) 裁定，[#148](https://github.com/speko-tw/inspect-flow/issues/148)），見 [`authentication` 事件](#authentication-事件)；首次設定 `admin` 密碼與 `admin` 重設指令沿用 `user.password_set`（ALG-R18、ALG-R21）。
 - 帳號名稱修改與公司連結變更（含因此清空的欄位）兩種事件（DOM-R22；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）），見[帳號與公司連結事件](#帳號與公司連結事件)。
+- 帳號停用與啟用事件，以及模組權限的授予與收回、模組委派的指派與收回、權限組合、建立者角色設定事件（DOM-R22；負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)），見[帳號與公司連結事件](#帳號與公司連結事件)與[模組權限事件](#模組權限事件)。
 - `ProjectZone` 新增、改名與刪除事件，依 `inspection-planning` IP-R10 登記，見[`inspection-planning` 事件](#inspection-planning-事件)。
 - 寫入時機的驗收：DOM-R22 列出的每一種變更是否寫出正確的紀錄（DOM-R22 寫明由本規格驗收）。
 - 預留：外部身分同步覆蓋基本欄位的事件（[KD-20](../../intents/03-decisions-and-stack.md#kd-20)），只保證之後不用改資料表就能套用。
@@ -32,7 +33,7 @@
 - `authentication` 事件的寫入入口與寫入時機的驗收：由 `authentication` 實作與驗收（AUT-R39、AUT-AC49～AUT-AC51、AUT-AC62）。
 - 保存期限、讀取紀錄是否另寫稽核、請求來源資訊：見[待釐清](#待釐清)；查詢 API 與畫面已依 [ALG-Q2](#alg-q2) 裁定納入範圍。
 - 其他資料（`Company`、`User` 基本欄位的人工修改等）的完整操作歷史：屬「延後但不排除」的 Audit Trail（[01-overview](../../intents/01-overview.md#延後但不排除的能力)，架構基準 §35）；這些資料目前只靠 [PR-08](../../intents/02-principles.md#pr-08) 的建立與修改紀錄。
-  - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；`User` 的姓名、email、`is_active` 與 `Company` 的修改，以及單獨修改工號、部門、地點，仍不寫（`is_active` 待 [ALG-Q4](#alg-q4)）。
+  - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；`User` 的姓名、email、`is_active` 與 `Company` 的修改，以及單獨修改工號、部門、地點，仍不寫；`is_active` 的變更改為要寫（[ALG-Q4](#alg-q4) 已裁定，ALG-R25）。
 - 資料庫層的防竄改（trigger、權限控管、雜湊鏈）：見[考慮過但沒採用的做法](plan.md#考慮過但沒採用的做法)。
 
 ## 使用情境
@@ -76,7 +77,7 @@
 | ALG-R11 | 事件目錄**必須**至少包含[第一批事件](#第一批事件)，欄位依該表 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)（權限與角色的變更）；DOM-R22（事件範圍，含移出專案，[#125](https://github.com/speko-tw/inspect-flow/issues/125)）；[#126](https://github.com/speko-tw/inspect-flow/issues/126)（`is_admin` 的變更算權限變更） | ALG-AC07 |
 | ALG-R12 | 初始化指令（DOM-R53）**不得**寫稽核紀錄。初始化只建立內建 `admin` 與首次登入碼（AUT-R42）；依負責人裁定（#261，2026-09-29），不預建角色。這些是系統安裝資料，不含任何人工操作；之後由首次設定流程產生的事件依 ALG-R18 | 必須 | [#126](https://github.com/speko-tw/inspect-flow/issues/126) 裁定（初始化是系統安裝，不是權限變更；資料本身已有建立紀錄）；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：初始化指令改寫為 DOM-R53，首次設定另算系統事件 | ALG-AC08 |
 | ALG-R13 | 外部來源的值覆蓋 `User` 基本欄位時，每次覆蓋**必須**寫一筆稽核紀錄；事件代碼與欄位由 `external-identity-sync` 登記進事件目錄。本規格的資料表與寫入入口**必須**不改 schema 就能登記新事件 | 必須 | [KD-20](../../intents/03-decisions-and-stack.md#kd-20)；「不改 schema」是本規格為預留所做的推導 | ALG-AC09（新增事件不需 migration）；覆蓋時寫紀錄由 `external-identity-sync` 驗收 |
-| ALG-R14 | DOM-R22 列出的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件的紀錄，內容依[第一批事件](#第一批事件)與[帳號與公司連結事件](#帳號與公司連結事件)；變更被拒絕或回滾時**不得**留下紀錄；DOM-R22 範圍外的變更（例如新增沒有角色的成員、`is_active`，待 [ALG-Q4](#alg-q4)）不寫 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R22（由本規格驗收，範圍含帳號名稱修改與公司連結變更：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））；「恰好一筆」是本規格推導，理由：同一次變更寫多筆或漏寫都會讓紀錄對不上 | ALG-AC11；帳號名稱與公司連結的變更由 ALG-AC14、ALG-AC15 |
+| ALG-R14 | DOM-R22 列出的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件的紀錄，內容依[第一批事件](#第一批事件)與[帳號與公司連結事件](#帳號與公司連結事件)；變更被拒絕或回滾時**不得**留下紀錄；DOM-R22 範圍外的變更（例如新增沒有角色的成員）不寫 | 必須 | [KD-29](../../intents/03-decisions-and-stack.md#kd-29)；DOM-R22（由本規格驗收，範圍含帳號名稱修改與公司連結變更：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））；「恰好一筆」是本規格推導，理由：同一次變更寫多筆或漏寫都會讓紀錄對不上 | ALG-AC11；帳號名稱與公司連結的變更由 ALG-AC14、ALG-AC15 |
 | ALG-R15 | 事件目錄**得**把事件標為「系統事件」：由系統自動觸發、沒有登入者的事件（例如帳號被鎖）。系統事件的 `created_by` **必須**是內建 `admin`（`is_system = true`），不論是否在請求中、有沒有登入者；未標為系統事件的事件照 ALG-R05，請求中沒有登入者時仍拒絕 | 得（標記）；必須（操作者） | [AUT-Q6](../authentication/spec.md#aut-q6) 裁定（帳號被鎖寫稽核紀錄，[#148](https://github.com/speko-tw/inspect-flow/issues/148)）；鎖定發生在未登入的登入請求裡，照 ALG-R05 會被拒絕。用內建 `admin` 是本規格的推導，理由：它本來就是「不在請求中」時的系統操作者（DOM-R14）；只開放給標記的事件，漏掛需登入的一般寫入仍會被擋 | ALG-AC12 |
 | ALG-R16 | 事件目錄**得**把事件標為「每次都寫」：宣告的欄位一律記錄，`before`、`after` 相同也照寫，不適用 ALG-R09 的「只記有變動的欄位」與「無變動不寫」 | 得 | 本規格推導：設定密碼時旗標可能不變（例如本人把非臨時密碼換成另一組），但這仍是一次要留紀錄的事件，差別在雜湊，而雜湊不得記錄（ALG-R08） | ALG-AC12 |
 | ALG-R17 | 事件目錄**必須**包含 [`authentication` 事件](#authentication-事件)，欄位依該表 | 必須 | [AUT-Q6](../authentication/spec.md#aut-q6) 裁定；依 ALG-R13 只登記事件，不改資料表 | ALG-AC12 |
@@ -92,6 +93,13 @@
 | ALG-R22 | 0.5.x 管理後台**必須**提供 Admin 專用的稽核紀錄查詢頁與唯讀 API；未登入者與非 Admin 不得取得紀錄，查詢不得新增、修改或刪除紀錄 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定（[#107 留言](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)）；[ADM-R07](../admin-dashboard/spec.md#需求)、ALG-R04 | ALG-AC17；ADM-AC06 |
 | ALG-R23 | 查詢**必須**支援專案、操作者、時間範圍、事件類型的多條件篩選與穩定 cursor 分頁；具體參數、排序、回應與錯誤契約依[查詢 API](#查詢-api)及 [ADM-R08](../admin-dashboard/spec.md#需求)。格式正確但不存在的 `project_id` 必須回 200 空頁 | 必須 | [ALG-Q2](#alg-q2) 負責人裁定了篩選與唯讀畫面；[ADM-R08](../admin-dashboard/spec.md#需求)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、API-R08；查詢 API 的具體比對、時間邊界、排序、page size、錯誤與不存在專案空頁均為規格設計（非負責人裁定），細節見[查詢 API](#查詢-api) | ALG-AC18；ADM-AC07、ADM-AC13 |
 | ALG-R24 | 寫入入口在事件具專案脈絡時**必須**將事件當下的專案 UUID 寫入 `AuditLog.project_id`：已登記的 `project_member.*`、`project_zone.*`、`inspection_task.*`、`project_inspection_item.*` 取其所屬專案，`template_item.created_from_project` 取來源專案；日後登記的 Plan／Task 事件若具專案脈絡，同樣填入。無專案脈絡的 `role.*`、`user.*` 等寫空值。刪除或修改事件即使 `before`／`after` 未列 `project_id`，仍須從被操作資料的所屬專案取得。帶 `project_id` 篩選只回欄位相符的紀錄，排除空值；不帶時回全部。既有紀錄不回填，歷史事件的 `project_id` 為空，無法由專案篩選找回 | 必須 | 規格設計（非負責人裁定）：為 [ALG-Q2](#alg-q2) 的專案篩選建立明確、可索引且不依賴已刪除 entity 的依據；不回填避免猜測歷史事件的專案歸屬 | ALG-AC18 |
+| ALG-AC19 | 非 Admin 的使用者 U、已停用的 V、被停用公司 C 一併選中的兩位人員 | 停用 U；再啟用 U；對已啟用的 U 再次「啟用」；嘗試停用最後一位 Admin；停用公司 C 並一併停用兩位人員 | 停用與啟用各恰有一筆 `user.active_changed`（`before`、`after` 為 `is_active` 的前後值）；重複啟用與被拒絕的停用不寫；一併停用的兩位人員各一筆 | ALG-R25 |
+| ALG-AC20 | Admin A；被委派 `template` 的 D；使用者 W；事件目錄已登記模組權限事件 | A 為 W 授予 `template.use` 與重複授予一次；D 收回後重複收回；A 指派 D 的委派後重複指派；A 收回委派；D 授予時看紀錄的 `created_by`；D 嘗試授予專案模組代碼（被拒絕） | 每次成功的授予、收回、委派指派與收回各恰有一筆對應事件，欄位依[模組權限事件](#模組權限事件)；重複與被拒絕的操作不留紀錄；D 授予的紀錄 `created_by` 是 D；集合欄位為排序後的陣列 | ALG-R26 |
+| ALG-AC21 | Admin A；組合 B1（含三個代碼）；使用者 U（已有其中一個代碼）、使用者 U2（都沒有） | A 新增 B1、改名並修改內容、套用到 U、套用到 U2、再套用到已全數具備的 U2、刪除 B1；設定建立者角色後刪除該角色 | 新增、修改、刪除各一筆 `permission_bundle.*`；套用到 U 只寫一筆 `permission_bundle.applied`，`permission_codes` 為 U 實際新增的兩個；套用到 U2 一筆含三個；再次套用不寫；沒有任何逐項 `module_permission.granted`；`creator_role.changed` 在設定時與角色被刪除時各一筆 | ALG-R26 |
+| ALG-AC22 | 有 `system_role_assignment` 資料列的資料庫（過渡期資料） | 執行 `template_admin` 轉換 migration | 轉換前後每個人的有效範本管理權限一致；`audit_logs` 筆數不變；過渡期的 `system_role_assignment.*` 事件在 Admin 操作舊路由時仍照常寫入 | ALG-R27 |
+| ALG-R25 | `User.is_active` 改變（停用或啟用）成功時，**必須**在同一個交易裡寫恰好一筆 `user.active_changed`；改前改後相同不寫；被拒絕（例如停用最後一位 Admin、內建 `admin`）不寫。經由停用公司而一併停用的人員，逐人各寫一筆（DOM-R33） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 5：補停用與啟用稽核事件）；「恰好一筆」比照 ALG-R14；逐人各寫是依 DOM-R33 的規格推導 | ALG-AC19 |
+| ALG-R26 | 事件目錄**必須**包含[模組權限事件](#模組權限事件)；DOM-R59～DOM-R64 的每一種變更成功時，**必須**在同一個交易裡寫恰好一筆對應事件；變更被拒絕、回滾或冪等（重複授予、重複收回）時**不得**留下紀錄。套用權限組合只寫 `permission_bundle.applied` 一筆 | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 5、補充裁定第 8 點：模組權限與委派的授予、收回都寫稽核）；權限組合與建立者角色設定的事件、套用組合只寫一筆是比照 [KD-29](../../intents/03-decisions-and-stack.md#kd-29) 與刪除角色只寫一筆（ALG-R14）的規格設計（非負責人裁定） | ALG-AC20、ALG-AC21 |
+| ALG-R27 | `template_admin` 改造為範本模組 `template.manage` 的資料轉換（migration）**不寫**稽核紀錄，與初始化指令同樣屬於系統搬遷、不含任何人工授權（ALG-R12）；轉換前後的有效權限比對由改造任務驗收（DOM-AC56） | 必須 | 規格設計（非負責人裁定）：比照 ALG-R12 的初始化規則；負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）要求遷移期間不得失去權限，見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69) | ALG-AC22 |
 
 ## 第一批事件
 
@@ -112,7 +120,7 @@
 <a id="template-system-事件"></a>
 ## `template-system` 事件
 
-依 [TPL-R09](../template-system/spec.md#需求) 登記全系統範本管理員角色指派與收回事件；事件須和角色指派變更在同一個交易內寫入（ALG-R06、ALG-R14）。
+依 [TPL-R09](../template-system/spec.md#需求) 登記全系統範本管理員角色指派與收回事件；事件須和角色指派變更在同一個交易內寫入（ALG-R06、ALG-R14）。這兩種事件只在過渡期（`template_admin` 改造完成前）使用，改造後範本管理權限改用[模組權限事件](#模組權限事件)。
 
 範本管理員將專案查核項目存成範本時，另寫 `template_item.created_from_project`；事件與範本建立在同一個交易內完成，並記錄來源專案、副本及目標系統的 ID。
 
@@ -121,6 +129,27 @@
 | `system_role_assignment.created` | 指派固定的 `template_admin` 角色 | `system_role_assignment` | 空值 | `user_id`、`role_code` |
 | `system_role_assignment.deleted` | 收回固定的 `template_admin` 角色 | `system_role_assignment` | `user_id`、`role_code` | 空值 |
 | `template_item.created_from_project` | 範本管理員將專案查核項目存成範本 | `template_item` | 空值 | `project_id`、`project_inspection_item_id`、`system_id` |
+
+<a id="模組權限事件"></a>
+## 模組權限事件
+
+依 DOM-R22（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）登記。入口由 `domain-model` 的人員模組 Service 實作（DOM-R59～DOM-R64），寫入時機由本規格驗收（ALG-R26）。
+
+| 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
+|---|---|---|---|---|
+| `module_permission.granted` | 授予一項模組權限（DOM-R62）；已有時不寫 | `user_module_permission` | 空值 | `user_id`、`permission_code`、`module` |
+| `module_permission.revoked` | 收回一項模組權限（DOM-R62）；沒有時不寫 | `user_module_permission` | `user_id`、`permission_code`、`module` | 空值 |
+| `module_delegation.granted` | Admin 指派模組委派者（DOM-R61）；已被委派時不寫 | `user_module_delegation` | 空值 | `user_id`、`module` |
+| `module_delegation.revoked` | Admin 收回模組委派者；沒有委派時不寫 | `user_module_delegation` | `user_id`、`module` | 空值 |
+| `permission_bundle.created` | 新增權限組合（DOM-R63） | `permission_bundle` | 空值 | `name`、`permission_codes` |
+| `permission_bundle.updated` | 改名或修改組合內容 | `permission_bundle` | 有變動的 `name`、`permission_codes` | 同左 |
+| `permission_bundle.deleted` | 刪除權限組合；已套用過的人不受影響 | `permission_bundle` | `name`、`permission_codes` | 空值 |
+| `permission_bundle.applied` | 把組合套用到一個人（DOM-R63）；只寫這一筆，不另寫逐項 `module_permission.granted` | `user` | 空值 | `user_id`、`bundle_id`、`bundle_name`、實際新增的 `permission_codes` |
+| `creator_role.changed` | 建立者角色設定改變（DOM-R64），含角色被刪除而回到空值 | `project_creation_setting` | `creator_role_id` | `creator_role_id` |
+
+- 授予與收回由被委派者執行時，`created_by` 仍是操作者本人，讓紀錄能看出是誰授予的；`permission_codes` 記整個集合並排序（ALG-R10）。
+- `permission_bundle.applied` 的 `permission_codes` 只含這次實際新增的代碼（已有的不重複記）；全部都已有時不寫。
+- 帳號停用與啟用事件 `user.active_changed` 見[帳號與公司連結事件](#帳號與公司連結事件)。
 
 <a id="inspection-planning-事件"></a>
 ## `inspection-planning` 事件
@@ -161,6 +190,7 @@
 |---|---|---|---|---|
 | `user.username_changed` | `User.username` 被修改（DOM-R45）；只有具 Admin 權限的人能改，改前改後相同不寫 | `user` | `username` | `username` |
 | `user.company_changed` | `User.company_id` 改變：換公司、連結公司、解除連結（DOM-R47）；因此被清空的工號、部門、地點一併記下（ALG-R20） | `user` | `company_id`、`employee_no`、`department`、`location` | 同左 |
+| `user.active_changed` | `User.is_active` 改變：停用或啟用帳號（DOM-R67）；改前改後相同不寫；停用公司時選擇一併停用的人員逐一寫（DOM-R33） | `user` | `is_active` | `is_active` |
 
 - 值用 `username` 存放的小寫（DOM-R45）；`company_id` 沒有公司時是空值；欄位沒有值時記空值，不省略。
 - 本系統帳號與外部帳號都適用；外部身分同步覆蓋這些欄位時另依 ALG-R13 寫。
@@ -225,7 +255,7 @@
 | ALG-AC08 | 對空資料庫執行 `alembic upgrade head` 之後 | 執行初始化指令（DOM-AC43 的成功案例）；再重跑一次（`admin` 尚未設定密碼，DOM-AC44 的甲案例） | 兩次都成功，`audit_logs` 都是 0 筆 | ALG-R12 |
 | ALG-AC09 | 事件目錄；測試結束後還原 | 在測試中登記一個測試用事件（`entity_type = user`，三個欄位），寫入一筆再讀回；比對寫入前後的 `alembic heads` 與 `audit_logs` 欄位 | 寫入與讀回成功；migration head 與欄位都沒有變 | ALG-R13 |
 | ALG-AC10 | 事件目錄 | 逐一檢查所有已登記的事件代碼 | 每個代碼都符合 ALG-R07 的格式，且「資料」段等於該事件的 `entity_type` | ALG-R07 |
-| ALG-AC11 | 初始化後的資料庫，`domain-model` T7 的入口可用；兩位啟用中的 Admin；角色 R1 由兩筆成員持有；專案 P | 透過 Service 層依序：新增角色 R2；R2 改名；把 U 加入 P 並指派 R2；替 U 再加 R1；把 V 加入 P 但不指派角色；刪除 R1；把 V 移出 P；取消一位 Admin 的 `is_admin`；嘗試取消最後一位 Admin 的 `is_admin`；停用一位非 Admin 的帳號 | 每一次成功的變更各恰有一筆紀錄，事件代碼依序為 `role.created`、`role.updated`、`project_member.roles_changed`、`project_member.roles_changed`、`role.deleted`、`project_member.removed`、`user.admin_changed`，內容依第一批事件；`role.deleted` 的 `project_member_ids` 恰為刪除當下持有 R1 的三筆成員（前置的兩筆與 U），且沒有另寫 `roles_changed`；加入 V、被拒絕的取消與停用帳號都沒有紀錄；`created_by` 都是目前操作者 | ALG-R14 |
+| ALG-AC11 | 初始化後的資料庫，`domain-model` T7 的入口可用；兩位啟用中的 Admin；角色 R1 由兩筆成員持有；專案 P | 透過 Service 層依序：新增角色 R2；R2 改名；把 U 加入 P 並指派 R2；替 U 再加 R1；把 V 加入 P 但不指派角色；刪除 R1；把 V 移出 P；取消一位 Admin 的 `is_admin`；嘗試取消最後一位 Admin 的 `is_admin`；停用一位非 Admin 的帳號 | 每一次成功的變更各恰有一筆紀錄，事件代碼依序為 `role.created`、`role.updated`、`project_member.roles_changed`、`project_member.roles_changed`、`role.deleted`、`project_member.removed`、`user.admin_changed`、`user.active_changed`，內容依第一批事件與帳號與公司連結事件；`role.deleted` 的 `project_member_ids` 恰為刪除當下持有 R1 的三筆成員（前置的兩筆與 U），且沒有另寫 `roles_changed`；加入 V 與被拒絕的取消都沒有紀錄；`created_by` 都是目前操作者 | ALG-R14 |
 | ALG-AC12 | 初始化後的資料庫（有內建 `admin`）；事件目錄已登記 `authentication` 事件 | 在沒有登入者的請求範圍內寫一筆 `user.locked`、一筆 `user.password_set`；在已綁定 U 的請求範圍內寫一筆 `user.locked`、兩筆 `before`、`after` 相同的 `user.password_set`；另在沒有登入者的請求範圍內寫一筆 `role.created`（`user.password_set` 未宣告為系統事件） | 兩筆 `user.locked` 都寫入成功，`created_by` 都是內建 `admin`（含已綁定 U 的那筆）；沒有登入者的 `user.password_set` 與 `role.created` 都被拒絕；U 的兩筆都寫入成功，`created_by` 是 U | ALG-R15、ALG-R16、ALG-R17 |
 | ALG-AC13 | 初始化後的資料庫（有內建 `admin`，尚未設定密碼）；事件目錄已登記 `user.password_set`；以可控時間固定現在時刻 | 在沒有登入者的請求範圍內，以首次設定的公開路由的方式（宣告為系統事件）寫一筆 `user.password_set`；在同樣沒有登入者的請求範圍內，不宣告為系統事件再寫一筆；在已綁定 U 的請求範圍內，不宣告再寫一筆 | 第一筆寫入成功，`created_by` 是內建 `admin`，`before` 為空值、`after.is_temporary` 為 `false`；第二筆被拒絕，筆數不變；第三筆寫入成功，`created_by` 是 U；宣告為系統事件的呼叫對其他事件（例如 `role.created`）仍被拒絕 | ALG-R18 |
 | ALG-AC14 | 初始化後的資料庫；具 Admin 權限的操作者 A、本系統帳號 U（`username = anna.deng`）；`domain-model` 的使用者 Service 可用 | 以 A 把 U 的 `username` 改為 `Anna.D`；再改為 `anna.d`（與上一次存放的值相同）；以 A 嘗試改成已被使用的名稱；掃描事件目錄中這兩種事件的宣告欄位 | 第一次恰有一筆 `user.username_changed`，`entity_id` 是 U，`created_by` 是 A，`before.username` 為 `anna.deng`、`after.username` 為 `anna.d`（小寫）；第二次、被拒絕的那次都沒有紀錄；事件代碼符合 ALG-R07 格式，宣告欄位沒有 `password`、`secret`、`token`、`session` 字樣 | ALG-R14、ALG-R19 |
@@ -245,7 +275,7 @@
 <a id="alg-q3"></a>
 - **ALG-Q3：要不要記錄讀取**。選項：（A）不記錄；（B）只記錄敏感資料的讀取或匯出（例如報告匯出）。業界：OWASP 建議視需要記錄敏感資料的存取，但讀取量大，一般不全記。**建議 A**：intents 沒有敏感讀取的要求；日後報告匯出若要記錄，再登記事件（ALG-R13）。
 <a id="alg-q4"></a>
-- **ALG-Q4：`User.is_active`（停用、啟用帳號）要不要記錄**。#126 只裁定 `is_admin`。選項：（A）記錄，新增 `user.active_changed`；（B）不記錄，只靠 `updated_at`、`updated_by`。業界：OWASP 把新增、刪除帳號與權限變更列為應記錄的高風險操作。**建議 A**：停用就是拿掉登入能力，DOM-R07 也把停用當成拿掉 Admin。選 A 時只要在事件目錄多登記一種事件，由 DOM T7（#135）寫入。
+- **ALG-Q4：`User.is_active`（停用、啟用帳號）要不要記錄**（已裁定，負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）第 5 項：停用和啟用都留下稽核紀錄）。選 A：記錄，新增 `user.active_changed`，由 DOM-R67 的入口寫入；事件做法見 ALG-R25。
 <a id="alg-q5"></a>
 - **ALG-Q5：要不要記錄請求來源（IP、User-Agent、Session）**。選項：（A）不記錄；（B）新增可空值的來源欄位。業界：OWASP 建議記錄「何時、何處、誰、做什麼」，「何處」通常包含 IP。**建議 A**：第一階段是單機、內網，操作者已記在 `created_by`；之後要加，只需一支新增可空值欄位的 migration。
 
@@ -267,3 +297,4 @@
 - 範圍變更（admin 與帳號重新設計）：改寫 ALG-R05、ALG-R12、ALG-R14、ALG-AC08，新增 ALG-R18～ALG-R21（首次設定為系統事件、帳號名稱與公司連結事件、`admin` 重設沿用 `user.password_set`）與 ALG-AC13～ALG-AC16、ALG-Q6，「`User` 基本欄位修改不寫稽核」的非目標部分已被取代 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 登記 `template-system` 的固定範本管理員角色指派／收回事件及其稽核欄位 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
 - 澄清存成範本事件與範本建立同交易，並列明其來源與目標識別欄位 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)
+- 範圍變更（負責人指示，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914)、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：新增停用與啟用事件 `user.active_changed`（ALG-Q4 已裁定、ALG-R25）、模組權限事件（授予與收回、委派、權限組合、建立者角色，ALG-R26）與過渡期轉換不寫稽核（ALG-R27）；`system_role_assignment.*` 事件僅過渡期使用；ALG-R14、ALG-AC11 同步；新增 ALG-AC19～ALG-AC22；權限組合與建立者角色設定的事件為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)

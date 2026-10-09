@@ -61,6 +61,15 @@
 - 簡便版的使用者與公司管理屬 0.2.x（E 的 API、G 的頁面）；搜尋、分頁、批次等進階功能仍屬 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）。
 - 這些任務的檔案清單，開 issue 時依當時的程式碼盤點，不在這裡預先寫死。
 
+## 兩層權限模型後續實作
+
+依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是範圍變更；規格合併後才開任務，每個任務一個 PR，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。過渡期（程式改造完成前）既有行為不變（AUT-R50）。
+
+| 任務 | 內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| P | 存取層級：新增「需模組權限」「模組權限或任一專案權限」兩種宣告（含是否允許委派）、模組權限檢查（AUT-R48）、專案內檢查加模組「可使用」（AUT-R19）、`me` 加 `module_permissions`、`delegated_modules`；路由宣告檢查納入新層級 | `domain-model` 任務 L（資料與 Service 介面） | AUT-AC71、AUT-AC72、AUT-AC75；既有 AUT-AC18、AUT-AC19、AUT-AC44、AUT-AC70 補測試資料 | 待開 |
+| Q | 模組權限端點的存取層級（AUT-R49）與過渡行為驗收：`template_admin` 轉換後前後逐人比對有效權限；舊系統角色層級在轉換完成後移除 | P、`domain-model` 任務 M、`template-system` 對應任務 | AUT-AC73、AUT-AC74 | 待開 |
+
 ## 並行分組
 
 依「改動的檔案」與「依賴」分波；同一波內的任務檔案不重疊，也互不依賴。
