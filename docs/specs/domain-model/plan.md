@@ -57,13 +57,13 @@
 
 ## 兩層權限模型後續實作
 
-依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是範圍變更（角色只存在專案內、新增人員模組權限、委派、權限組合、建立者角色），規格合併後才開任務；每個任務一個 PR，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。**過渡期**：程式完成前，現行 `template_admin` 與 Admin 才能開設專案的行為不變。
+依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進（角色只存在專案內、新增人員模組權限、委派、權限組合、建立者角色），規格合併後才開任務；每個任務一個 PR，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。**過渡期**：程式完成前，現行 `template_admin` 與 Admin 才能開設專案的行為不變。
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
 | L | 權限登記表加範圍與模組欄位並登記模組權限與 `project.update`；新增 `UserModulePermission`、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定的資料表與一支 migration；人員模組的 Service 介面（四種查詢、授予與收回、委派、組合）；契約測試守住專案模組不直接讀人員資料；`Role` 拒絕模組範圍代碼；稽核事件寫入（事件由 `audit-log` 登記） | 本計畫 T3、T7；`audit-log` 新事件 | DOM-AC55～DOM-AC60 | 待開 |
-| M | `template_admin`（`SystemRoleAssignment`）轉為範本模組 `template.manage`：migration 逐人轉換，前後逐人比對有效權限，轉換期間不得失去權限；過渡期保留舊路由直到前端切換 | L；`template-system` 對應任務 | DOM-AC56；`template-system` 驗收 | 待開 |
-| N | 開設專案同一交易加入建立者（`project.create`、建立者角色）、修改專案改看 `project.update`、`GET /projects` 正式存取條件；登入者權限摘要改走人員模組介面，收斂跨邊界寫法 | L；`authentication` 新存取層級 | DOM-AC61 | 待開 |
+| M | `template_admin`（`SystemRoleAssignment`）轉為範本模組 `template.manage`（是否同時取得 `template.use` 與既有專案成員是否回填 `project.use`、`inspection.use`，待負責人裁定 DOM-Q13，建議回填）：migration 逐人轉換與回填，前後逐人比對有效權限，轉換期間不得失去權限；過渡期保留舊路由直到前端切換 | L；`template-system` 對應任務 | DOM-AC56；`template-system` 驗收 | 待開 |
+| N | 開設專案同一交易加入建立者（建立者角色空值、Admin 是否自動成員、建立者角色是否含調整專案與管理成員、`project.create` 是否蘊含 `project.use`，分別待負責人裁定 DOM-Q10～DOM-Q12，裁定前不開工這些項目）（`project.create`、建立者角色）、修改專案改看 `project.update`、`GET /projects` 正式存取條件；登入者權限摘要改走人員模組介面，收斂跨邊界寫法 | L；`authentication` 新存取層級 | DOM-AC61 | 待開 |
 | O | 停用與啟用寫稽核、專案成員清單標已停用的驗收 | L | DOM-AC62 | 待開 |
 
 L 與 M 都新增 migration，不同波；N、O 不新增 migration，N 與 O 改的檔案不重疊時可並行（開 issue 時確認）。

@@ -17,7 +17,7 @@
 - 凍結：
   - `User` 的業務欄位（帳號名稱、基本欄位、聯絡與補充欄位）、系統欄位 `is_admin`、`is_system`，以及外部身分來源的預留欄位。
   - `Company`、`Role`、`ProjectMember` 的資料模型。
-  - 人員模組權限、模組委派、權限組合、建立者角色設定，以及建立專案同一交易加入建立者的規則（DOM-R59～DOM-R67；範圍變更，負責人指示，#538）。
+  - 人員模組權限、模組委派、權限組合、建立者角色設定，以及建立專案同一交易加入建立者的規則（DOM-R59～DOM-R67；意圖變更跟進，負責人裁定，#538）。
   - 這些實體的資料規則：字串欄位的長度上限與格式、帳號名稱的規則、可修改性、內建帳號的欄位與保護、最後一個 Admin、指派與收回他人的 Admin 權限、公司連結與工號、部門、地點的清空、公司名稱的唯一性、停用公司的限制與影響範圍、角色名稱的唯一性、權限代碼的登記表、角色的權限內容與刪除、有效權限的計算、角色影響範圍的計算、專案成員的角色下限與移出方式（沒有公司的人也能加入專案），以及哪些變更要寫稽核紀錄。
   - 建立內建 `admin` 的初始化指令，以及既有資料的回填規則。
   - 登入功能完成前，Service 層取得「目前操作者」的規則。
@@ -110,7 +110,7 @@
 | DOM-R24 | **已被取代**（已取消，沒有取代條目，[#259](https://github.com/speko-tw/inspect-flow/issues/259)）。原規定：替 `kind = customer` 的 `Company` 所屬人員指派「有修改能力」的角色時，功能規格必須顯示確認提示、但不阻擋，Service 層提供「有修改能力」的判斷（角色的權限代碼中只要有一個動作不是 `read` 就算）；公司不再有類型，這個提示與判斷一併取消，沒有取代條目。 | 已取代 | 原依據（已取消）：[KD-28](../../intents/03-decisions-and-stack.md#kd-28)；判斷規則為負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：規則簡單，寧可多提醒一次；讀取的動作一律寫成 `read` 為負責人裁定（[PR #205](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851837293)，2026-09-27），見 DOM-R35；取代依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29） | 原驗收：DOM-AC26（判斷）；確認提示由提供指派操作的功能規格驗收（已隨取代條文改寫） |
 | DOM-R30 | `Role.name` 最多 64 個字元，不限格式。權限代碼最多 64 個字元，格式**必須**是 `<資料>.<動作>`，與 `error.code` 的 dot-namespace 格式一致：符合 `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`（與 API-AC09 相同），例如 `report.read`、`evidence_variant.approve`。不符的值**必須**被拒絕；長度的算法與檢查方式見 DOM-R31。可用的權限代碼見 DOM-R35；模組權限代碼沿用同一格式，模組歸屬用 DOM-R35 登記表的獨立欄位表達，不改代碼格式 | 必須 | [#121 裁定](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)（負責人，2026-09-26）；[KD-15](../../intents/03-decisions-and-stack.md#kd-15)、API-R07（格式）；[KD-25](../../intents/03-decisions-and-stack.md#kd-25)（命名規則待相關規格定案） | DOM-AC21 |
 | DOM-R34 | `Role.name` 在所有 `Role` 之間**必須**唯一，由資料庫約束保證；比對與唯一性**必須**不分大小寫：已有 `Viewer` 時，新增或改名為 `viewer` 會被擋下。`name` **必須**保留輸入的原樣存放，只在比對與唯一約束時轉成小寫；寫法比照 DOM-R02 的 `email`，由計畫選擇；SQLite 只比對 ASCII 字母大小寫的差異已接受（[負責人裁定](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851795833)，見計畫風險段） | 必須 | 負責人裁定（[DOM-Q4](#dom-q4)，[#124](https://github.com/speko-tw/inspect-flow/issues/124)，2026-09-27）：名稱重複時指派畫面分辨不出來；規則與 `email` 一致（DOM-R02） | DOM-AC24 |
-| DOM-R35 | 可用的權限代碼**必須**集中登記在程式內的一份登記表（做法比照 `ErrorCode`，API-R07），不存在資料表。`Role` 寫入未登記的權限代碼時**必須**拒絕、不寫入；比照 DOM-R31，檢查涵蓋所有經 ORM model 的寫入。登記表的每個代碼**必須**標明範圍：專案範圍（可放進 `Role`，專案內動作權限）或模組範圍（逐人授予，DOM-R59），模組範圍的代碼另標所屬模組（`project`、`inspection`、`template`；`report` 預留，報告規格定案前不登記代碼）；專案範圍的代碼同樣標所屬模組，供專案內檢查對應的模組「可使用」（AUT-R19）：`project_member.manage`、`project.update` 屬專案模組，其餘既有專案範圍代碼（計畫、任務、查核項目、分區等）屬查核模組，歸屬為規格設計（非負責人裁定）；代碼在整份登記表內**必須**唯一；`Role` 寫入模組範圍的代碼**必須**拒絕，人員模組權限寫入專案範圍的代碼**必須**拒絕。各功能規格**必須**登記自己用到的代碼；目前已登記專案範圍 `project_member.manage`（#275）、`project.update`（調整專案基本資料，DOM-R66；規格設計，非負責人裁定），以及模組範圍的 `project.use`（專案模組可使用）、`project.create`（開設專案）、`all_project_progress.read`（看全部專案進度）、`inspection.use`（查核模組可使用）、`template.use`（範本模組可使用）、`template.manage`（管理範本庫）；模組範圍代碼的命名沿用「資料.動作」格式，是依業界慣例整理的規格設計（非負責人裁定）。讀取動作的代碼**必須**寫成 `read`（例如 `report.read`），**不得**用 `view`、`get` 等同義字；之後登記新代碼都照這個規則 | 必須 | 負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：每個代碼都對應一段檢查程式，清單應和程式放在一起，存在資料表可能出現程式不認得的代碼；拒絕未登記代碼可擋住打錯字（例如 `reprot.read`）；代碼由功能規格依需求登記；讀取一律寫 `read` 為負責人裁定（[PR #205](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851837293)，2026-09-27），「有修改能力」的判斷（原 DOM-R24）才能只看動作名稱；DOM-R24 已隨 [KD-28](../../intents/03-decisions-and-stack.md#kd-28) 取消（[#259](https://github.com/speko-tw/inspect-flow/issues/259)），這條命名規則不受影響，仍然有效；範圍與模組欄位：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)（用到哪個模組就要有該模組的使用權、模組權限與專案角色分開） | DOM-AC25（拒絕未登記代碼）、DOM-AC55（範圍檢查）；`read` 命名由登記代碼的功能規格在審查時確認 |
+| DOM-R35 | 可用的權限代碼**必須**集中登記在程式內的一份登記表（做法比照 `ErrorCode`，API-R07），不存在資料表。`Role` 寫入未登記的權限代碼時**必須**拒絕、不寫入；比照 DOM-R31，檢查涵蓋所有經 ORM model 的寫入。登記表的每個代碼**必須**標明範圍：專案範圍（可放進 `Role`，專案內動作權限）或模組範圍（逐人授予，DOM-R59），模組範圍的代碼另標所屬模組（`project`、`inspection`、`template`；`report` 預留，報告規格定案前不登記代碼）；專案範圍的代碼同樣標所屬模組，供專案內檢查對應的模組「可使用」（AUT-R19）：`project_member.manage`、`project.update` 屬專案模組，其餘既有專案範圍代碼（計畫、任務、查核項目、分區，以及 `GET /projects/{project_id}` 使用的 `inspection_plan.read`）屬查核模組，因此專案基本資料的**檢視**需要查核模組「可使用」、成員與專案基本資料的**管理**需要專案模組「可使用」；歸屬為規格設計（非負責人裁定）；代碼在整份登記表內**必須**唯一；`Role` 寫入模組範圍的代碼**必須**拒絕，人員模組權限寫入專案範圍的代碼**必須**拒絕。各功能規格**必須**登記自己用到的代碼；目前已登記專案範圍 `project_member.manage`（#275）、`project.update`（調整專案基本資料，DOM-R66；規格設計，非負責人裁定），以及模組範圍的 `project.use`（專案模組可使用）、`project.create`（開設專案）、`all_project_progress.read`（看全部專案進度）、`inspection.use`（查核模組可使用）、`template.use`（範本模組可使用）、`template.manage`（管理範本庫）；模組範圍代碼的命名沿用「資料.動作」格式，是依業界慣例整理的規格設計（非負責人裁定）。讀取動作的代碼**必須**寫成 `read`（例如 `report.read`），**不得**用 `view`、`get` 等同義字；之後登記新代碼都照這個規則 | 必須 | 負責人裁定（[DOM-Q3](#dom-q3)，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：每個代碼都對應一段檢查程式，清單應和程式放在一起，存在資料表可能出現程式不認得的代碼；拒絕未登記代碼可擋住打錯字（例如 `reprot.read`）；代碼由功能規格依需求登記；讀取一律寫 `read` 為負責人裁定（[PR #205](https://github.com/speko-tw/inspect-flow/pull/205#issuecomment-5851837293)，2026-09-27），「有修改能力」的判斷（原 DOM-R24）才能只看動作名稱；DOM-R24 已隨 [KD-28](../../intents/03-decisions-and-stack.md#kd-28) 取消（[#259](https://github.com/speko-tw/inspect-flow/issues/259)），這條命名規則不受影響，仍然有效；範圍與模組欄位：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)（用到哪個模組就要有該模組的使用權、模組權限與專案角色分開） | DOM-AC25（拒絕未登記代碼）、DOM-AC55（範圍檢查）；`read` 命名由登記代碼的功能規格在審查時確認 |
 | DOM-R55 | Backend **必須**提供全系統共用角色清單的 Admin API：列出角色、取得單一角色、新增角色、修改名稱與完整權限代碼集合，以及刪除角色；所有端點**必須**使用 authentication 的需 Admin 檢查（AUT-R20）。角色列表**必須**使用 API-R08 的 cursor-based 分頁，依建立時間與 UUID 穩定排序。角色回應**必須**帶 `user_count`、`project_count`，供修改與刪除前顯示影響範圍（PR-18）。API **必須**提供已登記權限代碼及其描述的清單供設定角色時選擇；登記表為空時回傳空清單。重複名稱回 409；角色不存在回 404；未登記或格式錯誤的權限代碼、空更新等規則拒絕回 422。刪除角色依 DOM-R21 同時移除全部成員指派，保留 `ProjectMember` 本身及其他角色指派；角色新增、修改、刪除依 DOM-R22 寫入 `role.*` 稽核事件 | 必須 | [#274](https://github.com/speko-tw/inspect-flow/issues/274)；AUT-R20、DOM-R19～DOM-R22、DOM-R30、DOM-R34、DOM-R35、API-R01～API-R09 | DOM-AC47～DOM-AC49 |
 ### `ProjectMember`（凍結）
 
@@ -124,19 +124,19 @@
 | DOM-R51 | 具備 Admin 權限（`is_admin = true`）的人，Service 層**必須**允許他指派或收回**其他人**的 Admin 權限；內建 `admin` 的 Admin 權限不能被任何人收回（DOM-R06）。收回仍受 DOM-R07 保護。指派與收回都**必須**寫稽核紀錄（DOM-R22）。判斷操作者是不是 Admin，由 `authentication` 執行 | 必須 | [KD-24](../../intents/03-decisions-and-stack.md#kd-24)（已補充）；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：Admin 可指派、收回他人的 Admin 權限，內建 `admin` 除外；本人收回自己的 Admin 權限，裁定沒有說明，見 [DOM-Q9](#dom-q9) | DOM-AC41；操作者身分由 `authentication` 驗收 |
 | DOM-R52 | 專案成員只依 `user_id` 關聯人員，**不得**要求人員有所屬公司：沒有公司的人（獨立或外部人員）也**必須**能加入專案、被指派角色。專案角色跟著人，不跟著公司：人員換公司、解除連結或所屬公司被停用，都**不得**改變他的 `ProjectMember` 與角色指派 | 必須 | [KD-46](../../intents/03-decisions-and-stack.md#kd-46)；負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）：沒有公司的人也可加入專案，專案角色跟著人 | DOM-AC42 |
 
-### 人員模組權限、委派、權限組合與建立專案（凍結，範圍變更：負責人指示，#538）
+### 人員模組權限、委派、權限組合與建立專案（凍結，意圖變更跟進：負責人裁定，#538）
 
-依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09））：權限分兩層，第 1 層是人員模組的逐人模組權限，第 2 層是專案角色（DOM-R19～DOM-R27）。專案外的事只看第 1 層；專案內的事兩層都要通過；Admin 兩層都放行。模組權限**不會**自動給任何專案內的動作權限：人員必須先是該專案成員、被指派專案角色，專案內動作一律由專案角色決定。0.3.x 與規格合併後到程式完成前，現行 `template_admin`（見 `template-system` TPL-R09）與 Admin 才能開設專案的行為維持不變（過渡行為，DOM-R60 之後的程式改造才生效）。
+依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09））：權限分兩層，第 1 層是人員模組的逐人模組權限，第 2 層是專案角色（DOM-R19～DOM-R27）。專案外的事只看第 1 層；專案內的事兩層都要通過；Admin 兩層都放行。模組權限**不會**自動給任何專案內的動作權限：人員必須先是該專案成員、被指派專案角色，專案內動作一律由專案角色決定。本節是**正式行為**，於 #538 的實作任務完成時生效；**過渡期結束＝`authentication` 任務 Q 合併**（見 `authentication` plan）。在此之前，現行 `template_admin`（見 `template-system` TPL-R09）與只有 Admin 才能開設專案的行為維持不變，本節各條與其驗收（DOM-AC55～DOM-AC62）隨各實作任務逐項生效，不在規格合併時要求。標「待負責人裁定」的細節（[DOM-Q10](#dom-q10)～[DOM-Q15](#dom-q15)）裁定前，對應的實作任務不得開工該項。
 
 | 編號 | 需求 | 強度 | 依據 | 驗收 |
 |---|---|---|---|---|
 | DOM-R59 | **人員模組權限**：`UserModulePermission` 記錄一個 `User` 擁有一項模組範圍權限代碼（DOM-R35 登記表中標為模組範圍的代碼）。**必須**具備 `user_id`（外鍵指向 `User`）與 `permission_code`，皆不可空值；同一 `User` 與代碼的組合**必須**唯一，由資料庫約束保證；代碼**必須**已登記且為模組範圍（DOM-R35）；沿用 DOM-R15 的共通結構（建立與修改紀錄）。授予與收回依 DOM-R62。Admin 的模組權限是隱含的（`is_admin` 放行所有模組權限），**不得**為了 Admin 寫入資料列。帳號停用時資料列**必須**保留（DOM-R67） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：逐人勾選的模組權限；Admin 兩層都放行（[KD-24](../../intents/03-decisions-and-stack.md#kd-24)）；資料表形狀（單表、複合唯一）是比照 DOM-R25 的規格設計（非負責人裁定） | DOM-AC56 |
-| DOM-R60 | **模組邊界單向**：專案模組（專案、成員、角色，以及所有掛在專案底下的模組）取得人員資訊與模組權限**必須**只經過人員模組提供的 Service 介面，且介面只回答四件事：這個人是誰（`User` 顯示欄位）、帳號有效嗎（`is_active`）、是不是系統管理者（`is_admin`）、有沒有模組權限 X。專案模組**不得**直接查詢 `User`、`Company`、`UserModulePermission` 的資料表或讀取 `is_admin` 欄位。**新模組接入規則**：新模組**必須**依序（1）在 DOM-R35 登記表宣告模組範圍的權限項目、（2）宣告專案範圍的動作權限項目、（3）人員頁與角色編輯畫面從登記表自動取得選項（不為單一模組另寫勾選畫面）、（4）後端路由使用「需要模組權限」的存取宣告（AUT-R18） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：模組邊界單向、新模組接入規則（[KD-69](../../intents/03-decisions-and-stack.md#kd-69)）；現況三處跨邊界寫法（登入者權限摘要、專案 API 直接查人員與公司表、專案服務直接讀管理者欄位）須收斂：規格合併後由程式任務處理 | DOM-AC57 |
-| DOM-R61 | **模組委派**：`UserModuleDelegation` 記錄一個 `User` 被委派管理某個模組（`user_id`、`module`，`module` 取自 DOM-R35 登記的模組識別）；同一 `User` 與模組的組合**必須**唯一，沿用 DOM-R15 的共通結構。**只有 Admin** 能指派與收回委派者；被委派者**不得**指派、收回或轉授委派。被委派者可授予與收回**自己被委派模組內**的模組權限（DOM-R62），也可做該模組的編輯動作（例如被委派範本模組的人可維護範本庫，與「管理範本庫」等效，授權規則由該模組的功能規格宣告）；不能授予其他模組的權限。委派的指派與收回**必須**寫稽核紀錄（DOM-R22） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（補充裁定第 8 點與 [#538 內文](https://github.com/speko-tw/inspect-flow/issues/538) 確認：以模組為單位、被委派者只能授予自己被委派模組內的權限並可做該模組的編輯動作、不可再轉委派、只有系統管理者能指派委派者、授予與收回寫稽核） | DOM-AC58 |
+| DOM-R60 | **模組邊界單向**：專案模組（專案、成員、角色，以及所有掛在專案底下的模組）取得人員資訊與模組權限的**權限判斷**（授權檢查）**必須**只經過人員模組提供的 Service 介面，且介面只回答四件事：這個人是誰（`User` 顯示欄位）、帳號有效嗎（`is_active`）、是不是系統管理者（`is_admin`）、有沒有模組權限 X。專案模組做權限判斷時**不得**直接查詢 `User`、`Company`、`UserModulePermission` 的資料表或讀取 `is_admin` 欄位；顯示用的人員資料（成員列表、候選使用者等既有端點回傳的顯示欄位）不受此限，沿用既有查詢。**新模組接入規則**：新模組**必須**依序（1）在 DOM-R35 登記表宣告模組範圍的權限項目、（2）宣告專案範圍的動作權限項目、（3）人員頁與角色編輯畫面從登記表自動取得選項（不為單一模組另寫勾選畫面）、（4）後端路由使用「需要模組權限」的存取宣告（AUT-R18） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：模組邊界單向、新模組接入規則（[KD-69](../../intents/03-decisions-and-stack.md#kd-69)）；現況三處跨邊界寫法（登入者權限摘要、專案 API 直接查人員與公司表、專案服務直接讀管理者欄位）須收斂：規格合併後由程式任務處理 | DOM-AC57 |
+| DOM-R61 | **模組委派**：`UserModuleDelegation` 記錄一個 `User` 被委派管理某個模組（`user_id`、`module`，`module` 取自 DOM-R35 登記的模組識別）；同一 `User` 與模組的組合**必須**唯一，沿用 DOM-R15 的共通結構。**只有 Admin** 能指派與收回委派者；被委派者**不得**指派、收回或轉授委派。被委派者可授予與收回**自己被委派模組內**的模組權限（DOM-R62），也可做該模組的編輯動作（例如被委派範本模組的人可維護範本庫，與「管理範本庫」等效，授權規則由該模組的功能規格宣告）；不能授予其他模組的權限。專案模組與查核模組目前**沒有**專屬的模組編輯動作：這兩個模組的委派者只能授予與收回該模組內的權限，**不能**因此修改專案、看全部專案進度或做任何專案內動作（待負責人裁定，[DOM-Q15](#dom-q15)）。委派的指派與收回**必須**寫稽核紀錄（DOM-R22） | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（補充裁定第 8 點與 [#538 內文](https://github.com/speko-tw/inspect-flow/issues/538) 確認：以模組為單位、被委派者只能授予自己被委派模組內的權限並可做該模組的編輯動作、不可再轉委派、只有系統管理者能指派委派者、授予與收回寫稽核） | DOM-AC58 |
 | DOM-R62 | **授予與收回模組權限**：Service 入口**必須**只允許 Admin，或被委派該權限所屬模組的人（DOM-R61）授予、收回；其他人拒絕且資料不變。成功授予或收回**必須**在同一交易寫稽核紀錄（DOM-R22）；重複授予已有的權限、收回沒有的權限為冪等（不報錯、不寫紀錄）。收回**不會**改變專案成員與專案角色 | 必須；冪等為應 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：模組權限由系統管理者或被委派者授予；冪等是比照 TPL-R09 既有做法的規格設計（非負責人裁定） | DOM-AC58 |
 | DOM-R63 | **權限組合**：`PermissionBundle` 是一組模組範圍權限代碼的命名集合，供一鍵勾選多個模組權限（例：「內業常用」）。**必須**具備 `name`（不可空值，最多 64 字元，不分大小寫唯一，比照 DOM-R34）與一組已登記的模組範圍代碼（同一組合內不得重複），沿用 DOM-R15 的共通結構。套用組合時，系統把組合**當下**的內容逐項寫成該人的模組權限（DOM-R62，受同樣授權限制：被委派者只能套用到自己被委派模組內的代碼，組合含被委派者無權授予的代碼時整筆拒絕，回 403（權限不足的共用錯誤，AUT-R23），資料不變，為規格設計）；組合與人員之間**不記錄連結**，修改或刪除組合**不會**追改已套用過的人。組合的新增、修改、刪除與套用**必須**寫稽核紀錄。維護組合限 Admin（規格設計，非負責人裁定） | 必須；維護限 Admin 為規格設計 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：「權限組合」本次一起做，修改組合不追改已套用的人；其餘為規格設計（非負責人裁定） | DOM-AC59 |
-| DOM-R64 | **建立者角色**：系統設定保存「建立者角色」（`creator_role_id`，外鍵指向 `Role`，可為空值）；Admin 可修改，修改寫稽核紀錄。預設為名稱「內業」的角色：因初始化不預建角色（DOM-R53），設定在該角色存在之前為空值。角色被刪除時（DOM-R21）設定回到空值。設定為空值時，開設專案（DOM-R65）**必須**拒絕並回 422 `project.creator_role_unset`，提示 Admin 先設定 | 必須；空值時的拒絕為規格設計 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：建立者角色預設內業、系統管理者可改；空值處理與錯誤碼是規格設計（非負責人裁定），列入 PR 待確認 | DOM-AC60 |
-| DOM-R65 | **開設專案**：具模組權限 `project.create`（DOM-R59）的人，或 Admin，才能新增 `Project`。新增 `Project` 時，**必須**在同一個交易內為操作者建立 `ProjectMember` 並指派建立者角色（DOM-R64）；任一步失敗整筆回滾，**不得**留下沒有建立者成員的專案。建立者成員的加入依既有的 `project_member.roles_changed` 事件寫稽核（與建立專案同一交易）；建立專案本身不另寫事件（DOM-R22 範圍外）。開設專案本身**不需要**是任何專案的成員，也不因擁有 `project.create` 取得任何其他專案的權限 | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 3：開專案者在同一個動作內自動成為成員，給系統設定的建立者角色；開設專案是逐人給予的專案模組權限）；Admin 開專案時同樣自動成為成員是依「開專案者」字面的規格設計（非負責人裁定） | DOM-AC61 |
+| DOM-R64 | **建立者角色**：系統設定保存「建立者角色」（`creator_role_id`，外鍵指向 `Role`，可為空值）；Admin 可修改，修改寫稽核紀錄。初始值為空值（初始化不預建角色，DOM-R53）；Admin 在系統內新增角色後設定。角色被刪除時（DOM-R21）設定回到空值，**刪除角色前的影響範圍**（DOM-R23、ADM-R10）**必須**同時說明「這是建立者角色，刪除後開設專案將無法自動加入建立者」。設定為空值時開設專案的處理，以及預設是否為名稱「內業」的角色，**待負責人裁定**（[DOM-Q10](#dom-q10)）；裁定前的暫定寫法：空值時開設專案（DOM-R65）拒絕並回 422 `project.creator_role_unset`，提示 Admin 先設定 | 必須；空值處理待負責人裁定 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）：建立者角色、系統管理者可改；預設是否為「內業」、空值處理與錯誤碼是規格設計（非負責人裁定），見 DOM-Q10；建立者角色是否含調整專案與管理成員見 DOM-Q11 | DOM-AC60 | 初始化後的資料庫，系統沒有任何角色 | 讀取建立者角色設定；Admin 新增角色「內業」並設為建立者角色；嘗試刪除該角色前讀取影響範圍；刪除該角色 | 一開始為空值；設定成功並寫稽核紀錄；刪除前的影響範圍包含「這是建立者角色」；刪除後設定回到空值；系統不自動建立任何預設角色 | DOM-R64 |
+| DOM-R65 | **開設專案**：具模組權限 `project.create`（DOM-R59）的人，或 Admin，才能新增 `Project`；`project.create` 是否蘊含專案模組「可使用」待負責人裁定（[DOM-Q12](#dom-q12)）。新增 `Project` 時，**必須**在同一個交易內為操作者建立 `ProjectMember` 並指派建立者角色（DOM-R64）；任一步失敗整筆回滾，**不得**留下沒有建立者成員的專案。建立者成員的加入依既有的 `project_member.roles_changed` 事件寫稽核（與建立專案同一交易）；建立專案本身不另寫事件（DOM-R22 範圍外）。開設專案本身**不需要**是任何專案的成員，也不因擁有 `project.create` 取得任何其他專案的權限 | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 3：開專案者在同一個動作內自動成為成員，給系統設定的建立者角色；開設專案是逐人給予的專案模組權限）；Admin 開專案是否同樣自動成為成員待負責人裁定（DOM-Q10，暫定同樣自動成為成員） | DOM-AC61 |
 | DOM-R66 | **修改專案**：Admin 可修改任何專案；非 Admin 只能修改「自己是該專案成員、且專案角色含 `project.update`（專案範圍，DOM-R35）」的專案。`all_project_progress.read` 只給唯讀，**不得**用來修改任何專案；模組權限 `project.create` 也不給修改既有專案的權限 | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 4：非系統管理者只能改自己是成員且角色含調整專案的專案；跨專案只給唯讀的「看全部專案進度」；改全部專案只留給系統管理者）；代碼名稱 `project.update` 為規格設計（非負責人裁定） | DOM-AC61 |
 | DOM-R67 | **停用與啟用**：`User.is_active = false` 時，該人的模組權限（DOM-R59）、模組委派（DOM-R61）與專案成員關係**必須**全部保留，不因停用而刪除；停用立即不能登入（AUT-R14），停用期間模組權限與委派不生效；重新啟用後原有的權限、委派與成員關係原樣恢復。專案成員清單**必須**能分辨已停用的成員（回應含 `is_active`）。停用與啟用**必須**寫稽核紀錄（DOM-R22）。未完成任務由內業改派，屬 `inspection-planning` 與管理畫面的功能，本規格不處理 | 必須 | 負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（問題 5：離職先停用帳號，保留模組權限與成員關係，成員清單標已停用，補停用／啟用稽核事件）；[KD-21](../../intents/03-decisions-and-stack.md#kd-21)、DOM-R10 | DOM-AC62 |
 
@@ -184,10 +184,10 @@
 | `Company` | 沿用同一套共通結構（DOM-R15） | `name`、`is_active`（DOM-R48、DOM-R49）；公司連結的規則（DOM-R18）；DOM-R16、DOM-R17、DOM-R29 已被取代 | 凍結 |
 | `Role` | 沿用同一套共通結構（DOM-R15） | `name`、權限代碼集合（DOM-R19～DOM-R24）；名稱與權限代碼的長度及格式（DOM-R30）；名稱不分大小寫唯一（DOM-R34）；權限代碼須已登記（DOM-R35） | 凍結 |
 | `ProjectMember` | 沿用同一套共通結構（DOM-R15） | `project_id`、`user_id`、角色指派（DOM-R25～DOM-R27） | 凍結 |
-| `UserModulePermission` | 沿用同一套共通結構（DOM-R15） | `user_id`、`permission_code`（模組範圍，DOM-R59、DOM-R62） | 凍結（範圍變更，#538） |
-| `UserModuleDelegation` | 沿用同一套共通結構（DOM-R15） | `user_id`、`module`（DOM-R61） | 凍結（範圍變更，#538） |
-| `PermissionBundle` | 沿用同一套共通結構（DOM-R15） | `name`、模組範圍權限代碼集合（DOM-R63） | 凍結（範圍變更，#538） |
-| 建立者角色設定 | 沿用同一套共通結構（DOM-R15） | `creator_role_id`（DOM-R64） | 凍結（範圍變更，#538） |
+| `UserModulePermission` | 沿用同一套共通結構（DOM-R15） | `user_id`、`permission_code`（模組範圍，DOM-R59、DOM-R62） | 凍結（意圖變更跟進，#538） |
+| `UserModuleDelegation` | 沿用同一套共通結構（DOM-R15） | `user_id`、`module`（DOM-R61） | 凍結（意圖變更跟進，#538） |
+| `PermissionBundle` | 沿用同一套共通結構（DOM-R15） | `name`、模組範圍權限代碼集合（DOM-R63） | 凍結（意圖變更跟進，#538） |
+| 建立者角色設定 | 沿用同一套共通結構（DOM-R15） | `creator_role_id`（DOM-R64） | 凍結（意圖變更跟進，#538） |
 | `Project` | UUID 主鍵、`project_code`（得重複，DBF-R13）、建立與修改紀錄（DBF-R11～DBF-R14） | 必填業務欄位、選填業務欄位、重複查詢介面、字串長度（`project_code` 暫定 32、待確認）（DOM-R40～DOM-R44） | 凍結 |
 | `Inspection Plan` | UUID 主鍵與建立／修改紀錄（database-foundation） | 與 Project 的關聯（DOM-R56） | 凍結 |
 | `Inspection Task` | UUID 主鍵與建立／修改紀錄（database-foundation） | 與 Plan 的關聯及選填地點（DOM-R56、DOM-R58） | 凍結 |
@@ -267,7 +267,7 @@
 | `POST /api/v1/projects` | 新增專案；正式行為依 DOM-R65：同一交易為操作者建立 `ProjectMember` 並指派建立者角色，建立者角色未設定回 422 `project.creator_role_unset` | **過渡期**需 Admin（AUT-R20），建立者不自動成為成員；**正式行為**需模組權限 `project.create`，Admin 放行（AUT-R18 的「需模組權限」層級） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案 | **過渡期**需 Admin（AUT-R20）；**正式行為**需專案權限 `project.update`（DOM-R66），Admin 依 AUT-R19 放行；`project.create` 與 `all_project_progress.read` 都不放行 |
 | `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
-| `GET /api/v1/projects/{project_id}/member-candidates?cursor=&limit=` | `{items: [{id, username, name_zh}], next_cursor}`；可加入該專案的使用者：啟用、非系統帳號、尚未是成員；非 Admin 呼叫者只含同公司的人（呼叫者沒有公司時回空清單），Admin 含全部公司；依 `(username,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/users` |
+| `GET /api/v1/projects/{project_id}/member-candidates?cursor=&limit=` | `{items: [{id, username, name_zh, module_status}], next_cursor}`，`module_status` 為 `{project_use, inspection_use}` 兩個布林（該人是否具專案模組、查核模組的「可使用」，供加入成員時提示，ADM-R31；只回傳這兩個布林，不回傳其他權限）；可加入該專案的使用者：啟用、非系統帳號、尚未是成員；非 Admin 呼叫者只含同公司的人（呼叫者沒有公司時回空清單），Admin 含全部公司；依 `(username,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/users` |
 | `GET /api/v1/projects/{project_id}/assignable-roles?cursor=&limit=` | `{items: [{id, name, permission_codes}], next_cursor}`；全部角色（角色是全系統共用，DOM-R19），`permission_codes` 依字母排序；依 `(created_at,id)` 升冪 cursor 分頁，分頁參數同上；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/roles` |
 | `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，**必須**同時指定至少一個角色；零個角色回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20）；非 Admin 呼叫者只能加入同公司的人，被加入者公司不同、沒有公司，或呼叫者沒有公司，回 422 與專用錯誤碼（與 `member-candidates` 同一套規則；資源不存在的 404 先於此檢查，此檢查先於零角色檢查；Admin 不受限） | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `PUT /api/v1/projects/{project_id}/members/{user_id}/roles` | 以完整角色集合取代目前指派；集合**必須**至少一個角色，空集合回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20）；既有沒有角色的舊成員不受影響，改角色時才需補上 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
@@ -278,7 +278,7 @@
 不屬於錯誤碼。專案回應包含 UUID、業務欄位與選填日期。
 ProjectMember 回應包含成員 UUID、`user_id`、`username` 與完整的
 `role_ids` 集合。成員列表的每一筆另含 `name_zh`、`email`、`company_id`、
-`company_name`（沒有公司時為空值）與 `is_active`，供管理頁顯示。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
+`company_name`（沒有公司時為空值）、`is_active` 與 `module_status`（同候選端點的兩個布林），供管理頁顯示。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
 回 HTTP 204。重複加入同一人回 HTTP 409、`project.member_conflict`；缺少
 專案、人員或角色回 HTTP 404、`resource.not_found`；加入或取代時沒有任何角色回 HTTP
 422、`project.member_roles_required`（權限與資源是否存在先於此檢查）；其餘無效輸入回 HTTP
@@ -313,7 +313,13 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - `project.member_conflict` — HTTP 409：同一人已是該專案成員。
 - `project.member_company_mismatch` — HTTP 422：非 Admin 呼叫者加入的使用者不是同一家公司，或呼叫者沒有公司（#481）。
 - `project.member_roles_required` — HTTP 422：加入成員或取代角色集合時沒有指定任何角色（ADM-R20；資料層仍允許沒有角色，見 DOM-R36）。
-- `project.creator_role_unset` — HTTP 422：開設專案時系統設定的建立者角色為空值（DOM-R64、DOM-R65；#538，規格設計）。
+- `project.creator_role_unset` — HTTP 422：開設專案時系統設定的建立者角色為空值（DOM-R64、DOM-R65；#538，規格設計；空值處理待 DOM-Q10 裁定）。
+- `module_permission.code_invalid` — HTTP 422：授予或收回模組權限時代碼未登記或不是模組範圍（DOM-R35、DOM-R62；#538，規格設計）。
+- `module_delegation.module_invalid` — HTTP 422：指派或收回委派時模組識別未登記（DOM-R61；#538，規格設計）。
+- `permission_bundle.name_conflict` — HTTP 409：權限組合名稱重複（不分大小寫，DOM-R63；#538，規格設計）。
+- `permission_bundle.not_found` — HTTP 404：權限組合不存在（#538，規格設計）。
+- `permission_bundle.code_invalid` — HTTP 422：組合內含未登記或非模組範圍的代碼（#538，規格設計）。
+- `creator_role.invalid` — HTTP 422：設定建立者角色時角色不存在（DOM-R64；#538，規格設計）。使用者不存在回共用的 `resource.not_found`，權限不足回共用的權限不足錯誤（AUT-R23）。
 
 ## 驗收條件
 
@@ -474,6 +480,32 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
     4. 「有修改能力」的判斷（DOM-R24、DOM-AC26）本來只服務客戶公司提示，隨提示一併取消；`read` 命名規則（DOM-R35）沒有被裁定取消，保留。
     5. 內建 `admin` 的 `email` 選填，但仍受 DOM-R02 的唯一與不分大小寫規則（有值時）。
 
+<a id="dom-q10"></a>
+- **DOM-Q10：建立者角色空值時怎麼辦；Admin 開專案是否自動成為成員**（待負責人裁定，#538 後續細節）。情境：系統剛初始化、沒有任何角色（DOM-R53），有人具 `project.create` 想開專案；或 Admin 開專案。
+  - **選項**：（A）空值時一律拒絕，提示 Admin 先設定建立者角色（DOM-R64 現行暫定寫法）；（B）空值時只有 Admin 能開專案，且不自動成為成員，非 Admin 拒絕；（C）第一次啟用模組權限時自動建立預設角色「內業」並設為建立者角色（與 [#261](https://github.com/speko-tw/inspect-flow/issues/261)「初始化不預建角色」的裁定衝突，須先改裁定）。Admin 開專案：（甲）同樣自動成為成員（暫定）；（乙）不自動成為成員。
+  - **建議**：B 加甲：建立者角色已設定時 Admin 也自動成為成員，空值時 Admin 仍可開專案、不成為成員並被提示設定；避免上線後沒設定就讓 Admin 完全無法開專案。
+  - **落地**：裁定前 DOM-R64、DOM-R65、DOM-AC60、DOM-AC61 以暫定寫法為準，實作任務 N 不得開工此項。
+<a id="dom-q11"></a>
+- **DOM-Q11：建立者角色是否一定含調整專案與管理成員**（待負責人裁定）。情境：Admin 把建立者角色設成只能現場查核的角色，開專案的人成為成員卻改不了自己開的專案、也不能加人（`project.update`、`project_member.manage` 屬專案角色）。
+  - **選項**：（A）完全由 Admin 勾選，設定畫面只提示建議含這兩項（暫定）；（B）建立者另外固定取得這兩項，不經角色；（C）設定建立者角色時檢查必須含這兩項，否則拒絕。
+  - **建議**：C：規則單純、不出現建立者改不了自己專案的狀態。
+<a id="dom-q12"></a>
+- **DOM-Q12：開設專案是否蘊含專案模組「可使用」**（待負責人裁定）。情境：只被授予 `project.create`、沒有 `project.use` 的人開出專案後，管理成員與專案基本資料需要 `project.use`（DOM-R35）而被拒絕。
+  - **選項**：（A）`project.create` 蘊含 `project.use`（檢查時視為具備）；（B）不蘊含，授予畫面提示、由權限組合一併勾選（暫定）。
+  - **建議**：A：避免開出專案卻無法管理。
+<a id="dom-q13"></a>
+- **DOM-Q13：上線時是否自動為既有成員開通「可使用」，以及 `template_admin` 轉換內容**（待負責人裁定）。情境：兩層檢查上線後，既有非 Admin 成員沒有 `project.use`、`inspection.use` 資料列，專案內權限會全部失效；`template_admin` 若只轉成 `template.manage` 而沒有 `template.use`，可能連讀取範本庫都被擋。
+  - **選項**：（A）轉換 migration 為目前持有任一專案角色的人開通 `project.use`、`inspection.use`，`template_admin` 同時轉為 `template.manage` 與 `template.use`；（B）不回填，由 Admin 逐人開通。
+  - **建議**：A：符合「遷移期間不得失去有效權限」的裁定；回填範圍限於目前有專案角色的人，不為其他帳號自動開通。轉換事件不寫稽核（ALG-R27）。
+<a id="dom-q14"></a>
+- **DOM-Q14：看全部專案進度的任務明細是否另需查核模組「可使用」**（待負責人裁定）。#538 裁定了「到任務明細、不含照片與結果」，沒有說明是否另需查核模組「可使用」；目前規格暫定另需（ADM-R06），預設組合「公司主管」因此暫含 `inspection.use`。
+  - **選項**：（A）不另需，只要 `all_project_progress.read`；（B）另需，並讓預設組合「公司主管」含 `inspection.use`（暫定）。
+  - **建議**：A：與「專案外的事只看第 1 層」一致，預設組合也更單純。
+<a id="dom-q15"></a>
+- **DOM-Q15：專案模組與查核模組的委派者能做什麼**（待負責人裁定）。裁定說被委派者可做該模組的編輯動作（例如範本模組維護範本庫），但專案模組與查核模組目前沒有專屬的模組編輯動作。
+  - **選項**：（A）目前只能授予與收回該模組內的權限，不能修改專案（暫定，DOM-R61）；（B）另定義專案模組的編輯動作（例如修改任何專案）。
+  - **建議**：A：避免委派者取得比「調整專案」更大的專案修改權。
+
 ## 變更紀錄
 
 - 同步 G-03、G-05 的授權來源與 KD-61、KD-62 引用；補明 G-04 負責人部分裁定及未決餘項；補列權限模型意圖引用（現為 KD-69），不改需求與 AC — [#404](https://github.com/speko-tw/inspect-flow/issues/404)
@@ -508,4 +540,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 範圍變更（負責人核可 #445 原型，#449）：專案管理 API 的成員加入與角色集合取代必須至少一個角色，零角色回 422 `project.member_roles_required`；DOM-R36「成員得沒有角色」仍指資料層與 service 層（舊資料、移除角色的內部流程），不改需求與 AC — [#445 負責人指示](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988461779)、[原型核可](https://github.com/speko-tw/inspect-flow/issues/445#issuecomment-5988590932)、[#449](https://github.com/speko-tw/inspect-flow/issues/449)
 - 範圍變更（負責人指示，#480）：`GET /api/v1/me/projects` 每筆新增 `has_office_access`，供內業專案清單只列有內業權限的專案；DOM-AC50 補欄位；欄位細節為規格設計（非負責人裁定） — [#480](https://github.com/speko-tw/inspect-flow/issues/480#issuecomment-6013263124)
 - 範圍變更（負責人指示，#481）：專案管理 API 介面表新增 `GET /api/v1/projects/{project_id}/member-candidates`（可加入的使用者）與 `GET /api/v1/projects/{project_id}/assignable-roles`（可指派的角色），權限同其他成員端點，只回傳顯示需要的欄位；`POST /api/v1/projects/{project_id}/members` 對非 Admin 呼叫者加入同公司檢查，錯誤碼 `project.member_company_mismatch`。讓只有 `project_member.manage`、不是 Admin 的內業使用成員頁，不放寬全域 `/users`、`/roles`。同公司的判讀、路徑與伺服器端檢查為規格設計（非負責人裁定）；不新增 migration — [負責人指示](https://github.com/speko-tw/inspect-flow/issues/481#issuecomment-6013263458)、[#481](https://github.com/speko-tw/inspect-flow/issues/481)
-- 範圍變更（負責人指示，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：角色只存在專案內（DOM-R19），權限代碼登記表加範圍與模組欄位並登記模組權限與 `project.update`（DOM-R35、DOM-R30 補充）；新增人員模組權限、模組邊界單向與新模組接入規則、模組委派、授予與收回、權限組合、建立者角色、開設專案同一交易加入建立者、修改專案限制、停用與啟用（DOM-R59～DOM-R67、DOM-AC55～DOM-AC62）；DOM-R22 稽核範圍補模組權限、委派、組合、建立者角色與停用／啟用；專案管理 API 的專案新增、修改與列表存取層級標明過渡期與正式行為；過渡期（程式完成前）`template_admin` 與 Admin 才能開設專案的行為不變；權限代碼名稱、組合維護限 Admin、建立者角色空值處理為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
+- 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914)、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：角色只存在專案內（DOM-R19），權限代碼登記表加範圍與模組欄位並登記模組權限與 `project.update`（DOM-R35、DOM-R30 補充）；新增人員模組權限、模組邊界單向與新模組接入規則、模組委派、授予與收回、權限組合、建立者角色、開設專案同一交易加入建立者、修改專案限制、停用與啟用（DOM-R59～DOM-R67、DOM-AC55～DOM-AC62）；DOM-R22 稽核範圍補模組權限、委派、組合、建立者角色與停用／啟用；專案管理 API 的專案新增、修改與列表存取層級標明過渡期與正式行為；過渡期（程式完成前）`template_admin` 與 Admin 才能開設專案的行為不變；權限代碼名稱、組合維護限 Admin、建立者角色空值處理為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)

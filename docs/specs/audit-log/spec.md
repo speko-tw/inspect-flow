@@ -33,7 +33,7 @@
 - `authentication` 事件的寫入入口與寫入時機的驗收：由 `authentication` 實作與驗收（AUT-R39、AUT-AC49～AUT-AC51、AUT-AC62）。
 - 保存期限、讀取紀錄是否另寫稽核、請求來源資訊：見[待釐清](#待釐清)；查詢 API 與畫面已依 [ALG-Q2](#alg-q2) 裁定納入範圍。
 - 其他資料（`Company`、`User` 基本欄位的人工修改等）的完整操作歷史：屬「延後但不排除」的 Audit Trail（[01-overview](../../intents/01-overview.md#延後但不排除的能力)，架構基準 §35）；這些資料目前只靠 [PR-08](../../intents/02-principles.md#pr-08) 的建立與修改紀錄。
-  - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；`User` 的姓名、email、`is_active` 與 `Company` 的修改，以及單獨修改工號、部門、地點，仍不寫；`is_active` 的變更改為要寫（[ALG-Q4](#alg-q4) 已裁定，ALG-R25）。
+  - **部分已被取代**（負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））：「`User` 基本欄位的修改不寫稽核」這一部分不再成立，帳號名稱修改與公司連結變更（含清空的工號、部門與地點）改為要寫，見 ALG-R19、ALG-R20；`User` 的姓名、email 與 `Company` 的修改，以及單獨修改工號、部門、地點，仍不寫；`User.is_active` 的變更改為要寫（[ALG-Q4](#alg-q4) 已裁定，ALG-R25）。
 - 資料庫層的防竄改（trigger、權限控管、雜湊鏈）：見[考慮過但沒採用的做法](plan.md#考慮過但沒採用的做法)。
 
 ## 使用情境
@@ -133,7 +133,7 @@
 <a id="模組權限事件"></a>
 ## 模組權限事件
 
-依 DOM-R22（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）登記。入口由 `domain-model` 的人員模組 Service 實作（DOM-R59～DOM-R64），寫入時機由本規格驗收（ALG-R26）。
+依 DOM-R22（負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）登記；本節事件是正式行為，隨 `domain-model` 任務 L 起的各實作任務生效，過渡期結束前 `system_role_assignment.*` 照舊。入口由 `domain-model` 的人員模組 Service 實作（DOM-R59～DOM-R64），寫入時機由本規格驗收（ALG-R26）。
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
@@ -297,4 +297,4 @@
 - 範圍變更（admin 與帳號重新設計）：改寫 ALG-R05、ALG-R12、ALG-R14、ALG-AC08，新增 ALG-R18～ALG-R21（首次設定為系統事件、帳號名稱與公司連結事件、`admin` 重設沿用 `user.password_set`）與 ALG-AC13～ALG-AC16、ALG-Q6，「`User` 基本欄位修改不寫稽核」的非目標部分已被取代 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - 登記 `template-system` 的固定範本管理員角色指派／收回事件及其稽核欄位 — [#325](https://github.com/speko-tw/inspect-flow/issues/325)
 - 澄清存成範本事件與範本建立同交易，並列明其來源與目標識別欄位 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)
-- 範圍變更（負責人指示，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914)、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：新增停用與啟用事件 `user.active_changed`（ALG-Q4 已裁定、ALG-R25）、模組權限事件（授予與收回、委派、權限組合、建立者角色，ALG-R26）與過渡期轉換不寫稽核（ALG-R27）；`system_role_assignment.*` 事件僅過渡期使用；ALG-R14、ALG-AC11 同步；新增 ALG-AC19～ALG-AC22；權限組合與建立者角色設定的事件為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
+- 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914)、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：新增停用與啟用事件 `user.active_changed`（ALG-Q4 已裁定、ALG-R25）、模組權限事件（授予與收回、委派、權限組合、建立者角色，ALG-R26）與過渡期轉換不寫稽核（ALG-R27）；`system_role_assignment.*` 事件僅過渡期使用；ALG-R14、ALG-AC11 同步；新增 ALG-AC19～ALG-AC22；權限組合與建立者角色設定的事件為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)

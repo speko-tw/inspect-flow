@@ -176,4 +176,4 @@
 - 計畫 T4、T5 與 DBF-AC10 驗收列：對齊 DBF-R12、DBF-R13、DBF-AC10 的新規則（`employee_no` 得為空值、同公司內唯一），落地由 `domain-model` 計畫的 B；規格條文不變 — [#259](https://github.com/speko-tw/inspect-flow/issues/259)
 - DBF-R22、DBF-AC14：範本與專案副本增加範圍形式及上下限欄位，舊 `range` 資料轉為 `tolerance` — [#356](https://github.com/speko-tw/inspect-flow/issues/356)。
 - DBF-R22、DBF-AC14：補明舊 `range` 資料空容許誤差轉成 `0`，並測試範本與專案副本兩張表 — [PR #373 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/373#pullrequestreview-5404511885)。
-- 範圍變更（負責人指示，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69）：DBF-R20 補明 `SystemRoleAssignment` 只在過渡期保留，改造時以新 migration 轉為人員模組權限（資料表由 `domain-model` DOM-R59 定義）；其餘不變 — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
+- 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69）：DBF-R20 補明 `SystemRoleAssignment` 只在過渡期保留，改造時以新 migration 轉為人員模組權限（資料表由 `domain-model` DOM-R59 定義）；其餘不變 — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
