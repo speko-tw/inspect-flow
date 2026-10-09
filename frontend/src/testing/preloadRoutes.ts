@@ -1,5 +1,5 @@
 /**
- * 預先載入 App 以 lazy() 拆包的路由模組，給會渲染 <App /> 的
+ * 預先載入 App 與 AdminPage 以 lazy() 拆包的路由模組，給會渲染 <App /> 的
  * 測試檔在 beforeAll 呼叫（#295）。
  *
  * 為什麼需要：vitest 每個測試檔各有獨立的模組快取，檔案內第一次
@@ -9,14 +9,16 @@
  * 卻都通過。把載入成本移到 beforeAll（hook 逾時 10 秒），各測試
  * 的斷言仍維持預設逾時，真的卡住或壞掉時照樣會失敗。
  *
- * 這份清單必須與 src/App.tsx 的 lazy() 保持一致；新增 lazy 路由
- * 時一併加在這裡。
+ * 這份清單必須涵蓋 src/App.tsx 與 src/admin/AdminPage.tsx 的 lazy()；
+ * 新增 lazy 路由時一併加在這裡。
  */
 export async function preloadLazyRoutes(): Promise<void> {
   await Promise.all([
     import('../admin/AdminPage'),
+    import('../admin/templates/TemplatesPage'),
+    import('../admin/projects/ProjectTemplatesPage'),
+    import('../admin/projectItems/ProjectItemChangePage'),
     import('../field/FieldPage'),
-    import('../field/ProjectTemplatesPage'),
     import('../setup/SetupPage'),
   ])
 }
