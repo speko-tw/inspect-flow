@@ -138,7 +138,9 @@ describe('planning management page', () => {
       fireEvent.change(screen.getByLabelText(/取消原因/), {
         target: { value: '現場順序調整' },
       })
-      fireEvent.click(screen.getByRole('button', { name: '確認取消' }))
+      fireEvent.click(
+        within(cancelDialog).getByRole('button', { name: '取消任務' }),
+      )
       await screen.findByText('取消原因：現場順序調整')
       await expectNotice('已取消任務，之後可以恢復。')
 
@@ -1118,6 +1120,59 @@ describe('planning forms guard (#507)', () => {
 
     await expectNotice('已將分區改名為「北側」。')
     expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables Cancel while a zone is being added (#516)', async () => {
+    const client = createMockPlanningClient()
+    const { gate } = hold(client, 'createZone')
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    await screen.findByRole('heading', { name: '專案分區' })
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增分區' }))
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
+      target: { value: '北區' },
+    })
+    const form = formByContext('zone')
+
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(
+        within(form).getByRole('button', { name: '新增分區' }),
+      ).toBeDisabled(),
+    )
+    expect(within(form).getByRole('button', { name: '取消' })).toBeDisabled()
+    gate.resolve()
+    await expectNotice('已新增分區「北區」。')
+  })
+
+  it('disables Cancel while a zone is being renamed (#516)', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone('project-demo-1', '北區')
+    const { gate } = hold(client, 'renameZone')
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    const zone = await screen.findByText('北區')
+    fireEvent.click(
+      within(zone.parentElement as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    )
+    fireEvent.change(screen.getByLabelText(/分區名稱/), {
+      target: { value: '北側' },
+    })
+    const form = formByContext('zone')
+
+    fireEvent.submit(form)
+
+    await waitFor(() =>
+      expect(
+        within(form).getByRole('button', { name: '儲存名稱' }),
+      ).toBeDisabled(),
+    )
+    expect(
+      within(form).getByRole('button', { name: '取消編輯' }),
+    ).toBeDisabled()
+    gate.resolve()
+    await expectNotice('已將分區改名為「北側」。')
   })
 
   it('ignores IME Enter in the zone rename', async () => {

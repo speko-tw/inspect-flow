@@ -588,6 +588,7 @@ export default function PlanningPage({
                     )}
                     <button
                       aria-label="取消編輯"
+                      disabled={busy}
                       onClick={() => {
                         setRenamingZone(null)
                         setZoneName('')
@@ -708,6 +709,7 @@ export default function PlanningPage({
                       </p>
                     )}
                     <button
+                      disabled={busy}
                       onClick={() => {
                         setAddingZone(false)
                         setZoneName('')
@@ -923,6 +925,7 @@ export default function PlanningPage({
                   )}
                   <button
                     aria-label="取消編輯"
+                    disabled={busy}
                     onClick={() => {
                       setEditingPlanName(false)
                       setFieldError(null)
@@ -1327,7 +1330,7 @@ export default function PlanningPage({
           asForm
           busy={busy}
           confirmDisabled={!cancelReason.trim()}
-          confirmLabel="確認取消"
+          confirmLabel="取消任務"
           headingRef={cancelHeading}
           initialFocus="none"
           modal

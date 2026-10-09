@@ -139,7 +139,7 @@ describe('專案網址的 id 無效或不存在', () => {
       expectNoLegacyMessage()
       // 不留空的專案頁框。
       expect(screen.queryByRole('navigation', { name: '專案區段' })).toBeNull()
-      expect(screen.queryByRole('link', { name: '回專案清單' })).toBeNull()
+      expect(screen.queryByRole('link', { name: '返回專案清單' })).toBeNull()
     },
   )
 

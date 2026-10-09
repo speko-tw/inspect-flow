@@ -576,7 +576,8 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       '已將「管線查核」存入「土木工程 / 基礎」。',
     )
-    expect(screen.getAllByRole('link', { name: '返回專案' })).toHaveLength(2)
+    // 成功後只留頁首的返回連結，不再多一個同名按鈕（#516）。
+    expect(screen.getAllByRole('link', { name: '返回專案' })).toHaveLength(1)
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/templates',
       expect.objectContaining({

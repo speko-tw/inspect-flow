@@ -446,16 +446,9 @@ export default function ProjectTemplatesPage() {
       )}
       {error && <p role="alert">{error}</p>}
       {notice && (
-        <>
-          <p className="notice-success" role="status">
-            {notice}
-          </p>
-          {!isSaveMode && (
-            <Link className="btn" to={`/admin/projects/${projectId}`}>
-              返回專案
-            </Link>
-          )}
-        </>
+        <p className="notice-success" role="status">
+          {notice}
+        </p>
       )}
       <div className="tpl-layout" data-pane={mobilePane}>
         <div className="tpl-list-pane">
