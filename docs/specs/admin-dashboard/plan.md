@@ -24,7 +24,8 @@
 | T11 | 專案成員區段：加入成員必選至少一個角色並附白話說明、成員卡片清單、修改角色獨立畫面、移出確認；後端專案成員 API 零角色回 422 專用錯誤碼；補 API 測試、前端 UI 測試與前後端契約 fixture、真後端瀏覽器走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`docs/specs/domain-model/spec.md`、`backend/app/api/errors.py`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_projects.py`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projects/MemberRoleFields.tsx`、`frontend/src/admin/projects/roleDescriptions.ts`、`frontend/src/admin/projects/ProjectMembers.css`、`frontend/src/admin/projects/fixtures/`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx` | T10（專案區段殼）；原型由負責人操作核可（#445） | ADM-AC20～22 | #449 |
 | T12 | 非 Admin 內業的成員頁：後端新增專案範圍候選使用者與可指派角色端點（權限同 `project_member.manage`、同公司、不 N+1）；前端成員頁改用候選端點並讓各 API 各自處理錯誤；沒有管理權限者不顯示成員操作；補 API 測試、前端測試、契約 fixture 與真後端內業走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`docs/specs/domain-model/spec.md`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_projects.py`、`backend/tests/contract/test_route_access.py`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/admin/projects/api.ts`、`frontend/src/admin/projects/ProjectMembers.css`、`frontend/src/admin/projects/fixtures/`、`frontend/src/admin/projects/ProjectsAdmin.test.tsx` | T11（成員區段）；不新增 migration | ADM-AC26 | #481 |
 | T13 | v0.3.0 角色走查後的操作回饋與文案整理：統一入口名稱、非管理者外殼與計畫任務頁的成功提示、項目修改確認依任務狀態分兩種說法並拿掉英文術語、建立任務的項目清單不顯示項次、成員頁無候選時隱藏表單、存為範本後更新範本樹項目數、變更密碼頁顯示密碼規則；補前端測試與真後端無頭瀏覽器走查 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/planning/PlanningPage.tsx`、`frontend/src/admin/projectItems/ProjectItemChangePage.tsx`、`frontend/src/admin/projects/ProjectDetailPage.tsx`、`frontend/src/field/FieldPage.tsx`、`frontend/src/field/ProjectTemplatesPage.tsx`、`frontend/src/auth/ChangePasswordPage.tsx` 及各自的前端測試 | T10、T11、T12 已合併；專案項目修改頁不能改數值標準屬 #450，不在此 | ADM-AC27 | #487 |
-| T14 | 開設專案與建立者：專案清單「新增專案」入口依 `can_create_project` 顯示、可開設專案但尚未加入專案者的落點與空清單、建立後導向首頁、Admin 開專案時選填專案工程師（ADM-R32，設定畫面屬 T4）；成員區段的未開通模組提示、可指派角色與外部人員限制、已停用標示（ADM-R31、R34）；停用前提醒與重新啟用預覽（ADM-R33）；看全部專案進度的任務明細頁（四項白名單欄位） | `frontend/src/admin/projects/`、`frontend/src/admin/dashboard/`、`backend/app/api/v1/projects.py`、`backend/app/api/v1/`（任務明細與候選欄位）、相關測試 | T4；`authentication` 任務 P 的 `can_create_project`；`domain-model` 任務 N（開設專案同一交易、`project.update`）、任務 O（停用與啟用稽核）；`authentication` 任務 P | ADM-AC05、30～33 | 待開 task |
+| T14 | 角色摘要與完整權限清單：依 #496 顯示摘要、可展開清單、項目計數與未知碼回退；補混合已知／未知碼、雙未知碼及組件行為測試，並同步規格 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/projects/roleDescriptions.ts`、`roleDescriptions.test.ts`、`RolePermissionSummary.tsx`、`RolePermissionSummary.css`、`RolePermissionSummary.test.tsx`、`RolesPage.tsx` | 負責人已同意 #496 提案；依權限 registry 次序產生摘要及清單 | ADM-AC21 | #496 |
+| T15 | 開設專案與建立者：專案清單「新增專案」入口依 `can_create_project` 顯示、可開設專案但尚未加入專案者的落點與空清單、建立後導向首頁、Admin 開專案時選填專案工程師（ADM-R32，設定畫面屬 T4）；成員區段的未開通模組提示、可指派角色與外部人員限制、已停用標示（ADM-R31、R34）；停用前提醒與重新啟用預覽（ADM-R33）；看全部專案進度的任務明細頁（四項白名單欄位） | `frontend/src/admin/projects/`、`frontend/src/admin/dashboard/`、`backend/app/api/v1/projects.py`、`backend/app/api/v1/`（任務明細與候選欄位）、相關測試 | T4；`authentication` 任務 P 的 `can_create_project`；`domain-model` 任務 N（開設專案同一交易、`project.update`）、任務 O（停用與啟用稽核）；`authentication` 任務 P | ADM-AC05、30～33 | 待開 task |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
@@ -37,7 +38,7 @@
 
 依改動檔案分波；有相同 API router、`AdminPage.tsx`、Dashboard 前端區域或規格檔的工作須錯開。
 
-- 第 1 波：T0、T1、T5a 可分別進行；T0 是先行 spec-change，T4、T14 等 `domain-model` 任務 L 與 `authentication` 任務 P，T5a 只負責把已裁定 C 同步到 audit-log。若 T1／T4 等需共用 `backend/app/main.py` 註冊，依 README 的共用檔案規則錯開。
+- 第 1 波：T0、T1、T5a 可分別進行；T0 是先行 spec-change，T4、T15 等 `domain-model` 任務 L 與 `authentication` 任務 P，T5a 只負責把已裁定 C 同步到 audit-log。若 T1／T4 等需共用 `backend/app/main.py` 註冊，依 README 的共用檔案規則錯開。
 - 第 2 波：T2、T3 依賴 T1；兩者共用 Dashboard 前端區域，應同一責任人串接或錯開。T5b 在 T5a 合併後開始。T6a 在 T0 合併後開始；T6b 等 T0、T6a 都合併後開始。
 - 第 3 波：T7 等 T0 合併後開始；與 T4 若共用角色／使用者路由，錯開實作；其餘檔案不重疊時可並行。
 - 0.7.x 後續版本：T8 等 `completion-validation` 契約與實作完成後執行，僅切換既有完成數與完成率的計算來源。
@@ -45,7 +46,7 @@
 
 ## 風險
 
-- 模組權限與委派模型依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)；T4、T14 必須等待 `domain-model` 任務 L／N／O 與 `authentication` 任務 P 把資料、Service 介面與存取層級合併。發現衝突先同步文件，不以本計畫推論覆蓋。
+- 模組權限與委派模型依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)；T4、T15 必須等待 `domain-model` 任務 L／N／O 與 `authentication` 任務 P 把資料、Service 介面與存取層級合併。發現衝突先同步文件，不以本計畫推論覆蓋。
 - PR-18 確認需在寫入前取得最新對象與後果；測試收回模組權限、收回委派、刪除權限組合的確認與取消，以及被委派者不能越過自己被委派的模組。
 - T0 與 T6a 是已凍結清單端點的規格變更，必須在 `authentication`／`domain-model` spec-change PR 合併後才可實作；#286 的 `member_count` 另需 T6a 合併。未合併 T6a 前不得呈現前端推算的成員數。
 - Dashboard 彙總可能讀取大量 Task；先受授權範圍及 cursor 查詢限制，效能門檻依實際量測訂定。
@@ -70,7 +71,8 @@
 | ADM-AC18 | 前端測試以 `viewer_permission_codes` 只含 `inspection_task.inspect`／`inspection_task.read` 的帳號驗證導向 Field，並以任一內業權限驗證留在專案；真後端登入測試帳號走查權限結果 |
 | ADM-AC19 | 專案清單測試建立成功導向新首頁、重複代號仍已儲存警告顯示且可關閉、每列「開啟專案」及「成員」各自連至正確區段 |
 | ADM-AC20 | `backend/tests/api/test_projects.py`：零角色加入／取代回 422 且資料不變、帶角色成功、無權限先 403；同檔契約測試讀取 `frontend/src/admin/projects/fixtures/member-roles-contract.json`，驗證真 API 的欄位集合與錯誤碼和前端 mock 一致（RG-M22） |
-| ADM-AC21、22 | `ProjectsAdmin.test.tsx` 與 `roleDescriptions.test.ts`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、角色白話說明、修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
+| ADM-AC21 | `ProjectsAdmin.test.tsx`、`roleDescriptions.test.ts`、`RolePermissionSummary.test.tsx`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、後端 registry 完整覆蓋、依 registry 順序摘要與清單、合併後項目計數一致、混合已知／未知碼及雙未知碼回退、兩個角色各自展開、零權限無按鈕、固定可及名稱；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
+| ADM-AC22 | `ProjectsAdmin.test.tsx`：修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
 | ADM-AC26 | `backend/tests/api/test_projects.py`：同公司／跨公司不洩漏、已加入與停用者排除、無公司呼叫者為空、Admin 看全部、欄位與契約 fixture 一致、cursor、權限（401／403／他專案 403／404）、全域 `/users`、`/roles` 仍 403、非 Admin 加入他公司或無公司對象回 422 與專用錯誤碼 而 Admin 不受限、查詢數不隨資料增加；`test_route_access.py` 登記兩條新路由；`ProjectsAdmin.test.tsx`：內業以點擊加入（必選角色）、修改角色、移出，全程不呼叫全域 `/users`、`/roles`，伺服器 422 公司不符對應到使用者欄；候選或角色失敗時成員列表仍顯示並可重新載入，無權限者看不到操作；SQLite 真後端、Vite 與無頭瀏覽器以內業帳號走查 1280px／360px，記錄 HTTP 狀態與截圖 |
 | ADM-AC27 | 各畫面的前端測試：入口名稱、非管理者外殼與計畫任務頁的成功提示（`role="status"`、舊提示清除）、項目修改確認的兩種說法（草稿只有確認儲存、已派出才有選項與說明）、成員頁無候選時隱藏表單、存為範本後項目數更新、變更密碼頁規則；SQLite 真後端、Vite 與無頭瀏覽器從登入開始只靠點擊走查內業、現場、混合三種帳號並保存桌面與 360px 截圖 |
 | ADM-AC14 | UI 測試驗證一次性密碼結果／離頁清除、三種高風險操作的取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通流程並記錄 HTTP 狀態與桌面／360px 截圖 |

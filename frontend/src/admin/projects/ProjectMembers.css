@@ -97,6 +97,14 @@
   align-items: flex-start;
 }
 
+.member-role-choice {
+  padding-bottom: var(--space-2);
+}
+
+.member-role-choice .role-permission-summary {
+  margin-left: 1.6rem;
+}
+
 .member-role-option input {
   flex: none;
   margin-top: 0.2rem;
