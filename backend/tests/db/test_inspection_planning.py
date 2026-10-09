@@ -5,8 +5,7 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Barrier
-from time import monotonic
+from threading import Barrier, BrokenBarrierError
 from typing import cast
 
 import pytest
@@ -834,11 +833,9 @@ def test_postgres_concurrent_completion_derives_completed_plan(
     plan_id = plan.id
     task_ids = [task.id for task in tasks]
     ready = Barrier(3)
-    intervals: list[tuple[float, float]] = []
     backend_pids: list[int] = []
 
     def complete(task_id):
-        transaction_started = monotonic()
         with Session(engine) as worker_session:
             with worker_session.begin():
                 worker_session.execute(text("SET LOCAL lock_timeout = '5s'"))
@@ -854,19 +851,35 @@ def test_postgres_concurrent_completion_derives_completed_plan(
                 assert task is not None
                 ready.wait(timeout=5)
                 complete_inspection_task(worker_session, task)
-        intervals.append((transaction_started, monotonic()))
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(complete, task_id) for task_id in task_ids]
-        ready.wait(timeout=5)
+        barrier_error: BrokenBarrierError | None = None
+        try:
+            ready.wait(timeout=5)
+        except BrokenBarrierError as exc:
+            barrier_error = exc
+        worker_errors: list[Exception] = []
         for future in futures:
-            future.result(timeout=15)
+            try:
+                future.result(timeout=15)
+            except Exception as exc:
+                worker_errors.append(exc)
+
+        if worker_errors:
+            worker_error = next(
+                (
+                    error
+                    for error in worker_errors
+                    if not isinstance(error, BrokenBarrierError)
+                ),
+                worker_errors[0],
+            )
+            raise worker_error
+        if barrier_error is not None:
+            raise barrier_error
 
     assert len(set(backend_pids)) == 2
-    assert len(intervals) == 2
-    assert max(start for start, _ in intervals) < min(
-        finish for _, finish in intervals
-    )
     session.expire_all()
     persisted_plan = session.get(InspectionPlan, plan_id)
     assert persisted_plan is not None

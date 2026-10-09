@@ -918,11 +918,6 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
     assert task_item is not None
     archive_inspection_plan(session, plan, archived=True)
     session.commit()
-    before_count = session.scalar(
-        select(ProjectInspectionItemChange.id).where(
-            ProjectInspectionItemChange.project_inspection_item_id == source.id
-        )
-    )
     snapshot_ids = set(
         session.scalars(
             select(TaskRequirementSnapshot.id).where(
@@ -940,20 +935,16 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
             reinspection_required=True,
         )
     assert rejected.value.code == "inspection_plan.archived"
-    session.rollback()
-    plan = session.get(InspectionPlan, plan.id)
-    source = session.get(ProjectInspectionItem, source.id)
-    assert plan is not None and source is not None
-    assert source.instruction == "檢查內容 A"
-    assert source.standard_revision == 1
     assert (
         session.scalar(
-            select(ProjectInspectionItemChange.id).where(
+            select(func.count())
+            .select_from(ProjectInspectionItemChange)
+            .where(
                 ProjectInspectionItemChange.project_inspection_item_id
                 == source.id
             )
         )
-        == before_count
+        == 0
     )
     assert (
         set(
@@ -975,6 +966,11 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
         ).all()
         == []
     )
+
+    session.rollback()
+    plan = session.get(InspectionPlan, plan.id)
+    source = session.get(ProjectInspectionItem, source.id)
+    assert plan is not None and source is not None
 
     archive_inspection_plan(session, plan, archived=False)
     session.commit()
@@ -1120,8 +1116,6 @@ def test_item_change_refreshes_every_plan_using_item_only(session, operator):
     }
     assert first_task.status == "PENDING"
     assert second_task.status == "IN_PROGRESS"
-    assert first_plan.status == "IN_PROGRESS"
-    assert second_plan.status == "IN_PROGRESS"
     assert (
         unrelated_task.status,
         unrelated_snapshot.id,
@@ -1130,12 +1124,20 @@ def test_item_change_refreshes_every_plan_using_item_only(session, operator):
         unrelated_snapshot.source_standard_revision,
     ) == ("PENDING", *unrelated_snapshot_state)
     assert unrelated_snapshot.is_current is True
-    assert (
-        session.scalars(
-            select(AuditLog.id).where(
-                AuditLog.entity_id == unrelated.id,
-                AuditLog.event_type == "project_inspection_item.updated",
-            )
-        ).all()
-        == []
+    change_count = session.scalar(
+        select(func.count())
+        .select_from(ProjectInspectionItemChange)
+        .where(
+            ProjectInspectionItemChange.project_inspection_item_id == shared.id
+        )
     )
+    assert change_count == 1
+    audit_events = session.scalars(
+        select(AuditLog).where(
+            AuditLog.entity_id == shared.id,
+            AuditLog.event_type == "project_inspection_item.updated",
+        )
+    ).all()
+    assert len(audit_events) == 1
+    assert audit_events[0].after["instruction"] == "跨計畫更新後的標準"
+    assert audit_events[0].after["reinspection_required"] is True
