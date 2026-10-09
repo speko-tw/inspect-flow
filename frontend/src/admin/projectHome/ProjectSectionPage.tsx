@@ -12,7 +12,7 @@ import ProjectDetailPage from '../projects/ProjectDetailPage'
 import ProjectSectionShell, {
   type ProjectSection,
 } from './ProjectSectionShell'
-import { getWorkflowSummary } from './api'
+import { useWorkflowSummary } from './WorkflowSummaryProvider'
 import { canViewIndoorSections } from './permissions'
 import ProjectDeniedPage from './ProjectDeniedPage'
 
@@ -33,6 +33,7 @@ export default function ProjectSectionPage({
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
+  const { loadSectionSummary } = useWorkflowSummary()
   const [result, setResult] = useState<{
     projectId: string
     project: { project_code: string; name: string }
@@ -45,7 +46,7 @@ export default function ProjectSectionPage({
 
   useEffect(() => {
     let active = true
-    getWorkflowSummary(projectId)
+    loadSectionSummary(projectId)
       .then((summary) => {
         if (active) {
           setResult({
@@ -75,7 +76,7 @@ export default function ProjectSectionPage({
     return () => {
       active = false
     }
-  }, [projectId])
+  }, [loadSectionSummary, projectId])
 
   const currentResult = result?.projectId === projectId ? result : null
   if (
