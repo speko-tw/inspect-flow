@@ -29,7 +29,7 @@
 - #389（負責人依 #387 指示）：Admin 與範本管理員可管理範本庫、存成範本及跨專案瀏覽；一般專案成員維持 403。此變更採用 `backend/app/auth/access.py` 的共用授權判斷，並由 TPL-AC08 API／契約測試及前端 Admin 控制項測試驗證。
 - TPL-AC07 在本規格只驗收範本端每項次恰好一筆必填照片需求（多送一筆回 422）、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。
-- #482（v0.3.0 走查缺陷修正）：套用頁依登入本體的 `has_template_access`（#484）顯示「存為範本」，並新增 TPL-AC23～TPL-AC24；驗證由 `ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx` 負責。
+- #482（v0.3.0 走查缺陷修正）：套用頁依登入本體的 `has_template_access`（#484）顯示「存為範本」，並新增 TPL-AC23～TPL-AC24；#486 將 TPL-AC24 的格式化函式共用至範本編輯器與現場詳情。驗證由 `inspectionStandard.test.ts`、`TemplatesPage.test.tsx`、`ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx`、`TaskDetail.test.tsx` 負責。
 
 ## 並行分組
 
@@ -69,6 +69,7 @@
 | TPL-AC12 | API 測試：單項與整系統套用遇同專案同名回 409 與衝突名稱；整次無新增項目。 |
 | TPL-AC17 | API 整合測試驗證欄位順序在範本建立／讀取、套用、存回範本及任務快照中一致；migration 對舊資料依 `created_at`、`id` 回填。 |
 | TPL-AC17（#427 第 2 輪） | 含資料的 migration 測試：範本、專案副本、任務快照的測量欄位與數值標準在 upgrade、downgrade、再 upgrade 後筆數與內容保留，且欄位順序回填正確。 |
+| TPL-AC24（#486） | 共用格式化單元測試及範本編輯器、專案查核項目修改、套用預覽、現場任務詳情前端測試：區間、公差、單側、文字回退與未設定顯示一致；編輯器草稿的單側區間顯示未設定；桌面與 360px 登入後點擊截圖。 |
 
 ## 考慮過但沒採用的做法
 

@@ -455,5 +455,5 @@ function pointSummary(point: InspectionPoint, photos: string): string {
       return `${name}${field.unit?.trim() ? `（${field.unit}）` : ''}`
     })
     .join('、')
-  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${formatInspectionStandard(point)}｜照片 ${photos.trim() || '？'} 張`
+  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${formatInspectionStandard(point, { requireCompleteInterval: true })}｜照片 ${photos.trim() || '？'} 張`
 }

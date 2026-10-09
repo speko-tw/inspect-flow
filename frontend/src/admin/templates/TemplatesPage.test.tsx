@@ -903,6 +903,30 @@ describe('TemplatesPage', () => {
     expect(body.inspection_points[0].numeric_standard.unit).toBe('%')
   })
 
+  it('does not present a one-sided editor draft as a saved interval', async () => {
+    templateFetch({ items: [] })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'cm' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '範圍' }))
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '3' },
+    })
+
+    const summary = document.querySelector('.tpl-point-card > summary')!
+    expect(summary).toHaveTextContent('標準未設定')
+    expect(summary).not.toHaveTextContent('≥ 3 cm')
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '5' },
+    })
+    expect(summary).toHaveTextContent('3～5 cm')
+  })
+
   it('preserves units when a new numeric field is not bound', async () => {
     const fetchMock = templateFetch({ items: [], validateWire: true })
     render(<TemplatesPage />)

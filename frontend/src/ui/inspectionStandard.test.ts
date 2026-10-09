@@ -52,6 +52,64 @@ describe('formatInspectionStandard', () => {
     ).toBe(expected)
   })
 
+  it.each([
+    ['<=', '≤ 5 ± 0.5 cm'],
+    ['>=', '≥ 5 ± 0.5 cm'],
+    ['=', '＝ 5 ± 0.5 cm'],
+  ] as const)('preserves tolerance for %s', (condition, expected) => {
+    expect(
+      formatInspectionStandard({
+        ...point,
+        numeric_standard: {
+          ...point.numeric_standard,
+          condition,
+          value: '5',
+          tolerance: '0.5',
+        },
+      }),
+    ).toBe(expected)
+  })
+
+  it('requires both interval bounds only when formatting an editor draft', () => {
+    const draft = {
+      ...point,
+      numeric_standard: { ...point.numeric_standard, upper_bound: null },
+    }
+    expect(formatInspectionStandard(draft)).toBe('≥ 3 cm')
+    expect(
+      formatInspectionStandard(draft, { requireCompleteInterval: true }),
+    ).toBe('標準未設定')
+  })
+
+  it('falls back to a text standard', () => {
+    expect(
+      formatInspectionStandard({
+        ...point,
+        numeric_standard: null,
+        text_standard: { text: '  目視合格  ' },
+      }),
+    ).toBe('目視合格')
+  })
+
+  it('omits an empty bound field unit', () => {
+    expect(
+      formatInspectionStandard({
+        ...point,
+        measurement_fields: [{ id: 'length', unit: '' }],
+      }),
+    ).toBe('3～5')
+  })
+
+  it('omits a null unit', () => {
+    expect(
+      formatInspectionStandard({
+        ...point,
+        numeric_standard: { ...point.numeric_standard, unit: null },
+        measurement_fields: [{ id: 'length', unit: null }],
+      }),
+    ).toBe('3～5')
+  })
+
   it('uses a clear label when the standard is unset', () => {
     expect(
       formatInspectionStandard({ ...point, numeric_standard: null }),
