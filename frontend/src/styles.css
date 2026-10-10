@@ -1821,7 +1821,6 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-error-summary {
-  border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error-text);
   margin: 0;
