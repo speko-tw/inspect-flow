@@ -364,6 +364,7 @@ def create_template_from_project_item(
         db,
         "template_item.created_from_project",
         entity_id=template.id,
+        project_id=project_id,
         before=None,
         after={
             "project_id": project_id,

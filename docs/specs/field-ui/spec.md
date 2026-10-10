@@ -116,4 +116,4 @@
 - FUI-R12、FUI-AC13：依 #429 核可原型，Field 首頁移除範本入口並由內業專案工作台卡片提供套用入口；路徑行為屬規格設計。
 - 修正草稿：補齊來源裁定連結、權限與草稿保護、PWA/iPhone 驗收及現有路由銜接；未改變領域模型。
 - 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)）：FUI-R06 補現場查核另需查核模組「可使用」，過渡期維持現行行為；引用意圖改為 KD-69 — [#538 裁定留言](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)
-- 範圍變更（負責人指示，#105）：FUI-R05、FUI-AC01 增設「近期已完成」區，預設最近 14 天、可展開，清單端點新增 `status=COMPLETED` 與 `completed_within_days`；FUI-R08 宣告現場照片端點回傳 `item_id`、`point_ids` 的例外 — [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)
+- 範圍變更（負責人指示，#105）：FUI-R05、FUI-AC01 增設「近期已完成」區，預設最近 14 天、可展開，清單端點新增 `status=COMPLETED` 與 `completed_within_days`；FUI-R08 宣告現場照片端點回傳 `item_id`、`point_ids` 的例外 — [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)（負責人直接指示：[#105 留言](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6094754996)）
