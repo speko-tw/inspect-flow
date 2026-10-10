@@ -1019,18 +1019,6 @@ td .btn {
   margin-bottom: 0;
 }
 
-/* 欄位錯誤：紅字貼在欄位下方，不套框（有沒有 role 外觀都一樣）。 */
-.tpl-field-error,
-.member-field-error {
-  margin: calc(var(--space-1) * -1) 0 var(--space-2);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--error-text);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
 output {
   display: block;
   margin: var(--space-3) 0;
