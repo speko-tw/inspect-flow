@@ -65,11 +65,12 @@ docstring, the Service layer must not depend on the API layer, so
 docstring for why.
 """
 
+import logging
 import re
 import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -79,7 +80,11 @@ from sqlalchemy.orm import Session
 from app.db import clock
 from app.db.engine import get_session_factory
 from app.models import AuditLog, User
-from app.services.operator import get_current_operator, get_system_operator
+from app.services.operator import (
+    OperatorNotFoundError,
+    get_current_operator,
+    get_system_operator,
+)
 
 # ALG-R07: an event code's format, e.g. ``role.updated`` or
 # ``project_member.roles_changed``. The segment before the dot is
@@ -130,6 +135,50 @@ class AuditEventDefinition:
 
 
 _EVENT_CATALOG: dict[str, AuditEventDefinition] = {}
+_PENDING_AUDIT_EVENTS_KEY = "pending_independent_audit_events"
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _PendingAuditEvent:
+    engine: Any
+    event_type: str
+    entity_id: uuid.UUID
+    before: Mapping[str, Any] | None
+    after: Mapping[str, Any] | None
+    system_event: bool
+    project_id: uuid.UUID | None
+    audit_log_id: uuid.UUID
+    operator_id: uuid.UUID | None
+
+
+def begin_pending_independent_audit_events(
+    session: Session,
+) -> list[_PendingAuditEvent]:
+    """Create a session queue flushed after rollback by the unit of work."""
+    pending: list[_PendingAuditEvent] = []
+    session.info[_PENDING_AUDIT_EVENTS_KEY] = pending
+    return pending
+
+
+def reset_pending_independent_audit_events(session: Session) -> None:
+    session.info.pop(_PENDING_AUDIT_EVENTS_KEY, None)
+
+
+def flush_pending_independent_audit_events(
+    pending: list[_PendingAuditEvent],
+) -> None:
+    """Persist queued security events in independent transactions."""
+    for item in pending:
+        try:
+            _write_independent_audit_event(item)
+        except Exception:
+            # The original rejection must remain the response. A failed
+            # security-event write is logged for operational follow-up.
+            logger.exception(
+                "Failed to write independent audit event %s",
+                item.event_type,
+            )
 
 
 class AuditEventRegistrationError(ValueError):
@@ -308,6 +357,8 @@ def _normalize_value(value: Any) -> Any:
         return str(value)
     if isinstance(value, datetime):
         return _format_datetime(value)
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, set | frozenset | list | tuple):
         return sorted(_normalize_value(item) for item in value)
     return value
@@ -500,6 +551,32 @@ def record_audit_event(
     before: Mapping[str, Any] | None,
     after: Mapping[str, Any] | None,
     system_event: bool = False,
+    project_id: uuid.UUID | None = None,
+) -> AuditLog:
+    """Write one audit event in the caller's transaction (ALG-R05)."""
+    return _record_audit_event(
+        session,
+        event_type,
+        entity_id=entity_id,
+        before=before,
+        after=after,
+        system_event=system_event,
+        project_id=project_id,
+        audit_log_id=None,
+    )
+
+
+def _record_audit_event(
+    session: Session,
+    event_type: str,
+    *,
+    entity_id: uuid.UUID,
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+    system_event: bool = False,
+    project_id: uuid.UUID | None = None,
+    audit_log_id: uuid.UUID | None = None,
+    operator_id: uuid.UUID | None = None,
 ) -> AuditLog:
     """The single entry point for writing an ``AuditLog`` row
     (ALG-R05). ``entity_type`` is not a parameter: it comes from
@@ -555,11 +632,19 @@ def record_audit_event(
         )
 
     operator = (
-        _resolve_system_operator(session)
-        if definition.system_event or system_event
-        else get_current_operator(session)
+        session.get(User, operator_id)
+        if operator_id is not None
+        else (
+            _resolve_system_operator(session)
+            if definition.system_event or system_event
+            else get_current_operator(session)
+        )
     )
-    log = AuditLog(
+    if operator is None:
+        raise OperatorNotFoundError(
+            f"Audit operator {operator_id} does not exist"
+        )
+    log_values = dict(
         created_at=clock.utc_now(),
         created_by=operator.id,
         event_type=event_type,
@@ -568,6 +653,11 @@ def record_audit_event(
         before=normalized_before,
         after=normalized_after,
     )
+    if audit_log_id is not None:
+        log_values["id"] = audit_log_id
+    if project_id is not None and "project_id" in AuditLog.__mapper__.attrs:
+        log_values["project_id"] = project_id
+    log = AuditLog(**log_values)
     session.add(log)
     session.flush()
     return log
@@ -581,6 +671,7 @@ def record_audit_event_in_independent_transaction(
     before: Mapping[str, Any] | None,
     after: Mapping[str, Any] | None,
     system_event: bool = False,
+    project_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """Commit a security event independently of the caller's transaction.
 
@@ -590,15 +681,60 @@ def record_audit_event_in_independent_transaction(
     """
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
-    factory = get_session_factory(engine)
+    pending = session.info.get(_PENDING_AUDIT_EVENTS_KEY)
+    audit_log_id = uuid.uuid4()
+    definition = _EVENT_CATALOG.get(event_type)
+    if definition is None:
+        raise UnregisteredAuditEventError(
+            f"{event_type!r} is not a registered audit event (ALG-R07)"
+        )
+    if pending is not None:
+        operator = (
+            _resolve_system_operator(session)
+            if definition.system_event or system_event
+            else get_current_operator(session)
+        )
+        pending.append(
+            _PendingAuditEvent(
+                engine=engine,
+                event_type=event_type,
+                entity_id=entity_id,
+                before=dict(before) if before is not None else None,
+                after=dict(after) if after is not None else None,
+                system_event=system_event,
+                project_id=project_id,
+                audit_log_id=audit_log_id,
+                operator_id=operator.id,
+            )
+        )
+        return audit_log_id
+    item = _PendingAuditEvent(
+        engine=engine,
+        event_type=event_type,
+        entity_id=entity_id,
+        before=before,
+        after=after,
+        system_event=system_event,
+        project_id=project_id,
+        audit_log_id=audit_log_id,
+        operator_id=None,
+    )
+    return _write_independent_audit_event(item)
+
+
+def _write_independent_audit_event(item: _PendingAuditEvent) -> uuid.UUID:
+    factory = get_session_factory(item.engine)
     with factory.begin() as independent_session:
-        log = record_audit_event(
+        log = _record_audit_event(
             independent_session,
-            event_type,
-            entity_id=entity_id,
-            before=before,
-            after=after,
-            system_event=system_event,
+            item.event_type,
+            entity_id=item.entity_id,
+            before=item.before,
+            after=item.after,
+            system_event=item.system_event,
+            project_id=item.project_id,
+            audit_log_id=item.audit_log_id,
+            operator_id=item.operator_id,
         )
         event_id = log.id
     return event_id
@@ -835,6 +971,7 @@ register_audit_event(
         "planned_start_date",
         "planned_completion_date",
     ),
+    nullable_fields=("planned_start_date", "planned_completion_date"),
 )
 register_audit_event(
     "project_member.assignment_denied",
