@@ -616,12 +616,18 @@ describe('CompaniesPage 停用公司（#507）', () => {
     render(<CompaniesPage />)
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: '停用公司' })
+    expect(screen.getByText('停用公司不會自動停用人員帳號。')).toBeVisible()
 
     fireEvent.click(button)
     fireEvent.click(button)
     gate.resolve()
 
     await screen.findByText('還有 1 位啟用中的人員')
+    expect(
+      screen.getByText(
+        '只有勾選的人員會一併停用；未選取的人員帳號會維持啟用。',
+      ),
+    ).toBeVisible()
     expect(backend.count('GET', /active-users$/)).toBe(1)
   })
 

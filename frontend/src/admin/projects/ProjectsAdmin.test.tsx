@@ -345,6 +345,9 @@ function calls(
 }
 
 function fillProjectForm() {
+  if (!screen.queryByLabelText(/專案代號/)) {
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+  }
   fireEvent.change(screen.getByLabelText(/專案代號/), {
     target: { value: 'DEMO-002' },
   })
@@ -532,6 +535,84 @@ function expectCancelThenDanger(scope: HTMLElement, labels: [string, string]) {
 }
 
 describe('admin projects page', () => {
+  it('opens create and edit as separate form modes', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    expect(screen.queryByLabelText(/專案代號/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
+    expect(screen.getByLabelText(/專案代號/)).toHaveValue('')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    expect(
+      screen.getByRole('heading', { name: '編輯專案「示範工程」' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText(/專案代號/)).toHaveValue('DEMO-001')
+    expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByLabelText(/專案代號/)).not.toBeInTheDocument()
+  })
+
+  it('cancels a new project form through the list transition', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+
+    expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(screen.queryByRole('heading', { name: '新增專案' })).toBeNull()
+    expect(screen.queryByRole('region', { name: '未儲存變更' })).toBeNull()
+  })
+
+  it('keeps or discards a dirty edit when cancelling to the list', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '未儲存的名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的名稱')
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    expect(screen.queryByLabelText(/工程名稱/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('示範工程')
+  })
+
+  it('shows refreshed project data after cancelling an unchanged edit', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByLabelText(/工程名稱/)).not.toBeInTheDocument()
+
+    await fetchMock('/api/v1/projects/project-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ name: '伺服器更新後的名稱' }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await screen.findAllByText('伺服器更新後的名稱')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('伺服器更新後的名稱')
+  })
+
   it('lists projects and links from the admin navigation', async () => {
     projectFetch({
       projects: [
@@ -745,7 +826,7 @@ describe('admin projects page', () => {
       name: '改名後的工程',
       planned_start_date: null,
     })
-    expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible()
   })
 
   it('opens the card edit entry with the existing unsaved guard and saves', async () => {
@@ -773,6 +854,8 @@ describe('admin projects page', () => {
     await waitFor(() => expect(document.activeElement).toBe(heading))
     expect(scroll.scrollIntoView).toHaveBeenCalledTimes(2)
     expect(scroll.scrollIntoView).toHaveBeenLastCalledWith({ block: 'start' })
+    const projectName = screen.getByLabelText(/工程名稱/)
+    fireEvent.focus(projectName)
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '尚未儲存的名稱' },
     })
@@ -780,6 +863,7 @@ describe('admin projects page', () => {
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('尚未儲存的名稱')
+    expect(projectName).toHaveFocus()
 
     fireEvent.click(edit)
     prompt = screen.getByRole('region', { name: '未儲存變更' })
@@ -832,12 +916,20 @@ describe('admin projects page', () => {
     await screen.findAllByText('示範工程')
 
     fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: ' 示範工程 ' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: '新增專案' })).toBeVisible(),
+      expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible(),
     )
     expect(calls(fetchMock, 'PATCH', /projects/)).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('region', { name: '未儲存變更' })).toBeNull()
+    expect(screen.queryByLabelText(/專案代號/)).not.toBeInTheDocument()
   })
 
   it('keeps a dirty create form when edit is requested, then discards on choice', async () => {
@@ -853,6 +945,7 @@ describe('admin projects page', () => {
     })
     renderAt('/admin/projects')
     await screen.findAllByText('示範工程')
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的新工程' },
     })
@@ -886,6 +979,7 @@ describe('admin projects page', () => {
     })
     renderAt('/admin/projects')
     await screen.findAllByText('第二示範工程')
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
     fireEvent.change(screen.getByLabelText(/工程名稱/), {
       target: { value: '未儲存的新工程' },
     })
