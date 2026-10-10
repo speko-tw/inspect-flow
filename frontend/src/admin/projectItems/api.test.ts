@@ -191,16 +191,40 @@ describe('projectItemApi', () => {
               field_type: 'number',
               unit: 'mm',
             },
+            {
+              id: '00000000-0000-4000-8000-000000000012',
+              name: '寬度',
+              field_type: 'number',
+              unit: 'cm',
+            },
           ],
         },
       ],
     })
     const init = fetchMock.mock.calls[0][1] as RequestInit
-    expect(JSON.parse(init.body as string)).toEqual(boundUnitFixture.request)
+    const expectedRequest = structuredClone(boundUnitFixture.request)
+    const expectedFields = expectedRequest.inspection_points[0]
+      .measurement_fields as Array<{
+      client_id: string
+      name: string
+      field_type: 'number'
+      unit: string | null
+    }>
+    expectedFields.push({
+      client_id: '00000000-0000-4000-8000-000000000012',
+      name: '寬度',
+      field_type: 'number',
+      unit: 'cm',
+    })
+    expect(JSON.parse(init.body as string)).toEqual(expectedRequest)
     expect(
       JSON.parse(init.body as string).inspection_points[0]
         .measurement_fields[0].unit,
     ).toBeNull()
+    expect(
+      JSON.parse(init.body as string).inspection_points[0]
+        .measurement_fields[1].unit,
+    ).toBe('cm')
   })
 
   it('maps the shared real project PATCH error envelope', async () => {

@@ -504,15 +504,7 @@ export default function TemplatesPage() {
     index: number,
     changes: Partial<InspectionPoint>,
   ): void {
-    setServerFieldErrors((current) => {
-      const prefix = `point:${index}:`
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([key]) => !key.startsWith(prefix)),
-      )
-      return Object.keys(next).length === Object.keys(current).length
-        ? current
-        : next
-    })
+    clearPointServerErrors(index)
     setItemDraft((current) =>
       current
         ? {
@@ -536,6 +528,18 @@ export default function TemplatesPage() {
         : current,
     )
     setError('')
+  }
+
+  function clearPointServerErrors(index: number): void {
+    setServerFieldErrors((current) => {
+      const prefix = `point:${index}:`
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([key]) => !key.startsWith(prefix)),
+      )
+      return Object.keys(next).length === Object.keys(current).length
+        ? current
+        : next
+    })
   }
 
   function updateField(
@@ -576,15 +580,6 @@ export default function TemplatesPage() {
 
   function addPoint(): void {
     if (!itemDraft) return
-    setServerFieldErrors((current) =>
-      Object.keys(current).some((key) => key.startsWith('point:'))
-        ? Object.fromEntries(
-            Object.entries(current).filter(
-              ([key]) => !key.startsWith('point:'),
-            ),
-          )
-        : current,
-    )
     updateDraft({
       inspection_points: [
         ...itemDraft.inspection_points,
@@ -1011,6 +1006,7 @@ export default function TemplatesPage() {
         setConfirmField={setConfirmField}
         setGuard={setGuard}
         setPhotoDraft={setPhotoDraft}
+        clearPointServerErrors={clearPointServerErrors}
         systemId={systemId}
         updateDraft={updateDraft}
         updateField={updateField}

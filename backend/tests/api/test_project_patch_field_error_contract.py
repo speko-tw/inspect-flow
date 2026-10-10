@@ -24,11 +24,16 @@ def test_project_patch_bound_unit_matches_frontend_contract(
 
     valid = world["admin"].patch(url, json=fixture["request"])
     assert valid.status_code == 200, valid.text
+    valid_body = valid.json()
+    valid_point = valid_body["inspection_points"][0]
+    assert valid_point["numeric_standard"]["unit"] == "mm"
+    assert valid_point["measurement_fields"][0]["unit"] == "mm"
 
     invalid_request = json.loads(json.dumps(fixture["request"]))
     invalid_request["inspection_points"][0]["measurement_fields"][0][
         "unit"
-    ] = "mm"
+    ] = "sentinel-forbidden-bound-unit"
     invalid = world["admin"].patch(url, json=invalid_request)
     assert invalid.status_code == 422, invalid.text
     assert invalid.json() == fixture["error_response"]
+    assert "sentinel-forbidden-bound-unit" not in invalid.text

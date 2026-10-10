@@ -1063,7 +1063,7 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
 def test_template_write_field_error_matches_frontend_contract_fixture(clients):
     manager = clients["manager"]
     _, system_id = _tree(manager)
-    body = _template(system_id, "Template contract sentinel")
+    body = _template(system_id, "Template contract")
     body["inspection_points"][1]["sequence"] = 1
 
     response = manager.post("/api/v1/templates", json=body)
@@ -1075,7 +1075,26 @@ def test_template_write_field_error_matches_frontend_contract_fixture(clients):
     expected = json.loads(fixture_path.read_text())
     assert response.status_code == 422
     assert response.json() == expected
-    assert "Template contract sentinel" not in response.text
+
+
+def test_template_write_field_errors_do_not_echo_invalid_values(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id)
+    body["inspection_points"][0]["measurement_fields"][0][
+        "unit"
+    ] = "sentinel-forbidden-bound-unit"
+
+    response = manager.post("/api/v1/templates", json=body)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["fields"] == [
+        {
+            "path": "/inspection_points/0/measurement_fields/0/unit",
+            "code": "template.bound_field_unit_forbidden",
+        }
+    ]
+    assert "sentinel-forbidden-bound-unit" not in response.text
 
 
 def test_system_nested_read_swap_and_clear(clients, db_session):

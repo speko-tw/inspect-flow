@@ -90,10 +90,12 @@ def _template_violations(
             )
             if field["client_id"] == bound_id and numeric is not None:
                 if field["unit"] is not None:
+                    code = (
+                        FieldErrorCode.TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN
+                    )
                     violations.append(
                         TemplateFieldError(
-                            f"{field_path}/unit",
-                            FieldErrorCode.TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN.value,
+                            f"{field_path}/unit", code.value
                         )
                     )
             elif field["field_type"] == "number" and not field["unit"]:
@@ -255,32 +257,28 @@ def _add_points(
             unit = field["unit"]
             if field["client_id"] == bound_client_id:
                 if unit is not None:
+                    code = (
+                        FieldErrorCode.TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN
+                    )
                     raise InvalidTemplateError(
                         [
                             TemplateFieldError(
-                                "",
-                                FieldErrorCode.TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN.value,
+                                "", code.value
                             )
                         ]
                     )
                 assert numeric is not None
                 unit = numeric["unit"]
             elif field["field_type"] == "number" and not unit:
+                code = FieldErrorCode.TEMPLATE_NUMERIC_UNIT_REQUIRED.value
                 raise InvalidTemplateError(
-                    [
-                        TemplateFieldError(
-                            "",
-                            FieldErrorCode.TEMPLATE_NUMERIC_UNIT_REQUIRED.value,
-                        )
-                    ]
+                    [TemplateFieldError("", code)]
                 )
             elif field["field_type"] == "text" and unit is not None:
+                code = FieldErrorCode.TEMPLATE_TEXT_UNIT_FORBIDDEN
                 raise InvalidTemplateError(
                     [
-                        TemplateFieldError(
-                            "",
-                            FieldErrorCode.TEMPLATE_TEXT_UNIT_FORBIDDEN.value,
-                        )
+                        TemplateFieldError("", code.value)
                     ]
                 )
             db.add(

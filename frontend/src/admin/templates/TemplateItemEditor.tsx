@@ -42,6 +42,7 @@ type Props = {
   setPhotoDraft: (
     updater: (current: Record<string, string>) => Record<string, string>,
   ) => void
+  clearPointServerErrors: (index: number) => void
   confirmField: string
   setConfirmField: (value: string) => void
 }
@@ -69,6 +70,7 @@ export function TemplateItemEditor({
   updateNumeric,
   photoDraft,
   setPhotoDraft,
+  clearPointServerErrors,
   confirmField,
   setConfirmField,
 }: Props) {
@@ -103,9 +105,11 @@ export function TemplateItemEditor({
     updateNumeric(index, changes)
   }
   const updatePhotoDraftAndPreserveErrors = (
+    pointIndex: number,
     updater: (current: Record<string, string>) => Record<string, string>,
   ) => {
     setPhotoDraft(updater)
+    clearPointServerErrors(pointIndex)
   }
   const focusPointTitle = (index: number) => {
     window.setTimeout(() => {
@@ -407,7 +411,7 @@ export function TemplateItemEditor({
                     inputMode="numeric"
                     min="1"
                     onChange={(event) => {
-                      updatePhotoDraftAndPreserveErrors((current) => ({
+                      updatePhotoDraftAndPreserveErrors(index, (current) => ({
                         ...current,
                         [String(index)]: event.target.value,
                       }))

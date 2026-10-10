@@ -144,6 +144,7 @@ function templateFetch(
     categoryError?: number
     writeError?: number
     writeFields?: Array<{ path: string; code: string }>
+    photoCountError?: boolean
     writeConflict?: boolean
     deleteSuccess?: boolean
     validateWire?: boolean
@@ -271,6 +272,29 @@ function templateFetch(
         })
       }
       if (path === '/api/v1/templates' && method === 'POST') {
+        const photoCount = (
+          body as {
+            inspection_points?: Array<{
+              evidence_requirements?: Array<{ min_count?: number }>
+            }>
+          }
+        )?.inspection_points?.[0]?.evidence_requirements?.[0]?.min_count
+        if (options.photoCountError && photoCount! > 1000) {
+          return Response.json(
+            {
+              error: {
+                code: 'request.validation_failed',
+                fields: [
+                  {
+                    path: '/inspection_points/0/evidence_requirements/0/min_count',
+                    code: 'field.out_of_range',
+                  },
+                ],
+              },
+            },
+            { status: 422 },
+          )
+        }
         if (options.writeError) {
           return Response.json(
             {
@@ -1461,6 +1485,42 @@ describe('TemplatesPage', () => {
     })
     await waitFor(() =>
       expect(screen.queryAllByText('請填寫此欄位。')).toHaveLength(0),
+    )
+  })
+
+  it('clears photo count server errors after the count is corrected', async () => {
+    templateFetch({ items: [], photoCountError: true })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'mm' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText(/照片至少幾張/), {
+      target: { value: '1001' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('數值超出允許範圍。')).toHaveLength(2)
+    expect(screen.getByLabelText(/照片至少幾張/)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+
+    fireEvent.change(screen.getByLabelText(/照片至少幾張/), {
+      target: { value: '2' },
+    })
+    await waitFor(() =>
+      expect(screen.queryAllByText('數值超出允許範圍。')).toHaveLength(0),
+    )
+    expect(screen.getByLabelText(/照片至少幾張/)).toHaveAttribute(
+      'aria-invalid',
+      'false',
     )
   })
 

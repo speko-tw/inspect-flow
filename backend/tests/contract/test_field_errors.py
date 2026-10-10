@@ -1,6 +1,7 @@
 """Contracts for optional field-level validation errors (API-R10–R18)."""
 
 import logging
+import re
 
 import pytest
 from fastapi import APIRouter, FastAPI, Header, Query
@@ -142,6 +143,11 @@ def test_field_error_description_map_is_generated_from_its_enum() -> None:
     }
 
 
+def test_all_field_error_codes_follow_the_dot_namespace() -> None:
+    pattern = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+    assert all(pattern.fullmatch(member.value) for member in FieldErrorCode)
+
+
 def test_template_codes_and_temporary_enum_are_generated_and_too_short_maps():
     class TemporaryFieldErrorCode(DescribedStrEnum):
         TEMPORARY = ("temporary.example", "A temporary test code.")
@@ -200,7 +206,7 @@ def test_query_path_and_header_errors_do_not_produce_fields() -> None:
         payload: Body,
         item_id: int = ApiPath(gt=0),
         search: str = Query(min_length=2),
-        token: str = Header(min_length=2),
+        x_token: str = Header(min_length=2),
     ) -> dict:
         return {"ok": True}
 
