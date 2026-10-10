@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { httpErrorMessage } from '../../http'
-import { listAllPages, listUsers, type User } from '../api'
+import { listAllPages, type User } from '../api'
 import type { Project } from '../projects/api'
 import {
   listAuditLogs,
@@ -54,7 +54,10 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     let active = true
-    void Promise.all([listAllPages<Project>('/projects'), listUsers()]).then(
+    void Promise.all([
+      listAllPages<Project>('/projects'),
+      listAllPages<User>('/users'),
+    ]).then(
       ([projectRows, userRows]) => {
         if (active) {
           setProjects(projectRows)

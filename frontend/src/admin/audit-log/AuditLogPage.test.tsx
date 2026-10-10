@@ -31,10 +31,17 @@ function mockFetch(
         })
       }
       if (url.pathname.endsWith('/users')) {
-        return Response.json({
-          items: [{ id: actorId, username: 'anna', name_zh: '安娜' }],
-          next_cursor: null,
-        })
+        return Response.json(
+          url.searchParams.get('cursor')
+            ? {
+                items: [{ id: 'user-2', username: 'ben', name_zh: '班' }],
+                next_cursor: null,
+              }
+            : {
+                items: [{ id: actorId, username: 'anna', name_zh: '安娜' }],
+                next_cursor: 'users-page-2',
+              },
+        )
       }
       if (url.pathname.endsWith('/audit-logs')) {
         if (init?.method && init.method !== 'GET') {
@@ -58,8 +65,17 @@ describe('稽核查詢頁', () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
     expect(await screen.findByText('project_zone.created')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('option', { name: '班 (ben)' }),
+    ).toBeInTheDocument()
     expect(screen.getAllByText('甲專案 (P-1)')).toHaveLength(2)
     expect(screen.getAllByText('安娜 (anna)')).toHaveLength(2)
+    const userRequests = fetcher.mock.calls
+      .map(([input]) => new URL(String(input), 'http://localhost'))
+      .filter((url) => url.pathname.endsWith('/users'))
+    expect(userRequests).toHaveLength(2)
+    expect(userRequests[0].searchParams.get('limit')).toBe('100')
+    expect(userRequests[1].searchParams.get('cursor')).toBe('users-page-2')
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: projectId },
     })
