@@ -377,7 +377,7 @@ def change_creator_role(session: Session, *, actor: User, role: Role) -> bool:
     _require_admin(actor)
     codes = frozenset(permission.code for permission in role.permission_codes)
     if not _CREATOR_ROLE_CODES <= codes:
-        raise InvalidModulePermissionError(
+        raise CreatorRolePermissionsError(
             "Creator role must retain project.update, "
             "project_member.manage, and project.read"
         )

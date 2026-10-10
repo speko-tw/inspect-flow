@@ -137,6 +137,72 @@ def test_primary_permission_blocks_use_revoke_for_every_source(
     )
 
 
+def test_template_manage_revoke_preserves_use_for_two_step_revoke(
+    session, operator
+):
+    user = create_root_user_with_company(session, "TMPL-IMPLIED")
+
+    assert service.grant_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="template.manage",
+    )
+    rows = list(
+        session.scalars(
+            select(UserModulePermission).where(
+                UserModulePermission.user_id == user.id
+            )
+        )
+    )
+    assert {row.permission_code: row.source for row in rows} == {
+        "template.manage": "manual",
+        "template.use": "implied",
+    }
+
+    with pytest.raises(service.ImpliedPermissionError):
+        service.revoke_module_permission(
+            session,
+            actor=operator,
+            user=user,
+            permission_code="template.use",
+        )
+
+    assert service.revoke_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="template.manage",
+    )
+    rows = list(
+        session.scalars(
+            select(UserModulePermission).where(
+                UserModulePermission.user_id == user.id
+            )
+        )
+    )
+    assert [(row.permission_code, row.source) for row in rows] == [
+        ("template.use", "implied")
+    ]
+
+    assert service.revoke_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="template.use",
+    )
+    assert (
+        list(
+            session.scalars(
+                select(UserModulePermission).where(
+                    UserModulePermission.user_id == user.id
+                )
+            )
+        )
+        == []
+    )
+
+
 def test_delegate_can_manage_other_user_but_not_self(session, operator):
     actor = create_root_user_with_company(session, "DEL001")
     target = create_root_user_with_company(session, "DEL002")
@@ -517,6 +583,22 @@ def test_creator_role_setting_changes_only_to_qualified_role(
     assert not service.change_creator_role(
         session, actor=operator, role=replacement
     )
+
+
+def test_creator_role_change_uses_required_permissions_error(
+    session, operator
+):
+    role = Role(
+        name="Incomplete creator",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project.read")],
+    )
+    session.add(role)
+    session.flush()
+
+    with pytest.raises(service.CreatorRolePermissionsError):
+        service.change_creator_role(session, actor=operator, role=role)
 
 
 def test_grant_and_revoke_events_preserve_permission_source(

@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
     AuditLog,
+    CreatorRoleSetting,
     Project,
     ProjectMember,
     ProjectMemberRole,
@@ -79,6 +80,32 @@ def test_every_role_endpoint_requires_admin(
         db_session.scalar(select(func.count()).select_from(AuditLog)),
     )
     assert after == before
+
+
+def test_editing_creator_role_missing_required_code_returns_422(
+    role_admin_client, db_session, registered_permission_codes
+):
+    client, _admin = role_admin_client
+    created = client.post(
+        "/api/v1/roles",
+        json=_role_payload("Creator role", ["project_member.manage"]),
+    )
+    assert created.status_code == 201, created.text
+    role_id = UUID(created.json()["id"])
+    role = db_session.get(Role, role_id)
+    assert role is not None
+    db_session.add(CreatorRoleSetting(role_id=role.id))
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/roles/{role_id}",
+        json={"permission_codes": ["project_member.manage", "report.read"]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == (
+        "role.creator_role_requires_permissions"
+    )
 
 
 def test_role_api_permission_catalog_and_crud_with_audit(
