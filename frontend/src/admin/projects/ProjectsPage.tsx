@@ -8,7 +8,7 @@ import {
 import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import { Form, FormError, FormSubmitButton } from '../../ui/Form'
 import { managementErrorMessage } from '../api'
 import {
   createProject,
@@ -70,8 +70,6 @@ export default function ProjectsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
-  const searchGuard = useSubmitGuard()
-  const saveGuard = useSubmitGuard()
   const [editing, setEditing] = useState<Project | null>(null)
   const [editFocusRequest, setEditFocusRequest] = useState(0)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -145,7 +143,6 @@ export default function ProjectsPage() {
 
   async function searchProjects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!searchGuard.enter()) return
     const search = query.trim()
     const id = ++requestId.current
     setProjects([])
@@ -164,7 +161,6 @@ export default function ProjectsPage() {
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
-      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -235,7 +231,6 @@ export default function ProjectsPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!saveGuard.enter()) return
     setError('')
     setNotice('')
     const input = toInput(form)
@@ -280,7 +275,6 @@ export default function ProjectsPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
-      saveGuard.leave()
       setSaving(false)
     }
   }
@@ -309,7 +303,7 @@ export default function ProjectsPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <form onKeyDown={blockImeEnter} onSubmit={searchProjects}>
+      <Form onSubmit={searchProjects}>
         <label>
           搜尋專案
           <input
@@ -317,11 +311,9 @@ export default function ProjectsPage() {
             value={query}
           />
         </label>
-        <button disabled={loading} type="submit">
-          搜尋
-        </button>
-      </form>
-      {listError && <p role="alert">{listError}</p>}
+        <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
+      </Form>
+      <FormError>{listError}</FormError>
       {projects.length > 0 && (
         <section aria-labelledby="project-workspace-heading">
           <h2 id="project-workspace-heading">專案工作台</h2>
@@ -450,7 +442,7 @@ export default function ProjectsPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <form onKeyDown={blockImeEnter} onSubmit={save}>
+      <Form onSubmit={save}>
         <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
           {editing ? `編輯專案「${editing.name}」` : '新增專案'}
         </h2>
@@ -534,15 +526,15 @@ export default function ProjectsPage() {
             取消
           </button>
         )}
-        <button className="btn-primary" disabled={saving} type="submit">
+        <FormSubmitButton className="btn-primary" disabled={saving}>
           {editing ? '儲存專案' : '新增專案'}
-        </button>
+        </FormSubmitButton>
         {error && (
           <p ref={errorRef} role="alert" tabIndex={-1}>
             {error}
           </p>
         )}
-      </form>
+      </Form>
     </section>
   )
 }
