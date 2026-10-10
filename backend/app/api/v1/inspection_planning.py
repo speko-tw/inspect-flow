@@ -174,6 +174,20 @@ def _planning_error_response(
     return code, status_code
 
 
+def _is_project_member(
+    db: Session, *, user_id: UUID, project_id: UUID
+) -> bool:
+    return (
+        db.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id,
+            )
+        )
+        is not None
+    )
+
+
 def _resource_permission(resource_type: str, permission: str):
     def check(
         request: Request,
@@ -186,12 +200,16 @@ def _resource_permission(resource_type: str, permission: str):
         try:
             parsed_id = UUID(str(resource_id))
         except ValueError as exc:
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
         resource = db.get(model, parsed_id)
         if resource is None:
             raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         if user.is_admin:
             return user
+        if not _is_project_member(
+            db, user_id=user.id, project_id=resource.project_id
+        ):
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         permissions = effective_permissions(
             db, user_id=user.id, project_id=resource.project_id
         )
@@ -222,6 +240,10 @@ def _task_read_permission():
             }
             & permissions
         ):
+            if not _is_project_member(
+                db, user_id=user.id, project_id=task.project_id
+            ):
+                raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         if (
             not user.is_admin
@@ -632,7 +654,13 @@ def add_zone(project_id: UUID, body: NameBody, db: Session = _db_dependency):
 
 @router.patch(
     "/projects/{project_id}/zones/{zone_id}",
-    dependencies=[Depends(require_project_permission("project_zone.manage"))],
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_zone.manage", uuid_path_params=("zone_id",)
+            )
+        )
+    ],
 )
 def patch_zone(
     project_id: UUID,
@@ -663,7 +691,13 @@ def _zone_response(zone: ProjectZone, *, include_project: bool = False):
 @router.delete(
     "/projects/{project_id}/zones/{zone_id}",
     status_code=204,
-    dependencies=[Depends(require_project_permission("project_zone.manage"))],
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_zone.manage", uuid_path_params=("zone_id",)
+            )
+        )
+    ],
 )
 def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
     zone = db.scalar(
@@ -783,7 +817,9 @@ def project_tasks(
     dependencies=[
         Depends(
             require_project_permission(
-                "project_inspection_item.edit", param_name="project_id"
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
             )
         )
     ],
@@ -1158,7 +1194,10 @@ def get_task(task_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-plans/{plan_id}:archive",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.archive")),
+    ],
 )
 def archive(plan_id: UUID, db: Session = _db_dependency):
     plan = _one_plan(db, plan_id)
@@ -1169,7 +1208,10 @@ def archive(plan_id: UUID, db: Session = _db_dependency):
 
 @router.post(
     "/inspection-plans/{plan_id}:unarchive",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("plan", "inspection_plan.unarchive")),
+    ],
 )
 def unarchive(plan_id: UUID, db: Session = _db_dependency):
     plan = _one_plan(db, plan_id)
@@ -1188,7 +1230,9 @@ def _project_exists(db: Session, project_id: UUID) -> None:
     dependencies=[
         Depends(
             require_project_permission(
-                "project_inspection_item.edit", param_name="project_id"
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
             )
         )
     ],
