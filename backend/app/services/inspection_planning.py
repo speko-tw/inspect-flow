@@ -14,7 +14,9 @@ from app.models import (
     Project,
     ProjectInspectionItemChange,
     ProjectMember,
+    ProjectMemberRole,
     ProjectZone,
+    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     User,
@@ -539,34 +541,49 @@ def field_inspection_task_filters(
     status: str | None = None,
 ) -> tuple[ColumnElement[bool], ...]:
     """Build filters for dispatched Tasks visible to the Field caller."""
-    if is_admin:
-        permitted_ids = set(session.scalars(select(Project.id)).all())
-    else:
-        member_project_ids = set(
-            session.scalars(
-                select(ProjectMember.project_id).where(
-                    ProjectMember.user_id == user_id
-                )
-            ).all()
+    permissioned_projects = (
+        select(ProjectMember.project_id)
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
         )
-        permitted_ids = {
-            candidate_id
-            for candidate_id in member_project_ids
-            if "inspection_task.inspect"
-            in effective_permissions(
-                session, user_id=user_id, project_id=candidate_id
-            )
-        }
-    if project_id is not None:
-        if not is_admin and project_id not in permitted_ids:
+        .join(
+            RolePermission,
+            RolePermission.role_id == ProjectMemberRole.role_id,
+        )
+        .where(
+            ProjectMember.user_id == user_id,
+            RolePermission.code == "inspection_task.inspect",
+        )
+        .distinct()
+    )
+    if not is_admin:
+        has_permission = permissioned_projects.exists()
+        if project_id is not None:
+            has_permission = permissioned_projects.where(
+                ProjectMember.project_id == project_id
+            ).exists()
+        if not session.scalar(select(has_permission)):
             raise PlanningError("authorization.forbidden")
-        permitted_ids.intersection_update({project_id})
-    if not permitted_ids and not is_admin:
-        raise PlanningError("authorization.forbidden")
+
+    if project_id is not None:
+        if is_admin:
+            project_filter = InspectionTask.project_id == project_id
+        else:
+            project_filter = InspectionTask.project_id.in_(
+                permissioned_projects.where(
+                    ProjectMember.project_id == project_id
+                )
+            )
+    elif not is_admin:
+        project_filter = InspectionTask.project_id.in_(permissioned_projects)
+    else:
+        project_filter = None
     filters: list[ColumnElement[bool]] = [
-        InspectionTask.project_id.in_(permitted_ids),
         InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
     ]
+    if project_filter is not None:
+        filters.append(project_filter)
     if status is not None:
         filters.append(InspectionTask.status == status)
     if assigned_to_me:
