@@ -1,10 +1,10 @@
-// 依後端實際回應形狀建立的測試資料（RG-M22）。形狀以
-// `auth/fixtures/current-user-contract.json` 為準，後端
-// `tests/api/test_access_summary.py` 用同一份檔案驗證真實回應，
-// 前端的 `contractFixtures.test.ts` 驗證這裡的資料沒有多欄或缺欄。
+// 依後端實際回應形狀建立的測試資料（RG-M22）。共用契約位於
+// `auth/fixtures/` 與 `admin/audit-log/fixtures/`；後端 API 測試
+// 驗證真實回應，這裡的測試驗證模擬資料沒有多欄或缺欄。
 
 import type { CurrentUser } from '../auth/api'
 import type { MyProject } from '../admin/projects/api'
+import type { AuditLogEntry, AuditLogPage } from '../admin/audit-log/api'
 
 export function currentUserFixture(
   overrides: Partial<CurrentUser> = {},
@@ -41,6 +41,33 @@ export function myProjectFixture(
     planned_completion_date: null,
     role_names: [],
     has_office_access: true,
+    ...overrides,
+  }
+}
+
+export function auditLogEntryFixture(
+  overrides: Partial<AuditLogEntry> = {},
+): AuditLogEntry {
+  return {
+    id: '00000000-0000-0000-0000-000000000002',
+    created_at: '2026-10-10T08:30:00Z',
+    created_by: '00000000-0000-0000-0000-000000000001',
+    project_id: '00000000-0000-0000-0000-000000000412',
+    event_type: 'project_zone.created',
+    entity_type: 'project_zone',
+    entity_id: '00000000-0000-0000-0000-000000000100',
+    before: null,
+    after: { name: '一樓' },
+    ...overrides,
+  }
+}
+
+export function auditLogPageFixture(
+  overrides: Partial<AuditLogPage> = {},
+): AuditLogPage {
+  return {
+    items: [auditLogEntryFixture()],
+    next_cursor: null,
     ...overrides,
   }
 }

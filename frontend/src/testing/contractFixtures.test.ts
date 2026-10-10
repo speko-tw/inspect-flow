@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import contract from '../auth/fixtures/current-user-contract.json'
+import auditContract from '../admin/audit-log/fixtures/audit-log-contract.json'
 import { landingPath } from '../auth/landing'
-import { currentUserFixture, myProjectFixture } from './contractFixtures'
+import {
+  auditLogEntryFixture,
+  auditLogPageFixture,
+  currentUserFixture,
+  myProjectFixture,
+} from './contractFixtures'
 
 describe('contract fixtures (RG-M22)', () => {
   it('current user fixture has exactly the backend keys', () => {
@@ -14,6 +20,15 @@ describe('contract fixtures (RG-M22)', () => {
   it('my project fixture has exactly the backend keys', () => {
     expect(Object.keys(myProjectFixture()).sort()).toEqual(
       contract.my_project_keys,
+    )
+  })
+
+  it('audit log fixtures have exactly the backend keys', () => {
+    expect(Object.keys(auditLogEntryFixture()).sort()).toEqual(
+      auditContract.audit_entry_keys,
+    )
+    expect(Object.keys(auditLogPageFixture()).sort()).toEqual(
+      auditContract.audit_page_keys,
     )
   })
 })

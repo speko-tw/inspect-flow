@@ -16,10 +16,12 @@
 | T4 | ID 格式契約測試與共用型別：一個回傳 UUID 字串 ID 的最小 Pydantic model／輔助函式，供其他規格之後引用 | `backend/app/api/schemas.py`（新增）、`backend/tests/contract/test_id_format.py`（新增） | — | API-AC08 | #32 |
 | T5 | 時間格式與 cursor 分頁契約測試：共用的 UTC ISO-8601 秒精度時間序列化輔助函式（依 [KD-14](../../intents/03-decisions-and-stack.md#kd-14)）；一個不透明的 cursor 編碼／解碼輔助函式，排序鍵為「時間＋UUID」（依 [KD-13](../../intents/03-decisions-and-stack.md#kd-13)）；測試模組內建立測試路由驗證兩者可行，時間格式測試先以 regex 檢查原始字串形狀（不得含小數秒），再以實際解析器（非只驗字形）確認 UTC 秒精度，並列兩個無效範例反例（含小數秒與日期時間本身無效各一），分頁測試以受控初始資料取得第一頁後、在翻頁過程插入新資料驗證 cursor 綁定「時間＋UUID」而非位移。這兩個輔助函式與測試路由只證明機制可行，不代表任何清單端點的正式頁大小或回應 envelope 形狀——那些留給第一個實作清單端點的功能規格決定 | `backend/app/api/time_format.py`（新增）、`backend/app/api/pagination.py`（新增）、`backend/tests/contract/test_time_format.py`（新增）、`backend/tests/contract/test_pagination_conventions.py`（新增） | — | API-AC11、API-AC12 | #33 |
 | T6 | 未攔截 API 例外診斷（#41）：產生 request ID 並同時回傳 `X-Request-ID`、記錄不含 exception 文字、source line、locals 或 request 資料的 traceback frame metadata；以機密 sentinel 測試 RG-M17 | `backend/app/api/errors.py`、`backend/tests/contract/test_error_envelope.py`、`docs/specs/api-conventions/plan.md` | — | #41 診斷範圍 | #41 |
+| T7 | 欄位層級錯誤（`error.fields`，[#432](https://github.com/speko-tw/inspect-flow/issues/432)）的後端共用機制：與 `ErrorCode` 分開的欄位錯誤碼列舉 `FieldErrorCode`（`field.*` 最小集合，並由同一個生成函式產生對照表）；Pydantic `loc` 轉 JSON Pointer（去掉開頭的 `body`、`~`／`/` 轉義、動態鍵停在容器、非 `body` 來源不產生）；`APIError` 可選的 `fields`（只允許 422、最多 100 筆、順序固定、只含 `path`／`code`）；`RequestValidationError` handler 對所有端點可定位的 JSON 本文驗證錯誤填入 `fields`（依〈介面〉的 Pydantic 對照，`loc` 中非請求模型定義的片段停在上一層並回 `field.invalid`），無法解析的本文與不支援的 `Content-Type` 不回；契約測試與 sentinel 測試；全域 handler 會讓既有端點的 422 多出 `fields`，實作時盤點並調整整份 422 本文逐字相等的既有斷言（已知如 `test_roles_api`、`test_projects`、`test_request_limits`、`test_template_library` 等，以盤點結果為準），改為只斷言 `error.code` 或容許 `fields` | `backend/app/api/errors.py`、`backend/tests/contract/test_error_envelope.py`（既有測試不改）、`backend/tests/contract/test_field_errors.py`（新增）、既有 API 測試中斷言整份 422 本文相等者（實作時盤點，只改斷言）、`docs/specs/api-conventions/plan.md` | T1 | API-AC13～API-AC18 | #432 |
+| T8 | 前端共用的欄位錯誤處理：`HttpError` 新增可選的 `fields` 屬性（形狀錯誤時忽略），由 `request()` 建立錯誤後以屬性指定，不改建構子簽章，因此 `ManagementApiError`（`admin/api.ts`）、`FieldApiError`（`field/api.ts`）、`ProjectTemplatesApiError`（`projectTemplatesApi.ts`）等子類別不需修改，在 `http.test.ts` 補測試確認三個子類別實例帶得到 `fields`；共用的對應工具把 `path` 轉成表單欄位識別、回傳可聚焦的第一個錯誤與對不到欄位的錯誤；各表單沿用既有的 `aria-invalid`、錯誤摘要與聚焦慣例；沒有 `fields` 時維持一般提示並保留草稿。本任務只做共用部分，不改個別畫面 | `frontend/src/http.ts`、`frontend/src/http.test.ts`、`frontend/src/ui/fieldErrors.ts`（新增）、`frontend/src/ui/fieldErrors.test.ts`（新增） | T7（契約定案後；單元測試可先以固定回應撰寫，但完成前須對真實後端驗證） | API-AC19 | #432 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收。
 - 每個任務至少對應一條 AC；每條 AC 至少被一個任務涵蓋。
-- T1～T5 完成、且規格所有需求都有對應驗證後，依 [docs/specs/README.md](../README.md#狀態) 由最後一個任務的 PR 把本規格改為「已完成」並更新索引。
+- T1～T5 完成、且規格所有需求都有對應驗證後，依 [docs/specs/README.md](../README.md#狀態) 由最後一個任務的 PR 把本規格改為「已完成」並更新索引。#432 新增 API-R10～API-R15 後狀態改為已凍結，T7、T8 完成後再改回已完成；範本 API 與範本管理畫面採用 `error.fields` 的任務在 [`template-system` 計畫](../template-system/plan.md) 的 T11、T12。
 - 依 plan 開 task issue 時才建立上表的 issue 編號；本 PR 只寫文件，不開 task issue。
 
 ## 並行分組
@@ -29,6 +31,8 @@
 - 第 1 波：T1、T4、T5（`backend/app/api/errors.py`／`backend/app/main.py`、`backend/app/api/schemas.py`、`backend/app/api/time_format.py`／`backend/app/api/pagination.py` 互不重疊；三者彼此不依賴）。
 - 第 2 波：T2（依賴 T1 的 `register_error_handlers`；改 `backend/tests/contract/test_route_conventions.py`，另因計畫調整同步本檔的 T2 列與 API-AC01 驗證方式，與其他任務的程式檔不重疊）。
 - 第 3 波：T3（依賴 T1；新增 `backend/pyproject.toml`／`backend/uv.lock` 依賴，與其他任務同波容易撞共用檔案，故獨立一波）。
+
+- 第 4 波：T7（後端共用機制，只動 `backend/app/api/errors.py` 與新增測試）；T8（前端共用，只動 `frontend/src/http.ts` 與新增檔案）與 T7 檔案不重疊，可同波，T8 完成前需對真實後端驗證。T7、T8 的最後合併者在同一個 PR 把本規格改回已完成。
 
 碰到[共用檔案](../README.md#parallel)的地方：
 
@@ -41,6 +45,10 @@
 - **`error.code` 命名法與跨資源共用錯誤的 namespace 分類已依 [KD-15](../../intents/03-decisions-and-stack.md#kd-15) 定案**：dot-namespace 為基本命名法；不特定於單一資源的錯誤原因依性質分屬 `request.*`（請求本身的問題）、`resource.*`（不特定於某資源的通用資源錯誤）、`server.*`（伺服器端錯誤）三個共用 namespace。T1 的三個碼 `request.validation_failed`、`resource.not_found`、`server.internal_error` 分別對應這三類，是 api-conventions 共用錯誤處理器實際使用、非佔位的正式碼；個別資源自己的碼（例如 `task.not_found`）由各功能規格依同一套命名法自行決定，不在本計畫範圍。
 - **`python-multipart` 是新依賴**：T3 要先確認版本與授權，並在 PR 說明寫清楚新增理由；與其他同時新增後端依賴的 PR 衝突時，依共用檔案規則先合併者優先。
 - **第一個真正的 multipart 上傳端點還沒實作**：API-AC06 目前只證明慣例可行，不是端到端驗證；日後 `field-evidence` 等規格加入真實端點時，**應**在自己的 `plan.md` 補一份對照驗證，本計畫不代管。
+- **`error.fields` 洩漏原始輸入值**：框架的驗證錯誤預設帶 `input`、`msg`、`ctx`；T7 只取 `loc` 與錯誤類型，以測試用 sentinel 驗證回應與日誌都不含請求值（RG-M17）。
+- **與其他規格的 T2 同改 `errors.py`**：`field-evidence` 與 `completion-validation` 的計畫 T2 也要擴充 `backend/app/api/errors.py`（錯誤碼與 `error.details`），先合併者優先，後合併者 rebase，不手動合併衝突。
+- **欄位路徑與前端表單欄位識別對不上**：JSON Pointer 的陣列索引是送出當下的順序；前端若在送出後重排項次，路徑會指錯欄位。T8 的對應工具以送出時的順序為準，對不到時併入一般錯誤，不推測。
+- **只做可定位的 422**：資料庫約束等錯誤仍只有 `error.code`；不要為了讓畫面好看而把它們硬對應到欄位（API-R10）。
 - **分頁與時間格式的測試路由不代表正式清單端點的頁大小或回應 envelope 形狀**：[KD-13](../../intents/03-decisions-and-stack.md#kd-13)／[KD-14](../../intents/03-decisions-and-stack.md#kd-14) 只定案分頁機制與時間格式本身；T5 的測試路由只用受控初始資料＋翻頁中插入新資料證明 cursor 排序與時間序列化可行，實際頁大小、上限與清單回應形狀留給第一個實作清單端點的功能規格決定。
 
 ## 驗證（Proof）
@@ -59,6 +67,13 @@
 | API-AC10 | `backend/tests/contract/test_error_envelope.py`（或獨立檔案）：對正式 `ErrorCode` 與一個臨時擴充／替換成員的測試專用列舉，分別呼叫生成函式 `build_error_code_descriptions(enum_cls)`，斷言兩次輸出的鍵集合各自與對應列舉成員一一對應（新增成員即出現、移除即消失）；另掃描 repo 確認不存在獨立維護、與生成函式輸出不同步的手寫對照表檔 |
 | API-AC11 | `backend/tests/contract/test_time_format.py`：呼叫測試路由，先以 regex `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$` 斷言回應時間欄位原始字串形狀（不得含小數秒），再以 `datetime.fromisoformat`（或等效 RFC 3339 解析器）解析該字串，斷言解析成功、`tzinfo` 為 UTC（offset 0）、`microsecond == 0`、字串以 `Z` 結尾；並對兩個無效範例（`2026-99-99T99:99:99Z` 與含小數秒的 `2026-09-26T08:30:00.000Z`）分別斷言被判定為不合法（regex 不符，或解析失敗，或未通過上述任一斷言） |
 | API-AC12 | `backend/tests/contract/test_pagination_conventions.py`：建立多筆同一秒的測試記錄並取得第一頁，接著插入一筆排序鍵（時間＋UUID）落在已讀範圍內的新資料，再依 cursor 翻完剩餘頁；斷言原始資料每筆恰好出現一次（不重複也不遺漏），並斷言 cursor 解碼後綁定的是「時間＋UUID」而非位移（例如變動已讀範圍之前的資料筆數不影響下一頁起點） |
+| API-AC13 | `backend/tests/contract/test_field_errors.py`：測試路由接受巢狀 JSON；斷言 `error.fields` 的 `path`、`code`（含必填、過長、數值範圍）、順序為請求本文中的出現順序且固定、超過 100 筆截斷、本文層級錯誤為空字串路徑，`error.code` 不變 |
+| API-AC14 | `test_field_errors.py`：無法解析的 JSON、不支援的 `Content-Type`、共用錯誤型別拋出的 422、404、409、500 都沒有 `fields` 鍵；可定位與不可定位混合時只列可定位者 |
+| API-AC15 | `test_field_errors.py`：路徑轉換單元測試（轉義、空路徑、動態鍵、多送未定義的鍵與 union 分支停在容器並回 `field.invalid`、非 `body` 來源不產生） |
+| API-AC16 | `test_field_errors.py`：`fields[].code` 的 regex、欄位錯誤碼對照表由列舉生成（含臨時擴充列舉）、repo 內無手寫對照表、框架錯誤類型（缺漏、過長、過短、數值上下限）依對照得到 `field.*`、未知類型回 `field.invalid` |
+| API-AC17 | `test_field_errors.py`：sentinel 測試（含多送的未定義鍵名），檢查原始回應文字與日誌不含請求值，每筆只有 `path`、`code` 兩個鍵 |
+| API-AC18 | `test_error_envelope.py` 與盤點後調整的既有 API 測試：沒有 `fields` 的 422 逐字相同，帶 `fields` 的 422 除 `fields` 以外的鍵不變；以 `details` 拋出共用錯誤型別的路由，`details` 與先前相同；既有端點的 JSON 本文驗證錯誤由共用 handler 填入 `fields` |
+| API-AC19 | `frontend/src/http.test.ts`、`frontend/src/ui/fieldErrors.test.ts`：帶 `fields`、沒有 `fields`、形狀錯誤、路徑對不到欄位四種回應；對真實後端驗證 T7 的回應被前端正確解析 |
 
 ## 考慮過但沒採用的做法
 
