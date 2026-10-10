@@ -569,6 +569,50 @@ describe('admin projects page', () => {
     expect(screen.queryByRole('region', { name: '未儲存變更' })).toBeNull()
   })
 
+  it('keeps or discards a dirty edit when cancelling to the list', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '未儲存的名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    let prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的名稱')
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    prompt = screen.getByRole('region', { name: '未儲存變更' })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄' }))
+    expect(screen.queryByLabelText(/工程名稱/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('示範工程')
+  })
+
+  it('shows refreshed project data after cancelling an unchanged edit', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByLabelText(/工程名稱/)).not.toBeInTheDocument()
+
+    await fetchMock('/api/v1/projects/project-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ name: '伺服器更新後的名稱' }),
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await screen.findAllByText('伺服器更新後的名稱')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('伺服器更新後的名稱')
+  })
+
   it('lists projects and links from the admin navigation', async () => {
     projectFetch({
       projects: [
