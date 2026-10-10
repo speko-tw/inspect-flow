@@ -56,9 +56,24 @@ class PermissionCode(DescribedStrEnum):
         "project_member.manage",
         "管理專案成員與其角色",
     )
+    PROJECT_UPDATE = ("project.update", "調整專案")
+    PROJECT_READ = ("project.read", "檢視專案")
+    PROJECT_USE = ("project.use", "使用專案模組")
+    PROJECT_CREATE = ("project.create", "開設專案")
+    ALL_PROJECT_PROGRESS_READ = (
+        "all_project_progress.read",
+        "檢視所有專案進度",
+    )
+    INSPECTION_USE = ("inspection.use", "使用查核模組")
+    TEMPLATE_USE = ("template.use", "使用範本模組")
+    TEMPLATE_MANAGE = ("template.manage", "管理範本庫")
     PROJECT_INSPECTION_ITEM_EDIT = (
         "project_inspection_item.edit",
         "編輯專案查核項目",
+    )
+    PROJECT_INSPECTION_ITEM_READ = (
+        "project_inspection_item.read",
+        "讀取專案查核項目",
     )
     PROJECT_ZONE_READ = ("project_zone.read", "讀取專案分區")
     PROJECT_ZONE_MANAGE = ("project_zone.manage", "管理專案分區")
@@ -87,6 +102,59 @@ class PermissionCode(DescribedStrEnum):
 # ``tests/conftest.py``'s ``registered_permission_codes`` fixture
 # reassigns this, and only for the duration of one test.
 _active_registry: type[DescribedStrEnum] = PermissionCode
+
+MODULES = frozenset({"project", "inspection", "template"})
+
+_MODULE_CODES = frozenset(
+    {
+        "project.use",
+        "project.create",
+        "all_project_progress.read",
+        "inspection.use",
+        "template.use",
+        "template.manage",
+    }
+)
+_EXTERNAL_ALLOWED_CODES = frozenset(
+    {
+        "project.read",
+        "project_inspection_item.read",
+        "project_zone.read",
+        "inspection_plan.read",
+        "inspection_task.read",
+        "template.use",
+    }
+)
+
+
+def permission_code_scope(code: str) -> str | None:
+    """Return the registered code scope: ``module`` or ``project``."""
+    if not is_permission_code_registered(code):
+        return None
+    return "module" if code in _MODULE_CODES else "project"
+
+
+def permission_code_module(code: str) -> str | None:
+    """Return the module owning a registered code."""
+    if permission_code_scope(code) is None:
+        return None
+    module = code.split(".", 1)[0]
+    if module == "project_inspection_item" or module in {
+        "project_zone",
+        "inspection_plan",
+        "inspection_task",
+    }:
+        return "inspection"
+    if module == "all_project_progress":
+        return "project"
+    return module
+
+
+def permission_code_external_allowed(code: str) -> bool:
+    return (
+        code in _EXTERNAL_ALLOWED_CODES
+        and is_permission_code_registered(code)
+    )
 
 
 def is_permission_code_registered(code: str) -> bool:

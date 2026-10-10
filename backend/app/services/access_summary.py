@@ -27,19 +27,16 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    ProjectMember,
-    ProjectMemberRole,
-    RolePermission,
-    SystemRoleAssignment,
-    SystemRoleCode,
-    User,
-)
+from app.models import SystemRoleAssignment, SystemRoleCode, User
+from app.services.permissions import calculate_effective_access
 
 FIELD_PERMISSION_CODES: frozenset[str] = frozenset({"inspection_task.inspect"})
 OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     {
         "project_member.manage",
+        "project.update",
+        "project.read",
+        "project_inspection_item.read",
         "project_inspection_item.edit",
         "project_zone.read",
         "project_zone.manage",
@@ -72,23 +69,9 @@ def permission_codes_by_project(
     """Effective permission codes of ``user_id`` in every project the
     user is a member of, from a single query.
     """
-    with session.no_autoflush:
-        rows = session.execute(
-            select(ProjectMember.project_id, RolePermission.code)
-            .join(
-                ProjectMemberRole,
-                ProjectMemberRole.project_member_id == ProjectMember.id,
-            )
-            .join(
-                RolePermission,
-                RolePermission.role_id == ProjectMemberRole.role_id,
-            )
-            .where(ProjectMember.user_id == user_id)
-        ).all()
-    grouped: dict[uuid.UUID, set[str]] = {}
-    for project_id, code in rows:
-        grouped.setdefault(project_id, set()).add(code)
-    return {key: frozenset(value) for key, value in grouped.items()}
+    return calculate_effective_access(
+        session, user_id=user_id
+    ).project_permissions_by_project
 
 
 def summarize_access(session: Session, user: User) -> AccessSummary:
@@ -99,12 +82,11 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
     templates to apply them to a project needs no summary flag; it
     lives inside the project pages.
     """
-    if user.is_admin:
+    access = calculate_effective_access(session, user_id=user.id)
+    if access.is_admin:
         return AccessSummary(True, True, True)
-    codes: set[str] = set()
-    for project_codes in permission_codes_by_project(
-        session, user_id=user.id
-    ).values():
+    codes: set[str] = set(access.module_permissions)
+    for project_codes in access.project_permissions_by_project.values():
         codes |= project_codes
     with session.no_autoflush:
         is_template_admin = (
