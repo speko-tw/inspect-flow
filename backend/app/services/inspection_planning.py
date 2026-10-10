@@ -402,26 +402,33 @@ def _validate_assignee(
         raise PlanningError("inspection_task.invalid_assignee")
 
 
-def _validate_project_items(
+def _lock_project_items_for_snapshot(
     session: Session,
     *,
     project_id: uuid.UUID,
     item_ids: list[uuid.UUID],
 ) -> list[uuid.UUID]:
+    """Lock snapshot sources before taking the Plan lock.
+
+    Item edits lock the source item before its Plans. Keep the same lock
+    order here to serialize snapshot copying without a Plan/item deadlock.
+    """
     from app.models import ProjectInspectionItem
 
     unique_ids = list(dict.fromkeys(item_ids))
     if not unique_ids:
         raise PlanningError("inspection_task.items_required")
-    found_ids = set(
-        session.scalars(
-            select(ProjectInspectionItem.id).where(
-                ProjectInspectionItem.project_id == project_id,
-                ProjectInspectionItem.id.in_(unique_ids),
-            )
-        ).all()
-    )
-    if found_ids != set(unique_ids):
+    sources = session.scalars(
+        select(ProjectInspectionItem)
+        .where(
+            ProjectInspectionItem.project_id == project_id,
+            ProjectInspectionItem.id.in_(unique_ids),
+        )
+        .order_by(ProjectInspectionItem.id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    ).all()
+    if {source.id for source in sources} != set(unique_ids):
         raise PlanningError("inspection_task.invalid_project_item")
     return unique_ids
 
@@ -438,14 +445,14 @@ def create_inspection_task(
     operator_id = _require_permission(
         session, plan.project_id, "inspection_task.create"
     )
+    project_inspection_item_ids = _lock_project_items_for_snapshot(
+        session,
+        project_id=plan.project_id,
+        item_ids=project_inspection_item_ids,
+    )
     locked_plan = _lock_plan(session, plan.id)
     if locked_plan is None or locked_plan.is_archived:
         raise PlanningError("inspection_plan.archived")
-    project_inspection_item_ids = _validate_project_items(
-        session,
-        project_id=locked_plan.project_id,
-        item_ids=project_inspection_item_ids,
-    )
     _validate_assignee(
         session,
         project_id=locked_plan.project_id,

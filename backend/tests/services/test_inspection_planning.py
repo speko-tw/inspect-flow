@@ -371,6 +371,48 @@ def test_task_lock_queries_follow_plan_then_task_order(
     assert locked_entities == [InspectionPlan, InspectionTask, InspectionPlan]
 
 
+def test_task_creation_locks_source_item_before_plan(
+    session, operator, monkeypatch
+):
+    project = _project(session, operator, "CREATELOCKORDER")
+    _grant(session, operator, project, *_planning_codes())
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="建立任務鎖定順序"
+    )
+    source = _source_item(session, operator, project)
+    original_scalars = session.scalars
+    original_scalar = session.scalar
+    locked_entities = []
+
+    def capture_lock(statement):
+        if statement._for_update_arg is not None:
+            locked_entities.append(
+                (
+                    statement.column_descriptions[0]["entity"],
+                    statement._for_update_arg.read,
+                )
+            )
+
+    def capture_scalars(statement, *args, **kwargs):
+        capture_lock(statement)
+        return original_scalars(statement, *args, **kwargs)
+
+    def capture_scalar(statement, *args, **kwargs):
+        capture_lock(statement)
+        return original_scalar(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "scalars", capture_scalars)
+    monkeypatch.setattr(session, "scalar", capture_scalar)
+    create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[source.id]
+    )
+
+    assert locked_entities[:2] == [
+        (ProjectInspectionItem, True),
+        (InspectionPlan, False),
+    ]
+
+
 def test_snapshot_child_rows_copy_source_and_remain_immutable(
     session, operator
 ):
