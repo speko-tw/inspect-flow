@@ -139,13 +139,23 @@ export function NumericStandardEditor({
                 </select>
               </>
             ) : numberOptions.length === 1 ? (
-              <p className="tpl-bound-note">
+              <p
+                className="tpl-bound-note"
+                data-error-key={`${key}:binding`}
+                tabIndex={-1}
+              >
                 使用：
                 <strong>{numberOptions[0].name || '尚未命名'}</strong>（
                 {numberOptions[0].unit || '單位未填'}）
               </p>
             ) : (
-              <p className="tpl-hint">請先在「實測欄位」新增數字欄位。</p>
+              <p
+                className="tpl-hint"
+                data-error-key={`${key}:binding`}
+                tabIndex={-1}
+              >
+                請先在「實測欄位」新增數字欄位。
+              </p>
             )}
             {inputError(`${key}:binding`) && (
               <p className="tpl-field-error">{inputError(`${key}:binding`)}</p>

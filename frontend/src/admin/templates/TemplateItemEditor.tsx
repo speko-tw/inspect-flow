@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { blockImeEnter } from '../../ui/submitGuard'
 import { formatInspectionStandard } from '../../ui/inspectionStandard'
@@ -8,10 +8,12 @@ import type { InspectionPoint, MeasurementField, TemplateItem } from './api'
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 type Mode = 'create-item' | 'edit-item'
+type FocusRequest = { id: number; key: string }
 
 type Props = {
   itemDraft: TemplateItem | null
   errors: Record<string, string>
+  focusRequest: FocusRequest | null
   requestError: string
   dirty: boolean
   setGuard: (selection: Selection | null) => void
@@ -47,6 +49,7 @@ type Props = {
 export function TemplateItemEditor({
   itemDraft,
   errors,
+  focusRequest,
   requestError,
   dirty,
   setGuard,
@@ -71,6 +74,8 @@ export function TemplateItemEditor({
 }: Props) {
   const [openPoint, setOpenPoint] = useState<number | null>(0)
   const [errorOpen, setErrorOpen] = useState<Set<number>>(new Set())
+  const completedFocusRequest = useRef(0)
+  const scheduledFocusRequest = useRef(0)
   const inputError = (key: string) => errors[key]
   const errorPoints = new Set(
     Object.keys(errors)
@@ -78,7 +83,6 @@ export function TemplateItemEditor({
       .map((key) => Number(key.split(':')[1]))
       .filter((index) => Number.isInteger(index)),
   )
-  if (!itemDraft) return null
   const updatePointAndPreserveErrors = (
     index: number,
     changes: Partial<InspectionPoint>,
@@ -116,6 +120,36 @@ export function TemplateItemEditor({
       `[data-error-key="${fieldKey}"]`,
     )
   }
+  useEffect(() => {
+    if (!focusRequest || focusRequest.id <= completedFocusRequest.current) {
+      return
+    }
+    const field = fieldForError(focusRequest.key)
+    if (!field) {
+      completedFocusRequest.current = focusRequest.id
+      return
+    }
+    const card = field.closest('details')
+    if (card && !card.open) {
+      const pointIndex = /^point:(\d+):/.exec(focusRequest.key)?.[1]
+      if (
+        pointIndex !== undefined &&
+        scheduledFocusRequest.current !== focusRequest.id
+      ) {
+        const index = Number(pointIndex)
+        scheduledFocusRequest.current = focusRequest.id
+        window.setTimeout(() => {
+          setErrorOpen((current) => new Set([...current, index]))
+        }, 0)
+        return
+      }
+      if (pointIndex !== undefined) return
+    }
+    field.scrollIntoView?.({ block: 'center' })
+    field.focus()
+    completedFocusRequest.current = focusRequest.id
+  }, [errorOpen, focusRequest])
+  if (!itemDraft) return null
   const alert =
     Object.keys(errors).length > 0
       ? `尚有 ${Object.keys(errors).length} 處要修正`
@@ -301,6 +335,10 @@ export function TemplateItemEditor({
                 )}
                 <label htmlFor={`point-${index}-instruction`}>說明</label>
                 <textarea
+                  aria-invalid={Boolean(
+                    inputError(`point:${index}:instruction`),
+                  )}
+                  data-error-key={`point:${index}:instruction`}
                   id={`point-${index}-instruction`}
                   onChange={(event) =>
                     updatePointAndPreserveErrors(index, {
@@ -309,6 +347,11 @@ export function TemplateItemEditor({
                   }
                   value={point.instruction}
                 />
+                {inputError(`point:${index}:instruction`) && (
+                  <p className="tpl-field-error">
+                    {inputError(`point:${index}:instruction`)}
+                  </p>
+                )}
                 <div className="tpl-actions">
                   <button
                     onClick={() => {
