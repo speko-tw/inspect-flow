@@ -2,17 +2,25 @@
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 
+from app.db.unit_of_work import unit_of_work
 from app.models import (
+    AuditLog,
     CreatorRoleSetting,
     PermissionBundle,
     PermissionBundlePermission,
     Role,
     RolePermission,
+    User,
     UserModuleDelegation,
     UserModulePermission,
 )
 from app.services import module_permissions as service
+from app.services.audit import (
+    record_audit_event,
+    record_audit_event_in_independent_transaction,
+)
 from tests.db.conftest import create_root_user_with_company
 
 
@@ -321,4 +329,102 @@ def test_creator_role_setting_changes_only_to_qualified_role(
     assert setting.role_id == replacement.id
     assert not service.change_creator_role(
         session, actor=operator, role=replacement
+    )
+
+
+def test_grant_and_revoke_events_preserve_permission_source(
+    session, operator, monkeypatch
+):
+    monkeypatch.setattr(
+        service.audit_service, "record_audit_event", record_audit_event
+    )
+    user = create_root_user_with_company(session, "AUD-MOD-SOURCE")
+    session.commit()
+
+    assert service.grant_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="project.use",
+    )
+    assert service.revoke_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="project.use",
+    )
+    session.commit()
+
+    events = list(
+        session.scalars(
+            select(AuditLog)
+            .where(AuditLog.entity_id == user.id)
+            .order_by(AuditLog.created_at, AuditLog.id)
+        )
+    )
+    assert [event.event_type for event in events] == [
+        "module_permission.granted",
+        "module_permission.revoked",
+    ]
+    assert events[0].after == {
+        "user_id": str(user.id),
+        "permission_code": "project.use",
+        "module": "project",
+        "source": "manual",
+    }
+    assert events[1].before == {
+        "user_id": str(user.id),
+        "permission_code": "project.use",
+        "module": "project",
+        "source": "manual",
+    }
+
+
+def test_denied_grant_event_survives_unit_of_work_rollback(
+    session, operator, monkeypatch
+):
+    monkeypatch.setattr(
+        service.audit_service,
+        "record_audit_event_in_independent_transaction",
+        record_audit_event_in_independent_transaction,
+    )
+    actor = create_root_user_with_company(session, "AUD-MOD-ACTOR")
+    target = create_root_user_with_company(session, "AUD-MOD-TARGET")
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with pytest.raises(service.ModulePermissionDeniedError):
+        with unit_of_work(factory) as transaction:
+            actor_in_transaction = transaction.get(User, actor.id)
+            target_in_transaction = transaction.get(User, target.id)
+            assert actor_in_transaction is not None
+            assert target_in_transaction is not None
+            service.grant_module_permission(
+                transaction,
+                actor=actor_in_transaction,
+                user=target_in_transaction,
+                permission_code="project.use",
+            )
+
+    event = session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "module_permission.grant_denied",
+            AuditLog.entity_id == target.id,
+        )
+    )
+    assert event is not None
+    assert event.created_by == operator.id
+    assert event.project_id is None
+    assert event.after == {
+        "user_id": str(target.id),
+        "permission_codes": ["project.use"],
+        "reason": "outside_delegation_scope",
+    }
+    assert (
+        session.scalar(
+            select(UserModulePermission.id).where(
+                UserModulePermission.user_id == target.id
+            )
+        )
+        is None
     )

@@ -42,6 +42,7 @@ from collections.abc import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.db.base import uuid7
 from app.models import (
     ProjectMember,
     ProjectMemberRole,
@@ -139,13 +140,8 @@ def _record_assignment_denial(
     role_ids: frozenset[uuid.UUID],
     reason: str,
 ) -> None:
-    writer = getattr(
-        audit_service, "record_audit_event_in_independent_transaction", None
-    )
-    if writer is None:
-        return
     try:
-        writer(
+        audit_service.record_audit_event_in_independent_transaction(
             session,
             "project_member.assignment_denied",
             entity_id=member.id,
@@ -263,10 +259,17 @@ def add_project_member(
     user = session.get(User, user_id)
     if user is None:
         raise ValueError(f"User {user_id} does not exist")
+    member_id = uuid7()
     validate_role_assignment(
-        session, actor=operator, user=user, role_ids=role_id_set
+        session,
+        actor=operator,
+        user=user,
+        project_id=project_id,
+        project_member_id=member_id,
+        role_ids=role_id_set,
     )
     member = ProjectMember(
+        id=member_id,
         project_id=project_id,
         user_id=user_id,
         created_by=operator.id,
@@ -311,6 +314,8 @@ def assign_role(
         session,
         actor=operator,
         user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
         role_ids=before_role_ids | {role_id},
     )
     _guard_last_manager(
@@ -382,6 +387,8 @@ def unassign_role(
         session,
         actor=operator,
         user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
         role_ids=before_role_ids - {role_id},
     )
     assignment = next(
@@ -424,7 +431,12 @@ def set_project_member_roles(
     if user is None:
         raise ValueError(f"User {member.user_id} does not exist")
     validate_role_assignment(
-        session, actor=operator, user=user, role_ids=after_role_ids
+        session,
+        actor=operator,
+        user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
+        role_ids=after_role_ids,
     )
     _guard_last_manager(
         session,
@@ -480,7 +492,12 @@ def remove_project_member(session: Session, member: ProjectMember) -> None:
     if user is None:
         raise ValueError(f"User {member.user_id} does not exist")
     validate_role_assignment(
-        session, actor=get_current_operator(session), user=user, role_ids=()
+        session,
+        actor=get_current_operator(session),
+        user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
+        role_ids=(),
     )
     _guard_last_manager(session, member=member, remaining_role_ids=frozenset())
     before = {

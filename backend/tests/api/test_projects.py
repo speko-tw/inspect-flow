@@ -183,6 +183,59 @@ def _same_company(db_session: Session, project_api: ProjectApiContext):
     return company
 
 
+def test_assignment_denial_audit_survives_request_rollback(
+    project_api, db_session
+):
+    actor = project_api["actor"]
+    target = project_api["target"]
+    project = project_api["project"]
+    _same_company(db_session, project_api)
+    restricted_role = create_role(
+        db_session,
+        name="不可指派角色",
+        permission_codes=["project.read"],
+    )
+    restricted_role.is_assignable = False
+    db_session.commit()
+
+    response = project_api["actor_client"].post(
+        f"/api/v1/projects/{project.id}/members",
+        json={
+            "user_id": str(target.id),
+            "role_ids": [str(restricted_role.id)],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == (
+        ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
+    )
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project.id,
+                ProjectMember.user_id == target.id,
+            )
+        )
+        is None
+    )
+    event = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "project_member.assignment_denied",
+            AuditLog.project_id == project.id,
+        )
+    )
+    assert event is not None
+    assert event.created_by == actor.id
+    assert event.after == {
+        "project_id": str(project.id),
+        "user_id": str(target.id),
+        "role_ids": [str(restricted_role.id)],
+        "reason": ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value,
+    }
+
+
 def test_project_crud_duplicate_code_warning_and_dates(project_api):
     client = project_api["admin_client"]
     first = client.post(

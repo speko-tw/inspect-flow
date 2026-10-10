@@ -28,6 +28,10 @@ from app.services import audit as audit_service
 
 logger = logging.getLogger(__name__)
 
+# Keep these audit reasons aligned with the corresponding API error codes.
+_ROLE_NOT_ASSIGNABLE_REASON = "project.role_not_assignable"
+_EXTERNAL_ROLE_NOT_ALLOWED_REASON = "project.external_role_not_allowed"
+
 
 class ModulePermissionError(ValueError):
     """Base class for rejected module permission operations."""
@@ -90,6 +94,8 @@ def validate_role_assignment(
     *,
     actor: User,
     user: User,
+    project_id: uuid.UUID,
+    project_member_id: uuid.UUID,
     role_ids: Iterable[uuid.UUID],
 ) -> None:
     """Enforce assignability and external-user role constraints."""
@@ -101,8 +107,24 @@ def validate_role_assignment(
         raise InvalidModulePermissionError("Role does not exist")
     for role in roles:
         if not actor.is_admin and not role.is_assignable:
+            _record_denied_role_assignment(
+                session,
+                project_id=project_id,
+                project_member_id=project_member_id,
+                user=user,
+                role_ids=desired_role_ids,
+                reason=_ROLE_NOT_ASSIGNABLE_REASON,
+            )
             raise RoleNotAssignableError("Role is not approved for assignment")
         if user.is_external_collaborator and not role.is_external_allowed:
+            _record_denied_role_assignment(
+                session,
+                project_id=project_id,
+                project_member_id=project_member_id,
+                user=user,
+                role_ids=desired_role_ids,
+                reason=_EXTERNAL_ROLE_NOT_ALLOWED_REASON,
+            )
             raise ExternalRoleAssignmentError(
                 "Role is not allowed for external collaborators"
             )
@@ -110,9 +132,44 @@ def validate_role_assignment(
             not permission_code_external_allowed(permission.code)
             for permission in role.permission_codes
         ):
+            _record_denied_role_assignment(
+                session,
+                project_id=project_id,
+                project_member_id=project_member_id,
+                user=user,
+                role_ids=desired_role_ids,
+                reason=_EXTERNAL_ROLE_NOT_ALLOWED_REASON,
+            )
             raise ExternalRoleAssignmentError(
                 "Role contains a permission unavailable to external users"
             )
+
+
+def _record_denied_role_assignment(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    project_member_id: uuid.UUID,
+    user: User,
+    role_ids: set[uuid.UUID],
+    reason: str,
+) -> None:
+    try:
+        audit_service.record_audit_event_in_independent_transaction(
+            session,
+            "project_member.assignment_denied",
+            entity_id=project_member_id,
+            project_id=project_id,
+            before=None,
+            after={
+                "project_id": project_id,
+                "user_id": user.id,
+                "role_ids": sorted(role_ids),
+                "reason": reason,
+            },
+        )
+    except Exception:
+        logger.exception("Could not write independent role denial")
 
 
 def validate_role_external_configuration(
@@ -776,13 +833,6 @@ def _record_denied_grant(
     bundle_id: uuid.UUID | None,
     reason: str,
 ) -> None:
-    writer = getattr(
-        audit_service, "record_audit_event_in_independent_transaction", None
-    )
-    if writer is None:
-        raise RuntimeError(
-            "Independent audit writer depends on audit-log T6 (#573)"
-        )
     after: dict[str, object] = {
         "user_id": user.id,
         "permission_codes": sorted(set(permission_codes)),
@@ -791,7 +841,7 @@ def _record_denied_grant(
     if bundle_id is not None:
         after["bundle_id"] = bundle_id
     try:
-        writer(
+        audit_service.record_audit_event_in_independent_transaction(
             session,
             "module_permission.grant_denied",
             entity_id=user.id,
