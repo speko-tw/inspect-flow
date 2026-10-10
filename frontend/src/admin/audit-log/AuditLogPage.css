@@ -22,6 +22,16 @@
   min-width: 0;
 }
 
+.audit-filter-error {
+  color: var(--error-text);
+}
+
+.audit-project-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+}
+
 .audit-results {
   display: grid;
   gap: 1rem;
@@ -31,7 +41,7 @@
 
 .audit-entry {
   padding: 1rem;
-  border: 1px solid var(--border-color, #b8c2cd);
+  border: 1px solid var(--border);
   border-radius: 0.5rem;
 }
 

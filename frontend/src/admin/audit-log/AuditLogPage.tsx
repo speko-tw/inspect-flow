@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { httpErrorMessage } from '../../http'
 import { listAllPages, listUsers, type User } from '../api'
@@ -19,12 +19,16 @@ const emptyFilters: AuditLogFilters = {
   event_type: '',
 }
 
-function displayJson(value: unknown): string {
-  return value == null ? '無' : JSON.stringify(value, null, 2)
+const eventTypePattern = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/
+
+interface FilterErrors {
+  from?: string
+  to?: string
+  eventType?: string
 }
 
-function utcValue(local: string): string {
-  return local ? new Date(local).toISOString() : ''
+function displayJson(value: unknown): string {
+  return value == null ? '無' : JSON.stringify(value, null, 2)
 }
 
 export default function AuditLogPage() {
@@ -36,6 +40,10 @@ export default function AuditLogPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [eventType, setEventType] = useState('')
+  const [filterErrors, setFilterErrors] = useState<FilterErrors>({})
+  const fromRef = useRef<HTMLInputElement>(null)
+  const toRef = useRef<HTMLInputElement>(null)
+  const eventTypeRef = useRef<HTMLInputElement>(null)
   const [filters, setFilters] = useState<AuditLogFilters>(emptyFilters)
   const [cursor, setCursor] = useState<string | null>(null)
   const [history, setHistory] = useState<Array<string | null>>([])
@@ -85,8 +93,27 @@ export default function AuditLogPage() {
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (from && to && new Date(from) > new Date(to)) {
-      setError('起始時間不得晚於結束時間。')
+    const fromDate = from ? new Date(from) : null
+    const toDate = to ? new Date(to) : null
+    const nextErrors: FilterErrors = {}
+    if (fromDate && Number.isNaN(fromDate.getTime())) {
+      nextErrors.from = '請輸入有效的起始時間。'
+    }
+    if (toDate && Number.isNaN(toDate.getTime())) {
+      nextErrors.to = '請輸入有效的結束時間。'
+    } else if (fromDate && toDate && fromDate > toDate) {
+      nextErrors.to = '起始時間不得晚於結束時間。'
+    }
+    const normalizedEventType = eventType.trim()
+    if (normalizedEventType && !eventTypePattern.test(normalizedEventType)) {
+      nextErrors.eventType = '事件類型格式應為資料類型.動作。'
+    }
+    setFilterErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      setError('')
+      if (nextErrors.from) fromRef.current?.focus()
+      else if (nextErrors.to) toRef.current?.focus()
+      else eventTypeRef.current?.focus()
       return
     }
     setLoading(true)
@@ -96,9 +123,9 @@ export default function AuditLogPage() {
     setFilters({
       project_id: projectId,
       actor_id: actorId,
-      from: utcValue(from),
-      to: utcValue(to),
-      event_type: eventType.trim(),
+      from: fromDate?.toISOString() ?? '',
+      to: toDate?.toISOString() ?? '',
+      event_type: normalizedEventType,
     })
   }
 
@@ -182,6 +209,7 @@ export default function AuditLogPage() {
         <label>
           專案
           <select
+            aria-describedby={projectId ? 'audit-project-hint' : undefined}
             onChange={(event) => setProjectId(event.target.value)}
             value={projectId}
           >
@@ -208,29 +236,89 @@ export default function AuditLogPage() {
           </select>
         </label>
         <label>
-          起始時間（含）
+          <span id="audit-from-label">起始時間（含）</span>
           <input
-            onChange={(event) => setFrom(event.target.value)}
+            aria-describedby={
+              filterErrors.from ? 'audit-from-error' : undefined
+            }
+            aria-invalid={Boolean(filterErrors.from)}
+            aria-labelledby="audit-from-label"
+            onChange={(event) => {
+              setFrom(event.target.value)
+              setFilterErrors((previous) => ({ ...previous, from: undefined }))
+            }}
+            ref={fromRef}
             type="datetime-local"
             value={from}
           />
+          {filterErrors.from && (
+            <span
+              className="audit-filter-error"
+              id="audit-from-error"
+              role="alert"
+            >
+              {filterErrors.from}
+            </span>
+          )}
         </label>
         <label>
-          結束時間（不含）
+          <span id="audit-to-label">結束時間（不含）</span>
           <input
-            onChange={(event) => setTo(event.target.value)}
+            aria-describedby={filterErrors.to ? 'audit-to-error' : undefined}
+            aria-invalid={Boolean(filterErrors.to)}
+            aria-labelledby="audit-to-label"
+            onChange={(event) => {
+              setTo(event.target.value)
+              setFilterErrors((previous) => ({ ...previous, to: undefined }))
+            }}
+            ref={toRef}
             type="datetime-local"
             value={to}
           />
+          {filterErrors.to && (
+            <span
+              className="audit-filter-error"
+              id="audit-to-error"
+              role="alert"
+            >
+              {filterErrors.to}
+            </span>
+          )}
         </label>
         <label>
-          事件類型
+          <span id="audit-event-type-label">事件類型</span>
           <input
-            onChange={(event) => setEventType(event.target.value)}
+            aria-describedby={
+              filterErrors.eventType ? 'audit-event-type-error' : undefined
+            }
+            aria-invalid={Boolean(filterErrors.eventType)}
+            aria-labelledby="audit-event-type-label"
+            onChange={(event) => {
+              setEventType(event.target.value)
+              setFilterErrors((previous) => ({
+                ...previous,
+                eventType: undefined,
+              }))
+            }}
             placeholder="例如 project_zone.created"
+            ref={eventTypeRef}
             value={eventType}
           />
+          {filterErrors.eventType && (
+            <span
+              className="audit-filter-error"
+              id="audit-event-type-error"
+              role="alert"
+            >
+              {filterErrors.eventType}
+            </span>
+          )}
         </label>
+        {projectId && (
+          <p className="audit-project-hint" id="audit-project-hint">
+            選擇專案後，無專案紀錄與尚未回填的歷史紀錄不會出現。
+          </p>
+        )}
         <button type="submit">查詢</button>
       </form>
       {error && <p role="alert">{error}</p>}
