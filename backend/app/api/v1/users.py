@@ -1,6 +1,7 @@
 """Admin user management endpoints (DOM-R04, DOM-R45, AUT-R46)."""
 
 import secrets
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -61,6 +62,8 @@ class UserResponse(BaseModel):
     is_active: bool
     is_admin: bool
     is_system: bool
+    is_external_collaborator: bool
+    account_expires_on: date | None
 
 
 class UserListResponse(BaseModel):
@@ -84,6 +87,8 @@ class CreateUserRequest(BaseModel):
     wechat_id: str | None = None
     responsibilities: str | None = None
     is_admin: bool = False
+    is_external_collaborator: bool
+    account_expires_on: date | None = None
 
 
 class CreatedUserResponse(UserResponse):

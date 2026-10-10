@@ -46,7 +46,18 @@ anything about *which* codes a future feature spec should register
 eventual contents.
 """
 
+from dataclasses import dataclass
+
 from app.api.errors import DescribedStrEnum
+
+
+@dataclass(frozen=True)
+class PermissionDefinition:
+    """Metadata required to validate and route one permission code."""
+
+    scope: str
+    module: str
+    external_allowed: bool = False
 
 
 class PermissionCode(DescribedStrEnum):
@@ -105,16 +116,39 @@ _active_registry: type[DescribedStrEnum] = PermissionCode
 
 MODULES = frozenset({"project", "inspection", "template"})
 
-_MODULE_CODES = frozenset(
-    {
-        "project.use",
-        "project.create",
-        "all_project_progress.read",
-        "inspection.use",
-        "template.use",
-        "template.manage",
-    }
-)
+# Every production permission has explicit scope, owning module, and
+# external-collaborator eligibility. Test-only registry entries use the
+# conservative fallback below.
+_PROJECT_CODES = {
+    "project_member.manage": "project",
+    "project.update": "project",
+    "project.read": "project",
+    "project_inspection_item.edit": "inspection",
+    "project_inspection_item.read": "inspection",
+    "project_zone.read": "inspection",
+    "project_zone.manage": "inspection",
+    "inspection_plan.read": "inspection",
+    "inspection_plan.create": "inspection",
+    "inspection_plan.manage": "inspection",
+    "inspection_plan.archive": "inspection",
+    "inspection_plan.unarchive": "inspection",
+    "inspection_task.read": "inspection",
+    "inspection_task.manage": "inspection",
+    "inspection_task.create": "inspection",
+    "inspection_task.dispatch": "inspection",
+    "inspection_task.assign": "inspection",
+    "inspection_task.inspect": "inspection",
+    "inspection_task.delete_draft": "inspection",
+    "inspection_task.cancel": "inspection",
+}
+_MODULE_CODE_MODULES = {
+    "project.use": "project",
+    "project.create": "project",
+    "all_project_progress.read": "project",
+    "inspection.use": "inspection",
+    "template.use": "template",
+    "template.manage": "template",
+}
 _EXTERNAL_ALLOWED_CODES = frozenset(
     {
         "project.read",
@@ -122,38 +156,55 @@ _EXTERNAL_ALLOWED_CODES = frozenset(
         "project_zone.read",
         "inspection_plan.read",
         "inspection_task.read",
+        "project.use",
+        "inspection.use",
         "template.use",
     }
 )
+PERMISSION_DEFINITIONS = {
+    **{
+        code: PermissionDefinition(
+            scope="project",
+            module=module,
+            external_allowed=code in _EXTERNAL_ALLOWED_CODES,
+        )
+        for code, module in _PROJECT_CODES.items()
+    },
+    **{
+        code: PermissionDefinition(
+            scope="module",
+            module=module,
+            external_allowed=code in _EXTERNAL_ALLOWED_CODES,
+        )
+        for code, module in _MODULE_CODE_MODULES.items()
+    },
+}
 
 
 def permission_code_scope(code: str) -> str | None:
     """Return the registered code scope: ``module`` or ``project``."""
     if not is_permission_code_registered(code):
         return None
-    return "module" if code in _MODULE_CODES else "project"
+    definition = PERMISSION_DEFINITIONS.get(code)
+    return definition.scope if definition else "project"
 
 
 def permission_code_module(code: str) -> str | None:
     """Return the module owning a registered code."""
     if permission_code_scope(code) is None:
         return None
-    module = code.split(".", 1)[0]
-    if module == "project_inspection_item" or module in {
-        "project_zone",
-        "inspection_plan",
-        "inspection_task",
-    }:
-        return "inspection"
-    if module == "all_project_progress":
-        return "project"
-    return module
+    definition = PERMISSION_DEFINITIONS.get(code)
+    if definition:
+        return definition.module
+    return code.split(".", 1)[0]
 
 
 def permission_code_external_allowed(code: str) -> bool:
-    return (
-        code in _EXTERNAL_ALLOWED_CODES
+    definition = PERMISSION_DEFINITIONS.get(code)
+    return bool(
+        definition
         and is_permission_code_registered(code)
+        and definition.external_allowed
     )
 
 

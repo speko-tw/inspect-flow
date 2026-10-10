@@ -70,6 +70,7 @@ def test_dom_ac35_username_change_requires_admin_and_local_account(
         username="taken.name",
         name_zh="已有使用者",
         email="taken@demo.example",
+        is_external_collaborator=False,
     )
     session.commit()
     with pytest.raises(IntegrityError):
@@ -127,6 +128,7 @@ def test_alg_ac15_company_event_boundaries(session, operator):
         username="ac15.independent",
         name_zh="獨立人員",
         email="independent15@demo.example",
+        is_external_collaborator=False,
     )
     create_user(session, **_user_kwargs("DUP15", company_a.id))
     session.commit()
@@ -165,6 +167,7 @@ def test_dom_ac42_company_link_does_not_change_project_roles(
         username="independent.user",
         name_zh="獨立使用者",
         email="independent@demo.example",
+        is_external_collaborator=False,
     )
     project = Project(
         project_code="DEMO42",
@@ -209,6 +212,7 @@ def test_dom_ac41_admin_grant_revoke_and_builtin_protection(session, operator):
         username="ac41.user",
         name_zh="示範人員",
         email="ac41@demo.example",
+        is_external_collaborator=False,
     )
     set_is_admin(session, user, True)
     set_is_admin(session, user, False)
@@ -239,6 +243,7 @@ def _user_kwargs(employee_no: str, company_id, **overrides) -> dict:
         "department": "Operations",
         "location": "HQ",
         "employee_no": employee_no,
+        "is_external_collaborator": False,
         "name_en": f"User {employee_no}",
         "name_zh": f"使用者{employee_no}",
         "email": f"{employee_no.lower()}@example.com",

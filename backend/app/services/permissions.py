@@ -66,27 +66,30 @@ class EffectiveAccess:
 
 
 def calculate_effective_access(
-    session: Session, *, user_id: uuid.UUID,
+    session: Session,
+    *,
+    user_id: uuid.UUID,
     project_id: uuid.UUID | None = None,
 ) -> EffectiveAccess:
     """DOM-R69: single calculation entry for module and project access."""
     with session.no_autoflush:
         user = session.get(User, user_id)
         if user is None:
-            return EffectiveAccess(
-                False, False, frozenset(), frozenset(), {}
-            )
+            return EffectiveAccess(False, False, frozenset(), frozenset(), {})
         if user.is_admin:
             module_codes = frozenset(
-                code.value for code in PermissionCode
+                code.value
+                for code in PermissionCode
                 if permission_code_scope(code.value) == "module"
             )
         else:
-            module_codes = frozenset(session.scalars(
-                select(UserModulePermission.permission_code).where(
-                    UserModulePermission.user_id == user_id
-                )
-            ).all())
+            module_codes = frozenset(
+                session.scalars(
+                    select(UserModulePermission.permission_code).where(
+                        UserModulePermission.user_id == user_id
+                    )
+                ).all()
+            )
         project_map = _project_permissions_by_project(
             session, user_id=user_id, project_id=project_id
         )
@@ -105,16 +108,21 @@ def calculate_effective_access(
 
 
 def _project_permissions_by_project(
-    session: Session, *, user_id: uuid.UUID,
+    session: Session,
+    *,
+    user_id: uuid.UUID,
     project_id: uuid.UUID | None,
 ) -> dict[uuid.UUID, frozenset[str]]:
     query = (
         select(ProjectMember.project_id, RolePermission.code)
         .distinct()
-        .join(ProjectMemberRole,
-              ProjectMemberRole.project_member_id == ProjectMember.id)
-        .join(RolePermission,
-              RolePermission.role_id == ProjectMemberRole.role_id)
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
+        )
+        .join(
+            RolePermission, RolePermission.role_id == ProjectMemberRole.role_id
+        )
         .where(ProjectMember.user_id == user_id)
     )
     if project_id is not None:

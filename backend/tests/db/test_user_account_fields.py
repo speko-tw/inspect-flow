@@ -65,6 +65,7 @@ def admin(session) -> User:
         username="admin",
         is_system=True,
         is_admin=True,
+        is_external_collaborator=False,
         created_by=admin_id,
         updated_by=admin_id,
     )
@@ -85,6 +86,7 @@ def company(session, admin) -> Company:
 def _kwargs(admin: User, username: str, **overrides) -> dict:
     kwargs = {
         "username": username,
+        "is_external_collaborator": False,
         "email": f"{username}@example.com",
         "name_zh": "示範人員",
         "created_by": admin.id,
@@ -481,6 +483,7 @@ class TestDomAc40BuiltInAdminConstraints:
             username="admin",
             is_system=True,
             is_admin=True,
+        is_external_collaborator=False,
             created_by=new_id,
             updated_by=new_id,
         )

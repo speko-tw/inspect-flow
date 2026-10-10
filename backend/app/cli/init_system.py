@@ -59,6 +59,7 @@ def initialize_system(session: Session) -> tuple[User, str]:
         employee_no=None,
         is_admin=True,
         is_system=True,
+        is_external_collaborator=False,
         created_by=admin_id,
         updated_by=admin_id,
     )

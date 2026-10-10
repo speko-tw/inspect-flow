@@ -22,8 +22,10 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from sqlalchemy import insert, inspect
 from sqlalchemy.orm import Session
 
+from app.db import clock
 from app.db.base import uuid7
 from app.db.engine import dispose_engine
 from app.db.settings import DATABASE_URL_ENV_VAR
@@ -200,8 +202,27 @@ def create_root_user_with_company(session: Session, employee_no: str) -> User:
     company_id = uuid7()
 
     user = build_root_user(employee_no, company_id, self_id=self_id)
-    session.add(user)
-    session.flush()
+    user_columns = {
+        column["name"]
+        for column in inspect(session.connection()).get_columns("users")
+    }
+    if "is_external_collaborator" in user_columns:
+        session.add(user)
+        session.flush()
+    else:
+        # Historical migration tests intentionally use the schema from
+        # before the external-collaborator migration. Insert only columns
+        # present at that revision; ORM persistence would include the new
+        # mapped fields and fail against the older table.
+        values = {
+            column.name: getattr(user, column.name)
+            for column in User.__table__.columns
+            if column.name in user_columns
+            and getattr(user, column.name) is not None
+        }
+        values["created_at"] = clock.utc_now()
+        values["updated_at"] = clock.utc_now()
+        session.execute(insert(User.__table__).values(values))
 
     session.add(
         Company(
@@ -246,6 +267,7 @@ def build_root_user(
         name_en=f"Root User {employee_no}",
         name_zh=f"根使用者{employee_no}",
         email=f"{self_id.hex}@example.com",
+        is_external_collaborator=False,
         created_by=self_id,
         updated_by=self_id,
     )

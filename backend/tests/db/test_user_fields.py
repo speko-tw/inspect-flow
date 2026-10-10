@@ -99,6 +99,7 @@ def _full_user_kwargs(company_id, *, employee_no: str) -> dict:
     """
     return {
         "username": username_for(),
+        "is_external_collaborator": False,
         "employee_no": employee_no,
         "company_id": company_id,
         "department": "Engineering",

@@ -32,6 +32,7 @@ nothing to audit.
 """
 
 import uuid
+from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -121,6 +122,8 @@ def create_user(
     employee_no: str | None = None,
     name_en: str | None = None,
     is_active: bool = True,
+    is_external_collaborator: bool,
+    account_expires_on: date | None = None,
     auth_source: str = "local",
     external_source: str | None = None,
     external_id: str | None = None,
@@ -152,6 +155,8 @@ def create_user(
             name_zh=name_zh,
             email=email,
             is_active=is_active,
+            is_external_collaborator=is_external_collaborator,
+            account_expires_on=account_expires_on,
             auth_source=auth_source,
             external_source=external_source,
             external_id=external_id,

@@ -4,19 +4,17 @@ The login landing page and the admin navigation need to know which
 areas of the UI a user can actually use. The frontend must not guess
 that from ``is_admin`` alone, so ``/auth/me`` carries this summary.
 
-Every registered permission code is classified into exactly one group
-below; a contract test fails when a new code is registered without a
-decision here.
+Every registered project permission code is classified into exactly
+one group below; module permissions are reported separately and are
+used to gate the owning module's access.
 
 - Field: ``inspection_task.inspect`` only -- the code the ``/field``
   task list requires.
-- Task read: ``inspection_task.read`` alone is neither. #447 (ADM-R18)
-  already treats it as a field-side code that hides the project's
-  office sections, so counting it as office here would send such a
-  user to a project list whose project page redirects away again.
-- Office: every other registered code (project members, inspection
-  items, zones, plans, and task manage/create/dispatch/assign/delete/
-  cancel).
+- Read-only project permissions (all project-scoped ``*.read`` codes)
+  are neither office nor field access. In particular,
+  ``inspection_task.read`` alone is insufficient to open the field task
+  list, which requires ``inspection_task.inspect`` (ADM-R18).
+- Office: project permissions that grant an action beyond reading.
 
 The summary is computed with one query per call (no per-project loop).
 """
@@ -28,6 +26,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import SystemRoleAssignment, SystemRoleCode, User
+from app.permission_codes import (
+    PermissionCode,
+    permission_code_module,
+    permission_code_scope,
+)
 from app.services.permissions import calculate_effective_access
 
 FIELD_PERMISSION_CODES: frozenset[str] = frozenset({"inspection_task.inspect"})
@@ -35,12 +38,8 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     {
         "project_member.manage",
         "project.update",
-        "project.read",
-        "project_inspection_item.read",
         "project_inspection_item.edit",
-        "project_zone.read",
         "project_zone.manage",
-        "inspection_plan.read",
         "inspection_plan.create",
         "inspection_plan.manage",
         "inspection_plan.archive",
@@ -53,7 +52,22 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
         "inspection_task.cancel",
     }
 )
-TASK_READ_ONLY_CODES: frozenset[str] = frozenset({"inspection_task.read"})
+READ_ONLY_PERMISSION_CODES: frozenset[str] = frozenset(
+    code.value
+    for code in PermissionCode
+    if permission_code_scope(code.value) == "project"
+    and code.value.endswith(".read")
+)
+PROJECT_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
+    code
+    for code in OFFICE_PERMISSION_CODES
+    if permission_code_module(code) == "project"
+)
+INSPECTION_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
+    code
+    for code in OFFICE_PERMISSION_CODES
+    if permission_code_module(code) == "inspection"
+)
 
 
 @dataclass(frozen=True)
@@ -61,6 +75,7 @@ class AccessSummary:
     has_office_access: bool
     has_field_access: bool
     has_template_access: bool
+    module_permissions: frozenset[str]
 
 
 def permission_codes_by_project(
@@ -84,7 +99,7 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
     """
     access = calculate_effective_access(session, user_id=user.id)
     if access.is_admin:
-        return AccessSummary(True, True, True)
+        return AccessSummary(True, True, True, access.module_permissions)
     codes: set[str] = set(access.module_permissions)
     for project_codes in access.project_permissions_by_project.values():
         codes |= project_codes
@@ -99,8 +114,21 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
             )
             is not None
         )
+    project_access = "project.use" in access.module_permissions and bool(
+        codes & PROJECT_OFFICE_PERMISSION_CODES
+    )
     return AccessSummary(
-        has_office_access=bool(codes & OFFICE_PERMISSION_CODES),
-        has_field_access=bool(codes & FIELD_PERMISSION_CODES),
-        has_template_access=is_template_admin,
+        has_office_access=project_access
+        or bool(
+            "inspection.use" in access.module_permissions
+            and codes & INSPECTION_OFFICE_PERMISSION_CODES
+        ),
+        has_field_access=(
+            "inspection.use" in access.module_permissions
+            and bool(codes & FIELD_PERMISSION_CODES)
+        ),
+        has_template_access=(
+            "template.manage" in access.module_permissions or is_template_admin
+        ),
+        module_permissions=access.module_permissions,
     )

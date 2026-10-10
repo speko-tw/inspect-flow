@@ -103,6 +103,7 @@ class MeResponse(CurrentUserResponse):
     has_office_access: bool
     has_field_access: bool
     has_template_access: bool
+    module_permissions: list[str]
 
 
 def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
@@ -138,6 +139,7 @@ def _me_response(db: Session, user: User) -> MeResponse:
         has_office_access=access.has_office_access,
         has_field_access=access.has_field_access,
         has_template_access=access.has_template_access,
+        module_permissions=sorted(access.module_permissions),
     )
 
 
