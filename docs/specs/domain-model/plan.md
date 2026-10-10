@@ -74,7 +74,7 @@ L 與 M 都新增 migration，不同波；N、O 不新增 migration，N 與 O �
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| R | `Project.company_role`：新增不可空欄位與程式內角色／檢查層級登記表；一支 migration 新增欄位並把既有專案回填 `contractor`（回填寫字面值、不 import app 內的登記表或 model，只新增欄位與更新資料、不重建資料表）；登記表在 model 寫入前檢查（比照 DOM-R35）；專案新增與修改 API 帶 `company_role` 與 `company_role_change_reason`、改角色需填原因、專用錯誤碼；`project.created`／`project.updated` 寫入前後值與原因（事件目錄欄位由 `audit-log` T8 登記）；過渡期只有 Admin 能修改，`project.update` 持有者隨任務 N 生效 | `audit-log` T6、T8；修改權限依任務 N | DOM-AC73、DOM-AC74 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
+| R | `Project.company_role`：新增不可空欄位與程式內角色／檢查層級登記表；一支 migration 新增欄位並把既有專案回填 `contractor`（回填寫字面值、不 import app 內的登記表或 model，只新增欄位與更新資料、不重建資料表）；登記表在 model 寫入前檢查（比照 DOM-R35）；唯讀端點 `GET /api/v1/project-company-roles`（需登入）、專案新增與修改 API 帶 `company_role` 與 `company_role_change_reason`、改角色需填原因、專用錯誤碼；`project.created`／`project.updated` 寫入前後值與原因（事件目錄欄位由 `audit-log` T8 登記）；過渡期只有 Admin 能修改，`project.update` 持有者隨任務 N 生效 | `audit-log` T6、T8；修改權限依任務 N | DOM-AC73、DOM-AC74 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 
 R 新增一支 migration；與其他新增 migration 的任務不同波（共用 migration 鏈規則見 [README](../README.md#parallel)）。畫面（開案欄位、專案頁顯示、改角色確認框）由 `admin-dashboard` 任務 T18 承接；workflow summary 的 `project` 物件加 `company_role` 由 `inspection-planning` 任務 T11 承接。
 
