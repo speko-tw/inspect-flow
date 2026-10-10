@@ -158,7 +158,7 @@
 
 **裁定**：查驗是一套共通流程，建立查驗時**不得**選定或處理輸出報表樣板；報表是獨立的功能模組，**得**匯入不同樣板格式，並一律使用內業版圖片（見 [G-02](#g-02)、[G-04](#g-04)）。記錄於 [KD-41](03-decisions-and-stack.md#kd-41)；討論見 [#77](https://github.com/speko-tw/inspect-flow/issues/77)。G-08 移轉至本條的未決部分是報告如何呈現符合、不符合、不適用及嚴重度。其他未定項目：具體匯入格式、樣板欄位對應、選樣板時機、簽署欄位、Revision 規則。
 
-**關聯註記**：檢查層級由專案決定（[KD-51](03-decisions-and-stack.md#kd-51)，[#551](https://github.com/speko-tw/inspect-flow/issues/551)）：承攬案做自主檢查、監造案做抽查，對方人員以外部協作人員加入；簽認屬 #77、不在 #313 範圍。設計簽署欄位與簽認流程時需一併考慮自主檢查表與抽查紀錄表；這只是關聯，**不是**裁定。
+**關聯註記**：檢查層級由專案決定（[KD-51](03-decisions-and-stack.md#kd-51)，[#551](https://github.com/speko-tw/inspect-flow/issues/551)）；簽認屬 #77，不在 KD-51 範圍。設計簽署欄位與簽認流程時需一併考慮自主檢查表與抽查紀錄表；這只是關聯，**不是**裁定。
 
 **為什麼要先決定**：影響 [KD-05](03-decisions-and-stack.md#kd-05)（DOCX/PDF 核心交付物）與 [04-glossary.md](04-glossary.md) `Report` / `Report Template` 的完整欄位設計。
 
