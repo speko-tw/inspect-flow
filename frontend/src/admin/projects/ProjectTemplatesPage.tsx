@@ -8,16 +8,16 @@ import {
   type TemplateCategory,
   type TemplateItem,
   type TemplateSystem,
-} from '../admin/templates/api'
-import { useCurrentUser } from '../auth/useCurrentUser'
-import { TemplateLibraryNav } from '../admin/templates/TemplateLibraryNav'
-import { isForbidden, isNotFound } from '../http'
-import { BackButton, BackLink } from '../layout/BackLink'
-import { ConfirmBox } from '../ui/ConfirmBox'
-import { formatInspectionStandard } from '../ui/inspectionStandard'
-import { useSubmitGuard } from '../ui/submitGuard'
-import { ProjectNotFound } from '../RouteNotFound'
-import { fetchMyProjects } from './api'
+} from '../templates/api'
+import { useCurrentUser } from '../../auth/useCurrentUser'
+import { TemplateLibraryNav } from '../templates/TemplateLibraryNav'
+import { isForbidden, isNotFound } from '../../http'
+import { BackButton, BackLink } from '../../layout/BackLink'
+import { ConfirmBox } from '../../ui/ConfirmBox'
+import { formatInspectionStandard } from '../../ui/inspectionStandard'
+import { useSubmitGuard } from '../../ui/submitGuard'
+import { ProjectNotFound } from '../../RouteNotFound'
+import { listMyProjects } from './api'
 import {
   applyTemplate,
   listAllProjects,
@@ -128,7 +128,7 @@ export default function ProjectTemplatesPage() {
         // a 403 from `GET /projects`.
         const projects = canManage
           ? await listAllProjects()
-          : await fetchMyProjects()
+          : await listMyProjects()
         if (active) {
           const found = projects.find((item) => item.id === projectId)
           setProject(

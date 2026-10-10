@@ -8,10 +8,10 @@ import {
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { CurrentUser } from '../auth/api'
-import type { TemplateItem } from '../admin/templates/api'
-import { CurrentUserProvider } from '../auth/useCurrentUser'
-import { holdRequests as holdFetch } from '../testing/submitGuard'
+import type { CurrentUser } from '../../auth/api'
+import type { TemplateItem } from '../templates/api'
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
+import { holdRequests as holdFetch } from '../../testing/submitGuard'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
 import {
   ProjectTemplatesApiError,
