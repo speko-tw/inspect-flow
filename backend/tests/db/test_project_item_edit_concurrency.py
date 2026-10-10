@@ -328,8 +328,12 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
         connection, cursor, statement, parameters, context, executemany
     ) -> None:
         if is_create_source_lock(statement):
+            backend_pid = (
+                connection.connection.driver_connection.info.backend_pid
+            )
             with events_lock:
                 observed.append("create_lock_attempted")
+                request_backend_pids["task_create"] = backend_pid
             create_lock_attempted.set()
         if is_patch_item_lock(statement):
             backend_pid = (
@@ -348,15 +352,11 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
                 observed.append("create_lock_acquired")
                 request_connection_ids[id(connection)] = "task_create"
             create_lock_acquired.set()
-            if first_writer == "task_create":
-                wait_for_blocked_request("item_patch")
         if is_patch_item_lock(statement):
             with events_lock:
                 observed.append("patch_lock_acquired")
                 request_connection_ids[id(connection)] = "item_patch"
             patch_lock_acquired.set()
-            if first_writer == "item_patch":
-                wait_for_blocked_request("task_create")
 
     def on_commit(connection) -> None:
         with events_lock:
@@ -382,10 +382,12 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
                 create_future = executor.submit(create_task)
                 assert create_lock_acquired.wait(timeout=10)
                 patch_future = executor.submit(patch_item)
+                wait_for_blocked_request("item_patch")
             else:
                 patch_future = executor.submit(patch_item)
                 assert patch_lock_acquired.wait(timeout=10)
                 create_future = executor.submit(create_task)
+                wait_for_blocked_request("task_create")
 
             create_response = create_future.result(timeout=20)
             patch_response = patch_future.result(timeout=20)
