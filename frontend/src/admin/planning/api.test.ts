@@ -20,33 +20,106 @@ describe('mock planning client', () => {
   it('paginates plans and fetches task details separately', async () => {
     const client = createMockPlanningClient()
     const created = []
-    for (let index = 0; index < 21; index += 1) {
-      created.push(await client.createPlan(PROJECT, { name: `計畫 ${index}` }))
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-10T00:00:00.123Z'))
+    try {
+      for (let index = 0; index < 101; index += 1) {
+        created.push(
+          await client.createPlan(PROJECT, { name: `計畫 ${index}` }),
+        )
+      }
+
+      const first = await client.listPlans(PROJECT)
+      expect(first.items).toHaveLength(100)
+      expect(first.items[0]).not.toHaveProperty('tasks')
+
+      const cursor = first.next_cursor
+      expect(cursor).not.toBeNull()
+      expect(cursor).toMatch(/^[A-Za-z0-9_-]+$/)
+      expect(cursor).not.toContain('=')
+      const base64 = cursor!.replaceAll('-', '+').replaceAll('_', '/')
+      const padding = (4 - (base64.length % 4)) % 4
+      const decoded = atob(base64 + '='.repeat(padding))
+      const payload = new TextDecoder().decode(
+        Uint8Array.from(decoded, (character) => character.charCodeAt(0)),
+      )
+      expect(payload).toBe(
+        `{"t":"2026-10-10T00:00:00.123000+00:00","id":"${first.items.at(-1)?.id}"}`,
+      )
+
+      const sortedIds = created.map((plan) => plan.id).sort()
+      expect(first.items.map((plan) => plan.id)).toEqual(
+        sortedIds.slice(0, 100),
+      )
+      const second = await client.listPlans(PROJECT, cursor)
+      expect(second.items.map((plan) => plan.id)).toEqual(sortedIds.slice(100))
+      expect(second.next_cursor).toBeNull()
+
+      const [item] = await client.listProjectItems(PROJECT)
+      const task = await client.createTask(created[0].id, {
+        item_ids: [item.id],
+        suggested_assignee_id: null,
+        zone_id: null,
+        location_text: '東側',
+      })
+      expect((await client.getPlan(created[0].id)).tasks).toEqual([task])
+      expect(await client.getTask(task.id)).toMatchObject({
+        zone_id: null,
+        zone: null,
+        location_text: '東側',
+        assignee_id: null,
+        started_by: null,
+        completed_by: null,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('returns no cursor when a page ends on the exact limit', async () => {
+    const client = createMockPlanningClient()
+    for (let index = 0; index < 100; index += 1) {
+      await client.createPlan(PROJECT, { name: `計畫 ${index}` })
     }
 
-    const first = await client.listPlans(PROJECT)
-    expect(first.items).toHaveLength(20)
-    expect(first.items[0]).not.toHaveProperty('tasks')
-    expect(first.next_cursor).toBe('20')
-    const second = await client.listPlans(PROJECT, first.next_cursor)
-    expect(second.items).toHaveLength(1)
-    expect(second.next_cursor).toBeNull()
+    const page = await client.listPlans(PROJECT)
+    expect(page.items).toHaveLength(100)
+    expect(page.next_cursor).toBeNull()
+  })
 
-    const [item] = await client.listProjectItems(PROJECT)
-    const task = await client.createTask(created[0].id, {
-      item_ids: [item.id],
-      suggested_assignee_id: null,
-      zone_id: null,
-      location_text: '東側',
-    })
-    expect((await client.getPlan(created[0].id)).tasks).toEqual([task])
-    expect(await client.getTask(task.id)).toMatchObject({
-      zone_id: null,
-      zone: null,
-      location_text: '東側',
-      assignee_id: null,
-      started_by: null,
-      completed_by: null,
+  it('paginates by increasing creation time without duplicates', async () => {
+    const client = createMockPlanningClient()
+    const created = []
+    vi.useFakeTimers()
+    try {
+      for (let index = 0; index < 101; index += 1) {
+        vi.setSystemTime(new Date(Date.UTC(2026, 9, 10, 0, 0, index)))
+        created.push(
+          await client.createPlan(PROJECT, { name: `遞增時間計畫 ${index}` }),
+        )
+      }
+
+      const first = await client.listPlans(PROJECT)
+      expect(first.items.map((plan) => plan.id)).toEqual(
+        created.slice(0, 100).map((plan) => plan.id),
+      )
+      expect(first.items.at(-1)?.created_at).not.toBe(created[100].created_at)
+
+      const second = await client.listPlans(PROJECT, first.next_cursor)
+      expect(second.items.map((plan) => plan.id)).toEqual([created[100].id])
+      expect(second.next_cursor).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects invalid plan cursors like the backend', async () => {
+    const client = createMockPlanningClient()
+    await expect(
+      client.listPlans(PROJECT, 'invalid-cursor'),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: 'request.validation_failed',
     })
   })
 

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { currentUserFixture } from '../../testing/contractFixtures'
@@ -8,6 +8,7 @@ import type { Project } from '../projects/api'
 import { ManagementApiError } from '../api'
 import ProjectHomePage from './ProjectHomePage'
 import ProjectSectionPage from './ProjectSectionPage'
+import { WorkflowSummaryProvider } from './WorkflowSummaryProvider'
 import type { WorkflowSummary } from './api'
 
 const mocks = vi.hoisted(() => ({
@@ -87,44 +88,70 @@ function renderAt(
       <CurrentUserProvider
         value={{ user: currentUserFixture(access), clear: vi.fn() }}
       >
-        <main>
-          <Routes>
-            <Route
-              element={<ProjectHomePage />}
-              path="/admin/projects/:projectId"
-            />
-            <Route
-              element={<ProjectSectionPage section="members" />}
-              path="/admin/projects/:projectId/members"
-            />
-            <Route
-              element={<ProjectSectionPage section="inspection-items" />}
-              path="/admin/projects/:projectId/inspection-items"
-            />
-            <Route
-              element={<ProjectSectionPage section="zones" />}
-              path="/admin/projects/:projectId/zones"
-            />
-            <Route
-              element={<ProjectSectionPage section="planning" />}
-              path="/admin/projects/:projectId/planning"
-            />
-            <Route
-              element={<ProjectSectionPage section="progress" />}
-              path="/admin/projects/:projectId/progress"
-            />
-            <Route
-              element={
-                <ProjectSectionPage section="inspection-items">
-                  <p>查核項目細節</p>
-                </ProjectSectionPage>
-              }
-              path="/admin/projects/:projectId/inspection-items/:itemId"
-            />
-            <Route element={<p>Field 工作台</p>} path="/field" />
-            <Route element={<p>我的專案清單</p>} path="/admin/projects" />
-          </Routes>
-        </main>
+        <WorkflowSummaryProvider>
+          <main>
+            <Link
+              aria-label="測試導覽至另一專案"
+              to="/admin/projects/project-2"
+            >
+              切換專案
+            </Link>
+            <Link
+              aria-label="測試導覽至計畫區段"
+              to="/admin/projects/project-1/planning"
+            >
+              開啟計畫區段
+            </Link>
+            <Link
+              aria-label="測試導覽至成員區段"
+              to="/admin/projects/project-1/members"
+            >
+              開啟成員區段
+            </Link>
+            <Link aria-label="測試離開專案" to="/admin/projects">
+              離開專案
+            </Link>
+            <Link aria-label="測試返回專案首頁" to="/admin/projects/project-1">
+              返回專案首頁
+            </Link>
+            <Routes>
+              <Route
+                element={<ProjectHomePage />}
+                path="/admin/projects/:projectId"
+              />
+              <Route
+                element={<ProjectSectionPage section="members" />}
+                path="/admin/projects/:projectId/members"
+              />
+              <Route
+                element={<ProjectSectionPage section="inspection-items" />}
+                path="/admin/projects/:projectId/inspection-items"
+              />
+              <Route
+                element={<ProjectSectionPage section="zones" />}
+                path="/admin/projects/:projectId/zones"
+              />
+              <Route
+                element={<ProjectSectionPage section="planning" />}
+                path="/admin/projects/:projectId/planning"
+              />
+              <Route
+                element={<ProjectSectionPage section="progress" />}
+                path="/admin/projects/:projectId/progress"
+              />
+              <Route
+                element={
+                  <ProjectSectionPage section="inspection-items">
+                    <p>查核項目細節</p>
+                  </ProjectSectionPage>
+                }
+                path="/admin/projects/:projectId/inspection-items/:itemId"
+              />
+              <Route element={<p>Field 工作台</p>} path="/field" />
+              <Route element={<p>我的專案清單</p>} path="/admin/projects" />
+            </Routes>
+          </main>
+        </WorkflowSummaryProvider>
       </CurrentUserProvider>
     </MemoryRouter>,
   )
@@ -134,7 +161,159 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('project home', () => {
+  it('reuses the home summary when navigating into a section', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '測試導覽至計畫區段' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('loads a fresh summary when navigating from one section to another', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '計畫與任務' }))
+    await screen.findByRole('heading', { name: '計畫與任務' })
+    fireEvent.click(screen.getByRole('link', { name: '成員' }))
+
+    expect(await screen.findByRole('heading', { name: '成員' })).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('clears the summary after leaving and returning to a project route', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '測試離開專案' }))
+    expect(await screen.findByText('我的專案清單')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '測試返回專案首頁' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('shares a pending home summary with the first section request', async () => {
+    let resolveSummary!: (value: WorkflowSummary) => void
+    const pendingSummary = new Promise<WorkflowSummary>((resolve) => {
+      resolveSummary = resolve
+    })
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockReturnValue(pendingSummary)
+
+    renderAt()
+
+    await waitFor(() =>
+      expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1),
+    )
+    fireEvent.click(screen.getByRole('link', { name: '測試導覽至計畫區段' }))
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1)
+    resolveSummary(summary())
+
+    expect(
+      await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reuse a completed summary for a later home visit', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '測試離開專案' }))
+    expect(await screen.findByText('我的專案清單')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '測試返回專案首頁' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not share a summary between different project routes', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockImplementation(async (projectId: string) =>
+      summary({
+        project: {
+          id: projectId,
+          project_code: projectId === 'project-1' ? 'DEMO-001' : 'DEMO-002',
+          name: projectId === 'project-1' ? '示範工程' : '另一個工程',
+        },
+      }),
+    )
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    fireEvent.click(screen.getByRole('link', { name: '測試導覽至另一專案' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-002｜另一個工程' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenNthCalledWith(1, 'project-1')
+    expect(mocks.getWorkflowSummary).toHaveBeenNthCalledWith(2, 'project-2')
+  })
+
+  it('refreshes permissions after the short summary cache expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(0))
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    vi.setSystemTime(new Date(30_001))
+    fireEvent.click(screen.getByRole('link', { name: '計畫與任務' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries after a failed home summary instead of reusing the failure', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce(summary())
+
+    renderAt()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '無法連線到伺服器，請稍後再試。',
+    )
+    fireEvent.click(screen.getByRole('link', { name: '測試導覽至計畫區段' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '計畫與任務' }),
+    ).toBeVisible()
+    expect(mocks.getWorkflowSummary).toHaveBeenCalledTimes(2)
+  })
+
   it('shows the project identity, primary draft action and key numbers', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
