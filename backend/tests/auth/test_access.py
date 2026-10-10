@@ -448,14 +448,14 @@ def test_aut_ac19_effective_permission_change_is_immediate(
     assert calls["report_read"] > 0
 
 
-def test_aut_r19_admin_still_fails_closed_on_invalid_project_id(
+def test_aut_r19_admin_gets_validation_error_for_invalid_project_id(
     db_session: Session,
     probe_client: tuple[TestClient, dict[str, int]],
 ) -> None:
     """AUT-R19 (reviewer regression): an Admin hitting 需專案權限
     with a path parameter that is not a valid UUID is rejected with
-    403 ``permission.denied`` -- the UUID is parsed *before* the
-    Admin bypass, so Admin can never ride a malformed request through
+    422 ``request.validation_failed`` -- the UUID is parsed *before*
+    the Admin bypass, so Admin can never ride malformed input through
     to the handler.
     """
     client, calls = probe_client
@@ -466,9 +466,10 @@ def test_aut_r19_admin_still_fails_closed_on_invalid_project_id(
         "/api/v1/test/needs-permission/report-read/not-a-uuid",
         cookies={SESSION_COOKIE_NAME: token_a},
     )
-    assert response.status_code == 403
+    assert response.status_code == 422
     assert (
-        response.json()["error"]["code"] == ErrorCode.PERMISSION_DENIED.value
+        response.json()["error"]["code"]
+        == ErrorCode.REQUEST_VALIDATION_FAILED.value
     )
     assert calls["report_read"] == 0
 
