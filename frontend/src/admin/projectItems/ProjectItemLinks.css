@@ -1,0 +1,24 @@
+.project-item-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-item-list > li {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.project-item-list p {
+  margin: 0;
+}
+
+.project-item-list .project-item-applied-time {
+  margin: 0;
+}

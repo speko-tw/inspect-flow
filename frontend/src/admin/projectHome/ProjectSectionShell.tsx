@@ -23,7 +23,9 @@ const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['zones', 'progress'])
 const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   home: [],
   members: ['project_member.manage'],
-  'inspection-items': ['project_inspection_item.edit'],
+  // The list endpoint allows every project member to read applied items.
+  // Editing and template application remain separately permission-gated.
+  'inspection-items': [],
   zones: ['project_zone.read', 'project_zone.manage'],
   planning: ['inspection_plan.read'],
   progress: ['inspection_task.read', 'inspection_task.inspect'],
@@ -67,7 +69,7 @@ export default function ProjectSectionShell({
       {SECTIONS.filter(
         (section) =>
           !HIDDEN_SECTIONS.has(section.id) &&
-          (section.id === 'home' ||
+          (SECTION_PERMISSIONS[section.id].length === 0 ||
             SECTION_PERMISSIONS[section.id].some((permission) =>
               viewerPermissions.includes(permission),
             )),

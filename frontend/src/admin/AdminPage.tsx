@@ -48,6 +48,16 @@ function ProjectPlanningRoute() {
   )
 }
 
+function ProjectTemplatesRedirect() {
+  const { projectId = '' } = useParams()
+  return (
+    <Navigate
+      replace
+      to={`/admin/projects/${projectId}/inspection-items/templates`}
+    />
+  )
+}
+
 const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
   { to: '/admin/companies', label: '公司' },
@@ -86,7 +96,7 @@ function AdminPageContent() {
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
   const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
+    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress))?\/?$/.test(
       location.pathname,
     )
 
@@ -184,12 +194,22 @@ function AdminPageContent() {
               element={<ProjectSectionPage section="zones" />}
             />
             <Route
-              path="projects/:projectId/templates"
+              path="projects/:projectId/inspection-items/templates"
               element={
-                <AdminRouteSuspense>
-                  <ProjectTemplatesPage />
-                </AdminRouteSuspense>
+                <ProjectSectionPage section="inspection-items">
+                  {(viewerPermissions) => (
+                    <AdminRouteSuspense>
+                      <ProjectTemplatesPage
+                        viewerPermissions={viewerPermissions}
+                      />
+                    </AdminRouteSuspense>
+                  )}
+                </ProjectSectionPage>
               }
+            />
+            <Route
+              path="projects/:projectId/templates"
+              element={<ProjectTemplatesRedirect />}
             />
             <Route
               path="projects/:projectId/planning"
@@ -246,10 +266,18 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
       <Route
         element={
-          <AdminRouteSuspense>
-            <ProjectTemplatesPage />
-          </AdminRouteSuspense>
+          <ProjectSectionPage section="inspection-items">
+            {(viewerPermissions) => (
+              <AdminRouteSuspense>
+                <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
+              </AdminRouteSuspense>
+            )}
+          </ProjectSectionPage>
         }
+        path="projects/:projectId/inspection-items/templates"
+      />
+      <Route
+        element={<ProjectTemplatesRedirect />}
         path="projects/:projectId/templates"
       />
       <Route

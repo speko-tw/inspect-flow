@@ -272,12 +272,22 @@ function renderPage(
   user: CurrentUser = { ...USER, has_template_access: managerMock },
 ) {
   return render(
-    <MemoryRouter initialEntries={['/admin/projects/project-1/templates']}>
+    <MemoryRouter
+      initialEntries={['/admin/projects/project-1/inspection-items/templates']}
+    >
       <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         <Routes>
           <Route
-            element={<ProjectTemplatesPage />}
-            path="/admin/projects/:projectId/templates"
+            element={
+              <ProjectTemplatesPage
+                viewerPermissions={['project_inspection_item.edit']}
+              />
+            }
+            path="/admin/projects/:projectId/inspection-items/templates"
+          />
+          <Route
+            element={<p>PROJECT_DETAIL</p>}
+            path="/admin/projects/:projectId/inspection-items"
           />
           <Route
             element={<p>PROJECT_DETAIL</p>}
@@ -356,6 +366,80 @@ describe('專案範本套用與存為範本（#429）', () => {
     await chooseSystem()
     fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
     expect(screen.getByText('標準未設定')).toBeInTheDocument()
+  })
+
+  it('單項名稱以 strip 與 casefold 比對，已套用項目不能再次選取', async () => {
+    const template = { ...TEMPLATE, title: 'Pump ß' }
+    mockApi({
+      templates: [template],
+      projectItems: [{ ...PROJECT_ITEM, title: '  PUMP ss  ' }],
+    })
+    renderPage()
+    const nav = screen.getByRole('complementary', { name: '範本庫導覽' })
+    fireEvent.click(
+      await within(nav).findByRole('button', { name: '建築工程' }),
+    )
+    fireEvent.click(await within(nav).findByRole('button', { name: '給排水' }))
+    await within(nav).findByRole('button', { name: 'Pump ß' })
+
+    const itemRadio = screen.getByRole('radio', {
+      name: '單一項目：Pump ß',
+    })
+    expect(itemRadio).toBeDisabled()
+    await waitFor(() => expect(itemRadio).toBeChecked())
+    expect(screen.getAllByText('已套用').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText('專案已有同名項目，需要第二份請先改名'),
+    ).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
+  })
+
+  it('全部項目已套用時停用整個系統並預選單項', async () => {
+    mockApi({
+      templates: [
+        TEMPLATE,
+        { ...TEMPLATE, id: 'template-2', title: '水壓測試' },
+      ],
+      projectItems: [
+        { ...PROJECT_ITEM, title: ' 管線查核 ' },
+        { ...PROJECT_ITEM, id: 'copy-2', title: '水壓測試' },
+      ],
+    })
+    renderPage()
+    await chooseSystem()
+
+    expect(
+      await screen.findByText('專案已有這個系統的全部項目，請選擇單一項目。'),
+    ).toBeInTheDocument()
+    const systemRadio = screen.getByLabelText('整個系統（2 個項目）')
+    expect(systemRadio).toBeDisabled()
+    expect(systemRadio).not.toBeChecked()
+    const itemRadio = screen.getByRole('radio', {
+      name: '單一項目：管線查核',
+    })
+    expect(itemRadio).toBeDisabled()
+    expect(itemRadio).toBeChecked()
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
+  })
+
+  it('部分項目已套用時顯示數量並禁止部分套用', async () => {
+    const calls = mockApi({
+      templates: [
+        TEMPLATE,
+        { ...TEMPLATE, id: 'template-2', title: '水壓測試' },
+      ],
+      projectItems: [{ ...PROJECT_ITEM, title: ' 管線查核 ' }],
+    })
+    renderPage()
+    await chooseSystem()
+
+    expect(screen.getByLabelText('整個系統（2 個項目）')).toBeChecked()
+    expect(screen.getAllByText(/1 項已套用/)).toHaveLength(2)
+    expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
+    expect(calls).not.toHaveBeenCalledWith(
+      '/api/v1/projects/project-1/inspection-items:apply-template',
+      expect.anything(),
+    )
   })
 
   it('整個系統切換後從樹選單一項目，只送出該範本 ID', async () => {
@@ -451,6 +535,17 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
   })
 
+  it('手機類別清單顯示各系統的查核項目數', async () => {
+    useMobileViewport()
+    mockApi({ listCounts: true })
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '建築工程' }))
+
+    const detail = screen.getByRole('region', { name: '範本操作' })
+    expect(await within(detail).findByText('2 個查核項目')).toBeInTheDocument()
+    expect(within(detail).getByText('1 個查核項目')).toBeInTheDocument()
+  })
+
   it('整系統多項套用前要求頁內確認', async () => {
     const calls = mockApi()
     renderPage()
@@ -505,10 +600,12 @@ describe('專案範本套用與存為範本（#429）', () => {
       screen.getByRole('button', { name: '改選其他範本' }),
     ).toBeInTheDocument()
     // 頁首的 BackLink 與錯誤框裡的出口各一個。
-    expect(screen.getAllByRole('link', { name: '返回專案' })).toHaveLength(2)
+    expect(screen.getAllByRole('link', { name: '返回查核項目' })).toHaveLength(
+      2,
+    )
     fireEvent.click(
       within(screen.getByRole('alert')).getByRole('link', {
-        name: '返回專案',
+        name: '返回查核項目',
       }),
     )
     expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
@@ -589,7 +686,9 @@ describe('專案範本套用與存為範本（#429）', () => {
       '已將「管線查核」存入「土木工程 / 基礎」。',
     )
     // 成功後只留頁首的返回連結，不再多一個同名按鈕（#516）。
-    expect(screen.getAllByRole('link', { name: '返回專案' })).toHaveLength(1)
+    expect(screen.getAllByRole('link', { name: '返回查核項目' })).toHaveLength(
+      1,
+    )
     expect(calls).toHaveBeenCalledWith(
       '/api/v1/projects/project-1/templates',
       expect.objectContaining({

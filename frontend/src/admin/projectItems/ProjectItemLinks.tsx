@@ -3,11 +3,14 @@ import { Link, useLocation } from 'react-router'
 
 import { isForbidden } from '../../http'
 import { listProjectItems, type ProjectItemData } from './api'
+import './ProjectItemLinks.css'
 
 export default function ProjectItemLinks({
   projectId,
+  viewerPermissions,
 }: {
   projectId: string
+  viewerPermissions: string[]
 }) {
   const location = useLocation()
   const [items, setItems] = useState<ProjectItemData[]>([])
@@ -21,6 +24,7 @@ export default function ProjectItemLinks({
         )
       : [],
   )
+  const canEdit = viewerPermissions.includes('project_inspection_item.edit')
 
   useEffect(() => {
     let active = true
@@ -47,17 +51,19 @@ export default function ProjectItemLinks({
   return (
     <section aria-labelledby="project-items-heading">
       <h2 id="project-items-heading">專案查核項目</h2>
-      <Link
-        className="btn btn-primary"
-        to={`/admin/projects/${projectId}/templates`}
-      >
-        套用範本
-      </Link>
+      {canEdit && (
+        <Link
+          className="btn btn-primary"
+          to={`/admin/projects/${projectId}/inspection-items/templates`}
+        >
+          從範本新增查核項目
+        </Link>
+      )}
       {loading && <p>載入中…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && !error && items.length === 0 && <p>目前沒有查核項目。</p>}
       {items.length > 0 && (
-        <ul>
+        <ul className="project-item-list">
           {items.map((item) => (
             <li key={item.id}>
               {highlightedItemIds.has(item.id) && (
@@ -66,6 +72,7 @@ export default function ProjectItemLinks({
                 </p>
               )}
               <strong>{item.title}</strong>
+              <p>{item.inspection_points.length} 個查核項次</p>
               <p>來源範本：{item.source_template_name}</p>
               <time
                 className="project-item-applied-time"
@@ -74,9 +81,11 @@ export default function ProjectItemLinks({
                 套用時間：{new Date(item.applied_at).toLocaleString('zh-TW')}
               </time>
               <Link
+                aria-label={`修改「${item.title}」`}
+                className="btn"
                 to={`/admin/projects/${projectId}/inspection-items/${item.id}`}
               >
-                修改「{item.title}」
+                修改
               </Link>
             </li>
           ))}

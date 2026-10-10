@@ -1119,18 +1119,15 @@ describe('admin user and company pages', () => {
   })
 
   it('allows non-admin users to open project template routes', async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
+    managementFetch()
     renderAdmin('/admin/projects/project-demo-1/templates', false)
 
     expect(
       await screen.findByRole('region', { name: '範本操作' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '返回專案' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '返回查核項目' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-demo-1',
+      '/admin/projects/project-demo-1/inspection-items',
     )
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
     expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()

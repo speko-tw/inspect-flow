@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
 import {
@@ -18,6 +18,7 @@ import { formatInspectionStandard } from '../../ui/inspectionStandard'
 import { useSubmitGuard } from '../../ui/submitGuard'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { listMyProjects } from './api'
+import './ProjectTemplatesPage.css'
 import {
   applyTemplate,
   listAllProjects,
@@ -36,6 +37,40 @@ function formatTime(value: string): string {
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-TW')
 }
 
+const PYTHON_WHITESPACE =
+  '\\u0009-\\u000d\\u001c-\\u0020\\u0085\\u00a0\\u1680' +
+  '\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000'
+
+function pythonStrip(value: string): string {
+  return value.replace(
+    new RegExp(`^[${PYTHON_WHITESPACE}]+|[${PYTHON_WHITESPACE}]+$`, 'g'),
+    '',
+  )
+}
+
+function pythonCasefold(value: string): string {
+  return Array.from(pythonStrip(value), (character) => {
+    const codepoint = character.codePointAt(0) ?? 0
+    if (codepoint === 0x0131) return character
+    if (codepoint === 0x1e9e) return 'ss'
+    if (
+      (codepoint >= 0x13a0 && codepoint <= 0x13f5) ||
+      (codepoint >= 0x13f8 && codepoint <= 0x13fd) ||
+      (codepoint >= 0xab70 && codepoint <= 0xabbf)
+    ) {
+      return character.toUpperCase()
+    }
+    return character.toUpperCase().toLowerCase()
+  }).join('')
+}
+
+function isAlreadyApplied(
+  template: TemplateItem,
+  projectItemNames: ReadonlySet<string>,
+): boolean {
+  return projectItemNames.has(pythonCasefold(template.title))
+}
+
 function pointEvidenceText(
   point: TemplateItem['inspection_points'][number],
 ): string[] {
@@ -47,7 +82,11 @@ function pointEvidenceText(
   })
 }
 
-export default function ProjectTemplatesPage() {
+export default function ProjectTemplatesPage({
+  viewerPermissions = [],
+}: {
+  viewerPermissions?: string[]
+}) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const navigate = useNavigate()
@@ -105,6 +144,8 @@ export default function ProjectTemplatesPage() {
 
   const applyConflict =
     applyErrorCode === 'project_inspection_item.duplicate_name'
+  const canEditProjectItems =
+    user.is_admin || viewerPermissions.includes('project_inspection_item.edit')
   const saveConflict = saveErrorCode === 'template.name_conflict'
 
   useEffect(() => {
@@ -262,23 +303,60 @@ export default function ProjectTemplatesPage() {
   const templates = selectedSystem
     ? (templatesBySystem[selectedSystem.id] ?? [])
     : []
-  const mode = selected?.type === 'system' ? 'system' : 'item'
+  const isSaveMode = saveSource !== null
+  const allTemplates = Object.values(templatesBySystem).flat()
+  const projectItemNames = useMemo(
+    () => new Set(projectItems.map((item) => pythonCasefold(item.title))),
+    [projectItems],
+  )
+  const appliedItemIds = useMemo(
+    () =>
+      new Set(
+        allTemplates
+          .filter((item) => isAlreadyApplied(item, projectItemNames))
+          .flatMap((item) => (item.id ? [item.id] : [])),
+      ),
+    [allTemplates, projectItemNames],
+  )
+  const appliedTemplateCount = templates.filter((item) =>
+    isAlreadyApplied(item, projectItemNames),
+  ).length
+  const allSystemItemsApplied =
+    templates.length > 0 && appliedTemplateCount === templates.length
+  const mode =
+    selected?.type === 'system' && allSystemItemsApplied
+      ? 'item'
+      : selected?.type === 'system'
+        ? 'system'
+        : 'item'
+  const activeSelection =
+    selected?.type === 'system' && allSystemItemsApplied
+      ? { type: 'item' as const, id: templates[0]?.id ?? '' }
+      : selected
   const selectedTemplates =
-    selected?.type === 'item'
-      ? templates.filter((item) => item.id === selected.id)
+    activeSelection?.type === 'item'
+      ? templates.filter((item) => item.id === activeSelection.id)
       : mode === 'system'
         ? templates
         : []
   const hasSelection = Boolean(
     selectedSystem &&
     selectedTemplates.length > 0 &&
-    (mode === 'system' || selected?.type === 'item'),
+    (mode === 'system' || activeSelection?.type === 'item'),
   )
-  const isSaveMode = saveSource !== null
-  const allTemplates = Object.values(templatesBySystem).flat()
+  const selectedAlreadyApplied = selectedTemplates.some((item) =>
+    isAlreadyApplied(item, projectItemNames),
+  )
 
   async function submitApply() {
-    if (!selectedSystem || !hasSelection || busy || itemsDenied || readOnly) {
+    if (
+      !selectedSystem ||
+      !hasSelection ||
+      busy ||
+      itemsDenied ||
+      readOnly ||
+      !canEditProjectItems
+    ) {
       return
     }
     if (!guard.enter()) return
@@ -295,7 +373,7 @@ export default function ProjectTemplatesPage() {
         setApplyError('這個系統沒有查核項目。')
         return
       }
-      navigate(`/admin/projects/${projectId}`, {
+      navigate(`/admin/projects/${projectId}/inspection-items`, {
         state: {
           notice: `已新增 ${result.length} 個項目到「${project?.name ?? '專案'}」。`,
           highlightedItemIds: result.map((item) => item.id),
@@ -410,8 +488,9 @@ export default function ProjectTemplatesPage() {
       onSelect={(value) => void selectNode(value)}
       onToggle={toggleNode}
       readOnly={readOnly}
+      appliedItemIds={isSaveMode ? undefined : appliedItemIds}
       selectSystemOnly={isSaveMode}
-      selected={selected}
+      selected={activeSelection}
       systems={systems}
     />
   )
@@ -420,17 +499,19 @@ export default function ProjectTemplatesPage() {
 
   return (
     <section className="tpl-page">
-      <BackLink to={`/admin/projects/${projectId}`}>返回專案</BackLink>
+      <BackLink to={`/admin/projects/${projectId}/inspection-items`}>
+        返回查核項目
+      </BackLink>
       <p className="tpl-crumb">
         {project?.project_code && <>{project.project_code} </>}
         {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
       </p>
       {project && (
-        <h1>
+        <h2>
           {isSaveMode
             ? `將「${saveSource?.title ?? ''}」存為範本`
             : '套用範本到專案'}
-        </h1>
+        </h2>
       )}
       {readOnly && (
         <p className="notice-info" role="status">
@@ -522,6 +603,11 @@ export default function ProjectTemplatesPage() {
                               type="button"
                             >
                               {system.name}
+                              {system.item_count !== undefined && (
+                                <span className="tpl-mobile-system-count">
+                                  {system.item_count} 個查核項目
+                                </span>
+                              )}
                             </button>
                           </li>
                         ))}
@@ -606,6 +692,11 @@ export default function ProjectTemplatesPage() {
                               type="button"
                             >
                               {system.name}
+                              {system.item_count !== undefined && (
+                                <span className="tpl-mobile-system-count">
+                                  {system.item_count} 個查核項目
+                                </span>
+                              )}
                             </button>
                           </li>
                         ))}
@@ -624,6 +715,7 @@ export default function ProjectTemplatesPage() {
                     <label>
                       <input
                         checked={mode === 'system'}
+                        disabled={allSystemItemsApplied}
                         name="apply-target"
                         onChange={() => {
                           setSelected({
@@ -638,30 +730,73 @@ export default function ProjectTemplatesPage() {
                       />
                       整個系統（{templates.length} 個項目）
                     </label>
+                    {allSystemItemsApplied && (
+                      <p className="tpl-conflict-hint">
+                        專案已有這個系統的全部項目，請選擇單一項目。
+                      </p>
+                    )}
                     {templates.map((item) => (
-                      <label key={item.id}>
-                        <input
-                          checked={mode === 'item' && selected?.id === item.id}
-                          name="apply-target"
-                          onChange={() => {
-                            setSelected({ type: 'item', id: item.id ?? '' })
-                            setApplyError('')
-                            setApplyErrorCode('')
-                            setApplyConfirm(false)
-                          }}
-                          type="radio"
-                        />
-                        單一項目：{item.title}
-                      </label>
+                      <div className="tpl-apply-item-option" key={item.id}>
+                        <label>
+                          <input
+                            aria-describedby={
+                              isAlreadyApplied(item, projectItemNames)
+                                ? `applied-template-${item.id}`
+                                : undefined
+                            }
+                            aria-label={`單一項目：${item.title}`}
+                            checked={
+                              mode === 'item' &&
+                              activeSelection?.type === 'item' &&
+                              activeSelection.id === item.id
+                            }
+                            disabled={isAlreadyApplied(item, projectItemNames)}
+                            name="apply-target"
+                            onChange={() => {
+                              setSelected({ type: 'item', id: item.id ?? '' })
+                              setApplyError('')
+                              setApplyErrorCode('')
+                              setApplyConfirm(false)
+                            }}
+                            type="radio"
+                          />
+                          <span>單一項目：{item.title}</span>
+                          {isAlreadyApplied(item, projectItemNames) && (
+                            <span className="tpl-applied-status">已套用</span>
+                          )}
+                        </label>
+                        {isAlreadyApplied(item, projectItemNames) && (
+                          <p
+                            className="tpl-conflict-hint"
+                            id={`applied-template-${item.id}`}
+                          >
+                            專案已有同名項目，需要第二份請先改名
+                          </p>
+                        )}
+                      </div>
                     ))}
                   </fieldset>
                   {selectedTemplates.length > 0 && (
                     <>
                       <h3>將新增 {selectedTemplates.length} 個項目</h3>
+                      {mode === 'system' && appliedTemplateCount > 0 && (
+                        <p className="tpl-conflict-hint">
+                          {appliedTemplateCount}{' '}
+                          項已套用。系統套用不會略過已套用項目，
+                          也不會部分套用；請改選未套用的單一項目。
+                        </p>
+                      )}
                       <ul className="tpl-preview-list">
                         {selectedTemplates.map((item) => (
                           <li key={item.id}>
-                            <strong>{item.title}</strong>
+                            <strong>
+                              {item.title}
+                              {isAlreadyApplied(item, projectItemNames) && (
+                                <span className="tpl-applied-status">
+                                  已套用
+                                </span>
+                              )}
+                            </strong>
                             <p>{item.instruction}</p>
                             {item.inspection_points.map((point) => (
                               <div key={point.sequence}>
@@ -722,15 +857,19 @@ export default function ProjectTemplatesPage() {
                           </button>
                           <Link
                             className="btn"
-                            to={`/admin/projects/${projectId}`}
+                            to={`/admin/projects/${projectId}/inspection-items`}
                           >
-                            返回專案
+                            返回查核項目
                           </Link>
                         </div>
                       ) : null}
                     </div>
                   )}
-                  {applyConfirm ? (
+                  {!canEditProjectItems ? (
+                    <p className="tpl-hint">
+                      你沒有修改此專案查核項目的權限。
+                    </p>
+                  ) : applyConfirm ? (
                     <ConfirmBox
                       busy={busy}
                       confirmLabel="確定套用"
@@ -748,7 +887,11 @@ export default function ProjectTemplatesPage() {
                     <button
                       className="btn-primary"
                       disabled={
-                        !hasSelection || busy || readOnly || itemsDenied
+                        !hasSelection ||
+                        busy ||
+                        readOnly ||
+                        itemsDenied ||
+                        selectedAlreadyApplied
                       }
                       onClick={() => {
                         if (mode === 'system' && templates.length > 1) {
@@ -761,6 +904,12 @@ export default function ProjectTemplatesPage() {
                     >
                       {busy ? '套用中…' : '套用至專案'}
                     </button>
+                  )}
+                  {selectedAlreadyApplied && mode === 'system' && (
+                    <p className="tpl-conflict-hint" role="status">
+                      {appliedTemplateCount}{' '}
+                      項已套用。系統套用不會略過已套用項目， 也不會部分套用。
+                    </p>
                   )}
                 </>
               )}
