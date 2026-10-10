@@ -159,7 +159,7 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
       </MemoryRouter>,
     )
 
-    fillAndSubmit('not-an-email', '')
+    fillAndSubmit('not-an-email', 'password')
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(GENERIC_ERROR_MESSAGE)
@@ -173,6 +173,65 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
     )
 
     expect(screen.getByLabelText('密碼')).toHaveAttribute('type', 'password')
+  })
+
+  it('登入欄位有必填標示，錯誤連到密碼欄並聚焦，輸入後清除', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
+      ),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    const account = screen.getByLabelText('帳號名稱或 Email')
+    const password = screen.getByLabelText('密碼')
+    expect(
+      document.querySelector(
+        'label[for="login-account"] .auth-required-marker',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector(
+        'label[for="login-password"] .auth-required-marker',
+      ),
+    ).toBeInTheDocument()
+
+    fillAndSubmit('user@example.com', 'wrong-password')
+
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveClass('auth-field-error')
+    expect(password).toHaveAttribute('aria-describedby', error.id)
+    expect(password).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(password).toHaveFocus())
+
+    fireEvent.change(password, { target: { value: 'corrected-password' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(account).toBeInTheDocument()
+  })
+
+  it('空白必填欄位會就地提示，不送出登入請求', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '登入' }))
+
+    const account = screen.getByLabelText('帳號名稱或 Email')
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveTextContent('請輸入帳號名稱或 Email。')
+    expect(account).toHaveAttribute('aria-describedby', error.id)
+    await waitFor(() => expect(account).toHaveFocus())
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 

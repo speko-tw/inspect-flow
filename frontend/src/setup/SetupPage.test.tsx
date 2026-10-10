@@ -283,9 +283,16 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      '請輸入首次登入碼。',
-    )
+    const error = await screen.findByRole('alert')
+    const code = screen.getByLabelText('首次登入碼')
+    expect(
+      document.querySelector('label[for="setup-code"] .auth-required-marker'),
+    ).toBeInTheDocument()
+    expect(error.textContent).toBe('請輸入首次登入碼。')
+    expect(error).toHaveClass('auth-field-error')
+    expect(code).toHaveAttribute('aria-describedby', error.id)
+    expect(code).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(code).toHaveFocus())
     expect(screen.queryByLabelText('新密碼')).toBeNull()
     expect(
       backend.calls.some((call) => call.url.endsWith('/admin-password')),
@@ -337,9 +344,22 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
 
     fillPassword('code-123', '1234567')
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      '密碼長度必須介於 8 到 128 個字元。',
-    )
+    const error = await screen.findByRole('alert')
+    const password = screen.getByLabelText('新密碼')
+    expect(
+      document.querySelector(
+        'label[for="setup-password"] .auth-required-marker',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector(
+        'label[for="setup-password-confirm"] .auth-required-marker',
+      ),
+    ).toBeInTheDocument()
+    expect(error.textContent).toBe('密碼長度必須介於 8 到 128 個字元。')
+    expect(error).toHaveClass('auth-field-error')
+    expect(password).toHaveAttribute('aria-describedby', error.id)
+    await waitFor(() => expect(password).toHaveFocus())
     expect(
       backend.calls.some((call) => call.url.endsWith('/admin-password')),
     ).toBe(false)

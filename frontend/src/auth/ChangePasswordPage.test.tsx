@@ -125,6 +125,15 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'type',
       'password',
     )
+    for (const id of [
+      'change-password-current',
+      'change-password-new',
+      'change-password-confirm',
+    ]) {
+      expect(
+        document.querySelector(`label[for="${id}"] .auth-required-marker`),
+      ).toBeInTheDocument()
+    }
 
     // 事先顯示密碼規則（#487），並連到新密碼欄位。
     expect(screen.getByLabelText('新密碼')).toHaveAccessibleDescription(
@@ -135,6 +144,11 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     fillAndSubmit('current-pw', 'new-password-1', 'new-password-2')
     let alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('兩次輸入的新密碼不一致，請重新輸入。')
+    const confirmation = screen.getByLabelText('再輸入一次新密碼')
+    expect(alert).toHaveClass('auth-field-error')
+    expect(confirmation).toHaveAttribute('aria-describedby', alert.id)
+    expect(confirmation).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(confirmation).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(0)
     const messages = [alert.textContent]
@@ -147,6 +161,9 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     )
     alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('目前密碼錯誤，請再試一次。')
+    const currentPassword = screen.getByLabelText('目前密碼')
+    expect(currentPassword).toHaveAttribute('aria-describedby', alert.id)
+    await waitFor(() => expect(currentPassword).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(1)
     messages.push(alert.textContent)
@@ -161,6 +178,9 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     expect(alert.textContent).toBe(
       '新密碼長度需為 8～128 個字元，請重新輸入。',
     )
+    const newPassword = screen.getByLabelText('新密碼')
+    expect(newPassword.getAttribute('aria-describedby')).toContain(alert.id)
+    await waitFor(() => expect(newPassword).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(2)
     messages.push(alert.textContent)

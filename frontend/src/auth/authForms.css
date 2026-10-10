@@ -1,0 +1,23 @@
+.auth-required-marker {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.auth-required-marker::before {
+  content: '*';
+}
+
+.auth-field-error {
+  margin: var(--space-1) 0 0;
+  color: var(--error-text);
+  font-size: 0.9rem;
+}
+
+.auth-form-error {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
