@@ -399,11 +399,13 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
                     assert create_lock_acquired.wait(timeout=10)
                     patch_future = executor.submit(patch_item)
                     wait_for_blocked_request("item_patch", "task_create")
+                    release_first_writer.set()
                 else:
                     patch_future = executor.submit(patch_item)
                     assert patch_lock_acquired.wait(timeout=10)
                     create_future = executor.submit(create_task)
                     wait_for_blocked_request("task_create", "item_patch")
+                    release_first_writer.set()
 
                 create_response = create_future.result(timeout=20)
                 patch_response = patch_future.result(timeout=20)
