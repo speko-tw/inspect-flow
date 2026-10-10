@@ -27,6 +27,7 @@
 | T14 | 角色摘要與完整權限清單：依 #496 顯示摘要、可展開清單、項目計數與未知碼回退；補混合已知／未知碼、雙未知碼及組件行為測試，並同步規格 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/projects/roleDescriptions.ts`、`roleDescriptions.test.ts`、`RolePermissionSummary.tsx`、`RolePermissionSummary.css`、`RolePermissionSummary.test.tsx`、`RolesPage.tsx` | 負責人已同意 #496 提案；依權限 registry 次序產生摘要及清單 | ADM-AC21 | #496 |
 | T15 | 開設專案與建立者：專案清單「新增專案」入口依 `can_create_project` 顯示、「我的專案」入口與落點依 `has_project_access`（唯讀成員有入口；有內業權限但沒有 `has_project_access` 者，即 AUT-AC70 的 U10，停在空清單與說明、不被導回，ADM-R23、R24）、可開設專案但尚未加入專案者的落點與空清單、建立後導向首頁、Admin 開專案時選填建立者角色人選（ADM-R32，設定畫面屬 T4）；成員區段的未開通模組提示、可指派角色與外部協作人員限制、已停用標示、候選的所屬公司與外部標籤（ADM-R26、R31、R34）；停用前提醒與重新啟用預覽（ADM-R33）；外部協作人員標記、改標記與到期日、無專案的外部人員與無人管理的專案清單（ADM-R35、R36）；看全部專案進度的任務明細頁（四項白名單欄位） | `frontend/src/admin/projects/`、`frontend/src/admin/dashboard/`、`backend/app/api/v1/projects.py`、`backend/app/api/v1/`（任務明細與候選欄位）、相關測試 | T4；`authentication` 任務 P 的 `can_create_project`；`domain-model` 任務 N（開設專案同一交易、`project.update`）、任務 O（停用與啟用稽核）；`authentication` 任務 P | ADM-AC05、23、24（含 U10）、30～35 | #583、#584 |
 | T16 | 將 Admin 的大型範本庫、專案範本及專案項目修改頁改為路由層 lazy chunk，並將專案範本頁及其專用 API／測試移至 `admin/projects/`；量測修改前後的 Admin chunk | `frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`frontend/src/admin/projects/projectTemplatesApi.ts`、相關測試與 `frontend/src/testing/preloadRoutes.ts`、`frontend/src/field/api.ts` | #469；維持 `/admin/*` 與 `/field/*` 單一 app 的路由拆分；不改 UI 路徑、權限或 API 契約 | SKL-AC03、FUI-AC10；另以 build chunk 尺寸及 Admin 路由測試驗收 | #469 |
+| T17 | 同步 v0.3.1 已實作的 UI 共通規則（危險操作顏色、確認框、狀態標籤顏色、啟用使用者確認）到規格與計畫，並把 skeleton 規格的版本範例改為 `<VERSION>`；對應程式已於 #510、#511、#530 完成，本任務只更新文件，不改程式 | `docs/specs/admin-dashboard/`、`docs/specs/field-ui/`、`docs/specs/template-system/plan.md`、`docs/specs/skeleton/spec.md` | 無 | ADM-AC14、ADM-AC36～38；`field-ui` FUI-AC14 | [#533](https://github.com/speko-tw/inspect-flow/issues/533) |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
@@ -63,19 +64,20 @@
 | ADM-AC04、05、13 | API 測試覆蓋專案可見／不可見、指定越權 ID、全公司權限撤銷、未登入、一般使用者、無效 cursor／limit 和錯誤 envelope |
 | ADM-AC06、07 | API／UI 測試非 Admin 拒絕、四類篩選 AND 組合、同 timestamp 的 cursor 穩定性及唯讀資料庫行為 |
 | ADM-AC08 | 前後端測試覆蓋模組權限授予／收回、委派指派／收回、被委派者受限畫面與直接呼叫 403、收回與刪除前的確認門檻、取消不送出 |
-| ADM-AC28～35 | 前後端測試與真後端走查：權限組合套用與失敗處理、被委派者畫面、加入成員的未開通提示、開設專案與建立者（Admin 不自動成為成員、可選填建立者角色人選）、可指派角色與外部協作人員（候選的所屬公司與外部標籤）、外部協作人員標記與改標記、無專案的外部人員與無人管理的專案清單、停用提醒與重新啟用預覽；桌面與 360px 截圖 |
+| ADM-AC28～35 | 前後端測試與真後端走查：權限組合套用與失敗處理、被委派者畫面、加入成員的未開通提示、開設專案與建立者（Admin 不自動成為成員、可選填建立者角色人選）、可指派角色與外部協作人員（候選的所屬公司與外部標籤）、外部協作人員標記與改標記、無專案的外部人員與無人管理的專案清單、停用提醒與重新啟用預覽；桌面與 360px 截圖附在 PR |
 | ADM-AC09 | #286 契約合併後 API 測試多專案及零成員筆數；UI 使用 API 值，不在契約尚未完成時推算 |
 | ADM-AC10、11 | user/company 搜尋、cursor、原子批次 rollback、臨時密碼一次性回傳、舊 session 失效、計數與稽核，以及專案成員批次角色操作的 API/UI 測試 |
 | ADM-AC12 | demo seed／API fixture 建立已完成、進行中及取消 Task；走通派出、現場開始、Dashboard 查看，並驗證沒有完成資料時指標為 0 |
 | ADM-AC15、16 | 前端摘要 mock 驗證五種 `primary_step`、全完成狀態、各數字、未指派草稿數與 `task_counts_visible=false`；#454 合併後再用真後端確認 |
-| ADM-AC17 | Testing Library 驗證每個區段恰一個目前頁、缺少各區段權限時導覽隱藏、頁面單一 `<h1>` 與唯一「返回專案清單」連結、手機選單展開及 Escape 關閉；真實 Vite 與無頭瀏覽器分別走查 1280px、360px 並保存截圖 |
+| ADM-AC17 | Testing Library 驗證每個區段恰一個目前頁、缺少各區段權限時導覽隱藏、頁面單一 `<h1>` 與唯一「返回專案清單」連結、手機選單展開及 Escape 關閉；真實 Vite 與無頭瀏覽器分別走查 1280px、360px，截圖附在 PR |
 | ADM-AC18 | 前端測試以 `viewer_permission_codes` 只含 `inspection_task.inspect`／`inspection_task.read` 的帳號驗證導向 Field，並以任一內業權限驗證留在專案；真後端登入測試帳號走查權限結果 |
 | ADM-AC19 | 專案清單測試建立成功導向新首頁、重複代號仍已儲存警告顯示且可關閉、每列「開啟專案」及「成員」各自連至正確區段 |
 | ADM-AC20 | `backend/tests/api/test_projects.py`：零角色加入／取代回 422 且資料不變、帶角色成功、無權限先 403；同檔契約測試讀取 `frontend/src/admin/projects/fixtures/member-roles-contract.json`，驗證真 API 的欄位集合與錯誤碼和前端 mock 一致（RG-M22） |
-| ADM-AC21 | `ProjectsAdmin.test.tsx`、`roleDescriptions.test.ts`、`RolePermissionSummary.test.tsx`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、後端 registry 完整覆蓋、依 registry 順序摘要與清單、合併後項目計數一致、混合已知／未知碼及雙未知碼回退、兩個角色各自展開、零權限無按鈕、固定可及名稱；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
-| ADM-AC22 | `ProjectsAdmin.test.tsx`：修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
-| ADM-AC26 | `backend/tests/api/test_projects.py`：不限公司、已加入與停用者排除、外部協作人員顯示所屬公司與標籤、Admin 看全部、欄位與契約 fixture 一致、cursor、權限（401／403／他專案 403／404）、全域 `/users`、`/roles` 仍 403、非 Admin 違反可指派角色、外部協作人員只能被指派外部可用的角色、不能改自己時回 422 與專用錯誤碼，Admin 不受白名單限制（對外部協作人員仍受外部可用限制）、查詢數不隨資料增加；`test_route_access.py` 登記兩條新路由；`ProjectsAdmin.test.tsx`：內業以點擊加入（必選角色）、修改角色、移出，全程不呼叫全域 `/users`、`/roles`，伺服器 422（不可指派角色、外部可用限制、不能改自己）對應到角色欄或使用者欄；候選或角色失敗時成員列表仍顯示並可重新載入，無權限者看不到操作；SQLite 真後端、Vite 與無頭瀏覽器以內業帳號走查 1280px／360px，記錄 HTTP 狀態與截圖 |
-| ADM-AC27 | 各畫面的前端測試：入口名稱、非管理者外殼與計畫任務頁的成功提示（`role="status"`、舊提示清除）、項目修改確認的兩種說法（草稿只有確認儲存、已派出才有選項與說明）、成員頁無候選時隱藏表單、存為範本後項目數更新、變更密碼頁規則；SQLite 真後端、Vite 與無頭瀏覽器從登入開始只靠點擊走查內業、現場、混合三種帳號並保存桌面與 360px 截圖 |
-| ADM-AC14 | UI 測試驗證一次性密碼結果／離頁清除、三種高風險操作的取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通流程並記錄 HTTP 狀態與桌面／360px 截圖 |
+| ADM-AC21 | `ProjectsAdmin.test.tsx`、`roleDescriptions.test.ts`、`RolePermissionSummary.test.tsx`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、後端 registry 完整覆蓋、依 registry 順序摘要與清單、合併後項目計數一致、混合已知／未知碼及雙未知碼回退、兩個角色各自展開、零權限無按鈕、固定可及名稱；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態，截圖附在 PR |
+| ADM-AC22 | `ProjectsAdmin.test.tsx`：修改角色、未儲存確認、移出確認與 Esc、卡片清單與舊成員提示；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態，截圖附在 PR |
+| ADM-AC26 | `backend/tests/api/test_projects.py`：不限公司、已加入與停用者排除、外部協作人員顯示所屬公司與標籤、Admin 看全部、欄位與契約 fixture 一致、cursor、權限（401／403／他專案 403／404）、全域 `/users`、`/roles` 仍 403、非 Admin 違反可指派角色、外部協作人員只能被指派外部可用的角色、不能改自己時回 422 與專用錯誤碼，Admin 不受白名單限制（對外部協作人員仍受外部可用限制）、查詢數不隨資料增加；`test_route_access.py` 登記兩條新路由；`ProjectsAdmin.test.tsx`：內業以點擊加入（必選角色）、修改角色、移出，全程不呼叫全域 `/users`、`/roles`，伺服器 422（不可指派角色、外部可用限制、不能改自己）對應到角色欄或使用者欄；候選或角色失敗時成員列表仍顯示並可重新載入，無權限者看不到操作；SQLite 真後端、Vite 與無頭瀏覽器以內業帳號走查 1280px／360px，記錄 HTTP 狀態，截圖附在 PR |
+| ADM-AC27 | 各畫面的前端測試：入口名稱、非管理者外殼與計畫任務頁的成功提示（`role="status"`、舊提示清除）、項目修改確認的兩種說法（草稿只有確認儲存、已派出才有選項與說明）、成員頁無候選時隱藏表單、存為範本後項目數更新、變更密碼頁規則；SQLite 真後端、Vite 與無頭瀏覽器從登入開始只靠點擊走查內業、現場、混合三種帳號，桌面與 360px 截圖附在 PR |
+| ADM-AC14 | UI 測試驗證一次性密碼結果／離頁清除、三種高風險操作與啟用的取消不送出與確認送出、專案未儲存時保留或捨棄；以 SQLite 真後端、Vite 與無頭瀏覽器走通流程並記錄 HTTP 狀態，桌面與 360px 截圖附在 PR |
+| ADM-AC36～38 | 前端元件與頁面測試：確認框的顏色變體、按鈕順序、初始焦點與 Esc（`ConfirmBox.test.tsx`、`UsersCompaniesGuards.test.tsx`）、狀態標籤對照（`Badge.test.tsx`）；程式於 v0.3.1 已有這些測試，本規格只補對照，截圖需要時附在 PR |
 
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。
