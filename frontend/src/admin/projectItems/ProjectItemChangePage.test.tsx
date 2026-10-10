@@ -427,6 +427,22 @@ describe('ProjectItemChangePage', () => {
     )
   })
 
+  it('shows the points_required message in plain words', async () => {
+    const api = apiWith({
+      update: vi.fn(async () => {
+        throw new ManagementApiError(
+          422,
+          'project_inspection_item.points_required',
+        )
+      }),
+    })
+    renderPage(api)
+    await confirm('yes')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '至少要保留一項查核項次。',
+    )
+  })
+
   it('refreshes the impact list when a choice becomes required', async () => {
     const initial = { ...preview, affectedTasks: [] }
     const api = apiWith({

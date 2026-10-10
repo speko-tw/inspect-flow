@@ -919,8 +919,6 @@ def test_project_item_patch_preserves_point_and_field_ids(
     project = world["project"]
     item = world["item"]
     item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
-    first_point_client_id = uuid4()
-    removed_point_client_id = uuid4()
     kept_field_client_id = uuid4()
     removed_field_client_id = uuid4()
     initial = admin.patch(
@@ -928,7 +926,6 @@ def test_project_item_patch_preserves_point_and_field_ids(
         json={
             "inspection_points": [
                 {
-                    "client_id": str(first_point_client_id),
                     "sequence": 1,
                     "title": "量測點",
                     "instruction": "初始量測說明",
@@ -957,7 +954,6 @@ def test_project_item_patch_preserves_point_and_field_ids(
                     "evidence_requirements": [{"min_count": 1}],
                 },
                 {
-                    "client_id": str(removed_point_client_id),
                     "sequence": 2,
                     "title": "移除點",
                     "instruction": "移除的說明",
@@ -975,7 +971,6 @@ def test_project_item_patch_preserves_point_and_field_ids(
     kept_field_id = first_point["measurement_fields"][0]["id"]
     removed_field_id = first_point["measurement_fields"][1]["id"]
 
-    new_point_client_id = uuid4()
     new_field_client_id = uuid4()
     updated = admin.patch(
         item_url,
@@ -995,6 +990,7 @@ def test_project_item_patch_preserves_point_and_field_ids(
                     "measurement_fields": [
                         {
                             "id": kept_field_id,
+                            "client_id": kept_field_id,
                             "name": "保留欄位更新",
                             "field_type": "number",
                             "unit": "cm",
@@ -1009,7 +1005,6 @@ def test_project_item_patch_preserves_point_and_field_ids(
                     "evidence_requirements": [{"min_count": 2}],
                 },
                 {
-                    "client_id": str(new_point_client_id),
                     "sequence": 1,
                     "title": "新增點",
                     "instruction": "新增的說明",
@@ -1043,62 +1038,7 @@ def test_project_item_patch_preserves_point_and_field_ids(
     assert preserved["numeric_standard"]["measurement_field_id"] == (
         kept_field_id
     )
-    added = next(point for point in points if point["title"] == "新增點")
-    assert added["id"] != str(new_point_client_id)
-
-    client_id_update = admin.patch(
-        item_url,
-        json={
-            "inspection_points": [
-                {
-                    "client_id": first_point["id"],
-                    "sequence": 2,
-                    "title": "client_id 更新點",
-                    "instruction": "以 client_id 對應既有點位",
-                    "numeric_standard": {
-                        "value": "13",
-                        "condition": "=",
-                        "unit": "cm",
-                        "measurement_field_client_id": kept_field_id,
-                    },
-                    "measurement_fields": [
-                        {
-                            "client_id": kept_field_id,
-                            "name": "client_id 更新欄位",
-                            "field_type": "number",
-                            "unit": "cm",
-                        },
-                        {
-                            "client_id": new_field["id"],
-                            "name": "新增欄位",
-                            "field_type": "text",
-                            "unit": None,
-                        },
-                    ],
-                    "evidence_requirements": [{"min_count": 2}],
-                },
-                {
-                    "client_id": added["id"],
-                    "sequence": 1,
-                    "title": "新增點更新",
-                    "instruction": "已新增點位再次更新",
-                    "text_standard": {"text": "新標準"},
-                    "measurement_fields": [],
-                    "evidence_requirements": [{"min_count": 1}],
-                },
-            ]
-        },
-    )
-    assert client_id_update.status_code == 200, client_id_update.text
-    assert {
-        point["id"] for point in client_id_update.json()["inspection_points"]
-    } == point_ids
-    client_id_preserved = next(
-        point
-        for point in client_id_update.json()["inspection_points"]
-        if point["id"] == first_point["id"]
-    )
-    assert client_id_preserved["measurement_fields"][0]["id"] == kept_field_id
+    assert len(point_ids) == 2
 
     legacy = admin.patch(
         item_url,
@@ -1140,7 +1080,6 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     for sequence in (1, 2):
         initial.append(
             {
-                "client_id": str(uuid4()),
                 "sequence": sequence,
                 "title": f"項次 {sequence}",
                 "instruction": "初始說明",
@@ -1159,6 +1098,82 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     created = admin.patch(item_url, json={"inspection_points": initial})
     assert created.status_code == 200, created.text
     points = created.json()["inspection_points"]
+    foreign_point_response = admin.patch(
+        f"/api/v1/projects/{project.id}/inspection-items/{world['item_two'].id}",
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "同專案外項目點位",
+                    "instruction": "外項目",
+                    "text_standard": {"text": "不可修改"},
+                    "measurement_fields": [
+                        {
+                            "client_id": str(uuid4()),
+                            "name": "外項目欄位",
+                            "field_type": "text",
+                            "unit": None,
+                        }
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert foreign_point_response.status_code == 200
+    same_project_foreign = foreign_point_response.json()["inspection_points"][
+        0
+    ]
+
+    other_project = Project(
+        project_code="PLAN-API-FOREIGN",
+        name="其他專案",
+        client_name="其他業主",
+        site_location="其他工地",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(other_project)
+    db_session.flush()
+    other_project_item = ProjectInspectionItem(
+        project_id=other_project.id,
+        sequence=1,
+        title="其他專案項目",
+        instruction="其他專案說明",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(other_project_item)
+    db_session.commit()
+    other_project_response = admin.patch(
+        f"/api/v1/projects/{other_project.id}/inspection-items/"
+        f"{other_project_item.id}",
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "其他專案點位",
+                    "instruction": "其他專案",
+                    "text_standard": {"text": "不可修改"},
+                    "measurement_fields": [
+                        {
+                            "client_id": str(uuid4()),
+                            "name": "其他專案欄位",
+                            "field_type": "text",
+                            "unit": None,
+                        }
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert other_project_response.status_code == 200
+    other_project_foreign = other_project_response.json()["inspection_points"][
+        0
+    ]
 
     plan = admin.post(
         f"/api/v1/projects/{project.id}/inspection-plans",
@@ -1175,7 +1190,6 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         field = point["measurement_fields"][0]
         return {
             "id": point["id"],
-            "client_id": point["id"],
             "sequence": point["sequence"],
             "title": title or point["title"],
             "instruction": "更新說明",
@@ -1197,6 +1211,11 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     updated_points = [
         point_payload(point, title="內容可更正") for point in points
     ]
+    original_field_ids = {
+        field["id"]
+        for point in points
+        for field in point["measurement_fields"]
+    }
     updated_points[0]["sequence"] = 2
     updated_points[1]["sequence"] = 1
     allowed = admin.patch(
@@ -1209,17 +1228,55 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         for point in allowed.json()["inspection_points"]
     }
     assert set(allowed_ids) == {point["id"] for point in points}
+    assert {
+        field_id
+        for field_ids in allowed_ids.values()
+        for field_id in field_ids
+    } == original_field_ids
     task_id = task.json()["id"]
     snapshot_before_rejections = admin.get(
         f"/api/v1/inspection-tasks/{task_id}"
     ).json()["items"][0]["current_snapshot"]
+    snapshot_points_before = db_session.scalars(
+        select(TaskSnapshotPoint).where(
+            TaskSnapshotPoint.snapshot_id
+            == db_session.scalar(
+                select(TaskRequirementSnapshot.id).where(
+                    TaskRequirementSnapshot.task_inspection_item_id
+                    == db_session.scalar(
+                        select(TaskInspectionItem.id).where(
+                            TaskInspectionItem.task_id == UUID(task_id),
+                            TaskInspectionItem.project_inspection_item_id
+                            == item.id,
+                        )
+                    ),
+                    TaskRequirementSnapshot.is_current.is_(True),
+                )
+            )
+        )
+    ).all()
+    assert {row.source_point_id for row in snapshot_points_before} == {
+        UUID(point_id) for point_id in allowed_ids
+    }
+    snapshot_field_ids_before = set(
+        db_session.scalars(
+            select(TaskSnapshotMeasurementField.source_field_id).where(
+                TaskSnapshotMeasurementField.point_id.in_(
+                    [row.id for row in snapshot_points_before]
+                )
+            )
+        ).all()
+    )
+    assert snapshot_field_ids_before == {
+        UUID(field_id) for field_id in original_field_ids
+    }
+    assert {
+        point_row["title"]
+        for point_row in snapshot_before_rejections["inspection_points"]
+    } == {"內容可更正"}
 
     missing_point_identity = [
-        {
-            key: value
-            for key, value in point.items()
-            if key not in {"id", "client_id"}
-        }
+        {key: value for key, value in point.items() if key != "id"}
         for point in updated_points
     ]
     missing_point_identity_response = admin.patch(
@@ -1282,7 +1339,6 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     assert snapshot_after_rejections == snapshot_before_rejections
 
     added_point = {
-        "client_id": str(uuid4()),
         "sequence": 3,
         "title": "新增項次",
         "instruction": "新增說明",
@@ -1382,25 +1438,59 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     )
 
     foreign_point = point_payload(point)
-    foreign_point["id"] = str(uuid4())
-    foreign_point["client_id"] = foreign_point["id"]
-    foreign_point_response = admin.patch(
+    foreign_point["id"] = same_project_foreign["id"]
+    same_project_foreign_response = admin.patch(
         item_url,
         json={
-            "inspection_points": [foreign_point, updated_points[1]],
+            "inspection_points": [foreign_point, point_payload(points[1])],
             "reinspect": True,
         },
     )
-    assert foreign_point_response.status_code == 422
-    assert foreign_point_response.json()["error"]["code"] == (
+    assert same_project_foreign_response.status_code == 422
+    assert same_project_foreign_response.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    other_project_point = point_payload(point)
+    other_project_point["id"] = other_project_foreign["id"]
+    other_project_point_response = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                other_project_point,
+                point_payload(points[1]),
+            ],
+            "reinspect": True,
+        },
+    )
+    assert other_project_point_response.status_code == 422
+    assert other_project_point_response.json()["error"]["code"] == (
         "request.validation_failed"
     )
 
     foreign_field_point = point_payload(point)
-    foreign_field_point["measurement_fields"][0]["id"] = str(uuid4())
-    foreign_field_point["measurement_fields"][0]["client_id"] = (
-        foreign_field_point["measurement_fields"][0]["id"]
+    foreign_field_point["measurement_fields"][0]["id"] = same_project_foreign[
+        "measurement_fields"
+    ][0]["id"]
+    same_project_foreign_field_response = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                foreign_field_point,
+                point_payload(points[1]),
+            ],
+            "reinspect": True,
+        },
     )
+    assert same_project_foreign_field_response.status_code == 422
+    assert same_project_foreign_field_response.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    foreign_field_point = point_payload(point)
+    foreign_field_point["measurement_fields"][0]["id"] = other_project_foreign[
+        "measurement_fields"
+    ][0]["id"]
     foreign_field_response = admin.patch(
         item_url,
         json={
@@ -1412,21 +1502,96 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     assert foreign_field_response.json()["error"]["code"] == (
         "request.validation_failed"
     )
+    assert (
+        db_session.get(
+            ProjectInspectionPoint, UUID(same_project_foreign["id"])
+        ).title
+        == "同專案外項目點位"
+    )
+    assert (
+        db_session.get(
+            ProjectMeasurementField,
+            UUID(same_project_foreign["measurement_fields"][0]["id"]),
+        ).name
+        == "外項目欄位"
+    )
+    assert (
+        db_session.get(
+            ProjectInspectionPoint, UUID(other_project_foreign["id"])
+        ).title
+        == "其他專案點位"
+    )
+    assert (
+        db_session.get(
+            ProjectMeasurementField,
+            UUID(other_project_foreign["measurement_fields"][0]["id"]),
+        ).name
+        == "其他專案欄位"
+    )
 
-    conflicting_alias = point_payload(point)
-    conflicting_alias["client_id"] = str(uuid4())
-    alias_response = admin.patch(
+    duplicate_id = point_payload(points[1])
+    duplicate_id["id"] = point["id"]
+    duplicate_response = admin.patch(
         item_url,
         json={
             "inspection_points": [
-                conflicting_alias,
-                updated_points[1],
+                point_payload(point),
+                duplicate_id,
             ],
-            "reinspect": False,
+            "reinspect": True,
         },
     )
-    assert alias_response.status_code == 422
-    assert alias_response.json()["error"]["code"] == (
+    assert duplicate_response.status_code == 422
+    assert duplicate_response.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    duplicate_field_point = point_payload(point)
+    duplicate_field = duplicate_field_point["measurement_fields"][0]
+    duplicate_field_point["measurement_fields"] = [
+        dict(duplicate_field),
+        dict(duplicate_field),
+    ]
+    duplicate_field_response = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                duplicate_field_point,
+                point_payload(points[1]),
+            ],
+            "reinspect": True,
+        },
+    )
+    assert duplicate_field_response.status_code == 422
+    assert duplicate_field_response.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    point_client_alias = point_payload(point)
+    point_client_alias["client_id"] = point["id"]
+    point_client_alias_response = admin.patch(
+        item_url,
+        json={"inspection_points": [point_client_alias]},
+    )
+    assert point_client_alias_response.status_code == 422
+    assert point_client_alias_response.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    numeric_field_alias = point_payload(point)
+    numeric_field_alias["numeric_standard"] = {
+        "value": "12",
+        "condition": "=",
+        "unit": "mm",
+        "measurement_field_id": point["measurement_fields"][0]["id"],
+        "measurement_field_client_id": point["measurement_fields"][0]["id"],
+    }
+    numeric_field_alias_response = admin.patch(
+        item_url,
+        json={"inspection_points": [numeric_field_alias]},
+    )
+    assert numeric_field_alias_response.status_code == 422
+    assert numeric_field_alias_response.json()["error"]["code"] == (
         "request.validation_failed"
     )
 
@@ -1449,7 +1614,6 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
 
     def point(sequence, title):
         return {
-            "client_id": str(uuid4()),
             "sequence": sequence,
             "title": title,
             "instruction": f"{title} 說明",

@@ -94,7 +94,6 @@ export function listProjectItems(
 function patchPoints(points: InspectionPoint[]) {
   return points.map((point) => ({
     id: point.id,
-    client_id: point.id ?? crypto.randomUUID(),
     sequence: point.sequence,
     title: point.title,
     instruction: point.instruction,
@@ -114,7 +113,7 @@ function patchPoints(points: InspectionPoint[]) {
       : null,
     measurement_fields: point.measurement_fields.map((field) => ({
       id: field.id,
-      client_id: field.id ?? field.client_id ?? crypto.randomUUID(),
+      client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
       name: field.name,
       field_type: field.field_type,
       unit: field.unit,
