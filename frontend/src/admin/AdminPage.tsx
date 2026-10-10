@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Link,
   Navigate,
@@ -21,14 +22,22 @@ import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import MyProjectsPage from './projects/MyProjectsPage'
 import ProjectsPage from './projects/ProjectsPage'
-import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
-import ProjectTemplatesPage from '../field/ProjectTemplatesPage'
 import { projectItemApi } from './projectItems/api'
-import TemplatesPage from './templates/TemplatesPage'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
 const PlanningPage = lazy(() => import('./planning/PlanningPage'))
+const TemplatesPage = lazy(() => import('./templates/TemplatesPage'))
+const ProjectTemplatesPage = lazy(
+  () => import('./projects/ProjectTemplatesPage'),
+)
+const ProjectItemChangePage = lazy(
+  () => import('./projectItems/ProjectItemChangePage'),
+)
+
+function AdminRouteSuspense({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
+}
 
 function ProjectPlanningRoute() {
   const { projectId } = useParams()
@@ -176,7 +185,11 @@ function AdminPageContent() {
             />
             <Route
               path="projects/:projectId/templates"
-              element={<ProjectTemplatesPage />}
+              element={
+                <AdminRouteSuspense>
+                  <ProjectTemplatesPage />
+                </AdminRouteSuspense>
+              }
             />
             <Route
               path="projects/:projectId/planning"
@@ -194,11 +207,20 @@ function AdminPageContent() {
               path="projects/:projectId/inspection-items/:itemId"
               element={
                 <ProjectSectionPage section="inspection-items">
-                  <ProjectItemChangePage api={projectItemApi} />
+                  <AdminRouteSuspense>
+                    <ProjectItemChangePage api={projectItemApi} />
+                  </AdminRouteSuspense>
                 </ProjectSectionPage>
               }
             />
-            <Route path="templates" element={<TemplatesPage />} />
+            <Route
+              path="templates"
+              element={
+                <AdminRouteSuspense>
+                  <TemplatesPage />
+                </AdminRouteSuspense>
+              }
+            />
             <Route path="*" element={<RouteNotFound />} />
           </Routes>
         )}
@@ -223,7 +245,11 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     <>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
       <Route
-        element={<ProjectTemplatesPage />}
+        element={
+          <AdminRouteSuspense>
+            <ProjectTemplatesPage />
+          </AdminRouteSuspense>
+        }
         path="projects/:projectId/templates"
       />
       <Route
@@ -253,7 +279,9 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
       <Route
         element={
           <ProjectSectionPage section="inspection-items">
-            <ProjectItemChangePage api={projectItemApi} />
+            <AdminRouteSuspense>
+              <ProjectItemChangePage api={projectItemApi} />
+            </AdminRouteSuspense>
           </ProjectSectionPage>
         }
         path="projects/:projectId/inspection-items/:itemId"
@@ -294,7 +322,14 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
           />
           {projectRoutes}
           {user.has_template_access && (
-            <Route path="templates" element={<TemplatesPage />} />
+            <Route
+              path="templates"
+              element={
+                <AdminRouteSuspense>
+                  <TemplatesPage />
+                </AdminRouteSuspense>
+              }
+            />
           )}
           <Route
             path="*"
