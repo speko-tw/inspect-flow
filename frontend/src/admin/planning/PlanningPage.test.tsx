@@ -218,18 +218,23 @@ describe('planning management page', () => {
     expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
   })
 
-  it('shows missing project without fallback', async () => {
-    const client = createMockPlanningClient()
-    vi.spyOn(client, 'getProject').mockRejectedValue(
-      new ManagementApiError(404, 'resource.not_found'),
-    )
-    render(<PlanningPage client={client} initialProjectId="missing-project" />)
+  it.each([404, 422])(
+    'shows missing project without fallback for status %i',
+    async (status) => {
+      const client = createMockPlanningClient()
+      vi.spyOn(client, 'getProject').mockRejectedValue(
+        new ManagementApiError(status, 'resource.not_found'),
+      )
+      render(
+        <PlanningPage client={client} initialProjectId="missing-project" />,
+      )
 
-    expect(
-      await screen.findByRole('heading', { name: '找不到專案' }),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
-  })
+      expect(
+        await screen.findByRole('heading', { name: '找不到專案' }),
+      ).toBeInTheDocument()
+      expect(screen.queryByText('專案：示範工程 A')).not.toBeInTheDocument()
+    },
+  )
 
   it('uses the route project ID when its name is forbidden', async () => {
     const client = createMockPlanningClient()

@@ -1019,18 +1019,6 @@ td .btn {
   margin-bottom: 0;
 }
 
-/* 欄位錯誤：紅字貼在欄位下方，不套框（有沒有 role 外觀都一樣）。 */
-.tpl-field-error,
-.member-field-error {
-  margin: calc(var(--space-1) * -1) 0 var(--space-2);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--error-text);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
 output {
   display: block;
   margin: var(--space-3) 0;
@@ -1381,9 +1369,6 @@ a.app-header-tab[aria-current='page'] {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
-}
-
-.temporary-password-result {
   max-width: 42rem;
   margin-inline: auto;
 }
@@ -1650,10 +1635,6 @@ a.app-header-tab[aria-current='page'] {
   text-decoration: underline;
 }
 
-.tpl-item-open {
-  display: none;
-}
-
 .project-item-applied-notice {
   display: inline-block;
   margin: 0 var(--space-2) 0 0;
@@ -1730,12 +1711,6 @@ a.app-header-tab[aria-current='page'] {
 .tpl-actions {
   justify-content: flex-start;
   margin: var(--space-3) 0 var(--space-5);
-}
-
-.tpl-error-summary {
-  border-color: var(--error-border);
-  background: var(--error-bg);
-  color: var(--error-text);
 }
 
 .project-workspace-grid {
@@ -1834,6 +1809,8 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-error-summary {
+  background: var(--error-bg);
+  color: var(--error-text);
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--error-border);
@@ -2010,10 +1987,6 @@ a.app-header-tab[aria-current='page'] {
   .tpl-tree-count {
     white-space: normal;
     text-align: right;
-  }
-
-  .tpl-item-open {
-    display: inline;
   }
 
   .tpl-editor-footer button {

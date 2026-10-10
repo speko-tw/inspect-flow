@@ -21,6 +21,7 @@
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
 - 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋，其 `project.read` 分支與 IP-R12、IP-AC13 由 `authentication` 任務 P 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
 - 任務按專案查核項目手動建立，並由內業選擇專案分區或填補充地點；本計畫不包含依 interval、起訖點或間距自動切分任務。
+- IP-R13～IP-R15 與 IP-AC14～IP-AC15 屬 [負責人直接指示（2026-10-10，#106）](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-6093842438) 的範圍變更；實作不在本計畫另開任務：點位與實測欄位帶 `id`、選「不要」不得增減項次、零項次擋下與 `has_result` 納入有效照片由 `field-evidence` T5 實作，Task 回應新增三個欄位與 `has_result` 納入結果由 [`completion-validation`](../completion-validation/plan.md) T3、T4、T6 實作。
 
 ## 並行分組
 
@@ -52,15 +53,17 @@
 | IP-AC01 | API 整合測試：授權與拒絕任意狀態輸入；跨專案存取測試。 |
 | IP-AC02 | API／服務測試：內業建立含多個明選項目的 Task 與只含單項的 Task；確認建立後為草稿且現場不可見，沒有 interval 仍可建立，也不自動切分任務。 |
 | IP-AC03 | 服務／資料庫測試：建立 Task 後修改 Template 與 ProjectInspectionItem，確認 Snapshot 仍為建立時內容。 |
-| IP-AC04 | 服務／API 測試：驗證跨 Plan 多項目 Task 僅作廢受影響項目、舊 Snapshot／結果／照片可查找、其他項目保持有效；僅 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 狀態不變並標記項目待重查；DRAFT Task 原位更新；封存中拒絕修改且唯讀，取消封存後重算狀態再成功。 |
+| IP-AC04 | 服務／API 測試：驗證跨 Plan 多項目 Task 僅作廢受影響項目、舊 Snapshot／結果／照片可查找、其他項目保持有效；僅 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 狀態不變並標記項目待重查；DRAFT Task 原位更新；有效照片或結果的項目才作廢並標待重查（只有照片也算），已取消 Task 恢復時才作廢；封存中拒絕修改且唯讀，取消封存後重算狀態再成功。 |
 | IP-AC05 | 服務／API 測試：選「不要」後比對 Snapshot 文字更新且 Task 狀態、結果與照片不變，稽核含選擇者及時間。 |
 | IP-AC06 | 權限整合測試：非指派但有專案現場權限的成員可操作；實際操作者欄位記錄該成員。 |
 | IP-AC07 | 狀態機整合測試：零 Task 維持 `DRAFT`；`DRAFT` Task 阻止 Plan 完成，可硬刪除但不可取消且不計入全取消判定，刪除另寫 `inspection_task.deleted` 稽核事件；已完成 Plan 新增草稿 Task 後回 `IN_PROGRESS`；派出後才可取消，取消保留結果／照片與取消前狀態；恢復沿用取消權限、不要求原因，且還原至取消前狀態；若取消期間標準變更，恢復採目前標準並將被修改項目的舊結果標示待重查，其他項目不變；完成不可取消；全取消且至少一筆成為 `CANCELLED`，已有完成且其餘取消則 `COMPLETED`。 |
 | IP-AC08 | 狀態機整合測試：封存各有效 Plan 狀態後確認所屬 Task 唯讀；取消封存後依目前 Task 狀態重算有效狀態，不直接還原封存前狀態。核對 KD-56 與 `state-machines` 同步後的狀態轉換。 |
-| IP-AC09 | API／服務測試：P4 不存在結果或照片新增／更正端點，也不提供一般人工將 Task 從 `COMPLETED` 重開的端點；KD-55「不要」只更新 Snapshot 文字且狀態、結果、照片不變；KD-55「要」是明確系統例外，可使受影響的 `COMPLETED` Task 自動回 `IN_PROGRESS`；`PENDING`／`IN_PROGRESS` Task 保持狀態但項目標記待重查，待重查完成前 Task 與 Plan 均不得完成。 |
+| IP-AC09 | API／服務測試：P4 不存在結果或照片新增／更正端點，也不提供一般人工將 Task 從 `COMPLETED` 重開的端點；KD-55「不要」只更新 Snapshot 文字且狀態、結果、照片不變；KD-55「要」是明確系統例外，可使受影響的 `COMPLETED` Task 自動回 `IN_PROGRESS`；`PENDING`／`IN_PROGRESS` Task 保持狀態但項目標記待重查，待重查完成前 Task 與 Plan 均不得完成；只有照片、尚無結果的項目也作廢並標待重查。 |
 | IP-AC10 | API 整合測試：權限、專案邊界、非法狀態輸入與共用錯誤格式。 |
 | IP-AC11 | API／服務／前端測試：分區 CRUD 權限、名稱唯一性、Task 同專案地點欄位與有／無分區的建立規則；地點可修改狀態、已完成／取消及封存時拒絕、地點修改稽核；Task 讀取回應含分區 ID／名稱且不要求 `project_zone.read`；引用分區不可刪除，Snapshot 排除地點欄位。 |
 | IP-AC12 | `backend/tests/api/test_project_workflow_summary.py` 驗證空專案步驟數、五種 Task 狀態、待重查 Task 數、DRAFT 可見性、403／404 與跨專案隔離；`backend/tests/contract/test_route_access.py` 驗證路由權限宣告。 |
+| IP-AC14 | 真後端 API 測試（隨 `field-evidence` T5）：PATCH 帶 `id` 保留識別、選「不要」拒絕增減項次與欄位集合、`id` 不屬於該項目、選「要」時被刪除的點位連同結果與照片作廢。 |
+| IP-AC15 | 真後端 API 測試（隨 `field-evidence` T5）：建立含零項次項目的 Task 被拒絕、已使用項目改成零項次被拒絕、未使用項目可暫時零項次。 |
 
 Issue #406 補齊以下測試對應，不變更產品行為：
 
