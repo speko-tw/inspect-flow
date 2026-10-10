@@ -54,7 +54,7 @@ from app.db import clock
 from app.db.base import uuid7
 from app.db.unit_of_work import unit_of_work
 from app.main import create_app
-from app.models import AuditLog, Company, User
+from app.models import AuditLog, Company
 from app.services.audit import (
     _EVENT_CATALOG,
     _EVENT_TYPE_RE,
@@ -329,9 +329,6 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
                 entity_id=uuid.uuid4(),
                 before=before,
                 after=after,
-                system_event=(
-                    event_type == "user.active_changed" and len(stored) == 15
-                ),
             )
         )
 
@@ -340,8 +337,6 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
         "planned_start_date": None,
         "planned_completion_date": None,
     }
-    system_actor = session.get(User, stored[16].created_by)
-    assert system_actor is not None and system_actor.is_system
     assert _EVENT_CATALOG["user.active_changed"].kind is AuditEventKind.UPDATED
     assert _EVENT_CATALOG["user.active_changed"].always_recorded == {
         "is_active"
@@ -410,6 +405,7 @@ def test_alg_ac26_authenticated_denial_flushes_after_rollback(
     router = APIRouter()
 
     def deny_after_flush(
+        malformed: bool = False,
         db: Session = Depends(get_db),  # noqa: B008 -- FastAPI DI
         _user=Depends(require_login),  # noqa: B008 -- FastAPI DI
     ):
@@ -420,16 +416,19 @@ def test_alg_ac26_authenticated_denial_flushes_after_rollback(
         )
         db.add(company)
         db.flush()
+        event_after = {
+            "user_id": _user.id,
+            "permission_codes": ["project.create"],
+            "reason": "delegation_scope_exceeded",
+        }
+        if malformed:
+            event_after["misspelled"] = True
         record_audit_event_in_independent_transaction(
             db,
             "module_permission.grant_denied",
             entity_id=uuid.uuid4(),
             before=None,
-            after={
-                "user_id": uuid.uuid4(),
-                "permission_codes": ["project.create"],
-                "reason": "delegation_scope_exceeded",
-            },
+            after=event_after,
             project_id=project_id,
         )
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
@@ -449,6 +448,22 @@ def test_alg_ac26_authenticated_denial_flushes_after_rollback(
     )
     assert login_response.status_code == 200
 
+    malformed_response = client.post(
+        "/api/v1/test/denied-flushed?malformed=true"
+    )
+    assert malformed_response.status_code == 500
+    session.expire_all()
+    assert (
+        session.query(AuditLog)
+        .filter_by(event_type="module_permission.grant_denied")
+        .count()
+        == 0
+    )
+    assert (
+        session.query(Company).filter_by(name="Pending Denied Change").count()
+        == 0
+    )
+
     started = time.monotonic()
     response = client.post("/api/v1/test/denied-flushed")
     elapsed = time.monotonic() - started
@@ -467,6 +482,7 @@ def test_alg_ac26_authenticated_denial_flushes_after_rollback(
         .one()
     )
     assert event.after["reason"] == "delegation_scope_exceeded"
+    assert event.created_by == user.id
 
     def fail_write(_item):
         raise RuntimeError("audit storage unavailable")
@@ -1162,6 +1178,7 @@ class TestAlgAc13SetupSystemEventAndAc16AdminReset:
             json={"login": user.email, "password": PASSWORD},
         )
         assert login.status_code == 200
+        assert user.is_system is False
         user_as_system = login_client.post(
             route,
             json={
@@ -1174,6 +1191,19 @@ class TestAlgAc13SetupSystemEventAndAc16AdminReset:
         )
         assert user_as_system.status_code == 201
         assert user_as_system.json()["created_by"] == str(admin.id)
+
+        active_change_as_system = login_client.post(
+            route,
+            json={
+                "event_type": "user.active_changed",
+                "entity_id": str(user.id),
+                "before": {"is_active": True},
+                "after": {"is_active": False},
+                "system_event": True,
+            },
+        )
+        assert active_change_as_system.status_code == 201
+        assert active_change_as_system.json()["created_by"] == str(admin.id)
 
         user_without_declaration = login_client.post(
             route,

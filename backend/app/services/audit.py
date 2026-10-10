@@ -673,11 +673,16 @@ def record_audit_event_in_independent_transaction(
     system_event: bool = False,
     project_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
-    """Commit a security event independently of the caller's transaction.
+    """Write a security event independently of the caller's transaction.
 
-    ALG-R28 permits denied assignment and authorization attempts to survive
-    rollback of the request transaction. The passed session supplies the
-    target engine only; its pending writes and transaction are untouched.
+    In a request unit of work, validate and queue the event immediately;
+    it is written only if the request fails, after the unit of work rolls
+    back. A successful request discards the queue. Outside that queue, the
+    event is written immediately using an independent session. On SQLite,
+    an already-flushed non-unit-of-work session can still hold the write
+    lock and self-block that immediate path; use the request unit of work
+    for denied writes. The passed session supplies the target engine only;
+    its pending writes and transaction are untouched.
     """
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
@@ -687,6 +692,19 @@ def record_audit_event_in_independent_transaction(
     if definition is None:
         raise UnregisteredAuditEventError(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
+        )
+    normalized_before = _normalize_payload(before)
+    normalized_after = _normalize_payload(after)
+    _validate_fields(definition, normalized_before, normalized_after)
+    _validate_no_null_field_values(
+        definition, normalized_before, normalized_after
+    )
+    _validate_shape(definition, normalized_before, normalized_after)
+    if system_event and not (
+        definition.system_event or definition.allow_system_event
+    ):
+        raise InvalidAuditEventDefinitionError(
+            f"{event_type!r} cannot be declared as a system event"
         )
     if pending is not None:
         operator = (
@@ -699,8 +717,8 @@ def record_audit_event_in_independent_transaction(
                 engine=engine,
                 event_type=event_type,
                 entity_id=entity_id,
-                before=dict(before) if before is not None else None,
-                after=dict(after) if after is not None else None,
+                before=normalized_before,
+                after=normalized_after,
                 system_event=system_event,
                 project_id=project_id,
                 audit_log_id=audit_log_id,
@@ -712,8 +730,8 @@ def record_audit_event_in_independent_transaction(
         engine=engine,
         event_type=event_type,
         entity_id=entity_id,
-        before=before,
-        after=after,
+        before=normalized_before,
+        after=normalized_after,
         system_event=system_event,
         project_id=project_id,
         audit_log_id=audit_log_id,
