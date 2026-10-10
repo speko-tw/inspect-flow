@@ -1,12 +1,12 @@
-import type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
+import type { TemplateCategory, TemplateSystem } from '../templates/api'
 import {
   HttpError,
   httpErrorMessage,
   listAllPages,
   request as httpRequest,
-} from '../http'
+} from '../../http'
 
-export type { TemplateCategory, TemplateSystem } from '../admin/templates/api'
+export type { TemplateCategory, TemplateSystem } from '../templates/api'
 
 export class ProjectTemplatesApiError extends HttpError {
   constructor(status: number, code?: string, details?: unknown) {

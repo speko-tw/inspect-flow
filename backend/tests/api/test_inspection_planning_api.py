@@ -203,6 +203,7 @@ def _planning_world(db_session, make_client):
         "outsider": _client(make_client, tokens["outsider"]),
         "field_user": field_user,
         "field_user_two": field_user_two,
+        "field_reader_user": field_reader,
         "plain_user": plain_member,
         "admin_user": admin,
         "project": project,
