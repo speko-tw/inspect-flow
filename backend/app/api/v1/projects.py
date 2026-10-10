@@ -50,7 +50,9 @@ _PROJECT_PLANNING_READ_ACCESS = Depends(
     require_project_permission("inspection_plan.read")
 )
 _PROJECT_MEMBER_ACCESS = Depends(
-    require_project_permission("project_member.manage")
+    require_project_permission(
+        "project_member.manage", uuid_path_params=("user_id",)
+    )
 )
 
 
