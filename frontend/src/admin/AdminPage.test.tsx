@@ -6,11 +6,12 @@ import {
   within,
 } from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
 import AdminPage from './AdminPage'
+import { preloadLazyRoutes } from '../testing/preloadRoutes'
 import {
   managementErrorMessage,
   ManagementApiError,
@@ -18,6 +19,8 @@ import {
   type CreatedUser,
   type User,
 } from './api'
+
+beforeAll(preloadLazyRoutes)
 
 const company: Company = {
   id: 'company-1',
