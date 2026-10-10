@@ -714,6 +714,11 @@ export default function ProjectTemplatesPage({
                     <legend>要套用什麼</legend>
                     <label>
                       <input
+                        aria-describedby={
+                          allSystemItemsApplied
+                            ? 'system-applied-help'
+                            : undefined
+                        }
                         checked={mode === 'system'}
                         disabled={allSystemItemsApplied}
                         name="apply-target"
@@ -730,11 +735,6 @@ export default function ProjectTemplatesPage({
                       />
                       整個系統（{templates.length} 個項目）
                     </label>
-                    {allSystemItemsApplied && (
-                      <p className="tpl-conflict-hint">
-                        專案已有這個系統的全部項目，請選擇單一項目。
-                      </p>
-                    )}
                     {templates.map((item) => (
                       <div className="tpl-apply-item-option" key={item.id}>
                         <label>
@@ -778,14 +778,14 @@ export default function ProjectTemplatesPage({
                   </fieldset>
                   {selectedTemplates.length > 0 && (
                     <>
-                      <h3>將新增 {selectedTemplates.length} 個項目</h3>
-                      {mode === 'system' && appliedTemplateCount > 0 && (
-                        <p className="tpl-conflict-hint">
-                          {appliedTemplateCount}{' '}
-                          項已套用。系統套用不會略過已套用項目，
-                          也不會部分套用；請改選未套用的單一項目。
-                        </p>
-                      )}
+                      <h3>
+                        {selected?.type === 'system' &&
+                        appliedTemplateCount > 0
+                          ? allSystemItemsApplied
+                            ? '沒有可套用的項目'
+                            : '系統套用預覽'
+                          : `將新增 ${selectedTemplates.length} 個項目`}
+                      </h3>
                       <ul className="tpl-preview-list">
                         {selectedTemplates.map((item) => (
                           <li key={item.id}>
@@ -885,6 +885,11 @@ export default function ProjectTemplatesPage({
                     </ConfirmBox>
                   ) : (
                     <button
+                      aria-describedby={
+                        selected?.type === 'system' && appliedTemplateCount > 0
+                          ? 'system-applied-help'
+                          : undefined
+                      }
                       className="btn-primary"
                       disabled={
                         !hasSelection ||
@@ -905,10 +910,15 @@ export default function ProjectTemplatesPage({
                       {busy ? '套用中…' : '套用至專案'}
                     </button>
                   )}
-                  {selectedAlreadyApplied && mode === 'system' && (
-                    <p className="tpl-conflict-hint" role="status">
-                      {appliedTemplateCount}{' '}
-                      項已套用。系統套用不會略過已套用項目， 也不會部分套用。
+                  {selected?.type === 'system' && appliedTemplateCount > 0 && (
+                    <p
+                      className="tpl-conflict-hint"
+                      id="system-applied-help"
+                      role="status"
+                    >
+                      {allSystemItemsApplied
+                        ? '專案已有這個系統的全部項目。'
+                        : `${appliedTemplateCount} 項已套用。系統不會略過已套用項目，也不會部分套用，請改選未套用的單一項目。`}
                     </p>
                   )}
                 </>

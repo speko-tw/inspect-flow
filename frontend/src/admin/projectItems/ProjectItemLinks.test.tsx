@@ -113,7 +113,7 @@ describe('ProjectItemLinks', () => {
 
     expect(await screen.findByText('管線查核')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '修改「管線查核」' }),
+      screen.getByRole('link', { name: '檢視「管線查核」' }),
     ).toHaveAttribute(
       'href',
       '/admin/projects/project-1/inspection-items/copy-1',

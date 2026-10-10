@@ -55,7 +55,8 @@ export function canVisit(user: AccessSummary, path: string): boolean {
   }
   if (underPrefix(pathname, '/admin/projects')) {
     // 專案的範本頁也開給範本管理員；其餘專案頁屬內業。
-    const templatePage = /^\/admin\/projects\/[^/]+\/templates\/?$/
+    const templatePage =
+      /^\/admin\/projects\/[^/]+\/(?:inspection-items\/templates|templates)\/?$/
     return (
       user.has_office_access ||
       (user.has_template_access && templatePage.test(pathname))

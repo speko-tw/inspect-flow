@@ -23,6 +23,7 @@ import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import MyProjectsPage from './projects/MyProjectsPage'
 import ProjectsPage from './projects/ProjectsPage'
 import { projectItemApi } from './projectItems/api'
+import { listMyProjects } from './projects/api'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
@@ -55,6 +56,59 @@ function ProjectTemplatesRedirect() {
       replace
       to={`/admin/projects/${projectId}/inspection-items/templates`}
     />
+  )
+}
+
+function ProjectTemplatesRoute() {
+  const { projectId = '' } = useParams()
+  const { user } = useCurrentUser()
+  const [membership, setMembership] = useState<{
+    projectId: string
+    isMember: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (user.is_admin || !user.has_template_access) return
+    let active = true
+    listMyProjects()
+      .then((projects) => {
+        if (active) {
+          setMembership({
+            projectId,
+            isMember: projects.some((project) => project.id === projectId),
+          })
+        }
+      })
+      .catch(() => {
+        if (active) setMembership({ projectId, isMember: false })
+      })
+    return () => {
+      active = false
+    }
+  }, [projectId, user.has_template_access, user.is_admin])
+
+  const isProjectMember =
+    membership?.projectId === projectId ? membership.isMember : null
+
+  if (!user.is_admin && user.has_template_access && isProjectMember !== true) {
+    if (isProjectMember === null) {
+      return <p role="status">正在確認專案權限…</p>
+    }
+    return (
+      <AdminRouteSuspense>
+        <ProjectTemplatesPage viewerPermissions={[]} />
+      </AdminRouteSuspense>
+    )
+  }
+
+  return (
+    <ProjectSectionPage section="inspection-items">
+      {(viewerPermissions) => (
+        <AdminRouteSuspense>
+          <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
+        </AdminRouteSuspense>
+      )}
+    </ProjectSectionPage>
   )
 }
 
@@ -195,17 +249,7 @@ function AdminPageContent() {
             />
             <Route
               path="projects/:projectId/inspection-items/templates"
-              element={
-                <ProjectSectionPage section="inspection-items">
-                  {(viewerPermissions) => (
-                    <AdminRouteSuspense>
-                      <ProjectTemplatesPage
-                        viewerPermissions={viewerPermissions}
-                      />
-                    </AdminRouteSuspense>
-                  )}
-                </ProjectSectionPage>
-              }
+              element={<ProjectTemplatesRoute />}
             />
             <Route
               path="projects/:projectId/templates"
@@ -265,15 +309,7 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     <>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
       <Route
-        element={
-          <ProjectSectionPage section="inspection-items">
-            {(viewerPermissions) => (
-              <AdminRouteSuspense>
-                <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
-              </AdminRouteSuspense>
-            )}
-          </ProjectSectionPage>
-        }
+        element={<ProjectTemplatesRoute />}
         path="projects/:projectId/inspection-items/templates"
       />
       <Route

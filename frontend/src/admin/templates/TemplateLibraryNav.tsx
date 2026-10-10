@@ -139,12 +139,13 @@ export function TemplateLibraryNav({
                                   const applied = Boolean(
                                     item.id && appliedItemIds.has(item.id),
                                   )
+                                  const accessibleName = applied
+                                    ? `${item.title || '未命名查核項目'}，已套用`
+                                    : item.title || '未命名查核項目'
                                   return (
                                     <li key={item.id ?? item.title}>
                                       <button
-                                        aria-label={
-                                          item.title || '未命名查核項目'
-                                        }
+                                        aria-label={accessibleName}
                                         disabled={applied}
                                         aria-current={
                                           selected?.type === 'item' &&

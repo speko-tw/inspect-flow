@@ -98,7 +98,7 @@ describe('App routing', () => {
     expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
   })
 
-  it('redirects the legacy Field project URL to its Admin template page', async () => {
+  it('redirects the legacy Field project URL to the current Admin path', async () => {
     render(
       <MemoryRouter initialEntries={['/field/projects/project-1']}>
         <LocationProbe />
@@ -108,7 +108,7 @@ describe('App routing', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(
-        '/admin/projects/project-1/templates',
+        '/admin/projects/project-1/inspection-items/templates',
       ),
     )
   })

@@ -81,11 +81,11 @@ export default function ProjectItemLinks({
                 套用時間：{new Date(item.applied_at).toLocaleString('zh-TW')}
               </time>
               <Link
-                aria-label={`修改「${item.title}」`}
+                aria-label={`${canEdit ? '修改' : '檢視'}「${item.title}」`}
                 className="btn"
                 to={`/admin/projects/${projectId}/inspection-items/${item.id}`}
               >
-                修改
+                {canEdit ? '修改' : '檢視'}
               </Link>
             </li>
           ))}
