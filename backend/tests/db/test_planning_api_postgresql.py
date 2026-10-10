@@ -1,8 +1,15 @@
 """PostgreSQL-backed API acceptance for Field planning endpoints (#552).
 
-Run these tests with ``make check-postgres``. That target selects the
-PostgreSQL URL explicitly and pytest refuses to fall back to SQLite when
-``--db-backend=postgresql`` is used without the URL.
+Run these tests with ``make check-postgres``. It uses
+``INSPECTFLOW_TEST_POSTGRES_URL`` and clears that database's ``public``
+schema. Set it only to a disposable test database. To run this file alone
+with the variable set, use::
+
+    cd backend && uv run --locked pytest \
+        tests/db/test_planning_api_postgresql.py --db-backend=postgresql
+
+Pytest refuses to fall back to SQLite when the PostgreSQL backend is
+requested without the URL.
 """
 
 from collections.abc import Generator
@@ -17,9 +24,11 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.main import create_app
 from app.models import (
+    Company,
     InspectionTask,
     ProjectMember,
     ProjectMemberRole,
@@ -32,7 +41,7 @@ from tests.api.test_inspection_planning_api import _planning_world
 from tests.api.test_planning_query_counts import (
     _create_permission_test_project,
 )
-from tests.db.conftest import create_root_user_with_company
+from tests.db.conftest import build_root_user
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -53,8 +62,12 @@ def migrated_url(db_url: str) -> str:
 
 
 @pytest.fixture
-def engine(migrated_url: str) -> Generator[Engine, None, None]:
+def engine(
+    request: pytest.FixtureRequest, migrated_url: str
+) -> Generator[Engine, None, None]:
     test_engine = create_engine_from_settings(migrated_url)
+    expected_dialect = request.config.getoption("--db-backend")
+    assert test_engine.dialect.name == expected_dialect
     try:
         yield test_engine
     finally:
@@ -93,7 +106,7 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
     )
     assert plan.status_code == 201, plan.text
     task_ids = []
-    for _ in range(4):
+    for _ in range(5):
         created = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
             json={"item_ids": [str(world["item"].id)]},
@@ -104,12 +117,18 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
         assert dispatched.status_code == 200, dispatched.text
         task_ids.append(UUID(task_id))
 
-    # Equal timestamps force the UUID tie-breaker to determine page order.
-    dispatch_time = datetime(2026, 10, 1, tzinfo=UTC)
+    # The first cursor boundary falls within the three-row newer group;
+    # the second boundary crosses from that group to the older two rows.
+    newer_time = datetime(2026, 10, 1, 0, 0, 0, 123456, tzinfo=UTC)
+    older_time = datetime(2026, 9, 30, 23, 59, 59, 654321, tzinfo=UTC)
+    task_times = {
+        task_id: newer_time if index < 3 else older_time
+        for index, task_id in enumerate(task_ids)
+    }
     for task in db_session.scalars(
         select(InspectionTask).where(InspectionTask.id.in_(task_ids))
     ):
-        task.dispatched_at = dispatch_time
+        task.dispatched_at = task_times[task.id]
     db_session.commit()
     expected = [
         str(task_id)
@@ -122,12 +141,15 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
         )
     ]
 
-    # The member has inspect access in the current project. Adding a second
-    # project without inspect access must not add visible tasks or SELECTs.
+    # The member has inspect access in the current project. Adding a role
+    # without inspect access must preserve the union of its project roles.
     url = "/api/v1/field/inspection-tasks"
     params = {"assigned_to_me": "false", "limit": 2}
     small_selects, small_items = select_count(field, url, **params)
     assert small_items == 2
+    visible_before_role = _field_task_ids(field, prefix, params)
+    assert visible_before_role == expected
+
     no_inspect_role = Role(
         name="PostgreSQL planning-only role",
         created_by=world["admin_user"].id,
@@ -136,6 +158,22 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
     )
     db_session.add(no_inspect_role)
     db_session.flush()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == world["field_user"].id,
+        )
+    )
+    assert member is not None
+    member.role_assignments.append(
+        ProjectMemberRole(role_id=no_inspect_role.id)
+    )
+    db_session.commit()
+
+    visible_after_role = _field_task_ids(field, prefix, params)
+    assert len(visible_after_role) == 5
+    assert visible_after_role == visible_before_role
+
     hidden_project = _create_permission_test_project(
         world,
         db_session,
@@ -170,7 +208,8 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
         if cursor is None:
             break
 
-    assert seen == expected
+    assert seen == visible_after_role == expected
+    assert len(seen) == 5
     assert hidden_project["task_id"] not in seen
 
 
@@ -213,7 +252,12 @@ def test_assignee_candidates_union_and_created_at_id_cursor(
         world["field_reader_user"].id,
     }
     for index in range(6):
-        user = create_candidate(db_session, world, index)
+        user = create_candidate(
+            db_session,
+            world,
+            index,
+            user_id=UUID(f"00000000-0000-7000-8000-{(6 - index) * 16:012x}"),
+        )
         user.created_at = timestamp
         candidate_member = ProjectMember(
             project_id=project_id,
@@ -259,10 +303,44 @@ def test_assignee_candidates_union_and_created_at_id_cursor(
     assert str(world["admin_user"].id) not in seen
 
 
-def create_candidate(db_session: Session, world: dict, index: int) -> User:
-    user = create_root_user_with_company(
-        db_session, f"PG-CANDIDATE-{index:02}"
+def create_candidate(
+    db_session: Session,
+    world: dict,
+    index: int,
+    *,
+    user_id: UUID,
+) -> User:
+    company_id = uuid7()
+    user = build_root_user(
+        f"PG-CANDIDATE-{index:02}", company_id, self_id=user_id
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        Company(
+            id=company_id,
+            name=f"Company for PG-CANDIDATE-{index:02}",
+            created_by=user_id,
+            updated_by=user_id,
+        )
     )
     user.created_at = datetime(2026, 10, 2, tzinfo=UTC)
     user.name_zh = f"候選人 {index}"
+    db_session.flush()
     return user
+
+
+def _field_task_ids(client, prefix: str, params: dict[str, str]) -> list[str]:
+    seen = []
+    cursor = None
+    while True:
+        page_params = dict(params)
+        if cursor is not None:
+            page_params["cursor"] = cursor
+        response = client.get(prefix, params=page_params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        seen.extend(row["id"] for row in page["items"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            return seen
