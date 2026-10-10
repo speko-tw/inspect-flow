@@ -200,11 +200,11 @@ function AdminPageContent() {
             <Route
               path="projects/:projectId/inspection-items/:itemId"
               element={
-                <AdminRouteSuspense>
-                  <ProjectSectionPage section="inspection-items">
+                <ProjectSectionPage section="inspection-items">
+                  <AdminRouteSuspense>
                     <ProjectItemChangePage api={projectItemApi} />
-                  </ProjectSectionPage>
-                </AdminRouteSuspense>
+                  </AdminRouteSuspense>
+                </ProjectSectionPage>
               }
             />
             <Route
@@ -272,11 +272,11 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
       />
       <Route
         element={
-          <AdminRouteSuspense>
-            <ProjectSectionPage section="inspection-items">
+          <ProjectSectionPage section="inspection-items">
+            <AdminRouteSuspense>
               <ProjectItemChangePage api={projectItemApi} />
-            </ProjectSectionPage>
-          </AdminRouteSuspense>
+            </AdminRouteSuspense>
+          </ProjectSectionPage>
         }
         path="projects/:projectId/inspection-items/:itemId"
       />
