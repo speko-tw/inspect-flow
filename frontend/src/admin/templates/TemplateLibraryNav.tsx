@@ -156,12 +156,14 @@ export function TemplateLibraryNav({
                                       <span>
                                         {item.title || '未命名查核項目'}
                                       </span>
-                                      <span
-                                        aria-hidden="true"
-                                        className="tpl-item-open"
-                                      >
-                                        開啟詳情
-                                      </span>
+                                      {mobile && (
+                                        <span
+                                          aria-hidden="true"
+                                          className="tpl-item-open"
+                                        >
+                                          開啟詳情
+                                        </span>
+                                      )}
                                     </button>
                                   </li>
                                 ))}

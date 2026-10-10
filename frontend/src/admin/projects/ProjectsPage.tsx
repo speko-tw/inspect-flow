@@ -8,7 +8,7 @@ import {
 import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import { Form, FormError, FormSubmitButton } from '../../ui/Form'
 import { managementErrorMessage } from '../api'
 import {
   createProject,
@@ -73,11 +73,10 @@ export default function ProjectsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
-  const searchGuard = useSubmitGuard()
-  const saveGuard = useSubmitGuard()
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [newDraft, setNewDraft] = useState<FormState>(EMPTY_FORM)
   const [editDrafts, setEditDrafts] = useState<Record<string, FormState>>({})
+  const [editFocusRequest, setEditFocusRequest] = useState(0)
   const [transition, setTransition] = useState<Transition | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [query, setQuery] = useState('')
@@ -88,6 +87,7 @@ export default function ProjectsPage() {
   const requestId = useRef(0)
   const transitionRef = useRef<HTMLDivElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
   const noticeRef = useRef<HTMLParagraphElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const restoreFocusAfterTransition = useRef(false)
@@ -123,12 +123,19 @@ export default function ProjectsPage() {
     const heading = editHeadingRef.current
     heading?.scrollIntoView?.({ block: 'start' })
     heading?.focus()
-  }, [formMode])
+  }, [formMode, editFocusRequest])
 
   useEffect(() => {
     if (!notice) return
     noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [notice])
+
+  useEffect(() => {
+    if (!error) return
+    const alert = errorRef.current
+    alert?.scrollIntoView?.({ block: 'nearest' })
+    alert?.focus()
+  }, [error])
 
   useEffect(() => {
     let active = true
@@ -158,7 +165,6 @@ export default function ProjectsPage() {
 
   async function searchProjects(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!searchGuard.enter()) return
     const search = query.trim()
     const id = ++requestId.current
     setProjects([])
@@ -177,7 +183,6 @@ export default function ProjectsPage() {
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
-      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -221,15 +226,21 @@ export default function ProjectsPage() {
     }
   }
 
+  function dropDraft(id: string) {
+    setEditDrafts((current) => {
+      if (!(id in current)) return current
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
+  }
+
   function applyTransition(next: Transition) {
     setTransition(null)
+    discardActiveDraft()
     if (next.kind === 'edit') {
       setFormMode(next)
-      setEditDrafts((current) =>
-        current[next.project.id]
-          ? current
-          : { ...current, [next.project.id]: toForm(next.project) },
-      )
+      setEditFocusRequest((request) => request + 1)
       setNotice('')
       setError('')
     } else if (next.kind === 'new') {
@@ -250,11 +261,7 @@ export default function ProjectsPage() {
     if (formMode?.kind === 'new') {
       setNewDraft(EMPTY_FORM)
     } else if (formMode?.kind === 'edit') {
-      setEditDrafts((current) => {
-        const next = { ...current }
-        delete next[formMode.project.id]
-        return next
-      })
+      dropDraft(formMode.project.id)
     }
   }
 
@@ -278,11 +285,7 @@ export default function ProjectsPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!saveGuard.enter()) return
-    if (!form || !formMode) {
-      saveGuard.leave()
-      return
-    }
+    if (!form || !formMode) return
     setError('')
     setNotice('')
     const input = toInput(form)
@@ -298,6 +301,7 @@ export default function ProjectsPage() {
           ),
         )
         if (Object.keys(changed).length === 0) {
+          dropDraft(editing.id)
           applyTransition({ kind: 'list' })
           return
         }
@@ -318,11 +322,7 @@ export default function ProjectsPage() {
       const savedNotice = hasDuplicateCodeWarning(saved)
         ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
         : `專案「${saved.name}」已儲存。`
-      setEditDrafts((current) => {
-        const next = { ...current }
-        if (editing) delete next[editing.id]
-        return next
-      })
+      if (editing) dropDraft(editing.id)
       applyTransition({ kind: 'list' })
       setNotice(savedNotice)
       setProjects([])
@@ -334,7 +334,6 @@ export default function ProjectsPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
-      saveGuard.leave()
       setSaving(false)
     }
   }
@@ -342,7 +341,6 @@ export default function ProjectsPage() {
   return (
     <section aria-labelledby="projects-heading">
       <h1 id="projects-heading">專案</h1>
-      {error && <p role="alert">{error}</p>}
       {notice && (
         <p className="notice-success" ref={noticeRef} role="status">
           {notice}
@@ -379,13 +377,12 @@ export default function ProjectsPage() {
         </button>
       )}
       {form && (
-        <form
+        <Form
           onFocusCapture={(event) => {
             if (event.target instanceof HTMLElement) {
               restoreFocusRef.current = event.target
             }
           }}
-          onKeyDown={blockImeEnter}
           onSubmit={save}
         >
           <h2 ref={editHeadingRef} tabIndex={-1}>
@@ -463,21 +460,29 @@ export default function ProjectsPage() {
               value={form.planned_completion_date}
             />
           </label>
-          {editing && (
-            <button
-              onClick={() => requestTransition({ kind: 'list' })}
-              type="button"
-            >
-              取消
-            </button>
-          )}
-          <button className="btn-primary" disabled={saving} type="submit">
-            {editing ? '儲存專案' : '新增專案'}
+          <button
+            onClick={() => requestTransition({ kind: 'list' })}
+            type="button"
+          >
+            取消
           </button>
-        </form>
+          <FormSubmitButton className="btn-primary" disabled={saving}>
+            {editing ? '儲存專案' : '新增專案'}
+          </FormSubmitButton>
+          {error && (
+            <p
+              className="shared-form-error"
+              ref={errorRef}
+              role="alert"
+              tabIndex={-1}
+            >
+              {error}
+            </p>
+          )}
+        </Form>
       )}
       {loading ? <p>載入中…</p> : null}
-      <form onKeyDown={blockImeEnter} onSubmit={searchProjects}>
+      <Form onSubmit={searchProjects}>
         <label>
           搜尋專案
           <input
@@ -485,11 +490,9 @@ export default function ProjectsPage() {
             value={query}
           />
         </label>
-        <button disabled={loading} type="submit">
-          搜尋
-        </button>
-      </form>
-      {listError && <p role="alert">{listError}</p>}
+        <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
+      </Form>
+      <FormError>{listError}</FormError>
       {projects.length > 0 && (
         <section aria-labelledby="project-workspace-heading">
           <h2 id="project-workspace-heading">專案工作台</h2>

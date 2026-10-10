@@ -2,11 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 import LoginPage from './LoginPage'
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
 import { resetSessionMemory } from './sessionMemory'
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const CURRENT_USER = {
   id: 'u1',
@@ -55,6 +55,7 @@ function ProtectedPage() {
 function TestApp() {
   return (
     <Routes>
+      <Route path="/" element={<h1>首頁</h1>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/protected"
@@ -77,6 +78,96 @@ function fillAndSubmit(account: string, password: string) {
   })
   fireEvent.click(screen.getByRole('button', { name: '登入' }))
 }
+
+describe.each([['登入頁', '/api/v1/auth/login']])(
+  '%s 共用表單',
+  (_name, endpoint) => {
+    function fill() {
+      fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
+        target: { value: 'user@example.com' },
+      })
+      fireEvent.change(screen.getByLabelText('密碼'), {
+        target: { value: 'correct-password' },
+      })
+    }
+
+    it('真實頁面 pending 時只送一次並停用按鈕', async () => {
+      const gate = deferred<Response>()
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        requestUrl(input).endsWith(endpoint)
+          ? gate.promise
+          : new Response(null, { status: 401 }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <TestApp />
+        </MemoryRouter>,
+      )
+      fill()
+      const button = screen.getByRole('button', { name: '登入' })
+      fireEvent.click(button)
+      fireEvent.submit(button.closest('form')!)
+      expect(button).toBeDisabled()
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          requestUrl(input).endsWith(endpoint),
+        ),
+      ).toHaveLength(1)
+      gate.resolve(
+        jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
+      )
+      await screen.findByRole('alert')
+    })
+
+    it('IME Enter 不送出真實登入 API', () => {
+      const fetchMock = vi.fn(async () => new Response(null, { status: 401 }))
+      vi.stubGlobal('fetch', fetchMock)
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <TestApp />
+        </MemoryRouter>,
+      )
+      const input = screen.getByLabelText('帳號名稱或 Email')
+      expectImeEnterIgnored(input)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('API 失敗後可再次送出', async () => {
+      let fail = true
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (requestUrl(input).endsWith(endpoint)) {
+          return fail
+            ? jsonResponse(
+                { error: { code: 'auth.invalid_credentials' } },
+                401,
+              )
+            : jsonResponse(CURRENT_USER)
+        }
+        return new Response(null, { status: 401 })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <TestApp />
+        </MemoryRouter>,
+      )
+      fill()
+      const button = screen.getByRole('button', { name: '登入' })
+      fireEvent.click(button)
+      await screen.findByRole('alert')
+      fail = false
+      fireEvent.click(button)
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.filter(([input]) =>
+            requestUrl(input).endsWith(endpoint),
+          ),
+        ).toHaveLength(2),
+      )
+    })
+  },
+)
 
 describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
   afterEach(() => {
@@ -320,80 +411,5 @@ describe('登入不碰 token／storage，登出會清狀態並導向 /login（AU
     expect(calledUrls.some((url) => url.endsWith('/api/v1/auth/logout'))).toBe(
       true,
     )
-  })
-})
-
-describe('LoginPage 防連點與輸入法 Enter（#507）', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  function fillForm() {
-    fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
-      target: { value: 'user@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText('密碼'), {
-      target: { value: 'secret-password' },
-    })
-  }
-
-  function renderLogin() {
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <TestApp />
-      </MemoryRouter>,
-    )
-  }
-
-  it('連按 Enter 只送出一次登入請求', async () => {
-    const gate = deferred<Response>()
-    const fetchMock = vi.fn(async () => gate.promise)
-    vi.stubGlobal('fetch', fetchMock)
-    renderLogin()
-    fillForm()
-    const form = screen
-      .getByRole('button', { name: '登入' })
-      .closest('form') as HTMLFormElement
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    gate.resolve(
-      jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
-    )
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      GENERIC_ERROR_MESSAGE,
-    )
-  })
-
-  it('失敗之後可以再送出', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    renderLogin()
-    fillForm()
-    const form = screen
-      .getByRole('button', { name: '登入' })
-      .closest('form') as HTMLFormElement
-
-    fireEvent.submit(form)
-    await screen.findByRole('alert')
-    fireEvent.submit(form)
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-  })
-
-  it('輸入法選字的 Enter 不送出', () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-    renderLogin()
-    fillForm()
-
-    expectImeEnterIgnored(screen.getByLabelText('密碼'))
-    expectImeEnterIgnored(screen.getByLabelText('帳號名稱或 Email'))
-
-    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
