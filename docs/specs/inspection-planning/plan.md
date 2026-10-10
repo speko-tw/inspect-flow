@@ -10,11 +10,13 @@
 |---|---|---|---|---|---|
 | T1 | 定義 P4 `ProjectInspectionItem` 擴充欄位、`ProjectZone`、Plan、Task、多項目關聯、Task 地點、每項 Snapshot／狀態／歷史及 KD-55 修改紀錄資料結構；建立 migration 與資料庫約束 | `backend/app/models/`、`backend/alembic/versions/`、`backend/tests/db/` | `template-system`、`domain-model`、`database-foundation`；核對已合併的 KD-55／KD-56 與 `state-machines` SM-Q03 凍結規則 | IP-AC02～IP-AC05、IP-AC11 | #359 |
 | T2 | 實作 ProjectZone CRUD 與稽核、Plan／Task／Snapshot 服務層（含查詢、修改與建議指派）、派出／草稿刪除／取消／恢復（恢復沿用取消權限且不要求原因）、KD-55 項目級重新查核及衍生狀態；受影響的 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀並標記有舊結果的項目待重查；草稿 Task 原位更新，已取消 Task 恢復時才套用目前標準；加入 Task 地點修改與稽核（僅 `DRAFT`、`PENDING`、`IN_PROGRESS` 可修改）；封存期間 Task 唯讀、取消封存後重算 Plan 狀態。集中登記權限代碼與稽核事件 | `backend/app/services/inspection_planning.py`、`backend/app/services/inspection_planning_snapshots.py`、`backend/tests/services/test_inspection_planning.py`、`backend/tests/api/test_roles_api.py`、`backend/app/permission_codes.py`、`docs/specs/audit-log/spec.md`、`docs/specs/inspection-planning/plan.md` | T1、`authentication`、`state-machines`；依 KD-55／KD-56 與已合併的 `state-machines` 規則實作；TPL 已登記的權限沿用 | IP-AC03～IP-AC09、IP-AC11 | #360 |
-| T3 | 實作 ProjectZone 與 Plan／Task／專案項目修改 API，含 Task 地點建立與修改端點、回應內嵌分區 ID／名稱、同專案檢查、狀態與權限檢查、UUID、分頁、錯誤契約及快照讀寫 | `backend/app/api/`、`backend/app/schemas/`、`backend/tests/api/` | T1、T2、`api-conventions` | IP-AC01～IP-AC11 | #361 |
+| T3 | 實作 ProjectZone 與 Plan／Task／專案項目修改 API，含 Task 地點建立與修改端點、回應內嵌分區 ID／名稱、同專案檢查、狀態與權限檢查、UUID、分頁、錯誤契約及快照讀寫 | `backend/app/api/`、`backend/app/schemas/`、`backend/tests/api/`、`backend/tests/db/` | T1、T2、`api-conventions` | IP-AC01～IP-AC11 | #361 |
 | T4 | 建立內業 ProjectZone 管理、Plan 管理、手動建立多項目 Task 與地點輸入／修改、派出／草稿刪除／取消／恢復操作與任務建議指派 UI；草稿 Task 僅內業可見；封存 Plan 的 Task 唯讀 | `frontend/src/features/`、`frontend/src/routes/`、`frontend/tests/` | T3；核對 KD-55／KD-56 及已合併的 `state-machines` 契約 | IP-AC01、IP-AC02、IP-AC06～IP-AC08、IP-AC11 | #363 |
 | T5 | 建立專案查核項目修改確認介面，說明重新查核後果；呈現受影響項目作廢歷史、其他項目保留及來源 Task 為 `DRAFT` 時原位更新 | `frontend/src/features/`、`frontend/tests/` | T3；依 IP-Q07／IP-Q08 的項目級技術設計及已合併的補充裁定 | IP-AC04、IP-AC05、IP-AC08 | #362 |
 | T6 | 端到端驗收快照隔離、修改影響範圍、權限、指派非排他性、自動 Plan 狀態與歷史保存，補文件及索引收尾 | `backend/tests/`、`frontend/tests/`、`docs/specs/inspection-planning/`、`docs/specs/README.md` | T1～T5；業務行為依已裁定來源，規格設計項依 spec 明示範圍驗收 | IP-AC01～IP-AC11 | #364 |
 | T7 | 新增專案流程摘要 API，以資料庫聚合回傳成員、項目、分區、計畫、可見 Task 狀態及待重查數；落實各專案讀取權限與 DRAFT 可見性，補充 API 規格與測試 | `backend/app/api/v1/projects.py`、`backend/app/services/project_workflow_summary.py`、`backend/app/services/inspection_planning.py`、`backend/tests/api/test_project_workflow_summary.py`、`backend/tests/contract/test_route_access.py`、`docs/specs/inspection-planning/spec.md` | T1、T2；共用 API、權限與資料模型已就緒（#446） | IP-AC12 | #446 |
+| T8 | 批次篩選 Field 任務清單的專案 inspect 權限與可指派候選人；候選人排序及 cursor 分頁在資料庫執行，並以小／大專案與成員資料量驗證查詢次數不線性增加 | `backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/api/test_planning_query_counts.py`、`docs/specs/inspection-planning/spec.md`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R01、IP-AC06 | #468 |
+| T9 | 修正內業 planning mock 的 Plan 列表分頁，採用與後端一致的 `(created_at,id)` cursor shape 與續頁排序；頁大小對齊 HTTP client 明確指定的 limit，補 cursor round-trip、tie-break、非法輸入與頁面邊界測試 | `frontend/src/admin/planning/api.mock.ts`、`frontend/src/admin/planning/api.test.ts`、`docs/specs/inspection-planning/plan.md` | T3；核對後端 pagination helper 與前端 HTTP client 的實際 limit | N/A（契約來源 API-R08） | #471 |
 
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
 - 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
@@ -59,6 +61,12 @@
 | IP-AC10 | API 整合測試：權限、專案邊界、非法狀態輸入與共用錯誤格式。 |
 | IP-AC11 | API／服務／前端測試：分區 CRUD 權限、名稱唯一性、Task 同專案地點欄位與有／無分區的建立規則；地點可修改狀態、已完成／取消及封存時拒絕、地點修改稽核；Task 讀取回應含分區 ID／名稱且不要求 `project_zone.read`；引用分區不可刪除，Snapshot 排除地點欄位。 |
 | IP-AC12 | `backend/tests/api/test_project_workflow_summary.py` 驗證空專案步驟數、五種 Task 狀態、待重查 Task 數、DRAFT 可見性、403／404 與跨專案隔離；`backend/tests/contract/test_route_access.py` 驗證路由權限宣告。 |
+
+Issue #406 補齊以下測試對應，不變更產品行為：
+
+- IP-AC04：封存 Plan 下修改被拒且沒有項目變更、Snapshot 或更新稽核；取消封存後重送成功；同一項目跨多個 Plan 的 Task 與 Snapshot 一併更新，無關項目不變。驗證位於 `backend/tests/services/test_inspection_planning.py`。
+- IP-AC06、STM-AC09：非指派但具 `inspection_task.inspect` 權限的成員可開始 Task，且 `started_by` 記錄實際操作者。驗證位於 `backend/tests/services/test_inspection_planning.py`。
+- IP-AC07、STM-AC02：PostgreSQL 以兩個獨立 transaction 並發完成同一 Plan 的最後兩個 Task，確認兩個 Task 與 Plan 最終均為 `COMPLETED`。驗證位於 `backend/tests/db/test_inspection_planning.py`。
 
 ## 考慮過但沒採用的做法
 
