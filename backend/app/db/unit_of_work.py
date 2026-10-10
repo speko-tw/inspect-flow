@@ -29,11 +29,20 @@ def unit_of_work(
     """
     factory = session_factory or get_session_factory()
     session = factory()
+    from app.services.audit import (
+        begin_pending_independent_audit_events,
+        flush_pending_independent_audit_events,
+        reset_pending_independent_audit_events,
+    )
+
+    pending_events = begin_pending_independent_audit_events(session)
     try:
         yield session
         session.commit()
     except Exception:
         session.rollback()
+        flush_pending_independent_audit_events(pending_events)
         raise
     finally:
+        reset_pending_independent_audit_events(session)
         session.close()

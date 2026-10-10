@@ -17,7 +17,7 @@ import TemporaryPassword from '../admin/TemporaryPassword'
 import UserForm from '../admin/UserForm'
 import { ApiError } from '../auth/api'
 import AuthLayout from '../auth/AuthLayout'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { Form, FormSubmitButton } from '../ui/Form'
 import { fetchSetupRequired, setAdminPassword, setupErrorMessage } from './api'
 
 const MIN_PASSWORD_LENGTH = 8
@@ -85,7 +85,6 @@ export default function SetupPage() {
   const [error, setError] = useState('')
   const [completed, setCompleted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const guard = useSubmitGuard()
   const [companies, setCompanies] = useState<Company[]>([])
   const [companiesError, setCompaniesError] = useState(false)
 
@@ -146,7 +145,6 @@ export default function SetupPage() {
       return
     }
 
-    if (!guard.enter()) return
     setSubmitting(true)
     try {
       await setAdminPassword(code.trim(), password)
@@ -167,7 +165,6 @@ export default function SetupPage() {
         setStep({ kind: 'code' })
       }
     } finally {
-      guard.leave()
       setSubmitting(false)
     }
   }
@@ -239,7 +236,7 @@ export default function SetupPage() {
         lead="請輸入 make init 印出的首次登入碼。"
         progress={<StepIndicator current={1} />}
       >
-        <form onKeyDown={blockImeEnter} onSubmit={submitCode} noValidate>
+        <Form error={error} onSubmit={submitCode} noValidate>
           <div>
             <label htmlFor="setup-code">首次登入碼</label>
             <input
@@ -253,11 +250,8 @@ export default function SetupPage() {
               onChange={(event) => setCode(event.target.value)}
             />
           </div>
-          {error && <p role="alert">{error}</p>}
-          <button className="btn-primary" type="submit">
-            下一步
-          </button>
-        </form>
+          <FormSubmitButton className="btn-primary">下一步</FormSubmitButton>
+        </Form>
       </AuthLayout>
     )
   }
@@ -268,7 +262,7 @@ export default function SetupPage() {
       lead="設定 admin 的密碼，長度 8 到 128 個字元。"
       progress={<StepIndicator current={2} />}
     >
-      <form onKeyDown={blockImeEnter} onSubmit={submitPassword} noValidate>
+      <Form error={error} onSubmit={submitPassword} noValidate>
         <div>
           <label htmlFor="setup-password">新密碼</label>
           <input
@@ -293,7 +287,6 @@ export default function SetupPage() {
             onChange={(event) => setConfirmation(event.target.value)}
           />
         </div>
-        {error && <p role="alert">{error}</p>}
         {completed && <Link to="/login">前往登入頁</Link>}
         <button
           disabled={submitting}
@@ -305,10 +298,10 @@ export default function SetupPage() {
         >
           上一步
         </button>
-        <button className="btn-primary" type="submit" disabled={submitting}>
+        <FormSubmitButton className="btn-primary" disabled={submitting}>
           {submitting ? '設定中…' : '設定密碼'}
-        </button>
-      </form>
+        </FormSubmitButton>
+      </Form>
     </AuthLayout>
   )
 }

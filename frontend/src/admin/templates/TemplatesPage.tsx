@@ -157,10 +157,24 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [readOnly, setReadOnly] = useState(false)
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(max-width: 40rem)').matches,
+  )
   const [guard, setGuard] = useState<Selection | null>(null)
   const [confirmField, setConfirmField] = useState('')
   // 儲存與刪除共用一道防護：送出中不接受第二次送出（#507）。
   const submitGuard = useSubmitGuard()
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia('(max-width: 40rem)')
+    const update = () => setIsMobile(query.matches)
+    update()
+    query.addEventListener?.('change', update)
+    return () => query.removeEventListener?.('change', update)
+  }, [])
 
   const categoryId =
     selected?.type === 'category'
@@ -902,8 +916,6 @@ export default function TemplatesPage() {
       : selected?.type === 'system'
         ? systemItems.length
         : 0
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640
-
   function renderDetail(): ReactNode {
     if (guard) {
       return (
