@@ -1367,6 +1367,14 @@ describe('TemplatesPage', () => {
           path: '/inspection_points/0/measurement_fields/0/unit',
           code: 'template.numeric_unit_required',
         },
+        {
+          path: '/inspection_points/0/sequence',
+          code: 'template.sequence_duplicate',
+        },
+        {
+          path: '/inspection_points/0/measurement_fields/0/client_id',
+          code: 'template.client_id_duplicate',
+        },
         { path: '/unrecognized/path', code: 'field.invalid' },
       ],
     })
@@ -1417,6 +1425,71 @@ describe('TemplatesPage', () => {
         .getAllByRole('alert')
         .some((alert) => alert.textContent?.includes('尚有 3 處要修正')),
     ).toBe(true)
+    expect(screen.queryByText(/unrecognized\/path/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/inspection_points\/0\/sequence/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/measurement_fields\/0\/client_id/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('clears a server field error when its point is edited', async () => {
+    templateFetch({
+      items: [],
+      writeError: 422,
+      writeFields: [
+        { path: '/inspection_points/0/title', code: 'field.required' },
+      ],
+    })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'cm' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫此欄位。')).toHaveLength(2)
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: '已修正標題' },
+    })
+    await waitFor(() =>
+      expect(screen.queryAllByText('請填寫此欄位。')).toHaveLength(0),
+    )
+  })
+
+  it('clears indexed server errors when removing their point', async () => {
+    templateFetch({
+      items: [],
+      writeError: 422,
+      writeFields: [
+        { path: '/inspection_points/0/title', code: 'field.required' },
+      ],
+    })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'cm' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫此欄位。')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '移除此項次' }))
+    await waitFor(() =>
+      expect(screen.queryAllByText('請填寫此欄位。')).toHaveLength(0),
+    )
   })
 
   it('rebinds numeric standard without disabling the unit input', async () => {

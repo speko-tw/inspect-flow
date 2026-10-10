@@ -489,6 +489,14 @@ export default function TemplatesPage() {
 
   function updateDraft(changes: Partial<TemplateItem>): void {
     setItemDraft((current) => (current ? { ...current, ...changes } : current))
+    if (changes.title !== undefined) {
+      setServerFieldErrors((current) => {
+        if (!('title' in current)) return current
+        const next = { ...current }
+        delete next.title
+        return next
+      })
+    }
     setError('')
   }
 
@@ -496,6 +504,15 @@ export default function TemplatesPage() {
     index: number,
     changes: Partial<InspectionPoint>,
   ): void {
+    setServerFieldErrors((current) => {
+      const prefix = `point:${index}:`
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([key]) => !key.startsWith(prefix)),
+      )
+      return Object.keys(next).length === Object.keys(current).length
+        ? current
+        : next
+    })
     setItemDraft((current) =>
       current
         ? {
@@ -559,6 +576,15 @@ export default function TemplatesPage() {
 
   function addPoint(): void {
     if (!itemDraft) return
+    setServerFieldErrors((current) =>
+      Object.keys(current).some((key) => key.startsWith('point:'))
+        ? Object.fromEntries(
+            Object.entries(current).filter(
+              ([key]) => !key.startsWith('point:'),
+            ),
+          )
+        : current,
+    )
     updateDraft({
       inspection_points: [
         ...itemDraft.inspection_points,
@@ -569,6 +595,15 @@ export default function TemplatesPage() {
 
   function removePoint(index: number): void {
     if (!itemDraft) return
+    setServerFieldErrors((current) =>
+      Object.keys(current).some((key) => key.startsWith('point:'))
+        ? Object.fromEntries(
+            Object.entries(current).filter(
+              ([key]) => !key.startsWith('point:'),
+            ),
+          )
+        : current,
+    )
     updateDraft({
       inspection_points: itemDraft.inspection_points
         .filter((_point, position) => position !== index)

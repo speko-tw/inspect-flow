@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.errors import FieldErrorCode
 from app.db.base import uuid7
 from app.models import (
     TemplateCategory,
@@ -59,7 +60,7 @@ def _template_violations(
             violations.append(
                 TemplateFieldError(
                     f"{point_path}/evidence_requirements",
-                    "template.photo_requirement_count",
+                    FieldErrorCode.TEMPLATE_PHOTO_REQUIREMENT_COUNT.value,
                 )
             )
         numeric = point["numeric_standard"]
@@ -79,7 +80,7 @@ def _template_violations(
                 TemplateFieldError(
                     f"{point_path}/numeric_standard/"
                     "measurement_field_client_id",
-                    "template.numeric_field_unbound",
+                    FieldErrorCode.TEMPLATE_NUMERIC_FIELD_UNBOUND.value,
                 )
             )
         for field_index, field in enumerate(fields):
@@ -92,25 +93,29 @@ def _template_violations(
                     violations.append(
                         TemplateFieldError(
                             f"{field_path}/unit",
-                            "template.bound_field_unit_forbidden",
+                            FieldErrorCode.TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN.value,
                         )
                     )
             elif field["field_type"] == "number" and not field["unit"]:
                 violations.append(
                     TemplateFieldError(
-                        f"{field_path}/unit", "template.numeric_unit_required"
+                        f"{field_path}/unit",
+                        FieldErrorCode.TEMPLATE_NUMERIC_UNIT_REQUIRED.value,
                     )
                 )
             elif field["field_type"] == "text" and field["unit"] is not None:
                 violations.append(
                     TemplateFieldError(
-                        f"{field_path}/unit", "template.text_unit_forbidden"
+                        f"{field_path}/unit",
+                        FieldErrorCode.TEMPLATE_TEXT_UNIT_FORBIDDEN.value,
                     )
                 )
     for paths in sequence_paths.values():
         if len(paths) > 1:
             violations.extend(
-                TemplateFieldError(path, "template.sequence_duplicate")
+                TemplateFieldError(
+                    path, FieldErrorCode.TEMPLATE_SEQUENCE_DUPLICATE.value
+                )
                 for path in paths
             )
     return violations
@@ -129,7 +134,9 @@ def validate_template_structure(data: dict, *, path_prefix: str = "") -> None:
     for paths in client_paths.values():
         if len(paths) > 1:
             violations.extend(
-                TemplateFieldError(path, "template.client_id_duplicate")
+                TemplateFieldError(
+                    path, FieldErrorCode.TEMPLATE_CLIENT_ID_DUPLICATE.value
+                )
                 for path in paths
             )
     if violations:
@@ -148,7 +155,9 @@ def validate_system_structures(items: Iterable[dict]) -> None:
     for paths in client_paths.values():
         if len(paths) > 1:
             violations.extend(
-                TemplateFieldError(path, "template.client_id_duplicate")
+                TemplateFieldError(
+                    path, FieldErrorCode.TEMPLATE_CLIENT_ID_DUPLICATE.value
+                )
                 for path in paths
             )
     if violations:
@@ -249,7 +258,8 @@ def _add_points(
                     raise InvalidTemplateError(
                         [
                             TemplateFieldError(
-                                "", "template.bound_field_unit_forbidden"
+                                "",
+                                FieldErrorCode.TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN.value,
                             )
                         ]
                     )
@@ -257,11 +267,21 @@ def _add_points(
                 unit = numeric["unit"]
             elif field["field_type"] == "number" and not unit:
                 raise InvalidTemplateError(
-                    [TemplateFieldError("", "template.numeric_unit_required")]
+                    [
+                        TemplateFieldError(
+                            "",
+                            FieldErrorCode.TEMPLATE_NUMERIC_UNIT_REQUIRED.value,
+                        )
+                    ]
                 )
             elif field["field_type"] == "text" and unit is not None:
                 raise InvalidTemplateError(
-                    [TemplateFieldError("", "template.text_unit_forbidden")]
+                    [
+                        TemplateFieldError(
+                            "",
+                            FieldErrorCode.TEMPLATE_TEXT_UNIT_FORBIDDEN.value,
+                        )
+                    ]
                 )
             db.add(
                 TemplateMeasurementField(

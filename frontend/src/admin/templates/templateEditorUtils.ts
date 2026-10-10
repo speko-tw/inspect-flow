@@ -164,7 +164,6 @@ export function templateFieldErrorBindings(
     const pointPath = `${prefix}/inspection_points/${pointIndex}`
     const pointKey = `point:${pointIndex}`
     bindings.push(
-      { path: `${pointPath}/sequence`, key: `${pointKey}:title` },
       { path: `${pointPath}/title`, key: `${pointKey}:title` },
       { path: `${pointPath}/instruction`, key: `${pointKey}:instruction` },
     )
@@ -172,7 +171,6 @@ export function templateFieldErrorBindings(
       const fieldPath = `${pointPath}/measurement_fields/${fieldIndex}`
       const fieldKey = `${pointKey}:field:${fieldIndex}`
       bindings.push(
-        { path: `${fieldPath}/client_id`, key: `${fieldKey}:name` },
         { path: `${fieldPath}/name`, key: `${fieldKey}:name` },
         { path: `${fieldPath}/field_type`, key: `${fieldKey}:type` },
         {

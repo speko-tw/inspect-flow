@@ -1060,6 +1060,24 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
     )
 
 
+def test_template_write_field_error_matches_frontend_contract_fixture(clients):
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    body = _template(system_id, "Template contract sentinel")
+    body["inspection_points"][1]["sequence"] = 1
+
+    response = manager.post("/api/v1/templates", json=body)
+
+    fixture_path = (
+        Path(__file__).parents[3] / "frontend/src/admin/templates/fixtures/"
+        "template-write-field-error.json"
+    )
+    expected = json.loads(fixture_path.read_text())
+    assert response.status_code == 422
+    assert response.json() == expected
+    assert "Template contract sentinel" not in response.text
+
+
 def test_system_nested_read_swap_and_clear(clients, db_session):
     manager = clients["manager"]
     _, system_id = _tree(manager)

@@ -3,13 +3,15 @@
 import logging
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Header, Query
+from fastapi import Path as ApiPath
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.errors import (
     FIELD_ERROR_CODE_DESCRIPTIONS,
     APIError,
+    DescribedStrEnum,
     ErrorCode,
     FieldErrorCode,
     build_error_code_descriptions,
@@ -138,6 +140,79 @@ def test_field_error_description_map_is_generated_from_its_enum() -> None:
     assert set(FIELD_ERROR_CODE_DESCRIPTIONS) == {
         member.value for member in FieldErrorCode
     }
+
+
+def test_template_codes_and_temporary_enum_are_generated_and_too_short_maps():
+    class TemporaryFieldErrorCode(DescribedStrEnum):
+        TEMPORARY = ("temporary.example", "A temporary test code.")
+
+    generated = build_error_code_descriptions(TemporaryFieldErrorCode)
+    assert generated == {"temporary.example": "A temporary test code."}
+    assert "template.sequence_duplicate" in FIELD_ERROR_CODE_DESCRIPTIONS
+
+    client = _client()
+    response = client.post(
+        "/body",
+        json={
+            "items": [{"name": "x", "amount": 1}],
+            "labels": {},
+            "choice": 1,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["fields"] == [
+        {"path": "/items/0/name", "code": "field.too_short"}
+    ]
+
+
+def test_mixed_body_and_query_errors_only_include_body_fields() -> None:
+    app = FastAPI()
+    register_error_handlers(app)
+    router = APIRouter()
+
+    @router.post("/mixed")
+    def mixed(payload: Body, search: str = Query(min_length=2)) -> dict:
+        return {"ok": True}
+
+    app.include_router(router)
+    response = TestClient(app).post(
+        "/mixed?search=x",
+        json={
+            "items": [{"name": "x", "amount": 1}],
+            "labels": {},
+            "choice": 1,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["fields"] == [
+        {"path": "/items/0/name", "code": "field.too_short"}
+    ]
+
+
+def test_query_path_and_header_errors_do_not_produce_fields() -> None:
+    app = FastAPI()
+    register_error_handlers(app)
+    router = APIRouter()
+
+    @router.post("/body/{item_id}")
+    def body_sources(
+        payload: Body,
+        item_id: int = ApiPath(gt=0),
+        search: str = Query(min_length=2),
+        token: str = Header(min_length=2),
+    ) -> dict:
+        return {"ok": True}
+
+    app.include_router(router)
+    response = TestClient(app).post(
+        "/body/0?search=x",
+        headers={"x-token": "x"},
+        json={"items": [], "labels": {}, "choice": 1},
+    )
+
+    assert response.status_code == 422
+    assert "fields" not in response.json()["error"]
 
 
 def test_json_pointer_escapes_declared_aliases_and_body_root() -> None:

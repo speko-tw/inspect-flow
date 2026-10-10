@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { HttpError, request } from '../../http'
+import { mapFieldErrors } from '../../ui/fieldErrors'
 import payloadFixture from './fixtures/template-item-payload.json'
+import templateWriteErrorFixture from './fixtures/template-write-field-error.json'
 import type { TemplateItem } from './api'
 import { forWire, templateFieldErrorBindings } from './templateEditorUtils'
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('forWire', () => {
   it('matches the shared payload sent to the template API', () => {
@@ -38,19 +43,27 @@ describe('templateFieldErrorBindings', () => {
       path: '/items/3/inspection_points/6/numeric_standard/measurement_field_client_id',
       key: 'point:6:binding',
     })
-    expect(bindings).toContainEqual({
+    expect(bindings).not.toContainEqual({
       path: '/items/3/inspection_points/6/sequence',
       key: 'point:6:title',
     })
+    expect(bindings).not.toContainEqual({
+      path: '/items/3/inspection_points/6/measurement_fields/1/client_id',
+      key: 'point:6:field:1:name',
+    })
   })
 
-  it('matches single-item service paths for sequence and title errors', () => {
+  it('does not guess a control for sequence and client ID errors', () => {
     const item = JSON.parse(JSON.stringify(payloadFixture)) as TemplateItem
     const bindings = templateFieldErrorBindings(item)
 
-    expect(bindings).toContainEqual({
+    expect(bindings).not.toContainEqual({
       path: '/inspection_points/6/sequence',
       key: 'point:6:title',
+    })
+    expect(bindings).not.toContainEqual({
+      path: '/inspection_points/6/measurement_fields/0/client_id',
+      key: 'point:6:field:0:name',
     })
     expect(bindings).toContainEqual({
       path: '/inspection_points/6/title',
@@ -87,6 +100,34 @@ describe('templateFieldErrorBindings', () => {
     expect(toleranceBindings).not.toContainEqual({
       path: '/inspection_points/6/numeric_standard/lower_bound',
       key: 'point:6:lower',
+    })
+  })
+
+  it('maps the shared real template-write error envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Response.json(templateWriteErrorFixture, { status: 422 }),
+      ),
+    )
+    let fields: Array<{ path: string; code: string }> = []
+    try {
+      await request('/templates', {
+        method: 'POST',
+        body: JSON.stringify(payloadFixture),
+      })
+    } catch (caught) {
+      expect(caught).toBeInstanceOf(HttpError)
+      fields = (caught as HttpError).fields ?? []
+    }
+    expect(
+      mapFieldErrors(
+        fields,
+        templateFieldErrorBindings(payloadFixture as TemplateItem),
+      ),
+    ).toEqual({
+      errors: {},
+      unmatched: templateWriteErrorFixture.error.fields,
     })
   })
 })

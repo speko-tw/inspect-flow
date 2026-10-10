@@ -263,6 +263,34 @@ class FieldErrorCode(DescribedStrEnum):
     TOO_SHORT = ("field.too_short", "The value is too short.")
     OUT_OF_RANGE = ("field.out_of_range", "The value is out of range.")
     DUPLICATE = ("field.duplicate", "The value is duplicated.")
+    TEMPLATE_PHOTO_REQUIREMENT_COUNT = (
+        "template.photo_requirement_count",
+        "A template inspection point must have exactly one photo requirement.",
+    )
+    TEMPLATE_NUMERIC_FIELD_UNBOUND = (
+        "template.numeric_field_unbound",
+        "The numeric standard must reference one numeric measurement field.",
+    )
+    TEMPLATE_BOUND_FIELD_UNIT_FORBIDDEN = (
+        "template.bound_field_unit_forbidden",
+        "A field bound to a numeric standard cannot set its own unit.",
+    )
+    TEMPLATE_NUMERIC_UNIT_REQUIRED = (
+        "template.numeric_unit_required",
+        "A numeric measurement field requires a unit.",
+    )
+    TEMPLATE_TEXT_UNIT_FORBIDDEN = (
+        "template.text_unit_forbidden",
+        "A text measurement field cannot set a unit.",
+    )
+    TEMPLATE_SEQUENCE_DUPLICATE = (
+        "template.sequence_duplicate",
+        "Inspection point sequence values must be unique.",
+    )
+    TEMPLATE_CLIENT_ID_DUPLICATE = (
+        "template.client_id_duplicate",
+        "Measurement field client identifiers must be unique.",
+    )
 
 
 def _field_code(error_type: str) -> FieldErrorCode:
