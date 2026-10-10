@@ -642,6 +642,8 @@ describe('admin projects page', () => {
     await waitFor(() => expect(document.activeElement).toBe(heading))
     expect(heading).toHaveAttribute('tabindex', '-1')
     expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+    heading.blur()
+    expect(document.activeElement).not.toBe(heading)
     fireEvent.click(edit)
     await waitFor(() => expect(document.activeElement).toBe(heading))
     expect(scroll.scrollIntoView).toHaveBeenCalledTimes(2)
@@ -865,6 +867,7 @@ describe('admin projects page', () => {
   })
 
   it('shows a project edit save error beside the form', async () => {
+    const scroll = mockScrollIntoView()
     projectFetch({
       failWith: {
         match: /\/projects\/project-1$/,
@@ -885,9 +888,18 @@ describe('admin projects page', () => {
     const form = screen
       .getByRole('heading', { name: '編輯專案「示範工程」' })
       .closest('form') as HTMLFormElement
-    expect(await within(form).findByRole('alert')).toHaveTextContent(
-      '資料格式不正確',
-    )
+    const alert = await within(form).findByRole('alert')
+    expect(alert).toHaveTextContent('資料格式不正確')
+    expect(alert).toHaveAttribute('tabindex', '-1')
+    const saveButton = within(form).getByRole('button', {
+      name: '儲存專案',
+    })
+    expect(
+      saveButton.compareDocumentPosition(alert) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    await waitFor(() => expect(document.activeElement).toBe(alert))
+    expect(scroll.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('無效的變更')
   })
 })

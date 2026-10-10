@@ -85,6 +85,7 @@ export default function ProjectsPage() {
   const requestId = useRef(0)
   const transitionRef = useRef<HTMLDivElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
   const noticeRef = useRef<HTMLParagraphElement>(null)
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
   const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
@@ -108,6 +109,13 @@ export default function ProjectsPage() {
     if (!notice) return
     noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [notice])
+
+  useEffect(() => {
+    if (!error) return
+    const alert = errorRef.current
+    alert?.scrollIntoView?.({ block: 'nearest' })
+    alert?.focus()
+  }, [error])
 
   useEffect(() => {
     let active = true
@@ -446,7 +454,6 @@ export default function ProjectsPage() {
         <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
           {editing ? `編輯專案「${editing.name}」` : '新增專案'}
         </h2>
-        {error && <p role="alert">{error}</p>}
         {editing && (
           <button
             onClick={() => requestTransition({ kind: 'new' })}
@@ -530,6 +537,11 @@ export default function ProjectsPage() {
         <button className="btn-primary" disabled={saving} type="submit">
           {editing ? '儲存專案' : '新增專案'}
         </button>
+        {error && (
+          <p ref={errorRef} role="alert" tabIndex={-1}>
+            {error}
+          </p>
+        )}
       </form>
     </section>
   )
