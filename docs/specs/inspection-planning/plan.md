@@ -17,7 +17,7 @@
 | T7 | 新增專案流程摘要 API，以資料庫聚合回傳成員、項目、分區、計畫、可見 Task 狀態及待重查數；落實各專案讀取權限與 DRAFT 可見性，補充 API 規格與測試 | `backend/app/api/v1/projects.py`、`backend/app/services/project_workflow_summary.py`、`backend/app/services/inspection_planning.py`、`backend/tests/api/test_project_workflow_summary.py`、`backend/tests/contract/test_route_access.py`、`docs/specs/inspection-planning/spec.md` | T1、T2；共用 API、權限與資料模型已就緒（#446） | IP-AC12 | #446 |
 | T8 | 批次篩選 Field 任務清單的專案 inspect 權限與可指派候選人；候選人排序及 cursor 分頁在資料庫執行，並以小／大專案與成員資料量驗證查詢次數不線性增加 | `backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/api/test_planning_query_counts.py`、`docs/specs/inspection-planning/spec.md`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R01、IP-AC06 | #468 |
 | T9 | 修正內業 planning mock 的 Plan 列表分頁，採用與後端一致的 `(created_at,id)` cursor shape 與續頁排序；頁大小對齊 HTTP client 明確指定的 limit，補 cursor round-trip、tie-break、非法輸入與頁面邊界測試 | `frontend/src/admin/planning/api.mock.ts`、`frontend/src/admin/planning/api.test.ts`、`docs/specs/inspection-planning/plan.md` | T3；核對後端 pagination helper 與前端 HTTP client 的實際 limit | N/A（契約來源 API-R08） | #471 |
-| T10 | 序列化 Task 建立快照與專案項目修改，固定項目／Plan 鎖順序，並以 PostgreSQL 並行 API 測試驗證一致性與無死鎖 | `backend/app/services/inspection_planning.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R03、IP-AC03 | #555 |
+| T12 | 序列化 Task 建立快照與專案項目修改，固定項目／Plan 鎖順序，並以 PostgreSQL 並行 API 測試驗證一致性與無死鎖 | `backend/app/services/inspection_planning.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R03、IP-AC03 | #555 |
 
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
 - 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋，其 `project.read` 分支與 IP-R12、IP-AC13 由 `authentication` 任務 P 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
@@ -53,7 +53,7 @@
 |---|---|
 | IP-AC01 | API 整合測試：授權與拒絕任意狀態輸入；跨專案存取測試。 |
 | IP-AC02 | API／服務測試：內業建立含多個明選項目的 Task 與只含單項的 Task；確認建立後為草稿且現場不可見，沒有 interval 仍可建立，也不自動切分任務。 |
-| IP-AC03 | 服務／資料庫測試：建立 Task 後修改 Template 與 ProjectInspectionItem，確認 Snapshot 仍為建立時內容。 |
+| IP-AC03 | 服務／資料庫測試：建立 Task 後修改 Template 與 ProjectInspectionItem，確認 Snapshot 仍為建立時內容；PostgreSQL 並行 API 測試驗證 Task 建立與項目 PATCH 依相同鎖順序序列化，且快照與最終標準一致。 |
 | IP-AC04 | 服務／API 測試：驗證跨 Plan 多項目 Task 僅作廢受影響項目、舊 Snapshot／結果／照片可查找、其他項目保持有效；僅 `COMPLETED` Task 回到 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 狀態不變並標記項目待重查；DRAFT Task 原位更新；有效照片或結果的項目才作廢並標待重查（只有照片也算），已取消 Task 恢復時才作廢；封存中拒絕修改且唯讀，取消封存後重算狀態再成功。 |
 | IP-AC05 | 服務／API 測試：選「不要」後比對 Snapshot 文字更新且 Task 狀態、結果與照片不變，稽核含選擇者及時間。 |
 | IP-AC06 | 權限整合測試：非指派但有專案現場權限的成員可操作；實際操作者欄位記錄該成員。 |

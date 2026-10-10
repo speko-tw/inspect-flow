@@ -4,11 +4,12 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier, Event, Lock
+from time import monotonic
 
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event, select
+from sqlalchemy import Engine, event, select, text
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -268,11 +269,13 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
 
     create_lock_acquired = Event()
     create_lock_attempted = Event()
-    patch_update_attempted = Event()
-    patch_update_acquired = Event()
+    patch_lock_attempted = Event()
+    patch_lock_acquired = Event()
+    lock_wait_confirmed = Event()
     events_lock = Lock()
     observed: list[str] = []
     request_connection_ids: dict[int, str] = {}
+    request_backend_pids: dict[str, int] = {}
     app_engine = get_engine()
 
     def is_create_source_lock(statement: str) -> bool:
@@ -282,41 +285,78 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
             and " for share" in normalized
         )
 
-    def is_item_update(statement: str) -> bool:
+    def is_patch_item_lock(statement: str) -> bool:
         normalized = statement.lower()
-        return normalized.lstrip().startswith(
-            "update project_inspection_items"
+        return (
+            "project_inspection_items" in normalized
+            and "for no key update" in normalized
         )
+
+    def wait_for_lock_wait(backend_pid: int) -> None:
+        deadline = monotonic() + 10
+        with app_engine.connect() as probe_connection:
+            while monotonic() < deadline:
+                wait_event_type = probe_connection.scalar(
+                    text(
+                        "SELECT wait_event_type FROM pg_stat_activity "
+                        "WHERE pid = :backend_pid"
+                    ),
+                    {"backend_pid": backend_pid},
+                )
+                if wait_event_type == "Lock":
+                    lock_wait_confirmed.set()
+                    with events_lock:
+                        observed.append("lock_wait_confirmed")
+                    return
+        raise AssertionError(
+            f"PostgreSQL backend {backend_pid} did not wait on a lock"
+        )
+
+    def wait_for_blocked_request(request_name: str) -> None:
+        attempted = (
+            patch_lock_attempted
+            if request_name == "item_patch"
+            else create_lock_attempted
+        )
+        assert attempted.wait(timeout=10)
+        with events_lock:
+            backend_pid = request_backend_pids.get(request_name)
+        assert backend_pid is not None
+        wait_for_lock_wait(backend_pid)
 
     def before_cursor_execute(
         connection, cursor, statement, parameters, context, executemany
     ) -> None:
         if is_create_source_lock(statement):
-            create_lock_attempted.set()
             with events_lock:
                 observed.append("create_lock_attempted")
-        if is_item_update(statement):
-            patch_update_attempted.set()
+            create_lock_attempted.set()
+        if is_patch_item_lock(statement):
+            backend_pid = (
+                connection.connection.driver_connection.info.backend_pid
+            )
             with events_lock:
-                observed.append("patch_update_attempted")
+                observed.append("patch_lock_attempted")
+                request_backend_pids["item_patch"] = backend_pid
+            patch_lock_attempted.set()
 
     def after_cursor_execute(
         connection, cursor, statement, parameters, context, executemany
     ) -> None:
         if is_create_source_lock(statement):
-            create_lock_acquired.set()
             with events_lock:
                 observed.append("create_lock_acquired")
                 request_connection_ids[id(connection)] = "task_create"
+            create_lock_acquired.set()
             if first_writer == "task_create":
-                assert patch_update_attempted.wait(timeout=10)
-        if is_item_update(statement):
-            patch_update_acquired.set()
+                wait_for_blocked_request("item_patch")
+        if is_patch_item_lock(statement):
             with events_lock:
-                observed.append("patch_update_acquired")
+                observed.append("patch_lock_acquired")
                 request_connection_ids[id(connection)] = "item_patch"
+            patch_lock_acquired.set()
             if first_writer == "item_patch":
-                assert create_lock_attempted.wait(timeout=10)
+                wait_for_blocked_request("task_create")
 
     def on_commit(connection) -> None:
         with events_lock:
@@ -344,7 +384,7 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
                 patch_future = executor.submit(patch_item)
             else:
                 patch_future = executor.submit(patch_item)
-                assert patch_update_acquired.wait(timeout=10)
+                assert patch_lock_acquired.wait(timeout=10)
                 create_future = executor.submit(create_task)
 
             create_response = create_future.result(timeout=20)
@@ -359,13 +399,14 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
     assert create_response.status_code == 201, create_response.text
     assert patch_response.status_code == 200, patch_response.text
     assert create_lock_acquired.is_set()
-    assert patch_update_acquired.is_set()
+    assert patch_lock_acquired.is_set()
+    assert lock_wait_confirmed.is_set()
     if first_writer == "task_create":
         assert observed.index("create_lock_acquired") < observed.index(
-            "create_lock_attempted"
+            "patch_lock_attempted"
         )
     else:
-        assert observed.index("patch_update_acquired") < observed.index(
+        assert observed.index("patch_lock_acquired") < observed.index(
             "create_lock_attempted"
         )
     expected_commits = (
