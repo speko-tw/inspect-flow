@@ -207,6 +207,7 @@ class TestTableStructure:
             "id",
             "created_at",
             "created_by",
+            "project_id",
             "event_type",
             "entity_type",
             "entity_id",
@@ -219,6 +220,7 @@ class TestTableStructure:
 
         assert columns["created_at"]["nullable"] is False
         assert columns["created_by"]["nullable"] is False
+        assert columns["project_id"]["nullable"] is True
         assert columns["event_type"]["nullable"] is False
         assert columns["entity_type"]["nullable"] is False
         assert columns["entity_id"]["nullable"] is False

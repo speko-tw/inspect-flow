@@ -3,7 +3,7 @@
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models import (
     AuditLog,
@@ -96,10 +96,10 @@ def _add_member(session, operator, project, user):
     return member
 
 
-def _source_item(session, operator, project, title="項目 A"):
+def _source_item(session, operator, project, title="項目 A", sequence=1):
     item = ProjectInspectionItem(
         project_id=project.id,
-        sequence=1,
+        sequence=sequence,
         title=title,
         instruction="檢查內容 A",
         source_template_name="示範範本",
@@ -188,6 +188,7 @@ def test_project_zone_normalization_audit_and_referenced_delete(
         "project_zone.updated",
     ]
     assert events[0].created_by == operator.id
+    assert [event.project_id for event in events] == [project.id, project.id]
     assert events[0].after == {"project_id": str(project.id), "name": "北側"}
     assert events[1].before == {"name": "北側"}
     assert events[1].after == {"name": "南側"}
@@ -200,15 +201,14 @@ def test_zone_without_task_can_be_deleted(session, operator):
     zone = create_project_zone(session, project_id=project.id, name=zone_name)
     delete_project_zone(session, zone)
     assert session.get(ProjectZone, zone.id) is None
-    assert (
-        session.scalar(
-            select(AuditLog.id).where(
-                AuditLog.event_type == "project_zone.deleted",
-                AuditLog.entity_id == zone.id,
-            )
+    deleted = session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "project_zone.deleted",
+            AuditLog.entity_id == zone.id,
         )
-        is not None
     )
+    assert deleted is not None
+    assert deleted.project_id == project.id
 
 
 def test_zone_name_uses_trim_casefold_and_length_boundary(session, operator):
@@ -301,6 +301,49 @@ def test_plan_manage_and_assignee_must_be_project_members(session, operator):
     with pytest.raises(PlanningError) as invalid:
         assign_inspection_task(session, task, assignee_id=uuid.uuid4())
     assert invalid.value.code == "inspection_task.invalid_assignee"
+
+
+def test_non_assignee_with_inspection_permission_can_start_task(
+    session, operator, monkeypatch
+):
+    project = _project(session, operator, "NONASSIGNEE")
+    _grant(session, operator, project, *_planning_codes())
+    inspector = create_root_user_with_company(session, "INSPECT01")
+    assignee = create_root_user_with_company(session, "ASSIGNED01")
+    _grant(
+        session,
+        operator,
+        project,
+        "inspection_task.inspect",
+        user=inspector,
+    )
+    _grant(
+        session,
+        operator,
+        project,
+        "inspection_task.inspect",
+        user=assignee,
+    )
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="指派不排他"
+    )
+    source = _source_item(session, operator, project)
+    task = create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[source.id]
+    )
+    assign_inspection_task(session, task, assignee_id=assignee.id)
+    dispatch_inspection_task(session, task)
+
+    monkeypatch.setattr(
+        "app.services.inspection_planning.get_current_operator",
+        lambda _: inspector,
+    )
+    start_inspection_task(session, task)
+
+    assert task.status == "IN_PROGRESS"
+    assert task.assignee_id == assignee.id
+    assert task.started_by == inspector.id
+    assert task.started_at is not None
 
 
 def test_task_lock_queries_follow_plan_then_task_order(
@@ -465,12 +508,19 @@ def test_task_snapshot_location_state_and_restore_audit(session, operator):
     restore_inspection_task(session, task)
     assert task.status == "IN_PROGRESS"
     assert task.cancellation_reason is None
-    event_types = session.scalars(
-        select(AuditLog.event_type).where(AuditLog.entity_id == task.id)
+    events = session.scalars(
+        select(AuditLog).where(AuditLog.entity_id == task.id)
     ).all()
+    event_types = [event.event_type for event in events]
     assert "inspection_task.location_updated" in event_types
     assert "inspection_task.cancelled" in event_types
     assert "inspection_task.restored" in event_types
+    assert all(event.project_id == project.id for event in events)
+    assert all(
+        "project_id" not in (payload or {})
+        for event in events
+        for payload in (event.before, event.after)
+    )
 
 
 def test_task_creation_requires_zone_only_when_project_has_zones(
@@ -835,6 +885,7 @@ def test_draft_task_hard_delete_is_audited_and_plan_rederived(
         )
     )
     assert event is not None
+    assert event.project_id == project.id
 
 
 def test_new_draft_task_rederives_cancelled_plan(session, operator):
@@ -873,12 +924,15 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
     )
     assert task_item is not None
-    before_count = session.scalar(
-        select(ProjectInspectionItemChange.id).where(
-            ProjectInspectionItemChange.project_inspection_item_id == source.id
-        )
-    )
     archive_inspection_plan(session, plan, archived=True)
+    session.commit()
+    snapshot_ids = set(
+        session.scalars(
+            select(TaskRequirementSnapshot.id).where(
+                TaskRequirementSnapshot.task_inspection_item_id == task_item.id
+            )
+        ).all()
+    )
     source.instruction = "封存後的內容"
     source.standard_revision = 2
     with pytest.raises(PlanningError) as rejected:
@@ -891,18 +945,210 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
     assert rejected.value.code == "inspection_plan.archived"
     assert (
         session.scalar(
-            select(ProjectInspectionItemChange.id).where(
+            select(func.count())
+            .select_from(ProjectInspectionItemChange)
+            .where(
                 ProjectInspectionItemChange.project_inspection_item_id
                 == source.id
             )
         )
-        == before_count
+        == 0
     )
     assert (
+        set(
+            session.scalars(
+                select(TaskRequirementSnapshot.id).where(
+                    TaskRequirementSnapshot.task_inspection_item_id
+                    == task_item.id
+                )
+            ).all()
+        )
+        == snapshot_ids
+    )
+    assert (
+        session.scalars(
+            select(AuditLog.id).where(
+                AuditLog.entity_id == source.id,
+                AuditLog.event_type == "project_inspection_item.updated",
+            )
+        ).all()
+        == []
+    )
+
+    session.rollback()
+    plan = session.get(InspectionPlan, plan.id)
+    source = session.get(ProjectInspectionItem, source.id)
+    assert plan is not None and source is not None
+
+    archive_inspection_plan(session, plan, archived=False)
+    session.commit()
+    source = session.get(ProjectInspectionItem, source.id)
+    assert source is not None
+    source.instruction = "取消封存後的新內容"
+    source.standard_revision = 2
+    update_project_item_usage(
+        session,
+        item_id=source.id,
+        before_data={"title": "項目 A", "instruction": "檢查內容 A"},
+        reinspection_required=True,
+    )
+    session.flush()
+
+    current_snapshot = session.scalar(
+        select(TaskRequirementSnapshot).where(
+            TaskRequirementSnapshot.task_inspection_item_id == task_item.id,
+            TaskRequirementSnapshot.is_current.is_(True),
+        )
+    )
+    assert current_snapshot is not None
+    assert current_snapshot.instruction == "取消封存後的新內容"
+    assert current_snapshot.source_standard_revision == 2
+    assert (
         session.scalar(
-            select(TaskRequirementSnapshot.id).where(
-                TaskRequirementSnapshot.task_inspection_item_id == task_item.id
+            select(func.count())
+            .select_from(ProjectInspectionItemChange)
+            .where(
+                ProjectInspectionItemChange.project_inspection_item_id
+                == source.id
             )
         )
-        is not None
+        == 1
     )
+    events = session.scalars(
+        select(AuditLog).where(
+            AuditLog.entity_id == source.id,
+            AuditLog.event_type == "project_inspection_item.updated",
+        )
+    ).all()
+    assert len(events) == 1
+    assert events[0].project_id == project.id
+    assert "project_id" not in (events[0].before or {})
+    assert "project_id" not in (events[0].after or {})
+    assert events[0].after == {
+        "instruction": "取消封存後的新內容",
+        "reinspection_required": True,
+    }
+
+
+def test_item_change_refreshes_every_plan_using_item_only(session, operator):
+    project = _project(session, operator, "MULTIPLAN")
+    _grant(session, operator, project, *_planning_codes())
+    first_plan = create_inspection_plan(
+        session, project_id=project.id, name="共用項次計畫一"
+    )
+    second_plan = create_inspection_plan(
+        session, project_id=project.id, name="共用項次計畫二"
+    )
+    shared = _source_item(session, operator, project, title="共用項次")
+    unrelated = _source_item(
+        session, operator, project, title="不相關項次", sequence=2
+    )
+    first_task = create_inspection_task(
+        session,
+        plan=first_plan,
+        project_inspection_item_ids=[shared.id],
+    )
+    second_task = create_inspection_task(
+        session,
+        plan=second_plan,
+        project_inspection_item_ids=[shared.id],
+    )
+    unrelated_task = create_inspection_task(
+        session,
+        plan=second_plan,
+        project_inspection_item_ids=[unrelated.id],
+    )
+    for task in (first_task, second_task, unrelated_task):
+        dispatch_inspection_task(session, task)
+    start_inspection_task(session, second_task)
+    complete_inspection_task(session, second_task)
+
+    shared_links = session.scalars(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.project_inspection_item_id == shared.id
+        )
+    ).all()
+    shared_link_ids = {link.id for link in shared_links}
+    old_snapshot_ids = set(
+        session.scalars(
+            select(TaskRequirementSnapshot.id).where(
+                TaskRequirementSnapshot.task_inspection_item_id.in_(
+                    shared_link_ids
+                )
+            )
+        ).all()
+    )
+    unrelated_link = session.scalar(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.task_id == unrelated_task.id
+        )
+    )
+    assert unrelated_link is not None
+    unrelated_snapshot = session.scalar(
+        select(TaskRequirementSnapshot).where(
+            TaskRequirementSnapshot.task_inspection_item_id
+            == unrelated_link.id,
+            TaskRequirementSnapshot.is_current.is_(True),
+        )
+    )
+    assert unrelated_snapshot is not None
+    unrelated_snapshot_state = (
+        unrelated_snapshot.id,
+        unrelated_snapshot.revision,
+        unrelated_snapshot.instruction,
+        unrelated_snapshot.source_standard_revision,
+    )
+
+    shared.instruction = "跨計畫更新後的標準"
+    shared.standard_revision = 2
+    update_project_item_usage(
+        session,
+        item_id=shared.id,
+        before_data={"instruction": "檢查內容 A"},
+        reinspection_required=True,
+    )
+
+    refreshed = session.scalars(
+        select(TaskRequirementSnapshot).where(
+            TaskRequirementSnapshot.task_inspection_item_id.in_(
+                shared_link_ids
+            )
+        )
+    ).all()
+    assert len(refreshed) == 4
+    current = [snapshot for snapshot in refreshed if snapshot.is_current]
+    assert len(current) == 2
+    assert {
+        (snapshot.instruction, snapshot.source_standard_revision)
+        for snapshot in current
+    } == {("跨計畫更新後的標準", 2)}
+    assert old_snapshot_ids <= {
+        snapshot.id for snapshot in refreshed if not snapshot.is_current
+    }
+    assert first_task.status == "PENDING"
+    assert second_task.status == "IN_PROGRESS"
+    assert (
+        unrelated_task.status,
+        unrelated_snapshot.id,
+        unrelated_snapshot.revision,
+        unrelated_snapshot.instruction,
+        unrelated_snapshot.source_standard_revision,
+    ) == ("PENDING", *unrelated_snapshot_state)
+    assert unrelated_snapshot.is_current is True
+    change_count = session.scalar(
+        select(func.count())
+        .select_from(ProjectInspectionItemChange)
+        .where(
+            ProjectInspectionItemChange.project_inspection_item_id == shared.id
+        )
+    )
+    assert change_count == 1
+    audit_events = session.scalars(
+        select(AuditLog).where(
+            AuditLog.entity_id == shared.id,
+            AuditLog.event_type == "project_inspection_item.updated",
+        )
+    ).all()
+    assert len(audit_events) == 1
+    assert audit_events[0].after["instruction"] == "跨計畫更新後的標準"
+    assert audit_events[0].after["reinspection_required"] is True

@@ -2,13 +2,15 @@
 
 import uuid
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Barrier, BrokenBarrierError
 from typing import cast
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, insert, inspect, select, text
+from sqlalchemy import Engine, func, insert, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,7 +23,11 @@ from app.models import (
     ProjectInspectionItem,
     ProjectInspectionItemChange,
     ProjectInspectionPoint,
+    ProjectMember,
+    ProjectMemberRole,
     ProjectZone,
+    Role,
+    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     TaskSnapshotEvidenceRequirement,
@@ -764,3 +770,124 @@ def test_ip_ac02_ac04_ac11_schema_constraints_and_round_trip(
             ).scalar_one()
             == 1
         )
+
+
+def test_postgres_concurrent_completion_derives_completed_plan(
+    session: Session, request: pytest.FixtureRequest, monkeypatch
+) -> None:
+    """Two live PostgreSQL transactions complete the final Tasks together."""
+    if request.config.getoption("--db-backend") != "postgresql":
+        pytest.skip("requires the PostgreSQL backend and independent sessions")
+
+    from types import SimpleNamespace
+
+    from app.services.inspection_planning import complete_inspection_task
+    from tests.db.conftest import make_system_admin
+
+    actor = create_root_user_with_company(session, "IP406RACE")
+    make_system_admin(actor)
+    project = _project(session, actor, "IP406RACE")
+    role = Role(
+        name="planning-406-concurrent-inspect",
+        created_by=actor.id,
+        updated_by=actor.id,
+        permission_codes=[RolePermission(code="inspection_task.inspect")],
+    )
+    session.add(role)
+    session.flush()
+    member = ProjectMember(
+        project_id=project.id,
+        user_id=actor.id,
+        created_by=actor.id,
+        updated_by=actor.id,
+        role_assignments=[ProjectMemberRole(role_id=role.id)],
+    )
+    session.add(member)
+    plan = InspectionPlan(
+        project_id=project.id,
+        name="並發完成",
+        status="IN_PROGRESS",
+        **_audit(actor),
+    )
+    session.add(plan)
+    session.flush()
+    tasks = [
+        InspectionTask(
+            project_id=project.id,
+            plan_id=plan.id,
+            status="IN_PROGRESS",
+            started_by=actor.id,
+            **_audit(actor),
+        )
+        for _ in range(2)
+    ]
+    session.add_all(tasks)
+    session.commit()
+
+    actor_stub = SimpleNamespace(id=actor.id)
+    monkeypatch.setattr(
+        "app.services.inspection_planning.get_current_operator",
+        lambda _: actor_stub,
+    )
+    engine = session.get_bind()
+    plan_id = plan.id
+    task_ids = [task.id for task in tasks]
+    ready = Barrier(3)
+    backend_pids: list[int] = []
+
+    def complete(task_id):
+        with Session(engine) as worker_session:
+            with worker_session.begin():
+                worker_session.execute(text("SET LOCAL lock_timeout = '5s'"))
+                worker_session.execute(
+                    text("SET LOCAL statement_timeout = '10s'")
+                )
+                backend_pid = worker_session.scalar(
+                    select(func.pg_backend_pid())
+                )
+                assert backend_pid is not None
+                backend_pids.append(backend_pid)
+                task = worker_session.get(InspectionTask, task_id)
+                assert task is not None
+                ready.wait(timeout=5)
+                complete_inspection_task(worker_session, task)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(complete, task_id) for task_id in task_ids]
+        barrier_error: BrokenBarrierError | None = None
+        try:
+            ready.wait(timeout=5)
+        except BrokenBarrierError as exc:
+            barrier_error = exc
+        worker_errors: list[Exception] = []
+        for future in futures:
+            try:
+                future.result(timeout=15)
+            except Exception as exc:
+                worker_errors.append(exc)
+
+        if worker_errors:
+            worker_error = next(
+                (
+                    error
+                    for error in worker_errors
+                    if not isinstance(error, BrokenBarrierError)
+                ),
+                worker_errors[0],
+            )
+            raise worker_error
+        if barrier_error is not None:
+            raise barrier_error
+
+    assert len(set(backend_pids)) == 2
+    session.expire_all()
+    persisted_plan = session.get(InspectionPlan, plan_id)
+    assert persisted_plan is not None
+    assert persisted_plan.status == "COMPLETED"
+    assert set(
+        session.scalars(
+            select(InspectionTask.status).where(
+                InspectionTask.plan_id == plan_id
+            )
+        ).all()
+    ) == {"COMPLETED"}

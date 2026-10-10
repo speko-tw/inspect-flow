@@ -7,11 +7,8 @@ import { isForbidden, isNotFound } from '../../http'
 import { managementErrorMessage } from '../api'
 import ProjectSectionShell from './ProjectSectionShell'
 import ProjectDeniedPage from './ProjectDeniedPage'
-import {
-  getWorkflowSummary,
-  type WorkflowStepCode,
-  type WorkflowSummary,
-} from './api'
+import { useWorkflowSummary } from './WorkflowSummaryProvider'
+import { type WorkflowStepCode, type WorkflowSummary } from './api'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { canViewIndoorSections } from './permissions'
 
@@ -51,6 +48,7 @@ export default function ProjectHomePage() {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const location = useLocation()
+  const { loadHomeSummary } = useWorkflowSummary()
   const [duplicateWarningDismissed, setDuplicateWarningDismissed] =
     useState(false)
   const [result, setResult] = useState<{
@@ -63,7 +61,7 @@ export default function ProjectHomePage() {
 
   useEffect(() => {
     let active = true
-    getWorkflowSummary(projectId)
+    loadHomeSummary(projectId)
       .then((nextSummary) => {
         if (active) {
           setResult({ projectId, summary: nextSummary })
@@ -82,7 +80,7 @@ export default function ProjectHomePage() {
     return () => {
       active = false
     }
-  }, [projectId])
+  }, [loadHomeSummary, projectId])
 
   const currentResult = result?.projectId === projectId ? result : null
   const summary = currentResult?.summary ?? null
