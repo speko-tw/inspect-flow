@@ -949,6 +949,7 @@ def test_project_item_can_be_saved_as_template_and_audited(
         )
     )
     assert event is not None
+    assert event.project_id == world["project"].id
     assert event.after == {
         "project_id": str(world["project"].id),
         "project_inspection_item_id": project_item_id,

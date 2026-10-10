@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TemplateLibraryNav } from './TemplateLibraryNav'
@@ -138,5 +138,49 @@ describe('TemplateLibraryNav counts from the list responses', () => {
 
     expect(screen.getByText('1 個系統')).toBeInTheDocument()
     expect(screen.getByText('1 個查核項目')).toBeInTheDocument()
+  })
+})
+
+describe('TemplateLibraryNav item selection', () => {
+  const props = {
+    categories: [{ id: 'category-1', name: '土木工程' }],
+    systems: [{ id: 'system-1', category_id: 'category-1', name: '護欄' }],
+    items: [
+      {
+        id: 'item-1',
+        system_id: 'system-1',
+        sequence: 1,
+        title: '檢查欄杆',
+        instruction: '',
+        inspection_points: [],
+      },
+    ],
+    loadedCategoryIds: new Set(['category-1']),
+    loadedSystemIds: new Set(['system-1']),
+    selected: null,
+    expanded: new Set(['category-1', 'system-1']),
+    onSelect: vi.fn(),
+    onToggle: vi.fn(),
+    onAddCategory: vi.fn(),
+    readOnly: false,
+    mode: 'manage' as const,
+  }
+
+  it('omits the mobile-only detail cue on desktop', () => {
+    render(<TemplateLibraryNav {...props} mobile={false} />)
+
+    expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
+  })
+
+  it('keeps the mobile detail cue and item selection', () => {
+    render(<TemplateLibraryNav {...props} mobile />)
+
+    expect(screen.getByText('開啟詳情')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '檢查欄杆' }))
+
+    expect(props.onSelect).toHaveBeenCalledWith({
+      type: 'item',
+      id: 'item-1',
+    })
   })
 })
