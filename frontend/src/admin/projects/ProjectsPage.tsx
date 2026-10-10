@@ -29,14 +29,17 @@ const EMPTY_FORM = {
 }
 
 type FormState = typeof EMPTY_FORM
+type FormMode = { kind: 'new' } | { kind: 'edit'; project: Project } | null
 type Transition =
   | { kind: 'new' }
   | { kind: 'edit'; project: Project }
+  | { kind: 'list' }
   | { kind: 'navigate'; to: string }
 
 // 換成另一個轉換時要重新掛載確認框，焦點才會回到「保留編輯」。
 function transitionKey(transition: Transition): string {
   if (transition.kind === 'edit') return `edit:${transition.project.id}`
+  if (transition.kind === 'list') return 'list'
   if (transition.kind === 'navigate') return `navigate:${transition.to}`
   return 'new'
 }
@@ -72,8 +75,9 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false)
   const searchGuard = useSubmitGuard()
   const saveGuard = useSubmitGuard()
-  const [editing, setEditing] = useState<Project | null>(null)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [formMode, setFormMode] = useState<FormMode>(null)
+  const [newDraft, setNewDraft] = useState<FormState>(EMPTY_FORM)
+  const [editDrafts, setEditDrafts] = useState<Record<string, FormState>>({})
   const [transition, setTransition] = useState<Transition | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [query, setQuery] = useState('')
@@ -85,10 +89,22 @@ export default function ProjectsPage() {
   const transitionRef = useRef<HTMLDivElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
   const noticeRef = useRef<HTMLParagraphElement>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
+  const restoreFocusAfterTransition = useRef(false)
+  const editing = formMode?.kind === 'edit' ? formMode.project : null
+  const form =
+    formMode?.kind === 'new'
+      ? newDraft
+      : editing
+        ? (editDrafts[editing.id] ?? toForm(editing))
+        : null
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
-  const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
-    (key) =>
-      form[key as keyof FormState] !== originalForm[key as keyof FormState],
+  const hasUnsavedChanges = Boolean(
+    form &&
+    Object.keys(EMPTY_FORM).some(
+      (key) =>
+        form[key as keyof FormState] !== originalForm[key as keyof FormState],
+    ),
   )
 
   useEffect(() => {
@@ -97,11 +113,17 @@ export default function ProjectsPage() {
   }, [transition])
 
   useEffect(() => {
-    if (!editing) return
+    if (transition || !restoreFocusAfterTransition.current) return
+    restoreFocusAfterTransition.current = false
+    restoreFocusRef.current?.focus()
+  }, [transition])
+
+  useEffect(() => {
+    if (!formMode) return
     const heading = editHeadingRef.current
     heading?.scrollIntoView?.({ block: 'start' })
     heading?.focus()
-  }, [editing])
+  }, [formMode])
 
   useEffect(() => {
     if (!notice) return
@@ -185,23 +207,54 @@ export default function ProjectsPage() {
   }
 
   function change(field: keyof FormState, value: string) {
-    setForm((current) => ({ ...current, [field]: value }))
+    if (formMode?.kind === 'new') {
+      setNewDraft((current) => ({ ...current, [field]: value }))
+    } else if (formMode?.kind === 'edit') {
+      const projectId = formMode.project.id
+      setEditDrafts((current) => ({
+        ...current,
+        [projectId]: {
+          ...(current[projectId] ?? toForm(formMode.project)),
+          [field]: value,
+        },
+      }))
+    }
   }
 
   function applyTransition(next: Transition) {
     setTransition(null)
     if (next.kind === 'edit') {
-      setEditing(next.project)
-      setForm(toForm(next.project))
+      setFormMode(next)
+      setEditDrafts((current) =>
+        current[next.project.id]
+          ? current
+          : { ...current, [next.project.id]: toForm(next.project) },
+      )
       setNotice('')
       setError('')
     } else if (next.kind === 'new') {
-      setEditing(null)
-      setForm(EMPTY_FORM)
+      setFormMode(next)
+      setNotice('')
+      setError('')
+    } else if (next.kind === 'list') {
+      setFormMode(null)
       setNotice('')
       setError('')
     } else {
+      setFormMode(null)
       navigate(next.to)
+    }
+  }
+
+  function discardActiveDraft() {
+    if (formMode?.kind === 'new') {
+      setNewDraft(EMPTY_FORM)
+    } else if (formMode?.kind === 'edit') {
+      setEditDrafts((current) => {
+        const next = { ...current }
+        delete next[formMode.project.id]
+        return next
+      })
     }
   }
 
@@ -226,6 +279,10 @@ export default function ProjectsPage() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!saveGuard.enter()) return
+    if (!form || !formMode) {
+      saveGuard.leave()
+      return
+    }
     setError('')
     setNotice('')
     const input = toInput(form)
@@ -241,7 +298,7 @@ export default function ProjectsPage() {
           ),
         )
         if (Object.keys(changed).length === 0) {
-          applyTransition({ kind: 'new' })
+          applyTransition({ kind: 'list' })
           return
         }
         saved = await updateProject(editing.id, changed)
@@ -249,6 +306,8 @@ export default function ProjectsPage() {
         saved = await createProject(input)
       }
       if (creating) {
+        setNewDraft(EMPTY_FORM)
+        setFormMode(null)
         navigate(`/admin/projects/${saved.id}`, {
           state: hasDuplicateCodeWarning(saved)
             ? { duplicateProjectCode: saved.project_code }
@@ -259,7 +318,12 @@ export default function ProjectsPage() {
       const savedNotice = hasDuplicateCodeWarning(saved)
         ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
         : `專案「${saved.name}」已儲存。`
-      applyTransition({ kind: 'new' })
+      setEditDrafts((current) => {
+        const next = { ...current }
+        if (editing) delete next[editing.id]
+        return next
+      })
+      applyTransition({ kind: 'list' })
       setNotice(savedNotice)
       setProjects([])
       setNextCursor(null)
@@ -290,14 +354,127 @@ export default function ProjectsPage() {
           cancelLabel="保留編輯"
           confirmLabel="捨棄"
           label="未儲存變更"
-          onCancel={() => setTransition(null)}
-          onConfirm={() => applyTransition(transition)}
+          onCancel={() => {
+            restoreFocusAfterTransition.current = true
+            setTransition(null)
+          }}
+          onConfirm={() => {
+            discardActiveDraft()
+            applyTransition(transition)
+          }}
           role="region"
           rootRef={transitionRef}
           variant="danger"
         >
           <p>目前的專案內容尚未儲存，要保留編輯或捨棄？</p>
         </ConfirmBox>
+      )}
+      {formMode === null && (
+        <button
+          className="btn-primary"
+          onClick={() => requestTransition({ kind: 'new' })}
+          type="button"
+        >
+          新增專案
+        </button>
+      )}
+      {form && (
+        <form
+          onFocusCapture={(event) => {
+            if (event.target instanceof HTMLElement) {
+              restoreFocusRef.current = event.target
+            }
+          }}
+          onKeyDown={blockImeEnter}
+          onSubmit={save}
+        >
+          <h2 ref={editHeadingRef} tabIndex={-1}>
+            {editing ? `編輯專案「${editing.name}」` : '新增專案'}
+          </h2>
+          {editing && (
+            <button
+              onClick={() => requestTransition({ kind: 'new' })}
+              type="button"
+            >
+              新增專案
+            </button>
+          )}
+          <label>
+            <span className="required-label">
+              專案代號 <span aria-hidden="true">*</span>
+            </span>
+            <input
+              maxLength={32}
+              onChange={(event) => change('project_code', event.target.value)}
+              required
+              value={form.project_code}
+            />
+          </label>
+          <label>
+            <span className="required-label">
+              工程名稱 <span aria-hidden="true">*</span>
+            </span>
+            <input
+              maxLength={128}
+              onChange={(event) => change('name', event.target.value)}
+              required
+              value={form.name}
+            />
+          </label>
+          <label>
+            <span className="required-label">
+              業主／委託單位 <span aria-hidden="true">*</span>
+            </span>
+            <input
+              maxLength={128}
+              onChange={(event) => change('client_name', event.target.value)}
+              required
+              value={form.client_name}
+            />
+          </label>
+          <label>
+            <span className="required-label">
+              整體工程地點 <span aria-hidden="true">*</span>
+            </span>
+            <input
+              maxLength={256}
+              onChange={(event) => change('site_location', event.target.value)}
+              required
+              value={form.site_location}
+            />
+          </label>
+          <label>
+            預定開工日
+            <input
+              onChange={(event) =>
+                change('planned_start_date', event.target.value)
+              }
+              type="date"
+              value={form.planned_start_date}
+            />
+          </label>
+          <label>
+            預定完工日
+            <input
+              onChange={(event) =>
+                change('planned_completion_date', event.target.value)
+              }
+              type="date"
+              value={form.planned_completion_date}
+            />
+          </label>
+          {editing && (
+            <button
+              onClick={() => requestTransition({ kind: 'list' })}
+              type="button"
+            >
+              取消
+            </button>
+          )}
+          <button className="btn-primary" disabled={saving} type="submit">
+            {editing ? '儲存專案' : '新增專案'}
+          </button>
+        </form>
       )}
       {loading ? <p>載入中…</p> : null}
       <form onKeyDown={blockImeEnter} onSubmit={searchProjects}>
@@ -441,94 +618,6 @@ export default function ProjectsPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <form onKeyDown={blockImeEnter} onSubmit={save}>
-        <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
-          {editing ? `編輯專案「${editing.name}」` : '新增專案'}
-        </h2>
-        {editing && (
-          <button
-            onClick={() => requestTransition({ kind: 'new' })}
-            type="button"
-          >
-            新增專案
-          </button>
-        )}
-        <label>
-          <span className="required-label">
-            專案代號 <span aria-hidden="true">*</span>
-          </span>
-          <input
-            maxLength={32}
-            onChange={(event) => change('project_code', event.target.value)}
-            required
-            value={form.project_code}
-          />
-        </label>
-        <label>
-          <span className="required-label">
-            工程名稱 <span aria-hidden="true">*</span>
-          </span>
-          <input
-            maxLength={128}
-            onChange={(event) => change('name', event.target.value)}
-            required
-            value={form.name}
-          />
-        </label>
-        <label>
-          <span className="required-label">
-            業主／委託單位 <span aria-hidden="true">*</span>
-          </span>
-          <input
-            maxLength={128}
-            onChange={(event) => change('client_name', event.target.value)}
-            required
-            value={form.client_name}
-          />
-        </label>
-        <label>
-          <span className="required-label">
-            整體工程地點 <span aria-hidden="true">*</span>
-          </span>
-          <input
-            maxLength={256}
-            onChange={(event) => change('site_location', event.target.value)}
-            required
-            value={form.site_location}
-          />
-        </label>
-        <label>
-          預定開工日
-          <input
-            onChange={(event) =>
-              change('planned_start_date', event.target.value)
-            }
-            type="date"
-            value={form.planned_start_date}
-          />
-        </label>
-        <label>
-          預定完工日
-          <input
-            onChange={(event) =>
-              change('planned_completion_date', event.target.value)
-            }
-            type="date"
-            value={form.planned_completion_date}
-          />
-        </label>
-        {editing && (
-          <button
-            onClick={() => requestTransition({ kind: 'new' })}
-            type="button"
-          >
-            取消
-          </button>
-        )}
-        <button className="btn-primary" disabled={saving} type="submit">
-          {editing ? '儲存專案' : '新增專案'}
-        </button>
-      </form>
     </section>
   )
 }
