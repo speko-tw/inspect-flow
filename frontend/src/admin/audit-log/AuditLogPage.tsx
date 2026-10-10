@@ -20,6 +20,7 @@ const emptyFilters: AuditLogFilters = {
 }
 
 const eventTypePattern = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/
+const reversedRangeError = '起始時間不得晚於結束時間。'
 
 interface FilterErrors {
   from?: string
@@ -102,7 +103,7 @@ export default function AuditLogPage() {
     if (toDate && Number.isNaN(toDate.getTime())) {
       nextErrors.to = '請輸入有效的結束時間。'
     } else if (fromDate && toDate && fromDate > toDate) {
-      nextErrors.to = '起始時間不得晚於結束時間。'
+      nextErrors.to = reversedRangeError
     }
     const normalizedEventType = eventType.trim()
     if (normalizedEventType && !eventTypePattern.test(normalizedEventType)) {
@@ -245,7 +246,12 @@ export default function AuditLogPage() {
             aria-labelledby="audit-from-label"
             onChange={(event) => {
               setFrom(event.target.value)
-              setFilterErrors((previous) => ({ ...previous, from: undefined }))
+              setFilterErrors((previous) => ({
+                ...previous,
+                from: undefined,
+                to:
+                  previous.to === reversedRangeError ? undefined : previous.to,
+              }))
             }}
             ref={fromRef}
             type="datetime-local"

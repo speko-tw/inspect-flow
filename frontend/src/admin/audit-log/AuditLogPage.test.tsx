@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import AuditLogPage from './AuditLogPage'
 
@@ -54,10 +54,8 @@ function mockFetch(
   return fetcher
 }
 
-beforeEach(() => vi.stubEnv('TZ', 'Asia/Taipei'))
 afterEach(() => {
   vi.unstubAllGlobals()
-  vi.unstubAllEnvs()
 })
 
 describe('稽核查詢頁', () => {
@@ -148,6 +146,14 @@ describe('稽核查詢頁', () => {
     expect(toInput).toHaveAttribute('aria-describedby', 'audit-to-error')
     expect(fetcher.mock.calls).toHaveLength(before)
     expect(screen.getByText('project_zone.created')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('起始時間（含）'), {
+      target: { value: '2026-10-09T08:00' },
+    })
+    expect(toInput).toHaveAttribute('aria-invalid', 'false')
+    expect(toInput).not.toHaveAttribute('aria-describedby')
+    expect(screen.queryByText('起始時間不得晚於結束時間。')).toBeNull()
+    expect(fetcher.mock.calls).toHaveLength(before)
   })
 
   it('在事件類型格式錯誤時聚焦欄位並保留原結果', async () => {
