@@ -310,6 +310,19 @@ def test_system_role_assignment_routes_require_admin() -> None:
         assert declaration.level is AccessLevel.ADMIN_REQUIRED
 
 
+def test_audit_query_route_requires_admin() -> None:
+    app = create_app()
+    routes = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/audit-logs")
+    }
+    assert set(routes) == {("GET", "/api/v1/audit-logs")}
+    declaration = routes[("GET", "/api/v1/audit-logs")]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.ADMIN_REQUIRED
+
+
 def test_template_library_routes_declare_read_and_write_access() -> None:
     app = create_app()
     routes = {

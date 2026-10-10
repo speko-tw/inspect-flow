@@ -188,6 +188,7 @@ def test_project_zone_normalization_audit_and_referenced_delete(
         "project_zone.updated",
     ]
     assert events[0].created_by == operator.id
+    assert [event.project_id for event in events] == [project.id, project.id]
     assert events[0].after == {"project_id": str(project.id), "name": "北側"}
     assert events[1].before == {"name": "北側"}
     assert events[1].after == {"name": "南側"}
@@ -200,15 +201,14 @@ def test_zone_without_task_can_be_deleted(session, operator):
     zone = create_project_zone(session, project_id=project.id, name=zone_name)
     delete_project_zone(session, zone)
     assert session.get(ProjectZone, zone.id) is None
-    assert (
-        session.scalar(
-            select(AuditLog.id).where(
-                AuditLog.event_type == "project_zone.deleted",
-                AuditLog.entity_id == zone.id,
-            )
+    deleted = session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "project_zone.deleted",
+            AuditLog.entity_id == zone.id,
         )
-        is not None
     )
+    assert deleted is not None
+    assert deleted.project_id == project.id
 
 
 def test_zone_name_uses_trim_casefold_and_length_boundary(session, operator):
@@ -508,12 +508,19 @@ def test_task_snapshot_location_state_and_restore_audit(session, operator):
     restore_inspection_task(session, task)
     assert task.status == "IN_PROGRESS"
     assert task.cancellation_reason is None
-    event_types = session.scalars(
-        select(AuditLog.event_type).where(AuditLog.entity_id == task.id)
+    events = session.scalars(
+        select(AuditLog).where(AuditLog.entity_id == task.id)
     ).all()
+    event_types = [event.event_type for event in events]
     assert "inspection_task.location_updated" in event_types
     assert "inspection_task.cancelled" in event_types
     assert "inspection_task.restored" in event_types
+    assert all(event.project_id == project.id for event in events)
+    assert all(
+        "project_id" not in (payload or {})
+        for event in events
+        for payload in (event.before, event.after)
+    )
 
 
 def test_task_creation_requires_zone_only_when_project_has_zones(
@@ -878,6 +885,7 @@ def test_draft_task_hard_delete_is_audited_and_plan_rederived(
         )
     )
     assert event is not None
+    assert event.project_id == project.id
 
 
 def test_new_draft_task_rederives_cancelled_plan(session, operator):
@@ -1013,6 +1021,9 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
         )
     ).all()
     assert len(events) == 1
+    assert events[0].project_id == project.id
+    assert "project_id" not in (events[0].before or {})
+    assert "project_id" not in (events[0].after or {})
     assert events[0].after == {
         "instruction": "取消封存後的新內容",
         "reinspection_required": True,
