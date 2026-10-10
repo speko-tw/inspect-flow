@@ -73,9 +73,11 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from app.db import clock
+from app.db.engine import get_session_factory
 from app.models import AuditLog, User
 from app.services.operator import get_current_operator, get_system_operator
 
@@ -119,6 +121,7 @@ class AuditEventDefinition:
     kind: AuditEventKind
     fields: frozenset[str]
     always_recorded: frozenset[str] = field(default_factory=frozenset)
+    optional_fields: frozenset[str] = field(default_factory=frozenset)
     system_event: bool = False
     allow_system_event: bool = False
     always_write: bool = False
@@ -153,6 +156,7 @@ def register_audit_event(
     kind: AuditEventKind,
     fields: Iterable[str],
     always_recorded: Iterable[str] = (),
+    optional_fields: Iterable[str] = (),
     system_event: bool = False,
     allow_system_event: bool = False,
     always_write: bool = False,
@@ -204,11 +208,16 @@ def register_audit_event(
 
     fields_set = frozenset(fields)
     always_recorded_set = frozenset(always_recorded)
+    optional_fields_set = frozenset(optional_fields)
     nullable_fields_set = frozenset(nullable_fields)
     if not always_recorded_set <= fields_set:
         raise InvalidAuditEventDefinitionError(
             f"{event_type!r}: always_recorded {sorted(always_recorded_set)} "
             f"must be a subset of fields {sorted(fields_set)}"
+        )
+    if not optional_fields_set <= fields_set:
+        raise InvalidAuditEventDefinitionError(
+            f"{event_type!r}: optional_fields must be declared fields"
         )
     if not nullable_fields_set <= fields_set:
         raise InvalidAuditEventDefinitionError(
@@ -229,6 +238,7 @@ def register_audit_event(
         kind=kind,
         fields=fields_set,
         always_recorded=always_recorded_set,
+        optional_fields=optional_fields_set,
         system_event=system_event,
         allow_system_event=allow_system_event,
         always_write=always_write,
@@ -395,7 +405,7 @@ def _validate_shape(
                 f"{definition.event_type}: a 新增 event's after must "
                 "not be None (ALG-R09)"
             )
-        missing = definition.fields - after.keys()
+        missing = definition.fields - definition.optional_fields - after.keys()
         if missing:
             raise InvalidAuditEventShapeError(
                 f"{definition.event_type}: field(s) {sorted(missing)} "
@@ -412,7 +422,8 @@ def _validate_shape(
                 f"{definition.event_type}: a 刪除 event's before must "
                 "not be None (ALG-R09)"
             )
-        missing = definition.fields - before.keys()
+        required = definition.fields - definition.optional_fields
+        missing = required - before.keys()
         if missing:
             raise InvalidAuditEventShapeError(
                 f"{definition.event_type}: field(s) {sorted(missing)} "
@@ -562,6 +573,37 @@ def record_audit_event(
     return log
 
 
+def record_audit_event_in_independent_transaction(
+    session: Session,
+    event_type: str,
+    *,
+    entity_id: uuid.UUID,
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+    system_event: bool = False,
+) -> uuid.UUID:
+    """Commit a security event independently of the caller's transaction.
+
+    ALG-R28 permits denied assignment and authorization attempts to survive
+    rollback of the request transaction. The passed session supplies the
+    target engine only; its pending writes and transaction are untouched.
+    """
+    bind = session.get_bind()
+    engine = bind.engine if isinstance(bind, Connection) else bind
+    factory = get_session_factory(engine)
+    with factory.begin() as independent_session:
+        log = record_audit_event(
+            independent_session,
+            event_type,
+            entity_id=entity_id,
+            before=before,
+            after=after,
+            system_event=system_event,
+        )
+        event_id = log.id
+    return event_id
+
+
 # 第一批事件 (docs/specs/audit-log/spec.md#第一批事件, ALG-R11).
 register_audit_event(
     "role.created",
@@ -573,7 +615,12 @@ register_audit_event(
     "role.updated",
     entity_type="role",
     kind=AuditEventKind.UPDATED,
-    fields=("name", "permission_codes"),
+    fields=(
+        "name",
+        "permission_codes",
+        "is_assignable",
+        "is_external_allowed",
+    ),
 )
 register_audit_event(
     "role.deleted",
@@ -658,4 +705,147 @@ register_audit_event(
     kind=AuditEventKind.CREATED,
     fields=("locked_until",),
     system_event=True,
+)
+
+# Two-layer permission and project events (ALG-R25~ALG-R28, plan.md T6).
+register_audit_event(
+    "user.active_changed",
+    entity_type="user",
+    kind=AuditEventKind.UPDATED,
+    fields=(
+        "is_active",
+        "reason",
+        "restored_permission_codes",
+        "removed_permission_codes",
+        "restored_delegated_modules",
+        "removed_delegated_modules",
+        "restored_project_ids",
+        "removed_project_ids",
+        "cleared_task_ids",
+    ),
+    always_recorded=("is_active",),
+    optional_fields=(
+        "reason",
+        "restored_permission_codes",
+        "removed_permission_codes",
+        "restored_delegated_modules",
+        "removed_delegated_modules",
+        "restored_project_ids",
+        "removed_project_ids",
+        "cleared_task_ids",
+    ),
+    allow_system_event=True,
+)
+register_audit_event(
+    "user.external_flag_changed",
+    entity_type="user",
+    kind=AuditEventKind.UPDATED,
+    fields=("is_external_collaborator",),
+)
+
+for _event_type, _entity_type, _kind, _fields, _always in (
+    (
+        "module_permission.granted",
+        "module_permission",
+        AuditEventKind.CREATED,
+        ("user_id", "permission_code", "module", "source"),
+        (),
+    ),
+    (
+        "module_permission.revoked",
+        "module_permission",
+        AuditEventKind.DELETED,
+        ("user_id", "permission_code", "module", "source"),
+        (),
+    ),
+    (
+        "module_delegation.granted",
+        "module_delegation",
+        AuditEventKind.CREATED,
+        ("user_id", "module"),
+        (),
+    ),
+    (
+        "module_delegation.revoked",
+        "module_delegation",
+        AuditEventKind.DELETED,
+        ("user_id", "module"),
+        (),
+    ),
+    (
+        "permission_bundle.created",
+        "permission_bundle",
+        AuditEventKind.CREATED,
+        ("name", "permission_codes"),
+        (),
+    ),
+    (
+        "permission_bundle.updated",
+        "permission_bundle",
+        AuditEventKind.UPDATED,
+        ("name", "permission_codes"),
+        (),
+    ),
+    (
+        "permission_bundle.deleted",
+        "permission_bundle",
+        AuditEventKind.DELETED,
+        ("name", "permission_codes"),
+        (),
+    ),
+    (
+        "permission_bundle.applied",
+        "permission_bundle",
+        AuditEventKind.CREATED,
+        ("user_id", "bundle_id", "bundle_name", "permission_codes"),
+        (),
+    ),
+    (
+        "creator_role.changed",
+        "creator_role",
+        AuditEventKind.UPDATED,
+        ("creator_role_id",),
+        ("creator_role_id",),
+    ),
+):
+    register_audit_event(
+        _event_type,
+        entity_type=_entity_type,
+        kind=_kind,
+        fields=_fields,
+        always_recorded=_always,
+    )
+
+register_audit_event(
+    "project.created",
+    entity_type="project",
+    kind=AuditEventKind.CREATED,
+    fields=("project_code", "name", "creator_role_user_id"),
+    optional_fields=("creator_role_user_id",),
+)
+register_audit_event(
+    "project.updated",
+    entity_type="project",
+    kind=AuditEventKind.UPDATED,
+    fields=(
+        "project_code",
+        "name",
+        "client_name",
+        "site_location",
+        "planned_start_date",
+        "planned_completion_date",
+    ),
+)
+register_audit_event(
+    "project_member.assignment_denied",
+    entity_type="project_member",
+    kind=AuditEventKind.CREATED,
+    fields=("project_id", "user_id", "role_ids", "reason"),
+)
+register_audit_event(
+    "module_permission.grant_denied",
+    entity_type="module_permission",
+    kind=AuditEventKind.CREATED,
+    fields=("user_id", "permission_codes", "bundle_id", "reason"),
+    optional_fields=("bundle_id",),
 )

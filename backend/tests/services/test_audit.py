@@ -61,6 +61,7 @@ from app.services.audit import (
     UndeclaredAuditFieldError,
     UnregisteredAuditEventError,
     record_audit_event,
+    record_audit_event_in_independent_transaction,
     register_audit_event,
 )
 from app.services.companies import create_company, update_company
@@ -92,6 +93,107 @@ def test_alg_ac14_ac15_management_event_catalog():
                 secret in field_name
                 for secret in ("password", "secret", "token", "session")
             )
+
+
+def test_alg_ac19_to_ac24_two_layer_event_catalog():
+    expected = {
+        "module_permission.granted": {
+            "user_id",
+            "permission_code",
+            "module",
+            "source",
+        },
+        "module_permission.revoked": {
+            "user_id",
+            "permission_code",
+            "module",
+            "source",
+        },
+        "module_delegation.granted": {"user_id", "module"},
+        "module_delegation.revoked": {"user_id", "module"},
+        "permission_bundle.created": {"name", "permission_codes"},
+        "permission_bundle.updated": {"name", "permission_codes"},
+        "permission_bundle.deleted": {"name", "permission_codes"},
+        "permission_bundle.applied": {
+            "user_id",
+            "bundle_id",
+            "bundle_name",
+            "permission_codes",
+        },
+        "creator_role.changed": {"creator_role_id"},
+        "project.created": {
+            "project_code",
+            "name",
+            "creator_role_user_id",
+        },
+        "project.updated": {
+            "project_code",
+            "name",
+            "client_name",
+            "site_location",
+            "planned_start_date",
+            "planned_completion_date",
+        },
+        "project_member.assignment_denied": {
+            "project_id",
+            "user_id",
+            "role_ids",
+            "reason",
+        },
+        "module_permission.grant_denied": {
+            "user_id",
+            "permission_codes",
+            "bundle_id",
+            "reason",
+        },
+        "user.external_flag_changed": {"is_external_collaborator"},
+    }
+    for event_type, fields in expected.items():
+        definition = _EVENT_CATALOG[event_type]
+        assert definition.fields == fields
+        assert definition.entity_type == event_type.split(".", 1)[0]
+        assert _EVENT_TYPE_RE.match(event_type)
+
+    role_updated = _EVENT_CATALOG["role.updated"]
+    assert {"is_assignable", "is_external_allowed"} <= role_updated.fields
+
+    active_changed = _EVENT_CATALOG["user.active_changed"]
+    assert active_changed.always_recorded == {"is_active"}
+    assert active_changed.allow_system_event
+    assert active_changed.optional_fields == active_changed.fields - {
+        "is_active"
+    }
+
+
+def test_alg_ac26_denial_event_survives_request_transaction_rollback(
+    session, operator
+):
+    session.commit()
+    session.add(Company(name="Rolled Back Company"))
+
+    event_id = record_audit_event_in_independent_transaction(
+        session,
+        "module_permission.grant_denied",
+        entity_id=uuid.uuid4(),
+        before=None,
+        after={
+            "user_id": uuid.uuid4(),
+            "permission_codes": ["project.create"],
+            "reason": "delegation_scope_exceeded",
+        },
+    )
+    session.rollback()
+
+    assert (
+        session.query(Company).filter_by(name="Rolled Back Company").count()
+        == 0
+    )
+    persisted = session.get(AuditLog, event_id)
+    assert persisted is not None
+    assert persisted.created_by == operator.id
+    assert persisted.event_type == "module_permission.grant_denied"
+    assert persisted.after["permission_codes"] == ["project.create"]
+    assert persisted.after["reason"] == "delegation_scope_exceeded"
 
 
 class _RecordAuditBody(BaseModel):
