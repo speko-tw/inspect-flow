@@ -106,7 +106,7 @@
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
 | `role.created` | 新增 `Role` | `role` | 空值 | `name`、`permission_codes` |
-| `role.updated` | 改名、修改權限內容或修改 `is_assignable`（DOM-R70） | `role` | 有變動的 `name`、`permission_codes`、`is_assignable`、`is_external_allowed` | 同左 |
+| `role.updated` | 改名、修改權限內容、修改 `is_assignable`（DOM-R70）或 `is_external_allowed`（DOM-R73） | `role` | 有變動的 `name`、`permission_codes`、`is_assignable`、`is_external_allowed` | 同左 |
 | `role.deleted` | 刪除 `Role`，連同移除所有指派（DOM-R21） | `role` | `name`、`permission_codes`、`project_member_ids`（被一併移除這個角色的成員） | 空值 |
 | `project_member.roles_changed` | 一筆 `ProjectMember` 的角色集合改變：加入專案時就指派角色、之後增減角色。加入時 `before.role_ids` 為空陣列；加入時沒有指派角色不寫（DOM-R22 範圍外，DOM-R36 允許沒有角色） | `project_member` | `role_ids`；一律記錄 `project_id`、`user_id` | 同左 |
 | `project_member.removed` | 把人移出專案，刪除 `ProjectMember` 與它的指派（DOM-R36）；成員沒有角色時也寫 | `project_member` | `project_id`、`user_id`、`role_ids` | 空值 |
@@ -322,4 +322,5 @@
 - 澄清存成範本事件與範本建立同交易，並列明其來源與目標識別欄位 — [PR #370 第 1 輪審查](https://github.com/speko-tw/inspect-flow/pull/370#pullrequestreview-5404213410)
 - 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖變更見 KD-69，裁定留言：[問題 1～5](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081228914)、[補充裁定 6～9](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)）：新增停用與啟用事件 `user.active_changed`（ALG-Q4 已裁定、ALG-R25）、模組權限事件（授予與收回、委派、權限組合、建立者角色，ALG-R26）與過渡期轉換不寫稽核（ALG-R27）；`system_role_assignment.*` 事件僅過渡期使用；ALG-R14、ALG-AC11 同步；新增 ALG-AC19～ALG-AC22；權限組合與建立者角色設定的事件為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
 - 意圖變更跟進（負責人裁定，[#538 第 10～24 點](https://github.com/speko-tw/inspect-flow/issues/538)）：授權事件加 `source`、`role.updated` 加 `is_assignable`、`user.active_changed` 加重新啟用的恢復與移除項目；新增「專案事件」（`project.created`、`project.updated`、`project_member.assignment_denied`）與 ALG-R28、ALG-AC23、ALG-AC24；ALG-R14 註明唯一例外；ALG-R25～R27 與 ALG-AC19～AC22 同步；`creator_role.changed` 不再有角色被刪除而回到空值；專案事件與 `source` 標示為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
-- 意圖變更跟進（負責人裁定，[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)）：新增 `module_permission.grant_denied`、`user.external_flag_changed` 事件，`user.active_changed` 加自動停用的原因；新增 ALG-R29（操作者身分快照 `actor_snapshot`）、ALG-AC25、ALG-AC26；ALG-R28 擴及授權拒絕；`project_member.assignment_denied` 涵蓋移除與替換及外部可用檢查；欄位名稱與快照組成為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
+- 意圖變更跟進（負責人裁定，[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)）：新增 `module_permission.grant_denied`、`user.external_flag_changed` 事件，`user.active_changed` 加自動停用的原因；新增 ALG-R29（操作者身分快照 `actor_snapshot`）、ALG-AC25～ALG-AC27；ALG-R28 擴及授權拒絕；`project_member.assignment_denied` 涵蓋移除與替換及外部可用檢查；欄位名稱與快照組成為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
+- 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #544 延後項）：`role.updated` 觸發條件補 `is_external_allowed`；第 25 點變更紀錄補 ALG-AC27 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
