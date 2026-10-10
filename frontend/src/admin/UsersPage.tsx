@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { useSubmitGuard } from '../ui/submitGuard'
 import {
   linkUserCompany,
   listCompanies,
@@ -50,7 +51,6 @@ export default function UsersPage({
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
-  const searchGuard = useSubmitGuard()
   const actionGuard = useSubmitGuard()
 
   useEffect(() => {
@@ -127,7 +127,6 @@ export default function UsersPage({
 
   async function searchUsers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!searchGuard.enter()) return
     const search = query.trim()
     setAppliedQuery(search)
     const id = ++requestId.current
@@ -146,7 +145,6 @@ export default function UsersPage({
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
-      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -294,11 +292,11 @@ export default function UsersPage({
   return (
     <section aria-labelledby="users-heading">
       <h1 id="users-heading">使用者管理</h1>
-      {error && <p role="alert">{error}</p>}
+      <FormError>{error}</FormError>
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
-        <form onKeyDown={blockImeEnter} onSubmit={searchUsers}>
+        <Form onSubmit={searchUsers}>
           <label>
             搜尋使用者
             <input
@@ -306,11 +304,9 @@ export default function UsersPage({
               value={query}
             />
           </label>
-          <button disabled={loading} type="submit">
-            搜尋
-          </button>
-        </form>
-        {listError && <p role="alert">{listError}</p>}
+          <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
+        </Form>
+        <FormError>{listError}</FormError>
         {!loading && users.length === 0 ? (
           appliedQuery ? (
             <p>
@@ -432,9 +428,7 @@ export default function UsersPage({
                               busy={busyUser !== null}
                               onCancel={() => setEditingUser(null)}
                               onSave={(fields) =>
-                                void act(user.id, () =>
-                                  updateUser(user.id, fields),
-                                )
+                                act(user.id, () => updateUser(user.id, fields))
                               }
                               user={user}
                             />
@@ -445,7 +439,7 @@ export default function UsersPage({
                               companies={companies}
                               onCancel={() => setEditingCompany(null)}
                               onSave={(companyId, fields) =>
-                                void act(user.id, () =>
+                                act(user.id, () =>
                                   companyId === user.company_id
                                     ? updateUser(user.id, fields)
                                     : linkUserCompany(
@@ -507,7 +501,7 @@ function UserDetailsForm({
     email: string
     name_zh: string
     name_en: string | null
-  }) => void
+  }) => Promise<void>
 }) {
   const [username, setUsername] = useState(user.username)
   const [email, setEmail] = useState(user.email ?? '')
@@ -516,7 +510,7 @@ function UserDetailsForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    onSave({
+    return onSave({
       username,
       email,
       name_zh: nameZh,
@@ -525,7 +519,7 @@ function UserDetailsForm({
   }
 
   return (
-    <form onKeyDown={blockImeEnter} onSubmit={submit}>
+    <Form onSubmit={submit}>
       <h3>修改使用者資料</h3>
       <label>
         帳號名稱
@@ -562,10 +556,10 @@ function UserDetailsForm({
       <button onClick={onCancel} type="button">
         取消
       </button>
-      <button className="btn-primary" disabled={busy} type="submit">
+      <FormSubmitButton className="btn-primary" disabled={busy}>
         儲存資料
-      </button>
-    </form>
+      </FormSubmitButton>
+    </Form>
   )
 }
 
@@ -584,7 +578,7 @@ function CompanyLinkForm({
   onSave: (
     companyId: string | null,
     fields: Pick<User, 'department' | 'location' | 'employee_no'>,
-  ) => void
+  ) => Promise<void>
 }) {
   const [companyId, setCompanyId] = useState(user.company_id ?? '')
   const [department, setDepartment] = useState(user.department ?? '')
@@ -606,16 +600,14 @@ function CompanyLinkForm({
   }
 
   return (
-    <form
-      onKeyDown={blockImeEnter}
-      onSubmit={(event) => {
-        event.preventDefault()
+    <Form
+      onSubmit={() =>
         onSave(companyId || null, {
           department: disabled ? null : department || null,
           location: disabled ? null : location || null,
           employee_no: disabled ? null : employeeNo || null,
         })
-      }}
+      }
     >
       <h3>連結公司</h3>
       <label>
@@ -662,9 +654,9 @@ function CompanyLinkForm({
       <button onClick={onCancel} type="button">
         取消
       </button>
-      <button className="btn-primary" disabled={busy} type="submit">
+      <FormSubmitButton className="btn-primary" disabled={busy}>
         儲存公司連結
-      </button>
-    </form>
+      </FormSubmitButton>
+    </Form>
   )
 }
