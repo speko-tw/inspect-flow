@@ -52,6 +52,7 @@
 | FUI-R10 | 設定 `INSPECTFLOW_DEV_HOST` 開放區網時，開發伺服器**必須**限制連入至明確指定的網段或介面，實際方式依 Vite 能力定案；**必須**提供 iPhone 安裝並明確信任 mkcert 根憑證的逐步指引，以及 iPhone 實測登入、Session 維持、登出流程。保留 Secure Cookie 所需 HTTPS；根憑證私鑰不得傳至裝置或提交 repository，後端仍只綁 localhost、由 HTTPS 前端代理 API。開發流程不得被描述為正式部署設定。 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[#231](https://github.com/speko-tw/inspect-flow/issues/231)、[README iPhone 測試流程](../../../README.zh-TW.md)；網段限制技術方式為規格設計 |
 | FUI-R11 | 現有 `/field/*` 個人工作台**必須**轉為今日任務現場首頁；範本瀏覽與專案套用範本為內業功能，**必須**移至 `/admin/...`，舊現場路徑轉址至新內業路徑。Field 保留個人資料、密碼變更與登出入口；公司資訊、專案清單及專案管理細節不得留在 Field 工作台，相關管理入口由 `admin-dashboard` 負責。任務本身所需的專案名稱及地點仍顯示於 Field 任務清單與詳情。 | 必須 | [PR-10](../../intents/02-principles.md#pr-10)、[OQ-21](../../intents/05-open-questions.md#oq-21)；現有 route 調整為規格設計；管理頁整合依賴 `admin-dashboard` |
 | FUI-R12 | Field 首頁**不得**提供範本瀏覽、套用或存為範本入口；內業使用者由 `/admin/projects` 專案工作台卡片進入 `/admin/projects/{project_id}/templates`。舊 `/field/projects/{project_id}` 網址**必須**轉址至對應內業路徑。 | 不得／必須 | 負責人直接指示（#429，原型核可 2026-10-05）；入口與轉址細節為規格設計。 |
+| FUI-R13 | Field 沿用 `admin-dashboard` 的 UI 共通規則（ADM-R37～ADM-R39），不另寫一份：開始查核的確認為一般主色（授予類確認）、按鈕為［取消］［確認］、開啟時焦點在「取消」、Esc 等同取消、在原地展開（不使用蓋住整頁的 modal）；Field 清單與詳情的狀態標籤（待開始黃、進行中藍、已完成綠、已取消灰）與管理頁使用同一份對照，同一個狀態詞在兩邊同色 | 必須 | v0.3.1 修正（[#510](https://github.com/speko-tw/inspect-flow/pull/510)、[#511](https://github.com/speko-tw/inspect-flow/pull/511)）已實作並定案的畫面規則，規格同步（[#533](https://github.com/speko-tw/inspect-flow/issues/533)）；規則內容見 ADM-R37～ADM-R39；套用方式為規格設計（非負責人裁定） |
 
 ## 資料
 
@@ -98,6 +99,7 @@
 | FUI-AC11 | `INSPECTFLOW_DEV_HOST` 啟用區網 HTTPS 開發伺服器，並有 iPhone 與開發機同網段 | 從允許網段／非允許來源連線；在 iPhone 安裝並信任 mkcert 根憑證，登入、重新載入、登出 | 僅指定網段或介面可連入；指引可依序完成根憑證安裝與完整信任；Safari 可登入、維持 Session 並登出；Secure Cookie 與 HTTPS API proxy 可用；不傳送 CA 私鑰 | FUI-R07、R10 |
 | FUI-AC12 | 現有 `/field/*` 工作台及 `/field/projects/:projectId` 範本頁仍可由瀏覽器直接開啟 | 導入 Field 首頁與管理路由 | Field 首頁為今日任務；範本瀏覽與專案套用移至 `/admin/...`，舊路徑轉址；Field 保留個人資料、密碼變更及登出，不保留公司資訊、專案清單或專案管理細節；任務所需的專案名稱與地點仍可見 | FUI-R07、R11 |
 | FUI-AC13 | Field 首頁、內業專案工作台及既有 `/field/projects/{project_id}` 網址 | 導入 #429 專案套用入口 | Field 首頁沒有範本瀏覽、套用或存為範本連結；專案卡片提供套用範本主要動作並連至內業套用頁；舊網址直接轉址至同一專案的內業套用頁，不顯示 UUID | FUI-R11、R12 |
+| FUI-AC14 | Field 清單與詳情有待開始、進行中、已完成、已取消的任務；有權限者開始查核 | 檢視狀態標籤；開啟開始查核確認，按 Tab 與 Esc | 狀態標籤顏色與管理頁同一份對照（待開始黃、進行中藍、已完成綠、已取消灰）；確認為一般主色、順序［取消］［確認］、焦點在「取消」、Esc 不送出並關閉、在原地展開 | FUI-R13、ADM-R37～R39 |
 
 ## 待釐清
 
@@ -116,3 +118,4 @@
 - FUI-R12、FUI-AC13：依 #429 核可原型，Field 首頁移除範本入口並由內業專案工作台卡片提供套用入口；路徑行為屬規格設計。
 - 修正草稿：補齊來源裁定連結、權限與草稿保護、PWA/iPhone 驗收及現有路由銜接；未改變領域模型。
 - 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)）：FUI-R06 補現場查核另需查核模組「可使用」，過渡期維持現行行為；引用意圖改為 KD-69 — [#538 裁定留言](https://github.com/speko-tw/inspect-flow/issues/538#issuecomment-6081327833)
+- 規格澄清（[#533](https://github.com/speko-tw/inspect-flow/issues/533)，v0.3.1 修正同步）：新增 FUI-R13、FUI-AC14，Field 沿用 `admin-dashboard` 的 UI 共通規則（顏色、確認框、狀態標籤）；對應程式已於 v0.3.1 完成，行為與範圍不變 — [#533](https://github.com/speko-tw/inspect-flow/issues/533)
