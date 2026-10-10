@@ -73,6 +73,7 @@ export default function ProjectsPage() {
   const searchGuard = useSubmitGuard()
   const saveGuard = useSubmitGuard()
   const [editing, setEditing] = useState<Project | null>(null)
+  const [editFocusRequest, setEditFocusRequest] = useState(0)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [transition, setTransition] = useState<Transition | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -101,7 +102,7 @@ export default function ProjectsPage() {
     const heading = editHeadingRef.current
     heading?.scrollIntoView?.({ block: 'start' })
     heading?.focus()
-  }, [editing])
+  }, [editing, editFocusRequest])
 
   useEffect(() => {
     if (!notice) return
@@ -192,6 +193,7 @@ export default function ProjectsPage() {
     setTransition(null)
     if (next.kind === 'edit') {
       setEditing(next.project)
+      setEditFocusRequest((request) => request + 1)
       setForm(toForm(next.project))
       setNotice('')
       setError('')
@@ -278,7 +280,6 @@ export default function ProjectsPage() {
   return (
     <section aria-labelledby="projects-heading">
       <h1 id="projects-heading">專案</h1>
-      {error && <p role="alert">{error}</p>}
       {notice && (
         <p className="notice-success" ref={noticeRef} role="status">
           {notice}
@@ -445,6 +446,7 @@ export default function ProjectsPage() {
         <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
           {editing ? `編輯專案「${editing.name}」` : '新增專案'}
         </h2>
+        {error && <p role="alert">{error}</p>}
         {editing && (
           <button
             onClick={() => requestTransition({ kind: 'new' })}
