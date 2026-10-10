@@ -71,6 +71,7 @@
 | FUI-AC10 | 檢查 production build 的 manifest 欄位、iOS icon/meta、未註冊快取 Service Worker、Field route chunk 不含 Admin；資料透過線上 API 載入。 |
 | FUI-AC11 | 依 #231 文件使用真 iPhone Safari：允許網段可連、未允許來源不可連；驗證 mkcert 根憑證安裝與信任、登入、Session 維持、登出、Secure Cookie 及 proxy。 |
 | FUI-AC12 | 瀏覽器直接開舊 Field 工作台及範本路徑，驗證今日任務首頁、轉址到 Admin 範本頁、個人操作入口仍可用。 |
+| FUI-AC14 | 前端元件測試驗證開始查核確認的顏色、順序、初始焦點與 Esc，及狀態標籤對照（`StartAction.test.tsx`、`Badge.test.tsx`）；規則內容與 `admin-dashboard` 的 ADM-AC36～38 共用，由其 T17 涵蓋 |
 
 ## 考慮過但沒採用的做法
 
