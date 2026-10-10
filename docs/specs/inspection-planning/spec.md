@@ -201,7 +201,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 <a id="ip-q01"></a>
 - **IP-Q01：已併入 IP-Q09，不再是獨立待決題。** 原情境是 Plan 從建立至派出前的狀態與操作；其業務問題與「建立 Task 何時算派出」同屬 IP-Q09。保留本錨點供既有連結使用。
 <a id="ip-q02"></a>
-- **IP-Q02：已裁定。** 一個 Task 得包含多個查核項目；只查一項時也得建立只含該項目的 Task。情境：同趟抽查數個項目可放進同一任務，不同趟則分開建任務。Task 與項目的多對多／明細表方式為規格設計（非負責人裁定）；引用 KD-55／KD-56。保留本錨點。
+- **IP-Q02：已裁定。** 一個 Task 得包含多個查核項目；只查一項時也得建立只含該項目的 Task。情境：同趟檢查數個項目可放進同一任務，不同趟則分開建任務。Task 與項目的多對多／明細表方式為規格設計（非負責人裁定）；引用 KD-55／KD-56。保留本錨點。
 <a id="ip-q03"></a>
 - **IP-Q03：已解決的技術規則（規格設計，非負責人裁定）。** Plan 已完成後新增一筆 `DRAFT` Task，Plan 回到 `IN_PROGRESS`；有草稿 Task 時不得完成 Plan。草稿 Task 可刪除或派出；派出後須完成才可完成 Plan。若 Plan 已封存，須先取消封存；取消封存後依目前 Task 狀態重算 Plan 狀態。
 <a id="ip-q04"></a>
@@ -221,6 +221,7 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 
 ## 變更紀錄
 
+- 意圖變更跟進（負責人裁定，[#551](https://github.com/speko-tw/inspect-flow/issues/551)）：IP-Q02 的用語「抽查」改為「檢查」，行為與範圍不變；檢查層級改由專案設定帶出，欄位由 [#559](https://github.com/speko-tw/inspect-flow/issues/559) 處理 — [#551](https://github.com/speko-tw/inspect-flow/issues/551)
 - 規格澄清（規格設計，非負責人裁定，#464）：專案查核項目 PATCH 提供子表集合時，改為套用與範本相同的結構驗證（每個項次恰好一筆照片需求、`sequence` 不重複等），不符回 422；原本重複 `sequence` 會回 500。合法輸入的行為不變 — [#464](https://github.com/speko-tw/inspect-flow/issues/464)
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #544 延後項）：IP-R11 與 workflow-summary 介面表的讀取權限加入 `project.read`，只有 `project.read` 者回 200、`task_counts_visible` 為 `false`，不再回 403；IP-AC12 同步 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #563 第 1 輪審查）：IP-R11、workflow-summary 介面表與 IP-AC12 的 `project.read` 標明為正式行為（`authentication` 任務 P 合併時生效，此前維持現行讀取碼清單）；專案詳情端點註明正式行為改為 `project.read` — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
