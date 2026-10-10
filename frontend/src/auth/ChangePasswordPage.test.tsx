@@ -246,8 +246,11 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     expect(confirmation).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(confirmation).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
+    const focus = vi.fn()
+    confirmation.addEventListener('focus', focus)
     fireEvent.submit(confirmation.closest('form')!)
-    await waitFor(() => expect(confirmation).toHaveFocus())
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce())
+    expect(confirmation).toHaveFocus()
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(0)
     const messages = [alert.textContent]

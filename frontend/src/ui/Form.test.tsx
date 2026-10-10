@@ -84,6 +84,20 @@ describe('Form primitive guard', () => {
     await act(async () => gate.resolve())
     expect(previous).toBeEnabled()
   })
+
+  it('defaults non-submit actions to type button', () => {
+    const onSubmit = vi.fn()
+    render(
+      <Form onSubmit={onSubmit}>
+        <FormActionButton>上一步</FormActionButton>
+      </Form>,
+    )
+
+    const button = screen.getByRole('button', { name: '上一步' })
+    expect(button).toHaveAttribute('type', 'button')
+    fireEvent.click(button)
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
 })
 
 describe('shared form errors', () => {
@@ -99,7 +113,7 @@ describe('shared form errors', () => {
     expect(screen.getByText('欄位錯誤')).toHaveClass('shared-field-error')
   })
 
-  it('supports refs, tabIndex, and repeated form-error focus requests', async () => {
+  it('supports refs, tabIndex, and repeated error focus requests', async () => {
     const fieldRef = createRef<HTMLParagraphElement>()
     const formRef = createRef<HTMLParagraphElement>()
     const { rerender } = render(
@@ -116,6 +130,8 @@ describe('shared form errors', () => {
     expect(fieldRef.current).toHaveAttribute('tabindex', '-1')
     expect(formRef.current).toHaveAttribute('tabindex', '-1')
     await waitFor(() => expect(formRef.current).toHaveFocus())
+    const focus = vi.fn()
+    formRef.current?.addEventListener('focus', focus)
 
     rerender(
       <>
@@ -127,7 +143,8 @@ describe('shared form errors', () => {
         </FormError>
       </>,
     )
-    await waitFor(() => expect(formRef.current).toHaveFocus())
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce())
+    expect(formRef.current).toHaveFocus()
   })
 })
 

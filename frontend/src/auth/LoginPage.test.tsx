@@ -331,6 +331,7 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
 
     fireEvent.change(password, { target: { value: 'corrected-password' } })
     expect(account).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('相同的空白驗證錯誤再次送出時仍回焦帳號欄', async () => {
@@ -347,10 +348,13 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
     fireEvent.click(submit)
     const firstError = await screen.findByRole('alert')
     await waitFor(() => expect(account).toHaveFocus())
+    const focus = vi.fn()
+    account.addEventListener('focus', focus)
     fireEvent.submit(account.closest('form')!)
 
     expect(screen.getByRole('alert')).toBe(firstError)
-    await waitFor(() => expect(account).toHaveFocus())
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce())
+    expect(account).toHaveFocus()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

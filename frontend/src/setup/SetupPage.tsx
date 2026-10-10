@@ -92,6 +92,10 @@ export default function SetupPage() {
     'code' | 'password' | 'confirmation' | 'form' | null
   >(null)
   const [errorAttempt, setErrorAttempt] = useState(0)
+  const submitButtonProps = {
+    className: 'btn-primary',
+    pendingContent: '設定中…',
+  }
   const [completed, setCompleted] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [companiesError, setCompaniesError] = useState(false)
@@ -402,7 +406,7 @@ export default function SetupPage() {
         >
           上一步
         </FormActionButton>
-        <FormSubmitButton className="btn-primary">設定密碼</FormSubmitButton>
+        <FormSubmitButton {...submitButtonProps}>設定密碼</FormSubmitButton>
       </Form>
     </AuthLayout>
   )

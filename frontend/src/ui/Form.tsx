@@ -100,12 +100,15 @@ export function Form({
   )
 }
 
-/** A submit button disabled automatically while its shared form is pending. */
+/** A submit button disabled while its shared form is pending. */
 export function FormSubmitButton({
   children,
+  pendingContent,
   disabled = false,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  pendingContent?: ReactNode
+}) {
   const context = useContext(FormContext)
   return (
     <button
@@ -113,20 +116,25 @@ export function FormSubmitButton({
       disabled={disabled || Boolean(context?.pending)}
       type="submit"
     >
-      {children}
+      {context?.pending && pendingContent ? pendingContent : children}
     </button>
   )
 }
 
-/** A non-submit action disabled automatically while its shared form is pending. */
+/** A non-submit action disabled while its shared form is pending. */
 export function FormActionButton({
   children,
   disabled = false,
+  type = 'button',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   const context = useContext(FormContext)
   return (
-    <button {...props} disabled={disabled || Boolean(context?.pending)}>
+    <button
+      {...props}
+      disabled={disabled || Boolean(context?.pending)}
+      type={type}
+    >
       {children}
     </button>
   )

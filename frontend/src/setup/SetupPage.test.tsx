@@ -217,6 +217,7 @@ describe.each([
     fireEvent.click(button)
     fireEvent.submit(form)
     expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('設定中…')
     expect(
       backend.calls.filter((call) =>
         call.url.endsWith('/api/v1/setup/admin-password'),
