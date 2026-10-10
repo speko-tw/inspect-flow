@@ -9,15 +9,20 @@
 // 進入時只查一次 setup 狀態：設定成功後狀態會變成 false，流程進
 // 行中不能因此被導走。
 
-import { Fragment, useEffect, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
 
 import { listCompanies, type Company, type CreatedUser } from '../admin/api'
 import TemporaryPassword from '../admin/TemporaryPassword'
 import UserForm from '../admin/UserForm'
 import { ApiError } from '../auth/api'
-import AuthLayout from '../auth/AuthLayout'
-import { Form, FormSubmitButton } from '../ui/Form'
+import AuthLayout, { RequiredMark } from '../auth/AuthLayout'
+import {
+  FieldError,
+  Form,
+  FormActionButton,
+  FormSubmitButton,
+} from '../ui/Form'
 import { fetchSetupRequired, setAdminPassword, setupErrorMessage } from './api'
 
 const MIN_PASSWORD_LENGTH = 8
@@ -83,10 +88,20 @@ export default function SetupPage() {
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [error, setError] = useState('')
+  const [errorField, setErrorField] = useState<
+    'code' | 'password' | 'confirmation' | 'form' | null
+  >(null)
+  const [errorAttempt, setErrorAttempt] = useState(0)
+  const submitButtonProps = {
+    className: 'btn-primary',
+    pendingContent: '設定中…',
+  }
   const [completed, setCompleted] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [companiesError, setCompaniesError] = useState(false)
+  const codeInput = useRef<HTMLInputElement>(null)
+  const passwordInput = useRef<HTMLInputElement>(null)
+  const confirmationInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -120,15 +135,19 @@ export default function SetupPage() {
     event.preventDefault()
     if (code.trim() === '') {
       setError('請輸入首次登入碼。')
+      setErrorField('code')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     setError('')
+    setErrorField(null)
     setStep({ kind: 'password' })
   }
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setErrorField(null)
     setCompleted(false)
 
     // 長度以 Unicode 字元（code point）計算，與後端一致（AUT-R04）。
@@ -138,14 +157,17 @@ export default function SetupPage() {
         `密碼長度必須介於 ${MIN_PASSWORD_LENGTH} 到 ` +
           `${MAX_PASSWORD_LENGTH} 個字元。`,
       )
+      setErrorField('password')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (password !== confirmation) {
       setError('兩次輸入的密碼不一致。')
+      setErrorField('confirmation')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
 
-    setSubmitting(true)
     try {
       await setAdminPassword(code.trim(), password)
       setPassword('')
@@ -157,15 +179,23 @@ export default function SetupPage() {
       setError(setupErrorMessage(caught))
       if (caught instanceof ApiError && caught.status === 409) {
         setCompleted(true)
+        setErrorField('form')
+        setErrorAttempt((attempt) => attempt + 1)
       } else if (caught instanceof ApiError && caught.status === 401) {
         // 碼不對：回到第 1 步重新輸入，密碼一併清掉。
         setCode('')
         setPassword('')
         setConfirmation('')
         setStep({ kind: 'code' })
+        setErrorField('code')
+        setErrorAttempt((attempt) => attempt + 1)
+      } else if (caught instanceof ApiError && caught.status === 422) {
+        setErrorField('password')
+        setErrorAttempt((attempt) => attempt + 1)
+      } else {
+        setErrorField('form')
+        setErrorAttempt((attempt) => attempt + 1)
       }
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -236,19 +266,44 @@ export default function SetupPage() {
         lead="請輸入 make init 印出的首次登入碼。"
         progress={<StepIndicator current={1} />}
       >
-        <Form error={error} onSubmit={submitCode} noValidate>
+        <Form
+          error={errorField === 'form' ? error : undefined}
+          onSubmit={submitCode}
+          noValidate
+        >
           <div>
-            <label htmlFor="setup-code">首次登入碼</label>
+            <label htmlFor="setup-code">
+              首次登入碼 <RequiredMark />
+            </label>
             <input
               id="setup-code"
               name="code"
               type="text"
               autoComplete="off"
               spellCheck={false}
+              ref={codeInput}
               required
               value={code}
-              onChange={(event) => setCode(event.target.value)}
+              aria-invalid={errorField === 'code'}
+              aria-describedby={
+                errorField === 'code' ? 'setup-code-error' : undefined
+              }
+              onChange={(event) => {
+                setCode(event.target.value)
+                setError('')
+                setErrorField(null)
+              }}
             />
+            {errorField === 'code' && error ? (
+              <FieldError
+                focusRequest={errorAttempt}
+                focusTarget={codeInput}
+                id="setup-code-error"
+                tabIndex={-1}
+              >
+                {error}
+              </FieldError>
+            ) : null}
           </div>
           <FormSubmitButton className="btn-primary">下一步</FormSubmitButton>
         </Form>
@@ -262,45 +317,96 @@ export default function SetupPage() {
       lead="設定 admin 的密碼，長度 8 到 128 個字元。"
       progress={<StepIndicator current={2} />}
     >
-      <Form error={error} onSubmit={submitPassword} noValidate>
+      <Form
+        error={errorField === 'form' ? error : undefined}
+        errorFocusRequest={errorAttempt}
+        errorTabIndex={-1}
+        onSubmit={submitPassword}
+        noValidate
+      >
         <div>
-          <label htmlFor="setup-password">新密碼</label>
+          <label htmlFor="setup-password">
+            新密碼 <RequiredMark />
+          </label>
           <input
             id="setup-password"
             name="password"
             type="password"
             autoComplete="new-password"
+            ref={passwordInput}
             required
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={errorField === 'password'}
+            aria-describedby={
+              errorField === 'password' ? 'setup-password-error' : undefined
+            }
+            onChange={(event) => {
+              setPassword(event.target.value)
+              setError('')
+              setErrorField(null)
+              setCompleted(false)
+            }}
           />
+          {errorField === 'password' && error ? (
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={passwordInput}
+              id="setup-password-error"
+              tabIndex={-1}
+            >
+              {error}
+            </FieldError>
+          ) : null}
         </div>
         <div>
-          <label htmlFor="setup-password-confirm">再次輸入新密碼</label>
+          <label htmlFor="setup-password-confirm">
+            再次輸入新密碼 <RequiredMark />
+          </label>
           <input
             id="setup-password-confirm"
             name="password-confirm"
             type="password"
             autoComplete="new-password"
+            ref={confirmationInput}
             required
             value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
+            aria-invalid={errorField === 'confirmation'}
+            aria-describedby={
+              errorField === 'confirmation'
+                ? 'setup-password-confirm-error'
+                : undefined
+            }
+            onChange={(event) => {
+              setConfirmation(event.target.value)
+              setError('')
+              setErrorField(null)
+              setCompleted(false)
+            }}
           />
+          {errorField === 'confirmation' && error ? (
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={confirmationInput}
+              id="setup-password-confirm-error"
+              tabIndex={-1}
+            >
+              {error}
+            </FieldError>
+          ) : null}
         </div>
         {completed && <Link to="/login">前往登入頁</Link>}
-        <button
-          disabled={submitting}
+        <FormActionButton
           onClick={() => {
             setError('')
+            setErrorField(null)
+            setCompleted(false)
             setStep({ kind: 'code' })
           }}
           type="button"
         >
           上一步
-        </button>
-        <FormSubmitButton className="btn-primary" disabled={submitting}>
-          {submitting ? '設定中…' : '設定密碼'}
-        </FormSubmitButton>
+        </FormActionButton>
+        <FormSubmitButton {...submitButtonProps}>設定密碼</FormSubmitButton>
       </Form>
     </AuthLayout>
   )

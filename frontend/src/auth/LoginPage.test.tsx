@@ -210,6 +210,8 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(GENERIC_ERROR_MESSAGE)
+    expect(alert).toHaveClass('shared-form-error')
+    await waitFor(() => expect(alert).toHaveFocus())
   })
 
   it('伺服器忙碌（503）顯示稍後再試而非帳密錯誤', async () => {
@@ -234,6 +236,33 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(BUSY_ERROR_MESSAGE)
     expect(alert.textContent).not.toBe(GENERIC_ERROR_MESSAGE)
+    expect(alert).toHaveClass('shared-form-error')
+    await waitFor(() => expect(alert).toHaveFocus())
+  })
+
+  it('網路錯誤顯示可聚焦的表單層錯誤', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('network down')
+      }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    fillAndSubmit('user@example.com', 'anything')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(GENERIC_ERROR_MESSAGE)
+    expect(alert).toHaveClass('shared-form-error')
+    expect(screen.getByLabelText('密碼')).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    )
+    await waitFor(() => expect(alert).toHaveFocus())
   })
 
   it('本體不合法（422）時顯示相同的訊息文字', async () => {
@@ -250,7 +279,7 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
       </MemoryRouter>,
     )
 
-    fillAndSubmit('not-an-email', '')
+    fillAndSubmit('not-an-email', 'password')
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(GENERIC_ERROR_MESSAGE)
@@ -264,6 +293,88 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
     )
 
     expect(screen.getByLabelText('密碼')).toHaveAttribute('type', 'password')
+  })
+
+  it('登入欄位有必填標示，伺服器錯誤顯示在表單層並聚焦', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
+      ),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    const account = screen.getByLabelText('帳號名稱或 Email')
+    const password = screen.getByLabelText('密碼')
+    expect(
+      document.querySelector(
+        'label[for="login-account"] .auth-required-marker',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      document.querySelector(
+        'label[for="login-password"] .auth-required-marker',
+      ),
+    ).toBeInTheDocument()
+
+    fillAndSubmit('user@example.com', 'wrong-password')
+
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveClass('shared-form-error')
+    expect(error).toHaveAttribute('tabindex', '-1')
+    await waitFor(() => expect(error).toHaveFocus())
+
+    fireEvent.change(password, { target: { value: 'corrected-password' } })
+    expect(account).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('相同的空白驗證錯誤再次送出時仍回焦帳號欄', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+    const account = screen.getByLabelText('帳號名稱或 Email')
+    const submit = screen.getByRole('button', { name: '登入' })
+
+    fireEvent.click(submit)
+    const firstError = await screen.findByRole('alert')
+    await waitFor(() => expect(account).toHaveFocus())
+    const focus = vi.fn()
+    account.addEventListener('focus', focus)
+    fireEvent.submit(account.closest('form')!)
+
+    expect(screen.getByRole('alert')).toBe(firstError)
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce())
+    expect(account).toHaveFocus()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('空白必填欄位會就地提示，不送出登入請求', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <TestApp />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '登入' }))
+
+    const account = screen.getByLabelText('帳號名稱或 Email')
+    const error = await screen.findByRole('alert')
+    expect(error).toHaveTextContent('請輸入帳號名稱或 Email。')
+    expect(account).toHaveAttribute('aria-describedby', error.id)
+    await waitFor(() => expect(account).toHaveFocus())
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 

@@ -1,0 +1,8 @@
+.auth-required-marker {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.auth-required-marker::before {
+  content: '*';
+}
