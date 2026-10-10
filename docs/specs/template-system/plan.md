@@ -28,6 +28,7 @@
 - #365（PR #370）補上專案查核項目列表與存成範本 API；#357（PR #376）補上畫面，納入 T7 收尾驗收。
 - #389（負責人依 #387 指示）：Admin 與範本管理員可管理範本庫、存成範本及跨專案瀏覽；一般專案成員維持 403。此變更採用 `backend/app/auth/access.py` 的共用授權判斷，並由 TPL-AC08 API／契約測試及前端 Admin 控制項測試驗證。
 - TPL-AC07 在本規格只驗收範本端每項次恰好一筆必填照片需求（多送一筆回 422）、`min_count >= 1`、無上限、固定照片類型，以及拒絕 `overview`／`is_overview` 總覽標記（範本沒有此欄位，因此總覽照不計入項次最低數量）；現場覆蓋與總覽照行為移交 P6 `field-evidence` #105。
+- #538（負責人裁定，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）：範本庫管理改為範本模組權限（`template.manage`、`template.use`；委派不附帶編輯能力，TPL-R09、TPL-AC25）；`template_admin` 與 `SystemRoleAssignment`（T1、T2）僅過渡期保留，改造時逐人轉換、不得失去權限，由 [`domain-model` 後續任務 M](../domain-model/plan.md#兩層權限模型後續實作) 與 `authentication` 任務 Q 接手；本計畫 T1～T10 已完成的內容不改寫。規格合併到程式完成前，T2 的行為維持不變。
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。
 - #482（v0.3.0 走查缺陷修正）：套用頁依登入本體的 `has_template_access`（#484）顯示「存為範本」，並新增 TPL-AC23～TPL-AC24；#486 將 TPL-AC24 的格式化函式共用至範本編輯器與現場詳情。驗證由 `inspectionStandard.test.ts`、`TemplatesPage.test.tsx`、`ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx`、`TaskDetail.test.tsx` 負責。
 
