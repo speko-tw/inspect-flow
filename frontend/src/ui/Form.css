@@ -1,0 +1,14 @@
+.shared-form-error {
+  margin: var(--space-2) 0;
+  color: var(--error-text);
+}
+
+.shared-field-error {
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--error-text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}

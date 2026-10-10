@@ -1,7 +1,4 @@
-// 使用者與公司管理的防連點與輸入法 Enter（#507）。
-//
-// 每個表單與確認框各兩個測試：請求還沒回來時再送出只會送一次，
-// 以及輸入法選字的 Enter 不送出。
+// 使用者與公司管理操作的確認框防護測試（#507）。
 
 import {
   fireEvent,
@@ -15,11 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
-import {
-  deferred,
-  expectImeEnterIgnored,
-  type Deferred,
-} from '../testing/submitGuard'
+import { deferred, type Deferred } from '../testing/submitGuard'
 import CompaniesPage from './CompaniesPage'
 import UsersPage from './UsersPage'
 import type { Company, User } from './api'
@@ -136,134 +129,8 @@ function renderUsers() {
   )
 }
 
-function formOf(element: HTMLElement): HTMLFormElement {
-  return element.closest('form') as HTMLFormElement
-}
-
 afterEach(() => {
   vi.unstubAllGlobals()
-})
-
-describe('UsersPage 搜尋表單（#507）', () => {
-  it('連按 Enter 只搜尋一次', async () => {
-    const searching: { gate?: Deferred<void> } = {}
-    const backend = stubBackend({
-      hold: (call) =>
-        call.path === '/api/v1/users' ? searching.gate : undefined,
-    })
-    renderUsers()
-    await screen.findByText('anna.deng')
-    const before = backend.count('GET', '/api/v1/users')
-    searching.gate = deferred()
-    const form = formOf(screen.getByLabelText('搜尋使用者'))
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    searching.gate.resolve()
-
-    await screen.findByText('anna.deng')
-    expect(backend.count('GET', '/api/v1/users')).toBe(before + 1)
-  })
-
-  it('輸入法選字的 Enter 不搜尋', async () => {
-    const backend = stubBackend()
-    renderUsers()
-    await screen.findByText('anna.deng')
-    const before = backend.calls.length
-
-    expectImeEnterIgnored(screen.getByLabelText('搜尋使用者'))
-
-    expect(backend.calls).toHaveLength(before)
-  })
-})
-
-describe('UsersPage 修改使用者資料表單（#507）', () => {
-  async function openDetails() {
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '修改資料' }))
-    return formOf(screen.getByRole('heading', { name: '修改使用者資料' }))
-  }
-
-  it('連按 Enter 只儲存一次', async () => {
-    const gate = deferred()
-    const backend = stubBackend({
-      hold: (call) => (call.method === 'PATCH' ? gate : undefined),
-    })
-    renderUsers()
-    const form = await openDetails()
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    gate.resolve()
-
-    await waitFor(() =>
-      expect(
-        screen.queryByRole('heading', { name: '修改使用者資料' }),
-      ).toBeNull(),
-    )
-    expect(backend.count('PATCH', '/api/v1/users/user-1')).toBe(1)
-  })
-
-  it('失敗之後可以再儲存', async () => {
-    const backend = stubBackend({ fail: (call) => call.method === 'PATCH' })
-    renderUsers()
-    const form = await openDetails()
-
-    fireEvent.submit(form)
-    await screen.findByRole('alert')
-    fireEvent.submit(form)
-
-    await waitFor(() =>
-      expect(backend.count('PATCH', '/api/v1/users/user-1')).toBe(2),
-    )
-  })
-
-  it('輸入法選字的 Enter 不儲存', async () => {
-    const backend = stubBackend()
-    renderUsers()
-    const form = await openDetails()
-
-    expectImeEnterIgnored(within(form).getByLabelText('中文姓名'))
-
-    expect(backend.count('PATCH', '/api/v1/users/user-1')).toBe(0)
-  })
-})
-
-describe('UsersPage 公司連結表單（#507）', () => {
-  async function openLink() {
-    const row = await screen.findByRole('row', { name: /anna\.deng/ })
-    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
-    return formOf(screen.getByRole('heading', { name: '連結公司' }))
-  }
-
-  it('連按 Enter 只儲存一次', async () => {
-    const gate = deferred()
-    const backend = stubBackend({
-      hold: (call) => (call.method === 'PATCH' ? gate : undefined),
-    })
-    renderUsers()
-    const form = await openLink()
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    gate.resolve()
-
-    await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: '連結公司' })).toBeNull(),
-    )
-    expect(backend.count('PATCH', '/api/v1/users/user-1')).toBe(1)
-  })
-
-  it('輸入法選字的 Enter 不儲存', async () => {
-    const backend = stubBackend()
-    renderUsers()
-    const form = await openLink()
-
-    expectImeEnterIgnored(within(form).getByLabelText('部門'))
-
-    expect(backend.count('PATCH', '/api/v1/users/user-1')).toBe(0)
-    expect(backend.count('PUT', /\/company$/)).toBe(0)
-  })
 })
 
 describe('UsersPage 操作確認框（#507）', () => {
@@ -452,94 +319,6 @@ describe('UsersPage 進行中停用整張列表的動作按鈕（#507）', () =>
         ),
       ).toBeEnabled(),
     )
-  })
-})
-
-describe('CompaniesPage 搜尋表單（#507）', () => {
-  it('連按 Enter 只搜尋一次', async () => {
-    const searching: { gate?: Deferred<void> } = {}
-    const backend = stubBackend({
-      hold: (call) =>
-        call.path === '/api/v1/companies' ? searching.gate : undefined,
-    })
-    render(<CompaniesPage />)
-    await screen.findByText('示範公司')
-    const before = backend.count('GET', '/api/v1/companies')
-    searching.gate = deferred()
-    const form = formOf(screen.getByLabelText('搜尋公司'))
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    searching.gate.resolve()
-
-    await waitFor(() => expect(screen.queryByText('載入中…')).toBeNull())
-    expect(backend.count('GET', '/api/v1/companies')).toBe(before + 1)
-  })
-
-  it('輸入法選字的 Enter 不搜尋', async () => {
-    const backend = stubBackend()
-    render(<CompaniesPage />)
-    await screen.findByText('示範公司')
-    const before = backend.calls.length
-
-    expectImeEnterIgnored(screen.getByLabelText('搜尋公司'))
-
-    expect(backend.calls).toHaveLength(before)
-  })
-})
-
-describe('CompaniesPage 新增與改名表單（#507）', () => {
-  it('連按 Enter 只新增一家公司', async () => {
-    const gate = deferred()
-    const backend = stubBackend({
-      hold: (call) => (call.method === 'POST' ? gate : undefined),
-    })
-    render(<CompaniesPage />)
-    await screen.findByText('示範公司')
-    fireEvent.change(screen.getByLabelText('公司名稱'), {
-      target: { value: '第二家公司' },
-    })
-    const form = formOf(screen.getByLabelText('公司名稱'))
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    gate.resolve()
-
-    await waitFor(() =>
-      expect(screen.getByLabelText('公司名稱')).toHaveValue(''),
-    )
-    expect(backend.count('POST', '/api/v1/companies')).toBe(1)
-  })
-
-  it('失敗之後可以再送出', async () => {
-    const backend = stubBackend({ fail: (call) => call.method === 'POST' })
-    render(<CompaniesPage />)
-    await screen.findByText('示範公司')
-    fireEvent.change(screen.getByLabelText('公司名稱'), {
-      target: { value: '第二家公司' },
-    })
-    const form = formOf(screen.getByLabelText('公司名稱'))
-
-    fireEvent.submit(form)
-    await screen.findByRole('alert')
-    fireEvent.submit(form)
-
-    await waitFor(() =>
-      expect(backend.count('POST', '/api/v1/companies')).toBe(2),
-    )
-  })
-
-  it('輸入法選字的 Enter 不送出', async () => {
-    const backend = stubBackend()
-    render(<CompaniesPage />)
-    await screen.findByText('示範公司')
-    fireEvent.change(screen.getByLabelText('公司名稱'), {
-      target: { value: '第二家公司' },
-    })
-
-    expectImeEnterIgnored(screen.getByLabelText('公司名稱'))
-
-    expect(backend.count('POST', '/api/v1/companies')).toBe(0)
   })
 })
 

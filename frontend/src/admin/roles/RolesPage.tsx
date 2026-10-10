@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import { ManagementApiError } from '../api'
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import { Form, FormError, FormSubmitButton } from '../../ui/Form'
+import { useSubmitGuard } from '../../ui/submitGuard'
 import RolePermissionSummary from '../projects/RolePermissionSummary'
 import {
   createRole,
@@ -139,7 +140,6 @@ export default function RolesPage() {
       setError('請輸入角色名稱。')
       return
     }
-    if (!guard.enter()) return
     setSaving(true)
     setError('')
     try {
@@ -169,7 +169,6 @@ export default function RolesPage() {
       setError(roleErrorMessage(caught))
       await reload()
     } finally {
-      guard.leave()
       setSaving(false)
     }
   }
@@ -240,7 +239,7 @@ export default function RolesPage() {
   return (
     <section aria-labelledby="roles-heading">
       <h1 id="roles-heading">角色管理</h1>
-      {error && <p role="alert">{error}</p>}
+      <FormError>{error}</FormError>
       {deleting && (
         <ConfirmBox
           busy={saving}
@@ -317,7 +316,7 @@ export default function RolesPage() {
           </tbody>
         </table>
       )}
-      <form onKeyDown={blockImeEnter} onSubmit={save}>
+      <Form guard={guard} onSubmit={save}>
         <h2>{editing ? `修改角色「${editing.name}」` : '新增角色'}</h2>
         <label>
           角色名稱
@@ -371,14 +370,13 @@ export default function RolesPage() {
             取消
           </button>
         )}
-        <button
+        <FormSubmitButton
           className="btn-primary"
           disabled={saving || loading || locked}
-          type="submit"
         >
           {editing ? '儲存角色' : '新增角色'}
-        </button>
-      </form>
+        </FormSubmitButton>
+      </Form>
     </section>
   )
 }

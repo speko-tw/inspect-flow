@@ -305,4 +305,19 @@ describe('ConfirmBox', () => {
       expect(onConfirm).not.toHaveBeenCalled()
     })
   })
+
+  it('shows an error when onConfirm throws synchronously', async () => {
+    const onConfirm = vi.fn(() => {
+      throw new Error('sync failure')
+    })
+    setup({ onConfirm })
+
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '操作失敗，請稍後再試。',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+    expect(onConfirm).toHaveBeenCalledTimes(2)
+  })
 })

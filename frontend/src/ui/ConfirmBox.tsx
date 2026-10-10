@@ -19,9 +19,11 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
 } from 'react'
 
 import { blockImeEnter, useSubmitGuard } from './submitGuard'
+import { FormError } from './Form'
 
 export type ConfirmVariant = 'danger' | 'neutral'
 
@@ -79,6 +81,7 @@ export function ConfirmBox({
   const localCancel = useRef<HTMLButtonElement | null>(null)
   const localHeading = useRef<HTMLHeadingElement | null>(null)
   const guard = useSubmitGuard()
+  const [confirmError, setConfirmError] = useState('')
 
   useEffect(() => {
     if (initialFocus === 'cancel') localCancel.current?.focus()
@@ -87,8 +90,13 @@ export function ConfirmBox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function confirm() {
-    return guard.run(onConfirm)
+  async function confirm() {
+    setConfirmError('')
+    try {
+      await guard.run(onConfirm)
+    } catch {
+      setConfirmError('操作失敗，請稍後再試。')
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -126,7 +134,10 @@ export function ConfirmBox({
           {title}
         </Heading>
       ) : null}
-      <div className="confirm-box-body">{children}</div>
+      <div className="confirm-box-body">
+        {children}
+        {confirmError ? <FormError>{confirmError}</FormError> : null}
+      </div>
       <div className="confirm-box-actions">
         <button
           disabled={busy}

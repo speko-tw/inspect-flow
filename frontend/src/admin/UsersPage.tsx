@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { useSubmitGuard } from '../ui/submitGuard'
 import {
   linkUserCompany,
   listCompanies,
@@ -127,7 +128,6 @@ export default function UsersPage({
 
   async function searchUsers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!searchGuard.enter()) return
     const search = query.trim()
     setAppliedQuery(search)
     const id = ++requestId.current
@@ -146,7 +146,6 @@ export default function UsersPage({
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
-      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -294,11 +293,11 @@ export default function UsersPage({
   return (
     <section aria-labelledby="users-heading">
       <h1 id="users-heading">使用者管理</h1>
-      {error && <p role="alert">{error}</p>}
+      <FormError>{error}</FormError>
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
-        <form onKeyDown={blockImeEnter} onSubmit={searchUsers}>
+        <Form guard={searchGuard} onSubmit={searchUsers}>
           <label>
             搜尋使用者
             <input
@@ -306,11 +305,9 @@ export default function UsersPage({
               value={query}
             />
           </label>
-          <button disabled={loading} type="submit">
-            搜尋
-          </button>
-        </form>
-        {listError && <p role="alert">{listError}</p>}
+          <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
+        </Form>
+        <FormError>{listError}</FormError>
         {!loading && users.length === 0 ? (
           appliedQuery ? (
             <p>
@@ -525,7 +522,7 @@ function UserDetailsForm({
   }
 
   return (
-    <form onKeyDown={blockImeEnter} onSubmit={submit}>
+    <Form onSubmit={submit}>
       <h3>修改使用者資料</h3>
       <label>
         帳號名稱
@@ -562,10 +559,10 @@ function UserDetailsForm({
       <button onClick={onCancel} type="button">
         取消
       </button>
-      <button className="btn-primary" disabled={busy} type="submit">
+      <FormSubmitButton className="btn-primary" disabled={busy}>
         儲存資料
-      </button>
-    </form>
+      </FormSubmitButton>
+    </Form>
   )
 }
 
@@ -606,10 +603,8 @@ function CompanyLinkForm({
   }
 
   return (
-    <form
-      onKeyDown={blockImeEnter}
-      onSubmit={(event) => {
-        event.preventDefault()
+    <Form
+      onSubmit={() => {
         onSave(companyId || null, {
           department: disabled ? null : department || null,
           location: disabled ? null : location || null,
@@ -662,9 +657,9 @@ function CompanyLinkForm({
       <button onClick={onCancel} type="button">
         取消
       </button>
-      <button className="btn-primary" disabled={busy} type="submit">
+      <FormSubmitButton className="btn-primary" disabled={busy}>
         儲存公司連結
-      </button>
-    </form>
+      </FormSubmitButton>
+    </Form>
   )
 }
