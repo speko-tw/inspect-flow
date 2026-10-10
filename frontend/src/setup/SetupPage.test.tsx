@@ -10,9 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import App from '../App'
 import LoginPage from '../auth/LoginPage'
-import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 import SetupGate from './SetupGate'
 import SetupPage from './SetupPage'
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const INVALID_CODE_MESSAGE =
   '首次登入碼不正確或已失效，請確認後再試；需要新的碼時，' +
@@ -72,7 +72,7 @@ function requestUrl(input: RequestInfo | URL): string {
 
 interface Backend {
   setupRequired: boolean
-  passwordResponse: () => Response
+  passwordResponse: () => Response | Promise<Response>
   calls: Array<{ method: string; url: string; body?: unknown }>
 }
 
@@ -97,7 +97,7 @@ function stubBackend(overrides: Partial<Backend> = {}): Backend {
         return jsonResponse({ setup_required: backend.setupRequired })
       }
       if (url.endsWith('/api/v1/setup/admin-password')) {
-        const response = backend.passwordResponse()
+        const response = await backend.passwordResponse()
         if (response.ok) {
           // 設定成功後後端的狀態會變成 false。
           backend.setupRequired = false
@@ -172,6 +172,105 @@ function fillPassword(
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe.each([
+  ['首次設定碼步驟', 'setup-code'],
+  ['首次設定密碼步驟', 'setup-password'],
+])('%s 共用表單', (_name, step) => {
+  it('同步驗證後可前往下一步；防重送不適用', async () => {
+    const backend = stubBackend()
+    renderApp('/setup')
+    await screen.findByLabelText('首次登入碼')
+
+    if (step === 'setup-code') {
+      const input = screen.getByLabelText('首次登入碼')
+      fireEvent.change(input, { target: { value: 'code-123' } })
+      expectImeEnterIgnored(input)
+      expect(screen.getByLabelText('首次登入碼')).toBeInTheDocument()
+      expect(
+        backend.calls.filter((call) => call.method === 'POST'),
+      ).toHaveLength(0)
+
+      const form = screen
+        .getByRole('button', { name: '下一步' })
+        .closest('form')!
+      fireEvent.submit(form)
+      expect(await screen.findByLabelText('新密碼')).toBeInTheDocument()
+      expect(
+        backend.calls.filter((call) => call.method === 'POST'),
+      ).toHaveLength(0)
+      return
+    }
+
+    fillCode('code-123')
+    const gate = deferred<Response>()
+    backend.passwordResponse = () => gate.promise
+    fireEvent.change(screen.getByLabelText('新密碼'), {
+      target: { value: VALID_PASSWORD },
+    })
+    fireEvent.change(screen.getByLabelText('再次輸入新密碼'), {
+      target: { value: VALID_PASSWORD },
+    })
+    const button = screen.getByRole('button', { name: '設定密碼' })
+    const form = button.closest('form')!
+    fireEvent.click(button)
+    fireEvent.submit(form)
+    expect(button).toBeDisabled()
+    expect(
+      backend.calls.filter((call) =>
+        call.url.endsWith('/api/v1/setup/admin-password'),
+      ),
+    ).toHaveLength(1)
+    gate.resolve(new Response(null, { status: 500 }))
+    await screen.findByRole('alert')
+  })
+
+  if (step === 'setup-password') {
+    it('IME Enter 不送出首次設定密碼 API', async () => {
+      const backend = stubBackend()
+      renderApp('/setup')
+      await screen.findByLabelText('首次登入碼')
+      fillCode('code-123')
+      const input = screen.getByLabelText('新密碼')
+      expectImeEnterIgnored(input)
+      expect(
+        backend.calls.filter((call) =>
+          call.url.endsWith('/api/v1/setup/admin-password'),
+        ),
+      ).toHaveLength(0)
+    })
+
+    it('API 失敗後可再次送出首次設定密碼', async () => {
+      const backend = stubBackend()
+      let fail = true
+      backend.passwordResponse = () =>
+        fail
+          ? new Response(null, { status: 500 })
+          : new Response(null, { status: 204 })
+      renderApp('/setup')
+      await screen.findByLabelText('首次登入碼')
+      fillCode('code-123')
+      fireEvent.change(screen.getByLabelText('新密碼'), {
+        target: { value: VALID_PASSWORD },
+      })
+      fireEvent.change(screen.getByLabelText('再次輸入新密碼'), {
+        target: { value: VALID_PASSWORD },
+      })
+      const button = screen.getByRole('button', { name: '設定密碼' })
+      fireEvent.click(button)
+      await screen.findByRole('alert')
+      fail = false
+      fireEvent.click(button)
+      await waitFor(() =>
+        expect(
+          backend.calls.filter((call) =>
+            call.url.endsWith('/api/v1/setup/admin-password'),
+          ),
+        ).toHaveLength(2),
+      )
+    })
+  }
 })
 
 describe('尚未首次設定時的導向（AUT-AC65）', () => {
@@ -562,79 +661,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
   })
 })
 
-describe('首次設定頁：防連點與輸入法 Enter（#507）', () => {
-  const adminPasswordCalls = (backend: Backend) =>
-    backend.calls.filter((call) => call.url.endsWith('/admin-password'))
-
-  it('設定密碼時連按 Enter 只送出一次', async () => {
-    const backend = stubBackend()
-    const original = globalThis.fetch
-    const gate = deferred()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (requestUrl(input).endsWith('/admin-password')) await gate.promise
-        return original(input, init)
-      }),
-    )
-    renderApp('/setup')
-    await screen.findByLabelText('首次登入碼')
-    fillPassword('code-123', VALID_PASSWORD)
-    const form = screen
-      .getByLabelText('新密碼')
-      .closest('form') as HTMLFormElement
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-
-    gate.resolve()
-    await screen.findByRole('heading', { name: '新增使用者' })
-    expect(adminPasswordCalls(backend)).toHaveLength(1)
-  })
-
-  it('設定密碼失敗之後可以再送出', async () => {
-    const backend = stubBackend({
-      passwordResponse: () => new Response(null, { status: 500 }),
-    })
-    renderApp('/setup')
-    await screen.findByLabelText('首次登入碼')
-    fillPassword('code-123', VALID_PASSWORD)
-    await screen.findByRole('alert')
-    fireEvent.submit(
-      screen.getByLabelText('新密碼').closest('form') as HTMLFormElement,
-    )
-
-    await waitFor(() => expect(adminPasswordCalls(backend)).toHaveLength(2))
-  })
-
-  it('首次登入碼的表單：輸入法選字的 Enter 不進入下一步', async () => {
-    stubBackend()
-    renderApp('/setup')
-    const code = await screen.findByLabelText('首次登入碼')
-    fireEvent.change(code, { target: { value: 'code-123' } })
-
-    expectImeEnterIgnored(code)
-
-    expect(screen.getByLabelText('首次登入碼')).toBeInTheDocument()
-  })
-
-  it('設定密碼的表單：輸入法選字的 Enter 不送出', async () => {
-    const backend = stubBackend()
-    renderApp('/setup')
-    await screen.findByLabelText('首次登入碼')
-    fillCode('code-123')
-    fireEvent.change(screen.getByLabelText('新密碼'), {
-      target: { value: VALID_PASSWORD },
-    })
-    fireEvent.change(screen.getByLabelText('再次輸入新密碼'), {
-      target: { value: VALID_PASSWORD },
-    })
-
-    expectImeEnterIgnored(screen.getByLabelText('新密碼'))
-    expectImeEnterIgnored(screen.getByLabelText('再次輸入新密碼'))
-
-    expect(adminPasswordCalls(backend)).toHaveLength(0)
-  })
-
+describe('首次登入碼表單轉換', () => {
   it('首次登入碼的表單是同步換頁，重複送出沒有副作用（不適用防連點）', async () => {
     stubBackend()
     renderApp('/setup')

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
+import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { useSubmitGuard } from '../ui/submitGuard'
 import {
   createCompany,
   listActiveCompanyUsers,
@@ -28,7 +29,6 @@ export default function CompaniesPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
-  const searchGuard = useSubmitGuard()
   const saveGuard = useSubmitGuard()
   const [deactivating, setDeactivating] = useState<{
     company: Company
@@ -86,7 +86,6 @@ export default function CompaniesPage() {
 
   async function searchCompanies(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!searchGuard.enter()) return
     const search = query.trim()
     setAppliedQuery(search)
     const id = ++requestId.current
@@ -105,7 +104,6 @@ export default function CompaniesPage() {
       if (id === requestId.current)
         setListError(managementErrorMessage(caught))
     } finally {
-      searchGuard.leave()
       if (id === requestId.current) setLoading(false)
     }
   }
@@ -158,7 +156,6 @@ export default function CompaniesPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!saveGuard.enter()) return
     setSaving(true)
     setError('')
     try {
@@ -174,7 +171,6 @@ export default function CompaniesPage() {
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
-      saveGuard.leave()
       setSaving(false)
     }
   }
@@ -233,7 +229,7 @@ export default function CompaniesPage() {
   return (
     <section aria-labelledby="companies-heading">
       <h1 id="companies-heading">公司管理</h1>
-      {error && <p role="alert">{error}</p>}
+      <FormError>{error}</FormError>
       {deactivating && (
         <ConfirmBox
           busy={saving}
@@ -273,7 +269,7 @@ export default function CompaniesPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <form onKeyDown={blockImeEnter} onSubmit={searchCompanies}>
+      <Form onSubmit={searchCompanies}>
         <label>
           搜尋公司
           <input
@@ -281,11 +277,9 @@ export default function CompaniesPage() {
             value={query}
           />
         </label>
-        <button disabled={loading} type="submit">
-          搜尋
-        </button>
-      </form>
-      {listError && <p role="alert">{listError}</p>}
+        <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
+      </Form>
+      <FormError>{listError}</FormError>
       {!loading && companies.length === 0 ? (
         appliedQuery ? (
           <p>
@@ -346,7 +340,7 @@ export default function CompaniesPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <form onKeyDown={blockImeEnter} onSubmit={save}>
+      <Form guard={saveGuard} onSubmit={save}>
         <h2>{renamingId ? '修改公司名稱' : '新增公司'}</h2>
         <label>
           公司名稱
@@ -371,10 +365,10 @@ export default function CompaniesPage() {
             取消
           </button>
         )}
-        <button className="btn-primary" disabled={saving} type="submit">
+        <FormSubmitButton className="btn-primary" disabled={saving}>
           {renamingId ? '儲存名稱' : '新增公司'}
-        </button>
-      </form>
+        </FormSubmitButton>
+      </Form>
     </section>
   )
 }
