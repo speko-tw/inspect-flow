@@ -131,12 +131,12 @@ class LocationBody(StrictBody):
 
 
 class ProjectNumericStandardBody(NumericStandardBody):
-    measurement_field_client_id: UUID | None = None
+    measurement_field_client_id: UUID
 
 
 class ProjectMeasurementFieldBody(MeasurementFieldBody):
     id: UUID | None = None
-    client_id: UUID | None = None
+    client_id: UUID
 
 
 class ProjectPointBody(PointBody):
@@ -1423,10 +1423,9 @@ def _validate_project_points(
                 raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
             if field_id is not None:
                 seen_field_ids.add(field_id)
-            if field.client_id is not None:
-                if field.client_id in seen_field_client_ids:
-                    raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-                seen_field_client_ids.add(field.client_id)
+            if field.client_id in seen_field_client_ids:
+                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+            seen_field_client_ids.add(field.client_id)
             for token in (field.id, field.client_id):
                 if token is None:
                     continue
@@ -1434,20 +1433,7 @@ def _validate_project_points(
                 if owner != index:
                     raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
 
-        standard = point.numeric_standard
-        if standard is None:
-            bound_id = None
-        else:
-            bound_id = standard.measurement_field_client_id
         normalized = point.model_dump()
-        normalized["measurement_fields"] = [
-            {**field.model_dump(), "client_id": field.client_id}
-            for field in point.measurement_fields
-        ]
-        if normalized["numeric_standard"] is not None:
-            normalized["numeric_standard"]["measurement_field_client_id"] = (
-                bound_id
-            )
         normalized_points.append(normalized)
 
     try:
@@ -1458,10 +1444,6 @@ def _validate_project_points(
     if has_tasks and not points:
         raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_POINTS_REQUIRED, 422)
     if has_tasks and reinspect is False:
-        if any(point_id is None for point_id in point_identities):
-            raise APIError(
-                ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
-            )
         if set(point_identities) != existing_point_ids:
             raise APIError(
                 ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
@@ -1501,7 +1483,6 @@ def _replace_project_points(
         )
     ).all()
     points_by_id = {point.id: point for point in old_points}
-    preserve_ids = any(point.id is not None for point in points)
     old_fields = db.scalars(
         select(ProjectMeasurementField).where(
             ProjectMeasurementField.project_inspection_item_id == item.id
@@ -1540,7 +1521,7 @@ def _replace_project_points(
         point_identity = source.id
         point = (
             points_by_id.get(point_identity)
-            if preserve_ids and point_identity is not None
+            if point_identity is not None
             else None
         )
         if point is None:
@@ -1591,13 +1572,7 @@ def _replace_project_points(
                 field.sort_order = index
                 field.updated_by = item.updated_by
             retained_field_ids.add(field.id)
-            if field_identity is not None:
-                field_map[field_identity] = field.id
-            if source_field.client_id is not None:
-                mapped = field_map.get(source_field.client_id)
-                if mapped is not None and mapped != field.id:
-                    raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-                field_map[source_field.client_id] = field.id
+            field_map[source_field.client_id] = field.id
 
         for field_id, field in existing_fields.items():
             if field_id not in retained_field_ids:
@@ -1616,17 +1591,13 @@ def _replace_project_points(
         if source.numeric_standard is not None:
             standard = source.numeric_standard
             field_identity = standard.measurement_field_client_id
-            field_id = (
-                field_map.get(field_identity)
-                if field_identity is not None
-                else None
-            )
+            field_id = field_map.get(field_identity)
             if field_id is None:
                 raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
             field = next(
                 row
                 for row in source.measurement_fields
-                if row.client_id == field_identity or row.id == field_identity
+                if row.client_id == field_identity
             )
             db.add(
                 ProjectNumericStandard(

@@ -1301,7 +1301,6 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         for point in updated_points
     ]
     missing_field_identity[0]["measurement_fields"][0].pop("id")
-    missing_field_identity[0]["measurement_fields"][0].pop("client_id")
     missing_field_identity_response = admin.patch(
         item_url,
         json={
@@ -1578,7 +1577,8 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         "request.validation_failed"
     )
 
-    numeric_field_alias = point_payload(point)
+    numeric_field_alias = point_payload(point, field_type="number")
+    numeric_field_alias["text_standard"] = None
     numeric_field_alias["numeric_standard"] = {
         "value": "12",
         "condition": "=",
