@@ -113,7 +113,7 @@ describe('shared form errors', () => {
     expect(screen.getByText('欄位錯誤')).toHaveClass('shared-field-error')
   })
 
-  it('supports refs, tabIndex, and repeated error focus requests', async () => {
+  it('supports refs, tabIndex, and repeated error focus', async () => {
     const fieldRef = createRef<HTMLParagraphElement>()
     const formRef = createRef<HTMLParagraphElement>()
     const { rerender } = render(
