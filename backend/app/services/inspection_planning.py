@@ -192,6 +192,7 @@ def create_project_zone(
         session,
         "project_zone.created",
         entity_id=zone.id,
+        project_id=zone.project_id,
         before=None,
         after={"project_id": str(project_id), "name": zone.name},
     )
@@ -225,6 +226,7 @@ def rename_project_zone(
             session,
             "project_zone.updated",
             entity_id=zone.id,
+            project_id=zone.project_id,
             before={"name": before},
             after={"name": zone.name},
         )
@@ -250,6 +252,7 @@ def delete_project_zone(session: Session, zone: ProjectZone) -> None:
         session,
         "project_zone.deleted",
         entity_id=zone_id,
+        project_id=zone.project_id,
         before=data,
         after=None,
     )
@@ -654,6 +657,7 @@ def update_task_location(
             session,
             "inspection_task.location_updated",
             entity_id=task.id,
+            project_id=task.project_id,
             before=before,
             after=after,
         )
@@ -711,6 +715,7 @@ def delete_draft_inspection_task(
         session,
         "inspection_task.deleted",
         entity_id=task_id,
+        project_id=task.project_id,
         before=before,
         after=None,
     )
@@ -741,6 +746,7 @@ def cancel_inspection_task(
         session,
         "inspection_task.cancelled",
         entity_id=task.id,
+        project_id=task.project_id,
         before={"status": before_status},
         after={"status": "CANCELLED", "cancellation_reason": normalized},
     )
@@ -824,6 +830,7 @@ def restore_inspection_task(
         session,
         "inspection_task.restored",
         entity_id=task.id,
+        project_id=task.project_id,
         before={"status": before_status},
         after={"status": restored},
     )
@@ -1053,6 +1060,7 @@ def update_project_item_usage(
         session,
         "project_inspection_item.updated",
         entity_id=item_id,
+        project_id=source.project_id,
         before=before,
         after=after,
     )
