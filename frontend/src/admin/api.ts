@@ -196,6 +196,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'user.builtin_protected': '內建 admin 帳號不可修改或停用。',
   'user.last_admin': '系統至少要保留一位啟用中的管理者。',
   'user.external_managed': '此帳號的基本資料由外部來源管理。',
+  'user.external_not_qualified': '外部協作人員不可指派系統管理者權限。',
   'company.inactive': '不能把使用者連結到已停用的公司。',
   'user.username_conflict': '帳號名稱已被使用。',
   'user.email_conflict': 'Email 已被使用。',

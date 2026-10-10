@@ -79,6 +79,35 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
     }
 
 
+def test_external_collaborator_cannot_be_created_as_admin(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "is_external_collaborator": True,
+            "username": "external.admin",
+            "email": "external-admin@demo.example",
+            "name_zh": "外部管理者",
+            "is_admin": True,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {"code": "user.external_not_qualified"}
+    }
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(User).where(User.username == "external.admin")
+        )
+        is None
+    )
+
+
 def test_internal_user_expiry_constraint_returns_422(admin_client, db_session):
     client, _admin = admin_client
     user = create_root_user_with_company(db_session, "EXPIRY01")

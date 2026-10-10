@@ -94,6 +94,25 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     expect(screen.getByRole('radio', { name: '內部人員' })).toHaveFocus()
   })
 
+  it('外部協作人員不可為 Admin，切回內部後可重新指派', () => {
+    renderForm()
+    const adminCheckbox = screen.getByRole('checkbox', {
+      name: '指派系統管理者權限',
+    })
+    fireEvent.click(adminCheckbox)
+    expect(adminCheckbox).toBeChecked()
+
+    fireEvent.click(screen.getByRole('radio', { name: '外部協作人員' }))
+    expect(adminCheckbox).not.toBeChecked()
+    expect(adminCheckbox).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
+    expect(adminCheckbox).toBeEnabled()
+    expect(adminCheckbox).not.toBeChecked()
+    fireEvent.click(adminCheckbox)
+    expect(adminCheckbox).toBeChecked()
+  })
+
   it.each([
     ['內部人員', false],
     ['外部協作人員', true],

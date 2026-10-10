@@ -187,6 +187,7 @@ export default function UserForm({
             name="account-type"
             onChange={() => {
               setIsExternalCollaborator(true)
+              setIsAdmin(false)
               setAccountTypeError('')
             }}
             type="radio"
@@ -245,6 +246,7 @@ export default function UserForm({
         <input
           checked={isAdmin}
           onChange={(event) => setIsAdmin(event.target.checked)}
+          disabled={isExternalCollaborator === true}
           type="checkbox"
         />
         指派系統管理者權限
