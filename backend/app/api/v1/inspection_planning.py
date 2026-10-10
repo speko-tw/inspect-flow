@@ -39,9 +39,11 @@ from app.models import (
     ProjectInspectionPoint,
     ProjectMeasurementField,
     ProjectMember,
+    ProjectMemberRole,
     ProjectNumericStandard,
     ProjectTextStandard,
     ProjectZone,
+    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     TaskSnapshotEvidenceRequirement,
@@ -891,25 +893,28 @@ def assignees(
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     _project_exists(db, project_id)
-    members = db.scalars(
-        select(ProjectMember).where(ProjectMember.project_id == project_id)
-    ).all()
-    result = []
-    for member in members:
-        person = db.get(User, member.user_id)
-        if person is None or person.is_admin:
-            continue
-        if "inspection_task.inspect" in effective_permissions(
-            db, user_id=person.id, project_id=project_id
-        ):
-            result.append(_person(person))
-    candidate_ids = [person["id"] for person in result]
+    candidate_ids = (
+        select(ProjectMember.user_id)
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
+        )
+        .join(
+            RolePermission,
+            RolePermission.role_id == ProjectMemberRole.role_id,
+        )
+        .where(
+            ProjectMember.project_id == project_id,
+            RolePermission.code == "inspection_task.inspect",
+        )
+        .distinct()
+    )
     return page(
         db,
         User,
         cursor=cursor,
         limit=limit,
-        filters=(User.id.in_(candidate_ids),),
+        filters=(User.id.in_(candidate_ids), User.is_admin.is_(False)),
         serialize=_person,
     )
 
