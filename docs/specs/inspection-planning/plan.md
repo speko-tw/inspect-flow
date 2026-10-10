@@ -61,6 +61,12 @@
 | IP-AC11 | API／服務／前端測試：分區 CRUD 權限、名稱唯一性、Task 同專案地點欄位與有／無分區的建立規則；地點可修改狀態、已完成／取消及封存時拒絕、地點修改稽核；Task 讀取回應含分區 ID／名稱且不要求 `project_zone.read`；引用分區不可刪除，Snapshot 排除地點欄位。 |
 | IP-AC12 | `backend/tests/api/test_project_workflow_summary.py` 驗證空專案步驟數、五種 Task 狀態、待重查 Task 數、DRAFT 可見性、403／404 與跨專案隔離；`backend/tests/contract/test_route_access.py` 驗證路由權限宣告。 |
 
+Issue #406 補齊以下測試對應，不變更產品行為：
+
+- IP-AC04：封存 Plan 下修改被拒且沒有項目變更、Snapshot 或更新稽核；取消封存後重送成功；同一項目跨多個 Plan 的 Task 與 Snapshot 一併更新，無關項目不變。驗證位於 `backend/tests/services/test_inspection_planning.py`。
+- IP-AC06、STM-AC09：非指派但具 `inspection_task.inspect` 權限的成員可開始 Task，且 `started_by` 記錄實際操作者。驗證位於 `backend/tests/services/test_inspection_planning.py`。
+- IP-AC07、STM-AC02：PostgreSQL 以兩個獨立 transaction 並發完成同一 Plan 的最後兩個 Task，確認兩個 Task 與 Plan 最終均為 `COMPLETED`。驗證位於 `backend/tests/db/test_inspection_planning.py`。
+
 ## 考慮過但沒採用的做法
 
 - **依 interval 自動切分任務**：MVP 已由 KD-36／G-01 定為不要求，任務由內業依專案項目建立。
