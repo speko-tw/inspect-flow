@@ -1,11 +1,69 @@
 """Admin audit query contract and stable cursor regression checks."""
 
+import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import AuditLog
 from tests.db.conftest import create_root_user_with_company
+
+
+def test_frontend_query_and_response_match_contract(db_session, make_client):
+    """RG-M22: the frontend's .000Z request reads a real audit row."""
+    contract = json.loads(
+        (
+            Path(__file__).parents[3]
+            / "frontend/src/admin/audit-log/fixtures"
+            / "audit-log-contract.json"
+        ).read_text(encoding="utf-8")
+    )
+    query = contract["query"]
+    assert query["from"].endswith(".000Z")
+    assert query["to"].endswith(".000Z")
+
+    admin = create_root_user_with_company(db_session, "AUD412F")
+    admin.is_admin = True
+    _, token = create_session(db_session, admin)
+    row = AuditLog(
+        id=UUID(int=2),
+        created_at=datetime(2026, 10, 10, 8, 30, tzinfo=UTC),
+        created_by=admin.id,
+        project_id=UUID(query["project_id"]),
+        event_type=query["event_type"],
+        entity_type="project_zone",
+        entity_id=UUID(int=100),
+        before=None,
+        after={"name": "一樓"},
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    client = make_client()
+    client.cookies.set(SESSION_COOKIE_NAME, token)
+    response = client.get(
+        "/api/v1/audit-logs",
+        params={**query, "actor_id": str(admin.id)},
+    )
+    assert response.status_code == 200
+    page = response.json()
+    assert sorted(page) == contract["audit_page_keys"]
+    assert page["next_cursor"] is None
+    assert len(page["items"]) == 1
+    item = page["items"][0]
+    assert sorted(item) == contract["audit_entry_keys"]
+    assert item == {
+        "id": str(row.id),
+        "created_at": "2026-10-10T08:30:00Z",
+        "created_by": str(admin.id),
+        "project_id": query["project_id"],
+        "event_type": query["event_type"],
+        "entity_type": "project_zone",
+        "entity_id": str(row.entity_id),
+        "before": None,
+        "after": {"name": "一樓"},
+    }
 
 
 def test_admin_query_filters_and_descending_cursor(db_session, make_client):
