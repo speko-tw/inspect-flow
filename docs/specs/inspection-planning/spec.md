@@ -230,12 +230,8 @@ Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；�
 - 規格設計（非負責人裁定，#416）：首次派送寫入 `dispatched_at`，後續狀態轉換維持不變；歷史非 DRAFT Task 以 `created_at` 近似回填；Task API 回應加入 `dispatched_at`，本次不新增派送稽核事件 — [#416 維護者裁定](https://github.com/speko-tw/inspect-flow/issues/416#issuecomment-5987138346)
 - 規格澄清（#416，第 2 輪審查）：Field 詳情的量測欄位 ID 與數值標準對應為關聯 ID 例外；補充 Admin 列表空頁行為及量測欄位排序 — PR #443
 - 規格澄清（規格設計，非負責人裁定，#462）：列表端點改以批次載入子資料，查詢數不隨每頁筆數成長；新增 Task 與 Plan 列表索引；請求欄位加長度與筆數上限。定為規格澄清，因為合法輸入的行為不變，上限都高於業務上限數倍，只是提早拒絕原本就不合理的超大請求 — [#462 盤點](https://github.com/speko-tw/inspect-flow/issues/462#issuecomment-5995612083)
-<<<<<<< HEAD
-- 規格澄清（#468）：Field Task 清單與可指派候選人以資料庫關聯批次篩選權限，並將候選人的排序及 cursor 分頁留在資料庫；確認查詢次數不隨專案數或成員數線性增加。既有權限、排序、cursor 與回應契約不變 — [#468](https://github.com/speko-tw/inspect-flow/issues/468)
-||||||| e7d6952
-=======
 - 意圖變更跟進（負責人裁定，[#538](https://github.com/speko-tw/inspect-flow/issues/538)，意圖見 KD-69）：新增 IP-R12、IP-AC13，可指派成員候選排除已停用者並依查核模組「可使用」過濾（正式行為，任務 P 合併時生效），並說明停用後改派的落點；細節為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
->>>>>>> origin/main
+- 規格澄清（#468）：Field Task 清單與可指派候選人以資料庫關聯批次篩選權限，並將候選人的排序及 cursor 分頁留在資料庫；確認查詢次數不隨專案數或成員數線性增加。既有權限、排序、cursor 與回應契約不變 — [#468](https://github.com/speko-tw/inspect-flow/issues/468)
 
 
 <a id="ip-q11"></a>
