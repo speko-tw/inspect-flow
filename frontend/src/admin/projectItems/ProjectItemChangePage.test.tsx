@@ -411,6 +411,22 @@ describe('ProjectItemChangePage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('封存計畫')
   })
 
+  it('explains that structural changes require choosing reinspection', async () => {
+    const api = apiWith({
+      update: vi.fn(async () => {
+        throw new ManagementApiError(
+          422,
+          'project_inspection_item.structure_locked',
+        )
+      }),
+    })
+    renderPage(api)
+    await confirm('yes')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '請選擇「要」重新查核',
+    )
+  })
+
   it('refreshes the impact list when a choice becomes required', async () => {
     const initial = { ...preview, affectedTasks: [] }
     const api = apiWith({

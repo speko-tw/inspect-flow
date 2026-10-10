@@ -85,6 +85,10 @@ function errorMessage(error: unknown): string {
   return httpErrorMessage(error, {
     codes: {
       'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
+      'project_inspection_item.structure_locked':
+        '此項目已有任務使用；若要增減查核項次或實測欄位、變更欄位類型，請選擇「要」重新查核。',
+      'project_inspection_item.points_required':
+        '此項目已有任務使用，至少要保留一項查核項次。',
       'resource.not_found': '找不到此查核項目，請返回專案重新選擇。',
       'request.validation_failed': '請檢查項目名稱與查核項次的必填欄位。',
       'inspection_task.invalid_transition':

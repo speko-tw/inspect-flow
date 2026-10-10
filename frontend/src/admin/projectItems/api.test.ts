@@ -146,6 +146,8 @@ describe('projectItemApi', () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit
     const body = JSON.parse(init.body as string)
     expect(body.inspection_points[0]).toEqual({
+      id: 'point-1',
+      client_id: 'point-1',
       sequence: 1,
       title: '裂縫',
       instruction: '檢查裂縫',
@@ -194,8 +196,10 @@ describe('projectItemApi', () => {
     })
     const init = fetchMock.mock.calls[0][1] as RequestInit
     const sent = JSON.parse(init.body as string).inspection_points[0]
+    expect(sent.client_id).toBe('point-1')
     expect(sent.measurement_fields).toEqual([
       {
+        id: 'field-1',
         client_id: 'field-1',
         name: '厚度',
         field_type: 'number',
