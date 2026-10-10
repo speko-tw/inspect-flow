@@ -139,9 +139,8 @@ def _declaration_of(
 
 def _parse_uuid(raw: object) -> uuid.UUID | None:
     """Parse a path-parameter value as a UUID, or ``None`` if it is
-    missing or not a valid UUID -- AUT-R19/AUT-R21's "路徑參數不是合法
-    UUID 時 fail closed" (a deliberate, reviewable design choice
-    since the spec does not rule on this directly).
+    missing or invalid. This helper does not choose an HTTP response;
+    callers map parse failures to their route's error contract.
     """
     if not isinstance(raw, str):
         return None
@@ -380,17 +379,21 @@ def require_admin_or_any_project_permission(
 
 
 def require_project_permission(
-    code: str, *, param_name: str = "project_id"
+    code: str,
+    *,
+    param_name: str = "project_id",
+    uuid_path_params: tuple[str, ...] = (),
 ) -> Callable[..., User]:
     """Build a dependency declaring 需專案權限 for ``code``, read
     from the path parameter named ``param_name`` (default
     ``project_id``).
 
-    AUT-R19's order: (1) the ``param_name`` path parameter is parsed
-    as a UUID *first*, before any Admin check -- missing or not a
-    valid UUID fails closed with 403 ``permission.denied``
-    regardless of ``user.is_admin``, so Admin can never bypass a
-    malformed request to reach the permission check; (2) once parsed,
+    AUT-R19's order: (1) the ``param_name`` and declared
+    ``uuid_path_params`` path parameters are parsed as UUIDs *first*,
+    before any Admin check -- an invalid UUID fails with 422
+    ``request.validation_failed`` regardless of ``user.is_admin``, so
+    Admin can never bypass malformed input to reach the permission
+    check; (2) once parsed,
     ``user.is_admin`` passes regardless of membership or ``code``;
     (3) otherwise the union of the caller's project roles'
     permission codes (recomputed fresh on every call, never cached
@@ -419,9 +422,13 @@ def require_project_permission(
         user: User = Depends(require_login),  # noqa: B008
         db: Session = Depends(get_db),  # noqa: B008
     ) -> User:
+        for name in uuid_path_params:
+            raw_value = request.path_params.get(name)
+            if raw_value is not None and _parse_uuid(raw_value) is None:
+                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
         project_id = _parse_uuid(request.path_params.get(param_name))
         if project_id is None:
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
         if user.is_admin:
             return user
         codes = effective_permissions(
