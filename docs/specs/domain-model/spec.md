@@ -180,7 +180,7 @@
 <a id="draft-others"></a>
 ### 其他實體（草稿）
 
-`ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯及 `Task Requirement Snapshot` 由本次加入凍結範圍（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）；`Evidence`、`Evidence Variant` 與照片的項次對應由 [`field-evidence`](../field-evidence/spec.md) 定義（草稿，欄位與關聯以該規格為準）；`Result` 與改善登記由 `completion-validation` 規格定義（草稿，[PR #546](https://github.com/speko-tw/inspect-flow/pull/546)）；其餘 `Template Item`、`Evidence Requirement`、`Report` 仍依各自門檻維持草稿。`Inspection Template` 由 `template-system` 定義且不版本化（KD-03）。
+`ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯及 `Task Requirement Snapshot` 由本次加入凍結範圍（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）；`Evidence`、`Evidence Variant` 與照片的項次對應由 [`field-evidence`](../field-evidence/spec.md) 定義（草稿，欄位與關聯以該規格為準）；`Result` 與改善登記由 `completion-validation` 規格定義（草稿）；其餘 `Template Item`、`Evidence Requirement`、`Report` 仍依各自門檻維持草稿。`Inspection Template` 由 `template-system` 定義且不版本化（KD-03）。
 
 ## 資料
 
