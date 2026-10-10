@@ -124,21 +124,9 @@ class ErrorCode(DescribedStrEnum):
         "role.creator_role_requires_permissions",
         "The designated creator role must retain its required permissions.",
     )
-    PROJECT_ROLE_NOT_ASSIGNABLE = (
-        "project.role_not_assignable",
-        "This role is not approved for assignment by non-admins.",
-    )
     PROJECT_EXTERNAL_ROLE_NOT_ALLOWED = (
         "project.external_role_not_allowed",
         "This role is not allowed for external collaborators.",
-    )
-    PROJECT_SELF_ROLE_CHANGE = (
-        "project.member_self_role_change",
-        "Non-admin users cannot change their own project roles.",
-    )
-    PROJECT_LAST_MANAGER = (
-        "project.last_manager",
-        "A project must retain an active project manager.",
     )
     USER_EXTERNAL_NOT_QUALIFIED = (
         "user.external_not_qualified",

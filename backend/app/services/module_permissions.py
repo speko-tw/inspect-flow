@@ -29,7 +29,6 @@ from app.services import audit as audit_service
 logger = logging.getLogger(__name__)
 
 # Keep these audit reasons aligned with the corresponding API error codes.
-_ROLE_NOT_ASSIGNABLE_REASON = "project.role_not_assignable"
 _EXTERNAL_ROLE_NOT_ALLOWED_REASON = "project.external_role_not_allowed"
 
 
@@ -65,10 +64,6 @@ class PermissionBundleScopeError(ModulePermissionDeniedError):
     """A delegate cannot fully apply the requested bundle."""
 
 
-class RoleNotAssignableError(ModulePermissionError):
-    """A non-Admin attempted to assign or remove an unapproved role."""
-
-
 class ExternalRoleAssignmentError(ModulePermissionError):
     """A role is not permitted for an external collaborator."""
 
@@ -92,13 +87,12 @@ class CreatorRolePermissionsError(ModulePermissionError):
 def validate_role_assignment(
     session: Session,
     *,
-    actor: User,
     user: User,
     project_id: uuid.UUID,
     project_member_id: uuid.UUID,
     role_ids: Iterable[uuid.UUID],
 ) -> None:
-    """Enforce assignability and external-user role constraints."""
+    """Enforce external-user role constraints."""
     desired_role_ids = set(role_ids)
     roles = list(
         session.scalars(select(Role).where(Role.id.in_(desired_role_ids)))
@@ -106,16 +100,6 @@ def validate_role_assignment(
     if len(roles) != len(desired_role_ids):
         raise InvalidModulePermissionError("Role does not exist")
     for role in roles:
-        if not actor.is_admin and not role.is_assignable:
-            _record_denied_role_assignment(
-                session,
-                project_id=project_id,
-                project_member_id=project_member_id,
-                user=user,
-                role_ids=desired_role_ids,
-                reason=_ROLE_NOT_ASSIGNABLE_REASON,
-            )
-            raise RoleNotAssignableError("Role is not approved for assignment")
         if user.is_external_collaborator and not role.is_external_allowed:
             _record_denied_role_assignment(
                 session,
@@ -482,7 +466,7 @@ def revoke_module_permission(
     user: User,
     permission_code: str,
 ) -> bool:
-    """Revoke one grant; no-op when it is absent."""
+    """Revoke one grant; implied access requires a separate revoke."""
     _check_permission_code(permission_code)
     module = permission_code_module(permission_code)
     _authorize_mutation(
@@ -502,7 +486,7 @@ def revoke_module_permission(
     if row is None:
         return False
     primary = _IMPLIED_BY_PERMISSION.get(permission_code)
-    if row.source == "implied" and primary in _IMPLIED_PERMISSIONS:
+    if primary in _IMPLIED_PERMISSIONS:
         primary_row = session.scalar(
             select(UserModulePermission.id).where(
                 UserModulePermission.user_id == user.id,
@@ -524,26 +508,6 @@ def revoke_module_permission(
         module=module,
         source=source,
     )
-    implied = _IMPLIED_PERMISSIONS.get(permission_code)
-    if implied is not None:
-        implied_row = session.scalar(
-            select(UserModulePermission).where(
-                UserModulePermission.user_id == user.id,
-                UserModulePermission.permission_code == implied,
-                UserModulePermission.source == "implied",
-            )
-        )
-        if implied_row is not None:
-            session.delete(implied_row)
-            session.flush()
-            _record_permission_event(
-                session,
-                event_type="module_permission.revoked",
-                user=user,
-                permission_code=implied,
-                module=permission_code_module(implied),
-                source="implied",
-            )
     return True
 
 
@@ -626,28 +590,65 @@ def apply_permission_bundle(
 ) -> bool:
     """Apply every bundle item atomically after checking the full set."""
     codes = sorted({item.permission_code for item in bundle.permission_codes})
-    for code in codes:
-        _check_permission_code(code)
-    try:
-        for code in codes:
-            _authorize_mutation(
-                session,
-                actor=actor,
-                user=user,
-                module=permission_code_module(code),
-                permission_codes=[code],
-                operation="grant",
-                bundle_id=bundle.id,
-            )
-    except ModulePermissionError as exc:
+    invalid_codes = [
+        code
+        for code in codes
+        if not is_permission_code_registered(code)
+        or permission_code_scope(code) != "module"
+    ]
+    if invalid_codes:
         _record_denied_grant(
             session,
             user=user,
-            permission_codes=codes,
+            permission_codes=invalid_codes,
             bundle_id=bundle.id,
-            reason=type(exc).__name__,
+            reason="invalid_permission_codes",
         )
-        raise PermissionBundleScopeError(str(exc)) from exc
+        raise InvalidModulePermissionError(
+            "Bundle contains invalid module permissions",
+            details=invalid_codes,
+        )
+    external_codes = [
+        code for code in codes if not permission_code_external_allowed(code)
+    ]
+    if user.is_external_collaborator and external_codes:
+        _record_denied_grant(
+            session,
+            user=user,
+            permission_codes=external_codes,
+            bundle_id=bundle.id,
+            reason="external_not_allowed",
+        )
+        raise ExternalCollaboratorPermissionError(
+            "External collaborators cannot receive this permission",
+            details=external_codes,
+        )
+    delegated_modules = _delegated_modules(session, actor.id)
+    denied_codes = [
+        code
+        for code in codes
+        if user.is_admin
+        or code == "all_project_progress.read"
+        or (
+            not actor.is_admin
+            and (
+                actor.id == user.id
+                or permission_code_module(code) not in delegated_modules
+            )
+        )
+    ]
+    if denied_codes:
+        _record_denied_grant(
+            session,
+            user=user,
+            permission_codes=denied_codes,
+            bundle_id=bundle.id,
+            reason="outside_delegation_scope",
+        )
+        raise PermissionBundleScopeError(
+            "Actor cannot manage every permission in the bundle",
+            details=denied_codes,
+        )
     changed_codes: set[str] = set()
     for code in codes:
         changed = _insert_permission(
@@ -760,6 +761,7 @@ def _authorize_mutation(
     permission_codes: list[str],
     operation: str,
     bundle_id: uuid.UUID | None = None,
+    record_denial: bool = True,
 ) -> None:
     if module is None:
         raise InvalidModulePermissionError("Permission has no owning module")
@@ -782,6 +784,7 @@ def _authorize_mutation(
             module=module,
             reason="external_not_allowed",
             bundle_id=bundle_id,
+            record_denial=record_denial,
         )
     allowed = actor.is_admin
     delegated = module in _delegated_modules(session, actor.id)
@@ -792,13 +795,14 @@ def _authorize_mutation(
                 operation == "revoke" and delegated and actor.id != user.id
             )
     if not allowed:
-        _record_denied_grant(
-            session,
-            user=user,
-            permission_codes=permission_codes,
-            bundle_id=bundle_id,
-            reason="outside_delegation_scope",
-        )
+        if record_denial:
+            _record_denied_grant(
+                session,
+                user=user,
+                permission_codes=permission_codes,
+                bundle_id=bundle_id,
+                reason="outside_delegation_scope",
+            )
         raise ModulePermissionDeniedError(
             "Actor cannot manage this module permission"
         )
@@ -812,14 +816,16 @@ def _reject_external_mutation(
     module: str,
     reason: str,
     bundle_id: uuid.UUID | None = None,
+    record_denial: bool = True,
 ) -> None:
-    _record_denied_grant(
-        session,
-        user=user,
-        permission_codes=permission_codes,
-        bundle_id=bundle_id,
-        reason=reason,
-    )
+    if record_denial:
+        _record_denied_grant(
+            session,
+            user=user,
+            permission_codes=permission_codes,
+            bundle_id=bundle_id,
+            reason=reason,
+        )
     raise ExternalCollaboratorPermissionError(
         "External collaborators cannot receive this permission"
     )

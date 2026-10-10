@@ -75,13 +75,65 @@ def test_grant_and_revoke_project_create_tracks_implied_use(session, operator):
         user=user,
         permission_code="project.create",
     )
-    assert (
-        session.scalars(
+    assert [
+        (row.permission_code, row.source)
+        for row in session.scalars(
             select(UserModulePermission).where(
                 UserModulePermission.user_id == user.id
             )
-        ).all()
-        == []
+        )
+    ] == [("project.use", "implied")]
+    assert service.revoke_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="project.use",
+    )
+
+
+@pytest.mark.parametrize("source", ["manual", "bundle", "backfill"])
+def test_primary_permission_blocks_use_revoke_for_every_source(
+    session, operator, source
+):
+    user = create_root_user_with_company(session, f"IMPLIED-{source}")
+    session.add_all(
+        [
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="project.create",
+                source="manual",
+            ),
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="project.use",
+                source=source,
+            ),
+        ]
+    )
+    session.flush()
+
+    with pytest.raises(service.ImpliedPermissionError):
+        service.revoke_module_permission(
+            session,
+            actor=operator,
+            user=user,
+            permission_code="project.use",
+        )
+
+    assert service.revoke_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="project.create",
+    )
+    assert (
+        session.scalar(
+            select(UserModulePermission.id).where(
+                UserModulePermission.user_id == user.id,
+                UserModulePermission.permission_code == "project.use",
+            )
+        )
+        is not None
     )
 
 
@@ -123,11 +175,14 @@ def test_bundle_application_is_all_or_nothing_for_delegate(session, operator):
     )
     session.add(bundle)
     session.flush()
+    session.commit()
 
-    with pytest.raises(service.ModulePermissionDeniedError):
+    with pytest.raises(service.PermissionBundleScopeError) as error:
         service.apply_permission_bundle(
             session, actor=actor, user=target, bundle=bundle
         )
+    assert error.value.status_code == 403
+    assert error.value.details == ["inspection.use"]
     assert (
         session.scalars(
             select(UserModulePermission).where(
@@ -136,6 +191,126 @@ def test_bundle_application_is_all_or_nothing_for_delegate(session, operator):
         ).all()
         == []
     )
+
+
+def test_bundle_rejects_all_invalid_codes_with_one_denial_audit(
+    session, operator, monkeypatch
+):
+    target = create_root_user_with_company(session, "BND-INVALID-TGT")
+    bundle = PermissionBundle(
+        name="Invalid bundle",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    bundle.permission_codes.extend(
+        [
+            PermissionBundlePermission(permission_code="project.use"),
+            PermissionBundlePermission(permission_code="inspection.use"),
+        ]
+    )
+    session.add(bundle)
+    session.flush()
+    session.commit()
+    original_scope = service.permission_code_scope
+
+    def outdated_scope(code):
+        if code in {"project.use", "inspection.use"}:
+            return "project"
+        return original_scope(code)
+
+    monkeypatch.setattr(service, "permission_code_scope", outdated_scope)
+    monkeypatch.setattr(
+        service.audit_service,
+        "record_audit_event_in_independent_transaction",
+        record_audit_event_in_independent_transaction,
+    )
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with pytest.raises(service.InvalidModulePermissionError) as error:
+        with unit_of_work(factory) as transaction:
+            actor_in_transaction = transaction.get(User, operator.id)
+            target_in_transaction = transaction.get(User, target.id)
+            bundle_in_transaction = transaction.get(
+                PermissionBundle, bundle.id
+            )
+            assert actor_in_transaction is not None
+            assert target_in_transaction is not None
+            assert bundle_in_transaction is not None
+            service.apply_permission_bundle(
+                transaction,
+                actor=actor_in_transaction,
+                user=target_in_transaction,
+                bundle=bundle_in_transaction,
+            )
+
+    assert error.value.details == ["inspection.use", "project.use"]
+    events = list(
+        session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "module_permission.grant_denied",
+                AuditLog.entity_id == target.id,
+            )
+        )
+    )
+    assert len(events) == 1
+    assert events[0].created_by == operator.id
+    assert events[0].after["permission_codes"] == error.value.details
+
+
+def test_external_bundle_denial_is_422_and_written_once(
+    session, operator, monkeypatch
+):
+    target = create_root_user_with_company(session, "BND-EXT-TARGET")
+    target.is_external_collaborator = True
+    bundle = PermissionBundle(
+        name="External bundle",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[
+            PermissionBundlePermission(permission_code="project.use"),
+            PermissionBundlePermission(permission_code="project.create"),
+        ],
+    )
+    session.add(bundle)
+    session.flush()
+    monkeypatch.setattr(
+        service.audit_service,
+        "record_audit_event_in_independent_transaction",
+        record_audit_event_in_independent_transaction,
+    )
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+
+    with pytest.raises(service.ExternalCollaboratorPermissionError) as error:
+        with unit_of_work(factory) as transaction:
+            actor_in_transaction = transaction.get(User, operator.id)
+            target_in_transaction = transaction.get(User, target.id)
+            bundle_in_transaction = transaction.get(
+                PermissionBundle, bundle.id
+            )
+            assert actor_in_transaction is not None
+            assert target_in_transaction is not None
+            assert bundle_in_transaction is not None
+            service.apply_permission_bundle(
+                transaction,
+                actor=actor_in_transaction,
+                user=target_in_transaction,
+                bundle=bundle_in_transaction,
+            )
+
+    assert error.value.status_code == 422
+    assert error.value.details == ["project.create"]
+    events = list(
+        session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "module_permission.grant_denied",
+                AuditLog.entity_id == target.id,
+            )
+        )
+    )
+    assert len(events) == 1
+    assert events[0].created_by == operator.id
+    assert events[0].after["permission_codes"] == ["project.create"]
 
 
 def test_permission_bundle_name_is_validated_on_model_assignment():
@@ -275,6 +450,18 @@ def test_bundle_crud_and_application_preserve_grant_sources(session, operator):
         actor=operator,
         user=target,
         permission_code="project.create",
+    )
+    assert [
+        row.permission_code
+        for row in service.list_user_module_permissions(
+            session, user_id=target.id
+        )
+    ] == ["project.use"]
+    assert service.revoke_module_permission(
+        session,
+        actor=operator,
+        user=target,
+        permission_code="project.use",
     )
     assert [
         row.permission_code

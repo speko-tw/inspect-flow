@@ -17,6 +17,7 @@ from app.models import (
     Role,
     User,
 )
+from app.permission_codes import PermissionCode, permission_code_scope
 from tests.db.conftest import create_root_user_with_company
 
 
@@ -87,13 +88,19 @@ def test_role_api_permission_catalog_and_crud_with_audit(
 
     catalog = client.get("/api/v1/roles/permission-codes")
     assert catalog.status_code == 200
+    returned_codes = {item["code"] for item in catalog.json()["items"]}
+    module_codes = {
+        code.value
+        for code in PermissionCode
+        if permission_code_scope(code.value) == "module"
+    }
+    assert returned_codes.isdisjoint(module_codes)
     assert catalog.json() == {
         "items": [
             {"code": "evidence.create", "description": "test"},
             {"code": "evidence.delete", "description": "test"},
             {"code": "evidence.read", "description": "test"},
             {"code": "evidence.update", "description": "test"},
-            {"code": "project.use", "description": "test"},
             {"code": "project_member.manage", "description": "test"},
             {"code": "report.approve", "description": "test"},
             {"code": "report.read", "description": "test"},
@@ -260,16 +267,16 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
 
     catalog = client.get("/api/v1/roles/permission-codes")
     assert catalog.status_code == 200
+    returned_codes = {item["code"] for item in catalog.json()["items"]}
+    module_codes = {
+        code.value
+        for code in PermissionCode
+        if permission_code_scope(code.value) == "module"
+    }
+    assert module_codes
+    assert returned_codes.isdisjoint(module_codes)
     assert catalog.json() == {
         "items": [
-            {
-                "code": "all_project_progress.read",
-                "description": "檢視所有專案進度",
-            },
-            {
-                "code": "inspection.use",
-                "description": "使用查核模組",
-            },
             {
                 "code": "inspection_plan.archive",
                 "description": "封存查核計畫",
@@ -322,10 +329,8 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
                 "code": "inspection_task.read",
                 "description": "讀取查核任務",
             },
-            {"code": "project.create", "description": "開設專案"},
             {"code": "project.read", "description": "檢視專案"},
             {"code": "project.update", "description": "調整專案"},
-            {"code": "project.use", "description": "使用專案模組"},
             {
                 "code": "project_inspection_item.edit",
                 "description": "編輯專案查核項目",
@@ -346,8 +351,6 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
                 "code": "project_zone.read",
                 "description": "讀取專案分區",
             },
-            {"code": "template.manage", "description": "管理範本庫"},
-            {"code": "template.use", "description": "使用範本模組"},
         ]
     }
 

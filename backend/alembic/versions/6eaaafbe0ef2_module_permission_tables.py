@@ -1,7 +1,7 @@
 """module permission tables
 
 Revision ID: 6eaaafbe0ef2
-Revises: d5a2c8e7b194
+Revises: f6c142a90b7d
 Create Date: 2026-10-10 12:35:27.975943
 
 """
@@ -177,7 +177,7 @@ def _upgrade() -> None:
             sa.Column(
                 "is_assignable",
                 sa.Boolean(),
-                server_default=sa.text("0"),
+                server_default=sa.false(),
                 nullable=False,
             )
         )
@@ -185,7 +185,7 @@ def _upgrade() -> None:
             sa.Column(
                 "is_external_allowed",
                 sa.Boolean(),
-                server_default=sa.text("0"),
+                server_default=sa.false(),
                 nullable=False,
             )
         )
@@ -212,7 +212,7 @@ def _upgrade() -> None:
         )
 
     op.execute(
-        "UPDATE users SET is_external_collaborator = 0 "
+        "UPDATE users SET is_external_collaborator = false "
         "WHERE is_external_collaborator IS NULL"
     )
     with op.batch_alter_table("users", schema=None) as batch_op:

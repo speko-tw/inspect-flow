@@ -5,6 +5,8 @@ Fixtures (``session``, ``operator``) come from this directory's
 ``conftest.py``.
 """
 
+from datetime import date
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -617,4 +619,20 @@ def test_external_flag_change_lists_unqualified_role(
     assert error.value.details == [f"role: {role.name} ({role.id})"]
     session.refresh(user)
     assert user.is_external_collaborator is False
-    assert _audit_rows_for(session, user.id) == []
+
+
+def test_returning_external_collaborator_to_internal_clears_expiry(
+    session, operator
+):
+    user = create_root_user_with_company(session, "EXT2INT01")
+    user.is_external_collaborator = True
+    user.account_expires_on = date(2027, 1, 1)
+    session.flush()
+
+    assert set_external_collaborator(session, user, False, confirmed=True)
+
+    assert user.is_external_collaborator is False
+    assert user.account_expires_on is None
+    assert [row.event_type for row in _audit_rows_for(session, user.id)] == [
+        "user.external_flag_changed"
+    ]

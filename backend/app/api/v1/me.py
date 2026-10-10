@@ -59,11 +59,6 @@ def list_my_projects(
     result: list[MyProjectResponse] = []
     for project, member_id in rows:
         project_codes = codes_by_project.get(project.id, frozenset())
-        if not access.is_admin and (
-            "project.read" not in project_codes
-            or "project.use" not in access.module_permissions
-        ):
-            continue
         role_names = db.scalars(
             select(Role.name)
             .join(ProjectMemberRole, ProjectMemberRole.role_id == Role.id)
@@ -80,19 +75,11 @@ def list_my_projects(
                 planned_start_date=project.planned_start_date,
                 planned_completion_date=project.planned_completion_date,
                 role_names=list(role_names),
-                has_office_access=(
-                    access.is_admin
-                    or (
-                        "project.use" in access.module_permissions
-                        and bool(
-                            project_codes & PROJECT_OFFICE_PERMISSION_CODES
-                        )
-                    )
-                    or (
-                        "inspection.use" in access.module_permissions
-                        and bool(
-                            project_codes & INSPECTION_OFFICE_PERMISSION_CODES
-                        )
+                has_office_access=bool(
+                    project_codes
+                    & (
+                        PROJECT_OFFICE_PERMISSION_CODES
+                        | INSPECTION_OFFICE_PERMISSION_CODES
                     )
                 ),
             )

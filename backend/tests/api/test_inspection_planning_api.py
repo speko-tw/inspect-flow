@@ -27,9 +27,7 @@ from app.models import (
     TaskRequirementSnapshot,
     TaskSnapshotMeasurementField,
     TaskSnapshotPoint,
-    UserModulePermission,
 )
-from app.permission_codes import PermissionCode
 from tests.db.conftest import create_root_user_with_company
 
 
@@ -183,20 +181,6 @@ def _planning_world(db_session, make_client):
             item,
             item_two,
         ]
-    )
-    db_session.add_all(
-        UserModulePermission(
-            user_id=user.id,
-            permission_code=PermissionCode.INSPECTION_USE.value,
-            source="manual",
-        )
-        for user in (
-            field_user,
-            field_user_two,
-            field_reader,
-            reader,
-            plain_member,
-        )
     )
     db_session.commit()
     tokens = {

@@ -20,7 +20,10 @@ from app.auth.access import require_admin
 from app.auth.dependencies import get_db
 from app.models import Role
 from app.models.role import PermissionCodeValidationError
-from app.permission_codes import permission_code_descriptions
+from app.permission_codes import (
+    permission_code_descriptions,
+    permission_code_scope,
+)
 from app.services.module_permissions import (
     CreatorRoleInUseError,
     CreatorRolePermissionsError,
@@ -225,6 +228,7 @@ def list_permission_codes() -> PermissionCodeListResponse:
         items=[
             PermissionCodeResponse(code=code, description=description)
             for code, description in sorted(descriptions.items())
+            if permission_code_scope(code) == "project"
         ]
     )
 

@@ -64,6 +64,7 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
         select(UserPassword).where(UserPassword.user_id == user.id)
     )
     assert stored is not None
+
     assert stored.must_change_password is True
     assert password not in client.get(f"/api/v1/users/{user.id}").text
     assert password not in client.get("/api/v1/users").text
@@ -76,6 +77,20 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
         "user.admin_changed",
         "user.password_set",
     }
+
+
+def test_internal_user_expiry_constraint_returns_422(admin_client, db_session):
+    client, _admin = admin_client
+    user = create_root_user_with_company(db_session, "EXPIRY01")
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/users/{user.id}",
+        json={"account_expires_on": "2027-01-01"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"error": {"code": "request.validation_failed"}}
 
 
 def test_aut_ac61_default_user_password_and_change_gate(

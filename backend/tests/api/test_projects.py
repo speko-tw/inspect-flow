@@ -26,7 +26,6 @@ from app.models import (
     SystemRoleAssignment,
     SystemRoleCode,
     User,
-    UserModulePermission,
 )
 from app.services.companies import create_company
 from app.services.project_members import add_project_member
@@ -138,14 +137,6 @@ def project_api(
         name="專案成員管理",
         permission_codes=["project_member.manage"],
     )
-    manage_role.is_assignable = True
-    db_session.add(
-        UserModulePermission(
-            user_id=actor.id,
-            permission_code="project.use",
-            source="manual",
-        )
-    )
     add_project_member(
         db_session,
         project_id=project.id,
@@ -183,10 +174,9 @@ def _same_company(db_session: Session, project_api: ProjectApiContext):
     return company
 
 
-def test_assignment_denial_audit_survives_request_rollback(
+def test_role_assignment_does_not_enforce_assignable_flag(
     project_api, db_session
 ):
-    actor = project_api["actor"]
     target = project_api["target"]
     project = project_api["project"]
     _same_company(db_session, project_api)
@@ -195,7 +185,6 @@ def test_assignment_denial_audit_survives_request_rollback(
         name="不可指派角色",
         permission_codes=["project.read"],
     )
-    restricted_role.is_assignable = False
     db_session.commit()
 
     response = project_api["actor_client"].post(
@@ -206,10 +195,7 @@ def test_assignment_denial_audit_survives_request_rollback(
         },
     )
 
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == (
-        ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
-    )
+    assert response.status_code == 201, response.text
     db_session.expire_all()
     assert (
         db_session.scalar(
@@ -218,22 +204,17 @@ def test_assignment_denial_audit_survives_request_rollback(
                 ProjectMember.user_id == target.id,
             )
         )
+        is not None
+    )
+    assert (
+        db_session.scalar(
+            select(AuditLog).where(
+                AuditLog.event_type == "project_member.assignment_denied",
+                AuditLog.project_id == project.id,
+            )
+        )
         is None
     )
-    event = db_session.scalar(
-        select(AuditLog).where(
-            AuditLog.event_type == "project_member.assignment_denied",
-            AuditLog.project_id == project.id,
-        )
-    )
-    assert event is not None
-    assert event.created_by == actor.id
-    assert event.after == {
-        "project_id": str(project.id),
-        "user_id": str(target.id),
-        "role_ids": [str(restricted_role.id)],
-        "reason": ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value,
-    }
 
 
 def test_project_crud_duplicate_code_warning_and_dates(project_api):
@@ -642,7 +623,6 @@ def test_member_operations_require_project_permission_and_audit(
         name="現場查核",
         permission_codes=["project_member.manage"],
     )
-    other_role.is_assignable = True
     db_session.commit()
     replaced = client.put(
         f"/api/v1/projects/{project.id}/members/{target.id}/roles",
@@ -1278,7 +1258,6 @@ def test_assignable_roles_expose_only_display_fields(
         name="現場查核",
         permission_codes=["inspection_task.read", "project.read"],
     )
-    extra.is_assignable = True
     db_session.commit()
     url = f"/api/v1/projects/{project.id}/assignable-roles"
 

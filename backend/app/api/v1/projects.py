@@ -32,11 +32,8 @@ from app.models import (
 from app.services.inspection_planning import PlanningError
 from app.services.module_permissions import (
     ExternalRoleAssignmentError,
-    RoleNotAssignableError,
 )
 from app.services.project_members import (
-    LastProjectManagerError,
-    SelfRoleChangeError,
     add_project_member,
     list_project_members,
     remove_project_member,
@@ -560,7 +557,7 @@ def list_assignable_roles(
         Role,
         cursor=cursor,
         limit=limit,
-        filters=([] if caller.is_admin else [Role.is_assignable.is_(True)]),
+        filters=[],
         serialize_batch=render,
     )
     return AssignableRoleListResponse(**result)
@@ -600,16 +597,10 @@ def add_member(
         if not _member_conflict(exc):
             raise
         raise APIError(ErrorCode.PROJECT_MEMBER_CONFLICT, 409) from exc
-    except RoleNotAssignableError as exc:
-        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
     except ExternalRoleAssignmentError as exc:
         raise APIError(
             ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
         ) from exc
-    except SelfRoleChangeError as exc:
-        raise APIError(ErrorCode.PROJECT_SELF_ROLE_CHANGE, 422) from exc
-    except LastProjectManagerError as exc:
-        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
     return _member_response(db, member)
 
 
@@ -629,16 +620,10 @@ def edit_member_roles(
     role_ids = _checked_role_ids(db, body.role_ids)
     try:
         set_project_member_roles(db, member, role_ids)
-    except RoleNotAssignableError as exc:
-        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
     except ExternalRoleAssignmentError as exc:
         raise APIError(
             ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
         ) from exc
-    except SelfRoleChangeError as exc:
-        raise APIError(ErrorCode.PROJECT_SELF_ROLE_CHANGE, 422) from exc
-    except LastProjectManagerError as exc:
-        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
     return _member_response(db, member)
 
 
@@ -653,14 +638,7 @@ def remove_member(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> None:
     member = _get_member(db, project_id, user_id)
-    try:
-        remove_project_member(db, member)
-    except RoleNotAssignableError as exc:
-        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
-    except SelfRoleChangeError as exc:
-        raise APIError(ErrorCode.PROJECT_SELF_ROLE_CHANGE, 422) from exc
-    except LastProjectManagerError as exc:
-        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
+    remove_project_member(db, member)
 
 
 __all__ = ["router"]

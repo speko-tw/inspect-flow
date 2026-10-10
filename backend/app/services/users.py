@@ -275,6 +275,8 @@ def set_external_collaborator(
             )
     previous = user.is_external_collaborator
     user.is_external_collaborator = is_external_collaborator
+    if not is_external_collaborator:
+        user.account_expires_on = None
     user.updated_by = operator.id
     session.flush()
     record_audit_event(

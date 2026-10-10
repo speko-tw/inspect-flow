@@ -1,12 +1,11 @@
 """Office/field access summary for the current user (Issue #480).
 
 The login landing page and the admin navigation need to know which
-areas of the UI a user can actually use. The frontend must not guess
+areas of the UI where a user has permissions. The frontend must not guess
 that from ``is_admin`` alone, so ``/auth/me`` carries this summary.
 
 Every registered project permission code is classified into exactly
-one group below; module permissions are reported separately and are
-used to gate the owning module's access.
+one group below; module permissions are reported separately.
 
 - Field: ``inspection_task.inspect`` only -- the code the ``/field``
   task list requires.
@@ -39,7 +38,9 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
         "project_member.manage",
         "project.update",
         "project_inspection_item.edit",
+        "project_zone.read",
         "project_zone.manage",
+        "inspection_plan.read",
         "inspection_plan.create",
         "inspection_plan.manage",
         "inspection_plan.archive",
@@ -57,6 +58,7 @@ READ_ONLY_PERMISSION_CODES: frozenset[str] = frozenset(
     for code in PermissionCode
     if permission_code_scope(code.value) == "project"
     and code.value.endswith(".read")
+    and code.value not in OFFICE_PERMISSION_CODES
 )
 PROJECT_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     code
@@ -114,21 +116,11 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
             )
             is not None
         )
-    project_access = "project.use" in access.module_permissions and bool(
-        codes & PROJECT_OFFICE_PERMISSION_CODES
-    )
+    project_access = bool(codes & PROJECT_OFFICE_PERMISSION_CODES)
     return AccessSummary(
         has_office_access=project_access
-        or bool(
-            "inspection.use" in access.module_permissions
-            and codes & INSPECTION_OFFICE_PERMISSION_CODES
-        ),
-        has_field_access=(
-            "inspection.use" in access.module_permissions
-            and bool(codes & FIELD_PERMISSION_CODES)
-        ),
-        has_template_access=(
-            "template.manage" in access.module_permissions or is_template_admin
-        ),
+        or bool(codes & INSPECTION_OFFICE_PERMISSION_CODES),
+        has_field_access=bool(codes & FIELD_PERMISSION_CODES),
+        has_template_access=is_template_admin,
         module_permissions=access.module_permissions,
     )

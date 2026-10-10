@@ -81,8 +81,6 @@ from app.models import (
 )
 from app.permission_codes import (
     is_permission_code_registered,
-    permission_code_module,
-    permission_code_scope,
 )
 from app.services.permissions import (
     calculate_effective_access,
@@ -413,12 +411,7 @@ def require_project_permission(
         access = calculate_effective_access(
             db, user_id=user.id, project_id=project_id
         )
-        module_code = permission_code_module(code)
-        has_module_access = (
-            permission_code_scope(code) != "project"
-            or f"{module_code}.use" in access.module_permissions
-        )
-        if code not in access.project_permissions or not has_module_access:
+        if code not in access.project_permissions:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 

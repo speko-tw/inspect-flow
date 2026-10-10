@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import SystemRoleCode, User, UserModulePermission
+from app.models import SystemRoleCode, User
 from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.access_summary import (
     FIELD_PERMISSION_CODES,
@@ -88,7 +88,6 @@ def world(db_session: Session, make_client):
         name="內業",
         permission_codes=[
             "project_member.manage",
-            "project.read",
             "inspection_plan.read",
         ],
     )
@@ -100,7 +99,7 @@ def world(db_session: Session, make_client):
     read_only_role = create_role(
         db_session,
         name="只讀任務",
-        permission_codes=["project.read", "inspection_task.read"],
+        permission_codes=["inspection_task.read"],
     )
     empty_role = create_role(db_session, name="空角色", permission_codes=[])
     template_role = create_role(
@@ -117,24 +116,6 @@ def world(db_session: Session, make_client):
     reader = person("reader")
     template_admin = person("tpladmin")
     editor = person("editor")
-    for person_user in (
-        office,
-        field,
-        both,
-        nobody,
-        split,
-        reader,
-        template_admin,
-        editor,
-    ):
-        db_session.add_all(
-            UserModulePermission(
-                user_id=person_user.id,
-                permission_code=code,
-                source="manual",
-            )
-            for code in ("project.use", "inspection.use", "template.use")
-        )
     add_project_member(
         db_session,
         project_id=project_a.id,
