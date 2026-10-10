@@ -2,14 +2,14 @@
 // 失敗時顯示通用訊息，不透露是哪種原因（呼應後端 AUT-R06 的一
 // 致回應）；伺服器忙碌時另提示稍後再試。
 
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { ApiError, login } from './api'
-import AuthLayout from './AuthLayout'
+import AuthLayout, { RequiredMark } from './AuthLayout'
 import { loginTarget } from './landing'
 import { previousSession } from './sessionMemory'
-import { Form, FormError, FormSubmitButton } from '../ui/Form'
+import { FieldError, Form, FormError, FormSubmitButton } from '../ui/Form'
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'
@@ -24,12 +24,30 @@ export default function LoginPage() {
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [errorField, setErrorField] = useState<
+    'account' | 'password' | 'form' | null
+  >(null)
+  const [errorAttempt, setErrorAttempt] = useState(0)
+  const accountInput = useRef<HTMLInputElement>(null)
+  const passwordInput = useRef<HTMLInputElement>(null)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    setSubmitting(true)
+    setErrorField(null)
+
+    if (account.trim() === '') {
+      setError('請輸入帳號名稱或 Email。')
+      setErrorField('account')
+      setErrorAttempt((attempt) => attempt + 1)
+      return
+    }
+    if (password === '') {
+      setError('請輸入密碼。')
+      setErrorField('password')
+      setErrorAttempt((attempt) => attempt + 1)
+      return
+    }
 
     try {
       const user = await login(account, password)
@@ -45,8 +63,8 @@ export default function LoginPage() {
           ? BUSY_ERROR_MESSAGE
           : GENERIC_ERROR_MESSAGE,
       )
-    } finally {
-      setSubmitting(false)
+      setErrorField('form')
+      setErrorAttempt((attempt) => attempt + 1)
     }
   }
 
@@ -54,33 +72,77 @@ export default function LoginPage() {
     <AuthLayout title="登入" lead="請輸入帳號名稱或 Email 與密碼。">
       <Form onSubmit={handleSubmit} noValidate>
         <div>
-          <label htmlFor="login-account">帳號名稱或 Email</label>
+          <label htmlFor="login-account">
+            帳號名稱或 Email <RequiredMark />
+          </label>
           <input
             id="login-account"
             name="username"
             type="text"
             autoComplete="username"
+            ref={accountInput}
             required
             value={account}
-            onChange={(event) => setAccount(event.target.value)}
+            aria-invalid={errorField === 'account'}
+            aria-describedby={
+              errorField === 'account' ? 'login-account-error' : undefined
+            }
+            onChange={(event) => {
+              setAccount(event.target.value)
+              setError(null)
+              setErrorField(null)
+            }}
           />
+          {errorField === 'account' && error !== null ? (
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={accountInput}
+              id="login-account-error"
+              tabIndex={-1}
+            >
+              {error}
+            </FieldError>
+          ) : null}
         </div>
         <div>
-          <label htmlFor="login-password">密碼</label>
+          <label htmlFor="login-password">
+            密碼 <RequiredMark />
+          </label>
           <input
             id="login-password"
             name="password"
             type="password"
             autoComplete="current-password"
+            ref={passwordInput}
             required
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={errorField === 'password'}
+            aria-describedby={
+              errorField === 'password' ? 'login-password-error' : undefined
+            }
+            onChange={(event) => {
+              setPassword(event.target.value)
+              setError(null)
+              setErrorField(null)
+            }}
           />
+          {errorField === 'password' && error !== null ? (
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={passwordInput}
+              id="login-password-error"
+              tabIndex={-1}
+            >
+              {error}
+            </FieldError>
+          ) : null}
         </div>
-        {error !== null ? <FormError>{error}</FormError> : null}
-        <FormSubmitButton className="btn-primary" disabled={submitting}>
-          登入
-        </FormSubmitButton>
+        {errorField === 'form' && error !== null ? (
+          <FormError focusRequest={errorAttempt} tabIndex={-1}>
+            {error}
+          </FormError>
+        ) : null}
+        <FormSubmitButton className="btn-primary">登入</FormSubmitButton>
       </Form>
     </AuthLayout>
   )
