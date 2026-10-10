@@ -21,8 +21,12 @@ def upgrade() -> None:
         "audit_logs", sa.Column("project_id", sa.Uuid(), nullable=True)
     )
     op.create_index("ix_audit_logs_project_id", "audit_logs", ["project_id"])
+    op.create_index(
+        "ix_audit_logs_created_at_id", "audit_logs", ["created_at", "id"]
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_audit_logs_created_at_id", table_name="audit_logs")
     op.drop_index("ix_audit_logs_project_id", table_name="audit_logs")
     op.drop_column("audit_logs", "project_id")

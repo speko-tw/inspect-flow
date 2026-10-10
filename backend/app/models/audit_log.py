@@ -284,7 +284,7 @@ import re
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, ForeignKey, String, event
+from sqlalchemy import Connection, Engine, ForeignKey, Index, String, event
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, Uuid
 
@@ -699,6 +699,9 @@ class AuditLog(Base):
     """
 
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_created_at_id", "created_at", "id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid, primary_key=True, default=uuid7

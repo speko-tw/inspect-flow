@@ -13,6 +13,9 @@ which the caller may override (there is no ``created_by=``/
 ``created_at=`` parameter at all, not merely one that is ignored).
 ``entity_type`` is not a parameter either: it comes from whichever
 catalog entry ``event_type`` names.
+Callers pass ``project_id`` for events with project context (ALG-R24),
+independent of fields present in ``before`` or ``after``; events without
+project context leave it null.
 
 The event catalog (:func:`register_audit_event`, ``_EVENT_CATALOG``)
 is how ALG-R13 lets other specs (``external-identity-sync``) add new
@@ -499,6 +502,10 @@ def record_audit_event(
     "系統事件", :func:`_resolve_system_operator`) and ``created_at``
     from :func:`app.db.clock.utc_now` -- there is no way for a caller
     to supply either.
+
+    ``project_id`` is the event's project at write time (ALG-R24),
+    even when ``before`` or ``after`` omits that field. Events without
+    project context leave it as ``None``.
 
     Only ``session.flush()``s (ALG-R06): the caller's own
     transaction (``app.db.unit_of_work``) commits or rolls back the

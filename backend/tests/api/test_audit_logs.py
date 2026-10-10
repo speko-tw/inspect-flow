@@ -30,6 +30,21 @@ def test_admin_query_filters_and_descending_cursor(db_session, make_client):
             "project_zone.created",
             moment - timedelta(days=1),
         ),
+        (8, project, admin.id, "inspection_task.deleted", moment),
+        (
+            9,
+            project,
+            admin.id,
+            "project_zone.created",
+            moment + timedelta(days=1),
+        ),
+        (
+            10,
+            project,
+            admin.id,
+            "project_zone.created",
+            moment + timedelta(days=2),
+        ),
     ]
     for number, project_id, actor_id, event_type, created_at in rows:
         db_session.add(
@@ -70,6 +85,15 @@ def test_admin_query_filters_and_descending_cursor(db_session, make_client):
     assert second.status_code == 200
     assert [row["id"] for row in second.json()["items"]] == [str(UUID(int=1))]
     assert second.json()["next_cursor"] is None
+    unfiltered = client.get("/api/v1/audit-logs", params={"limit": 100})
+    assert unfiltered.status_code == 200
+    assert {row["id"] for row in unfiltered.json()["items"]} == {
+        str(UUID(int=number)) for number in range(1, 11)
+    }
+    assert any(
+        row["id"] == str(UUID(int=5)) and row["project_id"] is None
+        for row in unfiltered.json()["items"]
+    )
     missing = client.get(
         "/api/v1/audit-logs", params={"project_id": str(UUID(int=999))}
     )
