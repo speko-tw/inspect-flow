@@ -1,0 +1,24 @@
+{
+  "local_from": "2026-10-10T08:00",
+  "local_to": "2026-10-11T08:00",
+  "query": {
+    "project_id": "00000000-0000-0000-0000-000000000412",
+    "actor_id": "00000000-0000-0000-0000-000000000001",
+    "from": "2026-10-10T00:00:00.000Z",
+    "to": "2026-10-11T00:00:00.000Z",
+    "event_type": "project_zone.created",
+    "limit": "50"
+  },
+  "audit_entry_keys": [
+    "after",
+    "before",
+    "created_at",
+    "created_by",
+    "entity_id",
+    "entity_type",
+    "event_type",
+    "id",
+    "project_id"
+  ],
+  "audit_page_keys": ["items", "next_cursor"]
+}

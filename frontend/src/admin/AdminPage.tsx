@@ -27,6 +27,7 @@ import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
 const PlanningPage = lazy(() => import('./planning/PlanningPage'))
+const AuditLogPage = lazy(() => import('./audit-log/AuditLogPage'))
 const TemplatesPage = lazy(() => import('./templates/TemplatesPage'))
 const ProjectTemplatesPage = lazy(
   () => import('./projects/ProjectTemplatesPage'),
@@ -53,6 +54,7 @@ const NAV_ITEMS = [
   { to: '/admin/companies', label: '公司' },
   { to: '/admin/roles', label: '角色' },
   { to: '/admin/projects', label: '專案' },
+  { to: '/admin/audit-logs', label: '稽核紀錄' },
   { to: '/admin/templates', label: '範本管理' },
   { to: '/change-password', label: '變更密碼' },
 ]
@@ -170,6 +172,14 @@ function AdminPageContent() {
             <Route path="companies" element={<CompaniesPage />} />
             <Route path="roles" element={<RolesPage />} />
             <Route path="projects" element={<ProjectsPage />} />
+            <Route
+              path="audit-logs"
+              element={
+                <AdminRouteSuspense>
+                  <AuditLogPage />
+                </AdminRouteSuspense>
+              }
+            />
             <Route path="projects/:projectId" element={<ProjectHomePage />} />
             <Route
               path="projects/:projectId/members"
@@ -238,7 +248,9 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
   const restrictedPage =
-    /^\/admin\/(?:users|companies|roles)(?:\/|$)/.test(location.pathname) ||
+    /^\/admin\/(?:users|companies|roles|audit-logs)(?:\/|$)/.test(
+      location.pathname,
+    ) ||
     (!user.has_template_access &&
       /^\/admin\/templates(?:\/|$)/.test(location.pathname))
   const projectRoutes = (

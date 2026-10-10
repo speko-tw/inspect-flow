@@ -1,0 +1,87 @@
+.audit-page {
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.audit-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 1rem;
+  align-items: end;
+  margin-block: 1.5rem;
+}
+
+.audit-filters label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.audit-filters select,
+.audit-filters input {
+  width: 100%;
+  min-width: 0;
+}
+
+.audit-filter-error {
+  color: var(--error-text);
+}
+
+.audit-project-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.audit-results {
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.audit-entry {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.audit-entry-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.audit-entry-heading h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-entry dl,
+.audit-entry-changes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 0.75rem;
+}
+
+.audit-entry dt {
+  font-weight: 700;
+}
+
+.audit-entry dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-entry pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
