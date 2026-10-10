@@ -65,6 +65,7 @@
 - **RG-S06**：自審後又推送了會影響範圍或驗收條件的改動時，更新自審留言。
 - **RG-S07**：PR 聲稱滿足的每條驗收條件，附上 `plan.md`「驗證」欄指定的證據（測試，或貼在 PR 說明的指令輸出與連結）（依據：各規格的 `plan.md`）。
 - **RG-S08**：以 `make check` 驗證，並把結果貼在「驗證」段。其中的 PostgreSQL 檢查（`make check-postgres`）只在設定 `INSPECTFLOW_TEST_POSTGRES_URL` 時執行，未設定就印 SKIPPED 略過，由 CI 的 PostgreSQL service container 補驗；要在本機跑，這個變數只能指向專用的測試資料庫，因為每次都會清空它（依據：[SKL-R03、SKL-R04](specs/skeleton/spec.md#需求)、[DBF-R10](specs/database-foundation/spec.md#需求)）。
+- **RG-S09**：PR 的截圖與走查證據用 GitHub 附件（貼在 PR 說明或留言），不 commit 進 repo；證據只屬於當次審查，放進 repo 會讓倉庫變大又容易過時（依據：[#442](https://github.com/speko-tw/inspect-flow/issues/442)）。
 
 ## 自審留言格式
 
