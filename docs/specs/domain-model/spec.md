@@ -24,7 +24,7 @@
   - `Project` 的業務欄位：依 [OQ-01](../../intents/05-open-questions.md#oq-01)（已裁定）與 [KD-39](../../intents/03-decisions-and-stack.md#kd-39)，見 [`Project` 業務欄位](#project-business-fields)。
   - `ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯與 `Task Requirement Snapshot`（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）。
 - 草稿（本次不凍結，不拆任務）：
-  - `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體依各自開工門檻維持草稿，見[其他實體](#draft-others)；`Inspection Template` 由 `template-system` 定義。
+  - `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 等其餘實體依各自開工門檻維持草稿，見[其他實體](#draft-others)（`Evidence`、`Evidence Variant` 的欄位由 [`field-evidence`](../field-evidence/spec.md) 定義，`Result` 由 `completion-validation` 定義）；`Inspection Template` 由 `template-system` 定義。
 
 **不包含**（注明移到哪份規格，或屬於哪一條非目標）：
 
@@ -180,7 +180,7 @@
 <a id="draft-others"></a>
 ### 其他實體（草稿）
 
-`ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯及 `Task Requirement Snapshot` 由本次加入凍結範圍（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）；其餘 `Template Item`、`Evidence Requirement`、`Evidence`、`Evidence Variant`、`Result`、`Report` 仍依各自門檻維持草稿。`Inspection Template` 由 `template-system` 定義且不版本化（KD-03）。
+`ProjectZone`、`Inspection Plan`、`Inspection Task`、Task 地點、Task 項目關聯及 `Task Requirement Snapshot` 由本次加入凍結範圍（DOM-R56～DOM-R58、DOM-AC51～DOM-AC53）；`Evidence`、`Evidence Variant` 與照片的項次對應由 [`field-evidence`](../field-evidence/spec.md) 定義（草稿，欄位與關聯以該規格為準）；`Result` 與改善登記由 `completion-validation` 規格定義（草稿，[PR #546](https://github.com/speko-tw/inspect-flow/pull/546)）；其餘 `Template Item`、`Evidence Requirement`、`Report` 仍依各自門檻維持草稿。`Inspection Template` 由 `template-system` 定義且不版本化（KD-03）。
 
 ## 資料
 
@@ -560,3 +560,4 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 意圖變更跟進（負責人裁定，[#538 第 22、25 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-10）：外部協作人員標記、外部可用角色與寫入口檢查、改標記與改角色、紀錄身分快照、帳號到期與無專案的外部人員（DOM-R71～DOM-R75、DOM-AC67～DOM-AC72）；DOM-R20、DOM-R21 改寫為與新模型一致的最終內容；DOM-R70 白名單涵蓋移除與替換並以有效權限計算「持有管理成員權限」；DOM-R61、DOM-R62 被委派者可收回但不能授予 `all_project_progress.read`，`template.manage` 蘊含 `template.use`；DOM-R67 重新啟用含模組委派；`GET /me/projects` 只列具 `project.read` 的專案；角色 API 補 `is_external_allowed`；細節為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #544 延後項）：DOM-R64、DOM-R20、DOM-AC60 建立者角色一律保留 `project.read`（實作前必修，否則建立者看不到自己開的專案），錯誤碼說明改「須保留三項」；DOM-R73、DOM-AC70 補內部改外部通過後也寫稽核；`GET /me/projects` 對 Admin 與 `has_project_access` 的對齊說明，並寫明每專案 `has_office_access` 依 AUT-R19 計有效權限 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #563 第 1 輪審查）：DOM-AC50 的每專案 `has_office_access` 改依 AUT-R19 以有效權限計；DOM-R20、DOM-R64 依據欄註明「檢視專案」第三項為規格設計並引 07 圖 3 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
+- 規格澄清（負責人指示，#105）：「其他實體（草稿）」改指向 `field-evidence` 與 `completion-validation` 的實體定義；不改凍結範圍與既有需求 — [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)
