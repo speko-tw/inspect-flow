@@ -527,6 +527,7 @@ class TestDomAc06LastActiveAdminProtected:
         rows = _audit_rows_for(session, lone_admin.id)
         assert len(rows) == 1
         assert rows[0].event_type == "user.admin_changed"
+        assert rows[0].project_id is None
         assert rows[0].before == {"is_admin": True}
         assert rows[0].after == {"is_admin": False}
         assert rows[0].created_by == operator.id

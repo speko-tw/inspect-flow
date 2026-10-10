@@ -112,6 +112,7 @@ class TestAddProjectMemberWithRoles:
         rows = _audit_rows_for(session, member.id)
         assert len(rows) == 1
         assert rows[0].event_type == "project_member.roles_changed"
+        assert rows[0].project_id == project.id
         assert rows[0].entity_type == "project_member"
         assert rows[0].before == {
             "role_ids": [],
@@ -312,6 +313,7 @@ class TestRemoveProjectMember:
         assert len(rows) == 2  # roles_changed (initial), removed
         removed = rows[-1]
         assert removed.event_type == "project_member.removed"
+        assert removed.project_id == project.id
         assert removed.after is None
         assert removed.before == {
             "project_id": str(project.id),
