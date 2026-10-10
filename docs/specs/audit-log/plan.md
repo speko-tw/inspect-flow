@@ -48,6 +48,15 @@
 |---|---|---|---|---|
 | T5b | 新增 `AuditLog.project_id` 可空值欄位與索引的 migration（既有資料不回填）；寫入入口及各專案事件呼叫端依 ALG-R24 填值，無專案事件留空；實作 Admin 唯讀稽核查詢 API 與管理後台頁面，依專案、操作者、時間及事件類型篩選，採穩定 cursor 分頁，合法但不存在的 `project_id` 回 200 空頁。原列檔案範圍依 [admin-dashboard T5b](../admin-dashboard/plan.md#任務)，另需 `backend/app/models/audit_log.py`、`backend/alembic/versions/`、稽核寫入入口及對應測試；#412 開工時依規格流程同步其 issue／plan 檔案清單 | #411 合併；`authentication` Admin 存取檢查 | ALG-AC01（新增欄位）、ALG-AC17、ALG-AC18；ADM-AC06、ADM-AC07、ADM-AC13 | [#412](https://github.com/speko-tw/inspect-flow/issues/412) |
 
+## 兩層權限模型後續實作
+
+依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09 與 2026-10-10，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進；規格合併後才開任務，每個任務一個 PR，先開 issue 再動工。
+
+| 任務 | 內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| T6 | 事件目錄登記模組權限事件、專案事件、`user.external_flag_changed`，補 `user.active_changed` 的欄位與「得為系統事件」；授權拒絕與違規指派在獨立交易寫入（ALG-R25～ALG-R28）；授權事件含 `source`；本任務只驗事件目錄與獨立交易寫入入口，端到端驗收由 `domain-model` 任務 L、N、O 承接 | 本計畫 T2 | ALG-AC19～ALG-AC24、ALG-AC26、ALG-AC27 | 待開 |
+| T7 | 操作者身分快照：`AuditLog.actor_snapshot` 不可空值欄位的 migration（既有紀錄回填一次）與寫入入口組成快照（ALG-R29）；`domain-model` DOM-R74 的驗收 | T6；`domain-model` 任務 L（`User.is_external_collaborator`，快照需要此欄位） | ALG-AC25、DOM-AC71 | 待開 |
+
 ## 並行分組
 
 - 第 1 波：T1。

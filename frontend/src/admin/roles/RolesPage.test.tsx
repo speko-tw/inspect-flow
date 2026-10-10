@@ -190,6 +190,24 @@ describe('admin role management page', () => {
     expect(table).toHaveClass('roles-table')
   })
 
+  it('expands a role summary to its full permission descriptions', async () => {
+    rolesFetch({
+      roles: [makeRole('r1', '示範內業', [MANAGE.code])],
+    })
+    renderRoles()
+
+    const row = await screen.findByRole('row', { name: /示範內業/ })
+    const button = within(row).getByRole('button', {
+      name: '「示範內業」完整權限',
+    })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(within(row).getByText('管理專案成員與其角色')).toBeVisible()
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('shows a placeholder when no permission can be configured', async () => {
     rolesFetch({ permissions: [] })
     renderRoles()
@@ -461,7 +479,10 @@ describe('admin role management page', () => {
 
     expect(
       await screen.findByRole('row', { name: /Legacy/ }),
-    ).toHaveTextContent('report.read')
+    ).toHaveTextContent('可使用部分功能')
+    expect(screen.getByRole('row', { name: /Legacy/ })).not.toHaveTextContent(
+      'report.read',
+    )
     fireEvent.click(screen.getByRole('button', { name: '修改角色 Legacy' }))
     expect(
       screen.getByRole('checkbox', { name: /report\.read/ }),

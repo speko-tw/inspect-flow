@@ -61,6 +61,15 @@
 - 簡便版的使用者與公司管理屬 0.2.x（E 的 API、G 的頁面）；搜尋、分頁、批次等進階功能仍屬 `admin-dashboard`（[#107](https://github.com/speko-tw/inspect-flow/issues/107)）。
 - 這些任務的檔案清單，開 issue 時依當時的程式碼盤點，不在這裡預先寫死。
 
+## 兩層權限模型後續實作
+
+依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）。本次是意圖變更跟進；規格合併後才開任務，每個任務一個 PR，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。過渡期結束＝任務 Q 合併；過渡期內既有行為不變（AUT-R50）。
+
+| 任務 | 內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| P | 存取層級：新增「需模組權限」「需模組委派」「模組權限或任一專案權限」宣告與檢查（AUT-R48、AUT-R49）、專案內檢查加模組「可使用」（AUT-R19）、經單一權限計算入口（AUT-R51）、被委派者用的最小欄位人員查詢、指派專案角色的限制（AUT-R22）、`me` 加 `can_create_project`、`has_project_access`、`is_external_collaborator`、`module_permissions`、`delegated_modules`，存取摘要的權限碼分類加「唯讀碼」（AUT-R08）；路由宣告檢查納入新層級；`workflow-summary` 讀取碼加 `project.read`（IP-R11）、可指派成員端點依查核模組「可使用」過濾（IP-R12） | `domain-model` 任務 L（資料、Service 介面與單一入口）與任務 M（回填與轉換 migration）；兩層檢查不得早於 M 生效 | AUT-AC71～AUT-AC73、AUT-AC75～AUT-AC77；`inspection-planning` IP-AC12（`project.read` 分支）、IP-AC13；既有 AUT-AC18、AUT-AC19、AUT-AC44、AUT-AC70 補測試資料 | 待開 |
+| Q | 模組權限端點的存取層級（AUT-R49）與過渡行為驗收：`template_admin` 轉換後前後逐人比對有效權限；舊系統角色層級在轉換完成後移除 | P、`domain-model` 任務 M、`template-system` 對應任務 | AUT-AC73、AUT-AC74 | 待開 |
+
 ## 並行分組
 
 依「改動的檔案」與「依賴」分波；同一波內的任務檔案不重疊，也互不依賴。
