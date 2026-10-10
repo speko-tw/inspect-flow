@@ -272,6 +272,7 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
     patch_lock_attempted = Event()
     patch_lock_acquired = Event()
     lock_wait_confirmed = Event()
+    release_first_writer = Event()
     events_lock = Lock()
     observed: list[str] = []
     request_connection_ids: dict[int, str] = {}
@@ -292,18 +293,26 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
             and "for no key update" in normalized
         )
 
-    def wait_for_lock_wait(backend_pid: int) -> None:
+    def wait_for_lock_wait(backend_pid: int, blocker_pid: int) -> None:
         deadline = monotonic() + 10
         with app_engine.connect() as probe_connection:
             while monotonic() < deadline:
-                wait_event_type = probe_connection.scalar(
+                probe_connection.execute(
+                    text("SELECT pg_stat_clear_snapshot()")
+                )
+                activity = probe_connection.execute(
                     text(
-                        "SELECT wait_event_type FROM pg_stat_activity "
+                        "SELECT wait_event_type, pg_blocking_pids(pid) "
+                        "FROM pg_stat_activity "
                         "WHERE pid = :backend_pid"
                     ),
                     {"backend_pid": backend_pid},
-                )
-                if wait_event_type == "Lock":
+                ).one_or_none()
+                if (
+                    activity is not None
+                    and activity.wait_event_type == "Lock"
+                    and blocker_pid in activity.pg_blocking_pids
+                ):
                     lock_wait_confirmed.set()
                     with events_lock:
                         observed.append("lock_wait_confirmed")
@@ -312,7 +321,7 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
             f"PostgreSQL backend {backend_pid} did not wait on a lock"
         )
 
-    def wait_for_blocked_request(request_name: str) -> None:
+    def wait_for_blocked_request(request_name: str, blocker_name: str) -> None:
         attempted = (
             patch_lock_attempted
             if request_name == "item_patch"
@@ -321,8 +330,10 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
         assert attempted.wait(timeout=10)
         with events_lock:
             backend_pid = request_backend_pids.get(request_name)
+            blocker_pid = request_backend_pids.get(blocker_name)
         assert backend_pid is not None
-        wait_for_lock_wait(backend_pid)
+        assert blocker_pid is not None
+        wait_for_lock_wait(backend_pid, blocker_pid)
 
     def before_cursor_execute(
         connection, cursor, statement, parameters, context, executemany
@@ -352,11 +363,15 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
                 observed.append("create_lock_acquired")
                 request_connection_ids[id(connection)] = "task_create"
             create_lock_acquired.set()
+            if first_writer == "task_create":
+                assert release_first_writer.wait(timeout=30)
         if is_patch_item_lock(statement):
             with events_lock:
                 observed.append("patch_lock_acquired")
                 request_connection_ids[id(connection)] = "item_patch"
             patch_lock_acquired.set()
+            if first_writer == "item_patch":
+                assert release_first_writer.wait(timeout=30)
 
     def on_commit(connection) -> None:
         with events_lock:
@@ -378,19 +393,22 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
     event.listen(app_engine, "commit", on_commit)
     try:
         with ThreadPoolExecutor(max_workers=2) as executor:
-            if first_writer == "task_create":
-                create_future = executor.submit(create_task)
-                assert create_lock_acquired.wait(timeout=10)
-                patch_future = executor.submit(patch_item)
-                wait_for_blocked_request("item_patch")
-            else:
-                patch_future = executor.submit(patch_item)
-                assert patch_lock_acquired.wait(timeout=10)
-                create_future = executor.submit(create_task)
-                wait_for_blocked_request("task_create")
+            try:
+                if first_writer == "task_create":
+                    create_future = executor.submit(create_task)
+                    assert create_lock_acquired.wait(timeout=10)
+                    patch_future = executor.submit(patch_item)
+                    wait_for_blocked_request("item_patch", "task_create")
+                else:
+                    patch_future = executor.submit(patch_item)
+                    assert patch_lock_acquired.wait(timeout=10)
+                    create_future = executor.submit(create_task)
+                    wait_for_blocked_request("task_create", "item_patch")
 
-            create_response = create_future.result(timeout=20)
-            patch_response = patch_future.result(timeout=20)
+                create_response = create_future.result(timeout=20)
+                patch_response = patch_future.result(timeout=20)
+            finally:
+                release_first_writer.set()
     finally:
         event.remove(
             app_engine, "before_cursor_execute", before_cursor_execute
