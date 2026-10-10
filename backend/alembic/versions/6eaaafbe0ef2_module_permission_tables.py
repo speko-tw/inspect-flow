@@ -201,7 +201,12 @@ def _upgrade() -> None:
     op.drop_index("ix_users_email_lower", table_name="users")
     with op.batch_alter_table("users", schema=None) as batch_op:
         batch_op.add_column(
-            sa.Column("is_external_collaborator", sa.Boolean())
+            sa.Column(
+                "is_external_collaborator",
+                sa.Boolean(),
+                server_default=sa.false(),
+                nullable=False,
+            )
         )
         batch_op.add_column(
             sa.Column("account_expires_on", sa.Date(), nullable=True)
@@ -211,15 +216,11 @@ def _upgrade() -> None:
             "is_external_collaborator OR account_expires_on IS NULL",
         )
 
-    op.execute(
-        "UPDATE users SET is_external_collaborator = false "
-        "WHERE is_external_collaborator IS NULL"
-    )
     with op.batch_alter_table("users", schema=None) as batch_op:
         batch_op.alter_column(
             "is_external_collaborator",
             existing_type=sa.Boolean(),
-            nullable=False,
+            server_default=None,
         )
     op.create_index(
         "ix_users_email_lower",
