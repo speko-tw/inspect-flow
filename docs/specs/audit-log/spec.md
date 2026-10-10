@@ -156,8 +156,8 @@
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
-| `project.created` | 新增專案（DOM-R65），與建立者或建立者角色人選的 `project_member.roles_changed` 同一交易 | `project` | 空值 | `project_code`、`name`；Admin 帶 `creator_role_user_id` 時另含該欄位 |
-| `project.updated` | 修改專案基本欄位（DOM-R66）；沒有變動不寫 | `project` | 有變動的欄位 | 同左 |
+| `project.created` | 新增專案（DOM-R65），與建立者或建立者角色人選的 `project_member.roles_changed` 同一交易 | `project` | 空值 | `project_code`、`name`、`company_role`；Admin 帶 `creator_role_user_id` 時另含該欄位 |
+| `project.updated` | 修改專案基本欄位（DOM-R66）；沒有變動不寫；改本公司角色（DOM-R76）沿用此事件，不另登記 | `project` | 有變動的欄位（含 `company_role`） | 同左；`company_role` 有變動時另含 `company_role_change_reason`（原因） |
 | `project_member.assignment_denied` | 指派被 DOM-R70 的（1）（2）或 DOM-R72 擋下：不可指派的角色（含移除與替換）、修改自己的角色、外部協作人員被指派不可外部使用的角色。屬安全事件，在獨立交易寫入，使請求失敗後仍保留；記錄被擋下的原因代碼 | `project_member` | 空值 | `project_id`、`user_id`（被指派的人）、`role_ids`（企圖指派的集合）、`reason`（錯誤碼） |
 | `module_permission.grant_denied` | 授權被拒絕（`entity_id` 為被授權的人）：自授、授予超出委派範圍、被委派者授予 `all_project_progress.read`、對外部協作人員授予不可外部使用的代碼、組合套用整組被拒絕（DOM-R62、DOM-R63）。屬安全事件，在獨立交易寫入，不隨主交易回滾 | `module_permission` | 空值 | `user_id`（被授權的人）、企圖授予的 `permission_codes`、`bundle_id`（套用組合時）、`reason`（原因代碼） |
 
@@ -286,6 +286,7 @@
 | ALG-AC25 | 外部協作人員 L（單位為公司 A）、沒有單位的外部協作人員 L2、內部人員 X | 三人各寫一筆稽核紀錄；之後修改 L 的姓名、公司與標記；列出紀錄；既有紀錄經 migration | `actor_snapshot` 依 ALG-R29 的格式保存（L 為「姓名．外部協作人員．公司 A」、L2 為「外部協作人員（未填單位）」、X 為「姓名．單位」）；人員資料變更後舊快照不變；欄位不可空值，既有紀錄已回填 | ALG-R29 |
 | ALG-AC26 | 非管理者 M；被委派 `template` 的 D；外部協作人員 L | D 為自己授權；D 套用含其他模組代碼的組合；D 對 L 授予 `project.create`；M 把 L 指派為不是外部可用的角色；上述每個操作的主交易都失敗或回滾 | 每個被拒絕的授權寫一筆 `module_permission.grant_denied`、被拒絕的指派寫一筆 `project_member.assignment_denied`，且在主交易回滾後仍保留 | ALG-R28 |
 | ALG-AC27 | 外部協作人員 L（持合格資料）與內部人員 X（合格轉外部）；角色 R | 把 L 由外部改內部；把 X 由內部改外部；修改 R 的 `is_external_allowed`；重新啟用時未勾選的模組權限、模組委派與成員身分 | 兩個方向的標記變更各寫一筆 `user.external_flag_changed`；`role.updated` 記下 `is_external_allowed` 的前後值；未勾選而被收回與移除的項目各寫 `module_permission.revoked`、`module_delegation.revoked`、`project_member.removed` | ALG-R25、ALG-R14 |
+| ALG-AC28 | 專案 P；具專案權限 `project.update` 的成員 M | M 把 `company_role` 由 `contractor` 改為 `supervisor` 並帶原因；再只改專案名稱；再以相同的 `company_role` 重送 | 改角色一筆 `project.updated`：前後值含 `company_role`，後值另含 `company_role_change_reason`；只改名稱的 `project.updated` 不含原因欄；沒有變動不寫 | ALG-R28、DOM-R76 |
 
 ## 待釐清
 
@@ -325,3 +326,4 @@
 - 意圖變更跟進（負責人裁定，[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)）：新增 `module_permission.grant_denied`、`user.external_flag_changed` 事件，`user.active_changed` 加自動停用的原因；新增 ALG-R29（操作者身分快照 `actor_snapshot`）、ALG-AC25～ALG-AC27；ALG-R28 擴及授權拒絕；`project_member.assignment_denied` 涵蓋移除與替換及外部可用檢查；欄位名稱與快照組成為規格設計（非負責人裁定） — [#538](https://github.com/speko-tw/inspect-flow/issues/538)
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #544 延後項）：`role.updated` 觸發條件補 `is_external_allowed`；第 25 點變更紀錄補 ALG-AC27 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #563 第 1 輪審查）：`role.updated` 引用的 DOM-R73 改為 DOM-R72、DOM-R73 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
+- 範圍變更（負責人裁定，[#559](https://github.com/speko-tw/inspect-flow/issues/559)）：`project.created` 加 `company_role`，`project.updated` 沿用於改本公司角色並於後值加 `company_role_change_reason`；新增 ALG-AC28。裁定留言：[六題裁定](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093033801)、[專家審視後修正](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093171971)；欄位名為規格設計（非負責人裁定） — [#559](https://github.com/speko-tw/inspect-flow/issues/559)

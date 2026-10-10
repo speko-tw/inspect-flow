@@ -4,7 +4,7 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
-本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-R59～DOM-R75、DOM-AC01～DOM-AC50、DOM-AC55～DOM-AC72，已被取代的條目除外；DOM-R59～DOM-R75 由[兩層權限模型後續實作](#兩層權限模型後續實作)涵蓋）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
+本計畫涵蓋 spec 標頭「凍結範圍」內的部分（DOM-R01～DOM-R36、DOM-R40～DOM-R55、DOM-R59～DOM-R75、DOM-AC01～DOM-AC50、DOM-AC55～DOM-AC72，已被取代的條目除外；DOM-R59～DOM-R75 由[兩層權限模型後續實作](#兩層權限模型後續實作)涵蓋；DOM-R76、DOM-AC73～DOM-AC74 由[本公司角色後續實作](#本公司角色後續實作)涵蓋）。T1～T8 是本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）之前完成的任務，內容保持當時的樣子；本次變更對 `User`、`Company`、初始化的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～H 接手。DOM-R22（稽核紀錄）的資料模型與驗收由 `audit-log` 規格定義（[#203](https://github.com/speko-tw/inspect-flow/issues/203)），本計畫不建稽核紀錄的資料表。會寫入權限與角色變更的入口集中在 T7，T7 等 `audit-log` T2（[#216](https://github.com/speko-tw/inspect-flow/issues/216)）建好稽核紀錄的寫入入口後才開工；其餘任務只建資料表、只做讀取，或依 DOM-R22 不寫稽核紀錄（T6 初始化）。`Project` 業務欄位（DOM-R40～DOM-R44）由 T8 負責，依 [OQ-01](../../intents/05-open-questions.md#oq-01) 裁定（[#246](https://github.com/speko-tw/inspect-flow/issues/246)）從草稿轉為正式後才開工。其他實體在擴大凍結範圍後，再於同一份計畫補任務。
 
 ## 任務
 
@@ -67,6 +67,16 @@
 | O | 停用與重新啟用：停用時刪除所有登入狀態、停用前提醒唯一的專案工程師、外部人員最後一個專案身分移除自動停用與到期日、「無專案的外部人員」與「無人管理的專案」清單、重新啟用預覽與勾選恢復、`user.active_changed` 記下恢復與移除項目 | L | DOM-AC62、DOM-AC72 | 待開 |
 
 L 與 M 都新增 migration，不同波；N、O 不新增 migration，N 與 O 改的檔案不重疊時可並行（開 issue 時確認）。
+
+## 本公司角色後續實作
+
+依據：負責人裁定（[#559 六題裁定](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093033801)、[#559 專家審視後修正](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093171971)、[#559 最後一題](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093217072)，2026-10-10；衝突處以修正為準），意圖見 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)。本次是範圍變更；規格合併後才開任務，先開 issue 再動工，檔案清單開 issue 時依當時程式碼盤點。
+
+| 任務 | 內容 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|
+| P | `Project.company_role`：新增不可空欄位與程式內角色／檢查層級登記表；一支 migration 新增欄位並把既有專案回填 `contractor`；專案新增與修改 API 帶 `company_role` 與 `company_role_change_reason`、改角色需填原因、專用錯誤碼；`project.created`／`project.updated` 寫入前後值與原因（事件目錄欄位由 `audit-log` T8 登記）；過渡期只有 Admin 能修改，`project.update` 持有者隨任務 N 生效 | `audit-log` T6、T8；修改權限依任務 N | DOM-AC73、DOM-AC74 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
+
+P 新增一支 migration；與其他新增 migration 的任務不同波（共用 migration 鏈規則見 [README](../README.md#parallel)）。畫面（開案欄位、改角色確認框、專案頁與報表預覽顯示）屬 `admin-dashboard` 的後續任務。
 
 ## 並行分組
 
