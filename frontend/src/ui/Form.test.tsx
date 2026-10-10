@@ -1,9 +1,22 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { createRef } from 'react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { deferred } from '../testing/submitGuard'
 import type { SubmitGuard } from './submitGuard'
-import { FieldError, Form, FormSubmitButton } from './Form'
+import {
+  FieldError,
+  Form,
+  FormActionButton,
+  FormError,
+  FormSubmitButton,
+} from './Form'
 
 function createGuard(enterResult: boolean): SubmitGuard {
   const run: SubmitGuard['run'] = async <T,>(
@@ -54,6 +67,37 @@ describe('Form primitive guard', () => {
     ).toBe(false)
     expect(onSubmit).not.toHaveBeenCalled()
   })
+
+  it('disables a non-submit action while the form is pending', async () => {
+    const gate = deferred<void>()
+    render(
+      <Form onSubmit={() => gate.promise}>
+        <FormActionButton type="button">上一步</FormActionButton>
+        <FormSubmitButton>送出</FormSubmitButton>
+      </Form>,
+    )
+    const form = screen.getByRole('button', { name: '送出' }).closest('form')!
+    const previous = screen.getByRole('button', { name: '上一步' })
+
+    fireEvent.submit(form)
+    expect(previous).toBeDisabled()
+    await act(async () => gate.resolve())
+    expect(previous).toBeEnabled()
+  })
+
+  it('defaults non-submit actions to type button', () => {
+    const onSubmit = vi.fn()
+    render(
+      <Form onSubmit={onSubmit}>
+        <FormActionButton>上一步</FormActionButton>
+      </Form>,
+    )
+
+    const button = screen.getByRole('button', { name: '上一步' })
+    expect(button).toHaveAttribute('type', 'button')
+    fireEvent.click(button)
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
 })
 
 describe('shared form errors', () => {
@@ -67,6 +111,40 @@ describe('shared form errors', () => {
 
     expect(screen.getByText('表單錯誤')).toHaveClass('shared-form-error')
     expect(screen.getByText('欄位錯誤')).toHaveClass('shared-field-error')
+  })
+
+  it('supports refs, tabIndex, and repeated error focus', async () => {
+    const fieldRef = createRef<HTMLParagraphElement>()
+    const formRef = createRef<HTMLParagraphElement>()
+    const { rerender } = render(
+      <>
+        <FieldError ref={fieldRef} id="field-error" tabIndex={-1}>
+          欄位錯誤
+        </FieldError>
+        <FormError focusRequest={1} ref={formRef} tabIndex={-1}>
+          表單錯誤
+        </FormError>
+      </>,
+    )
+
+    expect(fieldRef.current).toHaveAttribute('tabindex', '-1')
+    expect(formRef.current).toHaveAttribute('tabindex', '-1')
+    await waitFor(() => expect(formRef.current).toHaveFocus())
+    const focus = vi.fn()
+    formRef.current?.addEventListener('focus', focus)
+
+    rerender(
+      <>
+        <FieldError ref={fieldRef} id="field-error" tabIndex={-1}>
+          欄位錯誤
+        </FieldError>
+        <FormError focusRequest={2} ref={formRef} tabIndex={-1}>
+          表單錯誤
+        </FormError>
+      </>,
+    )
+    await waitFor(() => expect(focus).toHaveBeenCalledOnce())
+    expect(formRef.current).toHaveFocus()
   })
 })
 

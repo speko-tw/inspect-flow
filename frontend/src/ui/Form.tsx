@@ -1,5 +1,6 @@
 import {
   createContext,
+  useEffect,
   useContext,
   useRef,
   useState,
@@ -7,6 +8,7 @@ import {
   type FormHTMLAttributes,
   type ReactNode,
   type ButtonHTMLAttributes,
+  type Ref,
 } from 'react'
 
 import { blockImeEnter } from './submitGuard'
@@ -24,6 +26,8 @@ export type FormProps = Omit<
 > & {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<unknown>
   error?: ReactNode
+  errorFocusRequest?: number
+  errorTabIndex?: number
   guard?: SubmitGuard
 }
 
@@ -31,6 +35,8 @@ export type FormProps = Omit<
 export function Form({
   children,
   error,
+  errorFocusRequest,
+  errorTabIndex,
   onKeyDown,
   onSubmit,
   guard,
@@ -84,7 +90,9 @@ export function Form({
         onSubmit={handleSubmit}
       >
         {error || unexpectedError ? (
-          <FormError>{error || unexpectedError}</FormError>
+          <FormError focusRequest={errorFocusRequest} tabIndex={errorTabIndex}>
+            {error || unexpectedError}
+          </FormError>
         ) : null}
         {children}
       </form>
@@ -92,12 +100,15 @@ export function Form({
   )
 }
 
-/** A submit button disabled automatically while its shared form is pending. */
+/** A submit button disabled while its shared form is pending. */
 export function FormSubmitButton({
   children,
+  pendingContent,
   disabled = false,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  pendingContent?: ReactNode
+}) {
   const context = useContext(FormContext)
   return (
     <button
@@ -105,15 +116,74 @@ export function FormSubmitButton({
       disabled={disabled || Boolean(context?.pending)}
       type="submit"
     >
+      {context?.pending && pendingContent ? pendingContent : children}
+    </button>
+  )
+}
+
+/** A non-submit action disabled while its shared form is pending. */
+export function FormActionButton({
+  children,
+  disabled = false,
+  type = 'button',
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+  const context = useContext(FormContext)
+  return (
+    <button
+      {...props}
+      disabled={disabled || Boolean(context?.pending)}
+      type={type}
+    >
       {children}
     </button>
   )
 }
 
-export function FormError({ children }: { children: ReactNode }) {
+type ErrorProps = {
+  children: ReactNode
+  id?: string
+  tabIndex?: number
+  focusRequest?: number
+  ref?: Ref<HTMLParagraphElement>
+}
+
+function useRequestedFocus(
+  elementRef: { current: HTMLParagraphElement | null },
+  focusRequest: number | undefined,
+  focusTarget?: { readonly current: HTMLElement | null },
+) {
+  useEffect(() => {
+    if (focusRequest === undefined) return
+    const target = focusTarget?.current ?? elementRef.current
+    if (!target) return
+    if (document.activeElement === target) target.blur()
+    target.focus()
+  }, [elementRef, focusRequest, focusTarget])
+}
+
+export function FormError({
+  children,
+  id,
+  tabIndex,
+  focusRequest,
+  ref: forwardedRef,
+}: ErrorProps) {
+  const localRef = useRef<HTMLParagraphElement>(null)
+  useRequestedFocus(localRef, focusRequest)
   if (!children) return null
   return (
-    <p className="shared-form-error" role="alert">
+    <p
+      className="shared-form-error"
+      id={id}
+      ref={(node) => {
+        localRef.current = node
+        if (typeof forwardedRef === 'function') forwardedRef(node)
+        else if (forwardedRef) forwardedRef.current = node
+      }}
+      role="alert"
+      tabIndex={tabIndex}
+    >
       {children}
     </p>
   )
@@ -122,13 +192,33 @@ export function FormError({ children }: { children: ReactNode }) {
 export function FieldError({
   children,
   id,
+  tabIndex,
+  focusRequest,
+  ref: forwardedRef,
+  focusTarget,
 }: {
   children: ReactNode
   id?: string
+  tabIndex?: number
+  focusRequest?: number
+  ref?: Ref<HTMLParagraphElement>
+  focusTarget?: { readonly current: HTMLElement | null }
 }) {
+  const localRef = useRef<HTMLParagraphElement>(null)
+  useRequestedFocus(localRef, focusRequest, focusTarget)
   if (!children) return null
   return (
-    <p className="shared-field-error" id={id} role="alert">
+    <p
+      className="shared-field-error"
+      id={id}
+      ref={(node) => {
+        localRef.current = node
+        if (typeof forwardedRef === 'function') forwardedRef(node)
+        else if (forwardedRef) forwardedRef.current = node
+      }}
+      role="alert"
+      tabIndex={tabIndex}
+    >
       {children}
     </p>
   )
