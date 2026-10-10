@@ -73,6 +73,7 @@ export default function ProjectsPage() {
   const searchGuard = useSubmitGuard()
   const saveGuard = useSubmitGuard()
   const [editing, setEditing] = useState<Project | null>(null)
+  const [editFocusRequest, setEditFocusRequest] = useState(0)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [transition, setTransition] = useState<Transition | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
@@ -84,6 +85,7 @@ export default function ProjectsPage() {
   const requestId = useRef(0)
   const transitionRef = useRef<HTMLDivElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
   const noticeRef = useRef<HTMLParagraphElement>(null)
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
   const hasUnsavedChanges = Object.keys(EMPTY_FORM).some(
@@ -101,12 +103,19 @@ export default function ProjectsPage() {
     const heading = editHeadingRef.current
     heading?.scrollIntoView?.({ block: 'start' })
     heading?.focus()
-  }, [editing])
+  }, [editing, editFocusRequest])
 
   useEffect(() => {
     if (!notice) return
     noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [notice])
+
+  useEffect(() => {
+    if (!error) return
+    const alert = errorRef.current
+    alert?.scrollIntoView?.({ block: 'nearest' })
+    alert?.focus()
+  }, [error])
 
   useEffect(() => {
     let active = true
@@ -192,6 +201,7 @@ export default function ProjectsPage() {
     setTransition(null)
     if (next.kind === 'edit') {
       setEditing(next.project)
+      setEditFocusRequest((request) => request + 1)
       setForm(toForm(next.project))
       setNotice('')
       setError('')
@@ -278,7 +288,6 @@ export default function ProjectsPage() {
   return (
     <section aria-labelledby="projects-heading">
       <h1 id="projects-heading">專案</h1>
-      {error && <p role="alert">{error}</p>}
       {notice && (
         <p className="notice-success" ref={noticeRef} role="status">
           {notice}
@@ -528,6 +537,11 @@ export default function ProjectsPage() {
         <button className="btn-primary" disabled={saving} type="submit">
           {editing ? '儲存專案' : '新增專案'}
         </button>
+        {error && (
+          <p ref={errorRef} role="alert" tabIndex={-1}>
+            {error}
+          </p>
+        )}
       </form>
     </section>
   )
