@@ -1,6 +1,7 @@
 """Template library writes and complete item replacement (TPL T3)."""
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
@@ -20,60 +21,138 @@ from app.models import (
 from app.services.operator import get_current_operator
 
 
+@dataclass(frozen=True)
+class TemplateFieldError:
+    path: str
+    code: str
+
+
 class InvalidTemplateError(ValueError):
     """The supplied nested structure violates template rules."""
 
+    def __init__(self, fields: Iterable[TemplateFieldError]) -> None:
+        self.fields = tuple(fields)
+        super().__init__("The template structure is invalid.")
 
-def validate_template_structure(data: dict) -> None:
+
+def _join_path(prefix: str, suffix: str) -> str:
+    return f"{prefix}{suffix}"
+
+
+def _template_violations(
+    data: dict,
+    path_prefix: str,
+    *,
+    client_paths: dict[UUID, list[str]],
+) -> list[TemplateFieldError]:
+    violations: list[TemplateFieldError] = []
+    sequence_paths: dict[int, list[str]] = {}
+    for point_index, point in enumerate(data["inspection_points"]):
+        point_path = _join_path(
+            path_prefix, f"/inspection_points/{point_index}"
+        )
+        sequence_paths.setdefault(point["sequence"], []).append(
+            f"{point_path}/sequence"
+        )
+        requirements = point["evidence_requirements"]
+        if len(requirements) != 1:
+            violations.append(
+                TemplateFieldError(
+                    f"{point_path}/evidence_requirements",
+                    "template.photo_requirement_count",
+                )
+            )
+        numeric = point["numeric_standard"]
+        fields = point["measurement_fields"]
+        bound_id = (
+            numeric["measurement_field_client_id"]
+            if numeric is not None
+            else None
+        )
+        bound_fields = [
+            field for field in fields if field["client_id"] == bound_id
+        ]
+        if numeric is not None and (
+            len(bound_fields) != 1 or bound_fields[0]["field_type"] != "number"
+        ):
+            violations.append(
+                TemplateFieldError(
+                    f"{point_path}/numeric_standard/"
+                    "measurement_field_client_id",
+                    "template.numeric_field_unbound",
+                )
+            )
+        for field_index, field in enumerate(fields):
+            field_path = f"{point_path}/measurement_fields/{field_index}"
+            client_paths.setdefault(field["client_id"], []).append(
+                f"{field_path}/client_id"
+            )
+            if field["client_id"] == bound_id and numeric is not None:
+                if field["unit"] is not None:
+                    violations.append(
+                        TemplateFieldError(
+                            f"{field_path}/unit",
+                            "template.bound_field_unit_forbidden",
+                        )
+                    )
+            elif field["field_type"] == "number" and not field["unit"]:
+                violations.append(
+                    TemplateFieldError(
+                        f"{field_path}/unit", "template.numeric_unit_required"
+                    )
+                )
+            elif field["field_type"] == "text" and field["unit"] is not None:
+                violations.append(
+                    TemplateFieldError(
+                        f"{field_path}/unit", "template.text_unit_forbidden"
+                    )
+                )
+    for paths in sequence_paths.values():
+        if len(paths) > 1:
+            violations.extend(
+                TemplateFieldError(path, "template.sequence_duplicate")
+                for path in paths
+            )
+    return violations
+
+
+def validate_template_structure(data: dict, *, path_prefix: str = "") -> None:
     """Reject duplicate point positions and request-local field keys.
 
     Every point carries exactly one photo requirement (#464); the
     required count is ``min_count``, not the number of rows.
     """
-    sequences: set[int] = set()
-    client_ids: set[UUID] = set()
-    for point in data["inspection_points"]:
-        sequence = point["sequence"]
-        if sequence in sequences:
-            raise InvalidTemplateError("inspection point sequence repeats")
-        sequences.add(sequence)
-        if len(point["evidence_requirements"]) != 1:
-            raise InvalidTemplateError(
-                "each point needs exactly one photo requirement"
+    client_paths: dict[UUID, list[str]] = {}
+    violations = _template_violations(
+        data, path_prefix, client_paths=client_paths
+    )
+    for paths in client_paths.values():
+        if len(paths) > 1:
+            violations.extend(
+                TemplateFieldError(path, "template.client_id_duplicate")
+                for path in paths
             )
-        numeric = point["numeric_standard"]
-        fields = point["measurement_fields"]
-        for field in fields:
-            client_id = field["client_id"]
-            if client_id in client_ids:
-                raise InvalidTemplateError("measurement client_id repeats")
-            client_ids.add(client_id)
-        if numeric is None:
-            continue
-        bound = [
-            field
-            for field in fields
-            if field["client_id"] == numeric["measurement_field_client_id"]
-        ]
-        if len(bound) != 1 or bound[0]["field_type"] != "number":
-            raise InvalidTemplateError(
-                "numeric standard needs one numeric field"
-            )
+    if violations:
+        raise InvalidTemplateError(violations)
 
 
 def validate_system_structures(items: Iterable[dict]) -> None:
     """Check every item before a system-wide replacement mutates rows."""
-    seen_client_ids: set[UUID] = set()
-    for item in items:
-        validate_template_structure(item)
-        for point in item["inspection_points"]:
-            for field in point["measurement_fields"]:
-                client_id = field["client_id"]
-                if client_id in seen_client_ids:
-                    raise InvalidTemplateError(
-                        "measurement client_id repeats across items"
-                    )
-                seen_client_ids.add(client_id)
+    violations: list[TemplateFieldError] = []
+    client_paths: dict[UUID, list[str]] = {}
+    for item_index, item in enumerate(items):
+        prefix = f"/items/{item_index}"
+        violations.extend(
+            _template_violations(item, prefix, client_paths=client_paths)
+        )
+    for paths in client_paths.values():
+        if len(paths) > 1:
+            violations.extend(
+                TemplateFieldError(path, "template.client_id_duplicate")
+                for path in paths
+            )
+    if violations:
+        raise InvalidTemplateError(violations)
 
 
 def park_template_names(db: Session, items: Iterable[TemplateItem]) -> None:
@@ -168,14 +247,22 @@ def _add_points(
             if field["client_id"] == bound_client_id:
                 if unit is not None:
                     raise InvalidTemplateError(
-                        "bound field unit must be omitted"
+                        [
+                            TemplateFieldError(
+                                "", "template.bound_field_unit_forbidden"
+                            )
+                        ]
                     )
                 assert numeric is not None
                 unit = numeric["unit"]
             elif field["field_type"] == "number" and not unit:
-                raise InvalidTemplateError("numeric fields require a unit")
+                raise InvalidTemplateError(
+                    [TemplateFieldError("", "template.numeric_unit_required")]
+                )
             elif field["field_type"] == "text" and unit is not None:
-                raise InvalidTemplateError("text fields cannot have a unit")
+                raise InvalidTemplateError(
+                    [TemplateFieldError("", "template.text_unit_forbidden")]
+                )
             db.add(
                 TemplateMeasurementField(
                     id=field_ids[field["client_id"]],

@@ -887,21 +887,36 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
         "measurement_fields"
     ][0]["id"]
 
-    def reject(change):
+    def reject(change, expected_fields=None):
         body = _template(system_id, "Rejected")
         change(body)
         response = manager.post("/api/v1/templates", json=body)
         assert response.status_code == 422, response.text
-        assert response.json() == {
-            "error": {"code": "request.validation_failed"}
-        }
+        error = response.json()["error"]
+        assert error["code"] == "request.validation_failed"
+        assert error["fields"]
+        if expected_fields is not None:
+            assert error["fields"] == expected_fields
+        assert all(set(field) == {"path", "code"} for field in error["fields"])
         db_session.expire_all()
         assert (
             db_session.scalar(select(func.count()).select_from(TemplateItem))
             == 1
         )
 
-    reject(lambda body: body["inspection_points"][1].update(sequence=1))
+    reject(
+        lambda body: body["inspection_points"][1].update(sequence=1),
+        [
+            {
+                "path": "/inspection_points/0/sequence",
+                "code": "template.sequence_duplicate",
+            },
+            {
+                "path": "/inspection_points/1/sequence",
+                "code": "template.sequence_duplicate",
+            },
+        ],
+    )
     reject(
         lambda body: body["inspection_points"][1].update(
             measurement_fields=[
@@ -913,7 +928,17 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
                     "field_type": "text",
                 }
             ]
-        )
+        ),
+        [
+            {
+                "path": "/inspection_points/0/measurement_fields/0/client_id",
+                "code": "template.client_id_duplicate",
+            },
+            {
+                "path": "/inspection_points/1/measurement_fields/0/client_id",
+                "code": "template.client_id_duplicate",
+            },
+        ],
     )
     reject(
         lambda body: body["inspection_points"][0]["measurement_fields"][
@@ -922,7 +947,24 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
             client_id=body["inspection_points"][0]["measurement_fields"][0][
                 "client_id"
             ]
-        )
+        ),
+        [
+            {
+                "path": (
+                    "/inspection_points/0/numeric_standard/"
+                    "measurement_field_client_id"
+                ),
+                "code": "template.numeric_field_unbound",
+            },
+            {
+                "path": "/inspection_points/0/measurement_fields/0/client_id",
+                "code": "template.client_id_duplicate",
+            },
+            {
+                "path": "/inspection_points/0/measurement_fields/1/client_id",
+                "code": "template.client_id_duplicate",
+            },
+        ],
     )
     reject(
         lambda body: body["inspection_points"][0]["measurement_fields"][
@@ -930,9 +972,44 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
         ].update(id=stored_field_id)
     )
     reject(
+        lambda body: body["inspection_points"][0]["numeric_standard"].update(
+            measurement_field_client_id=str(uuid4())
+        ),
+        [
+            {
+                "path": (
+                    "/inspection_points/0/numeric_standard/"
+                    "measurement_field_client_id"
+                ),
+                "code": "template.numeric_field_unbound",
+            },
+            {
+                "path": "/inspection_points/0/measurement_fields/0/unit",
+                "code": "template.numeric_unit_required",
+            },
+        ],
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][
+            0
+        ].update(unit="mm"),
+        [
+            {
+                "path": "/inspection_points/0/measurement_fields/0/unit",
+                "code": "template.bound_field_unit_forbidden",
+            }
+        ],
+    )
+    reject(
         lambda body: body["inspection_points"][0]["measurement_fields"][2].pop(
             "unit"
-        )
+        ),
+        [
+            {
+                "path": "/inspection_points/0/measurement_fields/2/unit",
+                "code": "template.numeric_unit_required",
+            }
+        ],
     )
     reject(
         lambda body: body["inspection_points"][0]["measurement_fields"][
@@ -942,7 +1019,13 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
     reject(
         lambda body: body["inspection_points"][0]["measurement_fields"][
             1
-        ].update(unit="cm")
+        ].update(unit="cm"),
+        [
+            {
+                "path": "/inspection_points/0/measurement_fields/1/unit",
+                "code": "template.text_unit_forbidden",
+            }
+        ],
     )
     reject(
         lambda body: body["inspection_points"][0]["numeric_standard"].update(
@@ -1023,7 +1106,21 @@ def test_system_nested_read_swap_and_clear(clients, db_session):
     ] = duplicate["inspection_points"][0]["measurement_fields"][0]["client_id"]
     invalid = manager.put(path, json={"items": [a, duplicate]})
     assert invalid.status_code == 422
-    assert invalid.json() == {"error": {"code": "request.validation_failed"}}
+    assert invalid.json()["error"]["code"] == "request.validation_failed"
+    assert invalid.json()["error"]["fields"] == [
+        {
+            "path": (
+                "/items/0/inspection_points/0/measurement_fields/0/client_id"
+            ),
+            "code": "template.client_id_duplicate",
+        },
+        {
+            "path": (
+                "/items/1/inspection_points/0/measurement_fields/0/client_id"
+            ),
+            "code": "template.client_id_duplicate",
+        },
+    ]
     assert manager.get(path).json()["items"] == swapped.json()["items"]
 
     cleared = manager.put(path, json={"items": []})
@@ -1090,7 +1187,15 @@ def test_known_nested_constraint_is_422_and_unknown_error_stays_500(
     assert response.json() == {"error": {"code": "server.internal_error"}}
 
 
-_VALIDATION_ERROR = {"error": {"code": "request.validation_failed"}}
+def _assert_photo_requirement_field_error(
+    response, path="/inspection_points/0/evidence_requirements"
+) -> None:
+    error = response.json()["error"]
+    assert error["code"] == "request.validation_failed"
+    assert {
+        "path": path,
+        "code": "field.too_long",
+    } in error["fields"]
 
 
 def _with_two_photo_rows(body: dict) -> dict:
@@ -1138,14 +1243,14 @@ def test_template_writes_reject_two_photo_requirements_per_point(
         json=_with_two_photo_rows(_template(system_id, "Two rows POST")),
     )
     assert posted.status_code == 422, posted.text
-    assert posted.json() == _VALIDATION_ERROR
+    _assert_photo_requirement_field_error(posted)
 
     replaced = manager.put(
         f"/api/v1/templates/{template_id}",
         json=_with_two_photo_rows(_template(system_id, "One photo row")),
     )
     assert replaced.status_code == 422, replaced.text
-    assert replaced.json() == _VALIDATION_ERROR
+    _assert_photo_requirement_field_error(replaced)
 
     system_put = manager.put(
         f"/api/v1/template-systems/{system_id}/templates",
@@ -1161,7 +1266,9 @@ def test_template_writes_reject_two_photo_requirements_per_point(
         },
     )
     assert system_put.status_code == 422, system_put.text
-    assert system_put.json() == _VALIDATION_ERROR
+    _assert_photo_requirement_field_error(
+        system_put, "/items/0/inspection_points/0/evidence_requirements"
+    )
 
     db_session.expire_all()
     after = db_session.scalar(

@@ -16,6 +16,13 @@ from tests.api.test_template_library import (  # noqa: F401
 _VALIDATION = {"error": {"code": "request.validation_failed"}}
 
 
+def _assert_validation(response) -> None:
+    error = response.json()["error"]
+    assert error["code"] == _VALIDATION["error"]["code"]
+    assert error["fields"]
+    assert all(set(field) == {"path", "code"} for field in error["fields"])
+
+
 def _numeric_point() -> dict:
     field_id = str(uuid4())
     return {
@@ -111,14 +118,14 @@ def test_template_body_rejects_oversized_fields(clients, name):  # noqa: F811
 
     response = manager.post("/api/v1/templates", json=body)
     assert response.status_code == 422, response.text
-    assert response.json() == _VALIDATION
+    _assert_validation(response)
 
     system_put = manager.put(
         f"/api/v1/template-systems/{system_id}/templates",
         json={"items": [body]},
     )
     assert system_put.status_code == 422, system_put.text
-    assert system_put.json() == _VALIDATION
+    _assert_validation(system_put)
 
 
 def test_template_body_accepts_fields_at_the_limit(clients):  # noqa: F811
@@ -162,7 +169,7 @@ def test_template_system_put_and_names_reject_oversized_values(
 
     for response in (category, system, rename, many):
         assert response.status_code == 422, response.text
-        assert response.json() == _VALIDATION
+        _assert_validation(response)
 
 
 @pytest.fixture
@@ -242,7 +249,7 @@ def test_planning_bodies_reject_oversized_fields(planning):
     }
     for name, response in requests.items():
         assert response.status_code == 422, (name, response.text)
-        assert response.json() == _VALIDATION, name
+        _assert_validation(response)
 
 
 def test_domain_limit_errors_keep_their_codes_below_the_transport_cap(

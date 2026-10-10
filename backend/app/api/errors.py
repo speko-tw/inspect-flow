@@ -9,8 +9,11 @@ an equivalent table.
 
 import logging
 import traceback
+import types
 import uuid
+from collections.abc import Mapping
 from enum import StrEnum
+from typing import Annotated, Any, Union, get_args, get_origin
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -250,6 +253,158 @@ class ErrorCode(DescribedStrEnum):
     )
 
 
+class FieldErrorCode(DescribedStrEnum):
+    """Stable codes for request-body field errors (API-R12)."""
+
+    REQUIRED = ("field.required", "A value is required.")
+    INVALID = ("field.invalid", "The value is invalid.")
+    TOO_LONG = ("field.too_long", "The value is too long.")
+    TOO_SHORT = ("field.too_short", "The value is too short.")
+    OUT_OF_RANGE = ("field.out_of_range", "The value is out of range.")
+    DUPLICATE = ("field.duplicate", "The value is duplicated.")
+
+
+def _field_code(error_type: str) -> FieldErrorCode:
+    if error_type == "missing":
+        return FieldErrorCode.REQUIRED
+    if error_type in {"string_too_long", "list_too_long", "too_long"}:
+        return FieldErrorCode.TOO_LONG
+    if error_type in {"string_too_short", "list_too_short", "too_short"}:
+        return FieldErrorCode.TOO_SHORT
+    if error_type in {
+        "greater_than",
+        "greater_than_equal",
+        "less_than",
+        "less_than_equal",
+    }:
+        return FieldErrorCode.OUT_OF_RANGE
+    return FieldErrorCode.INVALID
+
+
+def _non_null_types(annotation: Any) -> tuple[Any, ...]:
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        annotation = get_args(annotation)[0]
+        origin = get_origin(annotation)
+    if origin in (Union, types.UnionType):
+        return tuple(
+            arg for arg in get_args(annotation) if arg is not type(None)
+        )
+    return (annotation,)
+
+
+def _json_pointer(parts: list[str | int]) -> str:
+    return "".join(
+        "/" + str(part).replace("~", "~0").replace("/", "~1") for part in parts
+    )
+
+
+def _body_field_error(
+    body_model: Any, location: tuple[Any, ...], error_type: str
+) -> dict[str, str] | None:
+    """Resolve a Pydantic location using only declared model fields.
+
+    Dynamic mapping keys, extra keys and ambiguous union branches stop at
+    their containing field and receive the generic invalid code.
+    """
+    if not location or location[0] != "body":
+        return None
+    parts: list[str | int] = []
+    annotation = body_model
+    remaining = list(location[1:])
+    generic = False
+    while remaining:
+        choices = _non_null_types(annotation)
+        if len(choices) > 1:
+            generic = True
+            break
+        if not choices:
+            generic = True
+            break
+        annotation = choices[0]
+        origin = get_origin(annotation)
+        if isinstance(annotation, type) and hasattr(
+            annotation, "model_fields"
+        ):
+            part = remaining.pop(0)
+            if not isinstance(part, str):
+                generic = True
+                break
+            model_field = next(
+                (
+                    field
+                    for name, field in annotation.model_fields.items()
+                    if part in (name, field.alias, field.validation_alias)
+                ),
+                None,
+            )
+            if model_field is None:
+                generic = True
+                break
+            parts.append(part)
+            annotation = model_field.annotation
+            continue
+        if origin in (list, tuple):
+            part = remaining.pop(0)
+            if isinstance(part, int) or (
+                isinstance(part, str) and part.isdecimal()
+            ):
+                parts.append(int(part))
+                args = get_args(annotation)
+                annotation = args[0] if args else Any
+                continue
+            generic = True
+            break
+        if origin in (dict, Mapping):
+            generic = True
+            break
+        generic = True
+        break
+    if remaining:
+        generic = True
+    code = FieldErrorCode.INVALID if generic else _field_code(error_type)
+    return {"path": _json_pointer(parts), "code": code.value}
+
+
+def _request_body_model(request: Request) -> Any | None:
+    route = request.scope.get("route")
+    dependant = getattr(route, "dependant", None)
+    body_params = getattr(dependant, "body_params", ())
+    if len(body_params) != 1:
+        return None
+    body_param = body_params[0]
+    return getattr(body_param, "type_", None) or getattr(
+        body_param.field_info, "annotation", None
+    )
+
+
+def _request_field_errors(
+    request: Request, exc: RequestValidationError
+) -> list[dict[str, str]] | None:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0]
+    if not (
+        content_type == "application/json" or content_type.endswith("+json")
+    ):
+        return None
+    model = _request_body_model(request)
+    if model is None:
+        return None
+    fields: list[dict[str, str]] = []
+    for error in exc.errors():
+        if error.get("type") == "json_invalid":
+            return None
+        item = _body_field_error(
+            model,
+            tuple(error.get("loc", ())),
+            str(error.get("type", "")),
+        )
+        if item is not None:
+            fields.append(item)
+            if len(fields) == 100:
+                break
+    return fields or None
+
+
 def build_error_code_descriptions(
     enum_cls: type[DescribedStrEnum],
 ) -> dict[str, str]:
@@ -260,6 +415,9 @@ def build_error_code_descriptions(
     table exists anywhere in the repository.
     """
     return {member.value: member.description for member in enum_cls}
+
+
+FIELD_ERROR_CODE_DESCRIPTIONS = build_error_code_descriptions(FieldErrorCode)
 
 
 ERROR_CODE_DESCRIPTIONS: dict[str, str] = build_error_code_descriptions(
@@ -282,12 +440,14 @@ class APIError(Exception):
         *,
         headers: dict[str, str] | None = None,
         details: list[str] | None = None,
+        fields: list[dict[str, str]] | None = None,
     ) -> None:
         self.code = code
         self.status_code = status_code
         self.message = message
         self.headers = headers
         self.details = details
+        self.fields = fields
         super().__init__(message or code.value)
 
 
@@ -323,6 +483,11 @@ def register_error_handlers(app: FastAPI) -> None:
         error: dict[str, object] = {"code": exc.code.value}
         if exc.details is not None:
             error["details"] = exc.details
+        if exc.status_code == 422 and exc.fields:
+            error["fields"] = [
+                {"path": field["path"], "code": field["code"]}
+                for field in exc.fields[:100]
+            ]
         return JSONResponse(
             status_code=exc.status_code,
             content={"error": error},
@@ -333,11 +498,15 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        error: dict[str, object] = {
+            "code": ErrorCode.REQUEST_VALIDATION_FAILED.value
+        }
+        fields = _request_field_errors(request, exc)
+        if fields is not None:
+            error["fields"] = fields
         return JSONResponse(
             status_code=422,
-            content={
-                "error": {"code": ErrorCode.REQUEST_VALIDATION_FAILED.value}
-            },
+            content={"error": error},
         )
 
     @app.exception_handler(StarletteHTTPException)

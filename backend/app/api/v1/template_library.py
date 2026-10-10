@@ -319,7 +319,14 @@ def _invalid_structure_constraint(exc: IntegrityError) -> bool:
 
 def template_library_error(exc: Exception) -> APIError | None:
     if isinstance(exc, InvalidTemplateError):
-        return APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        return APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            fields=[
+                {"path": field.path, "code": field.code}
+                for field in exc.fields
+            ],
+        )
     if isinstance(exc, IntegrityError):
         if _name_conflict(exc):
             return APIError(ErrorCode.TEMPLATE_NAME_CONFLICT, 409)
