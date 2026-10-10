@@ -43,10 +43,10 @@ InspectFlow 是**工程查核系統**，涵蓋公共與私人工程的施工查�
 |---|---|
 | 系統管理者（Admin，人員身上的開關，不是角色） | 管理系統設定、人員、公司、角色定義；可直接查看、修改所有專案（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-24](03-decisions-and-stack.md#kd-24)）。 |
 | 專案角色（可自訂，掛在專案成員上） | 依指派的角色決定在該專案能做什麼，例如建立查核計畫、指派工程師、批次產生任務、監看完成度、審閱照片並產生報告，或唯讀存取；一個人在同一專案可同時擁有多個角色，權限加總（依據：負責人決定（#63，2026-09-26）；取代架構基準 §17 的範例矩陣，見 [KD-26](03-decisions-and-stack.md#kd-26)、[KD-27](03-decisions-and-stack.md#kd-27)）。 |
-| 範本管理員（預設全公司角色） | 系統預先建立的全公司角色之一，由 Admin 修改角色內容；預設具有「管理範本庫」權限。此權限包含跨專案瀏覽查核項目並存成範本；Admin 擁有全部權限。範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#387](https://github.com/speko-tw/inspect-flow/issues/387)，2026-10-04），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-60](03-decisions-and-stack.md#kd-60)、[OQ-08](05-open-questions.md#oq-08)）。 |
+| 範本模組管理權限（模組權限「管理範本庫」） | 範本模組的模組權限，逐人勾選，由 Admin 或被委派管理範本模組的人授予；具此權限的人可維護範本庫，包含跨專案瀏覽查核項目並存成範本，但不因此取得任何專案內的查核權限；Admin 擁有全部權限。範本建議加入與審核流程留待之後版本（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09），沿用 #313 的範本管理行為；見 [KD-49](03-decisions-and-stack.md#kd-49)、[KD-69](03-decisions-and-stack.md#kd-69)、[OQ-08](05-open-questions.md#oq-08)）。 |
 | 現場工程師（Inspector / Field Engineer） | 查看今日指派任務，依要求拍照、填寫必要說明，並將任務標記完成；屬於現場查核這類專案角色的典型職責（依據：架構基準 §6.1）。 |
 
-系統採全公司角色與專案角色並行的權限模型。全公司角色直接指派給人，專案角色指派給某人在某專案；Admin 擁有全部權限。權限依查核作業、範本系統與報告系統分組，且每個權限標明全公司或專案範圍；完整權限表與預設角色見 [OQ-08](05-open-questions.md#oq-08)（已裁定）、[KD-60](03-decisions-and-stack.md#kd-60)。v0.3.0 先允許 Admin 管理範本，全公司角色與權限管理改造排入 0.5.x，見 [KD-67](03-decisions-and-stack.md#kd-67)；此模型取代架構基準 §17 的固定角色範例及舊全系統角色安排（[KD-24](03-decisions-and-stack.md#kd-24)～[KD-29](03-decisions-and-stack.md#kd-29)、[KD-49](03-decisions-and-stack.md#kd-49)）。
+系統採兩層權限模型：第 1 層是人員模組的逐人模組權限（專案、查核、範本等模組各自的「可使用」與管理類權限，範圍是全公司），第 2 層是專案角色（只存在專案內，指派給某人在某專案，是專案內動作權限的套餐）；系統不設全公司角色。專案外的事只看模組權限，專案內的事兩層都要通過，Admin 兩層都放行；模組權限不會自動給專案內的查核權限，人員必須先是專案成員並被指派專案角色。模組權限可由 Admin 或被委派管理該模組的人授予。模組邊界單向：專案模組做權限判斷時只向人員模組問「他是誰、帳號有效嗎、是不是系統管理者、有沒有模組權限 X」。完整權限表見 [OQ-08](05-open-questions.md#oq-08)（已裁定）、[KD-69](03-decisions-and-stack.md#kd-69)，圖示與說明見 [07-permission-model.md](07-permission-model.md)。
 
 ### 人員、公司與權限的實體關係
 
@@ -57,12 +57,14 @@ flowchart LR
   Project["Project（專案）"] -->|一專案多筆成員| ProjectMember
   Role["Role（專案角色）"] -.->|一筆成員可掛多個角色，權限加總| ProjectMember
   User -.->|is_admin 開關，不經 Role| Admin["系統管理者權限"]
+  User -.->|逐人勾選，範圍是全公司| ModulePermission["模組權限（專案、查核、範本等模組）"]
 ```
 
 - `User` 不一定屬於 `Company`，最多連結一家：`Company` 與 `User` 是一對多、且為可選；本系統帳號的公司可隨時修改，外部帳號以外部來源為準、不能在系統內修改。沒有公司的人也能加入專案、被指派角色，專案角色跟著人、不跟著公司。見 [KD-23](03-decisions-and-stack.md#kd-23)、[KD-46](03-decisions-and-stack.md#kd-46)（依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。
 - `ProjectMember` 是 `User`、`Project`、`Role` 三者的關聯實體：同一人在同一 `Project` 下可掛多個 `Role`，權限加總，見 [KD-27](03-decisions-and-stack.md#kd-27)。
 - `Role` 全系統共用一份清單，可自訂、可刪除，修改時立即影響所有持有者，見 [KD-26](03-decisions-and-stack.md#kd-26)。
 - 系統管理者（`is_admin`）是 `User` 身上的開關，不透過 `Role` 授予，見 [KD-24](03-decisions-and-stack.md#kd-24)。內建 `admin` 代表系統本身，不屬於任何公司、永遠是系統管理者，見 [KD-44](03-decisions-and-stack.md#kd-44)。
+- 模組權限（全公司範圍）逐人勾選，不經 `Role`，且不會自動給專案內的動作權限；專案內動作由 `ProjectMember` 上的 `Role` 決定。Admin 可委派他人管理某個模組的權限，見 [KD-69](03-decisions-and-stack.md#kd-69)。
 
 除了系統內部角色之外，正式報告（DOCX／PDF）另有一群**文件收受方**：業主、監造單位、品管、政府標案審查方，以及文件歸檔／管理系統，他們不一定是系統的登入使用者，而是報告的閱讀與簽核對象 （依據：架構基準 §20.1、§20.12–20.13）。設計現場與後台流程時，需要區分「誰是系統使用者」與「誰只是最終文件的收受者」。
 

@@ -618,6 +618,34 @@ def test_member_operations_require_project_permission_and_audit(
     assert all_events[-1].event_type == "project_member.removed"
 
 
+def test_member_nested_malformed_user_ids_return_validation_error(project_api):
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    paths = (
+        (
+            "PUT",
+            f"/api/v1/projects/{project.id}/members/not-a-uuid/roles",
+            {"role_ids": []},
+        ),
+        (
+            "DELETE",
+            f"/api/v1/projects/{project.id}/members/not-a-uuid",
+            None,
+        ),
+    )
+    for method, path, body in paths:
+        for client in (
+            project_api["admin_client"],
+            project_api["actor_client"],
+            project_api["plain_client"],
+        ):
+            response = client.request(method, path, json=body)
+            assert response.status_code == 422, response.text
+            assert response.json() == {
+                "error": {"code": "request.validation_failed"}
+            }
+
+
 def test_project_member_permission_does_not_apply_to_other_projects(
     project_api,
 ):
