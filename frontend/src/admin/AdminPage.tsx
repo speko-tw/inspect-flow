@@ -18,6 +18,7 @@ import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
+import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import MyProjectsPage from './projects/MyProjectsPage'
 import ProjectsPage from './projects/ProjectsPage'
 import ProjectItemChangePage from './projectItems/ProjectItemChangePage'
@@ -49,7 +50,12 @@ const NAV_ITEMS = [
 
 export default function AdminPage() {
   const location = useLocation()
-  return <AdminPageContent key={location.key} />
+  const { user } = useCurrentUser()
+  return (
+    <WorkflowSummaryProvider key={user.id}>
+      <AdminPageContent key={location.key} />
+    </WorkflowSummaryProvider>
+  )
 }
 
 function AdminPageContent() {
