@@ -1381,9 +1381,6 @@ a.app-header-tab[aria-current='page'] {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface);
-}
-
-.temporary-password-result {
   max-width: 42rem;
   margin-inline: auto;
 }
@@ -1650,10 +1647,6 @@ a.app-header-tab[aria-current='page'] {
   text-decoration: underline;
 }
 
-.tpl-item-open {
-  display: none;
-}
-
 .project-item-applied-notice {
   display: inline-block;
   margin: 0 var(--space-2) 0 0;
@@ -1730,12 +1723,6 @@ a.app-header-tab[aria-current='page'] {
 .tpl-actions {
   justify-content: flex-start;
   margin: var(--space-3) 0 var(--space-5);
-}
-
-.tpl-error-summary {
-  border-color: var(--error-border);
-  background: var(--error-bg);
-  color: var(--error-text);
 }
 
 .project-workspace-grid {
@@ -1834,6 +1821,9 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-error-summary {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--error-border);
@@ -2010,10 +2000,6 @@ a.app-header-tab[aria-current='page'] {
   .tpl-tree-count {
     white-space: normal;
     text-align: right;
-  }
-
-  .tpl-item-open {
-    display: inline;
   }
 
   .tpl-editor-footer button {
