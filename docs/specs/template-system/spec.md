@@ -23,7 +23,7 @@
 
 - 專案副本在 0.3.x 以外的完整資料模型與欄位，以及修改副本後是否作廢任務、重新查核或更正既有任務的流程：由 P4 `inspection-planning` 定義。0.3.x 最小專案副本資料表仍由本規格定義，以支援套用及記錄來源名稱與套用時間。
 - `Inspection Plan`、`Inspection Task`、任務快照與任務狀態：移至 `inspection-planning`（P4）。
-- 自主檢查／抽查的檢查層級與檢查者欄位：屬 P4 `inspection-planning`（0.4.x；依 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)），不屬本規格範圍。
+- 檢查層級（由專案的本公司角色決定、任務建立時固定）與檢查人員身分快照、代登欄位：不屬本規格範圍；依 [KD-51](../../intents/03-decisions-and-stack.md#kd-51)，欄位由 [#559](https://github.com/speko-tw/inspect-flow/issues/559) 處理。
 - 現場選擇符合／不符合／不適用、填寫實測值、嚴重度、註解與原因，以及自動判定、缺失流程：屬 0.7.x 現場規格；本規格只定義範本的實測欄位結構，不定義現場填值或結果行為（依 [KD-37](../../intents/03-decisions-and-stack.md#kd-37)、[KD-52](../../intents/03-decisions-and-stack.md#kd-52)、[KD-54](../../intents/03-decisions-and-stack.md#kd-54)）。
 - Evidence 上傳與照片檔案儲存：移至 `field-evidence`（P6）；本規格只定義範本中的照片需求。
 - 報告版面與 `Report Template`：移至 `report-delivery`（P8）。查核範本不等於報告範本，報告範本的版本規則不受本規格影響。
@@ -171,6 +171,7 @@
 
 ## 變更紀錄
 
+- 意圖變更跟進（負責人裁定，[#551](https://github.com/speko-tw/inspect-flow/issues/551)）：「不包含」中的檢查層級與檢查者說明改為由專案的本公司角色決定、任務建立時固定、檢查人員取身分快照（KD-51），不再指向 `inspection-planning`；行為與範圍不變 — [#551](https://github.com/speko-tw/inspect-flow/issues/551)
 - TPL-R20～TPL-R22、TPL-AC18～TPL-AC20：依負責人試用回饋補充實測欄位名稱預填與項次卡手風琴行為；細節為規格設計（非負責人裁定）— [#444](https://github.com/speko-tw/inspect-flow/issues/444)。
 - TPL-R23、TPL-AC21～TPL-AC22：依 #429 核可原型補充專案套用與存為範本流程；介面細節為規格設計（非負責人裁定）。
 - TPL-R22／TPL-AC20：依第 3 輪審查明確手風琴展開狀態轉移與輸入期間的穩定性 — [PR #453 第 3 輪審查](https://github.com/speko-tw/inspect-flow/pull/453#pullrequestreview-5411083162)。

@@ -203,6 +203,7 @@ def _planning_world(db_session, make_client):
         "outsider": _client(make_client, tokens["outsider"]),
         "field_user": field_user,
         "field_user_two": field_user_two,
+        "field_reader_user": field_reader,
         "plain_user": plain_member,
         "admin_user": admin,
         "project": project,
@@ -1454,6 +1455,14 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
         updated_by=world["admin_user"].id,
     )
     db_session.add_all([foreign_zone, foreign_item])
+    db_session.add(
+        ProjectMember(
+            project_id=foreign.id,
+            user_id=world["plain_user"].id,
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
+        )
+    )
     db_session.commit()
     for method, path, body in (
         (
@@ -1491,13 +1500,83 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
     )
     assert foreign_task.status_code == 201, foreign_task.text
     plain = world["plain"]
+    outsider = world["outsider"]
+    plan_path = f"/api/v1/inspection-plans/{foreign_plan.json()['id']}"
+    task_path = f"/api/v1/inspection-tasks/{foreign_task.json()['id']}"
     for path in (
-        f"/api/v1/inspection-plans/{foreign_plan.json()['id']}",
-        f"/api/v1/inspection-tasks/{foreign_task.json()['id']}",
+        plan_path,
+        f"{plan_path}/tasks",
+        task_path,
     ):
         denied = plain.get(path)
         assert denied.status_code == 403, denied.text
         assert denied.json() == {"error": {"code": "permission.denied"}}
+        hidden = outsider.get(path)
+        assert hidden.status_code == 404, hidden.text
+        assert hidden.json() == {"error": {"code": "resource.not_found"}}
+
+    member_plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "成員可讀計畫"},
+    )
+    assert member_plan.status_code == 201, member_plan.text
+    member_task = admin.post(
+        f"/api/v1/inspection-plans/{member_plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert member_task.status_code == 201, member_task.text
+    dispatched_member_task = admin.post(
+        f"/api/v1/inspection-tasks/{member_task.json()['id']}:dispatch"
+    )
+    assert dispatched_member_task.status_code == 200
+    member_plan_path = f"/api/v1/inspection-plans/{member_plan.json()['id']}"
+    member_task_path = f"/api/v1/inspection-tasks/{member_task.json()['id']}"
+    assert world["reader"].get(member_plan_path).status_code == 200
+    assert world["reader"].get(f"{member_plan_path}/tasks").status_code == 200
+    for path in (member_plan_path, f"{member_plan_path}/tasks"):
+        assert world["plain"].get(path).status_code == 403
+    assert world["reader"].get(member_task_path).status_code == 403
+    assert world["field"].get(member_task_path).status_code == 200
+
+    assert admin.get(plan_path).status_code == 200
+    assert admin.get(f"{plan_path}/tasks").status_code == 200
+    assert admin.get(task_path).status_code == 200
+    missing_plan = (
+        "/api/v1/inspection-plans/00000000-0000-7000-8000-000000000000"
+    )
+    missing_task = (
+        "/api/v1/inspection-tasks/00000000-0000-7000-8000-000000000000"
+    )
+    for client in (admin, outsider):
+        for path in (missing_plan, f"{missing_plan}/tasks", missing_task):
+            missing = client.get(path)
+            assert missing.status_code == 404, missing.text
+            assert missing.json() == {"error": {"code": "resource.not_found"}}
+
+    # Project-scoped lists authorize against the project before looking up
+    # individual plans/items, so no per-resource existence is exposed.
+    scoped_paths = (
+        f"/api/v1/projects/{foreign.id}/inspection-plans",
+        f"/api/v1/projects/{foreign.id}/inspection-tasks",
+        (
+            f"/api/v1/projects/{foreign.id}/inspection-items/"
+            f"{foreign_item.id}/tasks"
+        ),
+        (
+            f"/api/v1/projects/{foreign.id}/inspection-items/"
+            "00000000-0000-7000-8000-000000000000/tasks"
+        ),
+    )
+    for path in scoped_paths:
+        denied = outsider.get(path)
+        assert denied.status_code == 403, denied.text
+        assert denied.json() == {"error": {"code": "permission.denied"}}
+
+    reader = world["reader"]
+    for path in (plan_path, f"{plan_path}/tasks", task_path):
+        hidden = reader.get(path)
+        assert hidden.status_code == 404, hidden.text
+        assert hidden.json() == {"error": {"code": "resource.not_found"}}
 
     candidates = admin.get(
         f"/api/v1/projects/{project_id}/inspection-task-assignees"
@@ -1510,6 +1589,167 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
     assert str(world["field_user_two"].id) in candidate_ids
     assert str(world["plain_user"].id) not in candidate_ids
     assert str(world["admin_user"].id) not in candidate_ids
+
+
+def test_global_plan_task_writes_hide_nonmember_resources(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    outsider = world["outsider"]
+    project_id = world["project"].id
+    plan_response = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "非成員隱藏測試"},
+    )
+    assert plan_response.status_code == 201, plan_response.text
+    plan_id = plan_response.json()["id"]
+    plan_path = f"/api/v1/inspection-plans/{plan_id}"
+    task_response = admin.post(
+        f"{plan_path}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task_response.status_code == 201, task_response.text
+    task_id = task_response.json()["id"]
+    task_path = f"/api/v1/inspection-tasks/{task_id}"
+    missing_id = "00000000-0000-7000-8000-000000000000"
+    missing_plan = f"/api/v1/inspection-plans/{missing_id}"
+    missing_task = f"/api/v1/inspection-tasks/{missing_id}"
+
+    plan_operations = (
+        ("PATCH", plan_path, {"name": "不應修改"}),
+        (
+            "POST",
+            f"{plan_path}/tasks",
+            {"item_ids": [str(world["item"].id)]},
+        ),
+        ("POST", f"{plan_path}:archive", None),
+        ("POST", f"{plan_path}:unarchive", None),
+    )
+    task_operations = (
+        ("POST", f"{task_path}:dispatch", None),
+        ("POST", f"{task_path}:assign", {"assignee_id": None}),
+        ("POST", f"{task_path}:start", None),
+        ("POST", f"{task_path}:complete", None),
+        ("POST", f"{task_path}:cancel", {"reason": "不應取消"}),
+        ("POST", f"{task_path}:restore", None),
+        ("DELETE", task_path, None),
+        (
+            "PATCH",
+            task_path,
+            {"zone_id": None, "location_text": "不應修改"},
+        ),
+    )
+    for method, path, body in plan_operations + task_operations:
+        response = outsider.request(method, path, json=body)
+        assert response.status_code == 404, (method, path, response.text)
+        assert response.json() == {"error": {"code": "resource.not_found"}}
+
+    missing_operations = (
+        ("PATCH", missing_plan, {"name": "不存在"}),
+        (
+            "POST",
+            f"{missing_plan}/tasks",
+            {"item_ids": [str(world["item"].id)]},
+        ),
+        ("POST", f"{missing_plan}:archive", None),
+        ("POST", f"{missing_plan}:unarchive", None),
+        ("POST", f"{missing_task}:dispatch", None),
+        ("POST", f"{missing_task}:assign", {"assignee_id": None}),
+        ("POST", f"{missing_task}:start", None),
+        ("POST", f"{missing_task}:complete", None),
+        ("POST", f"{missing_task}:cancel", {"reason": "不存在"}),
+        ("POST", f"{missing_task}:restore", None),
+        ("DELETE", missing_task, None),
+        (
+            "PATCH",
+            missing_task,
+            {"zone_id": None, "location_text": "不存在"},
+        ),
+    )
+    for method, path, body in missing_operations:
+        response = outsider.request(method, path, json=body)
+        assert response.status_code == 404, (method, path, response.text)
+        assert response.json() == {"error": {"code": "resource.not_found"}}
+
+    role = Role(
+        name="API archive member",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+        permission_codes=[
+            RolePermission(code="inspection_plan.archive"),
+            RolePermission(code="inspection_plan.unarchive"),
+        ],
+    )
+    db_session.add(role)
+    db_session.flush()
+    manager_user = create_root_user_with_company(
+        db_session, "PLAN-API-MANAGER"
+    )
+    db_session.add(
+        ProjectMember(
+            project_id=project_id,
+            user_id=manager_user.id,
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
+            role_assignments=[ProjectMemberRole(role_id=role.id)],
+        )
+    )
+    db_session.commit()
+    manager_token = create_session(db_session, manager_user)[1]
+    db_session.commit()
+    manager = _client(make_client, manager_token)
+    archived = manager.post(f"{plan_path}:archive")
+    assert archived.status_code == 200, archived.text
+    unarchived = manager.post(f"{plan_path}:unarchive")
+    assert unarchived.status_code == 200, unarchived.text
+    for path in (f"{missing_plan}:archive", f"{missing_plan}:unarchive"):
+        missing = manager.post(path)
+        assert missing.status_code == 404, missing.text
+        assert missing.json() == {"error": {"code": "resource.not_found"}}
+
+
+def test_inspection_planning_malformed_ids_use_validation_error(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    outsider = world["outsider"]
+    project_id = world["project"].id
+    cases = (
+        ("GET", "/api/v1/projects/not-a-uuid/inspection-plans", None),
+        ("GET", "/api/v1/projects/not-a-uuid/zones", None),
+        ("GET", "/api/v1/inspection-plans/not-a-uuid", None),
+        ("GET", "/api/v1/inspection-plans/not-a-uuid/tasks", None),
+        ("POST", "/api/v1/inspection-plans/not-a-uuid:archive", None),
+        ("POST", "/api/v1/inspection-tasks/not-a-uuid:start", None),
+        ("GET", "/api/v1/inspection-tasks/not-a-uuid", None),
+        ("GET", "/api/v1/field/inspection-tasks/not-a-uuid", None),
+        (
+            "GET",
+            f"/api/v1/projects/{project_id}/inspection-items/not-a-uuid/tasks",
+            None,
+        ),
+        (
+            "PATCH",
+            f"/api/v1/projects/{project_id}/zones/not-a-uuid",
+            {"name": "新名稱"},
+        ),
+    )
+    for method, path, body in cases:
+        # Both Admin and nonmember requests reject malformed input before
+        # either role can reach a permission or resource lookup.
+        for client in (admin, outsider):
+            response = client.request(method, path, json=body)
+            assert response.status_code == 422, (
+                method,
+                path,
+                response.status_code,
+                response.text,
+            )
+            assert response.json() == {
+                "error": {"code": "request.validation_failed"}
+            }
 
 
 def test_planning_error_codes_archive_immutability_and_plan_states(
