@@ -12,7 +12,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
-import { deferred, type Deferred } from '../testing/submitGuard'
+import {
+  deferred,
+  expectImeEnterIgnored,
+  type Deferred,
+} from '../testing/submitGuard'
 import CompaniesPage from './CompaniesPage'
 import UsersPage from './UsersPage'
 import type { Company, User } from './api'
@@ -195,7 +199,7 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
   it('IME Enter 不送出真實 API', async () => {
     const { backend, input } = await openForm()
     formCase.prepare(input)
-    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expectImeEnterIgnored(input)
     expect(backend.count(formCase.method, formCase.path)).toBe(0)
   })
 
@@ -242,7 +246,7 @@ describe('使用者管理搜尋共用表單', () => {
     const form = button.closest('form')!
 
     const initialCount = backend.count('GET', '/api/v1/users')
-    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expectImeEnterIgnored(input)
     expect(backend.count('GET', '/api/v1/users')).toBe(initialCount)
 
     holding = true
@@ -299,7 +303,7 @@ describe('使用者新增共用表單', () => {
     const form = button.closest('form')!
     const input = screen.getByLabelText(/^帳號名稱/)
 
-    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expectImeEnterIgnored(input)
     expect(backend.count('POST', '/api/v1/users')).toBe(0)
     fireEvent.click(button)
     fireEvent.submit(form)
@@ -388,7 +392,7 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
 
   it('IME Enter 不送出真實 API', async () => {
     const test = await setup()
-    fireEvent.keyDown(test.field, { key: 'Enter', isComposing: true })
+    expectImeEnterIgnored(test.field)
     expect(test.backend.count(formCase.method, formCase.path)).toBe(
       test.baseline,
     )

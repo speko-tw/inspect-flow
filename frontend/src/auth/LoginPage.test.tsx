@@ -6,7 +6,7 @@ import LoginPage from './LoginPage'
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
 import { resetSessionMemory } from './sessionMemory'
-import { deferred } from '../testing/submitGuard'
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const CURRENT_USER = {
   id: 'u1',
@@ -129,7 +129,7 @@ describe.each([['登入頁', '/api/v1/auth/login']])(
         </MemoryRouter>,
       )
       const input = screen.getByLabelText('帳號名稱或 Email')
-      fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      expectImeEnterIgnored(input)
       expect(fetchMock).not.toHaveBeenCalled()
     })
 

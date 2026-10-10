@@ -12,7 +12,7 @@ import App from '../App'
 import LoginPage from '../auth/LoginPage'
 import SetupGate from './SetupGate'
 import SetupPage from './SetupPage'
-import { deferred } from '../testing/submitGuard'
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const INVALID_CODE_MESSAGE =
   '首次登入碼不正確或已失效，請確認後再試；需要新的碼時，' +
@@ -178,7 +178,7 @@ describe.each([
   ['首次設定碼步驟', 'setup-code'],
   ['首次設定密碼步驟', 'setup-password'],
 ])('%s 共用表單', (_name, step) => {
-  it('同步步驟防重送並遵守 IME；API pending 不適用', async () => {
+  it('同步驗證後可前往下一步；防重送不適用', async () => {
     const backend = stubBackend()
     renderApp('/setup')
     await screen.findByLabelText('首次登入碼')
@@ -186,7 +186,7 @@ describe.each([
     if (step === 'setup-code') {
       const input = screen.getByLabelText('首次登入碼')
       fireEvent.change(input, { target: { value: 'code-123' } })
-      fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      expectImeEnterIgnored(input)
       expect(screen.getByLabelText('首次登入碼')).toBeInTheDocument()
       expect(
         backend.calls.filter((call) => call.method === 'POST'),
@@ -195,7 +195,6 @@ describe.each([
       const form = screen
         .getByRole('button', { name: '下一步' })
         .closest('form')!
-      fireEvent.submit(form)
       fireEvent.submit(form)
       expect(await screen.findByLabelText('新密碼')).toBeInTheDocument()
       expect(
@@ -234,7 +233,7 @@ describe.each([
       await screen.findByLabelText('首次登入碼')
       fillCode('code-123')
       const input = screen.getByLabelText('新密碼')
-      fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      expectImeEnterIgnored(input)
       expect(
         backend.calls.filter((call) =>
           call.url.endsWith('/api/v1/setup/admin-password'),

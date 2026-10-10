@@ -14,7 +14,7 @@ import App from '../App'
 import ChangePasswordPage from './ChangePasswordPage'
 import RequireAuth from './RequireAuth'
 import { preloadLazyRoutes } from '../testing/preloadRoutes'
-import { deferred } from '../testing/submitGuard'
+import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const TEMP_PASSWORD_USER = {
   id: 'u1',
@@ -123,10 +123,7 @@ describe.each([['變更密碼頁', '/api/v1/auth/password']])(
       )
       vi.stubGlobal('fetch', fetchMock)
       await renderReadyPage()
-      fireEvent.keyDown(screen.getByLabelText('目前密碼'), {
-        key: 'Enter',
-        isComposing: true,
-      })
+      expectImeEnterIgnored(screen.getByLabelText('目前密碼'))
       expect(
         fetchMock.mock.calls.filter(([input]) =>
           requestUrl(input).endsWith(endpoint),
