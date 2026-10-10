@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
-import { collectPages, HttpError, isForbidden } from '../../http'
+import { collectPages, isForbidden, isNotFound } from '../../http'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
@@ -204,7 +204,7 @@ export default function PlanningPage({
         if (!active) return
         if (isForbidden(caught)) {
           setAccessDenied(true)
-        } else if (caught instanceof HttpError && caught.status === 404) {
+        } else if (isNotFound(caught)) {
           setProjectNotFound(true)
         }
         setError(planningErrorMessage(caught))

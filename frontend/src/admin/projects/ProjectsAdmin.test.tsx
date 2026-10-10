@@ -398,6 +398,131 @@ function mockScrollIntoView() {
   }
 }
 
+const sharedProjectFormCases = [
+  {
+    name: '專案管理搜尋',
+    method: 'GET',
+    match: /\/projects\?/,
+    button: '搜尋',
+    field: '搜尋專案',
+    prepare: () => {},
+  },
+  {
+    name: '專案管理新增或編輯',
+    method: 'POST',
+    match: /\/projects$/,
+    button: '新增專案',
+    field: '專案代號',
+    prepare: fillProjectForm,
+  },
+] as const
+
+describe.each(sharedProjectFormCases)('$name 共用表單', (formCase) => {
+  async function setup() {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    formCase.prepare()
+    const button = screen.getByRole('button', { name: formCase.button })
+    const form = formOf(button)
+    const field = within(form).getByLabelText(new RegExp(formCase.field))
+    let failing = false
+    const original = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      if (
+        failing &&
+        (init?.method ?? 'GET') === formCase.method &&
+        formCase.match.test(String(input))
+      ) {
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 500 },
+        )
+      }
+      return original(input, init)
+    })
+    return {
+      fetchMock,
+      button,
+      field,
+      form,
+      setFailing: (value: boolean) => {
+        failing = value
+      },
+    }
+  }
+
+  it('pending 期間只送一次並停用按鈕', async () => {
+    const test = await setup()
+    const before = calls(
+      test.fetchMock,
+      formCase.method,
+      formCase.match,
+    ).length
+    const gate = holdRequests(test.fetchMock, formCase.method, formCase.match)
+
+    fireEvent.click(test.button)
+    fireEvent.submit(test.form)
+
+    expect(test.button).toBeDisabled()
+    expect(
+      calls(test.fetchMock, formCase.method, formCase.match),
+    ).toHaveLength(before + 1)
+    gate.resolve()
+    if (formCase.method === 'GET') {
+      await waitFor(() => expect(test.button).toBeEnabled())
+    } else {
+      await screen.findByRole('heading', {
+        name: 'DEMO-002｜第二示範工程',
+      })
+    }
+  })
+
+  it('IME Enter 不送出真實 API', async () => {
+    const test = await setup()
+    const before = calls(
+      test.fetchMock,
+      formCase.method,
+      formCase.match,
+    ).length
+    expectImeEnterIgnored(test.field)
+    expect(
+      calls(test.fetchMock, formCase.method, formCase.match),
+    ).toHaveLength(before)
+  })
+
+  it('API 失敗後可以再次送出', async () => {
+    const test = await setup()
+    const before = calls(
+      test.fetchMock,
+      formCase.method,
+      formCase.match,
+    ).length
+    test.setFailing(true)
+    fireEvent.click(test.button)
+    await screen.findByRole('alert')
+    expect(
+      calls(test.fetchMock, formCase.method, formCase.match),
+    ).toHaveLength(before + 1)
+    test.setFailing(false)
+    fireEvent.click(test.button)
+    if (formCase.method === 'GET') {
+      await waitFor(() =>
+        expect(
+          calls(test.fetchMock, formCase.method, formCase.match),
+        ).toHaveLength(before + 2),
+      )
+    } else {
+      await screen.findByRole('heading', {
+        name: 'DEMO-002｜第二示範工程',
+      })
+      expect(
+        calls(test.fetchMock, formCase.method, formCase.match),
+      ).toHaveLength(before + 2)
+    }
+  })
+})
+
 // 確認與取消固定排成 [取消][確認]；只有最終確認用 btn-danger（#500）。
 function expectCancelThenDanger(scope: HTMLElement, labels: [string, string]) {
   const buttons = within(scope).getAllByRole('button')
@@ -1573,96 +1698,6 @@ function holdRequests(
 function formOf(element: HTMLElement): HTMLFormElement {
   return element.closest('form') as HTMLFormElement
 }
-
-describe('projects page forms guard (#507)', () => {
-  it('searches once when Enter is pressed twice quickly', async () => {
-    const fetchMock = projectFetch()
-    renderAt('/admin/projects')
-    await screen.findAllByText('示範工程')
-    const search = async (query: string, times: number) => {
-      const gate = holdRequests(fetchMock, 'GET', /\/projects\?.*q=/)
-      fireEvent.change(screen.getByLabelText('搜尋專案'), {
-        target: { value: query },
-      })
-      const form = formOf(screen.getByLabelText('搜尋專案'))
-      for (let i = 0; i < times; i += 1) fireEvent.submit(form)
-      gate.resolve()
-      await waitFor(() => expect(screen.queryByText('載入中…')).toBeNull())
-      return calls(fetchMock, 'GET', new RegExp(`q=${query}`)).length
-    }
-
-    // 一次搜尋本來就會讓列表重抓（搜尋與查詢條件的 effect 各一次）；
-    // 連按兩次的請求數必須和只按一次相同。
-    const single = await search('demo', 1)
-    const double = await search('demo2', 2)
-
-    expect(double).toBe(single)
-  })
-
-  it('does not search when Enter only confirms an IME choice', async () => {
-    const fetchMock = projectFetch()
-    renderAt('/admin/projects')
-    await screen.findAllByText('示範工程')
-    fireEvent.change(screen.getByLabelText('搜尋專案'), {
-      target: { value: 'demo' },
-    })
-
-    expectImeEnterIgnored(screen.getByLabelText('搜尋專案'))
-
-    expect(calls(fetchMock, 'GET', /q=demo/)).toHaveLength(0)
-  })
-
-  it('creates one project when Enter is pressed twice quickly', async () => {
-    const fetchMock = projectFetch()
-    renderAt('/admin/projects')
-    await screen.findAllByText('示範工程')
-    fillProjectForm()
-    const gate = holdRequests(fetchMock, 'POST', /\/projects$/)
-    const form = formOf(screen.getByLabelText(/專案代號/))
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    gate.resolve()
-
-    await screen.findByRole('heading', { name: 'DEMO-002｜第二示範工程' })
-    expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(1)
-  })
-
-  it('accepts another save after a failed one', async () => {
-    const fetchMock = projectFetch({
-      failWith: {
-        match: /\/projects$/,
-        method: 'POST',
-        code: 'server.error',
-        status: 500,
-      },
-    })
-    renderAt('/admin/projects')
-    await screen.findAllByText('示範工程')
-    fillProjectForm()
-    const form = formOf(screen.getByLabelText(/專案代號/))
-
-    fireEvent.submit(form)
-    await screen.findByRole('alert')
-    fireEvent.submit(form)
-
-    await waitFor(() =>
-      expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(2),
-    )
-  })
-
-  it('does not save when Enter only confirms an IME choice', async () => {
-    const fetchMock = projectFetch()
-    renderAt('/admin/projects')
-    await screen.findAllByText('示範工程')
-    fillProjectForm()
-
-    expectImeEnterIgnored(screen.getByLabelText(/專案代號/))
-    expectImeEnterIgnored(screen.getByLabelText(/工程名稱/))
-
-    expect(calls(fetchMock, 'POST', /\/projects$/)).toHaveLength(0)
-  })
-})
 
 describe('project members forms guard (#507)', () => {
   async function fillAdd() {
