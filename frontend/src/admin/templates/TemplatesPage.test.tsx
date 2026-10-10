@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -360,6 +361,37 @@ async function startNewItem(): Promise<void> {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('TemplatesPage', () => {
+  it('updates the mobile detail cue when the media query changes', async () => {
+    let matches = false
+    const listeners = new Set<() => void>()
+    const matchMedia = vi.fn(() => ({
+      get matches() {
+        return matches
+      },
+      addEventListener: (_type: string, listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) =>
+        listeners.delete(listener),
+    }))
+    vi.stubGlobal('matchMedia', matchMedia)
+    templateFetch()
+    render(<TemplatesPage />)
+    await openSystem()
+
+    expect(matchMedia).toHaveBeenCalledWith('(max-width: 40rem)')
+    expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument()
+
+    matches = true
+    act(() => listeners.forEach((listener) => listener()))
+    expect(await screen.findByText('開啟詳情')).toBeInTheDocument()
+
+    matches = false
+    act(() => listeners.forEach((listener) => listener()))
+    await waitFor(() =>
+      expect(screen.queryByText('開啟詳情')).not.toBeInTheDocument(),
+    )
+  })
+
   it('prefills a first field and follows its title until edited', async () => {
     templateFetch({ items: [] })
     render(<TemplatesPage />)

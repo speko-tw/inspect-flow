@@ -29,8 +29,9 @@ come from this directory's ``conftest.py``.
 """
 
 import inspect
+import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -44,6 +45,8 @@ from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session, sessionmaker
 
+import app.services.audit as audit_module
+from app.api.errors import APIError, ErrorCode
 from app.auth.dependencies import bind_request_scope, get_db, require_login
 from app.auth.password_service import set_password
 from app.cli.reset_admin_password import run as reset_admin_password
@@ -51,7 +54,7 @@ from app.db import clock
 from app.db.base import uuid7
 from app.db.unit_of_work import unit_of_work
 from app.main import create_app
-from app.models import AuditLog, Company
+from app.models import AuditLog, Company, Project
 from app.services.audit import (
     _EVENT_CATALOG,
     _EVENT_TYPE_RE,
@@ -61,6 +64,7 @@ from app.services.audit import (
     UndeclaredAuditFieldError,
     UnregisteredAuditEventError,
     record_audit_event,
+    record_audit_event_in_independent_transaction,
     register_audit_event,
 )
 from app.services.companies import create_company, update_company
@@ -92,6 +96,444 @@ def test_alg_ac14_ac15_management_event_catalog():
                 secret in field_name
                 for secret in ("password", "secret", "token", "session")
             )
+
+
+def test_alg_ac19_to_ac24_two_layer_event_catalog():
+    expected = {
+        "module_permission.granted": {
+            "user_id",
+            "permission_code",
+            "module",
+            "source",
+        },
+        "module_permission.revoked": {
+            "user_id",
+            "permission_code",
+            "module",
+            "source",
+        },
+        "module_delegation.granted": {"user_id", "module"},
+        "module_delegation.revoked": {"user_id", "module"},
+        "permission_bundle.created": {"name", "permission_codes"},
+        "permission_bundle.updated": {"name", "permission_codes"},
+        "permission_bundle.deleted": {"name", "permission_codes"},
+        "permission_bundle.applied": {
+            "user_id",
+            "bundle_id",
+            "bundle_name",
+            "permission_codes",
+        },
+        "creator_role.changed": {"creator_role_id"},
+        "project.created": {
+            "project_code",
+            "name",
+            "creator_role_user_id",
+        },
+        "project.updated": {
+            "project_code",
+            "name",
+            "client_name",
+            "site_location",
+            "planned_start_date",
+            "planned_completion_date",
+        },
+        "project_member.assignment_denied": {
+            "project_id",
+            "user_id",
+            "role_ids",
+            "reason",
+        },
+        "module_permission.grant_denied": {
+            "user_id",
+            "permission_codes",
+            "bundle_id",
+            "reason",
+        },
+        "user.external_flag_changed": {"is_external_collaborator"},
+    }
+    for event_type, fields in expected.items():
+        definition = _EVENT_CATALOG[event_type]
+        assert definition.fields == fields
+        assert definition.entity_type == event_type.split(".", 1)[0]
+        assert _EVENT_TYPE_RE.match(event_type)
+
+    role_updated = _EVENT_CATALOG["role.updated"]
+    assert {"is_assignable", "is_external_allowed"} <= role_updated.fields
+
+    active_changed = _EVENT_CATALOG["user.active_changed"]
+    assert active_changed.always_recorded == {"is_active"}
+    assert active_changed.allow_system_event
+    assert active_changed.optional_fields == active_changed.fields - {
+        "is_active"
+    }
+
+
+def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
+    user_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    role_id = uuid.uuid4()
+    bundle_id = uuid.uuid4()
+    calls = [
+        (
+            "module_permission.granted",
+            None,
+            {
+                "user_id": user_id,
+                "permission_code": "project.use",
+                "module": "project",
+                "source": "manual",
+            },
+        ),
+        (
+            "module_permission.revoked",
+            {
+                "user_id": user_id,
+                "permission_code": "project.use",
+                "module": "project",
+                "source": "manual",
+            },
+            None,
+        ),
+        (
+            "module_delegation.granted",
+            None,
+            {
+                "user_id": user_id,
+                "module": "project",
+            },
+        ),
+        (
+            "module_delegation.revoked",
+            {
+                "user_id": user_id,
+                "module": "project",
+            },
+            None,
+        ),
+        (
+            "permission_bundle.created",
+            None,
+            {
+                "name": "Project bundle",
+                "permission_codes": ["project.use"],
+            },
+        ),
+        (
+            "permission_bundle.updated",
+            {
+                "name": "Old",
+                "permission_codes": ["project.use"],
+            },
+            {
+                "name": "New",
+                "permission_codes": ["inspection.use"],
+            },
+        ),
+        (
+            "permission_bundle.deleted",
+            {
+                "name": "Project bundle",
+                "permission_codes": ["project.use"],
+            },
+            None,
+        ),
+        (
+            "permission_bundle.applied",
+            None,
+            {
+                "user_id": user_id,
+                "bundle_id": bundle_id,
+                "bundle_name": "Project bundle",
+                "permission_codes": ["project.use"],
+            },
+        ),
+        (
+            "creator_role.changed",
+            {"creator_role_id": role_id},
+            {"creator_role_id": uuid.uuid4()},
+        ),
+        (
+            "project.created",
+            None,
+            {
+                "project_code": "P-1",
+                "name": "Project",
+            },
+        ),
+        (
+            "project.updated",
+            {"planned_start_date": None},
+            {
+                "planned_start_date": date(2026, 10, 10),
+            },
+        ),
+        (
+            "project.updated",
+            {
+                "planned_start_date": date(2026, 10, 10),
+                "planned_completion_date": date(2026, 12, 31),
+            },
+            {"planned_start_date": None, "planned_completion_date": None},
+        ),
+        (
+            "project_member.assignment_denied",
+            None,
+            {
+                "project_id": project_id,
+                "user_id": user_id,
+                "role_ids": [role_id],
+                "reason": "external_role_not_allowed",
+            },
+        ),
+        (
+            "module_permission.grant_denied",
+            None,
+            {
+                "user_id": user_id,
+                "permission_codes": ["project.create"],
+                "reason": "delegation_scope_exceeded",
+            },
+        ),
+        ("user.active_changed", {"is_active": True}, {"is_active": False}),
+        (
+            "user.active_changed",
+            {"is_active": False},
+            {
+                "is_active": True,
+                "restored_permission_codes": ["project.use"],
+            },
+        ),
+        ("user.active_changed", {"is_active": True}, {"is_active": False}),
+        (
+            "user.external_flag_changed",
+            {"is_external_collaborator": True},
+            {"is_external_collaborator": False},
+        ),
+        (
+            "user.external_flag_changed",
+            {"is_external_collaborator": False},
+            {"is_external_collaborator": True},
+        ),
+        (
+            "role.updated",
+            {"is_external_allowed": False},
+            {"is_external_allowed": True},
+        ),
+    ]
+    stored = []
+    for event_type, before, after in calls:
+        stored.append(
+            record_audit_event(
+                session,
+                event_type,
+                entity_id=uuid.uuid4(),
+                before=before,
+                after=after,
+            )
+        )
+
+    assert stored[10].after["planned_start_date"] == "2026-10-10"
+    assert stored[11].after == {
+        "planned_start_date": None,
+        "planned_completion_date": None,
+    }
+    assert _EVENT_CATALOG["user.active_changed"].kind is AuditEventKind.UPDATED
+    assert _EVENT_CATALOG["user.active_changed"].always_recorded == {
+        "is_active"
+    }
+    assert "reason" in _EVENT_CATALOG["user.active_changed"].optional_fields
+    assert _EVENT_CATALOG["project.created"].kind is AuditEventKind.CREATED
+    assert _EVENT_CATALOG["project.updated"].kind is AuditEventKind.UPDATED
+    assert _EVENT_CATALOG["project.updated"].nullable_fields == {
+        "planned_start_date",
+        "planned_completion_date",
+    }
+
+
+def test_alg_ac26_denial_event_survives_request_transaction_rollback(
+    session, operator
+):
+    session.commit()
+    session.add(Company(name="Rolled Back Company"))
+
+    event_id = record_audit_event_in_independent_transaction(
+        session,
+        "module_permission.grant_denied",
+        entity_id=uuid.uuid4(),
+        before=None,
+        after={
+            "user_id": uuid.uuid4(),
+            "permission_codes": ["project.create"],
+            "reason": "delegation_scope_exceeded",
+        },
+    )
+    session.rollback()
+
+    assert (
+        session.query(Company).filter_by(name="Rolled Back Company").count()
+        == 0
+    )
+    persisted = session.get(AuditLog, event_id)
+    assert persisted is not None
+    assert persisted.created_by == operator.id
+    assert persisted.event_type == "module_permission.grant_denied"
+    assert persisted.after["permission_codes"] == ["project.create"]
+    assert persisted.after["reason"] == "delegation_scope_exceeded"
+
+
+def test_assignment_denial_project_id_is_persisted_independently(
+    session, operator
+):
+    project = Project(
+        project_code="AUD-PROJECT",
+        name="Audit project",
+        client_name="Client",
+        site_location="Site",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    session.add(project)
+    session.commit()
+
+    event_id = record_audit_event_in_independent_transaction(
+        session,
+        "project_member.assignment_denied",
+        entity_id=uuid.uuid4(),
+        before=None,
+        after={
+            "project_id": project.id,
+            "user_id": operator.id,
+            "role_ids": [],
+            "reason": "role_not_assignable",
+        },
+        project_id=project.id,
+    )
+
+    session.expire_all()
+    persisted = session.get(AuditLog, event_id)
+    assert persisted is not None
+    assert persisted.project_id == project.id
+    assert persisted.after["project_id"] == str(project.id)
+
+
+def test_alg_ac26_authenticated_denial_flushes_after_rollback(
+    session, migrated_url, monkeypatch
+):
+    """A logged-in request already owns SQLite's write lock after
+    session touch and an explicit main-session flush. The denial audit
+    must be written only after the request unit of work rolls back.
+    """
+    user = make_local_user(session, "AUD026")
+    project_id = uuid.uuid4()
+    forwarded_project_ids = []
+    original_record = audit_module._record_audit_event
+
+    def capture_project_id(*args, **kwargs):
+        if args[1] == "module_permission.grant_denied":
+            forwarded_project_ids.append(kwargs.get("project_id"))
+        return original_record(*args, **kwargs)
+
+    monkeypatch.setattr(
+        audit_module, "_record_audit_event", capture_project_id
+    )
+    app = create_app()
+    router = APIRouter()
+
+    def deny_after_flush(
+        malformed: bool = False,
+        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI DI
+        _user=Depends(require_login),  # noqa: B008 -- FastAPI DI
+    ):
+        company = Company(
+            name="Pending Denied Change",
+            created_by=_user.id,
+            updated_by=_user.id,
+        )
+        db.add(company)
+        db.flush()
+        event_after = {
+            "user_id": _user.id,
+            "permission_codes": ["project.create"],
+            "reason": "delegation_scope_exceeded",
+        }
+        if malformed:
+            event_after["misspelled"] = True
+        record_audit_event_in_independent_transaction(
+            db,
+            "module_permission.grant_denied",
+            entity_id=uuid.uuid4(),
+            before=None,
+            after=event_after,
+            project_id=project_id,
+        )
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+
+    router.add_api_route(
+        "/api/v1/test/denied-flushed",
+        deny_after_flush,
+        methods=["POST"],
+    )
+    app.include_router(router)
+    client = TestClient(
+        app, base_url="https://testserver", raise_server_exceptions=False
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"login": user.email, "password": PASSWORD},
+    )
+    assert login_response.status_code == 200
+
+    malformed_response = client.post(
+        "/api/v1/test/denied-flushed?malformed=true"
+    )
+    assert malformed_response.status_code == 500
+    session.expire_all()
+    assert (
+        session.query(AuditLog)
+        .filter_by(event_type="module_permission.grant_denied")
+        .count()
+        == 0
+    )
+    assert (
+        session.query(Company).filter_by(name="Pending Denied Change").count()
+        == 0
+    )
+
+    started = time.monotonic()
+    response = client.post("/api/v1/test/denied-flushed")
+    elapsed = time.monotonic() - started
+
+    assert response.status_code == 403
+    assert elapsed < 2
+    assert forwarded_project_ids == [project_id]
+    session.expire_all()
+    assert (
+        session.query(Company).filter_by(name="Pending Denied Change").count()
+        == 0
+    )
+    event = (
+        session.query(AuditLog)
+        .filter_by(event_type="module_permission.grant_denied")
+        .one()
+    )
+    assert event.after["reason"] == "delegation_scope_exceeded"
+    assert event.created_by == user.id
+
+    def fail_write(_item):
+        raise RuntimeError("audit storage unavailable")
+
+    monkeypatch.setattr(
+        audit_module, "_write_independent_audit_event", fail_write
+    )
+    denied_again = client.post("/api/v1/test/denied-flushed")
+    assert denied_again.status_code == 403
+    session.expire_all()
+    assert (
+        session.query(AuditLog)
+        .filter_by(event_type="module_permission.grant_denied")
+        .count()
+        == 1
+    )
 
 
 class _RecordAuditBody(BaseModel):
@@ -771,6 +1213,7 @@ class TestAlgAc13SetupSystemEventAndAc16AdminReset:
             json={"login": user.email, "password": PASSWORD},
         )
         assert login.status_code == 200
+        assert user.is_system is False
         user_as_system = login_client.post(
             route,
             json={
@@ -783,6 +1226,19 @@ class TestAlgAc13SetupSystemEventAndAc16AdminReset:
         )
         assert user_as_system.status_code == 201
         assert user_as_system.json()["created_by"] == str(admin.id)
+
+        active_change_as_system = login_client.post(
+            route,
+            json={
+                "event_type": "user.active_changed",
+                "entity_id": str(user.id),
+                "before": {"is_active": True},
+                "after": {"is_active": False},
+                "system_event": True,
+            },
+        )
+        assert active_change_as_system.status_code == 201
+        assert active_change_as_system.json()["created_by"] == str(admin.id)
 
         user_without_declaration = login_client.post(
             route,
