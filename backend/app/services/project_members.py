@@ -80,6 +80,7 @@ def _record_roles_changed(
         session,
         "project_member.roles_changed",
         entity_id=member.id,
+        project_id=member.project_id,
         before={
             "role_ids": before_role_ids,
             "project_id": member.project_id,
@@ -288,6 +289,7 @@ def remove_project_member(session: Session, member: ProjectMember) -> None:
         session,
         "project_member.removed",
         entity_id=member_id,
+        project_id=member.project_id,
         before=before,
         after=None,
     )

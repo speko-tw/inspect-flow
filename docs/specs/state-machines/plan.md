@@ -10,7 +10,7 @@ Plan／Task 已裁定的狀態行為依部分凍結規則於 spec 中凍結；Ev
 |---|---|---|---|---|---|
 | T1（待依賴） | 實作凍結範圍內的 Plan／Task 後端狀態轉換、完成時伺服器覆核、KD-55 項目層級作廢／更正、實際查核人紀錄與 Service 層狀態驗證。Result 欄位驗證與寫入及改善追蹤屬 0.7.x，不納入。拆分前須有 `inspection-planning` API／流程契約及 `domain-model` Plan／Task 實體凍結。 | `backend/app/services/`、`backend/app/models/`、`backend/app/api/`、對應測試與 Alembic migration | `inspection-planning` API／流程契約；`domain-model` Plan／Task 實體凍結；本規格凍結範圍 | STM-AC01～STM-AC05、STM-AC08～STM-AC15 | 待開 |
 | T2（待依賴） | 實作凍結範圍內的 Plan／Task 動作之前端狀態顯示與互動，包含 KD-55 確認對話框（由功能規格定義）、取消原因及「有缺失」任務標示。須待 T1 與 API 契約確認後拆分。 | `frontend/src/`、對應前端測試 | T1；API 契約；本規格凍結範圍 | STM-AC02～STM-AC05、STM-AC08～STM-AC15 | 待開 |
-| T3（待凍結） | Evidence 照片流程、獨立刪除與保留政策；政策已由 KD-61～KD-64 決定，Evidence 凍結範圍仍待後續規格確認。 | Evidence 凍結範圍確認後拆分 | Evidence 凍結 | 待凍結 | 待開 |
+| T3（已移至 `field-evidence`） | Evidence 照片流程、刪除與保留、作廢連動；政策已由 KD-61～KD-64 決定，需求、API 與驗收改由 [`field-evidence`](../field-evidence/spec.md) 與其[計畫](../field-evidence/plan.md)拆任務，本規格不再另開 Evidence 任務。 | 見 `field-evidence` 計畫 | `field-evidence` 規格合併 | 見 `field-evidence` | 見 `field-evidence` |
 | T4（待凍結） | Report 狀態、快照、版次、核發與產製失敗流程；未達凍結條件，不可開工。 | G-06／G-07 裁定後拆分 | G-06 其他狀態、G-07；Report 凍結 | STM-AC06（草稿） | 待開 |
 
 - 規格凍結後，每個實作任務應能以一個 PR 完成並單獨驗收；任務須待其範圍凍結後拆分。
@@ -21,7 +21,7 @@ Plan／Task 已裁定的狀態行為依部分凍結規則於 spec 中凍結；Ev
 ## 並行分組
 
 - 待依賴：T1、T2 僅涵蓋本規格已凍結範圍；拆分前須有 `inspection-planning` 契約及 `domain-model` Plan／Task 實體凍結。
-- 待凍結：T3、T4；T3 的照片流程與刪除政策已依 KD-61～KD-64 決定，但凍結範圍仍待確認；T4 待 G-06／G-07 未決部分與對應範圍凍結。
+- 待凍結：T4 待 G-06／G-07 未決部分與對應範圍凍結。T3 已移至 `field-evidence`，由該規格的計畫分波。
 
 ## 風險
 
@@ -49,9 +49,10 @@ Plan／Task 已裁定的狀態行為依部分凍結規則於 spec 中凍結；Ev
 
 ## 考慮過但沒採用的做法
 
-- 在本輪拆出 Evidence／Report 的可執行實作任務：不採用；Evidence 凍結範圍仍待確認，Report 仍受 G-06、G-07 阻擋。
+- 在本輪拆出 Report 的可執行實作任務：不採用，Report 仍受 G-06、G-07 阻擋；Evidence 任務改由 `field-evidence` 計畫承接。
 - 以通用 PATCH 讓前端直接設定任意狀態：不採用，違反 PR-16 的後端 Service 狀態轉換邊界。
 
 ## 變更紀錄
 
 - 同步 Evidence 照片流程與刪除政策已決定狀態（KD-61～KD-64），保留 Evidence 凍結範圍待確認、Report 受 G-06／G-07 阻擋 — [#404](https://github.com/speko-tw/inspect-flow/issues/404)
+- Evidence 任務（原 T3）移至 `field-evidence` 計畫，本規格不再另開 Evidence 實作任務 — [#105](https://github.com/speko-tw/inspect-flow/issues/105)
