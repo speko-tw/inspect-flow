@@ -16,7 +16,7 @@
 // 頁面也放了 `LogoutButton`：臨時密碼帳號被導到本頁後，若不想現
 // 在改密碼，仍可登出（AUT-R30、AUT-R33 允許登出）。
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { BackLink } from '../layout/BackLink'
@@ -26,7 +26,7 @@ import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 import { useCurrentUser } from './useCurrentUser'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { FieldError, Form, FormError, FormSubmitButton } from '../ui/Form'
 
 // AUT-R04：新密碼長度必須介於 8～128 個字元（含兩端），以 Unicode
 // code point 計算；集中成常數只為了組出下面的錯誤訊息，前端不會
@@ -72,19 +72,10 @@ export default function ChangePasswordPage() {
   const [errorField, setErrorField] = useState<
     'current' | 'new' | 'confirmation' | 'form' | null
   >(null)
-  const [submitting, setSubmitting] = useState(false)
-  const guard = useSubmitGuard()
+  const [errorAttempt, setErrorAttempt] = useState(0)
   const currentInput = useRef<HTMLInputElement>(null)
   const newInput = useRef<HTMLInputElement>(null)
   const confirmationInput = useRef<HTMLInputElement>(null)
-  const formError = useRef<HTMLParagraphElement>(null)
-
-  useEffect(() => {
-    if (errorField === 'current') currentInput.current?.focus()
-    if (errorField === 'new') newInput.current?.focus()
-    if (errorField === 'confirmation') confirmationInput.current?.focus()
-    if (errorField === 'form') formError.current?.focus()
-  }, [error, errorField])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -94,27 +85,28 @@ export default function ChangePasswordPage() {
     if (currentPassword === '') {
       setError('請輸入目前密碼。')
       setErrorField('current')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (newPassword === '') {
       setError('請輸入新密碼。')
       setErrorField('new')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (confirmPassword === '') {
       setError('請再次輸入新密碼。')
       setErrorField('confirmation')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
 
     if (newPassword !== confirmPassword) {
       setError(MISMATCH_MESSAGE)
       setErrorField('confirmation')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
-
-    if (!guard.enter()) return
-    setSubmitting(true)
 
     try {
       await changePassword(currentPassword, newPassword)
@@ -141,9 +133,7 @@ export default function ChangePasswordPage() {
       } else {
         setErrorField('form')
       }
-    } finally {
-      guard.leave()
-      setSubmitting(false)
+      setErrorAttempt((attempt) => attempt + 1)
     }
   }
 
@@ -157,7 +147,7 @@ export default function ChangePasswordPage() {
       title="變更密碼"
       lead="請輸入目前密碼，並設定新的密碼。"
     >
-      <form onKeyDown={blockImeEnter} onSubmit={handleSubmit} noValidate>
+      <Form onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="change-password-current">
             目前密碼 <RequiredMark />
@@ -183,13 +173,14 @@ export default function ChangePasswordPage() {
             }}
           />
           {errorField === 'current' && error !== null ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={currentInput}
               id="change-password-current-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
         <div>
@@ -220,13 +211,14 @@ export default function ChangePasswordPage() {
             {PASSWORD_RULE_TEXT}
           </p>
           {errorField === 'new' && error !== null ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={newInput}
               id="change-password-new-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
         <div>
@@ -254,30 +246,23 @@ export default function ChangePasswordPage() {
             }}
           />
           {errorField === 'confirmation' && error !== null ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={confirmationInput}
               id="change-password-confirm-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
         {errorField === 'form' && error !== null ? (
-          <p
-            className="auth-form-error"
-            id="change-password-error"
-            ref={formError}
-            role="alert"
-            tabIndex={-1}
-          >
+          <FormError focusRequest={errorAttempt} tabIndex={-1}>
             {error}
-          </p>
+          </FormError>
         ) : null}
-        <button className="btn-primary" type="submit" disabled={submitting}>
-          變更密碼
-        </button>
-      </form>
+        <FormSubmitButton className="btn-primary">變更密碼</FormSubmitButton>
+      </Form>
       <LogoutButton />
     </AuthLayout>
   )

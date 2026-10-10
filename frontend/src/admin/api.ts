@@ -103,10 +103,6 @@ export function listUsersPage(
   return request(listPath('/users', options))
 }
 
-export async function listUsers(): Promise<User[]> {
-  return listAllPages('/users')
-}
-
 export function createUser(input: UserInput): Promise<CreatedUser> {
   return request('/users', {
     method: 'POST',

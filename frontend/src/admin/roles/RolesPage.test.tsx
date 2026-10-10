@@ -490,6 +490,69 @@ describe('admin role management page', () => {
   })
 })
 
+describe.each([['角色管理新增／編輯', '新增角色']])(
+  '%s 共用表單',
+  (_name, submitLabel) => {
+    function fillForm() {
+      fireEvent.change(screen.getByLabelText('角色名稱'), {
+        target: { value: '表單測試角色' },
+      })
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: MANAGE.description }),
+      )
+    }
+
+    it('真實頁面 API pending 時只送一次並停用按鈕', async () => {
+      const fetchMock = rolesFetch()
+      renderRoles()
+      await screen.findByRole('heading', { name: '角色管理' })
+      fillForm()
+      const button = screen.getByRole('button', { name: submitLabel })
+      const form = button.closest('form')!
+      const gate = holdRequests(fetchMock, 'POST', /\/roles$/)
+
+      fireEvent.click(button)
+      fireEvent.submit(form)
+
+      expect(button).toBeDisabled()
+      expect(calls(fetchMock, 'POST')).toHaveLength(1)
+      gate.resolve()
+      expect(
+        await screen.findByRole('row', { name: /表單測試角色/ }),
+      ).toBeInTheDocument()
+    })
+
+    it('IME Enter 不送出真實 API', async () => {
+      const fetchMock = rolesFetch()
+      renderRoles()
+      await screen.findByRole('heading', { name: '角色管理' })
+      fillForm()
+
+      expectImeEnterIgnored(screen.getByLabelText('角色名稱'))
+      expect(calls(fetchMock, 'POST')).toHaveLength(0)
+    })
+
+    it('API 失敗後可以再次送出', async () => {
+      const failures: FakeOptions['failures'] = {
+        'POST /roles': { status: 500, code: 'server.error' },
+      }
+      const fetchMock = rolesFetch({ failures })
+      renderRoles()
+      await screen.findByRole('heading', { name: '角色管理' })
+      fillForm()
+      const button = screen.getByRole('button', { name: submitLabel })
+      const form = button.closest('form')!
+
+      fireEvent.click(button)
+      await screen.findByRole('alert')
+      delete failures['POST /roles']
+      fireEvent.submit(form)
+
+      await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(2))
+    })
+  },
+)
+
 describe('roleErrorMessage', () => {
   it('maps role error codes and falls back to the shared messages', () => {
     expect(
@@ -512,79 +575,7 @@ describe('roleErrorMessage', () => {
   })
 })
 
-describe('role forms guard (#507)', () => {
-  it('creates one role when Enter is pressed twice quickly', async () => {
-    const fetchMock = rolesFetch()
-    renderRoles()
-    fireEvent.change(await screen.findByLabelText('角色名稱'), {
-      target: { value: 'Site Lead' },
-    })
-    const gate = holdRequests(fetchMock, 'POST', /\/roles$/)
-    const form = screen.getByLabelText('角色名稱').closest('form')
-    expect(form).not.toBeNull()
-
-    fireEvent.submit(form as HTMLFormElement)
-    fireEvent.submit(form as HTMLFormElement)
-    gate.resolve()
-
-    await screen.findByRole('row', { name: /Site Lead/ })
-    expect(calls(fetchMock, 'POST')).toHaveLength(1)
-  })
-
-  it('accepts another submit after a failed one', async () => {
-    const fetchMock = rolesFetch({
-      failures: { 'POST /roles': { status: 500, code: 'server.error' } },
-    })
-    renderRoles()
-    fireEvent.change(await screen.findByLabelText('角色名稱'), {
-      target: { value: 'Site Lead' },
-    })
-    const form = screen
-      .getByLabelText('角色名稱')
-      .closest('form') as HTMLFormElement
-
-    fireEvent.submit(form)
-    await screen.findByRole('alert')
-    fireEvent.submit(form)
-
-    await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(2))
-  })
-
-  it('does not submit when Enter only confirms an IME choice', async () => {
-    const fetchMock = rolesFetch()
-    renderRoles()
-    fireEvent.change(await screen.findByLabelText('角色名稱'), {
-      target: { value: 'Site Lead' },
-    })
-
-    expectImeEnterIgnored(screen.getByLabelText('角色名稱'))
-
-    expect(calls(fetchMock, 'POST')).toHaveLength(0)
-  })
-
-  it('opens the update confirmation once on a double submit', async () => {
-    const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
-    renderRoles()
-    fireEvent.click(
-      await screen.findByRole('button', { name: '修改角色 Viewer' }),
-    )
-    fireEvent.change(screen.getByLabelText('角色名稱'), {
-      target: { value: 'Reader' },
-    })
-    const gate = holdRequests(fetchMock, 'GET', /\/roles\/r1$/)
-    const form = screen
-      .getByLabelText('角色名稱')
-      .closest('form') as HTMLFormElement
-    const before = calls(fetchMock, 'GET').length
-
-    fireEvent.submit(form)
-    fireEvent.submit(form)
-    gate.resolve()
-
-    await screen.findByRole('region', { name: '修改「Viewer」' })
-    expect(calls(fetchMock, 'GET')).toHaveLength(before + 1)
-  })
-
+describe('role confirmation guards (#507)', () => {
   it('saves once when the update confirmation is clicked twice', async () => {
     const fetchMock = rolesFetch({ roles: [makeRole('r1', 'Viewer')] })
     renderRoles()

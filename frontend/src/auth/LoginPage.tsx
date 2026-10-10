@@ -2,14 +2,14 @@
 // 失敗時顯示通用訊息，不透露是哪種原因（呼應後端 AUT-R06 的一
 // 致回應）；伺服器忙碌時另提示稍後再試。
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { ApiError, login } from './api'
 import AuthLayout, { RequiredMark } from './AuthLayout'
 import { loginTarget } from './landing'
 import { previousSession } from './sessionMemory'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { FieldError, Form, FormError, FormSubmitButton } from '../ui/Form'
 
 const GENERIC_ERROR_MESSAGE = '帳號或密碼錯誤，請再試一次。'
 const BUSY_ERROR_MESSAGE = '伺服器暫時忙碌，請稍後再試。'
@@ -24,39 +24,30 @@ export default function LoginPage() {
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [errorField, setErrorField] = useState<'account' | 'password' | null>(
-    null,
-  )
-  const [submitting, setSubmitting] = useState(false)
-  const guard = useSubmitGuard()
+  const [errorField, setErrorField] = useState<
+    'account' | 'password' | 'form' | null
+  >(null)
+  const [errorAttempt, setErrorAttempt] = useState(0)
   const accountInput = useRef<HTMLInputElement>(null)
   const passwordInput = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (errorField === 'account') accountInput.current?.focus()
-    if (errorField === 'password') passwordInput.current?.focus()
-  }, [error, errorField])
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!guard.enter()) return
     setError(null)
     setErrorField(null)
 
     if (account.trim() === '') {
       setError('請輸入帳號名稱或 Email。')
       setErrorField('account')
-      guard.leave()
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (password === '') {
       setError('請輸入密碼。')
       setErrorField('password')
-      guard.leave()
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
-
-    setSubmitting(true)
 
     try {
       const user = await login(account, password)
@@ -72,16 +63,14 @@ export default function LoginPage() {
           ? BUSY_ERROR_MESSAGE
           : GENERIC_ERROR_MESSAGE,
       )
-      setErrorField('password')
-    } finally {
-      guard.leave()
-      setSubmitting(false)
+      setErrorField('form')
+      setErrorAttempt((attempt) => attempt + 1)
     }
   }
 
   return (
     <AuthLayout title="登入" lead="請輸入帳號名稱或 Email 與密碼。">
-      <form onKeyDown={blockImeEnter} onSubmit={handleSubmit} noValidate>
+      <Form onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="login-account">
             帳號名稱或 Email <RequiredMark />
@@ -105,13 +94,14 @@ export default function LoginPage() {
             }}
           />
           {errorField === 'account' && error !== null ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={accountInput}
               id="login-account-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
         <div>
@@ -137,19 +127,23 @@ export default function LoginPage() {
             }}
           />
           {errorField === 'password' && error !== null ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={passwordInput}
               id="login-password-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
-        <button className="btn-primary" type="submit" disabled={submitting}>
-          登入
-        </button>
-      </form>
+        {errorField === 'form' && error !== null ? (
+          <FormError focusRequest={errorAttempt} tabIndex={-1}>
+            {error}
+          </FormError>
+        ) : null}
+        <FormSubmitButton className="btn-primary">登入</FormSubmitButton>
+      </Form>
     </AuthLayout>
   )
 }

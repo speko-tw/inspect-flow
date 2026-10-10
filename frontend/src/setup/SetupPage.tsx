@@ -17,7 +17,12 @@ import TemporaryPassword from '../admin/TemporaryPassword'
 import UserForm from '../admin/UserForm'
 import { ApiError } from '../auth/api'
 import AuthLayout, { RequiredMark } from '../auth/AuthLayout'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import {
+  FieldError,
+  Form,
+  FormActionButton,
+  FormSubmitButton,
+} from '../ui/Form'
 import { fetchSetupRequired, setAdminPassword, setupErrorMessage } from './api'
 
 const MIN_PASSWORD_LENGTH = 8
@@ -86,22 +91,13 @@ export default function SetupPage() {
   const [errorField, setErrorField] = useState<
     'code' | 'password' | 'confirmation' | 'form' | null
   >(null)
+  const [errorAttempt, setErrorAttempt] = useState(0)
   const [completed, setCompleted] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const guard = useSubmitGuard()
   const [companies, setCompanies] = useState<Company[]>([])
   const [companiesError, setCompaniesError] = useState(false)
   const codeInput = useRef<HTMLInputElement>(null)
   const passwordInput = useRef<HTMLInputElement>(null)
   const confirmationInput = useRef<HTMLInputElement>(null)
-  const formError = useRef<HTMLParagraphElement>(null)
-
-  useEffect(() => {
-    if (errorField === 'code') codeInput.current?.focus()
-    if (errorField === 'password') passwordInput.current?.focus()
-    if (errorField === 'confirmation') confirmationInput.current?.focus()
-    if (errorField === 'form') formError.current?.focus()
-  }, [error, errorField, step.kind])
 
   useEffect(() => {
     let cancelled = false
@@ -136,6 +132,7 @@ export default function SetupPage() {
     if (code.trim() === '') {
       setError('請輸入首次登入碼。')
       setErrorField('code')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     setError('')
@@ -157,16 +154,16 @@ export default function SetupPage() {
           `${MAX_PASSWORD_LENGTH} 個字元。`,
       )
       setErrorField('password')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (password !== confirmation) {
       setError('兩次輸入的密碼不一致。')
       setErrorField('confirmation')
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
 
-    if (!guard.enter()) return
-    setSubmitting(true)
     try {
       await setAdminPassword(code.trim(), password)
       setPassword('')
@@ -179,6 +176,7 @@ export default function SetupPage() {
       if (caught instanceof ApiError && caught.status === 409) {
         setCompleted(true)
         setErrorField('form')
+        setErrorAttempt((attempt) => attempt + 1)
       } else if (caught instanceof ApiError && caught.status === 401) {
         // 碼不對：回到第 1 步重新輸入，密碼一併清掉。
         setCode('')
@@ -186,14 +184,14 @@ export default function SetupPage() {
         setConfirmation('')
         setStep({ kind: 'code' })
         setErrorField('code')
+        setErrorAttempt((attempt) => attempt + 1)
       } else if (caught instanceof ApiError && caught.status === 422) {
         setErrorField('password')
+        setErrorAttempt((attempt) => attempt + 1)
       } else {
         setErrorField('form')
+        setErrorAttempt((attempt) => attempt + 1)
       }
-    } finally {
-      guard.leave()
-      setSubmitting(false)
     }
   }
 
@@ -264,7 +262,11 @@ export default function SetupPage() {
         lead="請輸入 make init 印出的首次登入碼。"
         progress={<StepIndicator current={1} />}
       >
-        <form onKeyDown={blockImeEnter} onSubmit={submitCode} noValidate>
+        <Form
+          error={errorField === 'form' ? error : undefined}
+          onSubmit={submitCode}
+          noValidate
+        >
           <div>
             <label htmlFor="setup-code">
               首次登入碼 <RequiredMark />
@@ -289,19 +291,18 @@ export default function SetupPage() {
               }}
             />
             {errorField === 'code' && error ? (
-              <p
-                className="auth-field-error"
+              <FieldError
+                focusRequest={errorAttempt}
+                focusTarget={codeInput}
                 id="setup-code-error"
-                role="alert"
+                tabIndex={-1}
               >
                 {error}
-              </p>
+              </FieldError>
             ) : null}
           </div>
-          <button className="btn-primary" type="submit">
-            下一步
-          </button>
-        </form>
+          <FormSubmitButton className="btn-primary">下一步</FormSubmitButton>
+        </Form>
       </AuthLayout>
     )
   }
@@ -312,7 +313,13 @@ export default function SetupPage() {
       lead="設定 admin 的密碼，長度 8 到 128 個字元。"
       progress={<StepIndicator current={2} />}
     >
-      <form onKeyDown={blockImeEnter} onSubmit={submitPassword} noValidate>
+      <Form
+        error={errorField === 'form' ? error : undefined}
+        errorFocusRequest={errorAttempt}
+        errorTabIndex={-1}
+        onSubmit={submitPassword}
+        noValidate
+      >
         <div>
           <label htmlFor="setup-password">
             新密碼 <RequiredMark />
@@ -333,16 +340,18 @@ export default function SetupPage() {
               setPassword(event.target.value)
               setError('')
               setErrorField(null)
+              setCompleted(false)
             }}
           />
           {errorField === 'password' && error ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={passwordInput}
               id="setup-password-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
         <div>
@@ -367,44 +376,34 @@ export default function SetupPage() {
               setConfirmation(event.target.value)
               setError('')
               setErrorField(null)
+              setCompleted(false)
             }}
           />
           {errorField === 'confirmation' && error ? (
-            <p
-              className="auth-field-error"
+            <FieldError
+              focusRequest={errorAttempt}
+              focusTarget={confirmationInput}
               id="setup-password-confirm-error"
-              role="alert"
+              tabIndex={-1}
             >
               {error}
-            </p>
+            </FieldError>
           ) : null}
         </div>
-        {errorField === 'form' && error ? (
-          <p
-            className="auth-form-error"
-            id="setup-password-error-summary"
-            ref={formError}
-            role="alert"
-            tabIndex={-1}
-          >
-            {error}
-          </p>
-        ) : null}
         {completed && <Link to="/login">前往登入頁</Link>}
-        <button
-          disabled={submitting}
+        <FormActionButton
           onClick={() => {
             setError('')
+            setErrorField(null)
+            setCompleted(false)
             setStep({ kind: 'code' })
           }}
           type="button"
         >
           上一步
-        </button>
-        <button className="btn-primary" type="submit" disabled={submitting}>
-          {submitting ? '設定中…' : '設定密碼'}
-        </button>
-      </form>
+        </FormActionButton>
+        <FormSubmitButton className="btn-primary">設定密碼</FormSubmitButton>
+      </Form>
     </AuthLayout>
   )
 }

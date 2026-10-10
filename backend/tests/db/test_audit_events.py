@@ -174,6 +174,7 @@ class TestAlgAc07FirstBatchEventsRoundTrip:
 
         role_created = fetched[created.id]
         assert role_created.event_type == "role.created"
+        assert role_created.project_id is None
         assert role_created.entity_type == "role"
         assert role_created.entity_id == role_id
         assert role_created.before is None
@@ -184,11 +185,13 @@ class TestAlgAc07FirstBatchEventsRoundTrip:
 
         role_updated = fetched[updated.id]
         assert role_updated.event_type == "role.updated"
+        assert role_updated.project_id is None
         assert role_updated.before == {"name": "Inspector"}
         assert role_updated.after == {"name": "Senior Inspector"}
 
         role_deleted = fetched[deleted.id]
         assert role_deleted.event_type == "role.deleted"
+        assert role_deleted.project_id is None
         assert role_deleted.after is None
         assert role_deleted.before == {
             "name": "Senior Inspector",
@@ -223,6 +226,7 @@ class TestAlgAc07FirstBatchEventsRoundTrip:
 
         user_admin_changed = fetched[admin_changed.id]
         assert user_admin_changed.event_type == "user.admin_changed"
+        assert user_admin_changed.project_id is None
         assert user_admin_changed.entity_type == "user"
         assert user_admin_changed.entity_id == user_id
         assert user_admin_changed.before == {"is_admin": False}
