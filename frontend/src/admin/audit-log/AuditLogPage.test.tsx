@@ -1,29 +1,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  auditLogEntryFixture,
+  auditLogPageFixture,
+} from '../../testing/contractFixtures'
 import AuditLogPage from './AuditLogPage'
+import auditContract from './fixtures/audit-log-contract.json'
 
-const projectId = '00000000-0000-0000-0000-000000000412'
-const actorId = '00000000-0000-0000-0000-000000000001'
-
-const first = {
-  id: '00000000-0000-0000-0000-000000000002',
-  created_at: '2026-10-10T08:30:00Z',
-  created_by: actorId,
-  project_id: projectId,
-  event_type: 'project_zone.created',
-  entity_type: 'project_zone',
-  entity_id: '00000000-0000-0000-0000-000000000100',
-  before: null,
-  after: { name: '一樓' },
-}
+const projectId = auditContract.query.project_id
+const actorId = auditContract.query.actor_id
 
 function mockFetch(
   auditResponse: (url: URL) => Response = (url) =>
     Response.json(
       url.searchParams.get('cursor')
-        ? { items: [{ ...first, id: 'third' }], next_cursor: null }
-        : { items: [first], next_cursor: 'second-page' },
+        ? auditLogPageFixture({
+            items: [auditLogEntryFixture({ id: 'third' })],
+          })
+        : auditLogPageFixture({ next_cursor: 'second-page' }),
     ),
 ) {
   const fetcher = vi.fn(
@@ -72,13 +67,13 @@ describe('稽核查詢頁', () => {
       target: { value: actorId },
     })
     fireEvent.change(screen.getByLabelText('起始時間（含）'), {
-      target: { value: '2026-10-10T08:00' },
+      target: { value: auditContract.local_from },
     })
     fireEvent.change(screen.getByLabelText('結束時間（不含）'), {
-      target: { value: '2026-10-11T08:00' },
+      target: { value: auditContract.local_to },
     })
     fireEvent.change(screen.getByLabelText('事件類型'), {
-      target: { value: 'project_zone.created' },
+      target: { value: auditContract.query.event_type },
     })
     fireEvent.click(screen.getByRole('button', { name: '查詢' }))
     await waitFor(() => {
@@ -88,11 +83,7 @@ describe('稽核查詢頁', () => {
       )
       expect(search).toBeDefined()
       const params = new URL(search!, 'http://localhost').searchParams
-      expect(params.get('project_id')).toBe(projectId)
-      expect(params.get('actor_id')).toBe(actorId)
-      expect(params.get('event_type')).toBe('project_zone.created')
-      expect(params.get('from')).toBe('2026-10-10T00:00:00.000Z')
-      expect(params.get('to')).toBe('2026-10-11T00:00:00.000Z')
+      expect(Object.fromEntries(params)).toEqual(auditContract.query)
     })
     fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
     await waitFor(() => {
@@ -102,11 +93,10 @@ describe('稽核查詢頁', () => {
       expect(nextRequest).toBeDefined()
       const params = new URL(String(nextRequest?.[0]), 'http://localhost')
         .searchParams
-      expect(params.get('project_id')).toBe(projectId)
-      expect(params.get('actor_id')).toBe(actorId)
-      expect(params.get('from')).toBe('2026-10-10T00:00:00.000Z')
-      expect(params.get('to')).toBe('2026-10-11T00:00:00.000Z')
-      expect(params.get('event_type')).toBe('project_zone.created')
+      expect(Object.fromEntries(params)).toEqual({
+        ...auditContract.query,
+        cursor: 'second-page',
+      })
     })
     expect(screen.getByText('第 2 頁')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
@@ -215,7 +205,7 @@ describe('稽核查詢頁', () => {
   })
 
   it('顯示空結果狀態', async () => {
-    mockFetch(() => Response.json({ items: [], next_cursor: null }))
+    mockFetch(() => Response.json(auditLogPageFixture({ items: [] })))
     render(<AuditLogPage />)
 
     expect(
