@@ -58,9 +58,10 @@ describe('ProjectItemLinks', () => {
       'datetime',
       '2026-10-05T01:00:00Z',
     )
-    expect(
-      screen.getByRole('link', { name: '修改「管線查核」' }),
-    ).toHaveAttribute(
+    const editLinkName = '修改「管線查核」'
+    const editLink = screen.getByRole('link', { name: editLinkName })
+    expect(editLink).toHaveTextContent('修改')
+    expect(editLink).toHaveAttribute(
       'href',
       '/admin/projects/project-1/inspection-items/copy-1',
     )
@@ -112,9 +113,10 @@ describe('ProjectItemLinks', () => {
     )
 
     expect(await screen.findByText('管線查核')).toBeInTheDocument()
-    expect(
-      screen.getByRole('link', { name: '檢視「管線查核」' }),
-    ).toHaveAttribute(
+    const viewLinkName = '檢視「管線查核」'
+    const viewLink = screen.getByRole('link', { name: viewLinkName })
+    expect(viewLink).toHaveTextContent('檢視')
+    expect(viewLink).toHaveAttribute(
       'href',
       '/admin/projects/project-1/inspection-items/copy-1',
     )

@@ -32,6 +32,15 @@ import {
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 
+const PARTIAL_SYSTEM_APPLIED_HELP = [
+  '。系統不會略過已套用項目，也不會部分套用，',
+  '請改選未套用的單一項目。',
+].join('')
+const APPLY_CONFIRM_WARNING = [
+  '套用後可在查核項目修改內容，',
+  '目前無法刪除。',
+].join('')
+
 function formatTime(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-TW')
@@ -857,7 +866,10 @@ export default function ProjectTemplatesPage({
                           </button>
                           <Link
                             className="btn"
-                            to={`/admin/projects/${projectId}/inspection-items`}
+                            to={
+                              `/admin/projects/${projectId}` +
+                              '/inspection-items'
+                            }
                           >
                             返回查核項目
                           </Link>
@@ -879,8 +891,10 @@ export default function ProjectTemplatesPage({
                       role="alertdialog"
                     >
                       <p>
-                        一次新增 {selectedTemplates.length} 個項目到專案？
-                        套用後可在查核項目修改內容，目前無法刪除。
+                        {'一次新增 ' +
+                          selectedTemplates.length +
+                          ' 個項目到專案？'}{' '}
+                        {APPLY_CONFIRM_WARNING}
                       </p>
                     </ConfirmBox>
                   ) : (
@@ -916,9 +930,14 @@ export default function ProjectTemplatesPage({
                       id="system-applied-help"
                       role="status"
                     >
-                      {allSystemItemsApplied
-                        ? '專案已有這個系統的全部項目。'
-                        : `${appliedTemplateCount} 項已套用。系統不會略過已套用項目，也不會部分套用，請改選未套用的單一項目。`}
+                      {allSystemItemsApplied ? (
+                        '專案已有這個系統的全部項目。'
+                      ) : (
+                        <>
+                          {appliedTemplateCount} 項已套用
+                          {PARTIAL_SYSTEM_APPLIED_HELP}
+                        </>
+                      )}
                     </p>
                   )}
                 </>

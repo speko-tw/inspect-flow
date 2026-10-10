@@ -1269,6 +1269,35 @@ describe('admin user and company pages', () => {
     ).toBeInTheDocument()
   })
 
+  it('opens template apply route for an office member', async () => {
+    const fetchMock = managementFetch({
+      memberProjectIds: ['project-demo-1'],
+    })
+    renderAdmin(
+      '/admin/projects/project-demo-1/inspection-items/templates',
+      false,
+      {
+        has_office_access: true,
+        has_field_access: false,
+        has_template_access: false,
+      },
+    )
+
+    expect(
+      await screen.findByRole('region', { name: '範本操作' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeInTheDocument()
+    const permissionCheck = screen.queryByText('正在確認專案權限…')
+    expect(permissionCheck).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(true)
+  })
+
   it('lets non-admin users reach template browsing and displays API 403', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
