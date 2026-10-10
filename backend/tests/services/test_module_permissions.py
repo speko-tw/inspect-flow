@@ -259,6 +259,37 @@ def test_bundle_application_is_all_or_nothing_for_delegate(session, operator):
     )
 
 
+def test_admin_can_apply_bundle_with_all_project_progress_read(
+    session, operator
+):
+    target = create_root_user_with_company(session, "BND-ADM-PROG")
+    bundle = PermissionBundle(
+        name="Company lead bundle",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[
+            PermissionBundlePermission(
+                permission_code="all_project_progress.read"
+            )
+        ],
+    )
+    session.add(bundle)
+    session.flush()
+
+    assert operator.is_admin
+    assert service.apply_permission_bundle(
+        session, actor=operator, user=target, bundle=bundle
+    )
+    assert [
+        row.permission_code
+        for row in session.scalars(
+            select(UserModulePermission).where(
+                UserModulePermission.user_id == target.id
+            )
+        )
+    ] == ["all_project_progress.read"]
+
+
 def test_bundle_rejects_all_invalid_codes_with_one_denial_audit(
     session, operator, monkeypatch
 ):

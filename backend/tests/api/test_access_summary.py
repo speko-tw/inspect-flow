@@ -269,7 +269,7 @@ def test_responses_match_frontend_contract_fixture(world) -> None:
 
     for who in ("admin", "office", "field", "nobody"):
         assert sorted(world[who].get(ME).json()) == sorted(
-            contract["current_user_keys"] + ["module_permissions"]
+            contract["current_user_keys"]
         )
     projects = world["split"].get(ME_PROJECTS).json()
     assert projects

@@ -19,7 +19,7 @@ from app.models import (
     TaskRequirementSnapshot,
     User,
 )
-from app.permission_codes import PermissionCode
+from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.audit import (
     AuditEventKind,
     record_audit_event,
@@ -121,7 +121,11 @@ def project_permissions_for(
 ) -> frozenset[str]:
     operator = get_current_operator(session)
     if operator.is_admin:
-        return frozenset(code.value for code in PermissionCode)
+        return frozenset(
+            code.value
+            for code in PermissionCode
+            if permission_code_scope(code.value) == "project"
+        )
     return effective_permissions(
         session, user_id=operator.id, project_id=project_id
     )

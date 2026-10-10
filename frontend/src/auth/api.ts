@@ -20,6 +20,7 @@ export interface CurrentUser {
   has_office_access: boolean
   has_field_access: boolean
   has_template_access: boolean
+  module_permissions: string[]
   // 登入與 `me` 回傳同一份本體（AUT-R05、AUT-R08）；這四個公司欄位
   // 由我的工作台讀取，其他呼叫端不需要，所以型別上選填。
   company?: { id: string; name: string } | null

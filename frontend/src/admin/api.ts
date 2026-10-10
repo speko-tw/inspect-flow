@@ -61,6 +61,7 @@ export type UserInput = {
   department?: string | null
   location?: string | null
   employee_no?: string | null
+  is_external_collaborator: boolean
   is_admin?: boolean
 }
 

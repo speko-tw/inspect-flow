@@ -526,12 +526,12 @@ def list_assignable_roles(
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),  # noqa: B008
-    caller: User = _PROJECT_MEMBER_ACCESS,
+    _caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> AssignableRoleListResponse:
-    """List the roles that can be assigned to project members.
+    """List role definitions for the project member assignment UI.
 
-    Non-Admin callers see only roles approved by an Admin. Admins can
-    assign any role, subject to the external-collaborator restriction.
+    The dependency enforces project member management access before
+    this function runs.
     """
     _get_project(db, project_id)
 

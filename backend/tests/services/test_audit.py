@@ -404,7 +404,7 @@ def test_assignment_denial_project_id_is_persisted_independently(
             "project_id": project.id,
             "user_id": operator.id,
             "role_ids": [],
-            "reason": "role_not_assignable",
+            "reason": "external_role_not_allowed",
         },
         project_id=project.id,
     )

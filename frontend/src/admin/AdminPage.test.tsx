@@ -76,6 +76,7 @@ const currentUser: CurrentUser = {
   has_office_access: true,
   has_field_access: true,
   has_template_access: true,
+  module_permissions: [],
 }
 
 function renderAdmin(
@@ -533,6 +534,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     const passwordHeading = await screen.findByRole('heading', {
@@ -609,6 +611,7 @@ describe('admin user and company pages', () => {
       fireEvent.change(screen.getByLabelText(/^中文姓名/), {
         target: { value: '測試' },
       })
+      fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
       fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     }
 
@@ -654,6 +657,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     expect(await screen.findByText('leave-page-password')).toBeInTheDocument()
 
@@ -687,6 +691,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     expect(
       await screen.findByText('back-navigation-password'),
@@ -853,6 +858,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(

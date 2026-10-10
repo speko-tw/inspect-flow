@@ -30,6 +30,7 @@ const USER: CurrentUser = {
   has_office_access: true,
   has_field_access: false,
   has_template_access: false,
+  module_permissions: [],
 }
 
 const PROJECT_ITEM: ProjectInspectionItem = {

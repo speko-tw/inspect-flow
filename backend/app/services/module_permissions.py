@@ -628,11 +628,11 @@ def apply_permission_bundle(
         code
         for code in codes
         if user.is_admin
-        or code == "all_project_progress.read"
         or (
             not actor.is_admin
             and (
-                actor.id == user.id
+                code == "all_project_progress.read"
+                or actor.id == user.id
                 or permission_code_module(code) not in delegated_modules
             )
         )

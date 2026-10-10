@@ -18,7 +18,6 @@ one group below; module permissions are reported separately.
 The summary is computed with one query per call (no per-project loop).
 """
 
-import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -78,17 +77,6 @@ class AccessSummary:
     has_field_access: bool
     has_template_access: bool
     module_permissions: frozenset[str]
-
-
-def permission_codes_by_project(
-    session: Session, *, user_id: uuid.UUID
-) -> dict[uuid.UUID, frozenset[str]]:
-    """Effective permission codes of ``user_id`` in every project the
-    user is a member of, from a single query.
-    """
-    return calculate_effective_access(
-        session, user_id=user_id
-    ).project_permissions_by_project
 
 
 def summarize_access(session: Session, user: User) -> AccessSummary:
