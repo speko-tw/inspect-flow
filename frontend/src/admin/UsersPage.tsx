@@ -51,7 +51,6 @@ export default function UsersPage({
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
-  const searchGuard = useSubmitGuard()
   const actionGuard = useSubmitGuard()
 
   useEffect(() => {
@@ -297,7 +296,7 @@ export default function UsersPage({
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
-        <Form guard={searchGuard} onSubmit={searchUsers}>
+        <Form onSubmit={searchUsers}>
           <label>
             搜尋使用者
             <input
@@ -429,9 +428,7 @@ export default function UsersPage({
                               busy={busyUser !== null}
                               onCancel={() => setEditingUser(null)}
                               onSave={(fields) =>
-                                void act(user.id, () =>
-                                  updateUser(user.id, fields),
-                                )
+                                act(user.id, () => updateUser(user.id, fields))
                               }
                               user={user}
                             />
@@ -442,7 +439,7 @@ export default function UsersPage({
                               companies={companies}
                               onCancel={() => setEditingCompany(null)}
                               onSave={(companyId, fields) =>
-                                void act(user.id, () =>
+                                act(user.id, () =>
                                   companyId === user.company_id
                                     ? updateUser(user.id, fields)
                                     : linkUserCompany(
@@ -504,7 +501,7 @@ function UserDetailsForm({
     email: string
     name_zh: string
     name_en: string | null
-  }) => void
+  }) => Promise<void>
 }) {
   const [username, setUsername] = useState(user.username)
   const [email, setEmail] = useState(user.email ?? '')
@@ -513,7 +510,7 @@ function UserDetailsForm({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    onSave({
+    return onSave({
       username,
       email,
       name_zh: nameZh,
@@ -581,7 +578,7 @@ function CompanyLinkForm({
   onSave: (
     companyId: string | null,
     fields: Pick<User, 'department' | 'location' | 'employee_no'>,
-  ) => void
+  ) => Promise<void>
 }) {
   const [companyId, setCompanyId] = useState(user.company_id ?? '')
   const [department, setDepartment] = useState(user.department ?? '')
@@ -604,13 +601,13 @@ function CompanyLinkForm({
 
   return (
     <Form
-      onSubmit={() => {
+      onSubmit={() =>
         onSave(companyId || null, {
           department: disabled ? null : department || null,
           location: disabled ? null : location || null,
           employee_no: disabled ? null : employeeNo || null,
         })
-      }}
+      }
     >
       <h3>連結公司</h3>
       <label>

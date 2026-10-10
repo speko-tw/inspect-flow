@@ -9,7 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
-import { holdRequests } from '../../testing/submitGuard'
+import { expectImeEnterIgnored, holdRequests } from '../../testing/submitGuard'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import AdminPage from '../AdminPage'
 import { ManagementApiError } from '../api'
@@ -489,6 +489,69 @@ describe('admin role management page', () => {
     ).toBeChecked()
   })
 })
+
+describe.each([['角色管理新增／編輯', '新增角色']])(
+  '%s 共用表單',
+  (_name, submitLabel) => {
+    function fillForm() {
+      fireEvent.change(screen.getByLabelText('角色名稱'), {
+        target: { value: '表單測試角色' },
+      })
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: MANAGE.description }),
+      )
+    }
+
+    it('真實頁面 API pending 時只送一次並停用按鈕', async () => {
+      const fetchMock = rolesFetch()
+      renderRoles()
+      await screen.findByRole('heading', { name: '角色管理' })
+      fillForm()
+      const button = screen.getByRole('button', { name: submitLabel })
+      const form = button.closest('form')!
+      const gate = holdRequests(fetchMock, 'POST', /\/roles$/)
+
+      fireEvent.click(button)
+      fireEvent.submit(form)
+
+      expect(button).toBeDisabled()
+      expect(calls(fetchMock, 'POST')).toHaveLength(1)
+      gate.resolve()
+      expect(
+        await screen.findByRole('row', { name: /表單測試角色/ }),
+      ).toBeInTheDocument()
+    })
+
+    it('IME Enter 不送出真實 API', async () => {
+      const fetchMock = rolesFetch()
+      renderRoles()
+      await screen.findByRole('heading', { name: '角色管理' })
+      fillForm()
+
+      expectImeEnterIgnored(screen.getByLabelText('角色名稱'))
+      expect(calls(fetchMock, 'POST')).toHaveLength(0)
+    })
+
+    it('API 失敗後可以再次送出', async () => {
+      const failures: FakeOptions['failures'] = {
+        'POST /roles': { status: 500, code: 'server.error' },
+      }
+      const fetchMock = rolesFetch({ failures })
+      renderRoles()
+      await screen.findByRole('heading', { name: '角色管理' })
+      fillForm()
+      const button = screen.getByRole('button', { name: submitLabel })
+      const form = button.closest('form')!
+
+      fireEvent.click(button)
+      await screen.findByRole('alert')
+      delete failures['POST /roles']
+      fireEvent.submit(form)
+
+      await waitFor(() => expect(calls(fetchMock, 'POST')).toHaveLength(2))
+    })
+  },
+)
 
 describe('roleErrorMessage', () => {
   it('maps role error codes and falls back to the shared messages', () => {

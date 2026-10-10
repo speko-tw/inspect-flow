@@ -11,6 +11,7 @@ import {
 
 import { blockImeEnter } from './submitGuard'
 import type { SubmitGuard } from './submitGuard'
+import { GENERIC_FAILURE_MESSAGE } from '../http'
 import './Form.css'
 
 type FormContextValue = { pending: boolean }
@@ -55,15 +56,17 @@ export function Form({
     let result: void | Promise<unknown>
     try {
       result = onSubmit(event)
-    } catch {
-      setUnexpectedError('操作失敗，請稍後再試。')
+    } catch (error) {
+      console.error('Shared form submission failed:', error)
+      setUnexpectedError(GENERIC_FAILURE_MESSAGE)
       release()
       return
     }
     if (result && typeof result.then === 'function') {
       return Promise.resolve(result)
-        .catch(() => {
-          setUnexpectedError('操作失敗，請稍後再試。')
+        .catch((error) => {
+          console.error('Shared form submission failed:', error)
+          setUnexpectedError(GENERIC_FAILURE_MESSAGE)
         })
         .finally(release)
     }

@@ -9,7 +9,6 @@ import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../../ui/Form'
-import { useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
 import {
   createProject,
@@ -71,8 +70,6 @@ export default function ProjectsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
-  const searchGuard = useSubmitGuard()
-  const saveGuard = useSubmitGuard()
   const [editing, setEditing] = useState<Project | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [transition, setTransition] = useState<Transition | null>(null)
@@ -297,7 +294,7 @@ export default function ProjectsPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <Form guard={searchGuard} onSubmit={searchProjects}>
+      <Form onSubmit={searchProjects}>
         <label>
           搜尋專案
           <input
@@ -436,7 +433,7 @@ export default function ProjectsPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <Form guard={saveGuard} onSubmit={save}>
+      <Form onSubmit={save}>
         <h2 ref={editHeadingRef} tabIndex={editing ? -1 : undefined}>
           {editing ? `編輯專案「${editing.name}」` : '新增專案'}
         </h2>

@@ -29,7 +29,6 @@ export default function CompaniesPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
-  const searchGuard = useSubmitGuard()
   const saveGuard = useSubmitGuard()
   const [deactivating, setDeactivating] = useState<{
     company: Company
@@ -270,7 +269,7 @@ export default function CompaniesPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <Form guard={searchGuard} onSubmit={searchCompanies}>
+      <Form onSubmit={searchCompanies}>
         <label>
           搜尋公司
           <input

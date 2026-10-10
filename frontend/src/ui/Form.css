@@ -3,7 +3,9 @@
   color: var(--error-text);
 }
 
-.shared-field-error {
+.shared-field-error,
+.tpl-field-error,
+.member-field-error {
   margin: calc(var(--space-1) * -1) 0 var(--space-2);
   padding: 0;
   border: 0;

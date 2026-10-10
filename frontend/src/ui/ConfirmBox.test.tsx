@@ -22,6 +22,21 @@ function setup(props: Partial<Parameters<typeof ConfirmBox>[0]> = {}) {
 }
 
 describe('ConfirmBox', () => {
+  it('shows a generic error when onConfirm rejects', async () => {
+    const onConfirm = vi.fn(() => Promise.reject(new Error('request failed')))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    setup({ onConfirm })
+
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '操作失敗，請稍後再試。',
+    )
+    expect(onConfirm).toHaveBeenCalledOnce()
+    expect(error).toHaveBeenCalledOnce()
+    error.mockRestore()
+  })
+
   it('orders the buttons [取消][確認]', () => {
     setup()
     expect(
@@ -310,6 +325,7 @@ describe('ConfirmBox', () => {
     const onConfirm = vi.fn(() => {
       throw new Error('sync failure')
     })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     setup({ onConfirm })
 
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
@@ -319,5 +335,10 @@ describe('ConfirmBox', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
     expect(onConfirm).toHaveBeenCalledTimes(2)
+    expect(error).toHaveBeenCalledWith(
+      'Confirmation failed:',
+      expect.objectContaining({ message: 'sync failure' }),
+    )
+    error.mockRestore()
   })
 })

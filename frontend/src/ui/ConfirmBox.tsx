@@ -24,6 +24,7 @@ import {
 
 import { blockImeEnter, useSubmitGuard } from './submitGuard'
 import { FormError } from './Form'
+import { GENERIC_FAILURE_MESSAGE } from '../http'
 
 export type ConfirmVariant = 'danger' | 'neutral'
 
@@ -94,8 +95,9 @@ export function ConfirmBox({
     setConfirmError('')
     try {
       await guard.run(onConfirm)
-    } catch {
-      setConfirmError('操作失敗，請稍後再試。')
+    } catch (error) {
+      console.error('Confirmation failed:', error)
+      setConfirmError(GENERIC_FAILURE_MESSAGE)
     }
   }
 

@@ -398,6 +398,131 @@ function mockScrollIntoView() {
   }
 }
 
+const sharedProjectFormCases = [
+  {
+    name: '專案管理搜尋',
+    method: 'GET',
+    match: /\/projects\?/,
+    button: '搜尋',
+    field: '搜尋專案',
+    prepare: () => {},
+  },
+  {
+    name: '專案管理新增或編輯',
+    method: 'POST',
+    match: /\/projects$/,
+    button: '新增專案',
+    field: '專案代號',
+    prepare: fillProjectForm,
+  },
+] as const
+
+describe.each(sharedProjectFormCases)('$name 共用表單', (formCase) => {
+  async function setup() {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    formCase.prepare()
+    const button = screen.getByRole('button', { name: formCase.button })
+    const form = formOf(button)
+    const field = within(form).getByLabelText(new RegExp(formCase.field))
+    let failing = false
+    const original = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      if (
+        failing &&
+        (init?.method ?? 'GET') === formCase.method &&
+        formCase.match.test(String(input))
+      ) {
+        return Response.json(
+          { error: { code: 'server.error' } },
+          { status: 500 },
+        )
+      }
+      return original(input, init)
+    })
+    return {
+      fetchMock,
+      button,
+      field,
+      form,
+      setFailing: (value: boolean) => {
+        failing = value
+      },
+    }
+  }
+
+  it('pending 期間只送一次並停用按鈕', async () => {
+    const test = await setup()
+    const before = calls(
+      test.fetchMock,
+      formCase.method,
+      formCase.match,
+    ).length
+    const gate = holdRequests(test.fetchMock, formCase.method, formCase.match)
+
+    fireEvent.click(test.button)
+    fireEvent.submit(test.form)
+
+    expect(test.button).toBeDisabled()
+    expect(
+      calls(test.fetchMock, formCase.method, formCase.match),
+    ).toHaveLength(before + 1)
+    gate.resolve()
+    if (formCase.method === 'GET') {
+      await waitFor(() => expect(test.button).toBeEnabled())
+    } else {
+      await screen.findByRole('heading', {
+        name: 'DEMO-002｜第二示範工程',
+      })
+    }
+  })
+
+  it('IME Enter 不送出真實 API', async () => {
+    const test = await setup()
+    const before = calls(
+      test.fetchMock,
+      formCase.method,
+      formCase.match,
+    ).length
+    expectImeEnterIgnored(test.field)
+    expect(
+      calls(test.fetchMock, formCase.method, formCase.match),
+    ).toHaveLength(before)
+  })
+
+  it('API 失敗後可以再次送出', async () => {
+    const test = await setup()
+    const before = calls(
+      test.fetchMock,
+      formCase.method,
+      formCase.match,
+    ).length
+    test.setFailing(true)
+    fireEvent.click(test.button)
+    await screen.findByRole('alert')
+    expect(
+      calls(test.fetchMock, formCase.method, formCase.match),
+    ).toHaveLength(before + 1)
+    test.setFailing(false)
+    fireEvent.click(test.button)
+    if (formCase.method === 'GET') {
+      await waitFor(() =>
+        expect(
+          calls(test.fetchMock, formCase.method, formCase.match),
+        ).toHaveLength(before + 2),
+      )
+    } else {
+      await screen.findByRole('heading', {
+        name: 'DEMO-002｜第二示範工程',
+      })
+      expect(
+        calls(test.fetchMock, formCase.method, formCase.match),
+      ).toHaveLength(before + 2)
+    }
+  })
+})
+
 // 確認與取消固定排成 [取消][確認]；只有最終確認用 btn-danger（#500）。
 function expectCancelThenDanger(scope: HTMLElement, labels: [string, string]) {
   const buttons = within(scope).getAllByRole('button')

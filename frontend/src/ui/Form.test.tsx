@@ -2,37 +2,33 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { deferred } from '../testing/submitGuard'
+import type { SubmitGuard } from './submitGuard'
 import { FieldError, Form, FormSubmitButton } from './Form'
 
-const formCases = [
-  ['登入', '登入'],
-  ['變更密碼', '變更密碼'],
-  ['首次設定：登入碼', '下一步'],
-  ['首次設定：admin 密碼', '設定密碼'],
-  ['使用者管理：搜尋', '搜尋'],
-  ['使用者管理：修改資料', '儲存資料'],
-  ['使用者管理：公司連結', '儲存公司連結'],
-  ['使用者管理：新增使用者', '新增使用者'],
-  ['公司管理：搜尋', '搜尋'],
-  ['公司管理：新增或改名', '新增公司'],
-  ['角色管理：新增或編輯', '新增角色'],
-  ['專案管理：搜尋', '搜尋'],
-  ['專案管理：新增或編輯', '儲存專案'],
-] as const
+function createGuard(enterResult: boolean): SubmitGuard {
+  const run: SubmitGuard['run'] = async <T,>(
+    task: () => T | Promise<T>,
+  ): Promise<T | undefined> => task()
+  return {
+    enter: vi.fn(() => enterResult),
+    leave: vi.fn(),
+    run,
+  }
+}
 
-describe.each(formCases)('%s 共用表單防護', (_name, buttonLabel) => {
-  it('only submits once while a request is pending and disables the button', async () => {
+describe('Form primitive guard', () => {
+  it('only submits once while a request is pending', async () => {
     const gate = deferred<void>()
     const onSubmit = vi.fn(() => gate.promise)
     render(
       <Form onSubmit={onSubmit}>
-        <FormSubmitButton>{buttonLabel}</FormSubmitButton>
+        <FormSubmitButton>儲存</FormSubmitButton>
       </Form>,
     )
-    const button = screen.getByRole('button', { name: buttonLabel })
+    const button = screen.getByRole('button', { name: '儲存' })
     const form = button.closest('form')!
 
-    fireEvent.submit(form)
+    fireEvent.click(button)
     fireEvent.submit(form)
 
     expect(onSubmit).toHaveBeenCalledOnce()
@@ -46,7 +42,7 @@ describe.each(formCases)('%s 共用表單防護', (_name, buttonLabel) => {
     render(
       <Form onSubmit={onSubmit}>
         <input aria-label="輸入" />
-        <FormSubmitButton>{buttonLabel}</FormSubmitButton>
+        <FormSubmitButton>儲存</FormSubmitButton>
       </Form>,
     )
 
@@ -57,30 +53,6 @@ describe.each(formCases)('%s 共用表單防護', (_name, buttonLabel) => {
       }),
     ).toBe(false)
     expect(onSubmit).not.toHaveBeenCalled()
-  })
-
-  it('allows another submit after a failed request', async () => {
-    const gate = deferred<void>()
-    const onSubmit = vi.fn(async () => {
-      try {
-        await gate.promise
-      } catch {
-        // The page handles request errors before the shared form releases.
-      }
-    })
-    render(
-      <Form onSubmit={onSubmit}>
-        <FormSubmitButton>{buttonLabel}</FormSubmitButton>
-      </Form>,
-    )
-    const button = screen.getByRole('button', { name: buttonLabel })
-    const form = button.closest('form')!
-
-    fireEvent.submit(form)
-    await act(async () => gate.reject(new Error('request failed')))
-    expect(button).toBeEnabled()
-    fireEvent.submit(form)
-    expect(onSubmit).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -95,5 +67,82 @@ describe('shared form errors', () => {
 
     expect(screen.getByText('表單錯誤')).toHaveClass('shared-form-error')
     expect(screen.getByText('欄位錯誤')).toHaveClass('shared-field-error')
+  })
+})
+
+describe('Form submission failures and guards', () => {
+  it('shows the generic error and releases after a synchronous throw', () => {
+    const guard = createGuard(true)
+    const onSubmit = vi.fn(() => {
+      throw new Error('sync failure')
+    })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <Form guard={guard} onSubmit={onSubmit}>
+        <FormSubmitButton>儲存</FormSubmitButton>
+      </Form>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '操作失敗，請稍後再試。',
+    )
+    expect(guard.leave).toHaveBeenCalledOnce()
+    expect(error).toHaveBeenCalledOnce()
+    error.mockRestore()
+  })
+
+  it('releases after a rejected Promise', async () => {
+    const guard = createGuard(true)
+    const onSubmit = vi.fn(() => Promise.reject(new Error('async failure')))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <Form guard={guard} onSubmit={onSubmit}>
+        <FormSubmitButton>儲存</FormSubmitButton>
+      </Form>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '操作失敗，請稍後再試。',
+    )
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(guard.leave).toHaveBeenCalledOnce()
+    expect(error).toHaveBeenCalledOnce()
+    error.mockRestore()
+  })
+
+  it('does not call onSubmit when the supplied guard is occupied', () => {
+    const guard = createGuard(false)
+    const onSubmit = vi.fn()
+    render(
+      <Form guard={guard} onSubmit={onSubmit}>
+        <FormSubmitButton>儲存</FormSubmitButton>
+      </Form>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+
+    expect(guard.enter).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(guard.leave).not.toHaveBeenCalled()
+  })
+
+  it('releases the supplied guard after a successful request', async () => {
+    const guard = createGuard(true)
+    const gate = deferred<void>()
+    render(
+      <Form guard={guard} onSubmit={() => gate.promise}>
+        <FormSubmitButton>儲存</FormSubmitButton>
+      </Form>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+    expect(guard.leave).not.toHaveBeenCalled()
+    await act(async () => gate.resolve())
+    expect(guard.leave).toHaveBeenCalledOnce()
   })
 })

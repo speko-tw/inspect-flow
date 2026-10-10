@@ -6,6 +6,7 @@ import LoginPage from './LoginPage'
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
 import { resetSessionMemory } from './sessionMemory'
+import { deferred } from '../testing/submitGuard'
 
 const CURRENT_USER = {
   id: 'u1',
@@ -54,6 +55,7 @@ function ProtectedPage() {
 function TestApp() {
   return (
     <Routes>
+      <Route path="/" element={<h1>首頁</h1>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/protected"
@@ -76,6 +78,96 @@ function fillAndSubmit(account: string, password: string) {
   })
   fireEvent.click(screen.getByRole('button', { name: '登入' }))
 }
+
+describe.each([['登入頁', '/api/v1/auth/login']])(
+  '%s 共用表單',
+  (_name, endpoint) => {
+    function fill() {
+      fireEvent.change(screen.getByLabelText('帳號名稱或 Email'), {
+        target: { value: 'user@example.com' },
+      })
+      fireEvent.change(screen.getByLabelText('密碼'), {
+        target: { value: 'correct-password' },
+      })
+    }
+
+    it('真實頁面 pending 時只送一次並停用按鈕', async () => {
+      const gate = deferred<Response>()
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        requestUrl(input).endsWith(endpoint)
+          ? gate.promise
+          : new Response(null, { status: 401 }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <TestApp />
+        </MemoryRouter>,
+      )
+      fill()
+      const button = screen.getByRole('button', { name: '登入' })
+      fireEvent.click(button)
+      fireEvent.submit(button.closest('form')!)
+      expect(button).toBeDisabled()
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          requestUrl(input).endsWith(endpoint),
+        ),
+      ).toHaveLength(1)
+      gate.resolve(
+        jsonResponse({ error: { code: 'auth.invalid_credentials' } }, 401),
+      )
+      await screen.findByRole('alert')
+    })
+
+    it('IME Enter 不送出真實登入 API', () => {
+      const fetchMock = vi.fn(async () => new Response(null, { status: 401 }))
+      vi.stubGlobal('fetch', fetchMock)
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <TestApp />
+        </MemoryRouter>,
+      )
+      const input = screen.getByLabelText('帳號名稱或 Email')
+      fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('API 失敗後可再次送出', async () => {
+      let fail = true
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (requestUrl(input).endsWith(endpoint)) {
+          return fail
+            ? jsonResponse(
+                { error: { code: 'auth.invalid_credentials' } },
+                401,
+              )
+            : jsonResponse(CURRENT_USER)
+        }
+        return new Response(null, { status: 401 })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <TestApp />
+        </MemoryRouter>,
+      )
+      fill()
+      const button = screen.getByRole('button', { name: '登入' })
+      fireEvent.click(button)
+      await screen.findByRole('alert')
+      fail = false
+      fireEvent.click(button)
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.filter(([input]) =>
+            requestUrl(input).endsWith(endpoint),
+          ),
+        ).toHaveLength(2),
+      )
+    })
+  },
+)
 
 describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
   afterEach(() => {

@@ -133,6 +133,287 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+const userFormCases = [
+  {
+    name: '使用者資料編輯',
+    open: '修改資料',
+    button: '儲存資料',
+    input: '帳號名稱',
+    method: 'PATCH',
+    path: '/api/v1/users/user-1',
+    prepare: () => {},
+  },
+  {
+    name: '使用者公司連結',
+    open: '公司連結',
+    button: '儲存公司連結',
+    input: '公司',
+    method: 'PUT',
+    path: '/api/v1/users/user-1/company',
+    prepare: (input: HTMLElement) =>
+      fireEvent.change(input, { target: { value: '' } }),
+  },
+] as const
+
+describe.each(userFormCases)('$name 共用表單', (formCase) => {
+  async function openForm(options: Parameters<typeof stubBackend>[0] = {}) {
+    const backend = stubBackend(options)
+    renderUsers()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: formCase.open }))
+    const button = await screen.findByRole('button', { name: formCase.button })
+    return {
+      backend,
+      button,
+      form: button.closest('form')!,
+      input: within(button.closest('form')!).getByLabelText(formCase.input),
+    }
+  }
+
+  it('pending 期間只呼叫一次 API，並停用送出按鈕', async () => {
+    const gate = deferred()
+    const { backend, button, form } = await openForm({
+      hold: (call) =>
+        call.method === formCase.method && call.path === formCase.path
+          ? gate
+          : undefined,
+    })
+
+    formCase.prepare(within(form).getByLabelText(formCase.input))
+    fireEvent.click(button)
+    fireEvent.submit(form)
+    expect(button).toBeDisabled()
+    expect(backend.count(formCase.method, formCase.path)).toBe(1)
+    gate.resolve()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: formCase.button }),
+      ).toBeNull(),
+    )
+  })
+
+  it('IME Enter 不送出真實 API', async () => {
+    const { backend, input } = await openForm()
+    formCase.prepare(input)
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(backend.count(formCase.method, formCase.path)).toBe(0)
+  })
+
+  it('API 失敗後可再次送出', async () => {
+    const backend = stubBackend({
+      fail: (call) =>
+        call.method === formCase.method && call.path === formCase.path,
+    })
+    renderUsers()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: formCase.open }))
+    const button = await screen.findByRole('button', { name: formCase.button })
+    formCase.prepare(
+      within(button.closest('form')!).getByLabelText(formCase.input),
+    )
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(backend.count(formCase.method, formCase.path)).toBe(1),
+    )
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(backend.count(formCase.method, formCase.path)).toBe(2),
+    )
+  })
+})
+
+describe('使用者管理搜尋共用表單', () => {
+  it('搜尋 pending 鎖送出，IME 略過，失敗後可重試', async () => {
+    const gate = deferred()
+    let holding = false
+    let failing = false
+    const backend = stubBackend({
+      hold: (call) =>
+        holding && call.method === 'GET' && call.path === '/api/v1/users'
+          ? gate
+          : undefined,
+      fail: (call) =>
+        failing && call.method === 'GET' && call.path === '/api/v1/users',
+    })
+    renderUsers()
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    const input = screen.getByLabelText('搜尋使用者')
+    const button = screen.getByRole('button', { name: '搜尋' })
+    const form = button.closest('form')!
+
+    const initialCount = backend.count('GET', '/api/v1/users')
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(backend.count('GET', '/api/v1/users')).toBe(initialCount)
+
+    holding = true
+    const before = initialCount
+    fireEvent.change(input, { target: { value: 'anna' } })
+    fireEvent.click(button)
+    fireEvent.submit(form)
+    expect(button).toBeDisabled()
+    expect(backend.count('GET', '/api/v1/users')).toBe(before + 1)
+    gate.resolve()
+    await waitFor(() => expect(button).toBeEnabled())
+
+    failing = true
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(backend.count('GET', '/api/v1/users')).toBe(before + 2),
+    )
+    failing = false
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(backend.count('GET', '/api/v1/users')).toBe(before + 3),
+    )
+  })
+})
+
+describe('使用者新增共用表單', () => {
+  function fillUserForm() {
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
+      target: { value: 'ben.lin' },
+    })
+    fireEvent.change(screen.getByLabelText(/^Email/), {
+      target: { value: 'ben@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
+      target: { value: '林本' },
+    })
+  }
+
+  it('新增 pending 鎖送出，IME 略過，失敗後可重試', async () => {
+    const gate = deferred()
+    let failing = false
+    const backend = stubBackend({
+      hold: (call) =>
+        call.method === 'POST' && call.path === '/api/v1/users'
+          ? gate
+          : undefined,
+      fail: (call) =>
+        failing && call.method === 'POST' && call.path === '/api/v1/users',
+    })
+    renderUsers()
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    fillUserForm()
+    const button = screen.getByRole('button', { name: '新增使用者' })
+    const form = button.closest('form')!
+    const input = screen.getByLabelText(/^帳號名稱/)
+
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(backend.count('POST', '/api/v1/users')).toBe(0)
+    fireEvent.click(button)
+    fireEvent.submit(form)
+    expect(button).toBeDisabled()
+    expect(backend.count('POST', '/api/v1/users')).toBe(1)
+    gate.resolve()
+    await waitFor(() => expect(button).toBeEnabled())
+
+    failing = true
+    fillUserForm()
+    fireEvent.click(button)
+    await waitFor(() => expect(backend.count('POST', '/api/v1/users')).toBe(2))
+    failing = false
+    fireEvent.click(button)
+    await waitFor(() => expect(backend.count('POST', '/api/v1/users')).toBe(3))
+  })
+})
+
+const companyFormCases = [
+  {
+    name: '公司管理搜尋',
+    button: '搜尋',
+    field: '搜尋公司',
+    method: 'GET',
+    path: '/api/v1/companies',
+  },
+  {
+    name: '公司管理新增',
+    button: '新增公司',
+    field: '公司名稱',
+    method: 'POST',
+    path: '/api/v1/companies',
+  },
+] as const
+
+describe.each(companyFormCases)('$name 共用表單', (formCase) => {
+  async function setup() {
+    const gate = deferred()
+    let hold = false
+    let fail = false
+    const backend = stubBackend({
+      hold: (call) =>
+        hold && call.method === formCase.method && call.path === formCase.path
+          ? gate
+          : undefined,
+      fail: (call) =>
+        fail && call.method === formCase.method && call.path === formCase.path,
+    })
+    render(<CompaniesPage />)
+    await screen.findByText('示範公司')
+    const button = screen.getByRole('button', { name: formCase.button })
+    const form = button.closest('form')!
+    const field = within(form).getByLabelText(formCase.field)
+    if (formCase.method === 'POST') {
+      fireEvent.change(field, { target: { value: '第二示範公司' } })
+    } else {
+      fireEvent.change(field, { target: { value: '示範' } })
+    }
+    return {
+      backend,
+      button,
+      field,
+      form,
+      baseline: backend.count(formCase.method, formCase.path),
+      gate,
+      hold: () => {
+        hold = true
+      },
+      fail: (value: boolean) => {
+        fail = value
+      },
+    }
+  }
+
+  it('真實頁面 API pending 時只送一次，並停用按鈕', async () => {
+    const test = await setup()
+    test.hold()
+    fireEvent.click(test.button)
+    fireEvent.submit(test.form)
+    expect(test.button).toBeDisabled()
+    const expected = test.baseline + 1
+    expect(test.backend.count(formCase.method, formCase.path)).toBe(expected)
+    test.gate.resolve()
+    await waitFor(() => expect(test.button).toBeEnabled())
+  })
+
+  it('IME Enter 不送出真實 API', async () => {
+    const test = await setup()
+    fireEvent.keyDown(test.field, { key: 'Enter', isComposing: true })
+    expect(test.backend.count(formCase.method, formCase.path)).toBe(
+      test.baseline,
+    )
+  })
+
+  it('API 失敗後可以再次送出', async () => {
+    const test = await setup()
+    const expected = test.baseline + 1
+    test.fail(true)
+    fireEvent.click(test.button)
+    await waitFor(() =>
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(
+        expected,
+      ),
+    )
+    test.fail(false)
+    fireEvent.click(test.button)
+    await waitFor(() =>
+      expect(test.backend.count(formCase.method, formCase.path)).toBe(
+        expected + 1,
+      ),
+    )
+  })
+})
+
 describe('UsersPage 操作確認框（#507）', () => {
   async function openConfirm() {
     const row = await screen.findByRole('row', { name: /anna\.deng/ })

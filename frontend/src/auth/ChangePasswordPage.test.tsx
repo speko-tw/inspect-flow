@@ -14,6 +14,7 @@ import App from '../App'
 import ChangePasswordPage from './ChangePasswordPage'
 import RequireAuth from './RequireAuth'
 import { preloadLazyRoutes } from '../testing/preloadRoutes'
+import { deferred } from '../testing/submitGuard'
 
 const TEMP_PASSWORD_USER = {
   id: 'u1',
@@ -49,6 +50,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/change-password']}>
       <Routes>
+        <Route path="/" element={<h1>首頁</h1>} />
         <Route path="/login" element={<h1>登入</h1>} />
         <Route
           path="/change-password"
@@ -67,6 +69,104 @@ async function renderReadyPage() {
   renderPage()
   await screen.findByRole('heading', { name: '變更密碼' })
 }
+
+describe.each([['變更密碼頁', '/api/v1/auth/password']])(
+  '%s 共用表單',
+  (_name, endpoint) => {
+    function fill() {
+      fireEvent.change(screen.getByLabelText('目前密碼'), {
+        target: { value: 'old-password' },
+      })
+      fireEvent.change(screen.getByLabelText('新密碼'), {
+        target: { value: 'new-password-123' },
+      })
+      fireEvent.change(screen.getByLabelText('再輸入一次新密碼'), {
+        target: { value: 'new-password-123' },
+      })
+    }
+
+    it('真實頁面 pending 時只送一次並停用按鈕', async () => {
+      const gate = deferred<Response>()
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input)
+        if (url.endsWith('/api/v1/auth/me'))
+          return jsonResponse(TEMP_PASSWORD_USER)
+        if (url.endsWith(endpoint)) return gate.promise
+        throw new Error(`unexpected fetch: ${url}`)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      await renderReadyPage()
+      fill()
+      const button = screen.getByRole('button', { name: '變更密碼' })
+      fireEvent.click(button)
+      fireEvent.submit(button.closest('form')!)
+      expect(button).toBeDisabled()
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          requestUrl(input).endsWith(endpoint),
+        ),
+      ).toHaveLength(1)
+      gate.resolve(
+        jsonResponse(
+          { error: { code: 'auth.current_password_incorrect' } },
+          400,
+        ),
+      )
+      await screen.findByRole('alert')
+    })
+
+    it('IME Enter 不送出真實變更密碼 API', async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        requestUrl(input).endsWith('/api/v1/auth/me')
+          ? jsonResponse(TEMP_PASSWORD_USER)
+          : new Response(null, { status: 400 }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+      await renderReadyPage()
+      fireEvent.keyDown(screen.getByLabelText('目前密碼'), {
+        key: 'Enter',
+        isComposing: true,
+      })
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          requestUrl(input).endsWith(endpoint),
+        ),
+      ).toHaveLength(0)
+    })
+
+    it('API 失敗後可再次送出', async () => {
+      let fail = true
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input)
+        if (url.endsWith('/api/v1/auth/me'))
+          return jsonResponse(TEMP_PASSWORD_USER)
+        if (url.endsWith(endpoint)) {
+          return fail
+            ? jsonResponse(
+                { error: { code: 'auth.current_password_incorrect' } },
+                400,
+              )
+            : new Response(null, { status: 204 })
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      await renderReadyPage()
+      fill()
+      const button = screen.getByRole('button', { name: '變更密碼' })
+      fireEvent.click(button)
+      await screen.findByRole('alert')
+      fail = false
+      fireEvent.click(button)
+      await screen.findByRole('heading', { name: '首頁' })
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          requestUrl(input).endsWith(endpoint),
+        ),
+      ).toHaveLength(2)
+    })
+  },
+)
 
 function fillAndSubmit(current: string, next: string, confirm: string) {
   fireEvent.change(screen.getByLabelText('目前密碼'), {
