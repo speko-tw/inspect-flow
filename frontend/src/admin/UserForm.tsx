@@ -6,7 +6,7 @@ import {
   type Company,
   type CreatedUser,
 } from './api'
-import { blockImeEnter, useSubmitGuard } from '../ui/submitGuard'
+import { Form, FormSubmitButton } from '../ui/Form'
 
 const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ -'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
@@ -38,7 +38,6 @@ export default function UserForm({
   const [isAdmin, setIsAdmin] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const guard = useSubmitGuard()
 
   const fieldsDisabled = companyId === ''
   const usernameRuleId = useId()
@@ -46,7 +45,6 @@ export default function UserForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!guard.enter()) return
     setError('')
     setSaving(true)
     try {
@@ -74,7 +72,6 @@ export default function UserForm({
     } catch (caught) {
       setError(managementErrorMessage(caught))
     } finally {
-      guard.leave()
       setSaving(false)
     }
   }
@@ -89,9 +86,8 @@ export default function UserForm({
   }
 
   return (
-    <form onKeyDown={blockImeEnter} onSubmit={submit}>
+    <Form error={error} onSubmit={submit}>
       <h2>新增使用者</h2>
-      {error && <p role="alert">{error}</p>}
       <div>
         <label>
           <Required>帳號名稱</Required>
@@ -199,9 +195,9 @@ export default function UserForm({
         />
         指派系統管理者權限
       </label>
-      <button className="btn-primary" disabled={saving} type="submit">
+      <FormSubmitButton className="btn-primary" disabled={saving}>
         {saving ? '建立中…' : '新增使用者'}
-      </button>
-    </form>
+      </FormSubmitButton>
+    </Form>
   )
 }
