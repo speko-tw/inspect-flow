@@ -54,7 +54,7 @@ from app.db import clock
 from app.db.base import uuid7
 from app.db.unit_of_work import unit_of_work
 from app.main import create_app
-from app.models import AuditLog, Company
+from app.models import AuditLog, Company, User
 from app.services.audit import (
     _EVENT_CATALOG,
     _EVENT_TYPE_RE,
@@ -268,6 +268,14 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
             },
         ),
         (
+            "project.updated",
+            {
+                "planned_start_date": date(2026, 10, 10),
+                "planned_completion_date": date(2026, 12, 31),
+            },
+            {"planned_start_date": None, "planned_completion_date": None},
+        ),
+        (
             "project_member.assignment_denied",
             None,
             {
@@ -328,7 +336,12 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
         )
 
     assert stored[10].after["planned_start_date"] == "2026-10-10"
-    assert stored[15].created_by == operator.id
+    assert stored[11].after == {
+        "planned_start_date": None,
+        "planned_completion_date": None,
+    }
+    system_actor = session.get(User, stored[16].created_by)
+    assert system_actor is not None and system_actor.is_system
     assert _EVENT_CATALOG["user.active_changed"].kind is AuditEventKind.UPDATED
     assert _EVENT_CATALOG["user.active_changed"].always_recorded == {
         "is_active"
