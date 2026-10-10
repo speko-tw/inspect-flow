@@ -1081,9 +1081,9 @@ def test_template_write_field_errors_do_not_echo_invalid_values(clients):
     manager = clients["manager"]
     _, system_id = _tree(manager)
     body = _template(system_id)
-    body["inspection_points"][0]["measurement_fields"][0][
-        "unit"
-    ] = "sentinel-forbidden-bound-unit"
+    body["inspection_points"][0]["measurement_fields"][0]["unit"] = (
+        "sentinel-forbidden-bound-unit"
+    )
 
     response = manager.post("/api/v1/templates", json=body)
 
