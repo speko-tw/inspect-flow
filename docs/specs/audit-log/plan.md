@@ -63,7 +63,7 @@
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| T8 | 事件目錄補 `project.created` 的 `company_role`，以及 `project.updated` 的 `company_role`、`company_role_change_reason` 欄位；端到端驗收由 `domain-model` 任務 P 承接 | T6 | ALG-AC28 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
+| T8 | 事件目錄補 `project.created` 的 `company_role`，以及 `project.updated` 的 `company_role`、`company_role_change_reason` 欄位；端到端驗收由 `domain-model` 任務 R 承接 | T6 | ALG-AC28 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 
 ## 並行分組
 
