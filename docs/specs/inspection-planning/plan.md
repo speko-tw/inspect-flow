@@ -21,7 +21,7 @@
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
 - 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋，其 `project.read` 分支與 IP-R12、IP-AC13 由 `authentication` 任務 P 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
 - 任務按專案查核項目手動建立，並由內業選擇專案分區或填補充地點；本計畫不包含依 interval、起訖點或間距自動切分任務。
-- IP-R13～IP-R15 與 IP-AC14～IP-AC15 屬 [負責人直接指示（2026-10-10，#106）](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-6093842438) 的範圍變更；實作不在本計畫另開任務：點位與實測欄位帶 `id`、選「不要」不得增減項次、零項次擋下與 `has_result` 納入有效照片由 [`field-evidence`](../field-evidence/plan.md) T5 實作，Task 回應新增三個欄位與 `has_result` 納入結果由 [`completion-validation`](../completion-validation/plan.md) T3、T4、T6 實作。
+- IP-R13～IP-R15 與 IP-AC14～IP-AC15 屬 [負責人直接指示（2026-10-10，#106）](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-6093842438) 的範圍變更；實作不在本計畫另開任務：點位與實測欄位帶 `id`、選「不要」不得增減項次、零項次擋下與 `has_result` 納入有效照片由 `field-evidence` T5 實作，Task 回應新增三個欄位與 `has_result` 納入結果由 [`completion-validation`](../completion-validation/plan.md) T3、T4、T6 實作。
 
 ## 並行分組
 
