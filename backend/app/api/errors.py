@@ -17,6 +17,7 @@ from typing import Annotated, Any, Union, get_args, get_origin
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.params import Form
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -381,6 +382,10 @@ def _request_body_model(request: Request) -> Any | None:
 def _request_field_errors(
     request: Request, exc: RequestValidationError
 ) -> list[dict[str, str]] | None:
+    route = request.scope.get("route")
+    body_field = getattr(route, "body_field", None)
+    if isinstance(getattr(body_field, "field_info", None), Form):
+        return None
     content_type = request.headers.get("content-type", "").split(";", 1)[0]
     if not (
         content_type == "application/json" or content_type.endswith("+json")

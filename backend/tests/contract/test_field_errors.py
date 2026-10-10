@@ -194,7 +194,7 @@ def test_api_error_fields_are_422_only_and_preserve_details() -> None:
     assert invalid.status_code == 422
     assert invalid.json() == {
         "error": {
-            "code": "request.validation_failed",
+            "code": ErrorCode.REQUEST_VALIDATION_FAILED.value,
             "details": ["legacy detail"],
             "fields": [{"path": "/title", "code": "field.invalid"}],
         }
