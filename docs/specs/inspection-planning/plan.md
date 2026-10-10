@@ -19,7 +19,7 @@
 | T9 | 修正內業 planning mock 的 Plan 列表分頁，採用與後端一致的 `(created_at,id)` cursor shape 與續頁排序；頁大小對齊 HTTP client 明確指定的 limit，補 cursor round-trip、tie-break、非法輸入與頁面邊界測試 | `frontend/src/admin/planning/api.mock.ts`、`frontend/src/admin/planning/api.test.ts`、`docs/specs/inspection-planning/plan.md` | T3；核對後端 pagination helper 與前端 HTTP client 的實際 limit | N/A（契約來源 API-R08） | #471 |
 
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
-- 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
+- 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋，其 `project.read` 分支與 IP-R12、IP-AC13 由 `authentication` 任務 P 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
 - 任務按專案查核項目手動建立，並由內業選擇專案分區或填補充地點；本計畫不包含依 interval、起訖點或間距自動切分任務。
 
 ## 並行分組
