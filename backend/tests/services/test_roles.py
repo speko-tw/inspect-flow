@@ -105,6 +105,7 @@ class TestCreateRoleWritesAuditEvent:
         rows = _audit_rows_for(session, role.id)
         assert len(rows) == 1
         assert rows[0].event_type == "role.created"
+        assert rows[0].project_id is None
         assert rows[0].entity_type == "role"
         assert rows[0].before is None
         assert rows[0].after == {
@@ -169,6 +170,7 @@ class TestDomAc14RenameAndAddPermissionCode:
         assert len(rows) == 2
         updated = rows[1]
         assert updated.event_type == "role.updated"
+        assert updated.project_id is None
         assert updated.before == {
             "name": "Old Name",
             "permission_codes": ["report.read"],
@@ -342,6 +344,7 @@ class TestDomAc16DeleteRole:
         assert len(rows) == 2  # role.created, role.deleted
         deleted = rows[-1]
         assert deleted.event_type == "role.deleted"
+        assert deleted.project_id is None
         assert deleted.after is None
         assert _field(deleted.before, "name") == "R1-AC16"
         assert _field(deleted.before, "permission_codes") == ["report.read"]

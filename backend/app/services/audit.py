@@ -13,6 +13,9 @@ which the caller may override (there is no ``created_by=``/
 ``created_at=`` parameter at all, not merely one that is ignored).
 ``entity_type`` is not a parameter either: it comes from whichever
 catalog entry ``event_type`` names.
+Callers pass ``project_id`` for events with project context (ALG-R24),
+independent of fields present in ``before`` or ``after``; events without
+project context leave it null.
 
 The event catalog (:func:`register_audit_event`, ``_EVENT_CATALOG``)
 is how ALG-R13 lets other specs (``external-identity-sync``) add new
@@ -74,6 +77,7 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
@@ -586,6 +590,10 @@ def _record_audit_event(
     from :func:`app.db.clock.utc_now` -- there is no way for a caller
     to supply either.
 
+    ``project_id`` is the event's project at write time (ALG-R24),
+    even when ``before`` or ``after`` omits that field. Events without
+    project context leave it as ``None``.
+
     Only ``session.flush()``s (ALG-R06): the caller's own
     transaction (``app.db.unit_of_work``) commits or rolls back the
     row together with whatever else it did.
@@ -647,6 +655,7 @@ def _record_audit_event(
     log_values = dict(
         created_at=clock.utc_now(),
         created_by=operator.id,
+        project_id=project_id,
         event_type=event_type,
         entity_type=definition.entity_type,
         entity_id=entity_id,
@@ -655,8 +664,6 @@ def _record_audit_event(
     )
     if audit_log_id is not None:
         log_values["id"] = audit_log_id
-    if project_id is not None and "project_id" in AuditLog.__mapper__.attrs:
-        log_values["project_id"] = project_id
     log = AuditLog(**log_values)
     session.add(log)
     session.flush()
@@ -756,6 +763,49 @@ def _write_independent_audit_event(item: _PendingAuditEvent) -> uuid.UUID:
         )
         event_id = log.id
     return event_id
+
+
+def query_audit_events(
+    session: Session,
+    *,
+    project_id: uuid.UUID | None,
+    actor_id: uuid.UUID | None,
+    from_time: datetime | None,
+    to_time: datetime | None,
+    event_type: str | None,
+    cursor_key: tuple[datetime, uuid.UUID] | None,
+    limit: int,
+) -> tuple[list[AuditLog], bool]:
+    """Read one stable, descending page without changing audit rows."""
+    filters = []
+    if project_id is not None:
+        filters.append(AuditLog.project_id == project_id)
+    if actor_id is not None:
+        filters.append(AuditLog.created_by == actor_id)
+    if from_time is not None:
+        filters.append(AuditLog.created_at >= from_time)
+    if to_time is not None:
+        filters.append(AuditLog.created_at < to_time)
+    if event_type is not None:
+        filters.append(AuditLog.event_type == event_type)
+    if cursor_key is not None:
+        filters.append(
+            or_(
+                AuditLog.created_at < cursor_key[0],
+                and_(
+                    AuditLog.created_at == cursor_key[0],
+                    AuditLog.id < cursor_key[1],
+                ),
+            )
+        )
+    statement = (
+        select(AuditLog)
+        .where(*filters)
+        .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        .limit(limit + 1)
+    )
+    rows = list(session.scalars(statement))
+    return rows[:limit], len(rows) > limit
 
 
 # 第一批事件 (docs/specs/audit-log/spec.md#第一批事件, ALG-R11).

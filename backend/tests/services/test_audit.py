@@ -54,7 +54,7 @@ from app.db import clock
 from app.db.base import uuid7
 from app.db.unit_of_work import unit_of_work
 from app.main import create_app
-from app.models import AuditLog, Company
+from app.models import AuditLog, Company, Project
 from app.services.audit import (
     _EVENT_CATALOG,
     _EVENT_TYPE_RE,
@@ -379,6 +379,41 @@ def test_alg_ac26_denial_event_survives_request_transaction_rollback(
     assert persisted.event_type == "module_permission.grant_denied"
     assert persisted.after["permission_codes"] == ["project.create"]
     assert persisted.after["reason"] == "delegation_scope_exceeded"
+
+
+def test_assignment_denial_project_id_is_persisted_independently(
+    session, operator
+):
+    project = Project(
+        project_code="AUD-PROJECT",
+        name="Audit project",
+        client_name="Client",
+        site_location="Site",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    session.add(project)
+    session.commit()
+
+    event_id = record_audit_event_in_independent_transaction(
+        session,
+        "project_member.assignment_denied",
+        entity_id=uuid.uuid4(),
+        before=None,
+        after={
+            "project_id": project.id,
+            "user_id": operator.id,
+            "role_ids": [],
+            "reason": "role_not_assignable",
+        },
+        project_id=project.id,
+    )
+
+    session.expire_all()
+    persisted = session.get(AuditLog, event_id)
+    assert persisted is not None
+    assert persisted.project_id == project.id
+    assert persisted.after["project_id"] == str(project.id)
 
 
 def test_alg_ac26_authenticated_denial_flushes_after_rollback(
