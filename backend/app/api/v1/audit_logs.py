@@ -22,22 +22,32 @@ router = APIRouter(
 )
 
 _EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
+_UTC_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
+    r"(?:\.\d{1,6})?(?:Z|\+00:00)$"
+)
 
 
-def _utc_time(value: datetime | None) -> datetime | None:
+def _utc_time(value: str | None) -> datetime | None:
     if value is None:
         return None
-    if value.tzinfo is None or value.utcoffset() != timedelta(0):
+    if not _UTC_TIMESTAMP.fullmatch(value):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-    return value.astimezone(UTC)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    if parsed.utcoffset() != timedelta(0):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    return parsed.astimezone(UTC)
 
 
 @router.get("")
 def list_audit_logs(
     project_id: UUID | None = None,
     actor_id: UUID | None = None,
-    from_time: Annotated[datetime | None, Query(alias="from")] = None,
-    to_time: Annotated[datetime | None, Query(alias="to")] = None,
+    from_time: Annotated[str | None, Query(alias="from")] = None,
+    to_time: Annotated[str | None, Query(alias="to")] = None,
     event_type: str | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),

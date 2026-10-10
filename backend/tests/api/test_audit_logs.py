@@ -97,6 +97,7 @@ def test_audit_query_authentication_and_validation(db_session, make_client):
         {"limit": 0},
         {"limit": 101},
         {"event_type": "bad event"},
+        {"from": "123"},
         {"from": "2026-10-10T10:00:00+08:00"},
         {"from": "2026-10-11T00:00:00Z", "to": "2026-10-10T00:00:00Z"},
     ]
