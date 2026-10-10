@@ -374,6 +374,9 @@ function managementFetch({
         }
         return Response.json(row)
       }
+      if (parsed.pathname.endsWith('/audit-logs') && method === 'GET') {
+        return Response.json({ items: [], next_cursor: null })
+      }
       return Response.json({}, { status: 204 })
     },
   )
@@ -800,6 +803,26 @@ describe('admin user and company pages', () => {
     ).not.toHaveAttribute('aria-current')
   })
 
+  it('opens the audit log page from the Admin navigation', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin('/admin/audit-logs')
+
+    expect(
+      await screen.findByRole('heading', { name: '稽核紀錄' }),
+    ).toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: '管理功能' })
+    expect(
+      within(nav).getByRole('link', { name: '稽核紀錄' }),
+    ).toHaveAttribute('aria-current', 'page')
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes('/audit-logs?'),
+        ),
+      ).toBe(true)
+    })
+  })
+
   it('clears company fields when switching to another company', async () => {
     const secondCompany = { ...company, id: 'company-2', name: '第二家公司' }
     const fetchMock = managementFetch({
@@ -1136,7 +1159,7 @@ describe('admin user and company pages', () => {
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
   })
 
-  it.each(['/admin/companies', '/admin/roles'])(
+  it.each(['/admin/companies', '/admin/roles', '/admin/audit-logs'])(
     'denies non-admin access to protected route %s',
     (path) => {
       managementFetch()
@@ -1144,6 +1167,7 @@ describe('admin user and company pages', () => {
       expect(
         screen.getByRole('heading', { name: '無權限' }),
       ).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: '稽核紀錄' })).toBeNull()
     },
   )
 

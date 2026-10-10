@@ -389,6 +389,7 @@ export default defineConfig(({ mode, command, isPreview }) => {
     },
     test: {
       environment: 'jsdom',
+      env: { TZ: 'Asia/Taipei' },
       setupFiles: ['./src/setupTests.ts'],
     },
   }

@@ -156,7 +156,7 @@
 
 **完成預檢與完成失敗的缺項**：`problems` 為陣列，每項 `{item_id, point_id, kind, field, reason, required, covered}`，只填適用的欄位。`kind`：`result_missing`（項次沒有有效結果，只有照片也算）、`result_invalid`（有結果但不符合目前快照的規則，`field` 指到欄位、`reason` 說明）、`photos_insufficient`（`required`、`covered` 為需要與已有張數）、`needs_reinspection`（項目待重查，`point_id` 為空）。`summary` 含項次總數、已作答數與符合、不符合、不適用各自的數量，供完成前的確認說明使用。完成失敗回 422「完成缺項」，`error.details.problems` 與預檢的 `problems` 同格式。照片「已有 n／需要 m」的畫面提示來自 `field-evidence` 的覆蓋端點，完成預檢才是權威。
 
-**欄位錯誤**：作答、更正、完成與改善登記的業務規則失敗回 422，`error.details.fields` 為陣列 `{field, reason}`；`field` 是 `outcome`、`severity`、`comment`、`na_reason`、`measurements.<field_id>`、`note`、`photo_ids`、`reason`、`proxy_entry`、`actual_inspector`；`reason` 是 `required`、`not_allowed`、`invalid_number`、`too_long`、`unknown_field`、`duplicate`、`not_found`。型別或結構錯誤（例如缺少 `outcome`、`value` 不是字串）走共用的「結構驗證失敗」。`error.details` 為物件，是新增的共用慣例，與 `field-evidence` 同一條，列在計畫 T0，T2 依賴它。
+**欄位錯誤**：（過渡用法：[api-conventions](../api-conventions/spec.md) 已定義頂層 `error.fields`（API-R10～API-R15），請求欄位錯誤一律用它、`details` 不另立欄位錯誤陣列；本段與下列錯誤、AC 的 `error.details.fields` 是過渡用法，由計畫 T2 改採 `error.fields`，完成缺項 `problems` 仍屬 `details`。）作答、更正、完成與改善登記的業務規則失敗回 422，`error.details.fields` 為陣列 `{field, reason}`；`field` 是 `outcome`、`severity`、`comment`、`na_reason`、`measurements.<field_id>`、`note`、`photo_ids`、`reason`、`proxy_entry`、`actual_inspector`；`reason` 是 `required`、`not_allowed`、`invalid_number`、`too_long`、`unknown_field`、`duplicate`、`not_found`。型別或結構錯誤（例如缺少 `outcome`、`value` 不是字串）走共用的「結構驗證失敗」。`error.details` 為物件，是新增的共用慣例，與 `field-evidence` 同一條，列在計畫 T0，T2 依賴它。
 
 **錯誤**（遵守 [API-R07](../api-conventions/spec.md#需求)；以條列呈現，錯誤碼的唯一來源是程式的錯誤碼列舉，本段只是便於閱讀的說明；AC 與計畫以名稱稱呼）：
 
@@ -274,7 +274,7 @@
 | D15 | KD-55 選「要」時，同一交易作廢被修改項目的有效結果與其改善登記；項目補查完成（每個項次都有新的有效結果）時伺服器清除待重查旗標與更新 `item_status`。已取消任務恢復時才作廢、只有照片的項目也作廢並標待重查，依 `field-evidence` 的 FEV-R11（負責人裁定 FEV-Q6、FEV-Q15） | 與 `field-evidence` 的照片作廢同一交易才不會只作廢一半；旗標由結果推導，不靠人工清除；未裁定的部分不先採用 |
 | D16 | `has_result` 把結果納入，由 `inspection-planning` 的現行實作只在項目 `item_status` 為已完成時才標待重查，改為依 `has_result`；同時納入有效照片（[CMV-Q6](#cmv-q6) 已裁定）。此為對 `inspection-planning` 契約的範圍變更，依負責人直接指示落地（IP-R04、IP-R15；[CMV-Q10](#cmv-q10)） | 結果與照片先後存在，只看其一會漏掉另一種舊紀錄；契約變更必須先裁定 |
 | D17 | 升級前的已完成任務維持原狀、沒有逐項結果；畫面說明；不追溯補資料 | PR-04 與不可延後意圖第 8 項；沒有現場資料可以補 |
-| D18 | 欄位錯誤統一格式 `error.details.fields[{field, reason}]`；前端依 `field` 對應欄位並聚焦，沒有 `field` 時顯示一般錯誤並保留草稿 | 滿足 PR-19 的「可定位錯誤顯示在欄位旁」與「不臆測位置」 |
+| D18 | 欄位錯誤統一格式 `error.details.fields[{field, reason}]`（過渡用法，T2 改採 api-conventions 的 `error.fields`）；前端依 `field` 對應欄位並聚焦，沒有 `field` 時顯示一般錯誤並保留草稿 | 滿足 PR-19 的「可定位錯誤顯示在欄位旁」與「不臆測位置」 |
 | D19 | 兩個稽核事件代碼，皆填 `project_id`（ALG-R24）；結果每次儲存不寫稽核事件（建立與修改者、時間已在資料列上）；更正無變動時不寫事件 | 高頻寫入會淹沒稽核；只有更正與改善登記是事後的、需要追溯的操作；符合 ALG-R09 的無變動不寫 |
 | D20 | 畫面配置、文案、顏色與互動細節 | 實作前依原型關卡由負責人核可後定案 |
 | D21 | 更正請求本文與並行：結果更正帶 `expected_revision`，註記帶 `expected_caption`，現場版取代帶 `expected_sha256`；不符回「版本衝突」；內容相同回「更正無變動」；更正數字實測值與取代現場版時更正原因必填，其餘選填 | 與作答共用同一種並行策略，更正才不會悄悄覆蓋別人剛改的內容；無變動不寫紀錄符合 ALG-R09 |
@@ -341,3 +341,4 @@
 - 依 PR #546 第 1 輪審查修訂：錯誤改以條列、補欄位允許矩陣與更正請求本文、未裁定內容改標待確認與範圍變更、新增穩定身分與並行鎖序的前置與驗收 — [#106](https://github.com/speko-tw/inspect-flow/issues/106)
 - 依負責人裁定與直接指示定案待裁定項目（CMV-Q1～Q13）並對齊權限模型與 KD-51：更正範圍與必填原因（CMV-R11）、改善登記規則（CMV-R13）、全部改善後仍標有缺失並顯示「已改善 n／n」（CMV-R10、R14）、`has_result` 納入有效照片與已取消任務恢復時作廢（CMV-R15）、舊任務遇「要」整個任務補齊與儀表板照舊計入（CMV-R21、AC35）；新增 CMV-R22（身分快照與代登欄位）、CMV-AC35、AC36、D23、D24；CMV-R16 改為兩層權限，D14 依 AUT-R08 重寫存取分類；改善狀態只寫列舉值，`NOT_IMPROVED` 的畫面用語暫稱「尚未改善」（原型時確認）。同步修改 `inspection-planning`（IP-R04、IP-R07、IP-R13～R15）。範圍變更（負責人指示，#106）— [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-6093842438)
 - 第 2 輪審查後修訂（規格澄清，行為與裁定不變）：裁定依據連結改指[裁定紀錄留言](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-6094452837)；改善狀態只寫列舉值，`NOT_IMPROVED` 的畫面用語暫稱「尚未改善」；CMV-AC08 改為防禦性檢查；D11、AC14 改為重新產生初始內業版；「只能更正錯字與照片」改為實際範圍；D14 寫明 #576 合併前的暫行分類；CMV-R16 寫明預建角色初始內容與讀取碼的外部可用規則；CMV-Q14 改指向 `field-evidence` 的例外句；刪除不存在的 KD-60 引用；狀態改為已凍結 — [#106](https://github.com/speko-tw/inspect-flow/issues/106)
+- 規格澄清（#432）：`error.details.fields` 標為過渡用法，請求欄位錯誤一律用 api-conventions 的 `error.fields`（API-R10～API-R15），由計畫 T2 改採，T2 加依賴 api-conventions T7；行為與範圍不變 — [#432](https://github.com/speko-tw/inspect-flow/issues/432)

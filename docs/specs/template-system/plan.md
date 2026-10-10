@@ -18,6 +18,8 @@
 | T8 | 範圍條件兩種形式與套用同名拒絕：更新數值標準欄位、驗證、遷移、複製與重複名稱檢查 | `backend/`、`docs/specs/template-system/`、必要的 `docs/specs/database-foundation/` | T1、T3、T4 | TPL-AC11、TPL-AC12 | #356 |
 | T9 | 依核可原型重設範本管理 UI：階層導覽與詳情、手機單欄往返、分開新增與改名、單頁項次卡片與即時預覽、欄位錯誤及草稿保留；項目寫入使用既有單項端點，並驗證綁定欄位的 `unit: null` 契約，不變更 API 端點。#427 第 1 輪修正另持久化實測欄位順序，覆蓋範本、專案副本與任務快照 | 原 T9 檔案；另含 `backend/app/models/template_system.py`、`backend/app/models/inspection_planning.py`、`backend/app/services/template_library.py`、`backend/app/services/inspection_details.py`、`backend/app/services/project_templates.py`、`backend/app/services/inspection_planning_snapshots.py`、`backend/alembic/versions/`、`backend/tests/api/test_project_template_application.py`、`backend/tests/services/test_inspection_planning.py` | T3、T5、T8 | TPL-AC13～TPL-AC17 | #427 |
 | T10 | 依核可原型重設專案套用與存為範本流程：內業專案卡片入口、單項／整系統預覽與確認、同名出口、存為範本目的地選擇與衝突保留；Field 首頁移除範本入口；補上 1280px／360px 前端流程驗收並保留 API 權限行為 | `frontend/src/field/ProjectTemplatesPage.tsx`、`ProjectTemplatesPage.test.tsx`、`projectTemplatesApi.ts`、`projectTemplatesApi.test.ts`、`frontend/src/admin/templates/TemplateLibraryNav.tsx`、`frontend/src/admin/projects/ProjectsPage.tsx`、`ProjectsAdmin.test.tsx`、`ProjectItemLinks.tsx`、`AdminPage.tsx`、`AdminPage.test.tsx`、`frontend/src/App.tsx`、`frontend/src/field/FieldPage.tsx`、`FieldPage.test.tsx`、`frontend/src/styles.css`、`docs/specs/template-system/`、`docs/specs/field-ui/spec.md`、`docs/specs/template-system/ui-apply-prototype.html` | T2、T3、T4、T6、#441 | TPL-AC21、TPL-AC22、FUI-AC13 | #429 |
+| T11 | 範本 API 採用 `error.fields`（TPL-R24，[#432](https://github.com/speko-tw/inspect-flow/issues/432)）：服務層 `InvalidTemplateError` 改帶欄位路徑與資源專屬碼（每種結構違規各自對應，整系統覆蓋含 `/items/{k}`）；驗證函式（`validate_template_structure`、`validate_system_structures`）與專案查核項目 PATCH 的 `_validate_project_points` 都改為收集全部違規後一次回報，不在第一個錯誤就 raise；範本庫寫入端點與專案查核項目 PATCH 的 422 回 `fields`，資料庫約束造成的 422 維持只有 `error.code`；後端契約測試含 sentinel | `backend/app/services/template_library.py`、`backend/app/api/v1/template_library.py`、`backend/app/api/v1/inspection_planning.py`（只動 PATCH 點位驗證的呼叫）、`backend/tests/api/`（範本與專案項目 422 測試） | api-conventions T7 | TPL-AC26 | #432 |
+| T12 | 範本編輯器依 `error.fields` 顯示欄位錯誤（TPL-R18、TPL-R24）：把 `path` 對應到標題、項次、實測欄位、數值標準與照片數欄位，展開有錯誤的項次並聚焦第一個錯誤，對不到欄位的併入一般提示；待修正數量由畫面自己的欄位錯誤計算，不拿 `fields.length` 當總數（`fields` 不保證涵蓋全部錯誤，也可能被截在 100 筆）；沒有 `fields` 時維持現行一般提示與草稿保留；接真實 API | `frontend/src/admin/templates/TemplateItemEditor.tsx`、`InspectionPointCard.tsx`、`MeasurementFieldEditor.tsx`、`NumericStandardEditor.tsx`、`templateEditorUtils.ts`、`TemplatesPage.tsx` 與對應前端測試 | api-conventions T8；T11（真 API） | TPL-AC27、TPL-AC16 | #432 |
 
 - 每個任務一個 PR 就能完成，並能單獨驗收；任務 issue 開立前應把表內概略檔案責任換成實際檔案清單。
 - 每條本規格 AC 至少由一個任務涵蓋；TPL-AC01、AC08 涵蓋權限及管理員指派稽核，AC02～AC04 涵蓋結構與不版本化，AC05～AC06 涵蓋複製與權限，AC07 涵蓋標準及照片需求，AC09 涵蓋實測欄位結構與單位。
@@ -42,6 +44,7 @@
 - 第 4 波：T4（依賴 T1 資料模型、T2 授權與 T3 API 完成）。
 - 第 5 波：T5（前端範本管理；依賴 T2、T3）與 T6（專案套用；依賴 T2、T3、T4）；若路由及共用 client 不重疊可並行，否則依序。
 - 第 6 波：T7（整合驗收、規格收尾與索引同步）。
+- 第 7 波（#432，api-conventions 的 `error.fields`）：T11（後端採用，依賴 api-conventions T7）；T12（範本編輯器畫面，依賴 api-conventions T8 與 T11；與 T11 的程式檔不重疊，但要用真實 API，所以排在其後）。T11、T12 的最後合併者在同一個 PR 把本規格改回已完成。
 
 ## 風險
 
@@ -71,9 +74,12 @@
 | TPL-AC17 | API 整合測試驗證欄位順序在範本建立／讀取、套用、存回範本及任務快照中一致；migration 對舊資料依 `created_at`、`id` 回填。 |
 | TPL-AC17（#427 第 2 輪） | 含資料的 migration 測試：範本、專案副本、任務快照的測量欄位與數值標準在 upgrade、downgrade、再 upgrade 後筆數與內容保留，且欄位順序回填正確。 |
 | TPL-AC24（#486） | 共用格式化單元測試及範本編輯器、專案查核項目修改、套用預覽、現場任務詳情前端測試：區間、公差、單側、文字回退與未設定顯示一致；編輯器草稿的單側區間顯示未設定；桌面與 360px 登入後點擊走查，截圖附在 PR。 |
+| TPL-AC26（#432） | 後端 API 測試：各結構違規（含綁定欄位帶單位）與模型驗證的 422 回 `error.fields`（路徑含整系統覆蓋的 `/items/{k}`、重複者各一筆）；資料庫約束的 422 沒有 `fields`；sentinel 測試回應不含請求值；既有 409、403 不變。 |
+| TPL-AC27（#432） | 前端測試：帶 `fields` 時錯誤顯示在欄位旁、有錯誤項次展開並聚焦第一個錯誤；沒有 `fields` 或形狀錯誤時一般提示並保留草稿；路徑對不到欄位併入一般提示；對真實後端走查，桌面與 360px 截圖附在 PR。 |
 
 ## 考慮過但沒採用的做法
 
 - **把全系統角色模型交由其他規格**：KD-49 已裁定全系統角色機制與專案角色、`is_admin` 並存且互相獨立；`domain-model` 目前沒有此實體，本規格負責定義範本管理員及其角色／指派模型，避免依賴不存在的模型。
 - **把專案副本與任務需求快照合併**：KD-55 已把作廢／重查／更正流程交給 P4；本規格仍定義 0.3.x 最小 `ProjectInspectionItem`，避免範本覆蓋語意改寫任務既有需求。
 - **替查核範本保留版本表**：與 KD-03、PR-04 的現行裁定相反；專案套用副本承接快照，任務快照仍在建立任務時產生。
+- #432 新增 `error.fields`：T11、T12 與 TPL-AC26、TPL-AC27 只涵蓋範本 API 與範本編輯器；其他 API 與畫面之後逐步採用，不在本計畫。
