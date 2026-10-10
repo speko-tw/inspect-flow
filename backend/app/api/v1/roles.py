@@ -21,6 +21,13 @@ from app.auth.dependencies import get_db
 from app.models import Role
 from app.models.role import PermissionCodeValidationError
 from app.permission_codes import permission_code_descriptions
+from app.services.module_permissions import (
+    CreatorRoleInUseError,
+    CreatorRolePermissionsError,
+    ExternalRoleInUseError,
+    InvalidExternalRoleError,
+    ModulePermissionDeniedError,
+)
 from app.services.roles import (
     RoleUnchangedError,
     RoleUsage,
@@ -52,6 +59,8 @@ class RoleUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=64)
     permission_codes: list[str] | None = None
+    is_assignable: bool | None = None
+    is_external_allowed: bool | None = None
 
 
 class RoleResponse(BaseModel):
@@ -60,6 +69,8 @@ class RoleResponse(BaseModel):
     id: UUID
     name: str
     permission_codes: list[str]
+    is_assignable: bool
+    is_external_allowed: bool
     user_count: int
     project_count: int
     created_at: str
@@ -87,6 +98,8 @@ def _role_response(role: Role, usage: RoleUsage) -> RoleResponse:
         id=role.id,
         name=role.name,
         permission_codes=sorted(item.code for item in role.permission_codes),
+        is_assignable=role.is_assignable,
+        is_external_allowed=role.is_external_allowed,
         user_count=usage.user_count,
         project_count=usage.project_count,
         created_at=format_utc(role.created_at),
@@ -242,6 +255,14 @@ def add_role(
         raise
     except PermissionCodeValidationError as exc:
         raise _translate_permission_error() from exc
+    except InvalidExternalRoleError as exc:
+        raise APIError(ErrorCode.ROLE_EXTERNAL_ALLOWED_INVALID, 422) from exc
+    except CreatorRolePermissionsError as exc:
+        raise APIError(
+            ErrorCode.ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS, 422
+        ) from exc
+    except ModulePermissionDeniedError as exc:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
     return _single_role_response(db, role)
 
 
@@ -257,6 +278,11 @@ def update_role_endpoint(
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     if "permission_codes" in changes and changes["permission_codes"] is None:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    if any(
+        field in changes and changes[field] is None
+        for field in ("is_assignable", "is_external_allowed")
+    ):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     try:
         role = update_role(db, role, **changes)
     except IntegrityError as exc:
@@ -266,6 +292,20 @@ def update_role_endpoint(
         raise
     except RoleUnchangedError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    except InvalidExternalRoleError as exc:
+        raise APIError(ErrorCode.ROLE_EXTERNAL_ALLOWED_INVALID, 422) from exc
+    except ExternalRoleInUseError as exc:
+        raise APIError(
+            ErrorCode.ROLE_EXTERNAL_IN_USE, 422, details=exc.details
+        ) from exc
+    except CreatorRolePermissionsError as exc:
+        raise APIError(
+            ErrorCode.ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS,
+            422,
+            details=[str(exc)],
+        ) from exc
+    except ModulePermissionDeniedError as exc:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
     except PermissionCodeValidationError as exc:
         raise _translate_permission_error() from exc
     return _single_role_response(db, role)
@@ -278,7 +318,10 @@ def remove_role(
 ) -> None:
     """Delete a role and its assignments as DOM-R21 requires."""
     role = _get_role(db, role_id)
-    delete_role(db, role)
+    try:
+        delete_role(db, role)
+    except CreatorRoleInUseError as exc:
+        raise APIError(ErrorCode.ROLE_CREATOR_ROLE_IN_USE, 422) from exc
 
 
 __all__ = ["router"]

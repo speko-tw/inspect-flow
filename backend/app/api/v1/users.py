@@ -24,10 +24,12 @@ from app.services.users import (
     BuiltInAccountModificationError,
     CompanyNotActiveError,
     ExternalBasicFieldModificationError,
+    ExternalFlagChangeError,
     InvalidUserFieldError,
     LastActiveAdminRemovalError,
     UsernameChangePermissionError,
     create_user,
+    set_external_collaborator,
     set_is_active,
     set_is_admin,
     update_user_manual,
@@ -109,6 +111,9 @@ class UpdateUserRequest(BaseModel):
     line_id: str | None = None
     wechat_id: str | None = None
     responsibilities: str | None = None
+    is_external_collaborator: bool | None = None
+    account_expires_on: date | None = None
+    confirm_external_transition: bool = False
 
 
 class CompanyLinkRequest(BaseModel):
@@ -144,11 +149,17 @@ def _user_error(exc: ValueError) -> APIError:
         code = ErrorCode.COMPANY_INACTIVE
     elif isinstance(exc, UsernameChangePermissionError):
         return APIError(ErrorCode.PERMISSION_DENIED, 403)
+    elif isinstance(exc, ExternalFlagChangeError):
+        code = ErrorCode.USER_EXTERNAL_NOT_QUALIFIED
     elif isinstance(exc, PasswordLengthError):
         code = ErrorCode.AUTH_PASSWORD_INVALID
     else:
         code = ErrorCode.REQUEST_VALIDATION_FAILED
-    return APIError(code, 422)
+    return APIError(
+        code,
+        422,
+        details=getattr(exc, "details", None),
+    )
 
 
 _USER_BUSINESS_ERRORS = (
@@ -158,6 +169,7 @@ _USER_BUSINESS_ERRORS = (
     CompanyNotActiveError,
     UsernameChangePermissionError,
     InvalidUserFieldError,
+    ExternalFlagChangeError,
     PasswordLengthError,
 )
 
@@ -242,6 +254,12 @@ def edit_user(
 ) -> User:
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
+    desired_external = fields.pop("is_external_collaborator", None)
+    confirm_external = fields.pop("confirm_external_transition", False)
+    if "is_external_collaborator" in body.model_fields_set and (
+        desired_external is None
+    ):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     if (
         user.is_system
         and {
@@ -256,8 +274,21 @@ def edit_user(
     ):
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
     try:
+        if desired_external is not None:
+            set_external_collaborator(
+                db,
+                user,
+                desired_external,
+                confirmed=confirm_external,
+            )
         return update_user_manual(db, user, **fields)
     except _USER_BUSINESS_ERRORS as exc:
+        if isinstance(exc, ExternalFlagChangeError):
+            raise APIError(
+                ErrorCode.USER_EXTERNAL_NOT_QUALIFIED,
+                422,
+                details=exc.details,
+            ) from exc
         raise _user_error(exc) from exc
     except IntegrityError as exc:
         code = integrity_error_code(exc)

@@ -30,7 +30,13 @@ from app.models import (
     User,
 )
 from app.services.inspection_planning import PlanningError
+from app.services.module_permissions import (
+    ExternalRoleAssignmentError,
+    RoleNotAssignableError,
+)
 from app.services.project_members import (
+    LastProjectManagerError,
+    SelfRoleChangeError,
     add_project_member,
     list_project_members,
     remove_project_member,
@@ -517,19 +523,18 @@ def list_member_candidates(
 @router.get(
     "/{project_id}/assignable-roles",
     response_model=AssignableRoleListResponse,
-    dependencies=[_PROJECT_MEMBER_ACCESS],
 )
 def list_assignable_roles(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),  # noqa: B008
+    caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> AssignableRoleListResponse:
     """List the roles that can be assigned to project members.
 
-    Roles are system-wide (DOM-R19), so every role is assignable; this
-    only exposes the fields the member page needs, one extra query per
-    page for the permission codes.
+    Non-Admin callers see only roles approved by an Admin. Admins can
+    assign any role, subject to the external-collaborator restriction.
     """
     _get_project(db, project_id)
 
@@ -555,6 +560,7 @@ def list_assignable_roles(
         Role,
         cursor=cursor,
         limit=limit,
+        filters=([] if caller.is_admin else [Role.is_assignable.is_(True)]),
         serialize_batch=render,
     )
     return AssignableRoleListResponse(**result)
@@ -594,6 +600,16 @@ def add_member(
         if not _member_conflict(exc):
             raise
         raise APIError(ErrorCode.PROJECT_MEMBER_CONFLICT, 409) from exc
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except ExternalRoleAssignmentError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
+        ) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_SELF_ROLE_CHANGE, 422) from exc
+    except LastProjectManagerError as exc:
+        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
     return _member_response(db, member)
 
 
@@ -611,7 +627,18 @@ def edit_member_roles(
     member = _get_member(db, project_id, user_id)
     _require_roles(body.role_ids)
     role_ids = _checked_role_ids(db, body.role_ids)
-    set_project_member_roles(db, member, role_ids)
+    try:
+        set_project_member_roles(db, member, role_ids)
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except ExternalRoleAssignmentError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
+        ) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_SELF_ROLE_CHANGE, 422) from exc
+    except LastProjectManagerError as exc:
+        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
     return _member_response(db, member)
 
 
@@ -626,7 +653,14 @@ def remove_member(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> None:
     member = _get_member(db, project_id, user_id)
-    remove_project_member(db, member)
+    try:
+        remove_project_member(db, member)
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_SELF_ROLE_CHANGE, 422) from exc
+    except LastProjectManagerError as exc:
+        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
 
 
 __all__ = ["router"]

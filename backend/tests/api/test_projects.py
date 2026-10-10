@@ -26,6 +26,7 @@ from app.models import (
     SystemRoleAssignment,
     SystemRoleCode,
     User,
+    UserModulePermission,
 )
 from app.services.companies import create_company
 from app.services.project_members import add_project_member
@@ -84,7 +85,6 @@ def _audit_field(payload: object, key: str) -> object:
 def project_api(
     db_session: Session,
     make_client,
-    registered_permission_codes,
 ) -> ProjectApiContext:
     admin = create_root_user_with_company(db_session, "ADM275")
     admin.is_system = True
@@ -100,18 +100,21 @@ def project_api(
 
     actor = create_user(
         db_session,
+        is_external_collaborator=False,
         username="project.manager",
         email="manager@demo.example",
         name_zh="專案管理者",
     )
     target = create_user(
         db_session,
+        is_external_collaborator=False,
         username="project.member",
         email="member@demo.example",
         name_zh="專案成員",
     )
     plain = create_user(
         db_session,
+        is_external_collaborator=False,
         username="project.viewer",
         email="viewer@demo.example",
         name_zh="一般檢視者",
@@ -134,6 +137,14 @@ def project_api(
         db_session,
         name="專案成員管理",
         permission_codes=["project_member.manage"],
+    )
+    manage_role.is_assignable = True
+    db_session.add(
+        UserModulePermission(
+            user_id=actor.id,
+            permission_code="project.use",
+            source="manual",
+        )
     )
     add_project_member(
         db_session,
@@ -578,6 +589,7 @@ def test_member_operations_require_project_permission_and_audit(
         name="現場查核",
         permission_codes=["project_member.manage"],
     )
+    other_role.is_assignable = True
     db_session.commit()
     replaced = client.put(
         f"/api/v1/projects/{project.id}/members/{target.id}/roles",
@@ -1034,6 +1046,7 @@ def test_member_list_query_count_does_not_grow(
     for index in range(8):
         user = create_user(
             db_session,
+            is_external_collaborator=False,
             username=f"member.perf.{index}",
             email=f"member.perf.{index}@demo.example",
             name_zh=f"示範成員 {index}",
@@ -1103,6 +1116,7 @@ def _candidate_world(db_session: Session, project_api: ProjectApiContext):
     ):
         users[key] = create_user(
             db_session,
+            is_external_collaborator=False,
             username=f"cand.{key}",
             email=f"cand.{key}@demo.example",
             name_zh=f"候選 {key}",
@@ -1209,8 +1223,9 @@ def test_assignable_roles_expose_only_display_fields(
     extra = create_role(
         db_session,
         name="現場查核",
-        permission_codes=["report.read", "evidence.read"],
+        permission_codes=["inspection_task.read", "project.read"],
     )
+    extra.is_assignable = True
     db_session.commit()
     url = f"/api/v1/projects/{project.id}/assignable-roles"
 
@@ -1223,8 +1238,8 @@ def test_assignable_roles_expose_only_display_fields(
     by_id = {row["id"]: row for row in body["items"]}
     assert by_id[str(role.id)]["permission_codes"] == ["project_member.manage"]
     assert by_id[str(extra.id)]["permission_codes"] == [
-        "evidence.read",
-        "report.read",
+        "inspection_task.read",
+        "project.read",
     ]
     # Admin gets the same list.
     admin = project_api["admin_client"].get(url)
@@ -1282,6 +1297,7 @@ def test_candidate_endpoints_query_count_does_not_grow(
         for index in range(6):
             create_user(
                 db_session,
+                is_external_collaborator=False,
                 username=f"perf.{suffix}.{index}",
                 email=f"perf.{suffix}.{index}@demo.example",
                 name_zh=f"效能 {index}",
@@ -1290,7 +1306,7 @@ def test_candidate_endpoints_query_count_does_not_grow(
             create_role(
                 db_session,
                 name=f"效能角色 {suffix} {index}",
-                permission_codes=["report.read"],
+                permission_codes=["project.read"],
             )
         db_session.commit()
         with _select_statements(get_engine()) as expanded:
@@ -1385,6 +1401,7 @@ def test_non_admin_without_company_cannot_add_anyone(
     assert project_api["actor"].company_id is None
     member = create_user(
         db_session,
+        is_external_collaborator=False,
         username="cand.companyless_target",
         email="cand.companyless_target@demo.example",
         name_zh="候選",

@@ -16,6 +16,7 @@ Fixtures (``session``, ``operator``) come from this directory's
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
 from sqlalchemy import func, select
 
 from app.db import clock
@@ -26,6 +27,7 @@ from app.models import (
     ProjectMemberRole,
     Role,
 )
+from app.services.module_permissions import ExternalRoleInUseError
 from app.services.roles import (
     RoleUnchangedError,
     create_role,
@@ -359,3 +361,29 @@ class TestDomAc16DeleteRole:
             select(AuditLog).where(AuditLog.entity_type == "project_member")
         ).all()
         assert member_events == []
+
+
+def test_external_role_cannot_be_restricted_while_held(
+    session, operator, registered_permission_codes
+):
+    role = create_role(
+        session,
+        name="External Manager",
+        permission_codes={"project_member.manage"},
+    )
+    role.is_external_allowed = True
+    user = create_root_user_with_company(session, "EXT-HOLDER")
+    user.is_external_collaborator = True
+    project = _new_project(operator, "P-EXT-HOLDER")
+    session.add(project)
+    session.flush()
+    session.add(_new_member(operator, project, user, role))
+    session.commit()
+
+    with pytest.raises(ExternalRoleInUseError) as error:
+        update_role(session, role, is_external_allowed=False)
+
+    assert error.value.details
+    assert str(user.id) in error.value.details[0]
+    session.refresh(role)
+    assert role.is_external_allowed is True

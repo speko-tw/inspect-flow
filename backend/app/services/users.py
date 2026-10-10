@@ -37,7 +37,17 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Company, User
+from app.models import (
+    Company,
+    CreatorRoleSetting,
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    User,
+    UserModuleDelegation,
+    UserModulePermission,
+)
+from app.permission_codes import permission_code_external_allowed
 from app.services import UNSET, _Unset
 from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
@@ -92,6 +102,16 @@ class UsernameChangePermissionError(ValueError):
 
 class InvalidUserFieldError(ValueError):
     """A submitted User field failed model validation."""
+
+
+class ExternalFlagChangeError(ValueError):
+    """An external-collaborator flag change violates DOM-R73."""
+
+    def __init__(
+        self, message: str, *, details: list[str] | None = None
+    ) -> None:
+        self.details = details
+        super().__init__(message)
 
 
 def _reject_if_company_inactive(
@@ -176,6 +196,97 @@ def create_user(
     return user
 
 
+def set_external_collaborator(
+    session: Session,
+    user: User,
+    is_external_collaborator: bool,
+    *,
+    confirmed: bool = False,
+) -> bool:
+    """Change external-collaborator status after DOM-R73 checks."""
+    operator = get_current_operator(session)
+    if not operator.is_admin:
+        raise ExternalFlagChangeError("Only Admin may change this flag")
+    if user.is_external_collaborator == is_external_collaborator:
+        return False
+    if user.is_external_collaborator and not confirmed:
+        raise ExternalFlagChangeError(
+            "Changing an external collaborator to internal requires "
+            "confirmation"
+        )
+    if is_external_collaborator:
+        role_rows = session.execute(
+            select(Role.name, Role.is_external_allowed, Role.id)
+            .join(ProjectMemberRole, ProjectMemberRole.role_id == Role.id)
+            .join(
+                ProjectMember,
+                ProjectMember.id == ProjectMemberRole.project_member_id,
+            )
+            .where(ProjectMember.user_id == user.id)
+        ).all()
+        creator_role_id = session.scalar(
+            select(CreatorRoleSetting.role_id).limit(1)
+        )
+        invalid_roles = [
+            (name, role_id)
+            for name, allowed, role_id in role_rows
+            if not allowed or role_id == creator_role_id
+        ]
+        permissions = list(
+            session.scalars(
+                select(UserModulePermission.permission_code).where(
+                    UserModulePermission.user_id == user.id
+                )
+            ).all()
+        )
+        invalid_permissions = [
+            code
+            for code in permissions
+            if not permission_code_external_allowed(code)
+        ]
+        delegations = list(
+            session.scalars(
+                select(UserModuleDelegation.module).where(
+                    UserModuleDelegation.user_id == user.id
+                )
+            ).all()
+        )
+        if (
+            user.is_admin
+            or invalid_roles
+            or invalid_permissions
+            or delegations
+        ):
+            details = [
+                f"role: {name} ({role_id})" for name, role_id in invalid_roles
+            ]
+            details.extend(
+                f"module permission: {code}" for code in invalid_permissions
+            )
+            details.extend(f"delegation: {module}" for module in delegations)
+            if user.is_admin:
+                details.append("administrator status")
+            raise ExternalFlagChangeError(
+                "User does not qualify as an external collaborator: "
+                f"admin={user.is_admin}, roles={invalid_roles}, "
+                f"permissions={invalid_permissions}, "
+                f"delegations={delegations}",
+                details=details,
+            )
+    previous = user.is_external_collaborator
+    user.is_external_collaborator = is_external_collaborator
+    user.updated_by = operator.id
+    session.flush()
+    record_audit_event(
+        session,
+        "user.external_flag_changed",
+        entity_id=user.id,
+        before={"is_external_collaborator": previous},
+        after={"is_external_collaborator": is_external_collaborator},
+    )
+    return True
+
+
 def update_user_manual(
     session: Session,
     user: User,
@@ -194,6 +305,7 @@ def update_user_manual(
     line_id: str | None | _Unset = UNSET,
     wechat_id: str | None | _Unset = UNSET,
     responsibilities: str | None | _Unset = UNSET,
+    account_expires_on: date | None | _Unset = UNSET,
 ) -> User:
     """Manually modify a ``User`` (DOM-R04, DOM-R18, DOM-R32).
 
@@ -278,6 +390,8 @@ def update_user_manual(
         for field, value in contact_fields.items():
             if value is not UNSET:
                 setattr(user, field, value)
+        if account_expires_on is not UNSET:
+            user.account_expires_on = account_expires_on
     except ValueError as exc:
         raise InvalidUserFieldError from exc
     user.updated_by = operator.id
@@ -359,6 +473,10 @@ def set_is_admin(session: Session, user: User, is_admin: bool) -> User:
     if is_admin == user.is_admin:
         raise AdminStatusUnchangedError(
             f"User {user.id}: is_admin is already {is_admin}"
+        )
+    if is_admin and user.is_external_collaborator:
+        raise ExternalFlagChangeError(
+            "External collaborators cannot hold Admin status"
         )
     if not is_admin:
         if user.is_system:

@@ -108,6 +108,42 @@ class ErrorCode(DescribedStrEnum):
         "role.permission_code_invalid",
         "One or more permission codes are invalid or unavailable.",
     )
+    ROLE_EXTERNAL_ALLOWED_INVALID = (
+        "role.external_allowed_invalid",
+        "This role cannot be marked for external collaborators.",
+    )
+    ROLE_EXTERNAL_IN_USE = (
+        "role.external_in_use",
+        "External collaborators currently hold this role.",
+    )
+    ROLE_CREATOR_ROLE_IN_USE = (
+        "role.creator_role_in_use",
+        "The designated creator role cannot be deleted.",
+    )
+    ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS = (
+        "role.creator_role_requires_permissions",
+        "The designated creator role must retain its required permissions.",
+    )
+    PROJECT_ROLE_NOT_ASSIGNABLE = (
+        "project.role_not_assignable",
+        "This role is not approved for assignment by non-admins.",
+    )
+    PROJECT_EXTERNAL_ROLE_NOT_ALLOWED = (
+        "project.external_role_not_allowed",
+        "This role is not allowed for external collaborators.",
+    )
+    PROJECT_SELF_ROLE_CHANGE = (
+        "project.member_self_role_change",
+        "Non-admin users cannot change their own project roles.",
+    )
+    PROJECT_LAST_MANAGER = (
+        "project.last_manager",
+        "A project must retain an active project manager.",
+    )
+    USER_EXTERNAL_NOT_QUALIFIED = (
+        "user.external_not_qualified",
+        "This user does not qualify as an external collaborator.",
+    )
     SETUP_INVALID_CODE = (
         "setup.invalid_code",
         "The first-login code is invalid.",

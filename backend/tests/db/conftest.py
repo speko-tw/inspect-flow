@@ -222,7 +222,7 @@ def create_root_user_with_company(session: Session, employee_no: str) -> User:
         }
         values["created_at"] = clock.utc_now()
         values["updated_at"] = clock.utc_now()
-        session.execute(insert(User.__table__).values(values))
+        session.execute(insert(User).values(values))
 
     session.add(
         Company(

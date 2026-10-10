@@ -11,6 +11,8 @@ from app.models import (
     CreatorRoleSetting,
     PermissionBundle,
     PermissionBundlePermission,
+    ProjectMember,
+    ProjectMemberRole,
     Role,
     User,
     UserModuleDelegation,
@@ -32,6 +34,12 @@ class ModulePermissionError(ValueError):
 
     status_code = 422
 
+    def __init__(
+        self, message: str, *, details: list[str] | None = None
+    ) -> None:
+        self.details = details
+        super().__init__(message)
+
 
 class ModulePermissionDeniedError(ModulePermissionError):
     status_code = 403
@@ -51,6 +59,112 @@ class ImpliedPermissionError(ModulePermissionError):
 
 class PermissionBundleScopeError(ModulePermissionDeniedError):
     """A delegate cannot fully apply the requested bundle."""
+
+
+class RoleNotAssignableError(ModulePermissionError):
+    """A non-Admin attempted to assign or remove an unapproved role."""
+
+
+class ExternalRoleAssignmentError(ModulePermissionError):
+    """A role is not permitted for an external collaborator."""
+
+
+class InvalidExternalRoleError(ModulePermissionError):
+    """The role's definition cannot be marked externally allowed."""
+
+
+class ExternalRoleInUseError(ModulePermissionError):
+    """External collaborators currently hold a restricted role."""
+
+
+class CreatorRoleInUseError(ModulePermissionError):
+    """The designated creator role cannot be deleted."""
+
+
+class CreatorRolePermissionsError(ModulePermissionError):
+    """The designated creator role must retain three permissions."""
+
+
+def validate_role_assignment(
+    session: Session,
+    *,
+    actor: User,
+    user: User,
+    role_ids: Iterable[uuid.UUID],
+) -> None:
+    """Enforce assignability and external-user role constraints."""
+    desired_role_ids = set(role_ids)
+    roles = list(
+        session.scalars(select(Role).where(Role.id.in_(desired_role_ids)))
+    )
+    if len(roles) != len(desired_role_ids):
+        raise InvalidModulePermissionError("Role does not exist")
+    for role in roles:
+        if not actor.is_admin and not role.is_assignable:
+            raise RoleNotAssignableError("Role is not approved for assignment")
+        if user.is_external_collaborator and not role.is_external_allowed:
+            raise ExternalRoleAssignmentError(
+                "Role is not allowed for external collaborators"
+            )
+        if user.is_external_collaborator and any(
+            not permission_code_external_allowed(permission.code)
+            for permission in role.permission_codes
+        ):
+            raise ExternalRoleAssignmentError(
+                "Role contains a permission unavailable to external users"
+            )
+
+
+def validate_role_external_configuration(
+    session: Session,
+    *,
+    role: Role,
+    is_external_allowed: bool,
+    permission_codes: Iterable[str],
+) -> None:
+    """Reject role edits that would violate external-user constraints."""
+    desired = frozenset(permission_codes)
+    creator_role_id = session.scalar(
+        select(CreatorRoleSetting.role_id).limit(1)
+    )
+    if role.id == creator_role_id and not _CREATOR_ROLE_CODES <= desired:
+        raise CreatorRolePermissionsError(
+            "Creator role must retain its three required project codes"
+        )
+    if is_external_allowed and role.id == creator_role_id:
+        raise InvalidExternalRoleError(
+            "The creator role cannot be externally allowed"
+        )
+    holders = session.execute(
+        select(User.name_zh, User.name_en, User.id)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
+        )
+        .where(
+            ProjectMemberRole.role_id == role.id,
+            User.is_external_collaborator.is_(True),
+        )
+        .distinct()
+    ).all()
+    if holders and (
+        not is_external_allowed
+        or any(not permission_code_external_allowed(code) for code in desired)
+    ):
+        raise ExternalRoleInUseError(
+            "Role is held by external collaborators and cannot be restricted",
+            details=[
+                f"{name_zh or name_en} ({user_id})"
+                for name_zh, name_en, user_id in holders
+            ],
+        )
+    if is_external_allowed and any(
+        not permission_code_external_allowed(code) for code in desired
+    ):
+        raise InvalidExternalRoleError(
+            "External roles may contain only externally allowed codes"
+        )
 
 
 _CREATOR_ROLE_CODES = frozenset(
@@ -225,6 +339,10 @@ def change_creator_role(session: Session, *, actor: User, role: Role) -> bool:
         raise InvalidModulePermissionError(
             "Creator role must retain project.update, "
             "project_member.manage, and project.read"
+        )
+    if role.is_external_allowed:
+        raise InvalidExternalRoleError(
+            "The creator role cannot be externally allowed"
         )
     setting = get_creator_role_setting(session)
     if setting is None:

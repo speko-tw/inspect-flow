@@ -35,15 +35,33 @@ three functions -- :func:`app.services.audit.record_audit_event`
 requires it regardless.
 """
 
+import logging
 import uuid
 from collections.abc import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import ProjectMember, ProjectMemberRole
+from app.models import (
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
+    User,
+)
+from app.services import audit as audit_service
 from app.services.audit import record_audit_event
+from app.services.module_permissions import (
+    ModulePermissionError,
+    RoleNotAssignableError,
+    validate_role_assignment,
+)
 from app.services.operator import get_current_operator
+
+logger = logging.getLogger(__name__)
+
+_SELF_ROLE_CHANGE_REASON = ".".join(("project", "member_self_role_change"))
+_ROLE_NOT_ASSIGNABLE_REASON = ".".join(("project", "role_not_assignable"))
 
 
 class RoleAlreadyAssignedError(ValueError):
@@ -63,9 +81,142 @@ class RoleNotAssignedError(ValueError):
     """
 
 
+class SelfRoleChangeError(ModulePermissionError):
+    """Non-Admin attempted to modify their own project membership."""
+
+
+class LastProjectManagerError(ModulePermissionError):
+    """A change would leave no other active project manager."""
+
+
 def _current_role_ids(member: ProjectMember) -> frozenset[uuid.UUID]:
     return frozenset(
         assignment.role_id for assignment in member.role_assignments
+    )
+
+
+def _guard_removal(
+    session: Session,
+    *,
+    member: ProjectMember,
+    role_ids: frozenset[uuid.UUID],
+) -> None:
+    operator = get_current_operator(session)
+    if operator.is_admin:
+        return
+    if member.user_id == operator.id:
+        _record_assignment_denial(
+            session,
+            member=member,
+            role_ids=role_ids,
+            reason=_SELF_ROLE_CHANGE_REASON,
+        )
+        raise SelfRoleChangeError("Non-Admins cannot change their own roles")
+    unassignable = set(
+        session.scalars(
+            select(Role.id).where(
+                Role.id.in_(role_ids), Role.is_assignable.is_(False)
+            )
+        ).all()
+    )
+    if not unassignable:
+        return
+    _record_assignment_denial(
+        session,
+        member=member,
+        role_ids=frozenset(unassignable),
+        reason=_ROLE_NOT_ASSIGNABLE_REASON,
+    )
+    raise RoleNotAssignableError(
+        "Cannot remove or replace a role that is not assignable"
+    )
+
+
+def _record_assignment_denial(
+    session: Session,
+    *,
+    member: ProjectMember,
+    role_ids: frozenset[uuid.UUID],
+    reason: str,
+) -> None:
+    writer = getattr(
+        audit_service, "record_audit_event_in_independent_transaction", None
+    )
+    if writer is None:
+        return
+    try:
+        writer(
+            session,
+            "project_member.assignment_denied",
+            entity_id=member.id,
+            project_id=member.project_id,
+            before=None,
+            after={
+                "project_id": member.project_id,
+                "user_id": member.user_id,
+                "role_ids": sorted(role_ids),
+                "reason": reason,
+            },
+        )
+    except Exception:
+        logger.exception("Could not write independent role denial")
+
+
+def _guard_last_manager(
+    session: Session,
+    *,
+    member: ProjectMember,
+    remaining_role_ids: frozenset[uuid.UUID],
+) -> None:
+    """Keep one active, effectively authorized project manager."""
+    from app.services.permissions import calculate_effective_access
+
+    target = session.get(User, member.user_id)
+    if target is None or not target.is_active:
+        return
+    current = calculate_effective_access(
+        session, user_id=target.id, project_id=member.project_id
+    )
+    had_management = current.is_admin or (
+        current.is_active
+        and "project.use" in current.module_permissions
+        and "project_member.manage" in current.project_permissions
+    )
+    if not had_management:
+        return
+    remaining_codes = set(
+        session.scalars(
+            select(RolePermission.code).where(
+                RolePermission.role_id.in_(remaining_role_ids)
+            )
+        ).all()
+    )
+    keeps_management = current.is_admin or (
+        "project.use" in current.module_permissions
+        and "project_member.manage" in remaining_codes
+    )
+    if keeps_management:
+        return
+    other_member_ids = list(
+        session.scalars(
+            select(ProjectMember.user_id).where(
+                ProjectMember.project_id == member.project_id,
+                ProjectMember.id != member.id,
+            )
+        ).all()
+    )
+    for user_id in other_member_ids:
+        access = calculate_effective_access(
+            session, user_id=user_id, project_id=member.project_id
+        )
+        if access.is_admin or (
+            access.is_active
+            and "project.use" in access.module_permissions
+            and "project_member.manage" in access.project_permissions
+        ):
+            return
+    raise LastProjectManagerError(
+        "This change would remove the project's last active manager"
     )
 
 
@@ -109,6 +260,12 @@ def add_project_member(
     """
     operator = get_current_operator(session)
     role_id_set = frozenset(role_ids)
+    user = session.get(User, user_id)
+    if user is None:
+        raise ValueError(f"User {user_id} does not exist")
+    validate_role_assignment(
+        session, actor=operator, user=user, role_ids=role_id_set
+    )
     member = ProjectMember(
         project_id=project_id,
         user_id=user_id,
@@ -147,6 +304,20 @@ def assign_role(
             f"ProjectMember {member.id} already holds role {role_id}"
         )
     operator = get_current_operator(session)
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session,
+        actor=operator,
+        user=user,
+        role_ids=before_role_ids | {role_id},
+    )
+    _guard_last_manager(
+        session,
+        member=member,
+        remaining_role_ids=before_role_ids | {role_id},
+    )
     member.role_assignments.append(ProjectMemberRole(role_id=role_id))
     member.updated_by = operator.id
     session.flush()
@@ -197,7 +368,22 @@ def unassign_role(
         raise RoleNotAssignedError(
             f"ProjectMember {member.id} does not hold role {role_id}"
         )
+    _guard_removal(session, member=member, role_ids=frozenset({role_id}))
+    _guard_last_manager(
+        session,
+        member=member,
+        remaining_role_ids=before_role_ids - {role_id},
+    )
     operator = get_current_operator(session)
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session,
+        actor=operator,
+        user=user,
+        role_ids=before_role_ids - {role_id},
+    )
     assignment = next(
         a for a in member.role_assignments if a.role_id == role_id
     )
@@ -233,6 +419,18 @@ def set_project_member_roles(
     operator = get_current_operator(session)
     to_remove = before_role_ids - after_role_ids
     to_add = after_role_ids - before_role_ids
+    _guard_removal(session, member=member, role_ids=to_remove)
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session, actor=operator, user=user, role_ids=after_role_ids
+    )
+    _guard_last_manager(
+        session,
+        member=member,
+        remaining_role_ids=after_role_ids,
+    )
     for assignment in member.role_assignments:
         if assignment.role_id in to_remove:
             session.delete(assignment)
@@ -277,6 +475,14 @@ def remove_project_member(session: Session, member: ProjectMember) -> None:
     ``project_member.removed`` event (DOM-R22) even when ``member``
     held no role at all.
     """
+    _guard_removal(session, member=member, role_ids=_current_role_ids(member))
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session, actor=get_current_operator(session), user=user, role_ids=()
+    )
+    _guard_last_manager(session, member=member, remaining_role_ids=frozenset())
     before = {
         "project_id": member.project_id,
         "user_id": member.user_id,

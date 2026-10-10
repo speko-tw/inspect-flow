@@ -483,7 +483,7 @@ class TestDomAc40BuiltInAdminConstraints:
             username="admin",
             is_system=True,
             is_admin=True,
-        is_external_collaborator=False,
+            is_external_collaborator=False,
             created_by=new_id,
             updated_by=new_id,
         )

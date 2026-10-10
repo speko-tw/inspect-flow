@@ -23,6 +23,7 @@ def _company_kwargs(tag: str, **overrides) -> dict:
 def _user_kwargs(employee_no: str, company_id, **overrides) -> dict:
     kwargs = {
         "username": f"u{employee_no.lower()}",
+        "is_external_collaborator": False,
         "company_id": company_id,
         "department": "Operations",
         "location": "HQ",

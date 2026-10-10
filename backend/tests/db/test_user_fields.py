@@ -542,6 +542,7 @@ class TestDomAc19StringLengthsAndEmailFormat:
             company_id=operator.company_id,
             created_by=operator.id,
             updated_by=operator.id,
+            is_external_collaborator=False,
             **self._BOUNDARY_VALUES,
         )
         session.add(user)

@@ -31,6 +31,7 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModulePermission,
     UserPassword,
 )
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
@@ -326,6 +327,14 @@ def _build_project_permission_scenario(
 
     user_u = make_local_user(db_session, f"E9{suffix}1")
     _add_member(db_session, creator, project_p, user_u, [role_r1, role_r2])
+    db_session.add_all(
+        UserModulePermission(
+            user_id=user_u.id,
+            permission_code=code,
+            source="manual",
+        )
+        for code in (registered_permission_codes.PROJECT_USE.value,)
+    )
     db_session.commit()
 
     admin_a = _make_admin_user(db_session, f"E9{suffix}2")
