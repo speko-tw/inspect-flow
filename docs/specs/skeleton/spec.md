@@ -62,11 +62,11 @@
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
 | GET | `/api/v1/health` | 回傳 `{"status": "ok"}` | 公開 |
-| GET | `/api/v1/version` | 回傳 `{"version": "0.3.0", "commit": "a1b2c3d"}`；commit 無法取得時為 `null` | 公開 |
+| GET | `/api/v1/version` | 回傳 `{"version": "<VERSION>", "commit": "a1b2c3d"}`；commit 無法取得時為 `null` | 公開 |
 
 | 指令 | 用途 |
 |---|---|
-| `make version` | 顯示 `InspectFlow v0.3.0 (a1b2c3d)`；無法取得 commit 時只顯示版本 |
+| `make version` | 顯示 `InspectFlow v<VERSION> (a1b2c3d)`；無法取得 commit 時只顯示版本 |
 | `cd backend && uv run --locked python -m app version` | 顯示後端目前發布版本 |
 | `make check` | 包含版本來源一致性檢查 |
 
@@ -84,7 +84,7 @@
 | SKL-AC08 | 實作本規格各任務的 PR 由 agent 開出 | 檢查 PR 留言 | 每個 PR 都有一則依審查準則寫成的自審留言 | SKL-R08 |
 | SKL-AC09 | 分支保護已設定 | 對 CI 失敗的 PR 嘗試合併 | GitHub 擋下合併（由人驗證） | SKL-R09 |
 | SKL-AC10 | repo | 執行 `git ls-files \| grep '\.env$'` | 沒有輸出，且 `.env.example` 存在 | SKL-R10 |
-| SKL-AC11 | repo 版號設定為 `0.3.0`，並分別以可用及不可用 Git 資訊啟動／建置 | 啟動 Backend、執行後端 CLI 與公開 API、進入 Admin、Field、登入及首次設定頁，並執行 `make check` | 啟動 log、CLI 與 API 顯示版本及可取得的短 SHA；API 不需登入且只回傳 `version`、`commit`；四種前端畫面頁尾顯示 `InspectFlow v0.3.0`，commit 顯示於 tooltip；無 Git 資訊時服務與建置仍成功且省略 SHA；可用環境變數覆寫顯示值；改錯任一 manifest 版號時版本檢查失敗 | SKL-R11 |
+| SKL-AC11 | repo 版號設定為 `<VERSION>`（當時 repo 的發布版號，例如 `0.3.1`），並分別以可用及不可用 Git 資訊啟動／建置 | 啟動 Backend、執行後端 CLI 與公開 API、進入 Admin、Field、登入及首次設定頁，並執行 `make check` | 啟動 log、CLI 與 API 顯示版本及可取得的短 SHA；API 不需登入且只回傳 `version`、`commit`；四種前端畫面頁尾顯示 `InspectFlow v<VERSION>`，commit 顯示於 tooltip；無 Git 資訊時服務與建置仍成功且省略 SHA；可用環境變數覆寫顯示值；改錯任一 manifest 版號時版本檢查失敗 | SKL-R11 |
 
 ## 待釐清
 
@@ -95,3 +95,4 @@
 - SKL-R09 的 GitHub 核准人數暫設 0、改由人在合併前檢視 PR；SKL-AC09 改為只驗證 CI 失敗的 PR 會被擋下 — #22
 - 新增發布版本來源、後端查詢介面及雙前端版本頁尾（SKL-R11、SKL-AC11）— [#386](https://github.com/speko-tw/inspect-flow/issues/386)
 - 補充部署環境版本覆寫契約（SKL-R11、SKL-AC11）— [#386](https://github.com/speko-tw/inspect-flow/issues/386)
+- 規格澄清（[#533](https://github.com/speko-tw/inspect-flow/issues/533)）：SKL-R11 介面表與 SKL-AC11 的版本範例改為 `<VERSION>`，不綁定特定版號；行為與範圍不變 — [#533](https://github.com/speko-tw/inspect-flow/issues/533)
