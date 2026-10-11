@@ -18,6 +18,7 @@ from app.models import (
     ProjectMember,
     ProjectMemberRole,
     Role,
+    RolePermission,
     User,
 )
 from app.services import module_permissions
@@ -416,8 +417,56 @@ class TestSetProjectMemberRoles:
 
 
 @pytest.mark.parametrize("write", ["add", "assign", "replace"])
+def test_external_member_accepts_external_allowed_read_role(
+    session, operator, write
+):
+    project = _new_project(operator, f"P-EXT-ALLOW-{write.upper()}")
+    role = _new_role(operator, "External project reader")
+    role.is_external_allowed = True
+    role.permission_codes.append(RolePermission(code="project.read"))
+    target = create_root_user_with_company(session, f"EXT-ALLOW-{write[0]}")
+    target.is_external_collaborator = True
+    session.add_all([project, role])
+    session.commit()
+    member = None
+    if write != "add":
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=target.id,
+        )
+        session.commit()
+
+    if write == "add":
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=target.id,
+            role_ids=[role.id],
+        )
+    elif write == "assign":
+        assert member is not None
+        assign_role(session, member, role.id)
+    else:
+        assert member is not None
+        set_project_member_roles(session, member, [role.id])
+    session.commit()
+
+    session.refresh(member)
+    assert target.is_external_collaborator is True
+    assert {item.role_id for item in member.role_assignments} == {role.id}
+
+
+@pytest.mark.parametrize(
+    "permission_code", ["project_member.manage", "inspection_task.inspect"]
+)
+@pytest.mark.parametrize("write", ["add", "assign", "replace"])
 def test_external_role_assignment_entries_reject_and_audit_once(
-    session, operator, monkeypatch, write
+    session,
+    operator,
+    monkeypatch,
+    write,
+    permission_code,
 ):
     monkeypatch.setattr(
         module_permissions.audit_service,
@@ -425,7 +474,8 @@ def test_external_role_assignment_entries_reject_and_audit_once(
         record_audit_event_in_independent_transaction,
     )
     project = _new_project(operator, "P-EXT-DENY")
-    role = _new_role(operator, "Internal only")
+    role = _new_role(operator, f"Internal only {permission_code}")
+    role.permission_codes.append(RolePermission(code=permission_code))
     target = create_root_user_with_company(session, "EXT-DENY")
     target.is_external_collaborator = True
     session.add_all([project, role])

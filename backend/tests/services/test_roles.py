@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from app.db import clock
 from app.models import (
     AuditLog,
+    CreatorRoleSetting,
     Project,
     ProjectMember,
     ProjectMemberRole,
@@ -393,13 +394,16 @@ def test_external_role_cannot_be_restricted_while_held(
     assert role.is_external_allowed is True
 
 
+@pytest.mark.parametrize(
+    "permission_code", ["inspection_task.inspect", "project_member.manage"]
+)
 def test_role_with_internal_code_cannot_be_marked_external(
-    session, operator, registered_permission_codes
+    session, operator, permission_code
 ):
     role = create_role(
         session,
         name="內部管理角色",
-        permission_codes={"project_member.manage"},
+        permission_codes={permission_code},
     )
     before_codes = {item.code for item in role.permission_codes}
 
@@ -409,6 +413,49 @@ def test_role_with_internal_code_cannot_be_marked_external(
     session.refresh(role)
     assert role.is_external_allowed is False
     assert {item.code for item in role.permission_codes} == before_codes
+
+
+def test_project_read_role_can_be_external_and_assignable(session, operator):
+    role = create_role(
+        session, name="外部專案查閱", permission_codes={"project.read"}
+    )
+
+    update_role(
+        session,
+        role,
+        is_external_allowed=True,
+        is_assignable=True,
+    )
+
+    session.refresh(role)
+    assert role.is_external_allowed is True
+    assert role.is_assignable is True
+    assert {item.code for item in role.permission_codes} == {"project.read"}
+
+
+def test_creator_role_cannot_be_marked_external(session, operator):
+    creator_role = create_role(
+        session,
+        name="建立者專用角色",
+        permission_codes={
+            "project.update",
+            "project_member.manage",
+            "project.read",
+        },
+    )
+    session.add(CreatorRoleSetting(role_id=creator_role.id))
+    session.flush()
+
+    with pytest.raises(InvalidExternalRoleError):
+        update_role(session, creator_role, is_external_allowed=True)
+
+    session.refresh(creator_role)
+    assert creator_role.is_external_allowed is False
+    assert {item.code for item in creator_role.permission_codes} == {
+        "project.update",
+        "project_member.manage",
+        "project.read",
+    }
 
 
 def test_held_external_role_cannot_gain_internal_permission(session, operator):
