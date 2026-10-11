@@ -376,16 +376,34 @@ describe('project home', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('hides the placeholder zones and progress sections (#451, #452)', async () => {
+  it('shows permitted zones and keeps the placeholder progress hidden', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
 
     renderAt()
 
     await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
-    expect(screen.queryByRole('link', { name: '分區' })).toBeNull()
-    expect(screen.queryByRole('link', { name: '進度' })).toBeNull()
+    expect(screen.getByRole('link', { name: '分區' })).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: '進度' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
+  })
+
+  it('hides the zones section without zone read or manage permission', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: ['inspection_plan.read'],
+      }),
+    )
+
+    renderAt()
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expect(
+      screen.queryByRole('link', { name: '分區' }),
+    ).not.toBeInTheDocument()
   })
 
   it.each([
@@ -503,6 +521,19 @@ describe('project home', () => {
 
     expect(await screen.findByText('Field 工作台')).toBeVisible()
     expect(mocks.getProject).not.toHaveBeenCalled()
+  })
+
+  it('redirects field-only users from the deep-linked zones section', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
+    )
+
+    renderAt('/admin/projects/project-1/zones')
+
+    expect(await screen.findByText('Field 工作台')).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: '分區' }),
+    ).not.toBeInTheDocument()
   })
 
   it('redirects field-only users from an item detail deep link', async () => {
