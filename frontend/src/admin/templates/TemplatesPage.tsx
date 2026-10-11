@@ -11,7 +11,7 @@ import {
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { mapFieldErrors } from '../../ui/fieldErrors'
+import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
 import { InspectionPointCard } from './InspectionPointCard'
@@ -131,13 +131,8 @@ const TEMPLATE_ERROR_CODES: Record<string, string> = {
   'request.validation_failed': TEMPLATE_NOT_SAVED,
 }
 
-const FIELD_ERROR_MESSAGES: Record<string, string> = {
-  'field.required': '請填寫此欄位。',
-  'field.invalid': '欄位格式不正確，請檢查輸入內容。',
-  'field.too_long': '輸入內容太長。',
-  'field.too_short': '輸入內容太短。',
-  'field.out_of_range': '數值超出允許範圍。',
-  'field.duplicate': '此欄位不可重複。',
+// 範本專屬的欄位錯誤碼；`field.*` 通用碼由共用的 fieldErrorMessage 處理。
+const TEMPLATE_FIELD_ERROR_MESSAGES: Record<string, string> = {
   'template.sequence_duplicate': '項次順序重複，請檢查項次。',
   'template.photo_requirement_count': '每個項次必須設定一筆照片需求。',
   'template.client_id_duplicate': '實測欄位識別重複，請重新設定欄位。',
@@ -145,10 +140,6 @@ const FIELD_ERROR_MESSAGES: Record<string, string> = {
   'template.numeric_unit_required': '請填寫數字欄位的單位。',
   'template.text_unit_forbidden': '文字欄位不需要單位。',
   'template.bound_field_unit_forbidden': '綁定欄位的單位由數值標準帶入。',
-}
-
-function fieldErrorMessage(code: string): string {
-  return FIELD_ERROR_MESSAGES[code] ?? '欄位內容不符合規則，請檢查後再試。'
 }
 
 function apiMessage(error: unknown): string {
@@ -798,7 +789,7 @@ export default function TemplatesPage() {
         const messages = Object.fromEntries(
           Object.entries(mapped.errors).map(([key, code]) => [
             key,
-            fieldErrorMessage(code),
+            fieldErrorMessage(code, TEMPLATE_FIELD_ERROR_MESSAGES),
           ]),
         )
         setServerFieldErrors(messages)
