@@ -170,6 +170,7 @@ def test_alg_ac19_to_ac24_two_layer_event_catalog():
 
 
 def test_project_scoped_catalog_covers_all_project_event_families():
+    """守住 ALG-R24：新增專案事件時不能漏標 project_scoped。"""
     expected = {
         "project.created",
         "project.updated",
@@ -361,6 +362,7 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
         ),
     ]
     stored = []
+    # ALG-R24：payload 欄位不會自動填入 AuditLog.project_id。
     for event_type, before, after in calls:
         stored.append(
             record_audit_event(
@@ -463,6 +465,7 @@ def test_assignment_denial_project_id_is_persisted_independently(
 def test_project_event_without_project_id_is_rejected_before_write(
     session, operator
 ):
+    """依 ALG-R24 拒絕缺值，避免留下無法回補的稽核紀錄。"""
     before_count = session.query(AuditLog).count()
     with pytest.raises(MissingProjectAuditEventError):
         record_audit_event(
@@ -478,6 +481,7 @@ def test_project_event_without_project_id_is_rejected_before_write(
 def test_project_denial_without_project_id_is_rejected_before_queue(
     session, operator
 ):
+    """請求失敗前須拒絕缺值，避免佇列 flush 時漏掉 ALG-R24 事件。"""
     pending = audit_module.begin_pending_independent_audit_events(session)
     with pytest.raises(MissingProjectAuditEventError):
         record_audit_event_in_independent_transaction(

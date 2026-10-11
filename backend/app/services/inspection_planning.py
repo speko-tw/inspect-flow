@@ -40,6 +40,8 @@ class PlanningError(ValueError):
         super().__init__(message or code)
 
 
+# ALG-R24：下列分區、Task 與查核項目各屬單一專案；即使修改內容
+# 沒有 project_id，也須保留所屬專案。
 for _event, _entity, _kind, _fields in (
     (
         "project_zone.created",

@@ -122,6 +122,7 @@ class TestAlgAc07FirstBatchEventsRoundTrip:
             },
             after=None,
         )
+        # ALG-R24：payload 欄位不會自動填入 AuditLog.project_id。
         roles_changed = record_audit_event(
             session,
             "project_member.roles_changed",

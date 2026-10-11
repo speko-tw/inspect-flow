@@ -121,8 +121,9 @@ class AuditEventDefinition:
     ``always_recorded`` (a subset of ``fields``) lists which of them
     a 修改 event must include even when unchanged. ``system_event``
     and ``always_write`` are ALG-R15/ALG-R16's two flags;
-    ``before_optional`` permits a missing before snapshot for selected
-    changes. ``project_scoped`` requires a project UUID at write time.
+    ``before_optional`` is a third, narrower one -- see this module's
+    docstring. ``project_scoped`` 用於避免 append-only 紀錄遺失
+    ALG-R24 規定的專案脈絡。
     """
 
     event_type: str
@@ -223,8 +224,9 @@ def register_audit_event(
     event codes without any change to this module or a migration.
     ``system_event`` and ``always_write`` are ALG-R15/ALG-R16's two
     flags; ``before_optional`` is a third, narrower one (see this
-    module's docstring); ``project_scoped`` requires ``project_id``
-    at both write entry points (ALG-R24). All default to ``False``.
+    module's docstring); all three default to ``False``.
+    ``project_scoped`` 也預設為 ``False``；具專案脈絡時應標記，
+    避免 append-only 紀錄遺失 ALG-R24 規定的專案 UUID。
     ``before_optional`` is only meaningful on a 修改 (``kind=
     AuditEventKind.UPDATED``) event -- a 新增 event's ``before`` is
     already always ``None`` (ALG-R09), and a 刪除 event has no
@@ -319,12 +321,13 @@ class UnregisteredAuditEventError(AuditEventError):
 
 
 class MissingProjectAuditEventError(AuditEventError):
-    """ALG-R24: a project-scoped event requires ``project_id``."""
+    """依 ALG-R24 拒絕缺少專案脈絡的事件，避免寫入後無法補回。"""
 
 
 def _require_project_id(
     definition: AuditEventDefinition, project_id: uuid.UUID | None
 ) -> None:
+    """在寫入或排隊前拒絕缺少的專案脈絡，避免空值紀錄無法回補。"""
     if definition.project_scoped and project_id is None:
         raise MissingProjectAuditEventError(
             f"{definition.event_type!r} requires project_id (ALG-R24)"
@@ -574,7 +577,10 @@ def record_audit_event(
     system_event: bool = False,
     project_id: uuid.UUID | None = None,
 ) -> AuditLog:
-    """Write one audit event in the caller's transaction (ALG-R05)."""
+    """Write one audit event in the caller's transaction (ALG-R05).
+
+    專案事件依 ALG-R24 先驗證 project_id，避免留下無法回補的空值。
+    """
     return _record_audit_event(
         session,
         event_type,
@@ -640,6 +646,7 @@ def _record_audit_event(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
 
+    # ALG-R24：在查找操作者或變更 session 前拒絕，避免留下副作用。
     _require_project_id(definition, project_id)
 
     normalized_before = _normalize_payload(before)
@@ -709,6 +716,8 @@ def record_audit_event_in_independent_transaction(
     lock and self-block that immediate path; use the request unit of work
     for denied writes. The passed session supplies the target engine only;
     its pending writes and transaction are untouched.
+    ALG-R24 要求排隊前先驗證專案脈絡，避免請求失敗後才在 flush 階段
+    靜默丟棄無效的安全事件。
     """
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
@@ -719,6 +728,7 @@ def record_audit_event_in_independent_transaction(
         raise UnregisteredAuditEventError(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
+    # ALG-R24：拒絕事件須在回滾前通過驗證，不能把缺值事件排入佇列。
     _require_project_id(definition, project_id)
     normalized_before = _normalize_payload(before)
     normalized_after = _normalize_payload(after)
@@ -852,6 +862,7 @@ register_audit_event(
     kind=AuditEventKind.DELETED,
     fields=("name", "permission_codes", "project_member_ids"),
 )
+# ALG-R24：成員角色變更與移除後，仍須保留其所屬專案。
 register_audit_event(
     "project_member.roles_changed",
     entity_type="project_member",
@@ -899,6 +910,7 @@ register_audit_event(
     kind=AuditEventKind.DELETED,
     fields=("user_id", "role_code"),
 )
+# ALG-R24：由專案項目建立範本時，須保留來源專案。
 register_audit_event(
     "template_item.created_from_project",
     entity_type="template_item",
@@ -1043,6 +1055,7 @@ for _event_type, _entity_type, _kind, _fields, _always in (
         always_recorded=_always,
     )
 
+# ALG-R24：專案建立與修改事件，以專案本身的 UUID 作為脈絡。
 register_audit_event(
     "project.created",
     entity_type="project",
@@ -1066,6 +1079,7 @@ register_audit_event(
     nullable_fields=("planned_start_date", "planned_completion_date"),
     project_scoped=True,
 )
+# ALG-R24：指派遭拒並回滾後，仍須記錄該事件所屬專案。
 register_audit_event(
     "project_member.assignment_denied",
     entity_type="project_member",
