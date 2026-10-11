@@ -515,7 +515,7 @@ describe('adding and renaming zones', () => {
       'aria-describedby',
       'project-zone-name-error',
     )
-    expect(input).toHaveFocus()
+    await waitFor(() => expect(input).toHaveFocus())
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -536,7 +536,7 @@ describe('adding and renaming zones', () => {
     expect(
       await screen.findByText('同一專案已有相同名稱的分區。'),
     ).toBeVisible()
-    expect(input).toHaveFocus()
+    await waitFor(() => expect(input).toHaveFocus())
   })
 })
 
