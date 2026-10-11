@@ -14,7 +14,7 @@ from app.models import (
     RolePermission,
     TaskInspectionItem,
 )
-from app.permission_codes import PermissionCode
+from app.permission_codes import PermissionCode, permission_code_scope
 from tests.api.test_inspection_planning_api import _planning_world
 
 
@@ -66,7 +66,9 @@ def test_empty_project_reports_first_setup_step(db_session, make_client):
         "name": "空專案",
     }
     assert set(response.json()["viewer_permission_codes"]) == {
-        code.value for code in PermissionCode
+        code.value
+        for code in PermissionCode
+        if permission_code_scope(code.value) == "project"
     }
     assert response.json()["primary_step"] == "add_members"
     assert response.json()["next_steps"] == [
@@ -214,7 +216,9 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             "name": project.name,
         },
         "viewer_permission_codes": sorted(
-            code.value for code in PermissionCode
+            code.value
+            for code in PermissionCode
+            if permission_code_scope(code.value) == "project"
         ),
         "member_count": 6,
         "inspection_item_count": 2,

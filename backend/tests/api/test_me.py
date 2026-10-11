@@ -29,7 +29,7 @@ def _client_for(db_session: Session, make_client, user: User) -> TestClient:
 
 
 @pytest.fixture
-def seed(db_session: Session, make_client, registered_permission_codes):
+def seed(db_session: Session, make_client):
     root = create_root_user_with_company(db_session, "ROOT290")
     root.username = "admin"
     root.is_system = True
@@ -50,6 +50,7 @@ def seed(db_session: Session, make_client, registered_permission_codes):
         email="alice@demo.example",
         name_zh="愛麗絲",
         name_en="Alice",
+        is_external_collaborator=False,
         company_id=company.id,
         department="機電部",
         location="台北",
@@ -60,6 +61,7 @@ def seed(db_session: Session, make_client, registered_permission_codes):
         username="bob",
         email="bob@demo.example",
         name_zh="鮑伯",
+        is_external_collaborator=False,
     )
     mine = create_project(
         db_session,
@@ -85,11 +87,15 @@ def seed(db_session: Session, make_client, registered_permission_codes):
         site_location="示範工地丙",
     )
     inspector = create_role(
-        db_session, name="查核員", permission_codes=["project_member.manage"]
+        db_session,
+        name="查核員",
+        permission_codes=["project_member.manage"],
     )
     reviewer = create_role(db_session, name="審核員", permission_codes=[])
     other_role = create_role(
-        db_session, name="別人的角色", permission_codes=[]
+        db_session,
+        name="別人的角色",
+        permission_codes=[],
     )
     add_project_member(
         db_session,

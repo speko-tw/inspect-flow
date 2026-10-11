@@ -50,6 +50,7 @@ const currentUser: CurrentUser = {
   has_office_access: true,
   has_field_access: true,
   has_template_access: true,
+  module_permissions: [],
 }
 
 function renderRoles(path = '/admin/roles') {

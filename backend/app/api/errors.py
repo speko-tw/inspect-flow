@@ -112,6 +112,30 @@ class ErrorCode(DescribedStrEnum):
         "role.permission_code_invalid",
         "One or more permission codes are invalid or unavailable.",
     )
+    ROLE_EXTERNAL_ALLOWED_INVALID = (
+        "role.external_allowed_invalid",
+        "This role cannot be marked for external collaborators.",
+    )
+    ROLE_EXTERNAL_IN_USE = (
+        "role.external_in_use",
+        "External collaborators currently hold this role.",
+    )
+    ROLE_CREATOR_ROLE_IN_USE = (
+        "role.creator_role_in_use",
+        "The designated creator role cannot be deleted.",
+    )
+    ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS = (
+        "role.creator_role_requires_permissions",
+        "The designated creator role must retain its required permissions.",
+    )
+    PROJECT_EXTERNAL_ROLE_NOT_ALLOWED = (
+        "project.external_role_not_allowed",
+        "This role is not allowed for external collaborators.",
+    )
+    USER_EXTERNAL_NOT_QUALIFIED = (
+        "user.external_not_qualified",
+        "This user does not qualify as an external collaborator.",
+    )
     SETUP_INVALID_CODE = (
         "setup.invalid_code",
         "The first-login code is invalid.",

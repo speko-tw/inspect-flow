@@ -14,21 +14,22 @@ from app.models import (
     Project,
     ProjectInspectionItemChange,
     ProjectMember,
-    ProjectMemberRole,
     ProjectZone,
-    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     User,
 )
-from app.permission_codes import PermissionCode
+from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.audit import (
     AuditEventKind,
     record_audit_event,
     register_audit_event,
 )
 from app.services.operator import get_current_operator
-from app.services.permissions import effective_permissions
+from app.services.permissions import (
+    calculate_effective_access,
+    effective_permissions,
+)
 
 
 class PlanningError(ValueError):
@@ -120,7 +121,11 @@ def project_permissions_for(
 ) -> frozenset[str]:
     operator = get_current_operator(session)
     if operator.is_admin:
-        return frozenset(code.value for code in PermissionCode)
+        return frozenset(
+            code.value
+            for code in PermissionCode
+            if permission_code_scope(code.value) == "project"
+        )
     return effective_permissions(
         session, user_id=operator.id, project_id=project_id
     )
@@ -551,29 +556,26 @@ def field_inspection_task_filters(
     status: str | None = None,
 ) -> tuple[ColumnElement[bool], ...]:
     """Build filters for dispatched Tasks visible to the Field caller."""
-    permissioned_projects = (
-        select(ProjectMember.project_id)
-        .join(
-            ProjectMemberRole,
-            ProjectMemberRole.project_member_id == ProjectMember.id,
-        )
-        .join(
-            RolePermission,
-            RolePermission.role_id == ProjectMemberRole.role_id,
-        )
-        .where(
-            ProjectMember.user_id == user_id,
-            RolePermission.code == "inspection_task.inspect",
-        )
-        .distinct()
+    access = calculate_effective_access(
+        session, user_id=user_id, project_id=project_id
     )
+    is_admin = access.is_admin
+    if project_id is None:
+        permissioned_projects = set()
+        for (
+            member_project_id,
+            permissions,
+        ) in access.project_permissions_by_project.items():
+            if "inspection_task.inspect" in permissions:
+                permissioned_projects.add(member_project_id)
+    else:
+        permissioned_projects = (
+            {project_id}
+            if "inspection_task.inspect" in access.project_permissions
+            else set()
+        )
     if not is_admin:
-        has_permission = permissioned_projects.exists()
-        if project_id is not None:
-            has_permission = permissioned_projects.where(
-                ProjectMember.project_id == project_id
-            ).exists()
-        if not session.scalar(select(has_permission)):
+        if not permissioned_projects:
             raise PlanningError("authorization.forbidden")
 
     if project_id is not None:
@@ -581,9 +583,7 @@ def field_inspection_task_filters(
             project_filter = InspectionTask.project_id == project_id
         else:
             project_filter = InspectionTask.project_id.in_(
-                permissioned_projects.where(
-                    ProjectMember.project_id == project_id
-                )
+                permissioned_projects
             )
     elif not is_admin:
         project_filter = InspectionTask.project_id.in_(permissioned_projects)

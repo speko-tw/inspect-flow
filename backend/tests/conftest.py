@@ -9,6 +9,7 @@ import pytest
 
 from app import permission_codes
 from app.api.errors import DescribedStrEnum
+from app.permission_codes import PermissionDefinition
 
 
 class _TestPermissionCode(DescribedStrEnum):
@@ -31,6 +32,7 @@ class _TestPermissionCode(DescribedStrEnum):
     EVIDENCE_UPDATE = ("evidence.update", "test")
     EVIDENCE_DELETE = ("evidence.delete", "test")
     PROJECT_MEMBER_MANAGE = ("project_member.manage", "test")
+    PROJECT_USE = ("project.use", "test")
 
 
 @pytest.fixture
@@ -49,5 +51,22 @@ def registered_permission_codes(
     """
     monkeypatch.setattr(
         permission_codes, "_active_registry", _TestPermissionCode
+    )
+    definitions = dict(permission_codes.PERMISSION_DEFINITIONS)
+    definitions.update(
+        {
+            code: PermissionDefinition(scope="project", module="project")
+            for code in (
+                "report.read",
+                "report.approve",
+                "evidence.read",
+                "evidence.create",
+                "evidence.update",
+                "evidence.delete",
+            )
+        }
+    )
+    monkeypatch.setattr(
+        permission_codes, "PERMISSION_DEFINITIONS", definitions
     )
     return _TestPermissionCode

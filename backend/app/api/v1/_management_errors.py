@@ -42,6 +42,7 @@ def integrity_error_code(exc: IntegrityError) -> ErrorCode | None:
         "ck_users_username_reserved",
         "ck_users_username_lower",
         "ck_users_system_account",
+        "ck_users_external_expiry_only",
     )
     if constraint in validation_constraints or any(
         name in details for name in validation_constraints

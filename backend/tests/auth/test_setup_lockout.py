@@ -49,6 +49,7 @@ def test_aut_ac59_setup_failures_lock_independently_and_log_safely(
             username="alice",
             email="alice@example.test",
             name_zh="Alice",
+            is_external_collaborator=False,
             created_by=admin.id,
             updated_by=admin.id,
         )

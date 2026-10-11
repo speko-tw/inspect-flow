@@ -20,6 +20,7 @@ export function currentUserFixture(
     has_office_access: false,
     has_field_access: false,
     has_template_access: false,
+    module_permissions: [],
     company: null,
     department: null,
     location: null,

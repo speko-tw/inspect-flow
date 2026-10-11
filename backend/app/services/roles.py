@@ -43,9 +43,20 @@ from dataclasses import dataclass
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
-from app.models import ProjectMember, ProjectMemberRole, Role, RolePermission
+from app.models import (
+    CreatorRoleSetting,
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
+)
 from app.services import UNSET, _Unset
 from app.services.audit import record_audit_event
+from app.services.module_permissions import (
+    CreatorRoleInUseError,
+    ModulePermissionDeniedError,
+    validate_role_external_configuration,
+)
 from app.services.operator import get_current_operator
 
 
@@ -143,6 +154,8 @@ def update_role(
     *,
     name: str | _Unset = UNSET,
     permission_codes: Iterable[str] | _Unset = UNSET,
+    is_assignable: bool | _Unset = UNSET,
+    is_external_allowed: bool | _Unset = UNSET,
 ) -> Role:
     """Rename ``role`` and/or replace its permission codes with
     ``permission_codes`` (DOM-R20), filling ``updated_by`` from the
@@ -177,6 +190,8 @@ def update_role(
     current_codes = frozenset(
         permission.code for permission in role.permission_codes
     )
+    current_assignable = role.is_assignable
+    current_external_allowed = role.is_external_allowed
     name_changed = name is not UNSET and name != current_name
     desired_codes = (
         frozenset(permission_codes)
@@ -186,7 +201,16 @@ def update_role(
     codes_changed = permission_codes is not UNSET and (
         desired_codes != current_codes
     )
-    if not name_changed and not codes_changed:
+    assignable_changed = (
+        is_assignable is not UNSET and is_assignable != current_assignable
+    )
+    external_changed = (
+        is_external_allowed is not UNSET
+        and is_external_allowed != current_external_allowed
+    )
+    if not any(
+        (name_changed, codes_changed, assignable_changed, external_changed)
+    ):
         raise RoleUnchangedError(
             f"Role {role.id}: update_role() was called but neither "
             "name nor permission_codes would change"
@@ -206,7 +230,21 @@ def update_role(
             RolePermission(code=code) for code in sorted(to_add)
         ]
 
+    desired_external_allowed = (
+        is_external_allowed
+        if is_external_allowed is not UNSET
+        else current_external_allowed
+    )
     operator = get_current_operator(session)
+    if (assignable_changed or external_changed) and not operator.is_admin:
+        raise ModulePermissionDeniedError("Only Admin may change role flags")
+    validate_role_external_configuration(
+        session,
+        role=role,
+        is_external_allowed=desired_external_allowed,
+        permission_codes=desired_codes,
+    )
+
     before: dict[str, object] = {}
     after: dict[str, object] = {}
     if name_changed:
@@ -223,6 +261,16 @@ def update_role(
             for permission in role.permission_codes
             if permission.code not in to_remove
         ] + new_permission_rows
+    if assignable_changed:
+        assert is_assignable is not UNSET
+        before["is_assignable"] = current_assignable
+        after["is_assignable"] = is_assignable
+        role.is_assignable = is_assignable
+    if external_changed:
+        assert is_external_allowed is not UNSET
+        before["is_external_allowed"] = current_external_allowed
+        after["is_external_allowed"] = is_external_allowed
+        role.is_external_allowed = is_external_allowed
     role.updated_by = operator.id
     session.flush()
 
@@ -260,6 +308,11 @@ def delete_role(session: Session, role: Role) -> None:
     :func:`update_role` already give their own operator lookups.
     """
     get_current_operator(session)
+    creator_role_id = session.scalar(
+        select(CreatorRoleSetting.role_id).limit(1)
+    )
+    if creator_role_id == role.id:
+        raise CreatorRoleInUseError("The creator role cannot be deleted")
     member_ids = session.scalars(
         select(ProjectMemberRole.project_member_id)
         .distinct()
