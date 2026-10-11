@@ -1,19 +1,21 @@
 import { listAllPages, request } from '../api'
 import { HttpError, httpErrorMessage, isForbidden } from '../../http'
 
-/** HTTP client for the frozen inspection-planning API contract. */
-
+/** 依 IP-R06 表示由任務狀態衍生、不得由用戶端任意設定的 Plan 狀態。 */
 export type PlanStatus =
   'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'ARCHIVED'
 
+/** 依 IP-R07 表示草稿、派出與取消恢復所用的 Task 狀態。 */
 export type TaskStatus =
   'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 
+/** 專案選取清單所需的最小識別資料。 */
 export interface PlanningProject {
   id: string
   name: string
 }
 
+/** IP-R02 的任務選項只來自同專案查核項目。 */
 export interface ProjectInspectionItem {
   id: string
   project_id: string
@@ -24,6 +26,7 @@ export interface ProjectInspectionItem {
   inspection_points: unknown[]
 }
 
+/** 依 IP-R03 保留任務項目快照與待重查標記。 */
 export interface TaskInspectionItem {
   id: string
   status: string
@@ -40,18 +43,21 @@ export interface TaskInspectionItem {
   } | null
 }
 
+/** 依 IP-R05，指派候選人只是建議，並非執行者白名單。 */
 export interface SuggestedAssignee {
   id: string
   username: string
   name_zh: string | null
 }
 
+/** IP-R10 的分區必須屬於目前專案。 */
 export interface ProjectZone {
   id: string
   project_id: string
   name: string
 }
 
+/** 任務回應供內業判斷狀態、地點與受影響項目；寫入仍由後端驗證。 */
 export interface InspectionTask {
   id: string
   project_id: string
@@ -71,6 +77,7 @@ export interface InspectionTask {
   updated_at: string
 }
 
+/** 依 IP-R06，Plan 狀態由任務衍生，封存時任務唯讀。 */
 export interface InspectionPlan {
   id: string
   project_id: string
@@ -82,15 +89,18 @@ export interface InspectionPlan {
   tasks?: InspectionTask[]
 }
 
+/** Plan 清單的 cursor 必須持續取頁，避免漏掉後續計畫。 */
 export interface PlanPage {
   items: InspectionPlan[]
   next_cursor: string | null
 }
 
+/** 建立 Plan 的名稱輸入；空白與長度由後端檢查。 */
 export interface CreatePlanInput {
   name: string
 }
 
+/** IP-R02、IP-R10 的手動任務輸入；項目與分區須屬於同專案。 */
 export interface CreateTaskInput {
   item_ids: string[]
   suggested_assignee_id: string | null
@@ -98,15 +108,15 @@ export interface CreateTaskInput {
   location_text: string | null
 }
 
+/** IP-R10 的地點可由分區與補充文字共同表示。 */
 export interface UpdateLocationInput {
   zone_id: string | null
   location_text: string | null
 }
 
 /**
- * The operation names map one-to-one to the frozen planning endpoint table.
- * State values are read-only response data; there is no arbitrary status
- * update operation.
+ * 對應 IP-R01～IP-R10 的規劃端點；拒絕與狀態轉換由後端決定。
+ * IP-R06 的衍生狀態只有讀取，不能透過任意狀態更新操作覆寫。
  */
 export interface PlanningClient {
   /** GET /projects/{project_id}. */
@@ -173,6 +183,7 @@ export interface PlanningClient {
   unarchivePlan(planId: string): Promise<InspectionPlan>
 }
 
+/** 以後端規劃 API 執行操作；所有專案權限與狀態限制仍由後端覆核。 */
 export const planningClient: PlanningClient = {
   async getProject(projectId) {
     const project = await request<{ id: string; name: string }>(
@@ -288,6 +299,7 @@ const PLANNING_ERROR_CODES: Record<string, string> = {
   'resource.not_found': '找不到資料，請重新整理後再試。',
 }
 
+/** 把規劃 API 拒絕轉成可讀訊息；403 另提示規劃頁進入唯讀。 */
 export function planningErrorMessage(error: unknown): string {
   // 唯讀切換的說明是規劃頁的特例，其餘狀態碼走共用對應表。
   if (isForbidden(error)) {

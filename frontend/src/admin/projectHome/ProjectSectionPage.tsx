@@ -25,7 +25,10 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
   progress: '進度',
 }
 
-/** 依專案權限載入正式區段內容，並提供共用導覽外殼（ADM-R17）。 */
+/**
+ * 依 ADM-R17、ADM-R18 載入正式區段與有效權限。
+ * 純現場使用者導回權限落點；403 與不存在的專案分別顯示拒絕頁。
+ */
 export default function ProjectSectionPage({
   section,
   children,

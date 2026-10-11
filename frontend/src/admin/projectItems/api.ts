@@ -2,9 +2,11 @@ import { isForbidden } from '../../http'
 import { listAllPages, ManagementApiError, request } from '../api'
 import type { InspectionPoint } from '../templates/api'
 
+/** IP-R07 所需的任務狀態，供修改項目時說明後果。 */
 export type TaskStatus =
   'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 
+/** 專案項目及點位的目前資料；更新時保留既有識別。 */
 export interface ProjectItemData {
   id: string
   sequence: number
@@ -31,6 +33,7 @@ interface ImpactTask {
   items: TaskItem[]
 }
 
+/** 依 IP-R04 呈現受影響 Task 與未受影響項目。 */
 export interface AffectedTask {
   id: string
   name: string
@@ -43,12 +46,14 @@ export interface AffectedTask {
   preservedItemTitles: string[]
 }
 
+/** 儲存前的影響預覽；讀取 Tasks 被拒絕時只供唯讀顯示。 */
 export interface ProjectItemPreview {
   item: ProjectItemData
   affectedTasks: AffectedTask[]
   readOnly?: boolean
 }
 
+/** IP-R04、IP-R13 的修改輸入；有 Task 使用時須明確選擇重查。 */
 export interface ProjectItemChange {
   title: string
   instruction: string
@@ -56,6 +61,7 @@ export interface ProjectItemChange {
   reinspect?: boolean
 }
 
+/** 區分草稿原位更新、已完成退回與取消後恢復的影響。 */
 export type TaskAction =
   | 'draft_updated'
   | 'returned_to_in_progress'
@@ -63,6 +69,7 @@ export type TaskAction =
   | 'updated'
   | 'apply_current_standard_on_restore'
 
+/** IP-R04 的單筆受影響 Task 回應，不代表整筆 Task 都需重查。 */
 export interface AffectedTaskResult {
   task_id: string
   prior_status: TaskStatus
@@ -71,11 +78,13 @@ export interface AffectedTaskResult {
   needs_reinspection: boolean
 }
 
+/** 修改成功後的項目與受影響任務結果。 */
 export interface ProjectItemChangeResult extends ProjectItemData {
   reinspection_selected: boolean | null
   affected_tasks: AffectedTaskResult[]
 }
 
+/** 提供影響預覽與修改；後端會拒絕封存 Plan 及不合法項次變更。 */
 export interface ProjectItemApi {
   loadPreview(projectId: string, itemId: string): Promise<ProjectItemPreview>
   update(
@@ -85,12 +94,14 @@ export interface ProjectItemApi {
   ): Promise<ProjectItemChangeResult>
 }
 
+/** 列出專案項目所有分頁，避免確認畫面遺漏項目。 */
 export function listProjectItems(
   projectId: string,
 ): Promise<ProjectItemData[]> {
   return listAllPages(`/projects/${projectId}/inspection-items`)
 }
 
+// 依 IP-R13 傳回既有 id 與來源欄位識別，避免文字更正被當成新項次。
 function patchPoints(points: InspectionPoint[]) {
   return points.map((point) => ({
     id: point.id,
@@ -128,12 +139,14 @@ function patchPoints(points: InspectionPoint[]) {
   }))
 }
 
+/** 讀取跨 Plan 的影響預覽並提交修改；403 預覽降為唯讀。 */
 export const projectItemApi: ProjectItemApi = {
   async loadPreview(projectId, itemId) {
     const path = `/projects/${projectId}/inspection-items`
     const items = await listProjectItems(projectId)
     const item = items.find((entry) => entry.id === itemId)
     if (!item) throw new ManagementApiError(404, 'resource.not_found')
+    // IP-R04 的「使用」涵蓋同專案所有 Plan，不限目前頁面。
     let tasks: ImpactTask[] = []
     let readOnly = false
     try {

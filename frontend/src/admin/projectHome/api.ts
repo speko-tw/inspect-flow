@@ -1,5 +1,6 @@
 import { request } from '../api'
 
+/** IP-R11 的下一步代碼與待辦數，供首頁選唯一主要動作。 */
 export interface WorkflowStep {
   code:
     | 'add_members'
@@ -11,8 +12,10 @@ export interface WorkflowStep {
   pending: boolean
 }
 
+/** 首頁可導向的下一步代碼。 */
 export type WorkflowStepCode = WorkflowStep['code']
 
+/** IP-R11 的摘要與有效權限；任務數字不可見時不得以零代替。 */
 export interface WorkflowSummary {
   project: {
     id: string
@@ -38,6 +41,7 @@ export interface WorkflowSummary {
   viewer_permission_codes: string[]
 }
 
+/** 讀取專案流程摘要；非成員或無摘要讀取權限時由後端拒絕。 */
 export function getWorkflowSummary(
   projectId: string,
 ): Promise<WorkflowSummary> {

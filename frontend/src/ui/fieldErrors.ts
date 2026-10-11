@@ -1,16 +1,21 @@
 import type { HttpFieldError } from '../http'
 
+/** 只將 API pointer 對到本表單明確宣告的欄位。 */
 export interface FieldErrorBinding {
   path: string
   key: string
 }
 
+/** 無法安全對應欄位的錯誤留在一般訊息區，不猜測輸入位置。 */
 export interface MappedFieldErrors {
   errors: Record<string, string>
   unmatched: HttpFieldError[]
 }
 
-/** Match server pointers only to explicit, locally generated form bindings. */
+/**
+ * 只對應表單已宣告的伺服器欄位 pointer；未知 pointer 保留原錯誤。
+ * 規劃表單藉此依 ADM-R28 聚焦正確欄位，避免跨表單同名欄位混淆。
+ */
 export function mapFieldErrors(
   fields: readonly HttpFieldError[],
   bindings: readonly FieldErrorBinding[],

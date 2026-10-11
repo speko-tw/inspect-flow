@@ -1,4 +1,4 @@
-// 共用的確認框（#501）。
+// 依 ADM-R37、ADM-R38 共用確認框，避免各頁的危險色與焦點規則分歧。
 //
 // 取代原本 9 種確認框容器。外觀與行為只有一套：
 //   - 按鈕固定 [取消][確認]，取消在前；確認鈕顏色由 `variant` 決定：
@@ -7,7 +7,7 @@
 //   - 預設把焦點放在取消（`initialFocus`），按 Esc 等同取消。
 //   - 預設是原地展開的非 modal 區塊；只有真的要蓋住整頁的地方
 //     （計畫頁，背景要 inert）才傳 `modal`。
-// 送出邏輯留在各頁，這裡只負責外觀、焦點與鍵盤；另外擋掉兩種誤送出（#507）：
+// 送出邏輯留在各頁，這裡只負責外觀、焦點與鍵盤；另擋兩種誤送出：
 //   - 確認進行中（`onConfirm` 回傳的 Promise 還沒完成）不接受第二次確認。
 //   - 輸入法選字時按的 Enter 不會送出 asForm 的表單。
 
@@ -26,10 +26,13 @@ import { blockImeEnter, useSubmitGuard } from './submitGuard'
 import { FormError } from './Form'
 import { GENERIC_FAILURE_MESSAGE } from '../http'
 
+/** 依 ADM-R37 區分不可復原的最終確認與一般操作。 */
 export type ConfirmVariant = 'danger' | 'neutral'
 
+/** 依確認框是否蓋住頁面選擇適當的 ARIA 角色。 */
 export type ConfirmRole = 'group' | 'region' | 'dialog' | 'alertdialog'
 
+/** ADM-R38 的共用確認框選項；送出與拒絕原因仍由呼叫頁處理。 */
 export type ConfirmBoxProps = {
   variant?: ConfirmVariant
   /** 容器的 ARIA 角色；原地確認用 group，要蓋住整頁用 dialog。 */
@@ -58,6 +61,10 @@ export type ConfirmBoxProps = {
   children?: ReactNode
 }
 
+/**
+ * 依 ADM-R37、ADM-R38 提供一致的按鈕、焦點與 Esc 行為。
+ * 確認進行中拒絕重複送出，避免規劃表單的寫入操作執行兩次。
+ */
 export function ConfirmBox({
   variant = 'neutral',
   role = 'group',
