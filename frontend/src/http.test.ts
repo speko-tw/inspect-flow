@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ManagementApiError } from './admin/api'
+import { ProjectTemplatesApiError } from './admin/projects/projectTemplatesApi'
+import { FieldApiError } from './field/api'
 import {
   collectPages,
   FORBIDDEN_MESSAGE,
@@ -70,6 +73,87 @@ describe('request', () => {
       code: 'x.conflict',
       details: ['a'],
     })
+  })
+
+  it.each([
+    ['management', ManagementApiError],
+    ['field', FieldApiError],
+    ['project templates', ProjectTemplatesApiError],
+  ])(
+    'attaches valid 422 fields to the %s error subclass',
+    async (_name, ErrorClass) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          Response.json(
+            {
+              error: {
+                code: 'request.validation_failed',
+                fields: [{ path: '/items/1/name', code: 'field.required' }],
+              },
+            },
+            { status: 422 },
+          ),
+        ),
+      )
+
+      const error = await request('/things', undefined, ErrorClass).catch(
+        (caught: unknown) => caught,
+      )
+      expect(error).toBeInstanceOf(ErrorClass)
+      expect(error).toMatchObject({
+        code: 'request.validation_failed',
+        fields: [{ path: '/items/1/name', code: 'field.required' }],
+      })
+    },
+  )
+
+  it.each([
+    ['not an array', 'bad'],
+    ['missing code', [{ path: '/name' }]],
+    ['extra key', [{ path: '/name', code: 'field.required', value: 'x' }]],
+    ['invalid pointer escape', [{ path: '/name~2', code: 'field.invalid' }]],
+    [
+      'too many entries',
+      Array.from({ length: 101 }, () => ({
+        path: '/name',
+        code: 'field.invalid',
+      })),
+    ],
+  ])('ignores malformed fields: %s', async (_name, fields) => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { error: { code: 'request.validation_failed', fields } },
+            { status: 422 },
+          ),
+        ),
+    )
+    const error = await request('/things').catch((caught: unknown) => caught)
+    expect(error).toMatchObject({ code: 'request.validation_failed' })
+    expect(error).not.toHaveProperty('fields')
+  })
+
+  it('ignores fields outside 422 responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            error: {
+              code: 'x.conflict',
+              fields: [{ path: '/name', code: 'field.required' }],
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    )
+    const error = await request('/things').catch((caught: unknown) => caught)
+    expect(error).not.toHaveProperty('fields')
   })
 
   it('reports a 200 response whose body is not JSON as an API error', async () => {

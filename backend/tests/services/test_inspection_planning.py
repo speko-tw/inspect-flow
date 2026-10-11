@@ -38,6 +38,7 @@ from app.services.inspection_planning import (
     delete_project_zone,
     derive_plan_status,
     dispatch_inspection_task,
+    field_inspection_task_filters,
     get_inspection_plan,
     get_inspection_task,
     list_inspection_plans,
@@ -49,6 +50,7 @@ from app.services.inspection_planning import (
     update_project_item_usage,
     update_task_location,
 )
+from app.services.permissions import EffectiveAccess
 from app.services.projects import create_project
 from tests.db.conftest import create_root_user_with_company
 
@@ -301,6 +303,44 @@ def test_plan_manage_and_assignee_must_be_project_members(session, operator):
     with pytest.raises(PlanningError) as invalid:
         assign_inspection_task(session, task, assignee_id=uuid.uuid4())
     assert invalid.value.code == "inspection_task.invalid_assignee"
+
+
+def test_field_task_filters_use_central_permission_calculation(
+    session, monkeypatch
+):
+    user_id = uuid.uuid4()
+    allowed_project_id = uuid.uuid4()
+    denied_project_id = uuid.uuid4()
+    access = EffectiveAccess(
+        is_active=True,
+        is_admin=False,
+        module_permissions=frozenset(),
+        project_permissions=frozenset(),
+        project_permissions_by_project={
+            allowed_project_id: frozenset({"inspection_task.inspect"}),
+            denied_project_id: frozenset({"inspection_task.read"}),
+        },
+    )
+    calls = []
+
+    def calculate_effective_access(
+        session, *, user_id: uuid.UUID, project_id: uuid.UUID | None = None
+    ):
+        calls.append((user_id, project_id))
+        return access
+
+    monkeypatch.setattr(
+        "app.services.inspection_planning.calculate_effective_access",
+        calculate_effective_access,
+    )
+
+    filters = field_inspection_task_filters(
+        session, user_id=user_id, is_admin=False, assigned_to_me=False
+    )
+
+    assert calls == [(user_id, None)]
+    project_filter = filters[1]
+    assert set(project_filter.right.value) == {allowed_project_id}
 
 
 def test_non_assignee_with_inspection_permission_can_start_task(

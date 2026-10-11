@@ -46,7 +46,18 @@ anything about *which* codes a future feature spec should register
 eventual contents.
 """
 
+from dataclasses import dataclass
+
 from app.api.errors import DescribedStrEnum
+
+
+@dataclass(frozen=True)
+class PermissionDefinition:
+    """Metadata required to validate and route one permission code."""
+
+    scope: str
+    module: str
+    external_allowed: bool = False
 
 
 class PermissionCode(DescribedStrEnum):
@@ -56,9 +67,24 @@ class PermissionCode(DescribedStrEnum):
         "project_member.manage",
         "管理專案成員與其角色",
     )
+    PROJECT_UPDATE = ("project.update", "調整專案")
+    PROJECT_READ = ("project.read", "檢視專案")
+    PROJECT_USE = ("project.use", "使用專案模組")
+    PROJECT_CREATE = ("project.create", "開設專案")
+    ALL_PROJECT_PROGRESS_READ = (
+        "all_project_progress.read",
+        "檢視所有專案進度",
+    )
+    INSPECTION_USE = ("inspection.use", "使用查核模組")
+    TEMPLATE_USE = ("template.use", "使用範本模組")
+    TEMPLATE_MANAGE = ("template.manage", "管理範本庫")
     PROJECT_INSPECTION_ITEM_EDIT = (
         "project_inspection_item.edit",
         "編輯專案查核項目",
+    )
+    PROJECT_INSPECTION_ITEM_READ = (
+        "project_inspection_item.read",
+        "讀取專案查核項目",
     )
     PROJECT_ZONE_READ = ("project_zone.read", "讀取專案分區")
     PROJECT_ZONE_MANAGE = ("project_zone.manage", "管理專案分區")
@@ -87,6 +113,99 @@ class PermissionCode(DescribedStrEnum):
 # ``tests/conftest.py``'s ``registered_permission_codes`` fixture
 # reassigns this, and only for the duration of one test.
 _active_registry: type[DescribedStrEnum] = PermissionCode
+
+MODULES = frozenset({"project", "inspection", "template"})
+
+# Every production permission has explicit scope, owning module, and
+# external-collaborator eligibility. Test-only registry entries use the
+# conservative fallback below.
+_PROJECT_CODES = {
+    "project_member.manage": "project",
+    "project.update": "project",
+    "project.read": "project",
+    "project_inspection_item.edit": "inspection",
+    "project_inspection_item.read": "inspection",
+    "project_zone.read": "inspection",
+    "project_zone.manage": "inspection",
+    "inspection_plan.read": "inspection",
+    "inspection_plan.create": "inspection",
+    "inspection_plan.manage": "inspection",
+    "inspection_plan.archive": "inspection",
+    "inspection_plan.unarchive": "inspection",
+    "inspection_task.read": "inspection",
+    "inspection_task.manage": "inspection",
+    "inspection_task.create": "inspection",
+    "inspection_task.dispatch": "inspection",
+    "inspection_task.assign": "inspection",
+    "inspection_task.inspect": "inspection",
+    "inspection_task.delete_draft": "inspection",
+    "inspection_task.cancel": "inspection",
+}
+_MODULE_CODE_MODULES = {
+    "project.use": "project",
+    "project.create": "project",
+    "all_project_progress.read": "project",
+    "inspection.use": "inspection",
+    "template.use": "template",
+    "template.manage": "template",
+}
+_EXTERNAL_ALLOWED_CODES = frozenset(
+    {
+        "project.read",
+        "project_inspection_item.read",
+        "project_zone.read",
+        "inspection_plan.read",
+        "inspection_task.read",
+        "project.use",
+        "inspection.use",
+        "template.use",
+    }
+)
+PERMISSION_DEFINITIONS = {
+    **{
+        code: PermissionDefinition(
+            scope="project",
+            module=module,
+            external_allowed=code in _EXTERNAL_ALLOWED_CODES,
+        )
+        for code, module in _PROJECT_CODES.items()
+    },
+    **{
+        code: PermissionDefinition(
+            scope="module",
+            module=module,
+            external_allowed=code in _EXTERNAL_ALLOWED_CODES,
+        )
+        for code, module in _MODULE_CODE_MODULES.items()
+    },
+}
+
+
+def permission_code_scope(code: str) -> str | None:
+    """Return the registered code scope: ``module`` or ``project``."""
+    if not is_permission_code_registered(code):
+        return None
+    definition = PERMISSION_DEFINITIONS.get(code)
+    return definition.scope if definition else "project"
+
+
+def permission_code_module(code: str) -> str | None:
+    """Return the module owning a registered code."""
+    if permission_code_scope(code) is None:
+        return None
+    definition = PERMISSION_DEFINITIONS.get(code)
+    if definition:
+        return definition.module
+    return code.split(".", 1)[0]
+
+
+def permission_code_external_allowed(code: str) -> bool:
+    definition = PERMISSION_DEFINITIONS.get(code)
+    return bool(
+        definition
+        and is_permission_code_registered(code)
+        and definition.external_allowed
+    )
 
 
 def is_permission_code_registered(code: str) -> bool:

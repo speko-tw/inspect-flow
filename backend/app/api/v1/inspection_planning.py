@@ -1439,7 +1439,14 @@ def _validate_project_points(
     try:
         validate_template_structure({"inspection_points": normalized_points})
     except InvalidTemplateError as exc:
-        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            fields=[
+                {"path": field.path, "code": field.code}
+                for field in exc.fields
+            ],
+        ) from exc
 
     if has_tasks and not points:
         raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_POINTS_REQUIRED, 422)
@@ -1545,6 +1552,13 @@ def _replace_project_points(
         field_map: dict[UUID, UUID] = {}
         existing_fields = fields_by_point.get(point.id, {})
         retained_field_ids: set[UUID] = set()
+        field_units: dict[UUID, str | None] = {}
+        numeric = source.numeric_standard
+        bound_client_id = (
+            numeric.measurement_field_client_id
+            if numeric is not None
+            else None
+        )
         for index, source_field in enumerate(source.measurement_fields):
             field_identity = source_field.id
             field = (
@@ -1552,6 +1566,10 @@ def _replace_project_points(
                 if field_identity is not None
                 else None
             )
+            unit = source_field.unit
+            if source_field.client_id == bound_client_id:
+                assert numeric is not None
+                unit = numeric.unit
             if field is None:
                 field = ProjectMeasurementField(
                     id=uuid7(),
@@ -1559,7 +1577,7 @@ def _replace_project_points(
                     project_inspection_item_id=item.id,
                     name=source_field.name,
                     field_type=source_field.field_type,
-                    unit=source_field.unit,
+                    unit=unit,
                     sort_order=index,
                     created_by=item.updated_by,
                     updated_by=item.updated_by,
@@ -1568,15 +1586,17 @@ def _replace_project_points(
             else:
                 field.name = source_field.name
                 field.field_type = source_field.field_type
-                field.unit = source_field.unit
+                field.unit = unit
                 field.sort_order = index
                 field.updated_by = item.updated_by
             retained_field_ids.add(field.id)
             field_map[source_field.client_id] = field.id
+            field_units[source_field.client_id] = unit
 
         for field_id, field in existing_fields.items():
             if field_id not in retained_field_ids:
                 db.delete(field)
+        db.flush()
 
         if source.text_standard is not None:
             db.add(
@@ -1594,11 +1614,6 @@ def _replace_project_points(
             field_id = field_map.get(field_identity)
             if field_id is None:
                 raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-            field = next(
-                row
-                for row in source.measurement_fields
-                if row.client_id == field_identity
-            )
             db.add(
                 ProjectNumericStandard(
                     inspection_point_id=point.id,
@@ -1611,8 +1626,12 @@ def _replace_project_points(
                     lower_bound=standard.lower_bound,
                     upper_bound=standard.upper_bound,
                     measurement_field_id=field_id,
-                    measurement_field_type=field.field_type,
-                    measurement_field_unit=field.unit or "",
+                    measurement_field_type=next(
+                        row.field_type
+                        for row in source.measurement_fields
+                        if row.client_id == field_identity
+                    ),
+                    measurement_field_unit=field_units[field_identity] or "",
                     created_by=item.updated_by,
                     updated_by=item.updated_by,
                 )

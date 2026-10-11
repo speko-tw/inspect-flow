@@ -10,6 +10,7 @@
     "id",
     "is_admin",
     "location",
+    "module_permissions",
     "must_change_password",
     "name_en",
     "name_zh",

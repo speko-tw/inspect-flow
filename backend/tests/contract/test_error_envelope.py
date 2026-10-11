@@ -67,6 +67,10 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         "docs/intents/03-decisions-and-stack.md",
         "backend/app/api/errors.py",
         "backend/tests/contract/test_error_envelope.py",
+        # Shared API response fixtures contain error.code values,
+        # not a second hand-maintained error-code lookup table.
+        "frontend/src/admin/projectItems/fixtures/project-patch-bound-unit.json",
+        "frontend/src/admin/templates/fixtures/template-write-field-error.json",
     }
 )
 

@@ -31,7 +31,9 @@ from app.models import (
     TemplateMeasurementField,
     TemplateNumericStandard,
     TemplateTextStandard,
+    UserModulePermission,
 )
+from app.permission_codes import PermissionCode
 from app.services import project_templates
 from tests.db.conftest import create_root_user_with_company
 
@@ -79,6 +81,17 @@ def _world(db_session, make_client):
     )
     member.role_assignments.append(ProjectMemberRole(role_id=role.id))
     db_session.add(member)
+    db_session.add_all(
+        UserModulePermission(
+            user_id=editor.id,
+            permission_code=code.value,
+            source="manual",
+        )
+        for code in (
+            PermissionCode.PROJECT_USE,
+            PermissionCode.INSPECTION_USE,
+        )
+    )
     db_session.add(
         SystemRoleAssignment(
             user_id=admin.id,
@@ -1191,7 +1204,13 @@ def test_save_as_template_rejects_a_source_with_two_photo_requirements(
         },
     )
     assert rejected.status_code == 422, rejected.text
-    assert rejected.json() == {"error": {"code": "request.validation_failed"}}
+    error = rejected.json()["error"]
+    assert error["code"] == "request.validation_failed"
+    assert len(error["fields"]) == 1
+    assert error["fields"][0]["path"] == (
+        "/inspection_points/0/evidence_requirements"
+    )
+    assert error["fields"][0]["code"].startswith("template.")
     listed = world["admin"].get(
         f"/api/v1/templates?system_id={target_system.json()['id']}"
     )

@@ -1,0 +1,44 @@
+{
+  "request": {
+    "title": "混凝土表面",
+    "instruction": "檢查表面",
+    "inspection_points": [
+      {
+        "sequence": 1,
+        "title": "裂縫",
+        "instruction": "檢查裂縫",
+        "text_standard": null,
+        "numeric_standard": {
+          "value": "10",
+          "condition": "=",
+          "unit": "mm",
+          "tolerance": null,
+          "range_form": null,
+          "lower_bound": null,
+          "upper_bound": null,
+          "measurement_field_client_id": "00000000-0000-4000-8000-000000000011"
+        },
+        "measurement_fields": [
+          {
+            "client_id": "00000000-0000-4000-8000-000000000011",
+            "name": "厚度",
+            "field_type": "number",
+            "unit": null
+          }
+        ],
+        "evidence_requirements": [{ "min_count": 1 }]
+      }
+    ]
+  },
+  "error_response": {
+    "error": {
+      "code": "request.validation_failed",
+      "fields": [
+        {
+          "path": "/inspection_points/0/measurement_fields/0/unit",
+          "code": "template.bound_field_unit_forbidden"
+        }
+      ]
+    }
+  }
+}

@@ -5,7 +5,14 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router'
+import {
+  Link,
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -76,6 +83,7 @@ const currentUser: CurrentUser = {
   has_office_access: true,
   has_field_access: true,
   has_template_access: true,
+  module_permissions: [],
 }
 
 function renderAdmin(
@@ -112,8 +120,10 @@ function renderAdmin(
 
 function TestNavigation() {
   const navigate = useNavigate()
+  const location = useLocation()
   return (
     <>
+      <output data-testid="pathname">{location.pathname}</output>
       <Link to="/admin/companies">測試 SPA 管理頁導覽</Link>
       <button onClick={() => navigate(-1)} type="button">
         測試瀏覽器上一頁
@@ -125,11 +135,13 @@ function TestNavigation() {
 function managementFetch({
   userRows = [builtInUser, regularUser],
   companyRows = [company],
+  memberProjectIds = [],
   onCreate,
   failAdminAction = false,
 }: {
   userRows?: User[]
   companyRows?: Company[]
+  memberProjectIds?: string[]
   onCreate?: (body: Record<string, unknown>) => CreatedUser
   failAdminAction?: boolean
 } = {}) {
@@ -183,6 +195,41 @@ function managementFetch({
             'inspection_plan.read',
           ],
         })
+      }
+      if (parsed.pathname === '/api/v1/me/projects' && method === 'GET') {
+        return Response.json(
+          memberProjectIds.map((id) => ({
+            id,
+            project_code: 'DEMO-001',
+            name: '示範工程',
+            client_name: '示範公司',
+            site_location: '台北',
+            planned_start_date: null,
+            planned_completion_date: null,
+            role_names: ['內業'],
+            has_office_access: true,
+          })),
+        )
+      }
+      if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
+        return Response.json({
+          items: [
+            {
+              id: 'project-demo-1',
+              project_code: 'DEMO-001',
+              name: '示範工程',
+            },
+          ],
+          next_cursor: null,
+        })
+      }
+      if (
+        /\/projects\/project-demo-1\/inspection-items$/.test(
+          parsed.pathname,
+        ) &&
+        method === 'GET'
+      ) {
+        return Response.json({ items: [], next_cursor: null })
       }
       if (url.includes('/template-categories?')) {
         return Response.json({
@@ -533,6 +580,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     const passwordHeading = await screen.findByRole('heading', {
@@ -609,6 +657,7 @@ describe('admin user and company pages', () => {
       fireEvent.change(screen.getByLabelText(/^中文姓名/), {
         target: { value: '測試' },
       })
+      fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
       fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     }
 
@@ -654,6 +703,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     expect(await screen.findByText('leave-page-password')).toBeInTheDocument()
 
@@ -687,6 +737,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
     expect(
       await screen.findByText('back-navigation-password'),
@@ -853,6 +904,7 @@ describe('admin user and company pages', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '李柏' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -1142,22 +1194,114 @@ describe('admin user and company pages', () => {
     expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
   })
 
-  it('allows non-admin users to open project template routes', async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
+  it.each([true, false])(
+    'redirects the old project template path in the admin shell (%s)',
+    async (isAdmin) => {
+      const fetchMock = managementFetch({
+        memberProjectIds: ['project-demo-1'],
+      })
+      renderAdmin('/admin/projects/project-demo-1/templates', isAdmin)
+
+      await waitFor(() =>
+        expect(screen.getByTestId('pathname')).toHaveTextContent(
+          '/admin/projects/project-demo-1/inspection-items/templates',
+        ),
+      )
+      expect(
+        await screen.findByRole('region', { name: '範本操作' }),
+      ).toBeInTheDocument()
+      const navigation = screen.getByRole('complementary', {
+        name: '範本庫導覽',
+      })
+      fireEvent.click(
+        await within(navigation).findByRole('button', { name: '土木工程' }),
+      )
+      fireEvent.click(
+        await within(navigation).findByRole('button', { name: '護欄' }),
+      )
+      await within(navigation).findByRole('button', { name: '欄杆尺寸' })
+      expect(
+        screen.getByRole('link', { name: '返回查核項目' }),
+      ).toHaveAttribute(
+        'href',
+        '/admin/projects/project-demo-1/inspection-items',
+      )
+      expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+      if (isAdmin) {
+        expect(
+          screen.getByRole('link', { name: '使用者' }),
+        ).toBeInTheDocument()
+      } else {
+        expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
+      }
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).endsWith('/workflow-summary'),
+        ),
+      ).toBe(true)
+    },
+  )
+
+  it('allows a non-member template manager to browse without workflow summary', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin(
+      '/admin/projects/project-demo-1/inspection-items/templates',
+      false,
     )
-    vi.stubGlobal('fetch', fetchMock)
-    renderAdmin('/admin/projects/project-demo-1/templates', false)
 
     expect(
       await screen.findByRole('region', { name: '範本操作' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '返回專案' })).toHaveAttribute(
-      'href',
-      '/admin/projects/project-demo-1',
+    const navigation = screen.getByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '土木工程' }),
     )
-    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
-    expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '護欄' }),
+    )
+    await within(navigation).findByRole('button', { name: '欄杆尺寸' })
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(false)
+    expect(
+      screen.queryByRole('button', { name: '套用至專案' }),
+    ).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('你沒有修改此專案查核項目的權限。'),
+    ).toBeInTheDocument()
+  })
+
+  it('opens template apply route for an office member', async () => {
+    const fetchMock = managementFetch({
+      memberProjectIds: ['project-demo-1'],
+    })
+    renderAdmin(
+      '/admin/projects/project-demo-1/inspection-items/templates',
+      false,
+      {
+        has_office_access: true,
+        has_field_access: false,
+        has_template_access: false,
+      },
+    )
+
+    expect(
+      await screen.findByRole('region', { name: '範本操作' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeInTheDocument()
+    const permissionCheck = screen.queryByText('正在確認專案權限…')
+    expect(permissionCheck).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(true)
   })
 
   it('lets non-admin users reach template browsing and displays API 403', async () => {
@@ -1322,7 +1466,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/admin/projects/project-1/inspection-items', false)
     fireEvent.click(
       await screen.findByRole('link', {
-        name: '修改「混凝土表面」',
+        name: '檢視「混凝土表面」',
       }),
     )
     expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()

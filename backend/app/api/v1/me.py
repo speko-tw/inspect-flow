@@ -12,9 +12,10 @@ from app.auth.access import require_login_access
 from app.auth.dependencies import get_db
 from app.models import Project, ProjectMember, ProjectMemberRole, Role, User
 from app.services.access_summary import (
-    OFFICE_PERMISSION_CODES,
-    permission_codes_by_project,
+    INSPECTION_OFFICE_PERMISSION_CODES,
+    PROJECT_OFFICE_PERMISSION_CODES,
 )
+from app.services.permissions import calculate_effective_access
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -53,9 +54,11 @@ def list_my_projects(
         .where(ProjectMember.user_id == user.id)
         .order_by(Project.project_code, Project.name, Project.id)
     ).all()
-    codes_by_project = permission_codes_by_project(db, user_id=user.id)
+    access = calculate_effective_access(db, user_id=user.id)
+    codes_by_project = access.project_permissions_by_project
     result: list[MyProjectResponse] = []
     for project, member_id in rows:
+        project_codes = codes_by_project.get(project.id, frozenset())
         role_names = db.scalars(
             select(Role.name)
             .join(ProjectMemberRole, ProjectMemberRole.role_id == Role.id)
@@ -73,8 +76,11 @@ def list_my_projects(
                 planned_completion_date=project.planned_completion_date,
                 role_names=list(role_names),
                 has_office_access=bool(
-                    codes_by_project.get(project.id, frozenset())
-                    & OFFICE_PERMISSION_CODES
+                    project_codes
+                    & (
+                        PROJECT_OFFICE_PERMISSION_CODES
+                        | INSPECTION_OFFICE_PERMISSION_CODES
+                    )
                 ),
             )
         )

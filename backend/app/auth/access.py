@@ -75,15 +75,16 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError, ErrorCode
 from app.auth.dependencies import bind_request_scope, get_db, require_login
 from app.models import (
-    ProjectMember,
-    ProjectMemberRole,
-    RolePermission,
     SystemRoleAssignment,
     SystemRoleCode,
     User,
 )
-from app.permission_codes import is_permission_code_registered
-from app.services.permissions import effective_permissions
+from app.permission_codes import (
+    is_permission_code_registered,
+)
+from app.services.permissions import (
+    calculate_effective_access,
+)
 
 
 class AccessLevel(Enum):
@@ -302,23 +303,11 @@ def require_system_role_or_any_project_permission(
     ) -> User:
         if user.is_admin or _has_system_role(db, user, role_code):
             return user
-        allowed = db.scalar(
-            select(ProjectMember.id)
-            .join(
-                ProjectMemberRole,
-                ProjectMemberRole.project_member_id == ProjectMember.id,
-            )
-            .join(
-                RolePermission,
-                RolePermission.role_id == ProjectMemberRole.role_id,
-            )
-            .where(
-                ProjectMember.user_id == user.id,
-                RolePermission.code == permission_code,
-            )
-            .limit(1)
-        )
-        if allowed is None:
+        access = calculate_effective_access(db, user_id=user.id)
+        if not any(
+            permission_code in codes
+            for codes in access.project_permissions_by_project.values()
+        ):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -345,23 +334,11 @@ def require_admin_or_any_project_permission(
     ) -> User:
         if user.is_admin:
             return user
-        allowed = db.scalar(
-            select(ProjectMember.id)
-            .join(
-                ProjectMemberRole,
-                ProjectMemberRole.project_member_id == ProjectMember.id,
-            )
-            .join(
-                RolePermission,
-                RolePermission.role_id == ProjectMemberRole.role_id,
-            )
-            .where(
-                ProjectMember.user_id == user.id,
-                RolePermission.code == permission_code,
-            )
-            .limit(1)
-        )
-        if allowed is None:
+        access = calculate_effective_access(db, user_id=user.id)
+        if not any(
+            permission_code in codes
+            for codes in access.project_permissions_by_project.values()
+        ):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -431,10 +408,10 @@ def require_project_permission(
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
         if user.is_admin:
             return user
-        codes = effective_permissions(
+        access = calculate_effective_access(
             db, user_id=user.id, project_id=project_id
         )
-        if code not in codes:
+        if code not in access.project_permissions:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 

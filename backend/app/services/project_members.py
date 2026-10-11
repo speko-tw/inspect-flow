@@ -41,8 +41,14 @@ from collections.abc import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import ProjectMember, ProjectMemberRole
+from app.db.base import uuid7
+from app.models import (
+    ProjectMember,
+    ProjectMemberRole,
+    User,
+)
 from app.services.audit import record_audit_event
+from app.services.module_permissions import validate_role_assignment
 from app.services.operator import get_current_operator
 
 
@@ -109,7 +115,19 @@ def add_project_member(
     """
     operator = get_current_operator(session)
     role_id_set = frozenset(role_ids)
+    user = session.get(User, user_id)
+    if user is None:
+        raise ValueError(f"User {user_id} does not exist")
+    member_id = uuid7()
+    validate_role_assignment(
+        session,
+        user=user,
+        project_id=project_id,
+        project_member_id=member_id,
+        role_ids=role_id_set,
+    )
     member = ProjectMember(
+        id=member_id,
         project_id=project_id,
         user_id=user_id,
         created_by=operator.id,
@@ -147,6 +165,16 @@ def assign_role(
             f"ProjectMember {member.id} already holds role {role_id}"
         )
     operator = get_current_operator(session)
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session,
+        user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
+        role_ids=before_role_ids | {role_id},
+    )
     member.role_assignments.append(ProjectMemberRole(role_id=role_id))
     member.updated_by = operator.id
     session.flush()
@@ -198,6 +226,16 @@ def unassign_role(
             f"ProjectMember {member.id} does not hold role {role_id}"
         )
     operator = get_current_operator(session)
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session,
+        user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
+        role_ids=before_role_ids - {role_id},
+    )
     assignment = next(
         a for a in member.role_assignments if a.role_id == role_id
     )
@@ -233,6 +271,16 @@ def set_project_member_roles(
     operator = get_current_operator(session)
     to_remove = before_role_ids - after_role_ids
     to_add = after_role_ids - before_role_ids
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session,
+        user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
+        role_ids=after_role_ids,
+    )
     for assignment in member.role_assignments:
         if assignment.role_id in to_remove:
             session.delete(assignment)
@@ -277,6 +325,16 @@ def remove_project_member(session: Session, member: ProjectMember) -> None:
     ``project_member.removed`` event (DOM-R22) even when ``member``
     held no role at all.
     """
+    user = session.get(User, member.user_id)
+    if user is None:
+        raise ValueError(f"User {member.user_id} does not exist")
+    validate_role_assignment(
+        session,
+        user=user,
+        project_id=member.project_id,
+        project_member_id=member.id,
+        role_ids=(),
+    )
     before = {
         "project_id": member.project_id,
         "user_id": member.user_id,

@@ -355,7 +355,7 @@ describe('project home', () => {
     expect(currentLinks[0]).toHaveAccessibleName(label)
   })
 
-  it('hides sections when the viewer lacks their read permission', async () => {
+  it('keeps the item list visible without edit permission', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({
@@ -369,9 +369,7 @@ describe('project home', () => {
     expect(
       screen.queryByRole('link', { name: '成員' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('link', { name: '查核項目' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查核項目' })).toBeVisible()
     expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
     expect(
       screen.queryByRole('link', { name: '進度' }),

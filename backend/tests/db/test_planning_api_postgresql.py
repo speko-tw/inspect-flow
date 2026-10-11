@@ -30,10 +30,16 @@ from app.main import create_app
 from app.models import (
     Company,
     InspectionTask,
+    ProjectMeasurementField,
     ProjectMember,
     ProjectMemberRole,
+    ProjectNumericStandard,
     Role,
     RolePermission,
+    TaskInspectionItem,
+    TaskRequirementSnapshot,
+    TaskSnapshotNumericStandard,
+    TaskSnapshotPoint,
     User,
 )
 from tests.api.query_count import select_count
@@ -344,3 +350,145 @@ def _field_task_ids(client, prefix: str, params: dict[str, str]) -> list[str]:
         cursor = page["next_cursor"]
         if cursor is None:
             return seen
+
+
+def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
+    db_session: Session, make_client, request: pytest.FixtureRequest
+):
+    if request.config.getoption("--db-backend") != "postgresql":
+        pytest.skip("requires PostgreSQL immediate composite foreign keys")
+
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    item = world["item"]
+    url = f"/api/v1/projects/{world['project'].id}/inspection-items/{item.id}"
+    created = admin.patch(
+        url,
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "單位更新點位",
+                    "instruction": "檢查量測欄位單位",
+                    "numeric_standard": {
+                        "value": "10",
+                        "condition": "=",
+                        "unit": "mm",
+                        "measurement_field_client_id": (
+                            "00000000-0000-4000-8000-000000000011"
+                        ),
+                    },
+                    "measurement_fields": [
+                        {
+                            "client_id": (
+                                "00000000-0000-4000-8000-000000000011"
+                            ),
+                            "name": "厚度",
+                            "field_type": "number",
+                            "unit": None,
+                        }
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert created.status_code == 200, created.text
+    point = created.json()["inspection_points"][0]
+    field = point["measurement_fields"][0]
+    point_id = UUID(point["id"])
+    field_id = UUID(field["id"])
+    assert field["unit"] == "mm"
+
+    updated = admin.patch(
+        url,
+        json={
+            "inspection_points": [
+                {
+                    "id": str(point_id),
+                    "sequence": 1,
+                    "title": "單位更新點位",
+                    "instruction": "檢查量測欄位單位",
+                    "numeric_standard": {
+                        "value": "10",
+                        "condition": "=",
+                        "unit": "cm",
+                        "measurement_field_client_id": str(field_id),
+                    },
+                    "measurement_fields": [
+                        {
+                            "id": str(field_id),
+                            "client_id": str(field_id),
+                            "name": "厚度",
+                            "field_type": "number",
+                            "unit": None,
+                        }
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    updated_point = updated.json()["inspection_points"][0]
+    assert UUID(updated_point["id"]) == point_id
+    assert UUID(updated_point["measurement_fields"][0]["id"]) == field_id
+    assert updated_point["measurement_fields"][0]["unit"] == "cm"
+    assert updated_point["numeric_standard"]["unit"] == "cm"
+
+    db_session.expire_all()
+    persisted_field = db_session.get(ProjectMeasurementField, field_id)
+    persisted_standard = db_session.scalar(
+        select(ProjectNumericStandard).where(
+            ProjectNumericStandard.inspection_point_id == point_id
+        )
+    )
+    assert persisted_field is not None
+    assert persisted_field.unit == "cm"
+    assert persisted_standard is not None
+    assert persisted_standard.measurement_field_id == field_id
+    assert persisted_standard.measurement_field_unit == "cm"
+
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": "欄位單位快照"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(item.id)]},
+    )
+    assert task.status_code == 201, task.text
+    task_detail = admin.get(f"/api/v1/inspection-tasks/{task.json()['id']}")
+    assert task_detail.status_code == 200, task_detail.text
+    snapshot_point = task_detail.json()["items"][0]["current_snapshot"][
+        "inspection_points"
+    ][0]
+    assert snapshot_point["measurement_fields"][0]["id"] == str(field_id)
+    assert snapshot_point["measurement_fields"][0]["unit"] == "cm"
+    assert snapshot_point["numeric_standard"]["unit"] == "cm"
+    snapshot_point_row = db_session.scalar(
+        select(TaskSnapshotPoint)
+        .join(
+            TaskRequirementSnapshot,
+            TaskRequirementSnapshot.id == TaskSnapshotPoint.snapshot_id,
+        )
+        .join(
+            TaskInspectionItem,
+            TaskInspectionItem.id
+            == TaskRequirementSnapshot.task_inspection_item_id,
+        )
+        .where(
+            TaskInspectionItem.task_id == UUID(task.json()["id"]),
+            TaskSnapshotPoint.source_point_id == point_id,
+        )
+    )
+    assert snapshot_point_row is not None
+    snapshot_standard = db_session.scalar(
+        select(TaskSnapshotNumericStandard).where(
+            TaskSnapshotNumericStandard.point_id == snapshot_point_row.id
+        )
+    )
+    assert snapshot_standard is not None
+    assert snapshot_standard.source_measurement_field_id == field_id
+    assert snapshot_standard.measurement_field_unit == "cm"

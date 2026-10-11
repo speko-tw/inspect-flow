@@ -116,7 +116,11 @@ function patchPoints(points: InspectionPoint[]) {
       client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
       name: field.name,
       field_type: field.field_type,
-      unit: field.unit,
+      unit:
+        point.numeric_standard?.measurement_field_id !== undefined &&
+        field.id === point.numeric_standard.measurement_field_id
+          ? null
+          : field.unit,
     })),
     evidence_requirements: point.evidence_requirements.map((row) => ({
       min_count: row.min_count,

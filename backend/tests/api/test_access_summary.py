@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import SystemRoleCode, User
-from app.permission_codes import PermissionCode
+from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.access_summary import (
     FIELD_PERMISSION_CODES,
     OFFICE_PERMISSION_CODES,
-    TASK_READ_ONLY_CODES,
+    READ_ONLY_PERMISSION_CODES,
 )
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
@@ -66,6 +66,7 @@ def world(db_session: Session, make_client):
             username=name,
             email=f"{name}@demo.example",
             name_zh=name,
+            is_external_collaborator=False,
         )
 
     project_a = create_project(
@@ -85,7 +86,10 @@ def world(db_session: Session, make_client):
     office_role = create_role(
         db_session,
         name="內業",
-        permission_codes=["project_member.manage", "inspection_plan.read"],
+        permission_codes=[
+            "project_member.manage",
+            "inspection_plan.read",
+        ],
     )
     field_role = create_role(
         db_session,
@@ -153,7 +157,7 @@ def world(db_session: Session, make_client):
         db_session,
         project_id=project_b.id,
         user_id=split.id,
-        role_ids=[field_role.id],
+        role_ids=[field_role.id, read_only_role.id],
     )
     add_project_member(
         db_session,
@@ -193,12 +197,16 @@ def world(db_session: Session, make_client):
 
 
 def test_permission_classification_covers_every_registered_code() -> None:
-    registered = {code.value for code in PermissionCode}
+    registered = {
+        code.value
+        for code in PermissionCode
+        if permission_code_scope(code.value) == "project"
+    }
 
     groups = (
         OFFICE_PERMISSION_CODES,
         FIELD_PERMISSION_CODES,
-        TASK_READ_ONLY_CODES,
+        READ_ONLY_PERMISSION_CODES,
     )
     assert set().union(*groups) == registered
     assert sum(len(group) for group in groups) == len(registered)
@@ -260,8 +268,8 @@ def test_responses_match_frontend_contract_fixture(world) -> None:
     )
 
     for who in ("admin", "office", "field", "nobody"):
-        assert (
-            sorted(world[who].get(ME).json()) == contract["current_user_keys"]
+        assert sorted(world[who].get(ME).json()) == sorted(
+            contract["current_user_keys"]
         )
     projects = world["split"].get(ME_PROJECTS).json()
     assert projects
