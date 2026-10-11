@@ -174,6 +174,8 @@ def login(
 
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
+    # FastAPI request-scoped依賴在回應送出後才清理，登入狀態須先提交。
+    db.commit()
     return _me_response(db, user)
 
 
@@ -317,6 +319,8 @@ def change_password(
 
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
+    # 新密碼與替代登入狀態須在成功回應送出前一併持久化。
+    db.commit()
 
 
 # AUT-R33: the allowlist's third and final entry (AUT-AC36) -- a

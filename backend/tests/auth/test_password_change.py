@@ -12,13 +12,19 @@ code catalog, and the audit trail across both entry points.
 import uuid
 
 import pytest
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode, build_error_code_descriptions
-from app.api.v1.auth import change_password, get_me, logout
+from app.api.v1 import auth as auth_api
+from app.api.v1.auth import (
+    ChangePasswordRequest,
+    change_password,
+    get_me,
+    logout,
+)
 from app.auth import password_service
 from app.auth.dependencies import (
     TEMPORARY_PASSWORD_ALLOWLIST,
@@ -39,6 +45,47 @@ from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 NEW_PASSWORD = "Demo-New-Pass1"
+
+
+def test_password_change_commits_before_return(db_session, monkeypatch):
+    """新密碼與替代登入狀態須在端點返回前提交。"""
+    user = make_local_user(db_session, "R618PASS")
+    make_system_admin(make_local_user(db_session, "R618SYS"))
+    _session, _token = create_session(db_session, user)
+    db_session.commit()
+    events = []
+    original_commit = db_session.commit
+    original_create_session = auth_api.create_session
+
+    def tracked_commit():
+        original_commit()
+        if "session_created" in events:
+            events.append("session_committed")
+
+    def tracked_create_session(session, account):
+        result = original_create_session(session, account)
+        events.append("session_created")
+        return result
+
+    monkeypatch.setattr(db_session, "commit", tracked_commit)
+    monkeypatch.setattr(auth_api, "create_session", tracked_create_session)
+
+    auth_api.change_password(
+        ChangePasswordRequest(
+            current_password=PASSWORD,
+            new_password=NEW_PASSWORD,
+        ),
+        Response(),
+        user,
+        db_session,
+    )
+
+    assert events == ["session_created", "session_committed"]
+    db_session.expire_all()
+    stored_password = (
+        db_session.query(UserPassword).filter_by(user_id=user.id).one()
+    )
+    assert verify_password(stored_password.password_hash, NEW_PASSWORD)
 
 
 class TestAutAc36AllowlistHasThreeEntries:
