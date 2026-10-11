@@ -3057,6 +3057,70 @@ def test_project_item_patch_rejects_invalid_point_structure(
     assert unchanged.standard_revision == 1
 
 
+def test_project_item_patch_orders_mixed_errors_by_body_position(
+    db_session, make_client
+):
+    """API-R10：同一請求的不同類錯誤依本文位置排序，不依偵測順序。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    item_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        f"/inspection-items/{world['item'].id}"
+    )
+    client_id = str(uuid4())
+    bound_point = {
+        "sequence": 1,
+        "title": "量測項次",
+        "instruction": "量測說明",
+        "numeric_standard": {
+            "value": "5",
+            "condition": "=",
+            "unit": "mm",
+            "measurement_field_client_id": client_id,
+        },
+        "measurement_fields": [
+            {
+                "client_id": client_id,
+                "name": "綁定欄位",
+                "field_type": "number",
+                "unit": "mm",
+            }
+        ],
+        "evidence_requirements": [{"min_count": 1}],
+    }
+
+    # sequence 重複在彙整階段才偵測，晚於 unit 違規；但同一項次的
+    # sequence 在模型中排在 measurement_fields 之前，須依本文位置排序。
+    response = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                bound_point,
+                _item_point([{"min_count": 1}]),
+            ]
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert [
+        (field["path"], field["code"])
+        for field in response.json()["error"]["fields"]
+    ] == [
+        (
+            "/inspection_points/0/sequence",
+            "template.sequence_duplicate",
+        ),
+        (
+            "/inspection_points/0/measurement_fields/0/unit",
+            "template.bound_field_unit_forbidden",
+        ),
+        (
+            "/inspection_points/1/sequence",
+            "template.sequence_duplicate",
+        ),
+    ]
+
+
 def test_one_photo_requirement_keeps_task_flows_working(
     db_session, make_client
 ):
