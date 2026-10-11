@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from app.api.errors import ErrorCode
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
@@ -103,6 +104,58 @@ def test_external_collaborator_cannot_be_created_as_admin(
     assert (
         db_session.scalar(
             select(User).where(User.username == "external.admin")
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("is_external", [False, True])
+def test_new_user_requires_explicit_external_flag_and_persists_value(
+    admin_client, db_session, is_external
+):
+    client, _admin = admin_client
+    payload = {
+        "username": f"flag.{str(is_external).lower()}",
+        "email": f"flag.{str(is_external).lower()}@demo.example",
+        "name_zh": "標記測試人員",
+        "is_external_collaborator": is_external,
+    }
+
+    response = client.post("/api/v1/users", json=payload)
+
+    assert response.status_code == 201
+    assert response.json()["is_external_collaborator"] is is_external
+    stored = db_session.scalar(
+        select(User).where(User.username == payload["username"])
+    )
+    assert stored is not None
+    assert stored.is_external_collaborator is is_external
+
+
+def test_new_user_without_external_flag_is_rejected_without_insert(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    payload = {
+        "username": "flag.omitted",
+        "email": "flag.omitted@demo.example",
+        "name_zh": "缺少標記",
+    }
+
+    response = client.post("/api/v1/users", json=payload)
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == ErrorCode.REQUEST_VALIDATION_FAILED
+    assert error["fields"] == [
+        {
+            "path": "/is_external_collaborator",
+            "code": "field.required",
+        }
+    ]
+    assert (
+        db_session.scalar(
+            select(User).where(User.username == payload["username"])
         )
         is None
     )

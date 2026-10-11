@@ -13,11 +13,9 @@ from app.models import (
     InspectionTask,
     Project,
     ProjectInspectionItemChange,
-    ProjectMember,
     ProjectZone,
     TaskInspectionItem,
     TaskRequirementSnapshot,
-    User,
 )
 from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.audit import (
@@ -388,21 +386,14 @@ def _validate_assignee(
 ) -> None:
     if assignee_id is None:
         return
-    member = session.scalar(
-        select(ProjectMember.id).where(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == assignee_id,
-        )
-    )
-    permissions = effective_permissions(
+    # 中央權限快照同時保留無角色成員身分，避免本服務直接查人員與成員表。
+    access = calculate_effective_access(
         session, user_id=assignee_id, project_id=project_id
     )
-    assignee = session.get(User, assignee_id)
     if (
-        member is None
-        or assignee is None
-        or assignee.is_admin
-        or "inspection_task.inspect" not in permissions
+        project_id not in access.project_memberships
+        or access.is_admin
+        or "inspection_task.inspect" not in access.project_permissions
     ):
         raise PlanningError("inspection_task.invalid_assignee")
 

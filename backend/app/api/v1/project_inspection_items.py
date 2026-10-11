@@ -4,7 +4,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
@@ -24,13 +23,13 @@ from app.auth.dependencies import get_db
 from app.models import (
     Project,
     ProjectInspectionItem,
-    ProjectMember,
     SystemRoleCode,
     User,
 )
 from app.services.inspection_details import (
     project_inspection_item_details,
 )
+from app.services.permissions import calculate_effective_access
 from app.services.project_templates import (
     DuplicateProjectItemError,
     apply_template,
@@ -149,13 +148,11 @@ def list_project_inspection_items(
     user: User = Depends(require_login_access),  # noqa: B008
 ) -> dict:
     if not is_admin_or_system_role(db, user, SystemRoleCode.TEMPLATE_ADMIN):
-        membership = db.scalar(
-            select(ProjectMember.id).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user.id,
-            )
+        # 使用中央計算結果判斷成員資格，避免專案端點自行查 ProjectMember。
+        access = calculate_effective_access(
+            db, user_id=user.id, project_id=project_id
         )
-        if membership is None:
+        if project_id not in access.project_memberships:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     elif db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)

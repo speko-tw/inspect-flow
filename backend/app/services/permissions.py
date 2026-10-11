@@ -48,10 +48,11 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
-    User,
-    UserModulePermission,
 )
-from app.permission_codes import PermissionCode, permission_code_scope
+from app.services.module_permissions import (
+    query_people_access,
+    query_person_access,
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ class EffectiveAccess:
     module_permissions: frozenset[str]
     project_permissions: frozenset[str]
     project_permissions_by_project: dict[uuid.UUID, frozenset[str]]
+    project_memberships: frozenset[uuid.UUID] = frozenset()
 
 
 def calculate_effective_access(
@@ -73,23 +75,9 @@ def calculate_effective_access(
 ) -> EffectiveAccess:
     """DOM-R69: single calculation entry for module and project access."""
     with session.no_autoflush:
-        user = session.get(User, user_id)
-        if user is None:
+        person = query_person_access(session, user_id=user_id)
+        if person is None:
             return EffectiveAccess(False, False, frozenset(), frozenset(), {})
-        if user.is_admin:
-            module_codes = frozenset(
-                code.value
-                for code in PermissionCode
-                if permission_code_scope(code.value) == "module"
-            )
-        else:
-            module_codes = frozenset(
-                session.scalars(
-                    select(UserModulePermission.permission_code).where(
-                        UserModulePermission.user_id == user_id
-                    )
-                ).all()
-            )
         project_map = _project_permissions_by_project(
             session, user_id=user_id, project_id=project_id
         )
@@ -99,11 +87,53 @@ def calculate_effective_access(
             else frozenset()
         )
     return EffectiveAccess(
-        is_active=user.is_active,
-        is_admin=user.is_admin,
-        module_permissions=module_codes,
+        is_active=person.is_active,
+        is_admin=person.is_admin,
+        module_permissions=person.module_permissions,
         project_permissions=project_codes,
         project_permissions_by_project=project_map,
+        project_memberships=frozenset(project_map),
+    )
+
+
+def project_member_ids_with_permission(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    permission_code: str,
+) -> frozenset[uuid.UUID]:
+    """DOM-R69：回傳具指定動作權限且有效、非 Admin 的成員。
+
+    先由中央 Service 取得角色權限候選人，再由 DOM-R60 人員 Service
+    批次核對帳號狀態與 Admin 身分，避免端點自行重算授權。
+    """
+    with session.no_autoflush:
+        candidate_permissions: dict[uuid.UUID, set[str]] = {}
+        rows = session.execute(
+            select(ProjectMember.user_id, RolePermission.code)
+            .select_from(ProjectMember)
+            .join(
+                ProjectMemberRole,
+                ProjectMemberRole.project_member_id == ProjectMember.id,
+            )
+            .join(
+                RolePermission,
+                RolePermission.role_id == ProjectMemberRole.role_id,
+            )
+            .where(ProjectMember.project_id == project_id)
+        ).all()
+        for user_id, code in rows:
+            if code == permission_code:
+                candidate_permissions.setdefault(user_id, set()).add(code)
+        people = query_people_access(
+            session, user_ids=set(candidate_permissions)
+        )
+    return frozenset(
+        user_id
+        for user_id, person in people.items()
+        if person.is_active
+        and not person.is_admin
+        and permission_code in candidate_permissions[user_id]
     )
 
 
@@ -113,14 +143,15 @@ def _project_permissions_by_project(
     user_id: uuid.UUID,
     project_id: uuid.UUID | None,
 ) -> dict[uuid.UUID, frozenset[str]]:
+    # DOM-R36 允許成員沒有角色；保留其專案鍵，中央結果才能回答身分。
     query = (
         select(ProjectMember.project_id, RolePermission.code)
-        .distinct()
-        .join(
+        .select_from(ProjectMember)
+        .outerjoin(
             ProjectMemberRole,
             ProjectMemberRole.project_member_id == ProjectMember.id,
         )
-        .join(
+        .outerjoin(
             RolePermission, RolePermission.role_id == ProjectMemberRole.role_id
         )
         .where(ProjectMember.user_id == user_id)
@@ -129,7 +160,9 @@ def _project_permissions_by_project(
         query = query.where(ProjectMember.project_id == project_id)
     grouped: dict[uuid.UUID, set[str]] = {}
     for key, code in session.execute(query).all():
-        grouped.setdefault(key, set()).add(code)
+        values = grouped.setdefault(key, set())
+        if code is not None:
+            values.add(code)
     return {key: frozenset(values) for key, values in grouped.items()}
 
 

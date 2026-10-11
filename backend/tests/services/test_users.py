@@ -19,6 +19,8 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModuleDelegation,
+    UserModulePermission,
 )
 from app.services.companies import create_company, update_company
 from app.services.permissions import effective_permissions
@@ -378,6 +380,28 @@ class TestDomAc13LocalAccountCompanyChange:
 
         assert user.company_id == internal_company.id
 
+    def test_company_change_preserves_external_collaborator_marker(
+        self, session, operator
+    ):
+        company_a = create_company(session, **_company_kwargs("C013EXTA"))
+        company_b = create_company(session, **_company_kwargs("C013EXTB"))
+        session.flush()
+        user = create_user(
+            session,
+            **_user_kwargs(
+                "U013EXT",
+                company_a.id,
+                is_external_collaborator=True,
+            ),
+        )
+        session.commit()
+
+        update_user_manual(session, user, company_id=company_b.id)
+        session.commit()
+
+        assert user.company_id == company_b.id
+        assert user.is_external_collaborator is True
+
 
 class TestDomAc22DisabledCompanyIsRejectedOnlyForCompanyAssignment:
     """DOM-AC22: 啟用中的公司 A、停用中的公司 B（B 啟用時建立，之
@@ -621,6 +645,54 @@ def test_external_flag_change_lists_unqualified_role(
     assert user.is_external_collaborator is False
 
 
+@pytest.mark.parametrize(
+    ("restriction", "expected_detail"),
+    [
+        ("admin", "administrator status"),
+        ("permission", "module permission: project.create"),
+        ("delegation", "delegation: project"),
+    ],
+)
+def test_external_flag_change_rejects_each_non_role_restriction(
+    session, operator, restriction, expected_detail
+):
+    user = create_root_user_with_company(session, f"EXT-{restriction[:8]}")
+    if restriction == "admin":
+        user.is_admin = True
+    elif restriction == "permission":
+        session.add(
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="project.create",
+                source="manual",
+            )
+        )
+    else:
+        session.add(UserModuleDelegation(user_id=user.id, module="project"))
+    session.commit()
+
+    with pytest.raises(ExternalFlagChangeError) as error:
+        set_external_collaborator(session, user, True)
+
+    assert expected_detail in error.value.details
+    session.refresh(user)
+    assert user.is_external_collaborator is False
+    assert _audit_rows_for(session, user.id) == []
+
+
+def test_external_collaborator_cannot_be_promoted_to_admin(session, operator):
+    user = create_root_user_with_company(session, "EXT-ADMIN")
+    user.is_external_collaborator = True
+    session.commit()
+
+    before = snapshot_persisted_columns(user)
+    with pytest.raises(ExternalFlagChangeError):
+        set_is_admin(session, user, True)
+
+    assert snapshot_persisted_columns(user) == before
+    assert _audit_rows_for(session, user.id) == []
+
+
 def test_returning_external_collaborator_to_internal_clears_expiry(
     session, operator
 ):
@@ -636,3 +708,61 @@ def test_returning_external_collaborator_to_internal_clears_expiry(
     assert [row.event_type for row in _audit_rows_for(session, user.id)] == [
         "user.external_flag_changed"
     ]
+
+
+def test_returning_external_collaborator_requires_confirmation(
+    session, operator
+):
+    user = create_root_user_with_company(session, "EXT2INT-NOCONF")
+    user.is_external_collaborator = True
+    user.account_expires_on = date(2027, 1, 1)
+    session.commit()
+    before = snapshot_persisted_columns(user)
+
+    with pytest.raises(ExternalFlagChangeError):
+        set_external_collaborator(session, user, False)
+
+    assert snapshot_persisted_columns(user) == before
+    assert _audit_rows_for(session, user.id) == []
+
+
+def test_qualifying_internal_user_can_become_external_once(session, operator):
+    user = create_root_user_with_company(session, "INT2EXT01")
+    project = Project(
+        project_code="P-INT2EXT",
+        name="測試工程",
+        client_name="測試業主",
+        site_location="測試地點",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    role = Role(
+        name="外部可用查閱者",
+        is_external_allowed=True,
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project.read")],
+    )
+    session.add_all([project, role])
+    session.flush()
+    member = ProjectMember(
+        project_id=project.id,
+        user_id=user.id,
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    member.role_assignments.append(ProjectMemberRole(role=role))
+    session.add(member)
+    session.commit()
+
+    assert set_external_collaborator(session, user, True)
+    session.commit()
+
+    assert user.is_external_collaborator is True
+    assert session.get(ProjectMember, member.id) is not None
+    events = _audit_rows_for(session, user.id)
+    assert [event.event_type for event in events] == [
+        "user.external_flag_changed"
+    ]
+    assert events[0].before == {"is_external_collaborator": False}
+    assert events[0].after == {"is_external_collaborator": True}

@@ -27,7 +27,10 @@ from app.models import (
     ProjectMemberRole,
     Role,
 )
-from app.services.module_permissions import ExternalRoleInUseError
+from app.services.module_permissions import (
+    ExternalRoleInUseError,
+    InvalidExternalRoleError,
+)
 from app.services.roles import (
     RoleUnchangedError,
     create_role,
@@ -374,6 +377,7 @@ def test_external_role_cannot_be_restricted_while_held(
     role.is_external_allowed = True
     user = create_root_user_with_company(session, "EXT-HOLDER")
     user.is_external_collaborator = True
+    user.is_active = False
     project = _new_project(operator, "P-EXT-HOLDER")
     session.add(project)
     session.flush()
@@ -387,3 +391,50 @@ def test_external_role_cannot_be_restricted_while_held(
     assert str(user.id) in error.value.details[0]
     session.refresh(role)
     assert role.is_external_allowed is True
+
+
+def test_role_with_internal_code_cannot_be_marked_external(
+    session, operator, registered_permission_codes
+):
+    role = create_role(
+        session,
+        name="內部管理角色",
+        permission_codes={"project_member.manage"},
+    )
+    before_codes = {item.code for item in role.permission_codes}
+
+    with pytest.raises(InvalidExternalRoleError):
+        update_role(session, role, is_external_allowed=True)
+
+    session.refresh(role)
+    assert role.is_external_allowed is False
+    assert {item.code for item in role.permission_codes} == before_codes
+
+
+def test_held_external_role_cannot_gain_internal_permission(session, operator):
+    role = create_role(
+        session,
+        name="外部查閱角色",
+        permission_codes={"project.read"},
+    )
+    role.is_external_allowed = True
+    user = create_root_user_with_company(session, "EXT-ROLE-EDIT")
+    user.is_external_collaborator = True
+    project = _new_project(operator, "P-EXT-ROLE-EDIT")
+    session.add(project)
+    session.flush()
+    session.add(_new_member(operator, project, user, role))
+    session.commit()
+
+    with pytest.raises(ExternalRoleInUseError) as error:
+        update_role(
+            session,
+            role,
+            permission_codes={"project.read", "inspection_task.inspect"},
+        )
+
+    assert error.value.details is not None
+    assert str(user.id) in error.value.details[0]
+    session.refresh(role)
+    assert role.is_external_allowed is True
+    assert {item.code for item in role.permission_codes} == {"project.read"}

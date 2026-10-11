@@ -38,12 +38,9 @@ from app.models import (
     ProjectInspectionItem,
     ProjectInspectionPoint,
     ProjectMeasurementField,
-    ProjectMember,
-    ProjectMemberRole,
     ProjectNumericStandard,
     ProjectTextStandard,
     ProjectZone,
-    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     TaskSnapshotEvidenceRequirement,
@@ -82,7 +79,11 @@ from app.services.inspection_planning import (
     update_task_location,
 )
 from app.services.operator import get_current_operator
-from app.services.permissions import effective_permissions
+from app.services.permissions import (
+    calculate_effective_access,
+    effective_permissions,
+    project_member_ids_with_permission,
+)
 from app.services.template_library import (
     InvalidTemplateError,
     validate_template_structure,
@@ -179,15 +180,11 @@ def _planning_error_response(
 def _is_project_member(
     db: Session, *, user_id: UUID, project_id: UUID
 ) -> bool:
-    return (
-        db.scalar(
-            select(ProjectMember.id).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user_id,
-            )
-        )
-        is not None
+    """透過 DOM-R69 單一入口檢查成員身分，包含沒有角色的成員。"""
+    access = calculate_effective_access(
+        db, user_id=user_id, project_id=project_id
     )
+    return project_id in access.project_memberships
 
 
 def _resource_permission(resource_type: str, permission: str):
@@ -883,38 +880,30 @@ def assignees(
     db: Session = _db_dependency,
     _user: User = _login_dependency,
 ):
-    permissions = effective_permissions(
+    access = calculate_effective_access(
         db, user_id=_user.id, project_id=project_id
     )
     if (
-        not _user.is_admin
-        and not {"inspection_task.create", "inspection_task.assign"}
-        & permissions
+        not access.is_admin
+        and not {
+            "inspection_task.create",
+            "inspection_task.assign",
+        }
+        & access.project_permissions
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     _project_exists(db, project_id)
-    candidate_ids = (
-        select(ProjectMember.user_id)
-        .join(
-            ProjectMemberRole,
-            ProjectMemberRole.project_member_id == ProjectMember.id,
-        )
-        .join(
-            RolePermission,
-            RolePermission.role_id == ProjectMemberRole.role_id,
-        )
-        .where(
-            ProjectMember.project_id == project_id,
-            RolePermission.code == "inspection_task.inspect",
-        )
-        .distinct()
+    candidate_ids = project_member_ids_with_permission(
+        db,
+        project_id=project_id,
+        permission_code="inspection_task.inspect",
     )
     return page(
         db,
         User,
         cursor=cursor,
         limit=limit,
-        filters=(User.id.in_(candidate_ids), User.is_admin.is_(False)),
+        filters=(User.id.in_(candidate_ids),),
         serialize=_person,
     )
 
