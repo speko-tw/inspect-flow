@@ -44,18 +44,23 @@ _TEMPLATE_WRITE = Depends(
 
 
 class ApplyTemplateRequest(BaseModel):
+    """限制請求只能從單一範本或系統套用，避免來源歧義。"""
+
     model_config = ConfigDict(extra="forbid")
 
     template_id: UUID | None = None
     system_id: UUID | None = None
 
     def selected_source(self) -> tuple[UUID | None, UUID | None]:
+        """要求恰好一種來源；同時提供或都缺少時回 422。"""
         if (self.template_id is None) == (self.system_id is None):
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
         return self.template_id, self.system_id
 
 
 class AppliedItemResponse(BaseModel):
+    """回傳專案副本與來源資訊，供辨認套用後的項目。"""
+
     id: UUID
     project_id: UUID
     source_template_name: str
@@ -63,6 +68,8 @@ class AppliedItemResponse(BaseModel):
 
 
 class CreateTemplateFromProjectRequest(BaseModel):
+    """指定欲存為範本的專案項目及目標系統。"""
+
     model_config = ConfigDict(extra="forbid")
 
     project_inspection_item_id: UUID
@@ -83,6 +90,7 @@ def apply_template_to_project(
     response: Response,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[dict[str, object]]:
+    """依 KD-47 複製範本到專案；不存在或名稱重複時拒絕。"""
     if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     template_id, system_id = body.selected_source()
@@ -124,6 +132,7 @@ def save_project_item_as_template(
     body: CreateTemplateFromProjectRequest,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> dict:
+    """將專案項目存回範本庫；缺管理權限或來源不存在時拒絕。"""
     if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     item = template_write_call(
@@ -148,6 +157,7 @@ def list_project_inspection_items(
     db: Session = Depends(get_db),  # noqa: B008
     user: User = Depends(require_login_access),  # noqa: B008
 ) -> dict:
+    """列出專案查核項目；非成員且非範本管理者時拒絕。"""
     if not is_admin_or_system_role(db, user, SystemRoleCode.TEMPLATE_ADMIN):
         membership = db.scalar(
             select(ProjectMember.id).where(

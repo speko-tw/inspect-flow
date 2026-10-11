@@ -1,4 +1,4 @@
-"""Project zones, inspection plans, tasks and requirement history."""
+"""以資料約束守住 IP-R03、KD-55 與 Task 地點的領域邊界。"""
 
 import uuid
 from datetime import datetime
@@ -37,6 +37,8 @@ def _check_location_text(value: str) -> None:
 
 
 class ProjectZone(AuditMixin, TimestampedBase):
+    """依 IP-R10 表示專案分區，名稱於同專案內不重複。"""
+
     __tablename__ = "project_zones"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -58,6 +60,7 @@ class ProjectZone(AuditMixin, TimestampedBase):
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:
+        """拒絕空白或過長分區名稱，並維持同專案名稱鍵一致。"""
         normalized = value.strip()
         if not normalized or len(normalized) > 128:
             raise ValueError("ProjectZone.name must contain 1-128 characters")
@@ -66,6 +69,8 @@ class ProjectZone(AuditMixin, TimestampedBase):
 
 
 class InspectionPlan(AuditMixin, TimestampedBase):
+    """表示依 KD-56 由 Task 衍生有效狀態的查核計畫。"""
+
     __tablename__ = "inspection_plans"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
@@ -100,6 +105,7 @@ class InspectionPlan(AuditMixin, TimestampedBase):
 
     @validates("name")
     def validate_name(self, key: str, value: str) -> str:
+        """拒絕空白或過長 Plan 名稱，避免繞過 API 驗證。"""
         normalized = value.strip()
         if not normalized or len(normalized) > 128:
             raise ValueError(
@@ -109,6 +115,8 @@ class InspectionPlan(AuditMixin, TimestampedBase):
 
 
 class InspectionTask(AuditMixin, TimestampedBase):
+    """表示含建議指派與地點的任務；派出前依 IP-R09 不可見。"""
+
     __tablename__ = "inspection_tasks"
 
     plan_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
@@ -154,6 +162,7 @@ class InspectionTask(AuditMixin, TimestampedBase):
             ["inspection_plans.id", "inspection_plans.project_id"],
             ondelete="CASCADE",
         ),
+        # 依 IP-R10，以複合外鍵阻止 Task 指向其他專案的分區。
         ForeignKeyConstraint(
             ["project_id", "zone_id"],
             ["project_zones.project_id", "project_zones.id"],
@@ -181,6 +190,8 @@ class InspectionTask(AuditMixin, TimestampedBase):
 
 
 class TaskInspectionItem(AuditMixin, TimestampedBase):
+    """連結 Task 與專案項目，隔離 KD-55 的項目級重查狀態。"""
+
     __tablename__ = "task_inspection_items"
 
     task_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
@@ -217,6 +228,8 @@ class TaskInspectionItem(AuditMixin, TimestampedBase):
 
 
 class TaskRequirementSnapshot(AuditMixin, TimestampedBase):
+    """依 IP-R03 保存當時需求及 KD-55 更新後可追溯的修訂。"""
+
     __tablename__ = "task_requirement_snapshots"
 
     task_inspection_item_id: Mapped[uuid.UUID] = mapped_column(
@@ -234,6 +247,8 @@ class TaskRequirementSnapshot(AuditMixin, TimestampedBase):
     superseded_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     __table_args__ = (
         UniqueConstraint("task_inspection_item_id", "revision"),
+        # SQLite 與 PostgreSQL 的布林語法不同，兩者都只限制
+        # 同一 Task 項目同時最多一筆目前快照（IP-R03）。
         Index(
             "uq_task_requirement_snapshots_current",
             "task_inspection_item_id",
@@ -264,6 +279,8 @@ class TaskRequirementSnapshot(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotPoint(AuditMixin, TimestampedBase):
+    """保存項次來源 id，讓 IP-R13 的結構身分可追溯。"""
+
     __tablename__ = "task_snapshot_points"
 
     snapshot_id: Mapped[uuid.UUID] = mapped_column(
@@ -286,6 +303,8 @@ class TaskSnapshotPoint(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotTextStandard(AuditMixin, TimestampedBase):
+    """保存 Task 建立時的文字標準，避免來源修改回寫歷史。"""
+
     __tablename__ = "task_snapshot_text_standards"
 
     point_id: Mapped[uuid.UUID] = mapped_column(
@@ -298,6 +317,8 @@ class TaskSnapshotTextStandard(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotNumericStandard(AuditMixin, TimestampedBase):
+    """保存數值標準及欄位身分，維持來源與快照一致。"""
+
     __tablename__ = "task_snapshot_numeric_standards"
 
     point_id: Mapped[uuid.UUID] = mapped_column(
@@ -352,6 +373,8 @@ class TaskSnapshotNumericStandard(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotMeasurementField(AuditMixin, TimestampedBase):
+    """保存實測欄位的來源 id 與型別供數值標準引用。"""
+
     __tablename__ = "task_snapshot_measurement_fields"
 
     point_id: Mapped[uuid.UUID] = mapped_column(
@@ -385,6 +408,8 @@ class TaskSnapshotMeasurementField(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotEvidenceRequirement(AuditMixin, TimestampedBase):
+    """保存項次照片需求，避免來源修改影響既有 Task。"""
+
     __tablename__ = "task_snapshot_evidence_requirements"
 
     point_id: Mapped[uuid.UUID] = mapped_column(
@@ -411,7 +436,7 @@ class TaskSnapshotEvidenceRequirement(AuditMixin, TimestampedBase):
 
 
 class ProjectInspectionItemChange(AuditMixin, TimestampedBase):
-    """Structured KD-55 change details alongside the audit event."""
+    """記錄 KD-55 修訂及重查選擇，供取消 Task 恢復時判斷。"""
 
     __tablename__ = "project_inspection_item_changes"
 

@@ -1,4 +1,4 @@
-"""Inspection planning API (IP-R01 through IP-R10)."""
+"""公開 IP-R01～IP-R10 的規劃入口並統一權限與錯誤契約。"""
 
 from __future__ import annotations
 
@@ -101,14 +101,20 @@ _login_dependency: Any = Depends(require_login_access)
 
 
 class StrictBody(BaseModel):
+    """拒絕多餘欄位，避免客戶端誤以為可直接修改狀態。"""
+
     model_config = ConfigDict(extra="forbid")
 
 
 class NameBody(StrictBody):
+    """承載 Plan 或分區名稱，由服務層驗證領域限制。"""
+
     name: str = Field(max_length=PLANNING_NAME_MAX)
 
 
 class TaskCreateBody(StrictBody):
+    """承載建立 Task 的來源項目、地點與建議指派。"""
+
     item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
     zone_id: UUID | None = None
     location_text: str | None = Field(
@@ -118,28 +124,40 @@ class TaskCreateBody(StrictBody):
 
 
 class AssignBody(StrictBody):
+    """承載可清除的建議指派人；不限制實際查核者。"""
+
     assignee_id: UUID | None
 
 
 class CancelBody(StrictBody):
+    """承載 KD-56 取消 Task 所需的原因。"""
+
     reason: str = Field(default="", max_length=LONG_TEXT_MAX)
 
 
 class LocationBody(StrictBody):
+    """承載 IP-R10 的分區與補充地點。"""
+
     zone_id: UUID | None
     location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
 
 
 class ProjectNumericStandardBody(NumericStandardBody):
+    """保留數值標準欄位身分，供 IP-R13 修改時比對。"""
+
     measurement_field_client_id: UUID
 
 
 class ProjectMeasurementFieldBody(MeasurementFieldBody):
+    """保留欄位身分，供 IP-R13 判別新增與更正。"""
+
     id: UUID | None = None
     client_id: UUID
 
 
 class ProjectPointBody(PointBody):
+    """保留項次身分，供 IP-R13 限制不重查時的結構變動。"""
+
     id: UUID | None = None
     numeric_standard: ProjectNumericStandardBody | None = None
     measurement_fields: list[ProjectMeasurementFieldBody] = Field(
@@ -148,6 +166,8 @@ class ProjectPointBody(PointBody):
 
 
 class ProjectItemPatchBody(StrictBody):
+    """承載完整結構及 KD-55 的重新查核選擇。"""
+
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     instruction: str | None = Field(default=None, max_length=LONG_TEXT_MAX)
     inspection_points: list[ProjectPointBody] | None = Field(
@@ -398,9 +418,8 @@ def _field_task_summary(
     }
     if not detail:
         return result
-    # Display names only: no account fields, and no ids that let the
-    # client guess who a person is. ``is_me`` lets the viewer tell
-    # "you" apart without comparing names.
+    # 現場只需辨認顯示名稱；省略帳號與 id，避免推測他人身分。
+    # is_me 讓使用者辨認自己，而不必用可能重複的名稱比較。
     if assignee is not None and result["suggested_assignee"] is not None:
         result["suggested_assignee"]["is_me"] = assignee.id == viewer_id
     starter = db.get(User, task.started_by) if task.started_by else None
@@ -605,6 +624,7 @@ def plans(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
+    """列出專案 Plan；缺 inspection_plan.read 時拒絕。"""
     _call(list_inspection_plans, db, project_id=project_id)
     return page(
         db,
@@ -626,6 +646,7 @@ def plans(
 def create_plan(
     project_id: UUID, body: NameBody, db: Session = _db_dependency
 ):
+    """建立 DRAFT Plan；缺建立權限或名稱無效時拒絕。"""
     row = _call(
         create_inspection_plan, db, project_id=project_id, name=body.name
     )
@@ -640,7 +661,8 @@ def zones(
     db: Session = _db_dependency,
     _user: User = _login_dependency,
 ):
-    # inspection_plan.read also grants names needed to display its Plans.
+    """依 IP-R10 列出分區；無 Plan 或分區讀取權限時拒絕。"""
+    # inspection_plan.read 也可取顯示 Plan 所需的分區名稱。
     permissions = effective_permissions(
         db, user_id=_user.id, project_id=project_id
     )
@@ -670,6 +692,7 @@ def zones(
     dependencies=[Depends(require_project_permission("project_zone.manage"))],
 )
 def add_zone(project_id: UUID, body: NameBody, db: Session = _db_dependency):
+    """建立專案分區；缺管理權限或名稱衝突時拒絕。"""
     return _zone_response(
         _call(create_project_zone, db, project_id=project_id, name=body.name),
         include_project=True,
@@ -692,6 +715,7 @@ def patch_zone(
     body: NameBody,
     db: Session = _db_dependency,
 ):
+    """更名專案分區；跨專案或不存在的 id 回 404。"""
     zone = db.scalar(
         select(ProjectZone).where(
             ProjectZone.id == zone_id, ProjectZone.project_id == project_id
@@ -724,6 +748,7 @@ def _zone_response(zone: ProjectZone, *, include_project: bool = False):
     ],
 )
 def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
+    """刪除未使用分區；依 IP-R10 拒絕仍被 Task 引用者。"""
     zone = db.scalar(
         select(ProjectZone).where(
             ProjectZone.id == zone_id, ProjectZone.project_id == project_id
@@ -742,6 +767,7 @@ def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
     ],
 )
 def get_plan(plan_id: UUID, db: Session = _db_dependency):
+    """讀取 Plan 與所屬 Task；不存在或無讀取權限時拒絕。"""
     row = _call(get_inspection_plan, db, plan_id=plan_id)
     return _plan_summary(db, row, with_tasks=True)
 
@@ -754,6 +780,7 @@ def get_plan(plan_id: UUID, db: Session = _db_dependency):
     ],
 )
 def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
+    """修改 Plan 名稱；封存 Plan 依 KD-56 拒絕。"""
     row = _one_plan(db, plan_id)
     return _plan_summary(
         db, _call(rename_inspection_plan, db, row, name=body.name)
@@ -771,6 +798,7 @@ def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
 def add_task(
     plan_id: UUID, body: TaskCreateBody, db: Session = _db_dependency
 ):
+    """依 IP-R03 建立多項目 DRAFT Task；無效來源或地點時拒絕。"""
     plan = _one_plan(db, plan_id)
     task = _call(
         create_inspection_task,
@@ -797,6 +825,7 @@ def plan_tasks(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
+    """列出 Plan Task；依 IP-R09 隱藏現場不可見的草稿。"""
     plan = _call(get_inspection_plan, db, plan_id=plan_id)
     return page(
         db,
@@ -823,6 +852,7 @@ def project_tasks(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
+    """列出專案 Task；無讀取或現場權限時拒絕。"""
     filters = _call(inspection_task_list_filters, db, project_id=project_id)
     _project_exists(db, project_id)
     return page(
@@ -855,6 +885,7 @@ def item_tasks(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
+    """列出使用指定項目的 Task；無編輯權限或項目不存在時拒絕。"""
     _project_exists(db, project_id)
     item = db.scalar(
         select(ProjectInspectionItem).where(
@@ -889,8 +920,7 @@ def _impact_summaries(db: Session, tasks: Sequence[InspectionTask]):
             {
                 "plan_name": plan.name if plan else None,
                 "plan_archived": bool(plan and plan.is_archived),
-                # Results are not part of the inspection-planning API
-                # before the 0.7.x result endpoints are introduced.
+                # 依 IP-R08，結果端點屬 0.7.x；此處不推測尚未提供的結果。
                 "has_result": False,
             }
         )
@@ -905,6 +935,7 @@ def assignees(
     db: Session = _db_dependency,
     _user: User = _login_dependency,
 ):
+    """列出有查核權限的專案成員；無建立或指派權限時拒絕。"""
     permissions = effective_permissions(
         db, user_id=_user.id, project_id=project_id
     )
@@ -949,6 +980,7 @@ def assignees(
     ],
 )
 def dispatch(task_id: UUID, db: Session = _db_dependency):
+    """依 IP-R09 派出 DRAFT Task；封存或狀態不符時拒絕。"""
     task = _one_task(db, task_id)
     return _task_summary(db, _call(dispatch_inspection_task, db, task))
 
@@ -970,6 +1002,7 @@ def field_inspection_tasks(
     db: Session = _db_dependency,
     user: User = Depends(require_login),  # noqa: B008
 ):
+    """列出現場可見的已派 Task；無可查核專案時拒絕。"""
     try:
         filters = field_inspection_task_filters(
             db,
@@ -1003,7 +1036,7 @@ def field_inspection_tasks(
         ).limit(limit + 1)
     ).all()
     items = page_rows[:limit]
-    # Keep referenced rows alive in the identity map for the whole page.
+    # 整頁期間保留引用列，避免序列化時逐筆重查資料庫（#462）。
     _projects = db.scalars(
         select(Project).where(
             Project.id.in_({task.project_id for task in items})
@@ -1086,6 +1119,7 @@ def field_inspection_task(
     db: Session = _db_dependency,
     user: User = Depends(require_login),  # noqa: B008
 ):
+    """讀取現場 Task；依 IP-R09 隱藏草稿與無權限資源。"""
     task = _call(
         get_field_inspection_task,
         db,
@@ -1104,6 +1138,7 @@ def field_inspection_task(
     ],
 )
 def assign(task_id: UUID, body: AssignBody, db: Session = _db_dependency):
+    """修改建議指派人；封存 Plan 或無效候選人時拒絕。"""
     task = _one_task(db, task_id)
     return _task_summary(
         db,
@@ -1119,6 +1154,7 @@ def assign(task_id: UUID, body: AssignBody, db: Session = _db_dependency):
     ],
 )
 def start(task_id: UUID, db: Session = _db_dependency):
+    """開始待辦 Task；無查核權限或狀態不符時拒絕。"""
     task = _one_task(db, task_id)
     return _task_summary(db, _call(start_inspection_task, db, task))
 
@@ -1131,6 +1167,7 @@ def start(task_id: UUID, db: Session = _db_dependency):
     ],
 )
 def complete(task_id: UUID, db: Session = _db_dependency):
+    """完成 Task；依 IP-R06 拒絕仍待重新查核者。"""
     task = _one_task(db, task_id)
     return _task_summary(db, _call(complete_inspection_task, db, task))
 
@@ -1144,6 +1181,7 @@ def complete(task_id: UUID, db: Session = _db_dependency):
     ],
 )
 def delete_task(task_id: UUID, db: Session = _db_dependency):
+    """硬刪除 DRAFT Task；已派出或封存時拒絕。"""
     task = _one_task(db, task_id)
     _call(delete_draft_inspection_task, db, task)
 
@@ -1160,6 +1198,7 @@ def cancel(
     body: CancelBody | None = None,
     db: Session = _db_dependency,
 ):
+    """依 KD-56 取消未完成 Task；缺原因或狀態不符時拒絕。"""
     task = _one_task(db, task_id)
     reason = body.reason if body is not None else ""
     return _task_summary(
@@ -1181,6 +1220,7 @@ def cancel(
     ],
 )
 def restore(task_id: UUID, db: Session = _db_dependency):
+    """依 IP-R07 恢復取消的 Task；封存或非取消狀態時拒絕。"""
     task = _one_task(db, task_id)
     return _task_summary(db, _call(restore_inspection_task, db, task))
 
@@ -1195,6 +1235,7 @@ def restore(task_id: UUID, db: Session = _db_dependency):
 def patch_task(
     task_id: UUID, body: LocationBody, db: Session = _db_dependency
 ):
+    """依 IP-R10 修改地點；已完成、已取消或封存時拒絕。"""
     task = _one_task(db, task_id)
     return _task_summary(
         db,
@@ -1216,6 +1257,7 @@ def patch_task(
     ],
 )
 def get_task(task_id: UUID, db: Session = _db_dependency):
+    """讀取 Task 快照；依 IP-R09 隱藏現場不可見的草稿。"""
     return _task_summary(db, _call(get_inspection_task, db, task_id=task_id))
 
 
@@ -1227,6 +1269,7 @@ def get_task(task_id: UUID, db: Session = _db_dependency):
     ],
 )
 def archive(plan_id: UUID, db: Session = _db_dependency):
+    """依 KD-56 封存 Plan；無封存權限或 Plan 不存在時拒絕。"""
     plan = _one_plan(db, plan_id)
     return _plan_summary(
         db, _call(archive_inspection_plan, db, plan, archived=True)
@@ -1241,6 +1284,7 @@ def archive(plan_id: UUID, db: Session = _db_dependency):
     ],
 )
 def unarchive(plan_id: UUID, db: Session = _db_dependency):
+    """依 KD-56 取消封存；無取消封存權限時拒絕。"""
     plan = _one_plan(db, plan_id)
     return _plan_summary(
         db, _call(archive_inspection_plan, db, plan, archived=False)
@@ -1270,6 +1314,9 @@ def patch_project_item(
     body: ProjectItemPatchBody,
     db: Session = _db_dependency,
 ):
+    """依 KD-55 修改專案項目；有 Task 時未選重查則拒絕。"""
+    # #555：先鎖來源項目，再由服務層鎖 Plan／Task；並行建立 Task
+    # 也遵守此順序，快照不會跨越標準修訂邊界。
     item = db.scalar(
         select(ProjectInspectionItem)
         .where(
@@ -1373,7 +1420,7 @@ def _validate_project_points(
     has_tasks: bool,
     reinspect: bool | None,
 ) -> None:
-    """Apply the template structure rules before any row is touched."""
+    """先驗證完整結構；依 IP-R13 拒絕不重查時的項次增減。"""
     existing_points = db.scalars(
         select(ProjectInspectionPoint).where(
             ProjectInspectionPoint.project_inspection_item_id == item.id
@@ -1485,6 +1532,7 @@ def _validate_project_points(
 def _replace_project_points(
     db: Session, item: ProjectInspectionItem, points: list[ProjectPointBody]
 ) -> None:
+    # #595 保留傳入的項次與欄位 id，讓 Task 舊快照仍可追溯來源。
     old_points = db.scalars(
         select(ProjectInspectionPoint).where(
             ProjectInspectionPoint.project_inspection_item_id == item.id
@@ -1520,6 +1568,8 @@ def _replace_project_points(
     for row in [*old_numeric, *old_text, *old_evidence]:
         db.delete(row)
     db.flush()
+    # 暫置負序號以避開同一項目內的 unique sequence 衝突；
+    # 等新順序寫入後再完成結構替換。
     for index, point in enumerate(old_points, start=1):
         point.sequence = -index
     db.flush()

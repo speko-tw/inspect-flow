@@ -1,4 +1,4 @@
-"""Service operations for inspection plans, tasks, and project zones."""
+"""集中執行 Plan、Task 與分區的權限及狀態規則。"""
 
 import uuid
 from collections.abc import Sequence
@@ -33,7 +33,7 @@ from app.services.permissions import (
 
 
 class PlanningError(ValueError):
-    """A requested planning operation violates domain rules."""
+    """表示規劃操作違反權限或領域規則，供 API 轉成穩定錯誤碼。"""
 
     def __init__(self, code: str, message: str | None = None) -> None:
         self.code = code
@@ -122,6 +122,7 @@ def _require_permission(
 def project_permissions_for(
     session: Session, project_id: uuid.UUID
 ) -> frozenset[str]:
+    """取得操作者在專案內的有效權限；Admin 依 KD-69 取得所有專案權限。"""
     operator = get_current_operator(session)
     if operator.is_admin:
         return frozenset(
@@ -161,6 +162,7 @@ def _lock_task(session: Session, task_id: uuid.UUID) -> InspectionTask | None:
 def _lock_plan_and_task(
     session: Session, task_id: uuid.UUID
 ) -> tuple[InspectionPlan | None, InspectionTask]:
+    # 依 KD-56 先鎖 Plan 再鎖 Task，與狀態重算共用順序。
     task_reference = session.get(InspectionTask, task_id)
     if task_reference is None:
         raise PlanningError("inspection_task.not_found")
@@ -174,6 +176,7 @@ def _lock_plan_and_task(
 def create_project_zone(
     session: Session, *, project_id: uuid.UUID, name: str
 ) -> ProjectZone:
+    """建立專案分區；無管理權限、專案不存在或名稱衝突時拒絕。"""
     operator_id = _require_permission(
         session, project_id, "project_zone.manage"
     )
@@ -212,6 +215,7 @@ def create_project_zone(
 def rename_project_zone(
     session: Session, zone: ProjectZone, *, name: str
 ) -> ProjectZone:
+    """更名分區；無管理權限或同專案名稱衝突時拒絕。"""
     operator_id = _require_permission(
         session, zone.project_id, "project_zone.manage"
     )
@@ -244,6 +248,7 @@ def rename_project_zone(
 
 
 def delete_project_zone(session: Session, zone: ProjectZone) -> None:
+    """刪除未被 Task 引用的分區；引用中依 IP-R10 拒絕。"""
     _require_permission(session, zone.project_id, "project_zone.manage")
     if (
         session.scalar(
@@ -271,6 +276,7 @@ def delete_project_zone(session: Session, zone: ProjectZone) -> None:
 def create_inspection_plan(
     session: Session, *, project_id: uuid.UUID, name: str
 ) -> InspectionPlan:
+    """建立 DRAFT Plan；無權限、專案不存在或名稱無效時拒絕。"""
     operator_id = _require_permission(
         session, project_id, "inspection_plan.create"
     )
@@ -293,6 +299,7 @@ def create_inspection_plan(
 def list_inspection_plans(
     session: Session, *, project_id: uuid.UUID
 ) -> list[InspectionPlan]:
+    """讀取專案 Plan；缺少 inspection_plan.read 時拒絕。"""
     _require_permission(session, project_id, "inspection_plan.read")
     return list(
         session.scalars(
@@ -306,6 +313,7 @@ def list_inspection_plans(
 def get_inspection_plan(
     session: Session, *, plan_id: uuid.UUID
 ) -> InspectionPlan:
+    """取得 Plan；不存在或缺少專案讀取權限時拒絕。"""
     plan = session.get(InspectionPlan, plan_id)
     if plan is None:
         raise PlanningError("inspection_plan.not_found")
@@ -316,6 +324,7 @@ def get_inspection_plan(
 def rename_inspection_plan(
     session: Session, plan: InspectionPlan, *, name: str
 ) -> InspectionPlan:
+    """修改 Plan 名稱；依 KD-56 拒絕封存中的 Plan。"""
     operator_id = _require_permission(
         session, plan.project_id, "inspection_plan.manage"
     )
@@ -332,7 +341,7 @@ def rename_inspection_plan(
 
 
 def derive_plan_status(task_statuses: Sequence[str]) -> str:
-    """Return the effective non-archived Plan status from its Tasks."""
+    """依 KD-56 衍生 Plan 有效狀態；DRAFT Task 阻止完成。"""
     if not task_statuses:
         return "DRAFT"
     active = [status for status in task_statuses if status != "CANCELLED"]
@@ -346,6 +355,7 @@ def derive_plan_status(task_statuses: Sequence[str]) -> str:
 
 
 def _refresh_plan_status(session: Session, plan: InspectionPlan) -> None:
+    # 依 KD-56 鎖定所有 Task 後再衍生狀態，避免併發轉換覆寫結果。
     locked_plan = _lock_plan(session, plan.id)
     if locked_plan is None:
         raise PlanningError("inspection_plan.not_found")
@@ -368,6 +378,7 @@ def _validate_location(
     zone_id: uuid.UUID | None,
     location_text: str | None,
 ) -> str | None:
+    # 依 IP-R10，專案一旦建立分區，Task 必須選同專案分區。
     normalized = location_text.strip() if location_text is not None else None
     normalized = normalized or None
     if normalized is not None and len(normalized) > 256:
@@ -416,10 +427,10 @@ def _lock_project_items_for_snapshot(
     project_id: uuid.UUID,
     item_ids: list[uuid.UUID],
 ) -> list[uuid.UUID]:
-    """Lock snapshot sources before taking the Plan lock.
+    """依 IP-R03 先鎖來源項目再鎖 Plan，避免快照讀到舊標準。
 
-    Item edits lock the source item before its Plans. Keep the same lock
-    order here to serialize snapshot copying without a Plan/item deadlock.
+    #555 固定與項目修改相同的鎖順序，避免並行建立與修改時死鎖。
+    無來源項目或來源跨專案時拒絕。
     """
     from app.models import ProjectInspectionItem
 
@@ -450,6 +461,7 @@ def create_inspection_task(
     location_text: str | None = None,
     assignee_id: uuid.UUID | None = None,
 ) -> InspectionTask:
+    """建立含項目快照的 DRAFT Task；依 IP-R03 拒絕無效來源。"""
     operator_id = _require_permission(
         session, plan.project_id, "inspection_task.create"
     )
@@ -501,6 +513,7 @@ def list_inspection_tasks(
     project_id: uuid.UUID,
     plan_id: uuid.UUID | None = None,
 ) -> list[InspectionTask]:
+    """列出可見 Task；依 IP-R09 隱藏現場不可見的 DRAFT。"""
     filters = inspection_task_list_filters(session, project_id=project_id)
     statement = select(InspectionTask).where(*filters)
     if plan_id is not None:
@@ -515,7 +528,7 @@ def list_inspection_tasks(
 def inspection_task_visibility_filters(
     session: Session, *, project_id: uuid.UUID
 ) -> tuple[ColumnElement[bool], ...]:
-    """Return database filters that hide DRAFT Tasks without read access."""
+    """依 IP-R09 在資料庫層排除現場不可見的 DRAFT Task。"""
     permissions = _project_permissions(session, project_id)
     filters: list[ColumnElement[bool]] = [
         InspectionTask.project_id == project_id
@@ -528,7 +541,7 @@ def inspection_task_visibility_filters(
 def inspection_task_list_filters(
     session: Session, *, project_id: uuid.UUID
 ) -> tuple[ColumnElement[bool], ...]:
-    """Return visible project Task filters after checking list permission."""
+    """建立專案 Task 篩選；無讀取或現場權限時拒絕。"""
     permissions = _project_permissions(session, project_id)
     if not {"inspection_task.read", "inspection_task.inspect"} & permissions:
         raise PlanningError("authorization.forbidden")
@@ -538,6 +551,7 @@ def inspection_task_list_filters(
 def get_inspection_task(
     session: Session, *, task_id: uuid.UUID
 ) -> InspectionTask:
+    """讀取 Task；依 IP-R09 對現場隱藏 DRAFT。"""
     task = session.get(InspectionTask, task_id)
     if task is None:
         raise PlanningError("inspection_task.not_found")
@@ -558,7 +572,7 @@ def field_inspection_task_filters(
     project_id: uuid.UUID | None = None,
     status: str | None = None,
 ) -> tuple[ColumnElement[bool], ...]:
-    """Build filters for dispatched Tasks visible to the Field caller."""
+    """建立現場任務篩選；無可查核專案時拒絕。"""
     access = calculate_effective_access(
         session, user_id=user_id, project_id=project_id
     )
@@ -612,7 +626,7 @@ def get_field_inspection_task(
     user_id: uuid.UUID,
     is_admin: bool,
 ) -> InspectionTask:
-    """Hide missing, draft, or unauthorized Tasks from Field callers."""
+    """讀取現場任務；不存在、DRAFT 或無專案權限均隱藏。"""
     task = session.get(InspectionTask, task_id)
     if task is None or task.status == "DRAFT":
         raise PlanningError("inspection_task.not_found")
@@ -629,6 +643,7 @@ def assign_inspection_task(
     *,
     assignee_id: uuid.UUID | None,
 ) -> InspectionTask:
+    """設定建議指派人；封存 Plan 或無效候選人時拒絕。"""
     operator_id = _require_permission(
         session, task.project_id, "inspection_task.assign"
     )
@@ -653,6 +668,7 @@ def update_task_location(
     zone_id: uuid.UUID | None,
     location_text: str | None,
 ) -> InspectionTask:
+    """依 IP-R10 更新 Task 地點；封存或狀態已鎖定時拒絕。"""
     operator_id = _require_permission(
         session, task.project_id, "inspection_task.manage"
     )
@@ -694,6 +710,7 @@ def update_task_location(
 def dispatch_inspection_task(
     session: Session, task: InspectionTask
 ) -> InspectionTask:
+    """依 IP-R09 派出 DRAFT Task；封存或非草稿時拒絕。"""
     operator_id = _require_permission(
         session, task.project_id, "inspection_task.dispatch"
     )
@@ -714,6 +731,7 @@ def dispatch_inspection_task(
 def delete_draft_inspection_task(
     session: Session, task: InspectionTask
 ) -> None:
+    """依 IP-R07 刪除未派 Task；封存或已派出時拒絕。"""
     _require_permission(
         session, task.project_id, "inspection_task.delete_draft"
     )
@@ -752,6 +770,7 @@ def delete_draft_inspection_task(
 def cancel_inspection_task(
     session: Session, task: InspectionTask, *, reason: str
 ) -> InspectionTask:
+    """依 KD-56 取消未完成 Task；封存、狀態或原因無效時拒絕。"""
     operator_id = _require_permission(
         session, task.project_id, "inspection_task.cancel"
     )
@@ -784,6 +803,7 @@ def cancel_inspection_task(
 def restore_inspection_task(
     session: Session, task: InspectionTask
 ) -> InspectionTask:
+    """依 IP-R07 恢復 Task；封存或非取消狀態時拒絕。"""
     operator_id = _require_permission(
         session, task.project_id, "inspection_task.cancel"
     )
@@ -799,6 +819,8 @@ def restore_inspection_task(
     from app.models import ProjectInspectionItem
     from app.services.inspection_planning_snapshots import refresh_task_item
 
+    # 依 IP-R07，取消期間不改快照；恢復時依修訂紀錄辨別
+    # KD-55 的重查與文字更正，保留受影響項目的歷史。
     task_items = session.scalars(
         select(TaskInspectionItem)
         .where(TaskInspectionItem.task_id == task.id)
@@ -868,6 +890,7 @@ def restore_inspection_task(
 def start_inspection_task(
     session: Session, task: InspectionTask
 ) -> InspectionTask:
+    """開始待辦 Task；無查核權限、封存或狀態不符時拒絕。"""
     operator = get_current_operator(session)
     permissions = effective_permissions(
         session, user_id=operator.id, project_id=task.project_id
@@ -891,6 +914,7 @@ def start_inspection_task(
 def complete_inspection_task(
     session: Session, task: InspectionTask
 ) -> InspectionTask:
+    """完成進行中 Task；依 IP-R06 拒絕仍待重查的項目。"""
     operator = get_current_operator(session)
     permissions = effective_permissions(
         session, user_id=operator.id, project_id=task.project_id
@@ -919,6 +943,7 @@ def complete_inspection_task(
 def archive_inspection_plan(
     session: Session, plan: InspectionPlan, *, archived: bool
 ) -> InspectionPlan:
+    """切換 Plan 封存；無權限或 Plan 不存在時拒絕。"""
     operator_id = _require_permission(
         session,
         plan.project_id,
@@ -943,11 +968,9 @@ def update_project_item_usage(
     reinspection_required: bool,
     after_data: dict[str, object] | None = None,
 ) -> None:
-    """Apply a changed standard to every Task using this project item.
+    """依 KD-55 更新使用此項目的 Task 快照與項目級重查狀態。
 
-    The caller updates the ProjectInspectionItem and its detail rows in the
-    same transaction before invoking this operation. Snapshot copying is
-    delegated to the planning snapshot module.
+    呼叫端須先於同一交易修改來源項目；修訂未遞增或 Plan 封存時拒絕。
     """
     from app.models import ProjectInspectionItem
     from app.services.inspection_planning_snapshots import refresh_task_item
@@ -984,6 +1007,8 @@ def update_project_item_usage(
             if task_ids
             else []
         )
+        # #555：來源項目由 API 先鎖，這裡依 Plan、Task、項目明細
+        # 的固定順序取得寫鎖，避免與建立 Task 的快照交易死鎖。
         plan_ids = sorted({task.plan_id for task in tasks})
         plans = (
             session.scalars(
@@ -1043,6 +1068,7 @@ def update_project_item_usage(
         plan = plan_by_id.get(task.plan_id) if task else None
         if task is None or plan is None:
             continue
+        # 依 IP-R07，取消中的 Task 到恢復時才套用目前標準。
         if task.status == "CANCELLED":
             continue
         refresh_task_item(
@@ -1057,6 +1083,7 @@ def update_project_item_usage(
             ),
             retain_history=task.status != "DRAFT",
         )
+        # 依 KD-55，草稿原位更新；已完成任務只讓受影響項目待重查。
         if task.status == "DRAFT":
             task_item.needs_reinspection = False
         elif reinspection_required:
