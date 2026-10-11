@@ -22,8 +22,8 @@ import type {
 
 type NoticeArea = 'plans' | 'plan-detail' | 'tasks'
 
-// 依 #451 表單驗收，必填錯誤等送出才顯示，避免輸入前就出現錯誤。
-// 說明提示常駐，錯誤列在欄位旁並聚焦，讓使用者能找到修正位置。
+// 必填錯誤等送出才顯示，避免輸入前就出現錯誤；錯誤列在欄位旁
+// 並聚焦（PR-19、ADM-R28），讓使用者能找到修正位置。
 type FieldKey =
   | 'plan-name'
   | 'plan-rename'
@@ -100,8 +100,8 @@ const TASK_ASSIGNEE_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.invalid_assignee': 'suggested-assignee',
 }
 
-// 派出前必須處理的缺項；派出鈕的停用與阻擋說明共用同一份判斷（IP-R05、
-// IP-R10）。派出前檢查只在畫面引導：建議指派是非排他的，後端不擋。
+// 依 ADM-R28、IP-R10，派出鈕與阻擋說明共用畫面判斷；建議指派
+// 依 IP-R05 非排他，這裡的缺項提示不能冒充後端的派出限制。
 function dispatchBlockers(task: InspectionTask) {
   return {
     unassigned: !task.assignee_id,
@@ -127,7 +127,11 @@ function draftTaskSummary(task: InspectionTask): string {
   return places.length ? `${title}，位置：${places.join('・')}` : title
 }
 
-/** 顯示專案計畫、草稿任務及其管理操作（#451；ADM-R17、IP-R10）。 */
+/**
+ * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
+ * Plan 已封存時收起修改入口；頁面不預先判斷寫入權限，寫入被
+ * 後端回 403 後才切成唯讀，實際寫入一律由後端覆核。
+ */
 export default function PlanningPage({
   client = planningClient,
   initialProjectId = '',
@@ -161,7 +165,7 @@ export default function PlanningPage({
   const [serverFieldFocus, setServerFieldFocus] = useState<FieldKey | null>(
     null,
   )
-  // 依 #451 將成功提示放在所屬區塊，避免操作結果和其他表單混淆。
+  // 依 ADM-R28 將成功提示放在所屬區塊，避免與其他操作混淆。
   // 下一次操作先清除舊提示，避免使用者把舊結果套到新操作。
   const [notice, setNotice] = useState<{
     area: NoticeArea
@@ -200,7 +204,7 @@ export default function PlanningPage({
   const pageContent = useRef<HTMLElement | null>(null)
   const errorMessage = useRef<HTMLParagraphElement | null>(null)
   // Enter 用 requestSubmit() 送出時不會被停用的按鈕擋住，所以連按兩次 Enter
-  // 會送出兩次；用防護擋掉進行中的第二次送出（#490、#507）。
+  // 會送出兩次；用同步防護擋掉進行中的第二次送出。
   const guard = useSubmitGuard()
   const previousConfirmation = useRef(false)
   const previousCancelTask = useRef(false)
@@ -410,8 +414,8 @@ export default function PlanningPage({
   // 修改表單）都不顯示；只留說明文字。
   const canModify = canEditPlan && !readOnly
 
-  // 直接捲到「新增任務」的查核項目欄並聚焦（AC42）；不用 hash 導航，
-  // 避免被未儲存變更的離頁確認誤判成離開頁面。
+  // 依 ADM-R28，缺查核項目時捲到並聚焦新增任務的查核項目欄；
+  // 不用 hash 導航，避免未儲存變更的確認誤判成離頁。
   function focusTaskItems(): void {
     const field = pageContent.current?.querySelector<HTMLElement>(
       '[data-field="task-items"]',
@@ -605,8 +609,8 @@ export default function PlanningPage({
     )
   }
 
-  // #451 的必填欄位在送出時攔截，避免把已知空白值送交 API。
-  // 同時將錯誤設在對應欄位，讓使用者能直接修正。
+  // 依 PR-19 送出時攔截必填空值，避免把已知錯誤送交 API；
+  // 依 ADM-R28 把錯誤列在欄位旁並聚焦，讓使用者能直接修正。
   function rejectBlank(field: FieldKey, blank: boolean): boolean {
     if (!blank) return false
     setError('')
@@ -631,7 +635,7 @@ export default function PlanningPage({
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!selectedPlan) return
-    // 空項目會被後端拒絕；先在表單指出欄位並聚焦（IP-R14）。
+    // IP-R02 要求 Task 選專案既有項目；空選取先在欄旁提示並聚焦。
     if (rejectBlank('task-items', taskItems.length === 0)) return
     if (
       rejectBlank('task-zone', zones.length > 0 && !zonesDenied && !taskZoneId)
