@@ -1,6 +1,7 @@
 import { isForbidden } from '../../http'
 import { listAllPages, ManagementApiError, request } from '../api'
 import type { InspectionPoint } from '../templates/api'
+import { forWire } from '../templates/templateEditorUtils'
 
 export type TaskStatus =
   'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
@@ -93,46 +94,16 @@ export function listProjectItems(
 
 /** 保留既有識別，並讓新欄位與數值標準以穩定 client_id 綁定。 */
 export function serializeProjectItemPoints(points: InspectionPoint[]) {
-  return points.map((point) => {
-    const fields = point.measurement_fields
-    const boundKey = point.numeric_standard?.measurement_field_client_key
-    const boundField = fields.find(
-      (field) =>
-        field.clientKey === boundKey ||
-        field.id === point.numeric_standard?.measurement_field_id ||
-        field.client_id ===
-          point.numeric_standard?.measurement_field_client_id,
-    )
-    return {
-      id: point.id,
-      sequence: point.sequence,
-      title: point.title,
-      instruction: point.instruction,
-      text_standard: point.text_standard,
-      numeric_standard: point.numeric_standard
-        ? {
-            value: point.numeric_standard.value,
-            condition: point.numeric_standard.condition,
-            unit: point.numeric_standard.unit,
-            tolerance: point.numeric_standard.tolerance,
-            range_form: point.numeric_standard.range_form ?? null,
-            lower_bound: point.numeric_standard.lower_bound ?? null,
-            upper_bound: point.numeric_standard.upper_bound ?? null,
-            measurement_field_client_id: boundField?.client_id,
-          }
-        : null,
-      measurement_fields: fields.map((field) => ({
-        id: field.id,
-        client_id: field.client_id ?? field.id ?? field.clientKey,
-        name: field.name,
-        field_type: field.field_type,
-        unit: field === boundField ? null : field.unit,
-      })),
-      evidence_requirements: point.evidence_requirements.map((row) => ({
-        min_count: row.min_count,
-      })),
-    }
-  })
+  return forWire(
+    {
+      system_id: '',
+      sequence: 1,
+      title: '',
+      instruction: '',
+      inspection_points: points,
+    },
+    { includeIds: true },
+  ).inspection_points
 }
 
 export const projectItemApi: ProjectItemApi = {

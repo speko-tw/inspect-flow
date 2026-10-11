@@ -5,6 +5,8 @@ import { HttpError, request } from '../../http'
 import { mapFieldErrors } from '../../ui/fieldErrors'
 import { projectItemApi, serializeProjectItemPoints } from './api'
 import boundUnitFixture from './fixtures/project-patch-bound-unit.json'
+import structureFixture from './fixtures/project-patch-structure.json'
+import structureLockedFixture from './fixtures/project-patch-structure-locked.json'
 
 const item = {
   id: 'item-1',
@@ -88,6 +90,50 @@ const task = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('projectItemApi', () => {
+  it('serializes the shared numeric interval structure fixture', () => {
+    const points = structuredClone(
+      structureFixture.inspection_points,
+    ) as unknown as InspectionPoint[]
+    points.forEach((point) => {
+      point.measurement_fields = point.measurement_fields.map((field) => ({
+        ...field,
+        clientKey: field.client_id,
+      }))
+      if (point.numeric_standard) {
+        point.numeric_standard.measurement_field_client_key =
+          point.numeric_standard.measurement_field_client_id
+      }
+    })
+
+    const requestBody = {
+      title: structureFixture.title,
+      instruction: structureFixture.instruction,
+      inspection_points: serializeProjectItemPoints(points),
+    }
+
+    expect(JSON.parse(JSON.stringify(requestBody))).toEqual(structureFixture)
+  })
+
+  it('parses the shared structure_locked API response fixture', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(structureLockedFixture, { status: 422 }),
+      ),
+    )
+    await expect(
+      projectItemApi.update('project-1', 'item-1', {
+        title: item.title,
+        instruction: item.instruction,
+        inspection_points: item.inspection_points,
+        reinspect: false,
+      }),
+    ).rejects.toMatchObject({
+      code: 'project_inspection_item.structure_locked',
+      status: 422,
+    })
+  })
+
   it('keeps a new measurement field identity stable and binds its numeric standard', () => {
     const clientId = 'client-field-596'
     const points: InspectionPoint[] = [

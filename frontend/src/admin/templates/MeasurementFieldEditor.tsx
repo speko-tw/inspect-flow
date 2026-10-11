@@ -7,6 +7,7 @@ import { boundField, localizeField } from './templateEditorUtils'
 type Props = {
   point: InspectionPoint
   pointIndex: number
+  errorPointKey?: string
   errors: Record<string, string>
   confirmField: string
   setConfirmField: (value: string) => void
@@ -22,6 +23,7 @@ type Props = {
 export function MeasurementFieldEditor({
   point,
   pointIndex,
+  errorPointKey,
   errors,
   confirmField,
   setConfirmField,
@@ -39,7 +41,7 @@ export function MeasurementFieldEditor({
       )}
       {point.measurement_fields.map((field, fieldIndex) => {
         const bound = boundField(point) === field
-        const base = `point:${pointIndex}:field:${fieldIndex}`
+        const base = `${errorPointKey ?? `point:${pointIndex}`}:field:${fieldIndex}`
         const removeField = () => {
           updatePoint(pointIndex, {
             measurement_fields: point.measurement_fields.filter(

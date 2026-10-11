@@ -139,6 +139,7 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
     fireEvent.click(within(box).getByRole('button', { name: '保留編輯' }))
     expect(screen.queryByRole('group')).toBeNull()
     expect(window.location.pathname).toBe('/one')
+    expect(screen.getByTestId('plain-link')).toHaveFocus()
 
     fireEvent.click(screen.getByTestId('plain-link'))
     fireEvent.keyDown(await screen.findByRole('group'), { key: 'Escape' })

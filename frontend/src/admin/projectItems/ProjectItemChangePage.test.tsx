@@ -138,7 +138,7 @@ const changed: ProjectItemChangeResult = {
 }
 
 const reinspectChoice = /要，用新標準重新查核/
-const noReinspectChoice = /不要，只更正文字/
+const noReinspectChoice = /不要，只更正文字與標準值/
 
 function choiceName(choice: 'yes' | 'no') {
   if (choice === 'yes') return reinspectChoice
@@ -220,6 +220,7 @@ describe('ProjectItemChangePage', () => {
       inspection_points: [
         {
           ...point,
+          clientKey: expect.any(String),
           text_standard: { text: '不得有裂縫或剝落' },
         },
       ],
@@ -335,7 +336,7 @@ describe('ProjectItemChangePage', () => {
     expect(api.update).toHaveBeenCalledWith(
       'p',
       'item-1',
-      expect.objectContaining({ reinspect: false }),
+      expect.objectContaining({ reinspect: true }),
     )
     expect(
       await screen.findByText('草稿任務已直接更新為新內容，沒有重新查核。'),
@@ -375,7 +376,7 @@ describe('ProjectItemChangePage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '確認儲存' }))
     await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1))
     const change = vi.mocked(api.update).mock.calls[0][2]
-    expect(change.reinspect).toBe(false)
+    expect(change.reinspect).toBe(true)
     expect(change.inspection_points[0].id).toBe('numeric-point')
     const newPoint = change.inspection_points[1]
     expect(newPoint.id).toBeUndefined()
@@ -383,6 +384,43 @@ describe('ProjectItemChangePage', () => {
       /^[0-9a-f-]{36}$/i,
     )
     expect(newPoint.numeric_standard).toBeNull()
+  })
+
+  it('reloads task impact and asks for a choice after structure_locked', async () => {
+    const drafts = structuredClone(preview)
+    drafts.affectedTasks = [drafts.affectedTasks[0]]
+    let loadCount = 0
+    const dispatched = structuredClone(preview)
+    dispatched.affectedTasks = [
+      { ...dispatched.affectedTasks[0], status: 'PENDING' },
+    ]
+    const api = apiWith({
+      loadPreview: vi.fn(async () =>
+        structuredClone(loadCount++ === 0 ? drafts : dispatched),
+      ),
+      update: vi.fn(async () => {
+        throw new ManagementApiError(
+          422,
+          'project_inspection_item.structure_locked',
+        )
+      }),
+    })
+    renderPage(api)
+    const name = await screen.findByLabelText('查核項目名稱 *')
+    fireEvent.change(name, { target: { value: '競態後名稱' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: '確認儲存',
+      }),
+    )
+
+    expect(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('請選擇「要」重新查核')
+    expect(api.loadPreview).toHaveBeenCalledTimes(2)
+    expect(name).toHaveValue('競態後名稱')
   })
 
   it('locks structure but leaves standard values editable for dispatched Tasks', async () => {
@@ -397,11 +435,13 @@ describe('ProjectItemChangePage', () => {
       await screen.findByRole('radio', { name: noReinspectChoice }),
     )
     expect(await screen.findByRole('status')).toHaveTextContent(
-      '不能增減項次或欄位',
+      '項次／欄位增減都會鎖定',
     )
     expect(screen.getByRole('button', { name: '新增查核項次' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '移除此項次' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '新增實測欄位' })).toBeDisabled()
+    expect(screen.getByLabelText('照片至少幾張 *')).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('照片需求')
     const fieldName = screen.getAllByLabelText('欄位名稱 *')[0]
     expect(fieldName).toBeEnabled()
     expect(
@@ -423,9 +463,9 @@ describe('ProjectItemChangePage', () => {
     expect(screen.getByLabelText('標準值 *')).toBeEnabled()
     expect(screen.getByRole('radio', { name: '數值' })).toBeDisabled()
     expect(screen.getByRole('radio', { name: '範圍' })).toBeEnabled()
-    expect(
-      screen.getByText(/只能修改文字與標準值、容許誤差、區間/),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '只能更正文字與數值標準、容差、區間',
+    )
     fireEvent.change(fieldName, { target: { value: '修正欄位名稱' } })
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const saveDialog = screen.getByRole('dialog')
@@ -475,19 +515,22 @@ describe('ProjectItemChangePage', () => {
     expect(firstPointTitle.parentElement).toHaveTextContent('請填寫項次標題')
 
     fireEvent.change(firstPointTitle, { target: { value: '表面外觀' } })
-    fireEvent.keyDown(screen.getByLabelText('查核項目名稱 *'), {
+    fireEvent.click(
+      screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
+    )
+    const leaveDialog = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.keyDown(leaveDialog, {
       key: 'Escape',
     })
-    const leaveDialog = await screen.findByRole('alertdialog')
-    expect(leaveDialog).toHaveClass('confirm-box-danger')
     expect(
-      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
-    ).toBeInTheDocument()
-    expect(
-      within(leaveDialog).getByRole('button', { name: '捨棄變更' }),
-    ).toBeInTheDocument()
-    fireEvent.click(
-      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+      screen.queryByRole('group', { name: '有尚未儲存的變更' }),
+    ).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
+      ).toHaveFocus(),
     )
 
     fireEvent.click(
@@ -507,14 +550,18 @@ describe('ProjectItemChangePage', () => {
     fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
       target: { value: '未儲存的名稱' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '返回專案查核項目' }))
     fireEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', {
+      screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
+    )
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', {
         name: '捨棄變更',
       }),
     )
     expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group')).not.toBeInTheDocument()
   })
 
   it('leaves after saving without a stale dirty confirmation', async () => {
@@ -532,9 +579,11 @@ describe('ProjectItemChangePage', () => {
     })
     await confirm('yes')
     await screen.findByText('專案查核項目 / 已儲存的名稱')
-    fireEvent.click(screen.getByRole('button', { name: '返回專案查核項目' }))
+    fireEvent.click(
+      screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
+    )
     expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group')).not.toBeInTheDocument()
     expect(api.loadPreview).toHaveBeenCalledTimes(2)
   })
 
@@ -551,14 +600,29 @@ describe('ProjectItemChangePage', () => {
     fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
       target: { value: '已修改名稱' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '返回專案查核項目' }))
-    const leaveDialog = screen.getByRole('alertdialog')
+    fireEvent.click(
+      screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
+    )
+    const leaveDialog = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
     expect(leaveDialog).toHaveClass('confirm-box-danger')
     expect(
       within(leaveDialog).getByRole('button', { name: '保留編輯' }),
     ).toBeInTheDocument()
+    expect(leaveDialog).toHaveTextContent(
+      '離開後，已填寫但尚未儲存的內容會消失',
+    )
+    expect(
+      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+    ).toHaveFocus()
     fireEvent.click(
       within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
+      ).toHaveFocus(),
     )
     expect(screen.getByLabelText('查核項目名稱 *')).toHaveValue('已修改名稱')
 
@@ -567,6 +631,8 @@ describe('ProjectItemChangePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const saveDialog = screen.getByRole('dialog')
     expect(saveDialog).toHaveClass('confirm-box-danger')
+    expect(saveDialog).toHaveTextContent('即將刪除：項次「表面完整」')
+    expect(saveDialog).toHaveTextContent('舊結果與照片會依重新查核規則作廢')
     fireEvent.click(within(saveDialog).getByRole('button', { name: '取消' }))
     expect(screen.getAllByRole('button', { name: '移除此項次' })).toHaveLength(
       1,
@@ -582,9 +648,7 @@ describe('ProjectItemChangePage', () => {
     const dialog = screen.getByRole('dialog')
     expect(dialog.textContent).not.toMatch(/Snapshot|Task/)
     expect(screen.getByText(/已完成的任務會退回進行中/)).toBeInTheDocument()
-    expect(
-      screen.getByText(/任務狀態、已填的結果與照片都不變/),
-    ).toBeInTheDocument()
+    expect(within(dialog).getByText(/選擇「不要」時/)).toBeInTheDocument()
     expect(
       within(dialog).getByText(/二樓東側.*退回進行中，受影響項目改列待重查/),
     ).toBeInTheDocument()
@@ -717,6 +781,63 @@ describe('ProjectItemChangePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '至少要保留一項查核項次。',
     )
+  })
+
+  it('focuses the inline zero-point error before any request', async () => {
+    const empty = structuredClone(preview)
+    empty.item.inspection_points = []
+    const api = apiWith({ loadPreview: vi.fn(async () => empty) })
+    renderPage(api)
+    await screen.findByLabelText('查核項目名稱 *')
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    const pointError = await screen.findByText('請至少新增一個查核項次', {
+      selector: 'p[data-error-key="points"]',
+    })
+    expect(pointError).toHaveAttribute('data-error-key', 'points')
+    await waitFor(() => expect(pointError).toHaveFocus())
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('maps a server field error to the remaining point after deletion', async () => {
+    const twoPoints = structuredClone(preview)
+    twoPoints.item.inspection_points[0].id = 'deleted-point'
+    twoPoints.item.inspection_points.push({
+      ...structuredClone(point),
+      id: 'remaining-point',
+      sequence: 2,
+      title: '保留項次',
+    })
+    const api = apiWith({
+      loadPreview: vi.fn(async () => twoPoints),
+      update: vi.fn(async () => {
+        const error = new ManagementApiError(422, 'request.validation_failed')
+        error.fields = [
+          { path: '/inspection_points/0/title', code: 'field.required' },
+        ]
+        throw error
+      }),
+    })
+    renderPage(api)
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: '移除此項次' }))[0],
+    )
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: '確認儲存',
+      }),
+    )
+
+    const title = await screen.findByLabelText('項次標題 *')
+    expect(title).toHaveAttribute(
+      'data-error-key',
+      'point:remaining-point:title',
+    )
+    expect(title.parentElement).toHaveTextContent('請填寫此欄位')
+    await waitFor(() => expect(title).toHaveFocus())
   })
 
   it('refreshes the impact list when a choice becomes required', async () => {

@@ -8,6 +8,7 @@ import {
 type Props = {
   point: InspectionPoint
   pointIndex: number
+  errorPointKey?: string
   errors: Record<string, string>
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
   updateNumeric: (
@@ -20,6 +21,7 @@ type Props = {
 export function NumericStandardEditor({
   point,
   pointIndex,
+  errorPointKey,
   errors,
   updatePoint,
   updateNumeric,
@@ -28,7 +30,7 @@ export function NumericStandardEditor({
   const inputError = (key: string) => errors[key]
   const index = pointIndex
   const standard = point.numeric_standard
-  const key = `point:${index}`
+  const key = errorPointKey ?? `point:${index}`
   const numberOptions = numberFields(point)
   const unit = boundField(point)?.unit || standard?.unit || ''
   return (

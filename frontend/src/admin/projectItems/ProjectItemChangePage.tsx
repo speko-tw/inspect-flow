@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useParams } from 'react-router'
 
 import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
 import RouteNotFound from '../../RouteNotFound'
@@ -7,6 +7,8 @@ import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { mapFieldErrors } from '../../ui/fieldErrors'
 import { useSubmitGuard } from '../../ui/submitGuard'
+import { UnsavedLeaveBox } from '../planning/UnsavedLeaveBox'
+import { useUnsavedNavigationGuard } from '../planning/useUnsavedNavigationGuard'
 import { ManagementApiError } from '../api'
 import { TemplateItemEditor } from '../templates/TemplateItemEditor'
 import {
@@ -71,7 +73,7 @@ const REINSPECT_YES_HINT = [
 ].join('')
 
 const REINSPECT_NO_HINT =
-  '只更正項目的文字，任務狀態、已填的結果與照片都不變。'
+  '只更正文字與數值標準、容差、區間；任務狀態、結果、照片與照片需求不變。'
 
 function isReinspectionChoiceRequired(error: unknown): boolean {
   return (
@@ -92,8 +94,8 @@ function errorMessage(error: unknown): string {
     codes: {
       'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
       'project_inspection_item.structure_locked': [
-        '此項目已有任務使用；若要增減查核項次或實測欄位、',
-        '變更欄位類型，請選擇「要」重新查核。',
+        '此項目已有任務使用；若要修改照片需求，或增減項次、實測欄位，',
+        '變更欄位類型、單位、數值綁定或標準種類，請選擇「要」重新查核。',
       ].join(''),
       'project_inspection_item.points_required': [
         '此項目已有任務使用，',
@@ -126,8 +128,8 @@ function taskConsequence(status: TaskStatus): string {
   return '維持已取消；恢復時才套用新內容，原有結果若受影響才待重查'
 }
 
-// 後端只要有任務使用此項目就要求帶 `reinspect`；草稿任務一律在原任務內
-// 更新、不產生待重查，所以全部是草稿時不需要使用者選擇。
+// 依 ADM-R28 隱藏草稿專用項目的選擇，但仍送 true，符合後端 IP-R13 契約；
+// IP-R04 保證 DRAFT 在同一 Task 內更新 Snapshot，不產生待重查。
 function isDraftOnly(tasks: AffectedTask[]): boolean {
   return tasks.length > 0 && tasks.every((task) => task.status === 'DRAFT')
 }
@@ -151,11 +153,18 @@ function localizeProjectPoints(points: InspectionPoint[]): InspectionPoint[] {
       standard?.measurement_field_client_key ??
       fields.find(
         (field) =>
-          field.client_id === standard?.measurement_field_client_id ||
-          field.id === standard?.measurement_field_id,
+          Boolean(
+            standard?.measurement_field_client_id &&
+            field.client_id === standard.measurement_field_client_id,
+          ) ||
+          Boolean(
+            standard?.measurement_field_id &&
+            field.id === standard.measurement_field_id,
+          ),
       )?.clientKey
     return {
       ...point,
+      clientKey: point.clientKey ?? point.id ?? crypto.randomUUID(),
       measurement_fields: fields,
       numeric_standard: standard
         ? { ...standard, measurement_field_client_key: boundKey }
@@ -207,13 +216,12 @@ function hasStructureChange(
     const bindingIdentity = (row: InspectionPoint) => {
       const standard = row.numeric_standard
       if (!standard) return null
-      const field = row.measurement_fields.find(
-        (candidate) =>
-          candidate.clientKey === standard.measurement_field_client_key ||
-          candidate.id === standard.measurement_field_id ||
-          candidate.client_id === standard.measurement_field_client_id,
+      return (
+        standard.measurement_field_client_key ??
+        standard.measurement_field_client_id ??
+        standard.measurement_field_id ??
+        null
       )
-      return field?.id ?? field?.client_id ?? field?.clientKey ?? null
     }
     if (
       bindingIdentity(point) !== bindingIdentity(updated) ||
@@ -241,6 +249,12 @@ function hasStructureChange(
       ) {
         return true
       }
+    }
+    if (
+      JSON.stringify(point.evidence_requirements) !==
+      JSON.stringify(updated.evidence_requirements)
+    ) {
+      return true
     }
   }
   return false
@@ -273,6 +287,35 @@ function removesStructure(
   return false
 }
 
+function deletedStructureNames(
+  before: InspectionPoint[],
+  after: InspectionPoint[],
+): string[] {
+  const afterById = new Map(
+    after.filter((point) => point.id).map((point) => [point.id!, point]),
+  )
+  const deleted: string[] = []
+  for (const point of before) {
+    if (!point.id) continue
+    const updated = afterById.get(point.id)
+    if (!updated) {
+      deleted.push(`項次「${point.title}」`)
+      continue
+    }
+    const fieldIds = new Set(
+      updated.measurement_fields
+        .map((field) => field.id)
+        .filter((id): id is string => Boolean(id)),
+    )
+    for (const field of point.measurement_fields) {
+      if (field.id && !fieldIds.has(field.id)) {
+        deleted.push(`「${point.title}」的欄位「${field.name}」`)
+      }
+    }
+  }
+  return deleted
+}
+
 function validateDraft(
   item: TemplateItem,
   photos: Record<string, string>,
@@ -283,7 +326,7 @@ function validateDraft(
     errors.points = '請至少新增一個查核項次'
   }
   item.inspection_points.forEach((point, pointIndex) => {
-    const key = `point:${pointIndex}`
+    const key = `point:${point.clientKey ?? point.id ?? pointIndex}`
     if (!point.title.trim()) errors[`${key}:title`] = '請填寫項次標題'
     point.measurement_fields.forEach((field, fieldIndex) => {
       const fieldKey = `${key}:field:${fieldIndex}`
@@ -363,7 +406,6 @@ export default function ProjectItemChangePage({
   api: ProjectItemApi
 }) {
   const { projectId, itemId } = useParams()
-  const navigate = useNavigate()
   const [preview, setPreview] = useState<ProjectItemPreview | null>(null)
   const [title, setTitle] = useState('')
   const [instruction, setInstruction] = useState('')
@@ -392,7 +434,6 @@ export default function ProjectItemChangePage({
   const focusRequestId = useRef(0)
   const [photoDraft, setPhotoDraft] = useState<Record<string, string>>({})
   const [confirmField, setConfirmField] = useState('')
-  const [leaving, setLeaving] = useState(false)
   const [attemptedSave, setAttemptedSave] = useState(false)
   const [baseline, setBaseline] = useState('')
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -406,6 +447,7 @@ export default function ProjectItemChangePage({
     photoDraft,
   }
   const dirty = baseline !== JSON.stringify(editorValues)
+  const leaveGuard = useUnsavedNavigationGuard(dirty)
   const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
   const hasDraft = preview
     ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
@@ -414,6 +456,13 @@ export default function ProjectItemChangePage({
     ? preview.affectedTasks.some((task) => task.status !== 'DRAFT')
     : false
   const structureLocked = needsChoice && reinspect === false
+  const photoRequirementChanged = Boolean(
+    preview?.item.inspection_points.some(
+      (point, index) =>
+        Number(photoDraft[String(index)] ?? '1') !==
+        point.evidence_requirements[0]?.min_count,
+    ),
+  )
 
   useEffect(() => {
     let active = true
@@ -620,6 +669,24 @@ export default function ProjectItemChangePage({
       } else if (
         caught instanceof ManagementApiError &&
         caught.status === 422 &&
+        caught.code === 'project_inspection_item.structure_locked'
+      ) {
+        setConfirming(false)
+        setReinspect(null)
+        try {
+          const loaded = await reloadPreview()
+          if (
+            loaded.readOnly ||
+            loaded.affectedTasks.some((task) => task.planArchived)
+          ) {
+            setReadOnly(true)
+          }
+        } catch (reloadError) {
+          if (isForbidden(reloadError)) setReadOnly(true)
+        }
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.status === 422 &&
         caught.fields?.length
       ) {
         const draft = {
@@ -629,7 +696,7 @@ export default function ProjectItemChangePage({
         }
         const mapped = mapFieldErrors(
           caught.fields,
-          templateFieldErrorBindings(draft),
+          templateFieldErrorBindings(draft, undefined, true),
         )
         const messages = Object.fromEntries(
           Object.entries(mapped.errors).map(([key, code]) => [
@@ -672,14 +739,13 @@ export default function ProjectItemChangePage({
       const firstErrorKey = Object.keys(invalid)[0]
       focusRequestId.current += 1
       setFocusRequest({ id: focusRequestId.current, key: firstErrorKey })
-      return Promise.resolve([
-        ...new Set(
-          Object.keys(invalid)
-            .map((key) => /^point:(\d+):/.exec(key)?.[1])
-            .filter((index): index is string => index !== undefined)
-            .map(Number),
-        ),
-      ])
+      const invalidPoints = draft.inspection_points.flatMap((point, index) => {
+        const pointKey = `point:${point.clientKey ?? point.id ?? index}:`
+        return Object.keys(invalid).some((key) => key.startsWith(pointKey))
+          ? [index]
+          : []
+      })
+      return Promise.resolve(invalidPoints)
     }
     if (needsChoice && reinspect === null) {
       setError('請先選擇這次修改要不要重新查核。')
@@ -687,7 +753,8 @@ export default function ProjectItemChangePage({
     }
     if (
       structureLocked &&
-      hasStructureChange(preview!.item.inspection_points, inspectionPoints)
+      (hasStructureChange(preview!.item.inspection_points, inspectionPoints) ||
+        photoRequirementChanged)
     ) {
       setError(
         '選擇「不要」重新查核時，不能增減項次或實測欄位，也不能變更欄位型別、單位、數值綁定或標準種類。',
@@ -704,11 +771,6 @@ export default function ProjectItemChangePage({
     return Promise.resolve(null)
   }
 
-  function requestLeave() {
-    if (dirty) setLeaving(true)
-    else navigate(`/admin/projects/${projectId}/inspection-items`)
-  }
-
   const currentDraft = preview
     ? { ...makeDraft(preview.item, inspectionPoints), title, instruction }
     : null
@@ -719,16 +781,9 @@ export default function ProjectItemChangePage({
   const willDeleteStructure = preview
     ? removesStructure(preview.item.inspection_points, inspectionPoints)
     : false
-
-  useEffect(() => {
-    if (!dirty) return
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', warnBeforeUnload)
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
-  }, [dirty])
+  const deletedNames = preview
+    ? deletedStructureNames(preview.item.inspection_points, inspectionPoints)
+    : []
 
   if (!projectId || !itemId) {
     return <p role="alert">缺少專案或查核項目識別碼。</p>
@@ -781,7 +836,7 @@ export default function ProjectItemChangePage({
                   name="reinspect"
                   type="radio"
                 />
-                不要，只更正文字
+                不要，只更正文字與標準值
               </label>
               <p className="tpl-hint">{REINSPECT_NO_HINT}</p>
             </fieldset>
@@ -795,11 +850,16 @@ export default function ProjectItemChangePage({
                 ])
               }
               cancelLabel="返回專案查核項目"
+              cancelHref={`/admin/projects/${projectId}/inspection-items`}
+              stablePointErrorKeys
               clearPointServerErrors={(index) =>
                 setServerFieldErrors((current) =>
                   Object.fromEntries(
                     Object.entries(current).filter(
-                      ([key]) => !key.startsWith(`point:${index}:`),
+                      ([key]) =>
+                        !key.startsWith(
+                          `point:${inspectionPoints[index]?.clientKey ?? inspectionPoints[index]?.id ?? index}:`,
+                        ),
                     ),
                   ),
                 )
@@ -833,17 +893,17 @@ export default function ProjectItemChangePage({
                   return next
                 })
               }}
-              resetMode={requestLeave}
+              resetMode={() => {}}
               requestError=""
               saveItem={submitItem}
               saveLabel="儲存變更"
               selected={null}
               setConfirmField={setConfirmField}
-              setGuard={() => setLeaving(true)}
+              setGuard={() => {}}
               setPhotoDraft={setPhotoDraft}
               structureLocked={structureLocked}
               structureLockReason={
-                '有已派出的任務受影響；選擇「不要」時只能修改文字與標準值、容許誤差、區間，不能增減項次或欄位，也不能變更欄位型別、單位、數值綁定或標準種類。'
+                '選擇「不要」時，只能更正文字與數值標準、容差、區間；照片需求、欄位型別、單位、數值綁定、標準種類及項次／欄位增減都會鎖定。'
               }
               systemId={projectId}
               updateDraft={(changes: Partial<TemplateItem>) => {
@@ -900,7 +960,7 @@ export default function ProjectItemChangePage({
               initialFocus="none"
               onCancel={() => setConfirming(false)}
               onConfirm={() =>
-                save(draftOnly ? false : (reinspect ?? undefined))
+                save(draftOnly ? true : (reinspect ?? undefined))
               }
               role="dialog"
               title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
@@ -927,6 +987,19 @@ export default function ProjectItemChangePage({
                   {'不需要重新查核。'}
                 </p>
               )}
+              {willDeleteStructure && (
+                <>
+                  <p>即將刪除：{deletedNames.join('、')}。</p>
+                  {preview.affectedTasks.some(
+                    (task) => task.status !== 'DRAFT',
+                  ) && (
+                    <p>
+                      已派出任務的舊結果與照片會依重新查核規則作廢；
+                      已取消任務於恢復時套用目前標準。
+                    </p>
+                  )}
+                </>
+              )}
               <h3>使用此項目的任務</h3>
               {preview.affectedTasks.length === 0 ? (
                 <p>
@@ -947,22 +1020,7 @@ export default function ProjectItemChangePage({
             </ConfirmBox>
           )}
 
-          {leaving && (
-            <ConfirmBox
-              cancelLabel="保留編輯"
-              confirmLabel="捨棄變更"
-              label="尚未儲存的變更"
-              onCancel={() => setLeaving(false)}
-              onConfirm={() => {
-                setLeaving(false)
-                navigate(`/admin/projects/${projectId}/inspection-items`)
-              }}
-              role="alertdialog"
-              variant="danger"
-            >
-              <p>目前的項目內容尚未儲存，要保留編輯或捨棄變更？</p>
-            </ConfirmBox>
-          )}
+          <UnsavedLeaveBox guard={leaveGuard} />
 
           {result && (
             <section

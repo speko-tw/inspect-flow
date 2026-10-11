@@ -1336,14 +1336,6 @@ def patch_project_item(
             TaskInspectionItem.project_inspection_item_id == item.id
         )
     ).all()
-    associated_tasks = [
-        db.get(InspectionTask, association.task_id)
-        for association in associations
-    ]
-    has_dispatched_tasks = any(
-        task is not None and task.status != "DRAFT"
-        for task in associated_tasks
-    )
     if body.inspection_points is not None:
         # reinspect=None 不會啟用結構鎖，先回報完整結構錯誤欄位。
         _validate_project_points(
@@ -1351,7 +1343,6 @@ def patch_project_item(
             item,
             body.inspection_points,
             has_tasks=bool(associations),
-            has_dispatched_tasks=has_dispatched_tasks,
             reinspect=body.reinspect,
         )
     if associations and body.reinspect is None:
@@ -1430,14 +1421,13 @@ def _validate_project_points(
     points: list[ProjectPointBody],
     *,
     has_tasks: bool,
-    has_dispatched_tasks: bool,
     reinspect: bool | None,
 ) -> None:
     """依 IP-R13、IP-R14 先驗證完整結構，再動任何資料列。
 
-    有已派出的 Task 使用此項目且選擇不重查時，增減項次或實測欄位、
-    改欄位類型都拒絕（422）；只有草稿 Task 使用時允許原位調整
-    （IP-R04）。有任何 Task 使用時不得把項次清空（422）。
+    有 Task 使用此項目且選擇不重查時，增減項次或實測欄位、改欄位
+    類型或照片需求都拒絕（422）；草稿更新依 IP-R04 仍送出重新查核。
+    有任何 Task 使用時不得把項次清空（422）。
     """
     existing_points = db.scalars(
         select(ProjectInspectionPoint).where(
@@ -1476,7 +1466,7 @@ def _validate_project_points(
     seen_point_ids: set[UUID] = set()
     for point in points:
         point_id = point.id
-        if has_dispatched_tasks and reinspect is False and point_id is None:
+        if has_tasks and reinspect is False and point_id is None:
             raise APIError(
                 ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
             )
@@ -1531,7 +1521,7 @@ def _validate_project_points(
 
     if has_tasks and not points:
         raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_POINTS_REQUIRED, 422)
-    if has_dispatched_tasks and reinspect is False:
+    if has_tasks and reinspect is False:
         if set(point_identities) != existing_point_ids:
             raise APIError(
                 ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
@@ -1548,6 +1538,18 @@ def _validate_project_points(
                 )
             if (point.text_standard is not None) != (
                 point_id in text_point_ids
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
+            old_photo_count = db.scalar(
+                select(ProjectEvidenceRequirement.min_count).where(
+                    ProjectEvidenceRequirement.inspection_point_id == point_id
+                )
+            )
+            if (
+                len(point.evidence_requirements) != 1
+                or point.evidence_requirements[0].min_count != old_photo_count
             ):
                 raise APIError(
                     ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422

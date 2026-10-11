@@ -1344,6 +1344,22 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         for point_row in snapshot_before_rejections["inspection_points"]
     } == {"內容可更正"}
 
+    photo_requirement_changes = [
+        {**point, "evidence_requirements": [{"min_count": 2}]}
+        for point in updated_points
+    ]
+    photo_change = admin.patch(
+        item_url,
+        json={
+            "inspection_points": photo_requirement_changes,
+            "reinspect": False,
+        },
+    )
+    assert photo_change.status_code == 422, photo_change.text
+    assert photo_change.json()["error"]["code"] == (
+        "project_inspection_item.structure_locked"
+    )
+
     missing_point_identity = [
         {key: value for key, value in point.items() if key != "id"}
         for point in updated_points
@@ -1913,7 +1929,7 @@ def test_draft_task_allows_project_item_structure_update_in_place(
     updated = admin.patch(
         item_url,
         json={
-            "reinspect": False,
+            "reinspect": True,
             "inspection_points": [
                 {
                     "id": retained["id"],
@@ -3466,7 +3482,7 @@ def test_one_photo_requirement_keeps_task_flows_working(
     used_by_draft = admin.patch(
         item_url,
         json={
-            "reinspect": False,
+            "reinspect": True,
             "inspection_points": [
                 {
                     **_item_point([{"min_count": 2}]),
@@ -3488,3 +3504,55 @@ def test_one_photo_requirement_keeps_task_flows_working(
     restored = admin.post(f"{task_path}:restore")
     assert restored.status_code == 200, restored.text
     assert restored.json()["status"] == "IN_PROGRESS"
+
+
+def test_cancelled_task_locks_structure_when_reinspection_is_false(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project_id = world["project"].id
+    item_id = world["item"].id
+    item_url = f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+    current_point = _item_point([{"min_count": 1}])
+    created = admin.patch(
+        item_url,
+        json={"inspection_points": [current_point]},
+    )
+    assert created.status_code == 200, created.text
+    current_point["id"] = created.json()["inspection_points"][0]["id"]
+    plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "取消任務結構鎖"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(item_id)]},
+    )
+    assert task.status_code == 201, task.text
+    task_url = f"/api/v1/inspection-tasks/{task.json()['id']}"
+    assert admin.post(f"{task_url}:dispatch").status_code == 200
+    cancelled = admin.post(f"{task_url}:cancel", json={"reason": "計畫調整"})
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "CANCELLED"
+
+    added_point = {
+        "sequence": 2,
+        "title": "新增項次",
+        "instruction": "新增說明",
+        "text_standard": {"text": "新增標準"},
+        "measurement_fields": [],
+        "evidence_requirements": [{"min_count": 1}],
+    }
+    locked = admin.patch(
+        item_url,
+        json={
+            "reinspect": False,
+            "inspection_points": [current_point, added_point],
+        },
+    )
+    assert locked.status_code == 422, locked.text
+    assert locked.json()["error"]["code"] == (
+        "project_inspection_item.structure_locked"
+    ), locked.text
