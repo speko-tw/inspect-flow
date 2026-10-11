@@ -329,7 +329,10 @@ def change_admin_status(
     if user.is_admin == body.is_admin:
         return user
     try:
-        return set_is_admin(db, user, body.is_admin)
+        updated_user = set_is_admin(db, user, body.is_admin)
+        # 管理員身分變更須在成功回應送出前提交，避免回應與資料狀態不一致。
+        db.commit()
+        return updated_user
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
     except IntegrityError as exc:

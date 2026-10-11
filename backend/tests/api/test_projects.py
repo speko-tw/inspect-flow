@@ -552,6 +552,41 @@ def test_project_member_role_ids_payload_is_limited_to_64(
     assert after == before
 
 
+def test_project_member_role_ids_payload_accepts_exactly_64(
+    project_api, db_session: Session
+):
+    """64 個 role id 通過 body 驗證，只因角色不存在回 404；65 個才 422。"""
+    project = project_api["project"]
+    target = project_api["target"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    members_url = f"/api/v1/projects/{project.id}/members"
+    role_ids = [str(uuid4()) for _ in range(64)]
+
+    added = project_api["admin_client"].post(
+        members_url,
+        json={"user_id": str(target.id), "role_ids": role_ids},
+    )
+    replaced = project_api["admin_client"].put(
+        f"{members_url}/{target.id}/roles", json={"role_ids": role_ids}
+    )
+    rejected = project_api["admin_client"].post(
+        members_url,
+        json={
+            "user_id": str(target.id),
+            "role_ids": [*role_ids, str(uuid4())],
+        },
+    )
+
+    assert added.status_code == 404
+    assert added.json()["error"]["code"] == ErrorCode.RESOURCE_NOT_FOUND.value
+    assert replaced.status_code == 404
+    assert (
+        replaced.json()["error"]["code"] == ErrorCode.RESOURCE_NOT_FOUND.value
+    )
+    assert rejected.status_code == 422
+
+
 def test_system_role_assignment_endpoints_are_admin_only_and_audited(
     project_api, db_session: Session
 ):

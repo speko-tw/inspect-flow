@@ -208,11 +208,13 @@ def set_external_collaborator(
     operator = get_current_operator(session)
     if not operator.is_admin:
         raise ExternalFlagChangeError("Only Admin may change this flag")
-    # 重讀並鎖定同一 User 列，與系統角色指派共用序列化順序。
+    # 呼叫端傳入的 user 可能在取鎖前就已載入，需用 populate_existing
+    # 重讀最新旗標。改用 FOR NO KEY UPDATE，與外鍵檢查的 KEY SHARE
+    # 不互鎖，避免死結；與系統角色指派仍共用同一把互斥鎖。
     locked_user = session.scalar(
         select(User)
         .where(User.id == user.id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
     if locked_user is None:

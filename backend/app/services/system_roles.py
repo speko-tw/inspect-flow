@@ -30,11 +30,14 @@ def assign_system_role(
     session: Session, user_id: uuid.UUID, role_code: SystemRoleCode
 ) -> SystemRoleAssignment:
     """Assign one fixed system role and write its audit event."""
-    # 共用鎖定 User 列，避免與外部協作者狀態變更交錯提交。
+    # 呼叫端的 user 可能在取鎖前就已載入，需用 populate_existing 重讀
+    # 最新旗標，才不會以過期的外部協作者狀態判斷。改用 FOR NO KEY
+    # UPDATE，與外鍵檢查的 KEY SHARE 不互鎖，避免死結；兩個寫入口之間
+    # 仍互斥。
     user = session.scalar(
         select(User)
         .where(User.id == user_id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
     if (

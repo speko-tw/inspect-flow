@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.api.v1 import users as users_api
-from app.api.v1.users import ActiveStatusRequest
+from app.api.v1.users import ActiveStatusRequest, AdminStatusRequest
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
@@ -114,6 +114,41 @@ def test_active_status_commits_before_return(
     assert events == ["active_changed", "active_committed"]
     db_session.expire(user)
     assert user.is_active is False
+
+
+def test_admin_status_commits_before_return(
+    admin_client, db_session, monkeypatch
+):
+    """管理員身分變更結果須在端點返回前提交。"""
+    user = create_root_user_with_company(db_session, "R618ADMIN")
+    db_session.commit()
+    events = []
+    original_commit = db_session.commit
+    original_set_admin = users_api.set_is_admin
+
+    def tracked_commit():
+        original_commit()
+        if "admin_changed" in events:
+            events.append("admin_committed")
+
+    def tracked_set_admin(session, target, is_admin):
+        result = original_set_admin(session, target, is_admin)
+        events.append("admin_changed")
+        return result
+
+    monkeypatch.setattr(db_session, "commit", tracked_commit)
+    monkeypatch.setattr(users_api, "set_is_admin", tracked_set_admin)
+
+    result = users_api.change_admin_status(
+        user.id,
+        AdminStatusRequest(is_admin=True),
+        db_session,
+    )
+
+    assert result is user
+    assert events == ["admin_changed", "admin_committed"]
+    db_session.expire(user)
+    assert user.is_admin is True
 
 
 def test_template_admin_prevents_external_flag_change(
