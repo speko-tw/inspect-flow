@@ -3,6 +3,7 @@
 // 也不會被帶過去。
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -88,7 +89,7 @@ function stubBackend(conflictCode: string) {
   )
 }
 
-function renderPage(page: React.ReactNode) {
+function renderPage(page: ReactNode) {
   render(
     <MemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
@@ -129,6 +130,39 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     await vi.waitFor(() =>
       expect(within(form).getByRole('alert')).toHaveFocus(),
     )
+  })
+
+  it('同一列兩個表單都開著時，只有送出失敗的表單顯示錯誤並聚焦', async () => {
+    stubBackend('user.email_conflict')
+    renderPage(<UsersPage onTemporaryPassword={vi.fn()} />)
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '修改資料' }))
+    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    const detailsForm = (
+      await screen.findByRole('button', { name: '儲存資料' })
+    ).closest('form') as HTMLFormElement
+    const companyForm = screen
+      .getByRole('button', { name: '儲存公司連結' })
+      .closest('form') as HTMLFormElement
+
+    fireEvent.click(
+      within(companyForm).getByRole('button', { name: '儲存公司連結' }),
+    )
+
+    const alert = await within(companyForm).findByRole('alert')
+    expect(alert).toHaveTextContent('Email 已被使用。')
+    expect(alert).toHaveFocus()
+    expect(within(detailsForm).queryByRole('alert')).toBeNull()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+
+    // 換「修改資料」表單送出失敗：錯誤與焦點跟著移過去，公司表單不再顯示。
+    fireEvent.click(
+      within(detailsForm).getByRole('button', { name: '儲存資料' }),
+    )
+    const detailsAlert = await within(detailsForm).findByRole('alert')
+    expect(detailsAlert).toHaveFocus()
+    expect(within(companyForm).queryByRole('alert')).toBeNull()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('公司表單', async () => {

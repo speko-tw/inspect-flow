@@ -245,7 +245,9 @@ function AdminPageContent() {
                 </AdminRouteSuspense>
               }
             />
-            {/* 專案與查核項目的路由參數先驗格式，見 RequireValidRouteIds。 */}
+            {/* 專案與查核項目的路由參數先驗格式，見 RequireValidRouteIds。
+                新的專案子路由必須放在這個 layout route 底下，放在外面
+                就不受 id 守衛保護，特製網址會直接打到別的 API 端點。 */}
             <Route element={<RequireValidRouteIds />}>
               <Route
                 path="projects/:projectId"
@@ -324,6 +326,8 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     ) ||
     (!user.has_template_access &&
       /^\/admin\/templates(?:\/|$)/.test(location.pathname))
+  // 新的專案子路由必須放在這個 layout route 底下：放在外面就不受 id
+  // 守衛保護，特製網址會直接打到別的 API 端點。
   const projectRoutes = (
     <Route element={<RequireValidRouteIds />}>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />

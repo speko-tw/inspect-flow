@@ -38,8 +38,11 @@ export default function UsersPage({
   const [loading, setLoading] = useState(true)
   // 修改資料與公司連結的存檔錯誤：顯示在那一列的表單裡並聚焦。放在頁頂
   // 的話，列表一長就在視窗外，螢幕閱讀器使用者也不會被帶過去（F-O02）。
+  // 同一列的兩個表單可同時開啟，所以錯誤要記是哪個表單送出的，否則
+  // 兩份表單會各顯示一份、焦點也可能落在沒送出的那一份。
   const [saveError, setSaveError] = useState<{
     userId: string
+    form: 'details' | 'company'
     message: string
     request: number
   } | null>(null)
@@ -193,7 +196,11 @@ export default function UsersPage({
     }
   }
 
-  async function act(userId: string, operation: () => Promise<User>) {
+  async function act(
+    userId: string,
+    form: 'details' | 'company',
+    operation: () => Promise<User>,
+  ) {
     if (!actionGuard.enter()) return
     setSaveError(null)
     setBusyUser(userId)
@@ -205,6 +212,7 @@ export default function UsersPage({
     } catch (caught) {
       setSaveError((previous) => ({
         userId,
+        form,
         message: managementErrorMessage(caught),
         request: (previous?.request ?? 0) + 1,
       }))
@@ -296,8 +304,10 @@ export default function UsersPage({
     setActionError('')
   }
 
-  function rowError(userId: string): string {
-    return saveError?.userId === userId ? saveError.message : ''
+  function rowError(userId: string, form: 'details' | 'company'): string {
+    return saveError?.userId === userId && saveError.form === form
+      ? saveError.message
+      : ''
   }
 
   function created(user: { username: string; temporary_password: string }) {
@@ -443,14 +453,16 @@ export default function UsersPage({
                           {editingUser === user.id && (
                             <UserDetailsForm
                               busy={busyUser !== null}
-                              error={rowError(user.id)}
+                              error={rowError(user.id, 'details')}
                               errorFocusRequest={saveError?.request}
                               onCancel={() => {
                                 setSaveError(null)
                                 setEditingUser(null)
                               }}
                               onSave={(fields) =>
-                                act(user.id, () => updateUser(user.id, fields))
+                                act(user.id, 'details', () =>
+                                  updateUser(user.id, fields),
+                                )
                               }
                               user={user}
                             />
@@ -459,14 +471,14 @@ export default function UsersPage({
                             <CompanyLinkForm
                               busy={busyUser !== null}
                               companies={companies}
-                              error={rowError(user.id)}
+                              error={rowError(user.id, 'company')}
                               errorFocusRequest={saveError?.request}
                               onCancel={() => {
                                 setSaveError(null)
                                 setEditingCompany(null)
                               }}
                               onSave={(companyId, fields) =>
-                                act(user.id, () =>
+                                act(user.id, 'company', () =>
                                   companyId === user.company_id
                                     ? updateUser(user.id, fields)
                                     : linkUserCompany(

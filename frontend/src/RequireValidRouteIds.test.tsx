@@ -2,7 +2,7 @@
 // 用完整的 `App` 與路由驗證，fetch 替身記錄所有請求。
 
 import { act, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import {
   afterEach,
   beforeAll,
@@ -15,6 +15,8 @@ import {
 
 import App from './App'
 import { resetSessionMemory } from './auth/sessionMemory'
+import { CurrentUserProvider } from './auth/useCurrentUser'
+import RequireValidRouteIds from './RequireValidRouteIds'
 import { isResourceId } from './resourceId'
 import { currentUserFixture } from './testing/contractFixtures'
 import { preloadLazyRoutes } from './testing/preloadRoutes'
@@ -73,19 +75,31 @@ beforeEach(resetSessionMemory)
 afterEach(() => vi.unstubAllGlobals())
 
 describe('isResourceId', () => {
-  it.each(['project-1', '3f2b8c1e-5d4a-4f6b-9c7d-1a2b3c4d5e6f'])(
-    '接受 %s',
-    (value) => {
-      expect(isResourceId(value)).toBe(true)
-    },
-  )
+  it.each([
+    'project-1',
+    '3f2b8c1e-5d4a-4f6b-9c7d-1a2b3c4d5e6f',
+    'a',
+    '7',
+    'a'.repeat(64),
+  ])('接受 %s', (value) => {
+    expect(isResourceId(value)).toBe(true)
+  })
 
-  it.each(['', '../companies?', 'a/b', 'a?b', 'a#b', '..', 'a b', undefined])(
-    '拒絕 %s',
-    (value) => {
-      expect(isResourceId(value)).toBe(false)
-    },
-  )
+  it.each([
+    '',
+    '../companies?',
+    'a/b',
+    'a?b',
+    'a#b',
+    '..',
+    'a b',
+    '-a',
+    '_a',
+    'a'.repeat(65),
+    undefined,
+  ])('拒絕 %s', (value) => {
+    expect(isResourceId(value)).toBe(false)
+  })
 })
 
 describe('特製網址的路由參數', () => {
@@ -142,5 +156,50 @@ describe('特製網址的路由參數', () => {
       await screen.findByRole('heading', { name: '找不到這個查核項目' }),
     ).toBeVisible()
     expect(dataRequests()).toEqual([])
+  })
+})
+
+describe('RequireValidRouteIds 的參數驗證', () => {
+  function renderGuard(path: string, pattern: string) {
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <CurrentUserProvider value={{ user: ADMIN, clear: vi.fn() }}>
+          <Routes>
+            <Route element={<RequireValidRouteIds />}>
+              <Route element={<p>頁面內容</p>} path={pattern} />
+            </Route>
+          </Routes>
+        </CurrentUserProvider>
+      </MemoryRouter>,
+    )
+  }
+
+  it('其他具名參數無效：顯示通用找不到', () => {
+    renderGuard(`/tasks/${EVIL}`, '/tasks/:taskId')
+
+    expect(
+      screen.getByRole('heading', { name: '找不到這個頁面' }),
+    ).toBeVisible()
+    expect(screen.queryByText('頁面內容')).toBeNull()
+  })
+
+  it('專案 id 與其他參數都無效：專案文案優先', () => {
+    renderGuard(`/p/${EVIL}/tasks/${EVIL}`, '/p/:projectId/tasks/:taskId')
+
+    expect(
+      screen.getByRole('heading', { name: '找不到這個專案' }),
+    ).toBeVisible()
+  })
+
+  it('splat 剩餘路徑不當作 id 驗證', () => {
+    renderGuard('/files/a/b/..%2Fc', '/files/*')
+
+    expect(screen.getByText('頁面內容')).toBeVisible()
+  })
+
+  it('所有具名參數都有效：渲染子路由', () => {
+    renderGuard('/p/project-1/tasks/task-9', '/p/:projectId/tasks/:taskId')
+
+    expect(screen.getByText('頁面內容')).toBeVisible()
   })
 })
