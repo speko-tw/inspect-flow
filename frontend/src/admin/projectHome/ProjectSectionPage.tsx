@@ -8,6 +8,7 @@ import { isForbidden, isNotFound } from '../../http'
 import { managementErrorMessage } from '../api'
 import { ProjectNotFound } from '../../RouteNotFound'
 import ProjectItemLinks from '../projectItems/ProjectItemLinks'
+import ProjectZonesPage from '../planning/ProjectZonesPage'
 import ProjectDetailPage from '../projects/ProjectDetailPage'
 import ProjectSectionShell, {
   type ProjectSection,
@@ -24,10 +25,7 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
   progress: '進度',
 }
 
-/**
- * 顯示具備內業區段權限的專案內容。
- * 無此權限時依 ADM-R25 導回權限落點。
- */
+/** 依 ADM-R17 顯示專案區段；無內業權限時依 ADM-R25 導回權限落點。 */
 export default function ProjectSectionPage({
   section,
   children,
@@ -113,6 +111,13 @@ export default function ProjectSectionPage({
       content = (
         <ProjectItemLinks
           projectId={projectId}
+          viewerPermissions={currentResult.viewerPermissions}
+        />
+      )
+    } else if (section === 'zones') {
+      // 分區是正式專案區段；由專屬頁管理，避免和計畫頁重複提供 CRUD。
+      content = (
+        <ProjectZonesPage
           viewerPermissions={currentResult.viewerPermissions}
         />
       )

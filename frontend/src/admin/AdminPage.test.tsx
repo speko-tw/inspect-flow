@@ -1324,6 +1324,63 @@ describe('admin user and company pages', () => {
     ).toBe(true)
   })
 
+  it('opens template apply bypass for a non-member template manager', async () => {
+    managementFetch()
+    renderAdmin(
+      '/admin/projects/project-demo-1/inspection-items/templates',
+      false,
+      { has_office_access: false, has_field_access: false },
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
+  })
+
+  it('does not let a field-only template manager bypass member permissions', async () => {
+    const fetchMock = managementFetch({
+      memberProjectIds: ['project-demo-1'],
+      viewerPermissionCodes: ['inspection_task.inspect'],
+    })
+    const signedInUser = {
+      ...currentUser,
+      is_admin: false,
+      has_office_access: false,
+      has_field_access: true,
+      has_template_access: true,
+    }
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/admin/projects/project-demo-1/inspection-items/templates',
+        ]}
+      >
+        <CurrentUserProvider value={{ user: signedInUser, clear: vi.fn() }}>
+          <Routes>
+            <Route element={<AdminPage />} path="/admin/*" />
+          </Routes>
+          <TestNavigation />
+        </CurrentUserProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/field'),
+    )
+    expect(
+      screen.queryByRole('region', { name: '範本操作' }),
+    ).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(true)
+  })
+
   it('opens template apply route for an office member', async () => {
     const fetchMock = managementFetch({
       memberProjectIds: ['project-demo-1'],
