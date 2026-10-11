@@ -76,8 +76,10 @@ const TASK_CODE_MESSAGES: Record<string, string> = {
   'inspection_task.invalid_assignee':
     '建議指派人不是這個專案的成員，請重新選擇。',
   'inspection_task.items_required': '請至少選擇一筆查核項目。',
-  'inspection_task.item_without_points':
-    '查核項目沒有查核點，請重新整理後選擇有效項目。',
+  'inspection_task.item_without_points': [
+    '所選查核項目沒有查核項次，',
+    '請先補上項次或改選其他項目。',
+  ].join(''),
   'inspection_task.invalid_project_item':
     '所選查核項目不屬於這個專案，請重新整理後再選。',
   'inspection_task.invalid_location': '補充地點內容不符合規則，請修改後再試。',

@@ -1693,7 +1693,12 @@ describe('planning forms guard (#507)', () => {
           name: /選擇一筆以上/,
         })
         expect(
-          await within(form).findByText(/查核項目沒有查核點/),
+          await within(form).findByText(
+            [
+              '所選查核項目沒有查核項次，',
+              '請先補上項次或改選其他項目。',
+            ].join(''),
+          ),
         ).toHaveClass('tpl-field-error')
         expect(fieldset).toHaveAttribute('aria-invalid', 'true')
         await waitFor(() => expect(fieldset).toHaveFocus())

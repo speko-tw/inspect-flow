@@ -2218,7 +2218,10 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
 def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
     db_session, make_client
 ):
-    """以 RG-M22 共用前端 wire fixture 驗證 IP-AC02～IP-AC15 核心流程。"""
+    """驗證 RG-M22 fixture 的計畫、Task 與地點 API 情境。
+
+    涵蓋 IP-AC02、IP-AC04、IP-AC05、IP-AC07 與 IP-AC11 的部分流程。
+    """
     repository_root = Path(__file__).resolve().parents[3]
     fixture_path = (
         repository_root
@@ -2230,6 +2233,8 @@ def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
     world = _planning_world(db_session, make_client)
     project = world["project"]
     admin = world["admin"]
+    # 分區 CRUD 使用獨立專案，
+    # 讓端點契約和 Task 地點情境分開。
     zone_project = Project(
         project_code="PLAN-CONTRACT-ZONE",
         name="分區契約專案",
@@ -2250,16 +2255,17 @@ def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
     ids = {
         "$PROJECT_ID": str(project.id),
         "$ZONE_PROJECT_ID": str(zone_project.id),
-        "$PLAN_ID": "$PLAN_ID",
         "$TASK_ID": "$TASK_ID",
         "$ITEM_ID": str(world["item"].id),
         "$POINT_ID": str(point.id),
         "$ASSIGNEE_ID": str(world["field_user"].id),
     }
 
-    def send(name: str, **overrides):
+    used = set()
+
+    def send(name: str):
+        used.add(name)
         request = _bind_boundary_fixture(requests[name], ids)
-        request.update(overrides)
         kwargs = {}
         if "body" in request:
             kwargs["json"] = request["body"]
@@ -2269,18 +2275,21 @@ def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
 
     created_zone = send("zone_create")
     assert created_zone.status_code == 201, created_zone.text
-    ids["$ZONE_ID"] = created_zone.json()["id"]
+    created_zone_id = created_zone.json()["id"]
     zones_readback = admin.get(f"/api/v1/projects/{zone_project.id}/zones")
     assert zones_readback.status_code == 200, zones_readback.text
-    assert any(
-        zone["id"] == ids["$ZONE_ID"] and zone["name"] == "第二階段驗收區"
-        for zone in zones_readback.json()["items"]
-    )
+    zone_names = {}
+    for zone in zones_readback.json()["items"]:
+        zone_names[zone["id"]] = zone["name"]
+    assert zone_names[created_zone_id] == "第二階段驗收區"
 
     created_plan = send("plan_create")
     assert created_plan.status_code == 201, created_plan.text
     plan_id = created_plan.json()["id"]
     ids["$PLAN_ID"] = plan_id
+    plan_readback = admin.get(f"/api/v1/inspection-plans/{plan_id}")
+    assert plan_readback.status_code == 200, plan_readback.text
+    assert plan_readback.json()["name"] == "前後端共用契約"
 
     created_task = send("task_create")
     assert created_task.status_code == 201, created_task.text
@@ -2289,6 +2298,24 @@ def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
     assert created_task.json()["status"] == "DRAFT"
     assert created_task.json()["zone_id"] is None
     assert created_task.json()["location_text"] == "東側機房"
+    task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert task_readback.status_code == 200, task_readback.text
+    assert task_readback.json()["zone_id"] is None
+    assert task_readback.json()["location_text"] == "東側機房"
+
+    task_zone = send("task_zone_create")
+    assert task_zone.status_code == 201, task_zone.text
+    task_zone_id = task_zone.json()["id"]
+    ids["$ZONE_ID"] = task_zone_id
+    zoned_task = send("task_create_with_zone")
+    assert zoned_task.status_code == 201, zoned_task.text
+    zoned_task_id = zoned_task.json()["id"]
+    zoned_task_readback = admin.get(
+        f"/api/v1/inspection-tasks/{zoned_task_id}"
+    )
+    assert zoned_task_readback.status_code == 200, zoned_task_readback.text
+    assert zoned_task_readback.json()["zone_id"] == task_zone_id
+    assert zoned_task_readback.json()["location_text"] == "地下室管線區"
 
     assigned = send("task_assign")
     assert assigned.status_code == 200, assigned.text
@@ -2345,6 +2372,7 @@ def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
     archived = send("plan_archive")
     assert archived.status_code == 200, archived.text
     assert archived.json()["status"] == "ARCHIVED"
+    assert used == set(requests)
 
 
 def test_project_item_api_refreshes_task_snapshot_and_respects_archived_plan(

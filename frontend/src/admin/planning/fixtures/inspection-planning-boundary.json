@@ -20,6 +20,21 @@
         "location_text": "東側機房"
       }
     },
+    "task_zone_create": {
+      "method": "POST",
+      "path": "/projects/$PROJECT_ID/zones",
+      "body": { "name": "任務地點分區" }
+    },
+    "task_create_with_zone": {
+      "method": "POST",
+      "path": "/inspection-plans/$PLAN_ID/tasks",
+      "body": {
+        "item_ids": ["$ITEM_ID"],
+        "suggested_assignee_id": null,
+        "zone_id": "$ZONE_ID",
+        "location_text": "地下室管線區"
+      }
+    },
     "task_assign": {
       "method": "POST",
       "path": "/inspection-tasks/$TASK_ID:assign",

@@ -7,6 +7,8 @@ import contract from './fixtures/inspection-planning-boundary.json'
 
 const PROJECT_ID = 'project-1'
 const ZONE_PROJECT_ID = 'project-zones'
+const ZONE_ID = '0199aabb-ccdd-7eef-8abc-1234567890ab'
+const ZONE_PROJECT_ZONE_ID = '0199aabb-ccdd-7eef-8abc-1234567890ac'
 const PLAN_ID = 'plan-1'
 const TASK_ID = 'task-1'
 const ITEM_ID = 'item-1'
@@ -22,6 +24,9 @@ type ContractRequest = {
 const ids: Record<string, string> = {
   $PROJECT_ID: PROJECT_ID,
   $ZONE_PROJECT_ID: ZONE_PROJECT_ID,
+  // 固定 UUID 代表新增的有分區 Task 情境，
+  // 確保 wire body 帶有效 ID。
+  $ZONE_ID: ZONE_ID,
   $PLAN_ID: PLAN_ID,
   $TASK_ID: TASK_ID,
   $ITEM_ID: ITEM_ID,
@@ -71,6 +76,18 @@ describe('inspection planning frontend/backend boundary fixture', () => {
             { status: 409 },
           )
         }
+        if (init?.method === 'POST' && String(input).endsWith('/zones')) {
+          const projectId = String(input).includes(
+            `/projects/${PROJECT_ID}/zones`,
+          )
+            ? PROJECT_ID
+            : ZONE_PROJECT_ID
+          return Response.json({
+            id: projectId === PROJECT_ID ? ZONE_ID : ZONE_PROJECT_ZONE_ID,
+            project_id: projectId,
+            name: (body as { name: string }).name,
+          })
+        }
         return Response.json({})
       })
       vi.stubGlobal('fetch', fetchMock)
@@ -89,6 +106,22 @@ describe('inspection planning frontend/backend boundary fixture', () => {
         PLAN_ID,
         task as unknown as CreateTaskInput,
       )
+
+      const taskZone = bindIds(requests.task_zone_create.body!)
+      const createdTaskZone = await planningClient.createZone(
+        PROJECT_ID,
+        taskZone.name as string,
+      )
+
+      const zonedTask = bindIds(
+        requests.task_create_with_zone.body!,
+      ) as unknown as CreateTaskInput
+      // 後續 Task 必須沿用 createZone 的回應 ID（RG-M22）。
+      expect(zonedTask.zone_id).toBe(createdTaskZone.id)
+      await planningClient.createTask(PLAN_ID, {
+        ...zonedTask,
+        zone_id: createdTaskZone.id,
+      })
       await planningClient.setSuggestedAssignee(TASK_ID, ASSIGNEE_ID)
       await planningClient.archivePlan(PLAN_ID)
       await expect(planningClient.dispatchTask(TASK_ID)).rejects.toMatchObject(
@@ -113,7 +146,9 @@ describe('inspection planning frontend/backend boundary fixture', () => {
       await planningClient.restoreTask(TASK_ID)
       await planningClient.archivePlan(PLAN_ID)
 
-      const expected = Object.values(requests).map((request) => {
+      // 依 fixture 的鍵值順序比對，
+      // 確保新增情境也必須真的送出。
+      const expected = Object.entries(requests).map(([, request]) => {
         const bound = bindIds(request as ContractRequest)
         return {
           url: `/api/v1${bound.path}`,
