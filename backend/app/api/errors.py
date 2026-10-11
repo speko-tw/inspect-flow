@@ -11,7 +11,7 @@ import logging
 import traceback
 import types
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from typing import Annotated, Any, Union, get_args, get_origin
 
@@ -260,6 +260,14 @@ class ErrorCode(DescribedStrEnum):
         "project_inspection_item.reinspection_choice_required",
         "Choose whether affected tasks must be reinspected.",
     )
+    PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED = (
+        "project_inspection_item.structure_locked",
+        "Changing the inspection structure requires reinspection.",
+    )
+    PROJECT_INSPECTION_ITEM_POINTS_REQUIRED = (
+        "project_inspection_item.points_required",
+        "An inspection item used by a task must have inspection points.",
+    )
     TEMPLATE_NAME_CONFLICT = (
         "template.name_conflict",
         "A template library name is already in use at this level.",
@@ -434,6 +442,7 @@ def _request_body_model(request: Request) -> Any | None:
 def _request_field_errors(
     request: Request, exc: RequestValidationError
 ) -> list[dict[str, str]] | None:
+    """轉換可定位的 JSON 本文錯誤，並在 API-R10 上限前先去重。"""
     route = request.scope.get("route")
     body_field = getattr(route, "body_field", None)
     if isinstance(getattr(body_field, "field_info", None), Form):
@@ -457,9 +466,25 @@ def _request_field_errors(
         )
         if item is not None:
             fields.append(item)
-            if len(fields) == 100:
-                break
-    return fields or None
+    return _deduplicate_field_errors(fields)[:100] or None
+
+
+def _deduplicate_field_errors(
+    fields: Iterable[dict[str, str]],
+) -> list[dict[str, str]]:
+    """保留每組 API-R10 path 與 code 的第一筆。
+
+    union 分支可能對同一欄位重複回報安全錯誤；同一路徑的不同 code
+    仍保留為不同錯誤。
+    """
+    unique: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for field in fields:
+        key = (field["path"], field["code"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(field)
+    return unique
 
 
 def build_error_code_descriptions(
@@ -541,9 +566,10 @@ def register_error_handlers(app: FastAPI) -> None:
         if exc.details is not None:
             error["details"] = exc.details
         if exc.status_code == 422 and exc.fields:
+            # API-R10 限制不同錯誤的數量；重複項不能先占用 100 筆額度。
             error["fields"] = [
                 {"path": field["path"], "code": field["code"]}
-                for field in exc.fields[:100]
+                for field in _deduplicate_field_errors(exc.fields)[:100]
             ]
         return JSONResponse(
             status_code=exc.status_code,

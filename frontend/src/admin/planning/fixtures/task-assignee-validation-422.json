@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "request.validation_failed",
+    "fields": [{ "path": "/assignee_id", "code": "field.invalid" }]
+  }
+}

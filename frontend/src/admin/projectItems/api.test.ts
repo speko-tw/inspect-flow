@@ -149,6 +149,7 @@ describe('projectItemApi', () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit
     const body = JSON.parse(init.body as string)
     expect(body.inspection_points[0]).toEqual({
+      id: 'point-1',
       sequence: 1,
       title: '裂縫',
       instruction: '檢查裂縫',
@@ -170,61 +171,68 @@ describe('projectItemApi', () => {
       }),
     )
     vi.stubGlobal('fetch', fetchMock)
-    await projectItemApi.update('project-1', 'item-1', {
-      title: item.title,
-      instruction: item.instruction,
-      inspection_points: [
-        {
-          ...item.inspection_points[0],
-          text_standard: null,
-          numeric_standard: {
-            value: '10',
-            condition: '=',
-            unit: 'mm',
-            tolerance: null,
-            measurement_field_id: '00000000-0000-4000-8000-000000000011',
-          },
-          measurement_fields: [
-            {
-              id: '00000000-0000-4000-8000-000000000011',
-              name: '厚度',
-              field_type: 'number',
-              unit: 'mm',
-            },
-            {
-              id: '00000000-0000-4000-8000-000000000012',
-              name: '寬度',
-              field_type: 'number',
-              unit: 'cm',
-            },
-          ],
-        },
-      ],
-    })
-    const init = fetchMock.mock.calls[0][1] as RequestInit
-    const expectedRequest = structuredClone(boundUnitFixture.request)
-    const expectedFields = expectedRequest.inspection_points[0]
-      .measurement_fields as Array<{
-      client_id: string
-      name: string
-      field_type: 'number'
-      unit: string | null
-    }>
-    expectedFields.push({
+    /**
+     * fixture 是 wire body；expected 補上持久化 ID，維持真後端契約。
+     */
+    const expectedRequest = structuredClone(
+      boundUnitFixture.request,
+    ) as unknown as {
+      title: string
+      instruction: string
+      inspection_points: InspectionPoint[]
+    }
+    const expectedPoint = expectedRequest.inspection_points[0]
+    expectedPoint.id = 'point-1'
+    expectedPoint.measurement_fields[0].id =
+      '00000000-0000-4000-8000-000000000011'
+    expectedPoint.measurement_fields.push({
+      id: '00000000-0000-4000-8000-000000000012',
       client_id: '00000000-0000-4000-8000-000000000012',
       name: '寬度',
       field_type: 'number',
       unit: 'cm',
     })
-    expect(JSON.parse(init.body as string)).toEqual(expectedRequest)
-    expect(
-      JSON.parse(init.body as string).inspection_points[0]
-        .measurement_fields[0].unit,
-    ).toBeNull()
-    expect(
-      JSON.parse(init.body as string).inspection_points[0]
-        .measurement_fields[1].unit,
-    ).toBe('cm')
+    const point = expectedPoint
+    const numericStandard = point.numeric_standard!
+    await projectItemApi.update('project-1', 'item-1', {
+      title: expectedRequest.title,
+      instruction: expectedRequest.instruction,
+      inspection_points: [
+        {
+          ...point,
+          numeric_standard: {
+            ...numericStandard,
+            measurement_field_id: numericStandard.measurement_field_client_id,
+          },
+        },
+      ],
+    })
+    const init = fetchMock.mock.calls[0][1] as RequestInit
+    const body = JSON.parse(init.body as string)
+    const sent = body.inspection_points[0]
+    expect(body).toEqual(expectedRequest)
+    expect(sent.id).toBe('point-1')
+    expect(sent).not.toHaveProperty('client_id')
+    expect(sent.numeric_standard.measurement_field_client_id).toBe(
+      '00000000-0000-4000-8000-000000000011',
+    )
+    expect(sent.numeric_standard).not.toHaveProperty('measurement_field_id')
+    expect(sent.measurement_fields).toEqual([
+      {
+        id: '00000000-0000-4000-8000-000000000011',
+        client_id: '00000000-0000-4000-8000-000000000011',
+        name: '厚度',
+        field_type: 'number',
+        unit: null,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000012',
+        client_id: '00000000-0000-4000-8000-000000000012',
+        name: '寬度',
+        field_type: 'number',
+        unit: 'cm',
+      },
+    ])
   })
 
   it('maps the shared real project PATCH error envelope', async () => {
