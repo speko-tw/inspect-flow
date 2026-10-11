@@ -2042,14 +2042,26 @@ def test_field_start_rejections_map_to_distinct_error_codes(
 def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
     db_session, make_client
 ):
+    """驗證 IP-AC06～IP-AC09 的真 API 任務生命週期。"""
     world = _planning_world(db_session, make_client)
     project = world["project"]
     admin = world["admin"]
-    field = world["field"]
     plan_url = f"/api/v1/projects/{project.id}/inspection-plans"
     plan = admin.post(plan_url, json={"name": "狀態計畫"})
     assert plan.status_code == 201, plan.text
     plan_id = plan.json()["id"]
+    item_url = (
+        f"/api/v1/projects/{project.id}/inspection-items/{world['item'].id}"
+    )
+    configured = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                _item_point([{"min_count": 1}]),
+            ],
+        },
+    )
+    assert configured.status_code == 200, configured.text
     task_url = f"/api/v1/inspection-plans/{plan_id}/tasks"
     create = admin.post(
         task_url,
@@ -2064,12 +2076,14 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
         admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch").status_code
         == 200
     )
-    started = field.post(f"/api/v1/inspection-tasks/{task_id}:start")
+    # IP-R05：建議指派人不排他，實際操作者必須記在 Task 欄位。
+    field_two = world["field_two"]
+    started = field_two.post(f"/api/v1/inspection-tasks/{task_id}:start")
     assert started.status_code == 200, started.text
-    assert started.json()["started_by"] == str(world["field_user"].id)
-    completed = field.post(f"/api/v1/inspection-tasks/{task_id}:complete")
+    assert started.json()["started_by"] == str(world["field_user_two"].id)
+    completed = field_two.post(f"/api/v1/inspection-tasks/{task_id}:complete")
     assert completed.status_code == 200, completed.text
-    assert completed.json()["completed_by"] == str(world["field_user"].id)
+    assert completed.json()["completed_by"] == str(world["field_user_two"].id)
     assert completed.json()["assignee_id"] == str(world["field_user"].id)
     plan_detail = admin.get(f"/api/v1/inspection-plans/{plan_id}")
     assert plan_detail.json()["status"] == "COMPLETED"
@@ -2084,9 +2098,6 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
         == "inspection_task.invalid_transition"
     )
 
-    item_url = (
-        f"/api/v1/projects/{project.id}/inspection-items/{world['item'].id}"
-    )
     reopened = admin.patch(
         item_url, json={"title": "標準變更", "reinspect": True}
     )
