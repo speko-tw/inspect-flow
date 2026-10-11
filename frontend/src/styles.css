@@ -921,6 +921,23 @@ td .btn {
   gap: var(--space-2);
 }
 
+.task-dispatch-blockers {
+  padding: var(--space-3);
+  border-inline-start: 4px solid var(--warning-border);
+  background: var(--surface-alt);
+}
+
+.task-dispatch-blockers li + li {
+  margin-block-start: var(--space-2);
+}
+
+/* #451 要求阻擋說明的連結至少 44px 高，讓行動裝置可可靠觸控。 */
+.task-dispatch-blockers a,
+.task-dispatch-blockers button {
+  min-height: 44px;
+  margin-inline-start: var(--space-1);
+}
+
 .named-row > form {
   flex: 1 1 100%;
   margin: 0;

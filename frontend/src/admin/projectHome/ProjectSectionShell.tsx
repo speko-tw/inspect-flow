@@ -16,9 +16,8 @@ const SECTIONS = [
   { id: 'progress', label: '進度', suffix: '/progress' },
 ]
 
-// 分區與進度目前只是佔位頁（正式內容見 #451、#452），v0.3.0 先從導覽
-// 隱藏；分區管理實際在「計畫與任務」頁裡。
-const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['zones', 'progress'])
+// 進度正式內容由 #452 提供；目前仍隱藏。
+const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['progress'])
 
 const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   home: [],
@@ -31,8 +30,10 @@ const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   progress: ['inspection_task.read', 'inspection_task.inspect'],
 }
 
+/** 專案首頁與區段導覽使用的路由識別字。 */
 export type ProjectSection = (typeof SECTIONS)[number]['id']
 
+/** 顯示依 viewer 權限篩選的專案區段導覽與目前區段內容（ADM-R17）。 */
 export default function ProjectSectionShell({
   project,
   projectId,
