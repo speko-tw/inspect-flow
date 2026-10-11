@@ -260,6 +260,14 @@ class ErrorCode(DescribedStrEnum):
         "project_inspection_item.reinspection_choice_required",
         "Choose whether affected tasks must be reinspected.",
     )
+    PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED = (
+        "project_inspection_item.structure_locked",
+        "Changing the inspection structure requires reinspection.",
+    )
+    PROJECT_INSPECTION_ITEM_POINTS_REQUIRED = (
+        "project_inspection_item.points_required",
+        "An inspection item used by a task must have inspection points.",
+    )
     TEMPLATE_NAME_CONFLICT = (
         "template.name_conflict",
         "A template library name is already in use at this level.",
