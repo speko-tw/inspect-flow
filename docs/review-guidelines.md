@@ -42,6 +42,19 @@
 - **RG-M15**：CI 的 check 通過；失敗不得合併（依據：[SKL-R04](specs/skeleton/spec.md#需求)、[人的關卡](specs/README.md#human-gates)）。
 - **RG-M16**：程式碼行寬不超過 79 字元，formatter 與 linter 設定與之一致；會引起爭議或影響既有程式碼的規則變更（例如換 formatter、改命名慣例），已先開 `needs-decision` issue 經團隊決定（依據：[程式品質工具](intents/03-decisions-and-stack.md#stack-code-quality)、[人的關卡](specs/README.md#human-gates)）。
 
+- **RG-M24**：新增或修改的程式碼，註解寫「為什麼」，不重述程式在做什麼。
+  - 以下四種情況必須有註解：
+    1. 業務規則：標出規格編號，例如 `Per IP-R13, a dispatched task cannot add or remove points when reinspection is declined.`
+    2. 不明顯的取捨：例如為什麼先刪再建、為什麼鎖這個順序。
+    3. 踩過的坑：例如 PostgreSQL 限制、併發競爭、注音選字的 Enter。
+    4. 公開函式、類別、API 端點與匯出的前端元件：說明負責什麼、什麼情況會拒絕。
+  - 寫法依該語言的慣例規範：
+    - Python 依 [PEP 257](https://peps.python.org/pep-0257/) 寫 docstring（`"""…"""`，首行一句摘要）；區塊與行內註解依 [PEP 8](https://peps.python.org/pep-0008/#comments)。
+    - TypeScript 對匯出的函式、元件與型別寫 [TSDoc](https://tsdoc.org/)（`/** … */`）；函式內部用 `//`。
+  - 註解用英文，與識別字和既有程式一致。
+
+  依據：負責人指示（2026-10-11，#607）；架構基準無對應章節。
+
 ### 安全
 
 - **RG-M17**：沒有提交 `.env` 或其他機密設定（含金鑰、密碼、token 或連線字串的設定檔與值），repo 只保存 `.env.example`；log 不記錄密碼、session secret 或授權 token；health 端點的回應不含 secret、連線字串或任何設定值（依據：[PR-14](intents/02-principles.md#pr-14)、[SKL-R01、SKL-R10](specs/skeleton/spec.md#需求)）。

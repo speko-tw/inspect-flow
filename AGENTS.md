@@ -27,6 +27,7 @@ InspectFlow 工程查核系統（Engineering Inspection Management System），�
 ## 程式碼
 
 - 程式碼行寬上限 79 字元（依 PEP 8，全專案程式碼一律適用）；formatter 與 linter 的設定必須與之一致。Markdown 文件不受此限。
+- 註解寫「為什麼」，不重述程式在做什麼：業務規則（附規格編號）、不明顯的取捨、踩過的坑，以及公開函式、類別、API 端點與匯出元件的用途，都要有註解。寫法依語言慣例（Python 依 PEP 257／PEP 8，TypeScript 依 TSDoc），用英文；細節見審查準則 RG-M24。
 - 其餘格式規則以 repo 內的設定檔為準；審查規則見 [`docs/review-guidelines.md`](docs/review-guidelines.md)。
 
 ## Git
