@@ -16,6 +16,7 @@ type Props = {
     changes: Partial<MeasurementField>,
   ) => void
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
+  structureLocked?: boolean
 }
 
 export function MeasurementFieldEditor({
@@ -26,6 +27,7 @@ export function MeasurementFieldEditor({
   setConfirmField,
   updateField,
   updatePoint,
+  structureLocked = false,
 }: Props) {
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
   return (
@@ -75,6 +77,7 @@ export function MeasurementFieldEditor({
             <select
               aria-invalid={Boolean(errors[`${base}:type`])}
               data-error-key={`${base}:type`}
+              disabled={structureLocked}
               id={`field-${pointIndex}-${fieldIndex}-type`}
               onChange={(event) => {
                 if (bound && event.target.value !== 'number') {
@@ -118,6 +121,7 @@ export function MeasurementFieldEditor({
                 <input
                   aria-invalid={Boolean(errors[`${base}:unit`])}
                   data-error-key={`${base}:unit`}
+                  disabled={structureLocked}
                   id={`field-${pointIndex}-${fieldIndex}-unit`}
                   onChange={(event) =>
                     updateField(pointIndex, fieldIndex, {
@@ -132,7 +136,8 @@ export function MeasurementFieldEditor({
               </>
             )}
             {bound && <p className="tpl-hint">此欄位用於數值標準。</p>}
-            {confirmField === `${pointIndex}:${fieldIndex}` ? (
+            {confirmField === `${pointIndex}:${fieldIndex}` &&
+            !structureLocked ? (
               <ConfirmBox
                 confirmLabel="移除欄位"
                 label="移除欄位確認"
@@ -144,6 +149,7 @@ export function MeasurementFieldEditor({
               </ConfirmBox>
             ) : (
               <button
+                disabled={structureLocked}
                 onClick={() => {
                   if (bound) {
                     setActionErrors({
@@ -170,6 +176,7 @@ export function MeasurementFieldEditor({
         )
       })}
       <button
+        disabled={structureLocked}
         onClick={() => {
           updatePoint(pointIndex, {
             measurement_fields: [

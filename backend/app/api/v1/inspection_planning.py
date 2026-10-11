@@ -1286,6 +1286,14 @@ def patch_project_item(
             TaskInspectionItem.project_inspection_item_id == item.id
         )
     ).all()
+    associated_tasks = [
+        db.get(InspectionTask, association.task_id)
+        for association in associations
+    ]
+    has_dispatched_tasks = any(
+        task is not None and task.status != "DRAFT"
+        for task in associated_tasks
+    )
     if body.inspection_points is not None:
         # reinspect=None 不會啟用結構鎖，先回報完整結構錯誤欄位。
         _validate_project_points(
@@ -1293,6 +1301,7 @@ def patch_project_item(
             item,
             body.inspection_points,
             has_tasks=bool(associations),
+            has_dispatched_tasks=has_dispatched_tasks,
             reinspect=body.reinspect,
         )
     if associations and body.reinspect is None:
@@ -1371,9 +1380,10 @@ def _validate_project_points(
     points: list[ProjectPointBody],
     *,
     has_tasks: bool,
+    has_dispatched_tasks: bool,
     reinspect: bool | None,
 ) -> None:
-    """Apply the template structure rules before any row is touched."""
+    """依 IP-R13 驗證結構，只有草稿 Task 時仍允許原位調整。"""
     existing_points = db.scalars(
         select(ProjectInspectionPoint).where(
             ProjectInspectionPoint.project_inspection_item_id == item.id
@@ -1390,13 +1400,28 @@ def _validate_project_points(
         fields_by_point.setdefault(field.inspection_point_id, {})[field.id] = (
             field
         )
+    numeric_by_point = {
+        row.inspection_point_id: row
+        for row in db.scalars(
+            select(ProjectNumericStandard).where(
+                ProjectNumericStandard.project_inspection_item_id == item.id
+            )
+        ).all()
+    }
+    text_point_ids = set(
+        db.scalars(
+            select(ProjectTextStandard.inspection_point_id).where(
+                ProjectTextStandard.project_inspection_item_id == item.id
+            )
+        ).all()
+    )
 
     point_identities: list[UUID | None] = []
     normalized_points = []
     seen_point_ids: set[UUID] = set()
     for point in points:
         point_id = point.id
-        if has_tasks and reinspect is False and point_id is None:
+        if has_dispatched_tasks and reinspect is False and point_id is None:
             raise APIError(
                 ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
             )
@@ -1451,7 +1476,7 @@ def _validate_project_points(
 
     if has_tasks and not points:
         raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_POINTS_REQUIRED, 422)
-    if has_tasks and reinspect is False:
+    if has_dispatched_tasks and reinspect is False:
         if set(point_identities) != existing_point_ids:
             raise APIError(
                 ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
@@ -1459,6 +1484,19 @@ def _validate_project_points(
         for point, point_id in zip(points, point_identities, strict=True):
             assert point_id is not None
             old_fields = fields_by_point.get(point_id, {})
+            old_numeric = numeric_by_point.get(point_id)
+            if (point.numeric_standard is not None) != (
+                old_numeric is not None
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
+            if (point.text_standard is not None) != (
+                point_id in text_point_ids
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
             provided_field_ids = [
                 field.id for field in point.measurement_fields
             ]
@@ -1476,6 +1514,38 @@ def _validate_project_points(
                 assert field_id is not None
                 existing = old_fields[field_id]
                 if field.field_type != existing.field_type:
+                    raise APIError(
+                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
+                        422,
+                    )
+                expected_unit = (
+                    None
+                    if old_numeric is not None
+                    and old_numeric.measurement_field_id == field_id
+                    else existing.unit
+                )
+                if field.unit != expected_unit:
+                    raise APIError(
+                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
+                        422,
+                    )
+            if point.numeric_standard is not None:
+                assert old_numeric is not None
+                standard = point.numeric_standard
+                bound_field_id = next(
+                    (
+                        field.id
+                        for field in point.measurement_fields
+                        if field.id == standard.measurement_field_client_id
+                        or field.client_id
+                        == standard.measurement_field_client_id
+                    ),
+                    None,
+                )
+                if (
+                    standard.unit != old_numeric.unit
+                    or bound_field_id != old_numeric.measurement_field_id
+                ):
                     raise APIError(
                         ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
                         422,

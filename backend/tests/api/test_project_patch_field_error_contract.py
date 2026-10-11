@@ -28,6 +28,10 @@ def test_project_patch_bound_unit_matches_frontend_contract(
     valid_point = valid_body["inspection_points"][0]
     assert valid_point["numeric_standard"]["unit"] == "mm"
     assert valid_point["measurement_fields"][0]["unit"] == "mm"
+    assert (
+        valid_point["numeric_standard"]["measurement_field_id"]
+        == (valid_point["measurement_fields"][0]["id"])
+    )
 
     invalid_request = json.loads(json.dumps(fixture["request"]))
     invalid_request["inspection_points"][0]["measurement_fields"][0][

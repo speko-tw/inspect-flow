@@ -14,6 +14,7 @@ type Props = {
     index: number,
     changes: Partial<NonNullable<InspectionPoint['numeric_standard']>>,
   ) => void
+  structureLocked?: boolean
 }
 
 export function NumericStandardEditor({
@@ -22,6 +23,7 @@ export function NumericStandardEditor({
   errors,
   updatePoint,
   updateNumeric,
+  structureLocked = false,
 }: Props) {
   const inputError = (key: string) => errors[key]
   const index = pointIndex
@@ -42,6 +44,7 @@ export function NumericStandardEditor({
           ].map(([kind, label]) => (
             <label className="tpl-radio-option" key={kind}>
               <input
+                disabled={structureLocked}
                 checked={
                   (standard
                     ? 'numeric'
@@ -116,6 +119,7 @@ export function NumericStandardEditor({
                 <select
                   aria-invalid={Boolean(inputError(`${key}:binding`))}
                   data-error-key={`${key}:binding`}
+                  disabled={structureLocked}
                   id={`binding-${index}`}
                   onChange={(event) => {
                     const field = numberOptions.find(

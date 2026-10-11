@@ -45,8 +45,14 @@ type Props = {
   clearPointServerErrors: (index: number) => void
   confirmField: string
   setConfirmField: (value: string) => void
+  structureLocked?: boolean
+  structureLockReason?: string
+  contextLabel?: string
+  saveLabel?: string
+  cancelLabel?: string
 }
 
+/** 依 TPL-R16、TPL-R18 提供共用編輯器與送出前欄位驗證。 */
 export function TemplateItemEditor({
   itemDraft,
   errors,
@@ -73,6 +79,11 @@ export function TemplateItemEditor({
   clearPointServerErrors,
   confirmField,
   setConfirmField,
+  structureLocked = false,
+  structureLockReason,
+  contextLabel,
+  saveLabel = '儲存查核項目',
+  cancelLabel = '取消',
 }: Props) {
   const [openPoint, setOpenPoint] = useState<number | null>(0)
   const [errorOpen, setErrorOpen] = useState<Set<number>>(new Set())
@@ -182,7 +193,8 @@ export function TemplateItemEditor({
       <div className="tpl-editor-heading">
         <div>
           <p className="tpl-crumb">
-            範本庫 / {selectedCategory?.name} /{selectedSystem?.name}
+            {contextLabel ??
+              `範本庫 / ${selectedCategory?.name} /${selectedSystem?.name}`}
           </p>
           <h2>
             {mode === 'create-item'
@@ -198,7 +210,7 @@ export function TemplateItemEditor({
           }}
           type="button"
         >
-          取消
+          {cancelLabel}
         </button>
       </div>
       {alert && (
@@ -261,6 +273,11 @@ export function TemplateItemEditor({
           </section>
           <section className="tpl-card" aria-labelledby="tpl-points-title">
             <h3 id="tpl-points-title">查核項次</h3>
+            {structureLocked && structureLockReason && (
+              <p className="tpl-hint" role="status">
+                {structureLockReason}
+              </p>
+            )}
             <p className="tpl-hint">
               每張卡片是一個現場查核步驟。實測欄位可以留空。
             </p>
@@ -358,6 +375,7 @@ export function TemplateItemEditor({
                 )}
                 <div className="tpl-actions">
                   <button
+                    disabled={structureLocked}
                     onClick={() => {
                       removePoint(index)
                       setErrorOpen((current) => {
@@ -388,6 +406,7 @@ export function TemplateItemEditor({
                   setConfirmField={setConfirmField}
                   updateField={updateFieldAndPreserveErrors}
                   updatePoint={updatePointAndPreserveErrors}
+                  structureLocked={structureLocked}
                 />
                 <NumericStandardEditor
                   errors={errors}
@@ -395,6 +414,7 @@ export function TemplateItemEditor({
                   pointIndex={index}
                   updateNumeric={updateNumericAndPreserveErrors}
                   updatePoint={updatePointAndPreserveErrors}
+                  structureLocked={structureLocked}
                 />
                 <section className="tpl-point-section" aria-label="照片需求">
                   <h4>照片需求</h4>
@@ -432,6 +452,7 @@ export function TemplateItemEditor({
               </p>
             )}
             <button
+              disabled={structureLocked}
               onClick={() => {
                 const index = itemDraft.inspection_points.length
                 addPoint()
@@ -485,10 +506,10 @@ export function TemplateItemEditor({
           }}
           type="button"
         >
-          取消
+          {cancelLabel}
         </button>
         <button className="btn-primary" disabled={readOnly} type="submit">
-          儲存查核項目
+          {saveLabel}
         </button>
       </div>
     </form>

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InspectionPoint } from '../templates/api'
 import { HttpError, request } from '../../http'
 import { mapFieldErrors } from '../../ui/fieldErrors'
-import { projectItemApi } from './api'
+import { projectItemApi, serializeProjectItemPoints } from './api'
 import boundUnitFixture from './fixtures/project-patch-bound-unit.json'
 
 const item = {
@@ -88,6 +88,55 @@ const task = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('projectItemApi', () => {
+  it('keeps a new measurement field identity stable and binds its numeric standard', () => {
+    const clientId = 'client-field-596'
+    const points: InspectionPoint[] = [
+      {
+        sequence: 1,
+        title: '厚度',
+        instruction: '',
+        text_standard: null,
+        numeric_standard: {
+          value: '2.5',
+          condition: '=',
+          unit: 'mm',
+          tolerance: null,
+          range_form: null,
+          lower_bound: null,
+          upper_bound: null,
+          measurement_field_client_key: clientId,
+        },
+        measurement_fields: [
+          {
+            client_id: clientId,
+            clientKey: clientId,
+            name: '厚度',
+            field_type: 'number',
+            unit: 'mm',
+          },
+        ],
+        evidence_requirements: [{ min_count: 1 }],
+      },
+    ]
+
+    const first = serializeProjectItemPoints(points)
+    const second = serializeProjectItemPoints(points)
+
+    expect(first).toEqual(second)
+    expect(first[0].measurement_fields[0]).toMatchObject({
+      client_id: clientId,
+      name: '厚度',
+      field_type: 'number',
+      unit: null,
+    })
+    expect(first[0].numeric_standard?.measurement_field_client_id).toBe(
+      clientId,
+    )
+    expect(first[0].numeric_standard).not.toHaveProperty(
+      'measurement_field_id',
+    )
+  })
+
   it('reads every backend cursor page and maps Task snapshots', async () => {
     const fetchMock = vi
       .fn()
