@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "request.validation_failed",
+    "fields": [
+      { "path": "/zone_id", "code": "field.invalid" },
+      { "path": "/location_text", "code": "field.too_long" }
+    ]
+  }
+}
