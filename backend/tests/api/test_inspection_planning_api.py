@@ -3085,6 +3085,50 @@ def test_cancelled_task_restore_uses_current_item_standard(
     )
 
 
+def test_nonmember_admin_can_start_and_complete_tasks(db_session, make_client):
+    """Admin 即使不是專案成員，仍可依 IP-AC10 操作任務。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    field = world["field"]
+    project_id = world["project"].id
+    plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "非成員 Admin 現場操作"},
+    )
+    assert plan.status_code == 201
+
+    task_paths = []
+    for _ in range(2):
+        task = admin.post(
+            f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+            json={"item_ids": [str(world["item"].id)]},
+        )
+        assert task.status_code == 201
+        task_path = f"/api/v1/inspection-tasks/{task.json()['id']}"
+        assert admin.post(f"{task_path}:dispatch").status_code == 200
+        task_paths.append(task_path)
+
+    admin_member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == world["admin_user"].id,
+        )
+    )
+    assert admin_member is not None
+    db_session.delete(admin_member)
+    db_session.commit()
+
+    started = admin.post(f"{task_paths[0]}:start")
+    assert started.status_code == 200, started.text
+    assert started.json()["started_by"] == str(world["admin_user"].id)
+
+    member_started = field.post(f"{task_paths[1]}:start")
+    assert member_started.status_code == 200, member_started.text
+    completed = admin.post(f"{task_paths[1]}:complete")
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["completed_by"] == str(world["admin_user"].id)
+
+
 def _item_point(rows: list[dict], sequence: int = 1) -> dict:
     return {
         "sequence": sequence,

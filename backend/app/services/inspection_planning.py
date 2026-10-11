@@ -914,7 +914,7 @@ def start_inspection_task(
     permissions = effective_permissions(
         session, user_id=operator.id, project_id=task.project_id
     )
-    if "inspection_task.inspect" not in permissions:
+    if not operator.is_admin and "inspection_task.inspect" not in permissions:
         raise PlanningError("authorization.forbidden")
     plan, task = _lock_plan_and_task(session, task.id)
     if plan is not None and plan.is_archived:
@@ -938,7 +938,7 @@ def complete_inspection_task(
     permissions = effective_permissions(
         session, user_id=operator.id, project_id=task.project_id
     )
-    if "inspection_task.inspect" not in permissions:
+    if not operator.is_admin and "inspection_task.inspect" not in permissions:
         raise PlanningError("authorization.forbidden")
     plan, task = _lock_plan_and_task(session, task.id)
     if plan is not None and plan.is_archived:
