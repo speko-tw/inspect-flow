@@ -1518,9 +1518,89 @@ describe('planning forms guard (#507)', () => {
 
       expect(unload.defaultPrevented).toBe(false)
     })
+
+    it('lets the back link leave at once when the page turned into no-permission', async () => {
+      const { client } = await seeded()
+      client.getPlan = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      renderWithoutRouter(
+        <MemoryRouter
+          initialEntries={['/admin/projects/project-demo-1/planning']}
+        >
+          <Routes>
+            <Route
+              element={
+                <PlanningPage
+                  client={client}
+                  initialProjectId="project-demo-1"
+                />
+              }
+              path="/admin/projects/:projectId/planning"
+            />
+            <Route element={<p>專案清單頁</p>} path="/admin/projects" />
+          </Routes>
+        </MemoryRouter>,
+      )
+      fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
+        target: { value: '尚未儲存的計畫' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /橋梁查核（/ }))
+      await screen.findByRole('heading', { name: '無權限' })
+
+      fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
+
+      expect(await screen.findByText('專案清單頁')).toBeVisible()
+      expect(screen.queryByRole('group')).toBeNull()
+    })
+
+    it('closes the rename form when another write turns the page read-only', async () => {
+      const { client } = await seeded()
+      client.archivePlan = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      await openPlan(client)
+      fireEvent.click(screen.getByRole('button', { name: '修改計畫名稱' }))
+      expect(formByContext('plan-rename')).not.toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: '封存計畫' }))
+      fireEvent.click(
+        within(await screen.findByRole('dialog')).getByRole('button', {
+          name: '確認',
+        }),
+      )
+
+      await waitFor(() => expect(formByContext('plan-rename')).toBeNull())
+      expect(screen.getByRole('status')).toHaveTextContent('唯讀模式')
+      expect(screen.queryByLabelText(/計畫名稱/)).toBeNull()
+      const unload = new Event('beforeunload', {
+        cancelable: true,
+      }) as BeforeUnloadEvent
+      window.dispatchEvent(unload)
+      expect(unload.defaultPrevented).toBe(false)
+    })
+
+    it('closes the cancel dialog and keeps the reason visible when it returns 403', async () => {
+      const { client } = await seeded(true)
+      client.cancelTask = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      const article = await openPlan(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '取消任務' }),
+      )
+      const dialog = await screen.findByRole('dialog')
+      fireEvent.change(within(dialog).getByLabelText(/取消原因/), {
+        target: { value: '現場順序調整' },
+      })
+      fireEvent.click(within(dialog).getByRole('button', { name: '取消任務' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(await screen.findByRole('alert')).toBeVisible()
+      expect(screen.getByText('目前為唯讀模式。')).toBeVisible()
+    })
   })
 
-  describe('business 422 codes land on their fields (R2)', () => {
+  describe('business 422 codes land on their fields (ADM-R28)', () => {
     function businessError(code: string) {
       return new ManagementApiError(422, code)
     }

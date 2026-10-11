@@ -641,20 +641,12 @@ def zones(
     _user: User = _login_dependency,
 ):
     # inspection_plan.read also grants names needed to display its Plans.
-    # project_zone.manage must read too: the zones section (ADM-R17) shows
-    # the list its add/rename/delete controls act on, so a manage-only
-    # member would otherwise see the section but get a 403 (#451).
     permissions = effective_permissions(
         db, user_id=_user.id, project_id=project_id
     )
     if (
         not _user.is_admin
-        and not {
-            "project_zone.read",
-            "project_zone.manage",
-            "inspection_plan.read",
-        }
-        & permissions
+        and not {"project_zone.read", "inspection_plan.read"} & permissions
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     _project_exists(db, project_id)

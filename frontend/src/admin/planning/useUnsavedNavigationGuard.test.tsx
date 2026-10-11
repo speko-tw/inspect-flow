@@ -160,7 +160,7 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
     expect(window.location.pathname).toBe('/two')
   })
 
-  it('does not treat a hash-only link as leaving the page (R4)', async () => {
+  it('does not treat a hash-only link as leaving the page (ADM-R28)', async () => {
     await mountAtEditor()
 
     // jsdom 不會真的捲動；重點是沒被攔下、也沒有確認框。
@@ -275,6 +275,19 @@ describe('unsaved navigation guard lifecycle', () => {
     window.dispatchEvent(unload)
 
     expect(unload.defaultPrevented).toBe(true)
+  })
+
+  it('does not bring a stale leave box back after the changes are cleared', async () => {
+    const view = await mountAtEditor()
+    fireEvent.click(screen.getByTestId('plain-link'))
+    await screen.findByRole('group', { name: '有尚未儲存的變更' })
+
+    view.rerender(<BrowserHistoryHarness dirty={false} />)
+    await waitFor(() => expect(screen.queryByRole('group')).toBeNull())
+    view.rerender(<BrowserHistoryHarness dirty />)
+
+    expect(screen.queryByRole('group')).toBeNull()
+    expect(window.location.pathname).toBe('/one')
   })
 
   it('removes every listener when the page unmounts', async () => {

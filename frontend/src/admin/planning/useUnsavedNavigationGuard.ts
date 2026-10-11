@@ -51,6 +51,13 @@ export function useUnsavedNavigationGuard(
   const location = useLocation()
   const navigate = useNavigate()
   const [pendingLink, setPendingLink] = useState<PendingLink | null>(null)
+  // 變更歸零（例如使用者清空輸入）時，舊的待決連結一併作廢；否則再次輸入
+  // 時確認框會帶著舊目的地重現。用 render 期間調整 state，不靠 effect。
+  const [hadUnsavedChanges, setHadUnsavedChanges] = useState(hasUnsavedChanges)
+  if (hadUnsavedChanges !== hasUnsavedChanges) {
+    setHadUnsavedChanges(hasUnsavedChanges)
+    if (!hasUnsavedChanges) setPendingLink(null)
+  }
   // 放行時重新點一次同一個連結，Router 的 Link 才會帶著原本的 state 導頁；
   // 這一次點擊不能再被自己攔下。
   const bypassNextClick = useRef(false)
@@ -109,7 +116,7 @@ export function useUnsavedNavigationGuard(
         return
       }
       const destination = new URL(anchor.href, window.location.href)
-      // 只有 hash 不同是同頁錨點，不會卸載頁面，不算離開（R4）。
+      // 只有 hash 不同是同頁錨點，不會卸載頁面，不算離開（ADM-R28）。
       if (
         destination.origin !== window.location.origin ||
         (destination.pathname === location.pathname &&
@@ -121,9 +128,10 @@ export function useUnsavedNavigationGuard(
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
+      const { pathname, search, hash } = destination
       setPendingLink({
         anchor,
-        href: `${destination.pathname}${destination.search}${destination.hash}`,
+        href: `${pathname}${search}${hash}`,
         locationKey: location.key,
       })
     }

@@ -73,12 +73,14 @@ describe('project section navigation state', () => {
     expect(screen.getByRole('link', { name: '查核項目' })).toBeInTheDocument()
   })
 
-  it('shows the zones section to a member who can only manage zones', () => {
-    // GET /projects/{id}/zones also allows project_zone.manage, so the
-    // section is never visible to someone the API would answer with 403.
+  it('hides the zones section from a member who can only manage zones', () => {
+    // 該 API 只讓 project_zone.read 讀列表，只有 manage 的人看到入口
+    // 會得到 403，所以導覽不顯示（ADM-R17）。
     renderShell('/admin/projects/:projectId/zones', ['project_zone.manage'])
 
-    expect(screen.getByRole('link', { name: '分區' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '分區' }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the zones section to a member with zone read access', () => {

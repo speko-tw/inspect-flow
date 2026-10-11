@@ -1,9 +1,8 @@
-"""Shared frontend/backend contract for planning 422 field errors (#451).
+"""規劃區段 422 欄位錯誤的前後端共用契約（#451）。
 
-The frontend planning section replays the JSON fixtures below in its own
-tests to prove it binds each ``fields[].path`` to the right input. This
-file sends the matching invalid request to the real API and asserts the
-response equals the fixture, so a drift on either side turns a test red.
+前端規劃區段的測試會重播下方的 JSON fixture，證明每個 ``fields[].path``
+都綁到正確的輸入欄。本檔把對應的無效請求送到真實 API，斷言回應與
+fixture 相同，任何一邊走樣測試都會轉紅。
 """
 
 import json
@@ -29,7 +28,7 @@ def _fixture(name: str) -> dict:
 
 
 def _draft_task(world) -> str:
-    """Create a plan with one draft task and return the task id."""
+    """建立一份含一個草稿任務的計畫，回傳任務 id。"""
     admin = world["admin"]
     plan = admin.post(
         f"/api/v1/projects/{world['project'].id}/inspection-plans",

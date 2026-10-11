@@ -667,6 +667,19 @@ describe('loading zones', () => {
     expect(screen.queryByRole('heading', { name: '新增分區' })).toBeNull()
   })
 
+  it('explains a 403 when reading the zone list is denied', async () => {
+    const client = createMockPlanningClient()
+    client.listProjectZones = vi
+      .fn()
+      .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+    mount(client)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '你沒有讀取這個專案分區的權限。',
+    )
+    expect(screen.queryByLabelText('分區名稱')).toBeNull()
+  })
+
   it('offers a reload that recovers the list', async () => {
     const client = createMockPlanningClient()
     await client.createZone(PROJECT, '北區')

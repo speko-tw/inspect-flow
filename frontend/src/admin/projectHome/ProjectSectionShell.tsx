@@ -25,11 +25,11 @@ const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   // The list endpoint allows every project member to read applied items.
   // Editing and template application remain separately permission-gated.
   'inspection-items': [],
-  // 導覽可見的人一定讀得到列表：GET /projects/{id}/zones 允許
-  // project_zone.read、project_zone.manage 與 inspection_plan.read（後端同步
-  // 補上 manage，#451）。inspection_plan.read 只為了顯示計畫用的分區名稱，
-  // 不單獨開出分區區段。
-  zones: ['project_zone.read', 'project_zone.manage'],
+  // 導覽只認 project_zone.read，是 GET /projects/{id}/zones 讀取權限的子集，
+  // 所以導覽可見的人一定讀得到列表。inspection_plan.read 只為了顯示計畫用
+  // 的分區名稱，不單獨開出分區區段；只有 manage 沒有 read 者不顯示入口
+  // （維持既有 API 契約，#451）。
+  zones: ['project_zone.read'],
   planning: ['inspection_plan.read'],
   progress: ['inspection_task.read', 'inspection_task.inspect'],
 }

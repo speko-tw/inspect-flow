@@ -16,7 +16,7 @@ import type { PlanningClient, ProjectZone } from './api'
 import { UnsavedLeaveBox } from './UnsavedLeaveBox'
 import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
 
-// 業務錯誤碼（非 422 欄位清單）直接對應到名稱欄，與 ADM-R21 的欄旁錯誤一致。
+// 業務錯誤碼（非 422 欄位清單）直接對應到名稱欄，與 ADM-R28 的欄旁錯誤一致。
 const NAME_FIELD_CODES: ReadonlySet<string> = new Set([
   'project_zone.name_conflict',
   'project_zone.invalid_name',

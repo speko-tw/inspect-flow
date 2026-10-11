@@ -69,7 +69,7 @@ const TASK_CANCEL_BINDINGS: FieldErrorBinding[] = [
 ]
 
 // 任務的業務 422（沒有 fields 清單、只有專用錯誤碼）也要落在對應欄位旁並
-// 聚焦（ADM-R28、ADM-R21 同一做法）；各表單的欄位不同，所以每個表單各一張表。
+// 聚焦（ADM-R28）；各表單的欄位不同，所以每個表單各一張表。
 const TASK_CODE_MESSAGES: Record<string, string> = {
   'inspection_task.invalid_zone': '所選分區不屬於這個專案，請重新選擇。',
   'inspection_task.invalid_assignee':
@@ -200,9 +200,12 @@ export default function PlanningPage({
   const previousCancelTask = useRef(false)
   const dialogOpen = Boolean(confirmation || cancelTask)
   // 只在表單值偏離原資料或有新輸入時攔截離頁，避免純瀏覽也被詢問。
-  // 唯讀後表單都已收起，看不見的內容不該再攔住離頁。
+  // 唯讀、無權限與找不到專案時，表單都已收起或整頁被取代，看不見的內容
+  // 不該再攔住離頁（ADM-R28）。
   const hasUnsavedChanges = Boolean(
     !readOnly &&
+    !accessDenied &&
+    !projectNotFound &&
     (planName ||
       (editingPlanName && updatedPlanName.trim() !== selectedPlan?.name) ||
       taskItems.length > 0 ||
@@ -520,6 +523,14 @@ export default function PlanningPage({
     } catch (caught) {
       if (isForbidden(caught)) {
         setReadOnly(true)
+        // 唯讀後改名表單與取消對話框都不再提供，一併收起；取消對話框裡的
+        // 錯誤訊息改顯示在頁面上，避免使用者看不到被拒絕的原因。
+        setEditingPlanName(false)
+        if (cancelTask) {
+          setCancelTask(null)
+          setCancelReason('')
+          setErrorContext('page')
+        }
       }
       const codeField =
         caught instanceof HttpError && caught.code
@@ -828,83 +839,87 @@ export default function PlanningPage({
                   </button>
                 </>
               )}
-              {editingPlanName && selectedPlan.status !== 'ARCHIVED' && (
-                <form
-                  onKeyDown={blockImeEnter}
-                  data-error-context="plan-rename"
-                  noValidate
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    if (rejectBlank('plan-rename', !updatedPlanName.trim())) {
-                      return
-                    }
-                    void act(
-                      () =>
-                        client.updatePlan(selectedPlan.id, {
-                          name: updatedPlanName,
-                        }),
-                      { area: 'plan-detail', text: '已更新計畫名稱。' },
-                      'plan-rename',
-                      PLAN_RENAME_BINDINGS,
-                    )
-                  }}
-                >
-                  <label>
-                    <span className="required-label">
-                      計畫名稱 <span aria-hidden="true">*</span>
+              {editingPlanName &&
+                !readOnly &&
+                selectedPlan.status !== 'ARCHIVED' && (
+                  <form
+                    onKeyDown={blockImeEnter}
+                    data-error-context="plan-rename"
+                    noValidate
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      if (
+                        rejectBlank('plan-rename', !updatedPlanName.trim())
+                      ) {
+                        return
+                      }
+                      void act(
+                        () =>
+                          client.updatePlan(selectedPlan.id, {
+                            name: updatedPlanName,
+                          }),
+                        { area: 'plan-detail', text: '已更新計畫名稱。' },
+                        'plan-rename',
+                        PLAN_RENAME_BINDINGS,
+                      )
+                    }}
+                  >
+                    <label>
+                      <span className="required-label">
+                        計畫名稱 <span aria-hidden="true">*</span>
+                      </span>
+                      <input
+                        aria-describedby={describedBy(
+                          'updated-plan-name-hint',
+                          hasFieldError('plan-rename') &&
+                            fieldErrorId('plan-rename'),
+                        )}
+                        aria-invalid={hasFieldError('plan-rename')}
+                        maxLength={128}
+                        onChange={(event) => {
+                          setUpdatedPlanName(event.target.value)
+                          clearFieldError('plan-rename')
+                        }}
+                        data-field="plan-rename"
+                        required
+                        value={updatedPlanName}
+                      />
+                    </label>
+                    <span className="field-hint" id="updated-plan-name-hint">
+                      必填，最多 128 字。
                     </span>
-                    <input
-                      aria-describedby={describedBy(
-                        'updated-plan-name-hint',
-                        hasFieldError('plan-rename') &&
-                          fieldErrorId('plan-rename'),
-                      )}
-                      aria-invalid={hasFieldError('plan-rename')}
-                      maxLength={128}
-                      onChange={(event) => {
-                        setUpdatedPlanName(event.target.value)
+                    {fieldErrorText('plan-rename')}
+                    {error && errorContext === 'plan-rename' && (
+                      <p
+                        className="tpl-field-error"
+                        id="updated-plan-name-error"
+                        ref={errorMessage}
+                        role="alert"
+                        tabIndex={-1}
+                      >
+                        {error}
+                      </p>
+                    )}
+                    <button
+                      aria-label="取消編輯"
+                      disabled={busy}
+                      onClick={() => {
+                        setEditingPlanName(false)
                         clearFieldError('plan-rename')
                       }}
-                      data-field="plan-rename"
-                      required
-                      value={updatedPlanName}
-                    />
-                  </label>
-                  <span className="field-hint" id="updated-plan-name-hint">
-                    必填，最多 128 字。
-                  </span>
-                  {fieldErrorText('plan-rename')}
-                  {error && errorContext === 'plan-rename' && (
-                    <p
-                      className="tpl-field-error"
-                      id="updated-plan-name-error"
-                      ref={errorMessage}
-                      role="alert"
-                      tabIndex={-1}
+                      type="button"
                     >
-                      {error}
-                    </p>
-                  )}
-                  <button
-                    aria-label="取消編輯"
-                    disabled={busy}
-                    onClick={() => {
-                      setEditingPlanName(false)
-                      clearFieldError('plan-rename')
-                    }}
-                    type="button"
-                  >
-                    取消
-                  </button>
-                  <button
-                    className="btn-primary"
-                    disabled={busy}
-                    type="submit"
-                  >
-                    儲存計畫名稱
-                  </button>
-                </form>
-              )}
+                      取消
+                    </button>
+                    <button
+                      className="btn-primary"
+                      disabled={busy}
+                      type="submit"
+                    >
+                      儲存計畫名稱
+                    </button>
+                  </form>
+                )}
 
               <h3>任務</h3>
               {noticeFor('tasks')}
