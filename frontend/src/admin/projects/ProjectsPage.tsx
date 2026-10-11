@@ -140,8 +140,11 @@ export default function ProjectsPage() {
         : null
     const target = card ?? (!loading ? newProjectButtonRef.current : null)
     if (!target) return
-    target.focus()
+    // 清單重載期間使用者可能已點進別處（例如搜尋框），此時不搶焦點。
+    const active = document.activeElement
     focusAfterCloseRef.current = null
+    if (active && active !== document.body) return
+    target.focus()
   }, [formMode, loading, projects])
 
   useEffect(() => {
