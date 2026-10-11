@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "request.validation_failed",
+    "fields": [
+      { "path": "/item_ids", "code": "field.too_long" },
+      { "path": "/zone_id", "code": "field.invalid" },
+      { "path": "/location_text", "code": "field.too_long" },
+      { "path": "/suggested_assignee_id", "code": "field.invalid" }
+    ]
+  }
+}

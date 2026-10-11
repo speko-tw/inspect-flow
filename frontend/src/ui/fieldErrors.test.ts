@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mapFieldErrors } from './fieldErrors'
+import { fieldErrorMessage, mapFieldErrors } from './fieldErrors'
 
 describe('mapFieldErrors', () => {
   it('maps errors in binding order and leaves unknown pointers unmatched', () => {
@@ -81,5 +81,29 @@ describe('mapFieldErrors', () => {
     expect(result.unmatched).toEqual([
       { path: '/name~2unit', code: 'field.invalid' },
     ])
+  })
+})
+
+describe('fieldErrorMessage', () => {
+  it('translates common field codes and falls back without echoing', () => {
+    expect(fieldErrorMessage('field.too_long')).toBe('輸入內容太長。')
+    expect(fieldErrorMessage('field.required')).toBe('請填寫此欄位。')
+    expect(fieldErrorMessage('page.unknown_code')).toBe(
+      '欄位內容不符合規則，請檢查後再試。',
+    )
+  })
+
+  it('lets page-specific codes extend and override the common table', () => {
+    const extra = {
+      'template.sequence_duplicate': '項次順序重複。',
+      'field.too_long': '專屬訊息。',
+    }
+    expect(fieldErrorMessage('template.sequence_duplicate', extra)).toBe(
+      '項次順序重複。',
+    )
+    expect(fieldErrorMessage('field.too_long', extra)).toBe('專屬訊息。')
+    expect(fieldErrorMessage('field.invalid', extra)).toBe(
+      '欄位格式不正確，請檢查輸入內容。',
+    )
   })
 })

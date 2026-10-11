@@ -16,9 +16,8 @@ const SECTIONS = [
   { id: 'progress', label: '進度', suffix: '/progress' },
 ]
 
-// 分區與進度目前只是佔位頁（正式內容見 #451、#452），v0.3.0 先從導覽
-// 隱藏；分區管理實際在「計畫與任務」頁裡。
-const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['zones', 'progress'])
+// 進度正式內容由 #452 提供；目前仍隱藏。
+const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['progress'])
 
 const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   home: [],
@@ -26,13 +25,19 @@ const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   // The list endpoint allows every project member to read applied items.
   // Editing and template application remain separately permission-gated.
   'inspection-items': [],
-  zones: ['project_zone.read', 'project_zone.manage'],
+  // 導覽只認 project_zone.read，是 GET /projects/{id}/zones 讀取權限的子集，
+  // 所以導覽可見的人一定讀得到列表。inspection_plan.read 只為了顯示計畫用
+  // 的分區名稱，不單獨開出分區區段；只有 manage 沒有 read 者不顯示入口
+  // （維持既有 API 契約，#451）。
+  zones: ['project_zone.read'],
   planning: ['inspection_plan.read'],
   progress: ['inspection_task.read', 'inspection_task.inspect'],
 }
 
+/** 專案首頁與區段導覽使用的路由識別字。 */
 export type ProjectSection = (typeof SECTIONS)[number]['id']
 
+/** 顯示依 viewer 權限篩選的專案區段導覽與目前區段內容（ADM-R17）。 */
 export default function ProjectSectionShell({
   project,
   projectId,

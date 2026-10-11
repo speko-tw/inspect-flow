@@ -71,6 +71,13 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         # not a second hand-maintained error-code lookup table.
         "frontend/src/admin/projectItems/fixtures/project-patch-bound-unit.json",
         "frontend/src/admin/templates/fixtures/template-write-field-error.json",
+        # #451 規劃區段：前端測試重播這些 API 422 回應，並由後端契約
+        # 測試對照真實輸出。
+        "frontend/src/admin/planning/fixtures/name-too-long-422.json",
+        "frontend/src/admin/planning/fixtures/task-create-validation-422.json",
+        "frontend/src/admin/planning/fixtures/task-location-validation-422.json",
+        "frontend/src/admin/planning/fixtures/task-assignee-validation-422.json",
+        "frontend/src/admin/planning/fixtures/task-cancel-validation-422.json",
     }
 )
 
