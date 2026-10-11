@@ -106,7 +106,7 @@
 | ALG-AC15 | 同上：換公司、單獨改部門、清空後解除連結、連結公司、工號重複被拒絕，斷言筆數與四欄內容 |
 | ALG-AC16 | `backend/tests/cli/test_reset_admin_password_audit.py`（C，新增）：執行重設指令兩次（一次成功、一次輸入不同），斷言一筆 `user.password_set` 與目錄沒有新增事件代碼 |
 | ALG-AC17 | #412（T5b）：以未登入、非 Admin、Admin 呼叫查詢 API 並操作頁面；核對 401／403 與成功查詢前後 `audit_logs` 不變 |
-| ALG-AC18 | #412（T5b）：以 migration 前歷史事件、新的有專案與無專案事件（含刪除／修改時 `before`／`after` 無 `project_id`）驗證欄位填值、空值及索引；組合 `project_id`、`actor_id`、`event_type`、時間範圍並跨 cursor 翻頁，核對 AND、精確比對、降冪排序、無重複遺漏、無專案事件及歷史事件在專案篩選時被排除、不帶專案時仍可查、不存在專案 200 空頁、反向時間範圍與無效輸入 422；與 ADM-AC07、ADM-AC13 共用驗證 |
+| ALG-AC18 | #412（T5b）：以 migration 前歷史事件、新的有專案與無專案事件（含刪除／修改時 `before`／`after` 無 `project_id`）驗證欄位填值、空值及索引；組合 `project_id`、`actor_id`、`event_type`、時間範圍並跨 cursor 翻頁，核對 AND、精確比對、降冪排序、無重複遺漏、無專案事件及歷史事件在專案篩選時被排除、不帶專案時仍可查、不存在專案 200 空頁、反向時間範圍與無效輸入 422；與 ADM-AC07、ADM-AC13 共用驗證。專案事件守門證據（#572）：`backend/tests/services/test_audit.py` 的 `test_project_scoped_catalog_covers_all_project_event_families`、`test_events_declaring_project_id_field_are_project_scoped`（遍歷事件目錄）、`test_project_event_without_project_id_is_rejected_before_write`（一般寫入）、`test_project_denial_without_project_id_is_rejected_before_queue`（延後寫入）、`test_project_event_without_project_id_is_rejected_without_queue`（無佇列的即時獨立寫入） |
 
 ## 考慮過但沒採用的做法
 

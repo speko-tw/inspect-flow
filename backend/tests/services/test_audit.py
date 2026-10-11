@@ -209,6 +209,16 @@ def test_project_scoped_catalog_covers_all_project_event_families():
     assert marked == expected
 
 
+def test_events_declaring_project_id_field_are_project_scoped():
+    """欄位含 project_id 的事件必有專案脈絡，須標 project_scoped。"""
+    unmarked = sorted(
+        event_type
+        for event_type, definition in _EVENT_CATALOG.items()
+        if "project_id" in definition.fields and not definition.project_scoped
+    )
+    assert unmarked == []
+
+
 def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
     user_id = uuid.uuid4()
     project_id = uuid.uuid4()
@@ -497,6 +507,29 @@ def test_project_denial_without_project_id_is_rejected_before_queue(
             },
         )
     assert pending == []
+
+
+def test_project_event_without_project_id_is_rejected_without_queue(
+    session, operator
+):
+    """即時獨立寫入也在寫入前拒絕缺值，且不新增任何紀錄。"""
+    assert audit_module._PENDING_AUDIT_EVENTS_KEY not in session.info
+    before_count = session.query(AuditLog).count()
+    with pytest.raises(MissingProjectAuditEventError):
+        record_audit_event_in_independent_transaction(
+            session,
+            "project_member.assignment_denied",
+            entity_id=uuid.uuid4(),
+            before=None,
+            after={
+                "project_id": uuid.uuid4(),
+                "user_id": operator.id,
+                "role_ids": [],
+                "reason": "external_role_not_allowed",
+            },
+        )
+    session.expire_all()
+    assert session.query(AuditLog).count() == before_count
 
 
 def test_alg_ac26_authenticated_denial_flushes_after_rollback(

@@ -15,7 +15,9 @@ which the caller may override (there is no ``created_by=``/
 catalog entry ``event_type`` names.
 Callers pass ``project_id`` for events with project context (ALG-R24),
 independent of fields present in ``before`` or ``after``; events without
-project context leave it null.
+project context leave it null. 標為 ``project_scoped`` 的專案事件缺少
+``project_id`` 時會被拒絕（:class:`MissingProjectAuditEventError`），
+一般寫入與延後寫入兩條路徑皆然。
 
 The event catalog (:func:`register_audit_event`, ``_EVENT_CATALOG``)
 is how ALG-R13 lets other specs (``external-identity-sync``) add new
@@ -321,13 +323,13 @@ class UnregisteredAuditEventError(AuditEventError):
 
 
 class MissingProjectAuditEventError(AuditEventError):
-    """依 ALG-R24 拒絕缺少專案脈絡的事件，避免寫入後無法補回。"""
+    """ALG-R24：``project_scoped`` 事件缺少 ``project_id``。"""
 
 
 def _require_project_id(
     definition: AuditEventDefinition, project_id: uuid.UUID | None
 ) -> None:
-    """在寫入或排隊前拒絕缺少的專案脈絡，避免空值紀錄無法回補。"""
+    """在寫入或延後寫入前拒絕缺少的專案脈絡，避免空值紀錄無法回補。"""
     if definition.project_scoped and project_id is None:
         raise MissingProjectAuditEventError(
             f"{definition.event_type!r} requires project_id (ALG-R24)"
@@ -579,7 +581,12 @@ def record_audit_event(
 ) -> AuditLog:
     """Write one audit event in the caller's transaction (ALG-R05).
 
-    專案事件依 ALG-R24 先驗證 project_id，避免留下無法回補的空值。
+    Raises:
+        MissingProjectAuditEventError: 事件標為 ``project_scoped``
+            但未提供 ``project_id``（ALG-R24）；在查找操作者與寫入
+            前就拒絕，不留任何紀錄。
+        AuditEventError: 其餘子類別的拋出條件見
+            :func:`_record_audit_event`。
     """
     return _record_audit_event(
         session,
@@ -626,6 +633,9 @@ def _record_audit_event(
             catalog (ALG-R07).
         UndeclaredAuditFieldError: ``before``/``after`` names a field
             the event does not declare (ALG-R08).
+        MissingProjectAuditEventError: 事件標為 ``project_scoped``
+            但 ``project_id`` 為 ``None``（ALG-R24）；在查找操作者與
+            變更 session 前拒絕。
         InvalidAuditEventShapeError: ``before``/``after``'s shape
             does not match the event's kind, a "一律記錄" field is
             missing, or a declared field's value is ``None``
@@ -716,8 +726,16 @@ def record_audit_event_in_independent_transaction(
     lock and self-block that immediate path; use the request unit of work
     for denied writes. The passed session supplies the target engine only;
     its pending writes and transaction are untouched.
-    ALG-R24 要求排隊前先驗證專案脈絡，避免請求失敗後才在 flush 階段
-    靜默丟棄無效的安全事件。
+    ALG-R24 要求延後寫入前先驗證專案脈絡，避免請求失敗後才在 flush
+    階段靜默丟棄無效的安全事件。
+
+    Raises:
+        UnregisteredAuditEventError: ``event_type`` 未登記（ALG-R07）。
+        MissingProjectAuditEventError: 事件標為 ``project_scoped`` 但
+            ``project_id`` 為 ``None``（ALG-R24）；無論有無延後寫入
+            佇列都在寫入與入佇列之前拒絕。
+        AuditEventError: 欄位與形狀驗證失敗時的其餘子類別，見
+            :func:`_record_audit_event`。
     """
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
@@ -728,7 +746,7 @@ def record_audit_event_in_independent_transaction(
         raise UnregisteredAuditEventError(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
-    # ALG-R24：拒絕事件須在回滾前通過驗證，不能把缺值事件排入佇列。
+    # ALG-R24：拒絕事件須在回滾前通過驗證，不能延後寫入缺值事件。
     _require_project_id(definition, project_id)
     normalized_before = _normalize_payload(before)
     normalized_after = _normalize_payload(after)
@@ -947,6 +965,8 @@ register_audit_event(
 )
 
 # Two-layer permission and project events (ALG-R25~ALG-R28, plan.md T6).
+# 刻意不標 project_scoped：停用或啟用牽動的專案不只一個
+# （restored_project_ids／removed_project_ids），沒有單一 project_id。
 register_audit_event(
     "user.active_changed",
     entity_type="user",
@@ -1087,6 +1107,7 @@ register_audit_event(
     fields=("project_id", "user_id", "role_ids", "reason"),
     project_scoped=True,
 )
+# 刻意不標 project_scoped：授權拒絕是全域事件，沒有專案脈絡（ALG-R24）。
 register_audit_event(
     "module_permission.grant_denied",
     entity_type="module_permission",
