@@ -89,7 +89,7 @@
 | POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | Admin 或範本管理員 |
 | GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 該專案成員、Admin 或範本管理員；跨專案瀏覽限 Admin 或範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
-| PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204 | Admin |
+| PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204；對象是外部協作人員時回 `422 user.external_not_qualified`（外部協作人員不得持有 `template_admin`，DOM-R71） | Admin |
 | DELETE | `/api/v1/system-role-assignments/template_admin/{user_id}` | 收回使用者的 `template_admin` 指派；尚未指派時回 404 | Admin |
 
 上表「範本管理員」一詞與 `system-role-assignments` 路由是**過渡期**行為（TPL-R09、AUT-R50）；正式行為依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)：寫入、存成範本與跨專案瀏覽的存取層級改為「需模組權限 `template.manage`（委派不放行）」，讀取範本庫改為需範本模組「可使用」`template.use`（原「具任一專案查核項目編輯權限者」另須具 `template.use`），`GET /api/v1/projects` 列出全部專案的條件依 `domain-model` 專案管理 API（正式條件為規格設計，非負責人裁定）；`system-role-assignments` 兩條路由在改造完成後移除，改由 `admin-dashboard` 的模組權限 API 授予與收回。
@@ -144,7 +144,7 @@
 | TPL-AC13 | 桌面範本庫含空資料、至少一個類別、系統與項目；手機寬度為 360px | 新增／改名類別或系統、選取階層節點並在手機往返清單與詳情 | 空狀態引導新增；詳情及選取狀態正確；新增與改名入口分開；同父層重複名稱與空名稱顯示欄位錯誤；手機返回後選取與展開位置保留 | TPL-R15 |
 | TPL-AC14 | 管理者新增查核項目或編輯既有項目 | 開啟編輯器並新增項次、欄位、標準與照片數 | 基本資料、所有查核項次卡片、實測欄位、判定標準、照片需求及即時預覽同頁可見；項次卡片可收合並以標題作摘要；新項目有一張空白項次卡且沒有實測欄位；數值標準按需新增數字欄位；唯一數字欄位自動綁定，多個數字欄位須明選 | TPL-R16 |
 | TPL-AC15 | 項次有數值標準及綁定數字欄位 | 編輯單位、重綁，並儲存新增或修改的單項 | 綁定欄位單位輸入保持可編輯；標準顯示同一單位；改型別或刪除綁定欄位時顯示解除綁定原因；單項 CRUD 呼叫 `/templates` 對應端點，綁定欄位送 `unit: null` 且標準送欄位單位，不以整系統 PUT 儲存單項 | TPL-R11、TPL-R17 |
-| TPL-AC16 | 查核項目包含空白必填欄位、反序上下限、負容許誤差或無效照片數，或後端回 422／403 | 儲存或在有未儲存草稿時切換節點 | 本地錯誤在欄位下顯示、第一個錯誤獲得焦點並捲動至可見位置、摘要可聚焦對應欄位；後端 422 帶 `error.fields` 時錯誤顯示在對應欄位旁並聚焦第一個錯誤（見 TPL-AC27），沒有 `fields` 時保留草稿並只顯示一般訊息；403 切換唯讀並保留草稿；切換節點先提供保留或捨棄選擇 | TPL-R18 |
+| TPL-AC16 | 查核項目包含空白必填欄位、反序上下限、負容許誤差或無效照片數，或後端回 422／403 | 儲存或在有未儲存草稿時切換節點 | 本地錯誤在欄位下顯示、第一個錯誤獲得焦點並捲動至可見位置、摘要可聚焦對應欄位；後端 422 帶 `error.fields` 時錯誤顯示在對應欄位旁並聚焦第一個錯誤（見 TPL-AC27），沒有 `fields` 時保留草稿並只顯示一般訊息；403 切換唯讀並保留草稿；切換節點先提供保留或捨棄選擇，從左側新增工程類別時同樣先確認 | TPL-R18 |
 | TPL-AC17 | 範本項次有多個以特定順序排列的實測欄位，並在 migration 前建立範本、專案副本及任務快照資料與數值標準 | 儲存、讀回、更新、套用至專案、存回範本並建立任務快照；對含資料資料庫執行 migration upgrade、downgrade、再 upgrade | 各階段欄位順序均與原排列相同；upgrade、downgrade、再 upgrade 後範本／專案副本／任務快照的測量欄位及數值標準筆數與內容均保留；既有資料依遷移前的 `created_at`、`id` 順序回填 | TPL-R19 |
 | TPL-AC18 | 新增查核項次，標題為空白或已有標題；另有一個既有項次，其欄位名稱分別與標題相同或不同 | 新增第一個欄位、修改標題、手動修改名稱後再改標題，並開啟既有項目 | 第一個欄位依 TPL-R20 預填與同步；手動修改後不再跟隨；既有欄位依名稱相同與否判定同步；空白標題不預填；同步狀態不出現在 POST／PUT payload | TPL-R20、TPL-R21 |
 | TPL-AC19 | 一個項次已有實測欄位，且可新增另一欄；另在沒有數字欄位時選擇數值標準 | 新增第二個欄位，或由數值標準自動新增第一個數字欄位 | 第二個欄位名稱為空且焦點位於名稱欄；自動新增的第一個數字欄位依標題預填；空白標題仍須通過原必填驗證 | TPL-R20、TPL-R21 |

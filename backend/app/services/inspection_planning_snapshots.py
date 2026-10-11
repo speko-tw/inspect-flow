@@ -1,4 +1,4 @@
-"""Create and revise immutable task requirement snapshots."""
+"""依 IP-R03 固定 Task 需求，並保留 KD-55 的更正歷史。"""
 
 import uuid
 
@@ -41,6 +41,7 @@ def _copy_standard(
     operator_id: uuid.UUID,
     revision: int,
 ) -> TaskRequirementSnapshot:
+    # 來源 id 與型別一併複製，避免後續專案標準變更使舊需求失真。
     snapshot = TaskRequirementSnapshot(
         task_inspection_item_id=task_item.id,
         revision=revision,
@@ -165,6 +166,7 @@ def create_task_items(
     project_inspection_item_ids: list[uuid.UUID],
     operator_id: uuid.UUID,
 ) -> list[TaskInspectionItem]:
+    """依 IP-R02 建立 Task 項目並固定需求；來源為空或跨專案時拒絕。"""
     from app.services.inspection_planning import PlanningError
 
     items: list[TaskInspectionItem] = []
@@ -212,6 +214,8 @@ def refresh_task_item(
     superseded_reason: str,
     retain_history: bool = True,
 ) -> TaskRequirementSnapshot:
+    """依 KD-55 更新受影響項目快照；非草稿保留舊版供追查。"""
+    # 依 KD-55，草稿尚未派出可原位取代；已派 Task 必須保留舊版。
     current = _current_snapshot(session, task_item.id)
     revision = 1
     if current is not None:

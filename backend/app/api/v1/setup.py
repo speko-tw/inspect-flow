@@ -97,6 +97,9 @@ def set_initial_admin_password(
     _session, token = create_session(db, admin)
     response.status_code = 204
     set_session_cookie(response, token)
+    # 密碼與登入狀態須在 Cookie 隨回應送出前提交，否則客戶端可能拿到
+    # 尚未持久化的 session。
+    db.commit()
     logger.info(
         "auth.login_succeeded",
         extra={
