@@ -35,7 +35,7 @@ const HAS_RESULT_TEXT = [
   '任務需要重新查核',
 ].join('')
 
-// 依實際影響說明：後端結果只帶任務動作，是否已有結果用修改前的
+// 依 IP-R04 說明實際影響：後端結果只帶任務動作，是否已有結果用修改前的
 // 影響預覽（`hasResult`）判斷；草稿與已取消任務不屬於重查範圍。
 function reinspectionResultText(tasks: AffectedTask[]): string {
   const relevant = tasks.filter(
@@ -137,6 +137,10 @@ function taskLabel(task: AffectedTask): string {
   return `${task.name}（${task.planName}；${taskLocation(task)}）`
 }
 
+/**
+ * 依 IP-R04、IP-R13 呈現項目修改及重新查核確認。
+ * 受影響 Plan 已封存或無修改權限時改為唯讀，儲存仍交由後端覆核。
+ */
 export default function ProjectItemChangePage({
   api,
 }: {

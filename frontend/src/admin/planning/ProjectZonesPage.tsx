@@ -22,7 +22,10 @@ const NAME_FIELD_CODES: ReadonlySet<string> = new Set([
   'project_zone.invalid_name',
 ])
 
-/** 管理專案分區，並依 IP-R10 支援無分區專案的文字地點流程。 */
+/**
+ * 依 IP-R10 管理專案分區，並說明無分區時的文字地點流程。
+ * 讀取失敗時禁止新增，避免在未知既有分區的情況下重複建立。
+ */
 export default function ProjectZonesPage({
   client = planningClient,
   viewerPermissions,
@@ -49,7 +52,7 @@ export default function ProjectZonesPage({
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const rowTrigger = useRef<HTMLElement | null>(null)
   // Enter 走 requestSubmit() 時，停用的按鈕擋不住第二次送出，連按兩次
-  // Enter 會送出兩次並讓第二次變成「名稱重複」；用防護同步擋掉（#490、#507）。
+  // Enter 會送出兩次並讓第二次變成「名稱重複」；用同步防護擋掉。
   const guard = useSubmitGuard()
   const canManage = viewerPermissions.includes('project_zone.manage')
   const hasUnsavedChanges = Boolean(
