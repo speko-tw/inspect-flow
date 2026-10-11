@@ -2,7 +2,10 @@
 // 新增權限碼時，需同步補充描述與摘要合併規則（若有）。
 const PERMISSION_DESCRIPTIONS: Array<[code: string, description: string]> = [
   ['project_member.manage', '管理專案成員與其角色'],
+  ['project.update', '調整專案'],
+  ['project.read', '檢視專案'],
   ['project_inspection_item.edit', '編輯專案查核項目'],
+  ['project_inspection_item.read', '讀取專案查核項目'],
   ['project_zone.read', '讀取專案分區'],
   ['project_zone.manage', '管理專案分區'],
   ['inspection_plan.read', '讀取查核計畫'],
@@ -20,10 +23,13 @@ const PERMISSION_DESCRIPTIONS: Array<[code: string, description: string]> = [
   ['inspection_task.cancel', '取消或恢復查核任務'],
 ]
 
-// 每個 registry 權限碼都必須有項目；非 null 值只用於縮短摘要。
+// Role 只能包含 project-scope 權限碼；module 權限不在角色摘要內。
 const PHRASES: Array<[code: string, phrase: string | null]> = [
   ['project_member.manage', null],
+  ['project.update', null],
+  ['project.read', null],
   ['project_inspection_item.edit', null],
+  ['project_inspection_item.read', null],
   ['project_zone.read', null],
   ['project_zone.manage', null],
   ['inspection_plan.read', null],

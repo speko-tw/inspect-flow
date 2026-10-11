@@ -52,14 +52,24 @@ the foreign key's own ``ON DELETE CASCADE``, verified in
 import re
 import uuid
 
-from sqlalchemy import ForeignKey, Index, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
+    false,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import Uuid
 
 from app.db.base import TimestampedBase
 from app.models._audit import AuditMixin
 from app.models._bounded_string import BoundedString, validate_nullable
-from app.permission_codes import is_permission_code_registered
+from app.permission_codes import (
+    is_permission_code_registered,
+    permission_code_scope,
+)
 
 _NAME_MAX_LENGTH = 64
 _CODE_MAX_LENGTH = 64
@@ -96,6 +106,11 @@ def _check_code(value: str) -> None:
             f"RolePermission.code {value!r} is not a registered "
             "permission code (DOM-R35)"
         )
+    elif permission_code_scope(value) != "project":
+        raise PermissionCodeValidationError(
+            f"RolePermission.code {value!r} is module-scoped and "
+            "cannot be assigned to a Role (DOM-R35)"
+        )
 
 
 class Role(AuditMixin, TimestampedBase):
@@ -109,6 +124,12 @@ class Role(AuditMixin, TimestampedBase):
 
     name: Mapped[str] = mapped_column(
         BoundedString(_NAME_MAX_LENGTH, _check_name), nullable=False
+    )
+    is_assignable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    is_external_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
 
     permission_codes: Mapped[list["RolePermission"]] = relationship(

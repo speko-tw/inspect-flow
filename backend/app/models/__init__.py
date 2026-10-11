@@ -24,6 +24,13 @@ from app.models.inspection_planning import (
 )
 from app.models.login_counter import LoginCounter
 from app.models.login_failure import LoginFailure
+from app.models.module_permissions import (
+    CreatorRoleSetting,
+    PermissionBundle,
+    PermissionBundlePermission,
+    UserModuleDelegation,
+    UserModulePermission,
+)
 from app.models.project import Project
 from app.models.project_member import ProjectMember, ProjectMemberRole
 from app.models.role import Role, RolePermission
@@ -66,6 +73,11 @@ __all__ = [
     "TaskSnapshotTextStandard",
     "LoginCounter",
     "LoginFailure",
+    "CreatorRoleSetting",
+    "PermissionBundle",
+    "PermissionBundlePermission",
+    "UserModuleDelegation",
+    "UserModulePermission",
     "Project",
     "ProjectMember",
     "ProjectMemberRole",

@@ -1,7 +1,7 @@
 // 新增使用者表單的可用性提示（#284 第 4～6 項）。
 
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import UserForm from './UserForm'
 
@@ -10,6 +10,10 @@ const companies = [{ id: 'company-1', name: '示範公司', is_active: true }]
 function renderForm() {
   return render(<UserForm companies={companies} onCreated={() => {}} />)
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('UserForm 必填標示（#284 第 4 項）', () => {
   it('帳號名稱、Email、中文姓名標示「*」，其他欄位沒有', () => {
@@ -20,13 +24,20 @@ describe('UserForm 必填標示（#284 第 4 項）', () => {
       expect(field).toBeRequired()
       expect(field.closest('label')).toHaveTextContent('*')
     }
+    expect(
+      screen.getByRole('radiogroup', { name: /帳號類型/ }),
+    ).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByRole('radio', { name: '內部人員' })).not.toBeChecked()
+    expect(
+      screen.getByRole('radio', { name: '外部協作人員' }),
+    ).not.toBeChecked()
     for (const label of [/^英文姓名/, /^公司/, /^部門/, /^地點/, /^工號/]) {
       expect(
         screen.getByLabelText(label).closest('label'),
       ).not.toHaveTextContent('*')
     }
     // 「*」只是視覺標示，不進入無障礙名稱。
-    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(3)
+    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4)
     expect(
       screen.getByRole('textbox', { name: '帳號名稱' }),
     ).toBeInTheDocument()
@@ -70,5 +81,73 @@ describe('UserForm 帳號名稱規則說明（#284 第 6 項）', () => {
     expect(
       screen.getByText('3～32 字元，英文字母開頭，可用英數與 . _ -'),
     ).toBeVisible()
+  })
+})
+
+describe('UserForm 帳號類型（DOM-R71）', () => {
+  it('未選帳號類型時顯示欄位錯誤並聚焦第一個選項', () => {
+    renderForm()
+    const submit = screen.getByRole('button', { name: '新增使用者' })
+    fireEvent.submit(submit.closest('form')!)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('請選擇帳號類型。')
+    expect(screen.getByRole('radio', { name: '內部人員' })).toHaveFocus()
+  })
+
+  it('外部協作人員不可為 Admin，切回內部後可重新指派', () => {
+    renderForm()
+    const adminCheckbox = screen.getByRole('checkbox', {
+      name: '指派系統管理者權限',
+    })
+    fireEvent.click(adminCheckbox)
+    expect(adminCheckbox).toBeChecked()
+
+    fireEvent.click(screen.getByRole('radio', { name: '外部協作人員' }))
+    expect(adminCheckbox).not.toBeChecked()
+    expect(adminCheckbox).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
+    expect(adminCheckbox).toBeEnabled()
+    expect(adminCheckbox).not.toBeChecked()
+    fireEvent.click(adminCheckbox)
+    expect(adminCheckbox).toBeChecked()
+  })
+
+  it.each([
+    ['內部人員', false],
+    ['外部協作人員', true],
+  ])('送出 %s 時傳送外部協作人員標記 %s', async (label, expected) => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toMatch(/\/users$/)
+        expect(init?.method).toBe('POST')
+        return new Response('{}', {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderForm()
+
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
+      target: { value: 'ben.lin' },
+    })
+    fireEvent.change(screen.getByLabelText(/^Email/), {
+      target: { value: 'ben@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
+      target: { value: '林本' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: label }))
+    const submit = screen.getByRole('button', { name: '新增使用者' })
+    fireEvent.submit(submit.closest('form')!)
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const init = fetchMock.mock.calls[0]?.[1]
+    expect(init?.body).toBeDefined()
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      is_external_collaborator: expected,
+    })
   })
 })

@@ -1,45 +1,41 @@
 """Office/field access summary for the current user (Issue #480).
 
 The login landing page and the admin navigation need to know which
-areas of the UI a user can actually use. The frontend must not guess
+areas of the UI where a user has permissions. The frontend must not guess
 that from ``is_admin`` alone, so ``/auth/me`` carries this summary.
 
-Every registered permission code is classified into exactly one group
-below; a contract test fails when a new code is registered without a
-decision here.
+Every registered project permission code is classified into exactly
+one group below; module permissions are reported separately.
 
 - Field: ``inspection_task.inspect`` only -- the code the ``/field``
   task list requires.
-- Task read: ``inspection_task.read`` alone is neither. #447 (ADM-R18)
-  already treats it as a field-side code that hides the project's
-  office sections, so counting it as office here would send such a
-  user to a project list whose project page redirects away again.
-- Office: every other registered code (project members, inspection
-  items, zones, plans, and task manage/create/dispatch/assign/delete/
-  cancel).
+- Read-only project permissions (all project-scoped ``*.read`` codes)
+  are neither office nor field access. In particular,
+  ``inspection_task.read`` alone is insufficient to open the field task
+  list, which requires ``inspection_task.inspect`` (ADM-R18).
+- Office: project permissions that grant an action beyond reading.
 
 The summary is computed with one query per call (no per-project loop).
 """
 
-import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    ProjectMember,
-    ProjectMemberRole,
-    RolePermission,
-    SystemRoleAssignment,
-    SystemRoleCode,
-    User,
+from app.models import SystemRoleAssignment, SystemRoleCode, User
+from app.permission_codes import (
+    PermissionCode,
+    permission_code_module,
+    permission_code_scope,
 )
+from app.services.permissions import calculate_effective_access
 
 FIELD_PERMISSION_CODES: frozenset[str] = frozenset({"inspection_task.inspect"})
 OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     {
         "project_member.manage",
+        "project.update",
         "project_inspection_item.edit",
         "project_zone.read",
         "project_zone.manage",
@@ -56,7 +52,23 @@ OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
         "inspection_task.cancel",
     }
 )
-TASK_READ_ONLY_CODES: frozenset[str] = frozenset({"inspection_task.read"})
+READ_ONLY_PERMISSION_CODES: frozenset[str] = frozenset(
+    code.value
+    for code in PermissionCode
+    if permission_code_scope(code.value) == "project"
+    and code.value.endswith(".read")
+    and code.value not in OFFICE_PERMISSION_CODES
+)
+PROJECT_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
+    code
+    for code in OFFICE_PERMISSION_CODES
+    if permission_code_module(code) == "project"
+)
+INSPECTION_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
+    code
+    for code in OFFICE_PERMISSION_CODES
+    if permission_code_module(code) == "inspection"
+)
 
 
 @dataclass(frozen=True)
@@ -64,31 +76,7 @@ class AccessSummary:
     has_office_access: bool
     has_field_access: bool
     has_template_access: bool
-
-
-def permission_codes_by_project(
-    session: Session, *, user_id: uuid.UUID
-) -> dict[uuid.UUID, frozenset[str]]:
-    """Effective permission codes of ``user_id`` in every project the
-    user is a member of, from a single query.
-    """
-    with session.no_autoflush:
-        rows = session.execute(
-            select(ProjectMember.project_id, RolePermission.code)
-            .join(
-                ProjectMemberRole,
-                ProjectMemberRole.project_member_id == ProjectMember.id,
-            )
-            .join(
-                RolePermission,
-                RolePermission.role_id == ProjectMemberRole.role_id,
-            )
-            .where(ProjectMember.user_id == user_id)
-        ).all()
-    grouped: dict[uuid.UUID, set[str]] = {}
-    for project_id, code in rows:
-        grouped.setdefault(project_id, set()).add(code)
-    return {key: frozenset(value) for key, value in grouped.items()}
+    module_permissions: frozenset[str]
 
 
 def summarize_access(session: Session, user: User) -> AccessSummary:
@@ -99,12 +87,11 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
     templates to apply them to a project needs no summary flag; it
     lives inside the project pages.
     """
-    if user.is_admin:
-        return AccessSummary(True, True, True)
-    codes: set[str] = set()
-    for project_codes in permission_codes_by_project(
-        session, user_id=user.id
-    ).values():
+    access = calculate_effective_access(session, user_id=user.id)
+    if access.is_admin:
+        return AccessSummary(True, True, True, access.module_permissions)
+    codes: set[str] = set(access.module_permissions)
+    for project_codes in access.project_permissions_by_project.values():
         codes |= project_codes
     with session.no_autoflush:
         is_template_admin = (
@@ -117,8 +104,11 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
             )
             is not None
         )
+    project_access = bool(codes & PROJECT_OFFICE_PERMISSION_CODES)
     return AccessSummary(
-        has_office_access=bool(codes & OFFICE_PERMISSION_CODES),
+        has_office_access=project_access
+        or bool(codes & INSPECTION_OFFICE_PERMISSION_CODES),
         has_field_access=bool(codes & FIELD_PERMISSION_CODES),
         has_template_access=is_template_admin,
+        module_permissions=access.module_permissions,
     )

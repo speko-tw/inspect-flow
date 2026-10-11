@@ -574,6 +574,7 @@ describe('首次設定第 3 步完成畫面的臨時密碼（#284 第 7 項）',
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     await screen.findByLabelText('臨時密碼')
@@ -609,6 +610,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
@@ -675,6 +677,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(

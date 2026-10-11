@@ -43,7 +43,94 @@ from dataclasses import dataclass
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session, object_session
 
-from app.models import ProjectMember, ProjectMemberRole, Role, RolePermission
+from app.models import (
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
+    User,
+    UserModulePermission,
+)
+from app.permission_codes import PermissionCode, permission_code_scope
+
+
+@dataclass(frozen=True)
+class EffectiveAccess:
+    """One effective permission snapshot for a person and optional project."""
+
+    is_active: bool
+    is_admin: bool
+    module_permissions: frozenset[str]
+    project_permissions: frozenset[str]
+    project_permissions_by_project: dict[uuid.UUID, frozenset[str]]
+
+
+def calculate_effective_access(
+    session: Session,
+    *,
+    user_id: uuid.UUID,
+    project_id: uuid.UUID | None = None,
+) -> EffectiveAccess:
+    """DOM-R69: single calculation entry for module and project access."""
+    with session.no_autoflush:
+        user = session.get(User, user_id)
+        if user is None:
+            return EffectiveAccess(False, False, frozenset(), frozenset(), {})
+        if user.is_admin:
+            module_codes = frozenset(
+                code.value
+                for code in PermissionCode
+                if permission_code_scope(code.value) == "module"
+            )
+        else:
+            module_codes = frozenset(
+                session.scalars(
+                    select(UserModulePermission.permission_code).where(
+                        UserModulePermission.user_id == user_id
+                    )
+                ).all()
+            )
+        project_map = _project_permissions_by_project(
+            session, user_id=user_id, project_id=project_id
+        )
+        project_codes = (
+            project_map.get(project_id, frozenset())
+            if project_id
+            else frozenset()
+        )
+    return EffectiveAccess(
+        is_active=user.is_active,
+        is_admin=user.is_admin,
+        module_permissions=module_codes,
+        project_permissions=project_codes,
+        project_permissions_by_project=project_map,
+    )
+
+
+def _project_permissions_by_project(
+    session: Session,
+    *,
+    user_id: uuid.UUID,
+    project_id: uuid.UUID | None,
+) -> dict[uuid.UUID, frozenset[str]]:
+    query = (
+        select(ProjectMember.project_id, RolePermission.code)
+        .distinct()
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
+        )
+        .join(
+            RolePermission, RolePermission.role_id == ProjectMemberRole.role_id
+        )
+        .where(ProjectMember.user_id == user_id)
+    )
+    if project_id is not None:
+        query = query.where(ProjectMember.project_id == project_id)
+    grouped: dict[uuid.UUID, set[str]] = {}
+    for key, code in session.execute(query).all():
+        grouped.setdefault(key, set()).add(code)
+    return {key: frozenset(values) for key, values in grouped.items()}
 
 
 def effective_permissions(
@@ -58,24 +145,9 @@ def effective_permissions(
     no role (DOM-R36) -- both cases simply match zero rows below,
     so neither needs a separate branch.
     """
-    with session.no_autoflush:
-        codes = session.scalars(
-            select(RolePermission.code)
-            .distinct()
-            .join(
-                ProjectMemberRole,
-                ProjectMemberRole.role_id == RolePermission.role_id,
-            )
-            .join(
-                ProjectMember,
-                ProjectMember.id == ProjectMemberRole.project_member_id,
-            )
-            .where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user_id,
-            )
-        ).all()
-    return frozenset(codes)
+    return calculate_effective_access(
+        session, user_id=user_id, project_id=project_id
+    ).project_permissions
 
 
 @dataclass(frozen=True)
