@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TemplateLibraryNav } from './TemplateLibraryNav'
@@ -182,5 +182,25 @@ describe('TemplateLibraryNav item selection', () => {
       type: 'item',
       id: 'item-1',
     })
+  })
+
+  it('marks applied items as unavailable without hiding their status', () => {
+    const onSelect = vi.fn()
+    render(
+      <TemplateLibraryNav
+        {...props}
+        appliedItemIds={new Set(['item-1'])}
+        onSelect={onSelect}
+        mobile={false}
+      />,
+    )
+
+    const appliedItem = screen.getByRole('button', {
+      name: '檢查欄杆，已套用',
+    })
+    expect(appliedItem).toBeDisabled()
+    expect(within(appliedItem).getByText('已套用')).toBeInTheDocument()
+    fireEvent.click(appliedItem)
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })

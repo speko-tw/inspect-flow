@@ -9,7 +9,13 @@ function LocationState() {
   return <output>{JSON.stringify(location.state ?? null)}</output>
 }
 
-function renderShell(target: string) {
+function renderShell(
+  target: string,
+  viewerPermissions = [
+    'project_member.manage',
+    'project_inspection_item.edit',
+  ],
+) {
   return render(
     <MemoryRouter
       initialEntries={[
@@ -29,10 +35,7 @@ function renderShell(target: string) {
               activeSection="home"
               project={{ project_code: 'DEMO-001', name: '示範工程' }}
               projectId="project-1"
-              viewerPermissions={[
-                'project_member.manage',
-                'project_inspection_item.edit',
-              ]}
+              viewerPermissions={viewerPermissions}
             >
               <p>專案首頁</p>
             </ProjectSectionShell>
@@ -60,5 +63,13 @@ describe('project section navigation state', () => {
     fireEvent.click(screen.getByRole('link', { name: '成員' }))
 
     expect(screen.getByText('null')).toBeVisible()
+  })
+
+  it('shows the inspection items section to a read-only project member', () => {
+    renderShell('/admin/projects/:projectId/inspection-items', [
+      'inspection_plan.read',
+    ])
+
+    expect(screen.getByRole('link', { name: '查核項目' })).toBeInTheDocument()
   })
 })

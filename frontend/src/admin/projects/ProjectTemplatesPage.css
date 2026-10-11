@@ -1,0 +1,24 @@
+.tpl-mobile-system-count {
+  display: block;
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.tpl-applied-status {
+  margin-inline-start: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.tpl-apply-item-option {
+  margin-block: 0.5rem;
+}
+
+.tpl-conflict-hint {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}

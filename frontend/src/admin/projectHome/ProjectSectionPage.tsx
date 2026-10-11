@@ -29,7 +29,7 @@ export default function ProjectSectionPage({
   children,
 }: {
   section: Exclude<ProjectSection, 'home'>
-  children?: ReactNode
+  children?: ReactNode | ((viewerPermissions: string[]) => ReactNode)
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -95,12 +95,21 @@ export default function ProjectSectionPage({
     return <p role="status">正在確認專案權限…</p>
   }
 
-  let content = children ?? <p>正在確認專案權限…</p>
+  const childContent =
+    typeof children === 'function'
+      ? children(currentResult.viewerPermissions)
+      : children
+  let content = childContent ?? <p>正在確認專案權限…</p>
   if (!children && currentResult.canViewIndoor) {
     if (section === 'members') {
       content = <ProjectDetailPage />
     } else if (section === 'inspection-items') {
-      content = <ProjectItemLinks projectId={projectId} />
+      content = (
+        <ProjectItemLinks
+          projectId={projectId}
+          viewerPermissions={currentResult.viewerPermissions}
+        />
+      )
     } else {
       content = (
         <section aria-labelledby="project-section-heading">
