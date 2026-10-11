@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier, Event, Lock
 from time import monotonic
+from uuid import UUID
 
 import pytest
 from alembic.config import Config
@@ -24,12 +25,82 @@ from app.models import (
     AuditLog,
     ProjectInspectionItem,
     ProjectInspectionItemChange,
+    ProjectInspectionPoint,
     TaskInspectionItem,
     TaskRequirementSnapshot,
 )
 from tests.api.test_inspection_planning_api import _planning_world
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def test_project_item_patch_can_swap_point_sequences_on_postgresql(
+    engine: Engine,
+    db_session: Session,
+    make_client: Callable[[], TestClient],
+) -> None:
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL immediate unique constraints")
+
+    world = _planning_world(db_session, make_client)
+    item = world["item"]
+    project = world["project"]
+    admin = world["admin"]
+    item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
+    initial = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {
+                    "sequence": sequence,
+                    "title": f"點位 {sequence}",
+                    "instruction": "初始說明",
+                    "text_standard": {"text": "初始標準"},
+                    "measurement_fields": [],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+                for sequence in (1, 2)
+            ]
+        },
+    )
+    assert initial.status_code == 200, initial.text
+    points = initial.json()["inspection_points"]
+
+    swapped = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {
+                    "id": point["id"],
+                    "sequence": 3 - point["sequence"],
+                    "title": point["title"],
+                    "instruction": point["instruction"],
+                    "text_standard": point["text_standard"],
+                    "numeric_standard": None,
+                    "measurement_fields": [],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+                for point in points
+            ]
+        },
+    )
+    assert swapped.status_code == 200, swapped.text
+    assert {
+        point["id"]: point["sequence"]
+        for point in swapped.json()["inspection_points"]
+    } == {point["id"]: 3 - point["sequence"] for point in points}
+    stored_sequences = dict(
+        db_session.execute(
+            select(
+                ProjectInspectionPoint.id, ProjectInspectionPoint.sequence
+            ).where(
+                ProjectInspectionPoint.project_inspection_item_id == item.id
+            )
+        ).all()
+    )
+    assert stored_sequences == {
+        UUID(point["id"]): 3 - point["sequence"] for point in points
+    }
 
 
 @pytest.fixture(autouse=True)
