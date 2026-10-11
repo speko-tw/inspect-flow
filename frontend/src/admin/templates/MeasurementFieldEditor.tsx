@@ -73,6 +73,8 @@ export function MeasurementFieldEditor({
               欄位型別
             </label>
             <select
+              aria-invalid={Boolean(errors[`${base}:type`])}
+              data-error-key={`${base}:type`}
               id={`field-${pointIndex}-${fieldIndex}-type`}
               onChange={(event) => {
                 if (bound && event.target.value !== 'number') {
@@ -97,6 +99,9 @@ export function MeasurementFieldEditor({
               <option value="text">文字</option>
               <option value="number">數字</option>
             </select>
+            {errors[`${base}:type`] && (
+              <p className="tpl-field-error">{errors[`${base}:type`]}</p>
+            )}
             {actionErrors[`${base}:type`] && (
               <p className="tpl-field-error" role="alert">
                 {actionErrors[`${base}:type`]}

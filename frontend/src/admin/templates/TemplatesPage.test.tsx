@@ -143,6 +143,8 @@ function templateFetch(
   options: {
     categoryError?: number
     writeError?: number
+    writeFields?: Array<{ path: string; code: string }>
+    photoCountError?: boolean
     writeConflict?: boolean
     deleteSuccess?: boolean
     validateWire?: boolean
@@ -270,6 +272,29 @@ function templateFetch(
         })
       }
       if (path === '/api/v1/templates' && method === 'POST') {
+        const photoCount = (
+          body as {
+            inspection_points?: Array<{
+              evidence_requirements?: Array<{ min_count?: number }>
+            }>
+          }
+        )?.inspection_points?.[0]?.evidence_requirements?.[0]?.min_count
+        if (options.photoCountError && photoCount! > 1000) {
+          return Response.json(
+            {
+              error: {
+                code: 'request.validation_failed',
+                fields: [
+                  {
+                    path: '/inspection_points/0/evidence_requirements/0/min_count',
+                    code: 'field.out_of_range',
+                  },
+                ],
+              },
+            },
+            { status: 422 },
+          )
+        }
         if (options.writeError) {
           return Response.json(
             {
@@ -278,6 +303,9 @@ function templateFetch(
                   options.writeError === 403
                     ? 'permission.denied'
                     : 'request.validation_failed',
+                ...(options.writeFields
+                  ? { fields: options.writeFields }
+                  : {}),
               },
             },
             { status: options.writeError },
@@ -308,6 +336,9 @@ function templateFetch(
                   options.writeError === 403
                     ? 'permission.denied'
                     : 'request.validation_failed',
+                ...(options.writeFields
+                  ? { fields: options.writeFields }
+                  : {}),
               },
             },
             { status: options.writeError },
@@ -1325,6 +1356,200 @@ describe('TemplatesPage', () => {
       fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
     ).toBe(true)
     expect(screen.queryByText(/欄位路徑/)).not.toBeInTheDocument()
+  })
+
+  it('maps server field errors, opens the affected point, and keeps the draft', async () => {
+    const focusedErrorStates: Array<{
+      open: boolean
+      invalid: string | null
+    }> = []
+    const originalFocus = HTMLElement.prototype.focus
+    const focusSpy = vi
+      .spyOn(HTMLElement.prototype, 'focus')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.dataset.errorKey === 'point:0:title') {
+          focusedErrorStates.push({
+            open: this.closest('details')?.open ?? false,
+            invalid: this.getAttribute('aria-invalid'),
+          })
+        }
+        originalFocus.call(this)
+      })
+    templateFetch({
+      items: [],
+      writeError: 422,
+      writeFields: [
+        {
+          path: '/inspection_points/1/title',
+          code: 'field.required',
+        },
+        {
+          path: '/inspection_points/0/title',
+          code: 'field.required',
+        },
+        {
+          path: '/inspection_points/0/measurement_fields/0/unit',
+          code: 'template.numeric_unit_required',
+        },
+        {
+          path: '/inspection_points/0/sequence',
+          code: 'template.sequence_duplicate',
+        },
+        {
+          path: '/inspection_points/0/measurement_fields/0/client_id',
+          code: 'template.client_id_duplicate',
+        },
+        { path: '/unrecognized/path', code: 'field.invalid' },
+      ],
+    })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/欄位名稱/), {
+      target: { value: '坡度' },
+    })
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: '%' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
+    fireEvent.change(screen.getAllByLabelText(/項次標題/)[1], {
+      target: { value: '寬度' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫此欄位。')).toHaveLength(4)
+    expect(screen.getAllByText('請填寫數字欄位的單位。')).toHaveLength(2)
+    expect(
+      screen
+        .getAllByRole('alert')
+        .some((alert) =>
+          alert.textContent?.includes('範本未儲存，輸入內容已保留'),
+        ),
+    ).toBe(true)
+    expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('管線查核')
+    expect(screen.getByLabelText(/單位/)).toHaveValue('%')
+    const cards = Array.from(
+      document.querySelectorAll<HTMLDetailsElement>('.tpl-point-card'),
+    )
+    expect(cards[0].open).toBe(true)
+    expect(cards[1].open).toBe(true)
+    await waitFor(() =>
+      expect(screen.getAllByLabelText(/項次標題/)[0]).toHaveFocus(),
+    )
+    expect(focusSpy).toHaveBeenCalled()
+    expect(focusedErrorStates).toContainEqual({ open: true, invalid: 'true' })
+    focusSpy.mockRestore()
+    expect(
+      screen
+        .getAllByRole('alert')
+        .some((alert) => alert.textContent?.includes('尚有 3 處要修正')),
+    ).toBe(true)
+    expect(screen.queryByText(/unrecognized\/path/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/inspection_points\/0\/sequence/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/measurement_fields\/0\/client_id/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('clears a server field error when its point is edited', async () => {
+    templateFetch({
+      items: [],
+      writeError: 422,
+      writeFields: [
+        { path: '/inspection_points/0/title', code: 'field.required' },
+      ],
+    })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'cm' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫此欄位。')).toHaveLength(2)
+    fireEvent.change(screen.getByLabelText(/項次標題/), {
+      target: { value: '已修正標題' },
+    })
+    await waitFor(() =>
+      expect(screen.queryAllByText('請填寫此欄位。')).toHaveLength(0),
+    )
+  })
+
+  it('clears photo count server errors after the count is corrected', async () => {
+    templateFetch({ items: [], photoCountError: true })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'mm' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText(/照片至少幾張/), {
+      target: { value: '1001' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('數值超出允許範圍。')).toHaveLength(2)
+    expect(screen.getByLabelText(/照片至少幾張/)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+
+    fireEvent.change(screen.getByLabelText(/照片至少幾張/), {
+      target: { value: '2' },
+    })
+    await waitFor(() =>
+      expect(screen.queryAllByText('數值超出允許範圍。')).toHaveLength(0),
+    )
+    expect(screen.getByLabelText(/照片至少幾張/)).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    )
+  })
+
+  it('clears indexed server errors when removing their point', async () => {
+    templateFetch({
+      items: [],
+      writeError: 422,
+      writeFields: [
+        { path: '/inspection_points/0/title', code: 'field.required' },
+      ],
+    })
+    render(<TemplatesPage />)
+    await startNewItem()
+    fireEvent.change(screen.getByLabelText(/單位/), {
+      target: { value: 'cm' },
+    })
+    fireEvent.change(screen.getByLabelText(/^下限/), {
+      target: { value: '1' },
+    })
+    fireEvent.change(screen.getByLabelText(/^上限/), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查核項目' }))
+
+    expect(await screen.findAllByText('請填寫此欄位。')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '移除此項次' }))
+    await waitFor(() =>
+      expect(screen.queryAllByText('請填寫此欄位。')).toHaveLength(0),
+    )
   })
 
   it('rebinds numeric standard without disabling the unit input', async () => {

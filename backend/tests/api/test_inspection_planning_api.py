@@ -842,7 +842,7 @@ def test_field_task_detail_keeps_numeric_measurement_mapping_and_order(
                             "client_id": str(second_client_id),
                             "name": "第二量測欄位",
                             "field_type": "number",
-                            "unit": "mm",
+                            "unit": None,
                         },
                     ],
                     "evidence_requirements": [{"min_count": 1}],
@@ -851,6 +851,71 @@ def test_field_task_detail_keeps_numeric_measurement_mapping_and_order(
         },
     )
     assert updated.status_code == 200, updated.text
+    updated_point = updated.json()["inspection_points"][0]
+    assert updated_point["numeric_standard"]["unit"] == "mm"
+    assert updated_point["measurement_fields"][1]["unit"] == "mm"
+
+    listed = admin.get(f"/api/v1/projects/{project.id}/inspection-items")
+    assert listed.status_code == 200, listed.text
+    listed_item = next(
+        item
+        for item in listed.json()["items"]
+        if item["id"] == str(world["item"].id)
+    )
+    persisted_point = listed_item["inspection_points"][0]
+    assert persisted_point["measurement_fields"][1]["unit"] == "mm"
+    assert persisted_point["numeric_standard"]["unit"] == "mm"
+
+    client_ids = {
+        field["id"]: str(uuid4())
+        for field in persisted_point["measurement_fields"]
+    }
+    numeric = persisted_point["numeric_standard"]
+    patch_numeric = {
+        key: numeric[key]
+        for key in (
+            "value",
+            "condition",
+            "unit",
+            "tolerance",
+            "range_form",
+            "lower_bound",
+            "upper_bound",
+        )
+    }
+    patch_numeric["measurement_field_client_id"] = client_ids[
+        str(numeric["measurement_field_id"])
+    ]
+    roundtrip_point = {
+        key: persisted_point[key]
+        for key in ("sequence", "title", "instruction", "text_standard")
+    }
+    roundtrip_point["numeric_standard"] = patch_numeric
+    roundtrip_point["measurement_fields"] = [
+        {
+            "client_id": client_ids[str(field["id"])],
+            "name": field["name"],
+            "field_type": field["field_type"],
+            "unit": (
+                None
+                if field["id"] == numeric["measurement_field_id"]
+                else field["unit"]
+            ),
+        }
+        for field in persisted_point["measurement_fields"]
+    ]
+    roundtrip_point["evidence_requirements"] = [
+        {"min_count": requirement["min_count"]}
+        for requirement in persisted_point["evidence_requirements"]
+    ]
+    roundtrip = admin.patch(
+        item_url, json={"inspection_points": [roundtrip_point]}
+    )
+    assert roundtrip.status_code == 200, roundtrip.text
+    roundtrip_result = roundtrip.json()["inspection_points"][0]
+    assert roundtrip_result["measurement_fields"][1]["unit"] == "mm"
+    assert roundtrip_result["numeric_standard"]["unit"] == "mm"
+
     plan = admin.post(
         f"/api/v1/projects/{project.id}/inspection-plans",
         json={"name": "量測欄位排序"},
@@ -2017,8 +2082,6 @@ def test_project_item_patch_rejects_invalid_point_structure(
         f"/api/v1/projects/{world['project'].id}"
         f"/inspection-items/{world['item'].id}"
     )
-    validation = {"error": {"code": "request.validation_failed"}}
-
     two_rows = admin.patch(
         item_url,
         json={
@@ -2028,11 +2091,23 @@ def test_project_item_patch_rejects_invalid_point_structure(
         },
     )
     assert two_rows.status_code == 422, two_rows.text
-    assert two_rows.json() == validation
+    assert two_rows.json()["error"]["code"] == "request.validation_failed"
+    assert two_rows.json()["error"]["fields"] == [
+        {
+            "path": "/inspection_points/0/evidence_requirements",
+            "code": "field.too_long",
+        }
+    ]
     no_rows = admin.patch(
         item_url, json={"inspection_points": [_item_point([])]}
     )
     assert no_rows.status_code == 422, no_rows.text
+    assert no_rows.json()["error"]["fields"] == [
+        {
+            "path": "/inspection_points/0/evidence_requirements",
+            "code": "field.too_short",
+        }
+    ]
     repeated_sequence = admin.patch(
         item_url,
         json={
@@ -2043,7 +2118,54 @@ def test_project_item_patch_rejects_invalid_point_structure(
         },
     )
     assert repeated_sequence.status_code == 422, repeated_sequence.text
-    assert repeated_sequence.json() == validation
+    assert repeated_sequence.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+    assert repeated_sequence.json()["error"]["fields"] == [
+        {
+            "path": "/inspection_points/0/sequence",
+            "code": "template.sequence_duplicate",
+        },
+        {
+            "path": "/inspection_points/1/sequence",
+            "code": "template.sequence_duplicate",
+        },
+    ]
+    client_id = str(uuid4())
+    bound_unit = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "量測項次",
+                    "instruction": "量測說明",
+                    "numeric_standard": {
+                        "value": "5",
+                        "condition": "=",
+                        "unit": "mm",
+                        "measurement_field_client_id": client_id,
+                    },
+                    "measurement_fields": [
+                        {
+                            "client_id": client_id,
+                            "name": "綁定欄位",
+                            "field_type": "number",
+                            "unit": "mm",
+                        }
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert bound_unit.status_code == 422, bound_unit.text
+    assert bound_unit.json()["error"]["fields"] == [
+        {
+            "path": "/inspection_points/0/measurement_fields/0/unit",
+            "code": "template.bound_field_unit_forbidden",
+        }
+    ]
     db_session.expire_all()
     assert (
         db_session.scalar(

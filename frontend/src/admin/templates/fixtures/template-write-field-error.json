@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": "request.validation_failed",
+    "fields": [
+      {
+        "path": "/inspection_points/0/sequence",
+        "code": "template.sequence_duplicate"
+      },
+      {
+        "path": "/inspection_points/1/sequence",
+        "code": "template.sequence_duplicate"
+      }
+    ]
+  }
+}

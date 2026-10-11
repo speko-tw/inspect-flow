@@ -6,11 +6,51 @@
 
 export const API_BASE = '/api/v1'
 
+export interface HttpFieldError {
+  path: string
+  code: string
+}
+
+function isJsonPointer(path: string): boolean {
+  if (path === '') return true
+  if (!path.startsWith('/')) return false
+  return !/(?:~(?![01]))/.test(path)
+}
+
+function parseFieldErrors(value: unknown): HttpFieldError[] | undefined {
+  if (!Array.isArray(value) || value.length > 100) return undefined
+  const fields: HttpFieldError[] = []
+  for (const entry of value) {
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      Array.isArray(entry) ||
+      Object.keys(entry).length !== 2 ||
+      !('path' in entry) ||
+      !('code' in entry)
+    ) {
+      return undefined
+    }
+    const { path, code } = entry as Record<string, unknown>
+    if (
+      typeof path !== 'string' ||
+      !isJsonPointer(path) ||
+      typeof code !== 'string' ||
+      !code.trim()
+    ) {
+      return undefined
+    }
+    fields.push({ path, code })
+  }
+  return fields
+}
+
 /** API 回傳非預期狀態碼時拋出；`code`、`details` 取自錯誤 envelope。 */
 export class HttpError extends Error {
   readonly status: number
   readonly code?: string
   readonly details?: unknown
+  declare fields?: HttpFieldError[]
 
   constructor(status: number, code?: string, details?: unknown) {
     super(`API 錯誤（狀態碼 ${status}）`)
@@ -55,16 +95,24 @@ export async function request<T>(
   if (!response.ok) {
     let code: string | undefined
     let details: unknown
+    let fields: HttpFieldError[] | undefined
     try {
       const body = (await response.json()) as {
         error?: { code?: string; details?: unknown }
       }
       code = body.error?.code
       details = body.error?.details
+      if (response.status === 422) {
+        fields = parseFieldErrors(
+          (body.error as { fields?: unknown } | undefined)?.fields,
+        )
+      }
     } catch {
       // 非 JSON 錯誤回應以狀態碼處理。
     }
-    throw new ErrorClass(response.status, code, details)
+    const error = new ErrorClass(response.status, code, details)
+    if (fields !== undefined) error.fields = fields
+    throw error
   }
 
   if (response.status === 204) {

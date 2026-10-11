@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactNode,
@@ -10,12 +11,18 @@ import {
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { mapFieldErrors } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
 import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
-import { boundField, forWire, localizeField } from './templateEditorUtils'
+import {
+  boundField,
+  forWire,
+  localizeField,
+  templateFieldErrorBindings,
+} from './templateEditorUtils'
 import {
   createTemplateCategory,
   createTemplateItem,
@@ -37,6 +44,7 @@ import {
 } from './api'
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
+type FocusRequest = { id: number; key: string }
 type Mode =
   | 'view'
   | 'create-category'
@@ -123,6 +131,26 @@ const TEMPLATE_ERROR_CODES: Record<string, string> = {
   'request.validation_failed': TEMPLATE_NOT_SAVED,
 }
 
+const FIELD_ERROR_MESSAGES: Record<string, string> = {
+  'field.required': '請填寫此欄位。',
+  'field.invalid': '欄位格式不正確，請檢查輸入內容。',
+  'field.too_long': '輸入內容太長。',
+  'field.too_short': '輸入內容太短。',
+  'field.out_of_range': '數值超出允許範圍。',
+  'field.duplicate': '此欄位不可重複。',
+  'template.sequence_duplicate': '項次順序重複，請檢查項次。',
+  'template.photo_requirement_count': '每個項次必須設定一筆照片需求。',
+  'template.client_id_duplicate': '實測欄位識別重複，請重新設定欄位。',
+  'template.numeric_field_unbound': '請選擇有效的數字欄位。',
+  'template.numeric_unit_required': '請填寫數字欄位的單位。',
+  'template.text_unit_forbidden': '文字欄位不需要單位。',
+  'template.bound_field_unit_forbidden': '綁定欄位的單位由數值標準帶入。',
+}
+
+function fieldErrorMessage(code: string): string {
+  return FIELD_ERROR_MESSAGES[code] ?? '欄位內容不符合規則，請檢查後再試。'
+}
+
 function apiMessage(error: unknown): string {
   if (error instanceof HttpError) {
     const specific = TEMPLATE_ERROR_CODES[error.code ?? '']
@@ -150,6 +178,11 @@ export default function TemplatesPage() {
   const [baseline, setBaseline] = useState('')
   const [photoDraft, setPhotoDraft] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [serverFieldErrors, setServerFieldErrors] = useState<
+    Record<string, string>
+  >({})
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
+  const focusRequestId = useRef(0)
   const [attemptedSave, setAttemptedSave] = useState(false)
   const [actionError, setActionError] = useState('')
   const [error, setError] = useState('')
@@ -315,6 +348,8 @@ export default function TemplatesPage() {
     setBaseline('')
     setPhotoDraft({})
     setErrors({})
+    setServerFieldErrors({})
+    setFocusRequest(null)
     setAttemptedSave(false)
     setActionError('')
     setConfirmField('')
@@ -386,6 +421,8 @@ export default function TemplatesPage() {
     setPhotoDraft(photos)
     setBaseline(JSON.stringify({ itemDraft: normalized, photoDraft: photos }))
     setErrors({})
+    setServerFieldErrors({})
+    setFocusRequest(null)
     setAttemptedSave(false)
     setMode(nextMode)
     setNotice('')
@@ -452,6 +489,14 @@ export default function TemplatesPage() {
 
   function updateDraft(changes: Partial<TemplateItem>): void {
     setItemDraft((current) => (current ? { ...current, ...changes } : current))
+    if (changes.title !== undefined) {
+      setServerFieldErrors((current) => {
+        if (!('title' in current)) return current
+        const next = { ...current }
+        delete next.title
+        return next
+      })
+    }
     setError('')
   }
 
@@ -459,6 +504,7 @@ export default function TemplatesPage() {
     index: number,
     changes: Partial<InspectionPoint>,
   ): void {
+    clearPointServerErrors(index)
     setItemDraft((current) =>
       current
         ? {
@@ -482,6 +528,18 @@ export default function TemplatesPage() {
         : current,
     )
     setError('')
+  }
+
+  function clearPointServerErrors(index: number): void {
+    setServerFieldErrors((current) => {
+      const prefix = `point:${index}:`
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([key]) => !key.startsWith(prefix)),
+      )
+      return Object.keys(next).length === Object.keys(current).length
+        ? current
+        : next
+    })
   }
 
   function updateField(
@@ -532,6 +590,15 @@ export default function TemplatesPage() {
 
   function removePoint(index: number): void {
     if (!itemDraft) return
+    setServerFieldErrors((current) =>
+      Object.keys(current).some((key) => key.startsWith('point:'))
+        ? Object.fromEntries(
+            Object.entries(current).filter(
+              ([key]) => !key.startsWith('point:'),
+            ),
+          )
+        : current,
+    )
     updateDraft({
       inspection_points: itemDraft.inspection_points
         .filter((_point, position) => position !== index)
@@ -645,6 +712,22 @@ export default function TemplatesPage() {
     return result
   }, [itemDraft, photoDraft, systemItems])
 
+  function wireItem(item: TemplateItem): TemplateItem {
+    const next = forWire(item)
+    return {
+      ...next,
+      inspection_points: next.inspection_points.map((point, index) => ({
+        ...point,
+        sequence: index + 1,
+        evidence_requirements: [
+          {
+            min_count: Number(photoDraft[String(index)] ?? '1'),
+          },
+        ],
+      })),
+    }
+  }
+
   function focusFirstError(nextErrors: Record<string, string>): void {
     const first = Object.keys(nextErrors)[0]
     if (!first) return
@@ -662,22 +745,6 @@ export default function TemplatesPage() {
     }, 0)
   }
 
-  function wireItem(item: TemplateItem): TemplateItem {
-    const next = forWire(item)
-    return {
-      ...next,
-      inspection_points: next.inspection_points.map((point, index) => ({
-        ...point,
-        sequence: index + 1,
-        evidence_requirements: [
-          {
-            min_count: Number(photoDraft[String(index)] ?? '1'),
-          },
-        ],
-      })),
-    }
-  }
-
   async function saveItem(
     event: FormEvent<HTMLFormElement>,
   ): Promise<number[] | null> {
@@ -687,6 +754,7 @@ export default function TemplatesPage() {
     const found = validateItem()
     if (Object.keys(found).length) {
       setErrors(found)
+      setServerFieldErrors({})
       setError('')
       focusFirstError(found)
       return [
@@ -699,6 +767,8 @@ export default function TemplatesPage() {
       ]
     }
     if (!submitGuard.enter()) return null
+    setError('')
+    setServerFieldErrors({})
     try {
       const input = wireItem({ ...itemDraft, system_id: systemId })
       const result = itemDraft.id
@@ -716,6 +786,38 @@ export default function TemplatesPage() {
       showNotice('查核項目已儲存')
       return null
     } catch (caught) {
+      if (
+        caught instanceof HttpError &&
+        caught.status === 422 &&
+        caught.fields?.length
+      ) {
+        const mapped = mapFieldErrors(
+          caught.fields,
+          templateFieldErrorBindings(itemDraft),
+        )
+        const messages = Object.fromEntries(
+          Object.entries(mapped.errors).map(([key, code]) => [
+            key,
+            fieldErrorMessage(code),
+          ]),
+        )
+        setServerFieldErrors(messages)
+        setError(mapped.unmatched.length ? TEMPLATE_NOT_SAVED : '')
+        const firstErrorKey = Object.keys(messages)[0]
+        if (firstErrorKey) {
+          focusRequestId.current += 1
+          setFocusRequest({ id: focusRequestId.current, key: firstErrorKey })
+        }
+        return [
+          ...new Set(
+            Object.keys(messages)
+              .map((key) => /^point:(\d+):/.exec(key)?.[1])
+              .filter((index): index is string => index !== undefined)
+              .map(Number),
+          ),
+        ]
+      }
+      setServerFieldErrors({})
       fail(caught)
       return null
     } finally {
@@ -885,7 +987,11 @@ export default function TemplatesPage() {
         addPoint={addPoint}
         confirmField={confirmField}
         dirty={dirty}
-        errors={attemptedSave ? validateItem() : errors}
+        errors={{
+          ...serverFieldErrors,
+          ...(attemptedSave ? validateItem() : errors),
+        }}
+        focusRequest={focusRequest}
         requestError={error}
         itemDraft={itemDraft}
         mode={mode as 'create-item' | 'edit-item'}
@@ -900,6 +1006,7 @@ export default function TemplatesPage() {
         setConfirmField={setConfirmField}
         setGuard={setGuard}
         setPhotoDraft={setPhotoDraft}
+        clearPointServerErrors={clearPointServerErrors}
         systemId={systemId}
         updateDraft={updateDraft}
         updateField={updateField}

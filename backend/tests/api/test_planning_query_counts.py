@@ -46,7 +46,7 @@ def _point(sequence: int, kind: str) -> dict:
                 "client_id": field_id,
                 "name": "thickness",
                 "field_type": "number",
-                "unit": "mm",
+                "unit": None,
             },
             {
                 "client_id": str(uuid4()),

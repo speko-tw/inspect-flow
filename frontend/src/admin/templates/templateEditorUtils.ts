@@ -151,3 +151,87 @@ export function forWire(item: TemplateItem): TemplateItem {
     }),
   }
 }
+
+export function templateFieldErrorBindings(
+  item: TemplateItem,
+  itemIndex?: number,
+): Array<{ path: string; key: string }> {
+  const prefix = itemIndex === undefined ? '' : `/items/${itemIndex}`
+  const bindings: Array<{ path: string; key: string }> = [
+    { path: `${prefix}/title`, key: 'title' },
+  ]
+  item.inspection_points.forEach((point, pointIndex) => {
+    const pointPath = `${prefix}/inspection_points/${pointIndex}`
+    const pointKey = `point:${pointIndex}`
+    bindings.push(
+      { path: `${pointPath}/title`, key: `${pointKey}:title` },
+      { path: `${pointPath}/instruction`, key: `${pointKey}:instruction` },
+    )
+    point.measurement_fields.forEach((field, fieldIndex) => {
+      const fieldPath = `${pointPath}/measurement_fields/${fieldIndex}`
+      const fieldKey = `${pointKey}:field:${fieldIndex}`
+      bindings.push(
+        { path: `${fieldPath}/name`, key: `${fieldKey}:name` },
+        { path: `${fieldPath}/field_type`, key: `${fieldKey}:type` },
+        {
+          path: `${fieldPath}/unit`,
+          key: `${fieldKey}:${field.field_type === 'text' ? 'type' : 'unit'}`,
+        },
+      )
+    })
+    if (point.text_standard) {
+      bindings.push({
+        path: `${pointPath}/text_standard/text`,
+        key: `${pointKey}:text`,
+      })
+    }
+    if (point.numeric_standard) {
+      const standard = point.numeric_standard
+      const interval =
+        standard.condition === 'range' &&
+        (standard.range_form ?? 'interval') === 'interval'
+      bindings.push({
+        path: `${pointPath}/numeric_standard/measurement_field_client_id`,
+        key: `${pointKey}:binding`,
+      })
+      if (interval) {
+        bindings.push(
+          {
+            path: `${pointPath}/numeric_standard/lower_bound`,
+            key: `${pointKey}:lower`,
+          },
+          {
+            path: `${pointPath}/numeric_standard/upper_bound`,
+            key: `${pointKey}:upper`,
+          },
+        )
+      } else {
+        bindings.push({
+          path: `${pointPath}/numeric_standard/value`,
+          key: `${pointKey}:value`,
+        })
+        if (
+          standard.condition === 'range' ||
+          standard.condition === '=' ||
+          standard.tolerance
+        ) {
+          bindings.push({
+            path: `${pointPath}/numeric_standard/tolerance`,
+            key: `${pointKey}:tolerance`,
+          })
+        }
+      }
+    }
+    bindings.push(
+      {
+        path: `${pointPath}/evidence_requirements`,
+        key: `${pointKey}:photos`,
+      },
+      {
+        path: `${pointPath}/evidence_requirements/0/min_count`,
+        key: `${pointKey}:photos`,
+      },
+    )
+  })
+  return bindings
+}
