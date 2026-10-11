@@ -26,10 +26,16 @@ import { blockImeEnter, useSubmitGuard } from './submitGuard'
 import { FormError } from './Form'
 import { GENERIC_FAILURE_MESSAGE } from '../http'
 
-/** 依 ADM-R37 區分不可復原的最終確認與一般操作。 */
+/**
+ * 依 ADM-R37，danger 用於立即收回他人權限、讓他人工作失效或
+ * 無法復原的最終確認；neutral 用於授予、恢復與一般確認。
+ */
 export type ConfirmVariant = 'danger' | 'neutral'
 
-/** 依確認框是否蓋住頁面選擇適當的 ARIA 角色。 */
+/**
+ * 依確認框是否蓋住頁面選擇 ARIA 角色；原地展開的 dialog
+ * 不加 aria-modal（ADM-R38）。
+ */
 export type ConfirmRole = 'group' | 'region' | 'dialog' | 'alertdialog'
 
 /** ADM-R38 的共用確認框選項；送出與拒絕原因仍由呼叫頁處理。 */
@@ -63,7 +69,7 @@ export type ConfirmBoxProps = {
 
 /**
  * 依 ADM-R37、ADM-R38 提供一致的按鈕、焦點與 Esc 行為。
- * 確認進行中拒絕重複送出，避免規劃表單的寫入操作執行兩次。
+ * 確認進行中拒絕第二次確認，避免寫入操作重複執行。
  */
 export function ConfirmBox({
   variant = 'neutral',

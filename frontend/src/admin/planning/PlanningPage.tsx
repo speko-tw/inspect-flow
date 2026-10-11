@@ -22,8 +22,8 @@ import type {
 
 type NoticeArea = 'plans' | 'plan-detail' | 'tasks'
 
-// 依 ADM-R28，必填錯誤等送出才顯示，避免輸入前就出現錯誤。
-// 說明提示常駐，錯誤列在欄位旁並聚焦，讓使用者能找到修正位置。
+// 必填錯誤等送出才顯示，避免輸入前就出現錯誤；錯誤列在欄位旁
+// 並聚焦（PR-19、ADM-R28），讓使用者能找到修正位置。
 type FieldKey =
   | 'plan-name'
   | 'plan-rename'
@@ -123,7 +123,8 @@ function draftTaskSummary(task: InspectionTask): string {
 
 /**
  * 依 ADM-R17、IP-R02、IP-R10 呈現專案計畫與任務管理。
- * 權限不足或 Plan 已封存時收起修改入口，實際寫入仍由後端覆核。
+ * Plan 已封存時收起修改入口；頁面不預先判斷寫入權限，寫入被
+ * 後端回 403 後才切成唯讀，實際寫入一律由後端覆核。
  */
 export default function PlanningPage({
   client = planningClient,
@@ -407,8 +408,8 @@ export default function PlanningPage({
   // 修改表單）都不顯示；只留說明文字。
   const canModify = canEditPlan && !readOnly
 
-  // 依 ADM-R28 捲到待修欄位並聚焦；不用 hash 導航，
-  // 避免被未儲存變更的離頁確認誤判成離開頁面。
+  // 依 ADM-R28，缺查核項目時捲到並聚焦新增任務的查核項目欄；
+  // 不用 hash 導航，避免未儲存變更的確認誤判成離頁。
   function focusTaskItems(): void {
     const field = pageContent.current?.querySelector<HTMLElement>(
       '[data-field="task-items"]',
@@ -602,8 +603,8 @@ export default function PlanningPage({
     )
   }
 
-  // 依 ADM-R28 在送出時攔截必填空值，避免把已知錯誤送交 API。
-  // 同時將錯誤設在對應欄位，讓使用者能直接修正。
+  // 依 PR-19 送出時攔截必填空值，避免把已知錯誤送交 API；
+  // 依 ADM-R28 把錯誤列在欄位旁並聚焦，讓使用者能直接修正。
   function rejectBlank(field: FieldKey, blank: boolean): boolean {
     if (!blank) return false
     setError('')

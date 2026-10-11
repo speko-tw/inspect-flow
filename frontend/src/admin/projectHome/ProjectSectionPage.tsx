@@ -27,7 +27,8 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
 
 /**
  * 依 ADM-R17、ADM-R18 載入正式區段與有效權限。
- * 純現場使用者導回權限落點；403 與不存在的專案分別顯示拒絕頁。
+ * 純現場使用者導回權限落點；403 顯示無權限頁，專案 id 格式不對
+ * 或不存在（404／422）顯示找不到頁（ADM-R25）。
  */
 export default function ProjectSectionPage({
   section,

@@ -1,15 +1,18 @@
 import { listAllPages, request } from '../api'
 import { HttpError, httpErrorMessage, isForbidden } from '../../http'
 
-/** 依 IP-R06 表示由任務狀態衍生、不得由用戶端任意設定的 Plan 狀態。 */
+/**
+ * 除 ARCHIVED（封存旗標，由 :archive 操作設定）外，其餘狀態
+ * 由任務衍生，用戶端不得任意設定（IP-R06）。
+ */
 export type PlanStatus =
   'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'ARCHIVED'
 
-/** 依 IP-R07 表示草稿、派出與取消恢復所用的 Task 狀態。 */
+/** 依 IP-R09／IP-R06 表示草稿、派出與後續轉換所用的 Task 狀態。 */
 export type TaskStatus =
   'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 
-/** 專案選取清單所需的最小識別資料。 */
+/** 規劃頁顯示專案名稱所需的最小資料（由路由的專案 id 載入）。 */
 export interface PlanningProject {
   id: string
   name: string
@@ -26,7 +29,7 @@ export interface ProjectInspectionItem {
   inspection_points: unknown[]
 }
 
-/** 依 IP-R03 保留任務項目快照與待重查標記。 */
+/** 依 IP-R03 保留任務項目快照，依 IP-R04 標示待重查。 */
 export interface TaskInspectionItem {
   id: string
   status: string

@@ -2,7 +2,7 @@ import { isForbidden } from '../../http'
 import { listAllPages, ManagementApiError, request } from '../api'
 import type { InspectionPoint } from '../templates/api'
 
-/** IP-R07 所需的任務狀態，供修改項目時說明後果。 */
+/** IP-R04 所需的任務狀態，供修改項目時說明重查後果。 */
 export type TaskStatus =
   'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 

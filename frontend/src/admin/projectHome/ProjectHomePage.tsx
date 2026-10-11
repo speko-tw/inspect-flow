@@ -45,7 +45,7 @@ const STEP_CONTENT: Record<
 }
 
 /**
- * 依 ADM-R16、IP-R11 呈現專案下一步與可見的關鍵數字。
+ * 依 ADM-R16、IP-R11（流程摘要）呈現下一步與可見的關鍵數字。
  * 純現場權限者導向自身落點，拒絕或不存在的專案不顯示空首頁。
  */
 export default function ProjectHomePage() {
