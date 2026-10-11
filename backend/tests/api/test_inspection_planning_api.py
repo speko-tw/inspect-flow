@@ -1846,6 +1846,46 @@ def test_project_item_change_requires_choice_and_returns_task_actions(
     assert task_model.status == "DRAFT"
 
 
+def test_project_item_invalid_structure_precedes_missing_reinspect_choice(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": "結構錯誤優先序"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task.status_code == 201, task.text
+
+    item_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        f"/inspection-items/{world['item'].id}"
+    )
+    # 驗證結構錯誤先回 fields，避免缺少 reinspect 遮蔽可修正原因。
+    invalid = admin.patch(
+        item_url,
+        json={"inspection_points": [_item_point([])]},
+    )
+
+    assert invalid.status_code == 422, invalid.text
+    assert invalid.json() == {
+        "error": {
+            "code": "request.validation_failed",
+            "fields": [
+                {
+                    "path": "/inspection_points/0/evidence_requirements",
+                    "code": "field.too_short",
+                }
+            ],
+        }
+    }
+
+
 def _dispatched_field_task(world, plan_name, assignee_id=None):
     admin = world["admin"]
     plan = admin.post(

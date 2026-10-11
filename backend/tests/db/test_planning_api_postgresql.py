@@ -400,9 +400,22 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
     field_id = UUID(field["id"])
     assert field["unit"] == "mm"
 
+    # 先建立 Task，驗證 reinspect 更新會重拍且保留欄位來源 ID。
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": "既有任務單位快照"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(item.id)]},
+    )
+    assert task.status_code == 201, task.text
+
     updated = admin.patch(
         url,
         json={
+            "reinspect": True,
             "inspection_points": [
                 {
                     "id": str(point_id),
@@ -449,16 +462,6 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
     assert persisted_standard.measurement_field_id == field_id
     assert persisted_standard.measurement_field_unit == "cm"
 
-    plan = admin.post(
-        f"/api/v1/projects/{world['project'].id}/inspection-plans",
-        json={"name": "欄位單位快照"},
-    )
-    assert plan.status_code == 201, plan.text
-    task = admin.post(
-        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
-    )
-    assert task.status_code == 201, task.text
     task_detail = admin.get(f"/api/v1/inspection-tasks/{task.json()['id']}")
     assert task_detail.status_code == 200, task_detail.text
     snapshot_point = task_detail.json()["items"][0]["current_snapshot"][

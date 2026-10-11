@@ -1286,17 +1286,18 @@ def patch_project_item(
             TaskInspectionItem.project_inspection_item_id == item.id
         )
     ).all()
-    if associations and body.reinspect is None:
-        raise APIError(
-            ErrorCode.PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED, 422
-        )
     if body.inspection_points is not None:
+        # reinspect=None 不會啟用結構鎖，先回報完整結構錯誤欄位。
         _validate_project_points(
             db,
             item,
             body.inspection_points,
             has_tasks=bool(associations),
             reinspect=body.reinspect,
+        )
+    if associations and body.reinspect is None:
+        raise APIError(
+            ErrorCode.PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED, 422
         )
 
     before_data = {

@@ -171,39 +171,40 @@ describe('projectItemApi', () => {
       }),
     )
     vi.stubGlobal('fetch', fetchMock)
+    /**
+     * fixture 是 wire body；expected 補上持久化 ID，維持真後端契約。
+     */
+    const expectedRequest = structuredClone(boundUnitFixture.request)
+    const expectedPoint = expectedRequest.inspection_points[0]
+    expectedPoint.id = 'point-1'
+    expectedPoint.measurement_fields[0].id =
+      '00000000-0000-4000-8000-000000000011'
+    expectedPoint.measurement_fields.push({
+      id: '00000000-0000-4000-8000-000000000012',
+      client_id: '00000000-0000-4000-8000-000000000012',
+      name: '寬度',
+      field_type: 'number',
+      unit: 'cm',
+    })
+    const point = expectedPoint
     await projectItemApi.update('project-1', 'item-1', {
-      title: item.title,
-      instruction: item.instruction,
+      title: expectedRequest.title,
+      instruction: expectedRequest.instruction,
       inspection_points: [
         {
-          ...item.inspection_points[0],
-          text_standard: null,
+          ...point,
           numeric_standard: {
-            value: '10',
-            condition: '=',
-            unit: 'mm',
-            tolerance: null,
-            measurement_field_id: '00000000-0000-4000-8000-000000000011',
+            ...point.numeric_standard,
+            measurement_field_id:
+              point.numeric_standard.measurement_field_client_id,
           },
-          measurement_fields: [
-            {
-              id: '00000000-0000-4000-8000-000000000011',
-              name: '厚度',
-              field_type: 'number',
-              unit: 'mm',
-            },
-            {
-              id: '00000000-0000-4000-8000-000000000012',
-              name: '寬度',
-              field_type: 'number',
-              unit: 'cm',
-            },
-          ],
         },
       ],
     })
     const init = fetchMock.mock.calls[0][1] as RequestInit
-    const sent = JSON.parse(init.body as string).inspection_points[0]
+    const body = JSON.parse(init.body as string)
+    const sent = body.inspection_points[0]
+    expect(body).toEqual(expectedRequest)
     expect(sent.id).toBe('point-1')
     expect(sent).not.toHaveProperty('client_id')
     expect(sent.numeric_standard.measurement_field_client_id).toBe(
