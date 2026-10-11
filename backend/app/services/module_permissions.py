@@ -129,11 +129,7 @@ def query_person_access(
 def query_people_access(
     session: Session, *, user_ids: set[uuid.UUID]
 ) -> dict[uuid.UUID, PersonAccess]:
-    """批次回答 DOM-R60 人員查詢，避免候選清單逐人查詢。
-
-    此 Service 集中讀取 User 與 UserModulePermission；呼叫端只取得
-    顯示、有效狀態、Admin 與模組權限四項結果。
-    """
+    """批次回答 DOM-R60 人員查詢，避免候選清單逐人查詢。"""
     if not user_ids:
         return {}
     rows = session.execute(

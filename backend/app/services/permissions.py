@@ -101,11 +101,14 @@ def project_member_ids_with_permission(
     *,
     project_id: uuid.UUID,
     permission_code: str,
+    active_only: bool = False,
 ) -> frozenset[uuid.UUID]:
-    """DOM-R69：回傳具指定動作權限且有效、非 Admin 的成員。
+    """DOM-R69：回傳具指定動作權限且非 Admin 的專案成員。
 
     先由中央 Service 取得角色權限候選人，再由 DOM-R60 人員 Service
     批次核對帳號狀態與 Admin 身分，避免端點自行重算授權。
+    IP-R12 規定停用帳號過濾要等 authentication 任務 P 合併後才啟用，
+    因此預設保留目前行為，由該任務明確傳入 `active_only=True`。
     """
     with session.no_autoflush:
         candidate_permissions: dict[uuid.UUID, set[str]] = {}
@@ -131,7 +134,7 @@ def project_member_ids_with_permission(
     return frozenset(
         user_id
         for user_id, person in people.items()
-        if person.is_active
+        if (person.is_active or not active_only)
         and not person.is_admin
         and permission_code in candidate_permissions[user_id]
     )

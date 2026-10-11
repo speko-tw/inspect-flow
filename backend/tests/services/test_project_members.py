@@ -458,7 +458,12 @@ def test_external_member_accepts_external_allowed_read_role(
 
 
 @pytest.mark.parametrize(
-    "permission_code", ["project_member.manage", "inspection_task.inspect"]
+    ("permission_code", "is_external_allowed"),
+    [
+        ("project_member.manage", False),
+        ("inspection_task.inspect", False),
+        ("inspection_task.inspect", True),
+    ],
 )
 @pytest.mark.parametrize("write", ["add", "assign", "replace"])
 def test_external_role_assignment_entries_reject_and_audit_once(
@@ -467,6 +472,7 @@ def test_external_role_assignment_entries_reject_and_audit_once(
     monkeypatch,
     write,
     permission_code,
+    is_external_allowed,
 ):
     monkeypatch.setattr(
         module_permissions.audit_service,
@@ -475,6 +481,7 @@ def test_external_role_assignment_entries_reject_and_audit_once(
     )
     project = _new_project(operator, "P-EXT-DENY")
     role = _new_role(operator, f"Internal only {permission_code}")
+    role.is_external_allowed = is_external_allowed
     role.permission_codes.append(RolePermission(code=permission_code))
     target = create_root_user_with_company(session, "EXT-DENY")
     target.is_external_collaborator = True

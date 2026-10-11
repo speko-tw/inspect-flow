@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import SystemRoleCode, User
+from app.models import SystemRoleCode, User, UserModulePermission
 from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.access_summary import (
     FIELD_PERMISSION_CODES,
@@ -116,6 +116,7 @@ def world(db_session: Session, make_client):
     reader = person("reader")
     template_admin = person("tpladmin")
     editor = person("editor")
+    module_only = person("moduleonly")
     add_project_member(
         db_session,
         project_id=project_a.id,
@@ -174,6 +175,13 @@ def world(db_session: Session, make_client):
     assign_system_role(
         db_session, template_admin.id, SystemRoleCode.TEMPLATE_ADMIN
     )
+    db_session.add(
+        UserModulePermission(
+            user_id=module_only.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
     db_session.commit()
 
     def client(user: User) -> TestClient:
@@ -189,6 +197,7 @@ def world(db_session: Session, make_client):
         "reader": client(reader),
         "tpladmin": client(template_admin),
         "editor": client(editor),
+        "module_only": client(module_only),
         "project_a": project_a,
         "project_b": project_b,
         "make_client": make_client,
@@ -255,6 +264,61 @@ def test_my_projects_flags_office_access_per_project(world) -> None:
         "DEMO-480-A": True,
         "DEMO-480-B": False,
     }
+
+
+def test_permission_views_agree_across_project_and_person_endpoints(world):
+    project_id = world["project_a"].id
+    cases = {
+        "admin": (200, 200, 200, []),
+        "office": (
+            200,
+            200,
+            200,
+            ["DEMO-480-A", "DEMO-480-B"],
+        ),
+        "nobody": (403, 403, 403, ["DEMO-480-A"]),
+        "module_only": (403, 403, 403, []),
+    }
+    for who, (
+        project_status,
+        workflow_status,
+        members_status,
+        my_projects,
+    ) in cases.items():
+        client = world[who]
+        profile = client.get(ME)
+        assert profile.status_code == 200
+        module_permissions = set(profile.json()["module_permissions"])
+        if who == "module_only":
+            assert module_permissions == {"project.use"}
+        elif who == "admin":
+            assert module_permissions
+        else:
+            assert module_permissions == set()
+
+        projects = client.get(ME_PROJECTS)
+        assert projects.status_code == 200
+        assert [row["project_code"] for row in projects.json()] == my_projects
+        if who == "office":
+            assert projects.json()[0]["has_office_access"] is True
+        if who == "nobody":
+            assert projects.json()[0]["has_office_access"] is False
+
+        project = client.get(f"/api/v1/projects/{project_id}")
+        workflow = client.get(
+            f"/api/v1/projects/{project_id}/workflow-summary"
+        )
+        members = client.get(f"/api/v1/projects/{project_id}/members")
+        assert project.status_code == project_status, project.text
+        assert workflow.status_code == workflow_status, workflow.text
+        assert members.status_code == members_status, members.text
+        if who == "office":
+            assert set(workflow.json()["viewer_permission_codes"]) == {
+                "inspection_plan.read",
+                "project_member.manage",
+            }
+        if who == "admin":
+            assert workflow.json()["viewer_permission_codes"]
 
 
 def test_responses_match_frontend_contract_fixture(world) -> None:

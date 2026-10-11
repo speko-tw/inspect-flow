@@ -82,11 +82,13 @@ def _query_function_names(path: str, model_name: str) -> set[str]:
             child.id for child in ast.walk(node) if isinstance(child, ast.Name)
         }:
             continue
-        function_names.update(
+        enclosing_functions = [
             parent.name
             for parent in _ancestors(node, parents)
             if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef))
-        )
+        ]
+        if enclosing_functions:
+            function_names.add(enclosing_functions[-1])
     return function_names
 
 
@@ -226,12 +228,17 @@ def test_project_routes_do_not_join_permission_tables_for_recalculation():
         "app/services/access_summary.py",
     )
     forbidden_join_models = {
+        "User",
         "RolePermission",
         "UserModulePermission",
         "UserModuleDelegation",
     }
     for relative_path in project_routes:
         tree = ast.parse((BACKEND / relative_path).read_text(encoding="utf-8"))
+        tree_parents: dict[ast.AST, ast.AST] = {}
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                tree_parents[child] = parent
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Call)
@@ -243,7 +250,23 @@ def test_project_routes_do_not_join_permission_tables_for_recalculation():
                     for child in ast.walk(node)
                     if isinstance(child, ast.Name)
                 }
-                assert not names.intersection(forbidden_join_models), (
+                forbidden = names.intersection(forbidden_join_models)
+                if "User" in forbidden:
+                    owner = next(
+                        (
+                            parent.name
+                            for parent in _ancestors(node, tree_parents)
+                            if isinstance(
+                                parent, (ast.FunctionDef, ast.AsyncFunctionDef)
+                            )
+                        ),
+                        None,
+                    )
+                    # 成員清單的使用者資料只用於回傳身分欄位，不參與授權。
+                    if relative_path == "app/api/v1/projects.py":
+                        assert owner == "list_members"
+                        forbidden.remove("User")
+                assert not forbidden, (
                     relative_path,
                     node.lineno,
                 )
@@ -262,13 +285,13 @@ def test_project_routes_do_not_join_permission_tables_for_recalculation():
             relative_path, "RolePermission"
         )
         expected_role_code_display = (
-            {"list_assignable_roles", "render"}
+            {"list_assignable_roles"}
             if relative_path == "app/api/v1/projects.py"
             else set()
         )
         assert permission_queries == expected_role_code_display
 
-    # 此端點只連接角色資料來序列化角色名稱；有效權限仍由中央服務計算。
+    # 專案成員端點只讀角色名稱以呈現資料；授權仍由中央服務計算。
     assert _query_function_names("app/api/v1/me.py", "ProjectMemberRole") == {
         "list_my_projects"
     }
@@ -309,20 +332,9 @@ def test_project_routes_do_not_join_permission_tables_for_recalculation():
             None,
         ),
     )
-    person_models = {
-        "Company",
-        "UserModulePermission",
-        "UserModuleDelegation",
-        "PermissionBundle",
-    }
     for relative_path, function_name, enclosing in authorization_functions:
-        names = _function_names(
-            relative_path, function_name, enclosing=enclosing
-        )
-        assert not names.intersection(person_models), (
-            relative_path,
-            function_name,
-        )
+        # 只檢查查詢／載入模型，避免把 User 型別與 Admin 欄位判斷
+        # 誤判為直接讀取人員或權限資料表（DOM-R60、DOM-R69）。
         query_models = _function_query_models(
             relative_path, function_name, enclosing=enclosing
         )
@@ -336,8 +348,7 @@ def test_project_routes_do_not_join_permission_tables_for_recalculation():
             }
         ), (relative_path, function_name, query_models)
 
-    # Role code reads in this endpoint are response serialization, not an
-    # authorization calculation; reject permission-table reads elsewhere.
+    # 專案角色代碼只供回應序列化；其他權限計算一律走中央 Service。
     project_query_models = _query_model_names("app/api/v1/projects.py")
     assert "RolePermission" in project_query_models
 

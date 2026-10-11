@@ -680,6 +680,83 @@ def test_external_flag_change_rejects_each_non_role_restriction(
     assert _audit_rows_for(session, user.id) == []
 
 
+def test_external_flag_change_preserves_all_combined_unqualified_items(
+    session, operator
+):
+    user = create_root_user_with_company(session, "EXT-COMBINED")
+    project = Project(
+        project_code="P-EXT-COMBINED",
+        name="測試工程",
+        client_name="測試業主",
+        site_location="測試地點",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    role = Role(
+        name="內部專案管理者",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project_member.manage")],
+    )
+    session.add_all([project, role])
+    session.flush()
+    member = add_project_member(
+        session, project_id=project.id, user_id=user.id, role_ids=[role.id]
+    )
+    session.add_all(
+        [
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="project.create",
+                source="manual",
+            ),
+            UserModuleDelegation(user_id=user.id, module="project"),
+        ]
+    )
+    session.commit()
+    before = snapshot_persisted_columns(user)
+
+    with pytest.raises(ExternalFlagChangeError) as error:
+        set_external_collaborator(session, user, True)
+
+    assert error.value.details is not None
+    assert set(error.value.details) == {
+        f"role: {role.name} ({role.id})",
+        "module permission: project.create",
+        "delegation: project",
+    }
+    assert snapshot_persisted_columns(user) == before
+    assert session.get(ProjectMember, member.id) is not None
+    assert (
+        session.scalar(
+            select(ProjectMemberRole.id).where(
+                ProjectMemberRole.project_member_id == member.id,
+                ProjectMemberRole.role_id == role.id,
+            )
+        )
+        is not None
+    )
+    assert (
+        session.scalar(
+            select(UserModulePermission.id).where(
+                UserModulePermission.user_id == user.id,
+                UserModulePermission.permission_code == "project.create",
+            )
+        )
+        is not None
+    )
+    assert (
+        session.scalar(
+            select(UserModuleDelegation.id).where(
+                UserModuleDelegation.user_id == user.id,
+                UserModuleDelegation.module == "project",
+            )
+        )
+        is not None
+    )
+    assert _audit_rows_for(session, user.id) == []
+
+
 def test_external_collaborator_cannot_be_promoted_to_admin(session, operator):
     user = create_root_user_with_company(session, "EXT-ADMIN")
     user.is_external_collaborator = True

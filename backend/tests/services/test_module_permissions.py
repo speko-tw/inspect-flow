@@ -46,9 +46,14 @@ def _stub_audit(monkeypatch):
     )
 
 
-def test_grant_and_revoke_project_create_tracks_implied_use(session, operator):
+def test_grant_and_revoke_project_create_tracks_implied_use(
+    session, operator, monkeypatch
+):
+    monkeypatch.setattr(
+        service.audit_service, "record_audit_event", record_audit_event
+    )
     user = create_root_user_with_company(session, "MOD001")
-    session.flush()
+    session.commit()
 
     assert service.grant_module_permission(
         session,
@@ -67,6 +72,35 @@ def test_grant_and_revoke_project_create_tracks_implied_use(session, operator):
         "project.create": "manual",
         "project.use": "implied",
     }
+    events = list(
+        session.scalars(
+            select(AuditLog)
+            .where(AuditLog.entity_id == user.id)
+            .order_by(AuditLog.created_at, AuditLog.id)
+        )
+    )
+    assert [event.event_type for event in events] == [
+        "module_permission.granted",
+        "module_permission.granted",
+    ]
+    assert [event.after["source"] for event in events] == ["manual", "implied"]
+
+    assert not service.grant_module_permission(
+        session,
+        actor=operator,
+        user=user,
+        permission_code="project.create",
+    )
+    assert (
+        len(
+            list(
+                session.scalars(
+                    select(AuditLog).where(AuditLog.entity_id == user.id)
+                )
+            )
+        )
+        == 2
+    )
 
     with pytest.raises(service.ImpliedPermissionError):
         service.revoke_module_permission(
@@ -75,6 +109,16 @@ def test_grant_and_revoke_project_create_tracks_implied_use(session, operator):
             user=user,
             permission_code="project.use",
         )
+    assert (
+        len(
+            list(
+                session.scalars(
+                    select(AuditLog).where(AuditLog.entity_id == user.id)
+                )
+            )
+        )
+        == 2
+    )
     assert service.revoke_module_permission(
         session,
         actor=operator,
@@ -700,8 +744,20 @@ def test_bundle_crud_and_apply_write_one_audit_event_each(
     assert not service.apply_permission_bundle(
         session, actor=operator, user=target, bundle=bundle
     )
+    permissions_before_delete = [
+        (row.permission_code, row.source)
+        for row in service.list_user_module_permissions(
+            session, user_id=target.id
+        )
+    ]
     service.delete_permission_bundle(session, actor=operator, bundle=bundle)
     session.commit()
+    assert [
+        (row.permission_code, row.source)
+        for row in service.list_user_module_permissions(
+            session, user_id=target.id
+        )
+    ] == permissions_before_delete
 
     events = list(
         session.scalars(
@@ -894,6 +950,227 @@ def test_project_use_revoke_impact_includes_unmanaged_projects(
     assert impact.projects_without_manager == (project_a.id,)
 
 
+@pytest.mark.parametrize(
+    ("other_manager_state", "expected_unmanaged"),
+    [
+        ("active_manager", False),
+        ("inactive_manager", True),
+        ("manager_without_project_use", True),
+        ("project_use_without_manager_role", True),
+        ("no_other_member", True),
+    ],
+)
+def test_project_use_revoke_impact_requires_an_active_authorized_manager(
+    session, operator, other_manager_state, expected_unmanaged
+):
+    from app.services.module_permissions import permission_revoke_impact
+
+    target = create_root_user_with_company(session, "IMPRULETARGET")
+    project = Project(
+        project_code=f"IMPACT-RULE-{other_manager_state[:5]}",
+        name="撤回影響專案",
+        client_name="業主",
+        site_location="工地",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    manage_role = Role(
+        name=f"撤回影響管理者 {other_manager_state}",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project_member.manage")],
+    )
+    empty_role = Role(
+        name=f"撤回影響一般成員 {other_manager_state}",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    session.add_all([project, manage_role, empty_role])
+    session.flush()
+    session.add_all(
+        [
+            ProjectMember(
+                project_id=project.id,
+                user_id=target.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+            ),
+            UserModulePermission(
+                user_id=target.id,
+                permission_code="project.use",
+                source="manual",
+            ),
+        ]
+    )
+    if other_manager_state != "no_other_member":
+        other = create_root_user_with_company(
+            session, f"IMPRULE{other_manager_state[:5]}"
+        )
+        member_role = (
+            empty_role
+            if other_manager_state == "project_use_without_manager_role"
+            else manage_role
+        )
+        session.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=other.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+                role_assignments=[ProjectMemberRole(role_id=member_role.id)],
+            )
+        )
+        if other_manager_state != "manager_without_project_use":
+            session.add(
+                UserModulePermission(
+                    user_id=other.id,
+                    permission_code="project.use",
+                    source="manual",
+                )
+            )
+        if other_manager_state == "inactive_manager":
+            other.is_active = False
+    session.flush()
+
+    impact = permission_revoke_impact(
+        session, user_id=target.id, permission_code="project.use"
+    )
+
+    assert impact.member_count == 1
+    assert impact.project_ids == (project.id,)
+    assert (
+        project.id in impact.projects_without_manager
+    ) is expected_unmanaged
+
+
+@pytest.mark.parametrize("has_membership", [False, True])
+def test_project_use_revoke_impact_ignores_other_permission_codes(
+    session, operator, has_membership
+):
+    from app.services.module_permissions import permission_revoke_impact
+
+    target = create_root_user_with_company(session, "IMPACT-NON-USE")
+    if has_membership:
+        project = Project(
+            project_code="IMPACT-NON-USE-P",
+            name="其他權限影響",
+            client_name="業主",
+            site_location="工地",
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+        session.add(project)
+        session.flush()
+        session.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=target.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+            )
+        )
+    impact = permission_revoke_impact(
+        session, user_id=target.id, permission_code="project.create"
+    )
+    assert impact.member_count == 0
+    assert impact.project_ids == ()
+    assert impact.projects_without_manager == ()
+
+
+def test_project_use_revoke_impact_is_empty_without_membership(
+    session, operator
+):
+    from app.services.module_permissions import permission_revoke_impact
+
+    target = create_root_user_with_company(session, "IMPACT-NO-MEMBER")
+
+    impact = permission_revoke_impact(
+        session, user_id=target.id, permission_code="project.use"
+    )
+
+    assert impact.member_count == 0
+    assert impact.project_ids == ()
+    assert impact.projects_without_manager == ()
+
+
+@pytest.mark.parametrize(
+    ("actor_kind", "operation"),
+    [
+        ("cross_module_delegate", "grant"),
+        ("non_delegate", "grant"),
+        ("self_delegate", "revoke"),
+    ],
+)
+def test_denied_permission_mutations_write_one_audit_without_changing_rows(
+    session, operator, monkeypatch, actor_kind, operation
+):
+    monkeypatch.setattr(
+        service.audit_service,
+        "record_audit_event_in_independent_transaction",
+        record_audit_event_in_independent_transaction,
+    )
+    actor = create_root_user_with_company(session, f"AUD{actor_kind[:8]}")
+    target = (
+        actor
+        if actor_kind == "self_delegate"
+        else create_root_user_with_company(session, f"AUDTGT{actor_kind[:8]}")
+    )
+    if actor_kind == "cross_module_delegate":
+        session.add(UserModuleDelegation(user_id=actor.id, module="template"))
+    elif actor_kind == "self_delegate":
+        session.add(UserModuleDelegation(user_id=actor.id, module="project"))
+    if operation == "revoke":
+        session.add(
+            UserModulePermission(
+                user_id=target.id,
+                permission_code="project.use",
+                source="manual",
+            )
+        )
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    before = [
+        (row.user_id, row.permission_code, row.source)
+        for row in session.scalars(select(UserModulePermission)).all()
+    ]
+
+    with pytest.raises(service.ModulePermissionDeniedError):
+        with unit_of_work(factory) as transaction:
+            transaction_actor = transaction.get(User, actor.id)
+            transaction_target = transaction.get(User, target.id)
+            assert transaction_actor is not None
+            assert transaction_target is not None
+            mutation = (
+                service.grant_module_permission
+                if operation == "grant"
+                else service.revoke_module_permission
+            )
+            mutation(
+                transaction,
+                actor=transaction_actor,
+                user=transaction_target,
+                permission_code="project.use",
+            )
+
+    session.expire_all()
+    after = [
+        (row.user_id, row.permission_code, row.source)
+        for row in session.scalars(select(UserModulePermission)).all()
+    ]
+    assert after == before
+    denials = list(
+        session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "module_permission.grant_denied",
+                AuditLog.entity_id == target.id,
+            )
+        )
+    )
+    assert len(denials) == 1
+    assert denials[0].created_by == operator.id
+    assert denials[0].after["permission_codes"] == ["project.use"]
+
+
 def test_batch_project_permission_candidates_use_personnel_service(
     session, operator
 ):
@@ -958,6 +1235,12 @@ def test_batch_project_permission_candidates_use_personnel_service(
         session,
         project_id=project.id,
         permission_code="inspection_task.inspect",
+    ) == frozenset({candidate.id, inactive.id})
+    assert project_member_ids_with_permission(
+        session,
+        project_id=project.id,
+        permission_code="inspection_task.inspect",
+        active_only=True,
     ) == frozenset({candidate.id})
 
 
