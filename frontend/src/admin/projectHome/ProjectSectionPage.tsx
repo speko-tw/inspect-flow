@@ -25,18 +25,17 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
 }
 
 /**
- * 顯示專案區段；TPL-R23 允許範本管理員在無內業區段權限時檢視套用頁。
+ * 顯示具備內業區段權限的專案內容。
+ * 無此權限時依 ADM-R25 導回權限落點。
  */
 export default function ProjectSectionPage({
   section,
   children,
-  allowTemplateViewer = false,
 }: {
   section: Exclude<ProjectSection, 'home'>
   children?:
     | ReactNode
     | ((viewerPermissions: string[], canViewIndoor: boolean) => ReactNode)
-  allowTemplateViewer?: boolean
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -86,13 +85,10 @@ export default function ProjectSectionPage({
   }, [loadSectionSummary, projectId, section])
 
   const currentResult = result?.projectId === projectId ? result : null
-  const templateViewerAllowed =
-    allowTemplateViewer && (user.is_admin || user.has_template_access === true)
   if (
     currentResult &&
     !currentResult.canViewIndoor &&
-    currentResult.error === undefined &&
-    !templateViewerAllowed
+    currentResult.error === undefined
   ) {
     return <Navigate replace to={landingPath(user)} />
   }

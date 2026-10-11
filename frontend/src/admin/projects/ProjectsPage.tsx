@@ -66,7 +66,6 @@ function toInput(form: FormState): ProjectInput {
   }
 }
 
-/** 顯示專案管理與工作台入口，範本入口使用 TPL-R23 正式路徑。 */
 export default function ProjectsPage() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
@@ -498,42 +497,49 @@ export default function ProjectsPage() {
         <section aria-labelledby="project-workspace-heading">
           <h2 id="project-workspace-heading">專案工作台</h2>
           <div className="project-workspace-grid">
-            {projects.map((project) => (
-              <article className="project-workspace-card" key={project.id}>
-                <p className="project-code">{project.project_code}</p>
-                <h3>{project.name}</h3>
-                <p>{project.site_location}</p>
-                <Link
-                  className="btn btn-primary"
-                  onClick={(event) =>
-                    guardProjectLink(
-                      event,
-                      `/admin/projects/${project.id}/inspection-items/templates`,
-                    )
-                  }
-                  to={`/admin/projects/${project.id}/inspection-items/templates`}
-                >
-                  套用範本
-                </Link>
-                <Link
-                  className="btn"
-                  onClick={(event) =>
-                    guardProjectLink(event, `/admin/projects/${project.id}`)
-                  }
-                  to={`/admin/projects/${project.id}`}
-                >
-                  開啟專案
-                </Link>
-                <button
-                  aria-label={`編輯專案「${project.name}」`}
-                  className="btn project-workspace-edit"
-                  onClick={() => startEdit(project)}
-                  type="button"
-                >
-                  編輯
-                </button>
-              </article>
-            ))}
+            {projects.map((project) => {
+              // TPL-R23：導覽與未儲存變更守衛共用
+              // 正式套用路徑，避免守衛後前往舊網址。
+              const applyTemplatesPath = [
+                '/admin/projects',
+                project.id,
+                'inspection-items',
+                'templates',
+              ].join('/')
+              return (
+                <article className="project-workspace-card" key={project.id}>
+                  <p className="project-code">{project.project_code}</p>
+                  <h3>{project.name}</h3>
+                  <p>{project.site_location}</p>
+                  <Link
+                    className="btn btn-primary"
+                    onClick={(event) =>
+                      guardProjectLink(event, applyTemplatesPath)
+                    }
+                    to={applyTemplatesPath}
+                  >
+                    套用範本
+                  </Link>
+                  <Link
+                    className="btn"
+                    onClick={(event) =>
+                      guardProjectLink(event, `/admin/projects/${project.id}`)
+                    }
+                    to={`/admin/projects/${project.id}`}
+                  >
+                    開啟專案
+                  </Link>
+                  <button
+                    aria-label={`編輯專案「${project.name}」`}
+                    className="btn project-workspace-edit"
+                    onClick={() => startEdit(project)}
+                    type="button"
+                  >
+                    編輯
+                  </button>
+                </article>
+              )
+            })}
           </div>
         </section>
       )}

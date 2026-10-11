@@ -106,12 +106,8 @@ function ProjectTemplatesRoute() {
     )
   }
 
-  // TPL-R23：範本管理員可跨專案瀏覽；套用仍由 viewerPermissions 控制。
   return (
-    <ProjectSectionPage
-      allowTemplateViewer={user.is_admin || user.has_template_access === true}
-      section="inspection-items"
-    >
+    <ProjectSectionPage section="inspection-items">
       {(viewerPermissions, canViewIndoor) => (
         <AdminRouteSuspense>
           <ProjectTemplatesPage

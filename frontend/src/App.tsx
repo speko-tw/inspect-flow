@@ -15,7 +15,8 @@ const SetupPage = lazy(() => import('./setup/SetupPage'))
 
 function LegacyProjectTemplateRedirect() {
   const { projectId = '' } = useParams()
-  // TPL-R23：舊 Field 專案網址直接轉到套用範本正式路徑。
+  // FUI-R12、FUI-AC13：舊 Field 專案網址直接轉到正式
+  // 套用範本路徑。
   return (
     <Navigate
       replace

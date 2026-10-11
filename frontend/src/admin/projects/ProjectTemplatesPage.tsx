@@ -92,7 +92,10 @@ function pointEvidenceText(
 }
 
 /**
- * 提供專案套用範本與存為範本流程，遵守 TPL-R23 的路徑與出口規則。
+ * 提供專案範本瀏覽、套用及存回範本流程。
+ *
+ * standalone 僅供非成員範本管理員旁路檢視；
+ * 沒有 `project_inspection_item.edit` 時不顯示套用操作。
  */
 export default function ProjectTemplatesPage({
   viewerPermissions = [],
@@ -100,7 +103,16 @@ export default function ProjectTemplatesPage({
   returnToTemplateManagement = false,
 }: {
   viewerPermissions?: string[]
+  /**
+   * 非成員範本管理員旁路瀏覽時設為 true，
+   * 顯示標題並隱藏區段外殼。
+   * 此旗標不授予 `project_inspection_item.edit` 權限。
+   */
   standalone?: boolean
+  /**
+   * standalone 旁路檢視者設為 true 時，返回範本管理入口；
+   * 一般專案成員不應設定，避免離開專案流程。
+   */
   returnToTemplateManagement?: boolean
 }) {
   const { projectId = '' } = useParams()
@@ -128,7 +140,14 @@ export default function ProjectTemplatesPage({
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [projectLoading, setProjectLoading] = useState(true)
-  const [itemsLoading, setItemsLoading] = useState(true)
+  const [itemsLoadProjectId, setItemsLoadProjectId] = useState<string | null>(
+    null,
+  )
+  const [itemsLoadError, setItemsLoadError] = useState<{
+    projectId: string
+    message: string
+  } | null>(null)
+  const [itemsReloadKey, setItemsReloadKey] = useState(0)
   const [busy, setBusy] = useState(false)
   const guard = useSubmitGuard()
   const [readOnly, setReadOnly] = useState(false)
@@ -163,6 +182,11 @@ export default function ProjectTemplatesPage({
   const canEditProjectItems =
     user.is_admin || viewerPermissions.includes('project_inspection_item.edit')
   const saveConflict = saveErrorCode === 'template.name_conflict'
+  const itemsLoading = itemsLoadProjectId !== projectId
+  const currentItemsLoadError =
+    itemsLoadError?.projectId === projectId ? itemsLoadError.message : ''
+  const showEmptyProjectItems =
+    !itemsLoading && !currentItemsLoadError && projectItems.length === 0
 
   useEffect(() => {
     if (applyConflict) conflictActionRef.current?.focus()
@@ -236,22 +260,29 @@ export default function ProjectTemplatesPage({
     let active = true
     listProjectInspectionItems(projectId)
       .then((items) => {
-        if (active) setProjectItems(items)
+        if (active) {
+          setProjectItems(items)
+          setItemsDenied(false)
+        }
       })
       .catch((caught: unknown) => {
         if (!active) return
         // 專案 id 格式不對或不存在：整頁顯示找不到。
         if (isNotFound(caught)) setProjectMissing(true)
-        setError(templateErrorMessage(caught))
-        if (isForbidden(caught)) setItemsDenied(true)
+        // 載入失敗時項目狀態未知，停用套用並提供重試。
+        setItemsLoadError({
+          projectId,
+          message: templateErrorMessage(caught),
+        })
+        setItemsDenied(isForbidden(caught))
       })
       .finally(() => {
-        if (active) setItemsLoading(false)
+        if (active) setItemsLoadProjectId(projectId)
       })
     return () => {
       active = false
     }
-  }, [projectId])
+  }, [projectId, itemsReloadKey])
 
   async function selectNode(next: Selection) {
     setSelected(next)
@@ -371,6 +402,7 @@ export default function ProjectTemplatesPage({
       !hasSelection ||
       busy ||
       itemsLoading ||
+      currentItemsLoadError ||
       itemsDenied ||
       readOnly ||
       !canEditProjectItems
@@ -408,16 +440,20 @@ export default function ProjectTemplatesPage({
         caught instanceof ProjectTemplatesApiError &&
         caught.status === 409
       ) {
-        // TPL-R23：409 後同步專案項目，讓「已套用」狀態立即反映伺服器結果。
-        setItemsLoading(true)
+        // 409 同步失敗時鎖住套用，避免把未知當空清單。
+        setItemsLoadProjectId(null)
+        setItemsLoadError(null)
         try {
           setProjectItems(await listProjectInspectionItems(projectId))
           setItemsDenied(false)
         } catch (refreshError) {
-          setError(templateErrorMessage(refreshError))
-          if (isForbidden(refreshError)) setItemsDenied(true)
+          setItemsLoadError({
+            projectId,
+            message: templateErrorMessage(refreshError),
+          })
+          setItemsDenied(isForbidden(refreshError))
         } finally {
-          setItemsLoading(false)
+          setItemsLoadProjectId(projectId)
         }
       }
       if (isForbidden(caught)) setReadOnly(true)
@@ -588,9 +624,23 @@ export default function ProjectTemplatesPage({
             <section className="tpl-nav tpl-project-items">
               <h2>專案查核項目</h2>
               {itemsLoading && <p>載入中…</p>}
-              {!itemsLoading && projectItems.length === 0 && (
-                <p>目前沒有查核項目。</p>
+              {currentItemsLoadError && (
+                <div className="notice-error" role="alert">
+                  <p>{currentItemsLoadError}</p>
+                  <button
+                    onClick={() => {
+                      setItemsLoadProjectId(null)
+                      setItemsLoadError(null)
+                      setItemsDenied(false)
+                      setItemsReloadKey((key) => key + 1)
+                    }}
+                    type="button"
+                  >
+                    重新載入專案項目
+                  </button>
+                </div>
               )}
+              {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
               <ul>
                 {projectItems.map((item) => (
                   <li key={item.id}>
@@ -948,6 +998,7 @@ export default function ProjectTemplatesPage({
                         !hasSelection ||
                         busy ||
                         itemsLoading ||
+                        Boolean(currentItemsLoadError) ||
                         readOnly ||
                         itemsDenied ||
                         selectedAlreadyApplied

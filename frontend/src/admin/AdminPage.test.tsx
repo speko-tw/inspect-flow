@@ -1284,29 +1284,38 @@ describe('admin user and company pages', () => {
     ).toBeInTheDocument()
   })
 
-  it('範本管理員兼現場權限專案成員可瀏覽套用頁', async () => {
+  it('現場-only 成員開套用頁時會導回權限落點', async () => {
     const fetchMock = managementFetch({
       memberProjectIds: ['project-demo-1'],
       viewerPermissionCodes: ['inspection_task.inspect'],
     })
-    renderAdmin(
-      '/admin/projects/project-demo-1/inspection-items/templates',
-      false,
-      {
-        has_office_access: false,
-        has_field_access: true,
-        has_template_access: true,
-      },
+    const signedInUser = {
+      ...currentUser,
+      is_admin: false,
+      has_office_access: false,
+      has_field_access: true,
+      has_template_access: false,
+    }
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/admin/projects/project-demo-1/inspection-items/templates',
+        ]}
+      >
+        <CurrentUserProvider value={{ user: signedInUser, clear: vi.fn() }}>
+          <Routes>
+            <Route element={<AdminPage />} path="/admin/*" />
+          </Routes>
+          <TestNavigation />
+        </CurrentUserProvider>
+      </MemoryRouter>,
     )
 
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/field'),
+    )
     expect(
-      await screen.findByRole('region', { name: '範本操作' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'DEMO-001｜示範工程' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: '套用至專案' }),
+      screen.queryByRole('region', { name: '範本操作' }),
     ).not.toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(([input]) =>
