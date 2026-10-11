@@ -40,6 +40,54 @@ def _join_path(prefix: str, suffix: str) -> str:
     return f"{prefix}{suffix}"
 
 
+def _ordered_unique_violations(
+    data: dict, violations: Iterable[TemplateFieldError]
+) -> list[TemplateFieldError]:
+    """依本文結構排序錯誤並移除完全重複項。
+
+    API-R10 規定物件依請求模型欄位順序、陣列依索引排序；因此使用
+    解析後的模型資料順序，不採錯誤偵測順序或用戶端 JSON 鍵順序。
+    """
+
+    def order(path: str) -> tuple[int, ...]:
+        current: object = data
+        parts = path.strip("/").split("/")
+        result: list[int] = []
+        for part in parts:
+            if isinstance(current, list):
+                try:
+                    index = int(part)
+                except ValueError:
+                    result.append(len(current))
+                    current = None
+                else:
+                    result.append(index)
+                    current = (
+                        current[index] if 0 <= index < len(current) else None
+                    )
+            elif isinstance(current, dict):
+                keys = list(current)
+                try:
+                    result.append(keys.index(part))
+                except ValueError:
+                    result.append(len(keys))
+                current = current.get(part)
+            else:
+                result.append(0)
+                current = None
+        return tuple(result)
+
+    ordered = sorted(violations, key=lambda error: order(error.path))
+    unique: list[TemplateFieldError] = []
+    seen: set[tuple[str, str]] = set()
+    for error in ordered:
+        key = (error.path, error.code)
+        if key not in seen:
+            seen.add(key)
+            unique.append(error)
+    return unique
+
+
 def _template_violations(
     data: dict,
     path_prefix: str,
@@ -120,10 +168,10 @@ def _template_violations(
 
 
 def validate_template_structure(data: dict, *, path_prefix: str = "") -> None:
-    """Reject duplicate point positions and request-local field keys.
+    """拒絕重複項次順序與單次請求重複的實測欄位識別。
 
-    Every point carries exactly one photo requirement (#464); the
-    required count is ``min_count``, not the number of rows.
+    每個項次恰有一筆照片需求（#464）；需求張數由 ``min_count`` 表示，
+    不以資料列數計算。API-R10 要求回報的錯誤依請求模型欄位排序。
     """
     client_paths: dict[UUID, list[str]] = {}
     violations = _template_violations(
@@ -137,12 +185,18 @@ def validate_template_structure(data: dict, *, path_prefix: str = "") -> None:
                 )
                 for path in paths
             )
+    violations = _ordered_unique_violations(data, violations)
     if violations:
         raise InvalidTemplateError(violations)
 
 
 def validate_system_structures(items: Iterable[dict]) -> None:
-    """Check every item before a system-wide replacement mutates rows."""
+    """依本文 `/items/{index}` 順序驗證整個系統的範本替換。
+
+    API-R10 規定回應順序依項目索引及各項目的模型欄位順序，並在共用
+    的 100 筆上限套用前完成排序。
+    """
+    items = list(items)
     violations: list[TemplateFieldError] = []
     client_paths: dict[UUID, list[str]] = {}
     for item_index, item in enumerate(items):
@@ -158,6 +212,7 @@ def validate_system_structures(items: Iterable[dict]) -> None:
                 )
                 for path in paths
             )
+    violations = _ordered_unique_violations({"items": items}, violations)
     if violations:
         raise InvalidTemplateError(violations)
 

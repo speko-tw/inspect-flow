@@ -54,6 +54,7 @@ def _client() -> TestClient:
 def test_json_body_errors_have_safe_repeatable_pointers_and_codes(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """API-R10/R13：重複 union 分支錯誤只保留一個安全路徑。"""
     client = _client()
     payload = {
         "items": [
@@ -82,7 +83,6 @@ def test_json_body_errors_have_safe_repeatable_pointers_and_codes(
         "/items/1/amount",
         "/labels",
         "/choice",
-        "/choice",
         "",
     ]
     by_path = {field["path"]: field["code"] for field in fields}
@@ -105,6 +105,7 @@ def test_json_body_errors_have_safe_repeatable_pointers_and_codes(
 
 
 def test_field_errors_are_limited_to_100_and_exclude_non_json_errors() -> None:
+    """API-R10：先移除重複路徑，再套用不同錯誤的數量上限。"""
     client = _client()
     response = client.post(
         "/body",
@@ -116,6 +117,20 @@ def test_field_errors_are_limited_to_100_and_exclude_non_json_errors() -> None:
     )
     assert response.status_code == 422
     assert len(response.json()["error"]["fields"]) == 100
+
+    deduplicated = client.post(
+        "/body",
+        json={
+            "items": [{} for _ in range(49)],
+            "labels": {},
+            "choice": [],
+            "sentinel-extra-key": "ignored",
+        },
+    )
+    fields = deduplicated.json()["error"]["fields"]
+    assert len(fields) == 100
+    assert [field["path"] for field in fields].count("/choice") == 1
+    assert fields[-1] == {"path": "", "code": "field.invalid"}
 
     malformed = client.post(
         "/body",
@@ -141,6 +156,24 @@ def test_field_error_description_map_is_generated_from_its_enum() -> None:
     assert set(FIELD_ERROR_CODE_DESCRIPTIONS) == {
         member.value for member in FieldErrorCode
     }
+
+
+def test_field_error_deduplication_keeps_distinct_codes_for_same_path() -> (
+    None
+):
+    """去重只移除 API-R10 中 path 與 code 都相同的錯誤。"""
+    from app.api.errors import _deduplicate_field_errors
+
+    assert _deduplicate_field_errors(
+        [
+            {"path": "/value", "code": "field.invalid"},
+            {"path": "/value", "code": "field.invalid"},
+            {"path": "/value", "code": "field.required"},
+        ]
+    ) == [
+        {"path": "/value", "code": "field.invalid"},
+        {"path": "/value", "code": "field.required"},
+    ]
 
 
 def test_all_field_error_codes_follow_the_dot_namespace() -> None:

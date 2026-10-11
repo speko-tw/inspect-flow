@@ -877,6 +877,7 @@ def test_system_scope_pagination_and_deletion(clients):
 
 
 def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
+    """TPL-R24 錯誤依 API-R10 模型欄位與陣列索引順序回傳。"""
     manager = clients["manager"]
     _, system_id = _tree(manager)
     original = manager.post(
@@ -888,6 +889,7 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
     ][0]["id"]
 
     def reject(change, expected_fields=None):
+        """確認完整且排序後的 TPL-R24 錯誤，並確保未寫入資料列。"""
         body = _template(system_id, "Rejected")
         change(body)
         response = manager.post("/api/v1/templates", json=body)
@@ -918,6 +920,28 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
         ],
     )
     reject(
+        lambda body: (
+            body["inspection_points"][0]["measurement_fields"][0].update(
+                unit="mm"
+            ),
+            body["inspection_points"][1].update(sequence=1),
+        ),
+        [
+            {
+                "path": "/inspection_points/0/sequence",
+                "code": "template.sequence_duplicate",
+            },
+            {
+                "path": "/inspection_points/0/measurement_fields/0/unit",
+                "code": "template.bound_field_unit_forbidden",
+            },
+            {
+                "path": "/inspection_points/1/sequence",
+                "code": "template.sequence_duplicate",
+            },
+        ],
+    )
+    reject(
         lambda body: body["inspection_points"][1].update(
             measurement_fields=[
                 {
@@ -936,6 +960,30 @@ def test_invalid_nested_inputs_return_validation_envelope(clients, db_session):
             },
             {
                 "path": "/inspection_points/1/measurement_fields/0/client_id",
+                "code": "template.client_id_duplicate",
+            },
+        ],
+    )
+    reject(
+        lambda body: body["inspection_points"][0]["measurement_fields"][
+            1
+        ].update(
+            client_id=body["inspection_points"][0]["measurement_fields"][2][
+                "client_id"
+            ],
+            unit="cm",
+        ),
+        [
+            {
+                "path": "/inspection_points/0/measurement_fields/1/client_id",
+                "code": "template.client_id_duplicate",
+            },
+            {
+                "path": "/inspection_points/0/measurement_fields/1/unit",
+                "code": "template.text_unit_forbidden",
+            },
+            {
+                "path": "/inspection_points/0/measurement_fields/2/client_id",
                 "code": "template.client_id_duplicate",
             },
         ],
@@ -1098,6 +1146,7 @@ def test_template_write_field_errors_do_not_echo_invalid_values(clients):
 
 
 def test_system_nested_read_swap_and_clear(clients, db_session):
+    """整系統替換錯誤依 API-R10 的 `/items/{index}` 順序回傳。"""
     manager = clients["manager"]
     _, system_id = _tree(manager)
     originals = []
@@ -1158,6 +1207,25 @@ def test_system_nested_read_swap_and_clear(clients, db_session):
             "code": "template.client_id_duplicate",
         },
     ]
+    assert manager.get(path).json()["items"] == swapped.json()["items"]
+
+    oversized = []
+    for index in range(51):
+        item = _template(system_id, f"Invalid {index}")
+        item["inspection_points"][1]["sequence"] = 1
+        oversized.append(item)
+    capped = manager.put(path, json={"items": oversized})
+    assert capped.status_code == 422
+    fields = capped.json()["error"]["fields"]
+    assert len(fields) == 100
+    assert fields[0] == {
+        "path": "/items/0/inspection_points/0/sequence",
+        "code": "template.sequence_duplicate",
+    }
+    assert fields[-1] == {
+        "path": "/items/49/inspection_points/1/sequence",
+        "code": "template.sequence_duplicate",
+    }
     assert manager.get(path).json()["items"] == swapped.json()["items"]
 
     cleared = manager.put(path, json={"items": []})
