@@ -40,13 +40,15 @@ def _join_path(prefix: str, suffix: str) -> str:
     return f"{prefix}{suffix}"
 
 
-def _ordered_unique_violations(
+def _ordered_violations(
     data: dict, violations: Iterable[TemplateFieldError]
 ) -> list[TemplateFieldError]:
-    """依本文結構排序錯誤並移除完全重複項。
+    """依本文結構排序錯誤。
 
     API-R10 規定物件依請求模型欄位順序、陣列依索引排序；因此使用
     解析後的模型資料順序，不採錯誤偵測順序或用戶端 JSON 鍵順序。
+    只排序、不去重：同一 path 與 code 的重複錯誤由共用 handler 在
+    100 筆上限之前移除，這裡的驗證器本來就不會產生重複項。
     """
 
     def order(path: str) -> tuple[int, ...]:
@@ -58,6 +60,7 @@ def _ordered_unique_violations(
                 try:
                     index = int(part)
                 except ValueError:
+                    # 陣列下的非數字片段不在模型結構內，排在所有索引之後。
                     result.append(len(current))
                     current = None
                 else:
@@ -70,22 +73,17 @@ def _ordered_unique_violations(
                 try:
                     result.append(keys.index(part))
                 except ValueError:
+                    # 模型沒有此欄位時排在所有已知欄位之後，順序仍固定。
                     result.append(len(keys))
                 current = current.get(part)
             else:
+                # 路徑比資料更深（例如 null 欄位底下）時，以 0 補位，
+                # 讓同一父層的錯誤維持穩定的相對順序。
                 result.append(0)
                 current = None
         return tuple(result)
 
-    ordered = sorted(violations, key=lambda error: order(error.path))
-    unique: list[TemplateFieldError] = []
-    seen: set[tuple[str, str]] = set()
-    for error in ordered:
-        key = (error.path, error.code)
-        if key not in seen:
-            seen.add(key)
-            unique.append(error)
-    return unique
+    return sorted(violations, key=lambda error: order(error.path))
 
 
 def _template_violations(
@@ -185,16 +183,17 @@ def validate_template_structure(data: dict, *, path_prefix: str = "") -> None:
                 )
                 for path in paths
             )
-    violations = _ordered_unique_violations(data, violations)
+    violations = _ordered_violations(data, violations)
     if violations:
         raise InvalidTemplateError(violations)
 
 
 def validate_system_structures(items: Iterable[dict]) -> None:
-    """依本文 `/items/{index}` 順序驗證整個系統的範本替換。
+    """替換動到資料列之前，先整批檢查所有項目。
 
-    API-R10 規定回應順序依項目索引及各項目的模型欄位順序，並在共用
-    的 100 筆上限套用前完成排序。
+    任何一個項目不合法就整批拒絕，避免替換做到一半留下部分變更。
+    API-R10 規定回應順序依 `/items/{index}` 與各項目的模型欄位順序，
+    因此錯誤彙整後依本文結構排序，再交給共用 handler 套用 100 筆上限。
     """
     items = list(items)
     violations: list[TemplateFieldError] = []
@@ -212,7 +211,7 @@ def validate_system_structures(items: Iterable[dict]) -> None:
                 )
                 for path in paths
             )
-    violations = _ordered_unique_violations({"items": items}, violations)
+    violations = _ordered_violations({"items": items}, violations)
     if violations:
         raise InvalidTemplateError(violations)
 

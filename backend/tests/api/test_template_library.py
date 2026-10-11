@@ -1243,6 +1243,46 @@ def test_system_nested_read_swap_and_clear(clients, db_session):
         assert db_session.scalar(select(func.count()).select_from(model)) == 0
 
 
+def test_system_put_orders_errors_across_items_by_body_position(clients):
+    """API-R10：跨項目的錯誤依 `/items/{index}` 排序，與偵測順序無關。"""
+    manager = clients["manager"]
+    _, system_id = _tree(manager)
+    path = f"/api/v1/template-systems/{system_id}/templates"
+
+    # 實測欄位 client_id 重複是整批彙整後才偵測，晚於各項目的 sequence 重複；
+    # 排序若只依偵測順序，/items/1 的錯誤會排到 /items/0 之前。
+    first = _template(system_id, "First")
+    fields = first["inspection_points"][0]["measurement_fields"]
+    fields[2]["client_id"] = fields[1]["client_id"]
+    second = _template(system_id, "Second")
+    second["inspection_points"][1]["sequence"] = 1
+
+    response = manager.put(path, json={"items": [first, second]})
+
+    assert response.status_code == 422, response.text
+    assert [
+        (field["path"], field["code"])
+        for field in response.json()["error"]["fields"]
+    ] == [
+        (
+            "/items/0/inspection_points/0/measurement_fields/1/client_id",
+            "template.client_id_duplicate",
+        ),
+        (
+            "/items/0/inspection_points/0/measurement_fields/2/client_id",
+            "template.client_id_duplicate",
+        ),
+        (
+            "/items/1/inspection_points/0/sequence",
+            "template.sequence_duplicate",
+        ),
+        (
+            "/items/1/inspection_points/1/sequence",
+            "template.sequence_duplicate",
+        ),
+    ]
+
+
 def test_known_nested_constraint_is_422_and_unknown_error_stays_500(
     clients, monkeypatch
 ):

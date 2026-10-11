@@ -316,3 +316,34 @@ def test_api_error_fields_are_422_only_and_preserve_details() -> None:
     conflict = client.post("/conflict")
     assert conflict.status_code == 409
     assert conflict.json() == {"error": {"code": "template.name_conflict"}}
+
+
+def test_api_error_fields_deduplicate_before_the_100_limit() -> None:
+    """API-R10：APIError 的重複項先移除，不能占用 100 筆額度。"""
+    app = FastAPI()
+    register_error_handlers(app)
+    router = APIRouter()
+
+    @router.post("/repeated")
+    def repeated_endpoint() -> None:
+        distinct = [
+            {"path": f"/distinct/{index}", "code": "field.invalid"}
+            for index in range(100)
+        ]
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            fields=[distinct[0]] * 5 + distinct,
+        )
+
+    app.include_router(router)
+
+    response = TestClient(app).post("/repeated")
+
+    assert response.status_code == 422
+    fields = response.json()["error"]["fields"]
+    assert len(fields) == 100
+    assert len({(field["path"], field["code"]) for field in fields}) == 100
+    # 先截斷再去重時，前 100 筆含 5 筆重複，只會剩 95 筆互異錯誤。
+    assert fields[0] == {"path": "/distinct/0", "code": "field.invalid"}
+    assert fields[-1] == {"path": "/distinct/99", "code": "field.invalid"}
