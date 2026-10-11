@@ -161,6 +161,10 @@ function renderPage(api: ProjectItemApi) {
           element={<ProjectItemChangePage api={api} />}
           path="/admin/projects/:projectId/items/:itemId"
         />
+        <Route
+          element={<div>專案查核項目列表</div>}
+          path="/admin/projects/:projectId/inspection-items"
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -168,7 +172,9 @@ function renderPage(api: ProjectItemApi) {
 
 async function confirm(choice?: 'yes' | 'no') {
   if (choice) {
-    fireEvent.click(await screen.findByRole('radio', { name: choiceName(choice) }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: choiceName(choice) }),
+    )
   }
   fireEvent.click(
     await screen.findByRole('button', {
@@ -188,7 +194,9 @@ describe('ProjectItemChangePage', () => {
     fireEvent.change(screen.getByLabelText('標準文字'), {
       target: { value: '不得有裂縫或剝落' },
     })
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const intro = screen.getByText(
       /選擇「要」重新查核時，各任務會有以下狀態變化/,
@@ -294,8 +302,9 @@ describe('ProjectItemChangePage', () => {
   it('describes the reinspect option in plain words (#491)', async () => {
     renderPage(apiWith())
     await screen.findByRole('radio', { name: reinspectChoice })
-    expect(screen.getByText(/若已填過結果，舊結果與照片會保留供查詢/))
-      .toBeInTheDocument()
+    expect(
+      screen.getByText(/若已填過結果，舊結果與照片會保留供查詢/),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/要，作廢/)).toBeNull()
   })
 
@@ -384,7 +393,9 @@ describe('ProjectItemChangePage', () => {
     assigned.item.inspection_points = [structuredClone(numericPoint)]
     const api = apiWith({ loadPreview: vi.fn(async () => assigned) })
     renderPage(api)
-    fireEvent.click(await screen.findByRole('radio', { name: noReinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: noReinspectChoice }),
+    )
     expect(await screen.findByRole('status')).toHaveTextContent(
       '不能增減項次或欄位',
     )
@@ -404,16 +415,17 @@ describe('ProjectItemChangePage', () => {
         .every((field) => (field as HTMLInputElement).disabled),
     ).toBe(true)
     expect(
-      screen.getAllByRole('button', { name: '移除欄位' }).every(
-        (button) => (button as HTMLButtonElement).disabled,
-      ),
+      screen
+        .getAllByRole('button', { name: '移除欄位' })
+        .every((button) => (button as HTMLButtonElement).disabled),
     ).toBe(true)
     expect(screen.getByLabelText(/用來判定的數字欄位/)).toBeDisabled()
     expect(screen.getByLabelText('標準值 *')).toBeEnabled()
     expect(screen.getByRole('radio', { name: '數值' })).toBeDisabled()
     expect(screen.getByRole('radio', { name: '範圍' })).toBeEnabled()
-    expect(screen.getByText(/只能修改文字與標準值、容許誤差、區間/))
-      .toBeInTheDocument()
+    expect(
+      screen.getByText(/只能修改文字與標準值、容許誤差、區間/),
+    ).toBeInTheDocument()
     fireEvent.change(fieldName, { target: { value: '修正欄位名稱' } })
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const saveDialog = screen.getByRole('dialog')
@@ -437,7 +449,9 @@ describe('ProjectItemChangePage', () => {
     assigned.item.inspection_points = [structuredClone(numericPoint)]
     const api = apiWith({ loadPreview: vi.fn(async () => assigned) })
     renderPage(api)
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(screen.getByRole('radio', { name: '文字' }))
     fireEvent.change(screen.getByLabelText('標準文字'), {
       target: { value: '新文字標準' },
@@ -466,13 +480,19 @@ describe('ProjectItemChangePage', () => {
     })
     const leaveDialog = await screen.findByRole('alertdialog')
     expect(leaveDialog).toHaveClass('confirm-box-danger')
-    expect(within(leaveDialog).getByRole('button', { name: '保留編輯' }))
-      .toBeInTheDocument()
-    expect(within(leaveDialog).getByRole('button', { name: '捨棄變更' }))
-      .toBeInTheDocument()
-    fireEvent.click(within(leaveDialog).getByRole('button', { name: '保留編輯' }))
+    expect(
+      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+    ).toBeInTheDocument()
+    expect(
+      within(leaveDialog).getByRole('button', { name: '捨棄變更' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+    )
 
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     const form = screen.getByRole('form', { name: '查核項目編輯器' })
     fireEvent.submit(form)
     const dialog = await screen.findByRole('dialog')
@@ -480,6 +500,42 @@ describe('ProjectItemChangePage', () => {
     expect(dialog.querySelector('h2')).toHaveFocus()
     fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
     expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('leaves after discarding without a second dirty confirmation', async () => {
+    renderPage(apiWith())
+    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+      target: { value: '未儲存的名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '返回專案查核項目' }))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: '捨棄變更',
+      }),
+    )
+    expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('leaves after saving without a stale dirty confirmation', async () => {
+    const updatedPreview = structuredClone(preview)
+    updatedPreview.item.title = '已儲存的名稱'
+    const api = apiWith({
+      loadPreview: vi
+        .fn()
+        .mockResolvedValueOnce(structuredClone(preview))
+        .mockResolvedValueOnce(updatedPreview),
+    })
+    renderPage(api)
+    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+      target: { value: '已儲存的名稱' },
+    })
+    await confirm('yes')
+    await screen.findByText('專案查核項目 / 已儲存的名稱')
+    fireEvent.click(screen.getByRole('button', { name: '返回專案查核項目' }))
+    expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(api.loadPreview).toHaveBeenCalledTimes(2)
   })
 
   it('shows separate danger confirmations for discarding and deleting structure', async () => {
@@ -498,9 +554,12 @@ describe('ProjectItemChangePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '返回專案查核項目' }))
     const leaveDialog = screen.getByRole('alertdialog')
     expect(leaveDialog).toHaveClass('confirm-box-danger')
-    expect(within(leaveDialog).getByRole('button', { name: '保留編輯' }))
-      .toBeInTheDocument()
-    fireEvent.click(within(leaveDialog).getByRole('button', { name: '保留編輯' }))
+    expect(
+      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+    )
     expect(screen.getByLabelText('查核項目名稱 *')).toHaveValue('已修改名稱')
 
     fireEvent.click(screen.getAllByRole('button', { name: '移除此項次' })[0])
@@ -509,17 +568,23 @@ describe('ProjectItemChangePage', () => {
     const saveDialog = screen.getByRole('dialog')
     expect(saveDialog).toHaveClass('confirm-box-danger')
     fireEvent.click(within(saveDialog).getByRole('button', { name: '取消' }))
-    expect(screen.getAllByRole('button', { name: '移除此項次' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: '移除此項次' })).toHaveLength(
+      1,
+    )
   })
 
   it('explains each choice in plain words when dispatched Tasks exist (#487)', async () => {
     renderPage(apiWith())
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
     const dialog = screen.getByRole('dialog')
     expect(dialog.textContent).not.toMatch(/Snapshot|Task/)
     expect(screen.getByText(/已完成的任務會退回進行中/)).toBeInTheDocument()
-    expect(screen.getByText(/任務狀態、已填的結果與照片都不變/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/任務狀態、已填的結果與照片都不變/),
+    ).toBeInTheDocument()
     expect(
       within(dialog).getByText(/二樓東側.*退回進行中，受影響項目改列待重查/),
     ).toBeInTheDocument()
@@ -535,7 +600,9 @@ describe('ProjectItemChangePage', () => {
         loadPreview: vi.fn(async () => structuredClone(pendingOnly)),
       }),
     )
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
     expect(screen.getByRole('dialog')).toHaveTextContent('使用此項目的任務')
     expect(screen.getByRole('dialog')).not.toHaveTextContent(
@@ -551,7 +618,9 @@ describe('ProjectItemChangePage', () => {
     renderPage(
       apiWith({ loadPreview: vi.fn(async () => structuredClone(mixed)) }),
     )
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
     expect(screen.getByRole('dialog')).toHaveTextContent(
       '草稿任務不受選擇影響',
@@ -731,9 +800,9 @@ describe('ProjectItemChangePage numeric standard display (#482)', () => {
     })
     renderPage(api)
     await waitFor(() => {
-      expect(
-        document.querySelector('.tpl-point-summary'),
-      ).toHaveTextContent(/坡度｜量測/)
+      expect(document.querySelector('.tpl-point-summary')).toHaveTextContent(
+        /坡度｜量測/,
+      )
     })
     return document.querySelector('.tpl-point-summary') as HTMLElement
   }
@@ -799,7 +868,9 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
     fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
       target: { value: '新版檢查項目' },
     })
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const confirmButton = screen.getByRole('button', { name: '確認儲存' })
 
@@ -821,7 +892,9 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
     fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
       target: { value: '新版檢查項目' },
     })
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const confirmButton = screen.getByRole('button', { name: '確認儲存' })
 
@@ -849,7 +922,9 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
     const api = apiWith()
     renderPage(api)
     const title = await screen.findByLabelText('查核項目名稱 *')
-    fireEvent.click(await screen.findByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    )
     const form = title.closest('form') as HTMLFormElement
 
     fireEvent.submit(form)

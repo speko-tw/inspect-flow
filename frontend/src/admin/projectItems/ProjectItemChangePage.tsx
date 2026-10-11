@@ -14,10 +14,7 @@ import {
   localizeField,
   templateFieldErrorBindings,
 } from '../templates/templateEditorUtils'
-import type {
-  InspectionPoint,
-  TemplateItem,
-} from '../templates/api'
+import type { InspectionPoint, TemplateItem } from '../templates/api'
 import {
   type AffectedTask,
   type ProjectItemApi,
@@ -229,7 +226,9 @@ function hasStructureChange(
         .filter((field) => field.id)
         .map((field) => [field.id!, field]),
     )
-    if (point.measurement_fields.length !== updated.measurement_fields.length) {
+    if (
+      point.measurement_fields.length !== updated.measurement_fields.length
+    ) {
       return true
     }
     for (const field of point.measurement_fields) {
@@ -298,16 +297,26 @@ function validateDraft(
     const standard = point.numeric_standard
     if (standard) {
       if (!boundField(point)) errors[`${key}:binding`] = '請選擇數字欄位'
-      if (standard.condition === 'range' && standard.range_form === 'interval') {
+      if (
+        standard.condition === 'range' &&
+        standard.range_form === 'interval'
+      ) {
         const lower = Number(standard.lower_bound)
         const upper = Number(standard.upper_bound)
         if (!Number.isFinite(lower)) errors[`${key}:lower`] = '請填寫有效下限'
         if (!Number.isFinite(upper)) errors[`${key}:upper`] = '請填寫有效上限'
-        if (Number.isFinite(lower) && Number.isFinite(upper) && lower > upper) {
+        if (
+          Number.isFinite(lower) &&
+          Number.isFinite(upper) &&
+          lower > upper
+        ) {
           errors[`${key}:range`] = '下限不能大於上限'
         }
       } else {
-        if (!standard.value?.trim() || !Number.isFinite(Number(standard.value))) {
+        if (
+          !standard.value?.trim() ||
+          !Number.isFinite(Number(standard.value))
+        ) {
           errors[`${key}:value`] = '請填寫有效標準值'
         }
         if (standard.condition === 'range') {
@@ -385,7 +394,7 @@ export default function ProjectItemChangePage({
   const [confirmField, setConfirmField] = useState('')
   const [leaving, setLeaving] = useState(false)
   const [attemptedSave, setAttemptedSave] = useState(false)
-  const baselineRef = useRef('')
+  const [baseline, setBaseline] = useState('')
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -396,7 +405,7 @@ export default function ProjectItemChangePage({
     inspectionPoints,
     photoDraft,
   }
-  const dirty = baselineRef.current !== JSON.stringify(editorValues)
+  const dirty = baseline !== JSON.stringify(editorValues)
   const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
   const hasDraft = preview
     ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
@@ -433,12 +442,14 @@ export default function ProjectItemChangePage({
         setInstruction(localized.item.instruction)
         setInspectionPoints(localized.item.inspection_points)
         setPhotoDraft(photos)
-        baselineRef.current = JSON.stringify({
-          title: localized.item.title,
-          instruction: localized.item.instruction,
-          inspectionPoints: localized.item.inspection_points,
-          photoDraft: photos,
-        })
+        setBaseline(
+          JSON.stringify({
+            title: localized.item.title,
+            instruction: localized.item.instruction,
+            inspectionPoints: localized.item.inspection_points,
+            photoDraft: photos,
+          }),
+        )
         if (loaded.readOnly) {
           setReadOnly(true)
           setError('你沒有權限修改此專案查核項目。')
@@ -498,16 +509,20 @@ export default function ProjectItemChangePage({
     setInspectionPoints(localized.item.inspection_points)
     setPhotoDraft(photos)
     setReinspect(null)
-    baselineRef.current = JSON.stringify({
-      title: localized.item.title,
-      instruction: localized.item.instruction,
-      inspectionPoints: localized.item.inspection_points,
-      photoDraft: photos,
-    })
+    setBaseline(
+      JSON.stringify({
+        title: localized.item.title,
+        instruction: localized.item.instruction,
+        inspectionPoints: localized.item.inspection_points,
+        photoDraft: photos,
+      }),
+    )
     return localized
   }
 
-  async function reloadPreview(resetEditor = false): Promise<ProjectItemPreview> {
+  async function reloadPreview(
+    resetEditor = false,
+  ): Promise<ProjectItemPreview> {
     if (!projectId || !itemId) throw new Error('Missing route parameters')
     const loaded = await api.loadPreview(projectId, itemId)
     if (resetEditor) return applyPreview(loaded)
@@ -562,12 +577,14 @@ export default function ProjectItemChangePage({
         setTitle(change.title)
         setInstruction(change.instruction)
         setInspectionPoints(change.inspection_points)
-        baselineRef.current = JSON.stringify({
-          title: change.title,
-          instruction: change.instruction,
-          inspectionPoints: change.inspection_points,
-          photoDraft,
-        })
+        setBaseline(
+          JSON.stringify({
+            title: change.title,
+            instruction: change.instruction,
+            inspectionPoints: change.inspection_points,
+            photoDraft,
+          }),
+        )
         setError('已儲存變更，但重新載入任務狀態失敗。')
       }
     } catch (caught) {
@@ -624,9 +641,7 @@ export default function ProjectItemChangePage({
         setConfirming(false)
         fieldErrorsHandled = true
         setError(
-          mapped.unmatched.length
-            ? '查核項目未儲存，請檢查欄位內容。'
-            : '',
+          mapped.unmatched.length ? '查核項目未儲存，請檢查欄位內容。' : '',
         )
         const firstErrorKey = Object.keys(messages)[0]
         if (firstErrorKey) {
@@ -657,14 +672,14 @@ export default function ProjectItemChangePage({
       const firstErrorKey = Object.keys(invalid)[0]
       focusRequestId.current += 1
       setFocusRequest({ id: focusRequestId.current, key: firstErrorKey })
-      return Promise.resolve(
-        [...new Set(
+      return Promise.resolve([
+        ...new Set(
           Object.keys(invalid)
             .map((key) => /^point:(\d+):/.exec(key)?.[1])
             .filter((index): index is string => index !== undefined)
             .map(Number),
-        )],
-      )
+        ),
+      ])
     }
     if (needsChoice && reinspect === null) {
       setError('請先選擇這次修改要不要重新查核。')
@@ -812,7 +827,8 @@ export default function ProjectItemChangePage({
                   Object.entries(current).forEach(([key, value]) => {
                     const pointIndex = Number(key)
                     if (pointIndex < index) next[key] = value
-                    if (pointIndex > index) next[String(pointIndex - 1)] = value
+                    if (pointIndex > index)
+                      next[String(pointIndex - 1)] = value
                   })
                   return next
                 })
