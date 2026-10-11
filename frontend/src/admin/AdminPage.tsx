@@ -23,6 +23,7 @@ import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
 import MyProjectsPage from './projects/MyProjectsPage'
 import ProjectsPage from './projects/ProjectsPage'
 import { projectItemApi } from './projectItems/api'
+import { listMyProjects } from './projects/api'
 import TemporaryPassword from './TemporaryPassword'
 import UsersPage from './UsersPage'
 
@@ -46,6 +47,69 @@ function ProjectPlanningRoute() {
     <Suspense fallback={<p>載入中…</p>}>
       <PlanningPage key={projectId} initialProjectId={projectId} />
     </Suspense>
+  )
+}
+
+function ProjectTemplatesRedirect() {
+  const { projectId = '' } = useParams()
+  return (
+    <Navigate
+      replace
+      to={`/admin/projects/${projectId}/inspection-items/templates`}
+    />
+  )
+}
+
+function ProjectTemplatesRoute() {
+  const { projectId = '' } = useParams()
+  const { user } = useCurrentUser()
+  const [membership, setMembership] = useState<{
+    projectId: string
+    isMember: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (user.is_admin || !user.has_template_access) return
+    let active = true
+    listMyProjects()
+      .then((projects) => {
+        if (active) {
+          setMembership({
+            projectId,
+            isMember: projects.some((project) => project.id === projectId),
+          })
+        }
+      })
+      .catch(() => {
+        if (active) setMembership({ projectId, isMember: false })
+      })
+    return () => {
+      active = false
+    }
+  }, [projectId, user.has_template_access, user.is_admin])
+
+  const isProjectMember =
+    membership?.projectId === projectId ? membership.isMember : null
+
+  if (!user.is_admin && user.has_template_access && isProjectMember !== true) {
+    if (isProjectMember === null) {
+      return <p role="status">正在確認專案權限…</p>
+    }
+    return (
+      <AdminRouteSuspense>
+        <ProjectTemplatesPage viewerPermissions={[]} />
+      </AdminRouteSuspense>
+    )
+  }
+
+  return (
+    <ProjectSectionPage section="inspection-items">
+      {(viewerPermissions) => (
+        <AdminRouteSuspense>
+          <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
+        </AdminRouteSuspense>
+      )}
+    </ProjectSectionPage>
   )
 }
 
@@ -88,7 +152,7 @@ function AdminPageContent() {
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
   const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/[^/]+)?|zones|planning|progress))?\/?$/.test(
+    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress))?\/?$/.test(
       location.pathname,
     )
 
@@ -194,12 +258,12 @@ function AdminPageContent() {
               element={<ProjectSectionPage section="zones" />}
             />
             <Route
+              path="projects/:projectId/inspection-items/templates"
+              element={<ProjectTemplatesRoute />}
+            />
+            <Route
               path="projects/:projectId/templates"
-              element={
-                <AdminRouteSuspense>
-                  <ProjectTemplatesPage />
-                </AdminRouteSuspense>
-              }
+              element={<ProjectTemplatesRedirect />}
             />
             <Route
               path="projects/:projectId/planning"
@@ -257,11 +321,11 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     <>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
       <Route
-        element={
-          <AdminRouteSuspense>
-            <ProjectTemplatesPage />
-          </AdminRouteSuspense>
-        }
+        element={<ProjectTemplatesRoute />}
+        path="projects/:projectId/inspection-items/templates"
+      />
+      <Route
+        element={<ProjectTemplatesRedirect />}
         path="projects/:projectId/templates"
       />
       <Route
