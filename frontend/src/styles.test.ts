@@ -29,6 +29,7 @@ describe('touch target rules', () => {
     'td button,',
     '.app-header-account button,',
     '.tpl-tree-row,',
+    'summary',
   ])('raises %s to the touch target on narrow screens', (selector) => {
     expect(selectors).toContain(selector)
   })

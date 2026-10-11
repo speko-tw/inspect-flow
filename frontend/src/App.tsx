@@ -6,6 +6,7 @@ import HomeRedirect from './auth/HomeRedirect'
 import LoginPage from './auth/LoginPage'
 import RequireAuth from './auth/RequireAuth'
 import NotFoundPage from './NotFoundPage'
+import RequireValidRouteIds from './RequireValidRouteIds'
 import SetupGate from './setup/SetupGate'
 import VersionFooter from './VersionFooter'
 
@@ -81,7 +82,9 @@ export default function App() {
               path="/field/projects/:projectId"
               element={
                 <RequireAuth key="project-templates">
-                  <LegacyProjectTemplateRedirect />
+                  <RequireValidRouteIds>
+                    <LegacyProjectTemplateRedirect />
+                  </RequireValidRouteIds>
                 </RequireAuth>
               }
             />

@@ -461,6 +461,64 @@ describe('admin role management page', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows the not-found error in the form when the impact lookup fails on save', async () => {
+    rolesFetch({
+      roles: [makeRole('r1', 'Viewer')],
+      failures: {
+        'GET /roles/r1': { status: 404, code: 'role.not_found' },
+      },
+    })
+    renderRoles()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改角色 Viewer' }),
+    )
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: 'Reader' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+
+    // 順序：先 resetForm 才回報錯誤，錯誤留在表單裡並取得焦點。
+    const form = screen.getByLabelText('角色名稱').closest('form')
+    const alert = await within(form as HTMLFormElement).findByRole('alert')
+    expect(alert).toHaveTextContent(
+      '找不到這個角色，可能已被刪除，請重新整理後再試。',
+    )
+    expect(alert).toHaveFocus()
+    expect(
+      screen.getByRole('heading', { name: '新增角色' }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('shows the not-found error at the top when the impact lookup fails on delete', async () => {
+    rolesFetch({
+      roles: [makeRole('r1', 'Viewer')],
+      failures: {
+        'GET /roles/r1': { status: 404, code: 'role.not_found' },
+      },
+    })
+    renderRoles()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '刪除角色 Viewer' }),
+    )
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      '找不到這個角色，可能已被刪除，請重新整理後再試。',
+    )
+    // 不在表單裡，也沒有開出刪除確認框。
+    expect(
+      within(
+        screen.getByLabelText('角色名稱').closest('form') as HTMLElement,
+      ).queryByRole('alert'),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: '刪除「Viewer」' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('shows a load error when the role list cannot be fetched', async () => {
     rolesFetch({
       failures: {

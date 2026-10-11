@@ -39,6 +39,12 @@ export default function RolesPage() {
     changes: { name?: string; permission_codes?: string[] }
   } | null>(null)
   const [error, setError] = useState('')
+  // 新增或修改角色的存檔錯誤：顯示在表單裡並聚焦。表單在頁面底部，放在
+  // 頁頂的話使用者看不到，螢幕閱讀器也不會被帶過去（F-O02）。
+  const [formError, setFormError] = useState<{
+    message: string
+    request: number
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const guard = useSubmitGuard()
@@ -90,7 +96,15 @@ export default function RolesPage() {
     }
   }, [])
 
+  function failForm(message: string) {
+    setFormError((previous) => ({
+      message,
+      request: (previous?.request ?? 0) + 1,
+    }))
+  }
+
   function resetForm() {
+    setFormError(null)
     setPending(null)
     setEditingId(null)
     setName('')
@@ -99,6 +113,7 @@ export default function RolesPage() {
 
   function startEditing(role: Role) {
     setError('')
+    setFormError(null)
     setDeleting(null)
     setPending(null)
     setEditingId(role.id)
@@ -117,11 +132,13 @@ export default function RolesPage() {
   }
 
   // 影響範圍以按下按鈕當下的後端數字為準，列表上的數字可能已過時。
-  async function fetchFreshRole(id: string): Promise<Role | null> {
+  async function fetchFreshRole(
+    id: string,
+    report: (message: string) => void = setError,
+  ): Promise<Role | null> {
     try {
       return await getRole(id)
     } catch (caught) {
-      setError(roleErrorMessage(caught))
       if (
         caught instanceof ManagementApiError &&
         caught.code === 'role.not_found'
@@ -129,6 +146,8 @@ export default function RolesPage() {
         resetForm()
         await reload()
       }
+      // 放在 resetForm 之後：它會清掉表單錯誤，錯誤要留給使用者看。
+      report(roleErrorMessage(caught))
       return null
     }
   }
@@ -137,11 +156,12 @@ export default function RolesPage() {
     event.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('請輸入角色名稱。')
+      failForm('請輸入角色名稱。')
       return
     }
     setSaving(true)
     setError('')
+    setFormError(null)
     try {
       if (!editing) {
         await createRole({ name: trimmed, permission_codes: selected })
@@ -161,12 +181,12 @@ export default function RolesPage() {
         resetForm()
         return
       }
-      const fresh = await fetchFreshRole(editing.id)
+      const fresh = await fetchFreshRole(editing.id, failForm)
       if (fresh) {
         setPending({ role: fresh, changes })
       }
     } catch (caught) {
-      setError(roleErrorMessage(caught))
+      failForm(roleErrorMessage(caught))
       await reload()
     } finally {
       setSaving(false)
@@ -178,13 +198,13 @@ export default function RolesPage() {
     if (!guard.enter()) return
     setSaving(true)
     setError('')
+    setFormError(null)
     try {
       await updateRole(pending.role.id, pending.changes)
       setPending(null)
       resetForm()
       await reload()
     } catch (caught) {
-      setError(roleErrorMessage(caught))
       setPending(null)
       if (
         caught instanceof ManagementApiError &&
@@ -193,6 +213,8 @@ export default function RolesPage() {
         // 正在修改的角色已被別人刪除，不能再當成修改。
         resetForm()
       }
+      // 放在 resetForm 之後：它會清掉表單錯誤，錯誤要留給使用者看。
+      failForm(roleErrorMessage(caught))
       await reload()
     } finally {
       guard.leave()
@@ -316,7 +338,13 @@ export default function RolesPage() {
           </tbody>
         </table>
       )}
-      <Form guard={guard} onSubmit={save}>
+      <Form
+        error={formError?.message}
+        errorFocusRequest={formError?.request}
+        errorTabIndex={-1}
+        guard={guard}
+        onSubmit={save}
+      >
         <h2>{editing ? `修改角色「${editing.name}」` : '新增角色'}</h2>
         <label>
           角色名稱
