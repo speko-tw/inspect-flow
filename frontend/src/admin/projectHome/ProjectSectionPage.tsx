@@ -24,12 +24,18 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
   progress: '進度',
 }
 
+/**
+ * 顯示具備內業區段權限的專案內容。
+ * 無此權限時依 ADM-R25 導回權限落點。
+ */
 export default function ProjectSectionPage({
   section,
   children,
 }: {
   section: Exclude<ProjectSection, 'home'>
-  children?: ReactNode | ((viewerPermissions: string[]) => ReactNode)
+  children?:
+    | ReactNode
+    | ((viewerPermissions: string[], canViewIndoor: boolean) => ReactNode)
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -97,7 +103,7 @@ export default function ProjectSectionPage({
 
   const childContent =
     typeof children === 'function'
-      ? children(currentResult.viewerPermissions)
+      ? children(currentResult.viewerPermissions, currentResult.canViewIndoor)
       : children
   let content = childContent ?? <p>正在確認專案權限…</p>
   if (!children && currentResult.canViewIndoor) {

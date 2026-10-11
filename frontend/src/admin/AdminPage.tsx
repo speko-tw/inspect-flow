@@ -97,16 +97,25 @@ function ProjectTemplatesRoute() {
     }
     return (
       <AdminRouteSuspense>
-        <ProjectTemplatesPage viewerPermissions={[]} />
+        <ProjectTemplatesPage
+          returnToTemplateManagement
+          standalone
+          viewerPermissions={[]}
+        />
       </AdminRouteSuspense>
     )
   }
 
   return (
     <ProjectSectionPage section="inspection-items">
-      {(viewerPermissions) => (
+      {(viewerPermissions, canViewIndoor) => (
         <AdminRouteSuspense>
-          <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
+          <ProjectTemplatesPage
+            returnToTemplateManagement={
+              user.has_template_access === true && !canViewIndoor
+            }
+            viewerPermissions={viewerPermissions}
+          />
         </AdminRouteSuspense>
       )}
     </ProjectSectionPage>

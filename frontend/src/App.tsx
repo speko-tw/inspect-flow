@@ -15,7 +15,14 @@ const SetupPage = lazy(() => import('./setup/SetupPage'))
 
 function LegacyProjectTemplateRedirect() {
   const { projectId = '' } = useParams()
-  return <Navigate replace to={`/admin/projects/${projectId}/templates`} />
+  // FUI-R12、FUI-AC13：舊 Field 專案網址直接轉到正式
+  // 套用範本路徑。
+  return (
+    <Navigate
+      replace
+      to={`/admin/projects/${projectId}/inspection-items/templates`}
+    />
+  )
 }
 
 export default function App() {
