@@ -1,7 +1,9 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
+import json
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
@@ -234,6 +236,22 @@ def _planning_world(db_session, make_client):
         "item": item,
         "item_two": item_two,
     }
+
+
+def _bind_boundary_fixture(value: Any, ids: dict[str, str]) -> Any:
+    """將前端契約 fixture 的識別代碼換成 API 測試建立的真實 ID。"""
+    if isinstance(value, str):
+        for token, identifier in ids.items():
+            value = value.replace(token, identifier)
+        return value
+    if isinstance(value, list):
+        return [_bind_boundary_fixture(item, ids) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _bind_boundary_fixture(item, ids)
+            for key, item in value.items()
+        }
+    return value
 
 
 def test_single_project_read_is_limited_for_planning_members(
@@ -2195,6 +2213,166 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
         missing_reason.json()["error"]["code"]
         == "inspection_task.reason_required"
     )
+
+
+def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
+    db_session, make_client
+):
+    """驗證 RG-M22 fixture 的計畫、Task 與地點 API 情境。
+
+    涵蓋 IP-AC02、IP-AC04、IP-AC05、IP-AC07 與 IP-AC11 的部分流程。
+    """
+    repository_root = Path(__file__).resolve().parents[3]
+    fixture_path = (
+        repository_root
+        / "frontend/src/admin/planning/fixtures/"
+        / "inspection-planning-boundary.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    requests = fixture["requests"]
+    world = _planning_world(db_session, make_client)
+    project = world["project"]
+    admin = world["admin"]
+    # 分區 CRUD 使用獨立專案，
+    # 讓端點契約和 Task 地點情境分開。
+    zone_project = Project(
+        project_code="PLAN-CONTRACT-ZONE",
+        name="分區契約專案",
+        client_name="示範業主",
+        site_location="示範工地",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(zone_project)
+    db_session.commit()
+    point = db_session.scalar(
+        select(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id
+            == world["item"].id
+        )
+    )
+    assert point is not None
+    ids = {
+        "$PROJECT_ID": str(project.id),
+        "$ZONE_PROJECT_ID": str(zone_project.id),
+        "$TASK_ID": "$TASK_ID",
+        "$ITEM_ID": str(world["item"].id),
+        "$POINT_ID": str(point.id),
+        "$ASSIGNEE_ID": str(world["field_user"].id),
+    }
+
+    used = set()
+
+    def send(name: str):
+        used.add(name)
+        request = _bind_boundary_fixture(requests[name], ids)
+        kwargs = {}
+        if "body" in request:
+            kwargs["json"] = request["body"]
+        return admin.request(
+            request["method"], f"/api/v1{request['path']}", **kwargs
+        )
+
+    created_zone = send("zone_create")
+    assert created_zone.status_code == 201, created_zone.text
+    created_zone_id = created_zone.json()["id"]
+    zones_readback = admin.get(f"/api/v1/projects/{zone_project.id}/zones")
+    assert zones_readback.status_code == 200, zones_readback.text
+    zone_names = {}
+    for zone in zones_readback.json()["items"]:
+        zone_names[zone["id"]] = zone["name"]
+    assert zone_names[created_zone_id] == "第二階段驗收區"
+
+    created_plan = send("plan_create")
+    assert created_plan.status_code == 201, created_plan.text
+    plan_id = created_plan.json()["id"]
+    ids["$PLAN_ID"] = plan_id
+    plan_readback = admin.get(f"/api/v1/inspection-plans/{plan_id}")
+    assert plan_readback.status_code == 200, plan_readback.text
+    assert plan_readback.json()["name"] == "前後端共用契約"
+
+    created_task = send("task_create")
+    assert created_task.status_code == 201, created_task.text
+    task_id = created_task.json()["id"]
+    ids["$TASK_ID"] = task_id
+    assert created_task.json()["status"] == "DRAFT"
+    assert created_task.json()["zone_id"] is None
+    assert created_task.json()["location_text"] == "東側機房"
+    task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert task_readback.status_code == 200, task_readback.text
+    assert task_readback.json()["zone_id"] is None
+    assert task_readback.json()["location_text"] == "東側機房"
+
+    task_zone = send("task_zone_create")
+    assert task_zone.status_code == 201, task_zone.text
+    task_zone_id = task_zone.json()["id"]
+    ids["$ZONE_ID"] = task_zone_id
+    zoned_task = send("task_create_with_zone")
+    assert zoned_task.status_code == 201, zoned_task.text
+    zoned_task_id = zoned_task.json()["id"]
+    zoned_task_readback = admin.get(
+        f"/api/v1/inspection-tasks/{zoned_task_id}"
+    )
+    assert zoned_task_readback.status_code == 200, zoned_task_readback.text
+    assert zoned_task_readback.json()["zone_id"] == task_zone_id
+    assert zoned_task_readback.json()["location_text"] == "地下室管線區"
+
+    assigned = send("task_assign")
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["assignee_id"] == str(world["field_user"].id)
+
+    archived_for_blocker = send("plan_archive_blocker")
+    assert archived_for_blocker.status_code == 200, archived_for_blocker.text
+    blocked_dispatch = send("task_dispatch_blocked")
+    assert blocked_dispatch.status_code == 409
+    assert (
+        blocked_dispatch.json()["error"]["code"]
+        == requests["task_dispatch_blocked"]["error_code"]
+    )
+    unchanged_task = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert unchanged_task.status_code == 200, unchanged_task.text
+    assert unchanged_task.json()["status"] == "DRAFT"
+    assert unchanged_task.json()["dispatched_at"] is None
+    restored_plan = send("plan_unarchive_recovery")
+    assert restored_plan.status_code == 200, restored_plan.text
+    assert restored_plan.json()["status"] == "DRAFT"
+
+    dispatched = send("task_dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+    assert dispatched.json()["status"] == "PENDING"
+    started = send("task_start")
+    assert started.status_code == 200, started.text
+    assert started.json()["status"] == "IN_PROGRESS"
+
+    reinspect = send("item_reinspect_yes")
+    assert reinspect.status_code == 200, reinspect.text
+    assert reinspect.json()["reinspection_selected"] is True
+    assert reinspect.json()["title"] == "表面檢查（新標準）"
+    reinspect_no = send("item_reinspect_no")
+    assert reinspect_no.status_code == 200, reinspect_no.text
+    assert reinspect_no.json()["reinspection_selected"] is False
+    assert reinspect_no.json()["title"] == "表面檢查（文字更正）"
+
+    task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert task_readback.status_code == 200, task_readback.text
+    task_data = task_readback.json()
+    assert task_data["status"] == "IN_PROGRESS"
+    assert task_data["items"][0]["current_snapshot"]["title"] == (
+        "表面檢查（文字更正）"
+    )
+    assert task_data["items"][0]["needs_reinspection"] is False
+
+    cancelled = send("task_cancel")
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "CANCELLED"
+    restored = send("task_restore")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["status"] == "IN_PROGRESS"
+
+    archived = send("plan_archive")
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["status"] == "ARCHIVED"
+    assert used == set(requests)
 
 
 def test_project_item_api_refreshes_task_snapshot_and_respects_archived_plan(

@@ -1,0 +1,121 @@
+{
+  "requests": {
+    "zone_create": {
+      "method": "POST",
+      "path": "/projects/$ZONE_PROJECT_ID/zones",
+      "body": { "name": "第二階段驗收區" }
+    },
+    "plan_create": {
+      "method": "POST",
+      "path": "/projects/$PROJECT_ID/inspection-plans",
+      "body": { "name": "前後端共用契約" }
+    },
+    "task_create": {
+      "method": "POST",
+      "path": "/inspection-plans/$PLAN_ID/tasks",
+      "body": {
+        "item_ids": ["$ITEM_ID"],
+        "suggested_assignee_id": null,
+        "zone_id": null,
+        "location_text": "東側機房"
+      }
+    },
+    "task_zone_create": {
+      "method": "POST",
+      "path": "/projects/$PROJECT_ID/zones",
+      "body": { "name": "任務地點分區" }
+    },
+    "task_create_with_zone": {
+      "method": "POST",
+      "path": "/inspection-plans/$PLAN_ID/tasks",
+      "body": {
+        "item_ids": ["$ITEM_ID"],
+        "suggested_assignee_id": null,
+        "zone_id": "$ZONE_ID",
+        "location_text": "地下室管線區"
+      }
+    },
+    "task_assign": {
+      "method": "POST",
+      "path": "/inspection-tasks/$TASK_ID:assign",
+      "body": { "assignee_id": "$ASSIGNEE_ID" }
+    },
+    "plan_archive_blocker": {
+      "method": "POST",
+      "path": "/inspection-plans/$PLAN_ID:archive"
+    },
+    "task_dispatch_blocked": {
+      "method": "POST",
+      "path": "/inspection-tasks/$TASK_ID:dispatch",
+      "expected_status": 409,
+      "error_code": "inspection_plan.archived"
+    },
+    "plan_unarchive_recovery": {
+      "method": "POST",
+      "path": "/inspection-plans/$PLAN_ID:unarchive"
+    },
+    "task_dispatch": {
+      "method": "POST",
+      "path": "/inspection-tasks/$TASK_ID:dispatch"
+    },
+    "task_start": {
+      "method": "POST",
+      "path": "/inspection-tasks/$TASK_ID:start"
+    },
+    "item_reinspect_yes": {
+      "method": "PATCH",
+      "path": "/projects/$PROJECT_ID/inspection-items/$ITEM_ID",
+      "body": {
+        "title": "表面檢查（新標準）",
+        "instruction": "依新標準檢查表面",
+        "inspection_points": [
+          {
+            "id": "$POINT_ID",
+            "sequence": 1,
+            "title": "外觀",
+            "instruction": "確認表面狀況",
+            "text_standard": { "text": "不得有裂縫" },
+            "numeric_standard": null,
+            "measurement_fields": [],
+            "evidence_requirements": [{ "min_count": 1 }]
+          }
+        ],
+        "reinspect": true
+      }
+    },
+    "item_reinspect_no": {
+      "method": "PATCH",
+      "path": "/projects/$PROJECT_ID/inspection-items/$ITEM_ID",
+      "body": {
+        "title": "表面檢查（文字更正）",
+        "instruction": "依更正後文字檢查表面",
+        "inspection_points": [
+          {
+            "id": "$POINT_ID",
+            "sequence": 1,
+            "title": "外觀",
+            "instruction": "確認表面狀況",
+            "text_standard": { "text": "不得有裂縫" },
+            "numeric_standard": null,
+            "measurement_fields": [],
+            "evidence_requirements": [{ "min_count": 1 }]
+          }
+        ],
+        "reinspect": false
+      }
+    },
+    "task_cancel": {
+      "method": "POST",
+      "path": "/inspection-tasks/$TASK_ID:cancel",
+      "body": { "reason": "現場工作順序調整" }
+    },
+    "task_restore": {
+      "method": "POST",
+      "path": "/inspection-tasks/$TASK_ID:restore"
+    },
+    "plan_archive": {
+      "method": "POST",
+      "path": "/inspection-plans/$PLAN_ID:archive"
+    }
+  }
+}
