@@ -1343,7 +1343,14 @@ def _validate_project_points(points: list[PointBody]) -> None:
             {"inspection_points": [point.model_dump() for point in points]}
         )
     except InvalidTemplateError as exc:
-        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            fields=[
+                {"path": field.path, "code": field.code}
+                for field in exc.fields
+            ],
+        ) from exc
 
 
 def _replace_project_points(
@@ -1369,9 +1376,21 @@ def _replace_project_points(
         db.add(point)
         db.flush()
         field_map: dict[UUID, UUID] = {}
+        field_units: dict[UUID, str | None] = {}
+        numeric = source.numeric_standard
+        bound_client_id = (
+            numeric.measurement_field_client_id
+            if numeric is not None
+            else None
+        )
         for source_field in source.measurement_fields:
             field_id = uuid7()
             field_map[source_field.client_id] = field_id
+            unit = source_field.unit
+            if source_field.client_id == bound_client_id:
+                assert numeric is not None
+                unit = numeric.unit
+            field_units[source_field.client_id] = unit
             db.add(
                 ProjectMeasurementField(
                     id=field_id,
@@ -1379,7 +1398,7 @@ def _replace_project_points(
                     project_inspection_item_id=item.id,
                     name=source_field.name,
                     field_type=source_field.field_type,
-                    unit=source_field.unit,
+                    unit=unit,
                     created_by=item.updated_by,
                     updated_by=item.updated_by,
                 )
@@ -1417,7 +1436,9 @@ def _replace_project_points(
                     upper_bound=standard.upper_bound,
                     measurement_field_id=field_id,
                     measurement_field_type=field.field_type,
-                    measurement_field_unit=field.unit or "",
+                    measurement_field_unit=(
+                        field_units[standard.measurement_field_client_id] or ""
+                    ),
                     created_by=item.updated_by,
                     updated_by=item.updated_by,
                 )

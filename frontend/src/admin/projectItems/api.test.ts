@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { InspectionPoint } from '../templates/api'
+import { HttpError, request } from '../../http'
+import { mapFieldErrors } from '../../ui/fieldErrors'
 import { projectItemApi } from './api'
+import boundUnitFixture from './fixtures/project-patch-bound-unit.json'
 
 const item = {
   id: 'item-1',
@@ -179,31 +182,81 @@ describe('projectItemApi', () => {
             condition: '=',
             unit: 'mm',
             tolerance: null,
-            measurement_field_id: 'field-1',
+            measurement_field_id: '00000000-0000-4000-8000-000000000011',
           },
           measurement_fields: [
             {
-              id: 'field-1',
+              id: '00000000-0000-4000-8000-000000000011',
               name: '厚度',
               field_type: 'number',
               unit: 'mm',
+            },
+            {
+              id: '00000000-0000-4000-8000-000000000012',
+              name: '寬度',
+              field_type: 'number',
+              unit: 'cm',
             },
           ],
         },
       ],
     })
     const init = fetchMock.mock.calls[0][1] as RequestInit
-    const sent = JSON.parse(init.body as string).inspection_points[0]
-    expect(sent.measurement_fields).toEqual([
-      {
-        client_id: 'field-1',
-        name: '厚度',
-        field_type: 'number',
-        unit: 'mm',
+    const expectedRequest = structuredClone(boundUnitFixture.request)
+    const expectedFields = expectedRequest.inspection_points[0]
+      .measurement_fields as Array<{
+      client_id: string
+      name: string
+      field_type: 'number'
+      unit: string | null
+    }>
+    expectedFields.push({
+      client_id: '00000000-0000-4000-8000-000000000012',
+      name: '寬度',
+      field_type: 'number',
+      unit: 'cm',
+    })
+    expect(JSON.parse(init.body as string)).toEqual(expectedRequest)
+    expect(
+      JSON.parse(init.body as string).inspection_points[0]
+        .measurement_fields[0].unit,
+    ).toBeNull()
+    expect(
+      JSON.parse(init.body as string).inspection_points[0]
+        .measurement_fields[1].unit,
+    ).toBe('cm')
+  })
+
+  it('maps the shared real project PATCH error envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () =>
+        Response.json(boundUnitFixture.error_response, { status: 422 }),
+      ),
+    )
+    let fields: Array<{ path: string; code: string }> = []
+    try {
+      await request('/projects/project-1/inspection-items/item-1', {
+        method: 'PATCH',
+        body: JSON.stringify(boundUnitFixture.request),
+      })
+    } catch (caught) {
+      expect(caught).toBeInstanceOf(HttpError)
+      fields = (caught as HttpError).fields ?? []
+    }
+    expect(
+      mapFieldErrors(fields, [
+        {
+          path: '/inspection_points/0/measurement_fields/0/unit',
+          key: 'point:0:field:0:unit',
+        },
+      ]),
+    ).toEqual({
+      errors: {
+        'point:0:field:0:unit': 'template.bound_field_unit_forbidden',
       },
-    ])
-    expect(sent.numeric_standard.measurement_field_client_id).toBe('field-1')
-    expect(sent.numeric_standard).not.toHaveProperty('measurement_field_id')
+      unmatched: [],
+    })
   })
 
   it('uses the shared structured API error', async () => {
