@@ -5,8 +5,11 @@ AUT-AC03, AUT-AC05~AUT-AC07).
 import logging
 
 from argon2 import PasswordHasher, Type
+from fastapi import Response
 
 from app.api.errors import ErrorCode
+from app.api.v1 import auth as auth_api
+from app.api.v1.auth import LoginRequest
 from app.auth import login as login_module
 from app.auth.passwords import (
     MEMORY_COST_KIB,
@@ -23,6 +26,47 @@ from tests.db.conftest import (
 )
 
 PASSWORD = DEFAULT_TEST_PASSWORD
+
+
+def test_login_commits_session_before_building_response(
+    db_session, monkeypatch
+):
+    """登入建立 session 後，必須先提交再組成回應。"""
+    user = make_local_user(db_session, "R618LOGIN")
+    assert user.email is not None
+    events = []
+    original_commit = db_session.commit
+    original_create_session = auth_api.create_session
+    original_response = auth_api._me_response
+
+    def tracked_commit():
+        original_commit()
+        if "session_created" in events:
+            events.append("session_committed")
+
+    def tracked_create_session(session, account):
+        result = original_create_session(session, account)
+        events.append("session_created")
+        return result
+
+    def checked_response(session, account):
+        assert events[-1] == "session_committed"
+        events.append("response_built")
+        return original_response(session, account)
+
+    monkeypatch.setattr(db_session, "commit", tracked_commit)
+    monkeypatch.setattr(auth_api, "create_session", tracked_create_session)
+    monkeypatch.setattr(auth_api, "_me_response", checked_response)
+
+    response = Response()
+    result = auth_api.login(
+        LoginRequest(login=user.email, password=PASSWORD),
+        response,
+        db_session,
+    )
+
+    assert result.id == user.id
+    assert events == ["session_created", "session_committed", "response_built"]
 
 
 class TestAutAc02RehashOnLogin:

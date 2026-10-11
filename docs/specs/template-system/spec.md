@@ -89,7 +89,7 @@
 | POST | `/api/v1/projects/{project_id}/templates` | 將該專案的一筆查核項目存成範本；body 必含 `project_inspection_item_id` 與目標 `system_id` | Admin 或範本管理員 |
 | GET | `/api/v1/projects/{project_id}/inspection-items` | 依 cursor 分頁列出專案查核項目，每筆含完整巢狀結構、來源範本名稱與套用時間 | 該專案成員、Admin 或範本管理員；跨專案瀏覽限 Admin 或範本管理員 |
 | GET | `/api/v1/projects` | 沿用既有專案列表 API；Admin 或範本管理員可列出全部專案 | Admin 或範本管理員；其他非 Admin 回 403 |
-| PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204 | Admin |
+| PUT | `/api/v1/system-role-assignments/template_admin/{user_id}` | 指派固定代碼 `template_admin` 給使用者；已指派時仍回 204；對象是外部協作人員時回 `422 user.external_not_qualified`（外部協作人員不得持有 `template_admin`，DOM-R71） | Admin |
 | DELETE | `/api/v1/system-role-assignments/template_admin/{user_id}` | 收回使用者的 `template_admin` 指派；尚未指派時回 404 | Admin |
 
 上表「範本管理員」一詞與 `system-role-assignments` 路由是**過渡期**行為（TPL-R09、AUT-R50）；正式行為依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)：寫入、存成範本與跨專案瀏覽的存取層級改為「需模組權限 `template.manage`（委派不放行）」，讀取範本庫改為需範本模組「可使用」`template.use`（原「具任一專案查核項目編輯權限者」另須具 `template.use`），`GET /api/v1/projects` 列出全部專案的條件依 `domain-model` 專案管理 API（正式條件為規格設計，非負責人裁定）；`system-role-assignments` 兩條路由在改造完成後移除，改由 `admin-dashboard` 的模組權限 API 授予與收回。
