@@ -831,6 +831,160 @@ describe('admin projects page', () => {
     expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible()
   })
 
+  // ADM-R15：A 的慢回應不能關閉後來開啟的 B，否則 B 草稿會殘留。
+  it('keeps the next form open while an earlier save resolves', async () => {
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    const gate = holdRequests(fetchMock, 'PATCH', /\/projects\/project-1$/)
+    renderAt('/admin/projects')
+    await screen.findAllByText('第二示範工程')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+    )
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '已儲存的工程' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    expect(calls(fetchMock, 'PATCH', /\/projects\/project-1$/)).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+    )
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: 'B 的未儲存草稿' },
+    })
+
+    gate.resolve()
+    await screen.findByText('專案「已儲存的工程」已儲存。')
+    expect(
+      screen.getByRole('heading', { name: '編輯專案「第二示範工程」' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText(/工程名稱/)).toHaveValue('B 的未儲存草稿')
+  })
+
+  // ADM-R38：表單內按鈕卸載後，鍵盤焦點須回到可見清單入口。
+  it('restores focus after cancel, discard, and save', async () => {
+    projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    // 表單開啟時原按鈕會卸載，須檢查關閉後重新掛載的入口。
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '新增專案' })).toHaveFocus(),
+    )
+
+    const card = document.getElementById('project-card-project-1')!
+    const edit = within(card).getByRole('button', {
+      name: '編輯專案「示範工程」',
+    })
+    fireEvent.click(edit)
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '捨棄的名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    await waitFor(() => expect(card).toHaveFocus())
+
+    fireEvent.click(edit)
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '改名後的工程' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    await waitFor(() =>
+      expect(document.getElementById('project-card-project-1')).toHaveFocus(),
+    )
+  })
+
+  // ADM-R38：原卡片被搜尋濾掉時，退路是「新增專案」按鈕。
+  it('focuses the new button when the edited card is filtered', async () => {
+    projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    renderAt('/admin/projects')
+    await screen.findAllByText('第二示範工程')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+    )
+    fireEvent.change(screen.getByLabelText('搜尋專案'), {
+      target: { value: 'DEMO-002' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await waitFor(() =>
+      expect(document.getElementById('project-card-project-1')).toBeNull(),
+    )
+    await screen.findAllByText('第二示範工程')
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '新增專案' })).toHaveFocus(),
+    )
+  })
+
+  // ADM-R38：清單重載期間使用者已點進搜尋框時，不可把焦點拉走。
+  it('keeps the focus a user moved to search during reload', async () => {
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    renderAt('/admin/projects')
+    await screen.findAllByText('第二示範工程')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+    )
+    const gate = holdRequests(fetchMock, 'GET', /\/projects\?/)
+    const search = screen.getByLabelText('搜尋專案')
+    fireEvent.change(search, { target: { value: 'DEMO-002' } })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    search.focus()
+    expect(search).toHaveFocus()
+
+    gate.resolve()
+    await screen.findAllByText('第二示範工程')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '搜尋' })).toBeEnabled(),
+    )
+    expect(search).toHaveFocus()
+  })
+
   it('opens the card edit entry with the existing unsaved guard and saves', async () => {
     const scroll = mockScrollIntoView()
     const fetchMock = projectFetch()
