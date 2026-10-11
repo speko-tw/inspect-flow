@@ -44,9 +44,7 @@ def _draft_task(world) -> str:
     return task.json()["id"]
 
 
-def test_zone_name_too_long_matches_frontend_fixture(
-    db_session, make_client
-):
+def test_zone_name_too_long_matches_frontend_fixture(db_session, make_client):
     world = _planning_world(db_session, make_client)
 
     response = world["admin"].post(
