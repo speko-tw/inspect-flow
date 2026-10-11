@@ -66,6 +66,7 @@ function toInput(form: FormState): ProjectInput {
   }
 }
 
+/** 呈現專案清單與新增／編輯表單，並守住 ADM-R15 的草稿轉場。 */
 export default function ProjectsPage() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
@@ -91,6 +92,9 @@ export default function ProjectsPage() {
   const noticeRef = useRef<HTMLParagraphElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const restoreFocusAfterTransition = useRef(false)
+  const previousFormModeRef = useRef<FormMode>(null)
+  const focusAfterCloseRef = useRef<FormMode>(null)
+  const newProjectButtonRef = useRef<HTMLButtonElement>(null)
   const editing = formMode?.kind === 'edit' ? formMode.project : null
   const form =
     formMode?.kind === 'new'
@@ -117,6 +121,28 @@ export default function ProjectsPage() {
     restoreFocusAfterTransition.current = false
     restoreFocusRef.current?.focus()
   }, [transition])
+
+  useEffect(() => {
+    // ADM-R38：只在表單真的關閉時記錄落點，切換到另一份表單不搶焦點。
+    if (previousFormModeRef.current && !formMode) {
+      focusAfterCloseRef.current = previousFormModeRef.current
+    }
+    previousFormModeRef.current = formMode
+  }, [formMode])
+
+  useEffect(() => {
+    const closedForm = focusAfterCloseRef.current
+    if (!closedForm || formMode) return
+    // 儲存後清單會重載；等原專案卡片出現再聚焦，避免落到 body。
+    const card =
+      closedForm.kind === 'edit'
+        ? document.getElementById(`project-card-${closedForm.project.id}`)
+        : null
+    const target = card ?? (!loading ? newProjectButtonRef.current : null)
+    if (!target) return
+    target.focus()
+    focusAfterCloseRef.current = null
+  }, [formMode, loading, projects])
 
   useEffect(() => {
     if (!formMode) return
@@ -290,6 +316,7 @@ export default function ProjectsPage() {
     setNotice('')
     const input = toInput(form)
     const creating = editing === null
+    const savingProjectId = editing?.id ?? null
     setSaving(true)
     try {
       let saved: Project
@@ -322,8 +349,13 @@ export default function ProjectsPage() {
       const savedNotice = hasDuplicateCodeWarning(saved)
         ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
         : `專案「${saved.name}」已儲存。`
-      if (editing) dropDraft(editing.id)
-      applyTransition({ kind: 'list' })
+      if (savingProjectId) dropDraft(savingProjectId)
+      // ADM-R15：A 的回應晚於表單切換時，只關 A，不捨棄 B 的草稿。
+      setFormMode((current) =>
+        current?.kind === 'edit' && current.project.id === savingProjectId
+          ? null
+          : current,
+      )
       setNotice(savedNotice)
       setProjects([])
       setNextCursor(null)
@@ -371,6 +403,7 @@ export default function ProjectsPage() {
         <button
           className="btn-primary"
           onClick={() => requestTransition({ kind: 'new' })}
+          ref={newProjectButtonRef}
           type="button"
         >
           新增專案
@@ -498,7 +531,12 @@ export default function ProjectsPage() {
           <h2 id="project-workspace-heading">專案工作台</h2>
           <div className="project-workspace-grid">
             {projects.map((project) => (
-              <article className="project-workspace-card" key={project.id}>
+              <article
+                className="project-workspace-card"
+                id={`project-card-${project.id}`}
+                key={project.id}
+                tabIndex={-1}
+              >
                 <p className="project-code">{project.project_code}</p>
                 <h3>{project.name}</h3>
                 <p>{project.site_location}</p>
