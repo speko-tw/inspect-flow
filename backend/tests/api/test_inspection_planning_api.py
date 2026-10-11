@@ -2971,18 +2971,14 @@ def test_task_creation_rejects_items_without_points_atomically(
     world = _planning_world(db_session, make_client)
     admin = world["admin"]
     project = world["project"]
-    empty_item = ProjectInspectionItem(
-        project_id=project.id,
-        sequence=3,
-        title="沒有點位",
-        instruction="尚未設定檢查內容",
-        source_template_name="示範範本",
-        applied_at=world["admin_user"].created_at,
-        created_by=world["admin_user"].id,
-        updated_by=world["admin_user"].id,
+    empty_item = world["item_two"]
+    empty_item_url = (
+        f"/api/v1/projects/{project.id}/inspection-items/{empty_item.id}"
     )
-    db_session.add(empty_item)
-    db_session.commit()
+    # IP-AC15 允許未被 Task 使用的項目暫時沒有點位；Task 建立端仍須拒絕。
+    emptied = admin.patch(empty_item_url, json={"inspection_points": []})
+    assert emptied.status_code == 200, emptied.text
+    assert emptied.json()["inspection_points"] == []
     plan = admin.post(
         f"/api/v1/projects/{project.id}/inspection-plans",
         json={"name": "零點位拒絕"},
