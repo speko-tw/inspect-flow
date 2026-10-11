@@ -16,13 +16,18 @@ from app.api.limits import (
     ITEM_IDS_MAX,
     LOCATION_TEXT_MAX,
     LONG_TEXT_MAX,
+    MEASUREMENT_FIELDS_MAX,
     PLANNING_NAME_MAX,
     POINTS_MAX,
     TITLE_MAX,
 )
 from app.api.pagination import encode_page_cursor, page, page_cursor_key
 from app.api.time_format import format_utc
-from app.api.v1.template_library import PointBody
+from app.api.v1.template_library import (
+    MeasurementFieldBody,
+    NumericStandardBody,
+    PointBody,
+)
 from app.auth.access import (
     require_admin_or_any_project_permission,
     require_login_access,
@@ -125,10 +130,27 @@ class LocationBody(StrictBody):
     location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
 
 
+class ProjectNumericStandardBody(NumericStandardBody):
+    measurement_field_client_id: UUID
+
+
+class ProjectMeasurementFieldBody(MeasurementFieldBody):
+    id: UUID | None = None
+    client_id: UUID
+
+
+class ProjectPointBody(PointBody):
+    id: UUID | None = None
+    numeric_standard: ProjectNumericStandardBody | None = None
+    measurement_fields: list[ProjectMeasurementFieldBody] = Field(
+        default_factory=list, max_length=MEASUREMENT_FIELDS_MAX
+    )
+
+
 class ProjectItemPatchBody(StrictBody):
     title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX)
     instruction: str | None = Field(default=None, max_length=LONG_TEXT_MAX)
-    inspection_points: list[PointBody] | None = Field(
+    inspection_points: list[ProjectPointBody] | None = Field(
         default=None, max_length=POINTS_MAX
     )
     reinspect: bool | None = None
@@ -1259,13 +1281,20 @@ def patch_project_item(
     )
     if item is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    if body.inspection_points is not None:
-        _validate_project_points(body.inspection_points)
     associations = db.scalars(
         select(TaskInspectionItem).where(
             TaskInspectionItem.project_inspection_item_id == item.id
         )
     ).all()
+    if body.inspection_points is not None:
+        # reinspect=None 不會啟用結構鎖，先回報完整結構錯誤欄位。
+        _validate_project_points(
+            db,
+            item,
+            body.inspection_points,
+            has_tasks=bool(associations),
+            reinspect=body.reinspect,
+        )
     if associations and body.reinspect is None:
         raise APIError(
             ErrorCode.PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED, 422
@@ -1336,12 +1365,80 @@ def patch_project_item(
     return result
 
 
-def _validate_project_points(points: list[PointBody]) -> None:
+def _validate_project_points(
+    db: Session,
+    item: ProjectInspectionItem,
+    points: list[ProjectPointBody],
+    *,
+    has_tasks: bool,
+    reinspect: bool | None,
+) -> None:
     """Apply the template structure rules before any row is touched."""
-    try:
-        validate_template_structure(
-            {"inspection_points": [point.model_dump() for point in points]}
+    existing_points = db.scalars(
+        select(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id == item.id
         )
+    ).all()
+    existing_point_ids = {point.id for point in existing_points}
+    existing_fields = db.scalars(
+        select(ProjectMeasurementField).where(
+            ProjectMeasurementField.project_inspection_item_id == item.id
+        )
+    ).all()
+    fields_by_point: dict[UUID, dict[UUID, ProjectMeasurementField]] = {}
+    for field in existing_fields:
+        fields_by_point.setdefault(field.inspection_point_id, {})[field.id] = (
+            field
+        )
+
+    point_identities: list[UUID | None] = []
+    normalized_points = []
+    seen_point_ids: set[UUID] = set()
+    for point in points:
+        point_id = point.id
+        if has_tasks and reinspect is False and point_id is None:
+            raise APIError(
+                ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+            )
+        if point.id is not None and point.id not in existing_point_ids:
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        if point_id is not None and point_id in seen_point_ids:
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        if point_id is not None:
+            seen_point_ids.add(point_id)
+        point_identities.append(point_id)
+        existing_fields_for_point = (
+            fields_by_point.get(point_id, {}) if point_id is not None else {}
+        )
+        seen_field_ids: set[UUID] = set()
+        seen_field_client_ids: set[UUID] = set()
+        identity_owner: dict[UUID, int] = {}
+        for index, field in enumerate(point.measurement_fields):
+            field_id = field.id
+            if (
+                field.id is not None
+                and field.id not in existing_fields_for_point
+            ):
+                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+            if field_id is not None and field_id in seen_field_ids:
+                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+            if field_id is not None:
+                seen_field_ids.add(field_id)
+            if field.client_id in seen_field_client_ids:
+                raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+            seen_field_client_ids.add(field.client_id)
+            for token in (field.id, field.client_id):
+                if token is None:
+                    continue
+                owner = identity_owner.setdefault(token, index)
+                if owner != index:
+                    raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+        normalized = point.model_dump()
+        normalized_points.append(normalized)
+
+    try:
+        validate_template_structure({"inspection_points": normalized_points})
     except InvalidTemplateError as exc:
         raise APIError(
             ErrorCode.REQUEST_VALIDATION_FAILED,
@@ -1352,30 +1449,110 @@ def _validate_project_points(points: list[PointBody]) -> None:
             ],
         ) from exc
 
+    if has_tasks and not points:
+        raise APIError(ErrorCode.PROJECT_INSPECTION_ITEM_POINTS_REQUIRED, 422)
+    if has_tasks and reinspect is False:
+        if set(point_identities) != existing_point_ids:
+            raise APIError(
+                ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+            )
+        for point, point_id in zip(points, point_identities, strict=True):
+            assert point_id is not None
+            old_fields = fields_by_point.get(point_id, {})
+            provided_field_ids = [
+                field.id for field in point.measurement_fields
+            ]
+            if any(field_id is None for field_id in provided_field_ids):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
+            if set(provided_field_ids) != set(old_fields):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
+            for field, field_id in zip(
+                point.measurement_fields, provided_field_ids, strict=True
+            ):
+                assert field_id is not None
+                existing = old_fields[field_id]
+                if field.field_type != existing.field_type:
+                    raise APIError(
+                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
+                        422,
+                    )
+
 
 def _replace_project_points(
-    db: Session, item: ProjectInspectionItem, points: list[PointBody]
+    db: Session, item: ProjectInspectionItem, points: list[ProjectPointBody]
 ) -> None:
     old_points = db.scalars(
         select(ProjectInspectionPoint).where(
             ProjectInspectionPoint.project_inspection_item_id == item.id
         )
     ).all()
-    for point in old_points:
-        db.delete(point)
-    db.flush()
-    for source in points:
-        point = ProjectInspectionPoint(
-            project_inspection_item_id=item.id,
-            sequence=source.sequence,
-            title=source.title,
-            instruction=source.instruction,
-            created_by=item.updated_by,
-            updated_by=item.updated_by,
+    points_by_id = {point.id: point for point in old_points}
+    old_fields = db.scalars(
+        select(ProjectMeasurementField).where(
+            ProjectMeasurementField.project_inspection_item_id == item.id
         )
-        db.add(point)
-        db.flush()
+    ).all()
+    fields_by_point = {}
+    for field in old_fields:
+        fields_by_point.setdefault(field.inspection_point_id, {})[field.id] = (
+            field
+        )
+
+    old_numeric = db.scalars(
+        select(ProjectNumericStandard).where(
+            ProjectNumericStandard.project_inspection_item_id == item.id
+        )
+    ).all()
+    old_text = db.scalars(
+        select(ProjectTextStandard).where(
+            ProjectTextStandard.project_inspection_item_id == item.id
+        )
+    ).all()
+    old_evidence = db.scalars(
+        select(ProjectEvidenceRequirement).where(
+            ProjectEvidenceRequirement.project_inspection_item_id == item.id
+        )
+    ).all()
+    for row in [*old_numeric, *old_text, *old_evidence]:
+        db.delete(row)
+    db.flush()
+    for index, point in enumerate(old_points, start=1):
+        point.sequence = -index
+    db.flush()
+
+    retained_point_ids: set[UUID] = set()
+    for source in points:
+        point_identity = source.id
+        point = (
+            points_by_id.get(point_identity)
+            if point_identity is not None
+            else None
+        )
+        if point is None:
+            point = ProjectInspectionPoint(
+                project_inspection_item_id=item.id,
+                sequence=source.sequence,
+                title=source.title,
+                instruction=source.instruction,
+                created_by=item.updated_by,
+                updated_by=item.updated_by,
+            )
+            db.add(point)
+            db.flush()
+        else:
+            point.sequence = source.sequence
+            point.title = source.title
+            point.instruction = source.instruction
+            point.updated_by = item.updated_by
+        retained_point_ids.add(point.id)
+
         field_map: dict[UUID, UUID] = {}
+        existing_fields = fields_by_point.get(point.id, {})
+        retained_field_ids: set[UUID] = set()
         field_units: dict[UUID, str | None] = {}
         numeric = source.numeric_standard
         bound_client_id = (
@@ -1383,26 +1560,45 @@ def _replace_project_points(
             if numeric is not None
             else None
         )
-        for source_field in source.measurement_fields:
-            field_id = uuid7()
-            field_map[source_field.client_id] = field_id
+        for index, source_field in enumerate(source.measurement_fields):
+            field_identity = source_field.id
+            field = (
+                existing_fields.get(field_identity)
+                if field_identity is not None
+                else None
+            )
             unit = source_field.unit
             if source_field.client_id == bound_client_id:
                 assert numeric is not None
                 unit = numeric.unit
-            field_units[source_field.client_id] = unit
-            db.add(
-                ProjectMeasurementField(
-                    id=field_id,
+            if field is None:
+                field = ProjectMeasurementField(
+                    id=uuid7(),
                     inspection_point_id=point.id,
                     project_inspection_item_id=item.id,
                     name=source_field.name,
                     field_type=source_field.field_type,
                     unit=unit,
+                    sort_order=index,
                     created_by=item.updated_by,
                     updated_by=item.updated_by,
                 )
-            )
+                db.add(field)
+            else:
+                field.name = source_field.name
+                field.field_type = source_field.field_type
+                field.unit = unit
+                field.sort_order = index
+                field.updated_by = item.updated_by
+            retained_field_ids.add(field.id)
+            field_map[source_field.client_id] = field.id
+            field_units[source_field.client_id] = unit
+
+        for field_id, field in existing_fields.items():
+            if field_id not in retained_field_ids:
+                db.delete(field)
+        db.flush()
+
         if source.text_standard is not None:
             db.add(
                 ProjectTextStandard(
@@ -1415,14 +1611,10 @@ def _replace_project_points(
             )
         if source.numeric_standard is not None:
             standard = source.numeric_standard
-            field_id = field_map.get(standard.measurement_field_client_id)
+            field_identity = standard.measurement_field_client_id
+            field_id = field_map.get(field_identity)
             if field_id is None:
                 raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-            field = next(
-                row
-                for row in source.measurement_fields
-                if row.client_id == standard.measurement_field_client_id
-            )
             db.add(
                 ProjectNumericStandard(
                     inspection_point_id=point.id,
@@ -1435,10 +1627,12 @@ def _replace_project_points(
                     lower_bound=standard.lower_bound,
                     upper_bound=standard.upper_bound,
                     measurement_field_id=field_id,
-                    measurement_field_type=field.field_type,
-                    measurement_field_unit=(
-                        field_units[standard.measurement_field_client_id] or ""
+                    measurement_field_type=next(
+                        row.field_type
+                        for row in source.measurement_fields
+                        if row.client_id == field_identity
                     ),
+                    measurement_field_unit=field_units[field_identity] or "",
                     created_by=item.updated_by,
                     updated_by=item.updated_by,
                 )
@@ -1456,4 +1650,8 @@ def _replace_project_points(
                     updated_by=item.updated_by,
                 )
             )
+
+    for point in old_points:
+        if point.id not in retained_point_ids:
+            db.delete(point)
     db.flush()
