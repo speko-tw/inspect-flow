@@ -15,7 +15,9 @@ which the caller may override (there is no ``created_by=``/
 catalog entry ``event_type`` names.
 Callers pass ``project_id`` for events with project context (ALG-R24),
 independent of fields present in ``before`` or ``after``; events without
-project context leave it null.
+project context leave it null. 標為 ``project_scoped`` 的專案事件缺少
+``project_id`` 時會被拒絕（:class:`MissingProjectAuditEventError`），
+一般寫入與延後寫入兩條路徑皆然。
 
 The event catalog (:func:`register_audit_event`, ``_EVENT_CATALOG``)
 is how ALG-R13 lets other specs (``external-identity-sync``) add new
@@ -122,7 +124,8 @@ class AuditEventDefinition:
     a 修改 event must include even when unchanged. ``system_event``
     and ``always_write`` are ALG-R15/ALG-R16's two flags;
     ``before_optional`` is a third, narrower one -- see this module's
-    docstring.
+    docstring. ``project_scoped`` 用於避免 append-only 紀錄遺失
+    ALG-R24 規定的專案脈絡。
     """
 
     event_type: str
@@ -135,6 +138,7 @@ class AuditEventDefinition:
     allow_system_event: bool = False
     always_write: bool = False
     before_optional: bool = False
+    project_scoped: bool = False
     nullable_fields: frozenset[str] = field(default_factory=frozenset)
 
 
@@ -214,6 +218,7 @@ def register_audit_event(
     allow_system_event: bool = False,
     always_write: bool = False,
     before_optional: bool = False,
+    project_scoped: bool = False,
     nullable_fields: Iterable[str] = (),
 ) -> None:
     """Add one event to the catalog (ALG-R11, ALG-R13): other specs
@@ -222,6 +227,8 @@ def register_audit_event(
     ``system_event`` and ``always_write`` are ALG-R15/ALG-R16's two
     flags; ``before_optional`` is a third, narrower one (see this
     module's docstring); all three default to ``False``.
+    ``project_scoped`` 也預設為 ``False``；具專案脈絡時應標記，
+    避免 append-only 紀錄遺失 ALG-R24 規定的專案 UUID。
     ``before_optional`` is only meaningful on a 修改 (``kind=
     AuditEventKind.UPDATED``) event -- a 新增 event's ``before`` is
     already always ``None`` (ALG-R09), and a 刪除 event has no
@@ -296,6 +303,7 @@ def register_audit_event(
         allow_system_event=allow_system_event,
         always_write=always_write,
         before_optional=before_optional,
+        project_scoped=project_scoped,
         nullable_fields=nullable_fields_set,
     )
 
@@ -312,6 +320,20 @@ class AuditEventError(ValueError):
 
 class UnregisteredAuditEventError(AuditEventError):
     """ALG-R07: ``event_type`` was never registered."""
+
+
+class MissingProjectAuditEventError(AuditEventError):
+    """ALG-R24：``project_scoped`` 事件缺少 ``project_id``。"""
+
+
+def _require_project_id(
+    definition: AuditEventDefinition, project_id: uuid.UUID | None
+) -> None:
+    """在寫入或延後寫入前拒絕缺少的專案脈絡，避免空值紀錄無法回補。"""
+    if definition.project_scoped and project_id is None:
+        raise MissingProjectAuditEventError(
+            f"{definition.event_type!r} requires project_id (ALG-R24)"
+        )
 
 
 class UndeclaredAuditFieldError(AuditEventError):
@@ -557,7 +579,15 @@ def record_audit_event(
     system_event: bool = False,
     project_id: uuid.UUID | None = None,
 ) -> AuditLog:
-    """Write one audit event in the caller's transaction (ALG-R05)."""
+    """Write one audit event in the caller's transaction (ALG-R05).
+
+    Raises:
+        MissingProjectAuditEventError: 事件標為 ``project_scoped``
+            但未提供 ``project_id``（ALG-R24）；在查找操作者與寫入
+            前就拒絕，不留任何紀錄。
+        AuditEventError: 其餘子類別的拋出條件見
+            :func:`_record_audit_event`。
+    """
     return _record_audit_event(
         session,
         event_type,
@@ -603,6 +633,9 @@ def _record_audit_event(
             catalog (ALG-R07).
         UndeclaredAuditFieldError: ``before``/``after`` names a field
             the event does not declare (ALG-R08).
+        MissingProjectAuditEventError: 事件標為 ``project_scoped``
+            但 ``project_id`` 為 ``None``（ALG-R24）；在查找操作者與
+            變更 session 前拒絕。
         InvalidAuditEventShapeError: ``before``/``after``'s shape
             does not match the event's kind, a "一律記錄" field is
             missing, or a declared field's value is ``None``
@@ -622,6 +655,9 @@ def _record_audit_event(
         raise UnregisteredAuditEventError(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
+
+    # ALG-R24：在查找操作者或變更 session 前拒絕，避免留下副作用。
+    _require_project_id(definition, project_id)
 
     normalized_before = _normalize_payload(before)
     normalized_after = _normalize_payload(after)
@@ -690,6 +726,16 @@ def record_audit_event_in_independent_transaction(
     lock and self-block that immediate path; use the request unit of work
     for denied writes. The passed session supplies the target engine only;
     its pending writes and transaction are untouched.
+    ALG-R24 要求延後寫入前先驗證專案脈絡，避免請求失敗後才在 flush
+    階段靜默丟棄無效的安全事件。
+
+    Raises:
+        UnregisteredAuditEventError: ``event_type`` 未登記（ALG-R07）。
+        MissingProjectAuditEventError: 事件標為 ``project_scoped`` 但
+            ``project_id`` 為 ``None``（ALG-R24）；無論有無延後寫入
+            佇列都在寫入與入佇列之前拒絕。
+        AuditEventError: 欄位與形狀驗證失敗時的其餘子類別，見
+            :func:`_record_audit_event`。
     """
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
@@ -700,6 +746,8 @@ def record_audit_event_in_independent_transaction(
         raise UnregisteredAuditEventError(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
+    # ALG-R24：拒絕事件須在回滾前通過驗證，不能延後寫入缺值事件。
+    _require_project_id(definition, project_id)
     normalized_before = _normalize_payload(before)
     normalized_after = _normalize_payload(after)
     _validate_fields(definition, normalized_before, normalized_after)
@@ -832,18 +880,21 @@ register_audit_event(
     kind=AuditEventKind.DELETED,
     fields=("name", "permission_codes", "project_member_ids"),
 )
+# ALG-R24：成員角色變更與移除後，仍須保留其所屬專案。
 register_audit_event(
     "project_member.roles_changed",
     entity_type="project_member",
     kind=AuditEventKind.UPDATED,
     fields=("role_ids", "project_id", "user_id"),
     always_recorded=("project_id", "user_id"),
+    project_scoped=True,
 )
 register_audit_event(
     "project_member.removed",
     entity_type="project_member",
     kind=AuditEventKind.DELETED,
     fields=("project_id", "user_id", "role_ids"),
+    project_scoped=True,
 )
 register_audit_event(
     "user.admin_changed",
@@ -877,11 +928,13 @@ register_audit_event(
     kind=AuditEventKind.DELETED,
     fields=("user_id", "role_code"),
 )
+# ALG-R24：由專案項目建立範本時，須保留來源專案。
 register_audit_event(
     "template_item.created_from_project",
     entity_type="template_item",
     kind=AuditEventKind.CREATED,
     fields=("project_id", "project_inspection_item_id", "system_id"),
+    project_scoped=True,
 )
 
 # `authentication` 事件 (docs/specs/audit-log/spec.md#authentication-事件,
@@ -912,6 +965,8 @@ register_audit_event(
 )
 
 # Two-layer permission and project events (ALG-R25~ALG-R28, plan.md T6).
+# 刻意不標 project_scoped：停用或啟用牽動的專案不只一個
+# （restored_project_ids／removed_project_ids），沒有單一 project_id。
 register_audit_event(
     "user.active_changed",
     entity_type="user",
@@ -1020,12 +1075,14 @@ for _event_type, _entity_type, _kind, _fields, _always in (
         always_recorded=_always,
     )
 
+# ALG-R24：專案建立與修改事件，以專案本身的 UUID 作為脈絡。
 register_audit_event(
     "project.created",
     entity_type="project",
     kind=AuditEventKind.CREATED,
     fields=("project_code", "name", "creator_role_user_id"),
     optional_fields=("creator_role_user_id",),
+    project_scoped=True,
 )
 register_audit_event(
     "project.updated",
@@ -1040,13 +1097,17 @@ register_audit_event(
         "planned_completion_date",
     ),
     nullable_fields=("planned_start_date", "planned_completion_date"),
+    project_scoped=True,
 )
+# ALG-R24：指派遭拒並回滾後，仍須記錄該事件所屬專案。
 register_audit_event(
     "project_member.assignment_denied",
     entity_type="project_member",
     kind=AuditEventKind.CREATED,
     fields=("project_id", "user_id", "role_ids", "reason"),
+    project_scoped=True,
 )
+# 刻意不標 project_scoped：授權拒絕是全域事件，沒有專案脈絡（ALG-R24）。
 register_audit_event(
     "module_permission.grant_denied",
     entity_type="module_permission",
