@@ -136,12 +136,14 @@ function managementFetch({
   userRows = [builtInUser, regularUser],
   companyRows = [company],
   memberProjectIds = [],
+  viewerPermissionCodes = ['project_member.manage', 'inspection_plan.read'],
   onCreate,
   failAdminAction = false,
 }: {
   userRows?: User[]
   companyRows?: Company[]
   memberProjectIds?: string[]
+  viewerPermissionCodes?: string[]
   onCreate?: (body: Record<string, unknown>) => CreatedUser
   failAdminAction?: boolean
 } = {}) {
@@ -190,10 +192,7 @@ function managementFetch({
           primary_step: null,
           task_counts_visible: false,
           draft_tasks_missing_assignee: 0,
-          viewer_permission_codes: [
-            'project_member.manage',
-            'inspection_plan.read',
-          ],
+          viewer_permission_codes: viewerPermissionCodes,
         })
       }
       if (parsed.pathname === '/api/v1/me/projects' && method === 'GET') {
@@ -1252,6 +1251,16 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByRole('region', { name: '範本操作' }),
     ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'DEMO-001｜示範工程',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
     })
@@ -1273,6 +1282,37 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByText('你沒有修改此專案查核項目的權限。'),
     ).toBeInTheDocument()
+  })
+
+  it('範本管理員兼現場權限專案成員可瀏覽套用頁', async () => {
+    const fetchMock = managementFetch({
+      memberProjectIds: ['project-demo-1'],
+      viewerPermissionCodes: ['inspection_task.inspect'],
+    })
+    renderAdmin(
+      '/admin/projects/project-demo-1/inspection-items/templates',
+      false,
+      {
+        has_office_access: false,
+        has_field_access: true,
+        has_template_access: true,
+      },
+    )
+
+    expect(
+      await screen.findByRole('region', { name: '範本操作' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'DEMO-001｜示範工程' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '套用至專案' }),
+    ).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(true)
   })
 
   it('opens template apply route for an office member', async () => {

@@ -15,7 +15,13 @@ const SetupPage = lazy(() => import('./setup/SetupPage'))
 
 function LegacyProjectTemplateRedirect() {
   const { projectId = '' } = useParams()
-  return <Navigate replace to={`/admin/projects/${projectId}/templates`} />
+  // TPL-R23：舊 Field 專案網址直接轉到套用範本正式路徑。
+  return (
+    <Navigate
+      replace
+      to={`/admin/projects/${projectId}/inspection-items/templates`}
+    />
+  )
 }
 
 export default function App() {

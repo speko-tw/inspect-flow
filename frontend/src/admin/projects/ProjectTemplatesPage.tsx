@@ -91,10 +91,17 @@ function pointEvidenceText(
   })
 }
 
+/**
+ * 提供專案套用範本與存為範本流程，遵守 TPL-R23 的路徑與出口規則。
+ */
 export default function ProjectTemplatesPage({
   viewerPermissions = [],
+  standalone = false,
+  returnToTemplateManagement = false,
 }: {
   viewerPermissions?: string[]
+  standalone?: boolean
+  returnToTemplateManagement?: boolean
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -358,10 +365,12 @@ export default function ProjectTemplatesPage({
   )
 
   async function submitApply() {
+    // TPL-AC21：先確認既有項目載入完成，避免漏掉同名衝突。
     if (
       !selectedSystem ||
       !hasSelection ||
       busy ||
+      itemsLoading ||
       itemsDenied ||
       readOnly ||
       !canEditProjectItems
@@ -395,6 +404,22 @@ export default function ProjectTemplatesPage({
           ? (caught.code ?? '')
           : '',
       )
+      if (
+        caught instanceof ProjectTemplatesApiError &&
+        caught.status === 409
+      ) {
+        // TPL-R23：409 後同步專案項目，讓「已套用」狀態立即反映伺服器結果。
+        setItemsLoading(true)
+        try {
+          setProjectItems(await listProjectInspectionItems(projectId))
+          setItemsDenied(false)
+        } catch (refreshError) {
+          setError(templateErrorMessage(refreshError))
+          if (isForbidden(refreshError)) setItemsDenied(true)
+        } finally {
+          setItemsLoading(false)
+        }
+      }
       if (isForbidden(caught)) setReadOnly(true)
     } finally {
       guard.leave()
@@ -508,13 +533,29 @@ export default function ProjectTemplatesPage({
 
   return (
     <section className="tpl-page">
-      <BackLink to={`/admin/projects/${projectId}/inspection-items`}>
-        返回查核項目
+      <BackLink
+        to={
+          returnToTemplateManagement
+            ? '/admin/templates'
+            : `/admin/projects/${projectId}/inspection-items`
+        }
+      >
+        {returnToTemplateManagement ? '返回範本管理' : '返回查核項目'}
       </BackLink>
-      <p className="tpl-crumb">
-        {project?.project_code && <>{project.project_code} </>}
-        {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
-      </p>
+      {standalone ? (
+        <h1>
+          {project
+            ? `${project.project_code}｜${project.name}`
+            : projectLoading
+              ? '載入專案…'
+              : '專案'}
+        </h1>
+      ) : (
+        <p className="tpl-crumb">
+          {project?.project_code && <>{project.project_code} </>}
+          {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
+        </p>
+      )}
       {project && (
         <h2>
           {isSaveMode
@@ -864,14 +905,12 @@ export default function ProjectTemplatesPage({
                           >
                             改選其他範本
                           </button>
+                          {/* TPL-R23：衝突出口回專案首頁，和頁首返回項目入口分開。 */}
                           <Link
                             className="btn"
-                            to={
-                              `/admin/projects/${projectId}` +
-                              '/inspection-items'
-                            }
+                            to={`/admin/projects/${projectId}`}
                           >
-                            返回查核項目
+                            返回專案
                           </Link>
                         </div>
                       ) : null}
@@ -908,6 +947,7 @@ export default function ProjectTemplatesPage({
                       disabled={
                         !hasSelection ||
                         busy ||
+                        itemsLoading ||
                         readOnly ||
                         itemsDenied ||
                         selectedAlreadyApplied

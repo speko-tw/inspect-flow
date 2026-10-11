@@ -24,12 +24,19 @@ const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
   progress: '進度',
 }
 
+/**
+ * 顯示專案區段；TPL-R23 允許範本管理員在無內業區段權限時檢視套用頁。
+ */
 export default function ProjectSectionPage({
   section,
   children,
+  allowTemplateViewer = false,
 }: {
   section: Exclude<ProjectSection, 'home'>
-  children?: ReactNode | ((viewerPermissions: string[]) => ReactNode)
+  children?:
+    | ReactNode
+    | ((viewerPermissions: string[], canViewIndoor: boolean) => ReactNode)
+  allowTemplateViewer?: boolean
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -79,10 +86,13 @@ export default function ProjectSectionPage({
   }, [loadSectionSummary, projectId, section])
 
   const currentResult = result?.projectId === projectId ? result : null
+  const templateViewerAllowed =
+    allowTemplateViewer && (user.is_admin || user.has_template_access === true)
   if (
     currentResult &&
     !currentResult.canViewIndoor &&
-    currentResult.error === undefined
+    currentResult.error === undefined &&
+    !templateViewerAllowed
   ) {
     return <Navigate replace to={landingPath(user)} />
   }
@@ -97,7 +107,7 @@ export default function ProjectSectionPage({
 
   const childContent =
     typeof children === 'function'
-      ? children(currentResult.viewerPermissions)
+      ? children(currentResult.viewerPermissions, currentResult.canViewIndoor)
       : children
   let content = childContent ?? <p>正在確認專案權限…</p>
   if (!children && currentResult.canViewIndoor) {

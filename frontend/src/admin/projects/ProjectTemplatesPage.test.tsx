@@ -87,6 +87,7 @@ function mockApi(
     saveResponse?: Response
     templates?: TemplateItem[]
     projectItems?: ProjectInspectionItem[]
+    projectItemsAfterApplyConflict?: ProjectInspectionItem[]
     canSave?: boolean
     denyCategories?: boolean
     secondSystemTemplate?: boolean
@@ -97,6 +98,7 @@ function mockApi(
 ) {
   let saveRequests = 0
   let saved = false
+  let applyConflictReturned = false
   managerMock = Boolean(options.canSave)
   const calls = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -135,7 +137,10 @@ function mockApi(
     }
     if (url.endsWith('/inspection-items?limit=100')) {
       return Response.json({
-        items: options.projectItems ?? [],
+        items:
+          applyConflictReturned && options.projectItemsAfterApplyConflict
+            ? options.projectItemsAfterApplyConflict
+            : (options.projectItems ?? []),
         next_cursor: null,
       })
     }
@@ -230,7 +235,7 @@ function mockApi(
       return Response.json({ items: [], next_cursor: null })
     }
     if (url.endsWith('/inspection-items:apply-template')) {
-      return (
+      const response =
         options.applyResponse ??
         Response.json(
           [
@@ -243,7 +248,8 @@ function mockApi(
           ],
           { status: 201 },
         )
-      )
+      if (response.status === 409) applyConflictReturned = true
+      return response
     }
     if (url.endsWith('/projects/project-1/templates')) {
       saveRequests += 1
@@ -389,6 +395,78 @@ describe('專案範本套用與存為範本（#429）', () => {
       screen.getAllByText('專案已有同名項目，需要第二份請先改名'),
     ).toHaveLength(1)
     expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
+  })
+
+  it('專案項目載入完成前停用套用，載入後更新套用狀態與說明關聯', async () => {
+    const calls = mockApi({
+      templates: [TEMPLATE],
+      projectItems: [PROJECT_ITEM],
+    })
+    const gate = holdFetch(
+      calls as unknown as Parameters<typeof holdFetch>[0],
+      'GET',
+      /inspection-items\?limit=100$/,
+    )
+    renderPage()
+    await chooseSystem()
+
+    const apply = screen.getByRole('button', { name: '套用至專案' })
+    expect(apply).toBeDisabled()
+    expect(calls).not.toHaveBeenCalledWith(
+      '/api/v1/projects/project-1/inspection-items:apply-template',
+      expect.anything(),
+    )
+
+    gate.resolve()
+
+    const itemRadio = await screen.findByRole('radio', {
+      name: '單一項目：管線查核',
+    })
+    expect(itemRadio).toBeDisabled()
+    expect(apply).toBeDisabled()
+    const systemRadio = screen.getByRole('radio', {
+      name: '整個系統（1 個項目）',
+    })
+    expect(systemRadio).toHaveAttribute('aria-describedby')
+    expect(
+      document.getElementById(
+        systemRadio.getAttribute('aria-describedby') ?? '',
+      ),
+    ).toHaveTextContent('專案已有這個系統的全部項目。')
+  })
+
+  it('套用遇到同名 409 後重新載入專案項目並即時標示已套用', async () => {
+    const calls = mockApi({
+      templates: [TEMPLATE],
+      projectItemsAfterApplyConflict: [PROJECT_ITEM],
+      applyResponse: Response.json(
+        {
+          error: {
+            code: 'project_inspection_item.duplicate_name',
+            details: ['管線查核'],
+          },
+        },
+        { status: 409 },
+      ),
+    })
+    renderPage()
+    await chooseSystem()
+    fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
+    fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('已套用', { selector: '.tpl-applied-status' }),
+      ).not.toHaveLength(0),
+    )
+    expect(
+      screen.getByRole('radio', { name: '單一項目：管線查核' }),
+    ).toBeDisabled()
+    expect(
+      calls.mock.calls.filter(([url]) =>
+        String(url).endsWith('/inspection-items?limit=100'),
+      ),
+    ).toHaveLength(2)
   })
 
   it('名稱正規化剝除 Python 空白但不剝除 BOM', async () => {
@@ -647,13 +725,14 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.getByRole('button', { name: '改選其他範本' }),
     ).toBeInTheDocument()
-    // 頁首的 BackLink 與錯誤框裡的出口各一個。
-    expect(screen.getAllByRole('link', { name: '返回查核項目' })).toHaveLength(
-      2,
-    )
+    expect(
+      within(screen.getByRole('alert')).getByRole('link', {
+        name: '返回專案',
+      }),
+    ).toHaveAttribute('href', '/admin/projects/project-1')
     fireEvent.click(
       within(screen.getByRole('alert')).getByRole('link', {
-        name: '返回查核項目',
+        name: '返回專案',
       }),
     )
     expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()

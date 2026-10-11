@@ -66,6 +66,7 @@ function toInput(form: FormState): ProjectInput {
   }
 }
 
+/** 顯示專案管理與工作台入口，範本入口使用 TPL-R23 正式路徑。 */
 export default function ProjectsPage() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
@@ -507,10 +508,10 @@ export default function ProjectsPage() {
                   onClick={(event) =>
                     guardProjectLink(
                       event,
-                      `/admin/projects/${project.id}/templates`,
+                      `/admin/projects/${project.id}/inspection-items/templates`,
                     )
                   }
-                  to={`/admin/projects/${project.id}/templates`}
+                  to={`/admin/projects/${project.id}/inspection-items/templates`}
                 >
                   套用範本
                 </Link>

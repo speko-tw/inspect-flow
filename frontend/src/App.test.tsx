@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import {
   afterEach,
@@ -47,8 +48,15 @@ function stubAuthenticatedFetch() {
   )
 }
 
-function LocationProbe() {
+function LocationProbe({
+  onPathname,
+}: {
+  onPathname?: (path: string) => void
+}) {
   const location = useLocation()
+  useEffect(() => {
+    onPathname?.(location.pathname)
+  }, [location.pathname, onPathname])
   return <output data-testid="pathname">{location.pathname}</output>
 }
 
@@ -99,9 +107,11 @@ describe('App routing', () => {
   })
 
   it('redirects the legacy Field project URL to the current Admin path', async () => {
+    const visitedPaths: string[] = []
+    const recordPath = (path: string) => visitedPaths.push(path)
     render(
       <MemoryRouter initialEntries={['/field/projects/project-1']}>
-        <LocationProbe />
+        <LocationProbe onPathname={recordPath} />
         <App />
       </MemoryRouter>,
     )
@@ -111,6 +121,7 @@ describe('App routing', () => {
         '/admin/projects/project-1/inspection-items/templates',
       ),
     )
+    expect(visitedPaths).not.toContain('/admin/projects/project-1/templates')
   })
 
   it('shows the release version on the login page', async () => {
