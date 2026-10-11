@@ -824,7 +824,8 @@ def test_postgres_concurrent_completion_derives_completed_plan(
     session.add_all(tasks)
     session.commit()
 
-    actor_stub = SimpleNamespace(id=actor.id)
+    # 完成任務會檢查操作者是否為 Admin（IP-AC10），替身需帶相同欄位。
+    actor_stub = SimpleNamespace(id=actor.id, is_admin=actor.is_admin)
     monkeypatch.setattr(
         "app.services.inspection_planning.get_current_operator",
         lambda _: actor_stub,

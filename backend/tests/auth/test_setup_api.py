@@ -4,9 +4,13 @@ import logging
 import re
 from datetime import timedelta
 
+import pytest
+from fastapi import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.v1 import setup as setup_api
+from app.api.v1.setup import AdminPasswordRequest
 from app.auth.passwords import hash_password, verify_password
 from app.cli.init_system import run as initialize
 from app.db import clock
@@ -89,6 +93,48 @@ def test_aut_ac56_first_setup_sets_password_audit_and_cookie(
     )
     assert repeated.status_code == 409
     assert repeated.json() == {"error": {"code": "setup.already_completed"}}
+
+
+def test_first_setup_commits_before_cookie_response(
+    engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """設定密碼與 session 須在端點返回前提交，不能等回應之後。"""
+    code = _initialize(engine)
+    events: list[str] = []
+    original_create_session = setup_api.create_session
+    original_cookie = setup_api.set_session_cookie
+
+    with Session(engine) as session:
+        original_commit = session.commit
+
+        def tracked_commit() -> None:
+            original_commit()
+            if "session_created" in events:
+                events.append("session_committed")
+
+        def tracked_create_session(db, account):
+            result = original_create_session(db, account)
+            events.append("session_created")
+            return result
+
+        def tracked_cookie(response, token):
+            events.append("cookie_set")
+            original_cookie(response, token)
+
+        monkeypatch.setattr(session, "commit", tracked_commit)
+        monkeypatch.setattr(
+            setup_api, "create_session", tracked_create_session
+        )
+        monkeypatch.setattr(setup_api, "set_session_cookie", tracked_cookie)
+
+        response = setup_api.set_initial_admin_password(
+            AdminPasswordRequest(code=code, password=_PASSWORD),
+            Response(),
+            session,
+        )
+
+    assert response.status_code == 204
+    assert events == ["session_created", "cookie_set", "session_committed"]
 
 
 def test_aut_ac57_invalid_codes_have_identical_response_and_no_code_use(
