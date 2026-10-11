@@ -416,10 +416,16 @@ def _lock_project_items_for_snapshot(
     project_id: uuid.UUID,
     item_ids: list[uuid.UUID],
 ) -> list[uuid.UUID]:
-    """Lock snapshot sources before taking the Plan lock.
+    """先鎖定快照來源項目，再取得 Plan 鎖。
 
-    Item edits lock the source item before its Plans. Keep the same lock
-    order here to serialize snapshot copying without a Plan/item deadlock.
+    項目編輯會先鎖來源項目、再鎖其 Plan；此處沿用相同的鎖順序，
+    讓快照複製得以序列化，避免 Plan 與項目之間發生死結。
+
+    以下情況會拒絕建立（IP-R02、IP-R14）：
+    - ``item_ids`` 為空：``inspection_task.items_required``。
+    - 任一項目不屬於該專案或不存在：
+      ``inspection_task.invalid_project_item``。
+    - 任一項目沒有任何點位：``inspection_task.item_without_points``。
     """
     from app.models import ProjectInspectionItem, ProjectInspectionPoint
 

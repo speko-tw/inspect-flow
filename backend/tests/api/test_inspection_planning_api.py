@@ -2095,15 +2095,6 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
     item_url = (
         f"/api/v1/projects/{project.id}/inspection-items/{world['item'].id}"
     )
-    configured = admin.patch(
-        item_url,
-        json={
-            "inspection_points": [
-                _item_point([{"min_count": 1}]),
-            ],
-        },
-    )
-    assert configured.status_code == 200, configured.text
     task_url = f"/api/v1/inspection-plans/{plan_id}/tasks"
     create = admin.post(
         task_url,
@@ -3025,6 +3016,33 @@ def test_task_creation_rejects_items_without_points_atomically(
         )
         == audit_count
     )
+
+    # IP-AC15：已被 Task 使用的項目不得改成零項次，且資料維持不變。
+    used_item = world["item"]
+    used_item_url = (
+        f"/api/v1/projects/{project.id}/inspection-items/{used_item.id}"
+    )
+    list_url = f"/api/v1/projects/{project.id}/inspection-items"
+
+    def read_points() -> list[dict]:
+        listed = admin.get(list_url)
+        assert listed.status_code == 200, listed.text
+        return next(
+            item["inspection_points"]
+            for item in listed.json()["items"]
+            if item["id"] == str(used_item.id)
+        )
+
+    used_task = admin.post(create_url, json={"item_ids": [str(used_item.id)]})
+    assert used_task.status_code == 201, used_task.text
+    before = read_points()
+    assert before
+    emptied_used = admin.patch(used_item_url, json={"inspection_points": []})
+    assert emptied_used.status_code == 422, emptied_used.text
+    assert emptied_used.json()["error"]["code"] == (
+        "project_inspection_item.points_required"
+    )
+    assert read_points() == before
 
 
 def test_cancelled_task_restore_uses_current_item_standard(
