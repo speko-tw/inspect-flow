@@ -78,8 +78,8 @@ def ensure_default_permissions(
 ) -> None:
     """建立缺少的 DOM-R68 預設資料，並保留已存在的同名資料。
 
-    CLI 與 migration 共用相同的預設定義；重跑初始化時不覆寫資料，避免
-    清除管理員後續調整（DOM-AC63）。
+    CLI 依目前的 permission registry 組裝角色權限；歷史 migration 則保留
+    當時的凍結快照。重跑初始化時不覆寫既有同名資料（DOM-AC63）。
     """
     roles: dict[str, Role] = {}
     for name, codes, is_assignable, is_external_allowed in _role_presets():

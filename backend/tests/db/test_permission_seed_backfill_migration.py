@@ -1,4 +1,4 @@
-"""DOM-AC56/63 and AUT-AC74 seed and permission backfill coverage."""
+"""驗證 DOM-AC56/63 與 AUT-AC74 的預建資料及權限回填。"""
 
 from collections.abc import Generator
 from pathlib import Path
@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
+from app.cli.init_system import run as run_init
 from app.db.engine import create_engine_from_settings, dispose_engine
 from app.models import (
     AuditLog,
@@ -25,18 +26,87 @@ from app.models import (
     User,
     UserModulePermission,
 )
-from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.permissions import calculate_effective_access
 from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 _PARENT_REVISION = "6eaaafbe0ef2"
+# migration 的回填條件是歷史資料契約，測試不可隨 runtime registry 增碼而改變。
 _PROJECT_CODES = {
-    item.value
-    for item in PermissionCode
-    if permission_code_scope(item.value) == "project"
+    "project_member.manage",
+    "project.update",
+    "project.read",
+    "project_inspection_item.edit",
+    "project_inspection_item.read",
+    "project_zone.read",
+    "project_zone.manage",
+    "inspection_plan.read",
+    "inspection_plan.create",
+    "inspection_plan.manage",
+    "inspection_plan.archive",
+    "inspection_plan.unarchive",
+    "inspection_task.read",
+    "inspection_task.manage",
+    "inspection_task.create",
+    "inspection_task.dispatch",
+    "inspection_task.assign",
+    "inspection_task.inspect",
+    "inspection_task.delete_draft",
+    "inspection_task.cancel",
 }
+_MODULE_CODES = {
+    "project.use",
+    "project.create",
+    "all_project_progress.read",
+    "inspection.use",
+    "template.use",
+    "template.manage",
+}
+
+
+def _legacy_access_snapshot(session, user_id, project_id):
+    """重建 migration 前由成員、角色與系統角色共同提供的舊授權。
+
+    舊版兩層權限程式已不在此 revision 的測試執行環境；因此依其資料來源
+    保存 migration 前快照，再與目前的集中計算入口逐人比對（AUT-AC74）。
+    """
+    user = session.get(User, user_id)
+    assert user is not None
+    members = session.scalars(
+        select(ProjectMember).where(ProjectMember.user_id == user_id)
+    ).all()
+    project_codes: set[str] = set()
+    applicable = False
+    for member in members:
+        for assignment in member.role_assignments:
+            codes = {item.code for item in assignment.role.permission_codes}
+            if member.project_id == project_id:
+                project_codes.update(codes)
+            applicable = applicable or (
+                "project_inspection_item.edit" in codes
+            )
+
+    if user.is_admin:
+        module_codes = set(_MODULE_CODES)
+    else:
+        module_codes = set()
+        if members:
+            module_codes.update({"project.use", "inspection.use"})
+        if applicable:
+            module_codes.add("template.use")
+        if (
+            session.scalar(
+                select(SystemRoleAssignment.id).where(
+                    SystemRoleAssignment.user_id == user_id,
+                    SystemRoleAssignment.role_code
+                    == SystemRoleCode.TEMPLATE_ADMIN.value,
+                )
+            )
+            is not None
+        ):
+            module_codes.update({"template.manage", "template.use"})
+    return frozenset(module_codes), frozenset(project_codes)
 
 
 @pytest.fixture(autouse=True)
@@ -227,11 +297,7 @@ def test_migration_backfills_demo_and_trial_permissions_without_loss(db_url):
             admin_access = calculate_effective_access(
                 session, user_id=user_ids["admin"]
             )
-            assert admin_access.module_permissions == frozenset(
-                item.value
-                for item in PermissionCode
-                if permission_code_scope(item.value) == "module"
-            )
+            assert admin_access.module_permissions == frozenset(_MODULE_CODES)
             assert (
                 session.scalars(
                     select(UserModulePermission).where(
@@ -331,6 +397,209 @@ def test_migration_backfills_demo_and_trial_permissions_without_loss(db_url):
         engine.dispose()
 
 
+def test_backfill_does_not_create_module_rows_for_admin_members(db_url):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    old_engine = create_engine_from_settings(db_url)
+    try:
+        with Session(old_engine) as session:
+            admin = create_root_user_with_company(session, "M575D1")
+            make_system_admin(admin)
+            project = _new_project(admin, "M575D1")
+            role = _new_role(admin, "管理者成員角色", "project.read")
+            session.add_all([project, role])
+            session.flush()
+            session.add_all(
+                [
+                    _new_member(admin, project, admin, role),
+                    SystemRoleAssignment(
+                        user_id=admin.id,
+                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
+                        created_by=admin.id,
+                        updated_by=admin.id,
+                    ),
+                ]
+            )
+            admin_id = admin.id
+            session.commit()
+    finally:
+        old_engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            rows = session.scalars(select(UserModulePermission)).all()
+            codes_by_user: dict[object, set[str]] = {}
+            for row in rows:
+                codes_by_user.setdefault(row.user_id, set()).add(
+                    row.permission_code
+                )
+            assert admin_id not in codes_by_user
+    finally:
+        engine.dispose()
+
+
+def test_external_template_admin_backfill_keeps_only_external_codes(db_url):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    old_engine = create_engine_from_settings(db_url)
+    try:
+        with Session(old_engine) as session:
+            actor = create_root_user_with_company(session, "M575D3")
+            external = create_root_user_with_company(session, "M575D4")
+            external.is_external_collaborator = True
+            project = _new_project(actor, "M575D2")
+            applicable_role = _new_role(
+                actor,
+                "可套用範本的外部人員角色",
+                "project_inspection_item.edit",
+            )
+            session.add_all([project, applicable_role])
+            session.flush()
+            session.add_all(
+                [
+                    _new_member(actor, project, external, applicable_role),
+                    SystemRoleAssignment(
+                        user_id=external.id,
+                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
+                        created_by=actor.id,
+                        updated_by=actor.id,
+                    ),
+                ]
+            )
+            external_id = external.id
+            session.commit()
+    finally:
+        old_engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            rows = session.scalars(select(UserModulePermission)).all()
+            codes_by_user: dict[object, set[str]] = {}
+            for row in rows:
+                codes_by_user.setdefault(row.user_id, set()).add(
+                    row.permission_code
+                )
+            assert codes_by_user[external_id] == {
+                "project.use",
+                "inspection.use",
+                "template.use",
+            }
+            assert "template.manage" not in codes_by_user[external_id]
+    finally:
+        engine.dispose()
+
+
+def test_migration_preserves_legacy_access_across_mixed_members(db_url):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    old_engine = create_engine_from_settings(db_url)
+    try:
+        with Session(old_engine) as session:
+            admin = create_root_user_with_company(session, "M575R1")
+            make_system_admin(admin)
+            demo_user = create_root_user_with_company(session, "M575R2")
+            inactive_user = create_root_user_with_company(session, "M575R3")
+            inactive_user.is_active = False
+            external_user = create_root_user_with_company(session, "M575R4")
+            external_user.is_external_collaborator = True
+            template_admin = create_root_user_with_company(session, "M575R5")
+
+            demo_project = _new_project(admin, "M575R1")
+            trial_project = _new_project(admin, "M575R2")
+            role_a = _new_role(
+                admin,
+                "跨專案角色甲",
+                "project_zone.read",
+                "project_inspection_item.edit",
+            )
+            role_b = _new_role(admin, "同人第二角色", "inspection_plan.read")
+            trial_role = _new_role(
+                admin, "跨專案角色乙", "inspection_task.read"
+            )
+            inactive_role = _new_role(
+                admin, "停用者舊角色", "project_inspection_item.read"
+            )
+            external_role = _new_role(
+                admin, "外部人員舊角色", "project_zone.read"
+            )
+            session.add_all(
+                [
+                    demo_project,
+                    trial_project,
+                    role_a,
+                    role_b,
+                    trial_role,
+                    inactive_role,
+                    external_role,
+                ]
+            )
+            session.flush()
+            session.add_all(
+                [
+                    _new_member(admin, demo_project, admin, role_a),
+                    _new_member(
+                        admin, demo_project, demo_user, role_a, role_b
+                    ),
+                    _new_member(admin, trial_project, demo_user, trial_role),
+                    _new_member(
+                        admin, demo_project, inactive_user, inactive_role
+                    ),
+                    _new_member(
+                        admin, demo_project, external_user, external_role
+                    ),
+                    SystemRoleAssignment(
+                        user_id=admin.id,
+                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
+                        created_by=admin.id,
+                        updated_by=admin.id,
+                    ),
+                    SystemRoleAssignment(
+                        user_id=template_admin.id,
+                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
+                        created_by=admin.id,
+                        updated_by=admin.id,
+                    ),
+                ]
+            )
+            session.flush()
+            cases = [
+                (admin.id, demo_project.id),
+                (demo_user.id, demo_project.id),
+                (demo_user.id, trial_project.id),
+                (inactive_user.id, demo_project.id),
+                (external_user.id, demo_project.id),
+                (template_admin.id, None),
+            ]
+            legacy = {
+                case: _legacy_access_snapshot(session, *case) for case in cases
+            }
+            session.commit()
+    finally:
+        old_engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            for (user_id, project_id), (
+                old_modules,
+                old_project,
+            ) in legacy.items():
+                current = calculate_effective_access(
+                    session, user_id=user_id, project_id=project_id
+                )
+                assert current.module_permissions == old_modules
+                expected_project = set(old_project)
+                if old_project:
+                    expected_project.add("project.read")
+                assert current.project_permissions == frozenset(
+                    expected_project
+                )
+    finally:
+        engine.dispose()
+
+
 def test_migration_seeds_named_defaults_without_overwriting_existing_rows(
     db_url,
 ):
@@ -426,5 +695,96 @@ def test_migration_seeds_named_defaults_without_overwriting_existing_rows(
             assert {
                 item.permission_code for item in bundle.permission_codes
             } == {"project.create"}
+    finally:
+        engine.dispose()
+
+
+def test_reapplying_migration_after_preset_rename_preserves_renamed_role(
+    db_url,
+):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert (
+            run_init(sessionmaker(bind=engine), output=lambda _line: None) == 0
+        )
+    finally:
+        engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            role = session.scalars(
+                select(Role).where(Role.name == "現場工程師")
+            ).one()
+            role.name = "維護者自訂現場角色"
+            role_id = role.id
+            expected_codes = {item.code for item in role.permission_codes}
+            session.commit()
+    finally:
+        engine.dispose()
+
+    # Alembic 已記錄 revision；再次 upgrade 不應重建或覆寫管理員改名的角色。
+    command.upgrade(_cfg(), "head")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            assert (
+                session.scalar(
+                    select(Role.id).where(Role.name == "現場工程師")
+                )
+                is None
+            )
+            role = session.get(Role, role_id)
+            assert role is not None
+            assert role.name == "維護者自訂現場角色"
+            assert {
+                item.code for item in role.permission_codes
+            } == expected_codes
+    finally:
+        engine.dispose()
+
+
+def test_init_after_migration_does_not_duplicate_default_permissions(
+    db_url,
+):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert (
+            run_init(sessionmaker(bind=engine), output=lambda _line: None) == 0
+        )
+    finally:
+        engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    engine = create_engine_from_settings(db_url)
+    try:
+        with Session(engine) as session:
+            counts_before = (
+                len(session.scalars(select(Role)).all()),
+                len(session.scalars(select(RolePermission)).all()),
+                len(session.scalars(select(CreatorRoleSetting)).all()),
+                len(session.scalars(select(PermissionBundle)).all()),
+                len(session.scalars(select(PermissionBundlePermission)).all()),
+            )
+    finally:
+        engine.dispose()
+
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert (
+            run_init(sessionmaker(bind=engine), output=lambda _line: None) == 0
+        )
+        with Session(engine) as session:
+            counts_after = (
+                len(session.scalars(select(Role)).all()),
+                len(session.scalars(select(RolePermission)).all()),
+                len(session.scalars(select(CreatorRoleSetting)).all()),
+                len(session.scalars(select(PermissionBundle)).all()),
+                len(session.scalars(select(PermissionBundlePermission)).all()),
+            )
+            assert counts_after == counts_before
     finally:
         engine.dispose()

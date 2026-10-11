@@ -84,6 +84,8 @@ users = sa.table(
     "users",
     sa.column("id", sa.Uuid()),
     sa.column("is_system", sa.Boolean()),
+    sa.column("is_admin", sa.Boolean()),
+    sa.column("is_external_collaborator", sa.Boolean()),
 )
 roles = sa.table(
     "roles",
@@ -292,10 +294,16 @@ def upgrade() -> None:
     ).scalar_one_or_none()
     if actor_id is not None:
         _seed_presets(connection, actor_id)
+    # 空資料庫尚未執行 init；由 init 建立預建資料，以免 migration 缺少建立者。
 
     now = _timestamp()
     member_user_ids = (
-        connection.execute(sa.select(project_members.c.user_id).distinct())
+        connection.execute(
+            sa.select(project_members.c.user_id)
+            .join(users, users.c.id == project_members.c.user_id)
+            .where(users.c.is_admin.is_(False))
+            .distinct()
+        )
         .scalars()
         .all()
     )
@@ -307,7 +315,13 @@ def upgrade() -> None:
     template_admin_ids = (
         connection.execute(
             sa.select(system_role_assignments.c.user_id)
+            .join(
+                users,
+                users.c.id == system_role_assignments.c.user_id,
+            )
             .where(system_role_assignments.c.role_code == "template_admin")
+            .where(users.c.is_admin.is_(False))
+            .where(users.c.is_external_collaborator.is_(False))
             .distinct()
         )
         .scalars()
@@ -323,6 +337,7 @@ def upgrade() -> None:
     template_applicator_ids = (
         connection.execute(
             sa.select(project_members.c.user_id)
+            .join(users, users.c.id == project_members.c.user_id)
             .join(
                 project_member_roles,
                 project_member_roles.c.project_member_id
@@ -333,6 +348,7 @@ def upgrade() -> None:
                 role_permissions.c.role_id == project_member_roles.c.role_id,
             )
             .where(role_permissions.c.code == "project_inspection_item.edit")
+            .where(users.c.is_admin.is_(False))
             .distinct()
         )
         .scalars()

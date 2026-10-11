@@ -84,6 +84,43 @@ def test_aut_ac54_creates_only_system_rows_and_prints_one_code(
         assert roles["現場工程師"].is_external_allowed is False
         assert roles["專案查閱人員"].is_assignable is True
         assert roles["專案查閱人員"].is_external_allowed is True
+        expected_read_codes = {
+            "project.read",
+            "project_inspection_item.read",
+            "project_zone.read",
+            "inspection_plan.read",
+            "inspection_task.read",
+        }
+        expected_engineer_codes = {
+            "project_member.manage",
+            "project.update",
+            "project.read",
+            "project_inspection_item.edit",
+            "project_inspection_item.read",
+            "project_zone.read",
+            "project_zone.manage",
+            "inspection_plan.read",
+            "inspection_plan.create",
+            "inspection_plan.manage",
+            "inspection_plan.archive",
+            "inspection_plan.unarchive",
+            "inspection_task.read",
+            "inspection_task.manage",
+            "inspection_task.create",
+            "inspection_task.dispatch",
+            "inspection_task.assign",
+            "inspection_task.delete_draft",
+            "inspection_task.cancel",
+        }
+        assert {
+            item.code for item in roles["專案工程師"].permission_codes
+        } == expected_engineer_codes
+        assert {
+            item.code for item in roles["現場工程師"].permission_codes
+        } == expected_read_codes | {"inspection_task.inspect"}
+        assert {
+            item.code for item in roles["專案查閱人員"].permission_codes
+        } == expected_read_codes
         setting = session.scalars(select(CreatorRoleSetting)).one()
         assert setting.role_id == roles["專案工程師"].id
         bundles = {
