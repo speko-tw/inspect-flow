@@ -43,6 +43,7 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
     response = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "first.user",
             "email": "first@demo.example",
             "name_zh": "示範使用者",
@@ -63,6 +64,7 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
         select(UserPassword).where(UserPassword.user_id == user.id)
     )
     assert stored is not None
+
     assert stored.must_change_password is True
     assert password not in client.get(f"/api/v1/users/{user.id}").text
     assert password not in client.get("/api/v1/users").text
@@ -77,6 +79,49 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
     }
 
 
+def test_external_collaborator_cannot_be_created_as_admin(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+
+    response = client.post(
+        "/api/v1/users",
+        json={
+            "is_external_collaborator": True,
+            "username": "external.admin",
+            "email": "external-admin@demo.example",
+            "name_zh": "外部管理者",
+            "is_admin": True,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {"code": "user.external_not_qualified"}
+    }
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(User).where(User.username == "external.admin")
+        )
+        is None
+    )
+
+
+def test_internal_user_expiry_constraint_returns_422(admin_client, db_session):
+    client, _admin = admin_client
+    user = create_root_user_with_company(db_session, "EXPIRY01")
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/users/{user.id}",
+        json={"account_expires_on": "2027-01-01"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"error": {"code": "request.validation_failed"}}
+
+
 def test_aut_ac61_default_user_password_and_change_gate(
     admin_client, db_session, make_client
 ):
@@ -84,6 +129,7 @@ def test_aut_ac61_default_user_password_and_change_gate(
     response = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "temporary.user",
             "email": "temporary@demo.example",
             "name_zh": "臨時密碼使用者",
@@ -152,6 +198,7 @@ def test_admin_access_and_company_lifecycle(admin_client, db_session):
     created = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "sample.user",
             "email": "sample@demo.example",
             "name_zh": "測試人員",
@@ -175,6 +222,7 @@ def test_admin_access_and_company_lifecycle(admin_client, db_session):
     inactive_company = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "second.user",
             "email": "second@demo.example",
             "name_zh": "第二位",
@@ -243,6 +291,7 @@ def test_user_company_lists_search_cursor_and_validation(
     ):
         create_user(
             db_session,
+            is_external_collaborator=False,
             username=username,
             email=f"{username}@demo.example",
             name_zh=name,
@@ -251,6 +300,7 @@ def test_user_company_lists_search_cursor_and_validation(
         )
     create_user(
         db_session,
+        is_external_collaborator=False,
         username="literal.query.person",
         email="literal%_\\query@example.test",
         name_zh="符號%_\\人員",
@@ -347,6 +397,7 @@ def test_non_admin_cannot_manage(admin_client, db_session, make_client):
     response = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "normal.user",
             "email": "normal@demo.example",
             "name_zh": "一般人員",
@@ -429,6 +480,7 @@ def test_http_builtin_external_and_username_rules(admin_client, db_session):
     company_id = company.json()["id"]
     external = create_user(
         db_session,
+        is_external_collaborator=False,
         username="external.user",
         email="external@demo.example",
         name_zh="外部人員",
@@ -494,6 +546,7 @@ def test_http_builtin_external_and_username_rules(admin_client, db_session):
     created = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "old.name",
             "email": "old@demo.example",
             "name_zh": "本地人員",
@@ -503,6 +556,7 @@ def test_http_builtin_external_and_username_rules(admin_client, db_session):
     duplicate = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "taken.name",
             "email": "taken@demo.example",
             "name_zh": "已存在",
@@ -551,6 +605,7 @@ def test_conflict_codes_and_idempotent_admin_put(admin_client, db_session):
     first = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "conflict.one",
             "email": "one@demo.example",
             "name_zh": "第一位",
@@ -563,7 +618,12 @@ def test_conflict_codes_and_idempotent_admin_put(admin_client, db_session):
     ):
         response = client.post(
             "/api/v1/users",
-            json={"username": username, "email": email, "name_zh": "第二位"},
+            json={
+                "username": username,
+                "email": email,
+                "name_zh": "第二位",
+                "is_external_collaborator": False,
+            },
         )
         assert response.status_code == 409
         assert response.json()["error"]["code"] == expected
@@ -581,6 +641,7 @@ def test_conflict_codes_and_idempotent_admin_put(admin_client, db_session):
     second = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "conflict.three",
             "email": "three@demo.example",
             "name_zh": "第三位",
@@ -604,6 +665,7 @@ def test_program_errors_remain_server_errors(
     created = client.post(
         "/api/v1/users",
         json={
+            "is_external_collaborator": False,
             "username": "audit.test",
             "email": "audit@demo.example",
             "name_zh": "稽核測試",

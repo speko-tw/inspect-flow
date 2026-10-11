@@ -31,9 +31,11 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModulePermission,
 )
 from app.services.permissions import (
     RoleImpactScope,
+    calculate_effective_access,
     effective_permissions,
     has_modify_capability,
     role_impact_scope,
@@ -168,6 +170,34 @@ class TestDomAc15EffectivePermissions:
             }
             assert "code" not in columns
             assert "permission_codes" not in columns
+
+    def test_dom_ac64_central_access_includes_module_and_project_codes(
+        self, session, operator
+    ):
+        project = _new_project("P-AC64", operator)
+        member = create_root_user_with_company(session, "U-AC64")
+        role = _new_role(operator, "R-AC64", "project.read")
+        session.add_all([project, role])
+        session.flush()
+        session.add(_new_member(operator, project, member, role))
+        session.add(
+            UserModulePermission(
+                user_id=member.id,
+                permission_code="inspection.use",
+                source="manual",
+            )
+        )
+        session.flush()
+
+        access = calculate_effective_access(
+            session, user_id=member.id, project_id=project.id
+        )
+        assert access.is_active is True
+        assert access.module_permissions == frozenset({"inspection.use"})
+        assert access.project_permissions == frozenset({"project.read"})
+        assert access.project_permissions_by_project == {
+            project.id: frozenset({"project.read"})
+        }
 
 
 class TestDomAc17RoleImpactScope:

@@ -11,12 +11,14 @@ from sqlalchemy.exc import IntegrityError
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
     AuditLog,
+    CreatorRoleSetting,
     Project,
     ProjectMember,
     ProjectMemberRole,
     Role,
     User,
 )
+from app.permission_codes import PermissionCode, permission_code_scope
 from tests.db.conftest import create_root_user_with_company
 
 
@@ -80,6 +82,32 @@ def test_every_role_endpoint_requires_admin(
     assert after == before
 
 
+def test_editing_creator_role_missing_required_code_returns_422(
+    role_admin_client, db_session, registered_permission_codes
+):
+    client, _admin = role_admin_client
+    created = client.post(
+        "/api/v1/roles",
+        json=_role_payload("Creator role", ["project_member.manage"]),
+    )
+    assert created.status_code == 201, created.text
+    role_id = UUID(created.json()["id"])
+    role = db_session.get(Role, role_id)
+    assert role is not None
+    db_session.add(CreatorRoleSetting(role_id=role.id))
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/roles/{role_id}",
+        json={"permission_codes": ["project_member.manage", "report.read"]},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == (
+        "role.creator_role_requires_permissions"
+    )
+
+
 def test_role_api_permission_catalog_and_crud_with_audit(
     role_admin_client, db_session, registered_permission_codes
 ):
@@ -87,6 +115,13 @@ def test_role_api_permission_catalog_and_crud_with_audit(
 
     catalog = client.get("/api/v1/roles/permission-codes")
     assert catalog.status_code == 200
+    returned_codes = {item["code"] for item in catalog.json()["items"]}
+    module_codes = {
+        code.value
+        for code in PermissionCode
+        if permission_code_scope(code.value) == "module"
+    }
+    assert returned_codes.isdisjoint(module_codes)
     assert catalog.json() == {
         "items": [
             {"code": "evidence.create", "description": "test"},
@@ -259,6 +294,14 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
 
     catalog = client.get("/api/v1/roles/permission-codes")
     assert catalog.status_code == 200
+    returned_codes = {item["code"] for item in catalog.json()["items"]}
+    module_codes = {
+        code.value
+        for code in PermissionCode
+        if permission_code_scope(code.value) == "module"
+    }
+    assert module_codes
+    assert returned_codes.isdisjoint(module_codes)
     assert catalog.json() == {
         "items": [
             {
@@ -313,9 +356,15 @@ def test_role_api_list_uses_cursor_pagination(role_admin_client):
                 "code": "inspection_task.read",
                 "description": "讀取查核任務",
             },
+            {"code": "project.read", "description": "檢視專案"},
+            {"code": "project.update", "description": "調整專案"},
             {
                 "code": "project_inspection_item.edit",
                 "description": "編輯專案查核項目",
+            },
+            {
+                "code": "project_inspection_item.read",
+                "description": "讀取專案查核項目",
             },
             {
                 "code": "project_member.manage",

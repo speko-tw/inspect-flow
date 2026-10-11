@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
   createUser,
@@ -36,15 +36,27 @@ export default function UserForm({
   const [location, setLocation] = useState('')
   const [employeeNo, setEmployeeNo] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isExternalCollaborator, setIsExternalCollaborator] = useState<
+    boolean | null
+  >(null)
+  const [accountTypeError, setAccountTypeError] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   const fieldsDisabled = companyId === ''
   const usernameRuleId = useId()
   const companyHintIds = [useId(), useId(), useId()]
+  const accountTypeErrorId = useId()
+  const accountTypeRef = useRef<HTMLInputElement>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isExternalCollaborator === null) {
+      setAccountTypeError('請選擇帳號類型。')
+      accountTypeRef.current?.focus()
+      return
+    }
+    setAccountTypeError('')
     setError('')
     setSaving(true)
     try {
@@ -57,6 +69,7 @@ export default function UserForm({
         department: companyId ? department || null : null,
         location: companyId ? location || null : null,
         employee_no: companyId ? employeeNo || null : null,
+        is_external_collaborator: isExternalCollaborator,
         is_admin: isAdmin,
       })
       setUsername('')
@@ -68,6 +81,7 @@ export default function UserForm({
       setLocation('')
       setEmployeeNo('')
       setIsAdmin(false)
+      setIsExternalCollaborator(null)
       onCreated(user)
     } catch (caught) {
       setError(managementErrorMessage(caught))
@@ -145,6 +159,47 @@ export default function UserForm({
             ))}
         </select>
       </label>
+      <fieldset
+        aria-describedby={accountTypeError ? accountTypeErrorId : undefined}
+        aria-invalid={accountTypeError ? 'true' : undefined}
+        aria-required="true"
+        role="radiogroup"
+      >
+        <legend>
+          <Required>帳號類型</Required>
+        </legend>
+        <label>
+          <input
+            checked={isExternalCollaborator === false}
+            name="account-type"
+            onChange={() => {
+              setIsExternalCollaborator(false)
+              setAccountTypeError('')
+            }}
+            ref={accountTypeRef}
+            type="radio"
+          />
+          內部人員
+        </label>
+        <label>
+          <input
+            checked={isExternalCollaborator === true}
+            name="account-type"
+            onChange={() => {
+              setIsExternalCollaborator(true)
+              setIsAdmin(false)
+              setAccountTypeError('')
+            }}
+            type="radio"
+          />
+          外部協作人員
+        </label>
+        {accountTypeError && (
+          <small id={accountTypeErrorId} role="alert">
+            {accountTypeError}
+          </small>
+        )}
+      </fieldset>
       <div>
         <label>
           部門
@@ -191,6 +246,7 @@ export default function UserForm({
         <input
           checked={isAdmin}
           onChange={(event) => setIsAdmin(event.target.checked)}
+          disabled={isExternalCollaborator === true}
           type="checkbox"
         />
         指派系統管理者權限

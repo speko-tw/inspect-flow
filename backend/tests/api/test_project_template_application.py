@@ -31,7 +31,9 @@ from app.models import (
     TemplateMeasurementField,
     TemplateNumericStandard,
     TemplateTextStandard,
+    UserModulePermission,
 )
+from app.permission_codes import PermissionCode
 from app.services import project_templates
 from tests.db.conftest import create_root_user_with_company
 
@@ -79,6 +81,17 @@ def _world(db_session, make_client):
     )
     member.role_assignments.append(ProjectMemberRole(role_id=role.id))
     db_session.add(member)
+    db_session.add_all(
+        UserModulePermission(
+            user_id=editor.id,
+            permission_code=code.value,
+            source="manual",
+        )
+        for code in (
+            PermissionCode.PROJECT_USE,
+            PermissionCode.INSPECTION_USE,
+        )
+    )
     db_session.add(
         SystemRoleAssignment(
             user_id=admin.id,

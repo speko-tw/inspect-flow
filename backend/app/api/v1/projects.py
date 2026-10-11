@@ -30,6 +30,9 @@ from app.models import (
     User,
 )
 from app.services.inspection_planning import PlanningError
+from app.services.module_permissions import (
+    ExternalRoleAssignmentError,
+)
 from app.services.project_members import (
     add_project_member,
     list_project_members,
@@ -517,19 +520,18 @@ def list_member_candidates(
 @router.get(
     "/{project_id}/assignable-roles",
     response_model=AssignableRoleListResponse,
-    dependencies=[_PROJECT_MEMBER_ACCESS],
 )
 def list_assignable_roles(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),  # noqa: B008
+    _caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> AssignableRoleListResponse:
-    """List the roles that can be assigned to project members.
+    """List role definitions for the project member assignment UI.
 
-    Roles are system-wide (DOM-R19), so every role is assignable; this
-    only exposes the fields the member page needs, one extra query per
-    page for the permission codes.
+    The dependency enforces project member management access before
+    this function runs.
     """
     _get_project(db, project_id)
 
@@ -555,6 +557,7 @@ def list_assignable_roles(
         Role,
         cursor=cursor,
         limit=limit,
+        filters=[],
         serialize_batch=render,
     )
     return AssignableRoleListResponse(**result)
@@ -594,6 +597,10 @@ def add_member(
         if not _member_conflict(exc):
             raise
         raise APIError(ErrorCode.PROJECT_MEMBER_CONFLICT, 409) from exc
+    except ExternalRoleAssignmentError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
+        ) from exc
     return _member_response(db, member)
 
 
@@ -611,7 +618,12 @@ def edit_member_roles(
     member = _get_member(db, project_id, user_id)
     _require_roles(body.role_ids)
     role_ids = _checked_role_ids(db, body.role_ids)
-    set_project_member_roles(db, member, role_ids)
+    try:
+        set_project_member_roles(db, member, role_ids)
+    except ExternalRoleAssignmentError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
+        ) from exc
     return _member_response(db, member)
 
 

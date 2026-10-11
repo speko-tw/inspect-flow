@@ -64,19 +64,61 @@ describe('describeRole', () => {
     expect(summarizeRole(unknownCodes)).toBe(UNKNOWN_PERMISSION_TEXT)
   })
 
-  it('covers every code in the backend permission registry', () => {
+  it('maps project permission descriptions and excludes module codes', () => {
     const registry = readFileSync(
       resolve(process.cwd(), '../backend/app/permission_codes.py'),
       'utf8',
     )
-    const backendCodes = [...registry.matchAll(/"([a-z_]+\.[a-z_]+)"/g)].map(
-      ([, code]) => code,
+    const enumSource = registry
+      .split('class PermissionCode', 2)[1]
+      ?.split('# Always', 1)[0]
+    expect(enumSource).toBeDefined()
+    const backendDescriptions = Object.fromEntries(
+      [
+        ...(enumSource ?? '').matchAll(
+          /^\s+[A-Z][A-Z0-9_]*\s*=\s*\(\s*"([a-z_]+\.[a-z_]+)"\s*,\s*"([^"]+)"\s*,?\s*\)/gms,
+        ),
+      ].map(([, code, description]) => [code, description]),
     )
-    expect(backendCodes).toHaveLength(17)
-    expect(ROLE_SUMMARY_PHRASE_CODES).toEqual(new Set(backendCodes))
+    expect(Object.keys(backendDescriptions)).toHaveLength(26)
+
+    const projectSection = registry
+      .split('_PROJECT_CODES = {', 2)[1]
+      ?.split('}\n_MODULE_CODE_MODULES', 1)[0]
+    expect(projectSection).toBeDefined()
+    const projectCodes = new Set(
+      [
+        ...(projectSection ?? '').matchAll(/^\s*"([a-z_]+\.[a-z_]+)"\s*:/gm),
+      ].map(([, code]) => code),
+    )
+    expect(projectCodes.size).toBe(20)
+    expect(ROLE_SUMMARY_PHRASE_CODES).toEqual(projectCodes)
+
+    const projectDescriptions = Object.fromEntries(
+      Object.entries(backendDescriptions).filter(([code]) =>
+        projectCodes.has(code),
+      ),
+    )
     expect(
-      rolePermissionDetails(backendCodes).every(
-        ({ label }) => label !== UNKNOWN_PERMISSION_TEXT,
+      Object.fromEntries(
+        rolePermissionDetails(Object.keys(backendDescriptions))
+          .filter(({ code }) => projectCodes.has(code))
+          .map(({ code, label }) => [code, label]),
+      ),
+    ).toEqual(projectDescriptions)
+
+    const moduleSection = registry
+      .split('_MODULE_CODE_MODULES = {', 2)[1]
+      ?.split('}\n_EXTERNAL_ALLOWED_CODES', 1)[0]
+    expect(moduleSection).toBeDefined()
+    const moduleCodes = [
+      ...(moduleSection ?? '').matchAll(/^\s*"([a-z_]+\.[a-z_]+)"\s*:/gm),
+    ].map(([, code]) => code)
+    expect(moduleCodes).toHaveLength(6)
+    expect(moduleCodes.some((code) => projectCodes.has(code))).toBe(false)
+    expect(
+      rolePermissionDetails(moduleCodes).every(
+        ({ label }) => label === UNKNOWN_PERMISSION_TEXT,
       ),
     ).toBe(true)
   })

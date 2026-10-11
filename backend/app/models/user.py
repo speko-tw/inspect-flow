@@ -89,12 +89,13 @@ column type entirely and is not covered by DOM-R31 here.
 
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from functools import partial
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     ForeignKey,
     Index,
     String,
@@ -283,6 +284,12 @@ class User(AuditMixin, TimestampedBase):
     is_system: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    is_external_collaborator: Mapped[bool] = mapped_column(
+        Boolean, nullable=False
+    )
+    account_expires_on: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
 
     # -- DOM-R08: reserved external identity fields ----------------
     auth_source: Mapped[str] = mapped_column(
@@ -337,6 +344,10 @@ class User(AuditMixin, TimestampedBase):
         CheckConstraint(
             "is_system OR (email IS NOT NULL AND name_zh IS NOT NULL)",
             name="email_and_name_zh_required",
+        ),
+        CheckConstraint(
+            "is_external_collaborator OR account_expires_on IS NULL",
+            name="external_expiry_only",
         ),
         # DOM-R47: no company, no employee number/department/location.
         CheckConstraint(

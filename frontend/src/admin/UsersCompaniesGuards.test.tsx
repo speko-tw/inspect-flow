@@ -56,6 +56,7 @@ const currentUser: CurrentUser = {
   has_office_access: true,
   has_field_access: true,
   has_template_access: true,
+  module_permissions: [],
 }
 
 type Call = { method: string; path: string }
@@ -283,6 +284,7 @@ describe('使用者新增共用表單', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '林本' },
     })
+    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
   }
 
   it('新增 pending 鎖送出，IME 略過，失敗後可重試', async () => {

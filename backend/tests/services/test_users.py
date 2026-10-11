@@ -5,11 +5,21 @@ Fixtures (``session``, ``operator``) come from this directory's
 ``conftest.py``.
 """
 
+from datetime import date
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.models import AuditLog, Project, Role, RolePermission, User
+from app.models import (
+    AuditLog,
+    Project,
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
+    User,
+)
 from app.services.companies import create_company, update_company
 from app.services.permissions import effective_permissions
 from app.services.project_members import add_project_member
@@ -18,9 +28,11 @@ from app.services.users import (
     BuiltInAccountModificationError,
     CompanyNotActiveError,
     ExternalBasicFieldModificationError,
+    ExternalFlagChangeError,
     LastActiveAdminRemovalError,
     UsernameChangePermissionError,
     create_user,
+    set_external_collaborator,
     set_is_active,
     set_is_admin,
     update_user_manual,
@@ -70,6 +82,7 @@ def test_dom_ac35_username_change_requires_admin_and_local_account(
         username="taken.name",
         name_zh="已有使用者",
         email="taken@demo.example",
+        is_external_collaborator=False,
     )
     session.commit()
     with pytest.raises(IntegrityError):
@@ -127,6 +140,7 @@ def test_alg_ac15_company_event_boundaries(session, operator):
         username="ac15.independent",
         name_zh="獨立人員",
         email="independent15@demo.example",
+        is_external_collaborator=False,
     )
     create_user(session, **_user_kwargs("DUP15", company_a.id))
     session.commit()
@@ -165,6 +179,7 @@ def test_dom_ac42_company_link_does_not_change_project_roles(
         username="independent.user",
         name_zh="獨立使用者",
         email="independent@demo.example",
+        is_external_collaborator=False,
     )
     project = Project(
         project_code="DEMO42",
@@ -209,6 +224,7 @@ def test_dom_ac41_admin_grant_revoke_and_builtin_protection(session, operator):
         username="ac41.user",
         name_zh="示範人員",
         email="ac41@demo.example",
+        is_external_collaborator=False,
     )
     set_is_admin(session, user, True)
     set_is_admin(session, user, False)
@@ -239,6 +255,7 @@ def _user_kwargs(employee_no: str, company_id, **overrides) -> dict:
         "department": "Operations",
         "location": "HQ",
         "employee_no": employee_no,
+        "is_external_collaborator": False,
         "name_en": f"User {employee_no}",
         "name_zh": f"使用者{employee_no}",
         "email": f"{employee_no.lower()}@example.com",
@@ -563,3 +580,59 @@ class TestSetIsActiveWritesNoAuditEvent:
         assert user.is_active is True
 
         assert _audit_rows_for(session, user.id) == []
+
+
+def test_external_flag_change_lists_unqualified_role(
+    session, operator, registered_permission_codes
+):
+    company = create_company(session, **_company_kwargs("C-EXTFLAG"))
+    user = create_user(session, **_user_kwargs("U-EXTFLAG", company.id))
+    role = Role(
+        name="Internal manager",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    role.permission_codes.append(RolePermission(code="project_member.manage"))
+    project = Project(
+        project_code="P-EXTFLAG",
+        name="測試工程",
+        client_name="測試業主",
+        site_location="測試地點",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    session.add_all([role, project])
+    session.flush()
+    member = ProjectMember(
+        project_id=project.id,
+        user_id=user.id,
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    member.role_assignments.append(ProjectMemberRole(role=role))
+    session.add(member)
+    session.commit()
+
+    with pytest.raises(ExternalFlagChangeError) as error:
+        set_external_collaborator(session, user, True)
+
+    assert error.value.details == [f"role: {role.name} ({role.id})"]
+    session.refresh(user)
+    assert user.is_external_collaborator is False
+
+
+def test_returning_external_collaborator_to_internal_clears_expiry(
+    session, operator
+):
+    user = create_root_user_with_company(session, "EXT2INT01")
+    user.is_external_collaborator = True
+    user.account_expires_on = date(2027, 1, 1)
+    session.flush()
+
+    assert set_external_collaborator(session, user, False, confirmed=True)
+
+    assert user.is_external_collaborator is False
+    assert user.account_expires_on is None
+    assert [row.event_type for row in _audit_rows_for(session, user.id)] == [
+        "user.external_flag_changed"
+    ]

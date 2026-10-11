@@ -31,6 +31,7 @@ const officeUser: CurrentUser = {
   has_office_access: true,
   has_field_access: false,
   has_template_access: false,
+  module_permissions: [],
 }
 
 const adminUser: CurrentUser = {
@@ -44,6 +45,7 @@ const adminUser: CurrentUser = {
   has_office_access: true,
   has_field_access: true,
   has_template_access: true,
+  module_permissions: [],
 }
 
 function makeProject(overrides: Partial<Project> = {}): Project {
