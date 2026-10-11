@@ -24,6 +24,7 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [FIELD, '/field/tasks/t1'],
     [TEMPLATE, '/admin/templates'],
     [TEMPLATE, '/admin/projects/p1/templates'],
+    [TEMPLATE, '/admin/projects/p1/inspection-items/templates'],
     [NONE, '/change-password'],
     [NONE, '/somewhere-else'],
     [FIELD, '/administrator'],
@@ -41,6 +42,7 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [OFFICE, '/admin'],
     [TEMPLATE, '/admin/projects'],
     [TEMPLATE, '/admin/projects/p1/members'],
+    [TEMPLATE, '/admin/projects/p1/inspection-items'],
     [NONE, '/admin/projects'],
   ])('不可以：%j → %s', (user, path) => {
     expect(canVisit(user, path)).toBe(false)

@@ -17,6 +17,7 @@ export function TemplateLibraryNav({
   mobile,
   mode,
   selectSystemOnly = false,
+  appliedItemIds = new Set(),
 }: {
   categories: TemplateCategory[]
   systems: TemplateSystem[]
@@ -32,6 +33,7 @@ export function TemplateLibraryNav({
   mobile: boolean
   mode: 'manage' | 'select'
   selectSystemOnly?: boolean
+  appliedItemIds?: ReadonlySet<string>
 }) {
   return (
     <aside className="tpl-nav" aria-label="範本庫導覽">
@@ -133,40 +135,58 @@ export function TemplateLibraryNav({
                             <ul>
                               {items
                                 .filter((item) => item.system_id === system.id)
-                                .map((item) => (
-                                  <li key={item.id ?? item.title}>
-                                    <button
-                                      aria-label={
-                                        item.title || '未命名查核項目'
-                                      }
-                                      aria-current={
-                                        selected?.type === 'item' &&
-                                        selected.id === item.id
-                                          ? 'true'
-                                          : undefined
-                                      }
-                                      className="tpl-tree-row tpl-item-row"
-                                      onClick={() =>
-                                        item.id &&
-                                        onSelect({ type: 'item', id: item.id })
-                                      }
-                                      type="button"
-                                    >
-                                      <span aria-hidden="true">•</span>
-                                      <span>
-                                        {item.title || '未命名查核項目'}
-                                      </span>
-                                      {mobile && (
-                                        <span
-                                          aria-hidden="true"
-                                          className="tpl-item-open"
-                                        >
-                                          開啟詳情
+                                .map((item) => {
+                                  const applied = Boolean(
+                                    item.id && appliedItemIds.has(item.id),
+                                  )
+                                  const accessibleName = applied
+                                    ? `${item.title || '未命名查核項目'}，已套用`
+                                    : item.title || '未命名查核項目'
+                                  return (
+                                    <li key={item.id ?? item.title}>
+                                      <button
+                                        aria-label={accessibleName}
+                                        disabled={applied}
+                                        aria-current={
+                                          selected?.type === 'item' &&
+                                          selected.id === item.id
+                                            ? 'true'
+                                            : undefined
+                                        }
+                                        className={`tpl-tree-row tpl-item-row${
+                                          applied ? ' tpl-item-applied' : ''
+                                        }`}
+                                        onClick={() =>
+                                          item.id &&
+                                          !applied &&
+                                          onSelect({
+                                            type: 'item',
+                                            id: item.id,
+                                          })
+                                        }
+                                        type="button"
+                                      >
+                                        <span aria-hidden="true">•</span>
+                                        <span>
+                                          {item.title || '未命名查核項目'}
                                         </span>
-                                      )}
-                                    </button>
-                                  </li>
-                                ))}
+                                        {applied && (
+                                          <span className="tpl-applied-status">
+                                            已套用
+                                          </span>
+                                        )}
+                                        {mobile && (
+                                          <span
+                                            aria-hidden="true"
+                                            className="tpl-item-open"
+                                          >
+                                            開啟詳情
+                                          </span>
+                                        )}
+                                      </button>
+                                    </li>
+                                  )
+                                })}
                               {loadedSystemIds.has(system.id) &&
                                 items.filter(
                                   (item) => item.system_id === system.id,
