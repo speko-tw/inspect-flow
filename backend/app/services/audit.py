@@ -121,8 +121,8 @@ class AuditEventDefinition:
     ``always_recorded`` (a subset of ``fields``) lists which of them
     a 修改 event must include even when unchanged. ``system_event``
     and ``always_write`` are ALG-R15/ALG-R16's two flags;
-    ``before_optional`` is a third, narrower one -- see this module's
-    docstring.
+    ``before_optional`` permits a missing before snapshot for selected
+    changes. ``project_scoped`` requires a project UUID at write time.
     """
 
     event_type: str
@@ -135,6 +135,7 @@ class AuditEventDefinition:
     allow_system_event: bool = False
     always_write: bool = False
     before_optional: bool = False
+    project_scoped: bool = False
     nullable_fields: frozenset[str] = field(default_factory=frozenset)
 
 
@@ -214,6 +215,7 @@ def register_audit_event(
     allow_system_event: bool = False,
     always_write: bool = False,
     before_optional: bool = False,
+    project_scoped: bool = False,
     nullable_fields: Iterable[str] = (),
 ) -> None:
     """Add one event to the catalog (ALG-R11, ALG-R13): other specs
@@ -221,7 +223,8 @@ def register_audit_event(
     event codes without any change to this module or a migration.
     ``system_event`` and ``always_write`` are ALG-R15/ALG-R16's two
     flags; ``before_optional`` is a third, narrower one (see this
-    module's docstring); all three default to ``False``.
+    module's docstring); ``project_scoped`` requires ``project_id``
+    at both write entry points (ALG-R24). All default to ``False``.
     ``before_optional`` is only meaningful on a 修改 (``kind=
     AuditEventKind.UPDATED``) event -- a 新增 event's ``before`` is
     already always ``None`` (ALG-R09), and a 刪除 event has no
@@ -296,6 +299,7 @@ def register_audit_event(
         allow_system_event=allow_system_event,
         always_write=always_write,
         before_optional=before_optional,
+        project_scoped=project_scoped,
         nullable_fields=nullable_fields_set,
     )
 
@@ -312,6 +316,19 @@ class AuditEventError(ValueError):
 
 class UnregisteredAuditEventError(AuditEventError):
     """ALG-R07: ``event_type`` was never registered."""
+
+
+class MissingProjectAuditEventError(AuditEventError):
+    """ALG-R24: a project-scoped event requires ``project_id``."""
+
+
+def _require_project_id(
+    definition: AuditEventDefinition, project_id: uuid.UUID | None
+) -> None:
+    if definition.project_scoped and project_id is None:
+        raise MissingProjectAuditEventError(
+            f"{definition.event_type!r} requires project_id (ALG-R24)"
+        )
 
 
 class UndeclaredAuditFieldError(AuditEventError):
@@ -623,6 +640,8 @@ def _record_audit_event(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
 
+    _require_project_id(definition, project_id)
+
     normalized_before = _normalize_payload(before)
     normalized_after = _normalize_payload(after)
 
@@ -700,6 +719,7 @@ def record_audit_event_in_independent_transaction(
         raise UnregisteredAuditEventError(
             f"{event_type!r} is not a registered audit event (ALG-R07)"
         )
+    _require_project_id(definition, project_id)
     normalized_before = _normalize_payload(before)
     normalized_after = _normalize_payload(after)
     _validate_fields(definition, normalized_before, normalized_after)
@@ -838,12 +858,14 @@ register_audit_event(
     kind=AuditEventKind.UPDATED,
     fields=("role_ids", "project_id", "user_id"),
     always_recorded=("project_id", "user_id"),
+    project_scoped=True,
 )
 register_audit_event(
     "project_member.removed",
     entity_type="project_member",
     kind=AuditEventKind.DELETED,
     fields=("project_id", "user_id", "role_ids"),
+    project_scoped=True,
 )
 register_audit_event(
     "user.admin_changed",
@@ -882,6 +904,7 @@ register_audit_event(
     entity_type="template_item",
     kind=AuditEventKind.CREATED,
     fields=("project_id", "project_inspection_item_id", "system_id"),
+    project_scoped=True,
 )
 
 # `authentication` 事件 (docs/specs/audit-log/spec.md#authentication-事件,
@@ -1026,6 +1049,7 @@ register_audit_event(
     kind=AuditEventKind.CREATED,
     fields=("project_code", "name", "creator_role_user_id"),
     optional_fields=("creator_role_user_id",),
+    project_scoped=True,
 )
 register_audit_event(
     "project.updated",
@@ -1040,12 +1064,14 @@ register_audit_event(
         "planned_completion_date",
     ),
     nullable_fields=("planned_start_date", "planned_completion_date"),
+    project_scoped=True,
 )
 register_audit_event(
     "project_member.assignment_denied",
     entity_type="project_member",
     kind=AuditEventKind.CREATED,
     fields=("project_id", "user_id", "role_ids", "reason"),
+    project_scoped=True,
 )
 register_audit_event(
     "module_permission.grant_denied",

@@ -126,6 +126,7 @@ class TestAlgAc07FirstBatchEventsRoundTrip:
             session,
             "project_member.roles_changed",
             entity_id=uuid7(),
+            project_id=project_id,
             before={
                 "role_ids": [],
                 "project_id": project_id,
@@ -141,6 +142,7 @@ class TestAlgAc07FirstBatchEventsRoundTrip:
             session,
             "project_member.removed",
             entity_id=uuid7(),
+            project_id=project_id,
             before={
                 "project_id": project_id,
                 "user_id": user_id,

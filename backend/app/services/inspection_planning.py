@@ -95,6 +95,7 @@ for _event, _entity, _kind, _fields in (
         entity_type=_entity,
         kind=_kind,
         fields=_fields,
+        project_scoped=True,
         always_recorded=("reinspection_required",)
         if _event == "project_inspection_item.updated"
         else (),

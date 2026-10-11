@@ -60,6 +60,7 @@ from app.services.audit import (
     _EVENT_TYPE_RE,
     AuditEventKind,
     InvalidAuditEventShapeError,
+    MissingProjectAuditEventError,
     UnchangedAuditFieldError,
     UndeclaredAuditFieldError,
     UnregisteredAuditEventError,
@@ -166,6 +167,45 @@ def test_alg_ac19_to_ac24_two_layer_event_catalog():
     assert active_changed.optional_fields == active_changed.fields - {
         "is_active"
     }
+
+
+def test_project_scoped_catalog_covers_all_project_event_families():
+    expected = {
+        "project.created",
+        "project.updated",
+        "project_member.roles_changed",
+        "project_member.removed",
+        "project_member.assignment_denied",
+        "project_zone.created",
+        "project_zone.updated",
+        "project_zone.deleted",
+        "inspection_task.deleted",
+        "inspection_task.cancelled",
+        "inspection_task.restored",
+        "inspection_task.location_updated",
+        "project_inspection_item.updated",
+        "template_item.created_from_project",
+    }
+    project_entities = {
+        "project",
+        "project_member",
+        "project_zone",
+        "inspection_task",
+        "project_inspection_item",
+    }
+    actual = {
+        event_type
+        for event_type, definition in _EVENT_CATALOG.items()
+        if definition.entity_type in project_entities
+        or event_type == "template_item.created_from_project"
+    }
+    marked = {
+        event_type
+        for event_type, definition in _EVENT_CATALOG.items()
+        if definition.project_scoped
+    }
+    assert actual == expected
+    assert marked == expected
 
 
 def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
@@ -329,6 +369,10 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
                 entity_id=uuid.uuid4(),
                 before=before,
                 after=after,
+                project_id=project_id
+                if event_type.startswith("project.")
+                or event_type == "project_member.assignment_denied"
+                else None,
             )
         )
 
@@ -414,6 +458,41 @@ def test_assignment_denial_project_id_is_persisted_independently(
     assert persisted is not None
     assert persisted.project_id == project.id
     assert persisted.after["project_id"] == str(project.id)
+
+
+def test_project_event_without_project_id_is_rejected_before_write(
+    session, operator
+):
+    before_count = session.query(AuditLog).count()
+    with pytest.raises(MissingProjectAuditEventError):
+        record_audit_event(
+            session,
+            "project.created",
+            entity_id=uuid.uuid4(),
+            before=None,
+            after={"project_code": "P-1", "name": "Project"},
+        )
+    assert session.query(AuditLog).count() == before_count
+
+
+def test_project_denial_without_project_id_is_rejected_before_queue(
+    session, operator
+):
+    pending = audit_module.begin_pending_independent_audit_events(session)
+    with pytest.raises(MissingProjectAuditEventError):
+        record_audit_event_in_independent_transaction(
+            session,
+            "project_member.assignment_denied",
+            entity_id=uuid.uuid4(),
+            before=None,
+            after={
+                "project_id": uuid.uuid4(),
+                "user_id": operator.id,
+                "role_ids": [],
+                "reason": "external_role_not_allowed",
+            },
+        )
+    assert pending == []
 
 
 def test_alg_ac26_authenticated_denial_flushes_after_rollback(
