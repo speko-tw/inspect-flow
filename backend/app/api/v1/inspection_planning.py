@@ -78,7 +78,6 @@ from app.services.inspection_planning import (
     get_inspection_task,
     inspection_task_list_filters,
     inspection_task_visibility_filters,
-    list_inspection_plans,
     rename_inspection_plan,
     rename_project_zone,
     restore_inspection_task,
@@ -605,7 +604,6 @@ def plans(
     limit: int = Query(50, ge=1, le=100),
     db: Session = _db_dependency,
 ):
-    _call(list_inspection_plans, db, project_id=project_id)
     return page(
         db,
         InspectionPlan,

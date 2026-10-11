@@ -43,6 +43,7 @@ from app.models import (
     ProjectMember,
     ProjectMemberRole,
     Role,
+    SystemRoleAssignment,
     User,
     UserModuleDelegation,
     UserModulePermission,
@@ -207,6 +208,16 @@ def set_external_collaborator(
     operator = get_current_operator(session)
     if not operator.is_admin:
         raise ExternalFlagChangeError("Only Admin may change this flag")
+    # 重讀並鎖定同一 User 列，與系統角色指派共用序列化順序。
+    locked_user = session.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_user is None:
+        raise ExternalFlagChangeError("User does not exist")
+    user = locked_user
     if user.is_external_collaborator == is_external_collaborator:
         return False
     if user.is_external_collaborator and not confirmed:
@@ -232,6 +243,14 @@ def set_external_collaborator(
             for name, allowed, role_id in role_rows
             if not allowed or role_id == creator_role_id
         ]
+        invalid_system_roles = list(
+            session.scalars(
+                select(SystemRoleAssignment.role_code).where(
+                    SystemRoleAssignment.user_id == user.id,
+                    SystemRoleAssignment.role_code == "template_admin",
+                )
+            ).all()
+        )
         permissions = list(
             session.scalars(
                 select(UserModulePermission.permission_code).where(
@@ -254,12 +273,17 @@ def set_external_collaborator(
         if (
             user.is_admin
             or invalid_roles
+            or invalid_system_roles
             or invalid_permissions
             or delegations
         ):
             details = [
                 f"role: {name} ({role_id})" for name, role_id in invalid_roles
             ]
+            details.extend(
+                f"system role: {role_code}"
+                for role_code in invalid_system_roles
+            )
             details.extend(
                 f"module permission: {code}" for code in invalid_permissions
             )
@@ -269,6 +293,7 @@ def set_external_collaborator(
             raise ExternalFlagChangeError(
                 "User does not qualify as an external collaborator: "
                 f"admin={user.is_admin}, roles={invalid_roles}, "
+                f"system_roles={invalid_system_roles}, "
                 f"permissions={invalid_permissions}, "
                 f"delegations={delegations}",
                 details=details,

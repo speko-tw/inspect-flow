@@ -6,13 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from app.api.v1 import users as users_api
+from app.api.v1.users import ActiveStatusRequest
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     verify_password,
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import AuditLog, User, UserPassword
+from app.models import AuditLog, SystemRoleAssignment, User, UserPassword
 from app.services.audit import InvalidAuditEventShapeError
 from app.services.users import create_user
 from tests.db.conftest import create_root_user_with_company
@@ -77,6 +79,80 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
         "user.admin_changed",
         "user.password_set",
     }
+
+
+def test_active_status_commits_before_return(
+    admin_client, db_session, monkeypatch
+):
+    """帳號停用結果須在端點返回前提交。"""
+    user = create_root_user_with_company(db_session, "R618ACTIVE")
+    db_session.commit()
+    events = []
+    original_commit = db_session.commit
+    original_set_active = users_api.set_is_active
+
+    def tracked_commit():
+        original_commit()
+        if "active_changed" in events:
+            events.append("active_committed")
+
+    def tracked_set_active(session, target, is_active):
+        result = original_set_active(session, target, is_active)
+        events.append("active_changed")
+        return result
+
+    monkeypatch.setattr(db_session, "commit", tracked_commit)
+    monkeypatch.setattr(users_api, "set_is_active", tracked_set_active)
+
+    result = users_api.change_active_status(
+        user.id,
+        ActiveStatusRequest(is_active=False),
+        db_session,
+    )
+
+    assert result is user
+    assert events == ["active_changed", "active_committed"]
+    db_session.expire(user)
+    assert user.is_active is False
+
+
+def test_template_admin_prevents_external_flag_change(
+    admin_client, db_session
+):
+    """外部身分切換回應須列出並保留不相容的 template_admin。"""
+    client, admin = admin_client
+    target = create_root_user_with_company(db_session, "R618TPLFLAG")
+    db_session.add(
+        SystemRoleAssignment(
+            user_id=target.id,
+            role_code="template_admin",
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+    )
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/users/{target.id}",
+        json={"is_external_collaborator": True},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "user.external_not_qualified"
+    assert response.json()["error"]["details"] == [
+        "system role: template_admin"
+    ]
+    db_session.refresh(target)
+    assert target.is_external_collaborator is False
+    assert (
+        db_session.scalar(
+            select(SystemRoleAssignment.id).where(
+                SystemRoleAssignment.user_id == target.id,
+                SystemRoleAssignment.role_code == "template_admin",
+            )
+        )
+        is not None
+    )
 
 
 def test_external_collaborator_cannot_be_created_as_admin(

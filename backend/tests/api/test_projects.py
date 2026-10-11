@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event, select
+from sqlalchemy import Engine, event, func, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
@@ -485,6 +485,71 @@ def test_template_admin_guard_requires_assignment_not_project_permissions(
         check_template_admin(user=actor, db=db_session)
     assert denied.value.status_code == 403
     assert denied.value.code is ErrorCode.PERMISSION_DENIED
+
+
+def test_external_collaborator_cannot_receive_template_admin(
+    project_api, db_session: Session
+):
+    """DOM-R71 的外部身分限制也適用於 template_admin 指派。"""
+    target = project_api["target"]
+    assert isinstance(target, User)
+    target.is_external_collaborator = True
+    db_session.commit()
+
+    response = project_api["admin_client"].put(
+        f"/api/v1/system-role-assignments/template_admin/{target.id}"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "user.external_not_qualified"
+    assert response.json()["error"]["details"] == [
+        "system role: template_admin"
+    ]
+    assert (
+        db_session.scalar(
+            select(SystemRoleAssignment.id).where(
+                SystemRoleAssignment.user_id == target.id,
+                SystemRoleAssignment.role_code == "template_admin",
+            )
+        )
+        is None
+    )
+    db_session.refresh(target)
+    assert target.is_external_collaborator is True
+
+
+def test_project_member_role_ids_payload_is_limited_to_64(
+    project_api, db_session: Session
+):
+    """兩種成員角色寫入 body 都拒絕超過 64 個 role id。"""
+    project = project_api["project"]
+    target = project_api["target"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    members_url = f"/api/v1/projects/{project.id}/members"
+    role_ids = [str(uuid4()) for _ in range(65)]
+    before = db_session.scalar(
+        select(func.count(ProjectMember.id)).where(
+            ProjectMember.project_id == project.id
+        )
+    )
+
+    added = project_api["admin_client"].post(
+        members_url,
+        json={"user_id": str(target.id), "role_ids": role_ids},
+    )
+    replaced = project_api["admin_client"].put(
+        f"{members_url}/{target.id}/roles", json={"role_ids": role_ids}
+    )
+
+    assert added.status_code == 422
+    assert replaced.status_code == 422
+    after = db_session.scalar(
+        select(func.count(ProjectMember.id)).where(
+            ProjectMember.project_id == project.id
+        )
+    )
+    assert after == before
 
 
 def test_system_role_assignment_endpoints_are_admin_only_and_audited(

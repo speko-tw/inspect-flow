@@ -144,11 +144,11 @@ class UpdateProjectRequest(BaseModel):
 
 class AddProjectMemberRequest(BaseModel):
     user_id: UUID
-    role_ids: list[UUID] = Field(default_factory=list)
+    role_ids: list[UUID] = Field(default_factory=list, max_length=64)
 
 
 class SetProjectMemberRolesRequest(BaseModel):
-    role_ids: list[UUID]
+    role_ids: list[UUID] = Field(max_length=64)
 
 
 class ProjectMemberResponse(BaseModel):

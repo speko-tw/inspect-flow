@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import SystemRoleAssignment, SystemRoleCode
+from app.models import SystemRoleAssignment, SystemRoleCode, User
 from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
 
@@ -18,10 +18,32 @@ class SystemRoleNotAssignedError(LookupError):
     """Raised when the requested system role assignment does not exist."""
 
 
+class ExternalUserSystemRoleError(ValueError):
+    """外部協作人員不得取得 template_admin 系統角色。"""
+
+    def __init__(self) -> None:
+        self.details = ["system role: template_admin"]
+        super().__init__("External collaborators cannot hold template_admin")
+
+
 def assign_system_role(
     session: Session, user_id: uuid.UUID, role_code: SystemRoleCode
 ) -> SystemRoleAssignment:
     """Assign one fixed system role and write its audit event."""
+    # 共用鎖定 User 列，避免與外部協作者狀態變更交錯提交。
+    user = session.scalar(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if (
+        role_code is SystemRoleCode.TEMPLATE_ADMIN
+        and user is not None
+        and user.is_external_collaborator
+    ):
+        # 身分規則禁止外部協作者持有系統層級的範本管理權。
+        raise ExternalUserSystemRoleError()
     existing = session.scalar(
         select(SystemRoleAssignment).where(
             SystemRoleAssignment.user_id == user_id,
