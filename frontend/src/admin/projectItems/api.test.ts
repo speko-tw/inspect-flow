@@ -174,7 +174,13 @@ describe('projectItemApi', () => {
     /**
      * fixture 是 wire body；expected 補上持久化 ID，維持真後端契約。
      */
-    const expectedRequest = structuredClone(boundUnitFixture.request)
+    const expectedRequest = structuredClone(
+      boundUnitFixture.request,
+    ) as unknown as {
+      title: string
+      instruction: string
+      inspection_points: InspectionPoint[]
+    }
     const expectedPoint = expectedRequest.inspection_points[0]
     expectedPoint.id = 'point-1'
     expectedPoint.measurement_fields[0].id =
@@ -187,6 +193,7 @@ describe('projectItemApi', () => {
       unit: 'cm',
     })
     const point = expectedPoint
+    const numericStandard = point.numeric_standard!
     await projectItemApi.update('project-1', 'item-1', {
       title: expectedRequest.title,
       instruction: expectedRequest.instruction,
@@ -194,9 +201,8 @@ describe('projectItemApi', () => {
         {
           ...point,
           numeric_standard: {
-            ...point.numeric_standard,
-            measurement_field_id:
-              point.numeric_standard.measurement_field_client_id,
+            ...numericStandard,
+            measurement_field_id: numericStandard.measurement_field_client_id,
           },
         },
       ],

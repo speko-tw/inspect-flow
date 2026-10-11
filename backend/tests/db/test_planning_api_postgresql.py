@@ -439,7 +439,7 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
                     ],
                     "evidence_requirements": [{"min_count": 1}],
                 }
-            ]
+            ],
         },
     )
     assert updated.status_code == 200, updated.text

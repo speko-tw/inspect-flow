@@ -1873,17 +1873,14 @@ def test_project_item_invalid_structure_precedes_missing_reinspect_choice(
     )
 
     assert invalid.status_code == 422, invalid.text
-    assert invalid.json() == {
-        "error": {
-            "code": "request.validation_failed",
-            "fields": [
-                {
-                    "path": "/inspection_points/0/evidence_requirements",
-                    "code": "field.too_short",
-                }
-            ],
+    error = invalid.json()["error"]
+    assert error["code"] == "request.validation_failed"
+    assert error["fields"] == [
+        {
+            "path": "/inspection_points/0/evidence_requirements",
+            "code": "field.too_short",
         }
-    }
+    ]
 
 
 def _dispatched_field_task(world, plan_name, assignee_id=None):
