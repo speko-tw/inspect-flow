@@ -17,7 +17,8 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 # (index name, table, columns)；父 id、created_at、id 的順序
-# 對應 app.api.pagination.page 的 keyset 分頁，避免掃描無關專案。
+# 對應 app.api.pagination.page 的 keyset 分頁，避免掃描無關專案；
+# ix_inspection_tasks_assignee_id 是單欄篩選的例外。
 _INDEXES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "ix_inspection_tasks_project_created_id",

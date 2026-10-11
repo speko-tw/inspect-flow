@@ -162,7 +162,8 @@ def _lock_task(session: Session, task_id: uuid.UUID) -> InspectionTask | None:
 def _lock_plan_and_task(
     session: Session, task_id: uuid.UUID
 ) -> tuple[InspectionPlan | None, InspectionTask]:
-    # 依 KD-56 先鎖 Plan 再鎖 Task，與狀態重算共用順序。
+    # 先鎖 Plan 再鎖 Task，與 _refresh_plan_status 及項目修改同序，
+    # 避免並行轉換死鎖（#555）。
     task_reference = session.get(InspectionTask, task_id)
     if task_reference is None:
         raise PlanningError("inspection_task.not_found")
@@ -176,7 +177,7 @@ def _lock_plan_and_task(
 def create_project_zone(
     session: Session, *, project_id: uuid.UUID, name: str
 ) -> ProjectZone:
-    """建立專案分區；無管理權限、專案不存在或名稱衝突時拒絕。"""
+    """建立專案分區；無權限、專案不存在或名稱無效／衝突時拒絕。"""
     operator_id = _require_permission(
         session, project_id, "project_zone.manage"
     )
@@ -215,7 +216,7 @@ def create_project_zone(
 def rename_project_zone(
     session: Session, zone: ProjectZone, *, name: str
 ) -> ProjectZone:
-    """更名分區；無管理權限或同專案名稱衝突時拒絕。"""
+    """更名分區；無權限或同專案名稱無效／衝突時拒絕。"""
     operator_id = _require_permission(
         session, zone.project_id, "project_zone.manage"
     )
@@ -355,7 +356,7 @@ def derive_plan_status(task_statuses: Sequence[str]) -> str:
 
 
 def _refresh_plan_status(session: Session, plan: InspectionPlan) -> None:
-    # 依 KD-56 鎖定所有 Task 後再衍生狀態，避免併發轉換覆寫結果。
+    # 依 KD-56 衍生狀態前先鎖定所有 Task，避免併發轉換覆寫結果。
     locked_plan = _lock_plan(session, plan.id)
     if locked_plan is None:
         raise PlanningError("inspection_plan.not_found")
@@ -461,7 +462,7 @@ def create_inspection_task(
     location_text: str | None = None,
     assignee_id: uuid.UUID | None = None,
 ) -> InspectionTask:
-    """建立含項目快照的 DRAFT Task；依 IP-R03 拒絕無效來源。"""
+    """依 IP-R02 建立多項目 DRAFT Task；無效來源時拒絕。"""
     operator_id = _require_permission(
         session, plan.project_id, "inspection_task.create"
     )
@@ -770,7 +771,7 @@ def delete_draft_inspection_task(
 def cancel_inspection_task(
     session: Session, task: InspectionTask, *, reason: str
 ) -> InspectionTask:
-    """依 KD-56 取消未完成 Task；封存、狀態或原因無效時拒絕。"""
+    """依 IP-R07 取消已派出且未完成的 Task；封存、狀態或原因無效時拒絕。"""
     operator_id = _require_permission(
         session, task.project_id, "inspection_task.cancel"
     )
@@ -1007,7 +1008,7 @@ def update_project_item_usage(
             if task_ids
             else []
         )
-        # #555：來源項目由 API 先鎖，這裡依 Plan、Task、項目明細
+        # 依 IP-R03（#555），來源項目由 API 先鎖，這裡依 Plan、Task、項目明細
         # 的固定順序取得寫鎖，避免與建立 Task 的快照交易死鎖。
         plan_ids = sorted({task.plan_id for task in tasks})
         plans = (
@@ -1083,7 +1084,9 @@ def update_project_item_usage(
             ),
             retain_history=task.status != "DRAFT",
         )
-        # 依 KD-55，草稿原位更新；已完成任務只讓受影響項目待重查。
+        # 依 IP-R04，選「要」時已有結果的項目標待重查；
+        # COMPLETED Task 退回 IN_PROGRESS（IP-R08 的明確例外）。
+        # DRAFT 原位更新，不標待重查。
         if task.status == "DRAFT":
             task_item.needs_reinspection = False
         elif reinspection_required:

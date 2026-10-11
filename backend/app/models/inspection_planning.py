@@ -303,7 +303,7 @@ class TaskSnapshotPoint(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotTextStandard(AuditMixin, TimestampedBase):
-    """保存 Task 建立時的文字標準，避免來源修改回寫歷史。"""
+    """保存該 Snapshot 修訂的文字標準，以保留 KD-55 更正歷史。"""
 
     __tablename__ = "task_snapshot_text_standards"
 
@@ -317,7 +317,7 @@ class TaskSnapshotTextStandard(AuditMixin, TimestampedBase):
 
 
 class TaskSnapshotNumericStandard(AuditMixin, TimestampedBase):
-    """保存數值標準及欄位身分，維持來源與快照一致。"""
+    """維持快照內部一致，確保數值標準與綁定欄位的類型、單位相符。"""
 
     __tablename__ = "task_snapshot_numeric_standards"
 

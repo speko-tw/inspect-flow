@@ -1,4 +1,6 @@
-"""建立 IP-R03 的需求快照與 KD-55 的項目級歷史資料結構。
+"""建立 Plan、Task、ProjectZone、需求快照與 KD-55 變更紀錄。
+
+另為專案項目加入 standard_revision，追蹤標準修訂。
 
 Revision ID: 6d2e4f8a91b0
 Revises: a8356e4c12b0
@@ -8,7 +10,7 @@ Create Date: 2026-10-04 15:14:51.141219
 
 from collections.abc import Sequence
 
-# 沿用 Alembic 樣板的 sa 與 op，讓獨立重播 migration 時不依賴 app。
+# 沿用 Alembic 樣板保留 sa 與 op，即使 migration 未使用也不移除。
 import sqlalchemy as sa  # noqa: F401
 
 from alembic import op  # noqa: F401
@@ -16,7 +18,6 @@ from alembic import op  # noqa: F401
 # 只使用 SQLAlchemy 內建型別，不 import app；#139 要求舊 migration
 # 在應用程式模型演進後仍能原樣重播。
 
-# Alembic 以這些識別值連接 migration 歷史。
 revision: str = "6d2e4f8a91b0"
 down_revision: str | Sequence[str] | None = "a8356e4c12b0"
 branch_labels: str | Sequence[str] | None = None

@@ -157,7 +157,7 @@ def list_project_inspection_items(
     db: Session = Depends(get_db),  # noqa: B008
     user: User = Depends(require_login_access),  # noqa: B008
 ) -> dict:
-    """列出專案查核項目；非成員且非範本管理者時拒絕。"""
+    """列出專案查核項目；Admin 與範本管理者可讀，其他非成員拒絕。"""
     if not is_admin_or_system_role(db, user, SystemRoleCode.TEMPLATE_ADMIN):
         membership = db.scalar(
             select(ProjectMember.id).where(

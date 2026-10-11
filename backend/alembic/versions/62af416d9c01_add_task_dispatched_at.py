@@ -1,4 +1,4 @@
-"""依 IP-R11 保存首次派送時間，避免後續狀態轉換改寫排序基準。
+"""依 IP-R11（dispatched_at）保存首次派送時間，避免改寫排序基準。
 
 Revision ID: 62af416d9c01
 Revises: 4f7a1c93d2e6
@@ -19,7 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """新增派送時間；既有非草稿以建立時間近似回填。"""
-    # 依 IP-R11 只加欄與更新資料，避免重建 Task 表造成外鍵風險。
+    # 只增欄、不重建 Task 表（IP-R11（dispatched_at））。
     op.add_column(
         "inspection_tasks",
         sa.Column("dispatched_at", sa.DateTime(timezone=True), nullable=True),

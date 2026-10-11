@@ -166,7 +166,7 @@ def create_task_items(
     project_inspection_item_ids: list[uuid.UUID],
     operator_id: uuid.UUID,
 ) -> list[TaskInspectionItem]:
-    """依 IP-R03 為新 Task 固定各項需求；空清單或跨專案來源時拒絕。"""
+    """依 IP-R02 建立 Task 項目並固定需求；來源為空或跨專案時拒絕。"""
     from app.services.inspection_planning import PlanningError
 
     items: list[TaskInspectionItem] = []

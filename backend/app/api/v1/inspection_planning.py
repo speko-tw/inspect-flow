@@ -1,4 +1,7 @@
-"""公開 IP-R01～IP-R10 的規劃入口並統一權限與錯誤契約。"""
+"""提供 Plan、Task、分區及專案項目 API，統一權限與錯誤契約。
+
+涵蓋 IP-R01～IP-R10、IP-R11（dispatched_at）、IP-R12～IP-R14。
+"""
 
 from __future__ import annotations
 
@@ -143,7 +146,7 @@ class LocationBody(StrictBody):
 
 
 class ProjectNumericStandardBody(NumericStandardBody):
-    """保留數值標準欄位身分，供 IP-R13 修改時比對。"""
+    """以 client_id 綁定同項次實測欄位，讓新欄位尚無 id 時也可建立對應。"""
 
     measurement_field_client_id: UUID
 
@@ -798,7 +801,7 @@ def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
 def add_task(
     plan_id: UUID, body: TaskCreateBody, db: Session = _db_dependency
 ):
-    """依 IP-R03 建立多項目 DRAFT Task；無效來源或地點時拒絕。"""
+    """依 IP-R02 建立多項目 DRAFT Task；無效來源或地點時拒絕。"""
     plan = _one_plan(db, plan_id)
     task = _call(
         create_inspection_task,
@@ -920,7 +923,9 @@ def _impact_summaries(db: Session, tasks: Sequence[InspectionTask]):
             {
                 "plan_name": plan.name if plan else None,
                 "plan_archived": bool(plan and plan.is_archived),
-                # 依 IP-R08，結果端點屬 0.7.x；此處不推測尚未提供的結果。
+                # 依 IP-R04 與規格「API 表示」，has_result 含結果與有效照片；
+                # field-evidence（0.6.x）、completion-validation（0.7.x）
+                # 上線前恆為 false。
                 "has_result": False,
             }
         )
@@ -1198,7 +1203,7 @@ def cancel(
     body: CancelBody | None = None,
     db: Session = _db_dependency,
 ):
-    """依 KD-56 取消未完成 Task；缺原因或狀態不符時拒絕。"""
+    """依 IP-R07 取消已派出且未完成的 Task；缺原因或狀態不符時拒絕。"""
     task = _one_task(db, task_id)
     reason = body.reason if body is not None else ""
     return _task_summary(
@@ -1314,9 +1319,9 @@ def patch_project_item(
     body: ProjectItemPatchBody,
     db: Session = _db_dependency,
 ):
-    """依 KD-55 修改專案項目；有 Task 時未選重查則拒絕。"""
-    # #555：先鎖來源項目，再由服務層鎖 Plan／Task；並行建立 Task
-    # 也遵守此順序，快照不會跨越標準修訂邊界。
+    """依 KD-55 修改專案項目；有 Task 卻未提供 reinspect 時拒絕（422）。"""
+    # 依 IP-R03（#555），先鎖來源項目，再由服務層鎖 Plan／Task；
+    # 建立 Task 也遵守此順序，快照不會跨越標準修訂邊界。
     item = db.scalar(
         select(ProjectInspectionItem)
         .where(
@@ -1420,7 +1425,11 @@ def _validate_project_points(
     has_tasks: bool,
     reinspect: bool | None,
 ) -> None:
-    """先驗證完整結構；依 IP-R13 拒絕不重查時的項次增減。"""
+    """依 IP-R13、IP-R14 先驗證完整結構。
+
+    有 Task 時不重查卻增減項次／欄位、改欄位類型，
+    或將項次清空，均拒絕（422）。
+    """
     existing_points = db.scalars(
         select(ProjectInspectionPoint).where(
             ProjectInspectionPoint.project_inspection_item_id == item.id
@@ -1532,7 +1541,7 @@ def _validate_project_points(
 def _replace_project_points(
     db: Session, item: ProjectInspectionItem, points: list[ProjectPointBody]
 ) -> None:
-    # #595 保留傳入的項次與欄位 id，讓 Task 舊快照仍可追溯來源。
+    # 依 IP-R13 保留傳入的項次與欄位 id，讓 Task 舊快照仍可追溯來源。
     old_points = db.scalars(
         select(ProjectInspectionPoint).where(
             ProjectInspectionPoint.project_inspection_item_id == item.id
