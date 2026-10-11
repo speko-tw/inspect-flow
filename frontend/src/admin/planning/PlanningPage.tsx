@@ -4,10 +4,11 @@ import { Link } from 'react-router'
 import { collectPages, HttpError, isForbidden, isNotFound } from '../../http'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { mapFieldErrors } from '../../ui/fieldErrors'
+import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import type { FieldErrorBinding } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { planningClient, planningErrorMessage } from './api'
+import { UnsavedLeaveBox } from './UnsavedLeaveBox'
 import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
 import type {
   InspectionPlan,
@@ -67,18 +68,40 @@ const TASK_CANCEL_BINDINGS: FieldErrorBinding[] = [
   { path: '/reason', key: 'cancel-reason' },
 ]
 
-// 僅把 API 契約已知的欄位路徑對應到畫面欄位；未知路徑保留一般錯誤。
-const SERVER_FIELD_MESSAGES: Record<string, string> = {
-  'field.required': '請填寫此欄位。',
-  'field.invalid': '欄位格式不正確，請檢查輸入內容。',
-  'field.too_long': '輸入內容太長。',
-  'field.too_short': '輸入內容太短。',
-  'field.out_of_range': '數值超出允許範圍。',
-  'field.duplicate': '此欄位不可重複。',
+// 任務的業務 422（沒有 fields 清單、只有專用錯誤碼）也要落在對應欄位旁並
+// 聚焦（ADM-R28、ADM-R21 同一做法）；各表單的欄位不同，所以每個表單各一張表。
+const TASK_CODE_MESSAGES: Record<string, string> = {
+  'inspection_task.invalid_zone': '所選分區不屬於這個專案，請重新選擇。',
+  'inspection_task.invalid_assignee':
+    '建議指派人不是這個專案的成員，請重新選擇。',
+  'inspection_task.items_required': '請至少選擇一筆查核項目。',
+  'inspection_task.invalid_project_item':
+    '所選查核項目不屬於這個專案，請重新整理後再選。',
+  'inspection_task.invalid_location': '補充地點內容不符合規則，請修改後再試。',
+}
+const TASK_CREATE_CODE_FIELDS: Record<string, FieldKey> = {
+  'inspection_task.invalid_zone': 'task-zone',
+  'inspection_task.invalid_assignee': 'task-assignee',
+  'inspection_task.items_required': 'task-items',
+  'inspection_task.invalid_project_item': 'task-items',
+  'inspection_task.invalid_location': 'task-location',
+}
+const TASK_LOCATION_CODE_FIELDS: Record<string, FieldKey> = {
+  'inspection_task.invalid_zone': 'location-zone',
+  'inspection_task.invalid_location': 'location-text',
+}
+const TASK_ASSIGNEE_CODE_FIELDS: Record<string, FieldKey> = {
+  'inspection_task.invalid_assignee': 'suggested-assignee',
 }
 
-function serverFieldMessage(code: string): string {
-  return SERVER_FIELD_MESSAGES[code] ?? '欄位內容不符合規則，請檢查後再試。'
+// 派出前必須處理的缺項；派出鈕的停用與阻擋說明共用同一份判斷（IP-R05、
+// IP-R10）。派出前檢查只在畫面引導：建議指派是非排他的，後端不擋。
+function dispatchBlockers(task: InspectionTask) {
+  return {
+    unassigned: !task.assignee_id,
+    noLocation: !task.zone_id && !task.location_text?.trim(),
+    noItems: task.items.length === 0,
+  }
 }
 
 function describedBy(...ids: (string | false)[]): string {
@@ -177,23 +200,25 @@ export default function PlanningPage({
   const previousCancelTask = useRef(false)
   const dialogOpen = Boolean(confirmation || cancelTask)
   // 只在表單值偏離原資料或有新輸入時攔截離頁，避免純瀏覽也被詢問。
+  // 唯讀後表單都已收起，看不見的內容不該再攔住離頁。
   const hasUnsavedChanges = Boolean(
-    planName ||
-    (editingPlanName && updatedPlanName.trim() !== selectedPlan?.name) ||
-    taskItems.length > 0 ||
-    taskZoneId ||
-    taskLocation ||
-    assigneeId ||
-    (editingLocation &&
-      (editingLocation.zoneId !== (editingLocation.task.zone_id ?? '') ||
-        editingLocation.locationText !==
-          (editingLocation.task.location_text ?? ''))) ||
-    (editingAssignee &&
-      editingAssignee.assigneeId !==
-        (editingAssignee.task.assignee_id ?? '')) ||
-    (cancelTask && cancelReason),
+    !readOnly &&
+    (planName ||
+      (editingPlanName && updatedPlanName.trim() !== selectedPlan?.name) ||
+      taskItems.length > 0 ||
+      taskZoneId ||
+      taskLocation ||
+      assigneeId ||
+      (editingLocation &&
+        (editingLocation.zoneId !== (editingLocation.task.zone_id ?? '') ||
+          editingLocation.locationText !==
+            (editingLocation.task.location_text ?? ''))) ||
+      (editingAssignee &&
+        editingAssignee.assigneeId !==
+          (editingAssignee.task.assignee_id ?? '')) ||
+      (cancelTask && cancelReason)),
   )
-  useUnsavedNavigationGuard(hasUnsavedChanges)
+  const leaveGuard = useUnsavedNavigationGuard(hasUnsavedChanges)
 
   useEffect(() => {
     if (error && !serverFieldFocus) errorMessage.current?.focus()
@@ -372,6 +397,73 @@ export default function PlanningPage({
   const canEditPlan = Boolean(
     selectedPlan && selectedPlan.status !== 'ARCHIVED',
   )
+  // 計畫封存或畫面唯讀時，任務上的所有修改入口（含阻擋說明的捷徑與
+  // 修改表單）都不顯示；只留說明文字。
+  const canModify = canEditPlan && !readOnly
+
+  // 直接捲到「新增任務」的查核項目欄並聚焦（AC42）；不用 hash 導航，
+  // 避免被未儲存變更的離頁確認誤判成離開頁面。
+  function focusTaskItems(): void {
+    const field = pageContent.current?.querySelector<HTMLElement>(
+      '[data-field="task-items"]',
+    )
+    field?.scrollIntoView?.({ block: 'center' })
+    field?.focus()
+  }
+
+  // 沒有任何阻擋原因時不渲染清單，避免空的 <ul> 被報讀成「清單，0 項」。
+  function renderDispatchBlockers(task: InspectionTask) {
+    if (task.status !== 'DRAFT') return null
+    const blockers = dispatchBlockers(task)
+    if (!blockers.unassigned && !blockers.noLocation && !blockers.noItems) {
+      return null
+    }
+    return (
+      <ul aria-label="派出前需要處理的項目" className="task-dispatch-blockers">
+        {blockers.unassigned && (
+          <li>
+            {canModify ? '尚未指派：' : '尚未指派建議指派人。'}
+            {canModify && (
+              <button
+                onClick={() => setEditingAssignee({ task, assigneeId: '' })}
+                type="button"
+              >
+                前往建議指派欄位
+              </button>
+            )}
+          </li>
+        )}
+        {blockers.noLocation && (
+          <li>
+            {canModify ? '尚未填寫地點：' : '尚未填寫地點。'}
+            {canModify && (
+              <button
+                onClick={() =>
+                  setEditingLocation({ task, zoneId: '', locationText: '' })
+                }
+                type="button"
+              >
+                前往地點欄位
+              </button>
+            )}
+          </li>
+        )}
+        {blockers.noItems && (
+          <li>
+            {/* 現有 API 沒有替草稿補項目的操作；明示刪除重建，不暗示可修復。 */}
+            {canModify
+              ? '尚未選擇查核項目：請刪除這筆草稿後重新建立，並選擇項目。'
+              : '尚未選擇查核項目。'}
+            {canModify && (
+              <button onClick={focusTaskItems} type="button">
+                前往新增任務欄位
+              </button>
+            )}
+          </li>
+        )}
+      </ul>
+    )
+  }
 
   function confirm(
     title: string,
@@ -397,6 +489,7 @@ export default function PlanningPage({
     success: { area: NoticeArea; text: string },
     context?: string,
     bindings: readonly FieldErrorBinding[] = [],
+    codeFields: Readonly<Record<string, FieldKey>> = {},
   ): Promise<boolean> {
     if (!guard.enter()) return false
     setError('')
@@ -428,7 +521,18 @@ export default function PlanningPage({
       if (isForbidden(caught)) {
         setReadOnly(true)
       }
-      if (
+      const codeField =
+        caught instanceof HttpError && caught.code
+          ? codeFields[caught.code]
+          : undefined
+      if (codeField && caught instanceof HttpError && caught.code) {
+        setServerFieldErrors({
+          [codeField]:
+            TASK_CODE_MESSAGES[caught.code] ?? planningErrorMessage(caught),
+        })
+        setServerFieldFocus(codeField)
+        setError('')
+      } else if (
         caught instanceof HttpError &&
         caught.status === 422 &&
         caught.fields?.length
@@ -438,7 +542,7 @@ export default function PlanningPage({
         const messages = Object.fromEntries(
           Object.entries(mapped.errors).map(([key, code]) => [
             key,
-            serverFieldMessage(code),
+            fieldErrorMessage(code),
           ]),
         ) as Partial<Record<FieldKey, string>>
         setServerFieldErrors(messages)
@@ -528,6 +632,7 @@ export default function PlanningPage({
       { area: 'tasks', text: '已建立草稿任務，派出後現場才看得到。' },
       'task',
       TASK_CREATE_BINDINGS,
+      TASK_CREATE_CODE_FIELDS,
     )
     if (created) {
       setTaskItems([])
@@ -580,6 +685,7 @@ export default function PlanningPage({
         計畫與任務
       </h2>
       <p>計畫狀態由任務狀態自動推導；任務派出後才會提供給現場。</p>
+      <UnsavedLeaveBox guard={leaveGuard} />
       {projects[0] && <p>專案：{projects[0].name}</p>}
       {readOnly && (
         <p className="notice-info" role="status">
@@ -813,53 +919,7 @@ export default function PlanningPage({
                         {taskTitle(task)}{' '}
                         <StatusBadge parenthesized status={task.status} />
                       </h4>
-                      {task.status === 'DRAFT' && (
-                        <ul
-                          aria-label="派出前需要處理的項目"
-                          className="task-dispatch-blockers"
-                        >
-                          {/* #451 要求停用派出時仍指出缺項，並提供直達修正欄位的入口。 */}
-                          {!task.assignee_id && (
-                            <li>
-                              尚未指派：
-                              <button
-                                onClick={() =>
-                                  setEditingAssignee({ task, assigneeId: '' })
-                                }
-                                type="button"
-                              >
-                                前往建議指派欄位
-                              </button>
-                            </li>
-                          )}
-                          {!task.zone_id && !task.location_text?.trim() && (
-                            <li>
-                              尚未填寫地點：
-                              <button
-                                onClick={() =>
-                                  setEditingLocation({
-                                    task,
-                                    zoneId: '',
-                                    locationText: '',
-                                  })
-                                }
-                                type="button"
-                              >
-                                前往地點欄位
-                              </button>
-                            </li>
-                          )}
-                          {task.items.length === 0 && (
-                            <li>
-                              {/* 現有 API 沒有替草稿補項目的操作；明示刪除重建，不暗示可修復。 */}
-                              尚未選擇查核項目：請刪除這筆草稿後重新建立，並選擇項目。
-                              <a href="#task-creation-form">
-                                前往新增任務欄位
-                              </a>
-                            </li>
-                          )}
-                        </ul>
-                      )}
+                      {renderDispatchBlockers(task)}
                       {task.zone && <p>分區：{task.zone.name}</p>}
                       {task.location_text && (
                         <p>補充地點：{task.location_text}</p>
@@ -873,17 +933,16 @@ export default function PlanningPage({
                       {task.status === 'CANCELLED' && (
                         <p>取消原因：{task.cancellation_reason}</p>
                       )}
-                      {canEditPlan && !readOnly && (
+                      {canModify && (
                         <div>
                           {task.status === 'DRAFT' && (
                             <>
                               <button
                                 disabled={
                                   busy ||
-                                  !task.assignee_id ||
-                                  (!task.zone_id &&
-                                    !task.location_text?.trim()) ||
-                                  task.items.length === 0
+                                  Object.values(dispatchBlockers(task)).some(
+                                    Boolean,
+                                  )
                                 }
                                 onClick={() =>
                                   confirm(
@@ -984,7 +1043,7 @@ export default function PlanningPage({
                           )}
                         </div>
                       )}
-                      {editingLocation?.task.id === task.id && (
+                      {canModify && editingLocation?.task.id === task.id && (
                         <form
                           onKeyDown={blockImeEnter}
                           data-error-context="location"
@@ -1014,6 +1073,7 @@ export default function PlanningPage({
                               { area: 'tasks', text: '已更新任務地點。' },
                               'location',
                               TASK_LOCATION_BINDINGS,
+                              TASK_LOCATION_CODE_FIELDS,
                             )
                           }}
                         >
@@ -1097,7 +1157,7 @@ export default function PlanningPage({
                           )}
                         </form>
                       )}
-                      {editingAssignee?.task.id === task.id && (
+                      {canModify && editingAssignee?.task.id === task.id && (
                         <form
                           onKeyDown={blockImeEnter}
                           data-error-context="assignee"
@@ -1112,6 +1172,7 @@ export default function PlanningPage({
                               { area: 'tasks', text: '已更新建議指派。' },
                               'assignee',
                               TASK_ASSIGNEE_BINDINGS,
+                              TASK_ASSIGNEE_CODE_FIELDS,
                             )
                           }}
                         >
@@ -1166,7 +1227,7 @@ export default function PlanningPage({
                 ))}
               </ul>
 
-              {canEditPlan && !readOnly && (
+              {canModify && (
                 <form
                   id="task-creation-form"
                   onKeyDown={blockImeEnter}

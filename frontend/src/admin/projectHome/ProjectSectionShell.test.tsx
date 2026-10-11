@@ -73,6 +73,14 @@ describe('project section navigation state', () => {
     expect(screen.getByRole('link', { name: '查核項目' })).toBeInTheDocument()
   })
 
+  it('shows the zones section to a member who can only manage zones', () => {
+    // GET /projects/{id}/zones also allows project_zone.manage, so the
+    // section is never visible to someone the API would answer with 403.
+    renderShell('/admin/projects/:projectId/zones', ['project_zone.manage'])
+
+    expect(screen.getByRole('link', { name: '分區' })).toBeInTheDocument()
+  })
+
   it('shows the zones section to a member with zone read access', () => {
     renderShell('/admin/projects/:projectId/zones', ['project_zone.read'])
 

@@ -931,14 +931,18 @@ td .btn {
   margin-block-start: var(--space-2);
 }
 
-/* #451 要求阻擋說明的連結至少 44px 高，讓行動裝置可可靠觸控。 */
+/* #451 要求阻擋說明的連結與按鈕至少 44px 高，讓行動裝置可可靠觸控。
+ * 行內元素的 min-height 不生效，所以連結要改成 inline-flex。 */
 .task-dispatch-blockers a,
 .task-dispatch-blockers button {
+  display: inline-flex;
+  align-items: center;
   min-height: 44px;
   margin-inline-start: var(--space-1);
 }
 
-.named-row > form {
+.named-row > form,
+.named-row > .confirm-box {
   flex: 1 1 100%;
   margin: 0;
 }
@@ -2057,6 +2061,7 @@ a.app-header-tab[aria-current='page'] {
   input:not([type='checkbox'], [type='radio']),
   select,
   .btn,
+  .btn-sm,
   td button,
   .app-header-account button,
   .tpl-tree-row,

@@ -523,6 +523,19 @@ describe('project home', () => {
     expect(mocks.getProject).not.toHaveBeenCalled()
   })
 
+  it('redirects field-only users from the deep-linked zones section', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
+    )
+
+    renderAt('/admin/projects/project-1/zones')
+
+    expect(await screen.findByText('Field 工作台')).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: '分區' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('redirects field-only users from an item detail deep link', async () => {
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({ viewer_permission_codes: ['inspection_task.inspect'] }),

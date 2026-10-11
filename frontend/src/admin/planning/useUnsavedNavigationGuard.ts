@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
-import { useLocation } from 'react-router'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 
 type BrowserHistoryIndex = number | null
 
@@ -17,9 +17,43 @@ function historyIndex(state: unknown): BrowserHistoryIndex {
   return typeof index === 'number' && Number.isInteger(index) ? index : null
 }
 
-/** 攔截 #451 分區與規劃表單的離頁操作，保留使用者尚未儲存的內容。 */
-export function useUnsavedNavigationGuard(hasUnsavedChanges: boolean): void {
+/** 站內連結被攔下、等使用者決定時的狀態與兩個出口。 */
+export interface UnsavedNavigationGuard {
+  /** 有連結被攔下時為 true；頁面此時要顯示 `UnsavedLeaveBox`。 */
+  pending: boolean
+  /** 「保留編輯」：留在原頁，連結不執行。 */
+  stay: () => void
+  /** 「捨棄變更」：放行剛才被攔下的連結。 */
+  leave: () => void
+}
+
+interface PendingLink {
+  anchor: HTMLAnchorElement
+  href: string
+  locationKey: string
+}
+
+/**
+ * 攔截 #451 分區與規劃表單的離頁操作，保留使用者尚未儲存的內容。
+ *
+ * 三種離開方式的確認方式不同（ADM-R28）：
+ * - 站內連結：在頁內顯示確認框（回傳值交給 `UnsavedLeaveBox`），
+ *   與其他表單的未儲存確認一致（ADM-R15、ADM-R38）。
+ * - 上一頁／下一頁：BrowserRouter 沒有 data router 的 `useBlocker`，
+ *   popstate 發生時瀏覽器游標已經移動，無法可靠改成頁內確認，
+ *   只能維持原生確認並在取消時把游標移回來。
+ * - 重新整理或關閉分頁：瀏覽器只允許原生提示。
+ * 只有 hash 不同的連結不算離開（同頁錨點不會丟掉表單內容）。
+ */
+export function useUnsavedNavigationGuard(
+  hasUnsavedChanges: boolean,
+): UnsavedNavigationGuard {
   const location = useLocation()
+  const navigate = useNavigate()
+  const [pendingLink, setPendingLink] = useState<PendingLink | null>(null)
+  // 放行時重新點一次同一個連結，Router 的 Link 才會帶著原本的 state 導頁；
+  // 這一次點擊不能再被自己攔下。
+  const bypassNextClick = useRef(false)
   const currentEntry = useRef<GuardedRouteEntry>({
     href: `${location.pathname}${location.search}${location.hash}`,
     state: window.history.state,
@@ -54,6 +88,7 @@ export function useUnsavedNavigationGuard(hasUnsavedChanges: boolean): void {
     }
 
     function interceptLink(event: MouseEvent): void {
+      if (bypassNextClick.current) return
       if (
         event.button !== 0 ||
         event.metaKey ||
@@ -74,18 +109,23 @@ export function useUnsavedNavigationGuard(hasUnsavedChanges: boolean): void {
         return
       }
       const destination = new URL(anchor.href, window.location.href)
+      // 只有 hash 不同是同頁錨點，不會卸載頁面，不算離開（R4）。
       if (
         destination.origin !== window.location.origin ||
         (destination.pathname === location.pathname &&
-          destination.search === location.search &&
-          destination.hash === location.hash)
+          destination.search === location.search)
       ) {
         return
       }
-      if (!hasUnsavedChanges || confirmLeave()) return
+      if (!hasUnsavedChanges) return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
+      setPendingLink({
+        anchor,
+        href: `${destination.pathname}${destination.search}${destination.hash}`,
+        locationKey: location.key,
+      })
     }
 
     function interceptHistory(event: PopStateEvent): void {
@@ -148,5 +188,36 @@ export function useUnsavedNavigationGuard(hasUnsavedChanges: boolean): void {
       window.removeEventListener('popstate', interceptHistory, true)
       document.removeEventListener('click', interceptLink, true)
     }
-  }, [hasUnsavedChanges, location.hash, location.pathname, location.search])
+  }, [
+    hasUnsavedChanges,
+    location.hash,
+    location.key,
+    location.pathname,
+    location.search,
+  ])
+
+  // 內容已存好或頁面已換掉時，舊的待決連結作廢，避免確認框殘留。
+  const pending =
+    hasUnsavedChanges && pendingLink?.locationKey === location.key
+      ? pendingLink
+      : null
+
+  return {
+    pending: pending !== null,
+    stay: () => setPendingLink(null),
+    leave: () => {
+      if (!pending) return
+      setPendingLink(null)
+      if (pending.anchor.isConnected) {
+        bypassNextClick.current = true
+        try {
+          pending.anchor.click()
+        } finally {
+          bypassNextClick.current = false
+        }
+      } else {
+        navigate(pending.href)
+      }
+    },
+  }
 }

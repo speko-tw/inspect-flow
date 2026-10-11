@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
 import { ManagementApiError } from '../api'
-import type { PlanningClient } from './api'
+import type { InspectionTask, PlanningClient } from './api'
 import { createMockPlanningClient } from './api.mock'
 import planNameValidation from './fixtures/name-too-long-422.json'
 import taskAssigneeValidation from './fixtures/task-assignee-validation-422.json'
@@ -698,11 +698,21 @@ describe('planning management page', () => {
       expect(unload.defaultPrevented).toBe(true)
 
       fireEvent.click(screen.getByRole('link', { name: '切換頁面' }))
-      expect(confirm).toHaveBeenCalledWith('有尚未儲存的變更。確定要離開嗎？')
+      const box = await screen.findByRole('group', {
+        name: '有尚未儲存的變更',
+      })
+      expect(confirm).not.toHaveBeenCalled()
       expect(screen.queryByText('已離開計畫頁')).toBeNull()
 
-      confirm.mockReturnValue(true)
+      fireEvent.click(within(box).getByRole('button', { name: '保留編輯' }))
+      expect(screen.getByLabelText(/計畫名稱/)).toHaveValue('尚未儲存的計畫')
+
       fireEvent.click(screen.getByRole('link', { name: '切換頁面' }))
+      fireEvent.click(
+        within(await screen.findByRole('group')).getByRole('button', {
+          name: '捨棄變更',
+        }),
+      )
       expect(await screen.findByText('已離開計畫頁')).toBeVisible()
       confirm.mockRestore()
     })
@@ -1314,5 +1324,315 @@ describe('planning forms guard (#507)', () => {
     expect(unload.defaultPrevented).toBe(true)
     expect(confirm).toHaveBeenCalledTimes(0)
     confirm.mockRestore()
+  })
+
+  describe('dispatch blockers (#451)', () => {
+    const BLOCKERS = '派出前需要處理的項目'
+
+    /** 讓 getPlan 回傳被改過的任務，模擬 API 目前不會產生的舊草稿。 */
+    function reshapeTasks(
+      client: PlanningClient,
+      change: (task: InspectionTask) => InspectionTask,
+    ) {
+      const original = client.getPlan.bind(client)
+      client.getPlan = vi.fn(async (id: string) => {
+        const plan = await original(id)
+        return { ...plan, tasks: (plan.tasks ?? []).map(change) }
+      })
+    }
+
+    /** 任務沒有查核項目時標題是空的，所以改用 article 角色找任務。 */
+    async function openPlanBare(client: PlanningClient) {
+      render(
+        <PlanningPage client={client} initialProjectId="project-demo-1" />,
+      )
+      fireEvent.click(
+        await screen.findByRole('button', { name: /橋梁查核（/ }),
+      )
+      return screen.findByRole('article')
+    }
+
+    async function seededComplete() {
+      const client = createMockPlanningClient()
+      const zone = await client.createZone('project-demo-1', '北區')
+      const plan = await client.createPlan('project-demo-1', {
+        name: '橋梁查核',
+      })
+      const [item] = await client.listProjectItems('project-demo-1')
+      await client.createTask(plan.id, {
+        item_ids: [item.id],
+        suggested_assignee_id: 'project-a-member-1',
+        zone_id: zone.id,
+        location_text: null,
+      })
+      return client
+    }
+
+    it('renders no blocker list when nothing blocks dispatch', async () => {
+      const client = await seededComplete()
+      const article = await openPlan(client)
+
+      expect(
+        within(article).getByRole('button', { name: '派出任務' }),
+      ).toBeEnabled()
+      expect(
+        within(article).queryByRole('list', { name: BLOCKERS }),
+      ).not.toBeInTheDocument()
+      expect(article.querySelector('.task-dispatch-blockers')).toBeNull()
+    })
+
+    it('lists a missing location and jumps to the location field', async () => {
+      const client = await seededComplete()
+      reshapeTasks(client, (task) => ({
+        ...task,
+        zone_id: null,
+        zone: null,
+        location_text: null,
+      }))
+      const article = await openPlan(client)
+
+      const list = within(article).getByRole('list', { name: BLOCKERS })
+      expect(within(list).getByText(/尚未填寫地點/)).toBeVisible()
+      expect(within(article).queryByText(/尚未指派/)).toBeNull()
+      expect(
+        within(article).getByRole('button', { name: '派出任務' }),
+      ).toBeDisabled()
+
+      fireEvent.click(
+        within(list).getByRole('button', { name: '前往地點欄位' }),
+      )
+
+      expect(
+        within(article).getByRole('heading', { name: '修改任務地點' }),
+      ).toBeVisible()
+      expect(within(article).getByLabelText(/分區/)).toHaveFocus()
+    })
+
+    it('lists missing items, says to rebuild, and focuses the item field without a hash jump', async () => {
+      const client = await seededComplete()
+      reshapeTasks(client, (task) => ({ ...task, items: [] }))
+      const article = await openPlanBare(client)
+
+      const list = within(article).getByRole('list', { name: BLOCKERS })
+      expect(within(list).getByText(/尚未選擇查核項目/)).toHaveTextContent(
+        '請刪除這筆草稿後重新建立',
+      )
+      const hashBefore = window.location.hash
+
+      // 先讓表單有未儲存內容；按鈕不是連結，不能被離頁確認攔下。
+      fireEvent.click(screen.getByLabelText(/鋼筋保護層/))
+      fireEvent.click(
+        within(list).getByRole('button', { name: '前往新增任務欄位' }),
+      )
+
+      expect(screen.getByRole('group', { name: /選擇一筆以上/ })).toHaveFocus()
+      expect(window.location.hash).toBe(hashBefore)
+      expect(screen.queryByRole('group', { name: '有尚未儲存的變更' })).toBe(
+        null,
+      )
+      expect(within(list).queryByRole('link')).toBeNull()
+    })
+
+    it('shows reasons but no shortcuts or forms on an archived plan', async () => {
+      const client = await seededComplete()
+      reshapeTasks(client, (task) => ({
+        ...task,
+        assignee_id: null,
+        assignee: null,
+        zone_id: null,
+        zone: null,
+        location_text: null,
+        items: [],
+      }))
+      const [plan] = (await client.listPlans('project-demo-1')).items
+      await client.archivePlan(plan.id)
+      const article = await openPlanBare(client)
+
+      const list = within(article).getByRole('list', { name: BLOCKERS })
+      expect(list).toHaveTextContent('尚未指派')
+      expect(list).toHaveTextContent('尚未填寫地點')
+      expect(list).toHaveTextContent('尚未選擇查核項目')
+      expect(within(list).queryByRole('button')).toBeNull()
+      expect(within(list).queryByRole('link')).toBeNull()
+      expect(screen.queryByRole('heading', { name: '新增任務' })).toBeNull()
+    })
+
+    it('removes shortcuts and open edit forms once a write returns 403', async () => {
+      const { client } = await seeded()
+      client.updateLocation = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      const article = await openPlan(client)
+      expect(
+        within(article).getByRole('button', { name: '前往建議指派欄位' }),
+      ).toBeVisible()
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改地點' }),
+      )
+      fireEvent.click(
+        within(article).getByRole('button', { name: '儲存地點' }),
+      )
+
+      await waitFor(() =>
+        expect(
+          within(article).queryByRole('button', { name: '儲存地點' }),
+        ).toBeNull(),
+      )
+      expect(
+        within(article).queryByRole('button', { name: '前往建議指派欄位' }),
+      ).toBeNull()
+      expect(within(article).getByText(/尚未指派/)).toBeVisible()
+      expect(
+        within(article).queryByRole('button', { name: '修改建議指派' }),
+      ).toBeNull()
+      expect(
+        within(article).queryByRole('heading', { name: '修改任務指派' }),
+      ).toBeNull()
+    })
+
+    it('does not guard against leaving once read-only hides the forms', async () => {
+      const { client } = await seeded()
+      client.updateLocation = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      const article = await openPlan(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改地點' }),
+      )
+      fireEvent.change(within(article).getByLabelText('補充地點'), {
+        target: { value: '東側' },
+      })
+      fireEvent.click(
+        within(article).getByRole('button', { name: '儲存地點' }),
+      )
+      await waitFor(() =>
+        expect(
+          within(article).queryByRole('button', { name: '儲存地點' }),
+        ).toBeNull(),
+      )
+
+      const unload = new Event('beforeunload', {
+        cancelable: true,
+      }) as BeforeUnloadEvent
+      window.dispatchEvent(unload)
+
+      expect(unload.defaultPrevented).toBe(false)
+    })
+  })
+
+  describe('business 422 codes land on their fields (R2)', () => {
+    function businessError(code: string) {
+      return new ManagementApiError(422, code)
+    }
+
+    it.each([
+      ['inspection_task.invalid_zone', /任務分區/, '所選分區不屬於這個專案'],
+      [
+        'inspection_task.invalid_assignee',
+        '建議指派人',
+        '建議指派人不是這個專案的成員',
+      ],
+      [
+        'inspection_task.invalid_location',
+        '補充地點',
+        '補充地點內容不符合規則',
+      ],
+    ])(
+      'maps %s from task creation beside its field and focuses it',
+      async (code, label, message) => {
+        const { client, zone } = await seeded()
+        client.createTask = vi.fn().mockRejectedValue(businessError(code))
+        await openPlan(client)
+        const form = formByContext('task')
+        fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+        fireEvent.change(within(form).getByLabelText(/任務分區/), {
+          target: { value: zone.id },
+        })
+        fireEvent.click(
+          within(form).getByRole('button', { name: '建立草稿任務' }),
+        )
+
+        const field = within(form).getByLabelText(label)
+        expect(await within(form).findByText(new RegExp(message))).toHaveClass(
+          'tpl-field-error',
+        )
+        expect(field).toHaveAttribute('aria-invalid', 'true')
+        await waitFor(() => expect(field).toHaveFocus())
+        expect(within(form).queryByRole('alert')).toBeNull()
+      },
+    )
+
+    it('maps items_required from task creation to the item field', async () => {
+      const { client } = await seeded()
+      client.createTask = vi
+        .fn()
+        .mockRejectedValue(businessError('inspection_task.items_required'))
+      await openPlan(client)
+      const form = formByContext('task')
+      fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+      fireEvent.change(within(form).getByLabelText(/任務分區/), {
+        target: {
+          value: (await client.listProjectZones('project-demo-1'))[0].id,
+        },
+      })
+      fireEvent.click(
+        within(form).getByRole('button', { name: '建立草稿任務' }),
+      )
+
+      const fieldset = within(form).getByRole('group', {
+        name: /選擇一筆以上/,
+      })
+      await waitFor(() => expect(fieldset).toHaveFocus())
+      expect(fieldset).toHaveAttribute('aria-invalid', 'true')
+      expect(within(form).queryByRole('alert')).toBeNull()
+    })
+
+    it.each([
+      ['inspection_task.invalid_zone', /分區/],
+      ['inspection_task.invalid_location', '補充地點'],
+    ] as const)(
+      'maps %s from a location edit beside its field and focuses it',
+      async (code, label) => {
+        const { client } = await seeded()
+        client.updateLocation = vi.fn().mockRejectedValue(businessError(code))
+        const article = await openPlan(client)
+        fireEvent.click(
+          within(article).getByRole('button', { name: '修改地點' }),
+        )
+        const form = formByContext('location')
+        fireEvent.click(within(form).getByRole('button', { name: '儲存地點' }))
+
+        const field = within(form).getByLabelText(label)
+        await waitFor(() =>
+          expect(field).toHaveAttribute('aria-invalid', 'true'),
+        )
+        await waitFor(() => expect(field).toHaveFocus())
+        expect(within(form).queryByRole('alert')).toBeNull()
+      },
+    )
+
+    it('maps invalid_assignee from an assignee edit beside the selector', async () => {
+      const { client } = await seeded()
+      client.setSuggestedAssignee = vi
+        .fn()
+        .mockRejectedValue(businessError('inspection_task.invalid_assignee'))
+      const article = await openPlan(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改建議指派' }),
+      )
+      const form = formByContext('assignee')
+      fireEvent.change(within(form).getByLabelText('建議指派人'), {
+        target: { value: 'project-a-member-1' },
+      })
+      fireEvent.click(within(form).getByRole('button', { name: '儲存指派' }))
+
+      const selector = within(form).getByLabelText('建議指派人')
+      expect(
+        await within(form).findByText(/建議指派人不是這個專案的成員/),
+      ).toHaveClass('tpl-field-error')
+      expect(selector).toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(selector).toHaveFocus())
+      expect(within(form).queryByRole('alert')).toBeNull()
+    })
   })
 })
