@@ -2033,6 +2033,8 @@ a.app-header-tab[aria-current='page'] {
  * ---- 觸控目標：窄螢幕一律 >= 44px（放在檔尾，蓋過前面各元件的較小值）----
  * 頂端導覽分頁（.app-header-tab）與返回連結（.back-link）已在各自的規則裡
  * 不分寬度固定 44px，不重複列在這裡。
+ * `summary`（可展開區塊的標題）涵蓋範本檢查點卡片與稽核紀錄的
+ * 「查看改前與改後內容」，兩者原本只有文字高度（F-O07）。
  */
 
 @media (max-width: 40rem) {
@@ -2043,8 +2045,14 @@ a.app-header-tab[aria-current='page'] {
   td button,
   .app-header-account button,
   .tpl-tree-row,
-  .tpl-detail-list button {
+  .tpl-detail-list button,
+  summary {
     min-height: var(--touch-target);
+  }
+
+  /* 點擊區是整個 summary；範本檢查點卡片的 summary 是 flex，內容垂直置中。 */
+  .tpl-point-card summary {
+    align-content: center;
   }
 
   /* 核取方塊與選項按鈕本身很小，點擊區是整個 label。 */

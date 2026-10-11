@@ -21,6 +21,12 @@ export default function CompaniesPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [error, setError] = useState('')
+  // 新增或改名的存檔錯誤：顯示在表單裡並聚焦。表單在頁面底部，放在頁頂
+  // 的話使用者看不到，螢幕閱讀器也不會被帶過去（F-O02）。
+  const [formError, setFormError] = useState<{
+    message: string
+    request: number
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
@@ -158,6 +164,7 @@ export default function CompaniesPage() {
     event.preventDefault()
     setSaving(true)
     setError('')
+    setFormError(null)
     try {
       if (renamingId) {
         await renameCompany(renamingId, renameValue)
@@ -169,7 +176,10 @@ export default function CompaniesPage() {
       }
       await reload()
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      setFormError((previous) => ({
+        message: managementErrorMessage(caught),
+        request: (previous?.request ?? 0) + 1,
+      }))
     } finally {
       setSaving(false)
     }
@@ -312,6 +322,7 @@ export default function CompaniesPage() {
                 <td>
                   <button
                     onClick={() => {
+                      setFormError(null)
                       setRenamingId(company.id)
                       setRenameValue(company.name)
                     }}
@@ -344,7 +355,13 @@ export default function CompaniesPage() {
           {loadingMore ? '載入中…' : '載入更多'}
         </button>
       )}
-      <Form guard={saveGuard} onSubmit={save}>
+      <Form
+        error={formError?.message}
+        errorFocusRequest={formError?.request}
+        errorTabIndex={-1}
+        guard={saveGuard}
+        onSubmit={save}
+      >
         <h2>{renamingId ? '修改公司名稱' : '新增公司'}</h2>
         <label>
           公司名稱
@@ -361,6 +378,7 @@ export default function CompaniesPage() {
         {renamingId && (
           <button
             onClick={() => {
+              setFormError(null)
               setRenamingId(null)
               setRenameValue('')
             }}

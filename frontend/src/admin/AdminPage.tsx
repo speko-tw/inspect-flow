@@ -14,6 +14,7 @@ import type { CurrentUser } from '../auth/api'
 import { landingLabel, landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
+import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
@@ -244,49 +245,55 @@ function AdminPageContent() {
                 </AdminRouteSuspense>
               }
             />
-            <Route path="projects/:projectId" element={<ProjectHomePage />} />
-            <Route
-              path="projects/:projectId/members"
-              element={<ProjectSectionPage section="members" />}
-            />
-            <Route
-              path="projects/:projectId/inspection-items"
-              element={<ProjectSectionPage section="inspection-items" />}
-            />
-            <Route
-              path="projects/:projectId/zones"
-              element={<ProjectSectionPage section="zones" />}
-            />
-            <Route
-              path="projects/:projectId/inspection-items/templates"
-              element={<ProjectTemplatesRoute />}
-            />
-            <Route
-              path="projects/:projectId/templates"
-              element={<ProjectTemplatesRedirect />}
-            />
-            <Route
-              path="projects/:projectId/planning"
-              element={
-                <ProjectSectionPage section="planning">
-                  <ProjectPlanningRoute />
-                </ProjectSectionPage>
-              }
-            />
-            <Route
-              path="projects/:projectId/progress"
-              element={<ProjectSectionPage section="progress" />}
-            />
-            <Route
-              path="projects/:projectId/inspection-items/:itemId"
-              element={
-                <ProjectSectionPage section="inspection-items">
-                  <AdminRouteSuspense>
-                    <ProjectItemChangePage api={projectItemApi} />
-                  </AdminRouteSuspense>
-                </ProjectSectionPage>
-              }
-            />
+            {/* 專案與查核項目的路由參數先驗格式，見 RequireValidRouteIds。 */}
+            <Route element={<RequireValidRouteIds />}>
+              <Route
+                path="projects/:projectId"
+                element={<ProjectHomePage />}
+              />
+              <Route
+                path="projects/:projectId/members"
+                element={<ProjectSectionPage section="members" />}
+              />
+              <Route
+                path="projects/:projectId/inspection-items"
+                element={<ProjectSectionPage section="inspection-items" />}
+              />
+              <Route
+                path="projects/:projectId/zones"
+                element={<ProjectSectionPage section="zones" />}
+              />
+              <Route
+                path="projects/:projectId/inspection-items/templates"
+                element={<ProjectTemplatesRoute />}
+              />
+              <Route
+                path="projects/:projectId/templates"
+                element={<ProjectTemplatesRedirect />}
+              />
+              <Route
+                path="projects/:projectId/planning"
+                element={
+                  <ProjectSectionPage section="planning">
+                    <ProjectPlanningRoute />
+                  </ProjectSectionPage>
+                }
+              />
+              <Route
+                path="projects/:projectId/progress"
+                element={<ProjectSectionPage section="progress" />}
+              />
+              <Route
+                path="projects/:projectId/inspection-items/:itemId"
+                element={
+                  <ProjectSectionPage section="inspection-items">
+                    <AdminRouteSuspense>
+                      <ProjectItemChangePage api={projectItemApi} />
+                    </AdminRouteSuspense>
+                  </ProjectSectionPage>
+                }
+              />
+            </Route>
             <Route
               path="templates"
               element={
@@ -318,7 +325,7 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     (!user.has_template_access &&
       /^\/admin\/templates(?:\/|$)/.test(location.pathname))
   const projectRoutes = (
-    <>
+    <Route element={<RequireValidRouteIds />}>
       <Route element={<ProjectHomePage />} path="projects/:projectId" />
       <Route
         element={<ProjectTemplatesRoute />}
@@ -362,7 +369,7 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
         }
         path="projects/:projectId/inspection-items/:itemId"
       />
-    </>
+    </Route>
   )
   return (
     <div className="app-shell">

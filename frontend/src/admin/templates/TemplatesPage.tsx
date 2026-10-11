@@ -44,6 +44,10 @@ import {
 } from './api'
 
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
+// 「尚未儲存的變更」確認框的待辦：使用者選「捨棄變更」才執行 `proceed`。
+// 為什麼不只存 Selection：離開編輯的路徑不只換選取項目（例如左側
+// 「新增工程類別」要切到新增表單），都必須先過這道確認（TPL-AC16）。
+type Guard = { key: string; proceed: () => void }
 type FocusRequest = { id: number; key: string }
 type Mode =
   | 'view'
@@ -195,7 +199,7 @@ export default function TemplatesPage() {
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(max-width: 40rem)').matches,
   )
-  const [guard, setGuard] = useState<Selection | null>(null)
+  const [guard, setGuard] = useState<Guard | null>(null)
   const [confirmField, setConfirmField] = useState('')
   // 儲存與刪除共用一道防護：送出中不接受第二次送出（#507）。
   const submitGuard = useSubmitGuard()
@@ -374,7 +378,7 @@ export default function TemplatesPage() {
     setNotice('')
     setError('')
     if (dirty) {
-      setGuard(next)
+      setGuard(selectionGuard(next))
       // 手機一次只顯示一個窗格；確認框在詳情窗格，要切過去才看得到。
       setMobilePane('detail')
       return
@@ -385,6 +389,35 @@ export default function TemplatesPage() {
     if (next.type !== 'item') {
       setExpanded((current) => new Set([...current, next.id]))
     }
+  }
+
+  function selectionGuard(next: Selection): Guard {
+    return {
+      key: `${next.type}:${next.id}`,
+      proceed: () => {
+        resetMode()
+        setSelected(next)
+        setMobilePane('detail')
+      },
+    }
+  }
+
+  // 左側「新增工程類別」：編輯中先走確認，不得直接丟掉未儲存的內容。
+  function addCategory(): void {
+    if (dirty) {
+      setNotice('')
+      setError('')
+      setGuard({
+        key: 'create-category',
+        proceed: () => {
+          resetMode()
+          beginName('create-category')
+        },
+      })
+      setMobilePane('detail')
+      return
+    }
+    beginName('create-category')
   }
 
   function beginName(nextMode: Mode, initial = ''): void {
@@ -1004,7 +1037,7 @@ export default function TemplatesPage() {
         selectedCategory={selectedCategory}
         selectedSystem={selectedSystem}
         setConfirmField={setConfirmField}
-        setGuard={setGuard}
+        setGuard={(next) => setGuard(next ? selectionGuard(next) : null)}
         setPhotoDraft={setPhotoDraft}
         clearPointServerErrors={clearPointServerErrors}
         systemId={systemId}
@@ -1027,17 +1060,15 @@ export default function TemplatesPage() {
     if (guard) {
       return (
         <ConfirmBox
-          key={`${guard.type}:${guard.id}`}
+          key={guard.key}
           cancelLabel="保留編輯"
           confirmLabel="捨棄變更"
           label="尚未儲存的變更"
           onCancel={() => setGuard(null)}
           onConfirm={() => {
-            const next = guard
+            const pending = guard
             setGuard(null)
-            resetMode()
-            setSelected(next)
-            setMobilePane('detail')
+            pending.proceed()
           }}
           role="alertdialog"
           variant="danger"
@@ -1333,7 +1364,7 @@ export default function TemplatesPage() {
               loadedCategoryIds={loadedCategoryIds}
               loadedSystemIds={loadedSystemIds}
               mobile={isMobile}
-              onAddCategory={() => beginName('create-category')}
+              onAddCategory={addCategory}
               onSelect={navigate}
               onToggle={(id) =>
                 setExpanded((current) => {
