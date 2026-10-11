@@ -1324,7 +1324,7 @@ describe('admin user and company pages', () => {
     ).toBe(true)
   })
 
-  it('opens template apply bypass for a non-member template manager', async () => {
+  it('opens template bypass for a non-member manager', async () => {
     managementFetch()
     renderAdmin(
       '/admin/projects/project-demo-1/inspection-items/templates',
@@ -1341,7 +1341,7 @@ describe('admin user and company pages', () => {
     )
   })
 
-  it('does not let a field-only template manager bypass member permissions', async () => {
+  it('blocks field-only manager bypass for project members', async () => {
     const fetchMock = managementFetch({
       memberProjectIds: ['project-demo-1'],
       viewerPermissionCodes: ['inspection_task.inspect'],

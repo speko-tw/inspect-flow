@@ -538,6 +538,7 @@ describe('專案範本套用與存為範本（#429）', () => {
 
     const loadError = await screen.findByText(/伺服器暫時無法處理/)
     expect(loadError.closest('[role="alert"]')).not.toBeNull()
+    expect(loadError.closest('.tpl-list-pane')).toBeNull()
     const apply = screen.getByRole('button', { name: '套用至專案' })
     expect(apply).toBeDisabled()
     const retry = screen.getByRole('button', {
@@ -553,9 +554,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     ).toHaveLength(2)
   })
 
-  it('409 後重新載入失敗時停用套用並提供重試', async () => {
+  it('409 後載入失敗可於頁級重試並更新套用狀態', async () => {
     const calls = mockApi({
       templates: [TEMPLATE],
+      projectItemsAfterApplyConflict: [PROJECT_ITEM],
       failProjectItemsOnRequest: 2,
       applyResponse: Response.json(
         {
@@ -574,6 +576,7 @@ describe('專案範本套用與存為範本（#429）', () => {
 
     const loadError = await screen.findByText(/伺服器暫時無法處理/)
     expect(loadError.closest('[role="alert"]')).not.toBeNull()
+    expect(loadError.closest('.tpl-list-pane')).toBeNull()
     const apply = screen.getByRole('button', { name: '套用至專案' })
     expect(apply).toBeDisabled()
     const retry = screen.getByRole('button', {
@@ -581,7 +584,11 @@ describe('專案範本套用與存為範本（#429）', () => {
     })
     fireEvent.click(retry)
 
-    await waitFor(() => expect(apply).toBeEnabled())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('radio', { name: '單一項目：管線查核' }),
+      ).toBeDisabled(),
+    )
     expect(
       calls.mock.calls.filter(([url]) =>
         String(url).endsWith('/inspection-items?limit=100'),

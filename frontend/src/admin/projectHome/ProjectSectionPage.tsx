@@ -31,9 +31,7 @@ export default function ProjectSectionPage({
   children,
 }: {
   section: Exclude<ProjectSection, 'home'>
-  children?:
-    | ReactNode
-    | ((viewerPermissions: string[], canViewIndoor: boolean) => ReactNode)
+  children?: ReactNode | ((viewerPermissions: string[]) => ReactNode)
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -101,7 +99,7 @@ export default function ProjectSectionPage({
 
   const childContent =
     typeof children === 'function'
-      ? children(currentResult.viewerPermissions, currentResult.canViewIndoor)
+      ? children(currentResult.viewerPermissions)
       : children
   let content = childContent ?? <p>正在確認專案權限…</p>
   if (!children && currentResult.canViewIndoor) {

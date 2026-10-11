@@ -612,6 +612,23 @@ export default function ProjectTemplatesPage({
         </p>
       )}
       {error && <p role="alert">{error}</p>}
+      {/* TPL-AC21：手機會隱藏清單窗格，載入錯誤須留在頁級可見。 */}
+      {currentItemsLoadError && (
+        <div className="notice-error" role="alert">
+          <p>{currentItemsLoadError}</p>
+          <button
+            onClick={() => {
+              setItemsLoadProjectId(null)
+              setItemsLoadError(null)
+              setItemsDenied(false)
+              setItemsReloadKey((key) => key + 1)
+            }}
+            type="button"
+          >
+            重新載入專案項目
+          </button>
+        </div>
+      )}
       {notice && (
         <p className="notice-success" role="status">
           {notice}
@@ -624,22 +641,6 @@ export default function ProjectTemplatesPage({
             <section className="tpl-nav tpl-project-items">
               <h2>專案查核項目</h2>
               {itemsLoading && <p>載入中…</p>}
-              {currentItemsLoadError && (
-                <div className="notice-error" role="alert">
-                  <p>{currentItemsLoadError}</p>
-                  <button
-                    onClick={() => {
-                      setItemsLoadProjectId(null)
-                      setItemsLoadError(null)
-                      setItemsDenied(false)
-                      setItemsReloadKey((key) => key + 1)
-                    }}
-                    type="button"
-                  >
-                    重新載入專案項目
-                  </button>
-                </div>
-              )}
               {showEmptyProjectItems && <p>目前沒有查核項目。</p>}
               <ul>
                 {projectItems.map((item) => (
