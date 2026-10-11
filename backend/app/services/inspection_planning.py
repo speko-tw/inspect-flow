@@ -421,7 +421,7 @@ def _lock_project_items_for_snapshot(
     Item edits lock the source item before its Plans. Keep the same lock
     order here to serialize snapshot copying without a Plan/item deadlock.
     """
-    from app.models import ProjectInspectionItem
+    from app.models import ProjectInspectionItem, ProjectInspectionPoint
 
     unique_ids = list(dict.fromkeys(item_ids))
     if not unique_ids:
@@ -438,6 +438,18 @@ def _lock_project_items_for_snapshot(
     ).all()
     if {source.id for source in sources} != set(unique_ids):
         raise PlanningError("inspection_task.invalid_project_item")
+    source_ids_with_points = set(
+        session.scalars(
+            select(ProjectInspectionPoint.project_inspection_item_id).where(
+                ProjectInspectionPoint.project_inspection_item_id.in_(
+                    unique_ids
+                )
+            )
+        ).all()
+    )
+    # IP-R14：先鎖住來源項目再查點位，避免與項目 PATCH 並行時建立空快照。
+    if source_ids_with_points != set(unique_ids):
+        raise PlanningError("inspection_task.item_without_points")
     return unique_ids
 
 

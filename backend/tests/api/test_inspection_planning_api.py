@@ -14,6 +14,7 @@ from app.db.base import uuid7
 from app.db.clock import reset_clock, set_clock
 from app.db.engine import get_engine
 from app.models import (
+    AuditLog,
     InspectionTask,
     Project,
     ProjectEvidenceRequirement,
@@ -153,6 +154,7 @@ def _planning_world(db_session, make_client):
         role_assignments=[ProjectMemberRole(role_id=manager_role.id)],
     )
     item = ProjectInspectionItem(
+        id=uuid7(),
         project_id=project.id,
         sequence=1,
         title="表面檢查",
@@ -163,12 +165,30 @@ def _planning_world(db_session, make_client):
         updated_by=admin.id,
     )
     item_two = ProjectInspectionItem(
+        id=uuid7(),
         project_id=project.id,
         sequence=2,
         title="鋼筋檢查",
         instruction="確認鋼筋間距",
         source_template_name="示範範本",
         applied_at=admin.created_at,
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    # IP-R14：一般規劃案例使用可建立 Task 的有效來源項目。
+    item_point = ProjectInspectionPoint(
+        project_inspection_item_id=item.id,
+        sequence=1,
+        title="檢查點",
+        instruction="確認項目狀況",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    item_two_point = ProjectInspectionPoint(
+        project_inspection_item_id=item_two.id,
+        sequence=1,
+        title="檢查點",
+        instruction="確認項目狀況",
         created_by=admin.id,
         updated_by=admin.id,
     )
@@ -182,6 +202,8 @@ def _planning_world(db_session, make_client):
             manager_member,
             item,
             item_two,
+            item_point,
+            item_two_point,
         ]
     )
     db_session.commit()
@@ -457,6 +479,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     assert plan.status_code == 201, plan.text
     plan_id = plan.json()["id"]
     second_item = ProjectInspectionItem(
+        id=uuid7(),
         project_id=project.id,
         sequence=2,
         title="第二查核項目",
@@ -467,7 +490,16 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         created_by=world["admin_user"].id,
         updated_by=world["admin_user"].id,
     )
-    db_session.add(second_item)
+    # IP-R14：此列表案例要涵蓋有效的第二項目與外部任務。
+    second_item_point = ProjectInspectionPoint(
+        project_inspection_item_id=second_item.id,
+        sequence=1,
+        title="檢查點",
+        instruction="確認項目狀況",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add_all([second_item, second_item_point])
     db_session.commit()
 
     foreign_project = Project(
@@ -481,6 +513,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     db_session.add(foreign_project)
     db_session.flush()
     foreign_item = ProjectInspectionItem(
+        id=uuid7(),
         project_id=foreign_project.id,
         sequence=1,
         title="未授權查核項目",
@@ -490,7 +523,16 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         created_by=world["admin_user"].id,
         updated_by=world["admin_user"].id,
     )
-    db_session.add(foreign_item)
+    # IP-R14：外部任務須有有效點位，才能測試專案邊界而非建立驗證。
+    foreign_item_point = ProjectInspectionPoint(
+        project_inspection_item_id=foreign_item.id,
+        sequence=1,
+        title="檢查點",
+        instruction="確認項目狀況",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add_all([foreign_item, foreign_item_point])
     db_session.commit()
     foreign_plan = admin.post(
         f"/api/v1/projects/{foreign_project.id}/inspection-plans",
@@ -2400,6 +2442,7 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
         updated_by=world["admin_user"].id,
     )
     foreign_item = ProjectInspectionItem(
+        id=uuid7(),
         project_id=foreign.id,
         sequence=1,
         title="外部項目",
@@ -2409,7 +2452,16 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
         created_by=world["admin_user"].id,
         updated_by=world["admin_user"].id,
     )
-    db_session.add_all([foreign_zone, foreign_item])
+    # IP-R14：外部任務須有有效點位，才能測試專案邊界而非建立驗證。
+    foreign_item_point = ProjectInspectionPoint(
+        project_inspection_item_id=foreign_item.id,
+        sequence=1,
+        title="檢查點",
+        instruction="確認項目狀況",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add_all([foreign_zone, foreign_item, foreign_item_point])
     db_session.add(
         ProjectMember(
             project_id=foreign.id,
@@ -2911,6 +2963,72 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     assert world["item_two"].standard_revision == before_revision
     stored_task = db_session.get(InspectionTask, UUID(draft_task.json()["id"]))
     assert stored_task is not None and stored_task.status == "DRAFT"
+
+
+def test_task_creation_rejects_items_without_points_atomically(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project = world["project"]
+    empty_item = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=3,
+        title="沒有點位",
+        instruction="尚未設定檢查內容",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(empty_item)
+    db_session.commit()
+    plan = admin.post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "零點位拒絕"},
+    )
+    assert plan.status_code == 201, plan.text
+    create_url = f"/api/v1/inspection-plans/{plan.json()['id']}/tasks"
+    audit_count = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.project_id == project.id)
+    )
+
+    single_item = admin.post(
+        create_url, json={"item_ids": [str(empty_item.id)]}
+    )
+    assert single_item.status_code == 422, single_item.text
+    assert single_item.json()["error"]["code"] == (
+        "inspection_task.item_without_points"
+    )
+
+    mixed_items = admin.post(
+        create_url,
+        json={
+            "item_ids": [str(world["item"].id), str(empty_item.id)],
+        },
+    )
+    assert mixed_items.status_code == 422, mixed_items.text
+    assert mixed_items.json()["error"]["code"] == (
+        "inspection_task.item_without_points"
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(InspectionTask)
+            .where(InspectionTask.project_id == project.id)
+        )
+        == 0
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.project_id == project.id)
+        )
+        == audit_count
+    )
 
 
 def test_cancelled_task_restore_uses_current_item_standard(

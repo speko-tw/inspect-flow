@@ -216,6 +216,10 @@ class ErrorCode(DescribedStrEnum):
         "inspection_task.items_required",
         "At least one project inspection item is required.",
     )
+    INSPECTION_TASK_ITEM_WITHOUT_POINTS = (
+        "inspection_task.item_without_points",
+        "A selected project inspection item has no inspection points.",
+    )
     INSPECTION_TASK_INVALID_ITEM = (
         "inspection_task.invalid_project_item",
         "A selected item does not belong to this project.",
