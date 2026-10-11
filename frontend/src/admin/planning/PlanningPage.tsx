@@ -69,12 +69,15 @@ const TASK_CANCEL_BINDINGS: FieldErrorBinding[] = [
 ]
 
 // 任務的業務 422（沒有 fields 清單、只有專用錯誤碼）也要落在對應欄位旁並
-// 聚焦（ADM-R28）；各表單的欄位不同，所以每個表單各一張表。
+// 聚焦（ADM-R28）；IP-AC15 的零點位項目錯誤也屬於查核項目欄位。
+// 各表單欄位不同，所以每個表單各一張表。
 const TASK_CODE_MESSAGES: Record<string, string> = {
   'inspection_task.invalid_zone': '所選分區不屬於這個專案，請重新選擇。',
   'inspection_task.invalid_assignee':
     '建議指派人不是這個專案的成員，請重新選擇。',
   'inspection_task.items_required': '請至少選擇一筆查核項目。',
+  'inspection_task.item_without_points':
+    '查核項目沒有查核點，請重新整理後選擇有效項目。',
   'inspection_task.invalid_project_item':
     '所選查核項目不屬於這個專案，請重新整理後再選。',
   'inspection_task.invalid_location': '補充地點內容不符合規則，請修改後再試。',
@@ -83,6 +86,7 @@ const TASK_CREATE_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.invalid_zone': 'task-zone',
   'inspection_task.invalid_assignee': 'task-assignee',
   'inspection_task.items_required': 'task-items',
+  'inspection_task.item_without_points': 'task-items',
   'inspection_task.invalid_project_item': 'task-items',
   'inspection_task.invalid_location': 'task-location',
 }

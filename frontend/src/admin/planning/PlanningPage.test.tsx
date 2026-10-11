@@ -1667,6 +1667,40 @@ describe('planning forms guard (#507)', () => {
       expect(within(form).queryByRole('alert')).toBeNull()
     })
 
+    it(
+      [
+        'maps item_without_points from task creation ',
+        'to the item field',
+      ].join(''),
+      async () => {
+        const { client, zone } = await seeded()
+        client.createTask = vi
+          .fn()
+          .mockRejectedValue(
+            businessError('inspection_task.item_without_points'),
+          )
+        await openPlan(client)
+        const form = formByContext('task')
+        fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+        fireEvent.change(within(form).getByLabelText(/任務分區/), {
+          target: { value: zone.id },
+        })
+        fireEvent.click(
+          within(form).getByRole('button', { name: '建立草稿任務' }),
+        )
+
+        const fieldset = within(form).getByRole('group', {
+          name: /選擇一筆以上/,
+        })
+        expect(
+          await within(form).findByText(/查核項目沒有查核點/),
+        ).toHaveClass('tpl-field-error')
+        expect(fieldset).toHaveAttribute('aria-invalid', 'true')
+        await waitFor(() => expect(fieldset).toHaveFocus())
+        expect(within(form).queryByRole('alert')).toBeNull()
+      },
+    )
+
     it.each([
       ['inspection_task.invalid_zone', /分區/],
       ['inspection_task.invalid_location', '補充地點'],
