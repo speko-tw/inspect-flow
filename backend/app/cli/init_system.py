@@ -13,6 +13,7 @@ from app.db.base import uuid7
 from app.db.engine import get_session_factory
 from app.db.unit_of_work import unit_of_work
 from app.models import User, UserPassword
+from app.services.default_permissions import ensure_default_permissions
 from app.services.setup_codes import issue_setup_code
 
 Output = Callable[[str], None]
@@ -23,7 +24,11 @@ class AlreadyInitializedError(RuntimeError):
 
 
 def initialize_system(session: Session) -> tuple[User, str]:
-    """Create system rows once, or issue a replacement setup code."""
+    """建立系統資料，或簽發新的首次登入代碼。
+
+    DOM-R68 角色與權限組合和第一位管理員在同一交易內建立，避免初始化失敗
+    時留下不完整的系統資料。
+    """
     if session.get_bind().dialect.name == "sqlite":
         # SQLite ignores SELECT FOR UPDATE. Take its database writer
         # reservation before reading so concurrent initializers cannot
@@ -44,6 +49,7 @@ def initialize_system(session: Session) -> tuple[User, str]:
             is not None
         ):
             raise AlreadyInitializedError("System is already initialized.")
+        ensure_default_permissions(session, actor_id=admin.id)
         return admin, issue_setup_code(session, admin)
 
     admin_id = uuid7()
@@ -65,6 +71,8 @@ def initialize_system(session: Session) -> tuple[User, str]:
     )
     session.add(admin)
     session.flush()
+
+    ensure_default_permissions(session, actor_id=admin.id)
 
     return admin, issue_setup_code(session, admin)
 
