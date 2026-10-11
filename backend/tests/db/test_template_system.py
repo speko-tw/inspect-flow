@@ -1,12 +1,15 @@
 """Database acceptance for template-system T1 and DBF-AC12/13."""
 
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Barrier, Event
+from time import monotonic, sleep
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import JSON, Engine, func, inspect, select
+from sqlalchemy import JSON, Engine, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +36,7 @@ from app.models import (
     User,
 )
 from app.services import system_roles
+from app.services import users as user_services
 from app.services.audit import AuditLog
 from tests.db.conftest import create_root_user_with_company
 
@@ -528,7 +532,152 @@ def test_tpl_ac08_system_role_assignment_and_audit_share_transaction(
         "role_code": "template_admin",
     }
     assert deleted_event.after is None
+
+
+def test_template_admin_and_external_flag_updates_serialize_on_user_row(
+    engine: Engine,
+    session: Session,
+    creator: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if engine.dialect.name != "postgresql":
+        pytest.skip("PostgreSQL row locks are required")
+
+    creator.is_admin = True
+    creator_id = creator.id
+    target = create_root_user_with_company(session, "TMP326")
+    target_id = target.id
     session.commit()
+    monkeypatch.setattr(
+        system_roles,
+        "get_current_operator",
+        lambda worker_session: worker_session.get(User, creator_id),
+    )
+    monkeypatch.setattr(
+        user_services,
+        "get_current_operator",
+        lambda worker_session: worker_session.get(User, creator_id),
+    )
+    monkeypatch.setattr(
+        "app.services.audit.get_current_operator",
+        lambda worker_session: worker_session.get(User, creator_id),
+    )
+    barrier = Barrier(2)
+    release_winner = Event()
+    winner_finished_operation = Event()
+    backend_pids: dict[str, int] = {}
+    successful_pids: list[int] = []
+
+    def assign_role() -> tuple[str, int]:
+        with Session(engine) as worker_session:
+            worker_pid = -1
+            try:
+                with worker_session.begin():
+                    backend_pid = worker_session.scalar(
+                        select(func.pg_backend_pid())
+                    )
+                    assert backend_pid is not None
+                    worker_pid = backend_pid
+                    backend_pids["assign"] = worker_pid
+                    barrier.wait(timeout=10)
+                    system_roles.assign_system_role(
+                        worker_session,
+                        target_id,
+                        SystemRoleCode.TEMPLATE_ADMIN,
+                    )
+                    successful_pids.append(worker_pid)
+                    winner_finished_operation.set()
+                    assert release_winner.wait(timeout=20)
+                return "assigned", worker_pid
+            except system_roles.ExternalUserSystemRoleError:
+                worker_session.rollback()
+                return "role_rejected", worker_pid
+
+    def enable_external() -> tuple[str, int]:
+        with Session(engine) as worker_session:
+            worker_pid = -1
+            try:
+                with worker_session.begin():
+                    backend_pid = worker_session.scalar(
+                        select(func.pg_backend_pid())
+                    )
+                    assert backend_pid is not None
+                    worker_pid = backend_pid
+                    backend_pids["external"] = worker_pid
+                    worker = worker_session.get(User, target_id)
+                    assert worker is not None
+                    barrier.wait(timeout=10)
+                    user_services.set_external_collaborator(
+                        worker_session, worker, True
+                    )
+                    successful_pids.append(worker_pid)
+                    winner_finished_operation.set()
+                    assert release_winner.wait(timeout=20)
+                return "external_enabled", worker_pid
+            except user_services.ExternalFlagChangeError:
+                worker_session.rollback()
+                return "external_rejected", worker_pid
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assign_future = pool.submit(assign_role)
+        external_future = pool.submit(enable_external)
+        if not winner_finished_operation.wait(timeout=10):
+            release_winner.set()
+            raise AssertionError(
+                "neither operation acquired the User row lock"
+            )
+        winner_pid = successful_pids[0]
+        loser_pid = next(
+            pid for pid in backend_pids.values() if pid != winner_pid
+        )
+        try:
+            deadline = monotonic() + 10
+            blocked_by_winner = False
+            while monotonic() < deadline:
+                with Session(engine) as monitor_session:
+                    activity = monitor_session.execute(
+                        text(
+                            "SELECT wait_event_type, pg_blocking_pids(pid) "
+                            "FROM pg_stat_activity WHERE pid = :pid"
+                        ),
+                        {"pid": loser_pid},
+                    ).one_or_none()
+                if (
+                    activity is not None
+                    and activity.wait_event_type == "Lock"
+                    and winner_pid in activity.pg_blocking_pids
+                ):
+                    blocked_by_winner = True
+                    release_winner.set()
+                    break
+                sleep(0.05)
+            assert blocked_by_winner
+        finally:
+            release_winner.set()
+        outcomes = {
+            assign_future.result(timeout=20)[0],
+            external_future.result(timeout=20)[0],
+        }
+
+    assert outcomes in (
+        {"assigned", "external_rejected"},
+        {"role_rejected", "external_enabled"},
+    )
+    with Session(engine) as verify_session:
+        persisted_user = verify_session.get(User, target_id)
+        assert persisted_user is not None
+        has_template_admin = (
+            verify_session.scalar(
+                select(SystemRoleAssignment.id).where(
+                    SystemRoleAssignment.user_id == target_id,
+                    SystemRoleAssignment.role_code == "template_admin",
+                )
+            )
+            is not None
+        )
+        assert not (
+            persisted_user.is_external_collaborator and has_template_admin
+        )
 
 
 def test_dbf_ac12_schema_shape(
