@@ -644,6 +644,33 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
     ).toBe(true)
   })
 
+  it('收回後沒有現場權限：落點依存取摘要選，不固定到 /field', async () => {
+    const backend = stubBackend(ADMIN)
+    const original = backend.fetchMock.getMockImplementation()!
+    backend.fetchMock.mockImplementation(async (input, init) => {
+      const response = await original(input, init)
+      // 收回後這個帳號只剩內業權限，落點應是我的專案（F-O04）。
+      if (String(input).endsWith(`/users/${ADMIN.id}/admin`)) {
+        backend.me = { ...OFFICE }
+      }
+      return response
+    })
+    renderApp('/admin/users')
+    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
+        'button',
+        { name: '確認' },
+      ),
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: '我的專案' }),
+    ).toBeVisible()
+    expect(screen.getByText('已收回你的管理者權限。')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '今日任務' })).toBeNull()
+  })
+
   it('收回自己失敗時留在管理頁並顯示錯誤', async () => {
     const backend = stubBackend(ADMIN)
     const original = backend.fetchMock.getMockImplementation()!

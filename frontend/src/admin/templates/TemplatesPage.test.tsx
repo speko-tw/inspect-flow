@@ -1742,6 +1742,49 @@ describe('TemplatesPage', () => {
     expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('未儲存項目')
   })
 
+  it('guards a dirty draft when adding a category from the nav', async () => {
+    templateFetch({ categories: [category, otherCategory] })
+    render(<TemplatesPage />)
+    await openSystem()
+    fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
+    fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
+      target: { value: '未儲存項目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增工程類別' }))
+
+    // TPL-AC16：不能直接丟掉草稿，先提供保留或捨棄。
+    expect(
+      screen.getByRole('alertdialog', { name: '尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: '新增工程類別' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('未儲存項目')
+
+    fireEvent.click(screen.getByRole('button', { name: '新增工程類別' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+    expect(
+      screen.getByRole('heading', { name: '新增工程類別' }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/名稱/)).toHaveValue('')
+    expect(screen.queryByLabelText(/查核項目名稱/)).not.toBeInTheDocument()
+  })
+
+  it('does not ask again when adding a category from a clean state', async () => {
+    templateFetch({ categories: [category, otherCategory] })
+    render(<TemplatesPage />)
+    await screen.findByRole('button', { name: '建築工程' })
+    fireEvent.click(screen.getByRole('button', { name: '新增工程類別' }))
+
+    expect(
+      screen.queryByRole('alertdialog', { name: '尚未儲存的變更' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '新增工程類別' }),
+    ).toBeInTheDocument()
+  })
+
   it('switches between mobile list and detail panes', async () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
