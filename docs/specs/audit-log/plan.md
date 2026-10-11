@@ -46,7 +46,7 @@
 
 | 任務 | 稽核相關的內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| T5b | 新增 `AuditLog.project_id` 可空值欄位與索引的 migration（既有資料不回填）；寫入入口及各專案事件呼叫端依 ALG-R24 填值，無專案事件留空；實作 Admin 唯讀稽核查詢 API 與管理後台頁面，依專案、操作者、時間及事件類型篩選，採穩定 cursor 分頁，合法但不存在的 `project_id` 回 200 空頁。原列檔案範圍依 [admin-dashboard T5b](../admin-dashboard/plan.md#任務)，另需 `backend/app/models/audit_log.py`、`backend/alembic/versions/`、稽核寫入入口及對應測試；#412 開工時依規格流程同步其 issue／plan 檔案清單 | #411 合併；`authentication` Admin 存取檢查 | ALG-AC01（新增欄位）、ALG-AC17、ALG-AC18；ADM-AC06、ADM-AC07、ADM-AC13 | [#412](https://github.com/speko-tw/inspect-flow/issues/412) |
+| T5b | 新增 `AuditLog.project_id` 可空值欄位與索引的 migration（既有資料不回填）；寫入入口及各專案事件呼叫端依 ALG-R24 填值，無專案事件留空；事件目錄以 `project_scoped` 標示所有專案事件，兩種寫入路徑對缺少 `project_id` 的專案事件立即拒絕，並以遍歷目錄的測試守門；實作 Admin 唯讀稽核查詢 API 與管理後台頁面，依專案、操作者、時間及事件類型篩選，採穩定 cursor 分頁，合法但不存在的 `project_id` 回 200 空頁。原列檔案範圍依 [admin-dashboard T5b](../admin-dashboard/plan.md#任務)，另需 `backend/app/models/audit_log.py`、`backend/alembic/versions/`、稽核寫入入口及對應測試；#412 開工時依規格流程同步其 issue／plan 檔案清單 | #411 合併；`authentication` Admin 存取檢查 | ALG-AC01（新增欄位）、ALG-AC17、ALG-AC18；ADM-AC06、ADM-AC07、ADM-AC13 | [#412](https://github.com/speko-tw/inspect-flow/issues/412) |
 
 ## 兩層權限模型後續實作
 
