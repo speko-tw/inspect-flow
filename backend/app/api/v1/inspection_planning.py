@@ -1425,8 +1425,10 @@ def _validate_project_points(
 ) -> None:
     """依 IP-R13、IP-R14 先驗證完整結構，再動任何資料列。
 
-    有 Task 使用此項目且選擇不重查時，增減項次或實測欄位、改欄位
-    類型或照片需求都拒絕（422）；草稿更新依 IP-R04 仍送出重新查核。
+    有 Task 使用此項目且選擇不重查（`reinspect=false`）時，一律視為結構
+    變更而拒絕（422）：增減項次或實測欄位、改欄位類型、照片需求張數、
+    判定標準種類（數值／文字／無）、數值標準綁定的欄位與單位。草稿專用
+    的修改前端送 `reinspect=true`，依 IP-R04 在同一 Task 更新 Snapshot。
     有任何 Task 使用時不得把項次清空（422）。
     """
     existing_points = db.scalars(
