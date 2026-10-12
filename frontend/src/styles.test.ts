@@ -5,32 +5,49 @@ import { describe, expect, it } from 'vitest'
 
 const css = readFileSync('src/styles.css', 'utf8')
 
+// 取出頂層規則（行首的選擇器）的宣告，轉成 屬性 -> 值；比對值而不是原始
+// 字串，格式或宣告順序調整時測試不會誤報。
+function declarationsOf(selector: string, source = css) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = new RegExp(`(?:^|\\n)${escaped} \\{([^}]*)\\}`).exec(source)
+  expect(match, `找不到規則 ${selector}`).not.toBeNull()
+  return Object.fromEntries(
+    (match?.[1] ?? '')
+      .split(';')
+      .map((line) => line.split(/:(.*)/s))
+      .filter(([name, value]) => name.trim() && value)
+      .map(([name, value]) => [name.trim(), value.trim()]),
+  )
+}
+
 // #517 的管理頁與專案頁都在共用 main 內，表單和分區列沿用共用間距。
 describe('page and zone spacing', () => {
   it('keeps the same main inset for admin and project sections', () => {
-    const start = css.indexOf('\nmain {')
-    const rule = css.slice(start, css.indexOf('}', start))
-    expect(start).toBeGreaterThan(0)
-    expect(rule).toContain('padding: var(--space-5) var(--space-4)')
+    expect(declarationsOf('main').padding).toBe(
+      'var(--space-5) var(--space-4)',
+    )
   })
 
   it('separates the zone label from its action and row buttons', () => {
-    const formStart = css.indexOf('\nform {')
-    const formRule = css.slice(formStart, css.indexOf('}', formStart))
-    const actionStart = css.indexOf('\n.named-row-actions {')
-    const actionRule = css.slice(actionStart, css.indexOf('}', actionStart))
-    expect(formRule).toContain('gap: var(--space-4) var(--space-3)')
-    expect(actionRule).toContain('gap: var(--space-2)')
+    expect(declarationsOf('form').gap).toBe('var(--space-4) var(--space-3)')
+    expect(declarationsOf('.named-row-actions').gap).toBe('var(--space-2)')
   })
 })
 
 // Field 桌機內容沿用全站最大寬度，手機繼續使用原本窄欄。
 describe('field content alignment', () => {
+  it('keeps the narrow column by default', () => {
+    expect(declarationsOf('.field-shell').width).toBe('min(100%, 440px)')
+  })
+
   it('expands only on desktop to align with the shared header', () => {
-    expect(css).toMatch(
-      /@media \(min-width: 64rem\) \{\s+\.field-shell \{\s+width: min\(100%, var\(--content-width\)\)/,
+    const media = /@media \(min-width: 64rem\) \{([\s\S]*?\n\})/.exec(
+      css.slice(css.indexOf('.field-shell {')),
     )
-    expect(css).toMatch(/\.field-shell \{\s+width: min\(100%, 440px\)/)
+    expect(media).not.toBeNull()
+    expect(declarationsOf('  .field-shell', media?.[1] ?? '').width).toBe(
+      'min(100%, var(--content-width))',
+    )
   })
 })
 

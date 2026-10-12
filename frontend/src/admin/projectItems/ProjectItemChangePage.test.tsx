@@ -208,7 +208,11 @@ describe('ProjectItemChangePage', () => {
     })
     try {
       renderPage(apiWith())
-      fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+      // 有已派出的任務時，要先選擇重查與否才能進到確認框。
+      fireEvent.click(
+        await screen.findByRole('radio', { name: reinspectChoice }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
       const dialog = screen.getByRole('dialog')
       expect(dialog).not.toHaveClass('confirm-box-modal')
       expect(
