@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InspectionPoint } from '../templates/api'
 import { HttpError, request } from '../../http'
 import { mapFieldErrors } from '../../ui/fieldErrors'
-import { projectItemApi } from './api'
+import { projectItemApi, serializeProjectItemPoints } from './api'
 import boundUnitFixture from './fixtures/project-patch-bound-unit.json'
+import structureFixture from './fixtures/project-patch-structure.json'
+import structureLockedFixture from './fixtures/project-patch-structure-locked.json'
 
 const item = {
   id: 'item-1',
@@ -88,6 +90,99 @@ const task = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('projectItemApi', () => {
+  it('serializes the shared numeric interval structure fixture', () => {
+    const points = structuredClone(
+      structureFixture.inspection_points,
+    ) as unknown as InspectionPoint[]
+    points.forEach((point) => {
+      point.measurement_fields = point.measurement_fields.map((field) => ({
+        ...field,
+        clientKey: field.client_id,
+      }))
+      if (point.numeric_standard) {
+        point.numeric_standard.measurement_field_client_key =
+          point.numeric_standard.measurement_field_client_id
+      }
+    })
+
+    const requestBody = {
+      title: structureFixture.title,
+      instruction: structureFixture.instruction,
+      inspection_points: serializeProjectItemPoints(points),
+    }
+
+    expect(JSON.parse(JSON.stringify(requestBody))).toEqual(structureFixture)
+  })
+
+  it('parses the shared structure_locked API response fixture', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(structureLockedFixture, { status: 422 }),
+      ),
+    )
+    await expect(
+      projectItemApi.update('project-1', 'item-1', {
+        title: item.title,
+        instruction: item.instruction,
+        inspection_points: item.inspection_points,
+        reinspect: false,
+      }),
+    ).rejects.toMatchObject({
+      code: 'project_inspection_item.structure_locked',
+      status: 422,
+    })
+  })
+
+  it('keeps a new measurement field identity stable and binds its numeric standard', () => {
+    const clientId = 'client-field-596'
+    const points: InspectionPoint[] = [
+      {
+        sequence: 1,
+        title: '厚度',
+        instruction: '',
+        text_standard: null,
+        numeric_standard: {
+          value: '2.5',
+          condition: '=',
+          unit: 'mm',
+          tolerance: null,
+          range_form: null,
+          lower_bound: null,
+          upper_bound: null,
+          measurement_field_client_key: clientId,
+        },
+        measurement_fields: [
+          {
+            client_id: clientId,
+            clientKey: clientId,
+            name: '厚度',
+            field_type: 'number',
+            unit: 'mm',
+          },
+        ],
+        evidence_requirements: [{ min_count: 1 }],
+      },
+    ]
+
+    const first = serializeProjectItemPoints(points)
+    const second = serializeProjectItemPoints(points)
+
+    expect(first).toEqual(second)
+    expect(first[0].measurement_fields[0]).toMatchObject({
+      client_id: clientId,
+      name: '厚度',
+      field_type: 'number',
+      unit: null,
+    })
+    expect(first[0].numeric_standard?.measurement_field_client_id).toBe(
+      clientId,
+    )
+    expect(first[0].numeric_standard).not.toHaveProperty(
+      'measurement_field_id',
+    )
+  })
+
   it('reads every backend cursor page and maps Task snapshots', async () => {
     const fetchMock = vi
       .fn()

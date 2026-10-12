@@ -2018,6 +2018,10 @@ a.app-header-tab[aria-current='page'] {
   .tpl-editor-footer button {
     flex: 1 1 auto;
   }
+
+  .tpl-editor-footer .btn {
+    flex: 1 1 auto;
+  }
 }
 
 /* ---- 目前選取（#500）----
