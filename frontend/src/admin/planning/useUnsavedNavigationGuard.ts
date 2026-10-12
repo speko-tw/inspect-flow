@@ -61,6 +61,11 @@ export function useUnsavedNavigationGuard(
   // 放行時重新點一次同一個連結，Router 的 Link 才會帶著原本的 state 導頁；
   // 這一次點擊不能再被自己攔下。
   const bypassNextClick = useRef(false)
+  const activeUnsavedChanges = useRef(hasUnsavedChanges)
+  useLayoutEffect(() => {
+    // 無權限頁取代表單後，舊監聽器清理前也要立即放行返回連結。
+    activeUnsavedChanges.current = hasUnsavedChanges
+  }, [hasUnsavedChanges])
   const currentEntry = useRef<GuardedRouteEntry>({
     href: `${location.pathname}${location.search}${location.hash}`,
     state: window.history.state,
@@ -89,7 +94,7 @@ export function useUnsavedNavigationGuard(
     }
 
     function beforeUnload(event: BeforeUnloadEvent): void {
-      if (!hasUnsavedChanges) return
+      if (!activeUnsavedChanges.current) return
       event.preventDefault()
       event.returnValue = ''
     }
@@ -124,7 +129,7 @@ export function useUnsavedNavigationGuard(
       ) {
         return
       }
-      if (!hasUnsavedChanges) return
+      if (!activeUnsavedChanges.current) return
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
@@ -148,7 +153,7 @@ export function useUnsavedNavigationGuard(
       }
       correctionTarget.current = null
 
-      if (!hasUnsavedChanges) {
+      if (!activeUnsavedChanges.current) {
         currentIndex.current = nextIndex
         return
       }
