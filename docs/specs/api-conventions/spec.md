@@ -5,7 +5,7 @@
 **引用意圖**：[PR-17](../../intents/02-principles.md#pr-17)、[PR-02](../../intents/02-principles.md#pr-02)、[PR-19](../../intents/02-principles.md#pr-19)、[KD-07](../../intents/03-decisions-and-stack.md#kd-07)、[KD-13](../../intents/03-decisions-and-stack.md#kd-13)、[KD-14](../../intents/03-decisions-and-stack.md#kd-14)、[KD-15](../../intents/03-decisions-and-stack.md#kd-15)
 **被擋議題**：無
 
-**關於開工門檻**：[05-open-questions.md §E〈開工門檻〉](../../intents/05-open-questions.md#gate)列出的 G-01～G-07、OQ-06 **不適用**本規格：這些議題全是資源層契約（interval 歸屬、原圖來源、上傳時序、報告核可、刪除保留、報告狀態機、Result 欄位），由各功能規格與 `domain-model` 的端點與資料模型承擔；本規格不定義任何資源端點，只定義跨端點共用的慣例（路徑前綴、內容型別、錯誤 envelope、分頁、時間格式、ID 表示法），不受該門檻約束（依據：負責人決定，PR #30，2026-09-26；另見 [05-open-questions.md §E 的澄清](../../intents/05-open-questions.md#gate)）。因此「被擋議題」維持「無」，索引欄維持「—」。
+**關於開工門檻**：[05-open-questions.md §D〈開工門檻〉](../../intents/05-open-questions.md#gate)列出的 G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） **不適用**本規格：這些議題全是資源層契約（interval 歸屬、原圖來源、上傳時序、報告核可、刪除保留、報告狀態機、Result 欄位），由各功能規格與 `domain-model` 的端點與資料模型承擔；本規格不定義任何資源端點，只定義跨端點共用的慣例（路徑前綴、內容型別、錯誤 envelope、分頁、時間格式、ID 表示法），不受該門檻約束（依據：負責人決定，PR #30，2026-09-26；另見 [05-open-questions.md §E 的澄清](../../intents/05-open-questions.md#gate)）。因此「被擋議題」維持「無」，索引欄維持「—」。
 
 ## 目的
 
@@ -123,3 +123,4 @@
 ## 變更紀錄
 
 - 範圍變更（#432）：新增可選的 `error.fields`（API-R10～API-R15、API-AC13～API-AC19）；既有 `error.code` 與 `error.details` 語意不變；共用 handler 對所有端點的 JSON 本文驗證錯誤填入 `fields`；狀態由已完成改為已凍結，實作任務（計畫 T7、T8）完成後改回已完成。欄位路徑、欄位錯誤碼、筆數上限與全域 handler 的做法是規格設計（非負責人裁定） — [#432](https://github.com/speko-tw/inspect-flow/issues/432)
+- 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
