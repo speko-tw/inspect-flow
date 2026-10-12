@@ -59,6 +59,11 @@ function displayTime(value: string) {
       }).format(date)
 }
 
+/**
+ * 顯示 Field 任務清單與唯讀詳情入口，遵守 FUI-R02、FUI-R03。
+ *
+ * @returns Field 首頁內容與共用導覽。
+ */
 export default function FieldPage() {
   const { user } = useCurrentUser()
   const [listMemory] = useState(() => new Map<string, ListState>())
@@ -351,11 +356,12 @@ function TaskList({
                     {task.project_name}
                   </span>
                   <span className="field-card-meta">
-                    <span>
-                      地點：{task.location.location_text ?? '未指定'}
-                    </span>
                     {task.location.zone_name && (
                       <span>分區：{task.location.zone_name}</span>
+                    )}
+                    {/* IP-R10：空補充地點不代表地點未指定。 */}
+                    {task.location.location_text && (
+                      <span>補充地點：{task.location.location_text}</span>
                     )}
                     <span>
                       建議指派：{task.suggested_assignee?.name_zh ?? '未指定'}

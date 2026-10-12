@@ -14,6 +14,10 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; projects: MyProject[] }
 
+/**
+ * 顯示帳號可進入的專案清單。
+ * 入口依 ADM-R23、ADM-R24 判定。
+ */
 export default function MyProjectsPage() {
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [reloadKey, setReloadKey] = useState(0)
@@ -42,7 +46,7 @@ export default function MyProjectsPage() {
   return (
     <section aria-labelledby="my-projects-heading">
       <h1 id="my-projects-heading">我的專案</h1>
-      <p>你參與、且有內業權限的專案。</p>
+      <p>你參與的專案會列在這裡。</p>
       {state.kind === 'loading' && <p role="status">載入專案中…</p>}
       {state.kind === 'error' && (
         <div>

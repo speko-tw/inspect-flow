@@ -38,6 +38,13 @@ async function expectNotice(text: string) {
   return notice
 }
 
+async function openTaskCreationForm(): Promise<void> {
+  const button = await screen.findByRole('button', {
+    name: '＋ 新增任務',
+  })
+  fireEvent.click(button)
+}
+
 describe('planning management page', () => {
   it(
     'manages plans, multi-item tasks, dispatch, cancel, ' + 'and restore',
@@ -59,6 +66,14 @@ describe('planning management page', () => {
       })
       await expectNotice('已建立計畫「橋梁查核」。')
       fireEvent.click(planButton)
+      await waitFor(() =>
+        expect(
+          screen.getByRole('heading', { name: '橋梁查核' }),
+        ).toHaveFocus(),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', { name: '＋ 新增任務' }),
+      )
 
       fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
       fireEvent.click(await screen.findByLabelText(/鋼筋保護層/))
@@ -113,6 +128,9 @@ describe('planning management page', () => {
         within(taskWithLocation).getByRole('button', {
           name: '派出任務',
         }),
+      )
+      expect(screen.getByRole('dialog')).toHaveTextContent(
+        '項目：混凝土外觀、鋼筋保護層；分區：北區；建議指派人：現場人員甲',
       )
       expect(screen.getByRole('button', { name: '確認' })).toHaveClass(
         'btn-primary',
@@ -361,6 +379,7 @@ describe('planning management page', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '草稿刪除（草稿）' }),
     )
+    await openTaskCreationForm()
     fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
     const zone = (await client.listProjectZones('project-demo-1')).find(
       (entry) => entry.name === '北區',
@@ -425,6 +444,37 @@ describe('planning management page', () => {
     expect(plan).toHaveAttribute('aria-current', 'true')
   })
 
+  it('scrolls to and focuses the selected plan heading', async () => {
+    const originalScroll = HTMLElement.prototype.scrollIntoView
+    const scroll = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scroll,
+    })
+    try {
+      const client = createMockPlanningClient()
+      await client.createPlan('project-demo-1', { name: '定位計畫' })
+      render(
+        <PlanningPage client={client} initialProjectId="project-demo-1" />,
+      )
+      fireEvent.click(
+        await screen.findByRole('button', { name: '定位計畫（草稿）' }),
+      )
+      const heading = await screen.findByRole('heading', { name: '定位計畫' })
+      await waitFor(() => expect(heading).toHaveFocus())
+      expect(scroll).toHaveBeenCalledWith({ block: 'start' })
+    } finally {
+      if (originalScroll) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: originalScroll,
+        })
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+      }
+    }
+  })
+
   it('lists items to choose without per-template numbers (#487)', async () => {
     const client = createMockPlanningClient()
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
@@ -436,8 +486,53 @@ describe('planning management page', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '項次檢查（草稿）' }),
     )
+    await openTaskCreationForm()
     const label = (await screen.findByLabelText(/混凝土外觀/)).closest('label')
     expect(label?.textContent).toMatch(/^混凝土外觀/)
+  })
+
+  it('keeps task creation collapsed and lists existing tasks', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '既有任務清單',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    await client.createTask(plan.id, {
+      item_ids: [item.id],
+      suggested_assignee_id: null,
+      zone_id: null,
+      location_text: null,
+    })
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '既有任務清單（草稿）' }),
+    )
+
+    expect(
+      screen.queryByRole('button', { name: '建立草稿任務' }),
+    ).not.toBeInTheDocument()
+    await openTaskCreationForm()
+    const summary = screen.getAllByText('本計畫已有 1 筆任務')[0]
+    expect(summary).toHaveStyle({ minHeight: '44px' })
+    fireEvent.click(summary)
+    expect(screen.getAllByText('混凝土外觀').length).toBeGreaterThan(1)
+
+    const itemCheckbox = screen.getByLabelText(/混凝土外觀/)
+    fireEvent.click(itemCheckbox)
+    expect(itemCheckbox).toBeChecked()
+    expect(
+      screen.getByText('此項目已在本計畫任務中使用；仍可建立另一筆任務。'),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+    await expectNotice('已建立草稿任務，派出後現場才看得到。')
+    const addTaskButton = screen.getByRole('button', {
+      name: '＋ 新增任務',
+    })
+    expect(addTaskButton).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    expect(
+      screen.queryByText('已建立草稿任務，派出後現場才看得到。'),
+    ).not.toBeInTheDocument()
   })
 
   it('hides actions on archived plans and restores them', async () => {
@@ -462,6 +557,13 @@ describe('planning management page', () => {
         name: /混凝土外觀\s+（待開始）/,
       })
     ).closest('article') as HTMLElement
+    const archiveButton = screen.getByRole('button', { name: '封存計畫' })
+    expect(archiveButton.parentElement).toHaveStyle({
+      marginBlockEnd: 'var(--space-3)',
+    })
+    expect(screen.getByRole('heading', { name: '任務' })).toHaveStyle({
+      marginBlockStart: 'var(--space-3)',
+    })
     fireEvent.click(screen.getByRole('button', { name: '封存計畫' }))
     fireEvent.click(
       within(screen.getByRole('dialog')).getByRole('button', { name: '確認' }),
@@ -548,6 +650,7 @@ describe('planning management page', () => {
       name: 'B 專案計畫（草稿）',
     })
     fireEvent.click(planButton)
+    await openTaskCreationForm()
 
     fireEvent.click(await screen.findByLabelText(/材料進場查驗/))
     fireEvent.change(screen.getByLabelText('建議指派人'), {
@@ -574,6 +677,7 @@ describe('planning management page', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '無分區計畫（草稿）' }),
     )
+    await openTaskCreationForm()
     await screen.findByLabelText(/材料進場查驗/)
     expect(screen.queryByLabelText('任務分區')).toBeNull()
   })
@@ -622,6 +726,9 @@ describe('planning management page', () => {
       )
       fireEvent.click(
         await screen.findByRole('button', { name: '橋梁查核（草稿）' }),
+      )
+      fireEvent.click(
+        await screen.findByRole('button', { name: '＋ 新增任務' }),
       )
       fireEvent.click(await screen.findByLabelText(/混凝土外觀/))
 
@@ -744,6 +851,9 @@ describe('planning management page', () => {
       fireEvent.click(
         await screen.findByRole('button', { name: '橋梁查核（草稿）' }),
       )
+      fireEvent.click(
+        await screen.findByRole('button', { name: '＋ 新增任務' }),
+      )
       const item = await screen.findByLabelText(/混凝土外觀/)
       fireEvent.click(item)
       fireEvent.change(screen.getByLabelText(/任務分區/), {
@@ -755,12 +865,22 @@ describe('planning management page', () => {
       fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
 
       await expectNotice('已建立草稿任務，派出後現場才看得到。')
+      expect(
+        screen.queryByRole('button', { name: '建立草稿任務' }),
+      ).not.toBeInTheDocument()
+      const addTaskButton = screen.getByRole('button', {
+        name: '＋ 新增任務',
+      })
+      expect(addTaskButton).toBeVisible()
+      await waitFor(() =>
+        expect(
+          screen.getByRole('heading', { name: /混凝土外觀.*（草稿）/ }),
+        ).toHaveFocus(),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
       expect(screen.getByLabelText(/混凝土外觀/)).not.toBeChecked()
       expect(screen.getByLabelText(/任務分區/)).toHaveValue('')
       expect(screen.getByLabelText('補充地點')).toHaveValue('')
-      expect(
-        screen.getByRole('button', { name: '建立草稿任務' }),
-      ).toBeEnabled()
     })
   })
 })
@@ -818,6 +938,7 @@ describe('planning forms guard (#507)', () => {
   async function openPlan(client: PlanningClient) {
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     fireEvent.click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+    await openTaskCreationForm()
     return (
       await screen.findByRole('heading', { name: /混凝土外觀/ })
     ).closest('article') as HTMLElement
@@ -1199,6 +1320,51 @@ describe('planning forms guard (#507)', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
+  it('confirms discard prompts for both fields (ADM-R38)', async () => {
+    const { client } = await seeded()
+    const article = await openPlan(client)
+
+    fireEvent.click(within(article).getByRole('button', { name: '修改地點' }))
+    const location = within(article).getByLabelText('補充地點')
+    fireEvent.change(location, { target: { value: '未儲存位置' } })
+    fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    let prompt = within(article).getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    expect(
+      within(prompt).getByRole('button', { name: '保留編輯' }),
+    ).toHaveFocus()
+    fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
+    expect(within(article).getByLabelText('補充地點')).toHaveValue(
+      '未儲存位置',
+    )
+    fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    prompt = within(article).getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
+    expect(within(article).queryByLabelText('補充地點')).toBeNull()
+    expect(
+      within(article).getByRole('button', { name: '修改地點' }),
+    ).toHaveFocus()
+
+    fireEvent.click(
+      within(article).getByRole('button', { name: '修改建議指派' }),
+    )
+    fireEvent.change(within(article).getByLabelText('建議指派人'), {
+      target: { value: 'project-a-member-1' },
+    })
+    fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    prompt = within(article).getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
+    expect(within(article).queryByLabelText('建議指派人')).toBeNull()
+    expect(
+      within(article).getByRole('button', { name: '修改建議指派' }),
+    ).toHaveFocus()
+  })
+
   it('ignores IME Enter in the location form', async () => {
     const { client } = await seeded()
     const spy = watch(client, 'updateLocation')
@@ -1392,6 +1558,7 @@ describe('planning forms guard (#507)', () => {
       const article = await openPlan(client)
 
       const list = within(article).getByRole('list', { name: BLOCKERS })
+      expect(list).toHaveStyle({ listStyle: 'none', paddingInlineStart: '0' })
       expect(within(list).getByText(/尚未填寫地點/)).toBeVisible()
       expect(within(article).queryByText(/尚未指派/)).toBeNull()
       expect(
@@ -1420,6 +1587,9 @@ describe('planning forms guard (#507)', () => {
       const hashBefore = window.location.hash
 
       // 先讓表單有未儲存內容；按鈕不是連結，不能被離頁確認攔下。
+      fireEvent.click(
+        await screen.findByRole('button', { name: '＋ 新增任務' }),
+      )
       fireEvent.click(screen.getByLabelText(/鋼筋保護層/))
       fireEvent.click(
         within(list).getByRole('button', { name: '前往新增任務欄位' }),

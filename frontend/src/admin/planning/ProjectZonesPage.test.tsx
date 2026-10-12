@@ -58,6 +58,18 @@ describe('project zones section', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       '已新增分區「北區」。',
     )
+    const northRow = screen.getByText('北區').closest('li')
+    fireEvent.click(
+      within(northRow as HTMLElement).getByRole('button', {
+        name: '重新命名',
+      }),
+    )
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('分區名稱').closest('li')).toBe(northRow)
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增分區' }))
+    expect(await screen.findByText('請輸入分區名稱。')).toBeVisible()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
     await expect(
       client.listProjectZones('project-demo-1'),
     ).resolves.toHaveLength(1)
@@ -95,7 +107,7 @@ describe('project zones section', () => {
 
     expect(await screen.findByText('請輸入分區名稱。')).toBeVisible()
     expect(input).toHaveAttribute('aria-invalid', 'true')
-    expect(input).toHaveFocus()
+    await waitFor(() => expect(input).toHaveFocus())
     await expect(client.listProjectZones('project-demo-1')).resolves.toEqual(
       [],
     )
@@ -129,7 +141,14 @@ describe('project zones section', () => {
         name: '重新命名',
       }),
     )
-    fireEvent.change(screen.getByLabelText('分區名稱'), {
+    const inlineInput = screen.getByLabelText('分區名稱')
+    expect(inlineInput.closest('li')).toBe(northRow)
+    expect(
+      within(northRow as HTMLElement).getByRole('heading', {
+        name: '修改分區「北區」',
+      }),
+    ).toBeVisible()
+    fireEvent.change(inlineInput, {
       target: { value: '' },
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
@@ -249,8 +268,9 @@ describe('project zones section', () => {
       }),
     )
 
-    expect(input).toHaveValue('南區')
-    expect(input).toHaveAttribute('aria-invalid', 'false')
+    const southInput = screen.getByLabelText('分區名稱')
+    expect(southInput).toHaveValue('南區')
+    expect(southInput).toHaveAttribute('aria-invalid', 'false')
     expect(screen.queryByText('輸入內容太長。')).not.toBeInTheDocument()
   })
 

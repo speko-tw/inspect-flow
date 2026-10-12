@@ -168,6 +168,8 @@ export default function ProjectZonesPage({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // ADM-R28：新操作包含欄位驗證，需清掉舊成功提示。
+    setNotice('')
     if (!name.trim()) {
       setError('')
       setServerNameError('')
@@ -233,6 +235,58 @@ export default function ProjectZonesPage({
     }
   }
 
+  function renderNameForm(isEditing: boolean) {
+    const formHeading = isEditing
+      ? `修改分區「${editing?.name ?? ''}」`
+      : '新增分區'
+
+    return (
+      <form
+        noValidate
+        onKeyDown={blockImeEnter}
+        onSubmit={(event) => void save(event)}
+      >
+        <h3>{formHeading}</h3>
+        <label>
+          分區名稱
+          <input
+            aria-describedby={
+              nameError || serverNameError
+                ? 'project-zone-name-error'
+                : undefined
+            }
+            aria-invalid={nameError || Boolean(serverNameError)}
+            aria-required="true"
+            ref={nameInput}
+            maxLength={128}
+            onChange={(event) => {
+              setName(event.target.value)
+              clearNameErrors()
+              setError('')
+              setNotice('')
+            }}
+            onKeyDown={handleNameKeyDown}
+            data-field="project-zone-name"
+            value={name}
+          />
+        </label>
+        {(nameError || serverNameError) && (
+          <p className="tpl-field-error" id="project-zone-name-error">
+            {nameError ? '請輸入分區名稱。' : serverNameError}
+          </p>
+        )}
+        <button className="btn-primary" disabled={busy} type="submit">
+          {isEditing ? '儲存名稱' : '新增分區'}
+        </button>
+        {isEditing && (
+          <button disabled={busy} onClick={cancelEditing} type="button">
+            取消
+          </button>
+        )}
+      </form>
+    )
+  }
+
   return (
     <section aria-labelledby="project-zones-heading">
       <h2 id="project-zones-heading" ref={pageHeading} tabIndex={-1}>
@@ -265,27 +319,36 @@ export default function ProjectZonesPage({
       <ul className="named-list">
         {zones.map((zone) => (
           <li className="named-row" key={zone.id}>
-            <span className="named-row-name">{zone.name}</span>
+            {/* #634 第 3 項：改名表單放回原列。 */}
+            {editing?.id === zone.id ? (
+              renderNameForm(true)
+            ) : (
+              <span className="named-row-name">{zone.name}</span>
+            )}
             {canManage && (
               <span className="named-row-actions">
+                {/* 取消時需保留觸發鈕以還原焦點。 */}
                 <button
                   className="btn-sm"
-                  disabled={busy}
+                  disabled={busy || editing?.id === zone.id}
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget
                     setDeleting(null)
                     setName(zone.name)
                     setEditing(zone)
                     setError('')
+                    // ADM-R28：原列改名時清除舊成功提示。
+                    setNotice('')
                     clearNameErrors()
                   }}
                   type="button"
                 >
                   重新命名
                 </button>
+                {/* 編輯中停用刪除，避免焦點目標消失。 */}
                 <button
                   className="btn-sm"
-                  disabled={busy}
+                  disabled={busy || editing?.id === zone.id}
                   onClick={(event) => {
                     rowTrigger.current = event.currentTarget
                     setError('')
@@ -314,50 +377,11 @@ export default function ProjectZonesPage({
           </li>
         ))}
       </ul>
-      {canManage && !loading && !loadFailed && (
-        <form
-          noValidate
-          onKeyDown={blockImeEnter}
-          onSubmit={(event) => void save(event)}
-        >
-          <h3>{editing ? '修改分區' : '新增分區'}</h3>
-          <label>
-            分區名稱
-            <input
-              aria-describedby={
-                nameError || serverNameError
-                  ? 'project-zone-name-error'
-                  : undefined
-              }
-              aria-invalid={nameError || Boolean(serverNameError)}
-              aria-required="true"
-              ref={nameInput}
-              maxLength={128}
-              onChange={(event) => {
-                setName(event.target.value)
-                clearNameErrors()
-                setError('')
-              }}
-              onKeyDown={handleNameKeyDown}
-              data-field="project-zone-name"
-              value={name}
-            />
-          </label>
-          {(nameError || serverNameError) && (
-            <p className="tpl-field-error" id="project-zone-name-error">
-              {nameError ? '請輸入分區名稱。' : serverNameError}
-            </p>
-          )}
-          <button className="btn-primary" disabled={busy} type="submit">
-            {editing ? '儲存名稱' : '新增分區'}
-          </button>
-          {editing && (
-            <button disabled={busy} onClick={cancelEditing} type="button">
-              取消
-            </button>
-          )}
-        </form>
-      )}
+      {canManage &&
+        !loading &&
+        !loadFailed &&
+        !editing &&
+        renderNameForm(false)}
     </section>
   )
 }
