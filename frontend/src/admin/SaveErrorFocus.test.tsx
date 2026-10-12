@@ -157,7 +157,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(companyForm).findByRole('alert')
     expect(alert).toHaveTextContent('Email 已被使用。')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(within(detailsForm).queryByRole('alert')).toBeNull()
     expect(screen.getAllByRole('alert')).toHaveLength(1)
 
@@ -166,7 +166,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
       within(detailsForm).getByRole('button', { name: '儲存資料' }),
     )
     const detailsAlert = await within(detailsForm).findByRole('alert')
-    expect(detailsAlert).toHaveFocus()
+    await waitFor(() => expect(detailsAlert).toHaveFocus())
     expect(within(companyForm).queryByRole('alert')).toBeNull()
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
@@ -183,7 +183,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('公司名稱已被使用。')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
@@ -198,7 +198,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     fireEvent.click(within(form).getByRole('button', { name: '新增角色' }))
 
     const alert = await within(form).findByRole('alert')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 })
