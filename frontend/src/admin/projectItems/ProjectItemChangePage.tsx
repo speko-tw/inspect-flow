@@ -128,8 +128,20 @@ function taskConsequence(status: TaskStatus): string {
   return '維持已取消；恢復時才套用新內容，原有結果若受影響才待重查'
 }
 
-// 依 ADM-R28 隱藏草稿專用項目的選擇，但仍送 true，符合後端 IP-R13 契約；
-// IP-R04 保證 DRAFT 在同一 Task 內更新 Snapshot，不產生待重查。
+// 選「不要」只更正文字，已派出任務的狀態都不變；草稿任務不受選擇影響。
+function taskConsequenceText(
+  status: TaskStatus,
+  reinspect: boolean | null,
+): string {
+  if (status === 'DRAFT' || reinspect !== false) {
+    return taskConsequence(status)
+  }
+  return '狀態維持不變'
+}
+
+// 有任務使用時每次都帶 reinspect 是 KD-55。只有草稿任務受影響時（ADM-R28
+// 不顯示選擇）送 true，是為了避開 IP-R13 的結構鎖（false 會鎖結構）；
+// 依 IP-R04 草稿任務會在同一個 Task 內更新 Snapshot，不產生待重查。
 function isDraftOnly(tasks: AffectedTask[]): boolean {
   return tasks.length > 0 && tasks.every((task) => task.status === 'DRAFT')
 }
@@ -173,8 +185,11 @@ function localizeProjectPoints(points: InspectionPoint[]): InspectionPoint[] {
   })
 }
 
+// clientKey 讓尚未儲存的新項次也有穩定識別：錯誤 key 與 React key 不會
+// 因前面的項次被刪除而位移。
 function blankPoint(sequence: number): InspectionPoint {
   return {
+    clientKey: crypto.randomUUID(),
     sequence,
     title: '',
     instruction: '',
@@ -439,7 +454,9 @@ export default function ProjectItemChangePage({
   const [photoDraft, setPhotoDraft] = useState<Record<string, string>>({})
   const [confirmField, setConfirmField] = useState('')
   const [attemptedSave, setAttemptedSave] = useState(false)
-  const [baseline, setBaseline] = useState('')
+  // null 代表尚未載入成功（載入中、失敗、404、403）；此時沒有可比對的
+  // 原始內容，不算有未儲存變更，離頁不應被攔下。
+  const [baseline, setBaseline] = useState<string | null>(null)
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -450,7 +467,7 @@ export default function ProjectItemChangePage({
     inspectionPoints,
     photoDraft,
   }
-  const dirty = baseline !== JSON.stringify(editorValues)
+  const dirty = baseline !== null && baseline !== JSON.stringify(editorValues)
   const leaveGuard = useUnsavedNavigationGuard(dirty)
   const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
   const hasDraft = preview
@@ -592,7 +609,9 @@ export default function ProjectItemChangePage({
     return localized
   }
 
-  async function save(selectedReinspect?: boolean) {
+  // `recheckDrafts`：只有草稿任務時要送 reinspect: true（見 isDraftOnly），
+  // 送出前先重讀任務；期間若已有任務被派出，改送會誤用草稿原位更新的語意。
+  async function save(selectedReinspect?: boolean, recheckDrafts = false) {
     if (!projectId || !itemId) return
     if (!guard.enter()) return
     setError('')
@@ -614,8 +633,27 @@ export default function ProjectItemChangePage({
         : { reinspect: selectedReinspect }),
     }
     try {
+      let tasksAtSave = preview?.affectedTasks ?? []
+      if (recheckDrafts) {
+        const loaded = await reloadPreview()
+        if (loaded.affectedTasks.some((task) => task.status !== 'DRAFT')) {
+          // 沿用競態回復：停下來，請使用者針對最新的任務重新選擇。
+          setConfirming(false)
+          setReinspect(null)
+          setError(REINSPECTION_CHOICE_ERROR)
+          if (
+            loaded.readOnly ||
+            loaded.affectedTasks.some((task) => task.planArchived)
+          ) {
+            setReadOnly(true)
+          }
+          return
+        }
+        tasksAtSave = loaded.affectedTasks
+        if (loaded.affectedTasks.length === 0) delete change.reinspect
+      }
       const updated = await api.update(projectId, itemId, change)
-      setResultTasks(preview?.affectedTasks ?? [])
+      setResultTasks(tasksAtSave)
       setResult(updated)
       setConfirming(false)
       setAttemptedSave(false)
@@ -627,17 +665,19 @@ export default function ProjectItemChangePage({
           setReadOnly(true)
         }
       } catch {
-        setTitle(change.title)
-        setInstruction(change.instruction)
-        setInspectionPoints(change.inspection_points)
-        setBaseline(
-          JSON.stringify({
-            title: change.title,
-            instruction: change.instruction,
-            inspectionPoints: change.inspection_points,
-            photoDraft,
-          }),
-        )
+        // 改用回應內帶 id 的項次當新基準：用送出前的草稿會缺少新項次與
+        // 欄位的 id，下一次儲存就會把它們當成新資料再建立一次。
+        if (preview) {
+          applyPreview({
+            ...preview,
+            item: {
+              ...preview.item,
+              title: updated.title,
+              instruction: updated.instruction,
+              inspection_points: updated.inspection_points,
+            },
+          })
+        }
         setError('已儲存變更，但重新載入任務狀態失敗。')
       }
     } catch (caught) {
@@ -761,7 +801,10 @@ export default function ProjectItemChangePage({
         photoRequirementChanged)
     ) {
       setError(
-        '選擇「不要」重新查核時，不能增減項次或實測欄位，也不能變更欄位型別、單位、數值綁定或標準種類。',
+        [
+          '選擇「不要」重新查核時，不能增減項次或實測欄位，',
+          '也不能變更照片需求、欄位型別、單位、數值綁定或標準種類。',
+        ].join(''),
       )
       return Promise.resolve(null)
     }
@@ -825,6 +868,7 @@ export default function ProjectItemChangePage({
               <legend>這次修改要不要重新查核？</legend>
               <label className="tpl-radio-option">
                 <input
+                  aria-describedby="reinspect-yes-hint"
                   checked={reinspect === true}
                   onChange={() => setReinspect(true)}
                   name="reinspect"
@@ -832,9 +876,12 @@ export default function ProjectItemChangePage({
                 />
                 要，用新標準重新查核
               </label>
-              <p className="tpl-hint">{REINSPECT_YES_HINT}</p>
+              <p className="tpl-hint" id="reinspect-yes-hint">
+                {REINSPECT_YES_HINT}
+              </p>
               <label className="tpl-radio-option">
                 <input
+                  aria-describedby="reinspect-no-hint"
                   checked={reinspect === false}
                   onChange={() => setReinspect(false)}
                   name="reinspect"
@@ -842,7 +889,9 @@ export default function ProjectItemChangePage({
                 />
                 不要，只更正文字與標準值
               </label>
-              <p className="tpl-hint">{REINSPECT_NO_HINT}</p>
+              <p className="tpl-hint" id="reinspect-no-hint">
+                {REINSPECT_NO_HINT}
+              </p>
             </fieldset>
           )}
           {currentDraft && (
@@ -856,18 +905,18 @@ export default function ProjectItemChangePage({
               cancelLabel="返回專案查核項目"
               cancelHref={`/admin/projects/${projectId}/inspection-items`}
               stablePointErrorKeys
-              clearPointServerErrors={(index) =>
+              clearPointServerErrors={(index) => {
+                const point = inspectionPoints[index]
+                const identity = point?.clientKey ?? point?.id ?? index
+                const prefix = `point:${identity}:`
                 setServerFieldErrors((current) =>
                   Object.fromEntries(
                     Object.entries(current).filter(
-                      ([key]) =>
-                        !key.startsWith(
-                          `point:${inspectionPoints[index]?.clientKey ?? inspectionPoints[index]?.id ?? index}:`,
-                        ),
+                      ([key]) => !key.startsWith(prefix),
                     ),
                   ),
                 )
-              }
+              }}
               confirmField={confirmField}
               contextLabel={`專案查核項目 / ${preview.item.title}`}
               dirty={dirty}
@@ -964,7 +1013,7 @@ export default function ProjectItemChangePage({
               initialFocus="none"
               onCancel={() => setConfirming(false)}
               onConfirm={() =>
-                save(draftOnly ? true : (reinspect ?? undefined))
+                draftOnly ? save(true, true) : save(reinspect ?? undefined)
               }
               role="dialog"
               title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
@@ -973,14 +1022,15 @@ export default function ProjectItemChangePage({
               {needsChoice && (
                 <>
                   <p>
-                    {'有任務已經派出，請先選擇這次修改要不要重新查核。'}
+                    {'有任務已經派出。'}
                     {hasDraft && '草稿任務不受選擇影響，會直接更新為新內容；'}
                     {'已核發的報告也不受影響。'}
                   </p>
                   <p>
-                    {'選擇「要」重新查核時，'}
-                    {'各任務會有以下狀態變化；'}
-                    {'選擇「不要」時，各任務狀態維持不變。'}
+                    {reinspect === true &&
+                      '你選擇「要」重新查核，各任務會有以下狀態變化。'}
+                    {reinspect === false &&
+                      '你選擇「不要」重新查核，各任務狀態維持不變。'}
                   </p>
                 </>
               )}
@@ -1016,7 +1066,9 @@ export default function ProjectItemChangePage({
                     <li key={task.id}>
                       {task.name}（{task.planName}；{taskLocation(task)}；
                       <StatusBadge status={task.status} />）
-                      {needsChoice && <>：{taskConsequence(task.status)}</>}
+                      {needsChoice && (
+                        <>：{taskConsequenceText(task.status, reinspect)}</>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -1034,12 +1086,12 @@ export default function ProjectItemChangePage({
             >
               <h2 id="change-result-heading">修改結果</h2>
               <p>
-                {result.reinspection_selected
-                  ? '已選擇重新查核。'
-                  : result.affected_tasks.length === 0
-                    ? '已儲存項目內容。'
-                    : isDraftOnly(resultTasks)
-                      ? DRAFT_ONLY_RESULT_TEXT
+                {isDraftOnly(resultTasks)
+                  ? DRAFT_ONLY_RESULT_TEXT
+                  : result.reinspection_selected
+                    ? '已選擇重新查核。'
+                    : result.affected_tasks.length === 0
+                      ? '已儲存項目內容。'
                       : '已更正文字，沒有重新查核。'}
               </p>
               {result.reinspection_selected &&

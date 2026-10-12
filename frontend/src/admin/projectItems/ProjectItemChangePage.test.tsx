@@ -5,9 +5,11 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
+import { currentUserFixture } from '../../testing/contractFixtures'
 import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
 import { ManagementApiError } from '../api'
 import type { InspectionPoint } from '../templates/api'
@@ -156,16 +158,24 @@ function apiWith(overrides: Partial<ProjectItemApi> = {}): ProjectItemApi {
 function renderPage(api: ProjectItemApi) {
   return render(
     <MemoryRouter initialEntries={['/admin/projects/p/items/item-1']}>
-      <Routes>
-        <Route
-          element={<ProjectItemChangePage api={api} />}
-          path="/admin/projects/:projectId/items/:itemId"
-        />
-        <Route
-          element={<div>專案查核項目列表</div>}
-          path="/admin/projects/:projectId/inspection-items"
-        />
-      </Routes>
+      <CurrentUserProvider
+        value={{
+          user: currentUserFixture({ is_admin: true }),
+          clear: vi.fn(),
+        }}
+      >
+        <Link to="/admin/projects/p/inspection-items">外殼導覽</Link>
+        <Routes>
+          <Route
+            element={<ProjectItemChangePage api={api} />}
+            path="/admin/projects/:projectId/items/:itemId"
+          />
+          <Route
+            element={<div>專案查核項目列表</div>}
+            path="/admin/projects/:projectId/inspection-items"
+          />
+        </Routes>
+      </CurrentUserProvider>
     </MemoryRouter>,
   )
 }
@@ -199,7 +209,7 @@ describe('ProjectItemChangePage', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const intro = screen.getByText(
-      /選擇「要」重新查核時，各任務會有以下狀態變化/,
+      /你選擇「要」重新查核，各任務會有以下狀態變化/,
     )
     const taskHeading = screen.getByRole('heading', {
       name: '使用此項目的任務',
@@ -208,8 +218,7 @@ describe('ProjectItemChangePage', () => {
       intro.compareDocumentPosition(taskHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(intro).toHaveTextContent(/選擇「不要」時/)
-    expect(intro).toHaveTextContent(/各任務狀態維持不變/)
+    expect(intro).not.toHaveTextContent(/不要/)
     expect(screen.getByText(/地下室北區・B1 柱旁/)).toBeInTheDocument()
     expect(screen.getByText(/二樓東側/)).toBeInTheDocument()
     expect(screen.getByText(/水塔旁/)).toBeInTheDocument()
@@ -302,10 +311,11 @@ describe('ProjectItemChangePage', () => {
 
   it('describes the reinspect option in plain words (#491)', async () => {
     renderPage(apiWith())
-    await screen.findByRole('radio', { name: reinspectChoice })
-    expect(
-      screen.getByText(/若已填過結果，舊結果與照片會保留供查詢/),
-    ).toBeInTheDocument()
+    const yes = await screen.findByRole('radio', { name: reinspectChoice })
+    expect(yes).toHaveAccessibleDescription(
+      /舊結果與照片會保留供查詢，但不再算數/,
+    )
+    expect(yes).not.toHaveAccessibleDescription(/作廢/)
     expect(screen.queryByText(/要，作廢/)).toBeNull()
   })
 
@@ -314,9 +324,11 @@ describe('ProjectItemChangePage', () => {
     drafts.affectedTasks = [drafts.affectedTasks[0]]
     const api = apiWith({
       loadPreview: vi.fn(async () => structuredClone(drafts)),
+      // 真後端在送 true 時回 reinspection_selected: true；草稿專用的
+      // 文案要靠任務狀態判斷，不能靠這個旗標。
       update: vi.fn(async () => ({
         ...changed,
-        reinspection_selected: false,
+        reinspection_selected: true,
         affected_tasks: [changed.affected_tasks[0]],
       })),
     })
@@ -333,14 +345,53 @@ describe('ProjectItemChangePage', () => {
     expect(within(dialog).queryByText(/是否重新查核/)).not.toBeInTheDocument()
     expect(dialog.textContent).not.toMatch(/Snapshot|Task/)
     fireEvent.click(within(dialog).getByRole('button', { name: '確認儲存' }))
-    expect(api.update).toHaveBeenCalledWith(
-      'p',
-      'item-1',
-      expect.objectContaining({ reinspect: true }),
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        'p',
+        'item-1',
+        expect.objectContaining({ reinspect: true }),
+      ),
     )
     expect(
       await screen.findByText('草稿任務已直接更新為新內容，沒有重新查核。'),
     ).toBeInTheDocument()
+    expect(screen.queryByText('已選擇重新查核。')).toBeNull()
+    // 初次載入、送出前重讀任務、儲存後重載。
+    expect(api.loadPreview).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops and asks again when a Task is dispatched before saving drafts', async () => {
+    const drafts = structuredClone(preview)
+    drafts.affectedTasks = [drafts.affectedTasks[0]]
+    const dispatched = structuredClone(preview)
+    dispatched.affectedTasks = [
+      { ...dispatched.affectedTasks[0], status: 'PENDING' },
+    ]
+    let loadCount = 0
+    const api = apiWith({
+      loadPreview: vi.fn(async () =>
+        structuredClone(loadCount++ === 0 ? drafts : dispatched),
+      ),
+    })
+    renderPage(api)
+    const name = await screen.findByLabelText('查核項目名稱 *')
+    fireEvent.change(name, { target: { value: '重讀前的名稱' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: '確認儲存',
+      }),
+    )
+
+    expect(
+      await screen.findByRole('radio', { name: reinspectChoice }),
+    ).not.toBeChecked()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '請重新確認受影響任務與查核選擇',
+    )
+    expect(api.update).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(name).toHaveValue('重讀前的名稱')
   })
 
   it('allows draft-only structure edits while retaining persisted identities', async () => {
@@ -395,8 +446,9 @@ describe('ProjectItemChangePage', () => {
       { ...dispatched.affectedTasks[0], status: 'PENDING' },
     ]
     const api = apiWith({
+      // 第二次是送出前重讀，仍是草稿；後端才在更後面回報已鎖定。
       loadPreview: vi.fn(async () =>
-        structuredClone(loadCount++ === 0 ? drafts : dispatched),
+        structuredClone(loadCount++ < 2 ? drafts : dispatched),
       ),
       update: vi.fn(async () => {
         throw new ManagementApiError(
@@ -419,7 +471,7 @@ describe('ProjectItemChangePage', () => {
       await screen.findByRole('radio', { name: reinspectChoice }),
     ).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('請選擇「要」重新查核')
-    expect(api.loadPreview).toHaveBeenCalledTimes(2)
+    expect(api.loadPreview).toHaveBeenCalledTimes(3)
     expect(name).toHaveValue('競態後名稱')
   })
 
@@ -647,8 +699,16 @@ describe('ProjectItemChangePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
     const dialog = screen.getByRole('dialog')
     expect(dialog.textContent).not.toMatch(/Snapshot|Task/)
-    expect(screen.getByText(/已完成的任務會退回進行中/)).toBeInTheDocument()
-    expect(within(dialog).getByText(/選擇「不要」時/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('radio', { name: reinspectChoice }),
+    ).toHaveAccessibleDescription(/已完成的任務會退回進行中/)
+    expect(
+      screen.getByRole('radio', { name: noReinspectChoice }),
+    ).toHaveAccessibleDescription(/任務狀態、結果、照片與照片需求不變/)
+    expect(
+      within(dialog).getByText(/你選擇「要」重新查核/),
+    ).toBeInTheDocument()
+    expect(within(dialog).queryByText(/你選擇「不要」/)).toBeNull()
     expect(
       within(dialog).getByText(/二樓東側.*退回進行中，受影響項目改列待重查/),
     ).toBeInTheDocument()
@@ -668,7 +728,8 @@ describe('ProjectItemChangePage', () => {
       await screen.findByRole('radio', { name: reinspectChoice }),
     )
     fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('使用此項目的任務')
+    expect(screen.getByRole('dialog')).toHaveTextContent('有任務已經派出')
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('請先選擇')
     expect(screen.getByRole('dialog')).not.toHaveTextContent(
       '草稿任務不受選擇影響',
     )
@@ -1053,5 +1114,144 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
 
     expect(screen.getAllByRole('button', { name: '確認儲存' })).toHaveLength(1)
     expect(api.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('ProjectItemChangePage review round 2', () => {
+  it('blocks saving until a choice is made when Tasks are dispatched', async () => {
+    const api = apiWith()
+    renderPage(api)
+    fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '請先選擇這次修改要不要重新查核',
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('button', { name: '確認儲存' })).toBeNull()
+    expect(
+      screen.getByRole('radio', { name: reinspectChoice }),
+    ).not.toBeChecked()
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('lists only the no-reinspect outcome when choosing not to', async () => {
+    renderPage(apiWith())
+    fireEvent.click(
+      await screen.findByRole('radio', { name: noReinspectChoice }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('你選擇「不要」重新查核')
+    expect(dialog).not.toHaveTextContent('你選擇「要」')
+    expect(dialog).not.toHaveTextContent('改列待重查')
+    expect(dialog).not.toHaveTextContent('退回進行中')
+    // 草稿任務不受選擇影響，仍說明直接更新。
+    expect(dialog).toHaveTextContent('草稿任務會直接更新為新內容')
+  })
+
+  it('leaves right away when the item is not found', async () => {
+    renderPage(
+      apiWith({
+        loadPreview: vi.fn(async () => {
+          throw new ManagementApiError(404, 'resource.not_found')
+        }),
+      }),
+    )
+    expect(await screen.findByText('找不到這個查核項目')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: '外殼導覽' }))
+    expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
+    expect(screen.queryByRole('group')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['server error', 500, 'server.error'],
+    ['forbidden', 403, 'permission.denied'],
+  ])(
+    'leaves right away after a %s load failure',
+    async (_name, status, code) => {
+      renderPage(
+        apiWith({
+          loadPreview: vi.fn(async () => {
+            throw new ManagementApiError(status, code)
+          }),
+        }),
+      )
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('link', { name: '外殼導覽' }))
+      expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
+      expect(screen.queryByRole('group')).not.toBeInTheDocument()
+    },
+  )
+
+  it('reuses returned ids when saving again after a failed reload', async () => {
+    const persisted: InspectionPoint = { ...point, id: 'persisted-point' }
+    const base = structuredClone(preview)
+    base.item.inspection_points = [persisted]
+    const created: InspectionPoint = {
+      ...structuredClone(persisted),
+      id: 'created-point',
+      sequence: 2,
+      title: '新增點位',
+      text_standard: null,
+      measurement_fields: [
+        {
+          id: 'created-field',
+          name: '新量測',
+          field_type: 'text',
+          unit: null,
+        },
+      ],
+    }
+    let loadCount = 0
+    const api = apiWith({
+      loadPreview: vi.fn(async () => {
+        if (loadCount++ > 0) throw new ManagementApiError(500, 'server.error')
+        return structuredClone(base)
+      }),
+      update: vi.fn(async () => ({
+        ...changed,
+        inspection_points: [persisted, created].map((row) =>
+          structuredClone(row),
+        ),
+      })),
+    })
+    renderPage(api)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '新增查核項次' }),
+    )
+    const titles = await screen.findAllByLabelText('項次標題 *')
+    fireEvent.change(titles[1], { target: { value: '新增點位' } })
+    await confirm('yes')
+    expect(
+      await screen.findByText('已儲存變更，但重新載入任務狀態失敗。'),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1))
+
+    await confirm('yes')
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(2))
+    const second = vi.mocked(api.update).mock.calls[1][2]
+    expect(second.inspection_points.map((row) => row.id)).toEqual([
+      'persisted-point',
+      'created-point',
+    ])
+    expect(second.inspection_points[1].measurement_fields[0].id).toBe(
+      'created-field',
+    )
+  })
+
+  it('keys a new point error by its own client key', async () => {
+    renderPage(apiWith())
+    fireEvent.click(
+      await screen.findByRole('button', { name: '新增查核項次' }),
+    )
+    const titles = await screen.findAllByLabelText('項次標題 *')
+    fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    await waitFor(() =>
+      expect(titles[1]).toHaveAttribute(
+        'data-error-key',
+        expect.stringMatching(/^point:[0-9a-f-]{36}:title$/i),
+      ),
+    )
+    expect(titles[1]).toHaveAttribute('aria-invalid', 'true')
   })
 })

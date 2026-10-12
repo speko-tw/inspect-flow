@@ -7,6 +7,7 @@ import { boundField, localizeField } from './templateEditorUtils'
 type Props = {
   point: InspectionPoint
   pointIndex: number
+  /** 錯誤 key 的項次前綴；專案項目編輯改用穩定識別而非索引。 */
   errorPointKey?: string
   errors: Record<string, string>
   confirmField: string
@@ -17,6 +18,7 @@ type Props = {
     changes: Partial<MeasurementField>,
   ) => void
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
+  /** 依 IP-R13，鎖定時不得增刪欄位或改型別、單位與綁定，只能改名稱。 */
   structureLocked?: boolean
 }
 
@@ -41,7 +43,8 @@ export function MeasurementFieldEditor({
       )}
       {point.measurement_fields.map((field, fieldIndex) => {
         const bound = boundField(point) === field
-        const base = `${errorPointKey ?? `point:${pointIndex}`}:field:${fieldIndex}`
+        const pointBase = errorPointKey ?? `point:${pointIndex}`
+        const base = `${pointBase}:field:${fieldIndex}`
         const removeField = () => {
           updatePoint(pointIndex, {
             measurement_fields: point.measurement_fields.filter(

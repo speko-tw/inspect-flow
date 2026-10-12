@@ -162,6 +162,11 @@ export function forWire(
   }
 }
 
+/**
+ * 把後端欄位錯誤的 JSON pointer 對到畫面的錯誤 key。
+ * `stablePointErrorKeys` 為 true（專案項目編輯）時以 clientKey／id 取代
+ * 索引：項次可被刪除或新增，索引會位移，錯誤就會顯示在錯的項次上。
+ */
 export function templateFieldErrorBindings(
   item: TemplateItem,
   itemIndex?: number,

@@ -11,6 +11,16 @@ type Selection = { type: 'category' | 'system' | 'item'; id: string }
 type Mode = 'create-item' | 'edit-item'
 type FocusRequest = { id: number; key: string }
 
+// 點位錯誤 key 的身分：專案項目編輯（stable）要用不隨增刪項次而位移的
+// 識別，否則刪除前一項次後，伺服器欄位錯誤會被對到別的項次；範本維持索引。
+function errorIdentity(
+  point: InspectionPoint,
+  index: number,
+  stable: boolean,
+): string {
+  return String(stable ? (point.clientKey ?? point.id ?? index) : index)
+}
+
 type Props = {
   itemDraft: TemplateItem | null
   errors: Record<string, string>
@@ -46,12 +56,19 @@ type Props = {
   clearPointServerErrors: (index: number) => void
   confirmField: string
   setConfirmField: (value: string) => void
+  /** 依 IP-R13 鎖定項次與欄位的增減；專案項目選「不要」重查時才為 true。 */
   structureLocked?: boolean
+  /** 結構鎖定時顯示在項次區的說明，讓使用者知道還能改什麼。 */
   structureLockReason?: string
+  /** 覆寫標題上方的麵包屑；專案項目頁不屬於範本庫，需自訂。 */
   contextLabel?: string
+  /** 儲存鈕文字；專案項目頁是「儲存變更」而非「儲存查核項目」。 */
   saveLabel?: string
+  /** 搭配 `cancelHref` 的返回連結文字；專案項目頁用來離開編輯頁。 */
   cancelLabel?: string
+  /** 有值時取消改成導覽連結，離開前由外層的未儲存攔截處理。 */
   cancelHref?: string
+  /** 以 clientKey／id 而非索引組錯誤 key，避免刪除項次後錯誤錯位。 */
   stablePointErrorKeys?: boolean
 }
 
@@ -101,9 +118,7 @@ export function TemplateItemEditor({
       .map((key) => key.split(':')[1]),
   )
   const pointErrorIdentity = (point: InspectionPoint, index: number) =>
-    String(
-      stablePointErrorKeys ? (point.clientKey ?? point.id ?? index) : index,
-    )
+    errorIdentity(point, index, stablePointErrorKeys)
   const pointKey = (point: InspectionPoint, index: number) =>
     `point:${pointErrorIdentity(point, index)}`
   const updatePointAndPreserveErrors = (
@@ -145,6 +160,7 @@ export function TemplateItemEditor({
       `[data-error-key="${fieldKey}"]`,
     )
   }
+  const draftPoints = itemDraft?.inspection_points
   useEffect(() => {
     if (!focusRequest || focusRequest.id <= completedFocusRequest.current) {
       return
@@ -156,9 +172,9 @@ export function TemplateItemEditor({
     }
     const card = field.closest('details')
     if (card && !card.open) {
-      const pointIndex = itemDraft?.inspection_points.findIndex(
+      const pointIndex = draftPoints?.findIndex(
         (point, index) =>
-          pointKey(point, index) ===
+          `point:${errorIdentity(point, index, stablePointErrorKeys)}` ===
           focusRequest.key.split(':').slice(0, 2).join(':'),
       )
       if (
@@ -178,7 +194,7 @@ export function TemplateItemEditor({
     field.scrollIntoView?.({ block: 'center' })
     field.focus()
     completedFocusRequest.current = focusRequest.id
-  }, [errorOpen, focusRequest])
+  }, [draftPoints, errorOpen, focusRequest, stablePointErrorKeys])
   if (!itemDraft) return null
   const alert =
     Object.keys(errors).length > 0
@@ -223,7 +239,7 @@ export function TemplateItemEditor({
           </Link>
         ) : (
           <button
-            aria-label={cancelLabel}
+            aria-label="取消編輯"
             onClick={() => {
               if (dirty) {
                 setGuard(selected ?? { type: 'system', id: systemId })
@@ -231,7 +247,7 @@ export function TemplateItemEditor({
             }}
             type="button"
           >
-            {cancelLabel}
+            取消
           </button>
         )}
       </div>
@@ -536,7 +552,7 @@ export function TemplateItemEditor({
             </p>
             <ol>
               {itemDraft.inspection_points.map((point, index) => (
-                <li key={point.id ?? index}>
+                <li key={point.id ?? point.clientKey ?? index}>
                   <strong className="tpl-preview-point">
                     項次 {index + 1}
                   </strong>
@@ -559,7 +575,6 @@ export function TemplateItemEditor({
           </Link>
         ) : (
           <button
-            aria-label={cancelLabel}
             onClick={() => {
               if (dirty) {
                 setGuard(selected ?? { type: 'system', id: systemId })
@@ -567,7 +582,7 @@ export function TemplateItemEditor({
             }}
             type="button"
           >
-            {cancelLabel}
+            取消
           </button>
         )}
         <button className="btn-primary" disabled={readOnly} type="submit">
@@ -585,5 +600,13 @@ function pointSummary(point: InspectionPoint, photos: string): string {
       return `${name}${field.unit?.trim() ? `（${field.unit}）` : ''}`
     })
     .join('、')
-  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${formatInspectionStandard(point, { requireCompleteInterval: true })}｜照片 ${photos.trim() || '？'} 張`
+  const standard = formatInspectionStandard(point, {
+    requireCompleteInterval: true,
+  })
+  return [
+    `${point.title.trim() || '？'}`,
+    `量測 ${fields || '無實測欄位'}`,
+    standard,
+    `照片 ${photos.trim() || '？'} 張`,
+  ].join('｜')
 }
