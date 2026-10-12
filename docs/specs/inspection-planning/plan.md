@@ -20,10 +20,12 @@
 | T10 | `Inspection Task.inspection_level`：新增不可空欄位並以一支 migration 回填既有 Task 為 `self_inspection`；建立 Task 時依專案當時的 `company_role` 帶入、建立請求不接受此欄；Task API 回應含此欄；外部協作人員派出時指定層級的部分待 [#550](https://github.com/speko-tw/inspect-flow/issues/550) | 依當時程式碼盤點，預計 `backend/app/models/`、`backend/alembic/versions/`（一支 migration）、`backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/` | `domain-model` 任務 R（`company_role` 與登記表） | IP-AC16 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 | T11 | 專案流程摘要的 `project` 物件加 `company_role`（IP-R11（流程摘要）），供專案首頁顯示本公司角色；補 API 測試與契約 fixture | `backend/app/services/project_workflow_summary.py`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_project_workflow_summary.py`、`frontend/src/admin/` 摘要型別（依當時程式碼盤點） | `domain-model` 任務 R | IP-AC12 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 | T12 | 序列化 Task 建立快照與專案項目修改，固定項目／Plan 鎖順序，並以 PostgreSQL 並行 API 測試驗證快照一致與鎖序一致 | `backend/app/services/inspection_planning.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_inspection_planning.py`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R03、IP-AC03 | #555 |
+| T13 | 專案進度區段所需的後端：專案 Task 清單的 `status`、`needs_reinspection=true` 篩選、排序與每筆 `plan`／`item_summary`（IP-R18），單筆 Task 讀取加 `plan`、`started_by_user`、`completed_by_user`（IP-R19）；以資料庫與批次載入完成；補 API 測試與前後端契約 fixture | 依當時程式碼盤點，預計 `backend/app/api/v1/inspection_planning.py`、`backend/app/services/inspection_planning.py`、`backend/tests/api/` | T3、T7 | IP-AC18、IP-AC19 | 待開 task（母 issue [#452](https://github.com/speko-tw/inspect-flow/issues/452)；先於 `admin-dashboard` T21 合併） |
 
 - 每個 task issue 開立前，應將路徑清單縮到具體檔案，並依共用 migration、model registry、router、API client 等實際重疊情況調整責任界線。
 - 所有 AC 至少由一個 task 涵蓋（IP-AC11 由 T1～T4 涵蓋；IP-AC12 由 T7 涵蓋，其 `project.read` 分支與 IP-R12、IP-AC13 由 `authentication` 任務 P 涵蓋）；IP-Q 業務裁定已納入 KD-55／KD-56；KD-55 項目級補充依負責人留言 5970063986，`state-machines` 的 SM-Q03 已同步並凍結。本規格 Plan／Task 原範圍已凍結；依 #369 擴增的 ProjectZone、Task 地點與對應驗收納入本次凍結範圍。
 - 任務按專案查核項目手動建立，並由內業選擇專案分區或填補充地點；本計畫不包含依 interval、起訖點或間距自動切分任務。
+- IP-R18、IP-R19 與 IP-AC18、IP-AC19 由 T13 涵蓋，是 `admin-dashboard` 專案進度區段（[#452](https://github.com/speko-tw/inspect-flow/issues/452)）的後端契約。
 - IP-R13～IP-R15 與 IP-AC14～IP-AC15 屬 [負責人直接指示（2026-10-10，#106）](https://github.com/speko-tw/inspect-flow/issues/106#issuecomment-6093842438) 的範圍變更；實作不在本計畫另開任務：點位與實測欄位帶 `id`、選「不要」不得增減項次、零項次擋下與 `has_result` 納入有效照片由 `field-evidence` T5 實作，Task 回應新增三個欄位與 `has_result` 納入結果由 [`completion-validation`](../completion-validation/plan.md) T3、T4、T6 實作。
 
 ## 並行分組
@@ -67,6 +69,8 @@
 | IP-AC12 | `backend/tests/api/test_project_workflow_summary.py` 驗證空專案步驟數、五種 Task 狀態、待重查 Task 數、DRAFT 可見性、403／404 與跨專案隔離；`backend/tests/contract/test_route_access.py` 驗證路由權限宣告。 |
 | IP-AC14 | 真後端 API 測試（隨 `field-evidence` T5）：PATCH 帶 `id` 保留識別、選「不要」拒絕增減項次與欄位集合、`id` 不屬於該項目、選「要」時被刪除的點位連同結果與照片作廢。 |
 | IP-AC15 | 真後端 API 測試（隨 `field-evidence` T5）：建立含零項次項目的 Task 被拒絕、已使用項目改成零項次被拒絕、未使用項目可暫時零項次。 |
+| IP-AC18 | 真後端 API 測試：每個 `status` 與 `needs_reinspection=true` 的筆數對照 workflow summary、兩者並用取交集、非法值 422、只有 `inspection_task.inspect` 者看不到 DRAFT 且回 200 空頁、封存 Plan 只被待重查排除、排序與 cursor 無重複遺漏、`plan`／`item_summary` 欄位、查詢次數不隨每頁筆數成長；契約 fixture 與前端 mock 一致（RG-M22） |
+| IP-AC19 | 真後端 API 測試：單筆 Task 含 `plan`、`started_by_user`、`completed_by_user`（只有 `id`、`name_zh`），沒有 `inspection_plan.read` 仍可讀，沒有 `inspection_task.read` 被拒 |
 
 Issue #406 補齊以下測試對應，不變更產品行為：
 
