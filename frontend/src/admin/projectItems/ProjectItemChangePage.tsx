@@ -5,10 +5,18 @@ import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
 import RouteNotFound from '../../RouteNotFound'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { formatInspectionStandard } from '../../ui/inspectionStandard'
-import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import { mapFieldErrors } from '../../ui/fieldErrors'
+import { useSubmitGuard } from '../../ui/submitGuard'
+import { UnsavedLeaveBox } from '../planning/UnsavedLeaveBox'
+import { useUnsavedNavigationGuard } from '../planning/useUnsavedNavigationGuard'
 import { ManagementApiError } from '../api'
-import type { InspectionPoint } from '../templates/api'
+import { TemplateItemEditor } from '../templates/TemplateItemEditor'
+import {
+  boundField,
+  localizeField,
+  templateFieldErrorBindings,
+} from '../templates/templateEditorUtils'
+import type { InspectionPoint, TemplateItem } from '../templates/api'
 import {
   type AffectedTask,
   type ProjectItemApi,
@@ -65,7 +73,7 @@ const REINSPECT_YES_HINT = [
 ].join('')
 
 const REINSPECT_NO_HINT =
-  '只更正項目的文字，任務狀態、已填的結果與照片都不變。'
+  '只更正文字與數值標準、容差、區間；任務狀態、結果、照片與照片需求不變。'
 
 function isReinspectionChoiceRequired(error: unknown): boolean {
   return (
@@ -86,8 +94,8 @@ function errorMessage(error: unknown): string {
     codes: {
       'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
       'project_inspection_item.structure_locked': [
-        '此項目已有任務使用；若要增減查核項次或實測欄位、',
-        '變更欄位類型，請選擇「要」重新查核。',
+        '此項目已有任務使用；若要修改照片需求，或增減項次、實測欄位，',
+        '變更欄位類型、單位、數值綁定或標準種類，請選擇「要」重新查核。',
       ].join(''),
       'project_inspection_item.points_required': [
         '此項目已有任務使用，',
@@ -120,8 +128,20 @@ function taskConsequence(status: TaskStatus): string {
   return '維持已取消；恢復時才套用新內容，原有結果若受影響才待重查'
 }
 
-// 後端只要有任務使用此項目就要求帶 `reinspect`；草稿任務一律在原任務內
-// 更新、不產生待重查，所以全部是草稿時不需要使用者選擇。
+// 選「不要」只更正文字，已派出任務的狀態都不變；草稿任務不受選擇影響。
+function taskConsequenceText(
+  status: TaskStatus,
+  reinspect: boolean | null,
+): string {
+  if (status === 'DRAFT' || reinspect !== false) {
+    return taskConsequence(status)
+  }
+  return '狀態維持不變'
+}
+
+// 有任務使用時每次都帶 reinspect 是 KD-55。只有草稿任務受影響時（ADM-R28
+// 不顯示選擇）送 true，是為了避開 IP-R13 的結構鎖（false 會鎖結構）；
+// 依 IP-R04 草稿任務會在同一個 Task 內更新 Snapshot，不產生待重查。
 function isDraftOnly(tasks: AffectedTask[]): boolean {
   return tasks.length > 0 && tasks.every((task) => task.status === 'DRAFT')
 }
@@ -135,6 +155,264 @@ function taskLocation(task: AffectedTask): string {
 
 function taskLabel(task: AffectedTask): string {
   return `${task.name}（${task.planName}；${taskLocation(task)}）`
+}
+
+function localizeProjectPoints(points: InspectionPoint[]): InspectionPoint[] {
+  return points.map((point) => {
+    const fields = point.measurement_fields.map(localizeField)
+    const standard = point.numeric_standard
+    const boundKey =
+      standard?.measurement_field_client_key ??
+      fields.find(
+        (field) =>
+          Boolean(
+            standard?.measurement_field_client_id &&
+            field.client_id === standard.measurement_field_client_id,
+          ) ||
+          Boolean(
+            standard?.measurement_field_id &&
+            field.id === standard.measurement_field_id,
+          ),
+      )?.clientKey
+    return {
+      ...point,
+      clientKey: point.clientKey ?? point.id ?? crypto.randomUUID(),
+      measurement_fields: fields,
+      numeric_standard: standard
+        ? { ...standard, measurement_field_client_key: boundKey }
+        : null,
+    }
+  })
+}
+
+// clientKey 讓尚未儲存的新項次也有穩定識別：錯誤 key 與 React key 不會
+// 因前面的項次被刪除而位移。
+function blankPoint(sequence: number): InspectionPoint {
+  return {
+    clientKey: crypto.randomUUID(),
+    sequence,
+    title: '',
+    instruction: '',
+    text_standard: null,
+    numeric_standard: null,
+    measurement_fields: [],
+    evidence_requirements: [{ min_count: 1 }],
+  }
+}
+
+function makeDraft(
+  item: ProjectItemPreview['item'],
+  points = item.inspection_points,
+): TemplateItem {
+  return {
+    system_id: item.id,
+    sequence: item.sequence,
+    title: item.title,
+    instruction: item.instruction,
+    inspection_points: points,
+  }
+}
+
+function hasStructureChange(
+  before: InspectionPoint[],
+  after: InspectionPoint[],
+): boolean {
+  const afterById = new Map(
+    after.filter((point) => point.id).map((point) => [point.id!, point]),
+  )
+  if (before.length !== after.length) return true
+  for (const point of before) {
+    if (!point.id) continue
+    const updated = afterById.get(point.id)
+    if (!updated) return true
+    const standardKind = (row: InspectionPoint) =>
+      row.numeric_standard ? 'numeric' : row.text_standard ? 'text' : 'none'
+    if (standardKind(point) !== standardKind(updated)) return true
+    const bindingIdentity = (row: InspectionPoint) => {
+      const standard = row.numeric_standard
+      if (!standard) return null
+      return (
+        standard.measurement_field_client_key ??
+        standard.measurement_field_client_id ??
+        standard.measurement_field_id ??
+        null
+      )
+    }
+    if (
+      bindingIdentity(point) !== bindingIdentity(updated) ||
+      point.numeric_standard?.unit !== updated.numeric_standard?.unit
+    ) {
+      return true
+    }
+    const afterFields = new Map(
+      updated.measurement_fields
+        .filter((field) => field.id)
+        .map((field) => [field.id!, field]),
+    )
+    if (
+      point.measurement_fields.length !== updated.measurement_fields.length
+    ) {
+      return true
+    }
+    for (const field of point.measurement_fields) {
+      if (!field.id) continue
+      const next = afterFields.get(field.id)
+      if (
+        !next ||
+        next.field_type !== field.field_type ||
+        next.unit !== field.unit
+      ) {
+        return true
+      }
+    }
+    if (
+      JSON.stringify(point.evidence_requirements) !==
+      JSON.stringify(updated.evidence_requirements)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function removesStructure(
+  before: InspectionPoint[],
+  after: InspectionPoint[],
+): boolean {
+  const afterById = new Map(
+    after.filter((point) => point.id).map((point) => [point.id!, point]),
+  )
+  for (const point of before) {
+    if (!point.id) continue
+    const updated = afterById.get(point.id)
+    if (!updated) return true
+    const fieldIds = new Set(
+      updated.measurement_fields
+        .map((field) => field.id)
+        .filter((id): id is string => Boolean(id)),
+    )
+    if (
+      point.measurement_fields.some(
+        (field) => field.id && !fieldIds.has(field.id),
+      )
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function deletedStructureNames(
+  before: InspectionPoint[],
+  after: InspectionPoint[],
+): string[] {
+  const afterById = new Map(
+    after.filter((point) => point.id).map((point) => [point.id!, point]),
+  )
+  const deleted: string[] = []
+  for (const point of before) {
+    if (!point.id) continue
+    const updated = afterById.get(point.id)
+    if (!updated) {
+      deleted.push(`項次「${point.title}」`)
+      continue
+    }
+    const fieldIds = new Set(
+      updated.measurement_fields
+        .map((field) => field.id)
+        .filter((id): id is string => Boolean(id)),
+    )
+    for (const field of point.measurement_fields) {
+      if (field.id && !fieldIds.has(field.id)) {
+        deleted.push(`「${point.title}」的欄位「${field.name}」`)
+      }
+    }
+  }
+  return deleted
+}
+
+function validateDraft(
+  item: TemplateItem,
+  photos: Record<string, string>,
+): Record<string, string> {
+  const errors: Record<string, string> = {}
+  if (!item.title.trim()) errors.title = '請填寫查核項目名稱'
+  if (item.inspection_points.length === 0) {
+    errors.points = '請至少新增一個查核項次'
+  }
+  item.inspection_points.forEach((point, pointIndex) => {
+    const key = `point:${point.clientKey ?? point.id ?? pointIndex}`
+    if (!point.title.trim()) errors[`${key}:title`] = '請填寫項次標題'
+    point.measurement_fields.forEach((field, fieldIndex) => {
+      const fieldKey = `${key}:field:${fieldIndex}`
+      if (!field.name.trim()) {
+        errors[`${fieldKey}:name`] = '請填寫欄位名稱'
+      }
+      if (field.field_type === 'number' && !field.unit?.trim()) {
+        errors[`${fieldKey}:unit`] = '請填寫數字欄位的單位'
+      }
+    })
+    const standard = point.numeric_standard
+    if (standard) {
+      if (!boundField(point)) errors[`${key}:binding`] = '請選擇數字欄位'
+      if (
+        standard.condition === 'range' &&
+        standard.range_form === 'interval'
+      ) {
+        const lower = Number(standard.lower_bound)
+        const upper = Number(standard.upper_bound)
+        if (!Number.isFinite(lower)) errors[`${key}:lower`] = '請填寫有效下限'
+        if (!Number.isFinite(upper)) errors[`${key}:upper`] = '請填寫有效上限'
+        if (
+          Number.isFinite(lower) &&
+          Number.isFinite(upper) &&
+          lower > upper
+        ) {
+          errors[`${key}:range`] = '下限不能大於上限'
+        }
+      } else {
+        if (
+          !standard.value?.trim() ||
+          !Number.isFinite(Number(standard.value))
+        ) {
+          errors[`${key}:value`] = '請填寫有效標準值'
+        }
+        if (standard.condition === 'range') {
+          const tolerance = Number(standard.tolerance)
+          if (
+            !standard.tolerance?.trim() ||
+            !Number.isFinite(tolerance) ||
+            tolerance < 0
+          ) {
+            errors[`${key}:tolerance`] = '請填寫大於或等於 0 的容許誤差'
+          }
+        }
+      }
+    }
+    if (point.text_standard && !point.text_standard.text.trim()) {
+      errors[`${key}:text`] = '請填寫文字標準'
+    }
+    const count = Number(photos[String(pointIndex)] ?? '1')
+    if (!Number.isInteger(count) || count < 1) {
+      errors[`${key}:photos`] = '照片至少要 1 張'
+    }
+  })
+  return errors
+}
+
+function fieldErrorMessage(code: string): string {
+  const messages: Record<string, string> = {
+    'field.required': '請填寫此欄位。',
+    'field.invalid': '欄位格式不正確，請檢查輸入內容。',
+    'field.out_of_range': '數值超出允許範圍。',
+    'template.sequence_duplicate': '項次順序重複，請檢查項次。',
+    'template.photo_requirement_count': '每個項次必須設定一筆照片需求。',
+    'template.client_id_duplicate': '實測欄位識別重複，請重新設定欄位。',
+    'template.numeric_field_unbound': '請選擇有效的數字欄位。',
+    'template.numeric_unit_required': '請填寫數字欄位的單位。',
+    'template.bound_field_unit_forbidden': '綁定欄位的單位由數值標準帶入。',
+  }
+  return messages[code] ?? '欄位內容不符合規則，請檢查後再試。'
 }
 
 /**
@@ -165,9 +443,48 @@ export default function ProjectItemChangePage({
   const [busy, setBusy] = useState(false)
   const guard = useSubmitGuard()
   const [error, setError] = useState('')
+  const [serverFieldErrors, setServerFieldErrors] = useState<
+    Record<string, string>
+  >({})
+  const [focusRequest, setFocusRequest] = useState<{
+    id: number
+    key: string
+  } | null>(null)
+  const focusRequestId = useRef(0)
+  const [photoDraft, setPhotoDraft] = useState<Record<string, string>>({})
+  const [confirmField, setConfirmField] = useState('')
+  const [attemptedSave, setAttemptedSave] = useState(false)
+  // null 代表尚未載入成功（載入中、失敗、404、403）；此時沒有可比對的
+  // 原始內容，不算有未儲存變更，離頁不應被攔下。
+  const [baseline, setBaseline] = useState<string | null>(null)
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
+  const confirmBoxRef = useRef<HTMLDivElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
+
+  const editorValues = {
+    title,
+    instruction,
+    inspectionPoints,
+    photoDraft,
+  }
+  const dirty = baseline !== null && baseline !== JSON.stringify(editorValues)
+  const leaveGuard = useUnsavedNavigationGuard(dirty)
+  const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
+  const hasDraft = preview
+    ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
+    : false
+  const needsChoice = preview
+    ? preview.affectedTasks.some((task) => task.status !== 'DRAFT')
+    : false
+  const structureLocked = needsChoice && reinspect === false
+  const photoRequirementChanged = Boolean(
+    preview?.item.inspection_points.some(
+      (point, index) =>
+        Number(photoDraft[String(index)] ?? '1') !==
+        point.evidence_requirements[0]?.min_count,
+    ),
+  )
 
   useEffect(() => {
     let active = true
@@ -176,10 +493,34 @@ export default function ProjectItemChangePage({
       .loadPreview(projectId, itemId)
       .then((loaded) => {
         if (!active) return
-        setPreview(loaded)
-        setTitle(loaded.item.title)
-        setInstruction(loaded.item.instruction)
-        setInspectionPoints(loaded.item.inspection_points)
+        const localized = {
+          ...loaded,
+          item: {
+            ...loaded.item,
+            inspection_points: localizeProjectPoints(
+              loaded.item.inspection_points,
+            ),
+          },
+        }
+        const photos = Object.fromEntries(
+          localized.item.inspection_points.map((point, index) => [
+            String(index),
+            String(point.evidence_requirements[0]?.min_count ?? 1),
+          ]),
+        )
+        setPreview(localized)
+        setTitle(localized.item.title)
+        setInstruction(localized.item.instruction)
+        setInspectionPoints(localized.item.inspection_points)
+        setPhotoDraft(photos)
+        setBaseline(
+          JSON.stringify({
+            title: localized.item.title,
+            instruction: localized.item.instruction,
+            inspectionPoints: localized.item.inspection_points,
+            photoDraft: photos,
+          }),
+        )
         if (loaded.readOnly) {
           setReadOnly(true)
           setError('你沒有權限修改此專案查核項目。')
@@ -207,6 +548,13 @@ export default function ProjectItemChangePage({
   useEffect(() => {
     if (confirming) {
       dialogHeadingRef.current?.focus()
+      // 手機確認框在表單下方；對齊框底，讓確認按鈕留在可視範圍。
+      if (
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(max-width: 40rem)').matches
+      ) {
+        confirmBoxRef.current?.scrollIntoView({ block: 'end' })
+      }
     } else if (returnFocusRef.current?.isConnected) {
       returnFocusRef.current.focus()
       returnFocusRef.current = null
@@ -217,14 +565,61 @@ export default function ProjectItemChangePage({
     if (error && preview) actionErrorRef.current?.focus()
   }, [error, preview])
 
-  async function reloadPreview(): Promise<ProjectItemPreview> {
-    if (!projectId || !itemId) throw new Error('Missing route parameters')
-    const loaded = await api.loadPreview(projectId, itemId)
-    setPreview(loaded)
-    return loaded
+  function applyPreview(loaded: ProjectItemPreview) {
+    const localized = {
+      ...loaded,
+      item: {
+        ...loaded.item,
+        inspection_points: localizeProjectPoints(
+          loaded.item.inspection_points,
+        ),
+      },
+    }
+    const photos = Object.fromEntries(
+      localized.item.inspection_points.map((point, index) => [
+        String(index),
+        String(point.evidence_requirements[0]?.min_count ?? 1),
+      ]),
+    )
+    setPreview(localized)
+    setTitle(localized.item.title)
+    setInstruction(localized.item.instruction)
+    setInspectionPoints(localized.item.inspection_points)
+    setPhotoDraft(photos)
+    setReinspect(null)
+    setBaseline(
+      JSON.stringify({
+        title: localized.item.title,
+        instruction: localized.item.instruction,
+        inspectionPoints: localized.item.inspection_points,
+        photoDraft: photos,
+      }),
+    )
+    return localized
   }
 
-  async function save(selectedReinspect?: boolean) {
+  async function reloadPreview(
+    resetEditor = false,
+  ): Promise<ProjectItemPreview> {
+    if (!projectId || !itemId) throw new Error('Missing route parameters')
+    const loaded = await api.loadPreview(projectId, itemId)
+    if (resetEditor) return applyPreview(loaded)
+    const localized = {
+      ...loaded,
+      item: {
+        ...loaded.item,
+        inspection_points: localizeProjectPoints(
+          loaded.item.inspection_points,
+        ),
+      },
+    }
+    setPreview(localized)
+    return localized
+  }
+
+  // `recheckDrafts`：只有草稿任務時要送 reinspect: true（見 isDraftOnly），
+  // 送出前先重讀任務；期間若已有任務被派出，改送會誤用草稿原位更新的語意。
+  async function save(selectedReinspect?: boolean, recheckDrafts = false) {
     if (!projectId || !itemId) return
     if (!guard.enter()) return
     setError('')
@@ -232,32 +627,69 @@ export default function ProjectItemChangePage({
     const change: ProjectItemChange = {
       title,
       instruction,
-      inspection_points: structuredClone(inspectionPoints),
+      inspection_points: structuredClone(
+        inspectionPoints.map((point, index) => ({
+          ...point,
+          sequence: index + 1,
+          evidence_requirements: [
+            { min_count: Number(photoDraft[String(index)] ?? '1') },
+          ],
+        })),
+      ),
       ...(selectedReinspect === undefined
         ? {}
         : { reinspect: selectedReinspect }),
     }
     try {
+      let tasksAtSave = preview?.affectedTasks ?? []
+      if (recheckDrafts) {
+        const loaded = await reloadPreview()
+        if (loaded.affectedTasks.some((task) => task.status !== 'DRAFT')) {
+          // 沿用競態回復：停下來，請使用者針對最新的任務重新選擇。
+          setConfirming(false)
+          setReinspect(null)
+          setError(REINSPECTION_CHOICE_ERROR)
+          if (
+            loaded.readOnly ||
+            loaded.affectedTasks.some((task) => task.planArchived)
+          ) {
+            setReadOnly(true)
+          }
+          return
+        }
+        tasksAtSave = loaded.affectedTasks
+        if (loaded.affectedTasks.length === 0) delete change.reinspect
+      }
       const updated = await api.update(projectId, itemId, change)
-      setResultTasks(preview?.affectedTasks ?? [])
+      setResultTasks(tasksAtSave)
       setResult(updated)
       setConfirming(false)
+      setAttemptedSave(false)
+      setServerFieldErrors({})
       try {
-        const loaded = await reloadPreview()
-        setTitle(loaded.item.title)
-        setInstruction(loaded.item.instruction)
-        setInspectionPoints(loaded.item.inspection_points)
+        const loaded = await reloadPreview(true)
         if (loaded.readOnly) setReadOnly(true)
         if (loaded.affectedTasks.some((task) => task.planArchived)) {
           setReadOnly(true)
         }
       } catch {
-        setTitle(change.title)
-        setInstruction(change.instruction)
-        setInspectionPoints(change.inspection_points)
+        // 改用回應內帶 id 的項次當新基準：用送出前的草稿會缺少新項次與
+        // 欄位的 id，下一次儲存就會把它們當成新資料再建立一次。
+        if (preview) {
+          applyPreview({
+            ...preview,
+            item: {
+              ...preview.item,
+              title: updated.title,
+              instruction: updated.instruction,
+              inspection_points: updated.inspection_points,
+            },
+          })
+        }
         setError('已儲存變更，但重新載入任務狀態失敗。')
       }
     } catch (caught) {
+      let fieldErrorsHandled = false
       if (isForbidden(caught)) {
         setReadOnly(true)
         setConfirming(false)
@@ -275,8 +707,8 @@ export default function ProjectItemChangePage({
       } else if (isReinspectionChoiceRequired(caught)) {
         try {
           const loaded = await reloadPreview()
-          setReinspect(null)
-          setConfirming(true)
+          setConfirming(false)
+          setError(REINSPECTION_CHOICE_ERROR)
           if (
             loaded.readOnly ||
             loaded.affectedTasks.some((task) => task.planArchived)
@@ -286,19 +718,104 @@ export default function ProjectItemChangePage({
         } catch (reloadError) {
           if (isForbidden(reloadError)) setReadOnly(true)
         }
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.status === 422 &&
+        caught.code === 'project_inspection_item.structure_locked'
+      ) {
+        setConfirming(false)
+        setReinspect(null)
+        try {
+          const loaded = await reloadPreview()
+          if (
+            loaded.readOnly ||
+            loaded.affectedTasks.some((task) => task.planArchived)
+          ) {
+            setReadOnly(true)
+          }
+        } catch (reloadError) {
+          if (isForbidden(reloadError)) setReadOnly(true)
+        }
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.status === 422 &&
+        caught.fields?.length
+      ) {
+        const draft = {
+          ...makeDraft(preview!.item, change.inspection_points),
+          title: change.title,
+          instruction: change.instruction,
+        }
+        const mapped = mapFieldErrors(
+          caught.fields,
+          templateFieldErrorBindings(draft, undefined, true),
+        )
+        const messages = Object.fromEntries(
+          Object.entries(mapped.errors).map(([key, code]) => [
+            key,
+            fieldErrorMessage(code),
+          ]),
+        )
+        setServerFieldErrors(messages)
+        setConfirming(false)
+        fieldErrorsHandled = true
+        setError(
+          mapped.unmatched.length ? '查核項目未儲存，請檢查欄位內容。' : '',
+        )
+        const firstErrorKey = Object.keys(messages)[0]
+        if (firstErrorKey) {
+          focusRequestId.current += 1
+          setFocusRequest({ id: focusRequestId.current, key: firstErrorKey })
+        }
       }
-      setError(errorMessage(caught))
+      if (!fieldErrorsHandled) setError(errorMessage(caught))
     } finally {
       guard.leave()
       setBusy(false)
     }
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submitItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
     setResult(null)
-    setReinspect(null)
+    setServerFieldErrors({})
+    setAttemptedSave(true)
+    const draft = {
+      ...makeDraft(preview!.item, inspectionPoints),
+      title,
+      instruction,
+    }
+    const invalid = validateDraft(draft, photoDraft)
+    if (Object.keys(invalid).length > 0) {
+      const firstErrorKey = Object.keys(invalid)[0]
+      focusRequestId.current += 1
+      setFocusRequest({ id: focusRequestId.current, key: firstErrorKey })
+      const invalidPoints = draft.inspection_points.flatMap((point, index) => {
+        const pointKey = `point:${point.clientKey ?? point.id ?? index}:`
+        return Object.keys(invalid).some((key) => key.startsWith(pointKey))
+          ? [index]
+          : []
+      })
+      return Promise.resolve(invalidPoints)
+    }
+    if (needsChoice && reinspect === null) {
+      setError('請先選擇這次修改要不要重新查核。')
+      return Promise.resolve(null)
+    }
+    if (
+      structureLocked &&
+      (hasStructureChange(preview!.item.inspection_points, inspectionPoints) ||
+        photoRequirementChanged)
+    ) {
+      setError(
+        [
+          '選擇「不要」重新查核時，不能增減項次或實測欄位，',
+          '也不能變更照片需求、欄位型別、單位、數值綁定或標準種類。',
+        ].join(''),
+      )
+      return Promise.resolve(null)
+    }
     const submitter = (event.nativeEvent as SubmitEvent).submitter
     returnFocusRef.current =
       (submitter as HTMLElement | null) ??
@@ -306,7 +823,22 @@ export default function ProjectItemChangePage({
         'button[type="submit"]',
       )
     setConfirming(true)
+    return Promise.resolve(null)
   }
+
+  const currentDraft = preview
+    ? { ...makeDraft(preview.item, inspectionPoints), title, instruction }
+    : null
+  const localErrors =
+    attemptedSave && currentDraft
+      ? validateDraft(currentDraft, photoDraft)
+      : {}
+  const willDeleteStructure = preview
+    ? removesStructure(preview.item.inspection_points, inspectionPoints)
+    : false
+  const deletedNames = preview
+    ? deletedStructureNames(preview.item.inspection_points, inspectionPoints)
+    : []
 
   if (!projectId || !itemId) {
     return <p role="alert">缺少專案或查核項目識別碼。</p>
@@ -324,14 +856,6 @@ export default function ProjectItemChangePage({
     )
   }
 
-  const draftOnly = preview ? isDraftOnly(preview.affectedTasks) : false
-  const hasDraft = preview
-    ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
-    : false
-  const needsChoice = preview
-    ? preview.affectedTasks.length > 0 && !draftOnly
-    : false
-
   return (
     <section aria-labelledby="project-item-heading">
       <h2 id="project-item-heading">修改專案查核項目</h2>
@@ -340,111 +864,153 @@ export default function ProjectItemChangePage({
           唯讀瀏覽
         </p>
       )}
-      {error && !preview && <p role="alert">{error}</p>}
+      {error && (
+        <p ref={actionErrorRef} role="alert" tabIndex={-1}>
+          {error}
+        </p>
+      )}
       {preview && (
         <>
-          <form onKeyDown={blockImeEnter} onSubmit={submit}>
-            <label>
-              項目名稱 *
-              <input
-                disabled={readOnly || busy}
-                onChange={(event) => setTitle(event.target.value)}
-                required
-                value={title}
-              />
-            </label>
-            <label>
-              項目說明
-              <textarea
-                disabled={readOnly || busy}
-                onChange={(event) => setInstruction(event.target.value)}
-                value={instruction}
-              />
-            </label>
-            <fieldset disabled={readOnly || busy}>
-              <legend>查核項次</legend>
-              {inspectionPoints.map((point, index) => (
-                <fieldset key={`${point.sequence}-${index}`}>
-                  <legend>第 {point.sequence} 項</legend>
-                  <label>
-                    項次名稱 *
-                    <input
-                      required
-                      onChange={(event) =>
-                        setInspectionPoints(
-                          updatePoint(inspectionPoints, index, {
-                            title: event.target.value,
-                          }),
-                        )
-                      }
-                      value={point.title}
-                    />
-                  </label>
-                  <label>
-                    查核說明
-                    <textarea
-                      onChange={(event) =>
-                        setInspectionPoints(
-                          updatePoint(inspectionPoints, index, {
-                            instruction: event.target.value,
-                          }),
-                        )
-                      }
-                      value={point.instruction}
-                    />
-                  </label>
-                  {point.text_standard && (
-                    <label>
-                      文字標準 *
-                      <textarea
-                        required
-                        onChange={(event) =>
-                          setInspectionPoints(
-                            updatePoint(inspectionPoints, index, {
-                              text_standard: { text: event.target.value },
-                            }),
-                          )
-                        }
-                        value={point.text_standard.text}
-                      />
-                    </label>
-                  )}
-                  {point.numeric_standard && (
-                    <p>
-                      數值標準：
-                      {formatInspectionStandard(point)}
-                    </p>
-                  )}
-                  {!point.numeric_standard && !point.text_standard && (
-                    <p>{formatInspectionStandard(point)}</p>
-                  )}
-                  {point.measurement_fields.length > 0 && (
-                    <p>
-                      實測欄位：
-                      {point.measurement_fields
-                        .map((field) => field.name)
-                        .join('、')}
-                    </p>
-                  )}
-                  {point.evidence_requirements.length > 0 && (
-                    <p>此項次含照片需求設定。</p>
-                  )}
-                </fieldset>
-              ))}
-            </fieldset>
-            <button
-              className="btn-primary"
-              disabled={readOnly || busy}
-              type="submit"
-            >
-              儲存變更
-            </button>
-            {error && (
-              <p ref={actionErrorRef} role="alert" tabIndex={-1}>
-                {error}
+          {needsChoice && (
+            <fieldset className="tpl-card" disabled={readOnly || busy}>
+              <legend>這次修改要不要重新查核？</legend>
+              <label className="tpl-radio-option">
+                <input
+                  aria-describedby="reinspect-yes-hint"
+                  checked={reinspect === true}
+                  onChange={() => setReinspect(true)}
+                  name="reinspect"
+                  type="radio"
+                />
+                要，用新標準重新查核
+              </label>
+              <p className="tpl-hint" id="reinspect-yes-hint">
+                {REINSPECT_YES_HINT}
               </p>
-            )}
-          </form>
+              <label className="tpl-radio-option">
+                <input
+                  aria-describedby="reinspect-no-hint"
+                  checked={reinspect === false}
+                  onChange={() => setReinspect(false)}
+                  name="reinspect"
+                  type="radio"
+                />
+                不要，只更正文字與標準值
+              </label>
+              <p className="tpl-hint" id="reinspect-no-hint">
+                {REINSPECT_NO_HINT}
+              </p>
+            </fieldset>
+          )}
+          {currentDraft && (
+            <TemplateItemEditor
+              addPoint={() =>
+                setInspectionPoints((current) => [
+                  ...current,
+                  blankPoint(current.length + 1),
+                ])
+              }
+              cancelLabel="返回專案查核項目"
+              cancelHref={`/admin/projects/${projectId}/inspection-items`}
+              stablePointErrorKeys
+              clearPointServerErrors={(index) => {
+                const point = inspectionPoints[index]
+                const identity = point?.clientKey ?? point?.id ?? index
+                const prefix = `point:${identity}:`
+                setServerFieldErrors((current) =>
+                  Object.fromEntries(
+                    Object.entries(current).filter(
+                      ([key]) => !key.startsWith(prefix),
+                    ),
+                  ),
+                )
+              }}
+              confirmField={confirmField}
+              contextLabel={`專案查核項目 / ${preview.item.title}`}
+              dirty={dirty}
+              errors={{ ...serverFieldErrors, ...localErrors }}
+              focusRequest={focusRequest}
+              itemDraft={currentDraft}
+              mode="edit-item"
+              photoDraft={photoDraft}
+              readOnly={readOnly || busy}
+              removePoint={(index) => {
+                setInspectionPoints((current) =>
+                  current
+                    .filter((_point, pointIndex) => pointIndex !== index)
+                    .map((point, pointIndex) => ({
+                      ...point,
+                      sequence: pointIndex + 1,
+                    })),
+                )
+                setPhotoDraft((current) => {
+                  const next: Record<string, string> = {}
+                  Object.entries(current).forEach(([key, value]) => {
+                    const pointIndex = Number(key)
+                    if (pointIndex < index) next[key] = value
+                    if (pointIndex > index)
+                      next[String(pointIndex - 1)] = value
+                  })
+                  return next
+                })
+              }}
+              resetMode={() => {}}
+              requestError=""
+              saveItem={submitItem}
+              saveLabel="儲存變更"
+              selected={null}
+              setConfirmField={setConfirmField}
+              setGuard={() => {}}
+              setPhotoDraft={setPhotoDraft}
+              structureLocked={structureLocked}
+              structureLockReason={
+                '選擇「不要」時，只能更正文字與數值標準、容差、區間；照片需求、欄位型別、單位、數值綁定、標準種類及項次／欄位增減都會鎖定。'
+              }
+              systemId={projectId}
+              updateDraft={(changes: Partial<TemplateItem>) => {
+                if (changes.title !== undefined) setTitle(changes.title)
+                if (changes.instruction !== undefined) {
+                  setInstruction(changes.instruction)
+                }
+                setError('')
+                setResult(null)
+              }}
+              updateField={(pointIndex, fieldIndex, changes) => {
+                setInspectionPoints((current) =>
+                  current.map((point, index) =>
+                    index !== pointIndex
+                      ? point
+                      : {
+                          ...point,
+                          measurement_fields: point.measurement_fields.map(
+                            (field, fieldPosition) =>
+                              fieldPosition === fieldIndex
+                                ? { ...field, ...changes }
+                                : field,
+                          ),
+                        },
+                  ),
+                )
+                setError('')
+                setResult(null)
+              }}
+              updateNumeric={(index, changes) =>
+                setInspectionPoints((current) =>
+                  updatePoint(current, index, {
+                    numeric_standard: {
+                      ...current[index].numeric_standard!,
+                      ...changes,
+                    },
+                  }),
+                )
+              }
+              updatePoint={(index, changes) =>
+                setInspectionPoints((current) =>
+                  updatePoint(current, index, changes),
+                )
+              }
+            />
+          )}
 
           {confirming && (
             <ConfirmBox
@@ -452,25 +1018,28 @@ export default function ProjectItemChangePage({
               confirmDisabled={readOnly || (needsChoice && reinspect === null)}
               confirmLabel="確認儲存"
               headingRef={dialogHeadingRef}
+              rootRef={confirmBoxRef}
               initialFocus="none"
               onCancel={() => setConfirming(false)}
               onConfirm={() =>
-                save(draftOnly ? false : (reinspect ?? undefined))
+                draftOnly ? save(true, true) : save(reinspect ?? undefined)
               }
               role="dialog"
               title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
+              variant={willDeleteStructure ? 'danger' : undefined}
             >
               {needsChoice && (
                 <>
                   <p>
-                    {'有任務已經派出，請先選擇這次修改要不要重新查核。'}
+                    {'有任務已經派出。'}
                     {hasDraft && '草稿任務不受選擇影響，會直接更新為新內容；'}
                     {'已核發的報告也不受影響。'}
                   </p>
                   <p>
-                    {'選擇「要」重新查核時，'}
-                    {'各任務會有以下狀態變化；'}
-                    {'選擇「不要」時，各任務狀態維持不變。'}
+                    {reinspect === true &&
+                      '你選擇「要」重新查核，各任務會有以下狀態變化。'}
+                    {reinspect === false &&
+                      '你選擇「不要」重新查核，各任務狀態維持不變。'}
                   </p>
                 </>
               )}
@@ -480,6 +1049,19 @@ export default function ProjectItemChangePage({
                   {'儲存後草稿任務會直接更新為新內容，'}
                   {'不需要重新查核。'}
                 </p>
+              )}
+              {willDeleteStructure && (
+                <>
+                  <p>即將刪除：{deletedNames.join('、')}。</p>
+                  {preview.affectedTasks.some(
+                    (task) => task.status !== 'DRAFT',
+                  ) && (
+                    <p>
+                      已派出任務的舊結果與照片會依重新查核規則作廢；
+                      已取消任務於恢復時套用目前標準。
+                    </p>
+                  )}
+                </>
               )}
               <h3>使用此項目的任務</h3>
               {preview.affectedTasks.length === 0 ? (
@@ -493,48 +1075,17 @@ export default function ProjectItemChangePage({
                     <li key={task.id}>
                       {task.name}（{task.planName}；{taskLocation(task)}；
                       <StatusBadge status={task.status} />）
-                      {needsChoice && <>：{taskConsequence(task.status)}</>}
+                      {needsChoice && (
+                        <>：{taskConsequenceText(task.status, reinspect)}</>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
-              {needsChoice && (
-                <fieldset disabled={readOnly}>
-                  <legend>是否重新查核？</legend>
-                  <div>
-                    <label>
-                      <input
-                        aria-describedby="reinspect-yes-hint"
-                        checked={reinspect === true}
-                        onChange={() => setReinspect(true)}
-                        name="reinspect"
-                        type="radio"
-                      />
-                      要，用新標準重新查核
-                    </label>
-                    <p className="tpl-hint" id="reinspect-yes-hint">
-                      {REINSPECT_YES_HINT}
-                    </p>
-                  </div>
-                  <div>
-                    <label>
-                      <input
-                        aria-describedby="reinspect-no-hint"
-                        checked={reinspect === false}
-                        onChange={() => setReinspect(false)}
-                        name="reinspect"
-                        type="radio"
-                      />
-                      不要，只更正文字
-                    </label>
-                    <p className="tpl-hint" id="reinspect-no-hint">
-                      {REINSPECT_NO_HINT}
-                    </p>
-                  </div>
-                </fieldset>
-              )}
             </ConfirmBox>
           )}
+
+          <UnsavedLeaveBox guard={leaveGuard} />
 
           {result && (
             <section
@@ -544,12 +1095,12 @@ export default function ProjectItemChangePage({
             >
               <h2 id="change-result-heading">修改結果</h2>
               <p>
-                {result.reinspection_selected
-                  ? '已選擇重新查核。'
-                  : result.affected_tasks.length === 0
-                    ? '已儲存項目內容。'
-                    : isDraftOnly(resultTasks)
-                      ? DRAFT_ONLY_RESULT_TEXT
+                {isDraftOnly(resultTasks)
+                  ? DRAFT_ONLY_RESULT_TEXT
+                  : result.reinspection_selected
+                    ? '已選擇重新查核。'
+                    : result.affected_tasks.length === 0
+                      ? '已儲存項目內容。'
                       : '已更正文字，沒有重新查核。'}
               </p>
               {result.reinspection_selected &&

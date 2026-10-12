@@ -212,7 +212,11 @@ export function useUnsavedNavigationGuard(
 
   return {
     pending: pending !== null,
-    stay: () => setPendingLink(null),
+    stay: () => {
+      const anchor = pending?.anchor
+      setPendingLink(null)
+      if (anchor?.isConnected) anchor.focus()
+    },
     leave: () => {
       if (!pending) return
       setPendingLink(null)

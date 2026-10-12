@@ -27,6 +27,7 @@ export interface MeasurementField {
 
 export interface InspectionPoint {
   id?: string
+  clientKey?: string
   sequence: number
   title: string
   instruction: string
