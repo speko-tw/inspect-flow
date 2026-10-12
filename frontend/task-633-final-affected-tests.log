@@ -1,0 +1,18 @@
+pwd -P: /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+HEAD: 4a2749d14276d320f1b1e9544f2cf21f42397e61
+COMMAND: VITEST_MAX_WORKERS=4 npx vitest run eight changed focus-test files --configLoader runner
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  8 passed (8)
+      Tests  313 passed (313)
+   Start at  23:02:52
+   Duration  11.74s (tests 65%, environment 23%, transform 5%, setup 4%, import 2%)
+
+    Isolate  8 workers spawned · ~1.43s startup each (spawn + environment, per file)
+             at least ~1.43s faster with isolate: false — reuses workers across files instead of one per file
+
+EXIT_CODE: 0

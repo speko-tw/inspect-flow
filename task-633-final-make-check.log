@@ -1,0 +1,655 @@
+PWD=/Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test
+HEAD=4a2749d14276d320f1b1e9544f2cf21f42397e61
+COMMAND=VITEST_MAX_WORKERS=4 make check
+/Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory check-env
+/Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory check-version
+python3 scripts/check-version.py
+version check passed: 0.4.0
+/Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory check-backend
+cd backend && uv run --locked ruff format --check .
+206 files already formatted
+cd backend && uv run --locked ruff check .
+All checks passed!
+cd backend && uv run --locked pyright
+0 errors, 0 warnings, 0 informations
+cd backend && uv run --locked pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 1164 items
+
+tests/api/test_access_summary.py .............                           [  1%]
+tests/api/test_audit_logs.py ...                                         [  1%]
+tests/api/test_inspection_planning_api.py ............................   [  3%]
+tests/api/test_management.py .............                               [  4%]
+tests/api/test_me.py ......                                              [  5%]
+tests/api/test_planning_field_error_contract.py .....                    [  5%]
+tests/api/test_planning_query_counts.py .......                          [  6%]
+tests/api/test_project_patch_field_error_contract.py .                   [  6%]
+tests/api/test_project_template_application.py .............             [  7%]
+tests/api/test_project_workflow_summary.py ....                          [  7%]
+tests/api/test_projects.py .....................................         [ 11%]
+tests/api/test_request_limits.py ................                        [ 12%]
+tests/api/test_roles_api.py .......                                      [ 13%]
+tests/api/test_template_library.py ..................................... [ 16%]
+                                                                         [ 16%]
+tests/api/test_template_query_counts.py ..                               [ 16%]
+tests/auth/test_access.py ...................                            [ 18%]
+tests/auth/test_auth_logging.py ........                                 [ 18%]
+tests/auth/test_login_api.py ........                                    [ 19%]
+tests/auth/test_login_lockout.py ..................                      [ 21%]
+tests/auth/test_password_change.py ........                              [ 21%]
+tests/auth/test_password_gate.py .....                                   [ 22%]
+tests/auth/test_passwords.py ...........                                 [ 23%]
+tests/auth/test_sessions.py ..............                               [ 24%]
+tests/auth/test_settings.py ............................................ [ 28%]
+.......................                                                  [ 30%]
+tests/auth/test_setup_api.py .....                                       [ 30%]
+tests/auth/test_setup_lockout.py ........                                [ 31%]
+tests/cli/test_init_system.py ...                                        [ 31%]
+tests/cli/test_init_system_audit.py .                                    [ 31%]
+tests/cli/test_reset_admin_password.py ........                          [ 32%]
+tests/contract/test_error_envelope.py ..............                     [ 33%]
+tests/contract/test_field_errors.py ...........                          [ 34%]
+tests/contract/test_id_format.py ..                                      [ 34%]
+tests/contract/test_multipart_conventions.py .                           [ 34%]
+tests/contract/test_pagination_conventions.py ...............            [ 35%]
+tests/contract/test_permission_codes.py ...                              [ 36%]
+tests/contract/test_route_access.py ..............                       [ 37%]
+tests/contract/test_route_conventions.py .....                           [ 37%]
+tests/contract/test_time_format.py ......                                [ 38%]
+tests/db/test_account_redesign_migration.py ...................          [ 39%]
+tests/db/test_audit_events.py .                                          [ 40%]
+tests/db/test_audit_log.py ............................................. [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 56%]
+..........                                                               [ 57%]
+tests/db/test_audit_project_id_migration.py .                            [ 57%]
+tests/db/test_auth_tables.py .............                               [ 58%]
+tests/db/test_autogenerate_render.py ..                                  [ 58%]
+tests/db/test_bounded_string.py ..                                       [ 58%]
+tests/db/test_company.py .........................                       [ 60%]
+tests/db/test_db_access_rules.py ................                        [ 62%]
+tests/db/test_engine_reuse.py ......                                     [ 62%]
+tests/db/test_inspection_planning.py ...........s                        [ 63%]
+tests/db/test_management_error_constraints.py sss                        [ 64%]
+tests/db/test_measurement_order_migration.py .                           [ 64%]
+tests/db/test_migrations.py ..No new upgrade operations detected.
+........                                   [ 64%]
+tests/db/test_module_permission_migration.py ......                      [ 65%]
+tests/db/test_narrow_business_number_lengths.py ....s..                  [ 66%]
+tests/db/test_planning_api_postgresql.py ..s                             [ 66%]
+tests/db/test_project_code_length.py ........                            [ 67%]
+tests/db/test_project_item_edit_concurrency.py ssss.                     [ 67%]
+tests/db/test_role_member.py .................................           [ 70%]
+tests/db/test_settings.py ......                                         [ 70%]
+tests/db/test_setup_codes.py ..........                                  [ 71%]
+tests/db/test_sqlite_pragmas.py ...                                      [ 71%]
+tests/db/test_template_system.py ....s..                                 [ 72%]
+tests/db/test_timestamped_base.py ...                                    [ 72%]
+tests/db/test_unit_of_work.py ..                                         [ 72%]
+tests/db/test_user_account_fields.py ................................... [ 75%]
+....                                                                     [ 76%]
+tests/db/test_user_fields.py ........................................... [ 79%]
+..............................                                           [ 82%]
+tests/db/test_user_password_flag.py ....                                 [ 82%]
+tests/db/test_user_project.py ...................                        [ 84%]
+tests/db/test_utc_datetime.py ..                                         [ 84%]
+tests/db/test_uuid7.py ........                                          [ 85%]
+tests/services/test_audit.py ..................................          [ 88%]
+tests/services/test_audit_write_timing.py .                              [ 88%]
+tests/services/test_companies.py ....                                    [ 88%]
+tests/services/test_inspection_planning.py ............................. [ 91%]
+....                                                                     [ 91%]
+tests/services/test_module_permissions.py ..................             [ 93%]
+tests/services/test_operator.py .....                                    [ 93%]
+tests/services/test_operator_auth.py .....                               [ 93%]
+tests/services/test_permissions.py ...........                           [ 94%]
+tests/services/test_project_members.py ...........                       [ 95%]
+tests/services/test_project_templates.py .                               [ 95%]
+tests/services/test_projects.py ....                                     [ 96%]
+tests/services/test_roles.py .........                                   [ 97%]
+tests/services/test_users.py .................                           [ 98%]
+tests/test_env_ignore.py .........                                       [ 99%]
+tests/test_health.py .                                                   [ 99%]
+tests/test_version.py .....                                              [ 99%]
+tests/test_version_check.py ..                                           [100%]
+
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/api/test_access_summary.py: 12 warnings
+tests/api/test_audit_logs.py: 3 warnings
+tests/api/test_inspection_planning_api.py: 28 warnings
+tests/api/test_management.py: 13 warnings
+tests/api/test_me.py: 6 warnings
+tests/api/test_planning_field_error_contract.py: 5 warnings
+tests/api/test_planning_query_counts.py: 7 warnings
+tests/api/test_project_patch_field_error_contract.py: 1 warning
+tests/api/test_project_template_application.py: 14 warnings
+tests/api/test_project_workflow_summary.py: 4 warnings
+tests/api/test_projects.py: 37 warnings
+tests/api/test_request_limits.py: 16 warnings
+tests/api/test_roles_api.py: 7 warnings
+tests/api/test_template_library.py: 36 warnings
+tests/api/test_template_query_counts.py: 2 warnings
+tests/auth/test_access.py: 15 warnings
+tests/auth/test_auth_logging.py: 8 warnings
+tests/auth/test_login_api.py: 8 warnings
+tests/auth/test_login_lockout.py: 14 warnings
+tests/auth/test_password_change.py: 5 warnings
+tests/auth/test_password_gate.py: 5 warnings
+tests/auth/test_sessions.py: 9 warnings
+tests/auth/test_setup_api.py: 5 warnings
+tests/auth/test_setup_lockout.py: 7 warnings
+tests/cli/test_init_system.py: 3 warnings
+tests/cli/test_init_system_audit.py: 1 warning
+tests/cli/test_reset_admin_password.py: 5 warnings
+tests/db/test_account_redesign_migration.py: 18 warnings
+tests/db/test_audit_events.py: 1 warning
+tests/db/test_audit_log.py: 37 warnings
+tests/db/test_audit_project_id_migration.py: 1 warning
+tests/db/test_auth_tables.py: 13 warnings
+tests/db/test_company.py: 25 warnings
+tests/db/test_inspection_planning.py: 12 warnings
+tests/db/test_management_error_constraints.py: 3 warnings
+tests/db/test_measurement_order_migration.py: 1 warning
+tests/db/test_migrations.py: 9 warnings
+tests/db/test_module_permission_migration.py: 6 warnings
+tests/db/test_narrow_business_number_lengths.py: 6 warnings
+tests/db/test_planning_api_postgresql.py: 3 warnings
+tests/db/test_project_code_length.py: 8 warnings
+tests/db/test_project_item_edit_concurrency.py: 5 warnings
+tests/db/test_role_member.py: 32 warnings
+tests/db/test_setup_codes.py: 10 warnings
+tests/db/test_template_system.py: 7 warnings
+tests/db/test_user_account_fields.py: 39 warnings
+tests/db/test_user_fields.py: 73 warnings
+tests/db/test_user_password_flag.py: 4 warnings
+tests/db/test_user_project.py: 19 warnings
+tests/services/test_audit.py: 27 warnings
+tests/services/test_audit_write_timing.py: 1 warning
+tests/services/test_companies.py: 4 warnings
+tests/services/test_inspection_planning.py: 24 warnings
+tests/services/test_module_permissions.py: 17 warnings
+tests/services/test_operator.py: 5 warnings
+tests/services/test_operator_auth.py: 5 warnings
+tests/services/test_permissions.py: 11 warnings
+tests/services/test_project_members.py: 11 warnings
+tests/services/test_projects.py: 4 warnings
+tests/services/test_roles.py: 9 warnings
+tests/services/test_users.py: 17 warnings
+  /usr/local/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py:144: SAWarning: Skipped unsupported reflection of expression-based index ix_users_email_lower
+    next(self.gen)
+
+tests/api/test_access_summary.py: 12 warnings
+tests/api/test_audit_logs.py: 3 warnings
+tests/api/test_inspection_planning_api.py: 28 warnings
+tests/api/test_management.py: 13 warnings
+tests/api/test_me.py: 6 warnings
+tests/api/test_planning_field_error_contract.py: 5 warnings
+tests/api/test_planning_query_counts.py: 7 warnings
+tests/api/test_project_patch_field_error_contract.py: 1 warning
+tests/api/test_project_template_application.py: 14 warnings
+tests/api/test_project_workflow_summary.py: 4 warnings
+tests/api/test_projects.py: 37 warnings
+tests/api/test_request_limits.py: 16 warnings
+tests/api/test_roles_api.py: 7 warnings
+tests/api/test_template_library.py: 36 warnings
+tests/api/test_template_query_counts.py: 2 warnings
+tests/auth/test_access.py: 15 warnings
+tests/auth/test_auth_logging.py: 8 warnings
+tests/auth/test_login_api.py: 8 warnings
+tests/auth/test_login_lockout.py: 13 warnings
+tests/auth/test_password_change.py: 5 warnings
+tests/auth/test_password_gate.py: 5 warnings
+tests/auth/test_sessions.py: 9 warnings
+tests/auth/test_setup_api.py: 5 warnings
+tests/auth/test_setup_lockout.py: 7 warnings
+tests/cli/test_init_system.py: 3 warnings
+tests/cli/test_init_system_audit.py: 1 warning
+tests/cli/test_reset_admin_password.py: 5 warnings
+tests/db/test_account_redesign_migration.py: 18 warnings
+tests/db/test_audit_events.py: 1 warning
+tests/db/test_audit_log.py: 36 warnings
+tests/db/test_audit_project_id_migration.py: 1 warning
+tests/db/test_auth_tables.py: 13 warnings
+tests/db/test_company.py: 25 warnings
+tests/db/test_inspection_planning.py: 12 warnings
+tests/db/test_management_error_constraints.py: 3 warnings
+tests/db/test_measurement_order_migration.py: 1 warning
+tests/db/test_migrations.py: 9 warnings
+tests/db/test_module_permission_migration.py: 6 warnings
+tests/db/test_narrow_business_number_lengths.py: 6 warnings
+tests/db/test_planning_api_postgresql.py: 3 warnings
+tests/db/test_project_code_length.py: 8 warnings
+tests/db/test_project_item_edit_concurrency.py: 5 warnings
+tests/db/test_role_member.py: 32 warnings
+tests/db/test_setup_codes.py: 10 warnings
+tests/db/test_template_system.py: 7 warnings
+tests/db/test_user_account_fields.py: 39 warnings
+tests/db/test_user_fields.py: 73 warnings
+tests/db/test_user_password_flag.py: 4 warnings
+tests/db/test_user_project.py: 18 warnings
+tests/services/test_audit.py: 27 warnings
+tests/services/test_audit_write_timing.py: 1 warning
+tests/services/test_companies.py: 4 warnings
+tests/services/test_inspection_planning.py: 24 warnings
+tests/services/test_module_permissions.py: 17 warnings
+tests/services/test_operator.py: 5 warnings
+tests/services/test_operator_auth.py: 5 warnings
+tests/services/test_permissions.py: 11 warnings
+tests/services/test_project_members.py: 11 warnings
+tests/services/test_projects.py: 4 warnings
+tests/services/test_roles.py: 9 warnings
+tests/services/test_users.py: 17 warnings
+  /usr/local/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py:144: SAWarning: Skipped unsupported reflection of expression-based index ix_companies_name_lower
+    next(self.gen)
+
+tests/api/test_access_summary.py: 12 warnings
+tests/api/test_audit_logs.py: 3 warnings
+tests/api/test_inspection_planning_api.py: 28 warnings
+tests/api/test_management.py: 13 warnings
+tests/api/test_me.py: 6 warnings
+tests/api/test_planning_field_error_contract.py: 5 warnings
+tests/api/test_planning_query_counts.py: 7 warnings
+tests/api/test_project_patch_field_error_contract.py: 1 warning
+tests/api/test_project_template_application.py: 14 warnings
+tests/api/test_project_workflow_summary.py: 4 warnings
+tests/api/test_projects.py: 37 warnings
+tests/api/test_request_limits.py: 16 warnings
+tests/api/test_roles_api.py: 7 warnings
+tests/api/test_template_library.py: 36 warnings
+tests/api/test_template_query_counts.py: 2 warnings
+tests/auth/test_access.py: 15 warnings
+tests/auth/test_auth_logging.py: 8 warnings
+tests/auth/test_login_api.py: 8 warnings
+tests/auth/test_login_lockout.py: 13 warnings
+tests/auth/test_password_change.py: 5 warnings
+tests/auth/test_password_gate.py: 5 warnings
+tests/auth/test_sessions.py: 9 warnings
+tests/auth/test_setup_api.py: 5 warnings
+tests/auth/test_setup_lockout.py: 7 warnings
+tests/cli/test_init_system.py: 3 warnings
+tests/cli/test_init_system_audit.py: 1 warning
+tests/cli/test_reset_admin_password.py: 5 warnings
+tests/db/test_account_redesign_migration.py: 18 warnings
+tests/db/test_audit_events.py: 1 warning
+tests/db/test_audit_log.py: 36 warnings
+tests/db/test_audit_project_id_migration.py: 1 warning
+tests/db/test_auth_tables.py: 13 warnings
+tests/db/test_company.py: 25 warnings
+tests/db/test_inspection_planning.py: 12 warnings
+tests/db/test_management_error_constraints.py: 3 warnings
+tests/db/test_measurement_order_migration.py: 1 warning
+tests/db/test_migrations.py: 9 warnings
+tests/db/test_module_permission_migration.py: 6 warnings
+tests/db/test_narrow_business_number_lengths.py: 6 warnings
+tests/db/test_planning_api_postgresql.py: 3 warnings
+tests/db/test_project_code_length.py: 8 warnings
+tests/db/test_project_item_edit_concurrency.py: 5 warnings
+tests/db/test_role_member.py: 32 warnings
+tests/db/test_setup_codes.py: 10 warnings
+tests/db/test_template_system.py: 7 warnings
+tests/db/test_user_account_fields.py: 39 warnings
+tests/db/test_user_fields.py: 73 warnings
+tests/db/test_user_password_flag.py: 4 warnings
+tests/db/test_user_project.py: 18 warnings
+tests/services/test_audit.py: 27 warnings
+tests/services/test_audit_write_timing.py: 1 warning
+tests/services/test_companies.py: 4 warnings
+tests/services/test_inspection_planning.py: 24 warnings
+tests/services/test_module_permissions.py: 17 warnings
+tests/services/test_operator.py: 5 warnings
+tests/services/test_operator_auth.py: 5 warnings
+tests/services/test_permissions.py: 11 warnings
+tests/services/test_project_members.py: 11 warnings
+tests/services/test_projects.py: 4 warnings
+tests/services/test_roles.py: 9 warnings
+tests/services/test_users.py: 17 warnings
+  /usr/local/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py:144: SAWarning: Skipped unsupported reflection of expression-based index ix_template_items_system_title
+    next(self.gen)
+
+tests/api/test_access_summary.py: 12 warnings
+tests/api/test_audit_logs.py: 3 warnings
+tests/api/test_inspection_planning_api.py: 28 warnings
+tests/api/test_management.py: 13 warnings
+tests/api/test_me.py: 6 warnings
+tests/api/test_planning_field_error_contract.py: 5 warnings
+tests/api/test_planning_query_counts.py: 7 warnings
+tests/api/test_project_patch_field_error_contract.py: 1 warning
+tests/api/test_project_template_application.py: 14 warnings
+tests/api/test_project_workflow_summary.py: 4 warnings
+tests/api/test_projects.py: 37 warnings
+tests/api/test_request_limits.py: 16 warnings
+tests/api/test_roles_api.py: 7 warnings
+tests/api/test_template_library.py: 36 warnings
+tests/api/test_template_query_counts.py: 2 warnings
+tests/auth/test_access.py: 15 warnings
+tests/auth/test_auth_logging.py: 8 warnings
+tests/auth/test_login_api.py: 8 warnings
+tests/auth/test_login_lockout.py: 13 warnings
+tests/auth/test_password_change.py: 5 warnings
+tests/auth/test_password_gate.py: 5 warnings
+tests/auth/test_sessions.py: 9 warnings
+tests/auth/test_setup_api.py: 5 warnings
+tests/auth/test_setup_lockout.py: 7 warnings
+tests/cli/test_init_system.py: 3 warnings
+tests/cli/test_init_system_audit.py: 1 warning
+tests/cli/test_reset_admin_password.py: 5 warnings
+tests/db/test_account_redesign_migration.py: 18 warnings
+tests/db/test_audit_events.py: 1 warning
+tests/db/test_audit_log.py: 36 warnings
+tests/db/test_audit_project_id_migration.py: 1 warning
+tests/db/test_auth_tables.py: 13 warnings
+tests/db/test_company.py: 25 warnings
+tests/db/test_inspection_planning.py: 12 warnings
+tests/db/test_management_error_constraints.py: 3 warnings
+tests/db/test_measurement_order_migration.py: 1 warning
+tests/db/test_migrations.py: 9 warnings
+tests/db/test_module_permission_migration.py: 6 warnings
+tests/db/test_narrow_business_number_lengths.py: 6 warnings
+tests/db/test_planning_api_postgresql.py: 3 warnings
+tests/db/test_project_code_length.py: 8 warnings
+tests/db/test_project_item_edit_concurrency.py: 5 warnings
+tests/db/test_role_member.py: 32 warnings
+tests/db/test_setup_codes.py: 10 warnings
+tests/db/test_template_system.py: 7 warnings
+tests/db/test_user_account_fields.py: 39 warnings
+tests/db/test_user_fields.py: 73 warnings
+tests/db/test_user_password_flag.py: 4 warnings
+tests/db/test_user_project.py: 18 warnings
+tests/services/test_audit.py: 27 warnings
+tests/services/test_audit_write_timing.py: 1 warning
+tests/services/test_companies.py: 4 warnings
+tests/services/test_inspection_planning.py: 24 warnings
+tests/services/test_module_permissions.py: 17 warnings
+tests/services/test_operator.py: 5 warnings
+tests/services/test_operator_auth.py: 5 warnings
+tests/services/test_permissions.py: 11 warnings
+tests/services/test_project_members.py: 11 warnings
+tests/services/test_projects.py: 4 warnings
+tests/services/test_roles.py: 9 warnings
+tests/services/test_users.py: 17 warnings
+  /usr/local/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py:144: SAWarning: Skipped unsupported reflection of expression-based index ix_template_systems_category_name
+    next(self.gen)
+
+tests/api/test_access_summary.py: 12 warnings
+tests/api/test_audit_logs.py: 3 warnings
+tests/api/test_inspection_planning_api.py: 28 warnings
+tests/api/test_management.py: 13 warnings
+tests/api/test_me.py: 6 warnings
+tests/api/test_planning_field_error_contract.py: 5 warnings
+tests/api/test_planning_query_counts.py: 7 warnings
+tests/api/test_project_patch_field_error_contract.py: 1 warning
+tests/api/test_project_template_application.py: 14 warnings
+tests/api/test_project_workflow_summary.py: 4 warnings
+tests/api/test_projects.py: 37 warnings
+tests/api/test_request_limits.py: 16 warnings
+tests/api/test_roles_api.py: 7 warnings
+tests/api/test_template_library.py: 36 warnings
+tests/api/test_template_query_counts.py: 2 warnings
+tests/auth/test_access.py: 15 warnings
+tests/auth/test_auth_logging.py: 8 warnings
+tests/auth/test_login_api.py: 8 warnings
+tests/auth/test_login_lockout.py: 13 warnings
+tests/auth/test_password_change.py: 5 warnings
+tests/auth/test_password_gate.py: 5 warnings
+tests/auth/test_sessions.py: 9 warnings
+tests/auth/test_setup_api.py: 5 warnings
+tests/auth/test_setup_lockout.py: 7 warnings
+tests/cli/test_init_system.py: 3 warnings
+tests/cli/test_init_system_audit.py: 1 warning
+tests/cli/test_reset_admin_password.py: 5 warnings
+tests/db/test_account_redesign_migration.py: 18 warnings
+tests/db/test_audit_events.py: 1 warning
+tests/db/test_audit_log.py: 36 warnings
+tests/db/test_audit_project_id_migration.py: 1 warning
+tests/db/test_auth_tables.py: 13 warnings
+tests/db/test_company.py: 25 warnings
+tests/db/test_inspection_planning.py: 12 warnings
+tests/db/test_management_error_constraints.py: 3 warnings
+tests/db/test_measurement_order_migration.py: 1 warning
+tests/db/test_migrations.py: 9 warnings
+tests/db/test_module_permission_migration.py: 6 warnings
+tests/db/test_narrow_business_number_lengths.py: 6 warnings
+tests/db/test_planning_api_postgresql.py: 3 warnings
+tests/db/test_project_code_length.py: 8 warnings
+tests/db/test_project_item_edit_concurrency.py: 5 warnings
+tests/db/test_role_member.py: 32 warnings
+tests/db/test_setup_codes.py: 10 warnings
+tests/db/test_template_system.py: 7 warnings
+tests/db/test_user_account_fields.py: 39 warnings
+tests/db/test_user_fields.py: 73 warnings
+tests/db/test_user_password_flag.py: 4 warnings
+tests/db/test_user_project.py: 18 warnings
+tests/services/test_audit.py: 27 warnings
+tests/services/test_audit_write_timing.py: 1 warning
+tests/services/test_companies.py: 4 warnings
+tests/services/test_inspection_planning.py: 24 warnings
+tests/services/test_module_permissions.py: 17 warnings
+tests/services/test_operator.py: 5 warnings
+tests/services/test_operator_auth.py: 5 warnings
+tests/services/test_permissions.py: 11 warnings
+tests/services/test_project_members.py: 11 warnings
+tests/services/test_projects.py: 4 warnings
+tests/services/test_roles.py: 9 warnings
+tests/services/test_users.py: 17 warnings
+  /usr/local/Cellar/python@3.12/3.12.14/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py:144: SAWarning: Skipped unsupported reflection of expression-based index ix_template_categories_name
+    next(self.gen)
+
+tests/auth/test_access.py: 33 warnings
+tests/auth/test_login_api.py: 2 warnings
+tests/auth/test_login_lockout.py: 7 warnings
+tests/auth/test_password_change.py: 5 warnings
+tests/auth/test_password_gate.py: 9 warnings
+tests/auth/test_sessions.py: 24 warnings
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/starlette/testclient.py:463: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return super().request(
+
+tests/db/test_audit_project_id_migration.py::test_project_column_round_trip_preserves_historical_row
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/tests/db/test_audit_project_id_migration.py:29: SAWarning: Skipped unsupported reflection of expression-based index ix_users_email_lower
+    table = Table("audit_logs", MetaData(), autoload_with=engine)
+
+tests/db/test_audit_project_id_migration.py::test_project_column_round_trip_preserves_historical_row
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/tests/db/test_audit_project_id_migration.py:29: SAWarning: Skipped unsupported reflection of expression-based index ix_companies_name_lower
+    table = Table("audit_logs", MetaData(), autoload_with=engine)
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+  /private/var/folders/lq/xd9zn09j2_bbc_jchcw6dh6c0000gn/T/pytest-of-kavy/pytest-47/test_autogenerate_renders_buil0/alembic_autogen/env.py:168: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "companies, users", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
+    context.run_migrations()
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_companies_name_lower'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_users_email_lower'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_permission_bundles_name_lower'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_roles_name_lower'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_template_categories_name'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_template_systems_category_name'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/.venv/lib/python3.12/site-packages/alembic/ddl/impl.py:850: UserWarning: autogenerate skipping metadata-specified expression-based index 'ix_template_items_system_title'; dialect 'sqlite' under SQLAlchemy 2.1.1 can't reflect these indexes so they can't be compared
+    util.warn(
+
+tests/db/test_autogenerate_render.py::test_autogenerate_renders_builtin_types_for_app_defined_columns
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/tests/db/test_autogenerate_render.py:83: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "companies, users", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
+    for table in Base.metadata.sorted_tables:
+
+tests/db/test_autogenerate_render.py::test_autogenerate_output_has_no_app_import
+  /private/var/folders/lq/xd9zn09j2_bbc_jchcw6dh6c0000gn/T/pytest-of-kavy/pytest-47/test_autogenerate_output_has_n0/alembic_autogen/env.py:168: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "companies, users", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
+    context.run_migrations()
+
+tests/db/test_company.py::TestDomAc36CompanyFieldsAndConstraints::test_removed_constraints_and_indexes_are_gone
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/tests/db/test_company.py:170: SAWarning: Skipped unsupported reflection of expression-based index ix_companies_name_lower
+    index_names = {i["name"] for i in inspector.get_indexes("companies")}
+
+tests/db/test_company.py::TestDomAc36CompanyFieldsAndConstraints::test_removed_constraints_and_indexes_are_gone
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/tests/db/test_company.py:172: SAWarning: Skipped unsupported reflection of expression-based index ix_companies_name_lower
+    u["name"] for u in inspector.get_unique_constraints("companies")
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_companies_name_lower
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_permission_bundles_name_lower
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_roles_name_lower
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_template_categories_name
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_template_items_system_title
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_template_systems_category_name
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Skipped unsupported reflection of expression-based index ix_users_email_lower
+    context.run_migrations()
+
+tests/db/test_migrations.py::test_check_reports_metadata_in_sync_with_the_migrated_schema
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/alembic/env.py:168: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "companies, users", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
+    context.run_migrations()
+
+tests/db/test_user_account_fields.py::TestDomAc39EmployeeNoUniquePerCompany::test_the_old_global_unique_constraint_is_gone
+  /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/backend/tests/db/test_user_account_fields.py:421: SAWarning: Skipped unsupported reflection of expression-based index ix_users_email_lower
+    for u in inspector.get_unique_constraints("users")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========= 1153 passed, 11 skipped, 3821 warnings in 857.44s (0:14:17) ==========
+cd backend && uv run --locked python -m compileall -q app
+/Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory check-postgres
+check-postgres: SKIPPED (INSPECTFLOW_TEST_POSTGRES_URL is not set)
+/Applications/Xcode.app/Contents/Developer/usr/bin/make --no-print-directory check-frontend
+cd frontend && npm run format:check
+
+> inspect-flow-frontend@0.4.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+cd frontend && npm run lint
+
+> inspect-flow-frontend@0.4.0 lint
+> eslint .
+
+cd frontend && npm run typecheck
+
+> inspect-flow-frontend@0.4.0 typecheck
+> npm run typecheck:app && npm run typecheck:node
+
+
+> inspect-flow-frontend@0.4.0 typecheck:app
+> tsc -p tsconfig.app.json --noEmit
+
+
+> inspect-flow-frontend@0.4.0 typecheck:node
+> tsc -p tsconfig.node.json --noEmit
+
+cd frontend && npm run test
+
+> inspect-flow-frontend@0.4.0 test
+> vitest run
+
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+Not implemented: Window's scrollTo() method
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  54 passed (54)
+      Tests  991 passed (991)
+   Start at  23:22:15
+   Duration  41.45s (tests 46%, environment 42%, setup 7%, import 3%, transform 2%)
+
+Environment  jsdom was created 54 times · 62.83s total, 42% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+cd frontend && npm run build
+
+> inspect-flow-frontend@0.4.0 build
+> vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 175 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                  1.02 kB │ gzip:  0.47 kB
+dist/.vite/manifest.json                         4.96 kB │ gzip:  0.79 kB
+dist/.vite/chunk-modules.json                   17.42 kB │ gzip:  2.20 kB
+dist/assets/Form-BhmIUcF4.css                    0.26 kB │ gzip:  0.17 kB
+dist/assets/ProjectTemplatesPage-dYXR5i9-.css    0.35 kB │ gzip:  0.18 kB
+dist/assets/AuditLogPage-BYdwjN90.css            1.06 kB │ gzip:  0.45 kB
+dist/assets/AdminPage-CEomV14Q.css               2.46 kB │ gzip:  0.73 kB
+dist/assets/index-BFOSsu2f.css                  29.48 kB │ gzip:  6.21 kB
+dist/assets/inspectionStandard-Br953Smz.js       0.84 kB │ gzip:  0.44 kB
+dist/assets/TemplateLibraryNav-DZnv1Gwe.js       4.22 kB │ gzip:  1.38 kB
+dist/assets/ConfirmBox-Cg5WczZZ.js               4.83 kB │ gzip:  2.08 kB
+dist/assets/SetupPage-DjyOocjD.js                5.85 kB │ gzip:  2.30 kB
+dist/assets/AuditLogPage-Cydcwj8W.js             6.49 kB │ gzip:  2.38 kB
+dist/assets/UserForm-BZk0cIH7.js                 6.68 kB │ gzip:  2.64 kB
+dist/assets/ProjectItemChangePage-hm0tuZKO.js   10.66 kB │ gzip:  4.16 kB
+dist/assets/http-CBz5xRNz.js                    10.76 kB │ gzip:  4.35 kB
+dist/assets/ProjectTemplatesPage-nccS8sgZ.js    14.94 kB │ gzip:  5.29 kB
+dist/assets/FieldPage-DGcmhh3p.js               19.04 kB │ gzip:  6.37 kB
+dist/assets/PlanningPage-DPuCY86A.js            25.74 kB │ gzip:  7.38 kB
+dist/assets/Form-OYi2SQCj.js                    40.95 kB │ gzip: 14.61 kB
+dist/assets/TemplatesPage-D0fl4p5y.js           42.82 kB │ gzip: 11.28 kB
+dist/assets/AdminPage-BwkWB8Uy.js               77.57 kB │ gzip: 21.11 kB
+dist/assets/index-8EJ5tFSi.js                  226.47 kB │ gzip: 70.93 kB
+
+✓ built in 1.10s
+cd frontend && node scripts/check-pwa.mjs
+PWA build artifact checks passed
+cd frontend && npm run check:split
+
+> inspect-flow-frontend@0.4.0 check:split
+> node scripts/check-split.mjs
+
+拆包檢查通過：檢查了 6 個 chunk、68 個模組，未見 Admin 模組。
+EXIT_CODE=0

@@ -517,7 +517,12 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.getByRole('button', { name: '套用至專案' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
     const dialog = screen.getByRole('alertdialog')
-    expect(within(dialog).getByRole('button', { name: '取消' })).toHaveFocus()
+    // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole('button', { name: '取消' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(within(dialog).getByRole('button', { name: '確定套用' }))
     expect(await screen.findByText('PROJECT_DETAIL')).toBeInTheDocument()
     expect(calls).toHaveBeenCalledWith(

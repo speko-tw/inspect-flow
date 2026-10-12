@@ -1,0 +1,364 @@
+pwd -P: /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+HEAD: 4a2749d14276d320f1b1e9544f2cf21f42397e61
+COMMAND: 30 runs of ProjectZonesPage.test.tsx with VITEST_MAX_WORKERS=4 after formatter changes
+
+===== RUN 1/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:16
+   Duration  2.26s (tests 46%, environment 38%, setup 7%, transform 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 2/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:19
+   Duration  2.36s (tests 47%, environment 36%, transform 7%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 3/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:22
+   Duration  2.41s (tests 45%, environment 38%, setup 6%, transform 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 4/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:26
+   Duration  2.30s (tests 46%, environment 36%, transform 7%, setup 7%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 5/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:29
+   Duration  2.37s (tests 49%, environment 36%, transform 6%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 6/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:32
+   Duration  2.33s (tests 47%, environment 36%, transform 7%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 7/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:36
+   Duration  2.34s (tests 45%, environment 39%, transform 6%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 8/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:39
+   Duration  2.37s (tests 44%, environment 38%, setup 8%, transform 7%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 9/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:42
+   Duration  2.46s (tests 49%, environment 34%, setup 7%, transform 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 10/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:46
+   Duration  2.58s (tests 48%, environment 34%, transform 7%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 11/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:49
+   Duration  2.58s (tests 47%, environment 36%, setup 7%, transform 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 12/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:53
+   Duration  2.59s (tests 46%, environment 37%, setup 6%, transform 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 13/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:03:57
+   Duration  2.90s (tests 43%, environment 38%, setup 8%, transform 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 14/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:01
+   Duration  2.71s (tests 50%, environment 34%, setup 6%, transform 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 15/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:04
+   Duration  2.57s (tests 47%, environment 36%, transform 6%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 16/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:08
+   Duration  2.42s (tests 47%, environment 37%, transform 6%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 17/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:11
+   Duration  2.53s (tests 45%, environment 39%, transform 7%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 18/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:15
+   Duration  2.58s (tests 46%, environment 39%, transform 6%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 19/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:19
+   Duration  2.43s (tests 45%, environment 38%, transform 7%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 20/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:22
+   Duration  2.45s (tests 48%, environment 36%, transform 7%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 21/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:26
+   Duration  2.56s (tests 44%, environment 39%, transform 6%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 22/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:29
+   Duration  2.56s (tests 47%, environment 37%, transform 7%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 23/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:33
+   Duration  2.76s (tests 47%, environment 37%, transform 7%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 24/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:37
+   Duration  2.92s (tests 45%, environment 37%, transform 8%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 25/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:41
+   Duration  2.98s (tests 47%, environment 37%, setup 6%, transform 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 26/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:45
+   Duration  2.86s (tests 45%, environment 38%, transform 7%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 27/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:49
+   Duration  2.85s (tests 48%, environment 36%, transform 6%, setup 6%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 28/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:53
+   Duration  2.93s (tests 47%, environment 37%, transform 7%, setup 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 29/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:04:57
+   Duration  3.08s (tests 47%, environment 38%, transform 6%, setup 5%, import 3%)
+
+RUN_EXIT_CODE: 0
+
+===== RUN 30/30 =====
+
+ RUN  v5.0.2 /Users/kavy/Documents/repo/inspect-flow-633-stabilize-zone-focus-test/frontend
+
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  23:05:01
+   Duration  2.83s (tests 47%, environment 37%, setup 7%, transform 6%, import 4%)
+
+RUN_EXIT_CODE: 0
+EXIT_CODE: 0
