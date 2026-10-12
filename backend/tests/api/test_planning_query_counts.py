@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.models import (
     Project,
     ProjectInspectionItem,
+    ProjectInspectionPoint,
     ProjectMember,
     ProjectMemberRole,
     Role,
@@ -260,6 +261,7 @@ def _create_permission_test_project(
         role_assignments=[ProjectMemberRole(role_id=role_id)],
     )
     item = ProjectInspectionItem(
+        id=uuid4(),
         project_id=project.id,
         sequence=1,
         title="查核項目",
@@ -269,7 +271,16 @@ def _create_permission_test_project(
         created_by=creator.id,
         updated_by=creator.id,
     )
-    db_session.add_all([member, item])
+    # IP-R14：此測試需要有效 Task 才能量測列表權限查詢數。
+    point = ProjectInspectionPoint(
+        project_inspection_item_id=item.id,
+        sequence=1,
+        title="檢查點",
+        instruction="確認項目狀況",
+        created_by=creator.id,
+        updated_by=creator.id,
+    )
+    db_session.add_all([member, item, point])
     db_session.commit()
 
     base = f"/api/v1/projects/{project.id}"

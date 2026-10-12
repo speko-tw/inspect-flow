@@ -33,6 +33,10 @@ function routeProjectId(pathname: string): string | null {
   return match?.[1] ?? null
 }
 
+/**
+ * 讓首頁與緊接開啟的區段共用一次摘要，避免轉頁時重複請求。
+ * 權限摘要只短暫共用，離開專案或逾時後必須重新向後端取得。
+ */
 export function WorkflowSummaryProvider({
   children,
 }: {
@@ -101,6 +105,7 @@ function WorkflowSummaryCache({ children }: { children: ReactNode }) {
   )
 }
 
+/** 讀取專案摘要載入器；在 Provider 外使用會拒絕。 */
 export function useWorkflowSummary() {
   const value = useContext(WorkflowSummaryContext)
   if (value === null) {
