@@ -20,6 +20,7 @@ from app.auth.access import (
     require_project_permission,
 )
 from app.auth.dependencies import get_db
+from app.company_roles import DEFAULT_COMPANY_ROLE
 from app.models import (
     Company,
     Project,
@@ -41,6 +42,8 @@ from app.services.project_members import (
 )
 from app.services.project_workflow_summary import get_project_workflow_summary
 from app.services.projects import (
+    COMPANY_ROLE_REASON_MAX_LENGTH,
+    CompanyRoleReasonRequiredError,
     InvalidProjectFieldError,
     ProjectUnchangedError,
     create_project,
@@ -71,6 +74,8 @@ class ProjectResponse(BaseModel):
     name: str
     client_name: str
     site_location: str
+    # DOM-R76：本公司在這個案子的角色（登記表的值）。
+    company_role: str
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
@@ -80,6 +85,7 @@ class ProjectPlanningResponse(BaseModel):
     id: UUID
     project_code: str
     name: str
+    company_role: str
     planned_start_date: date | None
     planned_completion_date: date | None
 
@@ -102,6 +108,8 @@ class WorkflowProjectIdentity(BaseModel):
     id: UUID
     project_code: str
     name: str
+    # IP-R11、ADM-R41：專案首頁顯示本公司角色，免另呼叫專案詳情。
+    company_role: str
 
 
 class ProjectWorkflowSummaryResponse(BaseModel):
@@ -129,6 +137,8 @@ class CreateProjectRequest(BaseModel):
     name: str
     client_name: str
     site_location: str
+    # DOM-R76：省略為 contractor；帶 null 或未登記的值回 422。
+    company_role: str | None = DEFAULT_COMPANY_ROLE
     planned_start_date: date | None = None
     planned_completion_date: date | None = None
 
@@ -138,6 +148,12 @@ class UpdateProjectRequest(BaseModel):
     name: str | None = None
     client_name: str | None = None
     site_location: str | None = None
+    company_role: str | None = None
+    # DOM-R76：改角色必填原因；長度由 Service 去除空白後檢查（專用錯誤
+    # 碼與共用驗證錯誤的分界），這裡只擋明顯過大的內容。
+    company_role_change_reason: str | None = Field(
+        default=None, max_length=COMPANY_ROLE_REASON_MAX_LENGTH * 4
+    )
     planned_start_date: date | None = None
     planned_completion_date: date | None = None
 
@@ -223,6 +239,7 @@ def _project_response(project: Project, is_duplicate: bool) -> ProjectResponse:
         name=project.name,
         client_name=project.client_name,
         site_location=project.site_location,
+        company_role=project.company_role,
         planned_start_date=project.planned_start_date,
         planned_completion_date=project.planned_completion_date,
         warnings=warnings,
@@ -352,6 +369,7 @@ def get_project(
         id=project.id,
         project_code=project.project_code,
         name=project.name,
+        company_role=project.company_role,
         planned_start_date=project.planned_start_date,
         planned_completion_date=project.planned_completion_date,
     )
@@ -434,11 +452,16 @@ def edit_project(
             "name",
             "client_name",
             "site_location",
+            "company_role",
         )
     ):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     try:
         update_project(db, project, **fields)
+    except CompanyRoleReasonRequiredError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_COMPANY_ROLE_REASON_REQUIRED, 422
+        ) from exc
     except (InvalidProjectFieldError, ProjectUnchangedError) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     return _single_project_response(db, project)

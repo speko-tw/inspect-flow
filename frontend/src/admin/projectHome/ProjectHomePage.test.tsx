@@ -14,11 +14,13 @@ import type { WorkflowSummary } from './api'
 const mocks = vi.hoisted(() => ({
   getProject: vi.fn(),
   getWorkflowSummary: vi.fn(),
+  listCompanyRoles: vi.fn(),
 }))
 
 vi.mock('../projects/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../projects/api')>()),
   getProject: mocks.getProject,
+  listCompanyRoles: mocks.listCompanyRoles,
 }))
 
 vi.mock('./api', () => ({
@@ -31,6 +33,7 @@ const project: Project = {
   name: '示範工程',
   client_name: '示範業主',
   site_location: '示範工地',
+  company_role: 'contractor',
   planned_start_date: null,
   planned_completion_date: null,
   warnings: [],
@@ -42,6 +45,7 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
       id: 'project-1',
       project_code: 'DEMO-001',
       name: '示範工程',
+      company_role: 'contractor',
     },
     member_count: 2,
     inspection_item_count: 3,
@@ -159,6 +163,14 @@ function renderAt(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.listCompanyRoles.mockResolvedValue([
+    {
+      value: 'contractor',
+      label: '承攬施工方',
+      inspection_level: 'self_inspection',
+    },
+    { value: 'supervisor', label: '監造方', inspection_level: 'spot_check' },
+  ])
 })
 
 afterEach(() => {
@@ -166,6 +178,38 @@ afterEach(() => {
 })
 
 describe('project home', () => {
+  // ADM-AC40：首頁顯示本公司角色標籤，資料取自流程摘要，不另呼叫專案詳情。
+  it.each([
+    ['contractor', '承攬施工方'],
+    ['supervisor', '監造方'],
+  ])('shows the company role label for %s', async (value, label) => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        project: {
+          id: 'project-1',
+          project_code: 'DEMO-001',
+          name: '示範工程',
+          company_role: value,
+        },
+      }),
+    )
+
+    renderAt()
+
+    expect(await screen.findByText(label)).toBeVisible()
+    expect(screen.getByText(/本公司角色/)).toBeVisible()
+    expect(mocks.getProject).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the role value when the label list cannot load', async () => {
+    mocks.listCompanyRoles.mockRejectedValue(new Error('offline'))
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    expect(await screen.findByText('contractor')).toBeVisible()
+  })
+
   it('reuses the home summary when navigating into a section', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
@@ -261,6 +305,7 @@ describe('project home', () => {
           id: projectId,
           project_code: projectId === 'project-1' ? 'DEMO-001' : 'DEMO-002',
           name: projectId === 'project-1' ? '示範工程' : '另一個工程',
+          company_role: 'contractor',
         },
       }),
     )

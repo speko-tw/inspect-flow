@@ -383,6 +383,238 @@ def test_project_crud_requires_admin(project_api):
     )
 
 
+def _create_body(**extra):
+    return {
+        "project_code": "ROLE-1",
+        "name": "角色示範工程",
+        "client_name": "示範業主",
+        "site_location": "示範工地",
+        **extra,
+    }
+
+
+def _events(db_session: Session, event_type: str, project_id: str):
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(AuditLog)
+            .where(
+                AuditLog.event_type == event_type,
+                AuditLog.project_id == UUID(project_id),
+            )
+            .order_by(AuditLog.created_at, AuditLog.id)
+        )
+    )
+
+
+def test_company_role_defaults_and_is_returned_with_audit(
+    project_api, db_session
+):
+    client = project_api["admin_client"]
+
+    omitted = client.post("/api/v1/projects", json=_create_body())
+    explicit = client.post(
+        "/api/v1/projects",
+        json=_create_body(project_code="ROLE-2", company_role="supervisor"),
+    )
+
+    assert omitted.status_code == 201, omitted.text
+    assert omitted.json()["company_role"] == "contractor"
+    assert explicit.status_code == 201, explicit.text
+    assert explicit.json()["company_role"] == "supervisor"
+    [event] = _events(db_session, "project.created", explicit.json()["id"])
+    assert event.after == {
+        "project_code": "ROLE-2",
+        "name": "角色示範工程",
+        "company_role": "supervisor",
+    }
+    fetched = client.get(f"/api/v1/projects/{explicit.json()['id']}")
+    assert fetched.json()["company_role"] == "supervisor"
+    listed = client.get("/api/v1/projects?q=ROLE-2")
+    assert listed.json()["items"][0]["company_role"] == "supervisor"
+
+
+@pytest.mark.parametrize("bad", [None, "unknown", ""])
+def test_company_role_create_rejects_null_and_unregistered(
+    project_api, db_session, bad
+):
+    client = project_api["admin_client"]
+
+    response = client.post(
+        "/api/v1/projects", json=_create_body(company_role=bad)
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "request.validation_failed"
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(Project)
+            .where(Project.project_code == "ROLE-1")
+        )
+        == 0
+    )
+
+
+def test_company_role_change_needs_a_reason(project_api, db_session):
+    client = project_api["admin_client"]
+    project = project_api["project"]
+    url = f"/api/v1/projects/{project.id}"
+
+    for body in (
+        {"company_role": "supervisor"},
+        {"company_role": "supervisor", "company_role_change_reason": None},
+        {"company_role": "supervisor", "company_role_change_reason": "  "},
+    ):
+        response = client.patch(url, json=body)
+        assert response.status_code == 422, response.text
+        assert (
+            response.json()["error"]["code"]
+            == "project.company_role_reason_required"
+        )
+    db_session.expire_all()
+    assert db_session.get(Project, project.id).company_role == "contractor"
+    assert _events(db_session, "project.updated", str(project.id)) == []
+
+    changed = client.patch(
+        url,
+        json={
+            "company_role": "supervisor",
+            "company_role_change_reason": "合約改為監造",
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["company_role"] == "supervisor"
+    [event] = _events(db_session, "project.updated", str(project.id))
+    assert event.before == {"company_role": "contractor"}
+    assert event.after == {
+        "company_role": "supervisor",
+        "company_role_change_reason": "合約改為監造",
+    }
+    assert event.created_by == project_api["admin"].id
+
+
+def test_company_role_reason_length_and_same_value(project_api, db_session):
+    client = project_api["admin_client"]
+    project = project_api["project"]
+    url = f"/api/v1/projects/{project.id}"
+
+    too_long = client.patch(
+        url,
+        json={
+            "company_role": "supervisor",
+            "company_role_change_reason": "字" * 257,
+        },
+    )
+    assert too_long.status_code == 422
+    assert too_long.json()["error"]["code"] == "request.validation_failed"
+    exact = client.patch(
+        url,
+        json={
+            "company_role": "supervisor",
+            "company_role_change_reason": "字" * 256,
+        },
+    )
+    assert exact.status_code == 200, exact.text
+
+    # 相同值不需原因、不寫稽核。
+    same = client.patch(url, json={"company_role": "supervisor"})
+    assert same.status_code == 200, same.text
+    assert len(_events(db_session, "project.updated", str(project.id))) == 1
+
+    # 改回承攬方同樣要原因；只改名稱的事件不含原因欄。
+    back = client.patch(
+        url,
+        json={
+            "company_role": "contractor",
+            "company_role_change_reason": "改回承攬",
+        },
+    )
+    assert back.status_code == 200, back.text
+    renamed = client.patch(url, json={"name": "只改名稱"})
+    assert renamed.status_code == 200, renamed.text
+    events = _events(db_session, "project.updated", str(project.id))
+    assert [event.after for event in events][-1] == {"name": "只改名稱"}
+    assert len(events) == 3
+
+
+@pytest.mark.parametrize("bad", [None, "unknown"])
+def test_company_role_patch_rejects_null_and_unregistered(
+    project_api, db_session, bad
+):
+    client = project_api["admin_client"]
+    project = project_api["project"]
+
+    response = client.patch(
+        f"/api/v1/projects/{project.id}",
+        json={"company_role": bad, "company_role_change_reason": "原因"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "request.validation_failed"
+    db_session.expire_all()
+    assert db_session.get(Project, project.id).company_role == "contractor"
+
+
+def test_company_role_change_is_admin_only_during_transition(
+    project_api, db_session
+):
+    project = project_api["project"]
+
+    response = project_api["actor_client"].patch(
+        f"/api/v1/projects/{project.id}",
+        json={
+            "company_role": "supervisor",
+            "company_role_change_reason": "不得修改",
+        },
+    )
+
+    assert response.status_code == 403
+    db_session.expire_all()
+    assert db_session.get(Project, project.id).company_role == "contractor"
+
+
+def test_project_company_roles_endpoint_lists_registry(
+    project_api, extra_company_role
+):
+    expected = [
+        {
+            "value": "contractor",
+            "label": "承攬施工方",
+            "inspection_level": "self_inspection",
+        },
+        {
+            "value": "supervisor",
+            "label": "監造方",
+            "inspection_level": "spot_check",
+        },
+        {
+            "value": extra_company_role,
+            "label": "專案管理顧問",
+            "inspection_level": "spot_check",
+        },
+    ]
+
+    anonymous = project_api["anonymous_client"].get(
+        "/api/v1/project-company-roles"
+    )
+    plain = project_api["plain_client"].get("/api/v1/project-company-roles")
+
+    assert anonymous.status_code == 401
+    assert plain.status_code == 200
+    assert plain.json() == {"items": expected}
+
+
+def test_project_company_roles_endpoint_default_registry(project_api):
+    response = project_api["plain_client"].get("/api/v1/project-company-roles")
+
+    assert [item["value"] for item in response.json()["items"]] == [
+        "contractor",
+        "supervisor",
+    ]
+
+
 def test_template_admin_can_list_projects_but_project_members_cannot(
     project_api, db_session: Session, make_client
 ):

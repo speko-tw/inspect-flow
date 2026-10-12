@@ -11,6 +11,7 @@ import { useWorkflowSummary } from './WorkflowSummaryProvider'
 import { type WorkflowStepCode, type WorkflowSummary } from './api'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { canViewIndoorSections } from './permissions'
+import { useCompanyRoles } from '../projects/useCompanyRoles'
 
 const STEP_CONTENT: Record<
   WorkflowStepCode,
@@ -53,6 +54,7 @@ export default function ProjectHomePage() {
   const { user } = useCurrentUser()
   const location = useLocation()
   const { loadHomeSummary } = useWorkflowSummary()
+  const companyRoles = useCompanyRoles()
   const [duplicateWarningDismissed, setDuplicateWarningDismissed] =
     useState(false)
   const [result, setResult] = useState<{
@@ -132,6 +134,16 @@ export default function ProjectHomePage() {
         {error && <p role="alert">{error}</p>}
         {summary && (
           <>
+            {/* ADM-R41：資料取自流程摘要，標籤取自角色登記表；
+                登記表載入前或沒有該值時顯示角色值本身。 */}
+            <p className="project-company-role">
+              本公司角色：
+              <strong>
+                {companyRoles.find(
+                  (role) => role.value === summary.project.company_role,
+                )?.label ?? summary.project.company_role}
+              </strong>
+            </p>
             <section
               aria-labelledby="project-next-step-heading"
               className="project-next-step"

@@ -84,7 +84,12 @@ const MY_PROJECTS = [
 ]
 
 const WORKFLOW_SUMMARY = {
-  project: { id: 'project-a', project_code: 'DEMO-A', name: '示範工程甲' },
+  project: {
+    id: 'project-a',
+    project_code: 'DEMO-A',
+    name: '示範工程甲',
+    company_role: 'contractor',
+  },
   viewer_permission_codes: ['project_member.manage', 'inspection_plan.read'],
   member_count: 1,
   inspection_item_count: 0,
@@ -190,6 +195,17 @@ function stubBackend(
       }
       if (url.endsWith('/me/projects')) {
         return Response.json(MY_PROJECTS)
+      }
+      if (url.endsWith('/project-company-roles')) {
+        return Response.json({
+          items: [
+            {
+              value: 'contractor',
+              label: '承攬施工方',
+              inspection_level: 'self_inspection',
+            },
+          ],
+        })
       }
       return Response.json([])
     },

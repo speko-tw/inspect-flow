@@ -1,10 +1,16 @@
-"""Project business fields and length checks (DOM-R40 through DOM-R44)."""
+"""Project business fields and length checks (DOM-R40 through DOM-R44,
+DOM-R76)."""
 
 from datetime import date
 
 from sqlalchemy import Date
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
+from app.company_roles import (
+    COMPANY_ROLE_MAX_LENGTH,
+    DEFAULT_COMPANY_ROLE,
+    is_company_role_registered,
+)
 from app.db.base import TimestampedBase
 from app.models._audit import AuditMixin
 from app.models._bounded_string import BoundedString, validate_nullable
@@ -26,6 +32,16 @@ def _check_length(field: str, value: str) -> None:
         )
 
 
+def _check_company_role(value: str) -> None:
+    # DOM-R76：登記表在 ORM model 寫入前檢查（比照 DOM-R35），
+    # 登記表在程式內，不用資料庫 enum，新增角色不需改資料表。
+    if not is_company_role_registered(value):
+        raise ValueError(
+            f"Project.company_role {value!r} is not a registered "
+            "company role (DOM-R76)"
+        )
+
+
 def _bounded(field: str) -> BoundedString:
     def check(value: str) -> None:
         _check_length(field, value)
@@ -37,6 +53,9 @@ class Project(AuditMixin, TimestampedBase):
     """A project identified internally by UUID; codes may repeat."""
 
     __tablename__ = "projects"
+    # 不在 INSERT 後立刻用 RETURNING 取回 server_default 的值，理由見
+    # ``company_role``。
+    __mapper_args__ = {"eager_defaults": False}
 
     project_code: Mapped[str] = mapped_column(
         _bounded("project_code"), nullable=False
@@ -47,6 +66,16 @@ class Project(AuditMixin, TimestampedBase):
     )
     site_location: Mapped[str] = mapped_column(
         _bounded("site_location"), nullable=False
+    )
+    # DOM-R76：本公司在這個案子的角色，一個專案一個值。預設承攬施工方只
+    # 放在資料庫端（server_default），不設 Python 預設：省略角色的寫入
+    # 不會把這一欄放進 INSERT，所以舊結構資料庫（尚未有此欄）上的歷史
+    # migration 測試仍能用 ORM 寫入 Project。API 與前端一律明確送出
+    # （ADM-R40）。
+    company_role: Mapped[str] = mapped_column(
+        BoundedString(COMPANY_ROLE_MAX_LENGTH, _check_company_role),
+        nullable=False,
+        server_default=DEFAULT_COMPANY_ROLE,
     )
     planned_start_date: Mapped[date | None] = mapped_column(
         Date, nullable=True
@@ -62,4 +91,13 @@ class Project(AuditMixin, TimestampedBase):
         value = validate_nullable(self, key, value, f"Project.{key}")
         if value is not None:
             _check_length(key, value)
+        return value
+
+    @validates("company_role")
+    def _validate_company_role(
+        self, key: str, value: str | None
+    ) -> str | None:
+        value = validate_nullable(self, key, value, f"Project.{key}")
+        if value is not None:
+            _check_company_role(value)
         return value
