@@ -570,15 +570,13 @@ def inspection_task_list_filters(
 def get_inspection_task(
     session: Session, *, task_id: uuid.UUID
 ) -> InspectionTask:
-    """讀取 Task；依 IP-R09 對現場隱藏 DRAFT。"""
+    """依 IP-R19 僅讓具任務讀取權限者讀取內業詳情。"""
     task = session.get(InspectionTask, task_id)
     if task is None:
         raise PlanningError("inspection_task.not_found")
     permissions = _project_permissions(session, task.project_id)
-    if not {"inspection_task.read", "inspection_task.inspect"} & permissions:
+    if "inspection_task.read" not in permissions:
         raise PlanningError("authorization.forbidden")
-    if task.status == "DRAFT" and "inspection_task.read" not in permissions:
-        raise PlanningError("inspection_task.not_found")
     return task
 
 

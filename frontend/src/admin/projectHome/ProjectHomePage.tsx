@@ -39,8 +39,7 @@ const STEP_CONTENT: Record<
   complete_reinspection: {
     label: '追蹤任務進度',
     action: '前往追蹤任務進度',
-    // 依 ADM-R25，進度區段未開放前讓任務進度導向計畫與任務頁。
-    suffix: '/planning',
+    suffix: '/progress?status=reinspection',
   },
 }
 
@@ -93,6 +92,11 @@ export default function ProjectHomePage() {
   const loading = currentResult === null
   const primary: WorkflowStepCode | null = summary?.primary_step ?? null
   const base = `/admin/projects/${projectId}`
+  const canViewProgress =
+    summary?.viewer_permission_codes.includes('inspection_task.read') ?? false
+  const canViewPlanning =
+    summary?.viewer_permission_codes.includes('inspection_plan.read') ?? false
+  const progressFallback = canViewProgress ? '/progress' : '/planning'
   const duplicateWarning = (
     location.state as { duplicateProjectCode?: string } | null
   )?.duplicateProjectCode
@@ -140,19 +144,29 @@ export default function ProjectHomePage() {
               {primary ? (
                 <>
                   <p>{STEP_CONTENT[primary].label}</p>
-                  <Link
-                    className="btn btn-primary"
-                    to={`${base}${STEP_CONTENT[primary].suffix}`}
-                  >
-                    {STEP_CONTENT[primary].action}
-                  </Link>
+                  {(primary !== 'complete_reinspection' ||
+                    canViewProgress ||
+                    canViewPlanning) && (
+                    <Link
+                      className="btn btn-primary"
+                      to={`${base}${
+                        primary === 'complete_reinspection' && !canViewProgress
+                          ? '/planning'
+                          : STEP_CONTENT[primary].suffix
+                      }`}
+                    >
+                      {STEP_CONTENT[primary].action}
+                    </Link>
+                  )}
                 </>
               ) : (
                 <>
                   <p>目前沒有待處理的下一步。</p>
-                  <Link className="btn" to={`${base}/planning`}>
-                    查看計畫與任務
-                  </Link>
+                  {(canViewProgress || canViewPlanning) && (
+                    <Link className="btn" to={`${base}${progressFallback}`}>
+                      追蹤進度
+                    </Link>
+                  )}
                 </>
               )}
             </section>
@@ -175,7 +189,13 @@ export default function ProjectHomePage() {
                   <div>
                     <dt>草稿任務</dt>
                     <dd>
-                      {summary.task_counts.DRAFT} 件
+                      {canViewProgress ? (
+                        <Link to={`${base}/progress?status=DRAFT`}>
+                          {summary.task_counts.DRAFT} 件
+                        </Link>
+                      ) : (
+                        <>{summary.task_counts.DRAFT} 件</>
+                      )}
                       <span className="project-key-number-detail">
                         未指派 {summary.draft_tasks_missing_assignee} 件
                       </span>
@@ -187,11 +207,29 @@ export default function ProjectHomePage() {
                       {summary.task_counts.PENDING +
                         summary.task_counts.IN_PROGRESS}{' '}
                       件
+                      {canViewProgress && (
+                        <span className="project-key-number-detail">
+                          <Link to={`${base}/progress?status=PENDING`}>
+                            待開始 {summary.task_counts.PENDING}
+                          </Link>{' '}
+                          <Link to={`${base}/progress?status=IN_PROGRESS`}>
+                            進行中 {summary.task_counts.IN_PROGRESS}
+                          </Link>
+                        </span>
+                      )}
                     </dd>
                   </div>
                   <div>
                     <dt>待重查</dt>
-                    <dd>{summary.pending_reinspection_task_count} 件</dd>
+                    <dd>
+                      {canViewProgress ? (
+                        <Link to={`${base}/progress?status=reinspection`}>
+                          {summary.pending_reinspection_task_count} 件
+                        </Link>
+                      ) : (
+                        <>{summary.pending_reinspection_task_count} 件</>
+                      )}
+                    </dd>
                   </div>
                 </>
               )}

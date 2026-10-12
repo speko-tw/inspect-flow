@@ -153,7 +153,7 @@ function AdminPageContent() {
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
   const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress))?\/?$/.test(
+    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress(?:\/tasks\/[^/]+)?))?\/?$/.test(
       location.pathname,
     )
 
@@ -286,6 +286,10 @@ function AdminPageContent() {
                 element={<ProjectSectionPage section="progress" />}
               />
               <Route
+                path="projects/:projectId/progress/tasks/:taskId"
+                element={<ProjectSectionPage section="progress" />}
+              />
+              <Route
                 path="projects/:projectId/inspection-items/:itemId"
                 element={
                   <ProjectSectionPage section="inspection-items">
@@ -362,6 +366,10 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
       <Route
         element={<ProjectSectionPage section="progress" />}
         path="projects/:projectId/progress"
+      />
+      <Route
+        element={<ProjectSectionPage section="progress" />}
+        path="projects/:projectId/progress/tasks/:taskId"
       />
       <Route
         element={

@@ -16,6 +16,7 @@ import ProjectSectionShell, {
 import { useWorkflowSummary } from './WorkflowSummaryProvider'
 import { canViewIndoorSections } from './permissions'
 import ProjectDeniedPage from './ProjectDeniedPage'
+import ProgressPage from '../progress/ProgressPage'
 
 const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
   members: '成員',
@@ -68,14 +69,23 @@ export default function ProjectSectionPage({
       })
       .catch((caught: unknown) => {
         if (active) {
+          // ADM-R43：摘要暫時失敗時進度清單仍可由自己的 API 載入。
+          const summaryUnavailable =
+            section === 'progress' &&
+            !isForbidden(caught) &&
+            !isNotFound(caught)
           setResult({
             projectId,
-            canViewIndoor: false,
+            canViewIndoor: summaryUnavailable,
             project: { project_code: '', name: '' },
-            viewerPermissions: [],
+            viewerPermissions: summaryUnavailable
+              ? ['inspection_task.read']
+              : [],
             denied: isForbidden(caught),
             notFound: isNotFound(caught),
-            error: managementErrorMessage(caught),
+            error: summaryUnavailable
+              ? undefined
+              : managementErrorMessage(caught),
           })
         }
       })
@@ -100,6 +110,12 @@ export default function ProjectSectionPage({
   if (!currentResult) {
     return <p role="status">正在確認專案權限…</p>
   }
+  if (
+    section === 'progress' &&
+    !currentResult.viewerPermissions.includes('inspection_task.read')
+  ) {
+    return <ProjectDeniedPage />
+  }
 
   const childContent =
     typeof children === 'function'
@@ -122,6 +138,10 @@ export default function ProjectSectionPage({
         <ProjectZonesPage
           viewerPermissions={currentResult.viewerPermissions}
         />
+      )
+    } else if (section === 'progress') {
+      content = (
+        <ProgressPage viewerPermissions={currentResult.viewerPermissions} />
       )
     } else {
       content = (

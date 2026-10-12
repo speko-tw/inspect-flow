@@ -495,6 +495,11 @@ export function createMockPlanningClient(options?: {
         id: crypto.randomUUID(),
         project_id: plan.project_id,
         plan_id: planId,
+        plan: { id: plan.id, name: plan.name, archived: plan.archived },
+        item_summary: {
+          first_title: items[0]?.current_snapshot?.title ?? null,
+          count: items.length,
+        },
         status: 'DRAFT',
         items,
         assignee_id: assignee?.id ?? null,
@@ -506,6 +511,9 @@ export function createMockPlanningClient(options?: {
         cancelled_from: null,
         started_by: null,
         completed_by: null,
+        started_by_user: null,
+        completed_by_user: null,
+        dispatched_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }

@@ -64,6 +64,9 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         "docs/specs/database-foundation/spec.md",
         "docs/specs/template-system/spec.md",
         "docs/specs/template-system/plan.md",
+        # IP-R18／IP-AC18 的需求表列出 422 回應；這是驗收契約，
+        # 並非與 build_error_code_descriptions 競爭的錯誤碼對照表。
+        "docs/specs/inspection-planning/spec.md",
         "docs/intents/03-decisions-and-stack.md",
         "backend/app/api/errors.py",
         "backend/tests/contract/test_error_envelope.py",

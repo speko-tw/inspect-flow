@@ -376,7 +376,7 @@ describe('project home', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows permitted zones and keeps the placeholder progress hidden', async () => {
+  it('shows progress only with task read permission', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
 
@@ -384,9 +384,10 @@ describe('project home', () => {
 
     await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
     expect(screen.getByRole('link', { name: '分區' })).toBeVisible()
-    expect(
-      screen.queryByRole('link', { name: '進度' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '進度' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress',
+    )
     expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
   })
 
@@ -435,16 +436,56 @@ describe('project home', () => {
     expect(screen.queryByText('待重查')).not.toBeInTheDocument()
   })
 
-  it('sends all-complete projects to planning, never to a placeholder', async () => {
+  it('links each homepage task count to its matching progress filter', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+    renderAt()
+
+    expect(
+      await screen.findByRole('link', { name: '待開始 2' }),
+    ).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=PENDING',
+    )
+    expect(screen.getByRole('link', { name: '進行中 1' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=IN_PROGRESS',
+    )
+    expect(screen.getByRole('link', { name: '4 件' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=DRAFT',
+    )
+    expect(screen.getByRole('link', { name: '1 件' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=reinspection',
+    )
+  })
+
+  it('uses planning when a reinspection step lacks task read', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'complete_reinspection',
+        viewer_permission_codes: ['inspection_plan.read'],
+      }),
+    )
+    renderAt()
+    expect(
+      await screen.findByRole('link', {
+        name: '前往追蹤任務進度',
+      }),
+    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+  })
+
+  it('sends all-complete projects to progress', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary({ primary_step: null }))
 
     renderAt()
 
     expect(await screen.findByText('目前沒有待處理的下一步。')).toBeVisible()
-    expect(
-      screen.getByRole('link', { name: '查看計畫與任務' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+    expect(screen.getByRole('link', { name: '追蹤進度' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress',
+    )
   })
 
   it('routes field-only permission sets to Field and skips project detail reads', async () => {
@@ -463,7 +504,7 @@ describe('project home', () => {
     expect(mocks.getProject).not.toHaveBeenCalled()
   })
 
-  it('complete_reinspection step points at planning, not progress', async () => {
+  it('complete_reinspection step opens the reinspection filter', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({ primary_step: 'complete_reinspection' }),
@@ -473,7 +514,10 @@ describe('project home', () => {
 
     expect(
       await screen.findByRole('link', { name: '前往追蹤任務進度' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+    ).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=reinspection',
+    )
   })
 
   it('sends an office user with field-only rights in this project to the project list', async () => {
