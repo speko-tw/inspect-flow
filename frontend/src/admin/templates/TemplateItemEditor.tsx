@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 
 import { blockImeEnter } from '../../ui/submitGuard'
 import { formatInspectionStandard } from '../../ui/inspectionStandard'
@@ -9,6 +10,16 @@ import type { InspectionPoint, MeasurementField, TemplateItem } from './api'
 type Selection = { type: 'category' | 'system' | 'item'; id: string }
 type Mode = 'create-item' | 'edit-item'
 type FocusRequest = { id: number; key: string }
+
+// 點位錯誤 key 的身分：專案項目編輯（stable）要用不隨增刪項次而位移的
+// 識別，否則刪除前一項次後，伺服器欄位錯誤會被對到別的項次；範本維持索引。
+function errorIdentity(
+  point: InspectionPoint,
+  index: number,
+  stable: boolean,
+): string {
+  return String(stable ? (point.clientKey ?? point.id ?? index) : index)
+}
 
 type Props = {
   itemDraft: TemplateItem | null
@@ -45,8 +56,23 @@ type Props = {
   clearPointServerErrors: (index: number) => void
   confirmField: string
   setConfirmField: (value: string) => void
+  /** 依 IP-R13 鎖定項次與欄位的增減；專案項目選「不要」重查時才為 true。 */
+  structureLocked?: boolean
+  /** 結構鎖定時顯示在項次區的說明，讓使用者知道還能改什麼。 */
+  structureLockReason?: string
+  /** 覆寫標題上方的麵包屑；專案項目頁不屬於範本庫，需自訂。 */
+  contextLabel?: string
+  /** 儲存鈕文字；專案項目頁是「儲存變更」而非「儲存查核項目」。 */
+  saveLabel?: string
+  /** 搭配 `cancelHref` 的返回連結文字；專案項目頁用來離開編輯頁。 */
+  cancelLabel?: string
+  /** 有值時取消改成導覽連結，離開前由外層的未儲存攔截處理。 */
+  cancelHref?: string
+  /** 以 clientKey／id 而非索引組錯誤 key，避免刪除項次後錯誤錯位。 */
+  stablePointErrorKeys?: boolean
 }
 
+/** 依 TPL-R16、TPL-R18 提供共用編輯器與送出前欄位驗證。 */
 export function TemplateItemEditor({
   itemDraft,
   errors,
@@ -73,6 +99,13 @@ export function TemplateItemEditor({
   clearPointServerErrors,
   confirmField,
   setConfirmField,
+  structureLocked = false,
+  structureLockReason,
+  contextLabel,
+  saveLabel = '儲存查核項目',
+  cancelLabel = '取消',
+  cancelHref,
+  stablePointErrorKeys = false,
 }: Props) {
   const [openPoint, setOpenPoint] = useState<number | null>(0)
   const [errorOpen, setErrorOpen] = useState<Set<number>>(new Set())
@@ -82,9 +115,12 @@ export function TemplateItemEditor({
   const errorPoints = new Set(
     Object.keys(errors)
       .filter((key) => key.startsWith('point:'))
-      .map((key) => Number(key.split(':')[1]))
-      .filter((index) => Number.isInteger(index)),
+      .map((key) => key.split(':')[1]),
   )
+  const pointErrorIdentity = (point: InspectionPoint, index: number) =>
+    errorIdentity(point, index, stablePointErrorKeys)
+  const pointKey = (point: InspectionPoint, index: number) =>
+    `point:${pointErrorIdentity(point, index)}`
   const updatePointAndPreserveErrors = (
     index: number,
     changes: Partial<InspectionPoint>,
@@ -124,6 +160,7 @@ export function TemplateItemEditor({
       `[data-error-key="${fieldKey}"]`,
     )
   }
+  const draftPoints = itemDraft?.inspection_points
   useEffect(() => {
     if (!focusRequest || focusRequest.id <= completedFocusRequest.current) {
       return
@@ -135,12 +172,17 @@ export function TemplateItemEditor({
     }
     const card = field.closest('details')
     if (card && !card.open) {
-      const pointIndex = /^point:(\d+):/.exec(focusRequest.key)?.[1]
+      const pointIndex = draftPoints?.findIndex(
+        (point, index) =>
+          `point:${errorIdentity(point, index, stablePointErrorKeys)}` ===
+          focusRequest.key.split(':').slice(0, 2).join(':'),
+      )
       if (
         pointIndex !== undefined &&
+        pointIndex >= 0 &&
         scheduledFocusRequest.current !== focusRequest.id
       ) {
-        const index = Number(pointIndex)
+        const index = pointIndex
         scheduledFocusRequest.current = focusRequest.id
         window.setTimeout(() => {
           setErrorOpen((current) => new Set([...current, index]))
@@ -152,7 +194,7 @@ export function TemplateItemEditor({
     field.scrollIntoView?.({ block: 'center' })
     field.focus()
     completedFocusRequest.current = focusRequest.id
-  }, [errorOpen, focusRequest])
+  }, [draftPoints, errorOpen, focusRequest, stablePointErrorKeys])
   if (!itemDraft) return null
   const alert =
     Object.keys(errors).length > 0
@@ -182,7 +224,8 @@ export function TemplateItemEditor({
       <div className="tpl-editor-heading">
         <div>
           <p className="tpl-crumb">
-            範本庫 / {selectedCategory?.name} /{selectedSystem?.name}
+            {contextLabel ??
+              `範本庫 / ${selectedCategory?.name} /${selectedSystem?.name}`}
           </p>
           <h2>
             {mode === 'create-item'
@@ -190,16 +233,23 @@ export function TemplateItemEditor({
               : `編輯「${itemDraft.title || '未命名查核項目'}」`}
           </h2>
         </div>
-        <button
-          aria-label="取消編輯"
-          onClick={() => {
-            if (dirty) setGuard(selected ?? { type: 'system', id: systemId })
-            else resetMode()
-          }}
-          type="button"
-        >
-          取消
-        </button>
+        {cancelHref ? (
+          <Link aria-label={cancelLabel} className="btn" to={cancelHref}>
+            {cancelLabel}
+          </Link>
+        ) : (
+          <button
+            aria-label="取消編輯"
+            onClick={() => {
+              if (dirty) {
+                setGuard(selected ?? { type: 'system', id: systemId })
+              } else resetMode()
+            }}
+            type="button"
+          >
+            取消
+          </button>
+        )}
       </div>
       {alert && (
         <div className="tpl-error-summary" role="alert">
@@ -261,177 +311,210 @@ export function TemplateItemEditor({
           </section>
           <section className="tpl-card" aria-labelledby="tpl-points-title">
             <h3 id="tpl-points-title">查核項次</h3>
+            {structureLocked && structureLockReason && (
+              <p className="tpl-hint" role="status">
+                {structureLockReason}
+              </p>
+            )}
             <p className="tpl-hint">
               每張卡片是一個現場查核步驟。實測欄位可以留空。
             </p>
-            {itemDraft.inspection_points.map((point, index) => (
-              <details
-                className="tpl-point-card"
-                key={point.id ?? index}
-                open={openPoint === index || errorOpen.has(index)}
-              >
-                <summary
-                  onClick={(event) => {
-                    event.preventDefault()
-                    const isOpen = openPoint === index || errorOpen.has(index)
-                    const opening = !isOpen
-                    if (opening) {
-                      setOpenPoint(index)
-                      setErrorOpen(
-                        (current) =>
-                          new Set(
-                            [...current].filter((pointIndex) =>
-                              errorPoints.has(pointIndex),
-                            ),
-                          ),
-                      )
-                    } else {
-                      setErrorOpen((current) => {
-                        const next = new Set(current)
-                        next.delete(index)
-                        return next
-                      })
-                      if (openPoint === index) setOpenPoint(null)
-                    }
-                    if (opening) focusPointTitle(index)
-                  }}
+            {itemDraft.inspection_points.map((point, index) => {
+              const pointErrorKey = pointKey(point, index)
+              return (
+                <details
+                  className="tpl-point-card"
+                  key={point.id ?? point.clientKey ?? index}
+                  open={openPoint === index || errorOpen.has(index)}
                 >
-                  <span>
-                    項次 {index + 1}：{point.title || '未命名項次'}
-                  </span>
-                  <span className="tpl-point-summary">
-                    {pointSummary(point, photoDraft[String(index)] ?? '1')}
-                  </span>
-                  {Array.from(Object.keys(errors)).filter((key) =>
-                    key.startsWith(`point:${index}:`),
-                  ).length > 0 && (
-                    <span className="tpl-point-errors">
-                      待修正{' '}
-                      {
-                        Object.keys(errors).filter((key) =>
-                          key.startsWith(`point:${index}:`),
-                        ).length
-                      }
-                    </span>
-                  )}
-                </summary>
-                <label htmlFor={`point-${index}-title`}>
-                  項次標題{' '}
-                  <b aria-hidden="true" className="tpl-required">
-                    *
-                  </b>
-                </label>
-                <input
-                  aria-invalid={Boolean(inputError(`point:${index}:title`))}
-                  data-error-key={`point:${index}:title`}
-                  id={`point-${index}-title`}
-                  onChange={(event) =>
-                    updatePointAndPreserveErrors(index, {
-                      title: event.target.value,
-                    })
-                  }
-                  value={point.title}
-                />
-                {inputError(`point:${index}:title`) && (
-                  <p className="tpl-field-error">
-                    {inputError(`point:${index}:title`)}
-                  </p>
-                )}
-                <label htmlFor={`point-${index}-instruction`}>說明</label>
-                <textarea
-                  aria-invalid={Boolean(
-                    inputError(`point:${index}:instruction`),
-                  )}
-                  data-error-key={`point:${index}:instruction`}
-                  id={`point-${index}-instruction`}
-                  onChange={(event) =>
-                    updatePointAndPreserveErrors(index, {
-                      instruction: event.target.value,
-                    })
-                  }
-                  value={point.instruction}
-                />
-                {inputError(`point:${index}:instruction`) && (
-                  <p className="tpl-field-error">
-                    {inputError(`point:${index}:instruction`)}
-                  </p>
-                )}
-                <div className="tpl-actions">
-                  <button
-                    onClick={() => {
-                      removePoint(index)
-                      setErrorOpen((current) => {
-                        const next = new Set<number>()
-                        current.forEach((pointIndex) => {
-                          if (pointIndex < index) next.add(pointIndex)
-                          if (pointIndex > index) next.add(pointIndex - 1)
+                  <summary
+                    onClick={(event) => {
+                      event.preventDefault()
+                      const isOpen =
+                        openPoint === index || errorOpen.has(index)
+                      const opening = !isOpen
+                      if (opening) {
+                        setOpenPoint(index)
+                        setErrorOpen(
+                          (current) =>
+                            new Set(
+                              [...current].filter((pointIndex) =>
+                                errorPoints.has(
+                                  pointErrorIdentity(
+                                    itemDraft.inspection_points[pointIndex],
+                                    pointIndex,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        )
+                      } else {
+                        setErrorOpen((current) => {
+                          const next = new Set(current)
+                          next.delete(index)
+                          return next
                         })
-                        return next
-                      })
-                      setOpenPoint((current) => {
-                        if (current === null) return null
-                        if (current > index) return current - 1
-                        if (current === index) return null
-                        return current
-                      })
+                        if (openPoint === index) setOpenPoint(null)
+                      }
+                      if (opening) focusPointTitle(index)
                     }}
-                    type="button"
                   >
-                    移除此項次
-                  </button>
-                </div>
-                <MeasurementFieldEditor
-                  confirmField={confirmField}
-                  errors={errors}
-                  point={point}
-                  pointIndex={index}
-                  setConfirmField={setConfirmField}
-                  updateField={updateFieldAndPreserveErrors}
-                  updatePoint={updatePointAndPreserveErrors}
-                />
-                <NumericStandardEditor
-                  errors={errors}
-                  point={point}
-                  pointIndex={index}
-                  updateNumeric={updateNumericAndPreserveErrors}
-                  updatePoint={updatePointAndPreserveErrors}
-                />
-                <section className="tpl-point-section" aria-label="照片需求">
-                  <h4>照片需求</h4>
-                  <label htmlFor={`photos-${index}`}>
-                    照片至少幾張{' '}
+                    <span>
+                      項次 {index + 1}：{point.title || '未命名項次'}
+                    </span>
+                    <span className="tpl-point-summary">
+                      {pointSummary(point, photoDraft[String(index)] ?? '1')}
+                    </span>
+                    {Array.from(Object.keys(errors)).filter((key) =>
+                      key.startsWith(`${pointErrorKey}:`),
+                    ).length > 0 && (
+                      <span className="tpl-point-errors">
+                        待修正{' '}
+                        {
+                          Object.keys(errors).filter((key) =>
+                            key.startsWith(`${pointErrorKey}:`),
+                          ).length
+                        }
+                      </span>
+                    )}
+                  </summary>
+                  <label htmlFor={`point-${index}-title`}>
+                    項次標題{' '}
                     <b aria-hidden="true" className="tpl-required">
                       *
                     </b>
                   </label>
                   <input
-                    aria-invalid={Boolean(inputError(`point:${index}:photos`))}
-                    data-error-key={`point:${index}:photos`}
-                    id={`photos-${index}`}
-                    inputMode="numeric"
-                    min="1"
-                    onChange={(event) => {
-                      updatePhotoDraftAndPreserveErrors(index, (current) => ({
-                        ...current,
-                        [String(index)]: event.target.value,
-                      }))
-                    }}
-                    value={photoDraft[String(index)] ?? '1'}
+                    aria-invalid={Boolean(
+                      inputError(`${pointErrorKey}:title`),
+                    )}
+                    data-error-key={`${pointErrorKey}:title`}
+                    id={`point-${index}-title`}
+                    onChange={(event) =>
+                      updatePointAndPreserveErrors(index, {
+                        title: event.target.value,
+                      })
+                    }
+                    value={point.title}
                   />
-                  {inputError(`point:${index}:photos`) && (
+                  {inputError(`${pointErrorKey}:title`) && (
                     <p className="tpl-field-error">
-                      {inputError(`point:${index}:photos`)}
+                      {inputError(`${pointErrorKey}:title`)}
                     </p>
                   )}
-                </section>
-              </details>
-            ))}
+                  <label htmlFor={`point-${index}-instruction`}>說明</label>
+                  <textarea
+                    aria-invalid={Boolean(
+                      inputError(`${pointErrorKey}:instruction`),
+                    )}
+                    data-error-key={`${pointKey(point, index)}:instruction`}
+                    id={`point-${index}-instruction`}
+                    onChange={(event) =>
+                      updatePointAndPreserveErrors(index, {
+                        instruction: event.target.value,
+                      })
+                    }
+                    value={point.instruction}
+                  />
+                  {inputError(`${pointErrorKey}:instruction`) && (
+                    <p className="tpl-field-error">
+                      {inputError(`${pointErrorKey}:instruction`)}
+                    </p>
+                  )}
+                  <div className="tpl-actions">
+                    <button
+                      disabled={structureLocked}
+                      onClick={() => {
+                        removePoint(index)
+                        setErrorOpen((current) => {
+                          const next = new Set<number>()
+                          current.forEach((pointIndex) => {
+                            if (pointIndex < index) next.add(pointIndex)
+                            if (pointIndex > index) next.add(pointIndex - 1)
+                          })
+                          return next
+                        })
+                        setOpenPoint((current) => {
+                          if (current === null) return null
+                          if (current > index) return current - 1
+                          if (current === index) return null
+                          return current
+                        })
+                      }}
+                      type="button"
+                    >
+                      移除此項次
+                    </button>
+                  </div>
+                  <MeasurementFieldEditor
+                    confirmField={confirmField}
+                    errors={errors}
+                    point={point}
+                    pointIndex={index}
+                    errorPointKey={pointErrorKey}
+                    setConfirmField={setConfirmField}
+                    updateField={updateFieldAndPreserveErrors}
+                    updatePoint={updatePointAndPreserveErrors}
+                    structureLocked={structureLocked}
+                  />
+                  <NumericStandardEditor
+                    errors={errors}
+                    point={point}
+                    pointIndex={index}
+                    errorPointKey={pointErrorKey}
+                    updateNumeric={updateNumericAndPreserveErrors}
+                    updatePoint={updatePointAndPreserveErrors}
+                    structureLocked={structureLocked}
+                  />
+                  <section className="tpl-point-section" aria-label="照片需求">
+                    <h4>照片需求</h4>
+                    <label htmlFor={`photos-${index}`}>
+                      照片至少幾張{' '}
+                      <b aria-hidden="true" className="tpl-required">
+                        *
+                      </b>
+                    </label>
+                    <input
+                      aria-invalid={Boolean(
+                        inputError(`${pointErrorKey}:photos`),
+                      )}
+                      data-error-key={`${pointKey(point, index)}:photos`}
+                      disabled={structureLocked}
+                      id={`photos-${index}`}
+                      inputMode="numeric"
+                      min="1"
+                      onChange={(event) => {
+                        updatePhotoDraftAndPreserveErrors(
+                          index,
+                          (current) => ({
+                            ...current,
+                            [String(index)]: event.target.value,
+                          }),
+                        )
+                      }}
+                      value={photoDraft[String(index)] ?? '1'}
+                    />
+                    {inputError(`${pointErrorKey}:photos`) && (
+                      <p className="tpl-field-error">
+                        {inputError(`${pointErrorKey}:photos`)}
+                      </p>
+                    )}
+                  </section>
+                </details>
+              )
+            })}
             {errors.points && (
-              <p className="tpl-field-error" role="alert">
+              <p
+                className="tpl-field-error"
+                data-error-key="points"
+                role="alert"
+                tabIndex={-1}
+              >
                 {errors.points}
               </p>
             )}
             <button
+              disabled={structureLocked}
               onClick={() => {
                 const index = itemDraft.inspection_points.length
                 addPoint()
@@ -440,7 +523,15 @@ export function TemplateItemEditor({
                   (current) =>
                     new Set(
                       [...current].filter((pointIndex) =>
-                        errorPoints.has(pointIndex),
+                        Boolean(
+                          itemDraft.inspection_points[pointIndex] &&
+                          errorPoints.has(
+                            pointErrorIdentity(
+                              itemDraft.inspection_points[pointIndex],
+                              pointIndex,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                 )
@@ -461,7 +552,7 @@ export function TemplateItemEditor({
             </p>
             <ol>
               {itemDraft.inspection_points.map((point, index) => (
-                <li key={point.id ?? index}>
+                <li key={point.id ?? point.clientKey ?? index}>
                   <strong className="tpl-preview-point">
                     項次 {index + 1}
                   </strong>
@@ -478,17 +569,24 @@ export function TemplateItemEditor({
             {requestError}
           </p>
         )}
-        <button
-          onClick={() => {
-            if (dirty) setGuard(selected ?? { type: 'system', id: systemId })
-            else resetMode()
-          }}
-          type="button"
-        >
-          取消
-        </button>
+        {cancelHref ? (
+          <Link aria-label={cancelLabel} className="btn" to={cancelHref}>
+            {cancelLabel}
+          </Link>
+        ) : (
+          <button
+            onClick={() => {
+              if (dirty) {
+                setGuard(selected ?? { type: 'system', id: systemId })
+              } else resetMode()
+            }}
+            type="button"
+          >
+            取消
+          </button>
+        )}
         <button className="btn-primary" disabled={readOnly} type="submit">
-          儲存查核項目
+          {saveLabel}
         </button>
       </div>
     </form>
@@ -502,5 +600,13 @@ function pointSummary(point: InspectionPoint, photos: string): string {
       return `${name}${field.unit?.trim() ? `（${field.unit}）` : ''}`
     })
     .join('、')
-  return `${point.title.trim() || '？'}｜量測 ${fields || '無實測欄位'}｜${formatInspectionStandard(point, { requireCompleteInterval: true })}｜照片 ${photos.trim() || '？'} 張`
+  const standard = formatInspectionStandard(point, {
+    requireCompleteInterval: true,
+  })
+  return [
+    `${point.title.trim() || '？'}`,
+    `量測 ${fields || '無實測欄位'}`,
+    standard,
+    `照片 ${photos.trim() || '？'} 張`,
+  ].join('｜')
 }

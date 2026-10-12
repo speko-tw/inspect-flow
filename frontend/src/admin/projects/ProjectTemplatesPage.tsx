@@ -93,12 +93,20 @@ function pointEvidenceText(
 
 export default function ProjectTemplatesPage({
   viewerPermissions = [],
+  headingLevel = 2,
 }: {
   viewerPermissions?: string[]
+  /**
+   * 頁面標題層級。預設 2：頁面嵌在專案頁框內，頁框已有 `<h1>`（專案名稱）。
+   * 範本管理員不是專案成員時沒有專案頁框、頁首也沒有 `<h1>`，改傳 1，
+   * 避免標題從 `<h2>` 起跳，也避免同頁出現兩個 `<h1>`。
+   */
+  headingLevel?: 1 | 2
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const navigate = useNavigate()
+  const PageHeading = headingLevel === 1 ? 'h1' : 'h2'
   const [project, setProject] = useState<ProjectSummary | null>(null)
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
@@ -516,11 +524,11 @@ export default function ProjectTemplatesPage({
         {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
       </p>
       {project && (
-        <h2>
+        <PageHeading>
           {isSaveMode
             ? `將「${saveSource?.title ?? ''}」存為範本`
             : '套用範本到專案'}
-        </h2>
+        </PageHeading>
       )}
       {readOnly && (
         <p className="notice-info" role="status">

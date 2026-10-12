@@ -1550,10 +1550,13 @@ def _validate_project_points(
     has_tasks: bool,
     reinspect: bool | None,
 ) -> None:
-    """依 IP-R13、IP-R14 先驗證完整結構。
+    """依 IP-R13、IP-R14 先驗證完整結構，再動任何資料列。
 
-    有 Task 時不重查卻增減項次／欄位、改欄位類型，
-    或將項次清空，均拒絕（422）。
+    有 Task 使用此項目且選擇不重查（`reinspect=false`）時，一律視為結構
+    變更而拒絕（422）：增減項次或實測欄位、改欄位類型、照片需求張數、
+    判定標準種類（數值／文字／無）、數值標準綁定的欄位與單位。草稿專用
+    的修改前端送 `reinspect=true`，依 IP-R04 在同一 Task 更新 Snapshot。
+    有任何 Task 使用時不得把項次清空（422）。
     """
     existing_points = db.scalars(
         select(ProjectInspectionPoint).where(
@@ -1571,6 +1574,21 @@ def _validate_project_points(
         fields_by_point.setdefault(field.inspection_point_id, {})[field.id] = (
             field
         )
+    numeric_by_point = {
+        row.inspection_point_id: row
+        for row in db.scalars(
+            select(ProjectNumericStandard).where(
+                ProjectNumericStandard.project_inspection_item_id == item.id
+            )
+        ).all()
+    }
+    text_point_ids = set(
+        db.scalars(
+            select(ProjectTextStandard.inspection_point_id).where(
+                ProjectTextStandard.project_inspection_item_id == item.id
+            )
+        ).all()
+    )
 
     point_identities: list[UUID | None] = []
     normalized_points = []
@@ -1640,6 +1658,31 @@ def _validate_project_points(
         for point, point_id in zip(points, point_identities, strict=True):
             assert point_id is not None
             old_fields = fields_by_point.get(point_id, {})
+            old_numeric = numeric_by_point.get(point_id)
+            if (point.numeric_standard is not None) != (
+                old_numeric is not None
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
+            if (point.text_standard is not None) != (
+                point_id in text_point_ids
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
+            old_photo_count = db.scalar(
+                select(ProjectEvidenceRequirement.min_count).where(
+                    ProjectEvidenceRequirement.inspection_point_id == point_id
+                )
+            )
+            if (
+                len(point.evidence_requirements) != 1
+                or point.evidence_requirements[0].min_count != old_photo_count
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
+                )
             provided_field_ids = [
                 field.id for field in point.measurement_fields
             ]
@@ -1657,6 +1700,38 @@ def _validate_project_points(
                 assert field_id is not None
                 existing = old_fields[field_id]
                 if field.field_type != existing.field_type:
+                    raise APIError(
+                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
+                        422,
+                    )
+                expected_unit = (
+                    None
+                    if old_numeric is not None
+                    and old_numeric.measurement_field_id == field_id
+                    else existing.unit
+                )
+                if field.unit != expected_unit:
+                    raise APIError(
+                        ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
+                        422,
+                    )
+            if point.numeric_standard is not None:
+                assert old_numeric is not None
+                standard = point.numeric_standard
+                bound_field_id = next(
+                    (
+                        field.id
+                        for field in point.measurement_fields
+                        if field.id == standard.measurement_field_client_id
+                        or field.client_id
+                        == standard.measurement_field_client_id
+                    ),
+                    None,
+                )
+                if (
+                    standard.unit != old_numeric.unit
+                    or bound_field_id != old_numeric.measurement_field_id
+                ):
                     raise APIError(
                         ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED,
                         422,

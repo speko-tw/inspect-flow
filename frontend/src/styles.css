@@ -71,6 +71,11 @@
   margin: 0 auto;
   padding: 0 16px 32px;
 }
+@media (min-width: 64rem) {
+  .field-shell {
+    width: min(100%, var(--content-width));
+  }
+}
 .field-heading {
   margin: 18px 0 3px;
   font-size: 1.72rem;
@@ -2064,6 +2069,10 @@ a.app-header-tab[aria-current='page'] {
   }
 
   .tpl-editor-footer button {
+    flex: 1 1 auto;
+  }
+
+  .tpl-editor-footer .btn {
     flex: 1 1 auto;
   }
 }

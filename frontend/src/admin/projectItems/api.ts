@@ -1,6 +1,7 @@
 import { isForbidden } from '../../http'
 import { listAllPages, ManagementApiError, request } from '../api'
 import type { InspectionPoint } from '../templates/api'
+import { forWire } from '../templates/templateEditorUtils'
 
 /** IP-R04 所需的任務狀態，供修改項目時說明重查後果。 */
 export type TaskStatus =
@@ -101,42 +102,18 @@ export function listProjectItems(
   return listAllPages(`/projects/${projectId}/inspection-items`)
 }
 
-// 依 IP-R13 傳回既有 id 與來源欄位識別，避免文字更正被當成新項次。
-function patchPoints(points: InspectionPoint[]) {
-  return points.map((point) => ({
-    id: point.id,
-    sequence: point.sequence,
-    title: point.title,
-    instruction: point.instruction,
-    text_standard: point.text_standard,
-    numeric_standard: point.numeric_standard
-      ? {
-          value: point.numeric_standard.value,
-          condition: point.numeric_standard.condition,
-          unit: point.numeric_standard.unit,
-          tolerance: point.numeric_standard.tolerance,
-          range_form: point.numeric_standard.range_form ?? null,
-          lower_bound: point.numeric_standard.lower_bound ?? null,
-          upper_bound: point.numeric_standard.upper_bound ?? null,
-          measurement_field_client_id:
-            point.numeric_standard.measurement_field_id,
-        }
-      : null,
-    measurement_fields: point.measurement_fields.map((field) => ({
-      id: field.id,
-      client_id: field.client_id ?? field.id ?? crypto.randomUUID(),
-      name: field.name,
-      field_type: field.field_type,
-      unit:
-        point.numeric_standard?.measurement_field_id !== undefined &&
-        field.id === point.numeric_standard.measurement_field_id
-          ? null
-          : field.unit,
-    })),
-    evidence_requirements: point.evidence_requirements.map((row) => ({
-      min_count: row.min_count,
-    })),
-  }))
+/** 保留既有識別，並讓新欄位與數值標準以穩定 client_id 綁定。 */
+export function serializeProjectItemPoints(points: InspectionPoint[]) {
+  return forWire(
+    {
+      system_id: '',
+      sequence: 1,
+      title: '',
+      instruction: '',
+      inspection_points: points,
+    },
+    { includeIds: true },
+  ).inspection_points
 }
 
 /** 讀取跨 Plan 的影響預覽並提交修改；403 預覽降為唯讀。 */
@@ -183,7 +160,9 @@ export const projectItemApi: ProjectItemApi = {
       body: JSON.stringify({
         title: change.title,
         instruction: change.instruction,
-        inspection_points: patchPoints(change.inspection_points),
+        inspection_points: serializeProjectItemPoints(
+          change.inspection_points,
+        ),
         ...(change.reinspect === undefined
           ? {}
           : { reinspect: change.reinspect }),

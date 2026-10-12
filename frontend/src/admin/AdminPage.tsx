@@ -98,7 +98,7 @@ function ProjectTemplatesRoute() {
     }
     return (
       <AdminRouteSuspense>
-        <ProjectTemplatesPage viewerPermissions={[]} />
+        <ProjectTemplatesPage headingLevel={1} viewerPermissions={[]} />
       </AdminRouteSuspense>
     )
   }

@@ -1,0 +1,37 @@
+{
+  "title": "厚度與寬度",
+  "instruction": "記錄區間尺寸",
+  "inspection_points": [
+    {
+      "sequence": 1,
+      "title": "尺寸區間",
+      "instruction": "量測兩個尺寸",
+      "measurement_fields": [
+        {
+          "client_id": "00000000-0000-4000-8000-000000000101",
+          "name": "高度",
+          "field_type": "number",
+          "unit": "cm"
+        },
+        {
+          "client_id": "00000000-0000-4000-8000-000000000102",
+          "name": "寬度",
+          "field_type": "number",
+          "unit": null
+        }
+      ],
+      "numeric_standard": {
+        "value": null,
+        "condition": "range",
+        "unit": "mm",
+        "tolerance": null,
+        "range_form": "interval",
+        "lower_bound": "10",
+        "upper_bound": "20",
+        "measurement_field_client_id": "00000000-0000-4000-8000-000000000102"
+      },
+      "text_standard": null,
+      "evidence_requirements": [{ "min_count": 1 }]
+    }
+  ]
+}
