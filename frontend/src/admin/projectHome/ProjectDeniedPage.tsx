@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { landingLabel, landingPath } from '../../auth/landing'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 
+/** 依 ADM-R25 顯示專案拒絕頁，並提供符合使用者權限的返回連結。 */
 export default function ProjectDeniedPage() {
   const { user } = useCurrentUser()
   const target = landingPath(user)

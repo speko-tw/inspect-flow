@@ -78,7 +78,6 @@ from app.services.inspection_planning import (
     get_inspection_task,
     inspection_task_list_filters,
     inspection_task_visibility_filters,
-    list_inspection_plans,
     rename_inspection_plan,
     rename_project_zone,
     restore_inspection_task,
@@ -625,7 +624,6 @@ def plans(
     db: Session = _db_dependency,
 ):
     """列出專案 Plan；缺 inspection_plan.read 時拒絕。"""
-    _call(list_inspection_plans, db, project_id=project_id)
     return page(
         db,
         InspectionPlan,

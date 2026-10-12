@@ -5,6 +5,10 @@ import { isForbidden } from '../../http'
 import { listProjectItems, type ProjectItemData } from './api'
 import './ProjectItemLinks.css'
 
+/**
+ * 依 ADM-R17 列出專案查核項目；只有編輯權限者顯示修改入口。
+ * 列表讀取被拒絕時顯示錯誤，避免將權限不足誤認為空清單。
+ */
 export default function ProjectItemLinks({
   projectId,
   viewerPermissions,

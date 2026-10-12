@@ -12,6 +12,7 @@ from app.auth.access import require_admin
 from app.auth.dependencies import get_db
 from app.models import SystemRoleAssignment, SystemRoleCode, User
 from app.services.system_roles import (
+    ExternalUserSystemRoleError,
     SystemRoleAlreadyAssignedError,
     SystemRoleNotAssignedError,
     assign_system_role,
@@ -55,6 +56,12 @@ def assign_template_admin(
     _get_user(db, user_id)
     try:
         assign_system_role(db, user_id, SystemRoleCode.TEMPLATE_ADMIN)
+    except ExternalUserSystemRoleError as exc:
+        raise APIError(
+            ErrorCode.USER_EXTERNAL_NOT_QUALIFIED,
+            422,
+            details=exc.details,
+        ) from exc
     except SystemRoleAlreadyAssignedError:
         pass
     except IntegrityError as exc:

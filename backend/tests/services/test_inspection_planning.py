@@ -98,7 +98,14 @@ def _add_member(session, operator, project, user):
     return member
 
 
-def _source_item(session, operator, project, title="項目 A", sequence=1):
+def _source_item(
+    session,
+    operator,
+    project,
+    title="項目 A",
+    sequence=1,
+    with_point=True,
+):
     item = ProjectInspectionItem(
         project_id=project.id,
         sequence=sequence,
@@ -111,6 +118,19 @@ def _source_item(session, operator, project, title="項目 A", sequence=1):
     )
     session.add(item)
     session.flush()
+    if with_point:
+        # IP-R14：一般服務案例使用可建立 Task 的有效來源項目。
+        session.add(
+            ProjectInspectionPoint(
+                project_inspection_item_id=item.id,
+                sequence=1,
+                title="檢查點",
+                instruction="確認項目狀況",
+                created_by=operator.id,
+                updated_by=operator.id,
+            )
+        )
+        session.flush()
     return item
 
 
@@ -461,7 +481,7 @@ def test_snapshot_child_rows_copy_source_and_remain_immutable(
     plan = create_inspection_plan(
         session, project_id=project.id, name="子表快照"
     )
-    source = _source_item(session, operator, project)
+    source = _source_item(session, operator, project, with_point=False)
     point = ProjectInspectionPoint(
         project_inspection_item_id=source.id,
         sequence=1,

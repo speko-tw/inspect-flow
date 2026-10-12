@@ -18,6 +18,7 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
+    SystemRoleAssignment,
     User,
     UserModuleDelegation,
     UserModulePermission,
@@ -768,6 +769,38 @@ def test_external_collaborator_cannot_be_promoted_to_admin(session, operator):
 
     assert snapshot_persisted_columns(user) == before
     assert _audit_rows_for(session, user.id) == []
+
+
+def test_external_flag_change_lists_template_admin_system_role(
+    session, operator
+):
+    """設定外部身分時須列出並保留不相容的範本管理系統角色。"""
+    user = create_root_user_with_company(session, "EXTTPLADMIN")
+    session.add(
+        SystemRoleAssignment(
+            user_id=user.id,
+            role_code="template_admin",
+            created_by=operator.id,
+            updated_by=operator.id,
+        )
+    )
+    session.commit()
+
+    with pytest.raises(ExternalFlagChangeError) as error:
+        set_external_collaborator(session, user, True)
+
+    assert error.value.details == ["system role: template_admin"]
+    session.refresh(user)
+    assert user.is_external_collaborator is False
+    assert (
+        session.scalar(
+            select(SystemRoleAssignment.id).where(
+                SystemRoleAssignment.user_id == user.id,
+                SystemRoleAssignment.role_code == "template_admin",
+            )
+        )
+        is not None
+    )
 
 
 def test_returning_external_collaborator_to_internal_clears_expiry(
