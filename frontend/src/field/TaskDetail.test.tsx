@@ -102,7 +102,7 @@ describe('現場任務詳情', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('示範工程甲')).toBeInTheDocument()
     expect(screen.getByText('分區：一樓')).toBeInTheDocument()
-    expect(screen.getByText('東側')).toBeInTheDocument()
+    expect(screen.getByText('補充地點：東側')).toBeInTheDocument()
     expect(screen.getByText('示範查核員')).toBeInTheDocument()
     expect(screen.getByText(/派送時間/).parentElement).toHaveTextContent(
       /2026/,
@@ -137,7 +137,8 @@ describe('現場任務詳情', () => {
       ),
     )
     renderDetail()
-    expect(await screen.findByText('西側')).toBeInTheDocument()
+    const location = await screen.findByText('補充地點：西側')
+    expect(location).toBeInTheDocument()
     expect(screen.queryByText(/分區：/)).not.toBeInTheDocument()
     expect(screen.getByText('未指定')).toBeInTheDocument()
     expect(screen.getByText('查核進行中')).toBeInTheDocument()
@@ -145,6 +146,25 @@ describe('現場任務詳情', () => {
     expect(
       screen.queryByRole('button', { name: /開始查核/ }),
     ).not.toBeInTheDocument()
+  })
+
+  it('沒有補充地點時不顯示未指定地點列', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          ...detail,
+          location: { zone_name: null, location_text: null },
+          suggested_assignee: null,
+        }),
+      ),
+    )
+    renderDetail()
+
+    expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
+    expect(screen.queryByText('查核地點')).not.toBeInTheDocument()
+    expect(screen.queryByText(/補充地點：/)).not.toBeInTheDocument()
+    expect(screen.queryByText('地點：未指定')).not.toBeInTheDocument()
   })
 
   it.each([
