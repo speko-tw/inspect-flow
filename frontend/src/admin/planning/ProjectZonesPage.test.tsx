@@ -164,6 +164,39 @@ describe('project zones section', () => {
     expect(screen.queryByText('請輸入分區名稱。')).not.toBeInTheDocument()
   })
 
+  it('returns focus to the row trigger after a successful rename', async () => {
+    const client = createMockPlanningClient()
+    await client.createZone('project-demo-1', '北區')
+    render(
+      <MemoryRouter initialEntries={['/admin/projects/project-demo-1/zones']}>
+        <Routes>
+          <Route
+            element={
+              <ProjectZonesPage
+                client={client}
+                viewerPermissions={[
+                  'project_zone.read',
+                  'project_zone.manage',
+                ]}
+              />
+            }
+            path="/admin/projects/:projectId/zones"
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const row = (await screen.findByText('北區')).closest('li') as HTMLElement
+    const trigger = within(row).getByRole('button', { name: '重新命名' })
+    fireEvent.click(trigger)
+    fireEvent.change(screen.getByLabelText('分區名稱'), {
+      target: { value: '北一區' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存名稱' }))
+
+    expect(await screen.findByText('北一區')).toBeVisible()
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
   it('maps the server zone-name 422 field beside the input and focuses it', async () => {
     const client = renderPage(['project_zone.read', 'project_zone.manage'])
     client.createZone = vi.fn().mockRejectedValue(validationError(nameTooLong))

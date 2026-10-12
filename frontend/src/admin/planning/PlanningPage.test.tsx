@@ -514,6 +514,8 @@ describe('planning management page', () => {
     await openTaskCreationForm()
     const summary = screen.getAllByText('本計畫已有 1 筆任務')[0]
     expect(summary).toHaveStyle({ minHeight: '44px' })
+    // display:flex 會移除 <summary> 的展開箭頭，所以只用 min-height。
+    expect(summary.style.display).toBe('')
     fireEvent.click(summary)
     expect(screen.getAllByText('混凝土外觀').length).toBeGreaterThan(1)
 
@@ -558,9 +560,10 @@ describe('planning management page', () => {
       })
     ).closest('article') as HTMLElement
     const archiveButton = screen.getByRole('button', { name: '封存計畫' })
-    expect(archiveButton.parentElement).toHaveStyle({
-      marginBlockEnd: 'var(--space-3)',
-    })
+    // 封存鈕與「修改計畫名稱」同一列，間距只由「任務」標題的上邊距提供。
+    expect(archiveButton.parentElement).toBe(
+      screen.getByRole('button', { name: '修改計畫名稱' }).parentElement,
+    )
     expect(screen.getByRole('heading', { name: '任務' })).toHaveStyle({
       marginBlockStart: 'var(--space-3)',
     })
@@ -1558,7 +1561,9 @@ describe('planning forms guard (#507)', () => {
       const article = await openPlan(client)
 
       const list = within(article).getByRole('list', { name: BLOCKERS })
-      expect(list).toHaveStyle({ listStyle: 'none', paddingInlineStart: '0' })
+      expect(list).toHaveStyle({ listStyle: 'none' })
+      expect(list).toHaveAttribute('role', 'list')
+      expect(list.style.paddingInlineStart).toBe('')
       expect(within(list).getByText(/尚未填寫地點/)).toBeVisible()
       expect(within(article).queryByText(/尚未指派/)).toBeNull()
       expect(
@@ -1586,16 +1591,17 @@ describe('planning forms guard (#507)', () => {
       )
       const hashBefore = window.location.hash
 
-      // 先讓表單有未儲存內容；按鈕不是連結，不能被離頁確認攔下。
-      fireEvent.click(
-        await screen.findByRole('button', { name: '＋ 新增任務' }),
-      )
-      fireEvent.click(screen.getByLabelText(/鋼筋保護層/))
+      // 表單預設收合：捷徑要先展開，等欄位渲染後才聚焦。
+      expect(screen.queryByRole('group', { name: /選擇一筆以上/ })).toBeNull()
       fireEvent.click(
         within(list).getByRole('button', { name: '前往新增任務欄位' }),
       )
 
-      expect(screen.getByRole('group', { name: /選擇一筆以上/ })).toHaveFocus()
+      await waitFor(() =>
+        expect(
+          screen.getByRole('group', { name: /選擇一筆以上/ }),
+        ).toHaveFocus(),
+      )
       expect(window.location.hash).toBe(hashBefore)
       expect(screen.queryByRole('group', { name: '有尚未儲存的變更' })).toBe(
         null,
@@ -1923,5 +1929,188 @@ describe('planning forms guard (#507)', () => {
       await waitFor(() => expect(selector).toHaveFocus())
       expect(within(form).queryByRole('alert')).toBeNull()
     })
+  })
+})
+
+describe('planning trial fixes (#634)', () => {
+  async function setup(
+    options: {
+      dispatched?: boolean
+      cancelledTwin?: boolean
+      otherPlan?: boolean
+    } = {},
+  ) {
+    const client = createMockPlanningClient()
+    const zone = await client.createZone('project-demo-1', '北區')
+    const plan = await client.createPlan('project-demo-1', {
+      name: '橋梁查核',
+    })
+    const [item, item2] = await client.listProjectItems('project-demo-1')
+    const task = await client.createTask(plan.id, {
+      item_ids: [item.id],
+      suggested_assignee_id: options.dispatched ? 'project-a-member-1' : null,
+      zone_id: zone.id,
+      location_text: null,
+    })
+    if (options.dispatched) await client.dispatchTask(task.id)
+    if (options.cancelledTwin) {
+      const twin = await client.createTask(plan.id, {
+        item_ids: [item.id],
+        suggested_assignee_id: 'project-a-member-1',
+        zone_id: zone.id,
+        location_text: null,
+      })
+      await client.dispatchTask(twin.id)
+      await client.cancelTask(twin.id, '重複建立')
+    }
+    if (options.otherPlan) {
+      await client.createPlan('project-demo-1', { name: '乙計畫' })
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+    const article = (
+      await screen.findAllByRole('heading', { name: /混凝土外觀/ })
+    )[0].closest('article') as HTMLElement
+    return { client, plan, task, article, item, item2, zone }
+  }
+
+  const creationForm = () =>
+    document.querySelector('#task-creation-form') as HTMLElement | null
+
+  async function renameWithNotice() {
+    fireEvent.click(screen.getByRole('button', { name: '修改計畫名稱' }))
+    const form = document.querySelector(
+      '[data-error-context="plan-rename"]',
+    ) as HTMLElement
+    fireEvent.change(within(form).getByLabelText(/計畫名稱/), {
+      target: { value: '橋梁查核乙' },
+    })
+    fireEvent.click(within(form).getByRole('button', { name: '儲存計畫名稱' }))
+    await expectNotice('已更新計畫名稱。')
+  }
+
+  it('focuses the first field on open and returns focus on cancel', async () => {
+    const { article } = await setup()
+    fireEvent.click(
+      within(article).getByRole('button', { name: '修改建議指派' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    const form = creationForm() as HTMLElement
+    await waitFor(() =>
+      expect(within(form).getAllByRole('checkbox')[0]).toHaveFocus(),
+    )
+
+    // 沒有輸入就取消：只收起新增任務表單，不得動到別的表單。
+    fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+
+    expect(creationForm()).toBeNull()
+    expect(
+      within(article).getByRole('heading', { name: '修改任務指派' }),
+    ).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '＋ 新增任務' }),
+      ).toHaveFocus(),
+    )
+  })
+
+  it('returns focus to the add button after discarding input', async () => {
+    await setup()
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    const form = creationForm() as HTMLElement
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+
+    expect(creationForm()).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '＋ 新增任務' }),
+      ).toHaveFocus(),
+    )
+  })
+
+  it('drops a pending discard prompt once the task is created', async () => {
+    const { zone } = await setup()
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    const form = creationForm() as HTMLElement
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    fireEvent.change(within(form).getByLabelText(/任務分區/), {
+      target: { value: zone.id },
+    })
+    fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+    expect(screen.getByText(/新增任務內容尚未儲存/)).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
+    await expectNotice('已建立草稿任務，派出後現場才看得到。')
+    expect(creationForm()).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    expect(screen.queryByText(/新增任務內容尚未儲存/)).toBeNull()
+    expect(screen.queryByRole('button', { name: '捨棄變更' })).toBeNull()
+  })
+
+  it('shortcuts clear notices and return focus to their button', async () => {
+    const { article } = await setup()
+    await renameWithNotice()
+
+    const shortcut = within(article).getByRole('button', {
+      name: '前往建議指派欄位',
+    })
+    fireEvent.click(shortcut)
+    expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
+    const form = within(article).getByRole('heading', { name: '修改任務指派' })
+    expect(form).toBeVisible()
+    fireEvent.click(
+      within(form.closest('form') as HTMLElement).getByRole('button', {
+        name: '取消',
+      }),
+    )
+
+    await waitFor(() => expect(shortcut).toHaveFocus())
+  })
+
+  it('clears notices when renaming the plan again', async () => {
+    await setup()
+    await renameWithNotice()
+
+    fireEvent.click(screen.getByRole('button', { name: '修改計畫名稱' }))
+
+    expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
+  })
+
+  it('clears notices when opening the cancel-task dialog', async () => {
+    const { article } = await setup({ dispatched: true })
+    await renameWithNotice()
+
+    fireEvent.click(within(article).getByRole('button', { name: '取消任務' }))
+
+    expect(screen.queryByText('已更新計畫名稱。')).toBeNull()
+  })
+
+  it('does not count cancelled tasks in the per-item totals', async () => {
+    await setup({ dispatched: true, cancelledTwin: true })
+    expect(screen.getAllByRole('article')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+
+    expect(screen.getAllByText('本計畫已有 1 筆任務')).toHaveLength(1)
+    expect(screen.getAllByText('本計畫已有 0 筆任務')).toHaveLength(2)
+  })
+
+  it('resets the creation form when another plan is opened', async () => {
+    await setup({ otherPlan: true })
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    fireEvent.click(screen.getByLabelText(/鋼筋保護層/))
+    expect(screen.getByLabelText(/鋼筋保護層/)).toBeChecked()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '乙計畫（草稿）' }),
+    )
+    await screen.findByRole('heading', { name: '乙計畫' })
+
+    expect(creationForm()).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
+    expect(screen.getByLabelText(/鋼筋保護層/)).not.toBeChecked()
   })
 })

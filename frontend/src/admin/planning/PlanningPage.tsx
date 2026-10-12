@@ -177,6 +177,11 @@ export default function PlanningPage({
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
   const [taskFormOpen, setTaskFormOpen] = useState(false)
+  // 表單展開後要把焦點送到哪裡：'first' 是一般展開，'items' 是阻擋說明的
+  // 捷徑（要落在查核項目欄）。表單還沒渲染時不能直接聚焦，所以先記下來。
+  const taskFormFocus = useRef<'first' | 'items' | null>(null)
+  // 只靠 ref 不會觸發 effect，所以每次請求都遞增計數讓 effect 再跑一次。
+  const [taskFormFocusTick, setTaskFormFocusTick] = useState(0)
   const [taskToFocus, setTaskToFocus] = useState('')
   const [taskZoneId, setTaskZoneId] = useState('')
   const [taskLocation, setTaskLocation] = useState('')
@@ -207,6 +212,9 @@ export default function PlanningPage({
   const cancelHeading = useRef<HTMLHeadingElement | null>(null)
   const locationTrigger = useRef<HTMLButtonElement | null>(null)
   const assigneeTrigger = useRef<HTMLButtonElement | null>(null)
+  const addTaskTrigger = useRef<HTMLButtonElement | null>(null)
+  const restoreAddTaskFocus = useRef(false)
+  const previousTaskFormOpen = useRef(false)
   const previousLocationEdit = useRef(false)
   const previousAssigneeEdit = useRef(false)
   const pageHeading = useRef<HTMLHeadingElement | null>(null)
@@ -291,6 +299,44 @@ export default function PlanningPage({
     }
     previousCancelTask.current = Boolean(cancelTask)
   }, [cancelTask])
+
+  useEffect(() => {
+    if (taskFormOpen && taskFormFocus.current) {
+      const form = pageContent.current?.querySelector<HTMLElement>(
+        '#task-creation-form',
+      )
+      const fieldset = form?.querySelector<HTMLElement>(
+        '[data-field="task-items"]',
+      )
+      // 一般展開落在第一個欄位；沒有可選項目時退回項目欄本身。
+      const target =
+        taskFormFocus.current === 'first'
+          ? (form?.querySelector<HTMLElement>('input, select, textarea') ??
+            fieldset)
+          : fieldset
+      target?.scrollIntoView?.({ block: 'center' })
+      target?.focus()
+      taskFormFocus.current = null
+    }
+  }, [taskFormOpen, taskFormFocusTick])
+
+  useEffect(() => {
+    // 只有使用者取消或捨棄才把焦點還給「＋ 新增任務」；建立成功時焦點要
+    // 去新任務，切換計畫時則沒有可還的對象。
+    if (
+      previousTaskFormOpen.current &&
+      !taskFormOpen &&
+      restoreAddTaskFocus.current
+    ) {
+      if (addTaskTrigger.current?.isConnected) {
+        addTaskTrigger.current.focus()
+      } else {
+        pageHeading.current?.focus()
+      }
+    }
+    if (!taskFormOpen) restoreAddTaskFocus.current = false
+    previousTaskFormOpen.current = taskFormOpen
+  }, [taskFormOpen])
 
   useEffect(() => {
     if (previousLocationEdit.current && !editingLocation) {
@@ -471,14 +517,19 @@ export default function PlanningPage({
   // 修改表單）都不顯示；只留說明文字。
   const canModify = canEditPlan && !readOnly
 
-  // 依 ADM-R28，缺查核項目時捲到並聚焦新增任務的查核項目欄；
-  // 不用 hash 導航，避免未儲存變更的確認誤判成離頁。
+  // 依 ADM-R28，缺查核項目時展開新增任務表單，並在它渲染後捲到、聚焦
+  // 查核項目欄（表單預設收合，按下時欄位還不在 DOM）；不用 hash 導航，
+  // 避免未儲存變更的確認誤判成離頁。
   function focusTaskItems(): void {
-    const field = pageContent.current?.querySelector<HTMLElement>(
-      '[data-field="task-items"]',
-    )
-    field?.scrollIntoView?.({ block: 'center' })
-    field?.focus()
+    clearFieldError()
+    setNotice(null)
+    setTaskFormOpen(true)
+    requestTaskFormFocus('items')
+  }
+
+  function requestTaskFormFocus(target: 'first' | 'items'): void {
+    taskFormFocus.current = target
+    setTaskFormFocusTick((tick) => tick + 1)
   }
 
   // 沒有任何阻擋原因時不渲染清單，避免空的 <ul> 被報讀成「清單，0 項」。
@@ -492,14 +543,21 @@ export default function PlanningPage({
       <ul
         aria-label="派出前需要處理的項目"
         className="task-dispatch-blockers"
-        style={{ listStyle: 'none', paddingInlineStart: 0 }}
+        // 去掉項目符號後 Safari 會不再把 <ul> 當清單報讀，所以明示 role。
+        role="list"
+        style={{ listStyle: 'none' }}
       >
         {blockers.unassigned && (
           <li>
             {canModify ? '尚未指派：' : '尚未指派建議指派人。'}
             {canModify && (
               <button
-                onClick={() => setEditingAssignee({ task, assigneeId: '' })}
+                onClick={(event) => {
+                  clearFieldError()
+                  setNotice(null)
+                  assigneeTrigger.current = event.currentTarget
+                  setEditingAssignee({ task, assigneeId: '' })
+                }}
                 type="button"
               >
                 前往建議指派欄位
@@ -512,9 +570,12 @@ export default function PlanningPage({
             {canModify ? '尚未填寫地點：' : '尚未填寫地點。'}
             {canModify && (
               <button
-                onClick={() =>
+                onClick={(event) => {
+                  clearFieldError()
+                  setNotice(null)
+                  locationTrigger.current = event.currentTarget
                   setEditingLocation({ task, zoneId: '', locationText: '' })
-                }
+                }}
                 type="button"
               >
                 前往地點欄位
@@ -589,6 +650,8 @@ export default function PlanningPage({
       setEditingLocation(null)
       setEditingAssignee(null)
       setEditingPlanName(false)
+      // 成功後各編輯表單都已收起，沒有東西可以再「確認捨棄」。
+      setDiscardingTaskForm(null)
       setReloadKey((key) => key + 1)
       return true
     } catch (caught) {
@@ -720,12 +783,20 @@ export default function PlanningPage({
     )
     if (created) {
       setTaskToFocus(pendingTaskHeading.current)
-      setTaskFormOpen(false)
-      setTaskItems([])
-      setTaskZoneId('')
-      setTaskLocation('')
-      setAssigneeId('')
+      resetTaskForm()
     }
+  }
+
+  // 收起新增任務表單並清空輸入；收起後不應留下任何隱藏的未儲存內容，
+  // 也不應留下等待確認的捨棄提示。
+  function resetTaskForm(): void {
+    setTaskFormOpen(false)
+    taskFormFocus.current = null
+    setTaskItems([])
+    setTaskZoneId('')
+    setTaskLocation('')
+    setAssigneeId('')
+    setDiscardingTaskForm(null)
   }
 
   function toggleItem(id: string, checked: boolean) {
@@ -759,28 +830,32 @@ export default function PlanningPage({
       setDiscardingTaskForm(kind)
       return
     }
-    if (kind === 'location') setEditingLocation(null)
-    else setEditingAssignee(null)
+    closeTaskForm(kind)
   }
 
-  // ADM-R38：確認捨棄後才清除編輯狀態，保留編輯則不碰原輸入。
-  function discardTaskForm(): void {
-    if (discardingTaskForm === 'location') setEditingLocation(null)
-    if (discardingTaskForm === 'assignee') setEditingAssignee(null)
-    if (discardingTaskForm === 'new-task') {
-      setTaskFormOpen(false)
-      setTaskItems([])
-      setTaskZoneId('')
-      setTaskLocation('')
-      setAssigneeId('')
+  // 依 kind 只收起對應的表單，不得牽動其他表單的狀態。
+  function closeTaskForm(kind: 'location' | 'assignee' | 'new-task'): void {
+    if (kind === 'location') setEditingLocation(null)
+    else if (kind === 'assignee') setEditingAssignee(null)
+    else {
+      restoreAddTaskFocus.current = true
+      resetTaskForm()
     }
     setDiscardingTaskForm(null)
   }
 
+  // ADM-R38：確認捨棄後才清除編輯狀態，保留編輯則不碰原輸入。
+  function discardTaskForm(): void {
+    if (discardingTaskForm) closeTaskForm(discardingTaskForm)
+  }
+
   // IP-R02：只計算本計畫內包含該專案項目的任務，其他計畫不混入數字。
+  // 已取消的任務不再涵蓋該項目，所以不計入，免得數字讓人以為還有有效任務。
   function tasksForItem(itemId: string): InspectionTask[] {
-    return (selectedPlanDetail?.tasks ?? []).filter((task) =>
-      task.items.some((taskItem) => taskItem.id === itemId),
+    return (selectedPlanDetail?.tasks ?? []).filter(
+      (task) =>
+        task.status !== 'CANCELLED' &&
+        task.items.some((taskItem) => taskItem.id === itemId),
     )
   }
 
@@ -866,6 +941,13 @@ export default function PlanningPage({
                     onClick={() => {
                       setNotice(null)
                       clearFieldError()
+                      if (plan.id !== selectedPlanId) {
+                        // 新增任務的輸入與編輯中的表單都屬於上一份計畫，
+                        // 帶到新計畫會誤建任務，也會留下看不見的未儲存內容。
+                        resetTaskForm()
+                        setEditingLocation(null)
+                        setEditingAssignee(null)
+                      }
                       setSelectedPlanId(plan.id)
                     }}
                     type="button"
@@ -946,6 +1028,7 @@ export default function PlanningPage({
                     disabled={busy || selectedPlan.status === 'ARCHIVED'}
                     onClick={() => {
                       setError('')
+                      setNotice(null)
                       clearFieldError()
                       setEditingPlanName(true)
                       setUpdatedPlanName(selectedPlan.name)
@@ -954,34 +1037,32 @@ export default function PlanningPage({
                   >
                     修改計畫名稱
                   </button>{' '}
-                  <div style={{ marginBlockEnd: 'var(--space-3)' }}>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        confirm(
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      confirm(
+                        selectedPlan.status === 'ARCHIVED'
+                          ? '取消封存計畫並依目前任務重算狀態？'
+                          : '封存計畫？封存期間任務將唯讀。',
+                        () =>
                           selectedPlan.status === 'ARCHIVED'
-                            ? '取消封存計畫並依目前任務重算狀態？'
-                            : '封存計畫？封存期間任務將唯讀。',
-                          () =>
+                            ? client.unarchivePlan(selectedPlan.id)
+                            : client.archivePlan(selectedPlan.id),
+                        {
+                          area: 'plan-detail',
+                          text:
                             selectedPlan.status === 'ARCHIVED'
-                              ? client.unarchivePlan(selectedPlan.id)
-                              : client.archivePlan(selectedPlan.id),
-                          {
-                            area: 'plan-detail',
-                            text:
-                              selectedPlan.status === 'ARCHIVED'
-                                ? '已取消封存計畫。'
-                                : '已封存計畫。',
-                          },
-                        )
-                      }
-                      type="button"
-                    >
-                      {selectedPlan.status === 'ARCHIVED'
-                        ? '取消封存'
-                        : '封存計畫'}
-                    </button>
-                  </div>
+                              ? '已取消封存計畫。'
+                              : '已封存計畫。',
+                        },
+                      )
+                    }
+                    type="button"
+                  >
+                    {selectedPlan.status === 'ARCHIVED'
+                      ? '取消封存'
+                      : '封存計畫'}
+                  </button>
                 </>
               )}
               {editingPlanName &&
@@ -1066,6 +1147,7 @@ export default function PlanningPage({
                   </form>
                 )}
 
+              {/* 按鈕與標題之間只靠標題的上邊距隔開，按鈕維持同一列。 */}
               <h3 style={{ marginBlockStart: 'var(--space-3)' }}>任務</h3>
               {noticeFor('tasks')}
               {(selectedPlanDetail.tasks ?? []).length === 0 ? (
@@ -1189,6 +1271,7 @@ export default function PlanningPage({
                             <button
                               disabled={busy}
                               onClick={(event) => {
+                                setNotice(null)
                                 cancelTrigger.current = event.currentTarget
                                 setCancelTask(task)
                               }}
@@ -1437,7 +1520,9 @@ export default function PlanningPage({
                     setError('')
                     setNotice(null)
                     setTaskFormOpen(true)
+                    requestTaskFormFocus('first')
                   }}
+                  ref={addTaskTrigger}
                   type="button"
                 >
                   ＋ 新增任務
@@ -1485,16 +1570,10 @@ export default function PlanningPage({
                             />
                             {item.title} — {item.instruction}
                           </label>
-                          {/* IP-R02 允許同項目建立多筆任務。 */}
-                          {/* 列出任務，提示項目已使用。 */}
+                          {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
+                              幾筆、不擋選擇，讓使用者自己避開重複任務。 */}
                           <details>
-                            <summary
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                minHeight: 44,
-                              }}
-                            >
+                            <summary style={{ minHeight: 44 }}>
                               本計畫已有 {existingTasks.length} 筆任務
                             </summary>
                             {existingTasks.length > 0 ? (

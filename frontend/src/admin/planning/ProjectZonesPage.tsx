@@ -51,6 +51,7 @@ export default function ProjectZonesPage({
   const errorMessage = useRef<HTMLParagraphElement>(null)
   const pageHeading = useRef<HTMLHeadingElement>(null)
   const rowTrigger = useRef<HTMLElement | null>(null)
+  const focusRowAfterSave = useRef(false)
   // Enter 走 requestSubmit() 時，停用的按鈕擋不住第二次送出，連按兩次
   // Enter 會送出兩次並讓第二次變成「名稱重複」；用同步防護擋掉。
   const guard = useSubmitGuard()
@@ -68,12 +69,21 @@ export default function ProjectZonesPage({
     if (error && !nameError && !serverNameError) errorMessage.current?.focus()
   }, [error, nameError, serverNameError])
 
-  // 進入改名時把焦點放到名稱欄；<input> 在新增與改名之間是同一個元素，
-  // autoFocus 只在掛載時生效，所以要自己移。
+  // 進入改名時把焦點放到名稱欄。改名表單掛在該列內、新增表單掛在頁底，
+  // 共用同一個 ref；從一列切到另一列時元件不一定重新掛載，autoFocus 不
+  // 會再生效，所以要自己移。
   const editingId = editing?.id
   useEffect(() => {
     if (editingId) nameInput.current?.focus()
   }, [editingId])
+
+  // 改名儲存成功後，表單在下一次 render 才會消失；等它收起、觸發鈕重新
+  // 可用再還焦點，鍵盤使用者才能從原列接續操作（與取消一致）。
+  useEffect(() => {
+    if (editing || !focusRowAfterSave.current) return
+    focusRowAfterSave.current = false
+    if (rowTrigger.current?.isConnected) rowTrigger.current.focus()
+  }, [editing])
 
   useEffect(() => {
     let active = true
@@ -188,6 +198,7 @@ export default function ProjectZonesPage({
           current.map((zone) => (zone.id === updated.id ? updated : zone)),
         )
         setNotice(`已將分區改名為「${updated.name}」。`)
+        focusRowAfterSave.current = true
       } else {
         const created = await client.createZone(projectId, name)
         setZones((current) => [...current, created])
@@ -319,7 +330,7 @@ export default function ProjectZonesPage({
       <ul className="named-list">
         {zones.map((zone) => (
           <li className="named-row" key={zone.id}>
-            {/* #634 第 3 項：改名表單放回原列。 */}
+            {/* 改名表單就在該列內展開，分區多時不必捲到頁面底部才找到它。 */}
             {editing?.id === zone.id ? (
               renderNameForm(true)
             ) : (
