@@ -53,6 +53,20 @@ describe('templateFieldErrorBindings', () => {
     })
   })
 
+  it('uses stable point keys only when the caller requests them', () => {
+    const item = JSON.parse(JSON.stringify(payloadFixture)) as TemplateItem
+    item.inspection_points[6].clientKey = 'stable-point-key'
+
+    expect(templateFieldErrorBindings(item)).toContainEqual({
+      path: '/inspection_points/6/title',
+      key: 'point:6:title',
+    })
+    expect(templateFieldErrorBindings(item, undefined, true)).toContainEqual({
+      path: '/inspection_points/6/title',
+      key: 'point:stable-point-key:title',
+    })
+  })
+
   it('does not guess a control for sequence and client ID errors', () => {
     const item = JSON.parse(JSON.stringify(payloadFixture)) as TemplateItem
     const bindings = templateFieldErrorBindings(item)
