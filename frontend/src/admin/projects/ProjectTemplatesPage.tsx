@@ -94,13 +94,12 @@ function pointEvidenceText(
 /**
  * 提供專案範本瀏覽、套用及存回範本流程。
  *
- * standalone 僅供非成員範本管理員旁路檢視；
+ * standalone 僅供非成員範本管理員旁路檢視與返回範本管理；
  * 沒有 `project_inspection_item.edit` 時不顯示套用操作。
  */
 export default function ProjectTemplatesPage({
   viewerPermissions = [],
   standalone = false,
-  returnToTemplateManagement = false,
 }: {
   viewerPermissions?: string[]
   /**
@@ -109,15 +108,11 @@ export default function ProjectTemplatesPage({
    * 此旗標不授予 `project_inspection_item.edit` 權限。
    */
   standalone?: boolean
-  /**
-   * standalone 旁路檢視者設為 true 時，返回範本管理入口；
-   * 一般專案成員不應設定，避免離開專案流程。
-   */
-  returnToTemplateManagement?: boolean
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const navigate = useNavigate()
+  const pageTitleRef = useRef<HTMLHeadingElement>(null)
   const [project, setProject] = useState<ProjectSummary | null>(null)
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
@@ -571,12 +566,12 @@ export default function ProjectTemplatesPage({
     <section className="tpl-page">
       <BackLink
         to={
-          returnToTemplateManagement
+          standalone
             ? '/admin/templates'
             : `/admin/projects/${projectId}/inspection-items`
         }
       >
-        {returnToTemplateManagement ? '返回範本管理' : '返回查核項目'}
+        {standalone ? '返回範本管理' : '返回查核項目'}
       </BackLink>
       {standalone ? (
         <h1>
@@ -593,7 +588,7 @@ export default function ProjectTemplatesPage({
         </p>
       )}
       {project && (
-        <h2>
+        <h2 ref={pageTitleRef} tabIndex={-1}>
           {isSaveMode
             ? `將「${saveSource?.title ?? ''}」存為範本`
             : '套用範本到專案'}
@@ -618,6 +613,8 @@ export default function ProjectTemplatesPage({
           <p>{currentItemsLoadError}</p>
           <button
             onClick={() => {
+              // TPL-AC21：錯誤區塊卸載前移焦至保留的標題，避免焦點掉到 body。
+              pageTitleRef.current?.focus()
               setItemsLoadProjectId(null)
               setItemsLoadError(null)
               setItemsDenied(false)

@@ -538,13 +538,18 @@ describe('專案範本套用與存為範本（#429）', () => {
 
     const loadError = await screen.findByText(/伺服器暫時無法處理/)
     expect(loadError.closest('[role="alert"]')).not.toBeNull()
-    expect(loadError.closest('.tpl-list-pane')).toBeNull()
+    expect(loadError.closest('.tpl-layout')).toBeNull()
     const apply = screen.getByRole('button', { name: '套用至專案' })
     expect(apply).toBeDisabled()
     const retry = screen.getByRole('button', {
       name: '重新載入專案項目',
     })
     fireEvent.click(retry)
+    expect(
+      screen.getByRole('heading', {
+        name: '套用範本到專案',
+      }),
+    ).toHaveFocus()
 
     await waitFor(() => expect(apply).toBeEnabled())
     expect(
@@ -576,13 +581,18 @@ describe('專案範本套用與存為範本（#429）', () => {
 
     const loadError = await screen.findByText(/伺服器暫時無法處理/)
     expect(loadError.closest('[role="alert"]')).not.toBeNull()
-    expect(loadError.closest('.tpl-list-pane')).toBeNull()
+    expect(loadError.closest('.tpl-layout')).toBeNull()
     const apply = screen.getByRole('button', { name: '套用至專案' })
     expect(apply).toBeDisabled()
     const retry = screen.getByRole('button', {
       name: '重新載入專案項目',
     })
     fireEvent.click(retry)
+    expect(
+      screen.getByRole('heading', {
+        name: '套用範本到專案',
+      }),
+    ).toHaveFocus()
 
     await waitFor(() =>
       expect(

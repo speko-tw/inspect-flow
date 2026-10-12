@@ -92,17 +92,15 @@ function ProjectTemplatesRoute() {
   const isProjectMember =
     membership?.projectId === projectId ? membership.isMember : null
 
+  // ADM-R17、TPL-R23：非成員範本管理員直接瀏覽獨立頁，
+  // 不載入 workflow-summary；成員仍由 ProjectSectionPage 依 ADM-R25 分流。
   if (!user.is_admin && user.has_template_access && isProjectMember !== true) {
     if (isProjectMember === null) {
       return <p role="status">正在確認專案權限…</p>
     }
     return (
       <AdminRouteSuspense>
-        <ProjectTemplatesPage
-          returnToTemplateManagement
-          standalone
-          viewerPermissions={[]}
-        />
+        <ProjectTemplatesPage standalone viewerPermissions={[]} />
       </AdminRouteSuspense>
     )
   }

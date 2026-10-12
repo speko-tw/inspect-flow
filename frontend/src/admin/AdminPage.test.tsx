@@ -1261,6 +1261,11 @@ describe('admin user and company pages', () => {
       'href',
       '/admin/templates',
     )
+    expect(
+      screen.queryByRole('link', {
+        name: '返回查核項目',
+      }),
+    ).not.toBeInTheDocument()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
     })
