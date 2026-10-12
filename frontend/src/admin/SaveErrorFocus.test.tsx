@@ -2,7 +2,13 @@
 // （#618 F-O02）。放在頁頂的話，列表一長就在視窗外，螢幕閱讀器使用者
 // 也不會被帶過去。
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -120,7 +126,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('Email 已被使用。')
-    expect(alert).toHaveFocus()
+    await waitFor(() => expect(alert).toHaveFocus())
     // 頁頂沒有另一份錯誤（也就沒有重複朗讀）。
     expect(screen.getAllByRole('alert')).toHaveLength(1)
 
