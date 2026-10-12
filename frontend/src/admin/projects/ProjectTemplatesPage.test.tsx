@@ -322,6 +322,24 @@ async function chooseSystem(itemTitle = '管線查核') {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('專案範本套用與存為範本（#429）', () => {
+  it('範本管理員的非成員套用頁從 h1 開始（F-O08）', async () => {
+    mockApi({ canSave: true })
+    renderPage({ ...USER, has_template_access: true }, [])
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: '套用範本到專案',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', {
+        level: 2,
+        name: '套用範本到專案',
+      }),
+    ).not.toBeInTheDocument()
+  })
+
   it('把 409 衝突名稱轉成原型指定訊息，並保留中性 404', () => {
     expect(
       templateErrorMessage(

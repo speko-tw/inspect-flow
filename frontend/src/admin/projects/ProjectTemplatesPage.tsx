@@ -516,11 +516,11 @@ export default function ProjectTemplatesPage({
         {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
       </p>
       {project && (
-        <h2>
+        <h1>
           {isSaveMode
             ? `將「${saveSource?.title ?? ''}」存為範本`
             : '套用範本到專案'}
-        </h2>
+        </h1>
       )}
       {readOnly && (
         <p className="notice-info" role="status">

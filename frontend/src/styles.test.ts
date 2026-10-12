@@ -5,6 +5,35 @@ import { describe, expect, it } from 'vitest'
 
 const css = readFileSync('src/styles.css', 'utf8')
 
+// #517 的管理頁與專案頁都在共用 main 內，表單和分區列沿用共用間距。
+describe('page and zone spacing', () => {
+  it('keeps the same main inset for admin and project sections', () => {
+    const start = css.indexOf('\nmain {')
+    const rule = css.slice(start, css.indexOf('}', start))
+    expect(start).toBeGreaterThan(0)
+    expect(rule).toContain('padding: var(--space-5) var(--space-4)')
+  })
+
+  it('separates the zone label from its action and row buttons', () => {
+    const formStart = css.indexOf('\nform {')
+    const formRule = css.slice(formStart, css.indexOf('}', formStart))
+    const actionStart = css.indexOf('\n.named-row-actions {')
+    const actionRule = css.slice(actionStart, css.indexOf('}', actionStart))
+    expect(formRule).toContain('gap: var(--space-4) var(--space-3)')
+    expect(actionRule).toContain('gap: var(--space-2)')
+  })
+})
+
+// Field 桌機內容沿用全站最大寬度，手機繼續使用原本窄欄。
+describe('field content alignment', () => {
+  it('expands only on desktop to align with the shared header', () => {
+    expect(css).toMatch(
+      /@media \(min-width: 64rem\) \{\s+\.field-shell \{\s+width: min\(100%, var\(--content-width\)\)/,
+    )
+    expect(css).toMatch(/\.field-shell \{\s+width: min\(100%, 440px\)/)
+  })
+})
+
 // jsdom 不套用版面，所以只守住規則本身：token 存在，且窄螢幕那一段
 // 列出所有要 >= 44px 的元件。實際尺寸以真瀏覽器 360px 量測為準。
 describe('touch target rules', () => {
