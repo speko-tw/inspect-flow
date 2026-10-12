@@ -129,6 +129,36 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
     )
   })
 
+  it('scrolls the visible unsaved prompt into view (ADM-R28)', async () => {
+    const originalScroll = HTMLElement.prototype.scrollIntoView
+    const scroll = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scroll,
+    })
+    try {
+      await mountAtEditor()
+      fireEvent.click(screen.getByTestId('self-link'))
+      const box = await screen.findByRole('group', {
+        name: '有尚未儲存的變更',
+      })
+
+      expect(scroll).toHaveBeenCalledWith({ block: 'center' })
+      expect(
+        within(box).getByRole('button', { name: '保留編輯' }),
+      ).toHaveFocus()
+    } finally {
+      if (originalScroll) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: originalScroll,
+        })
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+      }
+    }
+  })
+
   it('keeps the editor and the link unfollowed on Keep editing and Esc', async () => {
     await mountAtEditor()
     fireEvent.click(screen.getByTestId('plain-link'))
