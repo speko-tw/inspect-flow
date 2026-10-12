@@ -76,8 +76,16 @@ export function numberStandard(point: InspectionPoint): InspectionPoint {
   }
 }
 
-export function forWire(item: TemplateItem): TemplateItem {
+/**
+ * 正規化範本與專案項目的寫入格式；依 IP-R13 選擇是否保留既有 id。
+ */
+export function forWire(
+  item: TemplateItem,
+  options: { includeIds?: boolean } = {},
+): TemplateItem {
+  const { includeIds = false } = options
   return {
+    ...(includeIds && item.id ? { id: item.id } : {}),
     system_id: item.system_id,
     sequence: item.sequence,
     title: item.title.trim(),
@@ -110,10 +118,12 @@ export function forWire(item: TemplateItem): TemplateItem {
         numeric?.condition === 'range' && numeric.range_form === 'interval'
       const clean = (value: string | null | undefined) => value?.trim() || null
       return {
+        ...(includeIds && point.id ? { id: point.id } : {}),
         sequence: point.sequence,
         title: point.title.trim(),
         instruction: point.instruction,
         measurement_fields: fields.map((field) => ({
+          ...(includeIds && field.id ? { id: field.id } : {}),
           client_id: field.client_id,
           name: field.name.trim(),
           field_type: field.field_type,
@@ -152,9 +162,15 @@ export function forWire(item: TemplateItem): TemplateItem {
   }
 }
 
+/**
+ * 把後端欄位錯誤的 JSON pointer 對到畫面的錯誤 key。
+ * `stablePointErrorKeys` 為 true（專案項目編輯）時以 clientKey／id 取代
+ * 索引：項次可被刪除或新增，索引會位移，錯誤就會顯示在錯的項次上。
+ */
 export function templateFieldErrorBindings(
   item: TemplateItem,
   itemIndex?: number,
+  stablePointErrorKeys = false,
 ): Array<{ path: string; key: string }> {
   const prefix = itemIndex === undefined ? '' : `/items/${itemIndex}`
   const bindings: Array<{ path: string; key: string }> = [
@@ -162,7 +178,10 @@ export function templateFieldErrorBindings(
   ]
   item.inspection_points.forEach((point, pointIndex) => {
     const pointPath = `${prefix}/inspection_points/${pointIndex}`
-    const pointKey = `point:${pointIndex}`
+    const pointIdentity = stablePointErrorKeys
+      ? (point.clientKey ?? point.id ?? pointIndex)
+      : pointIndex
+    const pointKey = `point:${pointIdentity}`
     bindings.push(
       { path: `${pointPath}/title`, key: `${pointKey}:title` },
       { path: `${pointPath}/instruction`, key: `${pointKey}:instruction` },

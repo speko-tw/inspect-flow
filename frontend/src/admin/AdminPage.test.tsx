@@ -1470,7 +1470,7 @@ describe('admin user and company pages', () => {
       }),
     )
     expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
-    expect(screen.getByLabelText('項目名稱 *')).toBeDisabled()
+    expect(screen.getByLabelText('查核項目名稱 *')).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('沒有權限修改')
   })
 
