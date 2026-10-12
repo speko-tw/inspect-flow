@@ -329,7 +329,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - `role.external_allowed_invalid` — HTTP 422：標為外部可用的角色含不可外部使用的代碼，或是建立者角色（DOM-R72；#538，規格設計）。
 - `role.external_in_use` — HTTP 422：取消角色的外部可用，但仍有外部協作人員持有（含已停用者），回應列出人員（DOM-R73；#538，規格設計）。
 - `user.account_expiry_passed` — HTTP 422：重新啟用外部協作人員時到期日已過，須先清除或延長（DOM-R75；#538，規格設計）。
-- `user.external_not_qualified` — HTTP 422：內部改外部協作人員，但此人仍持有不合格的角色、模組權限、委派或 Admin 身分，回應列出項目（DOM-R73；#538，規格設計）。
+- `user.external_not_qualified` — HTTP 422：內部改外部協作人員，但此人仍持有不合格的角色、模組權限、委派或 Admin 身分，回應列出項目；也用於指派 `template_admin` 給外部協作人員（DOM-R71、DOM-R73；#538，規格設計）。
 - `project.last_manager` — HTTP 422：非 Admin 要移除或改掉專案最後一位持管理成員權限的啟用成員（DOM-R70；#538，規格設計）。
 - `module_permission.required_by_other` — HTTP 422：已具 `project.create` 時單獨收回 `project.use`，或已具 `template.manage` 時單獨收回 `template.use`（DOM-R62；#538，規格設計）。
 - `module_permission.code_invalid` — HTTP 422：授予或收回模組權限時代碼未登記或不是模組範圍（DOM-R35、DOM-R62；#538，規格設計）。

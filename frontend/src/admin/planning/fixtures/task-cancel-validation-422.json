@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "request.validation_failed",
+    "fields": [{ "path": "/reason", "code": "field.too_long" }]
+  }
+}

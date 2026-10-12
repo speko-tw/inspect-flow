@@ -39,11 +39,15 @@ const STEP_CONTENT: Record<
   complete_reinspection: {
     label: '追蹤任務進度',
     action: '前往追蹤任務進度',
-    // 進度區段的正式內容由 #452 提供；在那之前任務進度看計畫與任務頁。
+    // 依 ADM-R25，進度區段未開放前讓任務進度導向計畫與任務頁。
     suffix: '/planning',
   },
 }
 
+/**
+ * 依 ADM-R16、IP-R11（流程摘要）呈現下一步與可見的關鍵數字。
+ * 純現場權限者導向自身落點，拒絕或不存在的專案不顯示空首頁。
+ */
 export default function ProjectHomePage() {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
