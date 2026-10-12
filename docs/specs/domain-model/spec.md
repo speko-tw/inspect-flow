@@ -185,7 +185,7 @@
 
 ## 資料
 
-本規格定義下列實體的完整欄位；共通結構（UUID 主鍵、業務編號、建立與修改紀錄）由 `database-foundation` 定義，這裡只引用。以下逐一比對 G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-56、KD-61、KD-62）的理由和選項；各表列一個實體，避免以門檻總表取代實體相關性判讀。
+本規格定義下列實體的完整欄位；共通結構（UUID 主鍵、業務編號、建立與修改紀錄）由 `database-foundation` 定義，這裡只引用。以下逐一比對 G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-56、KD-61、KD-62）的理由和選項；各表列一個實體，避免以門檻總表取代實體相關性判讀。
 
 | 實體 | 共通結構（`database-foundation`） | 本規格定義 | 狀態 |
 |---|---|---|---|
@@ -208,36 +208,36 @@
 
 關聯：`Company` 1—多 `User`（每位 `User` 至多連結一家，得沒有）；公司之間沒有階層；`User` 1—多 `ProjectMember`；`Project` 1—多 `ProjectMember`；`ProjectMember` 多—多 `Role`；`User` 1—多 `UserModulePermission`、1—多 `UserModuleDelegation`（模組權限不經 `Role`，DOM-R59）；`PermissionBundle` 與 `User` 之間沒有連結（DOM-R63）（見 [01-overview 實體關係](../../intents/01-overview.md#人員公司與權限的實體關係)）。內建 `admin` 不屬於任何公司（DOM-R50），`Company.created_by` 指向 `admin`，所以原本「`User.company_id` 與 `Company.created_by` 互相引用、必須在同一個交易建立」的限制不再成立（原 DOM-R11 已被取代）。
 
-**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，含其中的「例外：只用 ID 引用」）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62）的原文理由、選項與門檻摘要，搜尋人員、使用者、管理者、核可者、角色、權限、公司、成員、客戶、帳號、專案等字面。
+**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，含其中的「例外：只用 ID 引用」）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62）的「為什麼要先決定」、選項原文與門檻摘要，搜尋人員、使用者、管理者、核可者、角色、權限、公司、成員、客戶、帳號、專案等字面。
 
 | 實體 | 比對過的議題 | 字面命中 | 結論 | 理由 |
 |---|---|---|---|---|
-| `User` | G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | interval 歸屬議題（KD-36）原文「由**管理者**輸入的參數」；報告選圖與核可議題（KD-34）原文「Variant 核可紀錄、**核可者**」 | 無關，凍結 | KD-36 的「管理者」指輸入 `Inspection Plan` 參數的人，議題只在問 interval 放在哪一張表，不涉及 `User` 欄位。KD-61 的照片流程由負責人裁定（#542，2026-10-13 確認），見 KD-61，未改變 `User` 欄位、狀態或規則。KD-34 由負責人依 #92 裁定不設獨立核可，該決定未改變 `User` 欄位、狀態或規則。 |
-| `Company` | G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 無 | 無關，凍結 | 門檻內沒有任何議題提到公司、客戶或組織 |
-| `Role` | G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 無直接命中；核可議題（KD-34）原文「核可者、核可流程」可能延伸到「誰有權核可」 | 無關，凍結 | KD-34 已由負責人依 #92 裁定不設獨立核可，故不需新增核可權限代碼，不改變 `Role` 的欄位或約束（[KD-25](../../intents/03-decisions-and-stack.md#kd-25)：系統存的是權限代碼，不是寫死的功能表） |
-| `ProjectMember` | G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 照片儲存路徑範例（KD-32 議題）`photos/<project_id>/...` | 無關，凍結 | 路徑裡的是 `Project` 的 UUID，不是 `ProjectMember`，本身就不算命中 `ProjectMember`；`ProjectMember` 只以 UUID 外鍵引用 `Project`、`User`，不依賴 `Project` 的業務欄位 |
-| `Project`（業務欄位） | G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 照片儲存路徑範例（KD-32 議題；同 `database-foundation` 的比對） | 無關，凍結 | 路徑只以 UUID 引用 `Project`，適用規則 1 的「只用 ID 引用」例外，結論同 `database-foundation`；門檻外的 [KD-39](../../intents/03-decisions-and-stack.md#kd-39) 已裁定（負責人，#71，2026-09-28），因此擴大凍結範圍，不再維持草稿 |
+| `User` | G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | interval 歸屬（KD-36）提到輸入 `Inspection Plan` 參數的**管理者**；報告選圖與核可（KD-34）涉及是否需要**核可者**（KD-34 已定不設獨立核可） | 無關，凍結 | KD-36 的「管理者」指輸入 `Inspection Plan` 參數的人，議題只在問 interval 放在哪一張表，不涉及 `User` 欄位。KD-61 的照片流程由負責人裁定（#542，2026-10-13 確認），見 KD-61，未改變 `User` 欄位、狀態或規則。KD-34 由負責人依 #92 裁定不設獨立核可，該決定未改變 `User` 欄位、狀態或規則。 |
+| `Company` | G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 無 | 無關，凍結 | 門檻內沒有任何議題提到公司、客戶或組織 |
+| `Role` | G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 無直接命中；報告選圖與核可（KD-34）涉及的核可者與核可流程可能延伸到「誰有權核可」 | 無關，凍結 | KD-34 已由負責人依 #92 裁定不設獨立核可，故不需新增核可權限代碼，不改變 `Role` 的欄位或約束（[KD-25](../../intents/03-decisions-and-stack.md#kd-25)：系統存的是權限代碼，不是寫死的功能表） |
+| `ProjectMember` | G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 架構基準 §13.1 的儲存鍵範例路徑（KD-32、PR-02）以 `Project` UUID 組成 | 無關，凍結 | 路徑裡的是 `Project` 的 UUID，不是 `ProjectMember`，本身就不算命中 `ProjectMember`；`ProjectMember` 只以 UUID 外鍵引用 `Project`、`User`，不依賴 `Project` 的業務欄位 |
+| `Project`（業務欄位） | G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62） | 架構基準 §13.1 的儲存鍵範例路徑（KD-32、PR-02；同 `database-foundation` 的比對） | 無關，凍結 | 路徑只以 UUID 引用 `Project`，適用規則 1 的「只用 ID 引用」例外，結論同 `database-foundation`；門檻外的 [KD-39](../../intents/03-decisions-and-stack.md#kd-39) 已裁定（負責人，#71，2026-09-28），因此擴大凍結範圍，不再維持草稿 |
 
 `User` 的命中屬於規則 1 的「只用 ID 引用」例外（不影響 `User` 本身），或只是泛稱。KD-34 已由負責人依 #92 裁定不設獨立核可，因此不要求新增 `User` 核可者欄位或 `Role` 核可權限；此決定不改變兩者的欄位、狀態或規則。
 
-新增的 `UserModulePermission`、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定與 `Role.is_assignable`、`Role.is_external_allowed`、`User.is_external_collaborator`（DOM-R59～DOM-R75，#538）：逐條比對 G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62）的原文，只有核可議題（KD-34）原文「核可者、核可流程」的字面可能延伸到權限，但 KD-34 已裁定不設獨立核可，不需要新增核可類模組權限；其餘議題沒有提到人員、權限、模組或委派。結論：無關，凍結；理由同 `Role`、`ProjectMember`。
+新增的 `UserModulePermission`、`UserModuleDelegation`、`PermissionBundle`、建立者角色設定與 `Role.is_assignable`、`Role.is_external_allowed`、`User.is_external_collaborator`（DOM-R59～DOM-R75，#538）：逐條比對 G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62）的原文，只有報告選圖與核可（KD-34）涉及的核可者、核可流程可能延伸到權限，但 KD-34 已裁定不設獨立核可，不需要新增核可類模組權限；其餘議題沒有提到人員、權限、模組或委派。結論：無關，凍結；理由同 `Role`、`ProjectMember`。
 
 <a id="projectzone-plan-task-門檻比對"></a>
 ### ProjectZone、Plan／Task 開工門檻比對
 
 | 實體 | 門檻與原文理由／選項比對 | 結論與理由 |
 |---|---|---|
-| `Inspection Plan` | interval 歸屬議題（KD-36）原文明列 Plan：A 將未來 interval 放 Template，B 放 Plan 輸入；KD-36 已裁定 MVP 無 interval，故不納入 Plan 欄位。照片儲存路徑範例（KD-32 議題）含 `project_id` UUID，僅引用 Project，不改 Plan 欄位或規則；Task 儲存鍵路徑中的 `task_id` UUID 僅引用 Task，也不改 Plan。KD-61 的照片流程由負責人裁定（#542，2026-10-13 確認），見 KD-61；KD-34 由負責人依 #92 裁定不設獨立核可且報表一律使用內業版（KD-34、KD-35），缺圖時能否出報表及圖片選用細節仍未定；KD-62 的刪除與保留政策另依負責人裁定（#542，2026-10-13 確認），見 KD-62；G-06 是 Report 狀態；G-07 是 Report Snapshot 時點及版次；KD-54 是 Result 欄位，均未要求改 Plan 本身。KD-56 明列 Plan 狀態；已裁定規則依 KD-42／KD-56，剩餘狀態表示依 state-machines 規格設計明示。 | KD-36 的 MVP interval 欄位被明確排除；KD-32 的 `project_id`／`task_id` 只作 ID 引用，其餘門檻沒有改 Plan 欄位的選項。KD-56 有關，業務裁定與技術設計分開列明，不宣稱未裁定為負責人裁定。 |
-| `ProjectZone` | G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-56、KD-61、KD-62）的原文理由與選項未決定分區欄位；KD-58 已裁定專案可選分區及名稱唯一規則。 | 凍結 `ProjectZone` 的 Project 關聯、專案內名稱唯一性及 Task 引用限制；名稱長度與 trim/casefold 算法為規格設計（非負責人裁定）。 |
-| `Inspection Task` | interval 歸屬議題（KD-36）原文點名 Task，討論未來 interval 的歸屬／快照，但 KD-36 排除 MVP interval。照片儲存鍵範例路徑（KD-32 議題）含 `<task_id>`；此 UUID 外鍵只引用 Task，依 README 規則 1「只用 ID 引用」例外，不改 Task 本身欄位或約束。KD-61 照片流程由負責人裁定（#542，2026-10-13 確認），見 KD-61；KD-34 由負責人依 #92 裁定不設獨立核可、報表一律使用內業版（KD-34、KD-35），缺圖與圖片選用細節仍未定；KD-62 刪除／保留政策另依負責人裁定（#542，2026-10-13 確認），見 KD-62。以上均未要求 Task 欄位或狀態改動；G-06／G-07 僅 Report 狀態與 Report Snapshot。Result 語意議題（KD-54）原文明列任務完成判定邏輯；Result 與完成所需資料已由 KD-54 裁定，狀態轉換及伺服器覆核由 state-machines 負責。KD-56 明列 Task 狀態與更正例外；KD-58 裁定 Task 地點由選用分區與補充文字組成，MVP 有分區時必選、無分區時只填補充文字。 | 凍結 Task 對 Plan 關聯、地點欄位及需求 IP-R02～R10；KD-58 對分區及地點已有依據，分區／Task 同專案約束及欄位表示由規格設計收斂。KD-32 的 `task_id` 僅為 UUID 引用；KD-54 完成資料已有 KD-54 依據、Task 狀態行為另由 state-machines 定義。其他 Evidence／Report／Result 門檻不改 Task 定義。 |
+| `Inspection Plan` | interval 歸屬（KD-36）涉及 Plan：A 將未來 interval 放 Template，B 放 Plan 輸入；KD-36 已裁定 MVP 無 interval，故不納入 Plan 欄位。架構基準 §13.1 的儲存鍵範例路徑（KD-32、PR-02）含 `project_id` UUID，僅引用 Project，不改 Plan 欄位或規則；Task 儲存鍵路徑中的 `task_id` UUID 僅引用 Task，也不改 Plan。KD-61 的照片流程由負責人裁定（#542，2026-10-13 確認），見 KD-61；KD-34 由負責人依 #92 裁定不設獨立核可且報表一律使用內業版（KD-34、KD-35），缺圖時能否出報表及圖片選用細節仍未定；KD-62 的刪除與保留政策另依負責人裁定（#542，2026-10-13 確認），見 KD-62；G-06 是 Report 狀態；G-07 是 Report Snapshot 時點及版次；KD-54 是 Result 欄位，均未要求改 Plan 本身。KD-56 明列 Plan 狀態；已裁定規則依 KD-42／KD-56，剩餘狀態表示依 state-machines 規格設計明示。 | KD-36 的 MVP interval 欄位被明確排除；KD-32 的 `project_id`／`task_id` 只作 ID 引用，其餘門檻沒有改 Plan 欄位的選項。KD-56 有關，業務裁定與技術設計分開列明，不宣稱未裁定為負責人裁定。 |
+| `ProjectZone` | G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-56、KD-61、KD-62）都未涉及分區欄位；KD-58 已裁定專案可選分區及名稱唯一規則。 | 凍結 `ProjectZone` 的 Project 關聯、專案內名稱唯一性及 Task 引用限制；名稱長度與 trim/casefold 算法為規格設計（非負責人裁定）。 |
+| `Inspection Task` | interval 歸屬議題（KD-36）原文點名 Task，討論未來 interval 的歸屬／快照，但 KD-36 排除 MVP interval。架構基準 §13.1 的儲存鍵範例路徑（KD-32、PR-02）含 `<task_id>`；此 UUID 外鍵只引用 Task，依 README 規則 1「只用 ID 引用」例外，不改 Task 本身欄位或約束。KD-61 照片流程由負責人裁定（#542，2026-10-13 確認），見 KD-61；KD-34 由負責人依 #92 裁定不設獨立核可、報表一律使用內業版（KD-34、KD-35），缺圖與圖片選用細節仍未定；KD-62 刪除／保留政策另依負責人裁定（#542，2026-10-13 確認），見 KD-62。以上均未要求 Task 欄位或狀態改動；G-06／G-07 僅 Report 狀態與 Report Snapshot。任務完成判定依賴 Result 資料（KD-54）與伺服器端覆核（PR-01、PR-16）；Result 與完成所需資料已由 KD-54 裁定，狀態轉換及伺服器覆核由 state-machines 負責。KD-56 明列 Task 狀態與更正例外；KD-58 裁定 Task 地點由選用分區與補充文字組成，MVP 有分區時必選、無分區時只填補充文字。 | 凍結 Task 對 Plan 關聯、地點欄位及需求 IP-R02～R10；KD-58 對分區及地點已有依據，分區／Task 同專案約束及欄位表示由規格設計收斂。KD-32 的 `task_id` 僅為 UUID 引用；完成所需資料依 KD-54，Task 狀態行為另由 state-machines 定義。其他 Evidence／Report／Result 門檻不改 Task 定義。 |
 | Task 項目關聯 | interval 歸屬議題（KD-36）：未來 interval 可能進 Snapshot，但不裁定關聯方式；MVP 不設 interval。KD-32 的照片版本模型由負責人依 #90 裁定（KD-32）；KD-61 的現場編輯與上傳流程、KD-62 的刪除與保留政策分別由負責人裁定（#542，2026-10-13 確認），見 KD-61、KD-62；KD-34 由負責人依 #92 裁定不設獨立核可、報表一律用內業版，缺圖能否出報表與每項圖片選用細節仍未定。上述議題均未要求 Task 項目關聯。G-06／G-07 與 KD-54 分別處理 Report 狀態／快照與 Result 欄位；沒有要求關聯表改動。KD-56／KD-55 明確要求標準變更影響特定項目，且負責人已裁定一個 Task 得含多項目。 | 凍結以明細關聯表達多項目與項目級變更的資料責任；表／子表表示法為規格設計。門檻其他選項不要求 Task 項目關聯變更。 |
-| `Task Requirement Snapshot` | interval 歸屬議題（KD-36）原文直接問 interval 要不要快照、兩種歸屬立場尚有未來分歧；KD-36 排除 MVP interval。KD-32 的照片版本模型由負責人依 #90 裁定（KD-32）；KD-61 的上傳與編輯流程及 KD-62 的刪除與保留政策分別由負責人裁定（#542，2026-10-13 確認）（KD-61、KD-62），影響 Snapshot 所參照的 Evidence 歷史，不改 Snapshot 建立時需求。KD-34 由負責人依 #92 裁定不設獨立核可、報表一律使用內業版（KD-34、KD-35）；缺圖能否出報表與每項圖片選用細節仍未定。G-06／G-07 的原文理由與選項 限於 Report 狀態及 Report 自己的快照時點／DRAFT 覆寫；KD-54 是 Result 欄位。KD-56 明定 Task Requirement Snapshot 必須存在，KD-55 的修改、更正及作廢歷史依其裁定；新舊標準資料表示列規格設計。 | 凍結建立 Task 時保存需求與不靜默改寫歷史；interval 不進 MVP Snapshot。KD-32、KD-61、KD-34、KD-62、KD-54 與 G-06、G-07 不改 Snapshot 業務欄位；KD-56 沒有涵蓋的資料表示維持規格設計（非負責人裁定）。 |
+| `Task Requirement Snapshot` | interval 歸屬議題（KD-36）原文直接問 interval 要不要快照、兩種歸屬立場尚有未來分歧；KD-36 排除 MVP interval。KD-32 的照片版本模型由負責人依 #90 裁定（KD-32）；KD-61 的上傳與編輯流程及 KD-62 的刪除與保留政策分別由負責人裁定（#542，2026-10-13 確認）（KD-61、KD-62），影響 Snapshot 所參照的 Evidence 歷史，不改 Snapshot 建立時需求。KD-34 由負責人依 #92 裁定不設獨立核可、報表一律使用內業版（KD-34、KD-35）；缺圖能否出報表與每項圖片選用細節仍未定。G-06／G-07 的「為什麼要先決定」與選項原文限於 Report 狀態及 Report 自己的快照時點／DRAFT 覆寫；KD-54 是 Result 欄位。KD-03、PR-04 規定建立 Task 時必須有需求快照，KD-55 的修改、更正及作廢歷史依其裁定；新舊標準資料表示列規格設計。 | 凍結建立 Task 時保存需求與不靜默改寫歷史；interval 不進 MVP Snapshot。KD-32、KD-61、KD-34、KD-62、KD-54 與 G-06、G-07 不改 Snapshot 業務欄位；KD-56 沒有涵蓋的資料表示維持規格設計（非負責人裁定）。 |
 
 ### Plan／Task 開工門檻逐項比對
 
 | 門檻項 | 狀態 | 依據 | 是否阻擋本凍結範圍 |
 |---|---|---|---|
-| KD-36：Interval 歸屬 | 已裁定；MVP 不需要 interval 欄位 | [KD-36](../../intents/03-decisions-and-stack.md#kd-36) | 否；未來選用功能另行裁定 |
+| KD-36：Interval 歸屬 | 方向已定；MVP 不需要 interval 欄位，歸屬另裁 | [KD-36](../../intents/03-decisions-and-stack.md#kd-36) | 否；未來選用功能另行裁定 |
 | KD-32：Original Evidence | 負責人依 #90 裁定 | [KD-32](../../intents/03-decisions-and-stack.md#kd-32) | 否；不影響 Plan／Task 關聯 |
 | KD-61：Evidence 編輯時序 | 已決定；負責人裁定（#542，2026-10-13 確認） | [KD-61](../../intents/03-decisions-and-stack.md#kd-61) | 否；不影響 Plan／Task，本單不判定 Evidence 凍結 |
 | KD-34：Evidence 核可與報表選圖 | 負責人依 #92 部分裁定：不設獨立核可，報表一律使用內業版；缺圖時能否出報表及每項圖片選用細節仍未定 | [KD-34](../../intents/03-decisions-and-stack.md#kd-34)、[KD-35](../../intents/03-decisions-and-stack.md#kd-35) | 否；未定餘項屬 Evidence／Report，不凍結該等實體 |
@@ -462,13 +462,13 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 <a id="dom-q1"></a>
 - **DOM-Q1：字串欄位的長度上限與格式**（已裁定，[#121](https://github.com/speko-tw/inspect-flow/issues/121)）。#63 只定了欄位，沒有定長度（例如 `email`、`employee_no`、`Company.code`、`name_en`、`name_zh`、權限代碼）與格式（例如 `tax_id` 是否限定 8 位數字、`email` 是否檢查格式）。SQLite 不強制 `VARCHAR` 長度，PostgreSQL 會；之後再加上限需要新的 migration。影響計畫 T1～T3。
   - **後續變更**：`Company.code`、`tax_id` 已隨欄位移除（DOM-R29 已被取代），`Company.name` 的上限改由 DOM-R49 定義，`User` 新增 `username`（DOM-R45、DOM-R28），見 [DOM-Q9](#dom-q9)。其餘裁定不變。
-  - **裁定**（負責人，[#121](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)，2026-09-26）：欄位上限不短於將來外部身分來源（AD、Entra ID）的上限，避免同步時截斷或寫入失敗；各欄位的上限與格式依裁定表。`email` 只檢查有 `@`、沒有空白；`Company.code` 限英數字、`-`、`_`；`tax_id` 選填，有填時必須是 8 位數字；權限代碼採 `<資料>.<動作>`，與錯誤碼的格式一致（[KD-15](../../intents/03-decisions-and-stack.md#kd-15)）。`project_code` 不在裁定表內，因為 `Project` 的業務欄位還在等 KD-39；收緊長度時暫定 32，標為待確認。
+  - **裁定**（負責人，[#121](https://github.com/speko-tw/inspect-flow/issues/121#issuecomment-5845332305)，2026-09-26）：欄位上限不短於將來外部身分來源（AD、Entra ID）的上限，避免同步時截斷或寫入失敗；各欄位的上限與格式依裁定表。`email` 只檢查有 `@`、沒有空白；`Company.code` 限英數字、`-`、`_`；`tax_id` 選填，有填時必須是 8 位數字；權限代碼採 `<資料>.<動作>`，與錯誤碼的格式一致（[KD-15](../../intents/03-decisions-and-stack.md#kd-15)）。`project_code` 當時不在裁定表內，因為 `Project` 的業務欄位還在等 KD-39 裁定（現已裁定）；長度上限暫定 32，仍標為待確認。
   - **落地**：寫進 DOM-R28～DOM-R31、DOM-AC19～DOM-AC21；`project_code` 的暫定值寫在 DOM-R40（草稿），不是定案；`database-foundation` 的 DBF-R12 引用本規格的上限，不另外定義。#59 建立 `employee_no`、`project_code` 時沒有設長度，收緊由 [#140](https://github.com/speko-tw/inspect-flow/issues/140) 新增 migration 負責。權限代碼的格式一併定案，DOM-Q3 其餘部分仍待裁定。`external_source`、`external_id` 不在裁定表內，仍未定上限。
 <a id="dom-q2"></a>
 - **DOM-Q2：email 比對是否不分大小寫**（已裁定，[#122](https://github.com/speko-tw/inspect-flow/issues/122)）。DOM-R02 要求 email 唯一；`A@example.com` 與 `a@example.com` 算不算同一個人，會影響唯一約束的寫法（另存正規化欄位並加唯一約束，或以小寫比對的唯一索引），以及 `external-identity-sync` 以 email 比對時的結果。影響計畫 T2。
   - **裁定**（負責人，[#122](https://github.com/speko-tw/inspect-flow/issues/122#issuecomment-5845418601)，2026-09-26）：不分大小寫，唯一性也不分大小寫（含已停用帳號）；保留輸入的原樣存放，只在比對與唯一約束時轉成小寫，寫法由計畫 T2 選擇；登入與外部身分同步的比對同樣不分大小寫。已寫入 DOM-R02、DOM-AC02。
 <a id="dom-q3"></a>
-- **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**（已裁定，[#123](https://github.com/speko-tw/inspect-flow/issues/123)）。[KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。權限代碼的格式與長度已由 [#121](https://github.com/speko-tw/inspect-flow/issues/121) 裁定（DOM-R30）。仍待定的有：可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼；清單的初始範圍（目前還沒有任何功能規格登記代碼）；原確認提示（DOM-R24，已取消）的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。原計畫 T6 建立範本角色的工作已由 #261 負責人裁定取消。
+- **DOM-Q3：權限代碼的命名規則、可用清單與「有修改能力」的判斷**（已裁定，[#123](https://github.com/speko-tw/inspect-flow/issues/123)）。當時 [KD-25](../../intents/03-decisions-and-stack.md#kd-25) 只給出 `report.read`、`report.approve` 的例子，並寫明命名規則待相關規格定案。權限代碼的格式與長度已由 [#121](https://github.com/speko-tw/inspect-flow/issues/121) 裁定（DOM-R30）。當時尚待定的有：可用的權限代碼清單放在哪裡（程式內的登記表或資料表），`Role` 能不能存清單以外的代碼（現由 DOM-R35 的程式內登記表定案）；清單的初始範圍（當時還沒有任何功能規格登記代碼）；原確認提示（DOM-R24，已取消）的「有修改能力」是否等於含 `create`、`update`、`delete` 或特殊動作任一者。原計畫 T6 建立範本角色的工作已由 #261 負責人裁定取消。
   - **裁定**（負責人，[#123](https://github.com/speko-tw/inspect-flow/issues/123)，2026-09-27）：清單放程式內的登記表（比照 `ErrorCode`）；`Role` 寫入清單外的代碼要拒絕；清單先空著，由各功能規格登記；角色含任何一個讀取以外的動作，就算有修改能力。
   - **理由**：代碼對應檢查程式，清單應和程式放一起；拒絕未登記代碼可擋打錯字；每個代碼都要有規格依據；判斷規則簡單，寧可多提醒一次。
   - **落地**：新增 DOM-R35、DOM-AC25（登記表、拒絕未登記代碼）；DOM-R24 寫明判斷規則並新增 DOM-AC26；DOM-R19、DOM-R30 改引用 DOM-R35、DOM-R24。
@@ -516,7 +516,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 <a id="dom-q10"></a>
 - **DOM-Q10：建立者角色與預建角色、Admin 開專案是否自動成為成員**（已裁定，負責人裁定（[#538 第 10 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 11 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09））。裁定：系統安裝時預建「專案工程師」「現場工程師」「專案查閱人員」三個專案角色，預設「專案工程師」為建立者角色，Admin 可改名與內容，刪除目前的建立者角色須先改設另一個；Admin 開專案不自動成為成員，只有非管理者開專案時自動加入。落地：DOM-R53、DOM-R64、DOM-R65、DOM-R68、DOM-AC60、DOM-AC61、DOM-AC63；這推翻 [#261](https://github.com/speko-tw/inspect-flow/issues/261)「初始化不預建角色」。
 <a id="dom-q11"></a>
-- **DOM-Q11：建立者角色是否含調整專案與管理成員**（已裁定，負責人裁定（[#538 第 12 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 21 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09））。裁定：預設「專案工程師」含調整專案與管理成員；被設為建立者角色的角色，系統一律保留這兩項，改設前先檢查。補充（負責人裁定，[#542](https://github.com/speko-tw/inspect-flow/issues/542)，2026-10-13）：下限改為三項，加「看專案」（`project.read`），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)，本題原句不改。落地：DOM-R64、DOM-R68、DOM-AC60。
+- **DOM-Q11：建立者角色是否含調整專案與管理成員**（已裁定，負責人裁定（[#538 第 12 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）、負責人裁定（[#538 第 21 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09））。裁定：預設「專案工程師」含調整專案與管理成員；被設為建立者角色的角色，系統一律保留這兩項，改設前先檢查。補充：2026-10-13 負責人裁定，下限為三項，加「看專案」（`project.read`），見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）。落地：DOM-R64、DOM-R68、DOM-AC60。
 <a id="dom-q12"></a>
 - **DOM-Q12：開設專案是否蘊含專案模組「可使用」**（已裁定，負責人裁定（[#538 第 13 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09））。裁定：勾選「開設專案」時系統自動一併勾上「可使用」。落地：DOM-R62、DOM-R63、DOM-AC58。
 <a id="dom-q13"></a>

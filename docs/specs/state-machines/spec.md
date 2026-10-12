@@ -65,14 +65,14 @@
 - `Evidence` 的照片流程依負責人裁定（#542，2026-10-13 確認）見 [KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63)、[KD-64](../../intents/03-decisions-and-stack.md#kd-64)，刪除與保留政策依同一授權見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)；本規格不判定 Evidence 狀態需求與 AC 是否可凍結。
 - `Report` 作為持久化版本實體保存資料快照；具體快照時間點和草稿版次邊界待 G-07 裁定（[PR-06](../../intents/02-principles.md#pr-06)）。
 
-**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，比對開工門檻內 G-06、G-07 及已裁定的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62）的原文理由與選項；結論只判斷是否阻擋本次 Plan／Task 狀態行為凍結）：
+**門檻比對**（依[部分凍結](../README.md#partial-freeze)規則 1，比對開工門檻內 G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62）的「為什麼要先決定」與選項原文；結論只判斷是否阻擋本次 Plan／Task 狀態行為凍結）：
 
 | 議題 | 字面是否指到 Plan／Task | 結論 | 理由 |
 |---|---|---|---|
-| KD-36 | 是，點名 `Inspection Plan`、`Inspection Task` 與 `Task Requirement Snapshot` | 不阻擋本次 MVP 凍結 | MVP 已裁定不需要 interval；未決歸屬與快照只適用未來選用的自動切分功能。本次凍結範圍不含該功能，開工門檻明定未定部分不擋 MVP 凍結。 |
-| KD-32 | 選項範例路徑含 `task_id` | 不相關 | 只以 Task ID 作證據儲存路徑的一段，不影響 Task 欄位、狀態或規則，適用只用 ID 引用例外；原圖模型已裁定。 |
+| KD-36 | 是，點名 `Inspection Plan`、`Inspection Task` 與 `Task Requirement Snapshot` | 不阻擋本次 MVP 凍結 | MVP 已裁定不需要 interval；未決歸屬與快照只適用未來選用的自動切分功能。本次凍結範圍不含該功能；[KD-36](../../intents/03-decisions-and-stack.md#kd-36) 與[開工門檻](../../intents/05-open-questions.md#gate)已寫明 MVP 凍結範圍不需為 interval 保留欄位、未來歸屬另行裁定。 |
+| KD-32 | 架構基準 §13.1 的儲存鍵範例路徑含 `task_id`（KD-32、PR-02） | 不相關 | 只以 Task ID 作證據儲存路徑的一段，不影響 Task 欄位、狀態或規則，適用只用 ID 引用例外；原圖模型已裁定。 |
 | KD-61 | 否 | 不阻擋本次凍結 | 照片流程已由負責人裁定（#542，2026-10-13 確認），見 KD-61；不改變本次 Plan／Task 狀態行為。 |
-| KD-34 | 否 | 不相關 | 議題討論 Evidence Variant 核可機制，且已裁定不另設核可流程；不影響 Plan／Task 狀態行為。 |
+| KD-34 | 否 | 不相關 | KD-34 涉及 Evidence 核可機制，且已定不另設核可流程；不影響 Plan／Task 狀態行為。 |
 | KD-62 | 否 | 不阻擋本次凍結 | Evidence 刪除與保留政策已由負責人裁定（#542，2026-10-13 確認），見 KD-62；本表只判斷 Plan／Task，Evidence 是否可凍結不在本次判定範圍。 |
 | G-06 | 否 | 不阻擋本次凍結 | 未決內容是 Report 完整狀態機；Report 範圍維持草稿。 |
 | G-07 | 否 | 不阻擋本次凍結 | 未決內容是 Report 快照時點與草稿版次邊界；Report 範圍維持草稿。 |

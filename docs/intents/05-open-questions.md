@@ -165,7 +165,11 @@
 <a id="gate"></a>
 ## D. 開工門檻（Domain Model／API 契約凍結前必須裁定）
 
-未解除的項目仍須先有單一答案，才能讓不同實作者做出相容實作。其餘原門檻項目（原圖來源、報告選圖與核可、Result 語意、權限模型、照片流程、Evidence 刪除、照片上傳、影像編輯、Result 欄位、報告治理、interval 歸屬）都已裁定，記錄在 [KD-32](03-decisions-and-stack.md#kd-32)、[KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)、[KD-36](03-decisions-and-stack.md#kd-36)、[KD-54](03-decisions-and-stack.md#kd-54)、[KD-57](03-decisions-and-stack.md#kd-57)、[KD-61](03-decisions-and-stack.md#kd-61)～[KD-65](03-decisions-and-stack.md#kd-65)、[KD-69](03-decisions-and-stack.md#kd-69)，不再擋門檻。
+未解除的項目仍須先有單一答案，才能讓不同實作者做出相容實作。其餘原門檻項目（原圖來源、報告選圖與核可、Result 語意、權限模型、照片流程、Evidence 刪除、照片上傳、影像編輯、Result 欄位、報告治理）都已裁定，記錄在 [KD-32](03-decisions-and-stack.md#kd-32)、[KD-34](03-decisions-and-stack.md#kd-34)、[KD-35](03-decisions-and-stack.md#kd-35)、[KD-54](03-decisions-and-stack.md#kd-54)、[KD-57](03-decisions-and-stack.md#kd-57)、[KD-61](03-decisions-and-stack.md#kd-61)～[KD-65](03-decisions-and-stack.md#kd-65)、[KD-69](03-decisions-and-stack.md#kd-69)，不再擋門檻。
+
+**定方向、歸屬另裁，不擋 MVP 凍結**：
+
+- interval（查核間距）的歸屬：MVP 方向已定——不設 interval，`template-system`、`domain-model` 的 MVP 凍結範圍不需要為 interval 保留欄位（[KD-36](03-decisions-and-stack.md#kd-36)）；未來若提出選用功能，其歸屬與快照規則屆時另行裁定，在那之前不擋門檻。
 
 **仍在擋門檻**：
 
