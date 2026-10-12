@@ -458,6 +458,7 @@ export default function ProjectItemChangePage({
   // 原始內容，不算有未儲存變更，離頁不應被攔下。
   const [baseline, setBaseline] = useState<string | null>(null)
   const dialogHeadingRef = useRef<HTMLHeadingElement>(null)
+  const confirmBoxRef = useRef<HTMLDivElement>(null)
   const actionErrorRef = useRef<HTMLParagraphElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
@@ -547,6 +548,13 @@ export default function ProjectItemChangePage({
   useEffect(() => {
     if (confirming) {
       dialogHeadingRef.current?.focus()
+      // 手機確認框在表單下方；對齊框底，讓確認按鈕留在可視範圍。
+      if (
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(max-width: 40rem)').matches
+      ) {
+        confirmBoxRef.current?.scrollIntoView({ block: 'end' })
+      }
     } else if (returnFocusRef.current?.isConnected) {
       returnFocusRef.current.focus()
       returnFocusRef.current = null
@@ -1010,6 +1018,7 @@ export default function ProjectItemChangePage({
               confirmDisabled={readOnly || (needsChoice && reinspect === null)}
               confirmLabel="確認儲存"
               headingRef={dialogHeadingRef}
+              rootRef={confirmBoxRef}
               initialFocus="none"
               onCancel={() => setConfirming(false)}
               onConfirm={() =>

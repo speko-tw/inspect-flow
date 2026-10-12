@@ -104,7 +104,7 @@ export default function ProjectTemplatesPage({
   viewerPermissions?: string[]
   /**
    * 非成員範本管理員旁路瀏覽時設為 true，
-   * 顯示標題並隱藏區段外殼。
+   * 顯示獨立頁標題並隱藏區段外殼。
    * 此旗標不授予 `project_inspection_item.edit` 權限。
    */
   standalone?: boolean
@@ -113,6 +113,8 @@ export default function ProjectTemplatesPage({
   const { user } = useCurrentUser()
   const navigate = useNavigate()
   const pageTitleRef = useRef<HTMLHeadingElement>(null)
+  // TPL-R23、ADM-R17、F-O08：獨立頁用 h1；成員頁框已有 h1。
+  const PageHeading = standalone ? 'h1' : 'h2'
   const [project, setProject] = useState<ProjectSummary | null>(null)
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
@@ -573,26 +575,28 @@ export default function ProjectTemplatesPage({
       >
         {standalone ? '返回範本管理' : '返回查核項目'}
       </BackLink>
-      {standalone ? (
-        <h1>
-          {project
-            ? `${project.project_code}｜${project.name}`
-            : projectLoading
-              ? '載入專案…'
-              : '專案'}
-        </h1>
-      ) : (
-        <p className="tpl-crumb">
-          {project?.project_code && <>{project.project_code} </>}
-          {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
-        </p>
-      )}
+      <p className="tpl-crumb">
+        {standalone ? (
+          project ? (
+            `${project.project_code}｜${project.name}`
+          ) : projectLoading ? (
+            '載入專案…'
+          ) : (
+            '專案'
+          )
+        ) : (
+          <>
+            {project?.project_code && <>{project.project_code} </>}
+            {project?.name ?? (projectLoading ? '載入專案…' : '找不到專案')}
+          </>
+        )}
+      </p>
       {project && (
-        <h2 ref={pageTitleRef} tabIndex={-1}>
+        <PageHeading ref={pageTitleRef} tabIndex={-1}>
           {isSaveMode
             ? `將「${saveSource?.title ?? ''}」存為範本`
             : '套用範本到專案'}
-        </h2>
+        </PageHeading>
       )}
       {readOnly && (
         <p className="notice-info" role="status">
