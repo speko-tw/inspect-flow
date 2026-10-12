@@ -317,6 +317,7 @@ describe('今日任務首頁', () => {
               id: 'task-2',
               status: 'IN_PROGRESS',
               item_summary: { first_title: '單一查核項目', item_count: 1 },
+              location: { zone_name: '二樓', location_text: null },
             },
           ],
           next_cursor: null,
@@ -328,9 +329,18 @@ describe('今日任務首頁', () => {
     const firstCard = fallback.closest('a')
     expect(firstCard).not.toBeNull()
     expect(within(firstCard!).queryByText(/分區：/)).not.toBeInTheDocument()
+    const firstLocation = within(firstCard!).getByText('補充地點：東側')
+    expect(firstLocation).toBeInTheDocument()
     const secondCard = screen.getByText('單一查核項目').closest('a')
     expect(secondCard).toHaveClass('progress')
     expect(within(secondCard!).getByText('進行中')).toBeInTheDocument()
+    const secondZone = within(secondCard!).getByText('分區：二樓')
+    expect(secondZone).toBeInTheDocument()
+    const unspecified = within(secondCard!).queryByText(/未指定/)
+    expect(unspecified).not.toBeInTheDocument()
+    expect(
+      within(secondCard!).queryByText(/補充地點：/),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('單一查核項目 等 1 項')).not.toBeInTheDocument()
   })
 

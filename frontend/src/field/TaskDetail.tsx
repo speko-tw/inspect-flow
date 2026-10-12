@@ -26,6 +26,11 @@ function fieldLabel(field: { name: string; unit: string | null }) {
   return `${field.name}${field.unit ? `（${field.unit}）` : ''}`
 }
 
+/**
+ * 顯示 Field Task 的唯讀快照與地點，遵守 FUI-R03、IP-R10。
+ *
+ * @returns Task 詳情與可用的開始查核操作。
+ */
 export default function TaskDetail({
   taskId,
   homePath = '/field',
@@ -134,13 +139,17 @@ export default function TaskDetail({
             <StatusBadge status={task.status} />
             <h1>{heading}</h1>
             <p className="field-detail-project">{task.project_name}</p>
-            <div className="field-detail-meta">
-              <strong>查核地點</strong>
-              {task.location.zone_name && (
-                <span>分區：{task.location.zone_name}</span>
-              )}
-              <span>{task.location.location_text ?? '未指定'}</span>
-            </div>
+            {(task.location.zone_name || task.location.location_text) && (
+              <div className="field-detail-meta">
+                <strong>查核地點</strong>
+                {task.location.zone_name && (
+                  <span>分區：{task.location.zone_name}</span>
+                )}
+                {task.location.location_text && (
+                  <span>補充地點：{task.location.location_text}</span>
+                )}
+              </div>
+            )}
             <div className="field-detail-meta">
               <strong>建議指派</strong>
               <span>{task.suggested_assignee?.name_zh ?? '未指定'}</span>

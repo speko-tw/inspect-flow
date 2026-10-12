@@ -78,6 +78,10 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         "frontend/src/admin/planning/fixtures/task-location-validation-422.json",
         "frontend/src/admin/planning/fixtures/task-assignee-validation-422.json",
         "frontend/src/admin/planning/fixtures/task-cancel-validation-422.json",
+        (
+            "frontend/src/admin/planning/fixtures/"
+            "inspection-planning-boundary.json"
+        ),
     }
 )
 

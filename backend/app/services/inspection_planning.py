@@ -430,10 +430,16 @@ def _lock_project_items_for_snapshot(
 ) -> list[uuid.UUID]:
     """依 IP-R03 先鎖來源項目再鎖 Plan，避免快照讀到舊標準。
 
-    #555 固定與項目修改相同的鎖順序，避免並行建立與修改時死鎖。
-    無來源項目或來源跨專案時拒絕。
+    項目編輯會先鎖來源項目、再鎖其 Plan；此處沿用相同的鎖順序（#555），
+    讓快照複製得以序列化，避免 Plan 與項目之間發生死結。
+
+    以下情況會拒絕建立（IP-R02、IP-R14）：
+    - ``item_ids`` 為空：``inspection_task.items_required``。
+    - 任一項目不屬於該專案或不存在：
+      ``inspection_task.invalid_project_item``。
+    - 任一項目沒有任何點位：``inspection_task.item_without_points``。
     """
-    from app.models import ProjectInspectionItem
+    from app.models import ProjectInspectionItem, ProjectInspectionPoint
 
     unique_ids = list(dict.fromkeys(item_ids))
     if not unique_ids:
@@ -450,6 +456,18 @@ def _lock_project_items_for_snapshot(
     ).all()
     if {source.id for source in sources} != set(unique_ids):
         raise PlanningError("inspection_task.invalid_project_item")
+    source_ids_with_points = set(
+        session.scalars(
+            select(ProjectInspectionPoint.project_inspection_item_id).where(
+                ProjectInspectionPoint.project_inspection_item_id.in_(
+                    unique_ids
+                )
+            )
+        ).all()
+    )
+    # IP-R14：先鎖住來源項目再查點位，避免與項目 PATCH 並行時建立空快照。
+    if source_ids_with_points != set(unique_ids):
+        raise PlanningError("inspection_task.item_without_points")
     return unique_ids
 
 

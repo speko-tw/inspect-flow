@@ -1,4 +1,4 @@
-// 表單送出防護（#507）。
+// 表單送出防護；避免快速連按 Enter 重複寫入。
 //
 // 兩個問題都出在「Enter」：
 //   1. 用 `requestSubmit()` 或表單的隱含送出（implicit submission）時，
@@ -11,6 +11,7 @@
 
 import { useMemo, useRef, type KeyboardEvent } from 'react'
 
+/** 以同步 ref 擋重複送出，避免快速連按 Enter 產生兩次寫入。 */
 export type SubmitGuard = {
   /**
    * 嘗試開始一次送出；已有送出進行中時回傳 false，呼叫端不得繼續。
@@ -26,6 +27,7 @@ export type SubmitGuard = {
   run: <T>(task: () => T | Promise<T>) => Promise<T | undefined>
 }
 
+/** 建立送出防護；進行中的第二次操作會被拒絕。 */
 export function useSubmitGuard(): SubmitGuard {
   const inFlight = useRef(false)
   return useMemo<SubmitGuard>(() => {
