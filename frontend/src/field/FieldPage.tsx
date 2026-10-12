@@ -44,9 +44,7 @@ function applyListChange(
 }
 
 function taskTitle(task: FieldTask) {
-  const { first_title: first, item_count: count } = task.item_summary
-  if (!first) return '查核任務'
-  return count > 1 ? `${first} 等 ${count} 項` : first
+  return task.name
 }
 
 function displayTime(value: string) {

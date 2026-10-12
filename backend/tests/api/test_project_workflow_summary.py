@@ -124,6 +124,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             assignee_id=world["field_user"].id,
             created_by=admin.id,
             updated_by=admin.id,
+            name="示範任務",
         ),
         InspectionTask(
             plan_id=plan.id,
@@ -131,6 +132,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             status="DRAFT",
             created_by=admin.id,
             updated_by=admin.id,
+            name="示範任務",
         ),
         InspectionTask(
             plan_id=archived_plan.id,
@@ -138,6 +140,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             status="DRAFT",
             created_by=admin.id,
             updated_by=admin.id,
+            name="示範任務",
         ),
     ]
     tasks = {
@@ -149,6 +152,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             cancellation_reason="測試取消" if status == "CANCELLED" else None,
             created_by=admin.id,
             updated_by=admin.id,
+            name="示範任務",
         )
         for status in (
             "PENDING",
@@ -163,6 +167,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
         status="IN_PROGRESS",
         created_by=admin.id,
         updated_by=admin.id,
+        name="示範任務",
     )
     db_session.add_all([*drafts, *tasks.values(), archived_recheck])
     db_session.flush()
@@ -203,6 +208,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             status="PENDING",
             created_by=admin.id,
             updated_by=admin.id,
+            name="示範任務",
         )
     )
     db_session.commit()
@@ -317,6 +323,7 @@ def test_next_steps_primary_step_moves_through_intermediate_states(
         status="DRAFT",
         created_by=admin.id,
         updated_by=admin.id,
+        name="示範任務",
     )
     db_session.add(draft)
     db_session.commit()
@@ -330,6 +337,7 @@ def test_next_steps_primary_step_moves_through_intermediate_states(
         status="IN_PROGRESS",
         created_by=admin.id,
         updated_by=admin.id,
+        name="示範任務",
     )
     db_session.add(recheck)
     db_session.flush()
@@ -383,6 +391,7 @@ def test_task_count_visibility_draft_permissions_and_access_errors(
                 status=status,
                 created_by=admin.id,
                 updated_by=admin.id,
+                name="示範任務",
             )
         )
     db_session.commit()

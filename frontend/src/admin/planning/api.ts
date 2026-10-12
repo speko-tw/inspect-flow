@@ -65,6 +65,7 @@ export interface InspectionTask {
   id: string
   project_id: string
   plan_id: string
+  name: string
   status: TaskStatus
   items: TaskInspectionItem[]
   assignee_id: string | null
@@ -105,6 +106,7 @@ export interface CreatePlanInput {
 
 /** IP-R02、IP-R10 的手動任務輸入；項目與分區須屬於同專案。 */
 export interface CreateTaskInput {
+  name: string
   item_ids: string[]
   suggested_assignee_id: string | null
   zone_id: string | null
@@ -115,6 +117,11 @@ export interface CreateTaskInput {
 export interface UpdateLocationInput {
   zone_id: string | null
   location_text: string | null
+}
+
+/** #497 的任務名稱欄位；長度與空白規則由後端驗證。 */
+export interface UpdateTaskNameInput {
+  name: string
 }
 
 /**
@@ -171,6 +178,11 @@ export interface PlanningClient {
   updateLocation(
     taskId: string,
     input: UpdateLocationInput,
+  ): Promise<InspectionTask>
+  /** PATCH /api/v1/inspection-tasks/{task_id}，修改任務名稱。 */
+  updateTaskName(
+    taskId: string,
+    input: UpdateTaskNameInput,
   ): Promise<InspectionTask>
   /** POST /api/v1/inspection-tasks/{task_id}:dispatch. */
   dispatchTask(taskId: string): Promise<InspectionTask>
@@ -262,6 +274,12 @@ export const planningClient: PlanningClient = {
     return request(`/inspection-tasks/${taskId}:complete`, { method: 'POST' })
   },
   updateLocation(taskId, input) {
+    return request(`/inspection-tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  },
+  updateTaskName(taskId, input) {
     return request(`/inspection-tasks/${taskId}`, {
       method: 'PATCH',
       body: JSON.stringify(input),

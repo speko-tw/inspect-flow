@@ -658,6 +658,7 @@ describe('deleting zones', () => {
     const plan = await client.createPlan(PROJECT, { name: '引用分區' })
     const [item] = await client.listProjectItems(PROJECT)
     await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: zone.id,

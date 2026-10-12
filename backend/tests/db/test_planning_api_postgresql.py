@@ -115,7 +115,10 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
     for _ in range(5):
         created = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-            json={"item_ids": [str(world["item"].id)]},
+            json={
+                "name": "資料庫任務清單",
+                "item_ids": [str(world["item"].id)],
+            },
         )
         assert created.status_code == 201, created.text
         task_id = created.json()["id"]
@@ -203,6 +206,7 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
                 "id",
                 "project_id",
                 "project_name",
+                "name",
                 "status",
                 "dispatched_at",
                 "location",
@@ -408,7 +412,7 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "資料庫任務快照", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
 

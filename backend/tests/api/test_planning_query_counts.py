@@ -106,6 +106,7 @@ def world(db_session, make_client):
         response = admin.post(
             f"/api/v1/inspection-plans/{world['plan_id']}/tasks",
             json={
+                "name": "查詢計數任務",
                 "item_ids": [str(world["item"].id), str(world["item_two"].id)],
                 "zone_id": zone["id"],
                 "suggested_assignee_id": str(world["field_user"].id),
@@ -151,6 +152,7 @@ def test_plan_detail_select_count_is_fixed_for_many_tasks(world):
     extra = admin.post(
         f"/api/v1/inspection-plans/{world['plan_id']}/tasks",
         json={
+            "name": "查詢計數任務",
             "item_ids": [str(world["item"].id)],
             "zone_id": admin.get(f"{world['base']}/zones").json()["items"][0][
                 "id"
@@ -288,7 +290,7 @@ def _create_permission_test_project(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "權限查詢計數任務", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
     task_id = task.json()["id"]

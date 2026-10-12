@@ -86,6 +86,12 @@ for _event, _entity, _kind, _fields in (
         ("zone_id", "location_text"),
     ),
     (
+        "inspection_task.renamed",
+        "inspection_task",
+        AuditEventKind.UPDATED,
+        ("name",),
+    ),
+    (
         "project_inspection_item.updated",
         "project_inspection_item",
         AuditEventKind.UPDATED,
@@ -475,12 +481,14 @@ def create_inspection_task(
     session: Session,
     *,
     plan: InspectionPlan,
+    name: str,
     project_inspection_item_ids: list[uuid.UUID],
     zone_id: uuid.UUID | None = None,
     location_text: str | None = None,
     assignee_id: uuid.UUID | None = None,
 ) -> InspectionTask:
-    """依 IP-R02 建立多項目 DRAFT Task；無效來源時拒絕。"""
+    """依 IP-R02 建立多項目 DRAFT Task；名稱與來源無效時拒絕。"""
+    normalized_name = _validate_task_name(name)
     operator_id = _require_permission(
         session, plan.project_id, "inspection_task.create"
     )
@@ -507,6 +515,7 @@ def create_inspection_task(
         plan_id=locked_plan.id,
         project_id=locked_plan.project_id,
         zone_id=zone_id,
+        name=normalized_name,
         location_text=normalized_location,
         assignee_id=assignee_id,
         created_by=operator_id,
@@ -524,6 +533,50 @@ def create_inspection_task(
     )
     _refresh_plan_status(session, locked_plan)
     return task
+
+
+def _validate_task_name(name: str) -> str:
+    """依 IP-R17 將任務名稱 trim 後限制為 1～128 字元。"""
+    normalized = name.strip()
+    if not normalized or len(normalized) > 128:
+        raise PlanningError("inspection_task.invalid_name")
+    return normalized
+
+
+def rename_inspection_task(
+    session: Session,
+    task: InspectionTask,
+    *,
+    name: str,
+) -> InspectionTask:
+    """依 IP-R17 修改未完成任務名稱並留下修改前後值。"""
+    operator_id = _require_permission(
+        session, task.project_id, "inspection_task.manage"
+    )
+    normalized = _validate_task_name(name)
+    plan, locked_task = _lock_plan_and_task(session, task.id)
+    if plan is not None and plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if plan is None or locked_task.status not in {
+        "DRAFT",
+        "PENDING",
+        "IN_PROGRESS",
+    }:
+        raise PlanningError("inspection_task.invalid_transition")
+    before = locked_task.name
+    locked_task.name = normalized
+    locked_task.updated_by = operator_id
+    session.flush()
+    if before != normalized:
+        record_audit_event(
+            session,
+            "inspection_task.renamed",
+            entity_id=locked_task.id,
+            project_id=locked_task.project_id,
+            before={"name": before},
+            after={"name": normalized},
+        )
+    return locked_task
 
 
 def list_inspection_tasks(
@@ -1154,6 +1207,7 @@ __all__ = [
     "delete_project_zone",
     "derive_plan_status",
     "dispatch_inspection_task",
+    "rename_inspection_task",
     "rename_project_zone",
     "restore_inspection_task",
     "start_inspection_task",

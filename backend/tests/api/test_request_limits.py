@@ -183,7 +183,7 @@ def planning(db_session, make_client):
     ).json()
     task = admin.post(
         f"/api/v1/inspection-plans/{plan['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "限制測試任務", "item_ids": [str(world["item"].id)]},
     ).json()
     world["plan"] = plan
     world["task"] = task
@@ -214,11 +214,15 @@ def test_planning_bodies_reject_oversized_fields(planning):
         ),
         "task item ids": admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
-            json={"item_ids": [str(uuid4())] * (limits.ITEM_IDS_MAX + 1)},
+            json={
+                "name": "限制測試任務",
+                "item_ids": [str(uuid4())] * (limits.ITEM_IDS_MAX + 1),
+            },
         ),
         "task location": admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
             json={
+                "name": "限制測試任務",
                 "item_ids": [str(planning["item"].id)],
                 "location_text": long_location,
             },
