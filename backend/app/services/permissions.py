@@ -1,4 +1,4 @@
-"""集中計算角色權限與專案存取範圍（DOM-R23、DOM-R24、DOM-R26、DOM-R69）。
+"""集中計算角色權限與專案存取範圍（DOM-R23、DOM-R26、DOM-R69）。
 
 本模組只讀取呼叫時已 flush 的資料，不替呼叫端 flush，避免權限判斷
 意外送出尚未完成的寫入。角色、帳號狀態與模組權限在同一組入口計算，
@@ -8,17 +8,15 @@ DOM-R35 登記權限代碼。讀取時先取出角色現有代碼再比對，避
 登記的代碼作為寫入值交給 BoundedString 驗證。
 """
 
-import contextlib
 import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import distinct, func, select
-from sqlalchemy.orm import Session, object_session
+from sqlalchemy.orm import Session
 
 from app.models import (
     ProjectMember,
     ProjectMemberRole,
-    Role,
     RolePermission,
 )
 from app.services.module_permissions import (
@@ -295,39 +293,3 @@ def role_impact_scope(
             .where(ProjectMemberRole.role_id == role_id)
         ).one()
     return RoleImpactScope(member_count=member_count, user_count=user_count)
-
-
-def has_modify_capability(role: Role) -> bool:
-    """DOM-R24: whether ``role`` has "modify capability" -- any of
-    its permission codes has an action (the part after the first
-    ``.``) other than ``read``. A role with no permission codes at
-    all does not count (returns ``False``).
-
-    Reads ``role.permission_codes`` directly (an ORM relationship,
-    not a query against ``session``) since the judgment only needs
-    one already-loaded ``Role``, not a set computed across rows. If
-    the relationship is already loaded in memory, this reads it as
-    is; if it is not, accessing it below triggers a lazy load,
-    which -- for a ``role`` attached to a ``Session`` -- would
-    autoflush that ``Session`` just like a direct query would.
-    Reading each permission's ``code`` further below can *also* hit
-    the database: if that attribute has been expired (e.g. by
-    ``session.expire(perm, ["code"])``) while the collection itself
-    stayed loaded, accessing it triggers a refresh, which likewise
-    autoflushes. So both the collection access and the iteration
-    that reads ``.code`` off each element must happen inside the
-    owning ``Session``'s ``no_autoflush``. A detached or transient
-    ``role`` has no owning ``Session`` to protect and is read
-    directly.
-    """
-    owning_session = object_session(role)
-    guard = (
-        owning_session.no_autoflush
-        if owning_session is not None
-        else contextlib.nullcontext()
-    )
-    with guard:
-        return any(
-            permission.code.split(".", 1)[1] != "read"
-            for permission in role.permission_codes
-        )
