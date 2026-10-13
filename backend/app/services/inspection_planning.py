@@ -7,17 +7,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.company_roles import company_role_inspection_level
 from app.db.clock import utc_now
 from app.models import (
     InspectionPlan,
     InspectionTask,
     Project,
+    ProjectInspectionItem,
     ProjectInspectionItemChange,
-    ProjectMember,
     ProjectZone,
     TaskInspectionItem,
     TaskRequirementSnapshot,
-    User,
 )
 from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.audit import (
@@ -84,6 +84,12 @@ for _event, _entity, _kind, _fields in (
         "inspection_task",
         AuditEventKind.UPDATED,
         ("zone_id", "location_text"),
+    ),
+    (
+        "inspection_task.items_updated",
+        "inspection_task",
+        AuditEventKind.UPDATED,
+        ("items",),
     ),
     (
         "project_inspection_item.updated",
@@ -403,21 +409,14 @@ def _validate_assignee(
 ) -> None:
     if assignee_id is None:
         return
-    member = session.scalar(
-        select(ProjectMember.id).where(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == assignee_id,
-        )
-    )
-    permissions = effective_permissions(
+    # 中央權限快照同時保留無角色成員身分，避免本服務直接查人員與成員表。
+    access = calculate_effective_access(
         session, user_id=assignee_id, project_id=project_id
     )
-    assignee = session.get(User, assignee_id)
     if (
-        member is None
-        or assignee is None
-        or assignee.is_admin
-        or "inspection_task.inspect" not in permissions
+        project_id not in access.project_memberships
+        or access.is_admin
+        or "inspection_task.inspect" not in access.project_permissions
     ):
         raise PlanningError("inspection_task.invalid_assignee")
 
@@ -471,6 +470,28 @@ def _lock_project_items_for_snapshot(
     return unique_ids
 
 
+def _current_inspection_level(session: Session, project_id: uuid.UUID) -> str:
+    """IP-R16：取專案**當下**的 ``company_role`` 對應的檢查層級。
+
+    以共享鎖讀取專案列：與改角色的 PATCH 並行時，兩邊會序列化，
+    新任務不會帶入剛被取代的舊層級。這裡排在 Plan 鎖之後，維持
+    「來源項目 → Plan → 專案」的取鎖順序。
+    """
+    role = session.scalar(
+        select(Project.company_role)
+        .where(Project.id == project_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    level = company_role_inspection_level(role) if role else None
+    if level is None:
+        # 登記表在 ORM 寫入前就擋下未登記的角色（DOM-R76），正常不會到這。
+        raise RuntimeError(
+            f"Project {project_id} has no registered inspection level"
+        )
+    return level
+
+
 def create_inspection_task(
     session: Session,
     *,
@@ -508,6 +529,9 @@ def create_inspection_task(
         project_id=locked_plan.project_id,
         zone_id=zone_id,
         location_text=normalized_location,
+        inspection_level=_current_inspection_level(
+            session, locked_plan.project_id
+        ),
         assignee_id=assignee_id,
         created_by=operator_id,
         updated_by=operator_id,
@@ -724,6 +748,104 @@ def update_task_location(
             after=after,
         )
     return task
+
+
+def _ensure_draft_task_editable(
+    plan: InspectionPlan | None, task: InspectionTask
+) -> None:
+    """依 IP-R20 檢查 Plan 未封存且 Task 仍為 DRAFT；封存優先。"""
+    if plan is None or plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if task.status != "DRAFT":
+        raise PlanningError("inspection_task.invalid_transition")
+
+
+def update_draft_task_items(
+    session: Session,
+    task: InspectionTask,
+    *,
+    item_ids: list[uuid.UUID],
+) -> InspectionTask:
+    """依 IP-R20 僅重建未派出 Task 的項目與快照。"""
+    operator_id = _require_permission(
+        session, task.project_id, "inspection_task.manage"
+    )
+    task_reference = session.get(InspectionTask, task.id)
+    if task_reference is None:
+        raise PlanningError("inspection_task.not_found")
+    # 規格要求先判斷 Plan 與 Task 狀態、再驗證項目；入口先做無鎖預檢，
+    # 讓封存 Plan 或已派出 Task 送壞項目時也穩定回 409。鎖後會再複檢。
+    _ensure_draft_task_editable(
+        session.get(InspectionPlan, task_reference.plan_id), task_reference
+    )
+    if not item_ids:
+        raise PlanningError("inspection_task.items_required")
+    if len(item_ids) > 200 or len(set(item_ids)) != len(item_ids):
+        raise PlanningError("request.validation_failed")
+
+    # 鎖序為來源項目 → Plan → Task，與建立任務及修改來源項目相同，
+    # 重建快照才不會讀到併發修改前的標準（#555）。
+    _lock_project_items_for_snapshot(
+        session, project_id=task.project_id, item_ids=item_ids
+    )
+    plan = _lock_plan(session, task_reference.plan_id)
+    locked_task = _lock_task(session, task.id)
+    if plan is None or locked_task is None:
+        raise PlanningError("inspection_task.not_found")
+    # 取得鎖前的預檢可能已過時，鎖後必須複檢。
+    _ensure_draft_task_editable(plan, locked_task)
+
+    # 等鎖期間同一 Task 的項目可能已被其他請求取代，舊項目集合一律
+    # 在持鎖後重讀，稽核的 before 與是否有變動才會正確。
+    old_items = session.scalars(
+        select(TaskInspectionItem)
+        .where(TaskInspectionItem.task_id == locked_task.id)
+        .order_by(TaskInspectionItem.created_at, TaskInspectionItem.id)
+        .execution_options(populate_existing=True)
+    ).all()
+    old_ids = [row.project_inspection_item_id for row in old_items]
+    # 集合相同就不重建：DRAFT 的快照由 IP-R04 隨來源項目修改同步，
+    # 內容必已是最新；重建只會換掉 id 並留下沒有意義的稽核。
+    if set(old_ids) == set(item_ids):
+        return locked_task
+
+    titles = dict(
+        session.execute(
+            select(ProjectInspectionItem.id, ProjectInspectionItem.title)
+            .where(ProjectInspectionItem.id.in_(set(old_ids) | set(item_ids)))
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    # 稽核欄位用 {項目 id: 名稱} 對照：ALG-R10 會把 list 排序，元素是
+    # dict 時無法比較；對照表既保留 id 與名稱，也不依賴順序。
+    before_items = {str(item_id): titles[item_id] for item_id in old_ids}
+    after_items = {str(item_id): titles[item_id] for item_id in item_ids}
+    # DRAFT 沒有結果，舊 Snapshot 不保留；資料庫 FK cascade 會一併
+    # 清除其下的點位、標準與證據需求，避免留下過期快照。
+    for row in old_items:
+        session.delete(row)
+    session.flush()
+    from app.services.inspection_planning_snapshots import create_task_items
+
+    create_task_items(
+        session,
+        task=locked_task,
+        project_inspection_item_ids=item_ids,
+        operator_id=operator_id,
+    )
+    locked_task.updated_by = operator_id
+    # 同一人連續修改時 updated_by 不變，onupdate 不會觸發，故顯式更新。
+    locked_task.updated_at = utc_now()
+    session.flush()
+    record_audit_event(
+        session,
+        "inspection_task.items_updated",
+        entity_id=locked_task.id,
+        project_id=locked_task.project_id,
+        before={"items": before_items},
+        after={"items": after_items},
+    )
+    return locked_task
 
 
 def dispatch_inspection_task(
@@ -1158,5 +1280,6 @@ __all__ = [
     "restore_inspection_task",
     "start_inspection_task",
     "update_project_item_usage",
+    "update_draft_task_items",
     "update_task_location",
 ]

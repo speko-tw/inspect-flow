@@ -46,12 +46,9 @@ from app.models import (
     ProjectInspectionItem,
     ProjectInspectionPoint,
     ProjectMeasurementField,
-    ProjectMember,
-    ProjectMemberRole,
     ProjectNumericStandard,
     ProjectTextStandard,
     ProjectZone,
-    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     TaskSnapshotEvidenceRequirement,
@@ -85,11 +82,16 @@ from app.services.inspection_planning import (
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
+    update_draft_task_items,
     update_project_item_usage,
     update_task_location,
 )
 from app.services.operator import get_current_operator
-from app.services.permissions import effective_permissions
+from app.services.permissions import (
+    calculate_effective_access,
+    effective_permissions,
+    project_member_ids_with_permission,
+)
 from app.services.template_library import (
     InvalidTemplateError,
     validate_template_structure,
@@ -142,6 +144,17 @@ class LocationBody(StrictBody):
 
     zone_id: UUID | None
     location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
+
+
+class TaskItemsBody(StrictBody):
+    """承載 IP-R20 的草稿任務新查核項目集合。
+
+    空陣列與重複項目不在此擋下，交給服務層依序檢查：先看 Plan 與 Task
+    狀態（409），再回 ``inspection_task.items_required`` 等項目錯誤，
+    與建立任務的錯誤碼一致。
+    """
+
+    item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
 
 
 class ProjectNumericStandardBody(NumericStandardBody):
@@ -223,15 +236,11 @@ def _planning_error_response(
 def _is_project_member(
     db: Session, *, user_id: UUID, project_id: UUID
 ) -> bool:
-    return (
-        db.scalar(
-            select(ProjectMember.id).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user_id,
-            )
-        )
-        is not None
+    """透過 DOM-R69 單一入口檢查成員身分，包含沒有角色的成員。"""
+    access = calculate_effective_access(
+        db, user_id=user_id, project_id=project_id
     )
+    return project_id in access.project_memberships
 
 
 def _resource_permission(resource_type: str, permission: str):
@@ -369,6 +378,7 @@ def _task_summaries(
                 "project_id": task.project_id,
                 "plan_id": task.plan_id,
                 "status": task.status,
+                "inspection_level": task.inspection_level,
                 "zone_id": task.zone_id,
                 "zone": {"id": zone.id, "name": zone.name} if zone else None,
                 "location_text": task.location_text,
@@ -939,38 +949,30 @@ def assignees(
     _user: User = _login_dependency,
 ):
     """列出有查核權限的專案成員；無建立或指派權限時拒絕。"""
-    permissions = effective_permissions(
+    access = calculate_effective_access(
         db, user_id=_user.id, project_id=project_id
     )
     if (
-        not _user.is_admin
-        and not {"inspection_task.create", "inspection_task.assign"}
-        & permissions
+        not access.is_admin
+        and not {
+            "inspection_task.create",
+            "inspection_task.assign",
+        }
+        & access.project_permissions
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     _project_exists(db, project_id)
-    candidate_ids = (
-        select(ProjectMember.user_id)
-        .join(
-            ProjectMemberRole,
-            ProjectMemberRole.project_member_id == ProjectMember.id,
-        )
-        .join(
-            RolePermission,
-            RolePermission.role_id == ProjectMemberRole.role_id,
-        )
-        .where(
-            ProjectMember.project_id == project_id,
-            RolePermission.code == "inspection_task.inspect",
-        )
-        .distinct()
+    candidate_ids = project_member_ids_with_permission(
+        db,
+        project_id=project_id,
+        permission_code="inspection_task.inspect",
     )
     return page(
         db,
         User,
         cursor=cursor,
         limit=limit,
-        filters=(User.id.in_(candidate_ids), User.is_admin.is_(False)),
+        filters=(User.id.in_(candidate_ids),),
         serialize=_person,
     )
 
@@ -1250,6 +1252,27 @@ def patch_task(
             location_text=body.location_text,
         ),
     )
+
+
+@router.put(
+    "/inspection-tasks/{task_id}/items",
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.manage")),
+    ],
+)
+def put_task_items(
+    task_id: UUID, body: TaskItemsBody, db: Session = _db_dependency
+):
+    """依 IP-R20 重建 DRAFT Task 的項目與需求快照。"""
+    task = _one_task(db, task_id)
+    updated = _call(
+        update_draft_task_items,
+        db,
+        task,
+        item_ids=body.item_ids,
+    )
+    return _task_summary(db, updated)
 
 
 @router.get(
