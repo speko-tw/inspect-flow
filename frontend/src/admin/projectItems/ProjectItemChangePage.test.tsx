@@ -195,6 +195,52 @@ async function confirm(choice?: 'yes' | 'no') {
 }
 
 describe('ProjectItemChangePage', () => {
+  it('手機展開重查確認時捲到確認框並保留標題焦點（ADM-R38）', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: true })),
+    )
+    const scrollIntoView = vi.fn()
+    const original = HTMLElement.prototype.scrollIntoView
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    try {
+      renderPage(apiWith())
+      // 有已派出的任務時，要先選擇重查與否才能進到確認框。
+      fireEvent.click(
+        await screen.findByRole('radio', { name: reinspectChoice }),
+      )
+      fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+      const dialog = screen.getByRole('dialog')
+      expect(dialog).not.toHaveClass('confirm-box-modal')
+      expect(
+        within(dialog).getByRole('heading', {
+          name: '儲存前確認是否重新查核',
+        }),
+      ).toHaveFocus()
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'end' })
+      expect(
+        within(dialog).getByRole('button', { name: '確認儲存' }),
+      ).toBeVisible()
+    } finally {
+      if (original) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+          configurable: true,
+          value: original,
+        })
+      } else {
+        delete (
+          HTMLElement.prototype as {
+            scrollIntoView?: (options?: ScrollIntoViewOptions) => void
+          }
+        ).scrollIntoView
+      }
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('confirms reinspection and renders backend Task actions', async () => {
     const api = apiWith()
     renderPage(api)
