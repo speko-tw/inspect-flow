@@ -1,5 +1,101 @@
 import type { InspectionPoint, MeasurementField, TemplateItem } from './api'
 
+/** TPL-R24 欄位錯誤碼；共用表單錯誤仍交給 `fieldErrorMessage` 處理。 */
+export const TEMPLATE_FIELD_ERROR_MESSAGES: Readonly<Record<string, string>> =
+  {
+    'template.sequence_duplicate': '項次順序重複，請檢查項次。',
+    'template.photo_requirement_count': '每個項次必須設定一筆照片需求。',
+    'template.client_id_duplicate': '實測欄位識別重複，請重新設定欄位。',
+    'template.numeric_field_unbound': '請選擇有效的數字欄位。',
+    'template.numeric_unit_required': '請填寫數字欄位的單位。',
+    'template.text_unit_forbidden': '文字欄位不需要單位。',
+    'template.bound_field_unit_forbidden': '綁定欄位的單位由數值標準帶入。',
+  }
+
+/**
+ * 建立空白查核項次；需在增刪項次後維持錯誤與 React key 時產生 clientKey。
+ */
+export function blankPoint(
+  sequence: number,
+  options: { stableClientKey?: boolean } = {},
+): InspectionPoint {
+  return {
+    ...(options.stableClientKey ? { clientKey: crypto.randomUUID() } : {}),
+    sequence,
+    title: '',
+    instruction: '',
+    text_standard: null,
+    numeric_standard: null,
+    measurement_fields: [],
+    evidence_requirements: [{ min_count: 1 }],
+  }
+}
+
+/**
+ * 將項次欄位轉成編輯器使用的 clientKey 關聯；持久 ID 只留在子項欄位。
+ * `stablePointKeys` 用於會重排項次的專案編輯，`fillBoundFieldUnit` 用於
+ * 範本 API 對綁定欄位回傳空單位的情形。
+ */
+export function localizeInspectionPoints(
+  points: InspectionPoint[],
+  options: {
+    stablePointKeys?: boolean
+    fillBoundFieldUnit?: boolean
+  } = {},
+): InspectionPoint[] {
+  const { stablePointKeys = false, fillBoundFieldUnit = false } = options
+  return points.map((point) => {
+    const fields = point.measurement_fields.map(localizeField)
+    const standard = point.numeric_standard
+    const boundKey =
+      standard?.measurement_field_client_key ??
+      fields.find(
+        (field) =>
+          Boolean(
+            standard?.measurement_field_client_id &&
+            field.client_id === standard.measurement_field_client_id,
+          ) ||
+          Boolean(
+            standard?.measurement_field_id &&
+            field.id === standard.measurement_field_id,
+          ),
+      )?.clientKey
+
+    return {
+      ...point,
+      ...(stablePointKeys
+        ? { clientKey: point.clientKey ?? point.id ?? crypto.randomUUID() }
+        : {}),
+      measurement_fields: fields.map((field) =>
+        fillBoundFieldUnit &&
+        Boolean(standard) &&
+        Boolean(boundKey) &&
+        field.clientKey === boundKey
+          ? { ...field, unit: field.unit ?? standard?.unit ?? '' }
+          : field,
+      ),
+      numeric_standard: standard
+        ? {
+            ...standard,
+            measurement_field_id: undefined,
+            measurement_field_client_id: undefined,
+            measurement_field_client_key: boundKey,
+          }
+        : null,
+    }
+  })
+}
+
+/** 將範本 API 資料轉成編輯器草稿，並保留範本欄位單位的顯示值。 */
+export function localizeTemplateItem(item: TemplateItem): TemplateItem {
+  return {
+    ...item,
+    inspection_points: localizeInspectionPoints(item.inspection_points, {
+      fillBoundFieldUnit: true,
+    }),
+  }
+}
+
 export function numberFields(point: InspectionPoint): MeasurementField[] {
   return point.measurement_fields.filter(
     (field) => field.field_type === 'number',
