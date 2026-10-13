@@ -2,7 +2,7 @@
 
 **規格**：[spec.md](spec.md)
 
-本計畫依已凍結的 Plan／Task、ProjectZone 與 Task 地點需求及驗收條件拆分工作。OQ-09 未裁定細節及本規格選定的規格設計見 [spec.md](spec.md#開工門檻逐實體比對)；實作 task 開立前仍須核對最新來源及責任檔案。
+本計畫依已凍結的 Plan／Task、ProjectZone 與 Task 地點需求及驗收條件拆分工作。KD-56 沒有涵蓋的細節及本規格選定的規格設計見 [spec.md](spec.md#開工門檻逐實體比對)；實作 task 開立前仍須核對最新來源及責任檔案。
 
 ## 任務
 
@@ -17,7 +17,7 @@
 | T7 | 新增專案流程摘要 API，以資料庫聚合回傳成員、項目、分區、計畫、可見 Task 狀態及待重查數；落實各專案讀取權限與 DRAFT 可見性，補充 API 規格與測試 | `backend/app/api/v1/projects.py`、`backend/app/services/project_workflow_summary.py`、`backend/app/services/inspection_planning.py`、`backend/tests/api/test_project_workflow_summary.py`、`backend/tests/contract/test_route_access.py`、`docs/specs/inspection-planning/spec.md` | T1、T2；共用 API、權限與資料模型已就緒（#446） | IP-AC12 | #446 |
 | T8 | 批次篩選 Field 任務清單的專案 inspect 權限與可指派候選人；候選人排序及 cursor 分頁在資料庫執行，並以小／大專案與成員資料量驗證查詢次數不線性增加。`make check-postgres` 另以 PostgreSQL backend 執行兩個 API 的權限、回應、排序與 cursor 驗收 | `backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/api/test_planning_query_counts.py`、`backend/tests/db/test_planning_api_postgresql.py`、`docs/specs/inspection-planning/spec.md`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R01、IP-AC06 | #468、#552 |
 | T9 | 修正內業 planning mock 的 Plan 列表分頁，採用與後端一致的 `(created_at,id)` cursor shape 與續頁排序；頁大小對齊 HTTP client 明確指定的 limit，補 cursor round-trip、tie-break、非法輸入與頁面邊界測試 | `frontend/src/admin/planning/api.mock.ts`、`frontend/src/admin/planning/api.test.ts`、`docs/specs/inspection-planning/plan.md` | T3；核對後端 pagination helper 與前端 HTTP client 的實際 limit | N/A（契約來源 API-R08） | #471 |
-| T10 | `Inspection Task.inspection_level`：新增不可空欄位並以一支 migration 回填既有 Task 為 `self_inspection`；建立 Task 時依專案當時的 `company_role` 帶入、建立請求不接受此欄；Task API 回應含此欄；外部協作人員派出時指定層級的部分待 [#550](https://github.com/speko-tw/inspect-flow/issues/550) | 依當時程式碼盤點，預計 `backend/app/models/`、`backend/alembic/versions/`（一支 migration）、`backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/` | `domain-model` 任務 R（`company_role` 與登記表） | IP-AC16 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
+| T10 | `Inspection Task.inspection_level`：新增不可空欄位並以一支 migration 回填既有 Task 為 `self_inspection`；建立 Task 時依專案當時的 `company_role` 帶入、建立請求不接受此欄；Task API 回應含此欄；外部協作人員派出時指定層級的部分待 [#550](https://github.com/speko-tw/inspect-flow/issues/550) | 依當時程式碼盤點，預計 `backend/app/models/`、`backend/alembic/versions/`（一支 migration）、`backend/app/services/inspection_planning.py`、`backend/app/api/v1/inspection_planning.py`、`backend/tests/` | `domain-model` 任務 R（`company_role` 與登記表） | IP-AC16 | [#646](https://github.com/speko-tw/inspect-flow/issues/646) |
 | T11 | 專案流程摘要的 `project` 物件加 `company_role`（IP-R11（流程摘要）），供專案首頁顯示本公司角色；補 API 測試與契約 fixture | `backend/app/services/project_workflow_summary.py`、`backend/app/api/v1/projects.py`、`backend/tests/api/test_project_workflow_summary.py`、`frontend/src/admin/` 摘要型別（依當時程式碼盤點） | `domain-model` 任務 R | IP-AC12 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 | T12 | 序列化 Task 建立快照與專案項目修改，固定項目／Plan 鎖順序，並以 PostgreSQL 並行 API 測試驗證快照一致與鎖序一致 | `backend/app/services/inspection_planning.py`、`backend/tests/db/test_project_item_edit_concurrency.py`、`backend/tests/services/test_inspection_planning.py`、`docs/specs/inspection-planning/plan.md` | T2、T3 | IP-R03、IP-AC03 | #555 |
 
@@ -39,12 +39,12 @@
 ## 風險
 
 - **KD-55 與項目級補充的文字需一併理解**：依負責人補充裁定 5970063986，只作廢受影響項目的舊 Snapshot、結果與照片，保留同 Task 其他項目；符合條件的 `COMPLETED` Task 回到 `IN_PROGRESS`、`PENDING`／`IN_PROGRESS` Task 保持原狀，來源為 `DRAFT` 時原位更新。#346 的 PR #347 與 state-machines PR #349 均已合併；實作依已凍結規則。
-- **狀態機規格同步與凍結門檻**：依 KD-56，Plan 任意狀態可封存；本規格採封存時 Task 唯讀、取消封存後依現況重算，且草稿 Task 阻止完成。`state-machines` 的 Plan／Task 行為已依 PR #349 合併。OQ-09 剩餘的未裁定表示細節，在規格中明標為規格設計（非負責人裁定）；Plan／Task 凍結範圍與 Evidence／Report 阻擋邊界見規格逐項比對表。
+- **狀態機規格同步與凍結門檻**：依 KD-56，Plan 任意狀態可封存；本規格採封存時 Task 唯讀、取消封存後依現況重算，且草稿 Task 阻止完成。`state-machines` 的 Plan／Task 行為已依 PR #349 合併。KD-56 沒有涵蓋的表示細節，在規格中明標為規格設計（非負責人裁定）；Plan／Task 凍結範圍與 Evidence／Report 阻擋邊界見規格逐項比對表。
 - **Task 組成**：負責人已裁定一個 Task 得含多個項目；關聯表／明細表、各項 Snapshot／狀態／歷史結構仍為規格設計，需涵蓋 KD-55 只作廢受影響項目且 Task 重回 `IN_PROGRESS`。
 - **快照結構與更正**：Snapshot 必須保存建立時需求；KD-55 的「不要」重新查核是明確更正例外，需確保結果、照片與狀態不變且有可追溯紀錄。欄位採明確欄位或關聯子表為**規格設計（非負責人裁定）**，實作前確認不破壞歷史追溯。
 - **專案項目修改範圍**：KD-55 只影響同專案使用該項次的任務；若跨 Plan，必須確保查全所有關聯，而不是只查目前頁面或目前 Plan。
 - **取消與完成判定**：未派出的 `DRAFT` Task 可刪除、不可取消；派出後未完成 Task 可取消及恢復，完成 Task 不可取消。恢復時若標準變更，改用目前標準並將被修改項目的舊結果標示待重查；此行為依裁定 5970733042。恢復沿用取消權限、不要求恢復原因為規格設計。草稿 Task 阻止 Plan 完成且不算已取消；零 Task 維持 `DRAFT`，全取消且至少一筆為 `CANCELLED`，有完成且其餘取消為 `COMPLETED`。取消封存後依當前 Task 重算 Plan。
-- **報告與 Evidence 範圍**：KD-55 對作廢資料保存與已發出報告的要求，不等於 G-05／G-06／G-07 已裁定；不可在本規格自行補足 Evidence 刪除或 Report 狀態政策。
+- **報告與 Evidence 範圍**：KD-55 對作廢資料保存與已發出報告的要求，不等於 Report 狀態與快照（G-06／G-07）已裁定；不可在本規格自行補足 Evidence 刪除（依 KD-62）或 Report 狀態政策。
 - **共用檔案競爭**：Plan／Task models、router 註冊、權限表及 migration 都可能與其他 P4 工作重疊；開 task 時需依最新 main 及 issue 狀態確認，不以本草稿推定可同波。
 
 ## 驗證（Proof）
@@ -76,7 +76,7 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 
 ## 考慮過但沒採用的做法
 
-- **依 interval 自動切分任務**：MVP 已由 KD-36／G-01 定為不要求，任務由內業依專案項目建立。
+- **依 interval 自動切分任務**：MVP 已由 KD-36 定為不要求，任務由內業依專案項目建立。
 - **以目前專案／範本資料即時組裝舊任務內容**：違反 PR-04 的任務需求快照；每個 Task 必須保有建立當時的 Snapshot。
 - **直接覆寫已建立任務的 Snapshot**：KD-55 只允許「不要重新查核」時更正任務文字，並保留結果、照片與狀態；此例外需留下操作者、時間與內容紀錄。
 - **已完成 Task 重新開啟**：KD-56 不允許重新開啟已完成 Task。KD-55 標準變更是明確的系統例外：受影響的已完成 Task 自動回到 `IN_PROGRESS`，只使相關項目的結果／照片作廢以重新查核；不提供一般人工重開 Task 的端點。此規則依負責人補充裁定 5970063986，並已反映於合併的 `state-machines` SM-Q03。

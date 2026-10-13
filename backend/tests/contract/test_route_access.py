@@ -386,6 +386,20 @@ def test_issue_290_my_projects_route_requires_login() -> None:
     assert declaration.level is AccessLevel.LOGIN_REQUIRED
 
 
+def test_issue_559_company_roles_route_requires_login() -> None:
+    app = create_app()
+    declarations = {
+        (info.method, info.path): info.declaration
+        for info in iter_route_access(app)
+        if info.path.startswith("/api/v1/project-company-roles")
+    }
+
+    assert set(declarations) == {("GET", "/api/v1/project-company-roles")}
+    declaration = declarations[("GET", "/api/v1/project-company-roles")]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.LOGIN_REQUIRED
+
+
 def test_issue_416_field_routes_declare_their_access_contract() -> None:
     app = create_app()
     routes = {

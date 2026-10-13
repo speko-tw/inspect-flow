@@ -136,12 +136,14 @@ function managementFetch({
   userRows = [builtInUser, regularUser],
   companyRows = [company],
   memberProjectIds = [],
+  viewerPermissionCodes = ['project_member.manage', 'inspection_plan.read'],
   onCreate,
   failAdminAction = false,
 }: {
   userRows?: User[]
   companyRows?: Company[]
   memberProjectIds?: string[]
+  viewerPermissionCodes?: string[]
   onCreate?: (body: Record<string, unknown>) => CreatedUser
   failAdminAction?: boolean
 } = {}) {
@@ -173,6 +175,7 @@ function managementFetch({
             id: projectId,
             project_code: 'DEMO-001',
             name: '示範工程',
+            company_role: 'contractor',
           },
           member_count: 0,
           inspection_item_count: 0,
@@ -190,10 +193,7 @@ function managementFetch({
           primary_step: null,
           task_counts_visible: false,
           draft_tasks_missing_assignee: 0,
-          viewer_permission_codes: [
-            'project_member.manage',
-            'inspection_plan.read',
-          ],
+          viewer_permission_codes: viewerPermissionCodes,
         })
       }
       if (parsed.pathname === '/api/v1/me/projects' && method === 'GET') {
@@ -1259,6 +1259,16 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByRole('region', { name: '範本操作' }),
     ).toBeInTheDocument()
+    expect(await screen.findByText('DEMO-001｜示範工程')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
+    expect(
+      screen.queryByRole('link', {
+        name: '返回查核項目',
+      }),
+    ).not.toBeInTheDocument()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
     })
@@ -1285,6 +1295,101 @@ describe('admin user and company pages', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: '套用範本到專案' }),
     ).toBeInTheDocument()
+  })
+
+  it('現場-only 成員開套用頁時會導回權限落點', async () => {
+    const fetchMock = managementFetch({
+      memberProjectIds: ['project-demo-1'],
+      viewerPermissionCodes: ['inspection_task.inspect'],
+    })
+    const signedInUser = {
+      ...currentUser,
+      is_admin: false,
+      has_office_access: false,
+      has_field_access: true,
+      has_template_access: false,
+    }
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/admin/projects/project-demo-1/inspection-items/templates',
+        ]}
+      >
+        <CurrentUserProvider value={{ user: signedInUser, clear: vi.fn() }}>
+          <Routes>
+            <Route element={<AdminPage />} path="/admin/*" />
+          </Routes>
+          <TestNavigation />
+        </CurrentUserProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/field'),
+    )
+    expect(
+      screen.queryByRole('region', { name: '範本操作' }),
+    ).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(true)
+  })
+
+  it('opens template bypass for a non-member manager', async () => {
+    managementFetch()
+    renderAdmin(
+      '/admin/projects/project-demo-1/inspection-items/templates',
+      false,
+      { has_office_access: false, has_field_access: false },
+    )
+
+    expect(await screen.findByText('DEMO-001｜示範工程')).toBeVisible()
+    expect(screen.getByRole('link', { name: '返回範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
+  })
+
+  it('blocks field-only manager bypass for project members', async () => {
+    const fetchMock = managementFetch({
+      memberProjectIds: ['project-demo-1'],
+      viewerPermissionCodes: ['inspection_task.inspect'],
+    })
+    const signedInUser = {
+      ...currentUser,
+      is_admin: false,
+      has_office_access: false,
+      has_field_access: true,
+      has_template_access: true,
+    }
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/admin/projects/project-demo-1/inspection-items/templates',
+        ]}
+      >
+        <CurrentUserProvider value={{ user: signedInUser, clear: vi.fn() }}>
+          <Routes>
+            <Route element={<AdminPage />} path="/admin/*" />
+          </Routes>
+          <TestNavigation />
+        </CurrentUserProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/field'),
+    )
+    expect(
+      screen.queryByRole('region', { name: '範本操作' }),
+    ).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith('/workflow-summary'),
+      ),
+    ).toBe(true)
   })
 
   it('opens template apply route for an office member', async () => {
@@ -1443,6 +1548,7 @@ describe('admin user and company pages', () => {
             id: 'project-1',
             project_code: 'DEMO-001',
             name: '示範工程',
+            company_role: 'contractor',
           },
           member_count: 0,
           inspection_item_count: 1,
