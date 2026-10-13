@@ -60,8 +60,8 @@ def list_my_projects(
     role_names_by_member: dict[UUID, list[str]] = defaultdict(list)
     if rows:
         member_ids = [member_id for _, member_id in rows]
-        # DOM-R25：同一請求一次載入所有成員的角色，避免專案數增加時
-        # 逐筆查詢造成 N+1；同名角色仍依 Role.id 穩定排序。
+        # 一次載入所有成員的角色，避免專案數增加時逐筆查詢造成 N+1
+        # （#529）。
         role_rows = db.execute(
             select(ProjectMemberRole.project_member_id, Role.name)
             .join(Role, ProjectMemberRole.role_id == Role.id)
