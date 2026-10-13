@@ -1,12 +1,9 @@
-import type { TemplateCategory, TemplateSystem } from '../templates/api'
 import {
   HttpError,
   httpErrorMessage,
   listAllPages,
   request as httpRequest,
 } from '../../http'
-
-export type { TemplateCategory, TemplateSystem } from '../templates/api'
 
 export class ProjectTemplatesApiError extends HttpError {
   constructor(status: number, code?: string, details?: unknown) {
@@ -41,30 +38,8 @@ export interface AppliedItem {
   applied_at: string
 }
 
-export interface ProjectInspectionItem extends AppliedItem {
-  sequence: number
-  title: string
-  instruction: string
-}
-
-export function listTemplateCategories(): Promise<TemplateCategory[]> {
-  return allPages('/template-categories')
-}
-
-export function listTemplateSystems(
-  categoryId: string,
-): Promise<TemplateSystem[]> {
-  return allPages(`/template-categories/${categoryId}/systems`)
-}
-
 export function listAllProjects(): Promise<ProjectSummary[]> {
   return allPages('/projects')
-}
-
-export function listProjectInspectionItems(
-  projectId: string,
-): Promise<ProjectInspectionItem[]> {
-  return allPages(`/projects/${projectId}/inspection-items`)
 }
 
 export function applyTemplate(

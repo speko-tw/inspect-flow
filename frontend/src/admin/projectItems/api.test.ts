@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InspectionPoint } from '../templates/api'
 import { HttpError, request } from '../../http'
 import { mapFieldErrors } from '../../ui/fieldErrors'
-import { projectItemApi, serializeProjectItemPoints } from './api'
+import {
+  listProjectItems,
+  projectItemApi,
+  serializeProjectItemPoints,
+} from './api'
 import boundUnitFixture from './fixtures/project-patch-bound-unit.json'
 import structureFixture from './fixtures/project-patch-structure.json'
 import structureLockedFixture from './fixtures/project-patch-structure-locked.json'
@@ -90,6 +94,36 @@ const task = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('projectItemApi', () => {
+  it('loads every page of project items from the shared endpoint', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ items: [item], next_cursor: 'next-page' }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [{ ...item, id: 'item-2' }],
+          next_cursor: null,
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(listProjectItems('project-1')).resolves.toEqual([
+      item,
+      { ...item, id: 'item-2' },
+    ])
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-1/inspection-items?limit=100',
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-1/inspection-items?limit=100&cursor=next-page',
+      expect.any(Object),
+    )
+  })
+
   it('serializes the shared numeric interval structure fixture', () => {
     const points = structuredClone(
       structureFixture.inspection_points,

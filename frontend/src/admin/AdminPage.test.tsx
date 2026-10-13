@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { StrictMode } from 'react'
 import {
   Link,
   MemoryRouter,
@@ -95,9 +96,10 @@ function renderAdmin(
       'has_office_access' | 'has_field_access' | 'has_template_access'
     >
   > = {},
+  strictMode = false,
 ) {
   const signedInUser = { ...currentUser, is_admin: isAdmin, ...access }
-  return render(
+  const page = (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
@@ -114,8 +116,9 @@ function renderAdmin(
           path="/admin/*"
         />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+  return render(strictMode ? <StrictMode>{page}</StrictMode> : page)
 }
 
 function TestNavigation() {
@@ -218,6 +221,7 @@ function managementFetch({
               id: 'project-demo-1',
               project_code: 'DEMO-001',
               name: '示範工程',
+              warnings: [],
             },
           ],
           next_cursor: null,
@@ -390,6 +394,39 @@ afterEach(() => {
 })
 
 describe('admin user and company pages', () => {
+  it('starts one user list request when StrictMode replays the mount', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin('/admin/users', true, {}, true)
+
+    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.filter(([input, init]) => {
+        const url = new URL(String(input), 'http://testserver')
+        return (
+          url.pathname === '/api/v1/users' &&
+          (init?.method ?? 'GET') === 'GET' &&
+          url.searchParams.get('limit') === '50'
+        )
+      }),
+    ).toHaveLength(1)
+  })
+
+  it('cancels the queued list request when StrictMode mounts are cleaned up', async () => {
+    const fetchMock = managementFetch()
+    const rendered = renderAdmin('/admin/users', true, {}, true)
+    rendered.unmount()
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+
+    expect(
+      fetchMock.mock.calls.filter(([input, init]) => {
+        const url = new URL(String(input), 'http://testserver')
+        return (
+          url.pathname === '/api/v1/users' && (init?.method ?? 'GET') === 'GET'
+        )
+      }),
+    ).toHaveLength(0)
+  })
+
   it('lets Admin edit templates from the management page', async () => {
     managementFetch()
     renderAdmin('/admin/templates')
@@ -499,21 +536,6 @@ describe('admin user and company pages', () => {
     ).toBe(true)
   })
 
-  it('reloads users when searching the same query repeatedly', async () => {
-    managementFetch()
-    renderAdmin()
-
-    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
-    const search = screen.getByRole('button', { name: '搜尋' })
-    fireEvent.click(search)
-    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
-    expect(search).toBeEnabled()
-
-    fireEvent.click(search)
-    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
-    expect(search).toBeEnabled()
-  })
-
   it('searches companies and loads the next cursor page', async () => {
     const rows = Array.from({ length: 51 }, (_, index) => ({
       id: `company-${index}`,
@@ -541,19 +563,75 @@ describe('admin user and company pages', () => {
     expect(await screen.findByText('目標公司50')).toBeInTheDocument()
   })
 
-  it('reloads companies when searching the same query repeatedly', async () => {
-    managementFetch()
-    renderAdmin('/admin/companies')
+  it.each([
+    {
+      label: '使用者',
+      path: '/admin/users',
+      searchLabel: '搜尋使用者',
+      query: 'anna',
+      result: 'anna.deng',
+      endpoint: '/api/v1/users',
+    },
+    {
+      label: '公司',
+      path: '/admin/companies',
+      searchLabel: '搜尋公司',
+      query: '示範',
+      result: '示範公司',
+      endpoint: '/api/v1/companies',
+    },
+    {
+      label: '專案',
+      path: '/admin/projects',
+      searchLabel: '搜尋專案',
+      query: '示範工程',
+      result: '示範工程',
+      endpoint: '/api/v1/projects',
+    },
+  ])(
+    'searches $label once per submit, including repeated queries',
+    async ({ path, searchLabel, query, result, endpoint }) => {
+      const fetchMock = managementFetch()
+      renderAdmin(path)
 
-    expect(await screen.findByText('示範公司')).toBeInTheDocument()
-    const search = screen.getByRole('button', { name: '搜尋' })
-    fireEvent.click(search)
-    expect(await screen.findByText('示範公司')).toBeInTheDocument()
-    expect(search).toBeEnabled()
+      expect(await screen.findByText(result)).toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText(searchLabel), {
+        target: { value: query },
+      })
+      const search = screen.getByRole('button', { name: '搜尋' })
+      const requestCount = () =>
+        fetchMock.mock.calls.filter(([input]) => {
+          const url = new URL(String(input), 'http://testserver')
+          return (
+            url.pathname === endpoint && url.searchParams.get('q') === query
+          )
+        }).length
 
-    fireEvent.click(search)
-    expect(await screen.findByText('示範公司')).toBeInTheDocument()
-    expect(search).toBeEnabled()
+      fireEvent.click(search)
+      await waitFor(() => expect(requestCount()).toBe(1))
+      await waitFor(() => expect(search).toBeEnabled())
+      fireEvent.click(search)
+      await waitFor(() => expect(requestCount()).toBe(2))
+    },
+  )
+
+  it('does not reload company choices when the user list is searched', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin()
+    expect(await screen.findByText('anna.deng')).toBeInTheDocument()
+
+    const companyRequests = () =>
+      fetchMock.mock.calls.filter(([input]) => {
+        const url = new URL(String(input), 'http://testserver')
+        return url.pathname === '/api/v1/companies'
+      }).length
+    expect(companyRequests()).toBe(1)
+
+    fireEvent.change(screen.getByLabelText('搜尋使用者'), {
+      target: { value: 'anna' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await waitFor(() => expect(companyRequests()).toBe(1))
   })
 
   it('shows and clears a temporary password', async () => {
@@ -566,7 +644,7 @@ describe('admin user and company pages', () => {
       name_zh: String(body.name_zh),
       temporary_password: password,
     }))
-    managementFetch({
+    const fetchMock = managementFetch({
       onCreate: create,
     })
     renderAdmin()
@@ -585,6 +663,13 @@ describe('admin user and company pages', () => {
 
     const passwordHeading = await screen.findByRole('heading', {
       name: '使用者已新增',
+    })
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) =>
+          String(input).includes('/api/v1/companies'),
+        ),
+      ).toHaveLength(2)
     })
     // 聚焦在 useEffect 裡；標題插入 DOM 後才聚焦，所以要等。
     await waitFor(() => expect(passwordHeading).toHaveFocus())
