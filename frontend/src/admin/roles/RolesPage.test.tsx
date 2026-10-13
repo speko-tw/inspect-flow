@@ -484,6 +484,7 @@ describe('admin role management page', () => {
     expect(alert).toHaveTextContent(
       '找不到這個角色，可能已被刪除，請重新整理後再試。',
     )
+    // 錯誤狀態先 render，聚焦在 effect 執行後才完成。
     await waitFor(() => expect(alert).toHaveFocus())
     expect(
       screen.getByRole('heading', { name: '新增角色' }),
