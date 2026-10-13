@@ -216,11 +216,13 @@ describe('ProjectItemChangePage', () => {
       fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
       const dialog = screen.getByRole('dialog')
       expect(dialog).not.toHaveClass('confirm-box-modal')
-      expect(
-        within(dialog).getByRole('heading', {
-          name: '儲存前確認是否重新查核',
-        }),
-      ).toHaveFocus()
+      await waitFor(() =>
+        expect(
+          within(dialog).getByRole('heading', {
+            name: '儲存前確認是否重新查核',
+          }),
+        ).toHaveFocus(),
+      )
       expect(scrollIntoView).toHaveBeenCalledWith({ block: 'end' })
       expect(
         within(dialog).getByRole('button', { name: '確認儲存' }),
@@ -453,7 +455,7 @@ describe('ProjectItemChangePage', () => {
     expect(screen.queryByRole('radio', { name: reinspectChoice })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
     const pointTitles = await screen.findAllByLabelText('項次標題 *')
-    expect(pointTitles[1]).toHaveFocus()
+    await waitFor(() => expect(pointTitles[1]).toHaveFocus())
     fireEvent.change(pointTitles[1], {
       target: { value: '新增點位' },
     })
@@ -639,7 +641,7 @@ describe('ProjectItemChangePage', () => {
     fireEvent.submit(form)
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toBeInTheDocument()
-    expect(dialog.querySelector('h2')).toHaveFocus()
+    await waitFor(() => expect(dialog.querySelector('h2')).toHaveFocus())
     fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
     expect(api.update).not.toHaveBeenCalled()
   })
@@ -712,9 +714,11 @@ describe('ProjectItemChangePage', () => {
     expect(leaveDialog).toHaveTextContent(
       '離開後，已填寫但尚未儲存的內容會消失',
     )
-    expect(
-      within(leaveDialog).getByRole('button', { name: '保留編輯' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(leaveDialog).getByRole('button', { name: '保留編輯' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(
       within(leaveDialog).getByRole('button', { name: '保留編輯' }),
     )

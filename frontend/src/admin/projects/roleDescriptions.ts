@@ -24,30 +24,28 @@ const PERMISSION_DESCRIPTIONS: Array<[code: string, description: string]> = [
 ]
 
 // Role 只能包含 project-scope 權限碼；module 權限不在角色摘要內。
-const PHRASES: Array<[code: string, phrase: string | null]> = [
-  ['project_member.manage', null],
-  ['project.update', null],
-  ['project.read', null],
-  ['project_inspection_item.edit', null],
-  ['project_inspection_item.read', null],
-  ['project_zone.read', null],
-  ['project_zone.manage', null],
-  ['inspection_plan.read', null],
-  ['inspection_plan.create', null],
-  ['inspection_plan.manage', null],
-  ['inspection_plan.archive', null],
-  ['inspection_plan.unarchive', null],
-  ['inspection_task.read', null],
-  ['inspection_task.create', null],
-  ['inspection_task.manage', null],
-  ['inspection_task.dispatch', null],
-  ['inspection_task.assign', null],
-  ['inspection_task.inspect', null],
-  ['inspection_task.delete_draft', null],
-  ['inspection_task.cancel', null],
-]
-
-export const ROLE_SUMMARY_PHRASE_CODES = new Set(PHRASES.map(([code]) => code))
+export const ROLE_SUMMARY_PHRASE_CODES = new Set([
+  'project_member.manage',
+  'project.update',
+  'project.read',
+  'project_inspection_item.edit',
+  'project_inspection_item.read',
+  'project_zone.read',
+  'project_zone.manage',
+  'inspection_plan.read',
+  'inspection_plan.create',
+  'inspection_plan.manage',
+  'inspection_plan.archive',
+  'inspection_plan.unarchive',
+  'inspection_task.read',
+  'inspection_task.create',
+  'inspection_task.manage',
+  'inspection_task.dispatch',
+  'inspection_task.assign',
+  'inspection_task.inspect',
+  'inspection_task.delete_draft',
+  'inspection_task.cancel',
+])
 
 export const NO_PERMISSION_TEXT = '尚未設定任何權限'
 export const UNKNOWN_PERMISSION_TEXT = '可使用部分功能'
@@ -115,10 +113,6 @@ export function summarizeRole(
     'inspection_task.create',
     'inspection_task.dispatch',
   ].every((code) => owned.has(code))
-  const mergedPhrases = new Map(PHRASES)
-  if (planningAndDispatch) {
-    mergedPhrases.set('inspection_plan.create', '規劃與派出任務')
-  }
   const summarizedCodes = new Set<string>()
   if (planningAndDispatch) {
     summarizedCodes.add('inspection_task.create')
@@ -127,7 +121,11 @@ export function summarizeRole(
 
   const phrases = details.flatMap(({ code, label }) => {
     if (summarizedCodes.has(code)) return []
-    return [mergedPhrases.get(code) ?? label]
+    return [
+      planningAndDispatch && code === 'inspection_plan.create'
+        ? '規劃與派出任務'
+        : label,
+    ]
   })
   const summary = formatRoleLabels(phrases.slice(0, 3))
   if (details.length > 3) return `${summary}等共 ${details.length} 項`

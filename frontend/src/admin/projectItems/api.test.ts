@@ -217,6 +217,56 @@ describe('projectItemApi', () => {
     )
   })
 
+  it('serializes a persisted binding after its server ID is localized', () => {
+    const point: InspectionPoint = {
+      id: 'point-1',
+      sequence: 1,
+      title: '厚度',
+      instruction: '',
+      text_standard: null,
+      numeric_standard: {
+        value: '2.5',
+        condition: '=',
+        unit: 'mm',
+        tolerance: null,
+        range_form: null,
+        lower_bound: null,
+        upper_bound: null,
+        measurement_field_id: 'field-1',
+        measurement_field_client_key: 'field-1',
+      },
+      measurement_fields: [
+        {
+          id: 'field-1',
+          client_id: 'field-1',
+          clientKey: 'field-1',
+          name: '厚度',
+          field_type: 'number',
+          unit: 'mm',
+        },
+      ],
+      evidence_requirements: [{ min_count: 1 }],
+    }
+    const templateEditorShape = {
+      ...point,
+      numeric_standard: {
+        ...point.numeric_standard!,
+        measurement_field_id: undefined,
+        measurement_field_client_id: undefined,
+      },
+    }
+
+    expect(serializeProjectItemPoints([point])).toEqual(
+      serializeProjectItemPoints([templateEditorShape]),
+    )
+    expect(
+      serializeProjectItemPoints([point])[0].numeric_standard,
+    ).toMatchObject({
+      measurement_field_client_id: 'field-1',
+      unit: 'mm',
+    })
+  })
+
   it('reads every backend cursor page and maps Task snapshots', async () => {
     const fetchMock = vi
       .fn()

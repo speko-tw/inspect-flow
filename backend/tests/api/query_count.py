@@ -21,5 +21,9 @@ def select_count(client, url: str, **params) -> tuple[int, int]:
         event.remove(engine, "before_cursor_execute", record)
     assert response.status_code == 200, response.text
     body = response.json()
-    rows = body.get("items", body.get("tasks"))
+    if isinstance(body, list):
+        # `/me/projects` 等端點直接回傳陣列，測試也要核對實際項目數。
+        rows = body
+    else:
+        rows = body.get("items", body.get("tasks"))
     return len(statements), 1 if rows is None else len(rows)

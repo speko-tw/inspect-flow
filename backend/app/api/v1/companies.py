@@ -190,8 +190,6 @@ def change_company_status(
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
     except LastActiveAdminRemovalError as exc:
         raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
-    except InvalidCompanyFieldError as exc:
-        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     except IntegrityError as exc:
         code = integrity_error_code(exc)
         if code is None:

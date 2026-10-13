@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { HttpError, request } from '../../http'
-import { mapFieldErrors } from '../../ui/fieldErrors'
+import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import payloadFixture from './fixtures/template-item-payload.json'
 import templateWriteErrorFixture from './fixtures/template-write-field-error.json'
 import type { TemplateItem } from './api'
-import { forWire, templateFieldErrorBindings } from './templateEditorUtils'
+import {
+  blankPoint,
+  forWire,
+  localizeInspectionPoints,
+  localizeTemplateItem,
+  TEMPLATE_FIELD_ERROR_MESSAGES,
+  templateFieldErrorBindings,
+} from './templateEditorUtils'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -23,6 +30,85 @@ describe('forWire', () => {
     })
 
     expect(JSON.parse(JSON.stringify(forWire(draft)))).toEqual(payloadFixture)
+  })
+})
+
+describe('editor localization helpers', () => {
+  const item: TemplateItem = {
+    system_id: 'system-1',
+    sequence: 1,
+    title: '高度',
+    instruction: '',
+    inspection_points: [
+      {
+        id: 'point-1',
+        sequence: 1,
+        title: '量測高度',
+        instruction: '',
+        text_standard: null,
+        numeric_standard: {
+          value: '110',
+          condition: '>=',
+          unit: 'cm',
+          tolerance: null,
+          measurement_field_id: 'field-1',
+        },
+        measurement_fields: [
+          {
+            id: 'field-1',
+            name: '高度',
+            field_type: 'number',
+            unit: null,
+          },
+        ],
+        evidence_requirements: [{ min_count: 1 }],
+      },
+    ],
+  }
+
+  it('turns persisted bindings into client keys and clears server binding IDs', () => {
+    const [point] = localizeInspectionPoints(item.inspection_points, {
+      stablePointKeys: true,
+    })
+
+    expect(point.clientKey).toBe('point-1')
+    expect(point.measurement_fields[0]).toMatchObject({
+      id: 'field-1',
+      client_id: 'field-1',
+      clientKey: 'field-1',
+      unit: null,
+    })
+    expect(point.numeric_standard).toMatchObject({
+      measurement_field_id: undefined,
+      measurement_field_client_id: undefined,
+      measurement_field_client_key: 'field-1',
+    })
+  })
+
+  it('fills a missing bound-field unit only for template editor data', () => {
+    const [projectPoint] = localizeInspectionPoints(item.inspection_points)
+    const templateItem = localizeTemplateItem(item)
+
+    expect(projectPoint.measurement_fields[0].unit).toBeNull()
+    expect(templateItem.inspection_points[0].measurement_fields[0].unit).toBe(
+      'cm',
+    )
+  })
+
+  it('adds stable keys to new project points only when requested', () => {
+    expect(blankPoint(1)).not.toHaveProperty('clientKey')
+    expect(blankPoint(1, { stableClientKey: true }).clientKey).toEqual(
+      expect.any(String),
+    )
+  })
+
+  it('maps the template text-unit error through the shared field formatter', () => {
+    expect(
+      fieldErrorMessage(
+        'template.text_unit_forbidden',
+        TEMPLATE_FIELD_ERROR_MESSAGES,
+      ),
+    ).toBe('文字欄位不需要單位。')
   })
 })
 

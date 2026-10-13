@@ -1,6 +1,7 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
 import json
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -34,6 +35,15 @@ from app.models import (
     TaskSnapshotPoint,
 )
 from tests.db.conftest import create_root_user_with_company
+
+_API_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def _assert_api_timestamp(value: str) -> None:
+    assert _API_TIMESTAMP.fullmatch(value) is not None
+    parsed = datetime.fromisoformat(value)
+    assert parsed.utcoffset() == timedelta(0)
+    assert parsed.microsecond == 0
 
 
 def _client(make_client, token):
@@ -1805,11 +1815,15 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
         json={"name": "刪除點位重查"},
     )
     assert plan.status_code == 201, plan.text
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(plan.json()[field])
     created_task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
         json={"item_ids": [str(world["item"].id), str(world["item_two"].id)]},
     )
     assert created_task.status_code == 201, created_task.text
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(created_task.json()[field])
     task_id = UUID(created_task.json()["id"])
     dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
     assert dispatched.status_code == 200, dispatched.text
@@ -1853,6 +1867,20 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
     )
     assert patched.status_code == 200, patched.text
     assert patched.json()["affected_tasks"][0]["action"] == "updated"
+
+    task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert task_readback.status_code == 200, task_readback.text
+    task_payload = task_readback.json()
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(task_payload[field])
+    changed_item = next(
+        row
+        for row in task_payload["items"]
+        if row["id"] == str(world["item"].id)
+    )
+    assert len(changed_item["snapshots"]) == 2
+    _assert_api_timestamp(changed_item["snapshots"][0]["superseded_at"])
+    assert changed_item["snapshots"][1]["superseded_at"] is None
 
     db_session.expire_all()
     changed_snapshots = db_session.scalars(
@@ -3897,3 +3925,243 @@ def test_cancelled_task_locks_structure_when_reinspection_is_false(
     assert locked.json()["error"]["code"] == (
         "project_inspection_item.structure_locked"
     ), locked.text
+
+
+def _items_world(db_session, make_client, name):
+    """建立含一個草稿任務的情境，供 PUT /items 測試共用。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": name},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task.status_code == 201, task.text
+    world["plan_id"] = plan.json()["id"]
+    world["task_id"] = task.json()["id"]
+    world["items_url"] = f"/api/v1/inspection-tasks/{task.json()['id']}/items"
+    return world
+
+
+def _task_state(db_session, task_id):
+    """回傳任務的項目關聯 id 與稽核筆數，用來斷言失敗不留痕跡。"""
+    db_session.expire_all()
+    associations = db_session.scalars(
+        select(TaskInspectionItem.id)
+        .where(TaskInspectionItem.task_id == UUID(task_id))
+        .order_by(TaskInspectionItem.id)
+    ).all()
+    audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.event_type == "inspection_task.items_updated")
+    )
+    return list(associations), audits
+
+
+def test_draft_task_items_api_rebuilds_snapshots_and_audits(
+    db_session, make_client
+):
+    world = _items_world(db_session, make_client, "草稿查核項目修改")
+    admin = world["admin"]
+    task_id = world["task_id"]
+    url = world["items_url"]
+    old_association = db_session.scalar(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.task_id == UUID(task_id)
+        )
+    )
+    assert old_association is not None
+    old_association_id = old_association.id
+    task_before = db_session.get(InspectionTask, UUID(task_id))
+    assert task_before is not None
+    # 倒退 updated_at，確認 PUT 會顯式更新它，而不是靠時鐘剛好不同。
+    updated_at_before = task_before.updated_at - timedelta(days=1)
+    task_before.updated_at = updated_at_before
+    db_session.commit()
+    updated = admin.put(
+        url,
+        json={"item_ids": [str(world["item_two"].id), str(world["item"].id)]},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["id"] == task_id
+    assert updated.json()["status"] == "DRAFT"
+    assert {item["id"] for item in updated.json()["items"]} == {
+        str(world["item_two"].id),
+        str(world["item"].id),
+    }
+    assert {
+        item["current_snapshot"]["title"] for item in updated.json()["items"]
+    } == {"鋼筋檢查", "表面檢查"}
+
+    db_session.expire_all()
+    # 舊關聯與其 Snapshot 一併清除，不留下過期需求。
+    assert db_session.get(TaskInspectionItem, old_association_id) is None
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(TaskRequirementSnapshot)
+            .where(
+                TaskRequirementSnapshot.task_inspection_item_id
+                == old_association_id
+            )
+        )
+        == 0
+    )
+    task_after = db_session.get(InspectionTask, UUID(task_id))
+    assert task_after is not None
+    assert task_after.updated_at > updated_at_before
+
+    audit = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "inspection_task.items_updated",
+            AuditLog.entity_id == UUID(task_id),
+        )
+    )
+    assert audit is not None
+    assert audit.before["items"] == {str(world["item"].id): "表面檢查"}
+    assert audit.after["items"] == {
+        str(world["item_two"].id): "鋼筋檢查",
+        str(world["item"].id): "表面檢查",
+    }
+
+
+def test_draft_task_items_api_same_set_is_noop(db_session, make_client):
+    world = _items_world(db_session, make_client, "同集合不重建")
+    admin = world["admin"]
+    before = _task_state(db_session, world["task_id"])
+
+    same = admin.put(
+        world["items_url"], json={"item_ids": [str(world["item"].id)]}
+    )
+
+    assert same.status_code == 200, same.text
+    assert _task_state(db_session, world["task_id"]) == before
+    assert before[1] == 0
+
+
+def test_draft_task_items_api_rejects_invalid_items_without_changes(
+    db_session, make_client
+):
+    world = _items_world(db_session, make_client, "壞項目拒絕")
+    admin = world["admin"]
+    project = world["project"]
+    url = world["items_url"]
+    no_points = ProjectInspectionItem(
+        id=uuid7(),
+        project_id=project.id,
+        sequence=3,
+        title="無點位項目",
+        instruction="示範",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    foreign_project = Project(
+        project_code="PLAN-API-ITEMS-FOREIGN",
+        name="另一專案",
+        client_name="示範業主",
+        site_location="示範地點",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add_all([no_points, foreign_project])
+    db_session.flush()
+    foreign_item = ProjectInspectionItem(
+        id=uuid7(),
+        project_id=foreign_project.id,
+        sequence=1,
+        title="跨專案項目",
+        instruction="示範",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(foreign_item)
+    db_session.add(
+        ProjectInspectionPoint(
+            project_inspection_item_id=foreign_item.id,
+            sequence=1,
+            title="檢查點",
+            instruction="示範",
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
+        )
+    )
+    db_session.commit()
+    before = _task_state(db_session, world["task_id"])
+
+    required = "inspection_task.items_required"
+    invalid_format = "request.validation_failed"
+    invalid_item = "inspection_task.invalid_project_item"
+    no_points_code = "inspection_task.item_without_points"
+    cases = [
+        ([], required),
+        ([str(world["item_two"].id)] * 2, invalid_format),
+        ([str(uuid4()) for _ in range(201)], invalid_format),
+        ([str(uuid4())], invalid_item),
+        ([str(foreign_item.id)], invalid_item),
+        ([str(world["item_two"].id), str(no_points.id)], no_points_code),
+    ]
+    for item_ids, code in cases:
+        response = admin.put(url, json={"item_ids": item_ids})
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == code, item_ids
+        assert _task_state(db_session, world["task_id"]) == before
+
+    no_manage = world["reader"].put(
+        url, json={"item_ids": [str(world["item_two"].id)]}
+    )
+    assert no_manage.status_code == 403
+    assert _task_state(db_session, world["task_id"]) == before
+
+
+def test_draft_task_items_api_checks_state_before_validating_items(
+    db_session, make_client
+):
+    world = _items_world(db_session, make_client, "狀態優先")
+    admin = world["admin"]
+    url = world["items_url"]
+    bad_bodies = (
+        {"item_ids": []},
+        {"item_ids": [str(uuid4())]},
+        {"item_ids": [str(world["item_two"].id)] * 2},
+    )
+
+    dispatched = admin.post(
+        f"/api/v1/inspection-tasks/{world['task_id']}:dispatch"
+    )
+    assert dispatched.status_code == 200, dispatched.text
+    before = _task_state(db_session, world["task_id"])
+    for body in bad_bodies:
+        response = admin.put(url, json=body)
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == (
+            "inspection_task.invalid_transition"
+        )
+    good = admin.put(url, json={"item_ids": [str(world["item_two"].id)]})
+    assert good.status_code == 409, good.text
+    assert _task_state(db_session, world["task_id"]) == before
+
+    draft = admin.post(
+        f"/api/v1/inspection-plans/{world['plan_id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert draft.status_code == 201, draft.text
+    draft_url = f"/api/v1/inspection-tasks/{draft.json()['id']}/items"
+    archived = admin.post(
+        f"/api/v1/inspection-plans/{world['plan_id']}:archive"
+    )
+    assert archived.status_code == 200, archived.text
+    draft_before = _task_state(db_session, draft.json()["id"])
+    for body in (*bad_bodies, {"item_ids": [str(world["item_two"].id)]}):
+        response = admin.put(draft_url, json=body)
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "inspection_plan.archived"
+    assert _task_state(db_session, draft.json()["id"]) == draft_before

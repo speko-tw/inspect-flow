@@ -451,9 +451,13 @@ describe('planning HTTP client contract', () => {
 
     const plans = await planningClient.listPlans(PROJECT)
     const task = await planningClient.getTask('task-1')
+    const updatedTask = await planningClient.updateTaskItems('task-1', {
+      item_ids: ['item-2'],
+    })
 
     expect(plans).toEqual({ items: [], next_cursor: 'cursor-2' })
     expect(task.items[0].current_snapshot?.title).toBe('外牆檢查')
+    expect(updatedTask.id).toBe('task-1')
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining(
@@ -465,6 +469,15 @@ describe('planning HTTP client contract', () => {
       2,
       '/api/v1/inspection-tasks/task-1',
       expect.objectContaining({ credentials: 'same-origin' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/inspection-tasks/task-1/items',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ item_ids: ['item-2'] }),
+        credentials: 'same-origin',
+      }),
     )
   })
 
