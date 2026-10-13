@@ -110,12 +110,6 @@
   margin-top: 0.2rem;
 }
 
-.member-role-text {
-  display: grid;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
 .member-role-name {
   font-weight: 600;
 }
