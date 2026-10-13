@@ -1107,6 +1107,95 @@ def test_project_use_revoke_impact_ignores_other_permission_codes(
     assert impact.projects_without_manager == ()
 
 
+def test_project_use_revoke_impact_checks_manager_roles_per_project(
+    session, operator
+):
+    from app.services.module_permissions import permission_revoke_impact
+
+    target = create_root_user_with_company(session, "SPLIT-TARGET")
+    candidate = create_root_user_with_company(
+        session, "SPLIT-CANDIDATE"
+    )
+    project_a = Project(
+        project_code="IMPACT-SPLIT-A",
+        name="沒有其他管理者",
+        client_name="業主",
+        site_location="工地",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    project_b = Project(
+        project_code="IMPACT-SPLIT-B",
+        name="仍有其他管理者",
+        client_name="業主",
+        site_location="工地",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    member_role = Role(
+        name="跨專案一般成員",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    manager_role = Role(
+        name="跨專案管理成員",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project_member.manage")],
+    )
+    session.add_all([project_a, project_b, member_role, manager_role])
+    session.flush()
+    session.add_all(
+        [
+            ProjectMember(
+                project_id=project_a.id,
+                user_id=target.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+            ),
+            ProjectMember(
+                project_id=project_b.id,
+                user_id=target.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+            ),
+            ProjectMember(
+                project_id=project_a.id,
+                user_id=candidate.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+                role_assignments=[ProjectMemberRole(role_id=member_role.id)],
+            ),
+            ProjectMember(
+                project_id=project_b.id,
+                user_id=candidate.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+                role_assignments=[ProjectMemberRole(role_id=manager_role.id)],
+            ),
+            UserModulePermission(
+                user_id=target.id,
+                permission_code="project.use",
+                source="manual",
+            ),
+            UserModulePermission(
+                user_id=candidate.id,
+                permission_code="project.use",
+                source="manual",
+            ),
+        ]
+    )
+    session.flush()
+
+    impact = permission_revoke_impact(
+        session, user_id=target.id, permission_code="project.use"
+    )
+
+    assert impact.member_count == 2
+    assert set(impact.project_ids) == {project_a.id, project_b.id}
+    assert impact.projects_without_manager == (project_a.id,)
+
+
 @pytest.mark.parametrize("permission_code", ["inspection.use", "template.use"])
 def test_non_project_use_revoke_impact_is_currently_empty(
     session, operator, permission_code

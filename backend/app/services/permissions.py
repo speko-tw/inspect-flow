@@ -176,11 +176,15 @@ def project_member_management_impact(
             )
         ).all()
         members_by_project: dict[uuid.UUID, set[uuid.UUID]] = {}
-        permissions_by_member: dict[uuid.UUID, set[str]] = {}
+        permissions_by_membership: dict[
+            tuple[uuid.UUID, uuid.UUID], set[str]
+        ] = {}
         for project_id, member_id, code in rows:
             members_by_project.setdefault(project_id, set()).add(member_id)
             if code is not None:
-                permissions_by_member.setdefault(member_id, set()).add(code)
+                permissions_by_membership.setdefault(
+                    (project_id, member_id), set()
+                ).add(code)
         people = query_people_access(
             session,
             user_ids=set().union(*members_by_project.values()),
@@ -194,7 +198,9 @@ def project_member_management_impact(
                 if person.is_admin or (
                     module_permission_code in person.module_permissions
                     and project_permission_code
-                    in permissions_by_member.get(member_id, set())
+                    in permissions_by_membership.get(
+                        (project_id, member_id), set()
+                    )
                 ):
                     managed_projects.add(project_id)
                     break
