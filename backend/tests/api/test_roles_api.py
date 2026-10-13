@@ -410,7 +410,7 @@ def test_role_api_cursor_breaks_same_timestamp_ties_by_id(
 ):
     client, admin = role_admin_client
     created_at = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
-    role_ids = [UUID(int=101), UUID(int=102), UUID(int=103)]
+    role_ids = [UUID(int=100), UUID(int=200), UUID(int=300)]
     db_session.add_all(
         Role(
             id=role_id,
@@ -424,21 +424,73 @@ def test_role_api_cursor_breaks_same_timestamp_ties_by_id(
     )
     db_session.commit()
 
-    seen: list[str] = []
-    cursor = None
-    while True:
-        response = client.get(
-            "/api/v1/roles",
-            params={"limit": 1, **({"cursor": cursor} if cursor else {})},
-        )
-        assert response.status_code == 200
-        page = response.json()
-        seen.extend(item["id"] for item in page["items"])
-        cursor = page["next_cursor"]
-        if cursor is None:
-            break
+    first = client.get("/api/v1/roles", params={"limit": 2})
+    assert first.status_code == 200
+    assert [UUID(item["id"]) for item in first.json()["items"]] == [
+        role_ids[0],
+        role_ids[1],
+    ]
+    cursor = first.json()["next_cursor"]
+    assert cursor == (
+        "eyJ0IjoiMjAyNi0wOS0zMFQxMjowMDowMC4wMDAwMDArMDA6MDAiLCJpZCI6"
+        "IjAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDBjOCJ9"
+    )
 
-    assert [UUID(item) for item in seen] == role_ids
+    # API-AC12：游標前插入同秒資料，不得改變下一頁起點。
+    db_session.add(
+        Role(
+            id=UUID(int=150),
+            name="Inserted before cursor",
+            created_at=created_at,
+            updated_at=created_at,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+    )
+    db_session.commit()
+
+    second = client.get("/api/v1/roles", params={"limit": 2, "cursor": cursor})
+    assert second.status_code == 200
+    assert [UUID(item["id"]) for item in second.json()["items"]] == [
+        role_ids[2]
+    ]
+    assert second.json()["next_cursor"] is None
+
+
+def test_role_api_cursor_ignores_removed_rows_before_cursor(
+    role_admin_client, db_session
+):
+    """API-AC12：移除已讀範圍之前的資料，不得改變下一頁的起點。"""
+    client, admin = role_admin_client
+    created_at = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
+    role_ids = [UUID(int=100), UUID(int=200), UUID(int=300)]
+    db_session.add_all(
+        Role(
+            id=role_id,
+            name=f"Same time {index}",
+            created_at=created_at,
+            updated_at=created_at,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        for index, role_id in enumerate(role_ids)
+    )
+    db_session.commit()
+
+    first = client.get("/api/v1/roles", params={"limit": 2})
+    assert first.status_code == 200
+    cursor = first.json()["next_cursor"]
+
+    removed = db_session.get(Role, role_ids[0])
+    db_session.delete(removed)
+    db_session.commit()
+
+    second = client.get("/api/v1/roles", params={"limit": 2, "cursor": cursor})
+    assert second.status_code == 200
+    assert [UUID(item["id"]) for item in second.json()["items"]] == [
+        role_ids[2]
+    ]
+    assert second.json()["next_cursor"] is None
 
 
 def test_unknown_integrity_error_is_not_reported_as_name_conflict(

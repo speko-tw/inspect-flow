@@ -1,10 +1,5 @@
 """Admin role-management endpoints (DOM-R55, AUT-R20)."""
 
-import base64
-import binascii
-import json
-import uuid
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -14,7 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import CursorKey
+from app.api.pagination import (
+    encode_page_cursor,
+    page_cursor_key,
+)
 from app.api.time_format import format_utc
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
@@ -125,48 +123,6 @@ def _get_role(db: Session, role_id: UUID) -> Role:
     return role
 
 
-def _check_cursor(cursor: str | None) -> CursorKey | None:
-    if cursor is None:
-        return None
-    try:
-        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
-        payload = json.loads(raw.decode("utf-8"))
-        if not isinstance(payload, dict) or set(payload) != {"t", "id"}:
-            raise ValueError("invalid cursor payload")
-        created_at = datetime.fromisoformat(payload["t"])
-        role_id = uuid.UUID(payload["id"])
-        if created_at.tzinfo is None:
-            raise ValueError("cursor timestamp must include a timezone")
-        key = CursorKey(created_at=created_at.astimezone(UTC), id=role_id)
-        if _encode_cursor(key) != cursor:
-            raise ValueError("cursor is not canonical")
-        return key
-    except (
-        binascii.Error,
-        UnicodeDecodeError,
-        json.JSONDecodeError,
-        AttributeError,
-        TypeError,
-        ValueError,
-    ) as exc:
-        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-
-
-def _encode_cursor(key: CursorKey) -> str:
-    """Keep timestamp precision in the opaque cursor sort key.
-
-    The shared pagination helper truncates timestamps to seconds, which
-    can skip or repeat roles created within the same second.
-    """
-    payload = {
-        "t": key.created_at.astimezone(UTC).isoformat(timespec="microseconds"),
-        "id": str(key.id),
-    }
-    raw = json.dumps(payload, separators=(",", ":"))
-    encoded = base64.urlsafe_b64encode(raw.encode("utf-8"))
-    return encoded.decode("ascii").rstrip("=")
-
-
 def _translate_integrity_error(exc: IntegrityError) -> APIError | None:
     """Map role uniqueness conflicts to the role-specific 409 code."""
     diagnostic = getattr(exc.orig, "diag", None)
@@ -187,16 +143,16 @@ def list_roles(
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
 ) -> RoleListResponse:
-    """List roles in stable creation-time/UUID order (API-R08)."""
-    cursor_key = _check_cursor(cursor)
+    """依 API-R08 按建立時間與 UUID 穩定排序並回傳角色分頁。"""
+    cursor_key = page_cursor_key(cursor)
     statement = select(Role).options(selectinload(Role.permission_codes))
     if cursor_key is not None:
         statement = statement.where(
             or_(
-                Role.created_at > cursor_key.created_at,
+                Role.created_at > cursor_key[0],
                 and_(
-                    Role.created_at == cursor_key.created_at,
-                    Role.id > cursor_key.id,
+                    Role.created_at == cursor_key[0],
+                    Role.id > cursor_key[1],
                 ),
             )
         )
@@ -210,9 +166,7 @@ def list_roles(
     next_cursor = None
     if has_more and page:
         last = page[-1]
-        next_cursor = _encode_cursor(
-            CursorKey(created_at=last.created_at, id=last.id)
-        )
+        next_cursor = encode_page_cursor(last.created_at, last.id)
     usages = role_usages(db, [role.id for role in page])
     return RoleListResponse(
         items=[_role_response(role, usages[role.id]) for role in page],

@@ -10,6 +10,7 @@ export type TaskStatus =
 /** 專案項目及點位的目前資料；更新時保留既有識別。 */
 export interface ProjectItemData {
   id: string
+  project_id: string
   sequence: number
   title: string
   instruction: string

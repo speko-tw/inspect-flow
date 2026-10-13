@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -7,6 +14,7 @@ import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
 import { useSubmitGuard } from '../ui/submitGuard'
+import { CursorListSearch } from './CursorListSearch'
 import {
   linkUserCompany,
   listCompanies,
@@ -18,6 +26,7 @@ import {
   type Company,
   type User,
 } from './api'
+import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
@@ -33,9 +42,23 @@ export default function UsersPage({
 }) {
   const { user: currentUser } = useCurrentUser()
   const navigate = useNavigate()
-  const [users, setUsers] = useState<User[]>([])
+  const userList = useCursorList(listUsersPage, managementErrorMessage)
+  const {
+    items: users,
+    query,
+    setQuery,
+    appliedQuery,
+    error: userListError,
+    nextCursor,
+    loading,
+    loadingMore,
+    search,
+    clearSearch,
+    reload,
+    loadMore,
+  } = userList
   const [companies, setCompanies] = useState<Company[]>([])
-  const [loading, setLoading] = useState(true)
+  const [companyListError, setCompanyListError] = useState('')
   // 修改資料與公司連結的存檔錯誤：顯示在那一列的表單裡並聚焦。放在頁頂
   // 的話，列表一長就在視窗外，螢幕閱讀器使用者也不會被帶過去（F-O02）。
   // 同一列的兩個表單可同時開啟，所以錯誤要記是哪個表單送出的，否則
@@ -54,12 +77,7 @@ export default function UsersPage({
   )
   const [actionError, setActionError] = useState('')
   const confirmationRef = useRef<HTMLDivElement>(null)
-  const [query, setQuery] = useState('')
-  const [appliedQuery, setAppliedQuery] = useState('')
-  const [listError, setListError] = useState('')
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const requestId = useRef(0)
+  const companyRequestId = useRef(0)
   const actionGuard = useSubmitGuard()
 
   useEffect(() => {
@@ -70,131 +88,24 @@ export default function UsersPage({
     })
   }, [pendingAction])
 
-  async function loadUserPage(
-    search: string,
-    cursor: string | null = null,
-    append = false,
-    id = requestId.current,
-  ) {
-    const page = await listUsersPage({ q: search, cursor, limit: 50 })
-    if (id === requestId.current) {
-      setUsers((current) =>
-        append ? [...current, ...page.items] : page.items,
-      )
-      setNextCursor(page.next_cursor)
-    }
-  }
-
-  async function reload() {
-    const id = ++requestId.current
-    setListError('')
-    setUsers([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setLoading(true)
+  const loadCompanies = useCallback(async () => {
+    const id = ++companyRequestId.current
+    setCompanyListError('')
     try {
-      const [, nextCompanies] = await Promise.all([
-        loadUserPage(appliedQuery, null, false, id),
-        listCompanies(),
-      ])
-      if (id === requestId.current) setCompanies(nextCompanies)
+      const nextCompanies = await listCompanies()
+      if (id === companyRequestId.current) setCompanies(nextCompanies)
     } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let active = true
-    const id = ++requestId.current
-    async function load() {
-      try {
-        const [, nextCompanies] = await Promise.all([
-          loadUserPage('', null, false, id),
-          listCompanies(),
-        ])
-        if (active && id === requestId.current) {
-          setCompanies(nextCompanies)
-        }
-      } catch (caught) {
-        if (active) {
-          setListError(managementErrorMessage(caught))
-        }
-      } finally {
-        if (active) {
-          if (id === requestId.current) setLoading(false)
-        }
-      }
-    }
-    void load()
-    return () => {
-      active = false
+      if (id === companyRequestId.current)
+        setCompanyListError(managementErrorMessage(caught))
     }
   }, [])
 
-  async function searchUsers(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const search = query.trim()
-    setAppliedQuery(search)
-    const id = ++requestId.current
-    setUsers([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setListError('')
-    setLoading(true)
-    try {
-      const [, nextCompanies] = await Promise.all([
-        loadUserPage(search, null, false, id),
-        listCompanies(),
-      ])
-      if (id === requestId.current) setCompanies(nextCompanies)
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
+  useEffect(() => {
+    void loadCompanies()
+    return () => {
+      companyRequestId.current += 1
     }
-  }
-
-  async function loadMoreUsers() {
-    if (!nextCursor || loading || loadingMore) return
-    const id = requestId.current
-    setLoadingMore(true)
-    setListError('')
-    try {
-      await loadUserPage(appliedQuery, nextCursor, true, id)
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoadingMore(false)
-    }
-  }
-
-  async function clearSearch() {
-    setQuery('')
-    setAppliedQuery('')
-    const id = ++requestId.current
-    setUsers([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setListError('')
-    setLoading(true)
-    try {
-      const [, nextCompanies] = await Promise.all([
-        loadUserPage('', null, false, id),
-        listCompanies(),
-      ])
-      if (id === requestId.current) setCompanies(nextCompanies)
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
-    }
-  }
+  }, [loadCompanies])
 
   async function act(
     userId: string,
@@ -313,6 +224,7 @@ export default function UsersPage({
   function created(user: { username: string; temporary_password: string }) {
     onTemporaryPassword(user.username, user.temporary_password)
     void reload()
+    void loadCompanies()
   }
 
   return (
@@ -321,17 +233,17 @@ export default function UsersPage({
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
-        <Form onSubmit={searchUsers}>
-          <label>
-            搜尋使用者
-            <input
-              onChange={(event) => setQuery(event.target.value)}
-              value={query}
-            />
-          </label>
-          <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
-        </Form>
-        <FormError>{listError}</FormError>
+        <CursorListSearch
+          disabled={loading}
+          label="搜尋使用者"
+          onQueryChange={setQuery}
+          onSearch={(event) => {
+            event.preventDefault()
+            void search(query)
+          }}
+          query={query}
+        />
+        <FormError>{userListError || companyListError}</FormError>
         {!loading && users.length === 0 ? (
           appliedQuery ? (
             <p>
@@ -503,7 +415,7 @@ export default function UsersPage({
         {nextCursor && (
           <button
             disabled={loading || loadingMore}
-            onClick={() => void loadMoreUsers()}
+            onClick={() => void loadMore()}
             type="button"
           >
             {loadingMore ? '載入中…' : '載入更多'}

@@ -67,6 +67,7 @@ export interface InspectionTask {
   plan_id: string
   plan: { id: string; name: string; archived: boolean }
   item_summary: { first_title: string | null; count: number }
+  name: string
   status: TaskStatus
   /**
    * IP-R16：建立時由後端依專案當時的本公司角色帶入，之後不變；
@@ -116,6 +117,7 @@ export interface CreatePlanInput {
 
 /** IP-R02、IP-R10 的手動任務輸入；項目與分區須屬於同專案。 */
 export interface CreateTaskInput {
+  name: string
   item_ids: string[]
   suggested_assignee_id: string | null
   zone_id: string | null
@@ -126,6 +128,11 @@ export interface CreateTaskInput {
 export interface UpdateLocationInput {
   zone_id: string | null
   location_text: string | null
+}
+
+/** #497 的任務名稱欄位；長度與空白規則由後端驗證。 */
+export interface UpdateTaskNameInput {
+  name: string
 }
 
 /** IP-R20 送出的草稿任務查核項目集合。 */
@@ -188,6 +195,12 @@ export interface PlanningClient {
     taskId: string,
     input: UpdateLocationInput,
   ): Promise<InspectionTask>
+  /** PATCH /api/v1/inspection-tasks/{task_id}，修改任務名稱。 */
+  updateTaskName(
+    taskId: string,
+    input: UpdateTaskNameInput,
+  ): Promise<InspectionTask>
+
   /** PUT /api/v1/inspection-tasks/{task_id}/items. */
   updateTaskItems(
     taskId: string,
@@ -288,6 +301,13 @@ export const planningClient: PlanningClient = {
       body: JSON.stringify(input),
     })
   },
+  updateTaskName(taskId, input) {
+    return request(`/inspection-tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  },
+
   updateTaskItems(taskId, input) {
     return request(`/inspection-tasks/${taskId}/items`, {
       method: 'PUT',

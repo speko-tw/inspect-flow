@@ -44,9 +44,7 @@ function applyListChange(
 }
 
 function taskTitle(task: FieldTask) {
-  const { first_title: first, item_count: count } = task.item_summary
-  if (!first) return '查核任務'
-  return count > 1 ? `${first} 等 ${count} 項` : first
+  return task.name
 }
 
 function displayTime(value: string) {
@@ -352,6 +350,13 @@ function TaskList({
                     <strong>{taskTitle(task)}</strong>
                     <StatusBadge status={task.status} />
                   </span>
+                  {task.item_summary.first_title && (
+                    <span className="field-card-item-summary">
+                      {task.item_summary.first_title}
+                      {task.item_summary.item_count > 1 &&
+                        `等 ${task.item_summary.item_count} 項`}
+                    </span>
+                  )}
                   <span className="field-card-project">
                     {task.project_name}
                   </span>

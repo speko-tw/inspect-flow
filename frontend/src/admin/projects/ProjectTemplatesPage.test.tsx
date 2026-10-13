@@ -10,13 +10,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
 import type { TemplateItem } from '../templates/api'
+import type { ProjectItemData } from '../projectItems/api'
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
 import { holdRequests as holdFetch } from '../../testing/submitGuard'
 import ProjectTemplatesPage from './ProjectTemplatesPage'
 import {
   ProjectTemplatesApiError,
   templateErrorMessage,
-  type ProjectInspectionItem,
 } from './projectTemplatesApi'
 
 const USER: CurrentUser = {
@@ -33,7 +33,7 @@ const USER: CurrentUser = {
   module_permissions: [],
 }
 
-const PROJECT_ITEM: ProjectInspectionItem = {
+const PROJECT_ITEM: ProjectItemData = {
   id: 'copy-1',
   project_id: 'project-1',
   sequence: 1,
@@ -41,6 +41,7 @@ const PROJECT_ITEM: ProjectInspectionItem = {
   instruction: '確認管線安裝',
   source_template_name: '給排水',
   applied_at: '2026-10-04T01:00:00Z',
+  inspection_points: [],
 }
 
 const TEMPLATE: TemplateItem = {
@@ -86,8 +87,8 @@ function mockApi(
     applyResponse?: Response
     saveResponse?: Response
     templates?: TemplateItem[]
-    projectItems?: ProjectInspectionItem[]
-    projectItemsAfterApplyConflict?: ProjectInspectionItem[]
+    projectItems?: ProjectItemData[]
+    projectItemsAfterApplyConflict?: ProjectItemData[]
     canSave?: boolean
     denyCategories?: boolean
     secondSystemTemplate?: boolean

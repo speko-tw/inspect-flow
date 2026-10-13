@@ -28,6 +28,8 @@ type FieldKey =
   | 'plan-name'
   | 'plan-rename'
   | 'task-items'
+  | 'task-name'
+  | 'task-rename'
   | 'edit-task-items'
   | 'task-zone'
   | 'task-location'
@@ -41,6 +43,8 @@ const FIELD_ERROR: Partial<Record<FieldKey, string>> = {
   'plan-name': '請輸入計畫名稱。',
   'plan-rename': '請輸入計畫名稱。',
   'task-items': '請至少選擇一筆查核項目。',
+  'task-name': '請輸入任務名稱。',
+  'task-rename': '請輸入任務名稱。',
   'edit-task-items': '請至少選擇一筆查核項目。',
   'task-zone': '請選擇任務分區。',
   'location-zone': '請選擇任務分區。',
@@ -54,10 +58,14 @@ const PLAN_RENAME_BINDINGS: FieldErrorBinding[] = [
   { path: '/name', key: 'plan-rename' },
 ]
 const TASK_CREATE_BINDINGS: FieldErrorBinding[] = [
+  { path: '/name', key: 'task-name' },
   { path: '/item_ids', key: 'task-items' },
   { path: '/zone_id', key: 'task-zone' },
   { path: '/location_text', key: 'task-location' },
   { path: '/suggested_assignee_id', key: 'task-assignee' },
+]
+const TASK_RENAME_BINDINGS: FieldErrorBinding[] = [
+  { path: '/name', key: 'task-rename' },
 ]
 const TASK_ITEMS_BINDINGS: FieldErrorBinding[] = [
   { path: '/item_ids', key: 'edit-task-items' },
@@ -88,14 +96,19 @@ const TASK_CODE_MESSAGES: Record<string, string> = {
   'inspection_task.invalid_project_item':
     '所選查核項目不屬於這個專案，請重新整理後再選。',
   'inspection_task.invalid_location': '補充地點內容不符合規則，請修改後再試。',
+  'inspection_task.invalid_name': '任務名稱需為 1 到 128 個字元。',
 }
 const TASK_CREATE_CODE_FIELDS: Record<string, FieldKey> = {
+  'inspection_task.invalid_name': 'task-name',
   'inspection_task.invalid_zone': 'task-zone',
   'inspection_task.invalid_assignee': 'task-assignee',
   'inspection_task.items_required': 'task-items',
   'inspection_task.item_without_points': 'task-items',
   'inspection_task.invalid_project_item': 'task-items',
   'inspection_task.invalid_location': 'task-location',
+}
+const TASK_RENAME_CODE_FIELDS: Record<string, FieldKey> = {
+  'inspection_task.invalid_name': 'task-rename',
 }
 const TASK_ITEMS_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.items_required': 'edit-task-items',
@@ -129,16 +142,43 @@ function describedBy(...ids: (string | false)[]): string {
 }
 
 function taskTitle(task: InspectionTask): string {
-  return task.items
-    .map((item) => item.current_snapshot?.title ?? '')
-    .join('、')
+  return task.name
 }
 
-// 刪除確認用：查核項目名加上分區與補充地點，讓人知道刪的是哪一筆。
+/** 只在欄位未被手動編輯前更新預設名稱，保留使用者自己的命名。 */
+function suggestedTaskName(
+  items: ProjectInspectionItem[],
+  itemIds: string[],
+  zones: ProjectZone[],
+  zoneId: string,
+  locationText: string,
+): string {
+  const selected = itemIds
+    .map((id) => items.find((item) => item.id === id)?.title)
+    .filter((title): title is string => Boolean(title))
+  if (!selected.length) return ''
+  const itemPart =
+    selected.length === 1
+      ? selected[0]
+      : `${selected[0]}等 ${selected.length} 項`
+  const location =
+    zones.find((zone) => zone.id === zoneId)?.name ?? locationText.trim()
+  const result = location ? `${itemPart}－${location}` : itemPart
+  // 預設值遵守領域名稱上限；使用者輸入不會再由此函式覆蓋。
+  return Array.from(result).slice(0, 128).join('')
+}
+
+function taskItemsSummary(task: InspectionTask): string {
+  return (
+    task.items
+      .map((item) => item.current_snapshot?.title)
+      .filter((title): title is string => Boolean(title))
+      .join('、') || '無查核項目'
+  )
+}
+
 function draftTaskSummary(task: InspectionTask): string {
-  const places = [task.zone?.name, task.location_text].filter(Boolean)
-  const title = `「${taskTitle(task) || '未命名任務'}」`
-  return places.length ? `${title}，位置：${places.join('・')}` : title
+  return `「${task.name}」（查核項目：${taskItemsSummary(task)}）`
 }
 
 /**
@@ -190,6 +230,9 @@ export default function PlanningPage({
   const [editingPlanName, setEditingPlanName] = useState(false)
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
+  const [taskName, setTaskName] = useState('')
+  // 只有使用者碰過名稱欄才採用手動值，避免項目變動覆寫自訂名稱。
+  const [taskNameTouched, setTaskNameTouched] = useState(false)
   const [taskFormOpen, setTaskFormOpen] = useState(false)
   // 表單展開時要把焦點送到第一個欄位；表單還沒渲染時不能直接聚焦，
   // 所以先記下來。
@@ -204,6 +247,10 @@ export default function PlanningPage({
     task: InspectionTask
     zoneId: string
     locationText: string
+  } | null>(null)
+  const [editingName, setEditingName] = useState<{
+    task: InspectionTask
+    name: string
   } | null>(null)
   const [editingTaskItems, setEditingTaskItems] = useState<{
     task: InspectionTask
@@ -222,19 +269,21 @@ export default function PlanningPage({
     danger?: { label: string }
   } | null>(null)
   const [discardingTaskForm, setDiscardingTaskForm] = useState<
-    'location' | 'assignee' | 'items' | 'new-task' | null
+    'location' | 'assignee' | 'items' | 'name' | 'new-task' | null
   >(null)
   const confirmationTrigger = useRef<HTMLElement | null>(null)
   const confirmationHeading = useRef<HTMLHeadingElement | null>(null)
   const cancelTrigger = useRef<HTMLElement | null>(null)
   const cancelHeading = useRef<HTMLHeadingElement | null>(null)
   const locationTrigger = useRef<HTMLButtonElement | null>(null)
+  const nameTrigger = useRef<HTMLButtonElement | null>(null)
   const taskItemsTrigger = useRef<HTMLButtonElement | null>(null)
   const assigneeTrigger = useRef<HTMLButtonElement | null>(null)
   const addTaskTrigger = useRef<HTMLButtonElement | null>(null)
   const restoreAddTaskFocus = useRef(false)
   const previousTaskFormOpen = useRef(false)
   const previousLocationEdit = useRef(false)
+  const previousNameEdit = useRef(false)
   const previousTaskItemsEdit = useRef(false)
   const previousAssigneeEdit = useRef(false)
   const pageHeading = useRef<HTMLHeadingElement | null>(null)
@@ -258,6 +307,15 @@ export default function PlanningPage({
     (planName ||
       (editingPlanName && updatedPlanName.trim() !== selectedPlan?.name) ||
       taskItems.length > 0 ||
+      (taskNameTouched &&
+        taskName.trim() !==
+          suggestedTaskName(
+            items,
+            taskItems,
+            zones,
+            taskZoneId,
+            taskLocation,
+          )) ||
       taskZoneId ||
       taskLocation ||
       assigneeId ||
@@ -265,6 +323,7 @@ export default function PlanningPage({
         (editingLocation.zoneId !== (editingLocation.task.zone_id ?? '') ||
           editingLocation.locationText !==
             (editingLocation.task.location_text ?? ''))) ||
+      (editingName && editingName.name.trim() !== editingName.task.name) ||
       (editingTaskItems &&
         !sameItemSet(
           editingTaskItems.itemIds,
@@ -371,6 +430,14 @@ export default function PlanningPage({
     }
     previousLocationEdit.current = Boolean(editingLocation)
   }, [editingLocation])
+
+  useEffect(() => {
+    if (previousNameEdit.current && !editingName) {
+      if (nameTrigger.current?.isConnected) nameTrigger.current.focus()
+      else pageHeading.current?.focus()
+    }
+    previousNameEdit.current = Boolean(editingName)
+  }, [editingName])
 
   useEffect(() => {
     if (previousTaskItemsEdit.current && !editingTaskItems) {
@@ -554,6 +621,13 @@ export default function PlanningPage({
   // 計畫封存或畫面唯讀時，任務上的所有修改入口（含阻擋說明的捷徑與
   // 修改表單）都不顯示；只留說明文字。
   const canModify = canEditPlan && !readOnly
+  const suggestedName = suggestedTaskName(
+    items,
+    taskItems,
+    zones,
+    taskZoneId,
+    taskLocation,
+  )
 
   function openTaskItemsEditor(
     task: InspectionTask,
@@ -694,6 +768,7 @@ export default function PlanningPage({
       setCancelTask(null)
       setCancelReason('')
       setEditingLocation(null)
+      setEditingName(null)
       setEditingTaskItems(null)
       setEditingAssignee(null)
       setEditingPlanName(false)
@@ -707,6 +782,7 @@ export default function PlanningPage({
         // 唯讀後改名表單與取消對話框都不再提供，一併收起；取消對話框裡的
         // 錯誤訊息改顯示在頁面上，避免使用者看不到被拒絕的原因。
         setEditingPlanName(false)
+        setEditingName(null)
         if (cancelTask) {
           setCancelTask(null)
           setCancelReason('')
@@ -809,6 +885,14 @@ export default function PlanningPage({
     // IP-R02 要求 Task 選專案既有項目；空選取先在欄旁提示並聚焦。
     if (rejectBlank('task-items', taskItems.length === 0)) return
     if (
+      rejectBlank(
+        'task-name',
+        !(taskNameTouched ? taskName : suggestedName).trim(),
+      )
+    ) {
+      return
+    }
+    if (
       rejectBlank('task-zone', zones.length > 0 && !zonesDenied && !taskZoneId)
     ) {
       return
@@ -816,6 +900,7 @@ export default function PlanningPage({
     const created = await act(
       async () => {
         const task = await client.createTask(selectedPlan.id, {
+          name: taskNameTouched ? taskName : suggestedName,
           item_ids: taskItems,
           suggested_assignee_id: assigneeId || null,
           zone_id: zones.length ? taskZoneId || null : null,
@@ -860,6 +945,8 @@ export default function PlanningPage({
     setTaskFormOpen(false)
     taskFormFocus.current = null
     setTaskItems([])
+    setTaskName('')
+    setTaskNameTouched(false)
     setTaskZoneId('')
     setTaskLocation('')
     setAssigneeId('')
@@ -874,11 +961,12 @@ export default function PlanningPage({
 
   // ADM-R38：只有欄位偏離原值時才確認，避免取消未修改的表單多一步。
   function requestTaskFormCancel(
-    kind: 'location' | 'assignee' | 'items' | 'new-task',
+    kind: 'location' | 'assignee' | 'items' | 'name' | 'new-task',
   ): void {
     const changed =
       kind === 'new-task'
         ? Boolean(taskItems.length) ||
+          taskNameTouched ||
           Boolean(taskZoneId || taskLocation || assigneeId)
         : kind === 'items'
           ? Boolean(
@@ -896,11 +984,16 @@ export default function PlanningPage({
                   editingLocation.locationText !==
                     (editingLocation.task.location_text ?? '')),
               )
-            : Boolean(
-                editingAssignee &&
-                editingAssignee.assigneeId !==
-                  (editingAssignee.task.assignee_id ?? ''),
-              )
+            : kind === 'name'
+              ? Boolean(
+                  editingName &&
+                  editingName.name.trim() !== editingName.task.name,
+                )
+              : Boolean(
+                  editingAssignee &&
+                  editingAssignee.assigneeId !==
+                    (editingAssignee.task.assignee_id ?? ''),
+                )
     if (changed) {
       setDiscardingTaskForm(kind)
       return
@@ -910,9 +1003,10 @@ export default function PlanningPage({
 
   // 依 kind 只收起對應的表單，不得牽動其他表單的狀態。
   function closeTaskForm(
-    kind: 'location' | 'assignee' | 'items' | 'new-task',
+    kind: 'location' | 'assignee' | 'items' | 'name' | 'new-task',
   ): void {
     if (kind === 'location') setEditingLocation(null)
+    else if (kind === 'name') setEditingName(null)
     else if (kind === 'items') setEditingTaskItems(null)
     else if (kind === 'assignee') setEditingAssignee(null)
     else {
@@ -937,15 +1031,14 @@ export default function PlanningPage({
     )
   }
 
-  // ADM-R28：確認文案列出項目、分區與建議指派，避免多任務計畫派錯。
+  // ADM-R28：列出分區與指派資訊，並讓改名後仍能辨認任務項目。
   function dispatchConfirmation(task: InspectionTask): string {
-    const itemNames = taskTitle(task) || '未命名項目'
     const zoneName = task.zone?.name ?? '未設定分區'
     const assigneeName =
       task.assignee?.name_zh ?? task.assignee?.username ?? '未指派'
     return (
-      `派出此任務？項目：${itemNames}；分區：${zoneName}；` +
-      `建議指派人：${assigneeName}。派出後現場即可查看。`
+      `派出任務「${task.name}」？查核項目：${taskItemsSummary(task)}；` +
+      `分區：${zoneName}；建議指派人：${assigneeName}。派出後現場即可查看。`
     )
   }
 
@@ -1024,6 +1117,7 @@ export default function PlanningPage({
                         // 帶到新計畫會誤建任務，也會留下看不見的未儲存內容。
                         resetTaskForm()
                         setEditingLocation(null)
+                        setEditingName(null)
                         setEditingTaskItems(null)
                         setEditingAssignee(null)
                       }
@@ -1249,6 +1343,7 @@ export default function PlanningPage({
                       {task.location_text && (
                         <p>補充地點：{task.location_text}</p>
                       )}
+                      <p>查核項目：{taskItemsSummary(task)}</p>
                       <p>
                         建議指派：
                         {task.assignee?.name_zh ??
@@ -1327,6 +1422,18 @@ export default function PlanningPage({
                                 onClick={(event) => {
                                   clearFieldError()
                                   setNotice(null)
+                                  nameTrigger.current = event.currentTarget
+                                  setEditingName({ task, name: task.name })
+                                }}
+                                type="button"
+                              >
+                                修改名稱
+                              </button>{' '}
+                              <button
+                                disabled={busy}
+                                onClick={(event) => {
+                                  clearFieldError()
+                                  setNotice(null)
                                   const trigger = event.currentTarget
                                   locationTrigger.current = trigger
                                   setEditingLocation({
@@ -1388,6 +1495,79 @@ export default function PlanningPage({
                             </button>
                           )}
                         </div>
+                      )}
+                      {canModify && editingName?.task.id === task.id && (
+                        <form
+                          onKeyDown={blockImeEnter}
+                          data-error-context="task-rename"
+                          noValidate
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            if (
+                              rejectBlank(
+                                'task-rename',
+                                !editingName.name.trim(),
+                              )
+                            ) {
+                              return
+                            }
+                            void act(
+                              () =>
+                                client.updateTaskName(task.id, {
+                                  name: editingName.name,
+                                }),
+                              { area: 'tasks', text: '已更新任務名稱。' },
+                              'task-rename',
+                              TASK_RENAME_BINDINGS,
+                              TASK_RENAME_CODE_FIELDS,
+                            )
+                          }}
+                        >
+                          <h5>修改任務名稱</h5>
+                          <label>
+                            任務名稱 <span aria-hidden="true">*</span>
+                            <input
+                              autoFocus
+                              aria-describedby={
+                                hasFieldError('task-rename')
+                                  ? fieldErrorId('task-rename')
+                                  : undefined
+                              }
+                              aria-invalid={hasFieldError('task-rename')}
+                              data-field="task-rename"
+                              maxLength={128}
+                              onChange={(event) => {
+                                setEditingName({
+                                  ...editingName,
+                                  name: event.target.value,
+                                })
+                                clearFieldError('task-rename')
+                              }}
+                              required
+                              value={editingName.name}
+                            />
+                          </label>
+                          {fieldErrorText('task-rename')}
+                          <button
+                            className="btn-primary"
+                            disabled={busy}
+                            type="submit"
+                          >
+                            儲存名稱
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => requestTaskFormCancel('name')}
+                            type="button"
+                          >
+                            取消
+                          </button>
+                          {error && errorContext === 'task-rename' && (
+                            <p ref={errorMessage} role="alert" tabIndex={-1}>
+                              {error}
+                            </p>
+                          )}
+                        </form>
                       )}
                       {canModify && editingTaskItems?.task.id === task.id && (
                         <form
@@ -1691,7 +1871,9 @@ export default function PlanningPage({
                           (discardingTaskForm === 'items' &&
                             editingTaskItems?.task.id === task.id) ||
                           (discardingTaskForm === 'assignee' &&
-                            editingAssignee?.task.id === task.id)) && (
+                            editingAssignee?.task.id === task.id) ||
+                          (discardingTaskForm === 'name' &&
+                            editingName?.task.id === task.id)) && (
                           <ConfirmBox
                             cancelLabel="保留編輯"
                             confirmLabel="捨棄變更"
@@ -1733,6 +1915,27 @@ export default function PlanningPage({
                   onSubmit={(event) => void createTask(event)}
                 >
                   <h3>新增任務</h3>
+                  <label>
+                    任務名稱 <span aria-hidden="true">*</span>
+                    <input
+                      aria-describedby={
+                        hasFieldError('task-name')
+                          ? fieldErrorId('task-name')
+                          : undefined
+                      }
+                      aria-invalid={hasFieldError('task-name')}
+                      data-field="task-name"
+                      maxLength={128}
+                      onChange={(event) => {
+                        setTaskName(event.target.value)
+                        setTaskNameTouched(true)
+                        clearFieldError('task-name')
+                      }}
+                      required
+                      value={taskNameTouched ? taskName : suggestedName}
+                    />
+                  </label>
+                  {fieldErrorText('task-name')}
                   <fieldset
                     aria-describedby={describedBy(
                       'task-items-hint',
@@ -1930,10 +2133,13 @@ export default function PlanningPage({
             )
           }
           role="dialog"
-          title="取消任務"
+          title={`取消任務「${cancelTask.name}」`}
           variant="danger"
         >
-          <p>取消後會保留任務資料；之後可以恢復到取消前狀態。</p>
+          <p>
+            將取消「{cancelTask.name}
+            」；任務資料會保留，之後可以恢復到取消前狀態。
+          </p>
           {error && errorContext === 'dialog' && (
             <p ref={errorMessage} role="alert" tabIndex={-1}>
               {error}
