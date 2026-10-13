@@ -117,6 +117,7 @@ def world(db_session: Session, make_client):
     template_admin = person("tpladmin")
     editor = person("editor")
     module_only = person("moduleonly")
+    member_only = person("memberonly")
     add_project_member(
         db_session,
         project_id=project_a.id,
@@ -146,6 +147,11 @@ def world(db_session: Session, make_client):
         project_id=project_a.id,
         user_id=nobody.id,
         role_ids=[empty_role.id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project_a.id,
+        user_id=member_only.id,
     )
     # Different projects: office in A, field in B.
     add_project_member(
@@ -198,6 +204,7 @@ def world(db_session: Session, make_client):
         "tpladmin": client(template_admin),
         "editor": client(editor),
         "module_only": client(module_only),
+        "member_only": client(member_only),
         "project_a": project_a,
         "project_b": project_b,
         "make_client": make_client,
@@ -319,6 +326,31 @@ def test_permission_views_agree_across_project_and_person_endpoints(world):
             }
         if who == "admin":
             assert workflow.json()["viewer_permission_codes"]
+
+
+def test_inspection_item_list_accepts_membership_without_role(world) -> None:
+    project_id = world["project_a"].id
+    member_only = world["member_only"]
+    module_only = world["module_only"]
+
+    item_list = member_only.get(
+        f"/api/v1/projects/{project_id}/inspection-items"
+    )
+    assert item_list.status_code == 200, item_list.text
+    assert item_list.json()["items"] == []
+
+    for path in (
+        f"/api/v1/projects/{project_id}",
+        f"/api/v1/projects/{project_id}/workflow-summary",
+        f"/api/v1/projects/{project_id}/members",
+    ):
+        response = member_only.get(path)
+        assert response.status_code == 403, response.text
+
+    nonmember_items = module_only.get(
+        f"/api/v1/projects/{project_id}/inspection-items"
+    )
+    assert nonmember_items.status_code == 403, nonmember_items.text
 
 
 def test_responses_match_frontend_contract_fixture(world) -> None:

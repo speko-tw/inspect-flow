@@ -353,6 +353,66 @@ def test_project_routes_do_not_join_permission_tables_for_recalculation():
     assert "RolePermission" in project_query_models
 
 
+def test_permission_calculation_scope_covers_new_service_boundaries():
+    scoped_paths = {
+        "app/auth/access.py",
+        "app/services/project_workflow_summary.py",
+        "app/services/project_members.py",
+        "app/services/projects.py",
+        "app/services/module_permissions.py",
+    }
+    forbidden_models = {
+        "RolePermission",
+        "ProjectMemberRole",
+        "ProjectMember",
+        "UserModulePermission",
+        "UserModuleDelegation",
+    }
+    calculation_functions = {
+        "app/auth/access.py": (
+            ("_check", "require_project_permission"),
+            ("_check", "require_admin_or_any_project_permission"),
+            ("_check", "require_system_role_or_any_project_permission"),
+        ),
+        "app/services/project_workflow_summary.py": (),
+        "app/services/project_members.py": (("add_project_member", None),),
+        "app/services/projects.py": (
+            ("create_project", None),
+            ("update_project", None),
+        ),
+        "app/services/module_permissions.py": (
+            ("permission_revoke_impact", None),
+        ),
+    }
+    assert scoped_paths <= set(calculation_functions)
+    assert "project_permissions_for" in _function_names(
+        "app/services/project_workflow_summary.py",
+        "get_project_workflow_summary",
+    )
+    for relative_path, functions in calculation_functions.items():
+        for function_name, enclosing in functions:
+            models = _function_query_models(
+                relative_path, function_name, enclosing=enclosing
+            )
+            assert not models.intersection(forbidden_models), (
+                relative_path,
+                function_name,
+                models,
+            )
+
+    # 人員與專案 permission joins 僅由集中計算服務擁有。
+    central_models = _function_query_models(
+        "app/services/permissions.py", "project_member_management_impact"
+    )
+    assert {"ProjectMember", "RolePermission"} <= central_models
+    assert "project_member_management_impact" in _query_function_names(
+        "app/services/permissions.py", "ProjectMemberRole"
+    )
+    assert "query_people_access" in _function_names(
+        "app/services/permissions.py", "project_member_management_impact"
+    )
+
+
 def test_project_routes_do_not_import_inspection_data_models():
     tree = ast.parse(
         (BACKEND / "app/api/v1/projects.py").read_text(encoding="utf-8")

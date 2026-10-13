@@ -5,7 +5,7 @@ import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
@@ -15,7 +15,6 @@ from app.models import (
     ProjectMember,
     ProjectMemberRole,
     Role,
-    RolePermission,
     User,
     UserModuleDelegation,
     UserModulePermission,
@@ -182,59 +181,20 @@ def permission_revoke_impact(
     """
     if permission_code != "project.use":
         return PermissionRevokeImpact(0, (), ())
-    project_ids = tuple(
-        sorted(
-            set(
-                session.scalars(
-                    select(ProjectMember.project_id).where(
-                        ProjectMember.user_id == user_id
-                    )
-                ).all()
-            ),
-            key=str,
+    from app.services.permissions import project_member_management_impact
+
+    member_count, project_ids, projects_without_manager = (
+        project_member_management_impact(
+            session,
+            user_id=user_id,
+            module_permission_code="project.use",
+            project_permission_code="project_member.manage",
         )
-    )
-    if not project_ids:
-        return PermissionRevokeImpact(0, (), ())
-    member_count = session.scalar(
-        select(func.count(ProjectMember.id)).where(
-            ProjectMember.user_id == user_id
-        )
-    )
-    other_managed_projects = set(
-        session.scalars(
-            select(ProjectMember.project_id)
-            .join(
-                ProjectMemberRole,
-                ProjectMemberRole.project_member_id == ProjectMember.id,
-            )
-            .join(
-                RolePermission,
-                RolePermission.role_id == ProjectMemberRole.role_id,
-            )
-            .join(User, User.id == ProjectMember.user_id)
-            .join(
-                UserModulePermission,
-                UserModulePermission.user_id == User.id,
-            )
-            .where(
-                ProjectMember.project_id.in_(project_ids),
-                ProjectMember.user_id != user_id,
-                RolePermission.code == "project_member.manage",
-                UserModulePermission.permission_code == "project.use",
-                User.is_active.is_(True),
-            )
-            .distinct()
-        ).all()
     )
     return PermissionRevokeImpact(
-        member_count=member_count or 0,
+        member_count=member_count,
         project_ids=project_ids,
-        projects_without_manager=tuple(
-            project_id
-            for project_id in project_ids
-            if project_id not in other_managed_projects
-        ),
+        projects_without_manager=projects_without_manager,
     )
 
 
