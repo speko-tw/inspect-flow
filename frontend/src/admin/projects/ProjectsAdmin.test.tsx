@@ -1359,7 +1359,8 @@ describe('admin projects page', () => {
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('尚未儲存的名稱')
-    expect(projectName).toHaveFocus()
+    // 確認框關閉後由 effect 還焦點，等待 effect 完成。
+    await waitFor(() => expect(projectName).toHaveFocus())
 
     fireEvent.click(edit)
     prompt = screen.getByRole('region', { name: '未儲存變更' })
@@ -1487,9 +1488,11 @@ describe('admin projects page', () => {
     ;(document.activeElement as HTMLElement).blur()
     fireEvent.click(screen.getAllByRole('link', { name: '成員' })[0])
     let prompt = screen.getByRole('region', { name: '未儲存變更' })
-    expect(
-      within(prompt).getByRole('button', { name: '保留編輯' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(prompt).getByRole('button', { name: '保留編輯' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('未儲存的新工程')
 
@@ -1831,7 +1834,9 @@ describe('admin project members', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
     // 獨立畫面：清單與加入表單不在同一畫面。
-    expect(screen.getByRole('heading', { name: /修改「/ })).toHaveFocus()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /修改「/ })).toHaveFocus(),
+    )
     expect(screen.queryByRole('heading', { name: '加入成員' })).toBeNull()
     expect(screen.queryByRole('heading', { name: '成員列表' })).toBeNull()
     expect(screen.getByLabelText('查核員')).toBeChecked()
@@ -1919,7 +1924,12 @@ describe('admin project members', () => {
     expect(calls(fetchMock, 'DELETE', /members/)).toHaveLength(0)
     const confirm = screen.getByRole('group', { name: '移出確認' })
     expectCancelThenDanger(confirm, ['取消', '確認移出'])
-    expect(within(confirm).getByRole('button', { name: '取消' })).toHaveFocus()
+    // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
+    await waitFor(() =>
+      expect(
+        within(confirm).getByRole('button', { name: '取消' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(within(confirm).getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('button', { name: '確認移出' })).toBeNull()
 

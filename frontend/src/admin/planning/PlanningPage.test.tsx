@@ -154,9 +154,12 @@ describe('planning management page', () => {
       )
       const cancelDialog = screen.getByRole('dialog')
       expect(cancelDialog).toHaveAttribute('aria-modal', 'true')
-      expect(
-        within(cancelDialog).getByRole('heading', { name: '取消任務' }),
-      ).toHaveFocus()
+      // 確認框掛載後由 effect 設定初始焦點。
+      await waitFor(() =>
+        expect(
+          within(cancelDialog).getByRole('heading', { name: '取消任務' }),
+        ).toHaveFocus(),
+      )
       fireEvent.change(screen.getByLabelText(/取消原因/), {
         target: { value: '現場順序調整' },
       })
@@ -402,9 +405,11 @@ describe('planning management page', () => {
     // 計畫頁是唯一保留 modal 的確認框（#501）：蓋住整頁、背景 inert。
     expect(dialog).toHaveClass('confirm-box', 'confirm-box-modal')
     expect(dialog).toHaveClass('confirm-box-danger')
-    expect(
-      within(dialog).getByRole('heading', { name: '請確認操作' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole('heading', { name: '請確認操作' }),
+      ).toHaveFocus(),
+    )
     expect(dialog).toHaveTextContent(
       `永久刪除草稿任務「混凝土外觀」，位置：${zone.name}・東側二樓？`,
     )
@@ -1285,9 +1290,12 @@ describe('planning forms guard (#507)', () => {
 
     const error = await within(form).findByText('請至少選擇一筆查核項目。')
     expect(error).toBeVisible()
-    expect(
-      within(form).getByRole('group', { name: /選擇一筆以上/ }),
-    ).toHaveFocus()
+    // 錯誤 render 後由 effect 聚焦欄位，不能只等錯誤文字。
+    await waitFor(() =>
+      expect(
+        within(form).getByRole('group', { name: /選擇一筆以上/ }),
+      ).toHaveFocus(),
+    )
     expect(createTask).not.toHaveBeenCalled()
   })
 
@@ -1335,9 +1343,11 @@ describe('planning forms guard (#507)', () => {
     let prompt = within(article).getByRole('group', {
       name: '有尚未儲存的變更',
     })
-    expect(
-      within(prompt).getByRole('button', { name: '保留編輯' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(prompt).getByRole('button', { name: '保留編輯' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(within(prompt).getByRole('button', { name: '保留編輯' }))
     expect(within(article).getByLabelText('補充地點')).toHaveValue(
       '未儲存位置',
@@ -1348,9 +1358,11 @@ describe('planning forms guard (#507)', () => {
     })
     fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
     expect(within(article).queryByLabelText('補充地點')).toBeNull()
-    expect(
-      within(article).getByRole('button', { name: '修改地點' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(article).getByRole('button', { name: '修改地點' }),
+      ).toHaveFocus(),
+    )
 
     fireEvent.click(
       within(article).getByRole('button', { name: '修改建議指派' }),
@@ -1364,9 +1376,11 @@ describe('planning forms guard (#507)', () => {
     })
     fireEvent.click(within(prompt).getByRole('button', { name: '捨棄變更' }))
     expect(within(article).queryByLabelText('建議指派人')).toBeNull()
-    expect(
-      within(article).getByRole('button', { name: '修改建議指派' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(article).getByRole('button', { name: '修改建議指派' }),
+      ).toHaveFocus(),
+    )
   })
 
   it('ignores IME Enter in the location form', async () => {
@@ -1578,7 +1592,9 @@ describe('planning forms guard (#507)', () => {
       expect(
         within(article).getByRole('heading', { name: '修改任務地點' }),
       ).toBeVisible()
-      expect(within(article).getByLabelText(/分區/)).toHaveFocus()
+      await waitFor(() =>
+        expect(within(article).getByLabelText(/分區/)).toHaveFocus(),
+      )
     })
 
     it('lists missing items, says to rebuild, and focuses the item field without a hash jump', async () => {
