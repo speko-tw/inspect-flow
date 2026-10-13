@@ -1113,9 +1113,7 @@ def test_project_use_revoke_impact_checks_manager_roles_per_project(
     from app.services.module_permissions import permission_revoke_impact
 
     target = create_root_user_with_company(session, "SPLIT-TARGET")
-    candidate = create_root_user_with_company(
-        session, "SPLIT-CANDIDATE"
-    )
+    candidate = create_root_user_with_company(session, "SPLIT-CANDIDATE")
     project_a = Project(
         project_code="IMPACT-SPLIT-A",
         name="沒有其他管理者",
