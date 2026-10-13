@@ -14,6 +14,7 @@
       "method": "POST",
       "path": "/inspection-plans/$PLAN_ID/tasks",
       "body": {
+        "name": "表面檢查－東側機房",
         "item_ids": ["$ITEM_ID"],
         "suggested_assignee_id": null,
         "zone_id": null,
@@ -29,6 +30,7 @@
       "method": "POST",
       "path": "/inspection-plans/$PLAN_ID/tasks",
       "body": {
+        "name": "表面檢查－地下室管線區",
         "item_ids": ["$ITEM_ID"],
         "suggested_assignee_id": null,
         "zone_id": "$ZONE_ID",

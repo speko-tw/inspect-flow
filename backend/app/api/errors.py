@@ -240,6 +240,10 @@ class ErrorCode(DescribedStrEnum):
         "inspection_task.invalid_location",
         "The task location text is invalid.",
     )
+    INSPECTION_TASK_INVALID_NAME = (
+        "inspection_task.invalid_name",
+        "The inspection task name must contain 1 to 128 characters.",
+    )
     INSPECTION_TASK_ITEMS_INCOMPLETE = (
         "inspection_task.items_incomplete",
         "Task items requiring reinspection are incomplete.",

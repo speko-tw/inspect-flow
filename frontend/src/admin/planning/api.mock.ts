@@ -10,6 +10,8 @@ import type {
   ProjectZone,
   SuggestedAssignee,
   UpdateLocationInput,
+  UpdateTaskNameInput,
+  UpdateTaskItemsInput,
 } from './api'
 
 interface TaskLocation {
@@ -448,6 +450,9 @@ export function createMockPlanningClient(options?: {
       if (input.item_ids.length === 0) {
         throw new ManagementApiError(422, 'inspection_task.items_required')
       }
+      if (!input.name.trim() || characterCount(input.name.trim()) > 128) {
+        throw new ManagementApiError(422, 'inspection_task.invalid_name')
+      }
       const projectZones = zones.filter(
         (zone) => zone.project_id === plan.project_id,
       )
@@ -495,6 +500,12 @@ export function createMockPlanningClient(options?: {
         id: crypto.randomUUID(),
         project_id: plan.project_id,
         plan_id: planId,
+        plan: { id: plan.id, name: plan.name, archived: plan.archived },
+        item_summary: {
+          first_title: items[0]?.current_snapshot?.title ?? null,
+          count: items.length,
+        },
+        name: input.name.trim(),
         status: 'DRAFT',
         // mock 專案一律是承攬施工方（IP-R16），不模擬改角色。
         inspection_level: 'self_inspection',
@@ -508,6 +519,9 @@ export function createMockPlanningClient(options?: {
         cancelled_from: null,
         started_by: null,
         completed_by: null,
+        started_by_user: null,
+        completed_by_user: null,
+        dispatched_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }
@@ -567,7 +581,23 @@ export function createMockPlanningClient(options?: {
       task.location_text = location.location_text
       return clone(task)
     },
-    async updateTaskItems(taskId, input) {
+    async updateTaskName(taskId, input: UpdateTaskNameInput) {
+      const { plan, task } = planForTask(taskId)
+      if (plan.status === 'ARCHIVED') {
+        throw new ManagementApiError(409, 'inspection_plan.archived')
+      }
+      if (!['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(task.status)) {
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
+      }
+      const name = input.name.trim()
+      if (!name || characterCount(name) > 128) {
+        throw new ManagementApiError(422, 'inspection_task.invalid_name')
+      }
+      task.name = name
+      return clone(task)
+    },
+
+    async updateTaskItems(taskId, input: UpdateTaskItemsInput) {
       const { plan, task } = planForTask(taskId)
       if (plan.status === 'ARCHIVED') {
         throw new ManagementApiError(409, 'inspection_plan.archived')

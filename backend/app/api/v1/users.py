@@ -7,14 +7,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import ilike_contains, page_by_text_key
+from app.api.pagination import ilike_contains, page_by_text_key, write_call
 from app.api.v1._management_errors import (
-    integrity_error_code,
-    management_error_status,
+    management_api_error,
 )
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
@@ -40,6 +38,9 @@ router = APIRouter(
     tags=["users"],
     dependencies=[Depends(require_admin)],
 )
+
+_DEFAULT_PAGE_SIZE = 50
+_MAX_PAGE_SIZE = 100
 
 
 class UserResponse(BaseModel):
@@ -183,7 +184,7 @@ def _check_company_exists(db: Session, company_id: UUID | None) -> None:
 def list_users(
     q: str | None = Query(default=None, max_length=256),
     cursor: str | None = None,
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db),  # noqa: B008
 ) -> UserListResponse:
     filters = []
@@ -226,19 +227,22 @@ def add_user(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> CreatedUserResponse:
     _check_company_exists(db, body.company_id)
-    try:
+
+    def create_user_and_password() -> tuple[User, str]:
         user = create_user(db, **body.model_dump(exclude={"is_admin"}))
         if body.is_admin:
             set_is_admin(db, user, True)
         password = secrets.token_urlsafe(24)
         set_password(db, user, password, is_temporary=True)
+        return user, password
+
+    try:
+        user, password = write_call(
+            create_user_and_password,
+            error_mapper=management_api_error,
+        )
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
     response.headers["Cache-Control"] = "no-store"
     return CreatedUserResponse(
         **UserResponse.model_validate(user).model_dump(),
@@ -273,7 +277,8 @@ def edit_user(
         & fields.keys()
     ):
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
-    try:
+
+    def update_user() -> User:
         if desired_external is not None:
             set_external_collaborator(
                 db,
@@ -282,6 +287,9 @@ def edit_user(
                 confirmed=confirm_external,
             )
         return update_user_manual(db, user, **fields)
+
+    try:
+        return write_call(update_user, error_mapper=management_api_error)
     except _USER_BUSINESS_ERRORS as exc:
         if isinstance(exc, ExternalFlagChangeError):
             raise APIError(
@@ -290,11 +298,6 @@ def edit_user(
                 details=exc.details,
             ) from exc
         raise _user_error(exc) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{user_id}/company", response_model=UserResponse)
@@ -309,14 +312,12 @@ def link_company(
     if user.is_system and body.company_id != user.company_id:
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422)
     try:
-        return update_user_manual(db, user, **fields)
+        return write_call(
+            lambda: update_user_manual(db, user, **fields),
+            error_mapper=management_api_error,
+        )
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{user_id}/admin", response_model=UserResponse)
@@ -328,18 +329,20 @@ def change_admin_status(
     user = _get_user(db, user_id)
     if user.is_admin == body.is_admin:
         return user
-    try:
+
+    def update_admin_status() -> User:
         updated_user = set_is_admin(db, user, body.is_admin)
         # 管理員身分變更須在成功回應送出前提交，避免回應與資料狀態不一致。
         db.commit()
         return updated_user
+
+    try:
+        return write_call(
+            update_admin_status,
+            error_mapper=management_api_error,
+        )
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{user_id}/active", response_model=UserResponse)
@@ -349,15 +352,17 @@ def change_active_status(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> User:
     user = _get_user(db, user_id)
-    try:
+
+    def update_active_status() -> User:
         updated_user = set_is_active(db, user, body.is_active)
         # 停用結果須在成功回應送出前提交，避免回應與資料狀態不一致。
         db.commit()
         return updated_user
+
+    try:
+        return write_call(
+            update_active_status,
+            error_mapper=management_api_error,
+        )
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc

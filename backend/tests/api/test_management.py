@@ -5,6 +5,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.errors import ErrorCode
 from app.api.v1 import users as users_api
@@ -893,7 +894,7 @@ def test_program_errors_remain_server_errors(
     assert db_session.get(User, UUID(user_id)).username == "audit.test"
 
     def broken_company(*args, **kwargs):
-        raise ValueError("program error")
+        raise IntegrityError("INSERT", {}, Exception("unexpected index"))
 
     monkeypatch.setattr("app.api.v1.companies.create_company", broken_company)
     failed = error_client.post("/api/v1/companies", json={"name": "示範公司"})

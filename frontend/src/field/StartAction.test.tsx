@@ -16,6 +16,7 @@ const PENDING: Detail = {
   id: 'task-1',
   project_id: 'project-1',
   project_name: '示範工程甲',
+  name: '外牆鋼筋查核－一樓',
   status: 'PENDING',
   dispatched_at: '2026-10-05T08:00:00Z',
   location: { zone_name: '一樓', location_text: '東側' },
@@ -118,7 +119,9 @@ describe('開始查核：確認步驟', () => {
     })
     await openConfirm()
     expect(
-      screen.getByRole('heading', { name: '確認開始「外牆鋼筋查核」？' }),
+      screen.getByRole('heading', {
+        name: '確認開始「外牆鋼筋查核－一樓」？',
+      }),
     ).toBeInTheDocument()
     expect(
       screen.getByText('開始後會改為進行中，並記錄你是實際開始者。'),
@@ -126,7 +129,7 @@ describe('開始查核：確認步驟', () => {
     expect(posts()).toHaveLength(0)
     // [取消][確認]：只有確認是主要按鈕（#500）。
     const panel = screen.getByRole('heading', {
-      name: '確認開始「外牆鋼筋查核」？',
+      name: '確認開始「外牆鋼筋查核－一樓」？',
     }).parentElement as HTMLElement
     const buttons = within(panel).getAllByRole('button')
     expect(buttons.map((button) => button.textContent)).toEqual([

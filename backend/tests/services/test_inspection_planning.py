@@ -44,6 +44,7 @@ from app.services.inspection_planning import (
     list_inspection_plans,
     list_inspection_tasks,
     rename_inspection_plan,
+    rename_inspection_task,
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
@@ -168,7 +169,10 @@ def test_draft_task_items_are_replaced_with_current_snapshots_and_audited(
         session, operator, project, title="新項目", sequence=2
     )
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[first.id]
+        session,
+        plan=plan,
+        name="草稿查核任務",
+        project_inspection_item_ids=[first.id],
     )
     old_association = session.scalar(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
@@ -218,7 +222,10 @@ def test_draft_task_item_updates_reject_invalid_state_archive_and_permissions(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        plan=plan,
+        name="鎖定草稿查核任務",
+        project_inspection_item_ids=[source.id],
     )
 
     reader = create_root_user_with_company(session, "ITEMSLOCK-READER")
@@ -237,12 +244,63 @@ def test_draft_task_item_updates_reject_invalid_state_archive_and_permissions(
     assert dispatched.value.code == "inspection_task.invalid_transition"
 
     new_draft = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        plan=plan,
+        name="歸檔驗證草稿任務",
+        project_inspection_item_ids=[source.id],
     )
     archive_inspection_plan(session, plan, archived=True)
     with pytest.raises(PlanningError) as archived:
         update_draft_task_items(session, new_draft, item_ids=[source.id])
     assert archived.value.code == "inspection_plan.archived"
+
+
+def test_unchanged_task_name_by_another_operator_changes_nothing(
+    session, operator, monkeypatch
+):
+    """IP-R17：名稱未變時，不同操作者的空改名不改最後修改人也不寫稽核。"""
+    project = _project(session, operator, "RENAMENOOP")
+    _grant(session, operator, project, *_planning_codes())
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="空改名計畫"
+    )
+    source = _source_item(session, operator, project)
+    task = create_inspection_task(
+        session,
+        plan=plan,
+        name="原任務名稱",
+        project_inspection_item_ids=[source.id],
+    )
+    other = create_root_user_with_company(session, "RENAMENOOP-OTHER")
+    _grant(session, operator, project, "inspection_task.manage", user=other)
+    session.flush()
+    before_by = task.updated_by
+    before_at = task.updated_at
+
+    def audit_count() -> int:
+        return session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.entity_id == task.id,
+                AuditLog.event_type == "inspection_task.renamed",
+            )
+        )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            "app.services.inspection_planning.get_current_operator",
+            lambda _: other,
+        )
+        same = rename_inspection_task(session, task, name="  原任務名稱  ")
+        assert same.name == "原任務名稱"
+        assert same.updated_by == before_by
+        assert same.updated_at == before_at
+        assert audit_count() == 0
+
+        changed = rename_inspection_task(session, task, name="新任務名稱")
+        assert changed.updated_by == other.id
+        assert audit_count() == 1
 
 
 class TestDerivedPlanStatus:
@@ -284,6 +342,7 @@ def test_project_zone_normalization_audit_and_referenced_delete(
     item = _source_item(session, operator, project)
     task = create_inspection_task(
         session,
+        name="示範任務",
         plan=plan,
         project_inspection_item_ids=[item.id],
         zone_id=zone.id,
@@ -352,7 +411,10 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
     )
     source = _source_item(session, operator, project)
     draft = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     reader = create_root_user_with_company(session, "READ001")
     reader.is_system = False
@@ -386,6 +448,7 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
             lambda _: reader,
         )
         assert list_inspection_tasks(session, project_id=project.id) == [draft]
+        assert get_inspection_task(session, task_id=draft.id) == draft
 
 
 def test_plan_manage_and_assignee_must_be_project_members(session, operator):
@@ -407,7 +470,10 @@ def test_plan_manage_and_assignee_must_be_project_members(session, operator):
     assert plan.name == "調整名稱"
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     assign_inspection_task(session, task, assignee_id=assignee.id)
     assert task.assignee_id == assignee.id
@@ -480,7 +546,10 @@ def test_non_assignee_with_inspection_permission_can_start_task(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     assign_inspection_task(session, task, assignee_id=assignee.id)
     dispatch_inspection_task(session, task)
@@ -507,7 +576,10 @@ def test_task_lock_queries_follow_plan_then_task_order(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     original_scalar = session.scalar
     locked_entities = []
@@ -555,7 +627,10 @@ def test_task_creation_locks_source_item_before_plan(
     monkeypatch.setattr(session, "scalars", capture_scalars)
     monkeypatch.setattr(session, "scalar", capture_scalar)
     create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
 
     assert locked_entities[:2] == [
@@ -608,7 +683,10 @@ def test_snapshot_child_rows_copy_source_and_remain_immutable(
     session.add(standard)
     session.flush()
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     task_item = session.scalar(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
@@ -670,6 +748,7 @@ def test_task_snapshot_location_state_and_restore_audit(session, operator):
     source = _source_item(session, operator, project)
     task = create_inspection_task(
         session,
+        name="示範任務",
         plan=plan,
         project_inspection_item_ids=[source.id],
         zone_id=zone.id,
@@ -727,6 +806,7 @@ def test_task_creation_requires_zone_only_when_project_has_zones(
     source = _source_item(session, operator, project)
     task = create_inspection_task(
         session,
+        name="示範任務",
         plan=plan,
         project_inspection_item_ids=[source.id],
         location_text="補充位置",
@@ -738,6 +818,7 @@ def test_task_creation_requires_zone_only_when_project_has_zones(
     with pytest.raises(PlanningError) as required:
         create_inspection_task(
             session,
+            name="示範任務",
             plan=plan,
             project_inspection_item_ids=[source.id],
         )
@@ -755,6 +836,7 @@ def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
     source = _source_item(session, operator, project)
     completed = create_inspection_task(
         session,
+        name="示範任務",
         plan=plan,
         project_inspection_item_ids=[source.id],
         location_text="  ",
@@ -783,7 +865,10 @@ def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
     assert completed_cancel.value.code == "inspection_task.invalid_transition"
 
     cancelled = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     dispatch_inspection_task(session, cancelled)
     cancel_inspection_task(session, cancelled, reason="取消驗證")
@@ -798,7 +883,10 @@ def test_location_and_cancellation_guards_cover_terminal_and_archived_states(
     restore_inspection_task(session, cancelled)
 
     archived = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     archive_inspection_plan(session, plan, archived=True)
     with pytest.raises(PlanningError) as archived_location:
@@ -827,6 +915,7 @@ def test_cross_project_zone_is_rejected(session, operator):
     with pytest.raises(PlanningError) as invalid:
         create_inspection_task(
             session,
+            name="示範任務",
             plan=plan,
             project_inspection_item_ids=[item.id],
             zone_id=zone_b.id,
@@ -844,7 +933,10 @@ def test_completed_task_blocked_by_reinspection_and_kd55_reopens(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     dispatch_inspection_task(session, task)
     start_inspection_task(session, task)
@@ -883,7 +975,10 @@ def test_cancelled_task_adopts_current_snapshot_only_on_restore(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     task_item = session.scalar(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
@@ -932,7 +1027,10 @@ def test_cancelled_completed_item_is_marked_on_restore(session, operator):
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     task_item = session.scalar(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
@@ -967,7 +1065,10 @@ def test_no_reinspection_updates_snapshot_without_task_status_change(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     dispatch_inspection_task(session, task)
     start_inspection_task(session, task)
@@ -1007,7 +1108,10 @@ def test_draft_kd55_replaces_snapshot_without_retaining_history(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     task_item = session.scalar(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
@@ -1043,7 +1147,10 @@ def test_archived_plan_locks_task_changes_and_unarchive_rederives(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     dispatch_inspection_task(session, task)
     archive_inspection_plan(session, plan, archived=True)
@@ -1065,7 +1172,10 @@ def test_draft_task_hard_delete_is_audited_and_plan_rederived(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     task_id = task.id
     delete_draft_inspection_task(session, task)
@@ -1089,14 +1199,20 @@ def test_new_draft_task_rederives_cancelled_plan(session, operator):
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     dispatch_inspection_task(session, task)
     cancel_inspection_task(session, task, reason="結束當前批次")
     assert plan.status == "CANCELLED"
 
     create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     assert plan.status == "DRAFT"
 
@@ -1111,7 +1227,10 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
     )
     source = _source_item(session, operator, project)
     task = create_inspection_task(
-        session, plan=plan, project_inspection_item_ids=[source.id]
+        session,
+        name="示範任務",
+        plan=plan,
+        project_inspection_item_ids=[source.id],
     )
     task_item = session.scalar(
         select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
@@ -1238,16 +1357,19 @@ def test_item_change_refreshes_every_plan_using_item_only(session, operator):
     )
     first_task = create_inspection_task(
         session,
+        name="示範任務",
         plan=first_plan,
         project_inspection_item_ids=[shared.id],
     )
     second_task = create_inspection_task(
         session,
+        name="示範任務",
         plan=second_plan,
         project_inspection_item_ids=[shared.id],
     )
     unrelated_task = create_inspection_task(
         session,
+        name="示範任務",
         plan=second_plan,
         project_inspection_item_ids=[unrelated.id],
     )

@@ -156,7 +156,7 @@ def test_concurrent_project_item_patches_preserve_revision_history(
     assert plan_response.status_code == 201, plan_response.text
     task_response = admin.post(
         f"/api/v1/inspection-plans/{plan_response.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "並行修改任務", "item_ids": [str(item.id)]},
     )
     assert task_response.status_code == 201, task_response.text
 
@@ -451,7 +451,13 @@ def test_task_creation_and_item_patch_serialize_snapshot_sources(
                 observed.append(f"{request}_commit")
 
     def create_task():
-        return create_client.post(task_url, json={"item_ids": [str(item.id)]})
+        return create_client.post(
+            task_url,
+            json={
+                "name": "並行建立任務",
+                "item_ids": [str(item.id)],
+            },
+        )
 
     def patch_item():
         return patch_client.patch(
@@ -691,7 +697,7 @@ def _world_with_draft_task(db_session, make_client, name):
     assert plan_response.status_code == 201, plan_response.text
     task_response = world["admin"].post(
         f"/api/v1/inspection-plans/{plan_response.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert task_response.status_code == 201, task_response.text
     return world, task_response.json()["id"]
