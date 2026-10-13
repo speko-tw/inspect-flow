@@ -15,6 +15,7 @@ from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
 from app.services.users import create_user
+from tests.api.query_count import select_count
 from tests.db.conftest import create_root_user_with_company
 
 ME_PROJECTS = "/api/v1/me/projects"
@@ -120,6 +121,7 @@ def seed(db_session: Session, make_client):
         "mine": mine,
         "also_mine": also_mine,
         "others": others,
+        "inspector": inspector,
         "alice_client": _client_for(db_session, make_client, alice),
         "bob_client": _client_for(db_session, make_client, bob),
         "admin_client": _client_for(db_session, make_client, root),
@@ -185,6 +187,65 @@ def test_my_projects_lists_only_own_projects_with_own_roles(seed):
             "has_office_access": False,
         },
     ]
+
+
+def test_my_projects_role_name_query_count_does_not_grow(
+    seed, db_session: Session
+):
+    client = seed["alice_client"]
+    few_queries, few_items = select_count(client, ME_PROJECTS)
+    assert few_queries > 0
+    assert few_items == 2
+
+    extra_codes = [f"DEMO-290-C{index}" for index in range(8)]
+    for code in extra_codes:
+        project = create_project(
+            db_session,
+            project_code=code,
+            name=f"工程 {code}",
+            client_name="示範業主",
+            site_location="示範工地",
+        )
+        add_project_member(
+            db_session,
+            project_id=project.id,
+            user_id=seed["alice"].id,
+            role_ids=[seed["inspector"].id],
+        )
+    db_session.commit()
+
+    many_queries, many_items = select_count(client, ME_PROJECTS)
+    assert many_queries == few_queries
+    assert many_items == 10
+
+    response = client.get(ME_PROJECTS)
+    assert response.status_code == 200
+    body = response.json()
+    assert [project["project_code"] for project in body] == [
+        "DEMO-290-A",
+        "DEMO-290-B",
+        *extra_codes,
+    ]
+    assert [project["role_names"] for project in body] == [
+        ["審核員", "查核員"],
+        [],
+        *([["查核員"]] * len(extra_codes)),
+    ]
+    assert all(
+        set(project)
+        == {
+            "id",
+            "project_code",
+            "name",
+            "client_name",
+            "site_location",
+            "planned_start_date",
+            "planned_completion_date",
+            "role_names",
+            "has_office_access",
+        }
+        for project in body
+    )
 
 
 def test_my_projects_never_shows_other_users_projects_or_roles(seed):

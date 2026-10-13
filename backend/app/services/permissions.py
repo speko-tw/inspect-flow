@@ -1,39 +1,11 @@
-"""Read-only permission calculations (DOM-R23, DOM-R24, DOM-R26).
+"""集中計算角色權限與專案存取範圍（DOM-R23、DOM-R24、DOM-R26、DOM-R69）。
 
-Three query-only entry points, none of which add, flush, commit or
-otherwise mutate any row. Each result reflects whatever is already
-flushed to the database at call time; a caller with its own pending
-(unflushed) changes that should count must flush them itself first
--- this module never flushes on a caller's behalf, precisely because
-it is read-only. Correspondingly, every query below runs inside
-``session.no_autoflush`` so that reading here never forces out a
-caller's pending write as a side effect (SQLAlchemy's default
-autoflush would otherwise ``UPDATE``/``INSERT`` before every
-``SELECT``):
+本模組只讀取呼叫時已 flush 的資料，不替呼叫端 flush，避免權限判斷
+意外送出尚未完成的寫入。角色、帳號狀態與模組權限在同一組入口計算，
+讓 API 與其他 Service 不必各自推導授權。
 
-- :func:`effective_permissions` (DOM-R26): the union of permission
-  codes a ``User`` holds in one ``Project``, computed fresh from
-  ``Role.permission_codes`` on every call -- never a copy stored on
-  ``ProjectMember`` itself, so a later edit to a ``Role`` is
-  reflected immediately for every holder (once flushed).
-- :func:`role_impact_scope` (DOM-R23): how many ``ProjectMember``
-  rows hold a given ``Role``, and how many distinct ``User``s that
-  is -- the numbers a future confirmation screen shows before a
-  ``Role`` is changed or deleted.
-- :func:`has_modify_capability` (DOM-R24): whether any of a
-  ``Role``'s permission codes represents something other than
-  reading, used by a future feature spec to decide whether to warn
-  before assigning that role to a customer-company member.
-
-DOM-R35 registers permission codes as one dot-namespaced string
-(``<data>.<action>``) per code, with the read action always spelled
-``read`` -- see ``app/permission_codes.py``. ``effective_permissions``
-therefore only ever ``SELECT``s ``RolePermission.code``, never
-filters ``WHERE ... code = ...``: a code used as a bind parameter
-would go through ``BoundedString``'s registration check
-(``app/models/role.py``), which is meant to gate *writes*, not reads,
-and would raise ``ValueError`` for any code no feature spec has
-registered yet.
+DOM-R35 登記權限代碼。讀取時先取出角色現有代碼再比對，避免把尚未
+登記的代碼作為寫入值交給 BoundedString 驗證。
 """
 
 import contextlib
@@ -48,21 +20,27 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
-    User,
-    UserModulePermission,
 )
-from app.permission_codes import PermissionCode, permission_code_scope
+from app.services.module_permissions import (
+    query_people_access,
+    query_person_access,
+)
 
 
 @dataclass(frozen=True)
 class EffectiveAccess:
-    """One effective permission snapshot for a person and optional project."""
+    """集中回傳一個人的有效權限與專案身分快照。
+
+    ``project_memberships`` 保留沒有角色的成員身分，因為部分端點只看
+    是否為專案成員，不能把空的角色權限集合誤當成非成員。
+    """
 
     is_active: bool
     is_admin: bool
     module_permissions: frozenset[str]
     project_permissions: frozenset[str]
     project_permissions_by_project: dict[uuid.UUID, frozenset[str]]
+    project_memberships: frozenset[uuid.UUID] = frozenset()
 
 
 def calculate_effective_access(
@@ -71,25 +49,15 @@ def calculate_effective_access(
     user_id: uuid.UUID,
     project_id: uuid.UUID | None = None,
 ) -> EffectiveAccess:
-    """DOM-R69: single calculation entry for module and project access."""
+    """依 DOM-R69 集中計算模組權限、專案權限與成員身分。
+
+    將這些結果放在同一個快照，避免各入口用不同查詢推導授權，並保留
+    無角色成員的專案身分供只要求成員資格的端點使用。
+    """
     with session.no_autoflush:
-        user = session.get(User, user_id)
-        if user is None:
+        person = query_person_access(session, user_id=user_id)
+        if person is None:
             return EffectiveAccess(False, False, frozenset(), frozenset(), {})
-        if user.is_admin:
-            module_codes = frozenset(
-                code.value
-                for code in PermissionCode
-                if permission_code_scope(code.value) == "module"
-            )
-        else:
-            module_codes = frozenset(
-                session.scalars(
-                    select(UserModulePermission.permission_code).where(
-                        UserModulePermission.user_id == user_id
-                    )
-                ).all()
-            )
         project_map = _project_permissions_by_project(
             session, user_id=user_id, project_id=project_id
         )
@@ -99,11 +67,151 @@ def calculate_effective_access(
             else frozenset()
         )
     return EffectiveAccess(
-        is_active=user.is_active,
-        is_admin=user.is_admin,
-        module_permissions=module_codes,
+        is_active=person.is_active,
+        is_admin=person.is_admin,
+        module_permissions=person.module_permissions,
         project_permissions=project_codes,
         project_permissions_by_project=project_map,
+        project_memberships=frozenset(project_map),
+    )
+
+
+def project_member_ids_with_permission(
+    session: Session,
+    *,
+    project_id: uuid.UUID,
+    permission_code: str,
+    active_only: bool = False,
+) -> frozenset[uuid.UUID]:
+    """DOM-R69：回傳具指定動作權限且非 Admin 的專案成員。
+
+    先由中央 Service 取得角色權限候選人，再由 DOM-R60 人員 Service
+    批次核對帳號狀態與 Admin 身分，避免端點自行重算授權。
+    IP-R12 規定停用帳號過濾要等 authentication 任務 P 合併後才啟用，
+    因此預設保留目前行為，由該任務明確傳入 `active_only=True`。
+    """
+    with session.no_autoflush:
+        candidate_permissions: dict[uuid.UUID, set[str]] = {}
+        rows = session.execute(
+            select(ProjectMember.user_id, RolePermission.code)
+            .select_from(ProjectMember)
+            .join(
+                ProjectMemberRole,
+                ProjectMemberRole.project_member_id == ProjectMember.id,
+            )
+            .join(
+                RolePermission,
+                RolePermission.role_id == ProjectMemberRole.role_id,
+            )
+            .where(ProjectMember.project_id == project_id)
+        ).all()
+        for user_id, code in rows:
+            if code == permission_code:
+                candidate_permissions.setdefault(user_id, set()).add(code)
+        people = query_people_access(
+            session, user_ids=set(candidate_permissions)
+        )
+    return frozenset(
+        user_id
+        for user_id, person in people.items()
+        if (person.is_active or not active_only)
+        and not person.is_admin
+        and permission_code in candidate_permissions[user_id]
+    )
+
+
+def project_member_management_impact(
+    session: Session,
+    *,
+    user_id: uuid.UUID,
+    module_permission_code: str,
+    project_permission_code: str,
+) -> tuple[int, tuple[uuid.UUID, ...], tuple[uuid.UUID, ...]]:
+    """集中計算撤回模組權限後的成員數與無管理者專案。
+
+    Admin 依全域管理規則可管理其成員專案；其他管理者必須同時啟用、
+    具模組使用權，並由角色取得專案管理權。
+    """
+    with session.no_autoflush:
+        project_ids = tuple(
+            sorted(
+                set(
+                    session.scalars(
+                        select(ProjectMember.project_id).where(
+                            ProjectMember.user_id == user_id
+                        )
+                    ).all()
+                ),
+                key=str,
+            )
+        )
+        if not project_ids:
+            return 0, (), ()
+        member_count = (
+            session.scalar(
+                select(func.count(ProjectMember.id)).where(
+                    ProjectMember.user_id == user_id
+                )
+            )
+            or 0
+        )
+        rows = session.execute(
+            select(
+                ProjectMember.project_id,
+                ProjectMember.user_id,
+                RolePermission.code,
+            )
+            .select_from(ProjectMember)
+            .outerjoin(
+                ProjectMemberRole,
+                ProjectMemberRole.project_member_id == ProjectMember.id,
+            )
+            .outerjoin(
+                RolePermission,
+                RolePermission.role_id == ProjectMemberRole.role_id,
+            )
+            .where(
+                ProjectMember.project_id.in_(project_ids),
+                ProjectMember.user_id != user_id,
+            )
+        ).all()
+        members_by_project: dict[uuid.UUID, set[uuid.UUID]] = {}
+        permissions_by_membership: dict[
+            tuple[uuid.UUID, uuid.UUID], set[str]
+        ] = {}
+        for project_id, member_id, code in rows:
+            members_by_project.setdefault(project_id, set()).add(member_id)
+            if code is not None:
+                permissions_by_membership.setdefault(
+                    (project_id, member_id), set()
+                ).add(code)
+        people = query_people_access(
+            session,
+            user_ids=set().union(*members_by_project.values()),
+        )
+        managed_projects = set()
+        for project_id, member_ids in members_by_project.items():
+            for member_id in member_ids:
+                person = people.get(member_id)
+                if person is None or not person.is_active:
+                    continue
+                if person.is_admin or (
+                    module_permission_code in person.module_permissions
+                    and project_permission_code
+                    in permissions_by_membership.get(
+                        (project_id, member_id), set()
+                    )
+                ):
+                    managed_projects.add(project_id)
+                    break
+    return (
+        member_count,
+        project_ids,
+        tuple(
+            project_id
+            for project_id in project_ids
+            if project_id not in managed_projects
+        ),
     )
 
 
@@ -113,14 +221,15 @@ def _project_permissions_by_project(
     user_id: uuid.UUID,
     project_id: uuid.UUID | None,
 ) -> dict[uuid.UUID, frozenset[str]]:
+    # DOM-R36 允許成員沒有角色；保留其專案鍵，中央結果才能回答身分。
     query = (
         select(ProjectMember.project_id, RolePermission.code)
-        .distinct()
-        .join(
+        .select_from(ProjectMember)
+        .outerjoin(
             ProjectMemberRole,
             ProjectMemberRole.project_member_id == ProjectMember.id,
         )
-        .join(
+        .outerjoin(
             RolePermission, RolePermission.role_id == ProjectMemberRole.role_id
         )
         .where(ProjectMember.user_id == user_id)
@@ -129,7 +238,9 @@ def _project_permissions_by_project(
         query = query.where(ProjectMember.project_id == project_id)
     grouped: dict[uuid.UUID, set[str]] = {}
     for key, code in session.execute(query).all():
-        grouped.setdefault(key, set()).add(code)
+        values = grouped.setdefault(key, set())
+        if code is not None:
+            values.add(code)
     return {key: frozenset(values) for key, values in grouped.items()}
 
 

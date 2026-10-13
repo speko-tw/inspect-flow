@@ -259,14 +259,6 @@ def add_role(
         raise
     except PermissionCodeValidationError as exc:
         raise _translate_permission_error() from exc
-    except InvalidExternalRoleError as exc:
-        raise APIError(ErrorCode.ROLE_EXTERNAL_ALLOWED_INVALID, 422) from exc
-    except CreatorRolePermissionsError as exc:
-        raise APIError(
-            ErrorCode.ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS, 422
-        ) from exc
-    except ModulePermissionDeniedError as exc:
-        raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
     return _single_role_response(db, role)
 
 

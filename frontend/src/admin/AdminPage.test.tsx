@@ -1012,9 +1012,12 @@ describe('admin user and company pages', () => {
     // 指派管理者是授予權限，確認用主要色；停用與收回才用危險色。
     expect(buttons[1]).toHaveClass('btn-primary')
     expect(buttons[0]).not.toHaveClass('btn-danger', 'btn-primary')
-    expect(
-      within(confirmation).getByRole('button', { name: '取消' }),
-    ).toHaveFocus()
+    // ConfirmBox 的初始焦點由 effect 設定，等待它完成後再檢查。
+    await waitFor(() =>
+      expect(
+        within(confirmation).getByRole('button', { name: '取消' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(
       within(confirmation).getByRole('button', {
         name: '確認',
@@ -1065,16 +1068,20 @@ describe('admin user and company pages', () => {
       within(assignment).getByRole('button', { name: '確認' }),
     ).toHaveClass('btn-primary')
     // 同一列換另一個動作時確認框重新掛載，焦點回到取消（#501 審查）。
-    expect(
-      within(assignment).getByRole('button', { name: '取消' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(assignment).getByRole('button', { name: '取消' }),
+      ).toHaveFocus(),
+    )
     ;(document.activeElement as HTMLElement).blur()
     fireEvent.click(within(userRow).getByRole('button', { name: '停用' }))
     const switched = screen.getByRole('region', { name: '操作確認' })
     expect(switched).toHaveTextContent('停用 anna.new')
-    expect(
-      within(switched).getByRole('button', { name: '取消' }),
-    ).toHaveFocus()
+    await waitFor(() =>
+      expect(
+        within(switched).getByRole('button', { name: '取消' }),
+      ).toHaveFocus(),
+    )
     fireEvent.click(within(switched).getByRole('button', { name: '取消' }))
     fireEvent.click(
       within(userRow).getByRole('button', { name: '指派管理者' }),

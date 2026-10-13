@@ -573,3 +573,279 @@ def test_concurrent_project_item_patches_serialize_on_sqlite_session_touch(
     stored_item = db_session.get(ProjectInspectionItem, item.id)
     assert stored_item is not None
     assert stored_item.standard_revision == 3
+
+
+class _LockGate:
+    """讓先取得指定鎖的請求暫停持鎖，確認後到者真的在等鎖才放行。
+
+    比照 #555 的作法，用 SQLAlchemy 事件與 pg_stat_activity 固定
+    交錯順序，而不是靠 sleep 賭時序：先完成鎖定語句的連線是持鎖者，
+    另一條連線只要也送出鎖定語句就會被 PostgreSQL 擋住。
+    """
+
+    def __init__(self, engine: Engine, matches: Callable[[str], bool]):
+        self._engine = engine
+        self._matches = matches
+        self._mutex = Lock()
+        self._backend_pids: dict[int, int] = {}
+        self._holder: int | None = None
+        self.acquired = Event()
+        self.waiter_attempted = Event()
+        self.release = Event()
+        self.commits: list[str] = []
+
+    def _before(
+        self, connection, cursor, statement, parameters, context, executemany
+    ) -> None:
+        if not self._matches(statement.lower()):
+            return
+        pid = connection.connection.driver_connection.info.backend_pid
+        with self._mutex:
+            self._backend_pids[id(connection)] = pid
+            others = [c for c in self._backend_pids if c != self._holder]
+            if self._holder is not None and others:
+                self.waiter_attempted.set()
+
+    def _after(
+        self, connection, cursor, statement, parameters, context, executemany
+    ) -> None:
+        if not self._matches(statement.lower()):
+            return
+        with self._mutex:
+            if self._holder is None:
+                self._holder = id(connection)
+            is_holder = self._holder == id(connection)
+        if is_holder:
+            self.acquired.set()
+            assert self.release.wait(timeout=30)
+
+    def _commit(self, connection) -> None:
+        with self._mutex:
+            if id(connection) in self._backend_pids:
+                role = "holder" if id(connection) == self._holder else "waiter"
+                self.commits.append(role)
+
+    def __enter__(self) -> "_LockGate":
+        event.listen(self._engine, "before_cursor_execute", self._before)
+        event.listen(self._engine, "after_cursor_execute", self._after)
+        event.listen(self._engine, "commit", self._commit)
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.release.set()
+        event.remove(self._engine, "before_cursor_execute", self._before)
+        event.remove(self._engine, "after_cursor_execute", self._after)
+        event.remove(self._engine, "commit", self._commit)
+
+    def wait_until_waiter_blocked(self) -> None:
+        """等到另一條連線確實被持鎖者擋在 PostgreSQL 的鎖等待上。"""
+        assert self.acquired.is_set()
+        deadline = monotonic() + 10
+        while monotonic() < deadline:
+            with self._mutex:
+                holder = self._holder
+                holder_pid = self._backend_pids.get(holder or 0)
+                waiter_pids = [
+                    pid
+                    for conn, pid in self._backend_pids.items()
+                    if conn != holder
+                ]
+            if holder_pid is not None and waiter_pids:
+                with self._engine.connect() as probe:
+                    probe.execute(text("SELECT pg_stat_clear_snapshot()"))
+                    blocked = probe.execute(
+                        text(
+                            "SELECT 1 FROM pg_stat_activity "
+                            "WHERE pid = :waiter "
+                            "AND wait_event_type = 'Lock' "
+                            "AND :holder = ANY(pg_blocking_pids(pid))"
+                        ),
+                        {"waiter": waiter_pids[0], "holder": holder_pid},
+                    ).first()
+                if blocked is not None:
+                    return
+        raise AssertionError("second request never waited on the held lock")
+
+
+def _two_admin_clients(
+    db_session: Session,
+    world,
+    make_client: Callable[[], TestClient],
+) -> list[TestClient]:
+    tokens = [
+        create_session(db_session, world["admin_user"])[1] for _ in range(2)
+    ]
+    db_session.commit()
+    clients = [make_client(), make_client()]
+    for client, token in zip(clients, tokens, strict=True):
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+    return clients
+
+
+def _world_with_draft_task(db_session, make_client, name):
+    world = _planning_world(db_session, make_client)
+    plan_response = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": name},
+    )
+    assert plan_response.status_code == 201, plan_response.text
+    task_response = world["admin"].post(
+        f"/api/v1/inspection-plans/{plan_response.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task_response.status_code == 201, task_response.text
+    return world, task_response.json()["id"]
+
+
+def test_concurrent_task_item_replacements_reread_old_items_after_lock(
+    engine: Engine,
+    db_session: Session,
+    make_client: Callable[[], TestClient],
+) -> None:
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row-level locks")
+
+    world, task_id = _world_with_draft_task(
+        db_session, make_client, "草稿項目並行取代"
+    )
+    first, second = _two_admin_clients(db_session, world, make_client)
+    url = f"/api/v1/inspection-tasks/{task_id}/items"
+    item_id, item_two_id = world["item"].id, world["item_two"].id
+
+    def lock_statement(statement: str) -> bool:
+        return "inspection_plans" in statement and "for update" in statement
+
+    with _LockGate(get_engine(), lock_statement) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            try:
+                first_future = executor.submit(
+                    first.put, url, json={"item_ids": [str(item_two_id)]}
+                )
+                assert gate.acquired.wait(timeout=10)
+                second_future = executor.submit(
+                    second.put,
+                    url,
+                    json={"item_ids": [str(item_id), str(item_two_id)]},
+                )
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            first_response = first_future.result(timeout=20)
+            second_response = second_future.result(timeout=20)
+
+    assert first_response.status_code == 200, first_response.text
+    assert second_response.status_code == 200, second_response.text
+    assert gate.commits == ["holder", "waiter"]
+    assert {item["id"] for item in second_response.json()["items"]} == {
+        str(item_id),
+        str(item_two_id),
+    }
+
+    db_session.expire_all()
+    task_items = db_session.scalars(
+        select(TaskInspectionItem).where(TaskInspectionItem.task_id == task_id)
+    ).all()
+    assert {row.project_inspection_item_id for row in task_items} == {
+        item_id,
+        item_two_id,
+    }
+    audits = db_session.scalars(
+        select(AuditLog)
+        .where(
+            AuditLog.event_type == "inspection_task.items_updated",
+            AuditLog.entity_id == UUID(task_id),
+        )
+        .order_by(AuditLog.created_at, AuditLog.id)
+    ).all()
+    # 後到者必須以持鎖後重讀的項目集合為 before；若沿用鎖前舊值，
+    # 第二筆稽核的 before 會誤記成最初的項目。
+    recorded = []
+    for audit in audits:
+        assert isinstance(audit.before, dict)
+        assert isinstance(audit.after, dict)
+        recorded.append(
+            (set(audit.before["items"]), set(audit.after["items"]))
+        )
+    assert recorded == [
+        ({str(item_id)}, {str(item_two_id)}),
+        ({str(item_two_id)}, {str(item_id), str(item_two_id)}),
+    ]
+
+
+@pytest.mark.parametrize("first_writer", ["task_items", "item_patch"])
+def test_task_item_replacement_and_item_patch_serialize_snapshot_sources(
+    engine: Engine,
+    db_session: Session,
+    make_client: Callable[[], TestClient],
+    first_writer: str,
+) -> None:
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row-level locks")
+
+    world, task_id = _world_with_draft_task(
+        db_session, make_client, "草稿項目與來源並行"
+    )
+    items_client, patch_client = _two_admin_clients(
+        db_session, world, make_client
+    )
+    items_url = f"/api/v1/inspection-tasks/{task_id}/items"
+    item_url = (
+        f"/api/v1/projects/{world['project'].id}"
+        f"/inspection-items/{world['item_two'].id}"
+    )
+
+    def source_lock(statement: str) -> bool:
+        return "project_inspection_items" in statement and (
+            " for share" in statement or "for no key update" in statement
+        )
+
+    def replace_items():
+        return items_client.put(
+            items_url, json={"item_ids": [str(world["item_two"].id)]}
+        )
+
+    def patch_item():
+        return patch_client.patch(
+            item_url, json={"title": "並行後標準", "reinspect": False}
+        )
+
+    first_call, second_call = (
+        (replace_items, patch_item)
+        if first_writer == "task_items"
+        else (patch_item, replace_items)
+    )
+    with _LockGate(get_engine(), source_lock) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            try:
+                first_future = executor.submit(first_call)
+                assert gate.acquired.wait(timeout=10)
+                second_future = executor.submit(second_call)
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            first_response = first_future.result(timeout=20)
+            second_response = second_future.result(timeout=20)
+
+    assert first_response.status_code == 200, first_response.text
+    assert second_response.status_code == 200, second_response.text
+    assert gate.commits == ["holder", "waiter"]
+
+    db_session.expire_all()
+    stored_item = db_session.get(ProjectInspectionItem, world["item_two"].id)
+    assert stored_item is not None
+    assert stored_item.standard_revision == 2
+    task_item = db_session.scalar(
+        select(TaskInspectionItem).where(TaskInspectionItem.task_id == task_id)
+    )
+    assert task_item is not None
+    assert task_item.project_inspection_item_id == stored_item.id
+    snapshot = db_session.scalar(
+        select(TaskRequirementSnapshot).where(
+            TaskRequirementSnapshot.task_inspection_item_id == task_item.id,
+            TaskRequirementSnapshot.is_current.is_(True),
+        )
+    )
+    assert snapshot is not None
+    # 不論誰先取得來源鎖，新快照都不得停在舊標準。
+    assert snapshot.source_standard_revision == stored_item.standard_revision
+    assert snapshot.title == stored_item.title == "並行後標準"
