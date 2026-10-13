@@ -4055,38 +4055,22 @@ def test_draft_task_items_api_rejects_invalid_items_without_changes(
     db_session.commit()
     before = _task_state(db_session, world["task_id"])
 
+    required = "inspection_task.items_required"
+    invalid_format = "request.validation_failed"
+    invalid_item = "inspection_task.invalid_project_item"
+    no_points_code = "inspection_task.item_without_points"
     cases = [
-        ({"item_ids": []}, 422, "inspection_task.items_required"),
-        (
-            {"item_ids": [str(world["item_two"].id)] * 2},
-            422,
-            "request.validation_failed",
-        ),
-        (
-            {"item_ids": [str(uuid4()) for _ in range(201)]},
-            422,
-            "request.validation_failed",
-        ),
-        (
-            {"item_ids": [str(uuid4())]},
-            422,
-            "inspection_task.invalid_project_item",
-        ),
-        (
-            {"item_ids": [str(foreign_item.id)]},
-            422,
-            "inspection_task.invalid_project_item",
-        ),
-        (
-            {"item_ids": [str(world["item_two"].id), str(no_points.id)]},
-            422,
-            "inspection_task.item_without_points",
-        ),
+        ([], required),
+        ([str(world["item_two"].id)] * 2, invalid_format),
+        ([str(uuid4()) for _ in range(201)], invalid_format),
+        ([str(uuid4())], invalid_item),
+        ([str(foreign_item.id)], invalid_item),
+        ([str(world["item_two"].id), str(no_points.id)], no_points_code),
     ]
-    for body, status, code in cases:
-        response = admin.put(url, json=body)
-        assert response.status_code == status, response.text
-        assert response.json()["error"]["code"] == code, body
+    for item_ids, code in cases:
+        response = admin.put(url, json={"item_ids": item_ids})
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == code, item_ids
         assert _task_state(db_session, world["task_id"]) == before
 
     no_manage = world["reader"].put(
