@@ -500,6 +500,13 @@ def test_external_bundle_denial_is_422_and_written_once(
 ):
     target = create_root_user_with_company(session, "BND-EXT-TARGET")
     target.is_external_collaborator = True
+    session.add(
+        UserModulePermission(
+            user_id=target.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
     bundle = PermissionBundle(
         name="External bundle",
         created_by=operator.id,
@@ -518,6 +525,14 @@ def test_external_bundle_denial_is_422_and_written_once(
     )
     session.commit()
     factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    before_permissions = [
+        (row.permission_code, row.source)
+        for row in session.scalars(
+            select(UserModulePermission).where(
+                UserModulePermission.user_id == target.id
+            )
+        )
+    ]
 
     with pytest.raises(service.ExternalCollaboratorPermissionError) as error:
         with unit_of_work(factory) as transaction:
@@ -538,6 +553,16 @@ def test_external_bundle_denial_is_422_and_written_once(
 
     assert error.value.status_code == 422
     assert error.value.details == ["project.create"]
+    session.expire_all()
+    after_permissions = [
+        (row.permission_code, row.source)
+        for row in session.scalars(
+            select(UserModulePermission).where(
+                UserModulePermission.user_id == target.id
+            )
+        )
+    ]
+    assert after_permissions == before_permissions
     events = list(
         session.scalars(
             select(AuditLog).where(
