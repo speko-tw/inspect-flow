@@ -366,6 +366,7 @@ def _task_summaries(
                 "project_id": task.project_id,
                 "plan_id": task.plan_id,
                 "status": task.status,
+                "inspection_level": task.inspection_level,
                 "zone_id": task.zone_id,
                 "zone": {"id": zone.id, "name": zone.name} if zone else None,
                 "location_text": task.location_text,
