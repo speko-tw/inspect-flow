@@ -1,7 +1,8 @@
 // 路由入口的 id 守衛（#618 F-S01）：網址裡的具名路由參數（`projectId`、
 // `itemId` 等）不是合法 id 格式時，直接顯示找不到（ADM-R25），不讓頁面元件拿
 // 這個值去拼 API 路徑。放在路由層而不是各頁，是因為專案底下有十幾個
-// 路由、且管理者與非管理者外殼各定義一份，守衛只寫一處才不會漏。
+// 路由；兩種管理外殼共用 AdminPage 的 `PROJECT_ROUTES`，守衛只寫在
+// 那個 layout route 一處才不會漏。
 
 import type { ReactNode } from 'react'
 import { Outlet, useParams } from 'react-router'

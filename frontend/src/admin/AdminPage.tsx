@@ -117,6 +117,9 @@ function ProjectTemplatesRoute() {
 }
 
 // 兩種管理外殼共用同一份專案路由，避免權限分流時路徑或守衛逐漸不一致。
+// 專案與查核項目的路由參數先驗格式，見 RequireValidRouteIds。安全規則：
+// 新的專案子路由必須放在這個 layout route 底下；放在外面就不受 id 守衛
+// 保護，特製網址會直接打到別的 API 端點。
 const PROJECT_ROUTES = (
   <Route element={<RequireValidRouteIds />}>
     <Route element={<ProjectHomePage />} path="projects/:projectId" />
