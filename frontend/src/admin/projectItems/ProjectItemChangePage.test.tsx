@@ -66,6 +66,7 @@ const numericPoint: InspectionPoint = {
 const preview: ProjectItemPreview = {
   item: {
     id: 'item-1',
+    project_id: 'project-1',
     sequence: 1,
     title: '混凝土表面檢查',
     instruction: '檢查混凝土表面狀況',

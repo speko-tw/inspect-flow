@@ -116,6 +116,55 @@ function ProjectTemplatesRoute() {
   )
 }
 
+// 兩種管理外殼共用同一份專案路由，避免權限分流時路徑或守衛逐漸不一致。
+const PROJECT_ROUTES = (
+  <Route element={<RequireValidRouteIds />}>
+    <Route element={<ProjectHomePage />} path="projects/:projectId" />
+    <Route
+      element={<ProjectSectionPage section="members" />}
+      path="projects/:projectId/members"
+    />
+    <Route
+      element={<ProjectSectionPage section="inspection-items" />}
+      path="projects/:projectId/inspection-items"
+    />
+    <Route
+      element={<ProjectSectionPage section="zones" />}
+      path="projects/:projectId/zones"
+    />
+    <Route
+      element={<ProjectTemplatesRoute />}
+      path="projects/:projectId/inspection-items/templates"
+    />
+    <Route
+      element={<ProjectTemplatesRedirect />}
+      path="projects/:projectId/templates"
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="planning">
+          <ProjectPlanningRoute />
+        </ProjectSectionPage>
+      }
+      path="projects/:projectId/planning"
+    />
+    <Route
+      element={<ProjectSectionPage section="progress" />}
+      path="projects/:projectId/progress"
+    />
+    <Route
+      element={
+        <ProjectSectionPage section="inspection-items">
+          <AdminRouteSuspense>
+            <ProjectItemChangePage api={projectItemApi} />
+          </AdminRouteSuspense>
+        </ProjectSectionPage>
+      }
+      path="projects/:projectId/inspection-items/:itemId"
+    />
+  </Route>
+)
+
 const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
   { to: '/admin/companies', label: '公司' },
@@ -247,57 +296,7 @@ function AdminPageContent() {
                 </AdminRouteSuspense>
               }
             />
-            {/* 專案與查核項目的路由參數先驗格式，見 RequireValidRouteIds。
-                新的專案子路由必須放在這個 layout route 底下，放在外面
-                就不受 id 守衛保護，特製網址會直接打到別的 API 端點。 */}
-            <Route element={<RequireValidRouteIds />}>
-              <Route
-                path="projects/:projectId"
-                element={<ProjectHomePage />}
-              />
-              <Route
-                path="projects/:projectId/members"
-                element={<ProjectSectionPage section="members" />}
-              />
-              <Route
-                path="projects/:projectId/inspection-items"
-                element={<ProjectSectionPage section="inspection-items" />}
-              />
-              <Route
-                path="projects/:projectId/zones"
-                element={<ProjectSectionPage section="zones" />}
-              />
-              <Route
-                path="projects/:projectId/inspection-items/templates"
-                element={<ProjectTemplatesRoute />}
-              />
-              <Route
-                path="projects/:projectId/templates"
-                element={<ProjectTemplatesRedirect />}
-              />
-              <Route
-                path="projects/:projectId/planning"
-                element={
-                  <ProjectSectionPage section="planning">
-                    <ProjectPlanningRoute />
-                  </ProjectSectionPage>
-                }
-              />
-              <Route
-                path="projects/:projectId/progress"
-                element={<ProjectSectionPage section="progress" />}
-              />
-              <Route
-                path="projects/:projectId/inspection-items/:itemId"
-                element={
-                  <ProjectSectionPage section="inspection-items">
-                    <AdminRouteSuspense>
-                      <ProjectItemChangePage api={projectItemApi} />
-                    </AdminRouteSuspense>
-                  </ProjectSectionPage>
-                }
-              />
-            </Route>
+            {PROJECT_ROUTES}
             <Route
               path="templates"
               element={
@@ -328,55 +327,6 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
     ) ||
     (!user.has_template_access &&
       /^\/admin\/templates(?:\/|$)/.test(location.pathname))
-  // 新的專案子路由必須放在這個 layout route 底下：放在外面就不受 id
-  // 守衛保護，特製網址會直接打到別的 API 端點。
-  const projectRoutes = (
-    <Route element={<RequireValidRouteIds />}>
-      <Route element={<ProjectHomePage />} path="projects/:projectId" />
-      <Route
-        element={<ProjectTemplatesRoute />}
-        path="projects/:projectId/inspection-items/templates"
-      />
-      <Route
-        element={<ProjectTemplatesRedirect />}
-        path="projects/:projectId/templates"
-      />
-      <Route
-        element={<ProjectSectionPage section="members" />}
-        path="projects/:projectId/members"
-      />
-      <Route
-        element={<ProjectSectionPage section="inspection-items" />}
-        path="projects/:projectId/inspection-items"
-      />
-      <Route
-        element={<ProjectSectionPage section="zones" />}
-        path="projects/:projectId/zones"
-      />
-      <Route
-        element={
-          <ProjectSectionPage section="planning">
-            <ProjectPlanningRoute />
-          </ProjectSectionPage>
-        }
-        path="projects/:projectId/planning"
-      />
-      <Route
-        element={<ProjectSectionPage section="progress" />}
-        path="projects/:projectId/progress"
-      />
-      <Route
-        element={
-          <ProjectSectionPage section="inspection-items">
-            <AdminRouteSuspense>
-              <ProjectItemChangePage api={projectItemApi} />
-            </AdminRouteSuspense>
-          </ProjectSectionPage>
-        }
-        path="projects/:projectId/inspection-items/:itemId"
-      />
-    </Route>
-  )
   return (
     <div className="app-shell">
       <AppHeader
@@ -409,7 +359,7 @@ function MemberAdminShell({ user }: { user: CurrentUser }) {
               )
             }
           />
-          {projectRoutes}
+          {PROJECT_ROUTES}
           {user.has_template_access && (
             <Route
               path="templates"
