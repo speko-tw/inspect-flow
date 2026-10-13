@@ -1591,7 +1591,9 @@ describe('planning forms guard (#507)', () => {
       expect(
         within(article).getByRole('heading', { name: '修改任務地點' }),
       ).toBeVisible()
-      expect(within(article).getByLabelText(/分區/)).toHaveFocus()
+      await waitFor(() =>
+        expect(within(article).getByLabelText(/分區/)).toHaveFocus(),
+      )
     })
 
     it('lists missing items, says to rebuild, and focuses the item field without a hash jump', async () => {
