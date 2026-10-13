@@ -27,6 +27,8 @@ export interface WorkflowSummary {
     id: string
     project_code: string
     name: string
+    /** DOM-R76：登記表中的角色值；標籤由前端依角色清單對應。 */
+    company_role: string
   }
   member_count: number
   inspection_item_count: number

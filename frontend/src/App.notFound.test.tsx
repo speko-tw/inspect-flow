@@ -40,7 +40,12 @@ const FIELD = { ...BASE, has_field_access: true }
 const BOTH = { ...BASE, has_office_access: true, has_field_access: true }
 
 const SUMMARY = {
-  project: { id: 'project-a', project_code: 'DEMO-A', name: '示範工程甲' },
+  project: {
+    id: 'project-a',
+    project_code: 'DEMO-A',
+    name: '示範工程甲',
+    company_role: 'contractor',
+  },
   viewer_permission_codes: [
     'project_member.manage',
     'project_inspection_item.edit',

@@ -6,12 +6,26 @@ export interface ProjectWarning {
   code: string
 }
 
+/** DOM-R76：本公司在這個案子的角色，值取自後端的角色登記表。 */
+export interface CompanyRole {
+  value: string
+  label: string
+  inspection_level: string
+}
+
+/**
+ * DOM-R76：開案時前端預設選取的角色值；選項本身仍由
+ * `GET /project-company-roles` 提供，不在畫面寫死（ADM-R40）。
+ */
+export const DEFAULT_COMPANY_ROLE = 'contractor'
+
 export interface Project {
   id: string
   project_code: string
   name: string
   client_name: string
   site_location: string
+  company_role: string
   planned_start_date: string | null
   planned_completion_date: string | null
   warnings: ProjectWarning[]
@@ -27,8 +41,15 @@ export type ProjectInput = {
   name: string
   client_name: string
   site_location: string
+  // ADM-R40：開案一律明確送出，不靠後端預設值。
+  company_role: string
   planned_start_date: string | null
   planned_completion_date: string | null
+}
+
+/** 修改專案；改本公司角色時必須同時帶原因（DOM-R76、ADM-R42）。 */
+export type ProjectUpdateInput = Partial<ProjectInput> & {
+  company_role_change_reason?: string
 }
 
 export interface ProjectMember {
@@ -90,9 +111,16 @@ export function createProject(input: ProjectInput): Promise<Project> {
   })
 }
 
+/** DOM-R76：登記表中的本公司角色，依登記順序。 */
+export function listCompanyRoles(): Promise<CompanyRole[]> {
+  return request<{ items: CompanyRole[] }>('/project-company-roles').then(
+    (page) => page.items,
+  )
+}
+
 export function updateProject(
   id: string,
-  input: Partial<ProjectInput>,
+  input: ProjectUpdateInput,
 ): Promise<Project> {
   return request(`/projects/${id}`, {
     method: 'PATCH',
