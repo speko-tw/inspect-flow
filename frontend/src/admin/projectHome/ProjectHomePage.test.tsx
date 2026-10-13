@@ -201,6 +201,33 @@ describe('project home', () => {
     expect(mocks.getProject).not.toHaveBeenCalled()
   })
 
+  it('leaves the role blank while the label list is loading', async () => {
+    let resolveRoles: (roles: unknown[]) => void = () => {}
+    mocks.listCompanyRoles.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRoles = resolve
+      }),
+    )
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+
+    renderAt()
+
+    expect(await screen.findByText(/本公司角色/)).toBeVisible()
+    // 登記表還沒回來：不顯示英文值，也沒有中文標籤。
+    expect(screen.queryByText('contractor')).toBeNull()
+    expect(screen.queryByText('承攬施工方')).toBeNull()
+
+    resolveRoles([
+      {
+        value: 'contractor',
+        label: '承攬施工方',
+        inspection_level: 'self_inspection',
+      },
+    ])
+    expect(await screen.findByText('承攬施工方')).toBeVisible()
+    expect(screen.queryByText('contractor')).toBeNull()
+  })
+
   it('falls back to the role value when the label list cannot load', async () => {
     mocks.listCompanyRoles.mockRejectedValue(new Error('offline'))
     mocks.getWorkflowSummary.mockResolvedValue(summary())

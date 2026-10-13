@@ -19,6 +19,7 @@ import AdminPage from '../AdminPage'
 import type { User } from '../api'
 import type { Project, ProjectMember, Role } from './api'
 import contract from './fixtures/member-roles-contract.json'
+import roleContract from './fixtures/company-role-contract.json'
 
 const officeUser: CurrentUser = {
   id: 'office-id',
@@ -146,7 +147,13 @@ function projectFetch({
   rolePages?: Role[][]
   /** 內業（非管理者、有 project_member.manage）：全域 API 一律 403。 */
   office?: boolean
-  failWith?: { match: RegExp; method: string; code: string; status: number }
+  failWith?: {
+    match: RegExp
+    method: string
+    code: string
+    status: number
+    fields?: { path: string; code: string }[]
+  }
 } = {}) {
   const projectRows = projects.map((row) => ({ ...row }))
   const memberRows = members.map((row) => ({ ...row }))
@@ -156,7 +163,12 @@ function projectFetch({
       const method = init?.method ?? 'GET'
       if (failWith && failWith.method === method && failWith.match.test(url)) {
         return Response.json(
-          { error: { code: failWith.code } },
+          {
+            error: {
+              code: failWith.code,
+              ...(failWith.fields ? { fields: failWith.fields } : {}),
+            },
+          },
           { status: failWith.status },
         )
       }
@@ -174,20 +186,8 @@ function projectFetch({
         )
       }
       if (parsed.pathname === '/api/v1/project-company-roles') {
-        return Response.json({
-          items: [
-            {
-              value: 'contractor',
-              label: '承攬施工方',
-              inspection_level: 'self_inspection',
-            },
-            {
-              value: 'supervisor',
-              label: '監造方',
-              inspection_level: 'spot_check',
-            },
-          ],
-        })
+        // 與後端相同：回應形狀取自共用契約 fixture（RG-M22）。
+        return Response.json(roleContract.roles_response)
       }
       if (parsed.pathname.endsWith('/inspection-items') && method === 'GET') {
         return Response.json({ items: [], next_cursor: null })
@@ -264,6 +264,12 @@ function projectFetch({
         const row = projectRows.find((item) => item.id === projectMatch[1])
         // 原因只進稽核，不是專案上保存的欄位（DOM-R76）。
         const fields = jsonBody(init)
+        // 與後端相同：改角色的請求只會帶契約規定的兩個欄位。
+        if (fields.company_role !== undefined) {
+          expect(Object.keys(fields)).toEqual(
+            expect.arrayContaining(Object.keys(roleContract.patch_request)),
+          )
+        }
         delete fields.company_role_change_reason
         Object.assign(row ?? {}, fields)
         return Response.json(row)
@@ -975,7 +981,17 @@ describe('admin projects page', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
     const again = await screen.findByRole('group', { name: '修改本公司角色' })
     const reason = within(again).getByLabelText(/變更原因/)
+    // 空字串：不能被瀏覽器原生必填提示攔下，自訂錯誤與焦點仍要出現。
+    expect(reason).toHaveValue('')
+    fireEvent.click(within(again).getByRole('button', { name: '確認' }))
+    expect(await within(again).findByText('請填寫變更原因。')).toBeVisible()
+    await waitFor(() => expect(reason).toHaveFocus())
+    expect(reason).toHaveAttribute('aria-invalid', 'true')
+    expect(calls(fetchMock, 'PATCH', /\/projects\//)).toHaveLength(0)
+
+    // 全空白：同樣擋下。
     fireEvent.change(reason, { target: { value: '   ' } })
+    expect(reason).not.toHaveAttribute('aria-invalid')
     fireEvent.click(within(again).getByRole('button', { name: '確認' }))
     expect(await within(again).findByText('請填寫變更原因。')).toBeVisible()
     await waitFor(() => expect(reason).toHaveFocus())
@@ -1020,8 +1036,8 @@ describe('admin projects page', () => {
       failWith: {
         match: /\/projects\/project-1$/,
         method: 'PATCH',
-        code: 'project.company_role_reason_required',
-        status: 422,
+        code: roleContract.reason_required_error.code,
+        status: roleContract.reason_required_error.status,
       },
     })
     renderAt('/admin/projects')
@@ -1041,6 +1057,95 @@ describe('admin projects page', () => {
       await within(box).findByText('改本公司角色必須填寫變更原因。'),
     ).toBeVisible()
     await waitFor(() => expect(reason).toHaveFocus())
+  })
+
+  // ADM-R28：後端對過長原因回帶欄位指標的 422，訊息顯示在原因欄旁。
+  it('shows a server field error on the reason field', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: roleContract.reason_too_long_error.code,
+        status: roleContract.reason_too_long_error.status,
+        fields: roleContract.reason_too_long_error.fields,
+      },
+    })
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    const role = await screen.findByLabelText(/本公司在這個案子的角色/)
+    await waitFor(() => expect(role).toBeEnabled())
+    fireEvent.change(role, { target: { value: 'supervisor' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    const box = await screen.findByRole('group', { name: '修改本公司角色' })
+    const reason = within(box).getByLabelText(/變更原因/)
+    fireEvent.change(reason, { target: { value: '合約改為監造' } })
+    fireEvent.click(within(box).getByRole('button', { name: '確認' }))
+
+    expect(
+      await within(box).findByText('變更原因最多 256 個字元。'),
+    ).toBeVisible()
+    await waitFor(() => expect(reason).toHaveFocus())
+    expect(reason).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('shows a server field error on the role field and closes the box', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: roleContract.invalid_role_error.code,
+        status: roleContract.invalid_role_error.status,
+        fields: roleContract.invalid_role_error.fields,
+      },
+    })
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    const role = await screen.findByLabelText(/本公司在這個案子的角色/)
+    await waitFor(() => expect(role).toBeEnabled())
+    fireEvent.change(role, { target: { value: 'supervisor' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    const box = await screen.findByRole('group', { name: '修改本公司角色' })
+    fireEvent.change(within(box).getByLabelText(/變更原因/), {
+      target: { value: '合約改為監造' },
+    })
+    fireEvent.click(within(box).getByRole('button', { name: '確認' }))
+
+    expect(
+      await screen.findByText('這個角色不能使用，請重新選擇。'),
+    ).toBeVisible()
+    await waitFor(() => expect(role).toHaveFocus())
+    expect(role).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByRole('group', { name: '修改本公司角色' })).toBeNull()
+  })
+
+  // 改回原值時確認框要關掉；再改成別的值時不能帶著舊的開啟狀態直接跳出。
+  it('closes the confirm box when the role is changed back', async () => {
+    const fetchMock = projectFetch()
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+
+    fireEvent.click(screen.getByRole('button', { name: '編輯' }))
+    const role = await screen.findByLabelText(/本公司在這個案子的角色/)
+    await waitFor(() => expect(role).toBeEnabled())
+    fireEvent.change(role, { target: { value: 'supervisor' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    await screen.findByRole('group', { name: '修改本公司角色' })
+
+    fireEvent.change(role, { target: { value: 'contractor' } })
+    expect(screen.queryByRole('group', { name: '修改本公司角色' })).toBeNull()
+
+    fireEvent.change(role, { target: { value: 'supervisor' } })
+    expect(screen.queryByRole('group', { name: '修改本公司角色' })).toBeNull()
+    expect(calls(fetchMock, 'PATCH', /\/projects\//)).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    expect(
+      await screen.findByRole('group', { name: '修改本公司角色' }),
+    ).toBeVisible()
   })
 
   it('does not ask for a reason when the role is unchanged', async () => {

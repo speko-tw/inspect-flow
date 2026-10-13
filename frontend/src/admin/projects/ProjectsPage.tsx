@@ -322,7 +322,13 @@ export default function ProjectsPage() {
   }
 
   function change(field: keyof FormState, value: string) {
-    if (field === 'company_role') setRoleFieldError('')
+    if (field === 'company_role') {
+      // 改角色就重新走一次確認：改回原值時確認框要關掉，否則再改成
+      // 別的值時會直接帶著舊的「已開啟」狀態跳出來。
+      setRoleFieldError('')
+      setRoleConfirmOpen(false)
+      setReasonError('')
+    }
     if (formMode?.kind === 'new') {
       setNewDraft((current) => ({ ...current, [field]: value }))
     } else if (formMode?.kind === 'edit') {
@@ -514,6 +520,7 @@ export default function ProjectsPage() {
       return
     }
     if (caught instanceof HttpError && caught.fields) {
+      // 後端對未登記角色與過長原因回帶欄位指標的 422（ADM-R28）。
       const mapped = mapFieldErrors(caught.fields, [
         { path: '/company_role', key: 'role' },
         { path: '/company_role_change_reason', key: 'reason' },
@@ -725,6 +732,7 @@ export default function ProjectsPage() {
           cancelLabel="取消"
           confirmLabel="確認"
           label="修改本公司角色"
+          noValidate
           onCancel={cancelRoleChange}
           onConfirm={confirmRoleChange}
           rootRef={roleConfirmRef}
