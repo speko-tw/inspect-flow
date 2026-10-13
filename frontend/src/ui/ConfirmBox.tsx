@@ -57,6 +57,12 @@ export type ConfirmBoxProps = {
   modal?: boolean
   /** 內容含必填欄位時，用 form 包起來，確認鈕改成 submit。 */
   asForm?: boolean
+  /**
+   * 關掉瀏覽器原生的必填提示（只在 `asForm` 時有效）。呼叫端要自己
+   * 驗證並把錯誤放在欄位旁、設 aria-invalid、聚焦（ADM-R28）時使用；
+   * 否則原生提示會先擋下送出，自訂錯誤永遠顯示不出來。
+   */
+  noValidate?: boolean
   cancelLabel?: string
   confirmLabel: string
   busy?: boolean
@@ -83,6 +89,7 @@ export function ConfirmBox({
   initialFocus = 'cancel',
   modal = false,
   asForm = false,
+  noValidate = false,
   cancelLabel = '取消',
   confirmLabel,
   busy = false,
@@ -190,6 +197,7 @@ export function ConfirmBox({
     return (
       <form
         {...common}
+        noValidate={noValidate}
         onSubmit={(event: FormEvent<HTMLFormElement>) => {
           event.preventDefault()
           void confirm()
