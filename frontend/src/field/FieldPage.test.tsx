@@ -221,12 +221,16 @@ describe('今日任務首頁', () => {
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二查核項目/ }),
+    ).toBeInTheDocument()
     expect(String(fetcher.mock.calls[3][0])).toContain('cursor=next')
     fireEvent.click(screen.getAllByRole('link', { name: /查看任務/ })[0])
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
-    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二查核項目/ }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -298,7 +302,9 @@ describe('今日任務首頁', () => {
     expect(await screen.findByText('無法載入任務')).toBeInTheDocument()
     expect(screen.getByText('外牆查核任務')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重試' }))
-    expect(await screen.findByText('第二項目')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二項目/ }),
+    ).toBeInTheDocument()
     expect(screen.getByText('外牆查核任務')).toBeInTheDocument()
     expect(fetcher).toHaveBeenCalledTimes(3)
     expect(String(fetcher.mock.calls[1][0])).toContain('cursor=next')
@@ -556,7 +562,7 @@ describe('開始查核後返回清單', () => {
     renderPage()
     await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
-    await screen.findByText('第二查核項目')
+    await screen.findByRole('link', { name: /第二查核項目/ })
     await startFirstCard()
     expect(await screen.findByText('查核進行中')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
@@ -634,13 +640,15 @@ describe('開始查核後返回清單', () => {
     renderPage()
     await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
-    await screen.findByText('第二查核項目')
+    await screen.findByRole('link', { name: /第二查核項目/ })
     await startFirstCard()
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '取消原因：施工順序調整。',
     )
     fireEvent.click(screen.getAllByRole('link', { name: /返回任務/ })[0])
-    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二查核項目/ }),
+    ).toBeInTheDocument()
     expect(screen.queryByText('外牆查核任務')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',

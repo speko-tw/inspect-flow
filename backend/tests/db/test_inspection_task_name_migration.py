@@ -19,7 +19,7 @@ from app.models import (
 from tests.db.conftest import create_root_user_with_company
 
 _BACKEND = Path(__file__).resolve().parents[2]
-_PARENT_REVISION = "c13b5e7a9d20"
+_PARENT_REVISION = "b4e8a2c71f93"
 _REVISION = "a497f3d2b601"
 
 

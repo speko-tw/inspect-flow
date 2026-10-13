@@ -59,7 +59,7 @@
 - **標示內容與版面未定**：標示欄位待 [#588](https://github.com/speko-tw/inspect-flow/issues/588)；T2 先做規則機制，預設不加標示，欄位定案後只改規則與測試。疊在照片上或延伸畫布另加標示區要在原型（T6）給負責人看；兩種版面對「內業版尺寸、編修後裁切、報表並排」的影響要在原型時一併說明。標示中的拍攝時間由手機提供、不一定可信，欄位定案時要決定是否採用。
 - **身分快照依賴 #550**：照片的拍照者是上傳者的身分快照，格式與寫入函式屬 [#550](https://github.com/speko-tw/inspect-flow/issues/550)；#550 未合併前，T1 先以同欄位結構實作，合併後對齊，避免兩處各存一份。
 - **跨規格依賴**：`inspection-planning` 的修改（IP-R04、IP-R07、IP-R13、IP-R14、`has_result`）放在 `completion-validation` 的規格 PR，避免兩個 PR 改同一份凍結規格；T5 必須等它合併。兩個 PR 都改 `docs/specs/README.md` 規格索引相鄰的兩列，後合併者要先 rebase。
-- **未裁定議題**：[OQ-19](../../intents/05-open-questions.md#oq-19) 與 G-04 餘項屬 0.8.x，本計畫不實作任何報告端行為。
+- **未裁定議題**：[OQ-19](../../intents/05-open-questions.md#oq-19) 與缺圖時能否出報表、圖片選用細節（[OQ-07](../../intents/05-open-questions.md#oq-07)）屬 0.8.x，本計畫不實作任何報告端行為。
 
 ## UI 原型與試用腳本
 
@@ -113,7 +113,7 @@ T6 完成時，於此段補上負責人核可的試用腳本（逐步編號列�
 
 ## 考慮過但沒採用的做法
 
-- **保存原圖並以版本系譜記錄每次編輯**（原 KD-04）：已被 [KD-32](../../intents/03-decisions-and-stack.md#kd-32) 取代，只保存現場版與內業版。
+- **保存原圖並以版本系譜記錄每次編輯**：不採用，[KD-32](../../intents/03-decisions-and-stack.md#kd-32) 決定只保存現場版與內業版。
 - **非同步產生內業版（背景工作）**：不採用。同步產生讓一筆照片永遠是完整兩版，也不用多出「產製中」「產製失敗」狀態；試用顯示過慢時再依 FEV-Q10 評估。
 - **前端直接產生內業版**：不採用，[KD-61](../../intents/03-decisions-and-stack.md#kd-61) 已決定由後端依編修操作產生，讓報告用圖一致且可追溯。
 - **離線佇列與重新連線同步**：不採用，MVP 為 Online-first（[KD-61](../../intents/03-decisions-and-stack.md#kd-61)、[KD-63](../../intents/03-decisions-and-stack.md#kd-63)）。

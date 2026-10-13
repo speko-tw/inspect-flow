@@ -8,7 +8,7 @@ Narrows ``users.employee_no`` to ``VARCHAR(16)`` and
 ``projects.project_code`` to ``VARCHAR(32)``, per DOM-Q1's ruling
 (#121): ``employee_no`` is a settled limit, while ``project_code``
 is a provisional value carried over from ``employee_no`` pending
-``Project``'s own business columns (OQ-01) -- see the PR description
+``Project``'s own business columns (KD-39) -- see the PR description
 for that caveat.
 
 T4 (#59, PR #120) created both columns as an unbounded ``String()``

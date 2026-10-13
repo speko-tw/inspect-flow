@@ -619,7 +619,9 @@ describe('planning management page', () => {
     const nameInput = within(article).getByLabelText(/任務名稱/)
     fireEvent.change(nameInput, { target: { value: '取消的名稱' } })
     fireEvent.click(within(article).getByRole('button', { name: '取消' }))
-    const discardDialog = screen.getByRole('dialog')
+    const discardDialog = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
     expect(discardDialog).toHaveTextContent('修改內容尚未儲存')
     fireEvent.click(
       within(discardDialog).getByRole('button', { name: '保留編輯' }),
@@ -629,7 +631,9 @@ describe('planning management page', () => {
     )
     fireEvent.click(within(article).getByRole('button', { name: '取消' }))
     fireEvent.click(
-      within(screen.getByRole('dialog')).getByRole('button', {
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', {
         name: '捨棄變更',
       }),
     )
@@ -1760,9 +1764,9 @@ describe('planning forms guard (#507)', () => {
         ).toHaveFocus(),
       )
       expect(window.location.hash).toBe(hashBefore)
-      expect(screen.queryByRole('group', { name: '有尚未儲存的變更' })).toBe(
-        null,
-      )
+      expect(
+        screen.queryByRole('group', { name: '有尚未儲存的變更' }),
+      ).toBeNull()
       expect(within(list).queryByRole('link')).toBeNull()
     })
 

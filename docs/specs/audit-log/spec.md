@@ -229,11 +229,11 @@
 
 關聯：`User` 1—多 `AuditLog`（`created_by`）。`entity_id` 只存 UUID，不是外鍵（ALG-R03）。
 
-**門檻比對**（參照[部分凍結](../README.md#partial-freeze)規則 1）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-01～G-07、OQ-06，搜尋稽核、紀錄、歷程、刪除、保留、核可等字面。
+**門檻比對**（參照[部分凍結](../README.md#partial-freeze)規則 1）：逐條比對[開工門檻](../../intents/05-open-questions.md#gate)的 G-06、G-07 及已裁定或已定方向的原門檻項目（KD-32、KD-34、KD-36、KD-54、KD-61、KD-62），搜尋稽核、紀錄、歷程、刪除、保留、核可等字面。
 
 | 實體 | 字面命中 | 結論 | 理由 |
 |---|---|---|---|
-| `AuditLog` | G-04「核可紀錄」；G-05「刪除與保留」 | 無關 | G-04 的核可紀錄是 Variant 那一側的欄位；日後若要把核可寫進稽核紀錄，只是在事件目錄多登記一種事件，不改資料表（ALG-R13）。Evidence 刪除與保留政策已由維護者依負責人授權決定（#388），見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)；這項政策與稽核紀錄的保留無關 |
+| `AuditLog` | 報告選圖與核可（KD-34）涉及核可紀錄；Evidence 刪除與保留（KD-62） | 無關 | KD-34 已定不設獨立核可，核可紀錄若日後要有，是 Evidence 那一側的欄位；日後若要把核可寫進稽核紀錄，只是在事件目錄多登記一種事件，不改資料表（ALG-R13）。Evidence 刪除與保留政策已由負責人裁定（#542，2026-10-13 確認），見 [KD-62](../../intents/03-decisions-and-stack.md#kd-62)；這項政策與稽核紀錄的保留無關 |
 
 ## 介面
 
@@ -309,7 +309,7 @@
 ## 變更紀錄
 
 - 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收；`project_id` 可空欄位、索引及篩選語意為規格設計（非負責人裁定） — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
-- 同步 G-05 已決定狀態與 KD-62 引用；不影響本規格或稽核紀錄保留範圍 — [#404](https://github.com/speko-tw/inspect-flow/issues/404)
+- 同步 KD-62 已決定狀態與引用；不影響本規格或稽核紀錄保留範圍 — [#404](https://github.com/speko-tw/inspect-flow/issues/404)
 - 對齊 #375 路線圖，將 Admin Dashboard 的 milestone 引用更新為 0.5.x — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
@@ -328,3 +328,4 @@
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #563 第 1 輪審查）：`role.updated` 引用的 DOM-R73 改為 DOM-R72、DOM-R73 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
 - 範圍變更（意圖變更跟進，負責人裁定，走標準路徑、未使用負責人直接指示的例外，[#559](https://github.com/speko-tw/inspect-flow/issues/559)）：`project.created` 加 `company_role`，`project.updated` 沿用於改本公司角色並於後值加 `company_role_change_reason`；新增 ALG-AC28。裁定留言：[六題裁定](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093033801)、[專家審視後修正](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093171971)、[最後一題](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093217072)；欄位名為規格設計（非負責人裁定） — [#559](https://github.com/speko-tw/inspect-flow/issues/559)
 - 規格澄清（規格設計，非負責人裁定，[#572](https://github.com/speko-tw/inspect-flow/issues/572)）：ALG-R24 列舉補 `project.*` 取該專案本身的 UUID，日後 Plan／Task 事件須標 `project_scoped`，「排隊」改稱「延後寫入」；ALG-AC18 補遍歷事件目錄與兩種寫入路徑拒絕缺少 `project_id` 的操作；行為與範圍不變，只為既有必須填值的規則加上拒絕守門 — [#572](https://github.com/speko-tw/inspect-flow/issues/572)
+- 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)

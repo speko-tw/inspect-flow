@@ -472,7 +472,7 @@ def test_locked_item_patch_batches_evidence_lookup(db_session, make_client):
         assert saved.status_code == 200, saved.text
         task = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-            json={"item_ids": [str(item_id)]},
+            json={"item_ids": [str(item_id)], "name": f"Task {key}"},
         )
         assert task.status_code == 201, task.text
         points = saved.json()["inspection_points"]

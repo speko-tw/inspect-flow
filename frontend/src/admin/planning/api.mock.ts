@@ -501,6 +501,8 @@ export function createMockPlanningClient(options?: {
         plan_id: planId,
         name: input.name.trim(),
         status: 'DRAFT',
+        // mock 專案一律是承攬施工方（IP-R16），不模擬改角色。
+        inspection_level: 'self_inspection',
         items,
         assignee_id: assignee?.id ?? null,
         assignee: assignee ?? null,

@@ -67,6 +67,12 @@ export interface InspectionTask {
   plan_id: string
   name: string
   status: TaskStatus
+  /**
+   * IP-R16：建立時由後端依專案當時的本公司角色帶入，之後不變；
+   * 值取自角色登記表（目前 `self_inspection`、`spot_check`），
+   * 以字串承載讓新增層級時前端不必改型別。
+   */
+  inspection_level: string
   items: TaskInspectionItem[]
   assignee_id: string | null
   assignee: SuggestedAssignee | null

@@ -7,17 +7,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.company_roles import company_role_inspection_level
 from app.db.clock import utc_now
 from app.models import (
     InspectionPlan,
     InspectionTask,
     Project,
     ProjectInspectionItemChange,
-    ProjectMember,
     ProjectZone,
     TaskInspectionItem,
     TaskRequirementSnapshot,
-    User,
 )
 from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.audit import (
@@ -409,21 +408,14 @@ def _validate_assignee(
 ) -> None:
     if assignee_id is None:
         return
-    member = session.scalar(
-        select(ProjectMember.id).where(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == assignee_id,
-        )
-    )
-    permissions = effective_permissions(
+    # 中央權限快照同時保留無角色成員身分，避免本服務直接查人員與成員表。
+    access = calculate_effective_access(
         session, user_id=assignee_id, project_id=project_id
     )
-    assignee = session.get(User, assignee_id)
     if (
-        member is None
-        or assignee is None
-        or assignee.is_admin
-        or "inspection_task.inspect" not in permissions
+        project_id not in access.project_memberships
+        or access.is_admin
+        or "inspection_task.inspect" not in access.project_permissions
     ):
         raise PlanningError("inspection_task.invalid_assignee")
 
@@ -477,6 +469,28 @@ def _lock_project_items_for_snapshot(
     return unique_ids
 
 
+def _current_inspection_level(session: Session, project_id: uuid.UUID) -> str:
+    """IP-R16：取專案**當下**的 ``company_role`` 對應的檢查層級。
+
+    以共享鎖讀取專案列：與改角色的 PATCH 並行時，兩邊會序列化，
+    新任務不會帶入剛被取代的舊層級。這裡排在 Plan 鎖之後，維持
+    「來源項目 → Plan → 專案」的取鎖順序。
+    """
+    role = session.scalar(
+        select(Project.company_role)
+        .where(Project.id == project_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    level = company_role_inspection_level(role) if role else None
+    if level is None:
+        # 登記表在 ORM 寫入前就擋下未登記的角色（DOM-R76），正常不會到這。
+        raise RuntimeError(
+            f"Project {project_id} has no registered inspection level"
+        )
+    return level
+
+
 def create_inspection_task(
     session: Session,
     *,
@@ -517,6 +531,9 @@ def create_inspection_task(
         zone_id=zone_id,
         name=normalized_name,
         location_text=normalized_location,
+        inspection_level=_current_inspection_level(
+            session, locked_plan.project_id
+        ),
         assignee_id=assignee_id,
         created_by=operator_id,
         updated_by=operator_id,
