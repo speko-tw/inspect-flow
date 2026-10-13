@@ -742,6 +742,17 @@ export default function ProjectsPage() {
                   </p>
                   <h3>{project.name}</h3>
                   <p>{project.site_location}</p>
+                  {/* 列表只剩卡片，業主與預定日期不得因此看不到；
+                      沒有值就不顯示該行。 */}
+                  {project.client_name ? (
+                    <p>{`業主：${project.client_name}`}</p>
+                  ) : null}
+                  {project.planned_start_date ? (
+                    <p>{`預定開工：${project.planned_start_date}`}</p>
+                  ) : null}
+                  {project.planned_completion_date ? (
+                    <p>{`預定完工：${project.planned_completion_date}`}</p>
+                  ) : null}
                   <Link
                     className="btn btn-primary"
                     onClick={(event) =>
@@ -774,7 +785,7 @@ export default function ProjectsPage() {
                   </Link>
                   <button
                     aria-label={`編輯專案「${project.name}」`}
-                    className="btn project-workspace-edit"
+                    className="btn"
                     onClick={() => startEdit(project)}
                     type="button"
                   >

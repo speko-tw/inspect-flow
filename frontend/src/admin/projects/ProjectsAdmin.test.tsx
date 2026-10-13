@@ -660,6 +660,10 @@ describe('admin projects page', () => {
     ).toBeVisible()
     expect(await screen.findAllByText('示範工程')).toHaveLength(2)
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    // 業主與預定開工日在卡片上；沒有預定完工日就不顯示該行。
+    expect(screen.getAllByText('業主：示範業主')).toHaveLength(2)
+    expect(screen.getAllByText('預定開工：2026-10-01')).toHaveLength(2)
+    expect(screen.queryByText(/預定完工/)).not.toBeInTheDocument()
     expect(screen.getByText('（代號重複）')).toBeVisible()
     expect(
       screen.getByRole('heading', {
@@ -748,6 +752,34 @@ describe('admin projects page', () => {
       screen.getByRole('heading', { name: /目標工程/ }),
     ).toBeInTheDocument()
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
+  })
+
+  it('shows planned completion on the card and hides empty lines', async () => {
+    projectFetch({
+      projects: [
+        makeProject({
+          planned_start_date: null,
+          planned_completion_date: '2027-04-01',
+        }),
+        makeProject({
+          id: 'project-2',
+          name: '無日期工程',
+          client_name: '',
+          planned_start_date: null,
+          planned_completion_date: null,
+        }),
+      ],
+    })
+    renderAt('/admin/projects')
+    await screen.findByRole('heading', { name: '無日期工程' })
+
+    const cards = document.querySelectorAll('.project-workspace-card')
+    const withDates = within(cards[0] as HTMLElement)
+    expect(withDates.getByText('預定完工：2027-04-01')).toBeVisible()
+    expect(withDates.queryByText(/預定開工/)).not.toBeInTheDocument()
+    const bare = within(cards[1] as HTMLElement)
+    expect(bare.queryByText(/業主：/)).not.toBeInTheDocument()
+    expect(bare.queryByText(/預定/)).not.toBeInTheDocument()
   })
 
   it('keeps the empty state hidden while searching and clearing', async () => {
@@ -1343,7 +1375,7 @@ describe('admin projects page', () => {
     const edit = within(card as HTMLElement).getByRole('button', {
       name: '編輯專案「示範工程」',
     })
-    expect(edit).toHaveClass('project-workspace-edit')
+    expect(edit).toHaveAttribute('type', 'button')
     fireEvent.click(edit)
     const heading = screen.getByRole('heading', {
       name: '編輯專案「示範工程」',
