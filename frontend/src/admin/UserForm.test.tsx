@@ -16,13 +16,15 @@ afterEach(() => {
 })
 
 describe('UserForm 必填標示（#284 第 4 項）', () => {
-  it('帳號名稱、Email、中文姓名標示「*」，其他欄位沒有', () => {
+  it('帳號名稱、Email、中文姓名顯示共用必填標記，其他欄位沒有', () => {
     const { container } = renderForm()
 
     for (const label of [/^帳號名稱/, /^Email/, /^中文姓名/]) {
       const field = screen.getByLabelText(label)
       expect(field).toBeRequired()
-      expect(field.closest('label')).toHaveTextContent('*')
+      expect(
+        field.closest('label')?.querySelector('.required-mark'),
+      ).toBeInTheDocument()
     }
     expect(
       screen.getByRole('radiogroup', { name: /帳號類型/ }),
@@ -33,11 +35,16 @@ describe('UserForm 必填標示（#284 第 4 項）', () => {
     ).not.toBeChecked()
     for (const label of [/^英文姓名/, /^公司/, /^部門/, /^地點/, /^工號/]) {
       expect(
-        screen.getByLabelText(label).closest('label'),
-      ).not.toHaveTextContent('*')
+        screen
+          .getByLabelText(label)
+          .closest('label')
+          ?.querySelector('.required-mark'),
+      ).not.toBeInTheDocument()
     }
     // 「*」只是視覺標示，不進入無障礙名稱。
-    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4)
+    expect(
+      container.querySelectorAll('.required-mark[aria-hidden="true"]'),
+    ).toHaveLength(4)
     expect(
       screen.getByRole('textbox', { name: '帳號名稱' }),
     ).toBeInTheDocument()

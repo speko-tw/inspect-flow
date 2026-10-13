@@ -21,7 +21,8 @@ import { useLocation, useNavigate } from 'react-router'
 
 import { BackLink } from '../layout/BackLink'
 import { ApiError, changePassword } from './api'
-import AuthLayout, { RequiredMark } from './AuthLayout'
+import AuthLayout from './AuthLayout'
+import { RequiredMark } from '../ui/Form'
 import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
@@ -207,7 +208,7 @@ export default function ChangePasswordPage() {
               setErrorField(null)
             }}
           />
-          <p className="tpl-hint" id="change-password-rule">
+          <p className="tpl-hint muted-text" id="change-password-rule">
             {PASSWORD_RULE_TEXT}
           </p>
           {errorField === 'new' && error !== null ? (

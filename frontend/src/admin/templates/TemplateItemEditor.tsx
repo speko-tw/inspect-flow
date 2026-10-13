@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
+import { RequiredMark } from '../../ui/Form'
 import { blockImeEnter } from '../../ui/submitGuard'
 import { formatInspectionStandard } from '../../ui/inspectionStandard'
 import { MeasurementFieldEditor } from './MeasurementFieldEditor'
@@ -223,7 +224,7 @@ export function TemplateItemEditor({
     >
       <div className="tpl-editor-heading">
         <div>
-          <p className="tpl-crumb">
+          <p className="tpl-crumb muted-text">
             {contextLabel ??
               `範本庫 / ${selectedCategory?.name} /${selectedSystem?.name}`}
           </p>
@@ -277,17 +278,16 @@ export function TemplateItemEditor({
         </div>
       )}
       {readOnly && (
-        <p className="tpl-hint">以下內容是尚未儲存的草稿，僅供唯讀檢視。</p>
+        <p className="tpl-hint muted-text">
+          以下內容是尚未儲存的草稿，僅供唯讀檢視。
+        </p>
       )}
       <fieldset className="tpl-editor-body" disabled={readOnly}>
         <>
           <section className="tpl-card" aria-labelledby="tpl-basic-title">
             <h3 id="tpl-basic-title">基本資料</h3>
             <label htmlFor="item-title">
-              查核項目名稱{' '}
-              <b aria-hidden="true" className="tpl-required">
-                *
-              </b>
+              查核項目名稱 <RequiredMark />
             </label>
             <input
               aria-invalid={Boolean(inputError('title'))}
@@ -298,7 +298,7 @@ export function TemplateItemEditor({
               value={itemDraft.title}
             />
             {inputError('title') && (
-              <p className="tpl-field-error">{inputError('title')}</p>
+              <p className="field-error">{inputError('title')}</p>
             )}
             <label htmlFor="item-instruction">項目說明</label>
             <textarea
@@ -312,11 +312,11 @@ export function TemplateItemEditor({
           <section className="tpl-card" aria-labelledby="tpl-points-title">
             <h3 id="tpl-points-title">查核項次</h3>
             {structureLocked && structureLockReason && (
-              <p className="tpl-hint" role="status">
+              <p className="tpl-hint muted-text" role="status">
                 {structureLockReason}
               </p>
             )}
-            <p className="tpl-hint">
+            <p className="tpl-hint muted-text">
               每張卡片是一個現場查核步驟。實測欄位可以留空。
             </p>
             {itemDraft.inspection_points.map((point, index) => {
@@ -362,7 +362,7 @@ export function TemplateItemEditor({
                     <span>
                       項次 {index + 1}：{point.title || '未命名項次'}
                     </span>
-                    <span className="tpl-point-summary">
+                    <span className="tpl-point-summary muted-text">
                       {pointSummary(point, photoDraft[String(index)] ?? '1')}
                     </span>
                     {Array.from(Object.keys(errors)).filter((key) =>
@@ -379,10 +379,7 @@ export function TemplateItemEditor({
                     )}
                   </summary>
                   <label htmlFor={`point-${index}-title`}>
-                    項次標題{' '}
-                    <b aria-hidden="true" className="tpl-required">
-                      *
-                    </b>
+                    項次標題 <RequiredMark />
                   </label>
                   <input
                     aria-invalid={Boolean(
@@ -398,7 +395,7 @@ export function TemplateItemEditor({
                     value={point.title}
                   />
                   {inputError(`${pointErrorKey}:title`) && (
-                    <p className="tpl-field-error">
+                    <p className="field-error">
                       {inputError(`${pointErrorKey}:title`)}
                     </p>
                   )}
@@ -417,7 +414,7 @@ export function TemplateItemEditor({
                     value={point.instruction}
                   />
                   {inputError(`${pointErrorKey}:instruction`) && (
-                    <p className="tpl-field-error">
+                    <p className="field-error">
                       {inputError(`${pointErrorKey}:instruction`)}
                     </p>
                   )}
@@ -469,10 +466,7 @@ export function TemplateItemEditor({
                   <section className="tpl-point-section" aria-label="照片需求">
                     <h4>照片需求</h4>
                     <label htmlFor={`photos-${index}`}>
-                      照片至少幾張{' '}
-                      <b aria-hidden="true" className="tpl-required">
-                        *
-                      </b>
+                      照片至少幾張 <RequiredMark />
                     </label>
                     <input
                       aria-invalid={Boolean(
@@ -495,7 +489,7 @@ export function TemplateItemEditor({
                       value={photoDraft[String(index)] ?? '1'}
                     />
                     {inputError(`${pointErrorKey}:photos`) && (
-                      <p className="tpl-field-error">
+                      <p className="field-error">
                         {inputError(`${pointErrorKey}:photos`)}
                       </p>
                     )}
@@ -505,7 +499,7 @@ export function TemplateItemEditor({
             })}
             {errors.points && (
               <p
-                className="tpl-field-error"
+                className="field-error"
                 data-error-key="points"
                 role="alert"
                 tabIndex={-1}
@@ -565,7 +559,7 @@ export function TemplateItemEditor({
       </fieldset>
       <div className="tpl-editor-footer">
         {requestError && (
-          <p className="tpl-field-error" role="alert">
+          <p className="field-error" role="alert">
             {requestError}
           </p>
         )}

@@ -277,7 +277,7 @@ function TaskList({
       )}
       {loading && !state && <p role="status">載入任務中…</p>}
       {error === 'forbidden' && (
-        <section className="field-notice field-error" role="alert">
+        <section className="field-notice field-notice-error" role="alert">
           <h2>目前無法查看現場任務</h2>
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
           {user.has_office_access && (
@@ -293,7 +293,7 @@ function TaskList({
         </section>
       )}
       {error === 'other' && !state?.nextCursor && (
-        <section className="field-notice field-error" role="alert">
+        <section className="field-notice field-notice-error" role="alert">
           <h2>無法載入任務</h2>
           <p>請稍後再試。</p>
           <button
@@ -391,7 +391,10 @@ function TaskList({
                 {loading ? '載入中…' : '載入更多'}
               </button>
               {error === 'other' && (
-                <section className="field-notice field-error" role="alert">
+                <section
+                  className="field-notice field-notice-error"
+                  role="alert"
+                >
                   <h2>無法載入任務</h2>
                   <p>請稍後再試。</p>
                   <button type="button" onClick={() => void loadMore()}>

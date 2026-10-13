@@ -227,7 +227,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'change-password-confirm',
     ]) {
       expect(
-        document.querySelector(`label[for="${id}"] .auth-required-marker`),
+        document.querySelector(`label[for="${id}"] .required-mark`),
       ).toBeInTheDocument()
     }
 
@@ -241,7 +241,7 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     let alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('兩次輸入的新密碼不一致，請重新輸入。')
     const confirmation = screen.getByLabelText('再輸入一次新密碼')
-    expect(alert).toHaveClass('shared-field-error')
+    expect(alert).toHaveClass('field-error')
     expect(confirmation).toHaveAttribute('aria-describedby', alert.id)
     expect(confirmation).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(confirmation).toHaveFocus())

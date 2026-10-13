@@ -205,12 +205,12 @@
   margin: 0 0 10px;
   color: var(--text-muted);
 }
-.field-error {
+.field-notice-error {
   background: var(--error-bg);
   color: var(--error-text);
   border-color: var(--error-border);
 }
-.field-error p {
+.field-notice-error p {
   color: inherit;
 }
 .field-notice .btn,
@@ -643,9 +643,14 @@ label {
   white-space: nowrap;
 }
 
-.required-label > [aria-hidden='true'] {
+.required-label > .required-mark,
+.required-mark {
   color: var(--danger);
   font-weight: 700;
+}
+
+.required-mark::before {
+  content: '*';
 }
 
 /* 包著核取方塊的 label：同一列、字重一般。 */
@@ -1561,6 +1566,17 @@ a.app-header-tab[aria-current='page'] {
 /* ---- 範本管理新版詳情流程（#427） ---- */
 
 /* 外層的 main 已提供最大寬度與內距，這裡不再重複（#500）。 */
+.field-hint,
+.muted-text,
+.tpl-empty p {
+  color: var(--text-muted);
+}
+
+.field-hint {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
 .tpl-page {
   min-width: 0;
 }
@@ -1583,14 +1599,9 @@ a.app-header-tab[aria-current='page'] {
   margin: 0;
 }
 
-.tpl-readonly,
-.tpl-required {
+.tpl-readonly {
   color: var(--danger);
   font-weight: 700;
-}
-
-.tpl-required {
-  display: inline;
 }
 
 .tpl-layout {
@@ -1652,7 +1663,6 @@ a.app-header-tab[aria-current='page'] {
 
 .tpl-tree-count,
 .tpl-item-open {
-  color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 400;
   white-space: nowrap;
@@ -1689,15 +1699,10 @@ a.app-header-tab[aria-current='page'] {
   }
 }
 
-.tpl-item-row {
-  color: var(--text-muted);
-}
-
 .tpl-tree-empty,
 .tpl-mobile-hint,
 .tpl-hint,
 .tpl-crumb {
-  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -1705,14 +1710,31 @@ a.app-header-tab[aria-current='page'] {
   padding: var(--space-2);
 }
 
+.tpl-mobile-system-count {
+  display: block;
+  margin-inline-start: auto;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.tpl-applied-status {
+  margin-inline-start: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.tpl-apply-item-option {
+  margin-block: 0.5rem;
+}
+
+.tpl-conflict-hint {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.875rem;
+}
+
 .tpl-empty {
   padding: var(--space-5) var(--space-3);
   text-align: center;
-}
-
-.tpl-empty p,
-.tpl-empty-small {
-  color: var(--text-muted);
 }
 
 .tpl-detail-pane h2 {
@@ -1892,7 +1914,6 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-point-summary {
-  color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 400;
 }
@@ -1939,7 +1960,6 @@ a.app-header-tab[aria-current='page'] {
 }
 
 .tpl-unit-suffix {
-  color: var(--text-muted);
   white-space: nowrap;
 }
 
@@ -2088,9 +2108,4 @@ a.app-header-tab[aria-current='page'] {
   }
 }
 
-/* 欄位說明文字：灰色一般字，和錯誤訊息分開（#490）。 */
-.field-hint {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  font-weight: 400;
-}
+/* 欄位說明與範本灰字共用顏色；尺寸由各元件規則決定（#490）。 */

@@ -16,6 +16,11 @@ import type { SubmitGuard } from './submitGuard'
 import { GENERIC_FAILURE_MESSAGE } from '../http'
 import './Form.css'
 
+/** 必填欄位的視覺標記；真正的必填語意由欄位驗證提供。 */
+export function RequiredMark() {
+  return <span aria-hidden="true" className="required-mark" />
+}
+
 type FormContextValue = { pending: boolean }
 
 const FormContext = createContext<FormContextValue | null>(null)
@@ -209,7 +214,7 @@ export function FieldError({
   if (!children) return null
   return (
     <p
-      className="shared-field-error"
+      className="field-error"
       id={id}
       ref={(node) => {
         localRef.current = node

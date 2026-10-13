@@ -1,5 +1,5 @@
 // 權限描述沿用 backend/app/permission_codes.py 的 registry 文案。
-// 新增權限碼時，需同步補充描述與摘要合併規則（若有）。
+// 新增權限碼時，需補充描述；摘要合併規則只在有群組時調整。
 const PERMISSION_DESCRIPTIONS: Array<[code: string, description: string]> = [
   ['project_member.manage', '管理專案成員與其角色'],
   ['project.update', '調整專案'],
@@ -23,29 +23,10 @@ const PERMISSION_DESCRIPTIONS: Array<[code: string, description: string]> = [
   ['inspection_task.cancel', '取消或恢復查核任務'],
 ]
 
-// Role 只能包含 project-scope 權限碼；module 權限不在角色摘要內。
-export const ROLE_SUMMARY_PHRASE_CODES = new Set([
-  'project_member.manage',
-  'project.update',
-  'project.read',
-  'project_inspection_item.edit',
-  'project_inspection_item.read',
-  'project_zone.read',
-  'project_zone.manage',
-  'inspection_plan.read',
-  'inspection_plan.create',
-  'inspection_plan.manage',
-  'inspection_plan.archive',
-  'inspection_plan.unarchive',
-  'inspection_task.read',
-  'inspection_task.create',
-  'inspection_task.manage',
-  'inspection_task.dispatch',
-  'inspection_task.assign',
-  'inspection_task.inspect',
-  'inspection_task.delete_draft',
-  'inspection_task.cancel',
-])
+// Role 摘要僅使用目前描述清單中的 project-scope 權限碼。
+export const ROLE_SUMMARY_PHRASE_CODES = new Set(
+  PERMISSION_DESCRIPTIONS.map(([code]) => code),
+)
 
 export const NO_PERMISSION_TEXT = '尚未設定任何權限'
 export const UNKNOWN_PERMISSION_TEXT = '可使用部分功能'

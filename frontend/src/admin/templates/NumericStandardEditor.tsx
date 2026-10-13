@@ -1,3 +1,4 @@
+import { RequiredMark } from '../../ui/Form'
 import type { InspectionPoint } from './api'
 import {
   boundField,
@@ -104,7 +105,7 @@ export function NumericStandardEditor({
               value={point.text_standard.text}
             />
             {inputError(`${key}:text`) && (
-              <p className="tpl-field-error">{inputError(`${key}:text`)}</p>
+              <p className="field-error">{inputError(`${key}:text`)}</p>
             )}
           </>
         )}
@@ -113,10 +114,7 @@ export function NumericStandardEditor({
             {numberOptions.length > 1 ? (
               <>
                 <label htmlFor={`binding-${index}`}>
-                  用來判定的數字欄位{' '}
-                  <b aria-hidden="true" className="tpl-required">
-                    *
-                  </b>
+                  用來判定的數字欄位 <RequiredMark />
                 </label>
                 <select
                   aria-invalid={Boolean(inputError(`${key}:binding`))}
@@ -156,7 +154,7 @@ export function NumericStandardEditor({
               </p>
             ) : (
               <p
-                className="tpl-hint"
+                className="tpl-hint muted-text"
                 data-error-key={`${key}:binding`}
                 tabIndex={-1}
               >
@@ -164,7 +162,7 @@ export function NumericStandardEditor({
               </p>
             )}
             {inputError(`${key}:binding`) && (
-              <p className="tpl-field-error">{inputError(`${key}:binding`)}</p>
+              <p className="field-error">{inputError(`${key}:binding`)}</p>
             )}
             <fieldset className="tpl-radio-group">
               <legend>條件</legend>
@@ -233,10 +231,7 @@ export function NumericStandardEditor({
             (standard.range_form ?? 'interval') === 'interval' ? (
               <>
                 <label htmlFor={`lower-${index}`}>
-                  下限{' '}
-                  <b aria-hidden="true" className="tpl-required">
-                    *
-                  </b>
+                  下限 <RequiredMark />
                 </label>
                 <div className="tpl-input-with-unit">
                   <input
@@ -253,23 +248,18 @@ export function NumericStandardEditor({
                     }
                     value={standard.lower_bound ?? ''}
                   />
-                  {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                  {unit && (
+                    <span className="tpl-unit-suffix muted-text">{unit}</span>
+                  )}
                 </div>
                 {inputError(`${key}:lower`) && (
-                  <p className="tpl-field-error">
-                    {inputError(`${key}:lower`)}
-                  </p>
+                  <p className="field-error">{inputError(`${key}:lower`)}</p>
                 )}
                 {inputError(`${key}:range`) && (
-                  <p className="tpl-field-error">
-                    {inputError(`${key}:range`)}
-                  </p>
+                  <p className="field-error">{inputError(`${key}:range`)}</p>
                 )}
                 <label htmlFor={`upper-${index}`}>
-                  上限{' '}
-                  <b aria-hidden="true" className="tpl-required">
-                    *
-                  </b>
+                  上限 <RequiredMark />
                 </label>
                 <div className="tpl-input-with-unit">
                   <input
@@ -284,21 +274,18 @@ export function NumericStandardEditor({
                     }
                     value={standard.upper_bound ?? ''}
                   />
-                  {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                  {unit && (
+                    <span className="tpl-unit-suffix muted-text">{unit}</span>
+                  )}
                 </div>
                 {inputError(`${key}:upper`) && (
-                  <p className="tpl-field-error">
-                    {inputError(`${key}:upper`)}
-                  </p>
+                  <p className="field-error">{inputError(`${key}:upper`)}</p>
                 )}
               </>
             ) : (
               <>
                 <label htmlFor={`value-${index}`}>
-                  標準值{' '}
-                  <b aria-hidden="true" className="tpl-required">
-                    *
-                  </b>
+                  標準值 <RequiredMark />
                 </label>
                 <div className="tpl-input-with-unit">
                   <input
@@ -313,12 +300,12 @@ export function NumericStandardEditor({
                     }
                     value={standard.value ?? ''}
                   />
-                  {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                  {unit && (
+                    <span className="tpl-unit-suffix muted-text">{unit}</span>
+                  )}
                 </div>
                 {inputError(`${key}:value`) && (
-                  <p className="tpl-field-error">
-                    {inputError(`${key}:value`)}
-                  </p>
+                  <p className="field-error">{inputError(`${key}:value`)}</p>
                 )}
                 {(standard.condition === 'range' ||
                   standard.condition === '=' ||
@@ -326,11 +313,7 @@ export function NumericStandardEditor({
                   <>
                     <label htmlFor={`tolerance-${index}`}>
                       容許誤差
-                      {standard.condition === 'range' && (
-                        <b aria-hidden="true" className="tpl-required">
-                          {' *'}
-                        </b>
-                      )}
+                      {standard.condition === 'range' && <RequiredMark />}
                       {standard.condition === '=' && '（選填）'}
                     </label>
                     <div className="tpl-input-with-unit">
@@ -346,10 +329,14 @@ export function NumericStandardEditor({
                         }
                         value={standard.tolerance ?? ''}
                       />
-                      {unit && <span className="tpl-unit-suffix">{unit}</span>}
+                      {unit && (
+                        <span className="tpl-unit-suffix muted-text">
+                          {unit}
+                        </span>
+                      )}
                     </div>
                     {inputError(`${key}:tolerance`) && (
-                      <p className="tpl-field-error">
+                      <p className="field-error">
                         {inputError(`${key}:tolerance`)}
                       </p>
                     )}
@@ -362,7 +349,7 @@ export function NumericStandardEditor({
               {boundField(point)?.unit || standard.unit || '單位未填'}
               （由綁定欄位帶入）
             </p>
-            <p className="tpl-hint">
+            <p className="tpl-hint muted-text">
               {standard.condition === 'range'
                 ? '量測值要落在一段範圍內。'
                 : '量測值依所選條件與標準值判定。'}

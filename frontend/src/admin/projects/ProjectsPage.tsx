@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { Link, useNavigate } from 'react-router'
 
+import { RequiredMark } from '../../ui/Form'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { mapFieldErrors } from '../../ui/fieldErrors'
 import { FieldError, Form, FormError, FormSubmitButton } from '../../ui/Form'
@@ -531,7 +532,7 @@ export default function ProjectsPage() {
           )}
           <label>
             <span className="required-label">
-              本公司在這個案子的角色 <span aria-hidden="true">*</span>
+              本公司在這個案子的角色 <RequiredMark />
             </span>
             <select
               aria-describedby={[
@@ -568,7 +569,7 @@ export default function ProjectsPage() {
           </FieldError>
           <label>
             <span className="required-label">
-              專案代號 <span aria-hidden="true">*</span>
+              專案代號 <RequiredMark />
             </span>
             <input
               maxLength={32}
@@ -579,7 +580,7 @@ export default function ProjectsPage() {
           </label>
           <label>
             <span className="required-label">
-              工程名稱 <span aria-hidden="true">*</span>
+              工程名稱 <RequiredMark />
             </span>
             <input
               maxLength={128}
@@ -590,7 +591,7 @@ export default function ProjectsPage() {
           </label>
           <label>
             <span className="required-label">
-              業主／委託單位 <span aria-hidden="true">*</span>
+              業主／委託單位 <RequiredMark />
             </span>
             <input
               maxLength={128}
@@ -601,7 +602,7 @@ export default function ProjectsPage() {
           </label>
           <label>
             <span className="required-label">
-              整體工程地點 <span aria-hidden="true">*</span>
+              整體工程地點 <RequiredMark />
             </span>
             <input
               maxLength={256}
@@ -677,7 +678,7 @@ export default function ProjectsPage() {
           </p>
           <label>
             <span className="required-label">
-              變更原因 <span aria-hidden="true">*</span>
+              變更原因 <RequiredMark />
             </span>
             <textarea
               aria-describedby={

@@ -874,12 +874,12 @@ describe('planning management page', () => {
       expect(document.getElementById('task-zone-hint')).toHaveClass(
         'field-hint',
       )
-      expect(document.querySelector('.tpl-field-error')).toBeNull()
+      expect(document.querySelector('.field-error')).toBeNull()
 
       fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
       const select = screen.getByLabelText(/任務分區/)
       const error = await screen.findByText('請選擇任務分區。')
-      expect(error).toHaveClass('tpl-field-error')
+      expect(error).toHaveClass('field-error')
       expect(select).toHaveAttribute('aria-invalid', 'true')
       expect(select.getAttribute('aria-describedby')).toContain(error.id)
       await waitFor(() => expect(select).toHaveFocus())
@@ -903,7 +903,7 @@ describe('planning management page', () => {
       fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
 
       const error = await screen.findByText('請輸入計畫名稱。')
-      expect(error).toHaveClass('tpl-field-error')
+      expect(error).toHaveClass('field-error')
       expect(input).toHaveAttribute('aria-invalid', 'true')
       await waitFor(() => expect(input).toHaveFocus())
       expect(createPlan).not.toHaveBeenCalled()
@@ -1925,7 +1925,7 @@ describe('planning forms guard (#507)', () => {
 
       const message = await within(form).findByText(
         '請至少選擇一筆查核項目。',
-        { selector: '.tpl-field-error' },
+        { selector: '.field-error' },
       )
       expect(message).toBeVisible()
       const field = within(form).getByRole('group', {
@@ -2224,7 +2224,7 @@ describe('planning forms guard (#507)', () => {
 
         const field = within(form).getByLabelText(label)
         expect(await within(form).findByText(new RegExp(message))).toHaveClass(
-          'tpl-field-error',
+          'field-error',
         )
         expect(field).toHaveAttribute('aria-invalid', 'true')
         await waitFor(() => expect(field).toHaveFocus())
@@ -2289,7 +2289,7 @@ describe('planning forms guard (#507)', () => {
               '請先補上項次或改選其他項目。',
             ].join(''),
           ),
-        ).toHaveClass('tpl-field-error')
+        ).toHaveClass('field-error')
         expect(fieldset).toHaveAttribute('aria-invalid', 'true')
         await waitFor(() => expect(fieldset).toHaveFocus())
         expect(within(form).queryByRole('alert')).toBeNull()
@@ -2338,7 +2338,7 @@ describe('planning forms guard (#507)', () => {
       const selector = within(form).getByLabelText('建議指派人')
       expect(
         await within(form).findByText(/建議指派人不是這個專案的成員/),
-      ).toHaveClass('tpl-field-error')
+      ).toHaveClass('field-error')
       expect(selector).toHaveAttribute('aria-invalid', 'true')
       await waitFor(() => expect(selector).toHaveFocus())
       expect(within(form).queryByRole('alert')).toBeNull()

@@ -12,7 +12,8 @@ import { isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { ManagementApiError, managementErrorMessage } from '../api'
-import MemberRoleFields, { RequiredMark } from './MemberRoleFields'
+import { RequiredMark } from '../../ui/Form'
+import MemberRoleFields from './MemberRoleFields'
 import {
   addProjectMember,
   getProject,
@@ -395,7 +396,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     <section aria-labelledby="project-heading">
       <h2 id="project-heading">成員</h2>
       {projectInfo && (
-        <p className="member-muted">
+        <p className="field-hint">
           專案代號 {projectInfo.project_code}；業主／委託單位{' '}
           {projectInfo.client_name}；工程地點 {projectInfo.site_location}
         </p>
@@ -428,12 +429,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           <>
             <p>沒有可加入的使用者。</p>
             {isAdmin ? (
-              <p className="member-hint">
+              <p className="field-hint">
                 要加入新的人，請先到
                 <Link to="/admin/users">使用者</Link>建立帳號。
               </p>
             ) : (
-              <p className="member-hint">
+              <p className="field-hint">
                 只能加入和你同公司、還沒加入這個專案的使用者；
                 需要新增帳號請洽系統管理者。
               </p>
@@ -465,7 +466,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
               </select>
             </label>
             {userError && (
-              <p className="member-field-error" id="member-user-error">
+              <p className="field-error" id="member-user-error">
                 {userError}
               </p>
             )}
@@ -485,7 +486,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
             ) : roles.length === 0 ? (
               <>
                 <p>目前沒有角色。</p>
-                <p className="member-hint">
+                <p className="field-hint">
                   {isAdmin ? (
                     <>
                       請先到<Link to="/admin/roles">角色</Link>
@@ -539,7 +540,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       ) : members.length === 0 ? (
         <div className="member-empty">
           <p>目前沒有成員。</p>
-          <p className="member-hint">
+          <p className="field-hint">
             先在上方選一位使用者並指定角色，把他加入專案。
           </p>
         </div>
@@ -552,7 +553,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   {member.name_zh ?? member.username}
                   {member.is_active ? null : <span>（已停用）</span>}
                 </p>
-                <p className="member-muted">
+                <p className="field-hint">
                   {[
                     member.name_zh ? member.username : null,
                     member.company_name ?? '未連結公司',
