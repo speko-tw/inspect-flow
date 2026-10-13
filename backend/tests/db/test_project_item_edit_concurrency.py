@@ -573,3 +573,72 @@ def test_concurrent_project_item_patches_serialize_on_sqlite_session_touch(
     stored_item = db_session.get(ProjectInspectionItem, item.id)
     assert stored_item is not None
     assert stored_item.standard_revision == 3
+
+
+def test_task_item_replacement_serializes_with_project_item_edit(
+    engine: Engine,
+    db_session: Session,
+    make_client: Callable[[], TestClient],
+) -> None:
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL row-level locks")
+
+    world = _planning_world(db_session, make_client)
+    project = world["project"]
+    admin_user = world["admin_user"]
+    plan_response = world["admin"].post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "草稿項目並發修改"},
+    )
+    assert plan_response.status_code == 201, plan_response.text
+    task_response = world["admin"].post(
+        f"/api/v1/inspection-plans/{plan_response.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task_response.status_code == 201, task_response.text
+    task_id = task_response.json()["id"]
+
+    tokens = [
+        create_session(db_session, admin_user)[1],
+        create_session(db_session, admin_user)[1],
+    ]
+    db_session.commit()
+    clients = [make_client(), make_client()]
+    for client, token in zip(clients, tokens, strict=True):
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+
+    barrier = Barrier(2)
+    item_url = (
+        f"/api/v1/projects/{project.id}/inspection-items/{world['item'].id}"
+    )
+    task_items_url = f"/api/v1/inspection-tasks/{task_id}/items"
+
+    def edit_source():
+        barrier.wait(timeout=10)
+        return clients[0].patch(
+            item_url,
+            json={"title": "更新中的舊項目", "reinspect": True},
+        )
+
+    def replace_task_items():
+        barrier.wait(timeout=10)
+        return clients[1].put(
+            task_items_url,
+            json={"item_ids": [str(world["item_two"].id)]},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        source_future = executor.submit(edit_source)
+        items_future = executor.submit(replace_task_items)
+        source_response = source_future.result(timeout=20)
+        items_response = items_future.result(timeout=20)
+
+    assert source_response.status_code == 200, source_response.text
+    assert items_response.status_code == 200, items_response.text
+    assert [item["id"] for item in items_response.json()["items"]] == [
+        str(world["item_two"].id)
+    ]
+    assert (
+        items_response.json()["items"][0]["current_snapshot"]["title"]
+        == "鋼筋檢查"
+    )

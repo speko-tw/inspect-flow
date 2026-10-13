@@ -3877,3 +3877,82 @@ def test_cancelled_task_locks_structure_when_reinspection_is_false(
     assert locked.json()["error"]["code"] == (
         "project_inspection_item.structure_locked"
     ), locked.text
+
+
+def test_draft_task_items_api_rebuilds_snapshots_and_audits(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project_id = world["project"].id
+    plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "草稿查核項目修改"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"item_ids": [str(world["item"].id)]},
+    )
+    assert task.status_code == 201, task.text
+    task_id = task.json()["id"]
+    url = f"/api/v1/inspection-tasks/{task_id}/items"
+
+    updated = admin.put(url, json={"item_ids": [str(world["item_two"].id)]})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["id"] == task_id
+    assert updated.json()["status"] == "DRAFT"
+    assert [item["id"] for item in updated.json()["items"]] == [
+        str(world["item_two"].id)
+    ]
+    assert (
+        updated.json()["items"][0]["current_snapshot"]["title"] == "鋼筋檢查"
+    )
+
+    audit = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "inspection_task.items_updated",
+            AuditLog.entity_id == UUID(task_id),
+        )
+    )
+    assert audit is not None
+    assert audit.before["items"] == [
+        {"id": str(world["item"].id), "name": "表面檢查"}
+    ]
+    assert audit.after["items"] == [
+        {"id": str(world["item_two"].id), "name": "鋼筋檢查"}
+    ]
+
+    empty = admin.put(url, json={"item_ids": []})
+    assert empty.status_code == 422
+    assert empty.json()["error"]["code"] == "request.validation_failed"
+    duplicate = admin.put(
+        url,
+        json={"item_ids": [str(world["item_two"].id)] * 2},
+    )
+    assert duplicate.status_code == 422
+    assert duplicate.json()["error"]["code"] == "request.validation_failed"
+    invalid_project_item = admin.put(
+        url,
+        json={
+            "item_ids": [
+                "00000000-0000-7000-8000-000000000000",
+            ]
+        },
+    )
+    assert invalid_project_item.status_code == 422
+    assert invalid_project_item.json()["error"]["code"] == (
+        "inspection_task.invalid_project_item"
+    )
+
+    no_manage = world["reader"].put(
+        url, json={"item_ids": [str(world["item"].id)]}
+    )
+    assert no_manage.status_code == 403
+    dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+    state_conflict = admin.put(url, json={"item_ids": [str(world["item"].id)]})
+    assert state_conflict.status_code == 409
+    assert state_conflict.json()["error"]["code"] == (
+        "inspection_task.invalid_transition"
+    )

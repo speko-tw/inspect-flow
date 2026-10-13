@@ -10,7 +10,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
@@ -85,6 +85,7 @@ from app.services.inspection_planning import (
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
+    update_draft_task_items,
     update_project_item_usage,
     update_task_location,
 )
@@ -142,6 +143,20 @@ class LocationBody(StrictBody):
 
     zone_id: UUID | None
     location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
+
+
+class TaskItemsBody(StrictBody):
+    """承載 IP-R20 的草稿任務新查核項目集合。"""
+
+    item_ids: list[UUID] = Field(min_length=1, max_length=ITEM_IDS_MAX)
+
+    @field_validator("item_ids")
+    @classmethod
+    def reject_duplicate_item_ids(cls, value: list[UUID]) -> list[UUID]:
+        """重複項目視為無效請求，避免客戶端誤認為項目順序有意義。"""
+        if len(value) != len(set(value)):
+            raise ValueError("item_ids must be unique")
+        return value
 
 
 class ProjectNumericStandardBody(NumericStandardBody):
@@ -1250,6 +1265,27 @@ def patch_task(
             location_text=body.location_text,
         ),
     )
+
+
+@router.put(
+    "/inspection-tasks/{task_id}/items",
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.manage")),
+    ],
+)
+def put_task_items(
+    task_id: UUID, body: TaskItemsBody, db: Session = _db_dependency
+):
+    """依 IP-R20 重建 DRAFT Task 的項目與需求快照。"""
+    task = _one_task(db, task_id)
+    updated = _call(
+        update_draft_task_items,
+        db,
+        task,
+        item_ids=body.item_ids,
+    )
+    return _task_summary(db, updated)
 
 
 @router.get(

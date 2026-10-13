@@ -12,7 +12,9 @@ from app.models import (
     InspectionPlan,
     InspectionTask,
     Project,
+    ProjectInspectionItem,
     ProjectInspectionItemChange,
+    ProjectInspectionPoint,
     ProjectMember,
     ProjectZone,
     TaskInspectionItem,
@@ -84,6 +86,12 @@ for _event, _entity, _kind, _fields in (
         "inspection_task",
         AuditEventKind.UPDATED,
         ("zone_id", "location_text"),
+    ),
+    (
+        "inspection_task.items_updated",
+        "inspection_task",
+        AuditEventKind.UPDATED,
+        ("items",),
     ),
     (
         "project_inspection_item.updated",
@@ -726,6 +734,109 @@ def update_task_location(
     return task
 
 
+def update_draft_task_items(
+    session: Session,
+    task: InspectionTask,
+    *,
+    item_ids: list[uuid.UUID],
+) -> InspectionTask:
+    """依 IP-R20 僅重建未派出 Task 的項目與快照。"""
+    operator_id = _require_permission(
+        session, task.project_id, "inspection_task.manage"
+    )
+    task_reference = session.get(InspectionTask, task.id)
+    if task_reference is None:
+        raise PlanningError("inspection_task.not_found")
+    old_items = session.scalars(
+        select(TaskInspectionItem)
+        .where(TaskInspectionItem.task_id == task.id)
+        .order_by(TaskInspectionItem.project_inspection_item_id)
+    ).all()
+    old_ids = [row.project_inspection_item_id for row in old_items]
+    if not item_ids:
+        raise PlanningError("inspection_task.items_required")
+    if len(item_ids) > 200 or len(set(item_ids)) != len(item_ids):
+        raise PlanningError("request.validation_failed")
+
+    # 先鎖新舊來源項目，再鎖 Plan 與 Task；與建立快照及修改來源項目
+    # 採相同鎖序，避免重建快照讀到併發修改前的標準（#555）。
+    source_ids = sorted(set(old_ids) | set(item_ids))
+    sources = session.scalars(
+        select(ProjectInspectionItem)
+        .where(
+            ProjectInspectionItem.project_id == task.project_id,
+            ProjectInspectionItem.id.in_(source_ids),
+        )
+        .order_by(ProjectInspectionItem.id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    ).all()
+    sources_by_id = {source.id: source for source in sources}
+    if set(item_ids) - sources_by_id.keys():
+        raise PlanningError("inspection_task.invalid_project_item")
+    if set(old_ids) - sources_by_id.keys():
+        raise PlanningError("inspection_task.invalid_project_item")
+
+    plan = _lock_plan(session, task_reference.plan_id)
+    locked_task = _lock_task(session, task.id)
+    if plan is None or locked_task is None:
+        raise PlanningError("inspection_task.not_found")
+    if plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if locked_task.status != "DRAFT":
+        raise PlanningError("inspection_task.invalid_transition")
+
+    source_ids_with_points = set(
+        session.scalars(
+            select(ProjectInspectionPoint.project_inspection_item_id).where(
+                ProjectInspectionPoint.project_inspection_item_id.in_(item_ids)
+            )
+        ).all()
+    )
+    if source_ids_with_points != set(item_ids):
+        raise PlanningError("inspection_task.item_without_points")
+
+    current_ids = {row.project_inspection_item_id for row in old_items}
+    if current_ids == set(item_ids):
+        return locked_task
+
+    before_items = [
+        {
+            "id": str(item_id),
+            "name": sources_by_id[item_id].title,
+        }
+        for item_id in old_ids
+    ]
+    after_items = [
+        {"id": str(item_id), "name": sources_by_id[item_id].title}
+        for item_id in item_ids
+    ]
+    # DRAFT 沒有結果，舊 Snapshot 不保留；資料庫 FK cascade 會一併
+    # 清除其下的點位、標準與證據需求，避免留下過期快照。
+    for row in old_items:
+        session.delete(row)
+    session.flush()
+    from app.services.inspection_planning_snapshots import create_task_items
+
+    create_task_items(
+        session,
+        task=locked_task,
+        project_inspection_item_ids=item_ids,
+        operator_id=operator_id,
+    )
+    locked_task.updated_by = operator_id
+    session.flush()
+    record_audit_event(
+        session,
+        "inspection_task.items_updated",
+        entity_id=locked_task.id,
+        project_id=locked_task.project_id,
+        before={"items": before_items},
+        after={"items": after_items},
+    )
+    return locked_task
+
+
 def dispatch_inspection_task(
     session: Session, task: InspectionTask
 ) -> InspectionTask:
@@ -1158,5 +1269,6 @@ __all__ = [
     "restore_inspection_task",
     "start_inspection_task",
     "update_project_item_usage",
+    "update_draft_task_items",
     "update_task_location",
 ]

@@ -47,6 +47,7 @@ from app.services.inspection_planning import (
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
+    update_draft_task_items,
     update_project_item_usage,
     update_task_location,
 )
@@ -152,6 +153,96 @@ def _planning_codes():
         "inspection_task.inspect",
         "project_inspection_item.edit",
     )
+
+
+def test_draft_task_items_are_replaced_with_current_snapshots_and_audited(
+    session, operator
+):
+    project = _project(session, operator, "ITEMSUPDATE")
+    _grant(session, operator, project, *_planning_codes())
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="調整草稿項目"
+    )
+    first = _source_item(session, operator, project, title="舊項目")
+    second = _source_item(
+        session, operator, project, title="新項目", sequence=2
+    )
+    task = create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[first.id]
+    )
+    old_association = session.scalar(
+        select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
+    )
+    assert old_association is not None
+
+    updated = update_draft_task_items(session, task, item_ids=[second.id])
+
+    assert updated.id == task.id
+    assert updated.status == "DRAFT"
+    associations = session.scalars(
+        select(TaskInspectionItem).where(TaskInspectionItem.task_id == task.id)
+    ).all()
+    assert [row.project_inspection_item_id for row in associations] == [
+        second.id
+    ]
+    assert associations[0].id != old_association.id
+    snapshots = session.scalars(
+        select(TaskRequirementSnapshot).where(
+            TaskRequirementSnapshot.task_inspection_item_id
+            == associations[0].id
+        )
+    ).all()
+    assert [
+        (row.revision, row.title, row.is_current) for row in snapshots
+    ] == [(1, "新項目", True)]
+    assert session.get(TaskInspectionItem, old_association.id) is None
+
+    audit = session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "inspection_task.items_updated",
+            AuditLog.entity_id == task.id,
+        )
+    )
+    assert audit is not None
+    assert audit.before == {"items": [{"id": str(first.id), "name": "舊項目"}]}
+    assert audit.after == {"items": [{"id": str(second.id), "name": "新項目"}]}
+
+
+def test_draft_task_item_updates_reject_invalid_state_archive_and_permissions(
+    session, operator, monkeypatch
+):
+    project = _project(session, operator, "ITEMSLOCK")
+    _grant(session, operator, project, *_planning_codes())
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="鎖定草稿項目"
+    )
+    source = _source_item(session, operator, project)
+    task = create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[source.id]
+    )
+
+    reader = create_root_user_with_company(session, "ITEMSLOCK-READER")
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            "app.services.inspection_planning.get_current_operator",
+            lambda _: reader,
+        )
+        with pytest.raises(PlanningError) as forbidden:
+            update_draft_task_items(session, task, item_ids=[source.id])
+        assert forbidden.value.code == "authorization.forbidden"
+
+    dispatch_inspection_task(session, task)
+    with pytest.raises(PlanningError) as dispatched:
+        update_draft_task_items(session, task, item_ids=[source.id])
+    assert dispatched.value.code == "inspection_task.invalid_transition"
+
+    new_draft = create_inspection_task(
+        session, plan=plan, project_inspection_item_ids=[source.id]
+    )
+    archive_inspection_plan(session, plan, archived=True)
+    with pytest.raises(PlanningError) as archived:
+        update_draft_task_items(session, new_draft, item_ids=[source.id])
+    assert archived.value.code == "inspection_plan.archived"
 
 
 class TestDerivedPlanStatus:
