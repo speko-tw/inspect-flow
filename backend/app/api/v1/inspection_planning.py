@@ -1463,6 +1463,23 @@ def _validate_project_points(
         ).all()
     )
 
+    # 鎖結構路徑要逐點比對照片張數；整批先查，避免每點各打一次 DB
+    # （N+1，#643）。只有該路徑會用到，其餘情況不多花一次查詢。
+    min_count_by_point: dict[UUID, int] = {}
+    if has_tasks and reinspect is False:
+        min_count_by_point = {
+            row.inspection_point_id: row.min_count
+            for row in db.execute(
+                select(
+                    ProjectEvidenceRequirement.inspection_point_id,
+                    ProjectEvidenceRequirement.min_count,
+                ).where(
+                    ProjectEvidenceRequirement.project_inspection_item_id
+                    == item.id
+                )
+            )
+        }
+
     point_identities: list[UUID | None] = []
     normalized_points = []
     seen_point_ids: set[UUID] = set()
@@ -1544,11 +1561,7 @@ def _validate_project_points(
                 raise APIError(
                     ErrorCode.PROJECT_INSPECTION_ITEM_STRUCTURE_LOCKED, 422
                 )
-            old_photo_count = db.scalar(
-                select(ProjectEvidenceRequirement.min_count).where(
-                    ProjectEvidenceRequirement.inspection_point_id == point_id
-                )
-            )
+            old_photo_count = min_count_by_point.get(point_id)
             if (
                 len(point.evidence_requirements) != 1
                 or point.evidence_requirements[0].min_count != old_photo_count
