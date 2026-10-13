@@ -1,7 +1,7 @@
 """``ProjectMember`` role assignment and removal Service entry
 points (DOM-R25, DOM-R36, plan.md T7, issue #135).
 
-Three entry points, each filling ``created_by``/``updated_by`` (or,
+Mutation entry points fill ``created_by``/``updated_by`` (or,
 for :func:`remove_project_member`, nothing -- the row is deleted)
 from the current operator (DOM-R14), and each recording exactly one
 DOM-R22 audit event through
@@ -16,10 +16,9 @@ DOM-R22 audit event through
   assigned at all, DOM-R36 allows the resulting membership to simply
   hold zero roles, and per DOM-R22's scope ("加入時沒有指派角色不
   寫") nothing is recorded.
-- :func:`assign_role`/:func:`unassign_role`: add or remove one
-  ``Role`` from an existing ``ProjectMember``, each recording the
-  full before/after role id sets as one more
-  ``project_member.roles_changed`` event.
+- :func:`set_project_member_roles`: replaces the complete role set
+  on an existing ``ProjectMember`` and records the full before/after
+  role id sets in one ``project_member.roles_changed`` event.
 - :func:`remove_project_member`: DOM-R36's "把人移出專案" -- deletes
   the ``ProjectMember`` row outright (no "removed" flag is kept),
   relying on the database's own ``ON DELETE CASCADE`` to remove its
@@ -30,9 +29,8 @@ DOM-R22 audit event through
 
 ``project_id``/``user_id`` are always included in
 ``project_member.roles_changed``'s payload (the event catalog's
-``always_recorded``), even though neither ever changes across these
-three functions -- :func:`app.services.audit.record_audit_event`
-requires it regardless.
+``always_recorded``); :func:`app.services.audit.record_audit_event`
+requires them regardless of whether they changed.
 """
 
 import uuid
@@ -50,23 +48,6 @@ from app.models import (
 from app.services.audit import record_audit_event
 from app.services.module_permissions import validate_role_assignment
 from app.services.operator import get_current_operator
-
-
-class RoleAlreadyAssignedError(ValueError):
-    """:func:`assign_role`: ``role_id`` is already one of
-    ``member``'s role assignments (DOM-R25's "同一個 Role 在同一筆
-    成員上不得重複指派"). Raised before ``member`` is touched, so a
-    caller that raced this check against a concurrent assignment
-    still relies on the database's own unique constraint, not this
-    check, to be the final authority.
-    """
-
-
-class RoleNotAssignedError(ValueError):
-    """:func:`unassign_role`: ``role_id`` is not currently one of
-    ``member``'s role assignments -- there is nothing to remove.
-    Raised before ``member`` is touched.
-    """
 
 
 def _current_role_ids(member: ProjectMember) -> frozenset[uuid.UUID]:
@@ -145,110 +126,6 @@ def add_project_member(
             before_role_ids=frozenset(),
             after_role_ids=role_id_set,
         )
-    return member
-
-
-def assign_role(
-    session: Session, member: ProjectMember, role_id: uuid.UUID
-) -> ProjectMember:
-    """Assign ``role_id`` to ``member`` (DOM-R25), filling
-    ``updated_by`` from the current operator (DOM-R14), and record
-    one ``project_member.roles_changed`` event (DOM-R22).
-
-    Raises:
-        RoleAlreadyAssignedError: ``member`` already holds
-            ``role_id``.
-    """
-    before_role_ids = _current_role_ids(member)
-    if role_id in before_role_ids:
-        raise RoleAlreadyAssignedError(
-            f"ProjectMember {member.id} already holds role {role_id}"
-        )
-    operator = get_current_operator(session)
-    user = session.get(User, member.user_id)
-    if user is None:
-        raise ValueError(f"User {member.user_id} does not exist")
-    validate_role_assignment(
-        session,
-        user=user,
-        project_id=member.project_id,
-        project_member_id=member.id,
-        role_ids=before_role_ids | {role_id},
-    )
-    member.role_assignments.append(ProjectMemberRole(role_id=role_id))
-    member.updated_by = operator.id
-    session.flush()
-    _record_roles_changed(
-        session,
-        member,
-        before_role_ids=before_role_ids,
-        after_role_ids=before_role_ids | {role_id},
-    )
-    return member
-
-
-def unassign_role(
-    session: Session, member: ProjectMember, role_id: uuid.UUID
-) -> ProjectMember:
-    """Remove ``role_id`` from ``member``, filling ``updated_by``
-    from the current operator (DOM-R14), and record one
-    ``project_member.roles_changed`` event (DOM-R22).
-
-    Deletes the matching ``ProjectMemberRole`` row directly
-    (``session.delete``) rather than dropping it from ``member.
-    role_assignments`` and relying on cascade: that relationship's
-    cascade is deliberately only ``"save-update, merge"`` (see
-    ``app/models/project_member.py``'s docstring), *not*
-    ``delete-orphan`` -- dropping an item from the collection would
-    instead try to ``UPDATE ... SET project_member_id = NULL``,
-    which fails outright since that column is ``NOT NULL``.
-
-    Deleting the child this way, instead of through the collection,
-    also means SQLAlchemy never removes it from ``member.
-    role_assignments``'s own in-memory list -- that list is only kept
-    in sync when *it* is the thing mutated. Left alone, a later call
-    in the same transaction (no commit in between) that reads
-    ``member.role_assignments`` -- :func:`_current_role_ids`, used by
-    both :func:`assign_role` and this function -- would still see the
-    just-deleted row and wrongly report ``role_id`` as still
-    assigned. This function therefore expires that one relationship
-    (``session.expire(member, ["role_assignments"])``) right after
-    flushing the delete, forcing the next access to re-``SELECT`` it
-    rather than reuse the stale in-memory list.
-
-    Raises:
-        RoleNotAssignedError: ``member`` does not currently hold
-            ``role_id``.
-    """
-    before_role_ids = _current_role_ids(member)
-    if role_id not in before_role_ids:
-        raise RoleNotAssignedError(
-            f"ProjectMember {member.id} does not hold role {role_id}"
-        )
-    operator = get_current_operator(session)
-    user = session.get(User, member.user_id)
-    if user is None:
-        raise ValueError(f"User {member.user_id} does not exist")
-    validate_role_assignment(
-        session,
-        user=user,
-        project_id=member.project_id,
-        project_member_id=member.id,
-        role_ids=before_role_ids - {role_id},
-    )
-    assignment = next(
-        a for a in member.role_assignments if a.role_id == role_id
-    )
-    session.delete(assignment)
-    member.updated_by = operator.id
-    session.flush()
-    session.expire(member, ["role_assignments"])
-    _record_roles_changed(
-        session,
-        member,
-        before_role_ids=before_role_ids,
-        after_role_ids=before_role_ids - {role_id},
-    )
     return member
 
 
@@ -354,12 +231,8 @@ def remove_project_member(session: Session, member: ProjectMember) -> None:
 
 
 __all__ = [
-    "RoleAlreadyAssignedError",
-    "RoleNotAssignedError",
     "add_project_member",
     "list_project_members",
-    "assign_role",
-    "unassign_role",
     "remove_project_member",
     "set_project_member_roles",
 ]
