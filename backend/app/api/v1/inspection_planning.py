@@ -394,8 +394,8 @@ def _task_summaries(
                     else None
                 ),
                 "items": details,
-                "created_at": task.created_at.isoformat(),
-                "updated_at": task.updated_at.isoformat(),
+                "created_at": format_utc(task.created_at),
+                "updated_at": format_utc(task.updated_at),
             }
         )
     return result
@@ -571,7 +571,7 @@ def _render_snapshots(
             "source_template_name": snapshot.source_template_name,
             "is_current": snapshot.is_current,
             "superseded_reason": snapshot.superseded_reason,
-            "superseded_at": snapshot.superseded_at.isoformat()
+            "superseded_at": format_utc(snapshot.superseded_at)
             if snapshot.superseded_at
             else None,
             "inspection_points": rendered,
@@ -588,8 +588,8 @@ def _plan_summary(
         "name": plan.name,
         "status": "ARCHIVED" if plan.is_archived else plan.status,
         "archived": plan.is_archived,
-        "created_at": plan.created_at.isoformat(),
-        "updated_at": plan.updated_at.isoformat(),
+        "created_at": format_utc(plan.created_at),
+        "updated_at": format_utc(plan.updated_at),
     }
     if with_tasks:
         tasks = list(

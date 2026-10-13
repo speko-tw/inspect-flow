@@ -1,6 +1,7 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
 import json
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -34,6 +35,15 @@ from app.models import (
     TaskSnapshotPoint,
 )
 from tests.db.conftest import create_root_user_with_company
+
+_API_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def _assert_api_timestamp(value: str) -> None:
+    assert _API_TIMESTAMP.fullmatch(value) is not None
+    parsed = datetime.fromisoformat(value)
+    assert parsed.utcoffset() == timedelta(0)
+    assert parsed.microsecond == 0
 
 
 def _client(make_client, token):
@@ -1805,11 +1815,15 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
         json={"name": "刪除點位重查"},
     )
     assert plan.status_code == 201, plan.text
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(plan.json()[field])
     created_task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
         json={"item_ids": [str(world["item"].id), str(world["item_two"].id)]},
     )
     assert created_task.status_code == 201, created_task.text
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(created_task.json()[field])
     task_id = UUID(created_task.json()["id"])
     dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
     assert dispatched.status_code == 200, dispatched.text
@@ -1853,6 +1867,20 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
     )
     assert patched.status_code == 200, patched.text
     assert patched.json()["affected_tasks"][0]["action"] == "updated"
+
+    task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert task_readback.status_code == 200, task_readback.text
+    task_payload = task_readback.json()
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(task_payload[field])
+    changed_item = next(
+        row
+        for row in task_payload["items"]
+        if row["id"] == str(world["item"].id)
+    )
+    assert len(changed_item["snapshots"]) == 2
+    _assert_api_timestamp(changed_item["snapshots"][0]["superseded_at"])
+    assert changed_item["snapshots"][1]["superseded_at"] is None
 
     db_session.expire_all()
     changed_snapshots = db_session.scalars(
