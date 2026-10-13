@@ -41,6 +41,7 @@ const FIELD_ERROR: Partial<Record<FieldKey, string>> = {
   'plan-name': '請輸入計畫名稱。',
   'plan-rename': '請輸入計畫名稱。',
   'task-items': '請至少選擇一筆查核項目。',
+  'edit-task-items': '請至少選擇一筆查核項目。',
   'task-zone': '請選擇任務分區。',
   'location-zone': '請選擇任務分區。',
 }
@@ -190,9 +191,9 @@ export default function PlanningPage({
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
   const [taskFormOpen, setTaskFormOpen] = useState(false)
-  // 表單展開後要把焦點送到哪裡：'first' 是一般展開，'items' 是阻擋說明的
-  // 捷徑（要落在查核項目欄）。表單還沒渲染時不能直接聚焦，所以先記下來。
-  const taskFormFocus = useRef<'first' | 'items' | null>(null)
+  // 表單展開時要把焦點送到第一個欄位；表單還沒渲染時不能直接聚焦，
+  // 所以先記下來。
+  const taskFormFocus = useRef<'first' | null>(null)
   // 只靠 ref 不會觸發 effect，所以每次請求都遞增計數讓 effect 再跑一次。
   const [taskFormFocusTick, setTaskFormFocusTick] = useState(0)
   const [taskToFocus, setTaskToFocus] = useState('')
@@ -332,12 +333,9 @@ export default function PlanningPage({
       const fieldset = form?.querySelector<HTMLElement>(
         '[data-field="task-items"]',
       )
-      // 一般展開落在第一個欄位；沒有可選項目時退回項目欄本身。
+      // 展開後落在第一個欄位；沒有可選項目時退回項目欄本身。
       const target =
-        taskFormFocus.current === 'first'
-          ? (form?.querySelector<HTMLElement>('input, select, textarea') ??
-            fieldset)
-          : fieldset
+        form?.querySelector<HTMLElement>('input, select, textarea') ?? fieldset
       target?.scrollIntoView?.({ block: 'center' })
       target?.focus()
       taskFormFocus.current = null
@@ -571,7 +569,7 @@ export default function PlanningPage({
     })
   }
 
-  function requestTaskFormFocus(target: 'first' | 'items'): void {
+  function requestTaskFormFocus(target: 'first'): void {
     taskFormFocus.current = target
     setTaskFormFocusTick((tick) => tick + 1)
   }

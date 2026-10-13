@@ -10,7 +10,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
@@ -146,17 +146,14 @@ class LocationBody(StrictBody):
 
 
 class TaskItemsBody(StrictBody):
-    """承載 IP-R20 的草稿任務新查核項目集合。"""
+    """承載 IP-R20 的草稿任務新查核項目集合。
 
-    item_ids: list[UUID] = Field(min_length=1, max_length=ITEM_IDS_MAX)
+    空陣列與重複項目不在此擋下，交給服務層依序檢查：先看 Plan 與 Task
+    狀態（409），再回 ``inspection_task.items_required`` 等項目錯誤，
+    與建立任務的錯誤碼一致。
+    """
 
-    @field_validator("item_ids")
-    @classmethod
-    def reject_duplicate_item_ids(cls, value: list[UUID]) -> list[UUID]:
-        """重複項目視為無效請求，避免客戶端誤認為項目順序有意義。"""
-        if len(value) != len(set(value)):
-            raise ValueError("item_ids must be unique")
-        return value
+    item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
 
 
 class ProjectNumericStandardBody(NumericStandardBody):

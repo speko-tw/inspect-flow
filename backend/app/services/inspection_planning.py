@@ -14,7 +14,6 @@ from app.models import (
     Project,
     ProjectInspectionItem,
     ProjectInspectionItemChange,
-    ProjectInspectionPoint,
     ProjectMember,
     ProjectZone,
     TaskInspectionItem,
@@ -734,6 +733,16 @@ def update_task_location(
     return task
 
 
+def _ensure_draft_task_editable(
+    plan: InspectionPlan | None, task: InspectionTask
+) -> None:
+    """依 IP-R20 檢查 Plan 未封存且 Task 仍為 DRAFT；封存優先。"""
+    if plan is None or plan.is_archived:
+        raise PlanningError("inspection_plan.archived")
+    if task.status != "DRAFT":
+        raise PlanningError("inspection_task.invalid_transition")
+
+
 def update_draft_task_items(
     session: Session,
     task: InspectionTask,
@@ -747,70 +756,53 @@ def update_draft_task_items(
     task_reference = session.get(InspectionTask, task.id)
     if task_reference is None:
         raise PlanningError("inspection_task.not_found")
-    old_items = session.scalars(
-        select(TaskInspectionItem)
-        .where(TaskInspectionItem.task_id == task.id)
-        .order_by(TaskInspectionItem.project_inspection_item_id)
-    ).all()
-    old_ids = [row.project_inspection_item_id for row in old_items]
+    # 規格要求先判斷 Plan 與 Task 狀態、再驗證項目；入口先做無鎖預檢，
+    # 讓封存 Plan 或已派出 Task 送壞項目時也穩定回 409。鎖後會再複檢。
+    _ensure_draft_task_editable(
+        session.get(InspectionPlan, task_reference.plan_id), task_reference
+    )
     if not item_ids:
         raise PlanningError("inspection_task.items_required")
     if len(item_ids) > 200 or len(set(item_ids)) != len(item_ids):
         raise PlanningError("request.validation_failed")
 
-    # 先鎖新舊來源項目，再鎖 Plan 與 Task；與建立快照及修改來源項目
-    # 採相同鎖序，避免重建快照讀到併發修改前的標準（#555）。
-    source_ids = sorted(set(old_ids) | set(item_ids))
-    sources = session.scalars(
-        select(ProjectInspectionItem)
-        .where(
-            ProjectInspectionItem.project_id == task.project_id,
-            ProjectInspectionItem.id.in_(source_ids),
-        )
-        .order_by(ProjectInspectionItem.id)
-        .with_for_update(read=True)
-        .execution_options(populate_existing=True)
-    ).all()
-    sources_by_id = {source.id: source for source in sources}
-    if set(item_ids) - sources_by_id.keys():
-        raise PlanningError("inspection_task.invalid_project_item")
-    if set(old_ids) - sources_by_id.keys():
-        raise PlanningError("inspection_task.invalid_project_item")
-
+    # 鎖序為來源項目 → Plan → Task，與建立任務及修改來源項目相同，
+    # 重建快照才不會讀到併發修改前的標準（#555）。
+    _lock_project_items_for_snapshot(
+        session, project_id=task.project_id, item_ids=item_ids
+    )
     plan = _lock_plan(session, task_reference.plan_id)
     locked_task = _lock_task(session, task.id)
     if plan is None or locked_task is None:
         raise PlanningError("inspection_task.not_found")
-    if plan.is_archived:
-        raise PlanningError("inspection_plan.archived")
-    if locked_task.status != "DRAFT":
-        raise PlanningError("inspection_task.invalid_transition")
+    # 取得鎖前的預檢可能已過時，鎖後必須複檢。
+    _ensure_draft_task_editable(plan, locked_task)
 
-    source_ids_with_points = set(
-        session.scalars(
-            select(ProjectInspectionPoint.project_inspection_item_id).where(
-                ProjectInspectionPoint.project_inspection_item_id.in_(item_ids)
-            )
-        ).all()
-    )
-    if source_ids_with_points != set(item_ids):
-        raise PlanningError("inspection_task.item_without_points")
-
-    current_ids = {row.project_inspection_item_id for row in old_items}
-    if current_ids == set(item_ids):
+    # 等鎖期間同一 Task 的項目可能已被其他請求取代，舊項目集合一律
+    # 在持鎖後重讀，稽核的 before 與是否有變動才會正確。
+    old_items = session.scalars(
+        select(TaskInspectionItem)
+        .where(TaskInspectionItem.task_id == locked_task.id)
+        .order_by(TaskInspectionItem.created_at, TaskInspectionItem.id)
+        .execution_options(populate_existing=True)
+    ).all()
+    old_ids = [row.project_inspection_item_id for row in old_items]
+    # 集合相同就不重建：DRAFT 的快照由 IP-R04 隨來源項目修改同步，
+    # 內容必已是最新；重建只會換掉 id 並留下沒有意義的稽核。
+    if set(old_ids) == set(item_ids):
         return locked_task
 
-    before_items = [
-        {
-            "id": str(item_id),
-            "name": sources_by_id[item_id].title,
-        }
-        for item_id in old_ids
-    ]
-    after_items = [
-        {"id": str(item_id), "name": sources_by_id[item_id].title}
-        for item_id in item_ids
-    ]
+    titles = dict(
+        session.execute(
+            select(ProjectInspectionItem.id, ProjectInspectionItem.title)
+            .where(ProjectInspectionItem.id.in_(set(old_ids) | set(item_ids)))
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    # 稽核欄位用 {項目 id: 名稱} 對照：ALG-R10 會把 list 排序，元素是
+    # dict 時無法比較；對照表既保留 id 與名稱，也不依賴順序。
+    before_items = {str(item_id): titles[item_id] for item_id in old_ids}
+    after_items = {str(item_id): titles[item_id] for item_id in item_ids}
     # DRAFT 沒有結果，舊 Snapshot 不保留；資料庫 FK cascade 會一併
     # 清除其下的點位、標準與證據需求，避免留下過期快照。
     for row in old_items:
@@ -825,6 +817,8 @@ def update_draft_task_items(
         operator_id=operator_id,
     )
     locked_task.updated_by = operator_id
+    # 同一人連續修改時 updated_by 不變，onupdate 不會觸發，故顯式更新。
+    locked_task.updated_at = utc_now()
     session.flush()
     record_audit_event(
         session,
