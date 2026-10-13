@@ -1757,21 +1757,19 @@ describe('planning forms guard (#507)', () => {
       )
     })
 
-    it('lists missing items, says to rebuild, and focuses the item field without a hash jump', async () => {
+    it('opens the draft item editor from a missing-item blocker', async () => {
       const client = await seededComplete()
       reshapeTasks(client, (task) => ({ ...task, items: [] }))
       const article = await openPlanBare(client)
 
       const list = within(article).getByRole('list', { name: BLOCKERS })
       expect(within(list).getByText(/尚未選擇查核項目/)).toHaveTextContent(
-        '請刪除這筆草稿後重新建立',
+        '請直接修改這筆草稿的查核項目',
       )
       const hashBefore = window.location.hash
 
-      // 表單預設收合：捷徑要先展開，等欄位渲染後才聚焦。
-      expect(screen.queryByRole('group', { name: /選擇一筆以上/ })).toBeNull()
       fireEvent.click(
-        within(list).getByRole('button', { name: '前往新增任務欄位' }),
+        within(list).getByRole('button', { name: '前往修改查核項目' }),
       )
 
       await waitFor(() =>
@@ -1779,11 +1777,203 @@ describe('planning forms guard (#507)', () => {
           screen.getByRole('group', { name: /選擇一筆以上/ }),
         ).toHaveFocus(),
       )
+      expect(
+        within(article).getByRole('heading', {
+          name: '修改草稿任務的查核項目',
+        }),
+      ).toBeVisible()
       expect(window.location.hash).toBe(hashBefore)
       expect(
         screen.queryByRole('group', { name: '有尚未儲存的變更' }),
       ).toBeNull()
       expect(within(list).queryByRole('link')).toBeNull()
+    })
+
+    it('guards unsaved item changes and saves a replacement selection', async () => {
+      const client = await seededComplete()
+      const updateItems = vi.spyOn(client, 'updateTaskItems')
+      const article = await openPlanBare(client)
+      const edit = within(article).getByRole('button', {
+        name: '修改查核項目',
+      })
+      fireEvent.click(edit)
+      const form = within(article).getByRole('heading', {
+        name: '修改草稿任務的查核項目',
+      }).parentElement as HTMLElement
+      expect(within(form).getByText(/本計畫已有 1 筆任務/)).toBeVisible()
+
+      const secondItem = within(form).getByLabelText(/鋼筋保護層/)
+      fireEvent.click(secondItem)
+      fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+      expect(
+        screen.getByRole('heading', { name: '有尚未儲存的變更' }),
+      ).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+      expect(secondItem).toBeChecked()
+
+      fireEvent.click(within(form).getByRole('button', { name: '取消' }))
+      fireEvent.click(screen.getByRole('button', { name: '捨棄變更' }))
+      await waitFor(() => expect(edit).toHaveFocus())
+      fireEvent.click(edit)
+      const reopened = within(article).getByRole('heading', {
+        name: '修改草稿任務的查核項目',
+      }).parentElement as HTMLElement
+      fireEvent.click(within(reopened).getByLabelText(/鋼筋保護層/))
+      fireEvent.click(
+        within(reopened).getByRole('button', { name: '儲存查核項目' }),
+      )
+
+      await expectNotice('已更新草稿任務的查核項目。')
+      await screen.findByRole('heading', {
+        name: /混凝土外觀\s+（草稿）/,
+      })
+      expect(
+        within(article).getByText('查核項目：混凝土外觀、鋼筋保護層'),
+      ).toBeVisible()
+      expect(updateItems).toHaveBeenCalledWith(expect.any(String), {
+        item_ids: ['item-demo-1', 'item-demo-2'],
+      })
+    })
+
+    it('shows item replacement business errors beside and focuses the field', async () => {
+      const client = await seededComplete()
+      client.updateTaskItems = vi
+        .fn()
+        .mockRejectedValue(
+          new ManagementApiError(422, 'inspection_task.invalid_project_item'),
+        )
+      const article = await openPlanBare(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改查核項目' }),
+      )
+      const form = within(article).getByRole('heading', {
+        name: '修改草稿任務的查核項目',
+      }).parentElement as HTMLElement
+      fireEvent.click(
+        within(form).getByRole('button', { name: '儲存查核項目' }),
+      )
+
+      const message = await within(form).findByText(
+        '所選查核項目不屬於這個專案，請重新整理後再選。',
+      )
+      expect(message).toBeVisible()
+      const field = within(form).getByRole('group', {
+        name: /選擇一筆以上查核項目/,
+      })
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(field).toHaveFocus())
+    })
+
+    it('rejects an empty item selection beside the field without calling the API', async () => {
+      const client = await seededComplete()
+      const updateItems = vi.spyOn(client, 'updateTaskItems')
+      const article = await openPlanBare(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改查核項目' }),
+      )
+      const form = within(article).getByRole('heading', {
+        name: '修改草稿任務的查核項目',
+      }).parentElement as HTMLElement
+      fireEvent.click(within(form).getByLabelText(/混凝土外觀/))
+      fireEvent.click(
+        within(form).getByRole('button', { name: '儲存查核項目' }),
+      )
+
+      const message = await within(form).findByText(
+        '請至少選擇一筆查核項目。',
+        { selector: '.tpl-field-error' },
+      )
+      expect(message).toBeVisible()
+      const field = within(form).getByRole('group', {
+        name: /選擇一筆以上查核項目/,
+      })
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(field).toHaveFocus())
+      expect(updateItems).not.toHaveBeenCalled()
+    })
+
+    it('shows a 409 state conflict inside the item form and keeps the selection', async () => {
+      const client = await seededComplete()
+      client.updateTaskItems = vi
+        .fn()
+        .mockRejectedValue(
+          new ManagementApiError(409, 'inspection_task.invalid_transition'),
+        )
+      const article = await openPlanBare(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改查核項目' }),
+      )
+      const form = within(article).getByRole('heading', {
+        name: '修改草稿任務的查核項目',
+      }).parentElement as HTMLElement
+      fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+      fireEvent.click(
+        within(form).getByRole('button', { name: '儲存查核項目' }),
+      )
+
+      const alert = await within(form).findByRole('alert')
+      expect(alert).toHaveTextContent('目前任務狀態不允許這項操作。')
+      expect(within(form).getByLabelText(/鋼筋保護層/)).toBeChecked()
+    })
+
+    it('guards page unload while the item selection is changed', async () => {
+      const client = await seededComplete()
+      const article = await openPlanBare(client)
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改查核項目' }),
+      )
+      const unchanged = new Event('beforeunload', {
+        cancelable: true,
+      }) as BeforeUnloadEvent
+      window.dispatchEvent(unchanged)
+      expect(unchanged.defaultPrevented).toBe(false)
+
+      fireEvent.click(within(article).getByLabelText(/鋼筋保護層/))
+      const changed = new Event('beforeunload', {
+        cancelable: true,
+      }) as BeforeUnloadEvent
+      window.dispatchEvent(changed)
+      expect(changed.defaultPrevented).toBe(true)
+    })
+
+    it('hides item editing once a write returns 403 turns the page read-only', async () => {
+      const client = await seededComplete()
+      client.updateLocation = vi
+        .fn()
+        .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
+      const article = await openPlanBare(client)
+      expect(
+        within(article).getByRole('button', { name: '修改查核項目' }),
+      ).toBeVisible()
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改查核項目' }),
+      )
+      fireEvent.click(within(article).getByLabelText(/鋼筋保護層/))
+      fireEvent.click(
+        within(article).getByRole('button', { name: '修改地點' }),
+      )
+      fireEvent.click(
+        within(article).getByRole('button', { name: '儲存地點' }),
+      )
+
+      await waitFor(() =>
+        expect(
+          within(article).queryByRole('button', { name: '儲存地點' }),
+        ).toBeNull(),
+      )
+      expect(
+        within(article).queryByRole('button', { name: '修改查核項目' }),
+      ).toBeNull()
+      expect(
+        within(article).queryByRole('heading', {
+          name: '修改草稿任務的查核項目',
+        }),
+      ).toBeNull()
+      const unload = new Event('beforeunload', {
+        cancelable: true,
+      }) as BeforeUnloadEvent
+      window.dispatchEvent(unload)
+      expect(unload.defaultPrevented).toBe(false)
     })
 
     it('shows reasons but no shortcuts or forms on an archived plan', async () => {
@@ -1808,6 +1998,9 @@ describe('planning forms guard (#507)', () => {
       expect(within(list).queryByRole('button')).toBeNull()
       expect(within(list).queryByRole('link')).toBeNull()
       expect(screen.queryByRole('heading', { name: '新增任務' })).toBeNull()
+      expect(
+        within(article).queryByRole('button', { name: '修改查核項目' }),
+      ).toBeNull()
     })
 
     it('removes shortcuts and open edit forms once a write returns 403', async () => {

@@ -11,6 +11,7 @@ import type {
   SuggestedAssignee,
   UpdateLocationInput,
   UpdateTaskNameInput,
+  UpdateTaskItemsInput,
 } from './api'
 
 interface TaskLocation {
@@ -585,6 +586,56 @@ export function createMockPlanningClient(options?: {
         throw new ManagementApiError(422, 'inspection_task.invalid_name')
       }
       task.name = name
+      return clone(task)
+    },
+
+    async updateTaskItems(taskId, input: UpdateTaskItemsInput) {
+      const { plan, task } = planForTask(taskId)
+      if (plan.status === 'ARCHIVED') {
+        throw new ManagementApiError(409, 'inspection_plan.archived')
+      }
+      if (task.status !== 'DRAFT') {
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
+      }
+      if (input.item_ids.length === 0) {
+        throw new ManagementApiError(422, 'inspection_task.items_required')
+      }
+      if (input.item_ids.length > 200) {
+        throw new ManagementApiError(422, 'request.validation_failed')
+      }
+      if (new Set(input.item_ids).size !== input.item_ids.length) {
+        throw new ManagementApiError(422, 'request.validation_failed')
+      }
+      const itemById = new Map(
+        (ITEMS[plan.project_id] ?? []).map((item) => [item.id, item]),
+      )
+      const nextItems = input.item_ids.map((id) => {
+        const item = itemById.get(id)
+        if (!item) {
+          throw new ManagementApiError(
+            422,
+            'inspection_task.invalid_project_item',
+          )
+        }
+        const snapshot = {
+          revision: 1,
+          source_standard_revision: 1,
+          title: item.title,
+          instruction: item.instruction,
+          source_template_name: item.source_template_name ?? '示範範本',
+          is_current: true,
+          inspection_points: item.inspection_points,
+        }
+        return {
+          id: item.id,
+          status: 'PENDING',
+          needs_reinspection: false,
+          snapshots: [snapshot],
+          current_snapshot: snapshot,
+        } satisfies TaskInspectionItem
+      })
+      task.items = nextItems
+      task.updated_at = new Date().toISOString()
       return clone(task)
     },
     async dispatchTask(taskId) {
