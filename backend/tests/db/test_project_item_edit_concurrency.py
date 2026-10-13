@@ -759,10 +759,14 @@ def test_concurrent_task_item_replacements_reread_old_items_after_lock(
     ).all()
     # 後到者必須以持鎖後重讀的項目集合為 before；若沿用鎖前舊值，
     # 第二筆稽核的 before 會誤記成最初的項目。
-    assert [
-        (set(audit.before["items"]), set(audit.after["items"]))
-        for audit in audits
-    ] == [
+    recorded = []
+    for audit in audits:
+        assert isinstance(audit.before, dict)
+        assert isinstance(audit.after, dict)
+        recorded.append(
+            (set(audit.before["items"]), set(audit.after["items"]))
+        )
+    assert recorded == [
         ({str(item_id)}, {str(item_two_id)}),
         ({str(item_two_id)}, {str(item_id), str(item_two_id)}),
     ]
