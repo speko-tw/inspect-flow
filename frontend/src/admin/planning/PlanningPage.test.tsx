@@ -1139,10 +1139,14 @@ describe('planning forms guard (#507)', () => {
     })
     fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
 
-    expect(await within(form).findAllByText('輸入內容太長。')).toHaveLength(2)
+    expect(await within(form).findAllByText('輸入內容太長。')).toHaveLength(3)
     expect(
       within(form).getAllByText('欄位格式不正確，請檢查輸入內容。'),
     ).toHaveLength(2)
+    expect(within(form).getByLabelText(/任務名稱/)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
     expect(
       within(form).getByRole('group', { name: /選擇一筆以上/ }),
     ).toHaveAttribute('aria-invalid', 'true')
@@ -1158,11 +1162,51 @@ describe('planning forms guard (#507)', () => {
       'aria-invalid',
       'true',
     )
+    // 任務名稱在表單最前面，/name 錯誤是第一個被回報的欄位。
     await waitFor(() =>
-      expect(
-        within(form).getByRole('group', { name: /選擇一筆以上/ }),
-      ).toHaveFocus(),
+      expect(within(form).getByLabelText(/任務名稱/)).toHaveFocus(),
     )
+    expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows a blank task name beside the field and focuses it', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'createTask')
+    await openPlan(client)
+    const form = formByContext('task')
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    const input = within(form).getByLabelText(/任務名稱/)
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
+
+    expect(await within(form).findByText('請輸入任務名稱。')).toBeVisible()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
+    expect(spy).not.toHaveBeenCalled()
+    expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('maps the server invalid_name code on creation to the name field', async () => {
+    const { client, zone } = await seeded()
+    client.createTask = vi
+      .fn()
+      .mockRejectedValue(
+        new ManagementApiError(422, 'inspection_task.invalid_name'),
+      )
+    await openPlan(client)
+    const form = formByContext('task')
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    fireEvent.change(within(form).getByLabelText(/任務分區/), {
+      target: { value: zone.id },
+    })
+    const input = within(form).getByLabelText(/任務名稱/)
+    fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
+
+    expect(
+      await within(form).findByText('任務名稱需為 1 到 128 個字元。'),
+    ).toBeVisible()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
     expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
   })
 

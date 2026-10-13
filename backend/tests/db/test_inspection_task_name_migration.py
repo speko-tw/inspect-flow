@@ -80,6 +80,8 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                     project_id=project.id,
                     name="舊名稱一",
                     zone_id=zone.id,
+                    # 分區與補充地點並存時，回填以分區名稱優先。
+                    location_text="應被忽略的補充地點",
                     created_by=actor.id,
                     updated_by=actor.id,
                 ),

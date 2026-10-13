@@ -3546,6 +3546,16 @@ def test_task_rename_validates_permissions_state_and_audit(
     no_op = manager.patch(task_path, json={"name": "更新任務"})
     assert no_op.status_code == 200
     assert no_op.json()["name"] == "更新任務"
+    # IP-R17：改名不動項目與地點；反過來改地點也不動名稱與項目。
+    for field in ("items", "zone_id", "location_text"):
+        assert renamed.json()[field] == created.json()[field], field
+    relocated = manager.patch(
+        task_path, json={"zone_id": None, "location_text": "新地點"}
+    )
+    assert relocated.status_code == 200, relocated.text
+    assert relocated.json()["location_text"] == "新地點"
+    assert relocated.json()["name"] == "更新任務"
+    assert relocated.json()["items"] == created.json()["items"]
     duplicate = admin.post(
         f"/api/v1/inspection-plans/{plan['id']}/tasks",
         json={

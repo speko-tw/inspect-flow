@@ -1,7 +1,7 @@
 """為查核任務新增獨立名稱，並依現有項目與地點回填。
 
 Revision ID: a497f3d2b601
-Revises: 6eaaafbe0ef2
+Revises: b4e8a2c71f93
 Create Date: 2026-10-12
 """
 

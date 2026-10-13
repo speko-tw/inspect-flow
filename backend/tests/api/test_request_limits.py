@@ -281,7 +281,8 @@ def test_domain_limit_errors_keep_their_codes_below_the_transport_cap(
     assert plan.json()["error"]["code"] == "inspection_plan.invalid_name"
     task_url = f"/api/v1/inspection-tasks/{planning['task']['id']}"
     create_url = f"/api/v1/inspection-plans/{planning['plan']['id']}/tasks"
-    for invalid_name in ("   ", "x" * 129):
+    # 512 字元是請求上限的邊界：通過傳輸層，仍由 128 字元業務上限擋下。
+    for invalid_name in ("   ", "x" * 129, "x" * limits.PLANNING_NAME_MAX):
         created = admin.post(
             create_url,
             json={

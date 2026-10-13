@@ -44,6 +44,7 @@ from app.services.inspection_planning import (
     list_inspection_plans,
     list_inspection_tasks,
     rename_inspection_plan,
+    rename_inspection_task,
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
@@ -252,6 +253,54 @@ def test_draft_task_item_updates_reject_invalid_state_archive_and_permissions(
     with pytest.raises(PlanningError) as archived:
         update_draft_task_items(session, new_draft, item_ids=[source.id])
     assert archived.value.code == "inspection_plan.archived"
+
+
+def test_unchanged_task_name_by_another_operator_changes_nothing(
+    session, operator, monkeypatch
+):
+    """IP-R17：名稱未變時，不同操作者的空改名不改最後修改人也不寫稽核。"""
+    project = _project(session, operator, "RENAMENOOP")
+    _grant(session, operator, project, *_planning_codes())
+    plan = create_inspection_plan(
+        session, project_id=project.id, name="空改名計畫"
+    )
+    source = _source_item(session, operator, project)
+    task = create_inspection_task(
+        session,
+        plan=plan,
+        name="原任務名稱",
+        project_inspection_item_ids=[source.id],
+    )
+    other = create_root_user_with_company(session, "RENAMENOOP-OTHER")
+    _grant(session, operator, project, "inspection_task.manage", user=other)
+    session.flush()
+    before_by = task.updated_by
+    before_at = task.updated_at
+
+    def audit_count() -> int:
+        return session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.entity_id == task.id,
+                AuditLog.event_type == "inspection_task.renamed",
+            )
+        )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            "app.services.inspection_planning.get_current_operator",
+            lambda _: other,
+        )
+        same = rename_inspection_task(session, task, name="  原任務名稱  ")
+        assert same.name == "原任務名稱"
+        assert same.updated_by == before_by
+        assert same.updated_at == before_at
+        assert audit_count() == 0
+
+        changed = rename_inspection_task(session, task, name="新任務名稱")
+        assert changed.updated_by == other.id
+        assert audit_count() == 1
 
 
 class TestDerivedPlanStatus:

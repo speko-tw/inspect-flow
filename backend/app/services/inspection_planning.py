@@ -588,18 +588,21 @@ def rename_inspection_task(
     }:
         raise PlanningError("inspection_task.invalid_transition")
     before = locked_task.name
+    if before == normalized:
+        # 名稱未變等於沒有修改：不動 updated_by／updated_at，也不寫稽核，
+        # 避免不同操作者的空改名被誤記為最後修改人（IP-R17）。
+        return locked_task
     locked_task.name = normalized
     locked_task.updated_by = operator_id
     session.flush()
-    if before != normalized:
-        record_audit_event(
-            session,
-            "inspection_task.renamed",
-            entity_id=locked_task.id,
-            project_id=locked_task.project_id,
-            before={"name": before},
-            after={"name": normalized},
-        )
+    record_audit_event(
+        session,
+        "inspection_task.renamed",
+        entity_id=locked_task.id,
+        project_id=locked_task.project_id,
+        before={"name": before},
+        after={"name": normalized},
+    )
     return locked_task
 
 
