@@ -77,7 +77,12 @@ function task(): InspectionTask {
 
 function summary(): WorkflowSummary {
   return {
-    project: { id: projectId, project_code: 'P1', name: '示範' },
+    project: {
+      id: projectId,
+      project_code: 'P1',
+      name: '示範',
+      company_role: 'contractor',
+    },
     member_count: 1,
     inspection_item_count: 2,
     zone_count: 0,
