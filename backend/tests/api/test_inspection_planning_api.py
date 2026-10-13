@@ -381,8 +381,8 @@ def test_plan_task_authorization_cursor_and_draft_visibility(
 
     detail_url = f"/api/v1/inspection-tasks/{task_id}"
     hidden = field.get(detail_url)
-    assert hidden.status_code == 403
-    assert hidden.json() == {"error": {"code": "permission.denied"}}
+    assert hidden.status_code == 404
+    assert hidden.json() == {"error": {"code": "resource.not_found"}}
     field_reader = world["field_reader"]
     plan_detail = field_reader.get(f"/api/v1/inspection-plans/{plan_id}")
     assert plan_detail.status_code == 200, plan_detail.text
@@ -446,7 +446,7 @@ def test_plan_task_authorization_cursor_and_draft_visibility(
 
     dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
     assert dispatched.status_code == 200, dispatched.text
-    assert field.get(detail_url).status_code == 403
+    assert field.get(detail_url).status_code == 200
     visible = admin.get(detail_url)
     assert visible.status_code == 200, visible.text
     assert visible.json()["status"] == "PENDING"
@@ -3001,7 +3001,7 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
     for path in (member_plan_path, f"{member_plan_path}/tasks"):
         assert world["plain"].get(path).status_code == 403
     assert world["reader"].get(member_task_path).status_code == 403
-    assert world["field"].get(member_task_path).status_code == 403
+    assert world["field"].get(member_task_path).status_code == 200
     assert (
         world["field"]
         .get(f"/api/v1/field/inspection-tasks/{member_task.json()['id']}")

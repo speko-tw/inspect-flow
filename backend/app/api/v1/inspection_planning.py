@@ -281,12 +281,25 @@ def _task_read_permission():
         permissions = effective_permissions(
             db, user_id=user.id, project_id=task.project_id
         )
-        if not user.is_admin and "inspection_task.read" not in permissions:
+        if (
+            not user.is_admin
+            and not {
+                "inspection_task.read",
+                "inspection_task.inspect",
+            }
+            & permissions
+        ):
             if not _is_project_member(
                 db, user_id=user.id, project_id=task.project_id
             ):
                 raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        if (
+            not user.is_admin
+            and task.status == "DRAFT"
+            and "inspection_task.read" not in permissions
+        ):
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         return user
 
     return check

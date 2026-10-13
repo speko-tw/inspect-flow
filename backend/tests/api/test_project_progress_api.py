@@ -8,8 +8,11 @@ from uuid import UUID
 from sqlalchemy import event, select
 
 from app.db.engine import get_engine
-from app.models import InspectionPlan, InspectionTask, TaskInspectionItem
+from app.models import InspectionPlan, InspectionTask, Role, TaskInspectionItem
 from tests.api.test_inspection_planning_api import _planning_world
+from tests.api.test_planning_query_counts import (
+    _create_permission_test_project,
+)
 from tests.api.test_project_workflow_summary import _grant_permission
 
 
@@ -33,6 +36,7 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         "IN_PROGRESS",
         "COMPLETED",
         "CANCELLED",
+        "PENDING",
         "PENDING",
     )
     identifiers = []
@@ -58,17 +62,19 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         if statuses[index] == "CANCELLED":
             task.cancelled_from_status = "PENDING"
             task.cancellation_reason = "停止查核"
-        task.created_at = base_time + timedelta(minutes=index)
+        created_minutes = (40, 1, 180, 240, 300, 400, 120)[index]
+        dispatched_minutes = (None, 60, 30, 30, 10, 5, 15)[index]
+        task.created_at = base_time + timedelta(minutes=created_minutes)
         task.dispatched_at = (
             None
-            if index == 0
-            else base_time + timedelta(hours=1 if index == 2 else index)
+            if dispatched_minutes is None
+            else base_time + timedelta(minutes=dispatched_minutes)
         )
         if index in (2, 3):
             task.started_by = world["field_user"].id
         if index == 3:
             task.completed_by = world["field_user_two"].id
-        if index in (1, 2, 5):
+        if index in (1, 2, 5, 6):
             item = db_session.scalar(
                 select(TaskInspectionItem).where(
                     TaskInspectionItem.task_id == task_id
@@ -95,6 +101,7 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
     assert {row["id"] for row in recheck.json()["items"]} == {
         str(identifiers[1]),
         str(identifiers[2]),
+        str(identifiers[6]),
     }
     assert (
         len(recheck.json()["items"])
@@ -118,16 +125,18 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         assert invalid.json()["error"]["code"] == ("request.validation_failed")
 
     expected = [
-        identifiers[5],
-        identifiers[4],
-        identifiers[3],
-        *sorted((identifiers[1], identifiers[2]), reverse=True),
+        identifiers[1],
         identifiers[0],
+        identifiers[3],
+        identifiers[2],
+        identifiers[6],
+        identifiers[4],
+        identifiers[5],
     ]
     seen = []
     cursor = None
     while True:
-        params = {"limit": 2}
+        params = {"limit": 3}
         if cursor:
             params["cursor"] = cursor
         response = admin.get(prefix, params=params)
@@ -136,16 +145,76 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         cursor = response.json()["next_cursor"]
         if not cursor:
             break
-        mixed = admin.get(
-            prefix,
-            params={
-                "status": "PENDING",
-                "cursor": cursor,
-            },
-        )
-        assert mixed.status_code == 422
+        for filters in (
+            {"status": "PENDING"},
+            {"needs_reinspection": "true"},
+            {"status": "PENDING", "needs_reinspection": "true"},
+        ):
+            mixed = admin.get(prefix, params={**filters, "cursor": cursor})
+            assert mixed.status_code == 422
     assert seen == expected
-    first = admin.get(prefix, params={"limit": 1}).json()["items"][0]
+    for filters, matching in (
+        (
+            {"status": "PENDING"},
+            [identifiers[1], identifiers[6], identifiers[5]],
+        ),
+        (
+            {"needs_reinspection": "true"},
+            [identifiers[1], identifiers[2], identifiers[6]],
+        ),
+        (
+            {"status": "PENDING", "needs_reinspection": "true"},
+            [identifiers[1], identifiers[6]],
+        ),
+    ):
+        filtered_ids = []
+        filtered_cursor = None
+        while True:
+            params = {**filters, "limit": 1}
+            if filtered_cursor:
+                params["cursor"] = filtered_cursor
+            page = admin.get(prefix, params=params)
+            assert page.status_code == 200, page.text
+            filtered_ids.extend(
+                UUID(row["id"]) for row in page.json()["items"]
+            )
+            filtered_cursor = page.json()["next_cursor"]
+            if filtered_cursor is None:
+                break
+        assert filtered_ids == matching
+
+    cursor_page = admin.get(prefix, params={"limit": 1}).json()
+    for filters in (
+        {"status": "PENDING"},
+        {"needs_reinspection": "true"},
+        {"status": "PENDING", "needs_reinspection": "true"},
+    ):
+        mismatched = admin.get(
+            prefix,
+            params={**filters, "cursor": cursor_page["next_cursor"]},
+        )
+        assert mismatched.status_code == 422
+
+    inspect_role = db_session.scalar(
+        select(Role).where(Role.name == "API field inspector")
+    )
+    assert inspect_role is not None
+    _create_permission_test_project(
+        world,
+        db_session,
+        project_code="PROGRESS-FOREIGN",
+        role_id=inspect_role.id,
+    )
+    all_ids = {row["id"] for row in admin.get(prefix).json()["items"]}
+    assert all_ids == {str(identifier) for identifier in identifiers}
+
+    archived_row = next(
+        row
+        for row in admin.get(prefix, params={"status": "PENDING"}).json()[
+            "items"
+        ]
+        if row["id"] == str(identifiers[5])
+    )
     contract = json.loads(
         (
             Path(__file__).parents[3]
@@ -153,13 +222,13 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
             / "project-progress-contract.json"
         ).read_text(encoding="utf-8")
     )
-    assert first["plan"] == {
+    assert archived_row["plan"] == {
         "id": plan_ids[1],
         "name": "已封存",
         "archived": True,
     }
-    assert set(first["plan"]) == set(contract["plan_keys"])
-    assert first["item_summary"] == contract["item_summary"]
+    assert set(archived_row["plan"]) == set(contract["plan_keys"])
+    assert archived_row["item_summary"] == contract["item_summary"]
     assert (
         world["field"]
         .get(
@@ -171,6 +240,10 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         .json()["items"]
         == []
     )
+    field_list = world["field"].get(prefix)
+    assert field_list.status_code == 200
+    assert all(row["status"] != "DRAFT" for row in field_list.json()["items"])
+    assert len(field_list.json()["items"]) == len(identifiers) - 1
 
     _grant_permission(
         db_session, world, world["plain_user"], "inspection_task.read"
@@ -190,11 +263,17 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
     assert set(detail.json()["completed_by_user"]) == set(
         contract["actor_keys"]
     )
+    pending_detail = world["field"].get(
+        f"/api/v1/inspection-tasks/{identifiers[1]}"
+    )
+    assert pending_detail.status_code == 200, pending_detail.text
+    assert pending_detail.json()["started_by_user"] is None
+    assert pending_detail.json()["completed_by_user"] is None
     assert (
         world["field"]
         .get(f"/api/v1/inspection-tasks/{identifiers[3]}")
         .status_code
-        == 403
+        == 200
     )
 
     def select_count(limit):

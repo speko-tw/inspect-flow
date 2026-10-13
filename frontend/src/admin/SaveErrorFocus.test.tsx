@@ -2,12 +2,7 @@
 // （#618 F-O02）。放在頁頂的話，列表一長就在視窗外，螢幕閱讀器使用者
 // 也不會被帶過去。
 
-import {
-  fireEvent,
-  render,
-  screen,
-  within,
-} from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'

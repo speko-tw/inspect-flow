@@ -41,6 +41,7 @@ export default function ProjectSectionPage({
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const { loadSectionSummary } = useWorkflowSummary()
+  const [retry, setRetry] = useState(0)
   const [result, setResult] = useState<{
     projectId: string
     project: { project_code: string; name: string }
@@ -69,43 +70,37 @@ export default function ProjectSectionPage({
       })
       .catch((caught: unknown) => {
         if (active) {
-          // ADM-R43：摘要暫時失敗時進度清單仍可由自己的 API 載入。
-          const summaryUnavailable =
-            section === 'progress' &&
-            !isForbidden(caught) &&
-            !isNotFound(caught)
           setResult({
             projectId,
-            canViewIndoor: summaryUnavailable,
+            canViewIndoor: false,
             project: { project_code: '', name: '' },
-            viewerPermissions: summaryUnavailable
-              ? ['inspection_task.read']
-              : [],
+            viewerPermissions: [],
             denied: isForbidden(caught),
             notFound: isNotFound(caught),
-            error: summaryUnavailable
-              ? undefined
-              : managementErrorMessage(caught),
+            error: managementErrorMessage(caught),
           })
         }
       })
     return () => {
       active = false
     }
-  }, [loadSectionSummary, projectId, section])
+  }, [loadSectionSummary, projectId, retry, section])
 
   const currentResult = result?.projectId === projectId ? result : null
-  if (
-    currentResult &&
-    !currentResult.canViewIndoor &&
-    currentResult.error === undefined
-  ) {
+  if (currentResult && !currentResult.canViewIndoor && !currentResult.error) {
     return <Navigate replace to={landingPath(user)} />
   }
   if (currentResult?.error) {
     if (currentResult.denied) return <ProjectDeniedPage />
     if (currentResult.notFound) return <ProjectNotFound />
-    return <p role="alert">{currentResult.error}</p>
+    return (
+      <p role="alert">
+        {currentResult.error}{' '}
+        <button type="button" onClick={() => setRetry((value) => value + 1)}>
+          重新載入
+        </button>
+      </p>
+    )
   }
   if (!currentResult) {
     return <p role="status">正在確認專案權限…</p>
@@ -114,7 +109,7 @@ export default function ProjectSectionPage({
     section === 'progress' &&
     !currentResult.viewerPermissions.includes('inspection_task.read')
   ) {
-    return <ProjectDeniedPage />
+    return <ProjectDeniedPage headingLevel={2} />
   }
 
   const childContent =

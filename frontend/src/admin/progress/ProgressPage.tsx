@@ -1,14 +1,16 @@
+// IP-R18 定義專案任務清單篩選、排序與游標；IP-R19 定義只讀任務詳情。
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
-import { isForbidden, isNotFound } from '../../http'
+import { onSignedOut } from '../../auth/sessionMemory'
 import RouteNotFound from '../../RouteNotFound'
+import { isForbidden, isNotFound } from '../../http'
 import { StatusBadge } from '../../ui/Badge'
 import { planningClient, type InspectionTask } from '../planning/api'
 import { getWorkflowSummary, type WorkflowSummary } from '../projectHome/api'
-import ProjectDeniedPage from '../projectHome/ProjectDeniedPage'
 import { listProgressTasks, type ProgressFilter } from './api'
+import ProjectDeniedPage from '../projectHome/ProjectDeniedPage'
 
 interface ListState {
   items: InspectionTask[]
@@ -19,6 +21,19 @@ interface ListState {
 
 // ADM-R44：從詳情或瀏覽器返回後沿用已載入頁及位置；依帳號隔離。
 const listMemory = new Map<string, ListState>()
+const detailReturnKeys = new Set<string>()
+
+function clearProgressMemory(): void {
+  listMemory.clear()
+  detailReturnKeys.clear()
+}
+
+onSignedOut(clearProgressMemory)
+
+/** 清除進度清單記憶，供登出與測試隔離使用。 */
+export function resetProgressListMemory(): void {
+  clearProgressMemory()
+}
 
 const FILTERS: Array<{ id: ProgressFilter; label: string }> = [
   { id: 'all', label: '全部' },
@@ -50,6 +65,7 @@ function taskLocation(task: InspectionTask): string {
 }
 
 function needsReinspection(task: InspectionTask): boolean {
+  // ADM-R43：封存計畫、已完成及已取消任務不列入待重查。
   return (
     !task.plan.archived &&
     (task.status === 'PENDING' || task.status === 'IN_PROGRESS') &&
@@ -105,7 +121,6 @@ export default function ProgressPage({
   }
   return (
     <ProgressList
-      key={`${projectId}:${filter}`}
       projectId={projectId}
       filter={filter}
       canViewPlanning={viewerPermissions.includes('inspection_plan.read')}
@@ -124,14 +139,22 @@ function ProgressList({
 }) {
   const { user } = useCurrentUser()
   const key = `${user.id}:${projectId}:${filter}`
-  const [state, setState] = useState<ListState | null>(
-    () => listMemory.get(key) ?? null,
-  )
-  const [loading, setLoading] = useState(() => !listMemory.has(key))
-  const [error, setError] = useState<'forbidden' | 'other' | null>(null)
+  const [listEntry, setListEntry] = useState<{
+    key: string
+    value: ListState
+  } | null>(null)
+  const [loadedKey, setLoadedKey] = useState('')
+  const [errorEntry, setErrorEntry] = useState<{
+    key: string
+    value: 'forbidden' | 'other'
+  } | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [summary, setSummary] = useState<WorkflowSummary | null>(null)
   const [summaryError, setSummaryError] = useState(false)
   const [summaryRetry, setSummaryRetry] = useState(0)
+  const state = listEntry?.key === key ? listEntry.value : null
+  const error = errorEntry?.key === key ? errorEntry.value : null
+  const loading = loadedKey !== key || loadingMore
   const base = `/admin/projects/${projectId}`
 
   useEffect(() => {
@@ -155,11 +178,23 @@ function ProgressList({
   }, [projectId, summaryRetry])
 
   useEffect(() => {
-    const saved = listMemory.get(key)
+    const restore = detailReturnKeys.delete(key)
+    const saved = restore ? listMemory.get(key) : null
     if (saved) {
-      requestAnimationFrame(() => window.scrollTo(0, saved.scrollY))
-      return
+      let active = true
+      const frame = requestAnimationFrame(() => {
+        if (!active) return
+        setListEntry({ key, value: saved })
+        setErrorEntry(null)
+        setLoadedKey(key)
+        window.scrollTo(0, saved.scrollY)
+      })
+      return () => {
+        active = false
+        cancelAnimationFrame(frame)
+      }
     }
+    listMemory.delete(key)
     let active = true
     listProgressTasks(projectId, filter)
       .then((page) => {
@@ -171,30 +206,29 @@ function ProgressList({
           scrollY: 0,
         }
         listMemory.set(key, next)
-        setState(next)
+        setListEntry({ key, value: next })
+        setErrorEntry(null)
       })
       .catch((cause: unknown) => {
-        if (active) setError(isForbidden(cause) ? 'forbidden' : 'other')
+        if (active) {
+          setErrorEntry({
+            key,
+            value: isForbidden(cause) ? 'forbidden' : 'other',
+          })
+        }
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (active) setLoadedKey(key)
       })
     return () => {
       active = false
     }
   }, [filter, key, projectId])
 
-  useEffect(() => {
-    return () => {
-      const saved = listMemory.get(key)
-      if (saved) listMemory.set(key, { ...saved, scrollY: window.scrollY })
-    }
-  }, [key])
-
   function loadMore() {
     if (!state?.nextCursor || loading) return
-    setLoading(true)
-    setError(null)
+    setLoadingMore(true)
+    setErrorEntry(null)
     listProgressTasks(projectId, filter, state.nextCursor)
       .then((page) => {
         const seen = new Set(state.items.map((task) => task.id))
@@ -208,13 +242,13 @@ function ProgressList({
           scrollY: window.scrollY,
         }
         listMemory.set(key, next)
-        setState(next)
+        setListEntry({ key, value: next })
       })
-      .catch(() => setError('other'))
-      .finally(() => setLoading(false))
+      .catch(() => setErrorEntry({ key, value: 'other' }))
+      .finally(() => setLoadingMore(false))
   }
 
-  if (error === 'forbidden') return <ProjectDeniedPage />
+  if (error === 'forbidden') return <ProjectDeniedPage headingLevel={2} />
   return (
     <section
       aria-labelledby="project-section-heading"
@@ -258,7 +292,7 @@ function ProgressList({
         </p>
       )}
       {state && state.items.length > 0 && (
-        <ul className="progress-cards">
+        <ul className="progress-cards" key={filter}>
           {state.items.map((task) => (
             <li key={task.id}>
               <Link
@@ -266,6 +300,16 @@ function ProgressList({
                   filter === 'all' ? '' : `?status=${filter}`
                 }`}
                 className="progress-card"
+                onClick={() => {
+                  const saved = listMemory.get(key)
+                  if (saved) {
+                    listMemory.set(key, {
+                      ...saved,
+                      scrollY: window.scrollY,
+                    })
+                  }
+                  detailReturnKeys.add(key)
+                }}
               >
                 <strong>{progressTaskTitle(task)}</strong>
                 <StatusBadge status={task.status} />
@@ -288,8 +332,8 @@ function ProgressList({
               if (state?.nextCursor) loadMore()
               else {
                 listMemory.delete(key)
-                setState(null)
-                setLoading(true)
+                setLoadedKey('')
+                setErrorEntry(null)
                 listProgressTasks(projectId, filter)
                   .then((page) => {
                     const next = {
@@ -299,11 +343,11 @@ function ProgressList({
                       scrollY: 0,
                     }
                     listMemory.set(key, next)
-                    setState(next)
-                    setError(null)
+                    setListEntry({ key, value: next })
+                    setErrorEntry(null)
                   })
-                  .catch(() => setError('other'))
-                  .finally(() => setLoading(false))
+                  .catch(() => setErrorEntry({ key, value: 'other' }))
+                  .finally(() => setLoadedKey(key))
               }
             }}
           >
@@ -365,11 +409,12 @@ function ProgressDetail({
   if (error === 'missing')
     return (
       <RouteNotFound
+        headingLevel={2}
         title="找不到這筆任務"
         message="網址可能輸入錯誤，或這筆任務已不存在。"
       />
     )
-  if (error === 'forbidden') return <ProjectDeniedPage />
+  if (error === 'forbidden') return <ProjectDeniedPage headingLevel={2} />
   return (
     <section
       aria-labelledby="project-section-heading"

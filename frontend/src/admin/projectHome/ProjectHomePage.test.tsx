@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -436,6 +442,31 @@ describe('project home', () => {
     expect(screen.queryByText('待重查')).not.toBeInTheDocument()
   })
 
+  it('shows visible task counts without progress links when read access is absent', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: [
+          'project_member.manage',
+          'inspection_task.inspect',
+        ],
+      }),
+    )
+
+    renderAt('/admin/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    expect(await screen.findByText('待重查')).toBeVisible()
+    expect(screen.getByText('4 件')).toBeVisible()
+    const dispatchedCount = screen.getByText('已派出未完成').parentElement
+    expect(dispatchedCount).toHaveTextContent('待開始 2')
+    expect(dispatchedCount).toHaveTextContent('進行中 1')
+    expect(
+      within(screen.getByLabelText('專案關鍵數字')).queryByRole('link'),
+    ).not.toBeInTheDocument()
+  })
+
   it('links each homepage task count to its matching progress filter', async () => {
     mocks.getWorkflowSummary.mockResolvedValue(summary())
     renderAt()
@@ -609,5 +640,25 @@ describe('project home', () => {
       'href',
       '/field',
     )
+  })
+
+  it('does not invent project permissions when a section summary fails', async () => {
+    mocks.getWorkflowSummary
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(summary())
+
+    renderAt('/admin/projects/project-1/progress')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('無法連線到伺服器')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '進度' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
   })
 })

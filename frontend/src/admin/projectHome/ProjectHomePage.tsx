@@ -207,16 +207,23 @@ export default function ProjectHomePage() {
                       {summary.task_counts.PENDING +
                         summary.task_counts.IN_PROGRESS}{' '}
                       件
-                      {canViewProgress && (
-                        <span className="project-key-number-detail">
-                          <Link to={`${base}/progress?status=PENDING`}>
-                            待開始 {summary.task_counts.PENDING}
-                          </Link>{' '}
-                          <Link to={`${base}/progress?status=IN_PROGRESS`}>
-                            進行中 {summary.task_counts.IN_PROGRESS}
-                          </Link>
-                        </span>
-                      )}
+                      <span className="project-key-number-detail">
+                        {canViewProgress ? (
+                          <>
+                            <Link to={`${base}/progress?status=PENDING`}>
+                              待開始 {summary.task_counts.PENDING}
+                            </Link>{' '}
+                            <Link to={`${base}/progress?status=IN_PROGRESS`}>
+                              進行中 {summary.task_counts.IN_PROGRESS}
+                            </Link>
+                          </>
+                        ) : (
+                          <>
+                            待開始 {summary.task_counts.PENDING} 進行中{' '}
+                            {summary.task_counts.IN_PROGRESS}
+                          </>
+                        )}
+                      </span>
                     </dd>
                   </div>
                   <div>

@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 
 import type { InspectionTask } from '../planning/api'
 import type { WorkflowSummary } from '../projectHome/api'
-import ProgressPage from './ProgressPage'
+import { ManagementApiError } from '../api'
+import { markSignedOut, resetSessionMemory } from '../../auth/sessionMemory'
+import ProgressPage, { resetProgressListMemory } from './ProgressPage'
 import progressContract from './fixtures/project-progress-contract.json'
 
 const mocks = vi.hoisted(() => ({
@@ -99,7 +101,25 @@ function summary(): WorkflowSummary {
 function page(initial: string) {
   render(
     <MemoryRouter initialEntries={[initial]}>
+      <header>
+        <h1>DEMO-001｜示範工程</h1>
+        <Link to="/outside">離開進度</Link>
+      </header>
       <Routes>
+        <Route
+          path="/outside"
+          element={
+            <>
+              <p>其他頁面</p>
+              <BrowserBack />
+              <Link
+                to={`/admin/projects/${projectId}/progress?status=PENDING`}
+              >
+                返回進度
+              </Link>
+            </>
+          }
+        />
         <Route
           path="/admin/projects/:projectId/progress"
           element={
@@ -117,7 +137,14 @@ function page(initial: string) {
   )
 }
 
+function BrowserBack() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate(-1)}>瀏覽器上一頁</button>
+}
+
 beforeEach(() => {
+  resetProgressListMemory()
+  resetSessionMemory()
   mocks.list.mockReset()
   mocks.detail.mockReset()
   mocks.summary.mockReset()
@@ -125,6 +152,41 @@ beforeEach(() => {
   mocks.detail.mockResolvedValue(task())
   mocks.summary.mockResolvedValue(summary())
   vi.stubGlobal('scrollTo', vi.fn())
+})
+
+it('keeps filter focus and reloads when returning to the list directly', async () => {
+  page(`/admin/projects/${projectId}/progress`)
+  const pending = await screen.findByRole('link', { name: '待開始 1' })
+  pending.focus()
+  fireEvent.click(pending)
+  await waitFor(() => expect(pending).toHaveAttribute('aria-current', 'true'))
+  expect(pending).toHaveFocus()
+  expect(mocks.list).toHaveBeenCalledTimes(2)
+
+  fireEvent.click(screen.getByRole('link', { name: '全部 1' }))
+  await screen.findByRole('link', { name: /表面檢查等 2 項/ })
+  expect(mocks.list).toHaveBeenCalledTimes(3)
+
+  fireEvent.click(screen.getByRole('link', { name: '離開進度' }))
+  fireEvent.click(await screen.findByRole('link', { name: '返回進度' }))
+  await screen.findByRole('link', { name: '待開始 1' })
+  expect(mocks.list).toHaveBeenCalledTimes(4)
+})
+
+it('refetches when browser Back revisits a consumed detail return entry', async () => {
+  page(`/admin/projects/${projectId}/progress`)
+  fireEvent.click(await screen.findByRole('link', { name: /表面檢查等 2 項/ }))
+  await screen.findByRole('heading', { name: '任務詳情' })
+  fireEvent.click(screen.getByRole('link', { name: '返回進度' }))
+  await screen.findByRole('link', { name: /表面檢查等 2 項/ })
+  expect(mocks.list).toHaveBeenCalledTimes(1)
+
+  fireEvent.click(screen.getByRole('link', { name: '離開進度' }))
+  fireEvent.click(await screen.findByRole('button', { name: '瀏覽器上一頁' }))
+  await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2))
+  expect(
+    await screen.findByRole('link', { name: /表面檢查等 2 項/ }),
+  ).toBeVisible()
 })
 
 it('shows seven server filtered links and a single keyboard reachable card', async () => {
@@ -203,6 +265,73 @@ it('does not render a task from a different project', async () => {
     }),
   ).toBeVisible()
   expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
+})
+
+it.each([404, 422])(
+  'renders a missing task as a page-level 404 (%s)',
+  async (status) => {
+    mocks.detail.mockRejectedValueOnce(
+      new ManagementApiError(status, 'resource.not_found'),
+    )
+    page(`/admin/projects/${projectId}/progress/tasks/${taskId}`)
+    expect(
+      await screen.findByRole('heading', { name: '找不到這筆任務' }),
+    ).toHaveProperty('tagName', 'H2')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  },
+)
+
+it('renders a forbidden task with a section heading', async () => {
+  mocks.detail.mockRejectedValueOnce(
+    new ManagementApiError(403, 'permission.denied'),
+  )
+  page(`/admin/projects/${projectId}/progress/tasks/${taskId}`)
+  expect(
+    await screen.findByRole('heading', { name: '無權限' }),
+  ).toHaveProperty('tagName', 'H2')
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+})
+
+it('shows an empty-state message when the selected filter has no tasks', async () => {
+  mocks.list.mockResolvedValueOnce({ items: [], next_cursor: null })
+  page(`/admin/projects/${projectId}/progress?status=CANCELLED`)
+  expect(await screen.findByText('這個狀態目前沒有任務。')).toBeVisible()
+})
+
+it('restores multiple loaded pages and the scroll position after task detail', async () => {
+  const second = {
+    ...task(),
+    id: '44444444-4444-7444-8444-444444444444',
+    item_summary: { first_title: '鋼筋檢查', count: 1 },
+  }
+  mocks.list
+    .mockResolvedValueOnce({ items: [task()], next_cursor: 'next-page' })
+    .mockResolvedValueOnce({ items: [second], next_cursor: null })
+  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  fireEvent.click(await screen.findByRole('button', { name: '載入更多' }))
+  expect(await screen.findByRole('link', { name: /鋼筋檢查/ })).toBeVisible()
+
+  Object.defineProperty(window, 'scrollY', {
+    configurable: true,
+    value: 720,
+  })
+  fireEvent.click(screen.getByRole('link', { name: /表面檢查等 2 項/ }))
+  await screen.findByRole('heading', { name: '任務詳情' })
+  fireEvent.click(screen.getByRole('link', { name: '返回進度' }))
+
+  expect(await screen.findByRole('link', { name: /鋼筋檢查/ })).toBeVisible()
+  expect(mocks.list).toHaveBeenCalledTimes(2)
+  await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith(0, 720))
+})
+
+it('clears saved progress pages when the user signs out', async () => {
+  page(`/admin/projects/${projectId}/progress`)
+  fireEvent.click(await screen.findByRole('link', { name: /表面檢查等 2 項/ }))
+  await screen.findByRole('heading', { name: '任務詳情' })
+  markSignedOut()
+  fireEvent.click(screen.getByRole('link', { name: '返回進度' }))
+  await screen.findByRole('link', { name: '全部 1' })
+  expect(mocks.list).toHaveBeenCalledTimes(2)
 })
 
 it('preserves loaded cards after a load more error and retries the cursor', async () => {

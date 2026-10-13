@@ -284,7 +284,7 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
         assert list_inspection_tasks(session, project_id=project.id) == []
         with pytest.raises(PlanningError) as hidden:
             get_inspection_task(session, task_id=draft.id)
-        assert hidden.value.code == "authorization.forbidden"
+        assert hidden.value.code == "inspection_task.not_found"
         scoped.setattr(
             "app.services.inspection_planning.get_current_operator",
             lambda _: operator,
@@ -295,6 +295,7 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
             lambda _: reader,
         )
         assert list_inspection_tasks(session, project_id=project.id) == [draft]
+        assert get_inspection_task(session, task_id=draft.id) == draft
 
 
 def test_plan_manage_and_assignee_must_be_project_members(session, operator):
