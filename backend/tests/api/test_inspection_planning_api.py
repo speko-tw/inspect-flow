@@ -3933,18 +3933,14 @@ def test_draft_task_items_api_rebuilds_snapshots_and_audits(
     old_association_id = old_association.id
     task_before = db_session.get(InspectionTask, UUID(task_id))
     assert task_before is not None
-    updated_at_before = task_before.updated_at
-    tick = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=1)
-    set_clock(lambda: tick)
-    try:
-        updated = admin.put(
-            url,
-            json={
-                "item_ids": [str(world["item_two"].id), str(world["item"].id)]
-            },
-        )
-    finally:
-        reset_clock()
+    # 倒退 updated_at，確認 PUT 會顯式更新它，而不是靠時鐘剛好不同。
+    updated_at_before = task_before.updated_at - timedelta(days=1)
+    task_before.updated_at = updated_at_before
+    db_session.commit()
+    updated = admin.put(
+        url,
+        json={"item_ids": [str(world["item_two"].id), str(world["item"].id)]},
+    )
     assert updated.status_code == 200, updated.text
     assert updated.json()["id"] == task_id
     assert updated.json()["status"] == "DRAFT"
