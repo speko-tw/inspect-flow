@@ -13,7 +13,7 @@ requested without the URL.
 """
 
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
@@ -224,6 +224,145 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
     assert seen == visible_after_role == expected
     assert len(seen) == 5
     assert hidden_project["task_id"] not in seen
+
+
+def test_project_progress_sort_filters_and_cursors_on_postgresql(
+    db_session: Session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    prefix = f"/api/v1/projects/{project_id}/inspection-tasks"
+    plan = world["admin"].post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "PostgreSQL progress"},
+    )
+    assert plan.status_code == 201, plan.text
+
+    statuses = (
+        "DRAFT",
+        "PENDING",
+        "IN_PROGRESS",
+        "COMPLETED",
+        "CANCELLED",
+        "PENDING",
+        "PENDING",
+    )
+    task_ids: list[UUID] = []
+    for _ in statuses:
+        created = world["admin"].post(
+            f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+            json={
+                "name": "PostgreSQL 進度任務",
+                "item_ids": [str(world["item"].id)],
+            },
+        )
+        assert created.status_code == 201, created.text
+        task_ids.append(UUID(created.json()["id"]))
+
+    base = datetime(2026, 10, 1, tzinfo=UTC)
+    created_minutes = (40, 1, 180, 240, 300, 400, 120)
+    dispatched_minutes = (None, 60, 30, 30, 10, 5, 15)
+    for index, task_id in enumerate(task_ids):
+        task = db_session.get(InspectionTask, task_id)
+        assert task is not None
+        task.status = statuses[index]
+        task.created_at = base + timedelta(minutes=created_minutes[index])
+        dispatched = dispatched_minutes[index]
+        task.dispatched_at = (
+            None
+            if dispatched is None
+            else base + timedelta(minutes=dispatched)
+        )
+        if index == 4:
+            task.cancelled_from_status = "PENDING"
+            task.cancellation_reason = "PostgreSQL 測試取消"
+        if index in (1, 2, 6):
+            item = db_session.scalar(
+                select(TaskInspectionItem).where(
+                    TaskInspectionItem.task_id == task_id
+                )
+            )
+            assert item is not None
+            item.needs_reinspection = True
+    db_session.commit()
+
+    expected = [
+        task_ids[1],
+        task_ids[0],
+        task_ids[3],
+        task_ids[2],
+        task_ids[6],
+        task_ids[4],
+        task_ids[5],
+    ]
+    # IP-R18：草稿以 created_at 排序，剛好位於頁尾時 cursor 仍須續頁。
+    draft_tail = world["admin"].get(prefix, params={"limit": 2})
+    assert draft_tail.status_code == 200, draft_tail.text
+    assert [UUID(row["id"]) for row in draft_tail.json()["items"]] == [
+        task_ids[1],
+        task_ids[0],
+    ]
+    assert draft_tail.json()["items"][-1]["dispatched_at"] is None
+    after_draft = world["admin"].get(
+        prefix, params={"limit": 2, "cursor": draft_tail.json()["next_cursor"]}
+    )
+    assert after_draft.status_code == 200, after_draft.text
+    assert [UUID(row["id"]) for row in after_draft.json()["items"]] == [
+        task_ids[3],
+        task_ids[2],
+    ]
+
+    seen: list[UUID] = []
+    cursor = None
+    while True:
+        params: dict[str, str | int] = {"limit": 3}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = world["admin"].get(prefix, params=params)
+        assert response.status_code == 200, response.text
+        seen.extend(UUID(row["id"]) for row in response.json()["items"])
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+    assert seen == expected
+
+    for filters, matching in (
+        ({"status": "PENDING"}, [task_ids[1], task_ids[6], task_ids[5]]),
+        (
+            {"needs_reinspection": "true"},
+            [task_ids[1], task_ids[2], task_ids[6]],
+        ),
+        (
+            {"status": "PENDING", "needs_reinspection": "true"},
+            [task_ids[1], task_ids[6]],
+        ),
+    ):
+        actual: list[UUID] = []
+        filtered_cursor = None
+        while True:
+            params = {**filters, "limit": 1}
+            if filtered_cursor is not None:
+                params["cursor"] = filtered_cursor
+            response = world["admin"].get(prefix, params=params)
+            assert response.status_code == 200, response.text
+            actual.extend(UUID(row["id"]) for row in response.json()["items"])
+            filtered_cursor = response.json()["next_cursor"]
+            if filtered_cursor is None:
+                break
+        assert actual == matching
+
+    all_cursor = (
+        world["admin"].get(prefix, params={"limit": 1}).json()["next_cursor"]
+    )
+    for filters in (
+        {"status": "PENDING"},
+        {"needs_reinspection": "true"},
+        {"status": "PENDING", "needs_reinspection": "true"},
+    ):
+        invalid = world["admin"].get(
+            prefix, params={**filters, "cursor": all_cursor}
+        )
+        assert invalid.status_code == 422, invalid.text
 
 
 def test_assignee_candidates_union_and_created_at_id_cursor(

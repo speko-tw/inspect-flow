@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -448,7 +454,7 @@ describe('project home', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('shows permitted zones and keeps the placeholder progress hidden', async () => {
+  it('shows progress only with task read permission', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
 
@@ -456,9 +462,10 @@ describe('project home', () => {
 
     await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
     expect(screen.getByRole('link', { name: '分區' })).toBeVisible()
-    expect(
-      screen.queryByRole('link', { name: '進度' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '進度' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress',
+    )
     expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
   })
 
@@ -507,16 +514,81 @@ describe('project home', () => {
     expect(screen.queryByText('待重查')).not.toBeInTheDocument()
   })
 
-  it('sends all-complete projects to planning, never to a placeholder', async () => {
+  it('shows visible task counts without progress links when read access is absent', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: [
+          'project_member.manage',
+          'inspection_task.inspect',
+        ],
+      }),
+    )
+
+    renderAt('/admin/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    expect(await screen.findByText('待重查')).toBeVisible()
+    expect(screen.getByText('4 件')).toBeVisible()
+    const dispatchedCount = screen.getByText('已派出未完成').parentElement
+    expect(dispatchedCount).toHaveTextContent('待開始 2')
+    expect(dispatchedCount).toHaveTextContent('進行中 1')
+    expect(
+      within(screen.getByLabelText('專案關鍵數字')).queryByRole('link'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('links each homepage task count to its matching progress filter', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(summary())
+    renderAt()
+
+    expect(
+      await screen.findByRole('link', { name: '待開始 2' }),
+    ).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=PENDING',
+    )
+    expect(screen.getByRole('link', { name: '進行中 1' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=IN_PROGRESS',
+    )
+    expect(screen.getByRole('link', { name: '4 件' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=DRAFT',
+    )
+    expect(screen.getByRole('link', { name: '1 件' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=reinspection',
+    )
+  })
+
+  it('uses planning when a reinspection step lacks task read', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'complete_reinspection',
+        viewer_permission_codes: ['inspection_plan.read'],
+      }),
+    )
+    renderAt()
+    expect(
+      await screen.findByRole('link', {
+        name: '前往追蹤任務進度',
+      }),
+    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+  })
+
+  it('sends all-complete projects to progress', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary({ primary_step: null }))
 
     renderAt()
 
     expect(await screen.findByText('目前沒有待處理的下一步。')).toBeVisible()
-    expect(
-      screen.getByRole('link', { name: '查看計畫與任務' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+    expect(screen.getByRole('link', { name: '追蹤進度' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress',
+    )
   })
 
   it('routes field-only permission sets to Field and skips project detail reads', async () => {
@@ -535,7 +607,7 @@ describe('project home', () => {
     expect(mocks.getProject).not.toHaveBeenCalled()
   })
 
-  it('complete_reinspection step points at planning, not progress', async () => {
+  it('complete_reinspection step opens the reinspection filter', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({ primary_step: 'complete_reinspection' }),
@@ -545,7 +617,10 @@ describe('project home', () => {
 
     expect(
       await screen.findByRole('link', { name: '前往追蹤任務進度' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+    ).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/progress?status=reinspection',
+    )
   })
 
   it('sends an office user with field-only rights in this project to the project list', async () => {
@@ -637,5 +712,25 @@ describe('project home', () => {
       'href',
       '/field',
     )
+  })
+
+  it('does not invent project permissions when a section summary fails', async () => {
+    mocks.getWorkflowSummary
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(summary())
+
+    renderAt('/admin/projects/project-1/progress')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('無法連線到伺服器')
+    expect(screen.getByRole('button', { name: '重新載入' })).toBeVisible()
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '進度' }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
+    expect(
+      await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' }),
+    ).toBeVisible()
   })
 })

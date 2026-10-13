@@ -16,9 +16,6 @@ const SECTIONS = [
   { id: 'progress', label: '進度', suffix: '/progress' },
 ]
 
-// 依 ADM-R25，進度區段尚未開放，避免導向沒有正式內容的頁面。
-const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(['progress'])
-
 const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   home: [],
   members: ['project_member.manage'],
@@ -31,7 +28,7 @@ const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
   // （ADM-R17；維持既有 API 契約）。
   zones: ['project_zone.read'],
   planning: ['inspection_plan.read'],
-  progress: ['inspection_task.read', 'inspection_task.inspect'],
+  progress: ['inspection_task.read'],
 }
 
 /** 依 ADM-R17 限定專案首頁與正式區段的路由識別字。 */
@@ -76,11 +73,10 @@ export default function ProjectSectionShell({
     <nav aria-label="專案區段" className="project-section-nav">
       {SECTIONS.filter(
         (section) =>
-          !HIDDEN_SECTIONS.has(section.id) &&
-          (SECTION_PERMISSIONS[section.id].length === 0 ||
-            SECTION_PERMISSIONS[section.id].some((permission) =>
-              viewerPermissions.includes(permission),
-            )),
+          SECTION_PERMISSIONS[section.id].length === 0 ||
+          SECTION_PERMISSIONS[section.id].some((permission) =>
+            viewerPermissions.includes(permission),
+          ),
       ).map((section) => (
         <NavLink
           aria-current={activeSection === section.id ? 'page' : undefined}

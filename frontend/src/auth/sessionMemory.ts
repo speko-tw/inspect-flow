@@ -18,6 +18,7 @@ export type PreviousSession =
   { kind: 'none' } | { kind: 'user'; userId: string } | { kind: 'signedOut' }
 
 let previous: PreviousSession = { kind: 'none' }
+const signedOutListeners = new Set<() => void>()
 
 /** 驗證成功時記下目前使用者；會蓋掉「已登出」狀態。 */
 export function rememberUser(userId: string): void {
@@ -27,6 +28,13 @@ export function rememberUser(userId: string): void {
 /** 主動登出：之後的登入一律去落點。 */
 export function markSignedOut(): void {
   previous = { kind: 'signedOut' }
+  for (const listener of signedOutListeners) listener()
+}
+
+/** 註冊主動登出時的記憶體清理；回傳取消訂閱函式。 */
+export function onSignedOut(listener: () => void): () => void {
+  signedOutListeners.add(listener)
+  return () => signedOutListeners.delete(listener)
 }
 
 export function previousSession(): PreviousSession {

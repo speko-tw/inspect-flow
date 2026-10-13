@@ -500,6 +500,11 @@ export function createMockPlanningClient(options?: {
         id: crypto.randomUUID(),
         project_id: plan.project_id,
         plan_id: planId,
+        plan: { id: plan.id, name: plan.name, archived: plan.archived },
+        item_summary: {
+          first_title: items[0]?.current_snapshot?.title ?? null,
+          count: items.length,
+        },
         name: input.name.trim(),
         status: 'DRAFT',
         // mock 專案一律是承攬施工方（IP-R16），不模擬改角色。
@@ -514,6 +519,9 @@ export function createMockPlanningClient(options?: {
         cancelled_from: null,
         started_by: null,
         completed_by: null,
+        started_by_user: null,
+        completed_by_user: null,
+        dispatched_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }

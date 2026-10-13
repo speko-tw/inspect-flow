@@ -65,6 +65,8 @@ export interface InspectionTask {
   id: string
   project_id: string
   plan_id: string
+  plan: { id: string; name: string; archived: boolean }
+  item_summary: { first_title: string | null; count: number }
   name: string
   status: TaskStatus
   /**
@@ -83,6 +85,9 @@ export interface InspectionTask {
   cancelled_from: 'PENDING' | 'IN_PROGRESS' | null
   started_by: string | null
   completed_by: string | null
+  started_by_user?: { id: string; name_zh: string | null } | null
+  completed_by_user?: { id: string; name_zh: string | null } | null
+  dispatched_at: string | null
   created_at: string
   updated_at: string
 }
