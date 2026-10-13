@@ -1080,7 +1080,8 @@ register_audit_event(
     "project.created",
     entity_type="project",
     kind=AuditEventKind.CREATED,
-    fields=("project_code", "name", "creator_role_user_id"),
+    # company_role：開案時選定的本公司角色（DOM-R76）。
+    fields=("project_code", "name", "company_role", "creator_role_user_id"),
     optional_fields=("creator_role_user_id",),
     project_scoped=True,
 )
@@ -1093,6 +1094,10 @@ register_audit_event(
         "name",
         "client_name",
         "site_location",
+        "company_role",
+        # 改本公司角色沿用本事件（DOM-R76）；原因只出現在 after，
+        # 因為它是這次修改的說明，不是專案上會保存的欄位。
+        "company_role_change_reason",
         "planned_start_date",
         "planned_completion_date",
     ),

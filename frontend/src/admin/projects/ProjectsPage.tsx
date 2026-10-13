@@ -8,18 +8,28 @@ import {
 import { Link, useNavigate } from 'react-router'
 
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { Form, FormError, FormSubmitButton } from '../../ui/Form'
+import { mapFieldErrors } from '../../ui/fieldErrors'
+import { FieldError, Form, FormError, FormSubmitButton } from '../../ui/Form'
+import { HttpError } from '../../http'
 import { managementErrorMessage } from '../api'
 import {
+  DEFAULT_COMPANY_ROLE,
   createProject,
   hasDuplicateCodeWarning,
+  listCompanyRoles,
   listProjectsPage,
   updateProject,
+  type CompanyRole,
   type Project,
   type ProjectInput,
 } from './api'
 
+// DOM-R76、ADM-R42：改本公司角色的原因，去除前後空白後 1～256 字元。
+const REASON_MAX_LENGTH = 256
+
 const EMPTY_FORM = {
+  // ADM-R40：開案預設承攬施工方；送出時仍明確帶上選取值。
+  company_role: DEFAULT_COMPANY_ROLE,
   project_code: '',
   name: '',
   client_name: '',
@@ -46,6 +56,7 @@ function transitionKey(transition: Transition): string {
 
 function toForm(project: Project): FormState {
   return {
+    company_role: project.company_role,
     project_code: project.project_code,
     name: project.name,
     client_name: project.client_name,
@@ -57,6 +68,7 @@ function toForm(project: Project): FormState {
 
 function toInput(form: FormState): ProjectInput {
   return {
+    company_role: form.company_role,
     project_code: form.project_code.trim(),
     name: form.name.trim(),
     client_name: form.client_name.trim(),
@@ -64,6 +76,34 @@ function toInput(form: FormState): ProjectInput {
     planned_start_date: form.planned_start_date || null,
     planned_completion_date: form.planned_completion_date || null,
   }
+}
+
+function roleLabel(roles: CompanyRole[], value: string): string {
+  return roles.find((role) => role.value === value)?.label ?? value
+}
+
+/** 角色選項；尚未載入或清單沒有目前值時，仍保留目前值避免畫面空白。 */
+function roleOptions(
+  roles: CompanyRole[],
+  current: string,
+  status: 'loading' | 'ready' | 'error',
+) {
+  if (status === 'loading') {
+    return <option value={current}>載入中…</option>
+  }
+  const options = roles.map((role) => (
+    <option key={role.value} value={role.value}>
+      {role.label}
+    </option>
+  ))
+  if (!roles.some((role) => role.value === current)) {
+    options.unshift(
+      <option key={current} value={current}>
+        {current}
+      </option>,
+    )
+  }
+  return options
 }
 
 /** 呈現專案清單與新增／編輯表單，並守住 ADM-R15 的草稿轉場。 */
@@ -79,6 +119,18 @@ export default function ProjectsPage() {
   const [editDrafts, setEditDrafts] = useState<Record<string, FormState>>({})
   const [editFocusRequest, setEditFocusRequest] = useState(0)
   const [transition, setTransition] = useState<Transition | null>(null)
+  const [roles, setRoles] = useState<CompanyRole[]>([])
+  const [rolesStatus, setRolesStatus] = useState<
+    'loading' | 'ready' | 'error'
+  >('loading')
+  const [roleFieldError, setRoleFieldError] = useState('')
+  const [roleFocusRequest, setRoleFocusRequest] = useState(0)
+  // ADM-R42：改角色要先在確認框填原因；原因草稿獨立保存，
+  // 確認框因錯誤關閉再開時不必重打。
+  const [roleConfirmOpen, setRoleConfirmOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [reasonError, setReasonError] = useState('')
+  const [reasonFocusRequest, setReasonFocusRequest] = useState(0)
   const [reloadKey, setReloadKey] = useState(0)
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
@@ -86,6 +138,9 @@ export default function ProjectsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const requestId = useRef(0)
+  const roleSelectRef = useRef<HTMLSelectElement>(null)
+  const reasonInputRef = useRef<HTMLTextAreaElement>(null)
+  const roleConfirmRef = useRef<HTMLDivElement>(null)
   const transitionRef = useRef<HTMLDivElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
   const errorRef = useRef<HTMLParagraphElement>(null)
@@ -103,6 +158,9 @@ export default function ProjectsPage() {
         ? (editDrafts[editing.id] ?? toForm(editing))
         : null
   const originalForm = editing ? toForm(editing) : EMPTY_FORM
+  const roleChanged = Boolean(
+    editing && form && form.company_role !== editing.company_role,
+  )
   const hasUnsavedChanges = Boolean(
     form &&
     Object.keys(EMPTY_FORM).some(
@@ -158,6 +216,29 @@ export default function ProjectsPage() {
     if (!notice) return
     noticeRef.current?.scrollIntoView?.({ block: 'nearest' })
   }, [notice])
+
+  useEffect(() => {
+    // ADM-R40：角色選項取自後端登記表，不在畫面寫死。
+    let active = true
+    listCompanyRoles()
+      .then((items) => {
+        if (!active) return
+        setRoles(items)
+        setRolesStatus('ready')
+      })
+      .catch(() => {
+        if (active) setRolesStatus('error')
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (roleConfirmOpen && roleChanged) {
+      roleConfirmRef.current?.scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [roleConfirmOpen, roleChanged])
 
   useEffect(() => {
     if (!error) return
@@ -241,6 +322,13 @@ export default function ProjectsPage() {
   }
 
   function change(field: keyof FormState, value: string) {
+    if (field === 'company_role') {
+      // 改角色就重新走一次確認：改回原值時確認框要關掉，否則再改成
+      // 別的值時會直接帶著舊的「已開啟」狀態跳出來。
+      setRoleFieldError('')
+      setRoleConfirmOpen(false)
+      setReasonError('')
+    }
     if (formMode?.kind === 'new') {
       setNewDraft((current) => ({ ...current, [field]: value }))
     } else if (formMode?.kind === 'edit') {
@@ -264,8 +352,16 @@ export default function ProjectsPage() {
     })
   }
 
+  function resetRoleConfirm() {
+    setRoleConfirmOpen(false)
+    setReason('')
+    setReasonError('')
+    setRoleFieldError('')
+  }
+
   function applyTransition(next: Transition) {
     setTransition(null)
+    resetRoleConfirm()
     discardActiveDraft()
     if (next.kind === 'edit') {
       setFormMode(next)
@@ -315,8 +411,44 @@ export default function ProjectsPage() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form || !formMode) return
+    // ADM-R42：改本公司角色先跳確認框並收原因；取消時不送出請求。
+    if (editing && roleChanged) {
+      setError('')
+      setNotice('')
+      setRoleConfirmOpen(true)
+      return
+    }
+    await persist(null)
+  }
+
+  /** 驗證確認框的原因欄；通過才送出（DOM-R76：去空白後 1～256 字元）。 */
+  async function confirmRoleChange() {
+    const trimmed = reason.trim()
+    if (!trimmed) {
+      setReasonError('請填寫變更原因。')
+      setReasonFocusRequest((request) => request + 1)
+      return
+    }
+    if (trimmed.length > REASON_MAX_LENGTH) {
+      setReasonError(`變更原因最多 ${REASON_MAX_LENGTH} 個字元。`)
+      setReasonFocusRequest((request) => request + 1)
+      return
+    }
+    setReasonError('')
+    await persist(trimmed)
+  }
+
+  function cancelRoleChange() {
+    setRoleConfirmOpen(false)
+    setReasonError('')
+    roleSelectRef.current?.focus()
+  }
+
+  async function persist(changeReason: string | null) {
+    if (!form || !formMode) return
     setError('')
     setNotice('')
+    setRoleFieldError('')
     const input = toInput(form)
     const creating = editing === null
     const savingProjectId = editing?.id ?? null
@@ -325,7 +457,7 @@ export default function ProjectsPage() {
       let saved: Project
       if (editing) {
         const original = toInput(toForm(editing))
-        const changed = Object.fromEntries(
+        const changed: Record<string, unknown> = Object.fromEntries(
           Object.entries(input).filter(
             ([key, value]) => original[key as keyof ProjectInput] !== value,
           ),
@@ -335,10 +467,14 @@ export default function ProjectsPage() {
           applyTransition({ kind: 'list' })
           return
         }
+        if (changed.company_role !== undefined && changeReason !== null) {
+          changed.company_role_change_reason = changeReason
+        }
         saved = await updateProject(editing.id, changed)
       } else {
         saved = await createProject(input)
       }
+      resetRoleConfirm()
       if (creating) {
         setNewDraft(EMPTY_FORM)
         setFormMode(null)
@@ -367,10 +503,42 @@ export default function ProjectsPage() {
       setListError('')
       setReloadKey((key) => key + 1)
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      showSaveError(caught)
     } finally {
       setSaving(false)
     }
+  }
+
+  /** 角色與原因的錯誤顯示在欄位旁並聚焦；其餘留在表單的一般訊息區。 */
+  function showSaveError(caught: unknown) {
+    if (
+      caught instanceof HttpError &&
+      caught.code === 'project.company_role_reason_required'
+    ) {
+      setReasonError('改本公司角色必須填寫變更原因。')
+      setReasonFocusRequest((request) => request + 1)
+      return
+    }
+    if (caught instanceof HttpError && caught.fields) {
+      // 後端對未登記角色與過長原因回帶欄位指標的 422（ADM-R28）。
+      const mapped = mapFieldErrors(caught.fields, [
+        { path: '/company_role', key: 'role' },
+        { path: '/company_role_change_reason', key: 'reason' },
+      ])
+      if (mapped.errors.reason) {
+        setReasonError(`變更原因最多 ${REASON_MAX_LENGTH} 個字元。`)
+        setReasonFocusRequest((request) => request + 1)
+        return
+      }
+      if (mapped.errors.role) {
+        setRoleConfirmOpen(false)
+        setRoleFieldError('這個角色不能使用，請重新選擇。')
+        setRoleFocusRequest((request) => request + 1)
+        return
+      }
+    }
+    setRoleConfirmOpen(false)
+    setError(managementErrorMessage(caught))
   }
 
   return (
@@ -432,6 +600,43 @@ export default function ProjectsPage() {
               新增專案
             </button>
           )}
+          <label>
+            <span className="required-label">
+              本公司在這個案子的角色 <span aria-hidden="true">*</span>
+            </span>
+            <select
+              aria-describedby={[
+                'company-role-hint',
+                roleFieldError || rolesStatus === 'error'
+                  ? 'company-role-error'
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-invalid={
+                roleFieldError || rolesStatus === 'error' ? 'true' : undefined
+              }
+              disabled={rolesStatus !== 'ready'}
+              onChange={(event) => change('company_role', event.target.value)}
+              ref={roleSelectRef}
+              required
+              value={form.company_role}
+            >
+              {roleOptions(roles, form.company_role, rolesStatus)}
+            </select>
+            <span className="field-hint" id="company-role-hint">
+              會決定報表種類。同工地的另一種角色請另開專案。
+            </span>
+          </label>
+          <FieldError
+            focusRequest={roleFocusRequest || undefined}
+            focusTarget={roleSelectRef}
+            id="company-role-error"
+          >
+            {rolesStatus === 'error'
+              ? '角色選項載入失敗，請重新整理後再試。'
+              : roleFieldError}
+          </FieldError>
           <label>
             <span className="required-label">
               專案代號 <span aria-hidden="true">*</span>
@@ -502,7 +707,10 @@ export default function ProjectsPage() {
           >
             取消
           </button>
-          <FormSubmitButton className="btn-primary" disabled={saving}>
+          <FormSubmitButton
+            className="btn-primary"
+            disabled={saving || (!editing && rolesStatus !== 'ready')}
+          >
             {editing ? '儲存專案' : '新增專案'}
           </FormSubmitButton>
           {error && (
@@ -516,6 +724,54 @@ export default function ProjectsPage() {
             </p>
           )}
         </Form>
+      )}
+      {editing && roleChanged && roleConfirmOpen && form && (
+        <ConfirmBox
+          asForm
+          busy={saving}
+          cancelLabel="取消"
+          confirmLabel="確認"
+          label="修改本公司角色"
+          noValidate
+          onCancel={cancelRoleChange}
+          onConfirm={confirmRoleChange}
+          rootRef={roleConfirmRef}
+          variant="neutral"
+        >
+          <p>
+            要把「{editing.name}」的本公司角色由「
+            {roleLabel(roles, editing.company_role)}」改為「
+            {roleLabel(roles, form.company_role)}」嗎？
+          </p>
+          <p>
+            之後新建的任務改為新的檢查層級，已建立的任務與已產生的報表維持原樣。
+          </p>
+          <label>
+            <span className="required-label">
+              變更原因 <span aria-hidden="true">*</span>
+            </span>
+            <textarea
+              aria-describedby={
+                reasonError ? 'company-role-reason-error' : undefined
+              }
+              aria-invalid={reasonError ? 'true' : undefined}
+              onChange={(event) => {
+                setReason(event.target.value)
+                setReasonError('')
+              }}
+              ref={reasonInputRef}
+              required
+              value={reason}
+            />
+          </label>
+          <FieldError
+            focusRequest={reasonFocusRequest || undefined}
+            focusTarget={reasonInputRef}
+            id="company-role-reason-error"
+          >
+            {reasonError}
+          </FieldError>
+        </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
       <Form onSubmit={searchProjects}>
