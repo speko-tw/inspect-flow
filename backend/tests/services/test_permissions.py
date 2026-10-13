@@ -238,15 +238,26 @@ class TestReadOnly:
     """
 
     def test_read_functions_leave_the_session_unchanged(
-        self, session, operator
+        self, session, operator, registered_permission_codes
     ):
         project = _new_project("P-RO", operator)
         user = create_root_user_with_company(session, "U-RO")
         session.add_all([project, user])
         session.flush()
 
-        effective_permissions(session, user_id=user.id, project_id=project.id)
-        role_impact_scope(session, role_id=operator.id)
+        role = _new_role(operator, "Role-RO", "report.read")
+        session.add(role)
+        session.flush()
+        member = _new_member(operator, project, user, role)
+        session.add(member)
+        session.flush()
+
+        assert effective_permissions(
+            session, user_id=user.id, project_id=project.id
+        ) == frozenset({"report.read"})
+        assert role_impact_scope(session, role_id=role.id) == RoleImpactScope(
+            member_count=1, user_count=1
+        )
 
         assert not session.new
         assert not session.dirty
