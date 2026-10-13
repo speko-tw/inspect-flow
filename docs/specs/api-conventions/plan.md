@@ -66,7 +66,7 @@
 | API-AC09 | `backend/tests/contract/test_error_envelope.py`：對 API-AC07 觸發的三個 `error.code` 值，斷言每個都符合 regex `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$` |
 | API-AC10 | `backend/tests/contract/test_error_envelope.py`（或獨立檔案）：對正式 `ErrorCode` 與一個臨時擴充／替換成員的測試專用列舉，分別呼叫生成函式 `build_error_code_descriptions(enum_cls)`，斷言兩次輸出的鍵集合各自與對應列舉成員一一對應（新增成員即出現、移除即消失）；另掃描 repo 確認不存在獨立維護、與生成函式輸出不同步的手寫對照表檔 |
 | API-AC11 | `backend/tests/contract/test_time_format.py`：呼叫測試路由，先以 regex `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$` 斷言回應時間欄位原始字串形狀（不得含小數秒），再以 `datetime.fromisoformat`（或等效 RFC 3339 解析器）解析該字串，斷言解析成功、`tzinfo` 為 UTC（offset 0）、`microsecond == 0`、字串以 `Z` 結尾；並對兩個無效範例（`2026-99-99T99:99:99Z` 與含小數秒的 `2026-09-26T08:30:00.000Z`）分別斷言被判定為不合法（regex 不符，或解析失敗，或未通過上述任一斷言） |
-| API-AC12 | `backend/tests/contract/test_pagination_conventions.py`：建立多筆同一秒的測試記錄並取得第一頁，接著插入一筆排序鍵（時間＋UUID）落在已讀範圍內的新資料，再依 cursor 翻完剩餘頁；斷言原始資料每筆恰好出現一次（不重複也不遺漏），並斷言 cursor 解碼後綁定的是「時間＋UUID」而非位移（例如變動已讀範圍之前的資料筆數不影響下一頁起點） |
+| API-AC12 | `backend/tests/api/test_roles_api.py::test_role_api_cursor_breaks_same_timestamp_ties_by_id`：透過真實 `/api/v1/roles` 建立同秒資料並取得第一頁，插入排序鍵落在已讀範圍內的新資料後，使用第一頁的 cursor 繼續查詢；斷言 cursor 字串固定、原始資料不重複也不遺漏，且新資料不改變下一頁起點 |
 | API-AC13 | `backend/tests/contract/test_field_errors.py`：測試路由接受巢狀 JSON；斷言 `error.fields` 的 `path`、`code`（含必填、過長、數值範圍）、順序為請求本文中的出現順序且固定、超過 100 筆截斷、本文層級錯誤為空字串路徑，`error.code` 不變 |
 | API-AC14 | `test_field_errors.py`：無法解析的 JSON、不支援的 `Content-Type`、共用錯誤型別拋出的 422、404、409、500 都沒有 `fields` 鍵；可定位與不可定位混合時只列可定位者 |
 | API-AC15 | `test_field_errors.py`：路徑轉換單元測試（轉義、空路徑、動態鍵、多送未定義的鍵與 union 分支停在容器並回 `field.invalid`、非 `body` 來源不產生） |
