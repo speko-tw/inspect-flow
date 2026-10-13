@@ -2,7 +2,7 @@
 
 **規格**：[spec.md](spec.md)
 
-Plan／Task 已裁定的狀態行為依部分凍結規則於 spec 中凍結；Evidence／Report 仍為草稿。G-01 未定的 interval 歸屬及快照規則只涉及未來選用功能，不阻擋 MVP 範圍。資料模型仍須等 `domain-model` 凍結 Plan／Task 實體後才能實作；`inspection-planning` 負責 Plan／Task 建立、任務組成、派出操作與現場可見性及操作契約，本規格負責派出後的狀態轉換、KD-55 項目結果狀態及 Plan 狀態彙總。技術選擇均在 spec 中標為「規格設計（非負責人裁定）」，不增補業務規則。Evidence 照片流程與刪除／保留政策已依維護者授權決定，見 KD-61～KD-64；其是否可凍結不在 #404 判定範圍。Report 仍受 G-06（其他產製狀態）與 G-07 阻擋。需求與 AC 編號見 [spec.md](spec.md)。
+Plan／Task 已裁定的狀態行為依部分凍結規則於 spec 中凍結；Evidence／Report 仍為草稿。KD-36 未定的 interval 歸屬及快照規則只涉及未來選用功能，不阻擋 MVP 範圍。資料模型仍須等 `domain-model` 凍結 Plan／Task 實體後才能實作；`inspection-planning` 負責 Plan／Task 建立、任務組成、派出操作與現場可見性及操作契約，本規格負責派出後的狀態轉換、KD-55 項目結果狀態及 Plan 狀態彙總。技術選擇均在 spec 中標為「規格設計（非負責人裁定）」，不增補業務規則。Evidence 照片流程與刪除／保留政策已依負責人裁定（#542，2026-10-13 確認），見 KD-61～KD-64；其是否可凍結不在 #404 判定範圍。Report 仍受 G-06（其他產製狀態）與 G-07 阻擋。需求與 AC 編號見 [spec.md](spec.md)。
 
 ## 任務
 

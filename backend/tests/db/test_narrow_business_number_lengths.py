@@ -4,7 +4,7 @@ migration ``22bfdd8a72a4`` (issue #140, DOM-Q1 ruled in #121).
 ``employee_no`` is narrowed to ``VARCHAR(16)`` and ``project_code``
 to ``VARCHAR(32)`` (the latter a provisional value carried over
 from ``employee_no`` pending ``Project``'s own business columns,
-OQ-01 -- see the PR description).
+KD-39 -- see the PR description).
 
 Like ``test_user_project.py``, this migrates the database behind
 ``conftest.py``'s ``db_url`` fixture with the real Alembic migration
