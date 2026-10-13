@@ -47,6 +47,9 @@ from tests.api.test_inspection_planning_api import _planning_world
 from tests.api.test_planning_query_counts import (
     _create_permission_test_project,
 )
+from tests.api.test_task_inspection_level import (
+    assert_inspection_level_flow,
+)
 from tests.db.conftest import build_root_user
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -614,3 +617,11 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
     assert snapshot_standard is not None
     assert snapshot_standard.source_measurement_field_id == field_id
     assert snapshot_standard.measurement_field_unit == "cm"
+
+
+def test_task_inspection_level_flow_on_database(
+    db_session: Session, make_client
+):
+    # IP-AC16：建立時帶入、改專案角色不回改既有任務，在 PostgreSQL 上
+    # 也要成立（含建立時對專案列的共享鎖）。
+    assert_inspection_level_flow(db_session, make_client)

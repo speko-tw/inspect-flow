@@ -1,5 +1,6 @@
 """Endpoints about the logged-in user's own data (#290)."""
 
+from collections import defaultdict
 from datetime import date
 from uuid import UUID
 
@@ -56,15 +57,27 @@ def list_my_projects(
     ).all()
     access = calculate_effective_access(db, user_id=user.id)
     codes_by_project = access.project_permissions_by_project
+    role_names_by_member: dict[UUID, list[str]] = defaultdict(list)
+    if rows:
+        member_ids = [member_id for _, member_id in rows]
+        # 一次載入所有成員的角色，避免專案數增加時逐筆查詢造成 N+1
+        # （#529）。
+        role_rows = db.execute(
+            select(ProjectMemberRole.project_member_id, Role.name)
+            .join(Role, ProjectMemberRole.role_id == Role.id)
+            .where(ProjectMemberRole.project_member_id.in_(member_ids))
+            .order_by(
+                ProjectMemberRole.project_member_id,
+                Role.name,
+                Role.id,
+            )
+        ).all()
+        for member_id, role_name in role_rows:
+            role_names_by_member[member_id].append(role_name)
+
     result: list[MyProjectResponse] = []
     for project, member_id in rows:
         project_codes = codes_by_project.get(project.id, frozenset())
-        role_names = db.scalars(
-            select(Role.name)
-            .join(ProjectMemberRole, ProjectMemberRole.role_id == Role.id)
-            .where(ProjectMemberRole.project_member_id == member_id)
-            .order_by(Role.name, Role.id)
-        ).all()
         result.append(
             MyProjectResponse(
                 id=project.id,
@@ -74,7 +87,7 @@ def list_my_projects(
                 site_location=project.site_location,
                 planned_start_date=project.planned_start_date,
                 planned_completion_date=project.planned_completion_date,
-                role_names=list(role_names),
+                role_names=role_names_by_member[member_id],
                 has_office_access=bool(
                     project_codes
                     & (
