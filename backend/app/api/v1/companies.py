@@ -4,14 +4,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import ilike_contains, page_by_text_key
+from app.api.pagination import ilike_contains, page_by_text_key, write_call
 from app.api.v1._management_errors import (
-    integrity_error_code,
-    management_error_status,
+    management_api_error,
 )
 from app.auth.access import require_admin
 from app.auth.dependencies import get_db
@@ -33,6 +31,9 @@ router = APIRouter(
     tags=["companies"],
     dependencies=[Depends(require_admin)],
 )
+
+_DEFAULT_PAGE_SIZE = 50
+_MAX_PAGE_SIZE = 100
 
 
 class CompanyResponse(BaseModel):
@@ -83,7 +84,7 @@ def _get_company(db: Session, company_id: UUID) -> Company:
 def list_companies(
     q: str | None = Query(default=None, max_length=256),
     cursor: str | None = None,
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db),  # noqa: B008
 ) -> CompanyListResponse:
     filters = []
@@ -140,14 +141,12 @@ def add_company(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> Company:
     try:
-        return create_company(db, name=body.name)
+        return write_call(
+            lambda: create_company(db, name=body.name),
+            error_mapper=management_api_error,
+        )
     except InvalidCompanyFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.patch("/{company_id}", response_model=CompanyResponse)
@@ -158,14 +157,12 @@ def rename_company(
 ) -> Company:
     company = _get_company(db, company_id)
     try:
-        return update_company(db, company, name=body.name)
+        return write_call(
+            lambda: update_company(db, company, name=body.name),
+            error_mapper=management_api_error,
+        )
     except InvalidCompanyFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
 
 
 @router.put("/{company_id}/active", response_model=CompanyResponse)
@@ -182,16 +179,18 @@ def change_company_status(
     chosen = set(body.disable_user_ids)
     if len(chosen) != len(body.disable_user_ids) or chosen - by_id.keys():
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-    try:
+
+    def update_company_status() -> Company:
         for user_id in chosen:
             set_is_active(db, by_id[user_id], False)
         return update_company(db, company, is_active=body.is_active)
+
+    try:
+        return write_call(
+            update_company_status,
+            error_mapper=management_api_error,
+        )
     except BuiltInAccountModificationError as exc:
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
     except LastActiveAdminRemovalError as exc:
         raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
-    except IntegrityError as exc:
-        code = integrity_error_code(exc)
-        if code is None:
-            raise
-        raise APIError(code, management_error_status(code)) from exc
