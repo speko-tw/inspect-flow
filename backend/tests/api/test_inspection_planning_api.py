@@ -2371,6 +2371,40 @@ def test_field_task_detail_hides_starter_and_reason_for_drafts_and_readers(
     assert make_client().get(url).status_code == 401
 
 
+def test_task_name_is_returned_by_every_task_read_surface(
+    db_session, make_client
+):
+    """IP-R17：Task 詳情、Plan 詳情、Plan 任務清單與 Field 讀取都帶名稱。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    plan_id, task_id = _dispatched_field_task(world, "名稱讀取面")
+
+    detail = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["name"] == "示範任務"
+    plan = admin.get(f"/api/v1/inspection-plans/{plan_id}")
+    assert plan.status_code == 200, plan.text
+    assert [row["name"] for row in plan.json()["tasks"]] == ["示範任務"]
+    listed = admin.get(f"/api/v1/inspection-plans/{plan_id}/tasks")
+    assert listed.status_code == 200, listed.text
+    assert [row["name"] for row in listed.json()["items"]] == ["示範任務"]
+    field_detail = world["field"].get(
+        f"/api/v1/field/inspection-tasks/{task_id}"
+    )
+    assert field_detail.status_code == 200, field_detail.text
+    assert field_detail.json()["name"] == "示範任務"
+    field_list = world["field"].get(
+        "/api/v1/field/inspection-tasks",
+        params={"assigned_to_me": "false"},
+    )
+    assert field_list.status_code == 200, field_list.text
+    assert [
+        row["name"]
+        for row in field_list.json()["items"]
+        if row["id"] == task_id
+    ] == ["示範任務"]
+
+
 def test_field_start_rejections_map_to_distinct_error_codes(
     db_session, make_client
 ):
