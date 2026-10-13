@@ -350,6 +350,13 @@ function TaskList({
                     <strong>{taskTitle(task)}</strong>
                     <StatusBadge status={task.status} />
                   </span>
+                  {task.item_summary.first_title && (
+                    <span className="field-card-item-summary">
+                      {task.item_summary.first_title}
+                      {task.item_summary.item_count > 1 &&
+                        `等 ${task.item_summary.item_count} 項`}
+                    </span>
+                  )}
                   <span className="field-card-project">
                     {task.project_name}
                   </span>

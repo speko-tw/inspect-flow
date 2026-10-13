@@ -130,6 +130,7 @@ class InspectionTask(AuditMixin, TimestampedBase):
     name: Mapped[str] = mapped_column(
         BoundedString(128, _check_task_name),
         nullable=False,
+        # 保留預設值以免 SQLite 重建表觸發 cascade；應用層一律明確帶入名稱。
         server_default="查核任務",
     )
     location_text: Mapped[str | None] = mapped_column(

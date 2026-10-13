@@ -488,10 +488,10 @@ def create_inspection_task(
     assignee_id: uuid.UUID | None = None,
 ) -> InspectionTask:
     """依 IP-R02 建立多項目 DRAFT Task；名稱與來源無效時拒絕。"""
-    normalized_name = _validate_task_name(name)
     operator_id = _require_permission(
         session, plan.project_id, "inspection_task.create"
     )
+    normalized_name = _validate_task_name(name)
     project_inspection_item_ids = _lock_project_items_for_snapshot(
         session,
         project_id=plan.project_id,

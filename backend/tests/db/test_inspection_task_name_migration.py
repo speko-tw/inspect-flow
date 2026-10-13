@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from alembic.config import Config
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
 from alembic import command
@@ -19,7 +19,7 @@ from app.models import (
 from tests.db.conftest import create_root_user_with_company
 
 _BACKEND = Path(__file__).resolve().parents[2]
-_PARENT_REVISION = "6eaaafbe0ef2"
+_PARENT_REVISION = "c13b5e7a9d20"
 _REVISION = "a497f3d2b601"
 
 
@@ -100,10 +100,36 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                     updated_by=actor.id,
                 ),
             ]
-            session.add_all(tasks)
+            long_item = ProjectInspectionItem(
+                project_id=project.id,
+                sequence=3,
+                title="長" * 160,
+                instruction="檢查",
+                source_template_name="範本",
+                applied_at=project.created_at,
+                created_by=actor.id,
+                updated_by=actor.id,
+            )
+            session.add_all([*tasks, long_item])
+            session.flush()
+            long_task = InspectionTask(
+                plan_id=plan.id,
+                project_id=project.id,
+                name="舊長名稱",
+                created_by=actor.id,
+                updated_by=actor.id,
+            )
+            session.add(long_task)
             session.flush()
             session.add_all(
                 [
+                    TaskInspectionItem(
+                        task_id=long_task.id,
+                        project_id=project.id,
+                        project_inspection_item_id=long_item.id,
+                        created_by=actor.id,
+                        updated_by=actor.id,
+                    ),
                     TaskInspectionItem(
                         task_id=tasks[0].id,
                         project_id=project.id,
@@ -124,7 +150,12 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                 ]
             )
             session.commit()
-            task_ids = [task.id for task in tasks]
+            task_ids = [task.id for task in tasks] + [long_task.id]
+            task_item_id = session.scalar(
+                select(TaskInspectionItem.id).where(
+                    TaskInspectionItem.task_id == long_task.id
+                )
+            )
     finally:
         engine.dispose()
 
@@ -139,7 +170,12 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
             assert backfilled[0] is not None
             assert backfilled[1] is not None
             assert backfilled[2] is not None
+            assert backfilled[3] is not None
             assert backfilled[0].name == "消防撒水頭－B1 停車場"
+            assert len(backfilled[3].name) == 128
+            assert backfilled[3].name == "長" * 128
+            assert task_item_id is not None
+            assert session.get(TaskInspectionItem, task_item_id) is not None
             assert backfilled[1].name == "消防撒水頭等 2 項－東側"
             assert backfilled[2].name == "查核任務－屋頂"
         columns = {
@@ -157,5 +193,6 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
             row["name"]
             for row in inspect(engine).get_columns("inspection_tasks")
         }
+        assert inspect(engine).has_table("task_inspection_items")
     finally:
         engine.dispose()

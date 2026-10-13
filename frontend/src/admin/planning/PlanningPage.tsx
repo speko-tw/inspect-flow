@@ -131,6 +131,7 @@ function taskTitle(task: InspectionTask): string {
   return task.name
 }
 
+/** 只在欄位未被手動編輯前更新預設名稱，保留使用者自己的命名。 */
 function suggestedTaskName(
   items: ProjectInspectionItem[],
   itemIds: string[],
@@ -149,12 +150,21 @@ function suggestedTaskName(
   const location =
     zones.find((zone) => zone.id === zoneId)?.name ?? locationText.trim()
   const result = location ? `${itemPart}－${location}` : itemPart
+  // 預設值遵守領域名稱上限；使用者輸入不會再由此函式覆蓋。
   return Array.from(result).slice(0, 128).join('')
 }
 
-// 刪除確認使用任務自己的名稱，項目與地點仍在明細中可查看。
+function taskItemsSummary(task: InspectionTask): string {
+  return (
+    task.items
+      .map((item) => item.current_snapshot?.title)
+      .filter((title): title is string => Boolean(title))
+      .join('、') || '無查核項目'
+  )
+}
+
 function draftTaskSummary(task: InspectionTask): string {
-  return `「${task.name}」`
+  return `「${task.name}」（查核項目：${taskItemsSummary(task)}）`
 }
 
 /**
@@ -207,6 +217,7 @@ export default function PlanningPage({
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
   const [taskName, setTaskName] = useState('')
+  // 只有使用者碰過名稱欄才採用手動值，避免項目變動覆寫自訂名稱。
   const [taskNameTouched, setTaskNameTouched] = useState(false)
   const [taskFormOpen, setTaskFormOpen] = useState(false)
   // 表單展開後要把焦點送到哪裡：'first' 是一般展開，'items' 是阻擋說明的
@@ -944,14 +955,14 @@ export default function PlanningPage({
     )
   }
 
-  // ADM-R28：確認文案列出項目、分區與建議指派，避免多任務計畫派錯。
+  // ADM-R28：列出分區與指派資訊，並讓改名後仍能辨認任務項目。
   function dispatchConfirmation(task: InspectionTask): string {
     const zoneName = task.zone?.name ?? '未設定分區'
     const assigneeName =
       task.assignee?.name_zh ?? task.assignee?.username ?? '未指派'
     return (
-      `派出任務「${task.name}」？分區：${zoneName}；` +
-      `建議指派人：${assigneeName}。派出後現場即可查看。`
+      `派出任務「${task.name}」？查核項目：${taskItemsSummary(task)}；` +
+      `分區：${zoneName}；建議指派人：${assigneeName}。派出後現場即可查看。`
     )
   }
 
@@ -1255,6 +1266,7 @@ export default function PlanningPage({
                       {task.location_text && (
                         <p>補充地點：{task.location_text}</p>
                       )}
+                      <p>查核項目：{taskItemsSummary(task)}</p>
                       <p>
                         建議指派：
                         {task.assignee?.name_zh ??
@@ -1396,6 +1408,7 @@ export default function PlanningPage({
                       )}
                       {canModify && editingName?.task.id === task.id && (
                         <form
+                          onKeyDown={blockImeEnter}
                           data-error-context="task-rename"
                           noValidate
                           onSubmit={(event) => {
@@ -1664,7 +1677,9 @@ export default function PlanningPage({
                         ((discardingTaskForm === 'location' &&
                           editingLocation?.task.id === task.id) ||
                           (discardingTaskForm === 'assignee' &&
-                            editingAssignee?.task.id === task.id)) && (
+                            editingAssignee?.task.id === task.id) ||
+                          (discardingTaskForm === 'name' &&
+                            editingName?.task.id === task.id)) && (
                           <ConfirmBox
                             cancelLabel="保留編輯"
                             confirmLabel="捨棄變更"

@@ -57,7 +57,8 @@ describe('planning management page', () => {
 
       await screen.findByRole('heading', { name: '計畫與任務' })
 
-      fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      // 初次載入完成後欄位才存在，避免同步查找早於資料載入。
+      fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '橋梁查核' },
       })
       fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
@@ -106,6 +107,11 @@ describe('planning management page', () => {
       const taskArticle = taskHeading.closest('article')
       expect(taskArticle).not.toBeNull()
       expect(
+        within(taskArticle as HTMLElement).getByText(
+          '查核項目：混凝土外觀、鋼筋保護層',
+        ),
+      ).toBeInTheDocument()
+      expect(
         within(taskArticle as HTMLElement).getByText('分區：北區'),
       ).toBeInTheDocument()
       expect(
@@ -139,7 +145,7 @@ describe('planning management page', () => {
         }),
       )
       expect(screen.getByRole('dialog')).toHaveTextContent(
-        '派出任務「橋梁外牆複查」？分區：北區；建議指派人：現場人員甲。',
+        '派出任務「橋梁外牆複查」？查核項目：混凝土外觀、鋼筋保護層；分區：北區；建議指派人：現場人員甲。',
       )
       expect(screen.getByRole('button', { name: '確認' })).toHaveClass(
         'btn-primary',
@@ -415,7 +421,9 @@ describe('planning management page', () => {
     expect(
       within(dialog).getByRole('heading', { name: '請確認操作' }),
     ).toHaveFocus()
-    expect(dialog).toHaveTextContent(`永久刪除草稿任務「混凝土外觀－北區」？`)
+    expect(dialog).toHaveTextContent(
+      '永久刪除草稿任務「混凝土外觀－北區」（查核項目：混凝土外觀）？',
+    )
     expect(dialog).toHaveTextContent('刪除後無法復原')
     expect(within(dialog).queryByRole('button', { name: '確認' })).toBeNull()
     const remove = within(dialog).getByRole('button', { name: '刪除' })
@@ -500,6 +508,45 @@ describe('planning management page', () => {
     expect(label?.textContent).toMatch(/^混凝土外觀/)
   })
 
+  it('suggests a single item name with optional supplemental location', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
+      target: { value: '單項名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '單項名稱（草稿）' }),
+    )
+    await openTaskCreationForm()
+    fireEvent.click(await screen.findByLabelText(/鋼筋保護層/))
+    expect(screen.getByLabelText(/任務名稱/)).toHaveValue('鋼筋保護層')
+    fireEvent.change(screen.getByLabelText('補充地點'), {
+      target: { value: '東側' },
+    })
+    expect(screen.getByLabelText(/任務名稱/)).toHaveValue('鋼筋保護層－東側')
+  })
+
+  it('truncates suggested task names at 128 characters', async () => {
+    const client = createMockPlanningClient()
+    const listItems = client.listProjectItems.bind(client)
+    client.listProjectItems = async (projectId) =>
+      (await listItems(projectId)).map((item, index) =>
+        index === 0 ? { ...item, title: '甲'.repeat(140) } : item,
+      )
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
+      target: { value: '名稱長度' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '名稱長度（草稿）' }),
+    )
+    await openTaskCreationForm()
+    fireEvent.click(await screen.findByLabelText(/甲{5}/))
+    expect(screen.getByLabelText(/任務名稱/)).toHaveValue('甲'.repeat(128))
+  })
+
   it('keeps task creation collapsed and lists existing tasks', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
@@ -572,6 +619,28 @@ describe('planning management page', () => {
     const nameInput = within(article).getByLabelText(/任務名稱/)
     fireEvent.change(nameInput, { target: { value: '取消的名稱' } })
     fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    const discardDialog = screen.getByRole('dialog')
+    expect(discardDialog).toHaveTextContent('修改內容尚未儲存')
+    fireEvent.click(
+      within(discardDialog).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(within(article).getByLabelText(/任務名稱/)).toHaveValue(
+      '取消的名稱',
+    )
+    fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: '捨棄變更',
+      }),
+    )
+    await waitFor(() =>
+      expect(within(article).queryByLabelText(/任務名稱/)).toBeNull(),
+    )
+    await waitFor(() =>
+      expect(
+        within(article).getByRole('button', { name: '修改名稱' }),
+      ).toHaveFocus(),
+    )
     expect(
       within(article).getByRole('heading', {
         name: /原任務名稱\s+（草稿）/,
@@ -1425,6 +1494,34 @@ describe('planning forms guard (#507)', () => {
     expect(
       within(article).getByRole('button', { name: '修改建議指派' }),
     ).toHaveFocus()
+  })
+
+  it('ignores IME Enter in the task rename form', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'updateTaskName')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
+
+    expectImeEnterIgnored(within(article).getByLabelText(/任務名稱/))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('maps task rename 422 name errors and focuses the input', async () => {
+    const { client } = await seeded()
+    client.updateTaskName = vi
+      .fn()
+      .mockRejectedValue(validationError(planNameValidation))
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
+    const form = formByContext('task-rename')
+    const input = within(form).getByLabelText(/任務名稱/)
+    fireEvent.change(input, { target: { value: '新名稱' } })
+    fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
+
+    expect(await within(form).findByText('輸入內容太長。')).toBeVisible()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
   })
 
   it('ignores IME Enter in the location form', async () => {

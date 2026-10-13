@@ -1317,6 +1317,10 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         json={"name": "示範任務", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
+    dispatched = admin.post(
+        f"/api/v1/inspection-tasks/{task.json()['id']}:dispatch"
+    )
+    assert dispatched.status_code == 200, dispatched.text
 
     def point_payload(point, *, title=None, field_type="text", fields=None):
         field = point["measurement_fields"][0]
@@ -1406,6 +1410,22 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
         point_row["title"]
         for point_row in snapshot_before_rejections["inspection_points"]
     } == {"內容可更正"}
+
+    photo_requirement_changes = [
+        {**point, "evidence_requirements": [{"min_count": 2}]}
+        for point in updated_points
+    ]
+    photo_change = admin.patch(
+        item_url,
+        json={
+            "inspection_points": photo_requirement_changes,
+            "reinspect": False,
+        },
+    )
+    assert photo_change.status_code == 422, photo_change.text
+    assert photo_change.json()["error"]["code"] == (
+        "project_inspection_item.structure_locked"
+    )
 
     missing_point_identity = [
         {key: value for key, value in point.items() if key != "id"}
@@ -1914,6 +1934,274 @@ def test_project_item_change_requires_choice_and_returns_task_actions(
     task_model = db_session.get(InspectionTask, UUID(task.json()["id"]))
     assert task_model is not None
     assert task_model.status == "DRAFT"
+
+
+def test_draft_task_allows_project_item_structure_update_in_place(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project = world["project"]
+    item = world["item"]
+    item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
+    initial = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "保留項次",
+                    "instruction": "原說明",
+                    "text_standard": {"text": "原標準"},
+                    "measurement_fields": [
+                        {
+                            "client_id": str(uuid4()),
+                            "name": "保留欄位",
+                            "field_type": "text",
+                            "unit": None,
+                        },
+                        {
+                            "client_id": str(uuid4()),
+                            "name": "移除欄位",
+                            "field_type": "text",
+                            "unit": None,
+                        },
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                },
+                {
+                    "sequence": 2,
+                    "title": "移除項次",
+                    "instruction": "原說明",
+                    "text_standard": {"text": "原標準"},
+                    "measurement_fields": [],
+                    "evidence_requirements": [{"min_count": 1}],
+                },
+            ]
+        },
+    )
+    assert initial.status_code == 200, initial.text
+    original_points = initial.json()["inspection_points"]
+    retained = original_points[0]
+    retained_field = retained["measurement_fields"][0]
+    plan = admin.post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "草稿同步結構"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"name": "草稿結構更新", "item_ids": [str(item.id)]},
+    )
+    assert task.status_code == 201, task.text
+    task_id = task.json()["id"]
+
+    updated = admin.patch(
+        item_url,
+        json={
+            "reinspect": True,
+            "inspection_points": [
+                {
+                    "id": retained["id"],
+                    "sequence": 1,
+                    "title": "保留項次更新",
+                    "instruction": "新說明",
+                    "text_standard": {"text": "新標準"},
+                    "measurement_fields": [
+                        {
+                            "id": retained_field["id"],
+                            "client_id": retained_field["id"],
+                            "name": "保留欄位更新",
+                            "field_type": "text",
+                            "unit": None,
+                        },
+                        {
+                            "client_id": str(uuid4()),
+                            "name": "新增欄位",
+                            "field_type": "number",
+                            "unit": "mm",
+                        },
+                    ],
+                    "evidence_requirements": [{"min_count": 2}],
+                },
+                {
+                    "sequence": 2,
+                    "title": "新增項次",
+                    "instruction": "新說明",
+                    "text_standard": {"text": "新標準"},
+                    "measurement_fields": [],
+                    "evidence_requirements": [{"min_count": 1}],
+                },
+            ],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    updated_points = updated.json()["inspection_points"]
+    assert len(updated_points) == 2
+    assert updated_points[0]["id"] == retained["id"]
+    assert updated_points[0]["title"] == "保留項次更新"
+    assert [
+        field["name"] for field in updated_points[0]["measurement_fields"]
+    ] == [
+        "保留欄位更新",
+        "新增欄位",
+    ]
+    assert updated_points[1]["title"] == "新增項次"
+    assert updated_points[1]["id"] != original_points[1]["id"]
+    assert updated.json()["affected_tasks"] == [
+        {
+            "task_id": task_id,
+            "prior_status": "DRAFT",
+            "status": "DRAFT",
+            "action": "draft_updated",
+            "needs_reinspection": False,
+        }
+    ]
+    current_task = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert current_task.status_code == 200
+    assert current_task.json()["status"] == "DRAFT"
+    snapshot = current_task.json()["items"][0]["current_snapshot"]
+    assert [point["title"] for point in snapshot["inspection_points"]] == [
+        "保留項次更新",
+        "新增項次",
+    ]
+    assert (
+        snapshot["inspection_points"][0]["text_standard"]["text"] == "新標準"
+    )
+
+
+def test_dispatched_project_item_rejects_standard_structure_changes(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project = world["project"]
+    item = world["item"]
+    item_url = f"/api/v1/projects/{project.id}/inspection-items/{item.id}"
+    field_client_id = uuid4()
+    second_field_client_id = uuid4()
+    created = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {
+                    "sequence": 1,
+                    "title": "厚度",
+                    "instruction": "測量厚度",
+                    "text_standard": None,
+                    "numeric_standard": {
+                        "value": "10",
+                        "condition": "=",
+                        "unit": "mm",
+                        "measurement_field_client_id": str(field_client_id),
+                    },
+                    "measurement_fields": [
+                        {
+                            "client_id": str(field_client_id),
+                            "name": "厚度",
+                            "field_type": "number",
+                            "unit": None,
+                        },
+                        {
+                            "client_id": str(second_field_client_id),
+                            "name": "寬度",
+                            "field_type": "number",
+                            "unit": "mm",
+                        },
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ]
+        },
+    )
+    assert created.status_code == 200, created.text
+    point = created.json()["inspection_points"][0]
+    fields = point["measurement_fields"]
+    plan = admin.post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "標準結構鎖定"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"name": "已派出結構鎖定", "item_ids": [str(item.id)]},
+    )
+    assert task.status_code == 201, task.text
+    dispatched = admin.post(
+        f"/api/v1/inspection-tasks/{task.json()['id']}:dispatch"
+    )
+    assert dispatched.status_code == 200, dispatched.text
+
+    def payload(*, kind="numeric", binding=None, unit="mm"):
+        numeric = None
+        text = None
+        active_binding = binding or fields[0]["id"]
+        if kind == "numeric":
+            numeric = {
+                "value": "12",
+                "condition": "=",
+                "unit": unit,
+                "measurement_field_client_id": active_binding,
+            }
+        elif kind == "text":
+            text = {"text": "文字標準可編"}
+        return {
+            "reinspect": False,
+            "inspection_points": [
+                {
+                    "id": point["id"],
+                    "sequence": 1,
+                    "title": "標題可編",
+                    "instruction": "說明可編",
+                    "text_standard": text,
+                    "numeric_standard": numeric,
+                    "measurement_fields": [
+                        {
+                            "id": fields[0]["id"],
+                            "client_id": fields[0]["id"],
+                            "name": "欄位名稱可編",
+                            "field_type": "number",
+                            "unit": (
+                                None
+                                if kind == "numeric"
+                                and active_binding == fields[0]["id"]
+                                else "mm"
+                            ),
+                        },
+                        {
+                            "id": fields[1]["id"],
+                            "client_id": fields[1]["id"],
+                            "name": "寬度",
+                            "field_type": "number",
+                            "unit": (
+                                None
+                                if kind == "numeric"
+                                and active_binding == fields[1]["id"]
+                                else "mm"
+                            ),
+                        },
+                    ],
+                    "evidence_requirements": [{"min_count": 1}],
+                }
+            ],
+        }
+
+    changed_field_unit = payload()
+    changed_field_unit["inspection_points"][0]["measurement_fields"][1][
+        "unit"
+    ] = "cm"
+    invalid_payloads = [
+        payload(kind="text"),
+        payload(binding=fields[1]["id"]),
+        changed_field_unit,
+        payload(unit="cm"),
+    ]
+    for index, invalid in enumerate(invalid_payloads):
+        response = admin.patch(item_url, json=invalid)
+        assert response.status_code == 422, f"case {index}: {response.text}"
+        assert response.json()["error"]["code"] == (
+            "project_inspection_item.structure_locked"
+        ), f"case {index}: {response.text}"
 
 
 def test_project_item_invalid_structure_precedes_missing_reinspect_choice(
@@ -3194,8 +3482,27 @@ def test_task_rename_validates_permissions_state_and_audit(
     task_id = UUID(created.json()["id"])
     task_path = f"/api/v1/inspection-tasks/{task_id}"
 
-    denied = world["plain"].patch(task_path, json={"name": "無權改名"})
-    assert denied.status_code == 403
+    for client in (world["plain"], world["reader"], world["field_reader"]):
+        denied = client.patch(task_path, json={"name": "無權改名"})
+        assert denied.status_code == 403
+
+    task = db_session.get(InspectionTask, task_id)
+    assert task is not None
+    manager_role = db_session.scalar(
+        select(Role).where(Role.name == "API planning manager")
+    )
+    manager_member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == world["field_user_two"].id,
+        )
+    )
+    assert manager_role is not None and manager_member is not None
+    manager_member.role_assignments.append(
+        ProjectMemberRole(role_id=manager_role.id)
+    )
+    db_session.commit()
+    manager = world["field_two"]
 
     for invalid_name in ("   ", "x" * 129):
         invalid = admin.patch(task_path, json={"name": invalid_name})
@@ -3204,9 +3511,29 @@ def test_task_rename_validates_permissions_state_and_audit(
             "inspection_task.invalid_name"
         )
 
-    renamed = admin.patch(task_path, json={"name": "  更新任務  "})
+    rejected_combined = admin.patch(
+        task_path,
+        json={"name": "雙用途欄位", "zone_id": None, "location_text": None},
+    )
+    assert rejected_combined.status_code == 422
+    assert rejected_combined.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    renamed = manager.patch(task_path, json={"name": "  更新任務  "})
     assert renamed.status_code == 200, renamed.text
     assert renamed.json()["name"] == "更新任務"
+    no_op = manager.patch(task_path, json={"name": "更新任務"})
+    assert no_op.status_code == 200
+    assert no_op.json()["name"] == "更新任務"
+    duplicate = admin.post(
+        f"/api/v1/inspection-plans/{plan['id']}/tasks",
+        json={
+            "name": "更新任務",
+            "item_ids": [str(world["item"].id)],
+        },
+    )
+    assert duplicate.status_code == 201, duplicate.text
     events = list(
         db_session.scalars(
             select(AuditLog).where(
@@ -3219,15 +3546,80 @@ def test_task_rename_validates_permissions_state_and_audit(
     assert events[0].before == {"name": "初始任務"}
     assert events[0].after == {"name": "更新任務"}
 
+    dispatched = admin.post(f"{task_path}:dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+    pending_rename = manager.patch(task_path, json={"name": "待開始已改名"})
+    assert pending_rename.status_code == 200, pending_rename.text
+    assert pending_rename.json()["status"] == "PENDING"
+    started = admin.post(f"{task_path}:start")
+    assert started.status_code == 200, started.text
+    in_progress_rename = manager.patch(
+        task_path, json={"name": "進行中已改名"}
+    )
+    assert in_progress_rename.status_code == 200, in_progress_rename.text
+    assert in_progress_rename.json()["status"] == "IN_PROGRESS"
+
     task = db_session.get(InspectionTask, task_id)
     assert task is not None
     task.status = "COMPLETED"
     db_session.commit()
-    completed = admin.patch(task_path, json={"name": "完成後不可改"})
+    completed = manager.patch(task_path, json={"name": "完成後不可改"})
     assert completed.status_code == 409
     assert completed.json()["error"]["code"] == (
         "inspection_task.invalid_transition"
     )
+    db_session.refresh(task)
+    assert task.name == "進行中已改名"
+    renamed_count = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(
+            AuditLog.entity_id == task_id,
+            AuditLog.event_type == "inspection_task.renamed",
+        )
+    )
+    assert renamed_count == 3
+
+    cancelled_task = admin.post(
+        f"/api/v1/inspection-plans/{plan['id']}/tasks",
+        json={
+            "name": "取消狀態任務",
+            "item_ids": [str(world["item_two"].id)],
+        },
+    )
+    assert cancelled_task.status_code == 201, cancelled_task.text
+    cancelled_id = cancelled_task.json()["id"]
+    cancelled_path = f"/api/v1/inspection-tasks/{cancelled_id}"
+    assert admin.post(f"{cancelled_path}:dispatch").status_code == 200
+    assert (
+        admin.post(
+            f"{cancelled_path}:cancel", json={"reason": "驗證鎖定"}
+        ).status_code
+        == 200
+    )
+    before_cancelled_name = cancelled_task.json()["name"]
+    before_cancelled_audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.entity_id == UUID(cancelled_id))
+    )
+    cancelled_rename = manager.patch(
+        cancelled_path, json={"name": "取消後不可改"}
+    )
+    assert cancelled_rename.status_code == 409
+    assert cancelled_rename.json()["error"]["code"] == (
+        "inspection_task.invalid_transition"
+    )
+    cancelled_row = db_session.get(InspectionTask, UUID(cancelled_id))
+    assert cancelled_row is not None
+    db_session.refresh(cancelled_row)
+    assert cancelled_row.name == before_cancelled_name
+    after_cancelled_audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.entity_id == UUID(cancelled_id))
+    )
+    assert after_cancelled_audits == before_cancelled_audits
 
     archived_plan = admin.post(
         f"/api/v1/projects/{project.id}/inspection-plans",
@@ -3638,7 +4030,7 @@ def test_one_photo_requirement_keeps_task_flows_working(
     used_by_draft = admin.patch(
         item_url,
         json={
-            "reinspect": False,
+            "reinspect": True,
             "inspection_points": [
                 {
                     **_item_point([{"min_count": 2}]),
@@ -3660,3 +4052,55 @@ def test_one_photo_requirement_keeps_task_flows_working(
     restored = admin.post(f"{task_path}:restore")
     assert restored.status_code == 200, restored.text
     assert restored.json()["status"] == "IN_PROGRESS"
+
+
+def test_cancelled_task_locks_structure_when_reinspection_is_false(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project_id = world["project"].id
+    item_id = world["item"].id
+    item_url = f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+    current_point = _item_point([{"min_count": 1}])
+    created = admin.patch(
+        item_url,
+        json={"inspection_points": [current_point]},
+    )
+    assert created.status_code == 200, created.text
+    current_point["id"] = created.json()["inspection_points"][0]["id"]
+    plan = admin.post(
+        f"/api/v1/projects/{project_id}/inspection-plans",
+        json={"name": "取消任務結構鎖"},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={"name": "取消狀態結構鎖定", "item_ids": [str(item_id)]},
+    )
+    assert task.status_code == 201, task.text
+    task_url = f"/api/v1/inspection-tasks/{task.json()['id']}"
+    assert admin.post(f"{task_url}:dispatch").status_code == 200
+    cancelled = admin.post(f"{task_url}:cancel", json={"reason": "計畫調整"})
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "CANCELLED"
+
+    added_point = {
+        "sequence": 2,
+        "title": "新增項次",
+        "instruction": "新增說明",
+        "text_standard": {"text": "新增標準"},
+        "measurement_fields": [],
+        "evidence_requirements": [{"min_count": 1}],
+    }
+    locked = admin.patch(
+        item_url,
+        json={
+            "reinspect": False,
+            "inspection_points": [current_point, added_point],
+        },
+    )
+    assert locked.status_code == 422, locked.text
+    assert locked.json()["error"]["code"] == (
+        "project_inspection_item.structure_locked"
+    ), locked.text

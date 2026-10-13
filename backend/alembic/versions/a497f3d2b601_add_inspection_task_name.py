@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "a497f3d2b601"
-down_revision: str | Sequence[str] | None = "6eaaafbe0ef2"
+down_revision: str | Sequence[str] | None = "c13b5e7a9d20"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -35,6 +35,8 @@ def upgrade() -> None:
                 name="inspection_task_name_valid",
             ),
             nullable=False,
+            # 暫存預設值避免 SQLite 重建表觸發 cascade；
+            # 應用層一律明確帶入名稱。
             server_default="查核任務",
         ),
     )

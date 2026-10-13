@@ -212,6 +212,17 @@ def test_planning_bodies_reject_oversized_fields(planning):
         "zone name": admin.post(
             f"/api/v1/projects/{project_id}/zones", json={"name": long_name}
         ),
+        "task create name": admin.post(
+            f"/api/v1/inspection-plans/{plan_id}/tasks",
+            json={
+                "name": long_name,
+                "item_ids": [str(planning["item"].id)],
+            },
+        ),
+        "task rename name": admin.patch(
+            f"/api/v1/inspection-tasks/{task_id}",
+            json={"name": long_name},
+        ),
         "task item ids": admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
             json={
@@ -268,6 +279,25 @@ def test_domain_limit_errors_keep_their_codes_below_the_transport_cap(
     )
     assert plan.status_code == 422
     assert plan.json()["error"]["code"] == "inspection_plan.invalid_name"
+    task_url = f"/api/v1/inspection-tasks/{planning['task']['id']}"
+    create_url = f"/api/v1/inspection-plans/{planning['plan']['id']}/tasks"
+    for invalid_name in ("   ", "x" * 129):
+        created = admin.post(
+            create_url,
+            json={
+                "name": invalid_name,
+                "item_ids": [str(planning["item"].id)],
+            },
+        )
+        assert created.status_code == 422
+        assert created.json()["error"]["code"] == (
+            "inspection_task.invalid_name"
+        )
+        renamed = admin.patch(task_url, json={"name": invalid_name})
+        assert renamed.status_code == 422
+        assert renamed.json()["error"]["code"] == (
+            "inspection_task.invalid_name"
+        )
     zone = admin.post(
         f"/api/v1/projects/{project_id}/zones", json={"name": "x" * 129}
     )
