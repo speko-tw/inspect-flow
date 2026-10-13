@@ -702,7 +702,11 @@ export default function ProjectTemplatesPage({
                             >
                               {system.name}
                               {system.item_count !== undefined && (
-                                <span className="tpl-mobile-system-count muted-text">
+                                <span
+                                  className={
+                                    'tpl-mobile-system-count muted-text'
+                                  }
+                                >
                                   {system.item_count} 個查核項目
                                 </span>
                               )}
@@ -791,7 +795,11 @@ export default function ProjectTemplatesPage({
                             >
                               {system.name}
                               {system.item_count !== undefined && (
-                                <span className="tpl-mobile-system-count muted-text">
+                                <span
+                                  className={
+                                    'tpl-mobile-system-count muted-text'
+                                  }
+                                >
                                   {system.item_count} 個查核項目
                                 </span>
                               )}
@@ -892,7 +900,9 @@ export default function ProjectTemplatesPage({
                             <strong>
                               {item.title}
                               {isAlreadyApplied(item, projectItemNames) && (
-                                <span className="tpl-applied-status muted-text">
+                                <span
+                                  className={'tpl-applied-status muted-text'}
+                                >
                                   已套用
                                 </span>
                               )}

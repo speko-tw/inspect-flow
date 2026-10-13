@@ -156,9 +156,14 @@ export function TemplateLibraryNav({
                                             ? 'true'
                                             : undefined
                                         }
-                                        className={`tpl-tree-row tpl-item-row muted-text${
-                                          applied ? ' tpl-item-applied' : ''
-                                        }`}
+                                        className={[
+                                          'tpl-tree-row',
+                                          'tpl-item-row',
+                                          'muted-text',
+                                          applied ? 'tpl-item-applied' : '',
+                                        ]
+                                          .filter(Boolean)
+                                          .join(' ')}
                                         onClick={() =>
                                           item.id &&
                                           !applied &&
@@ -174,14 +179,20 @@ export function TemplateLibraryNav({
                                           {item.title || '未命名查核項目'}
                                         </span>
                                         {applied && (
-                                          <span className="tpl-applied-status muted-text">
+                                          <span
+                                            className={
+                                              'tpl-applied-status muted-text'
+                                            }
+                                          >
                                             已套用
                                           </span>
                                         )}
                                         {mobile && (
                                           <span
                                             aria-hidden="true"
-                                            className="tpl-item-open muted-text"
+                                            className={
+                                              'tpl-item-open muted-text'
+                                            }
                                           >
                                             開啟詳情
                                           </span>
