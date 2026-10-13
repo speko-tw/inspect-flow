@@ -508,7 +508,12 @@ def test_company_role_reason_length_and_same_value(project_api, db_session):
         },
     )
     assert too_long.status_code == 422
-    assert too_long.json()["error"]["code"] == "request.validation_failed"
+    assert too_long.json()["error"] == {
+        "code": ErrorCode.REQUEST_VALIDATION_FAILED.value,
+        "fields": [
+            {"path": "/company_role_change_reason", "code": "field.too_long"}
+        ],
+    }
     exact = client.patch(
         url,
         json={
@@ -552,9 +557,124 @@ def test_company_role_patch_rejects_null_and_unregistered(
     )
 
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "request.validation_failed"
+    error = response.json()["error"]
+    assert error["code"] == "request.validation_failed"
+    # 未登記的值指到 /company_role；null 沒有欄位指標。
+    assert error.get("fields") == (
+        None
+        if bad is None
+        else [{"path": "/company_role", "code": "field.invalid"}]
+    )
     db_session.expire_all()
     assert db_session.get(Project, project.id).company_role == "contractor"
+
+
+@pytest.mark.parametrize("padding", [3, 257, 5000])
+def test_blank_reason_is_required_error_at_any_length(
+    project_api, db_session, padding
+):
+    """DOM-R76：全空白原因不論多長，都是專用錯誤碼而非長度錯誤。"""
+    project = project_api["project"]
+
+    response = project_api["admin_client"].patch(
+        f"/api/v1/projects/{project.id}",
+        json={
+            "company_role": "supervisor",
+            "company_role_change_reason": " " * padding,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"] == {
+        "code": ErrorCode.PROJECT_COMPANY_ROLE_REASON_REQUIRED.value
+    }
+    db_session.expire_all()
+    assert db_session.get(Project, project.id).company_role == "contractor"
+
+
+def test_padded_reason_within_limit_is_not_rejected_by_request_cap(
+    project_api, db_session
+):
+    """去空白後 256 字元的原因，前後有再多空白也不被請求上限誤擋。"""
+    project = project_api["project"]
+    reason = "字" * 256
+
+    response = project_api["admin_client"].patch(
+        f"/api/v1/projects/{project.id}",
+        json={
+            "company_role": "supervisor",
+            "company_role_change_reason": f"{' ' * 600}{reason}{' ' * 600}",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    [event] = _events(db_session, "project.updated", str(project.id))
+    assert event.after == {
+        "company_role": "supervisor",
+        "company_role_change_reason": reason,
+    }
+
+
+def test_create_with_unregistered_role_points_at_the_role_field(project_api):
+    response = project_api["admin_client"].post(
+        "/api/v1/projects", json=_create_body(company_role="unknown")
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"] == {
+        "code": ErrorCode.REQUEST_VALIDATION_FAILED.value,
+        "fields": [{"path": "/company_role", "code": "field.invalid"}],
+    }
+
+
+def test_company_role_api_matches_frontend_contract_fixture(
+    project_api, db_session
+):
+    """RG-M22：前端 mock 用的角色清單、請求本體與錯誤形狀都是真的。"""
+    fixture = _company_role_contract()
+    client = project_api["admin_client"]
+    project = project_api["project"]
+    url = f"/api/v1/projects/{project.id}"
+
+    listed = client.get("/api/v1/project-company-roles")
+    assert listed.status_code == 200
+    assert listed.json() == fixture["roles_response"]
+    assert all(
+        sorted(item) == fixture["role_item_keys"]
+        for item in listed.json()["items"]
+    )
+
+    def error_of(body: dict) -> tuple[int, dict]:
+        response = client.patch(url, json=body)
+        return response.status_code, response.json()["error"]
+
+    patch_body = fixture["patch_request"]
+    status, error = error_of({"company_role": patch_body["company_role"]})
+    expected = fixture["reason_required_error"]
+    assert (status, error) == (
+        expected["status"],
+        {"code": expected["code"]},
+    )
+
+    status, error = error_of({**patch_body, "company_role": "unknown"})
+    expected = fixture["invalid_role_error"]
+    assert (status, error) == (
+        expected["status"],
+        {"code": expected["code"], "fields": expected["fields"]},
+    )
+
+    status, error = error_of(
+        {**patch_body, "company_role_change_reason": "字" * 257}
+    )
+    expected = fixture["reason_too_long_error"]
+    assert (status, error) == (
+        expected["status"],
+        {"code": expected["code"], "fields": expected["fields"]},
+    )
+
+    changed = client.patch(url, json=patch_body)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["company_role"] == patch_body["company_role"]
 
 
 def test_company_role_change_is_admin_only_during_transition(
@@ -1458,6 +1578,17 @@ def _contract_fixture() -> dict:
             Path(__file__).parents[3]
             / "frontend/src/admin/projects/fixtures"
             / "member-roles-contract.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
+def _company_role_contract() -> dict:
+    """前後端共用的本公司角色契約（RG-M22）。"""
+    return json.loads(
+        (
+            Path(__file__).parents[3]
+            / "frontend/src/admin/projects/fixtures"
+            / "company-role-contract.json"
         ).read_text(encoding="utf-8")
     )
 

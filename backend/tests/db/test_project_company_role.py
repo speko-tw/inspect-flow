@@ -1,7 +1,8 @@
-"""DOM-AC73: ``Project.company_role`` column, registry and migration.
+"""DOM-AC73：``Project.company_role`` 欄位、登記表與 migration。
 
-Runs on the same SQLite/PostgreSQL fixture as the other database tests,
-so ``make check-postgres`` covers the migration on PostgreSQL too.
+與其他資料庫測試共用 SQLite／PostgreSQL fixture，所以
+``make check-postgres`` 也會在 PostgreSQL 上驗證這支 migration：
+回填既有專案、不可空、登記表檢查都不能只在 SQLite 上成立。
 """
 
 import ast
@@ -44,8 +45,8 @@ def _config() -> Config:
 
 def _projects_table(engine: Engine) -> Table:
     table = Table("projects", MetaData(), autoload_with=engine)
-    # SQLite reflects Uuid columns as CHAR; restore the declared type so
-    # Core binds UUID objects on both databases.
+    # SQLite 反射出來的 Uuid 欄位是 CHAR；改回宣告的型別，Core 才會
+    # 在兩種資料庫上都用 UUID 物件綁定參數。
     for name in ("id", "created_by", "updated_by"):
         table.c[name].type = Uuid()
     return table

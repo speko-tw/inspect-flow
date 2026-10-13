@@ -2,16 +2,16 @@
 
 from collections.abc import Sequence
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.errors import APIError, ErrorCode
+from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
     require_admin,
@@ -44,6 +44,8 @@ from app.services.project_workflow_summary import get_project_workflow_summary
 from app.services.projects import (
     COMPANY_ROLE_REASON_MAX_LENGTH,
     CompanyRoleReasonRequiredError,
+    CompanyRoleReasonTooLongError,
+    InvalidCompanyRoleError,
     InvalidProjectFieldError,
     ProjectUnchangedError,
     create_project,
@@ -143,17 +145,26 @@ class CreateProjectRequest(BaseModel):
     planned_completion_date: date | None = None
 
 
+def _strip_reason(value: object) -> object:
+    """非字串原樣交給 Pydantic 報型別錯誤；字串先去除前後空白。"""
+    return value.strip() if isinstance(value, str) else value
+
+
 class UpdateProjectRequest(BaseModel):
     project_code: str | None = None
     name: str | None = None
     client_name: str | None = None
     site_location: str | None = None
     company_role: str | None = None
-    # DOM-R76：改角色必填原因；長度由 Service 去除空白後檢查（專用錯誤
-    # 碼與共用驗證錯誤的分界），這裡只擋明顯過大的內容。
-    company_role_change_reason: str | None = Field(
-        default=None, max_length=COMPANY_ROLE_REASON_MAX_LENGTH * 4
-    )
+    # DOM-R76：改角色必填原因。先去除前後空白再套長度上限，所以：
+    # - 全空白的原因不論多長，都變成空字串、由 Service 回專用錯誤碼
+    #   ``project.company_role_reason_required``，不會被長度上限先擋成
+    #   一般驗證錯誤；
+    # - 去空白後超過 256 字元由 Pydantic 回帶欄位指標的 422
+    #   （``/company_role_change_reason``），錯誤顯示在原因欄旁（ADM-R28）。
+    company_role_change_reason: Annotated[
+        str | None, BeforeValidator(_strip_reason)
+    ] = Field(default=None, max_length=COMPANY_ROLE_REASON_MAX_LENGTH)
     planned_start_date: date | None = None
     planned_completion_date: date | None = None
 
@@ -208,6 +219,23 @@ class AssignableRoleResponse(BaseModel):
 class AssignableRoleListResponse(BaseModel):
     items: list[AssignableRoleResponse]
     next_cursor: str | None
+
+
+def _company_role_field_error(exc: InvalidProjectFieldError) -> APIError:
+    """把角色相關的欄位錯誤指到對應欄位（ADM-R28、API-R10）。
+
+    前端據此把訊息放在角色欄或原因欄旁；其他欄位錯誤仍維持整體
+    驗證失敗，不猜測位置。
+    """
+    if isinstance(exc, CompanyRoleReasonTooLongError):
+        path, code = "/company_role_change_reason", FieldErrorCode.TOO_LONG
+    else:
+        path, code = "/company_role", FieldErrorCode.INVALID
+    return APIError(
+        ErrorCode.REQUEST_VALIDATION_FAILED,
+        422,
+        fields=[{"path": path, "code": code.value}],
+    )
 
 
 def _get_project(db: Session, project_id: UUID) -> Project:
@@ -428,6 +456,8 @@ def add_project(
 ) -> ProjectResponse:
     try:
         project = create_project(db, **body.model_dump())
+    except InvalidCompanyRoleError as exc:
+        raise _company_role_field_error(exc) from exc
     except InvalidProjectFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     return _single_project_response(db, project)
@@ -462,6 +492,8 @@ def edit_project(
         raise APIError(
             ErrorCode.PROJECT_COMPANY_ROLE_REASON_REQUIRED, 422
         ) from exc
+    except (InvalidCompanyRoleError, CompanyRoleReasonTooLongError) as exc:
+        raise _company_role_field_error(exc) from exc
     except (InvalidProjectFieldError, ProjectUnchangedError) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     return _single_project_response(db, project)

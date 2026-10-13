@@ -1,4 +1,11 @@
-"""Service-layer company role rules (DOM-R76, ALG-AC28)."""
+"""本公司角色在服務層的規則（DOM-R76、ALG-AC28）。
+
+測 ``create_project``／``update_project`` 的角色檢查、改角色必填原因，
+以及 ``project.created``／``project.updated`` 稽核事件與專案寫入同一
+交易。這層獨立測，是因為 API 層的 Pydantic 會先處理部分輸入，服務
+層規則（例如全空白原因、過長原因）仍要自己成立，其他呼叫端
+（腳本、之後的任務）才不會繞過。
+"""
 
 import pytest
 from sqlalchemy import select
@@ -6,6 +13,8 @@ from sqlalchemy import select
 from app.models import AuditLog
 from app.services.projects import (
     CompanyRoleReasonRequiredError,
+    CompanyRoleReasonTooLongError,
+    InvalidCompanyRoleError,
     InvalidProjectFieldError,
     create_project,
     update_project,
@@ -53,8 +62,11 @@ def test_create_with_supervisor_and_invalid_values(session, operator):
     assert _project(session, company_role="supervisor").company_role == (
         "supervisor"
     )
-    for bad in (None, "unknown", ""):
-        with pytest.raises(InvalidProjectFieldError):
+    with pytest.raises(InvalidProjectFieldError):
+        _project(session, company_role=None)
+    for bad in ("unknown", ""):
+        # 未登記的值用專屬子類別，API 才能把錯誤指到角色欄。
+        with pytest.raises(InvalidCompanyRoleError):
             _project(session, company_role=bad)
     # 被拒絕的建立不留下事件（ALG-R14）：只有成功的那一筆。
     assert len(_events(session, "project.created")) == 1
@@ -84,7 +96,7 @@ def test_changing_role_requires_a_reason_and_leaves_data_unchanged(
 def test_reason_length_boundary(session, operator):
     project = _project(session)
 
-    with pytest.raises(InvalidProjectFieldError):
+    with pytest.raises(CompanyRoleReasonTooLongError):
         update_project(
             session,
             project,
@@ -174,7 +186,7 @@ def test_role_and_name_changed_together_share_one_event(session, operator):
 def test_unregistered_role_is_rejected_even_with_a_reason(session, operator):
     project = _project(session)
 
-    with pytest.raises(InvalidProjectFieldError):
+    with pytest.raises(InvalidCompanyRoleError):
         update_project(
             session,
             project,

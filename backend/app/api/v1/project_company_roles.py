@@ -1,4 +1,4 @@
-"""Read-only list of company roles a project can take (DOM-R76)."""
+"""專案可選的本公司角色清單，唯讀（DOM-R76）。"""
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -14,7 +14,11 @@ router = APIRouter(
 
 
 class CompanyRoleResponse(BaseModel):
-    """One registered company role: stored value, label, check level."""
+    """一個登記過的本公司角色：資料庫存的值、畫面標籤與檢查層級。
+
+    ``inspection_level`` 一併回傳，之後任務建立依角色帶入層級時，
+    前端不必另外維護一份對照（IP-R16）。
+    """
 
     value: str
     label: str
@@ -22,16 +26,18 @@ class CompanyRoleResponse(BaseModel):
 
 
 class CompanyRoleListResponse(BaseModel):
+    """角色清單回應；依登記順序排列，不分頁、不帶 cursor。"""
+
     items: list[CompanyRoleResponse]
 
 
 @router.get("", response_model=CompanyRoleListResponse)
 def get_project_company_roles() -> CompanyRoleListResponse:
-    """List the registered roles in registry order (DOM-R76).
+    """依登記順序回傳目前登記的角色（DOM-R76）。
 
-    The new-project and project-settings screens read their options
-    here instead of hard-coding them (ADM-R40); the list is short, so it
-    is not paginated.
+    新增專案與專案設定畫面的選項都讀這裡，不在前端寫死（ADM-R40）；
+    登記表只有少數幾筆，所以不做分頁。任何登入者都能讀，因為清單
+    本身不含專案資料。
     """
     return CompanyRoleListResponse(
         items=[

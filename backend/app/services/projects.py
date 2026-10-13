@@ -1,4 +1,4 @@
-"""Project write and lookup entry points (DOM-R14, DOM-R40-R44, DOM-R76)."""
+"""專案的寫入與查詢入口（DOM-R14、DOM-R40-R44、DOM-R76）。"""
 
 from collections.abc import Sequence
 from datetime import date
@@ -6,7 +6,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.company_roles import DEFAULT_COMPANY_ROLE
+from app.company_roles import DEFAULT_COMPANY_ROLE, is_company_role_registered
 from app.models import Project
 from app.services import UNSET, _Unset
 from app.services.audit import record_audit_event
@@ -17,19 +17,34 @@ COMPANY_ROLE_REASON_MAX_LENGTH = 256
 
 
 class InvalidProjectFieldError(ValueError):
-    """A submitted Project field failed model validation."""
+    """送進來的專案欄位沒通過 model 驗證。"""
 
 
 class ProjectUnchangedError(ValueError):
-    """An update contained no Project fields."""
+    """更新請求沒有帶任何專案欄位。"""
+
+
+class InvalidCompanyRoleError(InvalidProjectFieldError):
+    """DOM-R76：``company_role`` 不是登記表裡的值。
+
+    獨立成子類別，是為了讓 API 能把錯誤指到 ``/company_role`` 欄位
+    （ADM-R28 要求錯誤顯示在欄位旁），而不是只回整體驗證失敗。
+    """
+
+
+class CompanyRoleReasonTooLongError(InvalidProjectFieldError):
+    """DOM-R76：改角色的原因去除前後空白後超過上限。
+
+    與「缺原因」分開：過長是欄位格式問題，API 指到
+    ``/company_role_change_reason``，缺原因則用專用錯誤碼。
+    """
 
 
 class CompanyRoleReasonRequiredError(ValueError):
-    """DOM-R76: ``company_role`` changed without a usable reason.
+    """DOM-R76：改了 ``company_role`` 卻沒給可用的原因。
 
-    The API maps this to the dedicated error code
-    ``project.company_role_reason_required``; a reason that is too long
-    is a plain ``InvalidProjectFieldError`` (shared validation error).
+    API 對應專用錯誤碼 ``project.company_role_reason_required``，
+    前端靠它把提示放在原因欄旁。
     """
 
 
@@ -44,12 +59,14 @@ def create_project(
     planned_start_date: date | None = None,
     planned_completion_date: date | None = None,
 ) -> Project:
-    """Create a Project and fill its audit operator fields (DOM-R14).
+    """建立專案並填入稽核操作者欄位（DOM-R14）。
 
     ``company_role`` 省略時為承攬施工方（DOM-R76）；帶 ``None`` 或
-    未登記的值由 model 驗證拒絕。同一交易寫 ``project.created``
-    （DOM-R65、ALG-R28）。
+    未登記的值會被拒絕，未登記時丟 ``InvalidCompanyRoleError``。
+    ``project.created`` 與專案同一交易寫入，兩者要嘛一起成功、要嘛
+    一起回滾（DOM-R65、ALG-R28）。
     """
+    _require_registered_role(company_role)
     fields: dict[str, object] = {
         "project_code": project_code,
         "name": name,
@@ -98,12 +115,14 @@ def update_project(
     planned_start_date: date | None | _Unset = UNSET,
     planned_completion_date: date | None | _Unset = UNSET,
 ) -> Project:
-    """Update provided Project fields after validating all strings.
+    """驗證所有傳入欄位後更新專案。
 
     改 ``company_role``（值與目前不同）時必須同時給原因（DOM-R76）；
-    值沒有變動不需要原因。有欄位真的變動時，同一交易寫一筆
-    ``project.updated``，只記有變動的欄位（ALG-R09、ALG-R28）。
+    值沒有變動不需要原因，免得前端每次整包送出都被迫填原因。
+    有欄位真的變動時，同一交易寫一筆 ``project.updated``，只記有變動
+    的欄位（ALG-R09、ALG-R28）。
     """
+    _require_registered_role(None if company_role is UNSET else company_role)
     fields: dict[str, object] = {
         field: value
         for field, value in {
@@ -164,7 +183,8 @@ def update_project(
     if before:
         after = {field: fields[field] for field in before}
         if reason is not None:
-            # 原因只進稽核的 after，不是 Project 上保存的欄位。
+            # 原因只進稽核的 after：它說明「為什麼改」，不是專案本身的
+            # 屬性，不另開欄位保存。
             after["company_role_change_reason"] = reason
         record_audit_event(
             session,
@@ -177,10 +197,26 @@ def update_project(
     return project
 
 
+def _require_registered_role(value: str | None) -> None:
+    """DOM-R76：有給角色值時先查登記表，未登記丟專屬錯誤。
+
+    必須在 model 驗證之前查：model 只會丟沒有欄位資訊的 ValueError，
+    API 無法據此指出是哪個欄位錯。``None`` 交給呼叫端既有的檢查。
+    """
+    if value is not None and not is_company_role_registered(value):
+        raise InvalidCompanyRoleError(
+            f"company_role {value!r} is not a registered company role"
+        )
+
+
 def _checked_role_change_reason(
     reason: str | None | _Unset,
 ) -> str:
-    """DOM-R76：缺少或去除前後空白後為空 -> 專用錯誤；過長 -> 共用驗證錯誤。"""
+    """DOM-R76：缺原因或去空白後為空丟專用錯誤；過長丟欄位格式錯誤。
+
+    回傳去除前後空白的原因，稽核與回應都用同一份，避免前端送的空白
+    被寫進紀錄。
+    """
     stripped = reason.strip() if isinstance(reason, str) else ""
     if not stripped:
         raise CompanyRoleReasonRequiredError(
@@ -188,7 +224,7 @@ def _checked_role_change_reason(
             "changes (DOM-R76)"
         )
     if len(stripped) > COMPANY_ROLE_REASON_MAX_LENGTH:
-        raise InvalidProjectFieldError(
+        raise CompanyRoleReasonTooLongError(
             "company_role_change_reason must be at most "
             f"{COMPANY_ROLE_REASON_MAX_LENGTH} characters"
         )
@@ -208,6 +244,8 @@ def find_projects_by_code(
 __all__ = [
     "COMPANY_ROLE_REASON_MAX_LENGTH",
     "CompanyRoleReasonRequiredError",
+    "CompanyRoleReasonTooLongError",
+    "InvalidCompanyRoleError",
     "InvalidProjectFieldError",
     "ProjectUnchangedError",
     "create_project",
