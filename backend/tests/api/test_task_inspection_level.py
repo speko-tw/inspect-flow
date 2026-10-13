@@ -16,7 +16,7 @@ from tests.api.test_inspection_planning_api import _planning_world
 def _create_task(admin, plan_id: str, item_id: Any, **extra: Any):
     return admin.post(
         f"/api/v1/inspection-plans/{plan_id}/tasks",
-        json={"item_ids": [str(item_id)], **extra},
+        json={"name": "檢查任務", "item_ids": [str(item_id)], **extra},
     )
 
 

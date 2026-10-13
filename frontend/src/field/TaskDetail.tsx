@@ -49,13 +49,7 @@ export default function TaskDetail({
   )
   const [retry, setRetry] = useState(0)
   const back = `/field/${location.search}`
-  const heading = task
-    ? task.items.length
-      ? task.items.length > 1
-        ? `${task.items[0].title} 等 ${task.items.length} 項`
-        : task.items[0].title
-      : '查核任務'
-    : ''
+  const heading = task?.name ?? ''
 
   useEffect(() => {
     let active = true

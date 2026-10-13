@@ -61,7 +61,7 @@ def test_project_patch_structure_fixture_updates_draft_and_reads_back(
     assert plan.status_code == 201, plan.text
     task = world["admin"].post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item_id)]},
+        json={"name": "草稿結構契約", "item_ids": [str(item_id)]},
     )
     assert task.status_code == 201, task.text
 
@@ -126,7 +126,7 @@ def test_project_patch_locked_structure_allows_numeric_corrections(
     assert plan.status_code == 201, plan.text
     task = world["admin"].post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item_id)]},
+        json={"name": "數值修正結構契約", "item_ids": [str(item_id)]},
     )
     assert task.status_code == 201, task.text
     dispatched = world["admin"].post(

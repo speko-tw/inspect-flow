@@ -37,7 +37,7 @@ def _draft_task(world) -> str:
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "欄位錯誤任務", "item_ids": [str(world["item"].id)]},
     )
     assert task.status_code == 201, task.text
     return task.json()["id"]
@@ -68,6 +68,7 @@ def test_task_create_validation_matches_frontend_fixture(
     response = world["admin"].post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
         json={
+            "name": "名" * (PLANNING_NAME_MAX + 1),
             "item_ids": [str(uuid4()) for _ in range(ITEM_IDS_MAX + 1)],
             "zone_id": "not-a-uuid",
             "location_text": "址" * (LOCATION_TEXT_MAX + 1),

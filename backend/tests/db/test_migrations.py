@@ -489,10 +489,10 @@ def _planning_index_columns(engine) -> dict[str, list[str]]:
 
 def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
     from datetime import UTC, datetime
+    from uuid import uuid4
 
     from app.models import (
         InspectionPlan,
-        InspectionTask,
         Project,
         ProjectInspectionItem,
     )
@@ -526,24 +526,36 @@ def test_planning_list_index_migration_adds_and_drops_only_indexes(db_url):
         )
         session.add(plan)
         session.flush()
-        session.add_all(
-            [
-                InspectionTask(
-                    plan_id=plan.id,
-                    project_id=project.id,
-                    assignee_id=operator.id,
-                    **audit,
-                ),
-                ProjectInspectionItem(
-                    project_id=project.id,
-                    sequence=1,
-                    title="Index migration item",
-                    instruction="Instruction",
-                    source_template_name="Template",
-                    applied_at=datetime.now(UTC),
-                    **audit,
-                ),
-            ]
+        now = datetime.now(UTC)
+        session.execute(
+            text(
+                "INSERT INTO inspection_tasks "
+                "(id, plan_id, project_id, assignee_id, status, created_at, "
+                "updated_at, created_by, updated_by) VALUES "
+                "(:id, :plan_id, :project_id, :assignee_id, :status, "
+                ":created_at, :updated_at, :created_by, :updated_by)"
+            ),
+            {
+                "id": uuid4().hex,
+                "plan_id": plan.id.hex,
+                "project_id": project.id.hex,
+                "assignee_id": operator.id.hex,
+                "status": "DRAFT",
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                **{key: value.hex for key, value in audit.items()},
+            },
+        )
+        session.add(
+            ProjectInspectionItem(
+                project_id=project.id,
+                sequence=1,
+                title="Index migration item",
+                instruction="Instruction",
+                source_template_name="Template",
+                applied_at=now,
+                **audit,
+            )
         )
         session.commit()
 

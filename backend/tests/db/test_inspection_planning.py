@@ -108,6 +108,7 @@ def _task(session: Session, actor, plan, zone=None):
         zone_id=zone.id if zone else None,
         location_text="北側",
         **_audit(actor),
+        name="示範任務",
     )
     session.add(result)
     session.flush()
@@ -169,6 +170,7 @@ def test_dom_ac51_plan_fk_rejects_missing_and_cross_project_plan(
                 plan_id=plan_id,
                 project_id=project_id,
                 **_audit(actor),
+                name="示範任務",
             )
         )
         with pytest.raises(IntegrityError):
@@ -363,6 +365,7 @@ def test_ip_ac11_dom_ac53_zone_name_and_project_fk(
             project_id=project.id,
             zone_id=other_zone.id,
             **_audit(actor),
+            name="示範任務",
         )
     )
     with pytest.raises(IntegrityError):
@@ -504,6 +507,7 @@ def test_task_status_and_cancellation_checks(session: Session, actor) -> None:
                 project_id=project.id,
                 **overrides,
                 **_audit(actor),
+                name="示範任務",
             )
         )
         with pytest.raises(IntegrityError):
@@ -818,6 +822,7 @@ def test_postgres_concurrent_completion_derives_completed_plan(
             status="IN_PROGRESS",
             started_by=actor.id,
             **_audit(actor),
+            name="示範任務",
         )
         for _ in range(2)
     ]
