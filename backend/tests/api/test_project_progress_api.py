@@ -45,6 +45,7 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         response = admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
             json={
+                "name": f"進度任務 {index}",
                 "item_ids": [str(world["item"].id), str(world["item_two"].id)],
                 "suggested_assignee_id": None,
                 "zone_id": None,
@@ -246,6 +247,8 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
     }
     assert set(archived_row["plan"]) == set(contract["plan_keys"])
     assert archived_row["item_summary"] == contract["item_summary"]
+    assert archived_row["name"] == "進度任務 5"
+    assert archived_row["inspection_level"] == "self_inspection"
     assert (
         world["field"]
         .get(

@@ -50,11 +50,9 @@ function currentFilter(search: string): ProgressFilter {
   return FILTERS.find(({ id }) => id === value)?.id ?? 'all'
 }
 
-/** #497 合併後只需替換此處的卡片標題規則（ADM-R44）。 */
+/** 依 IP-R17、ADM-R44 使用已保存的 Task 名稱作清單與詳情標題。 */
 export function progressTaskTitle(task: InspectionTask): string {
-  const { first_title: first, count } = task.item_summary
-  if (!first) return '查核任務'
-  return count > 1 ? `${first}等 ${count} 項` : first
+  return task.name
 }
 
 function taskLocation(task: InspectionTask): string {

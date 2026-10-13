@@ -251,7 +251,10 @@ def test_project_progress_sort_filters_and_cursors_on_postgresql(
     for _ in statuses:
         created = world["admin"].post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-            json={"item_ids": [str(world["item"].id)]},
+            json={
+                "name": "PostgreSQL 進度任務",
+                "item_ids": [str(world["item"].id)],
+            },
         )
         assert created.status_code == 201, created.text
         task_ids.append(UUID(created.json()["id"]))

@@ -40,6 +40,7 @@ function task(): InspectionTask {
       archived: false,
     },
     item_summary: progressContract.item_summary,
+    name: '表面檢查等 2 項',
     status: 'PENDING',
     inspection_level: 'self_inspection',
     items: [
@@ -220,6 +221,21 @@ it('does not mark a modified card click as a detail return', async () => {
   await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2))
 })
 
+it('uses the saved task name before the item summary', async () => {
+  const renamed = { ...task(), name: '自訂巡檢任務' }
+  mocks.list.mockResolvedValueOnce({ items: [renamed], next_cursor: null })
+  mocks.detail.mockResolvedValueOnce(renamed)
+  page(`/admin/projects/${projectId}/progress`)
+  const card = await screen.findByRole('link', { name: /自訂巡檢任務/ })
+  expect(card).not.toHaveTextContent('表面檢查等 2 項')
+  fireEvent.click(card)
+  expect(
+    await screen.findByRole('heading', {
+      name: '自訂巡檢任務',
+    }),
+  ).toBeVisible()
+})
+
 it('shows seven server filtered links and a single keyboard reachable card', async () => {
   page(`/admin/projects/${projectId}/progress?status=reinspection`)
   const current = await screen.findByRole('link', {
@@ -333,6 +349,7 @@ it('restores multiple loaded pages and the scroll position after task detail', a
   const second = {
     ...task(),
     id: '44444444-4444-7444-8444-444444444444',
+    name: '鋼筋檢查',
     item_summary: { first_title: '鋼筋檢查', count: 1 },
   }
   mocks.list
