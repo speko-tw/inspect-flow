@@ -697,7 +697,7 @@ def _world_with_draft_task(db_session, make_client, name):
     assert plan_response.status_code == 201, plan_response.text
     task_response = world["admin"].post(
         f"/api/v1/inspection-plans/{plan_response.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert task_response.status_code == 201, task_response.text
     return world, task_response.json()["id"]
