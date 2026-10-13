@@ -126,6 +126,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('Email 已被使用。')
+    // 錯誤先呈現，焦點再由 effect 移入；等待兩個狀態同步完成。
     await waitFor(() => expect(alert).toHaveFocus())
     // 頁頂沒有另一份錯誤（也就沒有重複朗讀）。
     expect(screen.getAllByRole('alert')).toHaveLength(1)
