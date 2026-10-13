@@ -37,9 +37,8 @@ alone so the future T5 (``services/test_permissions.py``) and T7
 (``services/test_roles.py``) tasks (plan.md) can reuse it without
 duplicating the test enum.
 
-The catalog is shared with the frontend, so permission metadata has
-one source of truth. DOM-R30's format/length check remains on
-``RolePermission`` in ``app/models/role.py``.
+權限目錄由前後端共用，讓權限中繼資料只有一份來源。DOM-R30 的格式與長度檢查，
+仍由 ``app/models/role.py`` 的 ``RolePermission`` 負責。
 """
 
 import json
