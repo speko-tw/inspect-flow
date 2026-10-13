@@ -1280,6 +1280,11 @@ describe('admin user and company pages', () => {
     expect(
       await screen.findByText('你沒有修改此專案查核項目的權限。'),
     ).toBeInTheDocument()
+    // 非成員沒有專案頁框，套用頁標題就是整頁唯一的 h1（F-O08）。
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(
+      screen.getByRole('heading', { level: 1, name: '套用範本到專案' }),
+    ).toBeInTheDocument()
   })
 
   it('opens template apply route for an office member', async () => {
@@ -1300,8 +1305,16 @@ describe('admin user and company pages', () => {
       await screen.findByRole('region', { name: '範本操作' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { name: 'DEMO-001｜示範工程' }),
+      screen.getByRole('heading', { level: 1, name: 'DEMO-001｜示範工程' }),
     ).toBeInTheDocument()
+    // 專案頁框已有 h1，套用頁標題降為 h2，整頁只有一個 h1（F-O08）。
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: '套用範本到專案',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const permissionCheck = screen.queryByText('正在確認專案權限…')
     expect(permissionCheck).not.toBeInTheDocument()
     expect(
@@ -1477,7 +1490,7 @@ describe('admin user and company pages', () => {
       }),
     )
     expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
-    expect(screen.getByLabelText('項目名稱 *')).toBeDisabled()
+    expect(screen.getByLabelText('查核項目名稱 *')).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('沒有權限修改')
   })
 

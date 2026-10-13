@@ -2,7 +2,13 @@
 // （#618 F-O02）。放在頁頂的話，列表一長就在視窗外，螢幕閱讀器使用者
 // 也不會被帶過去。
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -120,8 +126,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('Email 已被使用。')
-    // 錯誤先 render，再由 effect 聚焦；等待 effect 完成避免時序競態。
-    await vi.waitFor(() => expect(alert).toHaveFocus())
+    await waitFor(() => expect(alert).toHaveFocus())
     // 頁頂沒有另一份錯誤（也就沒有重複朗讀）。
     expect(screen.getAllByRole('alert')).toHaveLength(1)
 
@@ -152,7 +157,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(companyForm).findByRole('alert')
     expect(alert).toHaveTextContent('Email 已被使用。')
-    await vi.waitFor(() => expect(alert).toHaveFocus())
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(within(detailsForm).queryByRole('alert')).toBeNull()
     expect(screen.getAllByRole('alert')).toHaveLength(1)
 
@@ -161,7 +166,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
       within(detailsForm).getByRole('button', { name: '儲存資料' }),
     )
     const detailsAlert = await within(detailsForm).findByRole('alert')
-    await vi.waitFor(() => expect(detailsAlert).toHaveFocus())
+    await waitFor(() => expect(detailsAlert).toHaveFocus())
     expect(within(companyForm).queryByRole('alert')).toBeNull()
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
@@ -178,7 +183,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
 
     const alert = await within(form).findByRole('alert')
     expect(alert).toHaveTextContent('公司名稱已被使用。')
-    await vi.waitFor(() => expect(alert).toHaveFocus())
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
@@ -193,7 +198,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     fireEvent.click(within(form).getByRole('button', { name: '新增角色' }))
 
     const alert = await within(form).findByRole('alert')
-    await vi.waitFor(() => expect(alert).toHaveFocus())
+    await waitFor(() => expect(alert).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 })

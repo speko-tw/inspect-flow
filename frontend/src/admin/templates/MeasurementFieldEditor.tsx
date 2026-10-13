@@ -7,6 +7,8 @@ import { boundField, localizeField } from './templateEditorUtils'
 type Props = {
   point: InspectionPoint
   pointIndex: number
+  /** 錯誤 key 的項次前綴；專案項目編輯改用穩定識別而非索引。 */
+  errorPointKey?: string
   errors: Record<string, string>
   confirmField: string
   setConfirmField: (value: string) => void
@@ -16,16 +18,20 @@ type Props = {
     changes: Partial<MeasurementField>,
   ) => void
   updatePoint: (index: number, changes: Partial<InspectionPoint>) => void
+  /** 依 IP-R13，鎖定時不得增刪欄位或改型別、單位與綁定，只能改名稱。 */
+  structureLocked?: boolean
 }
 
 export function MeasurementFieldEditor({
   point,
   pointIndex,
+  errorPointKey,
   errors,
   confirmField,
   setConfirmField,
   updateField,
   updatePoint,
+  structureLocked = false,
 }: Props) {
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
   return (
@@ -37,7 +43,8 @@ export function MeasurementFieldEditor({
       )}
       {point.measurement_fields.map((field, fieldIndex) => {
         const bound = boundField(point) === field
-        const base = `point:${pointIndex}:field:${fieldIndex}`
+        const pointBase = errorPointKey ?? `point:${pointIndex}`
+        const base = `${pointBase}:field:${fieldIndex}`
         const removeField = () => {
           updatePoint(pointIndex, {
             measurement_fields: point.measurement_fields.filter(
@@ -75,6 +82,7 @@ export function MeasurementFieldEditor({
             <select
               aria-invalid={Boolean(errors[`${base}:type`])}
               data-error-key={`${base}:type`}
+              disabled={structureLocked}
               id={`field-${pointIndex}-${fieldIndex}-type`}
               onChange={(event) => {
                 if (bound && event.target.value !== 'number') {
@@ -118,6 +126,7 @@ export function MeasurementFieldEditor({
                 <input
                   aria-invalid={Boolean(errors[`${base}:unit`])}
                   data-error-key={`${base}:unit`}
+                  disabled={structureLocked}
                   id={`field-${pointIndex}-${fieldIndex}-unit`}
                   onChange={(event) =>
                     updateField(pointIndex, fieldIndex, {
@@ -132,7 +141,8 @@ export function MeasurementFieldEditor({
               </>
             )}
             {bound && <p className="tpl-hint">此欄位用於數值標準。</p>}
-            {confirmField === `${pointIndex}:${fieldIndex}` ? (
+            {confirmField === `${pointIndex}:${fieldIndex}` &&
+            !structureLocked ? (
               <ConfirmBox
                 confirmLabel="移除欄位"
                 label="移除欄位確認"
@@ -144,6 +154,7 @@ export function MeasurementFieldEditor({
               </ConfirmBox>
             ) : (
               <button
+                disabled={structureLocked}
                 onClick={() => {
                   if (bound) {
                     setActionErrors({
@@ -170,6 +181,7 @@ export function MeasurementFieldEditor({
         )
       })}
       <button
+        disabled={structureLocked}
         onClick={() => {
           updatePoint(pointIndex, {
             measurement_fields: [

@@ -272,6 +272,7 @@ function mockApi(
 function renderPage(
   user: CurrentUser = { ...USER, has_template_access: managerMock },
   viewerPermissions = ['project_inspection_item.edit'],
+  headingLevel?: 1 | 2,
 ) {
   return render(
     <MemoryRouter
@@ -281,7 +282,10 @@ function renderPage(
         <Routes>
           <Route
             element={
-              <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
+              <ProjectTemplatesPage
+                headingLevel={headingLevel}
+                viewerPermissions={viewerPermissions}
+              />
             }
             path="/admin/projects/:projectId/inspection-items/templates"
           />
@@ -322,6 +326,37 @@ async function chooseSystem(itemTitle = '管線查核') {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('專案範本套用與存為範本（#429）', () => {
+  it('標題層級預設為 h2，避免與專案頁框的 h1 重複（F-O08）', async () => {
+    mockApi({ canSave: true })
+    renderPage({ ...USER, has_template_access: true }, [])
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: '套用範本到專案',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
+  })
+
+  it('非成員套用頁沒有專案頁框，標題從 h1 開始（F-O08）', async () => {
+    mockApi({ canSave: true })
+    renderPage({ ...USER, has_template_access: true }, [], 1)
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: '套用範本到專案',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', {
+        level: 2,
+        name: '套用範本到專案',
+      }),
+    ).not.toBeInTheDocument()
+  })
+
   it('把 409 衝突名稱轉成原型指定訊息，並保留中性 404', () => {
     expect(
       templateErrorMessage(
