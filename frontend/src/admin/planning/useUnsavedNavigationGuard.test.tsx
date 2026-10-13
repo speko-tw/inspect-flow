@@ -123,7 +123,12 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
     expect(confirm).not.toHaveBeenCalled()
     expect(window.location.pathname).toBe('/one')
     // ADM-R38：開啟時焦點在第一個按鈕「保留編輯」。
-    expect(within(box).getByRole('button', { name: '保留編輯' })).toHaveFocus()
+    // UnsavedLeaveBox 在 effect 聚焦，等 effect 完成再檢查。
+    await waitFor(() =>
+      expect(
+        within(box).getByRole('button', { name: '保留編輯' }),
+      ).toHaveFocus(),
+    )
     expect(within(box).getByRole('button', { name: '捨棄變更' })).toHaveClass(
       'btn-danger',
     )
@@ -144,9 +149,11 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
       })
 
       expect(scroll).toHaveBeenCalledWith({ block: 'center' })
-      expect(
-        within(box).getByRole('button', { name: '保留編輯' }),
-      ).toHaveFocus()
+      await waitFor(() =>
+        expect(
+          within(box).getByRole('button', { name: '保留編輯' }),
+        ).toHaveFocus(),
+      )
     } finally {
       if (originalScroll) {
         Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
