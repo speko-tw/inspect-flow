@@ -18,9 +18,11 @@ import { InspectionPointCard } from './InspectionPointCard'
 import { TemplateItemEditor } from './TemplateItemEditor'
 import { TemplateLibraryNav } from './TemplateLibraryNav'
 import {
+  blankPoint,
   boundField,
   forWire,
-  localizeField,
+  localizeTemplateItem,
+  TEMPLATE_FIELD_ERROR_MESSAGES,
   templateFieldErrorBindings,
 } from './templateEditorUtils'
 import {
@@ -61,18 +63,6 @@ type Mode =
   | 'delete-system'
   | 'delete-item'
 
-function blankPoint(sequence: number): InspectionPoint {
-  return {
-    sequence,
-    title: '',
-    instruction: '',
-    text_standard: null,
-    numeric_standard: null,
-    measurement_fields: [],
-    evidence_requirements: [{ min_count: 1 }],
-  }
-}
-
 function blankTemplate(systemId: string, sequence: number): TemplateItem {
   return {
     system_id: systemId,
@@ -80,48 +70,6 @@ function blankTemplate(systemId: string, sequence: number): TemplateItem {
     title: '',
     instruction: '',
     inspection_points: [blankPoint(1)],
-  }
-}
-
-function localizeFields(item: TemplateItem): TemplateItem {
-  return {
-    ...item,
-    inspection_points: item.inspection_points.map((point) => {
-      const measurementFields = point.measurement_fields.map(localizeField)
-      const numeric = point.numeric_standard
-      const keyByClientId = new Map(
-        measurementFields.map((field) => [field.client_id!, field.clientKey!]),
-      )
-      const keyById = new Map(
-        measurementFields
-          .filter((field) => field.id)
-          .map((field) => [field.id!, field.clientKey!]),
-      )
-      const boundKey =
-        numeric?.measurement_field_client_key ??
-        (numeric?.measurement_field_client_id
-          ? keyByClientId.get(numeric.measurement_field_client_id)
-          : undefined) ??
-        (numeric?.measurement_field_id
-          ? keyById.get(numeric.measurement_field_id)
-          : undefined)
-      return {
-        ...point,
-        numeric_standard: numeric
-          ? {
-              ...numeric,
-              measurement_field_id: undefined,
-              measurement_field_client_id: undefined,
-              measurement_field_client_key: boundKey,
-            }
-          : null,
-        measurement_fields: measurementFields.map((field) =>
-          Boolean(numeric) && Boolean(boundKey) && field.clientKey === boundKey
-            ? { ...field, unit: field.unit ?? numeric?.unit ?? '' }
-            : field,
-        ),
-      }
-    }),
   }
 }
 
@@ -133,17 +81,6 @@ const TEMPLATE_ERROR_CODES: Record<string, string> = {
   'template.category_not_empty': '此類別還有系統，請先處理系統。',
   'template.system_not_empty': '此系統還有查核項目，請先處理項目。',
   'request.validation_failed': TEMPLATE_NOT_SAVED,
-}
-
-// 範本專屬的欄位錯誤碼；`field.*` 通用碼由共用的 fieldErrorMessage 處理。
-const TEMPLATE_FIELD_ERROR_MESSAGES: Record<string, string> = {
-  'template.sequence_duplicate': '項次順序重複，請檢查項次。',
-  'template.photo_requirement_count': '每個項次必須設定一筆照片需求。',
-  'template.client_id_duplicate': '實測欄位識別重複，請重新設定欄位。',
-  'template.numeric_field_unbound': '請選擇有效的數字欄位。',
-  'template.numeric_unit_required': '請填寫數字欄位的單位。',
-  'template.text_unit_forbidden': '文字欄位不需要單位。',
-  'template.bound_field_unit_forbidden': '綁定欄位的單位由數值標準帶入。',
 }
 
 function apiMessage(error: unknown): string {
@@ -319,7 +256,7 @@ export default function TemplatesPage() {
           setLoadedSystemIds((current) => new Set([...current, systemId]))
           setItems((current) => [
             ...current.filter((item) => item.system_id !== systemId),
-            ...result.items.map(localizeFields),
+            ...result.items.map(localizeTemplateItem),
           ])
         }
       })
@@ -424,7 +361,7 @@ export default function TemplatesPage() {
     item: TemplateItem,
     nextMode: 'create-item' | 'edit-item',
   ): void {
-    const localized = localizeFields(item)
+    const localized = localizeTemplateItem(item)
     const normalized = {
       ...localized,
       inspection_points: localized.inspection_points.map((point) => ({
@@ -801,9 +738,9 @@ export default function TemplatesPage() {
       setItems((current) =>
         itemDraft.id
           ? current.map((row) =>
-              row.id === result.id ? localizeFields(result) : row,
+              row.id === result.id ? localizeTemplateItem(result) : row,
             )
-          : [...current, localizeFields(result)],
+          : [...current, localizeTemplateItem(result)],
       )
       setSelected({ type: 'item', id: result.id ?? '' })
       resetMode()
