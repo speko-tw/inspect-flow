@@ -5,15 +5,17 @@ import { httpErrorMessage, isForbidden, isNotFound } from '../../http'
 import RouteNotFound from '../../RouteNotFound'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
-import { mapFieldErrors } from '../../ui/fieldErrors'
+import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import { useSubmitGuard } from '../../ui/submitGuard'
 import { UnsavedLeaveBox } from '../planning/UnsavedLeaveBox'
 import { useUnsavedNavigationGuard } from '../planning/useUnsavedNavigationGuard'
 import { ManagementApiError } from '../api'
 import { TemplateItemEditor } from '../templates/TemplateItemEditor'
 import {
+  blankPoint,
   boundField,
-  localizeField,
+  localizeInspectionPoints,
+  TEMPLATE_FIELD_ERROR_MESSAGES,
   templateFieldErrorBindings,
 } from '../templates/templateEditorUtils'
 import type { InspectionPoint, TemplateItem } from '../templates/api'
@@ -155,49 +157,6 @@ function taskLocation(task: AffectedTask): string {
 
 function taskLabel(task: AffectedTask): string {
   return `${task.name}（${task.planName}；${taskLocation(task)}）`
-}
-
-function localizeProjectPoints(points: InspectionPoint[]): InspectionPoint[] {
-  return points.map((point) => {
-    const fields = point.measurement_fields.map(localizeField)
-    const standard = point.numeric_standard
-    const boundKey =
-      standard?.measurement_field_client_key ??
-      fields.find(
-        (field) =>
-          Boolean(
-            standard?.measurement_field_client_id &&
-            field.client_id === standard.measurement_field_client_id,
-          ) ||
-          Boolean(
-            standard?.measurement_field_id &&
-            field.id === standard.measurement_field_id,
-          ),
-      )?.clientKey
-    return {
-      ...point,
-      clientKey: point.clientKey ?? point.id ?? crypto.randomUUID(),
-      measurement_fields: fields,
-      numeric_standard: standard
-        ? { ...standard, measurement_field_client_key: boundKey }
-        : null,
-    }
-  })
-}
-
-// clientKey 讓尚未儲存的新項次也有穩定識別：錯誤 key 與 React key 不會
-// 因前面的項次被刪除而位移。
-function blankPoint(sequence: number): InspectionPoint {
-  return {
-    clientKey: crypto.randomUUID(),
-    sequence,
-    title: '',
-    instruction: '',
-    text_standard: null,
-    numeric_standard: null,
-    measurement_fields: [],
-    evidence_requirements: [{ min_count: 1 }],
-  }
 }
 
 function makeDraft(
@@ -400,21 +359,6 @@ function validateDraft(
   return errors
 }
 
-function fieldErrorMessage(code: string): string {
-  const messages: Record<string, string> = {
-    'field.required': '請填寫此欄位。',
-    'field.invalid': '欄位格式不正確，請檢查輸入內容。',
-    'field.out_of_range': '數值超出允許範圍。',
-    'template.sequence_duplicate': '項次順序重複，請檢查項次。',
-    'template.photo_requirement_count': '每個項次必須設定一筆照片需求。',
-    'template.client_id_duplicate': '實測欄位識別重複，請重新設定欄位。',
-    'template.numeric_field_unbound': '請選擇有效的數字欄位。',
-    'template.numeric_unit_required': '請填寫數字欄位的單位。',
-    'template.bound_field_unit_forbidden': '綁定欄位的單位由數值標準帶入。',
-  }
-  return messages[code] ?? '欄位內容不符合規則，請檢查後再試。'
-}
-
 /**
  * 依 IP-R04、IP-R13 呈現項目修改及重新查核確認。
  * 受影響 Plan 已封存或無修改權限時改為唯讀，儲存仍交由後端覆核。
@@ -497,8 +441,9 @@ export default function ProjectItemChangePage({
           ...loaded,
           item: {
             ...loaded.item,
-            inspection_points: localizeProjectPoints(
+            inspection_points: localizeInspectionPoints(
               loaded.item.inspection_points,
+              { stablePointKeys: true },
             ),
           },
         }
@@ -570,8 +515,9 @@ export default function ProjectItemChangePage({
       ...loaded,
       item: {
         ...loaded.item,
-        inspection_points: localizeProjectPoints(
+        inspection_points: localizeInspectionPoints(
           loaded.item.inspection_points,
+          { stablePointKeys: true },
         ),
       },
     }
@@ -608,8 +554,9 @@ export default function ProjectItemChangePage({
       ...loaded,
       item: {
         ...loaded.item,
-        inspection_points: localizeProjectPoints(
+        inspection_points: localizeInspectionPoints(
           loaded.item.inspection_points,
+          { stablePointKeys: true },
         ),
       },
     }
@@ -753,7 +700,7 @@ export default function ProjectItemChangePage({
         const messages = Object.fromEntries(
           Object.entries(mapped.errors).map(([key, code]) => [
             key,
-            fieldErrorMessage(code),
+            fieldErrorMessage(code, TEMPLATE_FIELD_ERROR_MESSAGES),
           ]),
         )
         setServerFieldErrors(messages)
@@ -907,7 +854,7 @@ export default function ProjectItemChangePage({
               addPoint={() =>
                 setInspectionPoints((current) => [
                   ...current,
-                  blankPoint(current.length + 1),
+                  blankPoint(current.length + 1, { stableClientKey: true }),
                 ])
               }
               cancelLabel="返回專案查核項目"

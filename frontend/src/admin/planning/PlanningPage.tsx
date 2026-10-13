@@ -28,6 +28,7 @@ type FieldKey =
   | 'plan-name'
   | 'plan-rename'
   | 'task-items'
+  | 'edit-task-items'
   | 'task-zone'
   | 'task-location'
   | 'task-assignee'
@@ -40,6 +41,7 @@ const FIELD_ERROR: Partial<Record<FieldKey, string>> = {
   'plan-name': '請輸入計畫名稱。',
   'plan-rename': '請輸入計畫名稱。',
   'task-items': '請至少選擇一筆查核項目。',
+  'edit-task-items': '請至少選擇一筆查核項目。',
   'task-zone': '請選擇任務分區。',
   'location-zone': '請選擇任務分區。',
 }
@@ -56,6 +58,9 @@ const TASK_CREATE_BINDINGS: FieldErrorBinding[] = [
   { path: '/zone_id', key: 'task-zone' },
   { path: '/location_text', key: 'task-location' },
   { path: '/suggested_assignee_id', key: 'task-assignee' },
+]
+const TASK_ITEMS_BINDINGS: FieldErrorBinding[] = [
+  { path: '/item_ids', key: 'edit-task-items' },
 ]
 const TASK_LOCATION_BINDINGS: FieldErrorBinding[] = [
   { path: '/zone_id', key: 'location-zone' },
@@ -92,6 +97,11 @@ const TASK_CREATE_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.invalid_project_item': 'task-items',
   'inspection_task.invalid_location': 'task-location',
 }
+const TASK_ITEMS_CODE_FIELDS: Record<string, FieldKey> = {
+  'inspection_task.items_required': 'edit-task-items',
+  'inspection_task.item_without_points': 'edit-task-items',
+  'inspection_task.invalid_project_item': 'edit-task-items',
+}
 const TASK_LOCATION_CODE_FIELDS: Record<string, FieldKey> = {
   'inspection_task.invalid_zone': 'location-zone',
   'inspection_task.invalid_location': 'location-text',
@@ -108,6 +118,10 @@ function dispatchBlockers(task: InspectionTask) {
     noLocation: !task.zone_id && !task.location_text?.trim(),
     noItems: task.items.length === 0,
   }
+}
+
+function sameItemSet(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id))
 }
 
 function describedBy(...ids: (string | false)[]): string {
@@ -177,9 +191,9 @@ export default function PlanningPage({
   const [updatedPlanName, setUpdatedPlanName] = useState('')
   const [taskItems, setTaskItems] = useState<string[]>([])
   const [taskFormOpen, setTaskFormOpen] = useState(false)
-  // 表單展開後要把焦點送到哪裡：'first' 是一般展開，'items' 是阻擋說明的
-  // 捷徑（要落在查核項目欄）。表單還沒渲染時不能直接聚焦，所以先記下來。
-  const taskFormFocus = useRef<'first' | 'items' | null>(null)
+  // 表單展開時要把焦點送到第一個欄位；表單還沒渲染時不能直接聚焦，
+  // 所以先記下來。
+  const taskFormFocus = useRef<'first' | null>(null)
   // 只靠 ref 不會觸發 effect，所以每次請求都遞增計數讓 effect 再跑一次。
   const [taskFormFocusTick, setTaskFormFocusTick] = useState(0)
   const [taskToFocus, setTaskToFocus] = useState('')
@@ -190,6 +204,10 @@ export default function PlanningPage({
     task: InspectionTask
     zoneId: string
     locationText: string
+  } | null>(null)
+  const [editingTaskItems, setEditingTaskItems] = useState<{
+    task: InspectionTask
+    itemIds: string[]
   } | null>(null)
   const [editingAssignee, setEditingAssignee] = useState<{
     task: InspectionTask
@@ -204,18 +222,20 @@ export default function PlanningPage({
     danger?: { label: string }
   } | null>(null)
   const [discardingTaskForm, setDiscardingTaskForm] = useState<
-    'location' | 'assignee' | 'new-task' | null
+    'location' | 'assignee' | 'items' | 'new-task' | null
   >(null)
   const confirmationTrigger = useRef<HTMLElement | null>(null)
   const confirmationHeading = useRef<HTMLHeadingElement | null>(null)
   const cancelTrigger = useRef<HTMLElement | null>(null)
   const cancelHeading = useRef<HTMLHeadingElement | null>(null)
   const locationTrigger = useRef<HTMLButtonElement | null>(null)
+  const taskItemsTrigger = useRef<HTMLButtonElement | null>(null)
   const assigneeTrigger = useRef<HTMLButtonElement | null>(null)
   const addTaskTrigger = useRef<HTMLButtonElement | null>(null)
   const restoreAddTaskFocus = useRef(false)
   const previousTaskFormOpen = useRef(false)
   const previousLocationEdit = useRef(false)
+  const previousTaskItemsEdit = useRef(false)
   const previousAssigneeEdit = useRef(false)
   const pageHeading = useRef<HTMLHeadingElement | null>(null)
   const selectedPlanHeading = useRef<HTMLHeadingElement | null>(null)
@@ -245,6 +265,11 @@ export default function PlanningPage({
         (editingLocation.zoneId !== (editingLocation.task.zone_id ?? '') ||
           editingLocation.locationText !==
             (editingLocation.task.location_text ?? ''))) ||
+      (editingTaskItems &&
+        !sameItemSet(
+          editingTaskItems.itemIds,
+          editingTaskItems.task.items.map((item) => item.id),
+        )) ||
       (editingAssignee &&
         editingAssignee.assigneeId !==
           (editingAssignee.task.assignee_id ?? '')) ||
@@ -308,12 +333,9 @@ export default function PlanningPage({
       const fieldset = form?.querySelector<HTMLElement>(
         '[data-field="task-items"]',
       )
-      // 一般展開落在第一個欄位；沒有可選項目時退回項目欄本身。
+      // 展開後落在第一個欄位；沒有可選項目時退回項目欄本身。
       const target =
-        taskFormFocus.current === 'first'
-          ? (form?.querySelector<HTMLElement>('input, select, textarea') ??
-            fieldset)
-          : fieldset
+        form?.querySelector<HTMLElement>('input, select, textarea') ?? fieldset
       target?.scrollIntoView?.({ block: 'center' })
       target?.focus()
       taskFormFocus.current = null
@@ -349,6 +371,22 @@ export default function PlanningPage({
     }
     previousLocationEdit.current = Boolean(editingLocation)
   }, [editingLocation])
+
+  useEffect(() => {
+    if (previousTaskItemsEdit.current && !editingTaskItems) {
+      if (taskItemsTrigger.current?.isConnected) {
+        taskItemsTrigger.current.focus()
+      } else {
+        pageHeading.current?.focus()
+      }
+    }
+    if (!previousTaskItemsEdit.current && editingTaskItems) {
+      pageContent.current
+        ?.querySelector<HTMLElement>('[data-field="edit-task-items"]')
+        ?.focus()
+    }
+    previousTaskItemsEdit.current = Boolean(editingTaskItems)
+  }, [editingTaskItems])
 
   useEffect(() => {
     if (previousAssigneeEdit.current && !editingAssignee) {
@@ -517,17 +555,21 @@ export default function PlanningPage({
   // 修改表單）都不顯示；只留說明文字。
   const canModify = canEditPlan && !readOnly
 
-  // 依 ADM-R28，缺查核項目時展開新增任務表單，並在它渲染後捲到、聚焦
-  // 查核項目欄（表單預設收合，按下時欄位還不在 DOM）；不用 hash 導航，
-  // 避免未儲存變更的確認誤判成離頁。
-  function focusTaskItems(): void {
+  function openTaskItemsEditor(
+    task: InspectionTask,
+    trigger?: HTMLButtonElement,
+  ): void {
     clearFieldError()
+    setError('')
     setNotice(null)
-    setTaskFormOpen(true)
-    requestTaskFormFocus('items')
+    if (trigger) taskItemsTrigger.current = trigger
+    setEditingTaskItems({
+      task,
+      itemIds: task.items.map((item) => item.id),
+    })
   }
 
-  function requestTaskFormFocus(target: 'first' | 'items'): void {
+  function requestTaskFormFocus(target: 'first'): void {
     taskFormFocus.current = target
     setTaskFormFocusTick((tick) => tick + 1)
   }
@@ -585,13 +627,17 @@ export default function PlanningPage({
         )}
         {blockers.noItems && (
           <li>
-            {/* 現有 API 沒有替草稿補項目的操作；明示刪除重建，不暗示可修復。 */}
             {canModify
-              ? '尚未選擇查核項目：請刪除這筆草稿後重新建立，並選擇項目。'
+              ? '尚未選擇查核項目：請直接修改這筆草稿的查核項目。'
               : '尚未選擇查核項目。'}
-            {canModify && (
-              <button onClick={focusTaskItems} type="button">
-                前往新增任務欄位
+            {canModify && task.status === 'DRAFT' && (
+              <button
+                onClick={(event) =>
+                  openTaskItemsEditor(task, event.currentTarget)
+                }
+                type="button"
+              >
+                前往修改查核項目
               </button>
             )}
           </li>
@@ -648,6 +694,7 @@ export default function PlanningPage({
       setCancelTask(null)
       setCancelReason('')
       setEditingLocation(null)
+      setEditingTaskItems(null)
       setEditingAssignee(null)
       setEditingPlanName(false)
       // 成功後各編輯表單都已收起，沒有東西可以再「確認捨棄」。
@@ -787,6 +834,26 @@ export default function PlanningPage({
     }
   }
 
+  async function updateTaskItems(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editingTaskItems) return
+    if (
+      rejectBlank('edit-task-items', editingTaskItems.itemIds.length === 0)
+    ) {
+      return
+    }
+    await act(
+      () =>
+        client.updateTaskItems(editingTaskItems.task.id, {
+          item_ids: editingTaskItems.itemIds,
+        }),
+      { area: 'tasks', text: '已更新草稿任務的查核項目。' },
+      'items',
+      TASK_ITEMS_BINDINGS,
+      TASK_ITEMS_CODE_FIELDS,
+    )
+  }
+
   // 收起新增任務表單並清空輸入；收起後不應留下任何隱藏的未儲存內容，
   // 也不應留下等待確認的捨棄提示。
   function resetTaskForm(): void {
@@ -807,25 +874,33 @@ export default function PlanningPage({
 
   // ADM-R38：只有欄位偏離原值時才確認，避免取消未修改的表單多一步。
   function requestTaskFormCancel(
-    kind: 'location' | 'assignee' | 'new-task',
+    kind: 'location' | 'assignee' | 'items' | 'new-task',
   ): void {
     const changed =
       kind === 'new-task'
         ? Boolean(taskItems.length) ||
           Boolean(taskZoneId || taskLocation || assigneeId)
-        : kind === 'location'
+        : kind === 'items'
           ? Boolean(
-              editingLocation &&
-              (editingLocation.zoneId !==
-                (editingLocation.task.zone_id ?? '') ||
-                editingLocation.locationText !==
-                  (editingLocation.task.location_text ?? '')),
+              editingTaskItems &&
+              !sameItemSet(
+                editingTaskItems.itemIds,
+                editingTaskItems.task.items.map((item) => item.id),
+              ),
             )
-          : Boolean(
-              editingAssignee &&
-              editingAssignee.assigneeId !==
-                (editingAssignee.task.assignee_id ?? ''),
-            )
+          : kind === 'location'
+            ? Boolean(
+                editingLocation &&
+                (editingLocation.zoneId !==
+                  (editingLocation.task.zone_id ?? '') ||
+                  editingLocation.locationText !==
+                    (editingLocation.task.location_text ?? '')),
+              )
+            : Boolean(
+                editingAssignee &&
+                editingAssignee.assigneeId !==
+                  (editingAssignee.task.assignee_id ?? ''),
+              )
     if (changed) {
       setDiscardingTaskForm(kind)
       return
@@ -834,8 +909,11 @@ export default function PlanningPage({
   }
 
   // 依 kind 只收起對應的表單，不得牽動其他表單的狀態。
-  function closeTaskForm(kind: 'location' | 'assignee' | 'new-task'): void {
+  function closeTaskForm(
+    kind: 'location' | 'assignee' | 'items' | 'new-task',
+  ): void {
     if (kind === 'location') setEditingLocation(null)
+    else if (kind === 'items') setEditingTaskItems(null)
     else if (kind === 'assignee') setEditingAssignee(null)
     else {
       restoreAddTaskFocus.current = true
@@ -946,6 +1024,7 @@ export default function PlanningPage({
                         // 帶到新計畫會誤建任務，也會留下看不見的未儲存內容。
                         resetTaskForm()
                         setEditingLocation(null)
+                        setEditingTaskItems(null)
                         setEditingAssignee(null)
                       }
                       setSelectedPlanId(plan.id)
@@ -1184,6 +1263,19 @@ export default function PlanningPage({
                           {task.status === 'DRAFT' && (
                             <>
                               <button
+                                disabled={busy}
+                                onClick={(event) =>
+                                  openTaskItemsEditor(
+                                    task,
+                                    event.currentTarget,
+                                  )
+                                }
+                                ref={taskItemsTrigger}
+                                type="button"
+                              >
+                                修改查核項目
+                              </button>{' '}
+                              <button
                                 disabled={
                                   busy ||
                                   Object.values(dispatchBlockers(task)).some(
@@ -1296,6 +1388,108 @@ export default function PlanningPage({
                             </button>
                           )}
                         </div>
+                      )}
+                      {canModify && editingTaskItems?.task.id === task.id && (
+                        <form
+                          onKeyDown={blockImeEnter}
+                          data-error-context="items"
+                          noValidate
+                          onSubmit={(event) => void updateTaskItems(event)}
+                        >
+                          <h5>修改草稿任務的查核項目</h5>
+                          <fieldset
+                            aria-describedby={describedBy(
+                              `task-${task.id}-items-hint`,
+                              hasFieldError('edit-task-items') &&
+                                fieldErrorId('edit-task-items'),
+                            )}
+                            aria-invalid={hasFieldError('edit-task-items')}
+                            data-field="edit-task-items"
+                            tabIndex={-1}
+                          >
+                            <legend>
+                              選擇一筆以上查核項目{' '}
+                              <span aria-hidden="true">*</span>
+                            </legend>
+                            <p
+                              className="field-hint"
+                              id={`task-${task.id}-items-hint`}
+                            >
+                              至少選擇一筆查核項目。
+                            </p>
+                            {items.map((item) => {
+                              const existingTasks = tasksForItem(item.id)
+                              const selected =
+                                editingTaskItems.itemIds.includes(item.id)
+                              return (
+                                <div key={item.id}>
+                                  <label>
+                                    <input
+                                      checked={selected}
+                                      onChange={(event) => {
+                                        setEditingTaskItems({
+                                          ...editingTaskItems,
+                                          itemIds: event.target.checked
+                                            ? [
+                                                ...editingTaskItems.itemIds,
+                                                item.id,
+                                              ]
+                                            : editingTaskItems.itemIds.filter(
+                                                (id) => id !== item.id,
+                                              ),
+                                        })
+                                        clearFieldError('edit-task-items')
+                                      }}
+                                      type="checkbox"
+                                      value={item.id}
+                                    />
+                                    {item.title} — {item.instruction}
+                                  </label>
+                                  <details>
+                                    <summary style={{ minHeight: 44 }}>
+                                      本計畫已有 {existingTasks.length} 筆任務
+                                    </summary>
+                                    {existingTasks.length > 0 ? (
+                                      <ul>
+                                        {existingTasks.map((existing) => (
+                                          <li key={existing.id}>
+                                            {taskTitle(existing) ||
+                                              '未命名任務'}
+                                            {existing.zone
+                                              ? `（${existing.zone.name}）`
+                                              : ''}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <p>目前沒有使用此項目的任務。</p>
+                                    )}
+                                  </details>
+                                </div>
+                              )
+                            })}
+                          </fieldset>
+                          {fieldErrorText('edit-task-items')}
+                          {error && errorContext === 'items' && (
+                            <p ref={errorMessage} role="alert" tabIndex={-1}>
+                              {error}
+                            </p>
+                          )}
+                          <button
+                            className="btn-primary"
+                            disabled={busy}
+                            type="submit"
+                          >
+                            儲存查核項目
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => requestTaskFormCancel('items')}
+                            type="button"
+                          >
+                            取消
+                          </button>
+                        </form>
                       )}
                       {canModify && editingLocation?.task.id === task.id && (
                         <form
@@ -1494,6 +1688,8 @@ export default function PlanningPage({
                         discardingTaskForm !== 'new-task' &&
                         ((discardingTaskForm === 'location' &&
                           editingLocation?.task.id === task.id) ||
+                          (discardingTaskForm === 'items' &&
+                            editingTaskItems?.task.id === task.id) ||
                           (discardingTaskForm === 'assignee' &&
                             editingAssignee?.task.id === task.id)) && (
                           <ConfirmBox

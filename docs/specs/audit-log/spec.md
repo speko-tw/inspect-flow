@@ -167,7 +167,7 @@
 <a id="inspection-planning-事件"></a>
 ## `inspection-planning` 事件
 
-依 `inspection-planning` IP-R03、IP-R04、IP-R10 登記 Plan／Task 與專案查核項目變更事件，包括 ProjectZone 管理、Task 地點、刪除、取消、恢復，以及 KD-55 選擇與修改內容。每次成功變更依下表記錄；失敗或回滾不得留紀錄，且事件須與領域變更在同一交易內寫入。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
+依 `inspection-planning` IP-R03、IP-R04、IP-R10、IP-R20 登記 Plan／Task 與專案查核項目變更事件，包括 ProjectZone 管理、Task 地點、草稿 Task 查核項目替換、刪除、取消、恢復，以及 KD-55 選擇與修改內容。每次成功變更依下表記錄；失敗或回滾不得留紀錄，且事件須與領域變更在同一交易內寫入。欄位依 ALG-R07～ALG-R10，刪除事件保存分區名稱與所屬 Project ID，避免依賴已刪除實體。
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
@@ -178,9 +178,10 @@
 | `inspection_task.cancelled` | 取消 PENDING／IN_PROGRESS Task | `inspection_task` | 變更前 `status` | `CANCELLED`、取消原因 |
 | `inspection_task.restored` | 恢復已取消 Task | `inspection_task` | `CANCELLED` | 恢復後 `status` |
 | `inspection_task.location_updated` | 修改 Task 地點 | `inspection_task` | 有變動的 `zone_id`、`location_text` | 同左 |
+| `inspection_task.items_updated` | 替換 DRAFT Task 的查核項目集合（新集合與目前相同時不寫） | `inspection_task` | 修改前的項目，格式為 `items`：`{項目 ID: 名稱}` 對照 | 修改後的項目，格式同左 |
 | `project_inspection_item.updated` | 修改專案查核項目並選擇是否重新查核 | `project_inspection_item` | 有變動的 `title`／`instruction`，以及重新查核選擇 | 修改後欄位與重新查核選擇 |
 
-`inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。Task 刪除、取消、恢復、地點修改及專案查核項目修改事件，均須與對應資料變更在同一交易內寫入。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
+`inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。`inspection_task.items_updated` 的 `items` 用 `{項目 ID: 名稱}` 對照而非陣列，因為 ALG-R10 會把陣列排序，元素為物件時無法比較；對照表同時保留 ID 與名稱且不依賴順序。Task 刪除、取消、恢復、地點修改、草稿 Task 查核項目替換及專案查核項目修改事件，均須與對應資料變更在同一交易內寫入；草稿 Task 查核項目替換失敗或回滾時不留事件。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
 
 <a id="authentication-事件"></a>
 ## `authentication` 事件
@@ -329,3 +330,4 @@
 - 範圍變更（意圖變更跟進，負責人裁定，走標準路徑、未使用負責人直接指示的例外，[#559](https://github.com/speko-tw/inspect-flow/issues/559)）：`project.created` 加 `company_role`，`project.updated` 沿用於改本公司角色並於後值加 `company_role_change_reason`；新增 ALG-AC28。裁定留言：[六題裁定](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093033801)、[專家審視後修正](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093171971)、[最後一題](https://github.com/speko-tw/inspect-flow/issues/559#issuecomment-6093217072)；欄位名為規格設計（非負責人裁定） — [#559](https://github.com/speko-tw/inspect-flow/issues/559)
 - 規格澄清（規格設計，非負責人裁定，[#572](https://github.com/speko-tw/inspect-flow/issues/572)）：ALG-R24 列舉補 `project.*` 取該專案本身的 UUID，日後 Plan／Task 事件須標 `project_scoped`，「排隊」改稱「延後寫入」；ALG-AC18 補遍歷事件目錄與兩種寫入路徑拒絕缺少 `project_id` 的操作；行為與範圍不變，只為既有必須填值的規則加上拒絕守門 — [#572](https://github.com/speko-tw/inspect-flow/issues/572)
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
+- 範圍變更（負責人指示，[#615](https://github.com/speko-tw/inspect-flow/issues/615)，依 [`docs/specs/README.md`](../README.md#change) 的例外在同一 PR 落地）：`inspection-planning` 新增 IP-R20，事件目錄新增 `inspection_task.items_updated`（草稿 Task 查核項目替換，記修改前後項目 ID 與名稱） — [負責人裁定（2026-10-12）](https://github.com/speko-tw/inspect-flow/issues/615#issuecomment-6127145609)
