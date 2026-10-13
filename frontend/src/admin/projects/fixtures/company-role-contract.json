@@ -1,0 +1,37 @@
+{
+  "roles_response": {
+    "items": [
+      {
+        "value": "contractor",
+        "label": "承攬施工方",
+        "inspection_level": "self_inspection"
+      },
+      {
+        "value": "supervisor",
+        "label": "監造方",
+        "inspection_level": "spot_check"
+      }
+    ]
+  },
+  "role_item_keys": ["inspection_level", "label", "value"],
+  "patch_request": {
+    "company_role": "supervisor",
+    "company_role_change_reason": "合約改為監造"
+  },
+  "reason_required_error": {
+    "status": 422,
+    "code": "project.company_role_reason_required"
+  },
+  "invalid_role_error": {
+    "status": 422,
+    "fields": [{ "path": "/company_role", "code": "field.invalid" }],
+    "code": "request.validation_failed"
+  },
+  "reason_too_long_error": {
+    "status": 422,
+    "fields": [
+      { "path": "/company_role_change_reason", "code": "field.too_long" }
+    ],
+    "code": "request.validation_failed"
+  }
+}

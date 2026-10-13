@@ -441,6 +441,7 @@ class TestProjectBusinessFields:
             "name",
             "client_name",
             "site_location",
+            "company_role",
             "planned_start_date",
             "planned_completion_date",
             "created_at",
@@ -448,7 +449,13 @@ class TestProjectBusinessFields:
             "created_by",
             "updated_by",
         }
-        for field in ("project_code", "name", "client_name", "site_location"):
+        for field in (
+            "project_code",
+            "name",
+            "client_name",
+            "site_location",
+            "company_role",
+        ):
             assert columns[field]["nullable"] is False
         for field in ("planned_start_date", "planned_completion_date"):
             assert columns[field]["nullable"] is True

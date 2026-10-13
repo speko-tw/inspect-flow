@@ -62,6 +62,9 @@ ALLOWED_CODE_MENTIONS: frozenset[str] = frozenset(
         # template error responses in requirement/verification tables.
         # They describe the contract, not a second code lookup table.
         "docs/specs/database-foundation/spec.md",
+        # #559：專案管理 API 表以表格列寫出 PATCH 的專用錯誤碼
+        # `project.company_role_reason_required`（DOM-R76）。
+        "docs/specs/domain-model/spec.md",
         "docs/specs/template-system/spec.md",
         "docs/specs/template-system/plan.md",
         # IP-R18／IP-AC18 的需求表列出 422 回應；這是驗收契約，

@@ -267,10 +267,12 @@ def test_single_project_read_is_limited_for_planning_members(
         "id",
         "project_code",
         "name",
+        "company_role",
         "planned_start_date",
         "planned_completion_date",
     }
     assert basic.json()["project_code"] == "PLAN-API-1"
+    assert basic.json()["company_role"] == "contractor"
     assert world["field"].get(path).status_code == 403
     assert world["outsider"].get(path).status_code == 403
     world["admin"].post(

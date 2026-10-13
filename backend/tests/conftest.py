@@ -70,3 +70,27 @@ def registered_permission_codes(
         permission_codes, "PERMISSION_DEFINITIONS", definitions
     )
     return _TestPermissionCode
+
+
+@pytest.fixture
+def extra_company_role(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Register a temporary company role for one test (DOM-AC73).
+
+    Proves a new role needs only a registry entry: no migration and no
+    table change. The registry is swapped for an extended copy and
+    restored afterwards, so the production tuple never changes.
+    """
+    from app import company_roles
+
+    value = "pcm"
+    monkeypatch.setattr(
+        company_roles,
+        "_registry",
+        (
+            *company_roles._registry,
+            company_roles.CompanyRoleDefinition(
+                value, "專案管理顧問", company_roles.SPOT_CHECK
+            ),
+        ),
+    )
+    return value

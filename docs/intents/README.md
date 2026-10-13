@@ -11,7 +11,7 @@ InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整�
 
 1. 任務建立當下就把需求凍結成快照，之後範本怎麼改都不影響舊任務 → [PR-04](02-principles.md#pr-04)
 2. 報告是版本化快照；已核發版次不得覆蓋，需要重新產生時應建立新版次 → [PR-06](02-principles.md#pr-06)
-3. 證據照片不能就地覆寫，編輯只能產生新版本；刪除與保留期限待定 → [PR-05](02-principles.md#pr-05)、[G-05](05-open-questions.md#g-05)
+3. 證據照片只保存現場版與內業版兩張，不存原圖；刪除依任務完成與報告引用狀態管理 → [PR-05](02-principles.md#pr-05)、[KD-62](03-decisions-and-stack.md#kd-62)
 4. 前端一律經後端 API 存取資料，能不能完成永遠由後端覆核一次 → [PR-01](02-principles.md#pr-01)
 5. 照片不進資料庫，只存 metadata；儲存鍵由後端產生，不用原始檔名 → [PR-02](02-principles.md#pr-02)
 6. 資料庫存取與結構演進只能走 SQLAlchemy／Alembic，不能手動改 schema → [PR-03](02-principles.md#pr-03)
@@ -24,11 +24,11 @@ InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整�
 |---|---|
 | [01-overview.md](01-overview.md) | InspectFlow 要解決什麼、服務誰、第一階段做到哪、整體架構長怎樣。 |
 | [02-principles.md](02-principles.md) | 每次改動都要對照檢查的設計原則（PR-xx）。 |
-| [03-decisions-and-stack.md](03-decisions-and-stack.md) | 關鍵決策（含保留編號的待決項目）與技術棧選型。 |
+| [03-decisions-and-stack.md](03-decisions-and-stack.md) | 關鍵決策（KD-xx）與技術棧選型。 |
 | [04-glossary.md](04-glossary.md) | 名詞對照：中文說法 ↔ 系統實體名。 |
-| [05-open-questions.md](05-open-questions.md) | 待決議（OQ-xx）與來源矛盾／缺漏（G-xx）。 |
+| [05-open-questions.md](05-open-questions.md) | 仍待決議的議題（OQ-xx）、來源矛盾／缺漏（G-xx）與開工門檻。 |
 | [06-versioning-and-milestone-governance.md](06-versioning-and-milestone-governance.md) | InspectFlow 的版本號、GitHub Milestone 規則，以及 Issue／PR 的版本歸屬判斷。 |
-| [07-permission-model.md](07-permission-model.md) | 兩層權限模型：模組怎麼分工、判斷順序、開專案流程、新模組接入規則、委派，以及方案比較與業界參考。 |
+| [07-permission-model.md](07-permission-model.md) | 兩層權限模型：模組怎麼分工、判斷順序、開專案流程、權限表、新模組接入規則與委派。 |
 
 ## 任務 → 要讀的條目
 
@@ -39,13 +39,13 @@ InspectFlow 管理規劃、現場查核、證據與正式報告。本目錄整�
 | 寫程式前檢查有沒有違反設計原則 | [02-principles.md](02-principles.md) |
 | 設計重大新畫面或改版 | [PR-19](02-principles.md#pr-19)、[原型與試用流程](../specs/README.md#ui-prototype-gate) |
 | 改報表欄位或版面 | [PR-06](02-principles.md#pr-06)、[PR-15](02-principles.md#pr-15)、[KD-05](03-decisions-and-stack.md#kd-05)、[G-06](05-open-questions.md#g-06)、[G-07](05-open-questions.md#g-07)、[OQ-07](05-open-questions.md#oq-07) |
-| 新增證據類型（NUMBER／SIGNATURE 等） | [OQ-20](05-open-questions.md#oq-20)、[PR-09](02-principles.md#pr-09) |
+| 新增證據類型（NUMBER／SIGNATURE 等） | [KD-53](03-decisions-and-stack.md#kd-53)、[PR-09](02-principles.md#pr-09) |
 | 選或換技術棧套件 | [03-decisions-and-stack.md](03-decisions-and-stack.md) |
 | 命名或名詞問題 | [04-glossary.md](04-glossary.md) |
-| 設計或凍結資料模型、API 契約 | [05-open-questions.md 開工門檻](05-open-questions.md#gate)、[G-01](05-open-questions.md#g-01)～[G-07](05-open-questions.md#g-07)、[OQ-06](05-open-questions.md#oq-06) |
+| 設計或凍結資料模型、API 契約 | [05-open-questions.md 開工門檻](05-open-questions.md#gate)、[G-06](05-open-questions.md#g-06)、[G-07](05-open-questions.md#g-07) |
 | 部署／上線流程 | [PR-13](02-principles.md#pr-13)、[PR-14](02-principles.md#pr-14)、[KD-09](03-decisions-and-stack.md#kd-09)、[OQ-18](05-open-questions.md#oq-18) |
-| 人員、公司、角色與權限相關功能 | [07-permission-model.md](07-permission-model.md)、[PR-18](02-principles.md#pr-18)、[KD-16](03-decisions-and-stack.md#kd-16)～[KD-29](03-decisions-and-stack.md#kd-29)、[KD-69](03-decisions-and-stack.md#kd-69)、[OQ-08](05-open-questions.md#oq-08)、[OQ-02](05-open-questions.md#oq-02) |
-| 登入、登入狀態與密碼 | [KD-21](03-decisions-and-stack.md#kd-21)、[KD-30](03-decisions-and-stack.md#kd-30)、[KD-31](03-decisions-and-stack.md#kd-31)、[OQ-13](05-open-questions.md#oq-13)、[認證與授權](03-decisions-and-stack.md#stack-auth) |
+| 人員、公司、角色與權限相關功能 | [07-permission-model.md](07-permission-model.md)、[PR-18](02-principles.md#pr-18)、[KD-17](03-decisions-and-stack.md#kd-17)、[KD-19](03-decisions-and-stack.md#kd-19)～[KD-29](03-decisions-and-stack.md#kd-29)、[KD-43](03-decisions-and-stack.md#kd-43)～[KD-46](03-decisions-and-stack.md#kd-46)、[KD-69](03-decisions-and-stack.md#kd-69) |
+| 登入、登入狀態與密碼 | [KD-21](03-decisions-and-stack.md#kd-21)、[KD-30](03-decisions-and-stack.md#kd-30)、[KD-31](03-decisions-and-stack.md#kd-31)、[認證與授權](03-decisions-and-stack.md#stack-auth) |
 | 遇到看似矛盾或未定案的地方 | [05-open-questions.md](05-open-questions.md) |
 
 ## 用語
