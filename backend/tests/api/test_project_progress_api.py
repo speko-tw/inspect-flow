@@ -133,6 +133,23 @@ def test_progress_filters_cursor_summary_and_detail(db_session, make_client):
         identifiers[4],
         identifiers[5],
     ]
+    # IP-R18：草稿以 created_at 排序，剛好位於頁尾時 cursor 仍須續頁。
+    draft_tail = admin.get(prefix, params={"limit": 2})
+    assert draft_tail.status_code == 200, draft_tail.text
+    assert [UUID(row["id"]) for row in draft_tail.json()["items"]] == [
+        identifiers[1],
+        identifiers[0],
+    ]
+    assert draft_tail.json()["items"][-1]["dispatched_at"] is None
+    after_draft = admin.get(
+        prefix, params={"limit": 2, "cursor": draft_tail.json()["next_cursor"]}
+    )
+    assert after_draft.status_code == 200, after_draft.text
+    assert [UUID(row["id"]) for row in after_draft.json()["items"]] == [
+        identifiers[3],
+        identifiers[2],
+    ]
+
     seen = []
     cursor = None
     while True:

@@ -65,7 +65,7 @@ function taskLocation(task: InspectionTask): string {
 }
 
 function needsReinspection(task: InspectionTask): boolean {
-  // ADM-R43：封存計畫、已完成及已取消任務不列入待重查。
+  // IP-R18 與 IP-R11 的待重查口徑相同；封存與已完成任務不列入。
   return (
     !task.plan.archived &&
     (task.status === 'PENDING' || task.status === 'IN_PROGRESS') &&
@@ -300,7 +300,16 @@ function ProgressList({
                   filter === 'all' ? '' : `?status=${filter}`
                 }`}
                 className="progress-card"
-                onClick={() => {
+                onClick={(event) => {
+                  if (
+                    event.defaultPrevented ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return
                   const saved = listMemory.get(key)
                   if (saved) {
                     listMemory.set(key, {
@@ -382,6 +391,14 @@ function ProgressDetail({
   const [retry, setRetry] = useState(0)
   const base = `/admin/projects/${projectId}`
   const back = `${base}/progress${filter === 'all' ? '' : `?status=${filter}`}`
+  const { user } = useCurrentUser()
+  const key = `${user.id}:${projectId}:${filter}`
+  useEffect(() => {
+    return () => {
+      // 返回清單的 effect 會先消耗標記；離開詳情則清除殘留。
+      queueMicrotask(() => detailReturnKeys.delete(key))
+    }
+  }, [key])
   useEffect(() => {
     let active = true
     planningClient

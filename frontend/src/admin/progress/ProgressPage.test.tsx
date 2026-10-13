@@ -41,6 +41,7 @@ function task(): InspectionTask {
     },
     item_summary: progressContract.item_summary,
     status: 'PENDING',
+    inspection_level: 'self_inspection',
     items: [
       {
         id: 'item-1',
@@ -192,6 +193,31 @@ it('refetches when browser Back revisits a consumed detail return entry', async 
   expect(
     await screen.findByRole('link', { name: /表面檢查等 2 項/ }),
   ).toBeVisible()
+})
+
+it('refetches after leaving detail through the header', async () => {
+  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  fireEvent.click(
+    await screen.findByRole('link', {
+      name: /表面檢查等 2 項/,
+    }),
+  )
+  await screen.findByRole('heading', { name: '任務詳情' })
+  fireEvent.click(screen.getByRole('link', { name: '離開進度' }))
+  fireEvent.click(await screen.findByRole('link', { name: '返回進度' }))
+  await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2))
+})
+
+it('does not mark a modified card click as a detail return', async () => {
+  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  const card = await screen.findByRole('link', {
+    name: /表面檢查等 2 項/,
+  })
+  fireEvent.click(card, { ctrlKey: true })
+  expect(screen.queryByRole('heading', { name: '任務詳情' })).toBeNull()
+  fireEvent.click(screen.getByRole('link', { name: '離開進度' }))
+  fireEvent.click(await screen.findByRole('link', { name: '返回進度' }))
+  await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2))
 })
 
 it('shows seven server filtered links and a single keyboard reachable card', async () => {

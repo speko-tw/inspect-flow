@@ -288,6 +288,23 @@ def test_project_progress_sort_filters_and_cursors_on_postgresql(
         task_ids[4],
         task_ids[5],
     ]
+    # IP-R18：草稿以 created_at 排序，剛好位於頁尾時 cursor 仍須續頁。
+    draft_tail = world["admin"].get(prefix, params={"limit": 2})
+    assert draft_tail.status_code == 200, draft_tail.text
+    assert [UUID(row["id"]) for row in draft_tail.json()["items"]] == [
+        task_ids[1],
+        task_ids[0],
+    ]
+    assert draft_tail.json()["items"][-1]["dispatched_at"] is None
+    after_draft = world["admin"].get(
+        prefix, params={"limit": 2, "cursor": draft_tail.json()["next_cursor"]}
+    )
+    assert after_draft.status_code == 200, after_draft.text
+    assert [UUID(row["id"]) for row in after_draft.json()["items"]] == [
+        task_ids[3],
+        task_ids[2],
+    ]
+
     seen: list[UUID] = []
     cursor = None
     while True:
