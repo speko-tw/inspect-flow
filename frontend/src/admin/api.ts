@@ -203,6 +203,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   'user.employee_no_conflict': '這家公司已有相同工號。',
   'company.name_conflict': '公司名稱已被使用。',
   'project.member_conflict': '這位使用者已經是此專案的成員。',
+  'project.company_role_reason_required': '改本公司角色必須填寫變更原因。',
   'auth.password_invalid': '密碼長度不符合要求。',
 }
 

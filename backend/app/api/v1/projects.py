@@ -2,16 +2,16 @@
 
 from collections.abc import Sequence
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.errors import APIError, ErrorCode
+from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
     require_admin,
@@ -20,6 +20,7 @@ from app.auth.access import (
     require_project_permission,
 )
 from app.auth.dependencies import get_db
+from app.company_roles import DEFAULT_COMPANY_ROLE
 from app.models import (
     Company,
     Project,
@@ -41,6 +42,10 @@ from app.services.project_members import (
 )
 from app.services.project_workflow_summary import get_project_workflow_summary
 from app.services.projects import (
+    COMPANY_ROLE_REASON_MAX_LENGTH,
+    CompanyRoleReasonRequiredError,
+    CompanyRoleReasonTooLongError,
+    InvalidCompanyRoleError,
     InvalidProjectFieldError,
     ProjectUnchangedError,
     create_project,
@@ -71,6 +76,8 @@ class ProjectResponse(BaseModel):
     name: str
     client_name: str
     site_location: str
+    # DOM-R76：本公司在這個案子的角色（登記表的值）。
+    company_role: str
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
@@ -80,6 +87,7 @@ class ProjectPlanningResponse(BaseModel):
     id: UUID
     project_code: str
     name: str
+    company_role: str
     planned_start_date: date | None
     planned_completion_date: date | None
 
@@ -102,6 +110,8 @@ class WorkflowProjectIdentity(BaseModel):
     id: UUID
     project_code: str
     name: str
+    # IP-R11、ADM-R41：專案首頁顯示本公司角色，免另呼叫專案詳情。
+    company_role: str
 
 
 class ProjectWorkflowSummaryResponse(BaseModel):
@@ -129,8 +139,15 @@ class CreateProjectRequest(BaseModel):
     name: str
     client_name: str
     site_location: str
+    # DOM-R76：省略為 contractor；帶 null 或未登記的值回 422。
+    company_role: str | None = DEFAULT_COMPANY_ROLE
     planned_start_date: date | None = None
     planned_completion_date: date | None = None
+
+
+def _strip_reason(value: object) -> object:
+    """非字串原樣交給 Pydantic 報型別錯誤；字串先去除前後空白。"""
+    return value.strip() if isinstance(value, str) else value
 
 
 class UpdateProjectRequest(BaseModel):
@@ -138,6 +155,16 @@ class UpdateProjectRequest(BaseModel):
     name: str | None = None
     client_name: str | None = None
     site_location: str | None = None
+    company_role: str | None = None
+    # DOM-R76：改角色必填原因。先去除前後空白再套長度上限，所以：
+    # - 全空白的原因不論多長，都變成空字串、由 Service 回專用錯誤碼
+    #   ``project.company_role_reason_required``，不會被長度上限先擋成
+    #   一般驗證錯誤；
+    # - 去空白後超過 256 字元由 Pydantic 回帶欄位指標的 422
+    #   （``/company_role_change_reason``），錯誤顯示在原因欄旁（ADM-R28）。
+    company_role_change_reason: Annotated[
+        str | None, BeforeValidator(_strip_reason)
+    ] = Field(default=None, max_length=COMPANY_ROLE_REASON_MAX_LENGTH)
     planned_start_date: date | None = None
     planned_completion_date: date | None = None
 
@@ -194,6 +221,23 @@ class AssignableRoleListResponse(BaseModel):
     next_cursor: str | None
 
 
+def _company_role_field_error(exc: InvalidProjectFieldError) -> APIError:
+    """把角色相關的欄位錯誤指到對應欄位（ADM-R28、API-R10）。
+
+    前端據此把訊息放在角色欄或原因欄旁；其他欄位錯誤仍維持整體
+    驗證失敗，不猜測位置。
+    """
+    if isinstance(exc, CompanyRoleReasonTooLongError):
+        path, code = "/company_role_change_reason", FieldErrorCode.TOO_LONG
+    else:
+        path, code = "/company_role", FieldErrorCode.INVALID
+    return APIError(
+        ErrorCode.REQUEST_VALIDATION_FAILED,
+        422,
+        fields=[{"path": path, "code": code.value}],
+    )
+
+
 def _get_project(db: Session, project_id: UUID) -> Project:
     project = db.get(Project, project_id)
     if project is None:
@@ -223,6 +267,7 @@ def _project_response(project: Project, is_duplicate: bool) -> ProjectResponse:
         name=project.name,
         client_name=project.client_name,
         site_location=project.site_location,
+        company_role=project.company_role,
         planned_start_date=project.planned_start_date,
         planned_completion_date=project.planned_completion_date,
         warnings=warnings,
@@ -352,6 +397,7 @@ def get_project(
         id=project.id,
         project_code=project.project_code,
         name=project.name,
+        company_role=project.company_role,
         planned_start_date=project.planned_start_date,
         planned_completion_date=project.planned_completion_date,
     )
@@ -410,6 +456,8 @@ def add_project(
 ) -> ProjectResponse:
     try:
         project = create_project(db, **body.model_dump())
+    except InvalidCompanyRoleError as exc:
+        raise _company_role_field_error(exc) from exc
     except InvalidProjectFieldError as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     return _single_project_response(db, project)
@@ -434,11 +482,18 @@ def edit_project(
             "name",
             "client_name",
             "site_location",
+            "company_role",
         )
     ):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     try:
         update_project(db, project, **fields)
+    except CompanyRoleReasonRequiredError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_COMPANY_ROLE_REASON_REQUIRED, 422
+        ) from exc
+    except (InvalidCompanyRoleError, CompanyRoleReasonTooLongError) as exc:
+        raise _company_role_field_error(exc) from exc
     except (InvalidProjectFieldError, ProjectUnchangedError) as exc:
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     return _single_project_response(db, project)

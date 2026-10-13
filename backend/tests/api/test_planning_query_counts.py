@@ -4,8 +4,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 
+from app.db.engine import get_engine
 from app.models import (
     Project,
     ProjectInspectionItem,
@@ -385,3 +386,98 @@ def test_assignee_query_count_and_cursor_page_do_not_grow_with_members(
     assert str(world["field_user_two"].id) in candidate_ids
     assert str(world["plain_user"].id) not in candidate_ids
     assert str(world["admin_user"].id) not in candidate_ids
+
+
+def _locked_item_patch_selects(
+    client, project_id, item_id, points
+) -> tuple[int, int]:
+    """回傳鎖結構 PATCH（`reinspect=false`）的照片需求查詢次數。
+
+    回傳 ``(依 inspection_point_id 逐點查詢, 依項目整批查詢)``。逐點
+    查詢是修正前的 N+1 形狀；回應序列化的 relationship 延遲載入不在此計數內。
+    """
+    per_point = 0
+    per_item = 0
+
+    def record(conn, cursor, statement, parameters, context, many):
+        nonlocal per_point, per_item
+        if not statement.lstrip().upper().startswith("SELECT"):
+            return
+        if "FROM project_evidence_requirements" not in statement:
+            return
+        # 帶 ORDER BY 的是回應序列化時 relationship 的延遲載入，另案處理；
+        # 這裡只計修正前逐點取 min_count 的查詢。
+        if (
+            "evidence_requirements.inspection_point_id = " in statement
+            and "ORDER BY" not in statement
+        ):
+            per_point += 1
+        elif (
+            "evidence_requirements.project_inspection_item_id = " in statement
+        ):
+            per_item += 1
+
+    engine = get_engine()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        response = client.patch(
+            f"/api/v1/projects/{project_id}/inspection-items/{item_id}",
+            json={
+                "inspection_points": [
+                    {
+                        "id": point["id"],
+                        "sequence": point["sequence"],
+                        "title": point["title"],
+                        "instruction": point["instruction"],
+                        "evidence_requirements": [{"min_count": 1}],
+                    }
+                    for point in points
+                ],
+                "reinspect": False,
+            },
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    assert response.status_code == 200, response.text
+    return per_point, per_item
+
+
+def test_locked_item_patch_batches_evidence_lookup(db_session, make_client):
+    """#643：點數增加時，照片需求的查詢次數不得跟著增加。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project_id = world["project"].id
+    base = f"/api/v1/projects/{project_id}"
+    plan = admin.post(f"{base}/inspection-plans", json={"name": "Plan"})
+    assert plan.status_code == 201, plan.text
+    counts = []
+    for key, size in (("item", 2), ("item_two", 8)):
+        item_id = world[key].id
+        saved = admin.patch(
+            f"{base}/inspection-items/{item_id}",
+            json={
+                "inspection_points": [
+                    {
+                        "sequence": sequence,
+                        "title": f"point {sequence}",
+                        "instruction": "check",
+                        "evidence_requirements": [{"min_count": 1}],
+                    }
+                    for sequence in range(1, size + 1)
+                ]
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        task = admin.post(
+            f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+            json={"item_ids": [str(item_id)]},
+        )
+        assert task.status_code == 201, task.text
+        points = saved.json()["inspection_points"]
+        assert len(points) == size
+        counts.append(
+            _locked_item_patch_selects(admin, project_id, item_id, points)
+        )
+    # 兩種點數下都不得逐點查詢，依項目整批的查詢次數也不隨點數增加。
+    assert counts[0][0] == counts[1][0] == 0
+    assert counts[0][1] == counts[1][1]

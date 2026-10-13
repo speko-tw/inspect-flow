@@ -45,6 +45,7 @@ class WorkflowProjectIdentity(TypedDict):
     id: UUID
     project_code: str
     name: str
+    company_role: str
 
 
 class ProjectWorkflowSummary(TypedDict):
@@ -224,6 +225,7 @@ def get_project_workflow_summary(
             "id": project.id,
             "project_code": project.project_code,
             "name": project.name,
+            "company_role": project.company_role,
         },
         "viewer_permission_codes": sorted(permissions),
         "member_count": member_count,

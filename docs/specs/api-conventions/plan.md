@@ -77,6 +77,6 @@
 
 ## 考慮過但沒採用的做法
 
-- **在 `field-evidence` 等第一個真正需要上傳端點的規格裡才驗證 multipart 慣例**：會讓 api-conventions 凍結後很長一段時間都沒有任何自動化證據，且 `field-evidence` 本身還被 [G-02](../../intents/05-open-questions.md#g-02)、[G-03](../../intents/05-open-questions.md#g-03) 等擋著；改用測試專用路由先行證明慣例本身可行，之後有真實端點時再補對照驗證（見〈風險〉）。
+- **在 `field-evidence` 等第一個真正需要上傳端點的規格裡才驗證 multipart 慣例**：會讓 api-conventions 凍結後很長一段時間都沒有任何自動化證據，且 `field-evidence` 本身還被 [KD-32](../../intents/03-decisions-and-stack.md#kd-32)、[KD-61](../../intents/03-decisions-and-stack.md#kd-61) 等擋著；改用測試專用路由先行證明慣例本身可行，之後有真實端點時再補對照驗證（見〈風險〉）。
 - **在正式 `app/main.py` 掛一個永久的「診斷用」失敗端點**：會讓正式 API 多一個非業務用途的公開路徑，且需要額外的權限與環境判斷（正式環境不該存在）；改用只存在於測試模組的臨時路由。
 - **讓每份功能規格各自決定 `error.code` 的命名法**：會導致格式各自發明、無法用單一 regex 驗證是否符合共用慣例；已依 [KD-15](../../intents/03-decisions-and-stack.md#kd-15) 統一為 dot-namespace，各功能規格只需依此決定自己資源的 `<reason>` 部分。
