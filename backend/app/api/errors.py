@@ -176,6 +176,10 @@ class ErrorCode(DescribedStrEnum):
         "company.name_conflict",
         "The company name is already in use.",
     )
+    PROJECT_COMPANY_ROLE_REASON_REQUIRED = (
+        "project.company_role_reason_required",
+        "Changing the company role requires a change reason.",
+    )
     PROJECT_MEMBER_CONFLICT = (
         "project.member_conflict",
         "The user is already a member of this project.",

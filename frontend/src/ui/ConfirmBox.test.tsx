@@ -258,6 +258,47 @@ describe('ConfirmBox', () => {
     expect(onConfirm).toHaveBeenCalledOnce()
   })
 
+  it('asForm without noValidate lets the native required hint block submit', () => {
+    const onConfirm = vi.fn()
+    render(
+      <ConfirmBox
+        asForm
+        confirmLabel="確認"
+        label="a"
+        onCancel={vi.fn()}
+        onConfirm={onConfirm}
+      >
+        <textarea aria-label="原因" required />
+      </ConfirmBox>,
+    )
+    const form = screen.getByRole('group', { name: 'a' })
+    expect(form).not.toHaveAttribute('novalidate')
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  // 呼叫端要自己顯示欄位旁的錯誤時，原生必填提示不能先擋下送出。
+  it('asForm with noValidate submits an empty required field to onConfirm', () => {
+    const onConfirm = vi.fn()
+    render(
+      <ConfirmBox
+        asForm
+        confirmLabel="確認"
+        label="a"
+        noValidate
+        onCancel={vi.fn()}
+        onConfirm={onConfirm}
+      >
+        <textarea aria-label="原因" required />
+      </ConfirmBox>,
+    )
+    expect(screen.getByRole('group', { name: 'a' })).toHaveAttribute(
+      'novalidate',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '確認' }))
+    expect(onConfirm).toHaveBeenCalledOnce()
+  })
+
   it('uses the given cancel label for discard prompts', () => {
     setup({ cancelLabel: '保留編輯', confirmLabel: '捨棄' })
     expect(

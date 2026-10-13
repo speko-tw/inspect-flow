@@ -44,6 +44,35 @@ def _grant_permission(db_session, world, user, permission: str) -> None:
     db_session.commit()
 
 
+def test_summary_reports_company_role_without_a_detail_call(
+    db_session, make_client
+):
+    # IP-R11、ADM-R41：專案首頁的角色取自流程摘要，兩種角色各驗一次。
+    world = _planning_world(db_session, make_client)
+    admin = world["admin_user"]
+    projects = [
+        Project(
+            project_code=f"SUMMARY-{role}",
+            name=f"{role} 專案",
+            client_name="示範業主",
+            site_location="示範工地",
+            company_role=role,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        for role in ("contractor", "supervisor")
+    ]
+    db_session.add_all(projects)
+    db_session.commit()
+
+    for project in projects:
+        response = world["admin"].get(_summary_path(project.id))
+        assert response.status_code == 200, response.text
+        assert response.json()["project"]["company_role"] == (
+            project.company_role
+        )
+
+
 def test_empty_project_reports_first_setup_step(db_session, make_client):
     world = _planning_world(db_session, make_client)
     admin = world["admin_user"]
@@ -64,6 +93,7 @@ def test_empty_project_reports_first_setup_step(db_session, make_client):
         "id": str(empty_project.id),
         "project_code": "SUMMARY-EMPTY",
         "name": "空專案",
+        "company_role": "contractor",
     }
     assert set(response.json()["viewer_permission_codes"]) == {
         code.value
@@ -214,6 +244,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             "id": str(project.id),
             "project_code": project.project_code,
             "name": project.name,
+            "company_role": "contractor",
         },
         "viewer_permission_codes": sorted(
             code.value
@@ -393,6 +424,7 @@ def test_task_count_visibility_draft_permissions_and_access_errors(
         "id": str(project.id),
         "project_code": project.project_code,
         "name": project.name,
+        "company_role": "contractor",
     }
     assert field.json()["viewer_permission_codes"] == [
         "inspection_task.inspect"

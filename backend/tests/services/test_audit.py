@@ -128,6 +128,7 @@ def test_alg_ac19_to_ac24_two_layer_event_catalog():
         "project.created": {
             "project_code",
             "name",
+            "company_role",
             "creator_role_user_id",
         },
         "project.updated": {
@@ -135,6 +136,8 @@ def test_alg_ac19_to_ac24_two_layer_event_catalog():
             "name",
             "client_name",
             "site_location",
+            "company_role",
+            "company_role_change_reason",
             "planned_start_date",
             "planned_completion_date",
         },
@@ -310,6 +313,15 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
             {
                 "project_code": "P-1",
                 "name": "Project",
+                "company_role": "contractor",
+            },
+        ),
+        (
+            "project.updated",
+            {"company_role": "contractor"},
+            {
+                "company_role": "supervisor",
+                "company_role_change_reason": "合約改為監造",
             },
         ),
         (
@@ -389,8 +401,12 @@ def test_alg_ac27_registered_events_accept_real_payloads(session, operator):
             )
         )
 
-    assert stored[10].after["planned_start_date"] == "2026-10-10"
-    assert stored[11].after == {
+    assert stored[10].after == {
+        "company_role": "supervisor",
+        "company_role_change_reason": "合約改為監造",
+    }
+    assert stored[11].after["planned_start_date"] == "2026-10-10"
+    assert stored[12].after == {
         "planned_start_date": None,
         "planned_completion_date": None,
     }

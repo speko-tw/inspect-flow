@@ -57,7 +57,8 @@ describe('planning management page', () => {
 
       await screen.findByRole('heading', { name: '計畫與任務' })
 
-      fireEvent.change(screen.getByLabelText(/計畫名稱/), {
+      // 初次載入完成後欄位才存在，避免同步查找早於資料載入。
+      fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '橋梁查核' },
       })
       fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
