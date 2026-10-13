@@ -295,6 +295,24 @@ def test_single_project_read_is_limited_for_planning_members(
     full = world["admin"].get(path)
     assert full.status_code == 200, full.text
     assert {"client_name", "site_location", "warnings"} <= set(full.json())
+
+
+def test_assignee_candidates_keep_inactive_members_until_ip_r12_activation(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    inactive = world["field_user_two"]
+    inactive.is_active = False
+    db_session.commit()
+
+    response = world["admin"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-task-assignees"
+    )
+
+    assert response.status_code == 200, response.text
+    candidate_ids = {UUID(row["id"]) for row in response.json()["items"]}
+    assert world["field_user"].id in candidate_ids
+    assert inactive.id in candidate_ids
     missing = world["admin"].get(
         "/api/v1/projects/00000000-0000-7000-8000-000000000000"
     )
