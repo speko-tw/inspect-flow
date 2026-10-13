@@ -86,17 +86,31 @@ describe('planning management page', () => {
       fireEvent.change(screen.getByLabelText('補充地點'), {
         target: { value: '東側二樓' },
       })
+      const taskNameInput = screen.getByLabelText(/任務名稱/)
+      expect(taskNameInput).toHaveValue('混凝土外觀等 2 項－北區')
+      fireEvent.change(taskNameInput, {
+        target: { value: '橋梁外牆複查' },
+      })
+      const secondItem = screen.getByLabelText(/鋼筋保護層/)
+      fireEvent.click(secondItem)
+      fireEvent.click(secondItem)
+      expect(taskNameInput).toHaveValue('橋梁外牆複查')
       fireEvent.change(screen.getByLabelText('建議指派人'), {
         target: { value: 'project-a-member-1' },
       })
       fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
 
       const taskHeading = await screen.findByRole('heading', {
-        name: /混凝土外觀、鋼筋保護層\s+（草稿）/,
+        name: /橋梁外牆複查\s+（草稿）/,
       })
       await expectNotice('已建立草稿任務，派出後現場才看得到。')
       const taskArticle = taskHeading.closest('article')
       expect(taskArticle).not.toBeNull()
+      expect(
+        within(taskArticle as HTMLElement).getByText(
+          '查核項目：混凝土外觀、鋼筋保護層',
+        ),
+      ).toBeInTheDocument()
       expect(
         within(taskArticle as HTMLElement).getByText('分區：北區'),
       ).toBeInTheDocument()
@@ -131,20 +145,20 @@ describe('planning management page', () => {
         }),
       )
       expect(screen.getByRole('dialog')).toHaveTextContent(
-        '項目：混凝土外觀、鋼筋保護層；分區：北區；建議指派人：現場人員甲',
+        '派出任務「橋梁外牆複查」？查核項目：混凝土外觀、鋼筋保護層；分區：北區；建議指派人：現場人員甲。',
       )
       expect(screen.getByRole('button', { name: '確認' })).toHaveClass(
         'btn-primary',
       )
       fireEvent.click(screen.getByRole('button', { name: '確認' }))
       await screen.findByRole('heading', {
-        name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
+        name: /橋梁外牆複查\s+（待開始）/,
       })
       await expectNotice('已派出任務，現場可以查看了。')
 
       const refreshedTask = screen
         .getByRole('heading', {
-          name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
+          name: /橋梁外牆複查\s+（待開始）/,
         })
         .closest('article') as HTMLElement
       fireEvent.click(
@@ -157,7 +171,9 @@ describe('planning management page', () => {
       // 確認框掛載後由 effect 設定初始焦點。
       await waitFor(() =>
         expect(
-          within(cancelDialog).getByRole('heading', { name: '取消任務' }),
+          within(cancelDialog).getByRole('heading', {
+            name: /取消任務「橋梁外牆複查」/,
+          }),
         ).toHaveFocus(),
       )
       fireEvent.change(screen.getByLabelText(/取消原因/), {
@@ -171,7 +187,7 @@ describe('planning management page', () => {
 
       const cancelledTask = screen
         .getByRole('heading', {
-          name: /混凝土外觀、鋼筋保護層\s+（已取消）/,
+          name: /橋梁外牆複查\s+（已取消）/,
         })
         .closest('article') as HTMLElement
       fireEvent.click(
@@ -181,7 +197,7 @@ describe('planning management page', () => {
       )
       fireEvent.click(screen.getByRole('button', { name: '確認' }))
       await screen.findByRole('heading', {
-        name: /混凝土外觀、鋼筋保護層\s+（待開始）/,
+        name: /橋梁外牆複查\s+（待開始）/,
       })
       await expectNotice('已恢復任務。')
     },
@@ -396,7 +412,7 @@ describe('planning management page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
     const task = await screen.findByRole('heading', {
-      name: /混凝土外觀\s+（草稿）/,
+      name: /混凝土外觀－北區\s+（草稿）/,
     })
     const article = task.closest('article') as HTMLElement
     fireEvent.click(within(article).getByRole('button', { name: '刪除草稿' }))
@@ -411,7 +427,7 @@ describe('planning management page', () => {
       ).toHaveFocus(),
     )
     expect(dialog).toHaveTextContent(
-      `永久刪除草稿任務「混凝土外觀」，位置：${zone.name}・東側二樓？`,
+      '永久刪除草稿任務「混凝土外觀－北區」（查核項目：混凝土外觀）？',
     )
     expect(dialog).toHaveTextContent('刪除後無法復原')
     expect(within(dialog).queryByRole('button', { name: '確認' })).toBeNull()
@@ -497,6 +513,45 @@ describe('planning management page', () => {
     expect(label?.textContent).toMatch(/^混凝土外觀/)
   })
 
+  it('suggests a single item name with optional supplemental location', async () => {
+    const client = createMockPlanningClient()
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
+      target: { value: '單項名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '單項名稱（草稿）' }),
+    )
+    await openTaskCreationForm()
+    fireEvent.click(await screen.findByLabelText(/鋼筋保護層/))
+    expect(screen.getByLabelText(/任務名稱/)).toHaveValue('鋼筋保護層')
+    fireEvent.change(screen.getByLabelText('補充地點'), {
+      target: { value: '東側' },
+    })
+    expect(screen.getByLabelText(/任務名稱/)).toHaveValue('鋼筋保護層－東側')
+  })
+
+  it('truncates suggested task names at 128 characters', async () => {
+    const client = createMockPlanningClient()
+    const listItems = client.listProjectItems.bind(client)
+    client.listProjectItems = async (projectId) =>
+      (await listItems(projectId)).map((item, index) =>
+        index === 0 ? { ...item, title: '甲'.repeat(140) } : item,
+      )
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
+      target: { value: '名稱長度' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '名稱長度（草稿）' }),
+    )
+    await openTaskCreationForm()
+    fireEvent.click(await screen.findByLabelText(/甲{5}/))
+    expect(screen.getByLabelText(/任務名稱/)).toHaveValue('甲'.repeat(128))
+  })
+
   it('keeps task creation collapsed and lists existing tasks', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
@@ -504,6 +559,7 @@ describe('planning management page', () => {
     })
     const [item] = await client.listProjectItems('project-demo-1')
     await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -543,6 +599,77 @@ describe('planning management page', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('edits a task name in place and can cancel the edit', async () => {
+    const client = createMockPlanningClient()
+    const plan = await client.createPlan('project-demo-1', {
+      name: '任務名稱編輯',
+    })
+    const [item] = await client.listProjectItems('project-demo-1')
+    const task = await client.createTask(plan.id, {
+      name: '原任務名稱',
+      item_ids: [item.id],
+      suggested_assignee_id: null,
+      zone_id: null,
+      location_text: null,
+    })
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '任務名稱編輯（草稿）' }),
+    )
+    const heading = await screen.findByRole('heading', {
+      name: /原任務名稱\s+（草稿）/,
+    })
+    const article = heading.closest('article') as HTMLElement
+    fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
+    const nameInput = within(article).getByLabelText(/任務名稱/)
+    fireEvent.change(nameInput, { target: { value: '取消的名稱' } })
+    fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    const discardDialog = screen.getByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    expect(discardDialog).toHaveTextContent('修改內容尚未儲存')
+    fireEvent.click(
+      within(discardDialog).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(within(article).getByLabelText(/任務名稱/)).toHaveValue(
+      '取消的名稱',
+    )
+    fireEvent.click(within(article).getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', {
+        name: '捨棄變更',
+      }),
+    )
+    await waitFor(() =>
+      expect(within(article).queryByLabelText(/任務名稱/)).toBeNull(),
+    )
+    await waitFor(() =>
+      expect(
+        within(article).getByRole('button', { name: '修改名稱' }),
+      ).toHaveFocus(),
+    )
+    expect(
+      within(article).getByRole('heading', {
+        name: /原任務名稱\s+（草稿）/,
+      }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
+    fireEvent.change(within(article).getByLabelText(/任務名稱/), {
+      target: { value: '更新後名稱' },
+    })
+    fireEvent.click(within(article).getByRole('button', { name: '儲存名稱' }))
+    expect(
+      await within(article).findByRole('heading', {
+        name: /更新後名稱\s+（草稿）/,
+      }),
+    ).toBeInTheDocument()
+    await expectNotice('已更新任務名稱。')
+    expect((await client.getTask(task.id)).name).toBe('更新後名稱')
+  })
+
   it('hides actions on archived plans and restores them', async () => {
     const client = createMockPlanningClient()
     const plan = await client.createPlan('project-demo-1', {
@@ -550,6 +677,7 @@ describe('planning management page', () => {
     })
     const [item] = await client.listProjectItems('project-demo-1')
     const task = await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -698,6 +826,7 @@ describe('planning management page', () => {
     })
     const [item] = await client.listProjectItems('project-demo-1')
     const completed = await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -707,6 +836,7 @@ describe('planning management page', () => {
     await client.startTask(completed.id)
     await client.completeTask(completed.id)
     const cancelled = await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -935,6 +1065,7 @@ describe('planning forms guard (#507)', () => {
     })
     const items = await client.listProjectItems('project-demo-1')
     const task = await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [items[0].id],
       suggested_assignee_id: null,
       zone_id: zone.id,
@@ -1008,10 +1139,14 @@ describe('planning forms guard (#507)', () => {
     })
     fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
 
-    expect(await within(form).findAllByText('輸入內容太長。')).toHaveLength(2)
+    expect(await within(form).findAllByText('輸入內容太長。')).toHaveLength(3)
     expect(
       within(form).getAllByText('欄位格式不正確，請檢查輸入內容。'),
     ).toHaveLength(2)
+    expect(within(form).getByLabelText(/任務名稱/)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
     expect(
       within(form).getByRole('group', { name: /選擇一筆以上/ }),
     ).toHaveAttribute('aria-invalid', 'true')
@@ -1027,11 +1162,51 @@ describe('planning forms guard (#507)', () => {
       'aria-invalid',
       'true',
     )
+    // 任務名稱在表單最前面，/name 錯誤是第一個被回報的欄位。
     await waitFor(() =>
-      expect(
-        within(form).getByRole('group', { name: /選擇一筆以上/ }),
-      ).toHaveFocus(),
+      expect(within(form).getByLabelText(/任務名稱/)).toHaveFocus(),
     )
+    expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows a blank task name beside the field and focuses it', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'createTask')
+    await openPlan(client)
+    const form = formByContext('task')
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    const input = within(form).getByLabelText(/任務名稱/)
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
+
+    expect(await within(form).findByText('請輸入任務名稱。')).toBeVisible()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
+    expect(spy).not.toHaveBeenCalled()
+    expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('maps the server invalid_name code on creation to the name field', async () => {
+    const { client, zone } = await seeded()
+    client.createTask = vi
+      .fn()
+      .mockRejectedValue(
+        new ManagementApiError(422, 'inspection_task.invalid_name'),
+      )
+    await openPlan(client)
+    const form = formByContext('task')
+    fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
+    fireEvent.change(within(form).getByLabelText(/任務分區/), {
+      target: { value: zone.id },
+    })
+    const input = within(form).getByLabelText(/任務名稱/)
+    fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
+
+    expect(
+      await within(form).findByText('任務名稱需為 1 到 128 個字元。'),
+    ).toBeVisible()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
     expect(within(form).queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -1383,6 +1558,34 @@ describe('planning forms guard (#507)', () => {
     )
   })
 
+  it('ignores IME Enter in the task rename form', async () => {
+    const { client } = await seeded()
+    const spy = watch(client, 'updateTaskName')
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
+
+    expectImeEnterIgnored(within(article).getByLabelText(/任務名稱/))
+
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('maps task rename 422 name errors and focuses the input', async () => {
+    const { client } = await seeded()
+    client.updateTaskName = vi
+      .fn()
+      .mockRejectedValue(validationError(planNameValidation))
+    const article = await openPlan(client)
+    fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
+    const form = formByContext('task-rename')
+    const input = within(form).getByLabelText(/任務名稱/)
+    fireEvent.change(input, { target: { value: '新名稱' } })
+    fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
+
+    expect(await within(form).findByText('輸入內容太長。')).toBeVisible()
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(input).toHaveFocus())
+  })
+
   it('ignores IME Enter in the location form', async () => {
     const { client } = await seeded()
     const spy = watch(client, 'updateLocation')
@@ -1544,6 +1747,7 @@ describe('planning forms guard (#507)', () => {
       })
       const [item] = await client.listProjectItems('project-demo-1')
       await client.createTask(plan.id, {
+        name: '混凝土外觀',
         item_ids: [item.id],
         suggested_assignee_id: 'project-a-member-1',
         zone_id: zone.id,
@@ -1623,9 +1827,9 @@ describe('planning forms guard (#507)', () => {
         }),
       ).toBeVisible()
       expect(window.location.hash).toBe(hashBefore)
-      expect(screen.queryByRole('group', { name: '有尚未儲存的變更' })).toBe(
-        null,
-      )
+      expect(
+        screen.queryByRole('group', { name: '有尚未儲存的變更' }),
+      ).toBeNull()
       expect(within(list).queryByRole('link')).toBeNull()
     })
 
@@ -1665,8 +1869,11 @@ describe('planning forms guard (#507)', () => {
 
       await expectNotice('已更新草稿任務的查核項目。')
       await screen.findByRole('heading', {
-        name: /混凝土外觀、鋼筋保護層\s+（草稿）/,
+        name: /混凝土外觀\s+（草稿）/,
       })
+      expect(
+        within(article).getByText('查核項目：混凝土外觀、鋼筋保護層'),
+      ).toBeVisible()
       expect(updateItems).toHaveBeenCalledWith(expect.any(String), {
         item_ids: ['item-demo-1', 'item-demo-2'],
       })
@@ -2154,6 +2361,7 @@ describe('planning trial fixes (#634)', () => {
     })
     const [item, item2] = await client.listProjectItems('project-demo-1')
     const task = await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: options.dispatched ? 'project-a-member-1' : null,
       zone_id: zone.id,
@@ -2162,6 +2370,7 @@ describe('planning trial fixes (#634)', () => {
     if (options.dispatched) await client.dispatchTask(task.id)
     if (options.cancelledTwin) {
       const twin = await client.createTask(plan.id, {
+        name: '混凝土外觀',
         item_ids: [item.id],
         suggested_assignee_id: 'project-a-member-1',
         zone_id: zone.id,
@@ -2204,7 +2413,7 @@ describe('planning trial fixes (#634)', () => {
     fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
     const form = creationForm() as HTMLElement
     await waitFor(() =>
-      expect(within(form).getAllByRole('checkbox')[0]).toHaveFocus(),
+      expect(within(form).getByLabelText(/任務名稱/)).toHaveFocus(),
     )
 
     // 沒有輸入就取消：只收起新增任務表單，不得動到別的表單。

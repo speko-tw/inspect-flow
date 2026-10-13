@@ -133,6 +133,7 @@ def test_tpl_ac17_migration_preserves_related_data_and_backfills_order(
         project_id=project.id,
         location_text="北側",
         **_audit(actor),
+        name="示範任務",
     )
     session.add(task)
     session.flush()

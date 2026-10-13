@@ -79,6 +79,7 @@ from app.services.inspection_planning import (
     inspection_task_list_filters,
     inspection_task_visibility_filters,
     rename_inspection_plan,
+    rename_inspection_task,
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
@@ -119,6 +120,7 @@ class NameBody(StrictBody):
 class TaskCreateBody(StrictBody):
     """承載建立 Task 的來源項目、地點與建議指派。"""
 
+    name: str = Field(max_length=PLANNING_NAME_MAX)
     item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
     zone_id: UUID | None = None
     location_text: str | None = Field(
@@ -139,11 +141,14 @@ class CancelBody(StrictBody):
     reason: str = Field(default="", max_length=LONG_TEXT_MAX)
 
 
-class LocationBody(StrictBody):
-    """承載 IP-R10 的分區與補充地點。"""
+class TaskPatchBody(StrictBody):
+    """承載 IP-R10 地點修改或 IP-R17 任務名稱修改。"""
 
-    zone_id: UUID | None
-    location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
+    name: str | None = Field(default=None, max_length=PLANNING_NAME_MAX)
+    zone_id: UUID | None = None
+    location_text: str | None = Field(
+        default=None, max_length=LOCATION_TEXT_MAX
+    )
 
 
 class TaskItemsBody(StrictBody):
@@ -377,6 +382,7 @@ def _task_summaries(
                 "id": task.id,
                 "project_id": task.project_id,
                 "plan_id": task.plan_id,
+                "name": task.name,
                 "status": task.status,
                 "inspection_level": task.inspection_level,
                 "zone_id": task.zone_id,
@@ -414,6 +420,7 @@ def _field_task_summary(
         "id": task.id,
         "project_id": task.project_id,
         "project_name": project.name if project else None,
+        "name": task.name,
         "status": task.status,
         "dispatched_at": (
             format_utc(task.dispatched_at)
@@ -816,6 +823,7 @@ def add_task(
         db,
         plan=plan,
         project_inspection_item_ids=body.item_ids,
+        name=body.name,
         zone_id=body.zone_id,
         location_text=body.location_text,
         assignee_id=body.suggested_assignee_id,
@@ -1238,10 +1246,20 @@ def restore(task_id: UUID, db: Session = _db_dependency):
     ],
 )
 def patch_task(
-    task_id: UUID, body: LocationBody, db: Session = _db_dependency
+    task_id: UUID, body: TaskPatchBody, db: Session = _db_dependency
 ):
-    """依 IP-R10 修改地點；已完成、已取消或封存時拒絕。"""
+    """依 IP-R10 修改地點或依 IP-R17 修改名稱。"""
     task = _one_task(db, task_id)
+    provided = body.model_fields_set
+    if "name" in provided:
+        if provided & {"zone_id", "location_text"}:
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        return _task_summary(
+            db,
+            _call(rename_inspection_task, db, task, name=body.name or ""),
+        )
+    if not {"zone_id", "location_text"} <= provided:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     return _task_summary(
         db,
         _call(

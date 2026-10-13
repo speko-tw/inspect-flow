@@ -187,6 +187,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "inspection_task.cancelled",
         "inspection_task.restored",
         "inspection_task.location_updated",
+        "inspection_task.renamed",
         "inspection_task.items_updated",
         "project_inspection_item.updated",
         "template_item.created_from_project",

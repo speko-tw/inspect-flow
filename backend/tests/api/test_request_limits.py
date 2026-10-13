@@ -183,7 +183,7 @@ def planning(db_session, make_client):
     ).json()
     task = admin.post(
         f"/api/v1/inspection-plans/{plan['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "限制測試任務", "item_ids": [str(world["item"].id)]},
     ).json()
     world["plan"] = plan
     world["task"] = task
@@ -212,13 +212,28 @@ def test_planning_bodies_reject_oversized_fields(planning):
         "zone name": admin.post(
             f"/api/v1/projects/{project_id}/zones", json={"name": long_name}
         ),
+        "task create name": admin.post(
+            f"/api/v1/inspection-plans/{plan_id}/tasks",
+            json={
+                "name": long_name,
+                "item_ids": [str(planning["item"].id)],
+            },
+        ),
+        "task rename name": admin.patch(
+            f"/api/v1/inspection-tasks/{task_id}",
+            json={"name": long_name},
+        ),
         "task item ids": admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
-            json={"item_ids": [str(uuid4())] * (limits.ITEM_IDS_MAX + 1)},
+            json={
+                "name": "限制測試任務",
+                "item_ids": [str(uuid4())] * (limits.ITEM_IDS_MAX + 1),
+            },
         ),
         "task location": admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
             json={
+                "name": "限制測試任務",
                 "item_ids": [str(planning["item"].id)],
                 "location_text": long_location,
             },
@@ -264,6 +279,26 @@ def test_domain_limit_errors_keep_their_codes_below_the_transport_cap(
     )
     assert plan.status_code == 422
     assert plan.json()["error"]["code"] == "inspection_plan.invalid_name"
+    task_url = f"/api/v1/inspection-tasks/{planning['task']['id']}"
+    create_url = f"/api/v1/inspection-plans/{planning['plan']['id']}/tasks"
+    # 512 字元是請求上限的邊界：通過傳輸層，仍由 128 字元業務上限擋下。
+    for invalid_name in ("   ", "x" * 129, "x" * limits.PLANNING_NAME_MAX):
+        created = admin.post(
+            create_url,
+            json={
+                "name": invalid_name,
+                "item_ids": [str(planning["item"].id)],
+            },
+        )
+        assert created.status_code == 422
+        assert created.json()["error"]["code"] == (
+            "inspection_task.invalid_name"
+        )
+        renamed = admin.patch(task_url, json={"name": invalid_name})
+        assert renamed.status_code == 422
+        assert renamed.json()["error"]["code"] == (
+            "inspection_task.invalid_name"
+        )
     zone = admin.post(
         f"/api/v1/projects/{project_id}/zones", json={"name": "x" * 129}
     )

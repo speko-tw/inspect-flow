@@ -16,6 +16,7 @@ import type { FieldTask } from './api'
 let nextUser = 0
 const TASK: FieldTask = {
   id: 'task-1',
+  name: '外牆查核任務',
   project_id: 'project-1',
   project_name: '示範工程甲',
   status: 'PENDING',
@@ -175,7 +176,8 @@ describe('今日任務首頁', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     renderPage()
-    expect(await screen.findByText('外牆鋼筋查核 等 2 項')).toBeInTheDocument()
+    expect(await screen.findByText('外牆查核任務')).toBeInTheDocument()
+    expect(screen.getByText('外牆鋼筋查核等 2 項')).toBeInTheDocument()
     expect(screen.getByText('分區：一樓')).toBeInTheDocument()
     expect(String(fetcher.mock.calls[0][0])).toContain('assigned_to_me=true')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
@@ -202,6 +204,7 @@ describe('今日任務首頁', () => {
                 {
                   ...TASK,
                   id: 'task-2',
+                  name: '第二查核項目',
                   item_summary: { first_title: '第二查核項目', item_count: 1 },
                 },
               ],
@@ -212,18 +215,22 @@ describe('今日任務首頁', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     renderPage()
-    await screen.findByText('外牆鋼筋查核 等 2 項')
+    await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
-    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二查核項目/ }),
+    ).toBeInTheDocument()
     expect(String(fetcher.mock.calls[3][0])).toContain('cursor=next')
     fireEvent.click(screen.getAllByRole('link', { name: /查看任務/ })[0])
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
-    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二查核項目/ }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -250,18 +257,18 @@ describe('今日任務首頁', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     renderPage()
-    await screen.findByText('外牆鋼筋查核 等 2 項')
+    await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
     currentStatus = 'IN_PROGRESS'
     fireEvent.click(screen.getByRole('button', { name: '所有狀態' }))
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3))
-    expect(screen.getByText('外牆鋼筋查核 等 2 項').closest('a')).toHaveClass(
+    expect(screen.getByText('外牆查核任務').closest('a')).toHaveClass(
       'progress',
     )
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
     expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
-    expect(screen.queryByText('外牆鋼筋查核 等 2 項')).not.toBeInTheDocument()
+    expect(screen.queryByText('外牆查核任務')).not.toBeInTheDocument()
     expect(fetcher).toHaveBeenCalledTimes(4)
     expect(String(fetcher.mock.calls[3][0])).toContain('status=PENDING')
     expect(String(fetcher.mock.calls[3][0])).not.toContain('cursor=')
@@ -281,6 +288,7 @@ describe('今日任務首頁', () => {
               {
                 ...TASK,
                 id: 'task-2',
+                name: '第二項目',
                 item_summary: { first_title: '第二項目', item_count: 1 },
               },
             ],
@@ -289,13 +297,15 @@ describe('今日任務首頁', () => {
     })
     vi.stubGlobal('fetch', fetcher)
     renderPage()
-    await screen.findByText('外牆鋼筋查核 等 2 項')
+    await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     expect(await screen.findByText('無法載入任務')).toBeInTheDocument()
-    expect(screen.getByText('外牆鋼筋查核 等 2 項')).toBeInTheDocument()
+    expect(screen.getByText('外牆查核任務')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '重試' }))
-    expect(await screen.findByText('第二項目')).toBeInTheDocument()
-    expect(screen.getByText('外牆鋼筋查核 等 2 項')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二項目/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('外牆查核任務')).toBeInTheDocument()
     expect(fetcher).toHaveBeenCalledTimes(3)
     expect(String(fetcher.mock.calls[1][0])).toContain('cursor=next')
     expect(String(fetcher.mock.calls[2][0])).toContain('cursor=next')
@@ -309,12 +319,14 @@ describe('今日任務首頁', () => {
           items: [
             {
               ...TASK,
+              name: '查核任務',
               item_summary: { first_title: null, item_count: 0 },
               location: { zone_name: null, location_text: '東側' },
             },
             {
               ...TASK,
               id: 'task-2',
+              name: '單一查核任務',
               status: 'IN_PROGRESS',
               item_summary: { first_title: '單一查核項目', item_count: 1 },
               location: { zone_name: '二樓', location_text: null },
@@ -331,7 +343,8 @@ describe('今日任務首頁', () => {
     expect(within(firstCard!).queryByText(/分區：/)).not.toBeInTheDocument()
     const firstLocation = within(firstCard!).getByText('補充地點：東側')
     expect(firstLocation).toBeInTheDocument()
-    const secondCard = screen.getByText('單一查核項目').closest('a')
+    const secondCard = screen.getByText('單一查核任務').closest('a')
+    expect(within(secondCard!).getByText('單一查核項目')).toBeInTheDocument()
     expect(secondCard).toHaveClass('progress')
     expect(within(secondCard!).getByText('進行中')).toBeInTheDocument()
     const secondZone = within(secondCard!).getByText('分區：二樓')
@@ -516,6 +529,7 @@ describe('開始查核後返回清單', () => {
       const second = {
         ...TASK,
         id: 'task-2',
+        name: '第二查核項目',
         item_summary: { first_title: '第二查核項目', item_count: 1 },
       }
       return Response.json({
@@ -536,14 +550,19 @@ describe('開始查核後返回清單', () => {
     vi.stubGlobal('scrollY', 120)
     vi.stubGlobal('scrollTo', scrollTo)
     const fetcher = listFetcher(
-      () => Response.json({ id: 'task-1', status: 'IN_PROGRESS' }),
+      () =>
+        Response.json({
+          id: 'task-1',
+          name: '外牆查核任務',
+          status: 'IN_PROGRESS',
+        }),
       [DETAIL, STARTED],
     )
     vi.stubGlobal('fetch', fetcher)
     renderPage()
-    await screen.findByText('外牆鋼筋查核 等 2 項')
+    await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
-    await screen.findByText('第二查核項目')
+    await screen.findByRole('link', { name: /第二查核項目/ })
     await startFirstCard()
     expect(await screen.findByText('查核進行中')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: /返回任務/ }))
@@ -570,12 +589,17 @@ describe('開始查核後返回清單', () => {
     vi.stubGlobal(
       'fetch',
       listFetcher(
-        () => Response.json({ id: 'task-1', status: 'IN_PROGRESS' }),
+        () =>
+          Response.json({
+            id: 'task-1',
+            name: '外牆查核任務',
+            status: 'IN_PROGRESS',
+          }),
         [DETAIL, STARTED],
       ),
     )
     renderPage()
-    await screen.findByText('外牆鋼筋查核 等 2 項')
+    await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '待開始' }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '待開始' })).toHaveAttribute(
@@ -614,16 +638,18 @@ describe('開始查核後返回清單', () => {
       ),
     )
     renderPage()
-    await screen.findByText('外牆鋼筋查核 等 2 項')
+    await screen.findByText('外牆查核任務')
     fireEvent.click(screen.getByRole('button', { name: '全部' }))
-    await screen.findByText('第二查核項目')
+    await screen.findByRole('link', { name: /第二查核項目/ })
     await startFirstCard()
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '取消原因：施工順序調整。',
     )
     fireEvent.click(screen.getAllByRole('link', { name: /返回任務/ })[0])
-    expect(await screen.findByText('第二查核項目')).toBeInTheDocument()
-    expect(screen.queryByText('外牆鋼筋查核 等 2 項')).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('link', { name: /第二查核項目/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('外牆查核任務')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',
       'true',
