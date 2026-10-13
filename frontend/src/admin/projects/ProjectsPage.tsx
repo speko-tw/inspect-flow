@@ -12,6 +12,8 @@ import { mapFieldErrors } from '../../ui/fieldErrors'
 import { FieldError, Form, FormError, FormSubmitButton } from '../../ui/Form'
 import { HttpError } from '../../http'
 import { managementErrorMessage } from '../api'
+import { CursorListSearch } from '../CursorListSearch'
+import { useCursorList } from '../useCursorList'
 import {
   DEFAULT_COMPANY_ROLE,
   createProject,
@@ -109,8 +111,21 @@ function roleOptions(
 /** 呈現專案清單與新增／編輯表單，並守住 ADM-R15 的草稿轉場。 */
 export default function ProjectsPage() {
   const navigate = useNavigate()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
+  const projectList = useCursorList(listProjectsPage, managementErrorMessage)
+  const {
+    items: projects,
+    query,
+    setQuery,
+    appliedQuery,
+    error: listError,
+    nextCursor,
+    loading,
+    loadingMore,
+    search,
+    clearSearch,
+    reload,
+    loadMore,
+  } = projectList
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
@@ -131,13 +146,6 @@ export default function ProjectsPage() {
   const [reason, setReason] = useState('')
   const [reasonError, setReasonError] = useState('')
   const [reasonFocusRequest, setReasonFocusRequest] = useState(0)
-  const [reloadKey, setReloadKey] = useState(0)
-  const [query, setQuery] = useState('')
-  const [appliedQuery, setAppliedQuery] = useState('')
-  const [listError, setListError] = useState('')
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const requestId = useRef(0)
   const roleSelectRef = useRef<HTMLSelectElement>(null)
   const reasonInputRef = useRef<HTMLTextAreaElement>(null)
   const roleConfirmRef = useRef<HTMLDivElement>(null)
@@ -246,80 +254,6 @@ export default function ProjectsPage() {
     alert?.scrollIntoView?.({ block: 'nearest' })
     alert?.focus()
   }, [error])
-
-  useEffect(() => {
-    let active = true
-    const id = ++requestId.current
-    async function load() {
-      try {
-        const page = await listProjectsPage({ q: appliedQuery, limit: 50 })
-        if (active && id === requestId.current) {
-          setProjects(page.items)
-          setNextCursor(page.next_cursor)
-        }
-      } catch (caught) {
-        if (active) {
-          setListError(managementErrorMessage(caught))
-        }
-      } finally {
-        if (active) {
-          if (id === requestId.current) setLoading(false)
-        }
-      }
-    }
-    void load()
-    return () => {
-      active = false
-    }
-  }, [reloadKey, appliedQuery])
-
-  async function searchProjects(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const search = query.trim()
-    const id = ++requestId.current
-    setProjects([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setListError('')
-    setAppliedQuery(search)
-    setLoading(true)
-    try {
-      const page = await listProjectsPage({ q: search, limit: 50 })
-      if (id === requestId.current) {
-        setProjects(page.items)
-        setNextCursor(page.next_cursor)
-      }
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
-    }
-  }
-
-  async function loadMoreProjects() {
-    if (!nextCursor || loading || loadingMore) return
-    const id = requestId.current
-    const cursor = nextCursor
-    setLoadingMore(true)
-    setListError('')
-    try {
-      const page = await listProjectsPage({
-        q: appliedQuery,
-        cursor,
-        limit: 50,
-      })
-      if (id === requestId.current) {
-        setProjects((current) => [...current, ...page.items])
-        setNextCursor(page.next_cursor)
-      }
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoadingMore(false)
-    }
-  }
 
   function change(field: keyof FormState, value: string) {
     if (field === 'company_role') {
@@ -496,12 +430,7 @@ export default function ProjectsPage() {
           : current,
       )
       setNotice(savedNotice)
-      setProjects([])
-      setNextCursor(null)
-      setLoading(true)
-      setLoadingMore(false)
-      setListError('')
-      setReloadKey((key) => key + 1)
+      void reload()
     } catch (caught) {
       showSaveError(caught)
     } finally {
@@ -774,16 +703,16 @@ export default function ProjectsPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <Form onSubmit={searchProjects}>
-        <label>
-          搜尋專案
-          <input
-            onChange={(event) => setQuery(event.target.value)}
-            value={query}
-          />
-        </label>
-        <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
-      </Form>
+      <CursorListSearch
+        disabled={loading}
+        label="搜尋專案"
+        onQueryChange={setQuery}
+        onSearch={(event) => {
+          event.preventDefault()
+          void search(query)
+        }}
+        query={query}
+      />
       <FormError>{listError}</FormError>
       {projects.length > 0 && (
         <section aria-labelledby="project-workspace-heading">
@@ -805,9 +734,25 @@ export default function ProjectsPage() {
                   key={project.id}
                   tabIndex={-1}
                 >
-                  <p className="project-code">{project.project_code}</p>
+                  <p className="project-code">
+                    {project.project_code}
+                    {hasDuplicateCodeWarning(project) ? (
+                      <span>（代號重複）</span>
+                    ) : null}
+                  </p>
                   <h3>{project.name}</h3>
                   <p>{project.site_location}</p>
+                  {/* 列表只剩卡片，業主與預定日期不得因此看不到；
+                      沒有值就不顯示該行。 */}
+                  {project.client_name ? (
+                    <p>{`業主：${project.client_name}`}</p>
+                  ) : null}
+                  {project.planned_start_date ? (
+                    <p>{`預定開工：${project.planned_start_date}`}</p>
+                  ) : null}
+                  {project.planned_completion_date ? (
+                    <p>{`預定完工：${project.planned_completion_date}`}</p>
+                  ) : null}
                   <Link
                     className="btn btn-primary"
                     onClick={(event) =>
@@ -826,9 +771,21 @@ export default function ProjectsPage() {
                   >
                     開啟專案
                   </Link>
+                  <Link
+                    className="btn btn-sm"
+                    onClick={(event) =>
+                      guardProjectLink(
+                        event,
+                        `/admin/projects/${project.id}/members`,
+                      )
+                    }
+                    to={`/admin/projects/${project.id}/members`}
+                  >
+                    成員
+                  </Link>
                   <button
                     aria-label={`編輯專案「${project.name}」`}
-                    className="btn project-workspace-edit"
+                    className="btn"
                     onClick={() => startEdit(project)}
                     type="button"
                   >
@@ -844,13 +801,7 @@ export default function ProjectsPage() {
         appliedQuery ? (
           <p>
             找不到符合「{appliedQuery}」的專案。{' '}
-            <button
-              onClick={() => {
-                setQuery('')
-                setAppliedQuery('')
-              }}
-              type="button"
-            >
+            <button onClick={() => void clearSearch()} type="button">
               清除搜尋
             </button>
           </p>
@@ -858,68 +809,10 @@ export default function ProjectsPage() {
           <p>目前沒有專案。</p>
         )
       ) : null}
-      {projects.length > 0 && (
-        <table className="projects-admin-table">
-          <thead>
-            <tr>
-              <th scope="col">專案代號</th>
-              <th scope="col">工程名稱</th>
-              <th scope="col">業主／委託單位</th>
-              <th scope="col">工程地點</th>
-              <th scope="col">預定開工</th>
-              <th scope="col">預定完工</th>
-              <th scope="col">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((project) => (
-              <tr key={project.id}>
-                <th scope="row">
-                  {project.project_code}
-                  {hasDuplicateCodeWarning(project) ? (
-                    <span>（代號重複）</span>
-                  ) : null}
-                </th>
-                <td>{project.name}</td>
-                <td>{project.client_name}</td>
-                <td>{project.site_location}</td>
-                <td>{project.planned_start_date ?? '—'}</td>
-                <td>{project.planned_completion_date ?? '—'}</td>
-                <td>
-                  <button onClick={() => startEdit(project)} type="button">
-                    編輯
-                  </button>
-                  <Link
-                    className="btn btn-sm"
-                    onClick={(event) =>
-                      guardProjectLink(
-                        event,
-                        `/admin/projects/${project.id}/members`,
-                      )
-                    }
-                    to={`/admin/projects/${project.id}/members`}
-                  >
-                    成員
-                  </Link>
-                  <Link
-                    className="btn btn-sm"
-                    onClick={(event) =>
-                      guardProjectLink(event, `/admin/projects/${project.id}`)
-                    }
-                    to={`/admin/projects/${project.id}`}
-                  >
-                    開啟專案
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
       {nextCursor && (
         <button
           disabled={loading || loadingMore}
-          onClick={() => void loadMoreProjects()}
+          onClick={() => void loadMore()}
           type="button"
         >
           {loadingMore ? '載入中…' : '載入更多'}

@@ -10,6 +10,8 @@ import type {
   ProjectZone,
   SuggestedAssignee,
   UpdateLocationInput,
+  UpdateTaskNameInput,
+  UpdateTaskItemsInput,
 } from './api'
 
 interface TaskLocation {
@@ -448,6 +450,9 @@ export function createMockPlanningClient(options?: {
       if (input.item_ids.length === 0) {
         throw new ManagementApiError(422, 'inspection_task.items_required')
       }
+      if (!input.name.trim() || characterCount(input.name.trim()) > 128) {
+        throw new ManagementApiError(422, 'inspection_task.invalid_name')
+      }
       const projectZones = zones.filter(
         (zone) => zone.project_id === plan.project_id,
       )
@@ -495,7 +500,10 @@ export function createMockPlanningClient(options?: {
         id: crypto.randomUUID(),
         project_id: plan.project_id,
         plan_id: planId,
+        name: input.name.trim(),
         status: 'DRAFT',
+        // mock 專案一律是承攬施工方（IP-R16），不模擬改角色。
+        inspection_level: 'self_inspection',
         items,
         assignee_id: assignee?.id ?? null,
         assignee: assignee ?? null,
@@ -563,6 +571,71 @@ export function createMockPlanningClient(options?: {
       task.zone_id = location.zone?.id ?? null
       task.zone = location.zone
       task.location_text = location.location_text
+      return clone(task)
+    },
+    async updateTaskName(taskId, input: UpdateTaskNameInput) {
+      const { plan, task } = planForTask(taskId)
+      if (plan.status === 'ARCHIVED') {
+        throw new ManagementApiError(409, 'inspection_plan.archived')
+      }
+      if (!['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(task.status)) {
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
+      }
+      const name = input.name.trim()
+      if (!name || characterCount(name) > 128) {
+        throw new ManagementApiError(422, 'inspection_task.invalid_name')
+      }
+      task.name = name
+      return clone(task)
+    },
+
+    async updateTaskItems(taskId, input: UpdateTaskItemsInput) {
+      const { plan, task } = planForTask(taskId)
+      if (plan.status === 'ARCHIVED') {
+        throw new ManagementApiError(409, 'inspection_plan.archived')
+      }
+      if (task.status !== 'DRAFT') {
+        throw new ManagementApiError(409, 'inspection_task.invalid_transition')
+      }
+      if (input.item_ids.length === 0) {
+        throw new ManagementApiError(422, 'inspection_task.items_required')
+      }
+      if (input.item_ids.length > 200) {
+        throw new ManagementApiError(422, 'request.validation_failed')
+      }
+      if (new Set(input.item_ids).size !== input.item_ids.length) {
+        throw new ManagementApiError(422, 'request.validation_failed')
+      }
+      const itemById = new Map(
+        (ITEMS[plan.project_id] ?? []).map((item) => [item.id, item]),
+      )
+      const nextItems = input.item_ids.map((id) => {
+        const item = itemById.get(id)
+        if (!item) {
+          throw new ManagementApiError(
+            422,
+            'inspection_task.invalid_project_item',
+          )
+        }
+        const snapshot = {
+          revision: 1,
+          source_standard_revision: 1,
+          title: item.title,
+          instruction: item.instruction,
+          source_template_name: item.source_template_name ?? '示範範本',
+          is_current: true,
+          inspection_points: item.inspection_points,
+        }
+        return {
+          id: item.id,
+          status: 'PENDING',
+          needs_reinspection: false,
+          snapshots: [snapshot],
+          current_snapshot: snapshot,
+        } satisfies TaskInspectionItem
+      })
+      task.items = nextItems
+      task.updated_at = new Date().toISOString()
       return clone(task)
     },
     async dispatchTask(taskId) {

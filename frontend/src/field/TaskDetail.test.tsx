@@ -37,6 +37,7 @@ const basePoint = {
 }
 const detail = {
   id: 'task-1',
+  name: '外牆查核任務',
   project_id: 'project-1',
   project_name: '示範工程甲',
   status: 'PENDING',
@@ -97,7 +98,7 @@ describe('現場任務詳情', () => {
     expect(await screen.findByText('依圖面查核')).toBeInTheDocument()
     expect(
       screen.getByRole('heading', {
-        name: '外牆鋼筋查核 等 2 項',
+        name: '外牆查核任務',
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('示範工程甲')).toBeInTheDocument()

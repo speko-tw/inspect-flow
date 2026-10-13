@@ -57,6 +57,7 @@ describe('mock planning client', () => {
 
       const [item] = await client.listProjectItems(PROJECT)
       const task = await client.createTask(created[0].id, {
+        name: '示範任務',
         item_ids: [item.id],
         suggested_assignee_id: null,
         zone_id: null,
@@ -133,6 +134,7 @@ describe('mock planning client', () => {
       const plan = await client.createPlan(PROJECT, { name: '現場操作者' })
       const [item] = await client.listProjectItems(PROJECT)
       const task = await client.createTask(plan.id, {
+        name: '示範任務',
         item_ids: [item.id],
         suggested_assignee_id: 'project-a-member-1',
         zone_id: null,
@@ -169,6 +171,7 @@ describe('mock planning client', () => {
 
     const [item] = await client.listProjectItems(PROJECT)
     const task = await client.createTask(plan.id, {
+      name: '示範任務',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: null,
@@ -208,6 +211,7 @@ describe('mock planning client', () => {
       const plan = await client.createPlan(PROJECT, { name: '巡查' })
       const [item] = await client.listProjectItems(PROJECT)
       const task = await client.createTask(plan.id, {
+        name: '示範任務',
         item_ids: [item.id],
         suggested_assignee_id: null,
         zone_id: zone.id,
@@ -265,6 +269,7 @@ describe('mock planning client', () => {
       })
       const [item] = await client.listProjectItems('project-demo-2')
       const task = await client.createTask(plan.id, {
+        name: '示範任務',
         item_ids: [item.id],
         suggested_assignee_id: null,
         zone_id: null,
@@ -312,6 +317,7 @@ describe('mock planning client', () => {
       const plan = await client.createPlan(PROJECT, { name: '快照' })
       const [item] = await client.listProjectItems(PROJECT)
       const task = await client.createTask(plan.id, {
+        name: '示範任務',
         item_ids: [item.id],
         suggested_assignee_id: null,
         zone_id: null,
@@ -336,6 +342,7 @@ describe('mock planning client', () => {
       expect(archived.status).toBe('ARCHIVED')
       await expect(
         client.createTask(plan.id, {
+          name: '示範任務',
           item_ids: ['item-demo-1'],
           suggested_assignee_id: null,
           zone_id: null,
@@ -357,6 +364,7 @@ describe('mock planning client', () => {
       const plan = await client.createPlan(PROJECT, { name: '草稿刪除' })
       const [item] = await client.listProjectItems(PROJECT)
       const task = await client.createTask(plan.id, {
+        name: '示範任務',
         item_ids: [item.id],
         suggested_assignee_id: null,
         zone_id: null,
@@ -418,6 +426,7 @@ describe('planning HTTP client contract', () => {
       }
       return Response.json({
         id: 'task-1',
+        name: '現場外牆任務',
         project_id: PROJECT,
         plan_id: 'plan-1',
         status: 'DRAFT',
@@ -451,9 +460,15 @@ describe('planning HTTP client contract', () => {
 
     const plans = await planningClient.listPlans(PROJECT)
     const task = await planningClient.getTask('task-1')
+    const updatedTask = await planningClient.updateTaskItems('task-1', {
+      item_ids: ['item-2'],
+    })
 
     expect(plans).toEqual({ items: [], next_cursor: 'cursor-2' })
+    expect(task.name).toBe('現場外牆任務')
     expect(task.items[0].current_snapshot?.title).toBe('外牆檢查')
+    expect(updatedTask.id).toBe('task-1')
+    expect(updatedTask.name).toBe(task.name)
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining(
@@ -465,6 +480,15 @@ describe('planning HTTP client contract', () => {
       2,
       '/api/v1/inspection-tasks/task-1',
       expect.objectContaining({ credentials: 'same-origin' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/inspection-tasks/task-1/items',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ item_ids: ['item-2'] }),
+        credentials: 'same-origin',
+      }),
     )
   })
 

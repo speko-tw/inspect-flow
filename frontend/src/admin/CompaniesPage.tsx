@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
@@ -14,9 +14,25 @@ import {
   setCompanyActive,
   type Company,
 } from './api'
+import { CursorListSearch } from './CursorListSearch'
+import { useCursorList } from './useCursorList'
 
 export default function CompaniesPage() {
-  const [companies, setCompanies] = useState<Company[]>([])
+  const companyList = useCursorList(listCompaniesPage, managementErrorMessage)
+  const {
+    items: companies,
+    query,
+    setQuery,
+    appliedQuery,
+    error: listError,
+    nextCursor,
+    loading,
+    loadingMore,
+    search,
+    clearSearch,
+    reload,
+    loadMore,
+  } = companyList
   const [name, setName] = useState('')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -27,14 +43,7 @@ export default function CompaniesPage() {
     message: string
     request: number
   } | null>(null)
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [query, setQuery] = useState('')
-  const [appliedQuery, setAppliedQuery] = useState('')
-  const [listError, setListError] = useState('')
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const requestId = useRef(0)
   const saveGuard = useSubmitGuard()
   const [deactivating, setDeactivating] = useState<{
     company: Company
@@ -42,123 +51,6 @@ export default function CompaniesPage() {
     count: number
     selected: string[]
   } | null>(null)
-
-  async function reload() {
-    const id = ++requestId.current
-    setListError('')
-    setCompanies([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setLoading(true)
-    try {
-      const page = await listCompaniesPage({ q: appliedQuery, limit: 50 })
-      if (id === requestId.current) {
-        setCompanies(page.items)
-        setNextCursor(page.next_cursor)
-      }
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let active = true
-    const id = ++requestId.current
-    async function load() {
-      try {
-        const page = await listCompaniesPage({ limit: 50 })
-        if (active && id === requestId.current) {
-          setCompanies(page.items)
-          setNextCursor(page.next_cursor)
-        }
-      } catch (caught) {
-        if (active && id === requestId.current) {
-          setListError(managementErrorMessage(caught))
-        }
-      } finally {
-        if (active && id === requestId.current) {
-          setLoading(false)
-        }
-      }
-    }
-    void load()
-    return () => {
-      active = false
-    }
-  }, [])
-
-  async function searchCompanies(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const search = query.trim()
-    setAppliedQuery(search)
-    const id = ++requestId.current
-    setCompanies([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setListError('')
-    setLoading(true)
-    try {
-      const page = await listCompaniesPage({ q: search, limit: 50 })
-      if (id === requestId.current) {
-        setCompanies(page.items)
-        setNextCursor(page.next_cursor)
-      }
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
-    }
-  }
-
-  async function loadMoreCompanies() {
-    if (!nextCursor || loading || loadingMore) return
-    const id = requestId.current
-    setLoadingMore(true)
-    setListError('')
-    try {
-      const page = await listCompaniesPage({
-        q: appliedQuery,
-        cursor: nextCursor,
-        limit: 50,
-      })
-      if (id === requestId.current) {
-        setCompanies((current) => [...current, ...page.items])
-        setNextCursor(page.next_cursor)
-      }
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoadingMore(false)
-    }
-  }
-
-  async function clearSearch() {
-    setQuery('')
-    setAppliedQuery('')
-    const id = ++requestId.current
-    setCompanies([])
-    setNextCursor(null)
-    setLoadingMore(false)
-    setListError('')
-    setLoading(true)
-    try {
-      const page = await listCompaniesPage({ limit: 50 })
-      if (id === requestId.current) {
-        setCompanies(page.items)
-        setNextCursor(page.next_cursor)
-      }
-    } catch (caught) {
-      if (id === requestId.current)
-        setListError(managementErrorMessage(caught))
-    } finally {
-      if (id === requestId.current) setLoading(false)
-    }
-  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -280,16 +172,16 @@ export default function CompaniesPage() {
         </ConfirmBox>
       )}
       {loading ? <p>載入中…</p> : null}
-      <Form onSubmit={searchCompanies}>
-        <label>
-          搜尋公司
-          <input
-            onChange={(event) => setQuery(event.target.value)}
-            value={query}
-          />
-        </label>
-        <FormSubmitButton disabled={loading}>搜尋</FormSubmitButton>
-      </Form>
+      <CursorListSearch
+        disabled={loading}
+        label="搜尋公司"
+        onQueryChange={setQuery}
+        onSearch={(event) => {
+          event.preventDefault()
+          void search(query)
+        }}
+        query={query}
+      />
       <FormError>{listError}</FormError>
       {!loading && companies.length === 0 ? (
         appliedQuery ? (
@@ -349,7 +241,7 @@ export default function CompaniesPage() {
       {nextCursor && (
         <button
           disabled={loading || loadingMore}
-          onClick={() => void loadMoreCompanies()}
+          onClick={() => void loadMore()}
           type="button"
         >
           {loadingMore ? '載入中…' : '載入更多'}

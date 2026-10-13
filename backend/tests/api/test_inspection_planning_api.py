@@ -1,6 +1,7 @@
 """Inspection planning HTTP contracts (IP-AC01 through IP-AC11)."""
 
 import json
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -34,6 +35,15 @@ from app.models import (
     TaskSnapshotPoint,
 )
 from tests.db.conftest import create_root_user_with_company
+
+_API_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def _assert_api_timestamp(value: str) -> None:
+    assert _API_TIMESTAMP.fullmatch(value) is not None
+    parsed = datetime.fromisoformat(value)
+    assert parsed.utcoffset() == timedelta(0)
+    assert parsed.microsecond == 0
 
 
 def _client(make_client, token):
@@ -285,6 +295,24 @@ def test_single_project_read_is_limited_for_planning_members(
     full = world["admin"].get(path)
     assert full.status_code == 200, full.text
     assert {"client_name", "site_location", "warnings"} <= set(full.json())
+
+
+def test_assignee_candidates_keep_inactive_members_until_ip_r12_activation(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    inactive = world["field_user_two"]
+    inactive.is_active = False
+    db_session.commit()
+
+    response = world["admin"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-task-assignees"
+    )
+
+    assert response.status_code == 200, response.text
+    candidate_ids = {UUID(row["id"]) for row in response.json()["items"]}
+    assert world["field_user"].id in candidate_ids
+    assert inactive.id in candidate_ids
     missing = world["admin"].get(
         "/api/v1/projects/00000000-0000-7000-8000-000000000000"
     )
@@ -364,6 +392,7 @@ def test_plan_task_authorization_cursor_and_draft_visibility(
     task_response = admin.post(
         f"/api/v1/inspection-plans/{plan_id}/tasks",
         json={
+            "name": "示範任務",
             "item_ids": [
                 str(world["item"].id),
                 str(world["item_two"].id),
@@ -561,7 +590,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     assert foreign_plan.status_code == 201, foreign_plan.text
     foreign_task = admin.post(
         f"/api/v1/inspection-plans/{foreign_plan.json()['id']}/tasks",
-        json={"item_ids": [str(foreign_item.id)]},
+        json={"name": "示範任務", "item_ids": [str(foreign_item.id)]},
     )
     assert foreign_task.status_code == 201, foreign_task.text
     foreign_task_id = foreign_task.json()["id"]
@@ -581,6 +610,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
     draft = admin.post(
         f"/api/v1/inspection-plans/{plan_id}/tasks",
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "suggested_assignee_id": str(world["field_user"].id),
         },
@@ -597,6 +627,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
         older = admin.post(
             f"/api/v1/inspection-plans/{plan_id}/tasks",
             json={
+                "name": "示範任務",
                 "item_ids": [str(world["item"].id)],
                 "suggested_assignee_id": str(world["field_user_two"].id),
             },
@@ -619,6 +650,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
             created = admin.post(
                 f"/api/v1/inspection-plans/{plan_id}/tasks",
                 json={
+                    "name": "示範任務",
                     "item_ids": [str(world["item"].id), str(second_item.id)],
                     "suggested_assignee_id": str(assignee_id),
                 },
@@ -749,6 +781,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
                 dispatched_at=timestamp,
                 created_by=world["admin_user"].id,
                 updated_by=world["admin_user"].id,
+                name="示範任務",
             )
         )
         db_session.commit()
@@ -802,6 +835,7 @@ def test_field_task_api_filters_safely_and_pages_by_dispatch_time(
                     assignee_id=world["field_user_two"].id,
                     created_by=world["admin_user"].id,
                     updated_by=world["admin_user"].id,
+                    name="示範任務",
                 )
                 for _ in range(51)
             ]
@@ -843,6 +877,7 @@ def test_field_task_items_keep_request_order_within_one_millisecond(
             created = admin.post(
                 f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
                 json={
+                    "name": "示範任務",
                     "item_ids": [str(row.id) for row in order],
                     "suggested_assignee_id": str(world["field_user"].id),
                 },
@@ -987,7 +1022,7 @@ def test_field_task_detail_keeps_numeric_measurement_mapping_and_order(
     assert plan.status_code == 201, plan.text
     created = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
@@ -1309,7 +1344,7 @@ def test_project_item_patch_locks_task_structure_without_reinspection(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "示範任務", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
     dispatched = admin.post(
@@ -1787,11 +1822,18 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
         json={"name": "刪除點位重查"},
     )
     assert plan.status_code == 201, plan.text
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(plan.json()[field])
     created_task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id), str(world["item_two"].id)]},
+        json={
+            "name": "示範任務",
+            "item_ids": [str(world["item"].id), str(world["item_two"].id)],
+        },
     )
     assert created_task.status_code == 201, created_task.text
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(created_task.json()[field])
     task_id = UUID(created_task.json()["id"])
     dispatched = admin.post(f"/api/v1/inspection-tasks/{task_id}:dispatch")
     assert dispatched.status_code == 200, dispatched.text
@@ -1835,6 +1877,20 @@ def test_reinspect_point_deletion_refreshes_only_the_changed_task_snapshot(
     )
     assert patched.status_code == 200, patched.text
     assert patched.json()["affected_tasks"][0]["action"] == "updated"
+
+    task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert task_readback.status_code == 200, task_readback.text
+    task_payload = task_readback.json()
+    for field in ("created_at", "updated_at"):
+        _assert_api_timestamp(task_payload[field])
+    changed_item = next(
+        row
+        for row in task_payload["items"]
+        if row["id"] == str(world["item"].id)
+    )
+    assert len(changed_item["snapshots"]) == 2
+    _assert_api_timestamp(changed_item["snapshots"][0]["superseded_at"])
+    assert changed_item["snapshots"][1]["superseded_at"] is None
 
     db_session.expire_all()
     changed_snapshots = db_session.scalars(
@@ -1893,7 +1949,7 @@ def test_project_item_change_requires_choice_and_returns_task_actions(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert task.status_code == 201, task.text
 
@@ -1983,7 +2039,7 @@ def test_draft_task_allows_project_item_structure_update_in_place(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "草稿結構更新", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
     task_id = task.json()["id"]
@@ -2116,7 +2172,7 @@ def test_dispatched_project_item_rejects_standard_structure_changes(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "已派出結構鎖定", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
     dispatched = admin.post(
@@ -2208,7 +2264,7 @@ def test_project_item_invalid_structure_precedes_missing_reinspect_choice(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert task.status_code == 201, task.text
 
@@ -2240,7 +2296,10 @@ def _dispatched_field_task(world, plan_name, assignee_id=None):
         json={"name": plan_name},
     )
     assert plan.status_code == 201, plan.text
-    body: dict[str, Any] = {"item_ids": [str(world["item"].id)]}
+    body: dict[str, Any] = {
+        "name": "示範任務",
+        "item_ids": [str(world["item"].id)],
+    }
     if assignee_id is not None:
         body["suggested_assignee_id"] = str(assignee_id)
     created = admin.post(
@@ -2322,7 +2381,7 @@ def test_field_task_detail_hides_starter_and_reason_for_drafts_and_readers(
     )
     draft = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     draft_url = f"/api/v1/field/inspection-tasks/{draft.json()['id']}"
     assert world["field"].get(draft_url).status_code == 404
@@ -2338,6 +2397,40 @@ def test_field_task_detail_hides_starter_and_reason_for_drafts_and_readers(
         assert denied.status_code == 404
         assert "內部原因" not in denied.text
     assert make_client().get(url).status_code == 401
+
+
+def test_task_name_is_returned_by_every_task_read_surface(
+    db_session, make_client
+):
+    """IP-R17：Task 詳情、Plan 詳情、Plan 任務清單與 Field 讀取都帶名稱。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    plan_id, task_id = _dispatched_field_task(world, "名稱讀取面")
+
+    detail = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["name"] == "示範任務"
+    plan = admin.get(f"/api/v1/inspection-plans/{plan_id}")
+    assert plan.status_code == 200, plan.text
+    assert [row["name"] for row in plan.json()["tasks"]] == ["示範任務"]
+    listed = admin.get(f"/api/v1/inspection-plans/{plan_id}/tasks")
+    assert listed.status_code == 200, listed.text
+    assert [row["name"] for row in listed.json()["items"]] == ["示範任務"]
+    field_detail = world["field"].get(
+        f"/api/v1/field/inspection-tasks/{task_id}"
+    )
+    assert field_detail.status_code == 200, field_detail.text
+    assert field_detail.json()["name"] == "示範任務"
+    field_list = world["field"].get(
+        "/api/v1/field/inspection-tasks",
+        params={"assigned_to_me": "false"},
+    )
+    assert field_list.status_code == 200, field_list.text
+    assert [
+        row["name"]
+        for row in field_list.json()["items"]
+        if row["id"] == task_id
+    ] == ["示範任務"]
 
 
 def test_field_start_rejections_map_to_distinct_error_codes(
@@ -2407,6 +2500,7 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
     create = admin.post(
         task_url,
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "suggested_assignee_id": str(world["field_user"].id),
         },
@@ -2476,7 +2570,7 @@ def test_task_lifecycle_completion_archiving_and_assignment_are_api_gated(
 
     draft = admin.post(
         task_url,
-        json={"item_ids": [str(world["item_two"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item_two"].id)]},
     )
     assert draft.status_code == 201, draft.text
     assert (
@@ -2586,11 +2680,13 @@ def test_frontend_boundary_fixture_is_accepted_and_read_back_by_api(
     task_id = created_task.json()["id"]
     ids["$TASK_ID"] = task_id
     assert created_task.json()["status"] == "DRAFT"
+    assert created_task.json()["name"] == "表面檢查－東側機房"
     assert created_task.json()["zone_id"] is None
     assert created_task.json()["location_text"] == "東側機房"
     task_readback = admin.get(f"/api/v1/inspection-tasks/{task_id}")
     assert task_readback.status_code == 200, task_readback.text
     assert task_readback.json()["zone_id"] is None
+    assert task_readback.json()["name"] == "表面檢查－東側機房"
     assert task_readback.json()["location_text"] == "東側機房"
 
     task_zone = send("task_zone_create")
@@ -2697,7 +2793,7 @@ def test_project_item_api_refreshes_task_snapshot_and_respects_archived_plan(
     )
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     task_id = task.json()["id"]
     world["item"].title = "來源資料更新"
@@ -2763,6 +2859,7 @@ def test_planning_denies_each_endpoint_before_body_validation(
     task = admin.post(
         f"/api/v1/inspection-plans/{plan_id}/tasks",
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "zone_id": str(zone["id"]),
         },
@@ -2838,6 +2935,7 @@ def test_every_planning_list_uses_cursor_pages(db_session, make_client):
         response = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
             json={
+                "name": "示範任務",
                 "item_ids": [str(world["item"].id)],
                 "zone_id": zones[0].json()["id"],
             },
@@ -2847,6 +2945,7 @@ def test_every_planning_list_uses_cursor_pages(db_session, make_client):
     extra_task = admin.post(
         f"/api/v1/inspection-plans/{plans[0].json()['id']}/tasks",
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "zone_id": zones[0].json()["id"],
         },
@@ -2960,6 +3059,7 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
     foreign_task = admin.post(
         f"/api/v1/inspection-plans/{foreign_plan.json()['id']}/tasks",
         json={
+            "name": "示範任務",
             "item_ids": [str(foreign_item.id)],
             "zone_id": str(foreign_zone.id),
         },
@@ -2988,7 +3088,7 @@ def test_project_scoped_resources_hide_cross_project_rows_and_candidates(
     assert member_plan.status_code == 201, member_plan.text
     member_task = admin.post(
         f"/api/v1/inspection-plans/{member_plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert member_task.status_code == 201, member_task.text
     dispatched_member_task = admin.post(
@@ -3073,7 +3173,7 @@ def test_global_plan_task_writes_hide_nonmember_resources(
     plan_path = f"/api/v1/inspection-plans/{plan_id}"
     task_response = admin.post(
         f"{plan_path}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert task_response.status_code == 201, task_response.text
     task_id = task_response.json()["id"]
@@ -3087,7 +3187,7 @@ def test_global_plan_task_writes_hide_nonmember_resources(
         (
             "POST",
             f"{plan_path}/tasks",
-            {"item_ids": [str(world["item"].id)]},
+            {"name": "示範任務", "item_ids": [str(world["item"].id)]},
         ),
         ("POST", f"{plan_path}:archive", None),
         ("POST", f"{plan_path}:unarchive", None),
@@ -3116,7 +3216,7 @@ def test_global_plan_task_writes_hide_nonmember_resources(
         (
             "POST",
             f"{missing_plan}/tasks",
-            {"item_ids": [str(world["item"].id)]},
+            {"name": "示範任務", "item_ids": [str(world["item"].id)]},
         ),
         ("POST", f"{missing_plan}:archive", None),
         ("POST", f"{missing_plan}:unarchive", None),
@@ -3254,13 +3354,26 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     assert deleted.status_code == 204
 
     create_url = f"{plan_path}/tasks"
-    empty_items = admin.post(create_url, json={"item_ids": []})
+    missing_name = admin.post(
+        create_url, json={"item_ids": [str(world["item"].id)]}
+    )
+    assert missing_name.status_code == 422
+    assert missing_name.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+    empty_items = admin.post(
+        create_url, json={"name": "示範任務", "item_ids": []}
+    )
     assert empty_items.status_code == 422
     assert (
         empty_items.json()["error"]["code"] == "inspection_task.items_required"
     )
     invalid_item = admin.post(
-        create_url, json={"item_ids": ["00000000-0000-7000-8000-000000000000"]}
+        create_url,
+        json={
+            "name": "示範任務",
+            "item_ids": ["00000000-0000-7000-8000-000000000000"],
+        },
     )
     assert invalid_item.status_code == 422
     assert invalid_item.json()["error"]["code"] == (
@@ -3269,6 +3382,7 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     invalid_zone = admin.post(
         create_url,
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "zone_id": "00000000-0000-7000-8000-000000000000",
         },
@@ -3280,6 +3394,7 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     invalid_assignee = admin.post(
         create_url,
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "suggested_assignee_id": str(world["plain_user"].id),
         },
@@ -3291,6 +3406,7 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     invalid_location = admin.post(
         create_url,
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "location_text": "x" * 257,
         },
@@ -3303,6 +3419,7 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     task = admin.post(
         create_url,
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id)],
             "zone_id": zone["id"],
             "suggested_assignee_id": str(world["field_user"].id),
@@ -3353,6 +3470,7 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
         response = admin.post(
             f"/api/v1/inspection-plans/{cancelled_plan_id}/tasks",
             json={
+                "name": "示範任務",
                 "item_ids": [str(world["item_two"].id)],
                 "zone_id": zone["id"],
             },
@@ -3381,6 +3499,7 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     draft_task = admin.post(
         f"/api/v1/inspection-plans/{archived_id}/tasks",
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item_two"].id)],
             "zone_id": zone["id"],
         },
@@ -3424,6 +3543,201 @@ def test_planning_error_codes_archive_immutability_and_plan_states(
     assert stored_task is not None and stored_task.status == "DRAFT"
 
 
+def test_task_rename_validates_permissions_state_and_audit(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    project = world["project"]
+    plan = admin.post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "任務命名"},
+    ).json()
+    created = admin.post(
+        f"/api/v1/inspection-plans/{plan['id']}/tasks",
+        json={
+            "name": "初始任務",
+            "item_ids": [str(world["item"].id)],
+        },
+    )
+    assert created.status_code == 201, created.text
+    task_id = UUID(created.json()["id"])
+    task_path = f"/api/v1/inspection-tasks/{task_id}"
+
+    for client in (world["plain"], world["reader"], world["field_reader"]):
+        denied = client.patch(task_path, json={"name": "無權改名"})
+        assert denied.status_code == 403
+
+    task = db_session.get(InspectionTask, task_id)
+    assert task is not None
+    manager_role = db_session.scalar(
+        select(Role).where(Role.name == "API planning manager")
+    )
+    manager_member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == world["field_user_two"].id,
+        )
+    )
+    assert manager_role is not None and manager_member is not None
+    manager_member.role_assignments.append(
+        ProjectMemberRole(role_id=manager_role.id)
+    )
+    db_session.commit()
+    manager = world["field_two"]
+
+    for invalid_name in ("   ", "x" * 129):
+        invalid = admin.patch(task_path, json={"name": invalid_name})
+        assert invalid.status_code == 422
+        assert invalid.json()["error"]["code"] == (
+            "inspection_task.invalid_name"
+        )
+
+    rejected_combined = admin.patch(
+        task_path,
+        json={"name": "雙用途欄位", "zone_id": None, "location_text": None},
+    )
+    assert rejected_combined.status_code == 422
+    assert rejected_combined.json()["error"]["code"] == (
+        "request.validation_failed"
+    )
+
+    renamed = manager.patch(task_path, json={"name": "  更新任務  "})
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "更新任務"
+    no_op = manager.patch(task_path, json={"name": "更新任務"})
+    assert no_op.status_code == 200
+    assert no_op.json()["name"] == "更新任務"
+    # IP-R17：改名不動項目與地點；反過來改地點也不動名稱與項目。
+    for field in ("items", "zone_id", "location_text"):
+        assert renamed.json()[field] == created.json()[field], field
+    relocated = manager.patch(
+        task_path, json={"zone_id": None, "location_text": "新地點"}
+    )
+    assert relocated.status_code == 200, relocated.text
+    assert relocated.json()["location_text"] == "新地點"
+    assert relocated.json()["name"] == "更新任務"
+    assert relocated.json()["items"] == created.json()["items"]
+    duplicate = admin.post(
+        f"/api/v1/inspection-plans/{plan['id']}/tasks",
+        json={
+            "name": "更新任務",
+            "item_ids": [str(world["item"].id)],
+        },
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    events = list(
+        db_session.scalars(
+            select(AuditLog).where(
+                AuditLog.entity_id == task_id,
+                AuditLog.event_type == "inspection_task.renamed",
+            )
+        )
+    )
+    assert len(events) == 1
+    assert events[0].before == {"name": "初始任務"}
+    assert events[0].after == {"name": "更新任務"}
+
+    dispatched = admin.post(f"{task_path}:dispatch")
+    assert dispatched.status_code == 200, dispatched.text
+    pending_rename = manager.patch(task_path, json={"name": "待開始已改名"})
+    assert pending_rename.status_code == 200, pending_rename.text
+    assert pending_rename.json()["status"] == "PENDING"
+    started = admin.post(f"{task_path}:start")
+    assert started.status_code == 200, started.text
+    in_progress_rename = manager.patch(
+        task_path, json={"name": "進行中已改名"}
+    )
+    assert in_progress_rename.status_code == 200, in_progress_rename.text
+    assert in_progress_rename.json()["status"] == "IN_PROGRESS"
+
+    task = db_session.get(InspectionTask, task_id)
+    assert task is not None
+    task.status = "COMPLETED"
+    db_session.commit()
+    completed = manager.patch(task_path, json={"name": "完成後不可改"})
+    assert completed.status_code == 409
+    assert completed.json()["error"]["code"] == (
+        "inspection_task.invalid_transition"
+    )
+    db_session.refresh(task)
+    assert task.name == "進行中已改名"
+    renamed_count = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(
+            AuditLog.entity_id == task_id,
+            AuditLog.event_type == "inspection_task.renamed",
+        )
+    )
+    assert renamed_count == 3
+
+    cancelled_task = admin.post(
+        f"/api/v1/inspection-plans/{plan['id']}/tasks",
+        json={
+            "name": "取消狀態任務",
+            "item_ids": [str(world["item_two"].id)],
+        },
+    )
+    assert cancelled_task.status_code == 201, cancelled_task.text
+    cancelled_id = cancelled_task.json()["id"]
+    cancelled_path = f"/api/v1/inspection-tasks/{cancelled_id}"
+    assert admin.post(f"{cancelled_path}:dispatch").status_code == 200
+    assert (
+        admin.post(
+            f"{cancelled_path}:cancel", json={"reason": "驗證鎖定"}
+        ).status_code
+        == 200
+    )
+    before_cancelled_name = cancelled_task.json()["name"]
+    before_cancelled_audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.entity_id == UUID(cancelled_id))
+    )
+    cancelled_rename = manager.patch(
+        cancelled_path, json={"name": "取消後不可改"}
+    )
+    assert cancelled_rename.status_code == 409
+    assert cancelled_rename.json()["error"]["code"] == (
+        "inspection_task.invalid_transition"
+    )
+    cancelled_row = db_session.get(InspectionTask, UUID(cancelled_id))
+    assert cancelled_row is not None
+    db_session.refresh(cancelled_row)
+    assert cancelled_row.name == before_cancelled_name
+    after_cancelled_audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.entity_id == UUID(cancelled_id))
+    )
+    assert after_cancelled_audits == before_cancelled_audits
+
+    archived_plan = admin.post(
+        f"/api/v1/projects/{project.id}/inspection-plans",
+        json={"name": "封存任務命名"},
+    ).json()
+    archived_task = admin.post(
+        f"/api/v1/inspection-plans/{archived_plan['id']}/tasks",
+        json={
+            "name": "封存前名稱",
+            "item_ids": [str(world["item_two"].id)],
+        },
+    ).json()
+    archived_result = admin.post(
+        f"/api/v1/inspection-plans/{archived_plan['id']}:archive"
+    )
+    assert archived_result.status_code == 200
+    archived_rename = admin.patch(
+        f"/api/v1/inspection-tasks/{archived_task['id']}",
+        json={"name": "封存後不可改"},
+    )
+    assert archived_rename.status_code == 409
+    assert archived_rename.json()["error"]["code"] == (
+        "inspection_plan.archived"
+    )
+
+
 def test_task_creation_rejects_items_without_points_atomically(
     db_session, make_client
 ):
@@ -3451,7 +3765,7 @@ def test_task_creation_rejects_items_without_points_atomically(
     )
 
     single_item = admin.post(
-        create_url, json={"item_ids": [str(empty_item.id)]}
+        create_url, json={"name": "示範任務", "item_ids": [str(empty_item.id)]}
     )
     assert single_item.status_code == 422, single_item.text
     assert single_item.json()["error"]["code"] == (
@@ -3461,6 +3775,7 @@ def test_task_creation_rejects_items_without_points_atomically(
     mixed_items = admin.post(
         create_url,
         json={
+            "name": "示範任務",
             "item_ids": [str(world["item"].id), str(empty_item.id)],
         },
     )
@@ -3501,7 +3816,9 @@ def test_task_creation_rejects_items_without_points_atomically(
             if item["id"] == str(used_item.id)
         )
 
-    used_task = admin.post(create_url, json={"item_ids": [str(used_item.id)]})
+    used_task = admin.post(
+        create_url, json={"name": "示範任務", "item_ids": [str(used_item.id)]}
+    )
     assert used_task.status_code == 201, used_task.text
     before = read_points()
     assert before
@@ -3525,7 +3842,7 @@ def test_cancelled_task_restore_uses_current_item_standard(
     )
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     task_id = task.json()["id"]
     task_path = f"/api/v1/inspection-tasks/{task_id}"
@@ -3569,7 +3886,7 @@ def test_nonmember_admin_can_start_and_complete_tasks(db_session, make_client):
     for _ in range(2):
         task = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-            json={"item_ids": [str(world["item"].id)]},
+            json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
         )
         assert task.status_code == 201
         task_path = f"/api/v1/inspection-tasks/{task.json()['id']}"
@@ -3798,7 +4115,7 @@ def test_one_photo_requirement_keeps_task_flows_working(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(world["item"].id)]},
+        json={"name": "示範任務", "item_ids": [str(world["item"].id)]},
     )
     assert task.status_code == 201, task.text
 
@@ -3851,7 +4168,7 @@ def test_cancelled_task_locks_structure_when_reinspection_is_false(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item_id)]},
+        json={"name": "取消狀態結構鎖定", "item_ids": [str(item_id)]},
     )
     assert task.status_code == 201, task.text
     task_url = f"/api/v1/inspection-tasks/{task.json()['id']}"
@@ -3879,3 +4196,254 @@ def test_cancelled_task_locks_structure_when_reinspection_is_false(
     assert locked.json()["error"]["code"] == (
         "project_inspection_item.structure_locked"
     ), locked.text
+
+
+def _items_world(db_session, make_client, name):
+    """建立含一個草稿任務的情境，供 PUT /items 測試共用。"""
+    world = _planning_world(db_session, make_client)
+    admin = world["admin"]
+    plan = admin.post(
+        f"/api/v1/projects/{world['project'].id}/inspection-plans",
+        json={"name": name},
+    )
+    assert plan.status_code == 201, plan.text
+    task = admin.post(
+        f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
+        json={
+            "name": "項目更新時保留名稱",
+            "item_ids": [str(world["item"].id)],
+        },
+    )
+    assert task.status_code == 201, task.text
+    world["plan_id"] = plan.json()["id"]
+    world["task_id"] = task.json()["id"]
+    world["items_url"] = f"/api/v1/inspection-tasks/{task.json()['id']}/items"
+    return world
+
+
+def _task_state(db_session, task_id):
+    """回傳任務的項目關聯 id 與稽核筆數，用來斷言失敗不留痕跡。"""
+    db_session.expire_all()
+    associations = db_session.scalars(
+        select(TaskInspectionItem.id)
+        .where(TaskInspectionItem.task_id == UUID(task_id))
+        .order_by(TaskInspectionItem.id)
+    ).all()
+    audits = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.event_type == "inspection_task.items_updated")
+    )
+    return list(associations), audits
+
+
+def test_draft_task_items_api_rebuilds_snapshots_and_audits(
+    db_session, make_client
+):
+    world = _items_world(db_session, make_client, "草稿查核項目修改")
+    admin = world["admin"]
+    task_id = world["task_id"]
+    url = world["items_url"]
+    old_association = db_session.scalar(
+        select(TaskInspectionItem).where(
+            TaskInspectionItem.task_id == UUID(task_id)
+        )
+    )
+    assert old_association is not None
+    old_association_id = old_association.id
+    task_before = db_session.get(InspectionTask, UUID(task_id))
+    assert task_before is not None
+    name_before = task_before.name
+    # 倒退 updated_at，確認 PUT 會顯式更新它，而不是靠時鐘剛好不同。
+    updated_at_before = task_before.updated_at - timedelta(days=1)
+    task_before.updated_at = updated_at_before
+    db_session.commit()
+    updated = admin.put(
+        url,
+        json={"item_ids": [str(world["item_two"].id), str(world["item"].id)]},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["id"] == task_id
+    assert updated.json()["name"] == name_before
+    assert updated.json()["status"] == "DRAFT"
+    assert {item["id"] for item in updated.json()["items"]} == {
+        str(world["item_two"].id),
+        str(world["item"].id),
+    }
+    assert {
+        item["current_snapshot"]["title"] for item in updated.json()["items"]
+    } == {"鋼筋檢查", "表面檢查"}
+
+    db_session.expire_all()
+    persisted_task = db_session.get(InspectionTask, UUID(task_id))
+    assert persisted_task is not None
+    assert persisted_task.name == name_before
+    # 舊關聯與其 Snapshot 一併清除，不留下過期需求。
+    assert db_session.get(TaskInspectionItem, old_association_id) is None
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(TaskRequirementSnapshot)
+            .where(
+                TaskRequirementSnapshot.task_inspection_item_id
+                == old_association_id
+            )
+        )
+        == 0
+    )
+    task_after = db_session.get(InspectionTask, UUID(task_id))
+    assert task_after is not None
+    assert task_after.updated_at > updated_at_before
+
+    audit = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "inspection_task.items_updated",
+            AuditLog.entity_id == UUID(task_id),
+        )
+    )
+    assert audit is not None
+    assert audit.before["items"] == {str(world["item"].id): "表面檢查"}
+    assert audit.after["items"] == {
+        str(world["item_two"].id): "鋼筋檢查",
+        str(world["item"].id): "表面檢查",
+    }
+
+
+def test_draft_task_items_api_same_set_is_noop(db_session, make_client):
+    world = _items_world(db_session, make_client, "同集合不重建")
+    admin = world["admin"]
+    before = _task_state(db_session, world["task_id"])
+
+    same = admin.put(
+        world["items_url"], json={"item_ids": [str(world["item"].id)]}
+    )
+
+    assert same.status_code == 200, same.text
+    assert _task_state(db_session, world["task_id"]) == before
+    assert before[1] == 0
+
+
+def test_draft_task_items_api_rejects_invalid_items_without_changes(
+    db_session, make_client
+):
+    world = _items_world(db_session, make_client, "壞項目拒絕")
+    admin = world["admin"]
+    project = world["project"]
+    url = world["items_url"]
+    no_points = ProjectInspectionItem(
+        id=uuid7(),
+        project_id=project.id,
+        sequence=3,
+        title="無點位項目",
+        instruction="示範",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    foreign_project = Project(
+        project_code="PLAN-API-ITEMS-FOREIGN",
+        name="另一專案",
+        client_name="示範業主",
+        site_location="示範地點",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add_all([no_points, foreign_project])
+    db_session.flush()
+    foreign_item = ProjectInspectionItem(
+        id=uuid7(),
+        project_id=foreign_project.id,
+        sequence=1,
+        title="跨專案項目",
+        instruction="示範",
+        source_template_name="示範範本",
+        applied_at=world["admin_user"].created_at,
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(foreign_item)
+    db_session.add(
+        ProjectInspectionPoint(
+            project_inspection_item_id=foreign_item.id,
+            sequence=1,
+            title="檢查點",
+            instruction="示範",
+            created_by=world["admin_user"].id,
+            updated_by=world["admin_user"].id,
+        )
+    )
+    db_session.commit()
+    before = _task_state(db_session, world["task_id"])
+
+    required = "inspection_task.items_required"
+    invalid_format = "request.validation_failed"
+    invalid_item = "inspection_task.invalid_project_item"
+    no_points_code = "inspection_task.item_without_points"
+    cases = [
+        ([], required),
+        ([str(world["item_two"].id)] * 2, invalid_format),
+        ([str(uuid4()) for _ in range(201)], invalid_format),
+        ([str(uuid4())], invalid_item),
+        ([str(foreign_item.id)], invalid_item),
+        ([str(world["item_two"].id), str(no_points.id)], no_points_code),
+    ]
+    for item_ids, code in cases:
+        response = admin.put(url, json={"item_ids": item_ids})
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == code, item_ids
+        assert _task_state(db_session, world["task_id"]) == before
+
+    no_manage = world["reader"].put(
+        url, json={"item_ids": [str(world["item_two"].id)]}
+    )
+    assert no_manage.status_code == 403
+    assert _task_state(db_session, world["task_id"]) == before
+
+
+def test_draft_task_items_api_checks_state_before_validating_items(
+    db_session, make_client
+):
+    world = _items_world(db_session, make_client, "狀態優先")
+    admin = world["admin"]
+    url = world["items_url"]
+    bad_bodies = (
+        {"item_ids": []},
+        {"item_ids": [str(uuid4())]},
+        {"item_ids": [str(world["item_two"].id)] * 2},
+    )
+
+    dispatched = admin.post(
+        f"/api/v1/inspection-tasks/{world['task_id']}:dispatch"
+    )
+    assert dispatched.status_code == 200, dispatched.text
+    before = _task_state(db_session, world["task_id"])
+    for body in bad_bodies:
+        response = admin.put(url, json=body)
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == (
+            "inspection_task.invalid_transition"
+        )
+    good = admin.put(url, json={"item_ids": [str(world["item_two"].id)]})
+    assert good.status_code == 409, good.text
+    assert _task_state(db_session, world["task_id"]) == before
+
+    draft = admin.post(
+        f"/api/v1/inspection-plans/{world['plan_id']}/tasks",
+        json={
+            "name": "封存時保留任務名稱",
+            "item_ids": [str(world["item"].id)],
+        },
+    )
+    assert draft.status_code == 201, draft.text
+    draft_url = f"/api/v1/inspection-tasks/{draft.json()['id']}/items"
+    archived = admin.post(
+        f"/api/v1/inspection-plans/{world['plan_id']}:archive"
+    )
+    assert archived.status_code == 200, archived.text
+    draft_before = _task_state(db_session, draft.json()["id"])
+    for body in (*bad_bodies, {"item_ids": [str(world["item_two"].id)]}):
+        response = admin.put(draft_url, json=body)
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "inspection_plan.archived"
+    assert _task_state(db_session, draft.json()["id"]) == draft_before

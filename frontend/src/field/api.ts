@@ -18,6 +18,7 @@ export interface FieldTask {
   id: string
   project_id: string
   project_name: string
+  name: string
   status: 'PENDING' | 'IN_PROGRESS'
   dispatched_at: string
   location: { zone_name: string | null; location_text: string | null }
@@ -109,6 +110,7 @@ function isFieldTask(value: unknown): value is FieldTask {
     typeof value.id === 'string' &&
     typeof value.project_id === 'string' &&
     typeof value.project_name === 'string' &&
+    typeof value.name === 'string' &&
     (value.status === 'PENDING' || value.status === 'IN_PROGRESS') &&
     typeof value.dispatched_at === 'string' &&
     isRecord(location) &&

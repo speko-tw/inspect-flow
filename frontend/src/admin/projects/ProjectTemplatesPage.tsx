@@ -18,15 +18,14 @@ import { formatInspectionStandard } from '../../ui/inspectionStandard'
 import { useSubmitGuard } from '../../ui/submitGuard'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { listMyProjects } from './api'
+import { listProjectItems, type ProjectItemData } from '../projectItems/api'
 import './ProjectTemplatesPage.css'
 import {
   applyTemplate,
   listAllProjects,
-  listProjectInspectionItems,
   ProjectTemplatesApiError,
   saveProjectItemAsTemplate,
   templateErrorMessage,
-  type ProjectInspectionItem,
   type ProjectSummary,
 } from './projectTemplatesApi'
 
@@ -127,10 +126,8 @@ export default function ProjectTemplatesPage({
     new Set(),
   )
   const [loadedSystems, setLoadedSystems] = useState<Set<string>>(new Set())
-  const [projectItems, setProjectItems] = useState<ProjectInspectionItem[]>([])
-  const [saveSource, setSaveSource] = useState<ProjectInspectionItem | null>(
-    null,
-  )
+  const [projectItems, setProjectItems] = useState<ProjectItemData[]>([])
+  const [saveSource, setSaveSource] = useState<ProjectItemData | null>(null)
   const [applyConfirm, setApplyConfirm] = useState(false)
   const [applyError, setApplyError] = useState('')
   const [saveError, setSaveError] = useState('')
@@ -255,7 +252,7 @@ export default function ProjectTemplatesPage({
 
   useEffect(() => {
     let active = true
-    listProjectInspectionItems(projectId)
+    listProjectItems(projectId)
       .then((items) => {
         if (active) {
           setProjectItems(items)
@@ -441,7 +438,7 @@ export default function ProjectTemplatesPage({
         setItemsLoadProjectId(null)
         setItemsLoadError(null)
         try {
-          setProjectItems(await listProjectInspectionItems(projectId))
+          setProjectItems(await listProjectItems(projectId))
           setItemsDenied(false)
         } catch (refreshError) {
           setItemsLoadError({
@@ -461,7 +458,7 @@ export default function ProjectTemplatesPage({
     }
   }
 
-  function startSave(item: ProjectInspectionItem) {
+  function startSave(item: ProjectItemData) {
     setSaveSource(item)
     setSelected(null)
     setExpanded(new Set())

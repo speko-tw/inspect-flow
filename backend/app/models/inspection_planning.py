@@ -16,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, validates
 from sqlalchemy.types import Uuid
 
+from app.company_roles import SELF_INSPECTION, SPOT_CHECK
 from app.db.base import TimestampedBase, UTCDateTime
 from app.models._audit import AuditMixin
 from app.models._bounded_string import BoundedString
@@ -34,6 +35,11 @@ def _check_plan_name(value: str) -> None:
 def _check_location_text(value: str) -> None:
     if len(value) > 256:
         raise ValueError("InspectionTask.location_text is too long")
+
+
+def _check_task_name(value: str) -> None:
+    if len(value) > 128:
+        raise ValueError("InspectionTask.name must be at most 128 characters")
 
 
 class ProjectZone(AuditMixin, TimestampedBase):
@@ -114,14 +120,27 @@ class InspectionPlan(AuditMixin, TimestampedBase):
         return normalized
 
 
+# IP-R16：檢查層級的合法值；值的定義與對應角色在 ``company_roles``。
+_INSPECTION_LEVELS = frozenset({SELF_INSPECTION, SPOT_CHECK})
+
+
 class InspectionTask(AuditMixin, TimestampedBase):
-    """表示含建議指派與地點的任務；派出前依 IP-R09 不可見。"""
+    """表示含獨立名稱、建議指派與地點的任務；派出前依 IP-R09 不可見。"""
 
     __tablename__ = "inspection_tasks"
+    # 不在 INSERT 後立刻用 RETURNING 取回 server_default 的值；理由是
+    # 舊結構資料庫沒有 ``inspection_level`` 欄，見該欄位的註解。
+    __mapper_args__ = {"eager_defaults": False}
 
     plan_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     project_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     zone_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    name: Mapped[str] = mapped_column(
+        BoundedString(128, _check_task_name),
+        nullable=False,
+        # 保留預設值以免 SQLite 重建表觸發 cascade；應用層一律明確帶入名稱。
+        server_default="查核任務",
+    )
     location_text: Mapped[str | None] = mapped_column(
         BoundedString(256, _check_location_text)
     )
@@ -142,6 +161,14 @@ class InspectionTask(AuditMixin, TimestampedBase):
         Uuid, ForeignKey("users.id")
     )
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # IP-R16：檢查層級於建立時由後端依專案當時的 ``company_role`` 帶入，
+    # 之後專案改角色不回改；服務層一律明確寫入，不依賴這個預設。
+    # ``server_default`` 與 migration 一致（既有 Task 回填為
+    # ``self_inspection``），也讓舊結構資料庫上的歷史 migration 測試仍能
+    # 用 ORM 寫入 Task（INSERT 不含此欄）。
+    inspection_level: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=SELF_INSPECTION
+    )
     __table_args__ = (
         UniqueConstraint("id", "project_id"),
         Index(
@@ -174,6 +201,10 @@ class InspectionTask(AuditMixin, TimestampedBase):
             name="inspection_task_status_valid",
         ),
         CheckConstraint(
+            "length(trim(name)) BETWEEN 1 AND 128",
+            name="inspection_task_name_valid",
+        ),
+        CheckConstraint(
             "cancelled_from_status IS NULL OR cancelled_from_status "
             "IN ('PENDING', 'IN_PROGRESS')",
             name="inspection_task_cancelled_from_valid",
@@ -187,6 +218,26 @@ class InspectionTask(AuditMixin, TimestampedBase):
             name="inspection_task_cancellation_consistent",
         ),
     )
+
+    @validates("name")
+    def validate_name(self, key: str, value: str) -> str:
+        """正規化獨立任務名稱，避免更新項目或地點時改變識別名稱。"""
+        normalized = value.strip()
+        if not normalized or len(normalized) > 128:
+            raise ValueError(
+                "InspectionTask.name must contain 1-128 characters"
+            )
+        return normalized
+
+    @validates("inspection_level")
+    def validate_inspection_level(self, key: str, value: str) -> str:
+        """只收登記的檢查層級；值不放資料庫 enum（DOM-R76 的同一理由）。"""
+        if value not in _INSPECTION_LEVELS:
+            raise ValueError(
+                f"InspectionTask.inspection_level {value!r} is not a "
+                "registered inspection level (IP-R16)"
+            )
+        return value
 
 
 class TaskInspectionItem(AuditMixin, TimestampedBase):

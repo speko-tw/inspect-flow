@@ -7,15 +7,23 @@ Fixtures (``session``, ``operator``) come from this directory's
 
 from typing import Any
 
+import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 
+from app.db.unit_of_work import unit_of_work
 from app.models import (
     AuditLog,
     Project,
     ProjectMember,
     ProjectMemberRole,
     Role,
+    RolePermission,
+    User,
 )
+from app.services import module_permissions
+from app.services.audit import record_audit_event_in_independent_transaction
+from app.services.module_permissions import ExternalRoleAssignmentError
 from app.services.project_members import (
     RoleAlreadyAssignedError,
     RoleNotAssignedError,
@@ -406,3 +414,131 @@ class TestSetProjectMemberRoles:
         set_project_member_roles(session, member, [])
         session.commit()
         assert len(_audit_rows_for(session, member.id)) == 2
+
+
+@pytest.mark.parametrize("write", ["add", "assign", "replace"])
+def test_external_member_accepts_external_allowed_read_role(
+    session, operator, write
+):
+    project = _new_project(operator, f"P-EXT-ALLOW-{write.upper()}")
+    role = _new_role(operator, "External project reader")
+    role.is_external_allowed = True
+    role.permission_codes.append(RolePermission(code="project.read"))
+    target = create_root_user_with_company(session, f"EXT-ALLOW-{write[0]}")
+    target.is_external_collaborator = True
+    session.add_all([project, role])
+    session.commit()
+    member = None
+    if write != "add":
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=target.id,
+        )
+        session.commit()
+
+    if write == "add":
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=target.id,
+            role_ids=[role.id],
+        )
+    elif write == "assign":
+        assert member is not None
+        assign_role(session, member, role.id)
+    else:
+        assert member is not None
+        set_project_member_roles(session, member, [role.id])
+    session.commit()
+
+    session.refresh(member)
+    assert target.is_external_collaborator is True
+    assert {item.role_id for item in member.role_assignments} == {role.id}
+
+
+@pytest.mark.parametrize(
+    ("permission_code", "is_external_allowed"),
+    [
+        ("project_member.manage", False),
+        ("inspection_task.inspect", False),
+        ("inspection_task.inspect", True),
+    ],
+)
+@pytest.mark.parametrize("write", ["add", "assign", "replace"])
+def test_external_role_assignment_entries_reject_and_audit_once(
+    session,
+    operator,
+    monkeypatch,
+    write,
+    permission_code,
+    is_external_allowed,
+):
+    monkeypatch.setattr(
+        module_permissions.audit_service,
+        "record_audit_event_in_independent_transaction",
+        record_audit_event_in_independent_transaction,
+    )
+    project = _new_project(operator, "P-EXT-DENY")
+    role = _new_role(operator, f"Internal only {permission_code}")
+    role.is_external_allowed = is_external_allowed
+    role.permission_codes.append(RolePermission(code=permission_code))
+    target = create_root_user_with_company(session, "EXT-DENY")
+    target.is_external_collaborator = True
+    session.add_all([project, role])
+    session.commit()
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    member = None
+    if write != "add":
+        member = add_project_member(
+            session,
+            project_id=project.id,
+            user_id=target.id,
+        )
+        session.commit()
+
+    with pytest.raises(ExternalRoleAssignmentError):
+        with unit_of_work(factory) as transaction:
+            transaction_target = transaction.get(User, target.id)
+            assert transaction_target is not None
+            if write == "add":
+                add_project_member(
+                    transaction,
+                    project_id=project.id,
+                    user_id=transaction_target.id,
+                    role_ids=[role.id],
+                )
+            else:
+                assert member is not None
+                transaction_member = transaction.get(ProjectMember, member.id)
+                assert transaction_member is not None
+                if write == "assign":
+                    assign_role(transaction, transaction_member, role.id)
+                else:
+                    set_project_member_roles(
+                        transaction, transaction_member, [role.id]
+                    )
+
+    session.expire_all()
+    stored_member = session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    if write == "add":
+        assert stored_member is None
+    else:
+        assert stored_member is not None
+        assert stored_member.role_assignments == []
+    events = list(
+        session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "project_member.assignment_denied",
+                AuditLog.project_id == project.id,
+            )
+        )
+    )
+    assert len(events) == 1
+    assert events[0].after["user_id"] == str(target.id)
+    assert events[0].after["reason"] == "project.external_role_not_allowed"

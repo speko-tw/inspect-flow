@@ -457,6 +457,42 @@ def test_role_api_cursor_breaks_same_timestamp_ties_by_id(
     assert second.json()["next_cursor"] is None
 
 
+def test_role_api_cursor_ignores_removed_rows_before_cursor(
+    role_admin_client, db_session
+):
+    """API-AC12：移除已讀範圍之前的資料，不得改變下一頁的起點。"""
+    client, admin = role_admin_client
+    created_at = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
+    role_ids = [UUID(int=100), UUID(int=200), UUID(int=300)]
+    db_session.add_all(
+        Role(
+            id=role_id,
+            name=f"Same time {index}",
+            created_at=created_at,
+            updated_at=created_at,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        for index, role_id in enumerate(role_ids)
+    )
+    db_session.commit()
+
+    first = client.get("/api/v1/roles", params={"limit": 2})
+    assert first.status_code == 200
+    cursor = first.json()["next_cursor"]
+
+    removed = db_session.get(Role, role_ids[0])
+    db_session.delete(removed)
+    db_session.commit()
+
+    second = client.get("/api/v1/roles", params={"limit": 2, "cursor": cursor})
+    assert second.status_code == 200
+    assert [UUID(item["id"]) for item in second.json()["items"]] == [
+        role_ids[2]
+    ]
+    assert second.json()["next_cursor"] is None
+
+
 def test_unknown_integrity_error_is_not_reported_as_name_conflict(
     role_admin_client, monkeypatch
 ):

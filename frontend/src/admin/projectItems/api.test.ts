@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InspectionPoint } from '../templates/api'
 import { HttpError, request } from '../../http'
 import { mapFieldErrors } from '../../ui/fieldErrors'
-import { projectItemApi, serializeProjectItemPoints } from './api'
+import {
+  listProjectItems,
+  projectItemApi,
+  serializeProjectItemPoints,
+} from './api'
 import boundUnitFixture from './fixtures/project-patch-bound-unit.json'
 import structureFixture from './fixtures/project-patch-structure.json'
 import structureLockedFixture from './fixtures/project-patch-structure-locked.json'
@@ -90,6 +94,36 @@ const task = {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('projectItemApi', () => {
+  it('loads every page of project items from the shared endpoint', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ items: [item], next_cursor: 'next-page' }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [{ ...item, id: 'item-2' }],
+          next_cursor: null,
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(listProjectItems('project-1')).resolves.toEqual([
+      item,
+      { ...item, id: 'item-2' },
+    ])
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/projects/project-1/inspection-items?limit=100',
+      expect.any(Object),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-1/inspection-items?limit=100&cursor=next-page',
+      expect.any(Object),
+    )
+  })
+
   it('serializes the shared numeric interval structure fixture', () => {
     const points = structuredClone(
       structureFixture.inspection_points,
@@ -181,6 +215,56 @@ describe('projectItemApi', () => {
     expect(first[0].numeric_standard).not.toHaveProperty(
       'measurement_field_id',
     )
+  })
+
+  it('serializes a persisted binding after its server ID is localized', () => {
+    const point: InspectionPoint = {
+      id: 'point-1',
+      sequence: 1,
+      title: '厚度',
+      instruction: '',
+      text_standard: null,
+      numeric_standard: {
+        value: '2.5',
+        condition: '=',
+        unit: 'mm',
+        tolerance: null,
+        range_form: null,
+        lower_bound: null,
+        upper_bound: null,
+        measurement_field_id: 'field-1',
+        measurement_field_client_key: 'field-1',
+      },
+      measurement_fields: [
+        {
+          id: 'field-1',
+          client_id: 'field-1',
+          clientKey: 'field-1',
+          name: '厚度',
+          field_type: 'number',
+          unit: 'mm',
+        },
+      ],
+      evidence_requirements: [{ min_count: 1 }],
+    }
+    const templateEditorShape = {
+      ...point,
+      numeric_standard: {
+        ...point.numeric_standard!,
+        measurement_field_id: undefined,
+        measurement_field_client_id: undefined,
+      },
+    }
+
+    expect(serializeProjectItemPoints([point])).toEqual(
+      serializeProjectItemPoints([templateEditorShape]),
+    )
+    expect(
+      serializeProjectItemPoints([point])[0].numeric_standard,
+    ).toMatchObject({
+      measurement_field_client_id: 'field-1',
+      unit: 'mm',
+    })
   })
 
   it('reads every backend cursor page and maps Task snapshots', async () => {

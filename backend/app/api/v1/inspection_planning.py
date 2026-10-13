@@ -46,12 +46,9 @@ from app.models import (
     ProjectInspectionItem,
     ProjectInspectionPoint,
     ProjectMeasurementField,
-    ProjectMember,
-    ProjectMemberRole,
     ProjectNumericStandard,
     ProjectTextStandard,
     ProjectZone,
-    RolePermission,
     TaskInspectionItem,
     TaskRequirementSnapshot,
     TaskSnapshotEvidenceRequirement,
@@ -82,14 +79,20 @@ from app.services.inspection_planning import (
     inspection_task_list_filters,
     inspection_task_visibility_filters,
     rename_inspection_plan,
+    rename_inspection_task,
     rename_project_zone,
     restore_inspection_task,
     start_inspection_task,
+    update_draft_task_items,
     update_project_item_usage,
     update_task_location,
 )
 from app.services.operator import get_current_operator
-from app.services.permissions import effective_permissions
+from app.services.permissions import (
+    calculate_effective_access,
+    effective_permissions,
+    project_member_ids_with_permission,
+)
 from app.services.template_library import (
     InvalidTemplateError,
     validate_template_structure,
@@ -117,6 +120,7 @@ class NameBody(StrictBody):
 class TaskCreateBody(StrictBody):
     """承載建立 Task 的來源項目、地點與建議指派。"""
 
+    name: str = Field(max_length=PLANNING_NAME_MAX)
     item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
     zone_id: UUID | None = None
     location_text: str | None = Field(
@@ -137,11 +141,25 @@ class CancelBody(StrictBody):
     reason: str = Field(default="", max_length=LONG_TEXT_MAX)
 
 
-class LocationBody(StrictBody):
-    """承載 IP-R10 的分區與補充地點。"""
+class TaskPatchBody(StrictBody):
+    """承載 IP-R10 地點修改或 IP-R17 任務名稱修改。"""
 
-    zone_id: UUID | None
-    location_text: str | None = Field(max_length=LOCATION_TEXT_MAX)
+    name: str | None = Field(default=None, max_length=PLANNING_NAME_MAX)
+    zone_id: UUID | None = None
+    location_text: str | None = Field(
+        default=None, max_length=LOCATION_TEXT_MAX
+    )
+
+
+class TaskItemsBody(StrictBody):
+    """承載 IP-R20 的草稿任務新查核項目集合。
+
+    空陣列與重複項目不在此擋下，交給服務層依序檢查：先看 Plan 與 Task
+    狀態（409），再回 ``inspection_task.items_required`` 等項目錯誤，
+    與建立任務的錯誤碼一致。
+    """
+
+    item_ids: list[UUID] = Field(max_length=ITEM_IDS_MAX)
 
 
 class ProjectNumericStandardBody(NumericStandardBody):
@@ -223,15 +241,11 @@ def _planning_error_response(
 def _is_project_member(
     db: Session, *, user_id: UUID, project_id: UUID
 ) -> bool:
-    return (
-        db.scalar(
-            select(ProjectMember.id).where(
-                ProjectMember.project_id == project_id,
-                ProjectMember.user_id == user_id,
-            )
-        )
-        is not None
+    """透過 DOM-R69 單一入口檢查成員身分，包含沒有角色的成員。"""
+    access = calculate_effective_access(
+        db, user_id=user_id, project_id=project_id
     )
+    return project_id in access.project_memberships
 
 
 def _resource_permission(resource_type: str, permission: str):
@@ -368,7 +382,9 @@ def _task_summaries(
                 "id": task.id,
                 "project_id": task.project_id,
                 "plan_id": task.plan_id,
+                "name": task.name,
                 "status": task.status,
+                "inspection_level": task.inspection_level,
                 "zone_id": task.zone_id,
                 "zone": {"id": zone.id, "name": zone.name} if zone else None,
                 "location_text": task.location_text,
@@ -384,8 +400,8 @@ def _task_summaries(
                     else None
                 ),
                 "items": details,
-                "created_at": task.created_at.isoformat(),
-                "updated_at": task.updated_at.isoformat(),
+                "created_at": format_utc(task.created_at),
+                "updated_at": format_utc(task.updated_at),
             }
         )
     return result
@@ -404,6 +420,7 @@ def _field_task_summary(
         "id": task.id,
         "project_id": task.project_id,
         "project_name": project.name if project else None,
+        "name": task.name,
         "status": task.status,
         "dispatched_at": (
             format_utc(task.dispatched_at)
@@ -561,7 +578,7 @@ def _render_snapshots(
             "source_template_name": snapshot.source_template_name,
             "is_current": snapshot.is_current,
             "superseded_reason": snapshot.superseded_reason,
-            "superseded_at": snapshot.superseded_at.isoformat()
+            "superseded_at": format_utc(snapshot.superseded_at)
             if snapshot.superseded_at
             else None,
             "inspection_points": rendered,
@@ -578,8 +595,8 @@ def _plan_summary(
         "name": plan.name,
         "status": "ARCHIVED" if plan.is_archived else plan.status,
         "archived": plan.is_archived,
-        "created_at": plan.created_at.isoformat(),
-        "updated_at": plan.updated_at.isoformat(),
+        "created_at": format_utc(plan.created_at),
+        "updated_at": format_utc(plan.updated_at),
     }
     if with_tasks:
         tasks = list(
@@ -806,6 +823,7 @@ def add_task(
         db,
         plan=plan,
         project_inspection_item_ids=body.item_ids,
+        name=body.name,
         zone_id=body.zone_id,
         location_text=body.location_text,
         assignee_id=body.suggested_assignee_id,
@@ -939,38 +957,30 @@ def assignees(
     _user: User = _login_dependency,
 ):
     """列出有查核權限的專案成員；無建立或指派權限時拒絕。"""
-    permissions = effective_permissions(
+    access = calculate_effective_access(
         db, user_id=_user.id, project_id=project_id
     )
     if (
-        not _user.is_admin
-        and not {"inspection_task.create", "inspection_task.assign"}
-        & permissions
+        not access.is_admin
+        and not {
+            "inspection_task.create",
+            "inspection_task.assign",
+        }
+        & access.project_permissions
     ):
         raise APIError(ErrorCode.PERMISSION_DENIED, 403)
     _project_exists(db, project_id)
-    candidate_ids = (
-        select(ProjectMember.user_id)
-        .join(
-            ProjectMemberRole,
-            ProjectMemberRole.project_member_id == ProjectMember.id,
-        )
-        .join(
-            RolePermission,
-            RolePermission.role_id == ProjectMemberRole.role_id,
-        )
-        .where(
-            ProjectMember.project_id == project_id,
-            RolePermission.code == "inspection_task.inspect",
-        )
-        .distinct()
+    candidate_ids = project_member_ids_with_permission(
+        db,
+        project_id=project_id,
+        permission_code="inspection_task.inspect",
     )
     return page(
         db,
         User,
         cursor=cursor,
         limit=limit,
-        filters=(User.id.in_(candidate_ids), User.is_admin.is_(False)),
+        filters=(User.id.in_(candidate_ids),),
         serialize=_person,
     )
 
@@ -1236,10 +1246,20 @@ def restore(task_id: UUID, db: Session = _db_dependency):
     ],
 )
 def patch_task(
-    task_id: UUID, body: LocationBody, db: Session = _db_dependency
+    task_id: UUID, body: TaskPatchBody, db: Session = _db_dependency
 ):
-    """依 IP-R10 修改地點；已完成、已取消或封存時拒絕。"""
+    """依 IP-R10 修改地點或依 IP-R17 修改名稱。"""
     task = _one_task(db, task_id)
+    provided = body.model_fields_set
+    if "name" in provided:
+        if provided & {"zone_id", "location_text"}:
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        return _task_summary(
+            db,
+            _call(rename_inspection_task, db, task, name=body.name or ""),
+        )
+    if not {"zone_id", "location_text"} <= provided:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     return _task_summary(
         db,
         _call(
@@ -1250,6 +1270,27 @@ def patch_task(
             location_text=body.location_text,
         ),
     )
+
+
+@router.put(
+    "/inspection-tasks/{task_id}/items",
+    dependencies=[
+        Depends(require_login_access),
+        Depends(_resource_permission("task", "inspection_task.manage")),
+    ],
+)
+def put_task_items(
+    task_id: UUID, body: TaskItemsBody, db: Session = _db_dependency
+):
+    """依 IP-R20 重建 DRAFT Task 的項目與需求快照。"""
+    task = _one_task(db, task_id)
+    updated = _call(
+        update_draft_task_items,
+        db,
+        task,
+        item_ids=body.item_ids,
+    )
+    return _task_summary(db, updated)
 
 
 @router.get(

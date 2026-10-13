@@ -65,7 +65,14 @@ export interface InspectionTask {
   id: string
   project_id: string
   plan_id: string
+  name: string
   status: TaskStatus
+  /**
+   * IP-R16：建立時由後端依專案當時的本公司角色帶入，之後不變；
+   * 值取自角色登記表（目前 `self_inspection`、`spot_check`），
+   * 以字串承載讓新增層級時前端不必改型別。
+   */
+  inspection_level: string
   items: TaskInspectionItem[]
   assignee_id: string | null
   assignee: SuggestedAssignee | null
@@ -105,6 +112,7 @@ export interface CreatePlanInput {
 
 /** IP-R02、IP-R10 的手動任務輸入；項目與分區須屬於同專案。 */
 export interface CreateTaskInput {
+  name: string
   item_ids: string[]
   suggested_assignee_id: string | null
   zone_id: string | null
@@ -115,6 +123,16 @@ export interface CreateTaskInput {
 export interface UpdateLocationInput {
   zone_id: string | null
   location_text: string | null
+}
+
+/** #497 的任務名稱欄位；長度與空白規則由後端驗證。 */
+export interface UpdateTaskNameInput {
+  name: string
+}
+
+/** IP-R20 送出的草稿任務查核項目集合。 */
+export interface UpdateTaskItemsInput {
+  item_ids: string[]
 }
 
 /**
@@ -171,6 +189,17 @@ export interface PlanningClient {
   updateLocation(
     taskId: string,
     input: UpdateLocationInput,
+  ): Promise<InspectionTask>
+  /** PATCH /api/v1/inspection-tasks/{task_id}，修改任務名稱。 */
+  updateTaskName(
+    taskId: string,
+    input: UpdateTaskNameInput,
+  ): Promise<InspectionTask>
+
+  /** PUT /api/v1/inspection-tasks/{task_id}/items. */
+  updateTaskItems(
+    taskId: string,
+    input: UpdateTaskItemsInput,
   ): Promise<InspectionTask>
   /** POST /api/v1/inspection-tasks/{task_id}:dispatch. */
   dispatchTask(taskId: string): Promise<InspectionTask>
@@ -267,6 +296,19 @@ export const planningClient: PlanningClient = {
       body: JSON.stringify(input),
     })
   },
+  updateTaskName(taskId, input) {
+    return request(`/inspection-tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    })
+  },
+
+  updateTaskItems(taskId, input) {
+    return request(`/inspection-tasks/${taskId}/items`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    })
+  },
   dispatchTask(taskId) {
     return request(`/inspection-tasks/${taskId}:dispatch`, { method: 'POST' })
   },
@@ -299,6 +341,11 @@ const PLANNING_ERROR_CODES: Record<string, string> = {
   'inspection_task.invalid_transition': '目前任務狀態不允許這項操作。',
   'inspection_task.reason_required': '請填寫取消原因。',
   'inspection_task.location_locked': '目前任務狀態無法修改地點。',
+  'inspection_task.items_required': '請至少選擇一筆查核項目。',
+  'inspection_task.invalid_project_item':
+    '所選查核項目不屬於這個專案，請重新整理後再選。',
+  'inspection_task.item_without_points':
+    '所選查核項目沒有查核項次，請先補上項次或改選其他項目。',
   'resource.not_found': '找不到資料，請重新整理後再試。',
 }
 

@@ -47,6 +47,9 @@ from tests.api.test_inspection_planning_api import _planning_world
 from tests.api.test_planning_query_counts import (
     _create_permission_test_project,
 )
+from tests.api.test_task_inspection_level import (
+    assert_inspection_level_flow,
+)
 from tests.db.conftest import build_root_user
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -115,7 +118,10 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
     for _ in range(5):
         created = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-            json={"item_ids": [str(world["item"].id)]},
+            json={
+                "name": "資料庫任務清單",
+                "item_ids": [str(world["item"].id)],
+            },
         )
         assert created.status_code == 201, created.text
         task_id = created.json()["id"]
@@ -203,6 +209,7 @@ def test_field_task_list_permissions_cursor_and_response_on_database(
                 "id",
                 "project_id",
                 "project_name",
+                "name",
                 "status",
                 "dispatched_at",
                 "location",
@@ -408,7 +415,7 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
     assert plan.status_code == 201, plan.text
     task = admin.post(
         f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
-        json={"item_ids": [str(item.id)]},
+        json={"name": "資料庫任務快照", "item_ids": [str(item.id)]},
     )
     assert task.status_code == 201, task.text
 
@@ -495,3 +502,11 @@ def test_patch_bound_field_unit_update_preserves_fk_and_snapshot(
     assert snapshot_standard is not None
     assert snapshot_standard.source_measurement_field_id == field_id
     assert snapshot_standard.measurement_field_unit == "cm"
+
+
+def test_task_inspection_level_flow_on_database(
+    db_session: Session, make_client
+):
+    # IP-AC16：建立時帶入、改專案角色不回改既有任務，在 PostgreSQL 上
+    # 也要成立（含建立時對專案列的共享鎖）。
+    assert_inspection_level_flow(db_session, make_client)

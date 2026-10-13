@@ -5,8 +5,12 @@ ISO 8601 / RFC 3339 strings, always UTC, truncated (not rounded) to
 whole-second precision, ending in "Z". Leniency on the input side
 (such as accepting fractional seconds or non-UTC offsets on parse)
 is out of scope for this module; see the "not included" section of
-docs/specs/api-conventions/spec.md. parse_utc is intentionally
-strict and is used to decode the time component of cursors.
+docs/specs/api-conventions/spec.md. parse_utc is the strict
+counterpart of format_utc (second precision, "Z" only). It has no
+production caller: list cursors keep microsecond precision and are
+decoded by app.api.pagination.page_cursor_key instead. It is kept,
+with its contract tests, for inputs that must round-trip
+format_utc output exactly.
 """
 
 import re

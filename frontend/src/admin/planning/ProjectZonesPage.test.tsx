@@ -210,7 +210,8 @@ describe('project zones section', () => {
       'aria-describedby',
       'project-zone-name-error',
     )
-    expect(input).toHaveFocus()
+    // 錯誤先在 render 出現，焦點由 effect 移動，須等 effect 完成。
+    await waitFor(() => expect(input).toHaveFocus())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -247,7 +248,7 @@ describe('project zones section', () => {
 
     expect(await screen.findByText('輸入內容太長。')).toBeVisible()
     expect(input).toHaveAttribute('aria-invalid', 'true')
-    expect(input).toHaveFocus()
+    await waitFor(() => expect(input).toHaveFocus())
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/projects/project-demo-1/zones'),
       expect.objectContaining({ method: 'POST' }),
@@ -419,7 +420,8 @@ describe('adding and renaming zones', () => {
       within(rowOf('北區')).getByRole('button', { name: '重新命名' }),
     )
     const input = screen.getByLabelText('分區名稱')
-    expect(input).toHaveFocus()
+    // 進入改名模式後由 effect 聚焦，等待焦點移動完成。
+    await waitFor(() => expect(input).toHaveFocus())
     fireEvent.change(input, { target: { value: '北側' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -613,7 +615,10 @@ describe('deleting zones', () => {
     const box = within(rowOf('待刪除分區')).getByRole('group', {
       name: '刪除分區「待刪除分區」？',
     })
-    expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus()
+    // ConfirmBox 掛載後由 effect 設定初始焦點。
+    await waitFor(() =>
+      expect(within(box).getByRole('button', { name: '取消' })).toHaveFocus(),
+    )
     expect(within(box).getByRole('button', { name: '確認刪除' })).toHaveClass(
       'btn-danger',
     )
@@ -633,7 +638,7 @@ describe('deleting zones', () => {
     fireEvent.keyDown(box, { key: 'Escape' })
 
     await waitFor(() => expect(box).not.toBeInTheDocument())
-    expect(trigger).toHaveFocus()
+    await waitFor(() => expect(trigger).toHaveFocus())
     expect(deleteZone).not.toHaveBeenCalled()
     expect(screen.getByText('待取消分區')).toBeVisible()
   })
@@ -658,6 +663,7 @@ describe('deleting zones', () => {
     const plan = await client.createPlan(PROJECT, { name: '引用分區' })
     const [item] = await client.listProjectItems(PROJECT)
     await client.createTask(plan.id, {
+      name: '混凝土外觀',
       item_ids: [item.id],
       suggested_assignee_id: null,
       zone_id: zone.id,
