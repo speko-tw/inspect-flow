@@ -3,6 +3,7 @@
 import logging
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -19,6 +20,7 @@ from app.models import (
     UserModulePermission,
 )
 from app.permission_codes import (
+    PermissionCode,
     is_permission_code_registered,
     permission_code_external_allowed,
     permission_code_module,
@@ -82,6 +84,118 @@ class CreatorRoleInUseError(ModulePermissionError):
 
 class CreatorRolePermissionsError(ModulePermissionError):
     """The designated creator role must retain three permissions."""
+
+
+@dataclass(frozen=True)
+class PersonDisplayInfo:
+    """人員模組提供給專案模組顯示的最小人員欄位（DOM-R60）。"""
+
+    user_id: uuid.UUID
+    username: str
+    name_zh: str | None
+    name_en: str | None
+
+
+@dataclass(frozen=True)
+class PersonAccess:
+    """封裝 DOM-R60 四項人員查詢，供其他模組透過 Service 取用。"""
+
+    display: PersonDisplayInfo
+    is_active: bool
+    is_admin: bool
+    module_permissions: frozenset[str]
+
+
+@dataclass(frozen=True)
+class PermissionRevokeImpact:
+    """DOM-R62 摘要：撤回 `project.use` 可能影響的成員與管理專案。"""
+
+    member_count: int
+    project_ids: tuple[uuid.UUID, ...]
+    projects_without_manager: tuple[uuid.UUID, ...]
+
+
+def query_person_access(
+    session: Session, *, user_id: uuid.UUID
+) -> PersonAccess | None:
+    """回答 DOM-R60 的人員顯示、有效狀態、Admin 與模組權限查詢。
+
+    專案層只消費此 Service 結果，避免直接依賴人員與模組權限資料表。
+    """
+    return query_people_access(session, user_ids={user_id}).get(user_id)
+
+
+def query_people_access(
+    session: Session, *, user_ids: set[uuid.UUID]
+) -> dict[uuid.UUID, PersonAccess]:
+    """批次回答 DOM-R60 人員查詢，避免候選清單逐人查詢。"""
+    if not user_ids:
+        return {}
+    rows = session.execute(
+        select(User, UserModulePermission.permission_code)
+        .outerjoin(
+            UserModulePermission,
+            UserModulePermission.user_id == User.id,
+        )
+        .where(User.id.in_(user_ids))
+    ).all()
+    users: dict[uuid.UUID, User] = {}
+    codes_by_user: dict[uuid.UUID, set[str]] = {}
+    for user, code in rows:
+        users[user.id] = user
+        if code is not None:
+            codes_by_user.setdefault(user.id, set()).add(code)
+
+    all_module_codes = frozenset(
+        item.value
+        for item in PermissionCode
+        if permission_code_scope(item.value) == "module"
+    )
+    return {
+        user_id: PersonAccess(
+            display=PersonDisplayInfo(
+                user_id=user.id,
+                username=user.username,
+                name_zh=user.name_zh,
+                name_en=user.name_en,
+            ),
+            is_active=user.is_active,
+            is_admin=user.is_admin,
+            module_permissions=(
+                all_module_codes
+                if user.is_admin
+                else frozenset(codes_by_user.get(user_id, set()))
+            ),
+        )
+        for user_id, user in users.items()
+    }
+
+
+def permission_revoke_impact(
+    session: Session, *, user_id: uuid.UUID, permission_code: str
+) -> PermissionRevokeImpact:
+    """計算撤回 `project.use` 後的成員與最後管理者影響（DOM-R62/70）。
+
+    用目前有效的 `project_member.manage`、`project.use` 與帳號狀態
+    判斷是否尚有其他管理者，避免確認畫面漏報將失去管理者的專案。
+    """
+    if permission_code != "project.use":
+        return PermissionRevokeImpact(0, (), ())
+    from app.services.permissions import project_member_management_impact
+
+    member_count, project_ids, projects_without_manager = (
+        project_member_management_impact(
+            session,
+            user_id=user_id,
+            module_permission_code="project.use",
+            project_permission_code="project_member.manage",
+        )
+    )
+    return PermissionRevokeImpact(
+        member_count=member_count,
+        project_ids=project_ids,
+        projects_without_manager=projects_without_manager,
+    )
 
 
 def validate_role_assignment(
