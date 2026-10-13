@@ -644,7 +644,10 @@ describe('admin projects page', () => {
     expect(document.querySelector('.projects-admin-table')).toBeInTheDocument()
     expect(
       screen.getAllByRole('link', { name: '套用範本' })[0],
-    ).toHaveAttribute('href', '/admin/projects/project-1/templates')
+    ).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/inspection-items/templates',
+    )
     expect(screen.getAllByRole('link', { name: '成員' })[0]).toHaveAttribute(
       'href',
       '/admin/projects/project-1/members',
