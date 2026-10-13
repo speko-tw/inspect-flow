@@ -12,13 +12,25 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine, MetaData, Table, Uuid, insert, inspect, select
+from sqlalchemy import (
+    Engine,
+    MetaData,
+    Table,
+    Uuid,
+    insert,
+    inspect,
+    select,
+    text,
+    update,
+)
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from alembic import command
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings
 from app.models import InspectionPlan, InspectionTask, Project
+from app.services.inspection_planning import _current_inspection_level
 from tests.db.conftest import create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -243,3 +255,85 @@ def test_migration_only_adds_a_column_and_imports_nothing_from_app():
     }
     assert "app" not in imported
     assert 'server_default="self_inspection"' in source
+
+
+def _committed_project(session: Session, code: str) -> Project:
+    owner = create_root_user_with_company(session, code)
+    project = Project(
+        project_code=code,
+        name="示範工程",
+        client_name="示範業主",
+        site_location="示範工地",
+        created_by=owner.id,
+        updated_by=owner.id,
+    )
+    session.add(project)
+    session.commit()
+    return project
+
+
+def _set_role(worker: Session, project_id, role: str) -> None:
+    worker.execute(
+        update(Project)
+        .where(Project.id == project_id)
+        .values(company_role=role)
+    )
+
+
+def test_postgres_level_read_waits_for_an_uncommitted_role_change(
+    session: Session, request: pytest.FixtureRequest
+) -> None:
+    """IP-R16：建立任務讀層級的共享鎖，會等進行中的改角色交易。
+
+    拿掉 ``with_for_update(read=True)`` 時，讀取不會被擋、直接回舊層級，
+    這支測試就會失敗。SQLite 沒有列鎖與獨立交易，只在 PostgreSQL 執行。
+    """
+    if request.config.getoption("--db-backend") != "postgresql":
+        pytest.skip("requires PostgreSQL row locks and independent sessions")
+    project = _committed_project(session, "T10LOCK1")
+    project_id = project.id
+    engine = session.get_bind()
+
+    with Session(engine) as changer:
+        changer.begin()
+        _set_role(changer, project_id, "supervisor")  # 尚未提交
+        with Session(engine) as creator:
+            with creator.begin():
+                creator.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                with pytest.raises(OperationalError):
+                    _current_inspection_level(creator, project_id)
+        changer.commit()
+
+    # 改角色提交後，新任務讀到的是新層級。
+    with Session(engine) as creator:
+        with creator.begin():
+            assert _current_inspection_level(creator, project_id) == (
+                "spot_check"
+            )
+
+
+def test_postgres_role_change_waits_for_an_open_task_creation(
+    session: Session, request: pytest.FixtureRequest
+) -> None:
+    """反方向：讀層級的交易未結束時，改角色的 UPDATE 要等它。"""
+    if request.config.getoption("--db-backend") != "postgresql":
+        pytest.skip("requires PostgreSQL row locks and independent sessions")
+    project = _committed_project(session, "T10LOCK2")
+    project_id = project.id
+    engine = session.get_bind()
+
+    with Session(engine) as creator:
+        creator.begin()
+        assert _current_inspection_level(creator, project_id) == (
+            "self_inspection"
+        )
+        with Session(engine) as changer:
+            with changer.begin():
+                changer.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                with pytest.raises(OperationalError):
+                    _set_role(changer, project_id, "supervisor")
+        creator.commit()
+
+    with Session(engine) as changer:
+        with changer.begin():
+            _set_role(changer, project_id, "supervisor")

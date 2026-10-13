@@ -30,12 +30,32 @@ def _set_role(admin, project_id: Any, role: str):
     )
 
 
+def _point(sequence: int, title: str) -> dict[str, Any]:
+    return {
+        "sequence": sequence,
+        "title": title,
+        "instruction": f"{title} 說明",
+        "text_standard": {"text": f"{title} 標準"},
+        "measurement_fields": [],
+        "evidence_requirements": [{"min_count": 1}],
+    }
+
+
 def assert_inspection_level_flow(db_session, make_client) -> None:
     """IP-AC16：建立時帶入、之後改角色不回改既有任務、建立請求不收此欄。"""
     world = _planning_world(db_session, make_client)
     admin = world["admin"]
     project_id = world["project"].id
     item_id = world["item"].id
+
+    # 兩個點位，稍後 KD-55 重新查核時刪掉其中一個。
+    item_url = f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+    seeded = admin.patch(
+        item_url,
+        json={"inspection_points": [_point(1, "保留點"), _point(2, "刪除點")]},
+    )
+    assert seeded.status_code == 200, seeded.text
+    kept_point = seeded.json()["inspection_points"][0]
 
     plan = admin.post(
         f"/api/v1/projects/{project_id}/inspection-plans",
@@ -111,9 +131,36 @@ def assert_inspection_level_flow(db_session, make_client) -> None:
     restored = admin.post(f"/api/v1/inspection-tasks/{second_id}:restore")
     assert restored.status_code == 200, restored.text
     assert restored.json()["inspection_level"] == "spot_check"
-    single = admin.get(f"/api/v1/inspection-tasks/{second_id}")
-    assert single.status_code == 200, single.text
-    assert single.json()["inspection_level"] == "spot_check"
+
+    # KD-55：刪除點位並選擇重新查核，兩筆任務的快照都會更新，層級不變。
+    reinspected = admin.patch(
+        item_url,
+        json={
+            "inspection_points": [
+                {"id": kept_point["id"], **_point(1, "保留點")}
+            ],
+            "reinspect": True,
+        },
+    )
+    assert reinspected.status_code == 200, reinspected.text
+
+    for task_id, expected in (
+        (first_id, "self_inspection"),
+        (second_id, "spot_check"),
+    ):
+        single = admin.get(f"/api/v1/inspection-tasks/{task_id}")
+        assert single.status_code == 200, single.text
+        assert single.json()["inspection_level"] == expected
+        if task_id == second_id:
+            # 派出後的任務確實產生了新快照，證明重新查核真的發生過。
+            assert len(single.json()["items"][0]["snapshots"]) == 2
+    # 第一筆任務（DRAFT）在 restore 與重新查核之後仍是原層級。
+    assert (
+        admin.get(f"/api/v1/inspection-tasks/{first_id}").json()[
+            "inspection_level"
+        ]
+        == "self_inspection"
+    )
 
 
 def test_level_is_recorded_at_creation_and_fixed_afterwards(
