@@ -1,4 +1,5 @@
 import { listAllPages, request } from '../api'
+import type { TaskStatus } from '../projectItems/api'
 import { HttpError, httpErrorMessage, isForbidden } from '../../http'
 
 /**
@@ -7,27 +8,6 @@ import { HttpError, httpErrorMessage, isForbidden } from '../../http'
  */
 export type PlanStatus =
   'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'ARCHIVED'
-
-/** 依 IP-R09／IP-R06 表示草稿、派出與後續轉換所用的 Task 狀態。 */
-export type TaskStatus =
-  'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
-
-/** 規劃頁顯示專案名稱所需的最小資料（由路由的專案 id 載入）。 */
-export interface PlanningProject {
-  id: string
-  name: string
-}
-
-/** IP-R02 的任務選項只來自同專案查核項目。 */
-export interface ProjectInspectionItem {
-  id: string
-  project_id: string
-  sequence: number
-  title: string
-  instruction: string
-  source_template_name: string | null
-  inspection_points: unknown[]
-}
 
 /** 依 IP-R03 保留任務項目快照，依 IP-R04 標示待重查。 */
 export interface TaskInspectionItem {
@@ -145,10 +125,6 @@ export interface UpdateTaskItemsInput {
  * IP-R06 的衍生狀態只有讀取，不能透過任意狀態更新操作覆寫。
  */
 export interface PlanningClient {
-  /** GET /projects/{project_id}. */
-  getProject(projectId: string): Promise<PlanningProject>
-  /** GET /api/v1/projects/{project_id}/inspection-items. */
-  listProjectItems(projectId: string): Promise<ProjectInspectionItem[]>
   /** GET /api/v1/projects/{project_id}/zones. */
   listProjectZones(projectId: string): Promise<ProjectZone[]>
   /** GET /projects/{project_id}/inspection-task-assignees. */
@@ -222,15 +198,6 @@ export interface PlanningClient {
 
 /** 以後端規劃 API 執行操作；所有專案權限與狀態限制仍由後端覆核。 */
 export const planningClient: PlanningClient = {
-  async getProject(projectId) {
-    const project = await request<{ id: string; name: string }>(
-      `/projects/${projectId}`,
-    )
-    return { id: project.id, name: project.name }
-  },
-  listProjectItems(projectId) {
-    return listAllPages(`/projects/${projectId}/inspection-items`)
-  },
   listProjectZones(projectId) {
     return listAllPages(`/projects/${projectId}/zones`)
   },

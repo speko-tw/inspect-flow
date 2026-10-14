@@ -18,7 +18,7 @@ import taskAssigneeValidation from './fixtures/task-assignee-validation-422.json
 import taskCancelValidation from './fixtures/task-cancel-validation-422.json'
 import taskCreateValidation from './fixtures/task-create-validation-422.json'
 import taskLocationValidation from './fixtures/task-location-validation-422.json'
-import PlanningPage from './PlanningPage'
+import PlanningPage, { type PlanningPageClient } from './PlanningPage'
 
 function validationError(fixture: {
   error: { code: string; fields: Array<{ path: string; code: string }> }
@@ -1039,7 +1039,7 @@ describe('planning forms guard (#507)', () => {
   >
 
   // 讓指定的 client 方法等到 gate 完成才回應，並記錄呼叫次數。
-  function hold(client: PlanningClient, method: Method) {
+  function hold(client: PlanningPageClient, method: Method) {
     const gate = deferred()
     const original = client[method] as (...args: unknown[]) => Promise<unknown>
     const spy = vi.fn(async (...args: unknown[]) => {
@@ -1050,7 +1050,7 @@ describe('planning forms guard (#507)', () => {
     return { gate, spy }
   }
 
-  function watch(client: PlanningClient, method: Method) {
+  function watch(client: PlanningPageClient, method: Method) {
     const original = client[method] as (...args: unknown[]) => Promise<unknown>
     const spy = vi.fn((...args: unknown[]) => original.apply(client, args))
     ;(client as unknown as Record<string, unknown>)[method] = spy
@@ -1075,7 +1075,7 @@ describe('planning forms guard (#507)', () => {
     return { client, zone, plan, task }
   }
 
-  async function openPlan(client: PlanningClient) {
+  async function openPlan(client: PlanningPageClient) {
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     fireEvent.click(await screen.findByRole('button', { name: /橋梁查核（/ }))
     await openTaskCreationForm()
@@ -1718,7 +1718,7 @@ describe('planning forms guard (#507)', () => {
 
     /** 讓 getPlan 回傳被改過的任務，模擬 API 目前不會產生的舊草稿。 */
     function reshapeTasks(
-      client: PlanningClient,
+      client: PlanningPageClient,
       change: (task: InspectionTask) => InspectionTask,
     ) {
       const original = client.getPlan.bind(client)
@@ -1729,7 +1729,7 @@ describe('planning forms guard (#507)', () => {
     }
 
     /** 任務沒有查核項目時標題是空的，所以改用 article 角色找任務。 */
-    async function openPlanBare(client: PlanningClient) {
+    async function openPlanBare(client: PlanningPageClient) {
       render(
         <PlanningPage client={client} initialProjectId="project-demo-1" />,
       )
@@ -2135,7 +2135,9 @@ describe('planning forms guard (#507)', () => {
       fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '尚未儲存的計畫' },
       })
-      fireEvent.click(screen.getByRole('button', { name: /橋梁查核（/ }))
+      fireEvent.click(
+        await screen.findByRole('button', { name: /橋梁查核（/ }),
+      )
       await screen.findByRole('heading', { name: '無權限' })
 
       fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))

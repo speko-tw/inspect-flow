@@ -1,12 +1,12 @@
 import { ManagementApiError } from '../api'
+import type { ProjectItemData } from '../projectItems/api'
+import type { Project } from '../projects/api'
 import type {
   InspectionPlan,
   InspectionTask,
   TaskInspectionItem,
   PlanStatus,
   PlanningClient,
-  PlanningProject,
-  ProjectInspectionItem,
   ProjectZone,
   SuggestedAssignee,
   UpdateLocationInput,
@@ -109,17 +109,18 @@ function decodePlanCursor(cursor: string): PlanCursorKey {
   }
 }
 
-const PROJECTS: PlanningProject[] = [
+const PROJECTS: Pick<Project, 'id' | 'name'>[] = [
   { id: 'project-demo-1', name: '示範工程 A' },
   { id: 'project-demo-2', name: '示範工程 B' },
 ]
 
-const ITEMS: Record<string, ProjectInspectionItem[]> = {
+const ITEMS: Record<string, ProjectItemData[]> = {
   'project-demo-1': [
     {
       id: 'item-demo-1',
       project_id: 'project-demo-1',
       source_template_name: '示範範本',
+      applied_at: '2026-10-10T00:00:00Z',
       inspection_points: [],
       sequence: 1,
       title: '混凝土外觀',
@@ -129,6 +130,7 @@ const ITEMS: Record<string, ProjectInspectionItem[]> = {
       id: 'item-demo-2',
       project_id: 'project-demo-1',
       source_template_name: '示範範本',
+      applied_at: '2026-10-10T00:00:00Z',
       inspection_points: [],
       sequence: 2,
       title: '鋼筋保護層',
@@ -138,6 +140,7 @@ const ITEMS: Record<string, ProjectInspectionItem[]> = {
       id: 'item-demo-3',
       project_id: 'project-demo-1',
       source_template_name: '示範範本',
+      applied_at: '2026-10-10T00:00:00Z',
       inspection_points: [],
       sequence: 3,
       title: '施工縫處理',
@@ -149,6 +152,7 @@ const ITEMS: Record<string, ProjectInspectionItem[]> = {
       id: 'item-demo-4',
       project_id: 'project-demo-2',
       source_template_name: '示範範本',
+      applied_at: '2026-10-10T00:00:00Z',
       inspection_points: [],
       sequence: 1,
       title: '材料進場查驗',
@@ -203,17 +207,20 @@ function characterCount(value: string): number {
   return Array.from(value).length
 }
 
-/** Create an isolated client with mutable in-memory data for UI tests. */
+/** 建立獨立的規劃資料，用於頁面互動測試。 */
 export function createMockPlanningClient(options?: {
   actingUserId?: string
   completionReady?: boolean
-}): PlanningClient {
+}): PlanningClient & {
+  getProject(projectId: string): Promise<Pick<Project, 'id' | 'name'>>
+  listProjectItems(projectId: string): Promise<ProjectItemData[]>
+} {
   const zones: ProjectZone[] = []
   const plans: MockPlan[] = []
   const actingUserId = options?.actingUserId ?? 'project-a-member-2'
   const completionReady = options?.completionReady ?? false
 
-  function project(projectId: string): PlanningProject {
+  function project(projectId: string): Pick<Project, 'id' | 'name'> {
     const found = PROJECTS.find((entry) => entry.id === projectId)
     if (!found) throw new ManagementApiError(404, 'resource.not_found')
     return found
