@@ -1,0 +1,212 @@
+{
+  "codes": [
+    {
+      "name": "PROJECT_MEMBER_MANAGE",
+      "code": "project_member.manage",
+      "description": "管理專案成員與其角色",
+      "scope": "project",
+      "module": "project",
+      "external_allowed": false
+    },
+    {
+      "name": "PROJECT_UPDATE",
+      "code": "project.update",
+      "description": "調整專案",
+      "scope": "project",
+      "module": "project",
+      "external_allowed": false
+    },
+    {
+      "name": "PROJECT_READ",
+      "code": "project.read",
+      "description": "檢視專案",
+      "scope": "project",
+      "module": "project",
+      "external_allowed": true
+    },
+    {
+      "name": "PROJECT_USE",
+      "code": "project.use",
+      "description": "使用專案模組",
+      "scope": "module",
+      "module": "project",
+      "external_allowed": true
+    },
+    {
+      "name": "PROJECT_CREATE",
+      "code": "project.create",
+      "description": "開設專案",
+      "scope": "module",
+      "module": "project",
+      "external_allowed": false
+    },
+    {
+      "name": "ALL_PROJECT_PROGRESS_READ",
+      "code": "all_project_progress.read",
+      "description": "檢視所有專案進度",
+      "scope": "module",
+      "module": "project",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_USE",
+      "code": "inspection.use",
+      "description": "使用查核模組",
+      "scope": "module",
+      "module": "inspection",
+      "external_allowed": true
+    },
+    {
+      "name": "TEMPLATE_USE",
+      "code": "template.use",
+      "description": "使用範本模組",
+      "scope": "module",
+      "module": "template",
+      "external_allowed": true
+    },
+    {
+      "name": "TEMPLATE_MANAGE",
+      "code": "template.manage",
+      "description": "管理範本庫",
+      "scope": "module",
+      "module": "template",
+      "external_allowed": false
+    },
+    {
+      "name": "PROJECT_INSPECTION_ITEM_EDIT",
+      "code": "project_inspection_item.edit",
+      "description": "編輯專案查核項目",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "PROJECT_INSPECTION_ITEM_READ",
+      "code": "project_inspection_item.read",
+      "description": "讀取專案查核項目",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": true
+    },
+    {
+      "name": "PROJECT_ZONE_READ",
+      "code": "project_zone.read",
+      "description": "讀取專案分區",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": true
+    },
+    {
+      "name": "PROJECT_ZONE_MANAGE",
+      "code": "project_zone.manage",
+      "description": "管理專案分區",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_PLAN_READ",
+      "code": "inspection_plan.read",
+      "description": "讀取查核計畫",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": true
+    },
+    {
+      "name": "INSPECTION_PLAN_CREATE",
+      "code": "inspection_plan.create",
+      "description": "建立查核計畫",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_PLAN_MANAGE",
+      "code": "inspection_plan.manage",
+      "description": "管理查核計畫",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_PLAN_ARCHIVE",
+      "code": "inspection_plan.archive",
+      "description": "封存查核計畫",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_PLAN_UNARCHIVE",
+      "code": "inspection_plan.unarchive",
+      "description": "取消封存查核計畫",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_READ",
+      "code": "inspection_task.read",
+      "description": "讀取查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": true
+    },
+    {
+      "name": "INSPECTION_TASK_MANAGE",
+      "code": "inspection_task.manage",
+      "description": "管理查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_CREATE",
+      "code": "inspection_task.create",
+      "description": "建立查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_DISPATCH",
+      "code": "inspection_task.dispatch",
+      "description": "派出查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_ASSIGN",
+      "code": "inspection_task.assign",
+      "description": "指派查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_INSPECT",
+      "code": "inspection_task.inspect",
+      "description": "執行現場查核",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_DELETE_DRAFT",
+      "code": "inspection_task.delete_draft",
+      "description": "刪除草稿查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    },
+    {
+      "name": "INSPECTION_TASK_CANCEL",
+      "code": "inspection_task.cancel",
+      "description": "取消或恢復查核任務",
+      "scope": "project",
+      "module": "inspection",
+      "external_allowed": false
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "item_summary": {
+    "first_title": "表面檢查",
+    "count": 2
+  },
+  "plan_keys": ["id", "name", "archived"],
+  "actor_keys": ["id", "name_zh"]
+}

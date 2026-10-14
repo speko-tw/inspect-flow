@@ -156,6 +156,10 @@ const PROJECT_ROUTES = (
       path="projects/:projectId/progress"
     />
     <Route
+      element={<ProjectSectionPage section="progress" />}
+      path="projects/:projectId/progress/tasks/:taskId"
+    />
+    <Route
       element={
         <ProjectSectionPage section="inspection-items">
           <AdminRouteSuspense>
@@ -207,7 +211,7 @@ function AdminPageContent() {
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
   const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress))?\/?$/.test(
+    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress(?:\/tasks\/[^/]+)?))?\/?$/.test(
       location.pathname,
     )
 

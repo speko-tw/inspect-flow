@@ -31,8 +31,8 @@ from sqlalchemy import select
 from app.models import AuditLog, Project, ProjectMember
 from app.services.project_members import (
     add_project_member,
-    assign_role,
     remove_project_member,
+    set_project_member_roles,
 )
 from app.services.roles import create_role, delete_role, update_role
 from app.services.users import (
@@ -220,7 +220,7 @@ class TestAlgAc11WriteTimingSequence:
         }
 
         # 4. 替 U 再加 R1 -> project_member.roles_changed
-        assign_role(session, member_u, role_1.id)
+        set_project_member_roles(session, member_u, [role_1.id, role_2.id])
         session.commit()
         row = tracker.assert_one("project_member.roles_changed")
         assert row.entity_id == member_u.id

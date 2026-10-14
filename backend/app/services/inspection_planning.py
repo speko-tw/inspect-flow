@@ -309,20 +309,6 @@ def create_inspection_plan(
     return plan
 
 
-def list_inspection_plans(
-    session: Session, *, project_id: uuid.UUID
-) -> list[InspectionPlan]:
-    """讀取專案 Plan；缺少 inspection_plan.read 時拒絕。"""
-    _require_permission(session, project_id, "inspection_plan.read")
-    return list(
-        session.scalars(
-            select(InspectionPlan)
-            .where(InspectionPlan.project_id == project_id)
-            .order_by(InspectionPlan.created_at, InspectionPlan.id)
-        ).all()
-    )
-
-
 def get_inspection_plan(
     session: Session, *, plan_id: uuid.UUID
 ) -> InspectionPlan:
@@ -606,24 +592,6 @@ def rename_inspection_task(
     return locked_task
 
 
-def list_inspection_tasks(
-    session: Session,
-    *,
-    project_id: uuid.UUID,
-    plan_id: uuid.UUID | None = None,
-) -> list[InspectionTask]:
-    """列出可見 Task；依 IP-R09 隱藏現場不可見的 DRAFT。"""
-    filters = inspection_task_list_filters(session, project_id=project_id)
-    statement = select(InspectionTask).where(*filters)
-    if plan_id is not None:
-        statement = statement.where(InspectionTask.plan_id == plan_id)
-    return list(
-        session.scalars(
-            statement.order_by(InspectionTask.created_at, InspectionTask.id)
-        ).all()
-    )
-
-
 def inspection_task_visibility_filters(
     session: Session, *, project_id: uuid.UUID
 ) -> tuple[ColumnElement[bool], ...]:
@@ -650,7 +618,7 @@ def inspection_task_list_filters(
 def get_inspection_task(
     session: Session, *, task_id: uuid.UUID
 ) -> InspectionTask:
-    """讀取 Task；依 IP-R09 對現場隱藏 DRAFT。"""
+    """依 IP-R09 隱藏現場不可見的 DRAFT Task。"""
     task = session.get(InspectionTask, task_id)
     if task is None:
         raise PlanningError("inspection_task.not_found")

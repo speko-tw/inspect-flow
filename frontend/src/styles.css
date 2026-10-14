@@ -466,10 +466,6 @@
   padding: var(--space-3);
 }
 
-.project-key-numbers dt {
-  color: var(--text-muted);
-}
-
 .project-key-numbers dd {
   margin: var(--space-1) 0 0;
   font-size: 1.25rem;
@@ -479,9 +475,61 @@
 
 .project-key-number-detail {
   display: block;
-  color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 400;
+}
+
+/* ADM-R43、ADM-R44：手機篩選與整張卡片皆可操作。 */
+.progress-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.progress-filters a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.progress-filters a[aria-current='true'] {
+  background: var(--surface-alt);
+  font-weight: 700;
+}
+
+.progress-cards {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.progress-card {
+  display: grid;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}
+
+.progress-page > a,
+.progress-page button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.progress-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
