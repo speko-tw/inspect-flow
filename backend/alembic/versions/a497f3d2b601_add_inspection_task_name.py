@@ -21,6 +21,16 @@ depends_on: str | Sequence[str] | None = None
 _DEFAULT_NAME = "查核任務"
 
 
+def _clean(value: str) -> str:
+    """移除 NUL 字元。
+
+    SQLite 的 length() 遇到 NUL 就停止計數，只有 NUL 加內容的舊標題
+    （如 "\x00X"）會被 length(trim(name)) 算成 0，讓 CHECK 失敗；
+    PostgreSQL 本來就不能存 NUL，移除不影響其行為。
+    """
+    return value.replace("\x00", "")
+
+
 def _bounded_name(value: str) -> str:
     """回填名稱必須通過非空白且 128 字元以內的 CHECK。
 
@@ -28,13 +38,14 @@ def _bounded_name(value: str) -> str:
     若只剩空白，CHECK 會讓整個升級失敗，所以退回預設名稱，
     確保既有資料一定能升級。
     """
-    bounded = "".join(list(value)[:128])
+    bounded = "".join(list(_clean(value))[:128])
     return bounded if bounded.strip() else _DEFAULT_NAME
 
 
 def _title_or_default(title: str) -> str:
     """舊資料的項目標題可能只有空白，沒有可讀內容時用預設名稱。"""
-    return title if title.strip() else _DEFAULT_NAME
+    cleaned = _clean(title)
+    return cleaned if cleaned.strip() else _DEFAULT_NAME
 
 
 def upgrade() -> None:
@@ -87,7 +98,7 @@ def upgrade() -> None:
     for row in task_rows:
         task_id = row.task_id
         task_titles = titles[task_id]
-        location = row.zone_name or row.location_text or ""
+        location = _clean(row.zone_name or row.location_text or "")
         if not task_titles:
             item_part = _DEFAULT_NAME
         elif len(task_titles) == 1:

@@ -45,6 +45,8 @@ def test_bounded_name_always_satisfies_name_check() -> None:
     assert module._bounded_name("   ") == "查核任務"
     assert module._bounded_name(" " * 130 + "X") == "查核任務"
     assert module._bounded_name("長" * 200) == "長" * 128
+    assert module._bounded_name("\x00X") == "X"
+    assert module._bounded_name("\x00") == "查核任務"
 
 
 def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
@@ -159,6 +161,44 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                 updated_by=actor.id,
             )
             session.add(long_task)
+            # SQLite 的 length() 遇到 NUL 即停止，舊標題含 NUL 也要能升級。
+            nul_items = [
+                ProjectInspectionItem(
+                    project_id=project.id,
+                    sequence=sequence,
+                    title=title,
+                    instruction="檢查",
+                    source_template_name="範本",
+                    applied_at=project.created_at,
+                    created_by=actor.id,
+                    updated_by=actor.id,
+                )
+                for sequence, title in ((5, "\x00X"), (6, "\x00"))
+            ]
+            nul_tasks = [
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=project.id,
+                    name=f"舊 NUL 名稱{index}",
+                    created_by=actor.id,
+                    updated_by=actor.id,
+                )
+                for index in range(2)
+            ]
+            session.add_all([*nul_items, *nul_tasks])
+            session.flush()
+            session.add_all(
+                TaskInspectionItem(
+                    task_id=nul_task.id,
+                    project_id=project.id,
+                    project_inspection_item_id=nul_item.id,
+                    created_by=actor.id,
+                    updated_by=actor.id,
+                )
+                for nul_task, nul_item in zip(
+                    nul_tasks, nul_items, strict=True
+                )
+            )
             session.flush()
             session.add_all(
                 [
@@ -196,7 +236,11 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                 ]
             )
             session.commit()
-            task_ids = [task.id for task in tasks] + [long_task.id]
+            task_ids = (
+                [task.id for task in tasks]
+                + [long_task.id]
+                + [task.id for task in nul_tasks]
+            )
             task_item_id = session.scalar(
                 select(TaskInspectionItem.id).where(
                     TaskInspectionItem.task_id == long_task.id
@@ -223,6 +267,10 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
             assert backfilled[3].name == "查核任務"
             assert len(backfilled[4].name) == 128
             assert backfilled[4].name == "長" * 128
+            assert backfilled[5] is not None
+            assert backfilled[6] is not None
+            assert backfilled[5].name == "X"
+            assert backfilled[6].name == "查核任務"
             assert task_item_id is not None
             assert session.get(TaskInspectionItem, task_item_id) is not None
             assert backfilled[1].name == "消防撒水頭等 2 項－東側"
