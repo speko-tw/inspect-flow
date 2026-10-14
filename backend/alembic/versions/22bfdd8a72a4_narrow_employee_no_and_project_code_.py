@@ -51,8 +51,26 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-    is_sqlite = op.get_bind().dialect.name == "sqlite"
+    """確認既有資料可容納後，才收緊業務編號欄位長度。"""
+    connection = op.get_bind()
+    employee_count = connection.scalar(
+        sa.text("SELECT COUNT(*) FROM users WHERE length(employee_no) > 16")
+    )
+    project_count = connection.scalar(
+        sa.text(
+            "SELECT COUNT(*) FROM projects WHERE length(project_code) > 32"
+        )
+    )
+    violations = []
+    if employee_count:
+        violations.append(f"employee_no 超過 16 字元：{employee_count} 筆")
+    if project_count:
+        violations.append(f"project_code 超過 32 字元：{project_count} 筆")
+    if violations:
+        # 先整批拒絕，避免資料庫間長度行為差異造成資料截斷或遺失。
+        raise RuntimeError("請先修正超長資料再升級：" + "；".join(violations))
+
+    is_sqlite = connection.dialect.name == "sqlite"
     if is_sqlite:
         op.execute("PRAGMA foreign_keys=OFF")
     try:
