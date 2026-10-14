@@ -1,5 +1,6 @@
 """IP-AC17: backfill task names and verify SQLite/PostgreSQL downgrade."""
 
+import importlib.util
 from pathlib import Path
 
 from alembic.config import Config
@@ -25,6 +26,25 @@ _REVISION = "a497f3d2b601"
 
 def _config() -> Config:
     return Config(str(_BACKEND / "alembic.ini"))
+
+
+def test_bounded_name_always_satisfies_name_check() -> None:
+    """截斷後只剩空白也要退回預設名稱，否則 CHECK 會擋下升級。"""
+    path = (
+        _BACKEND
+        / "alembic"
+        / "versions"
+        / "a497f3d2b601_add_inspection_task_name.py"
+    )
+    spec = importlib.util.spec_from_file_location("task_name_rev", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._bounded_name("門檢查") == "門檢查"
+    assert module._bounded_name("   ") == "查核任務"
+    assert module._bounded_name(" " * 130 + "X") == "查核任務"
+    assert module._bounded_name("長" * 200) == "長" * 128
 
 
 def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
@@ -101,7 +121,24 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                     created_by=actor.id,
                     updated_by=actor.id,
                 ),
+                InspectionTask(
+                    plan_id=plan.id,
+                    project_id=project.id,
+                    name="舊空白名稱",
+                    created_by=actor.id,
+                    updated_by=actor.id,
+                ),
             ]
+            blank_item = ProjectInspectionItem(
+                project_id=project.id,
+                sequence=4,
+                title="   ",
+                instruction="檢查",
+                source_template_name="範本",
+                applied_at=project.created_at,
+                created_by=actor.id,
+                updated_by=actor.id,
+            )
             long_item = ProjectInspectionItem(
                 project_id=project.id,
                 sequence=3,
@@ -112,7 +149,7 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                 created_by=actor.id,
                 updated_by=actor.id,
             )
-            session.add_all([*tasks, long_item])
+            session.add_all([*tasks, blank_item, long_item])
             session.flush()
             long_task = InspectionTask(
                 plan_id=plan.id,
@@ -136,6 +173,13 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                         task_id=tasks[0].id,
                         project_id=project.id,
                         project_inspection_item_id=items[0].id,
+                        created_by=actor.id,
+                        updated_by=actor.id,
+                    ),
+                    TaskInspectionItem(
+                        task_id=tasks[3].id,
+                        project_id=project.id,
+                        project_inspection_item_id=blank_item.id,
                         created_by=actor.id,
                         updated_by=actor.id,
                     ),
@@ -173,9 +217,12 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
             assert backfilled[1] is not None
             assert backfilled[2] is not None
             assert backfilled[3] is not None
+            assert backfilled[4] is not None
             assert backfilled[0].name == "消防撒水頭－B1 停車場"
-            assert len(backfilled[3].name) == 128
-            assert backfilled[3].name == "長" * 128
+            # 全空白標題的舊資料退回預設名稱，不得讓升級失敗。
+            assert backfilled[3].name == "查核任務"
+            assert len(backfilled[4].name) == 128
+            assert backfilled[4].name == "長" * 128
             assert task_item_id is not None
             assert session.get(TaskInspectionItem, task_item_id) is not None
             assert backfilled[1].name == "消防撒水頭等 2 項－東側"
