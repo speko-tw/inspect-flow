@@ -1138,7 +1138,10 @@ def update_project_item_usage(
     呼叫端須先於同一交易修改來源項目；修訂未遞增或 Plan 封存時拒絕。
     """
     from app.models import ProjectInspectionItem
-    from app.services.inspection_planning_snapshots import refresh_task_item
+    from app.services.inspection_planning_snapshots import (
+        load_task_item_refresh_context,
+        refresh_task_item,
+    )
 
     with session.no_autoflush:
         source = session.get(ProjectInspectionItem, item_id)
@@ -1228,6 +1231,20 @@ def update_project_item_usage(
             updated_by=operator_id,
         )
     )
+    refreshable_items = [
+        task_item
+        for task_item in task_items
+        if (
+            (task := task_by_id.get(task_item.task_id)) is not None
+            and task.plan_id in plan_by_id
+            and task.status != "CANCELLED"
+        )
+    ]
+    # 同一來源的標準與目前快照只讀一次，避免關聯 Task 數推高 SELECT。
+    refresh_context = load_task_item_refresh_context(
+        session, task_items=refreshable_items, source_item=source
+    )
+    plans_to_refresh: dict[uuid.UUID, InspectionPlan] = {}
     for task_item in task_items:
         task = task_by_id.get(task_item.task_id)
         plan = plan_by_id.get(task.plan_id) if task else None
@@ -1247,6 +1264,7 @@ def update_project_item_usage(
                 else "TEXT_CORRECTED"
             ),
             retain_history=task.status != "DRAFT",
+            context=refresh_context,
         )
         # 依 IP-R04，選「要」時已有結果的項目標待重查；
         # COMPLETED Task 退回 IN_PROGRESS（IP-R08 的明確例外）。
@@ -1264,7 +1282,10 @@ def update_project_item_usage(
             task_item.needs_reinspection = False
         task_item.updated_by = operator_id
         task.updated_by = operator_id
-        _refresh_plan_status(session, plan)
+        plans_to_refresh[plan.id] = plan
+    # 同一 Plan 的多個受影響 Task 共用一次狀態重算，避免重複載入整份計畫。
+    for plan_id in sorted(plans_to_refresh):
+        _refresh_plan_status(session, plans_to_refresh[plan_id])
     before: dict[str, str | bool | None] = {
         "reinspection_required": None,
     }

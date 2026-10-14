@@ -285,3 +285,88 @@ def test_narrowing_migration_round_trip_preserves_rows_and_constraints(
                 )
     finally:
         engine.dispose()
+
+
+def test_narrowing_migration_rejects_oversized_rows_without_changes(db_url):
+    """預檢須在 SQLite 重建或 PostgreSQL ALTER 前保留原資料。"""
+    cfg = _alembic_config()
+    command.upgrade(cfg, "78a4ba191ab5")
+    now = clock.utc_now().isoformat()
+    user_id = uuid7().hex
+    project_id = uuid7().hex
+    engine = create_engine_from_settings(db_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO users "
+                    "(id, employee_no, created_at, updated_at, "
+                    "created_by, updated_by) "
+                    "VALUES (:id, :employee_no, :now, :now, :id, :id)"
+                ),
+                {
+                    "id": user_id,
+                    "employee_no": "E" * 17,
+                    "now": now,
+                },
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO projects "
+                    "(id, project_code, created_at, updated_at, "
+                    "created_by, updated_by) "
+                    "VALUES (:id, :project_code, :now, :now, "
+                    ":creator, :creator)"
+                ),
+                {
+                    "id": project_id,
+                    "project_code": "P" * 33,
+                    "now": now,
+                    "creator": user_id,
+                },
+            )
+    finally:
+        engine.dispose()
+
+    with pytest.raises(RuntimeError) as error:
+        command.upgrade(cfg, "22bfdd8a72a4")
+    message = str(error.value)
+    assert "employee_no 超過 16 字元：1 筆" in message
+    assert "project_code 超過 32 字元：1 筆" in message
+    assert "請先修正" in message
+
+    engine = create_engine_from_settings(db_url)
+    try:
+        columns = {
+            col["name"]: col for col in inspect(engine).get_columns("users")
+        }
+        employee_type = columns["employee_no"]["type"]
+        assert isinstance(employee_type, String)
+        assert employee_type.length is None
+        project_columns = {
+            col["name"]: col for col in inspect(engine).get_columns("projects")
+        }
+        project_type = project_columns["project_code"]["type"]
+        assert isinstance(project_type, String)
+        assert project_type.length is None
+        with engine.begin() as conn:
+            assert (
+                conn.scalar(
+                    text("SELECT employee_no FROM users WHERE id = :id"),
+                    {"id": user_id},
+                )
+                == "E" * 17
+            )
+            assert (
+                conn.scalar(
+                    text("SELECT project_code FROM projects WHERE id = :id"),
+                    {"id": project_id},
+                )
+                == "P" * 33
+            )
+            assert (
+                conn.scalar(text("SELECT version_num FROM alembic_version"))
+                == "78a4ba191ab5"
+            )
+    finally:
+        engine.dispose()
