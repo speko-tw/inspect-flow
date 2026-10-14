@@ -161,7 +161,13 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                 updated_by=actor.id,
             )
             session.add(long_task)
-            # SQLite 的 length() 遇到 NUL 即停止，舊標題含 NUL 也要能升級。
+            # SQLite 的 length() 遇到 NUL 即停止，舊標題含 NUL 也要能升級；
+            # PostgreSQL 的 text 不能存 NUL，不會有這類舊資料，故不植入。
+            nul_titles = (
+                ((5, "\x00X"), (6, "\x00"))
+                if engine.dialect.name == "sqlite"
+                else ()
+            )
             nul_items = [
                 ProjectInspectionItem(
                     project_id=project.id,
@@ -173,7 +179,7 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                     created_by=actor.id,
                     updated_by=actor.id,
                 )
-                for sequence, title in ((5, "\x00X"), (6, "\x00"))
+                for sequence, title in nul_titles
             ]
             nul_tasks = [
                 InspectionTask(
@@ -183,7 +189,7 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
                     created_by=actor.id,
                     updated_by=actor.id,
                 )
-                for index in range(2)
+                for index in range(len(nul_titles))
             ]
             session.add_all([*nul_items, *nul_tasks])
             session.flush()
@@ -267,10 +273,11 @@ def test_task_name_migration_backfills_and_downgrades(db_url: str) -> None:
             assert backfilled[3].name == "查核任務"
             assert len(backfilled[4].name) == 128
             assert backfilled[4].name == "長" * 128
-            assert backfilled[5] is not None
-            assert backfilled[6] is not None
-            assert backfilled[5].name == "X"
-            assert backfilled[6].name == "查核任務"
+            if nul_titles:
+                assert backfilled[5] is not None
+                assert backfilled[6] is not None
+                assert backfilled[5].name == "X"
+                assert backfilled[6].name == "查核任務"
             assert task_item_id is not None
             assert session.get(TaskInspectionItem, task_item_id) is not None
             assert backfilled[1].name == "消防撒水頭等 2 項－東側"
