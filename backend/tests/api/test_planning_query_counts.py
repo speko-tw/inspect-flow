@@ -167,32 +167,69 @@ def test_plan_detail_select_count_is_fixed_for_many_tasks(world):
 
 
 def test_project_item_patch_batches_associated_task_loads(world, db_session):
-    statements: list[str] = []
-
-    def record_select(_conn, _cursor, statement, _params, _context, _many):
-        normalized = statement.lstrip().lower()
-        if (
-            normalized.startswith("select")
-            and "from inspection_tasks" in normalized
-            and "where inspection_tasks.id" in normalized
-        ):
-            statements.append(statement)
+    admin = world["admin"]
+    item = db_session.scalar(
+        select(ProjectInspectionItem).where(
+            ProjectInspectionItem.project_id == world["project"].id,
+            ProjectInspectionItem.sequence == 5,
+        )
+    )
+    assert item is not None
+    plan_id = world["plan_id"]
+    task_url = f"/api/v1/inspection-plans/{plan_id}/tasks"
+    zones = admin.get(f"{world['base']}/zones")
+    assert zones.status_code == 200, zones.text
+    zone_id = zones.json()["items"][0]["id"]
+    created = admin.post(
+        task_url,
+        json={
+            "name": "單一關聯",
+            "item_ids": [str(item.id)],
+            "zone_id": zone_id,
+        },
+    )
+    assert created.status_code == 201, created.text
 
     engine = get_engine()
-    event.listen(engine, "before_cursor_execute", record_select)
-    db_session.expire_all()
-    try:
-        response = world["admin"].patch(
-            f"{world['base']}/inspection-items/{world['item'].id}",
-            json={"title": "更新查核項目", "reinspect": False},
-        )
-    finally:
-        event.remove(engine, "before_cursor_execute", record_select)
 
-    assert response.status_code == 200, response.text
-    assert len(response.json()["affected_tasks"]) == _TASKS
-    # 權限檢查與修改服務另有固定查詢；路由載入不可隨關聯數增加。
-    assert len(statements) <= 3
+    def count_patch_selects(title: str, expected_tasks: int) -> int:
+        count = 0
+
+        def record_select(_conn, _cursor, statement, _params, _context, _many):
+            nonlocal count
+            if statement.lstrip().lower().startswith("select"):
+                count += 1
+
+        event.listen(engine, "before_cursor_execute", record_select)
+        db_session.expire_all()
+        try:
+            response = admin.patch(
+                f"{world['base']}/inspection-items/{item.id}",
+                json={"title": title, "reinspect": False},
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", record_select)
+        assert response.status_code == 200, response.text
+        assert len(response.json()["affected_tasks"]) == expected_tasks
+        return count
+
+    one_task_selects = count_patch_selects("單筆更新", 1)
+    for _ in range(19):
+        created = admin.post(
+            task_url,
+            json={
+                "name": "多筆關聯",
+                "item_ids": [str(item.id)],
+                "zone_id": zone_id,
+            },
+        )
+        assert created.status_code == 201, created.text
+    twenty_task_selects = count_patch_selects("多筆更新", 20)
+
+    # 計入 PATCH 的全部 SELECT（不只 inspection_tasks）。目前 1 與 20 個
+    # 關聯皆為 24 次；容許差距上限 2 次，以免無關的固定查詢造成誤報，
+    # 但 Plan 狀態重算與快照載入不得再逐 Task 重複查詢。
+    assert abs(twenty_task_selects - one_task_selects) <= 2
 
 
 def test_field_task_permission_select_count_does_not_grow_with_projects(
