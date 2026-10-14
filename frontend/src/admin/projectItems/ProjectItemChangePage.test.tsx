@@ -247,7 +247,13 @@ describe('ProjectItemChangePage', () => {
   it('confirms reinspection and renders backend Task actions', async () => {
     const api = apiWith()
     renderPage(api)
-    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+    const itemTitle = await screen.findByLabelText('查核項目名稱')
+    expect(itemTitle).toHaveAttribute('aria-required', 'true')
+    const itemTitleLabel = itemTitle
+      .closest('form')
+      ?.querySelector('label[for="item-title"] .required-mark')
+    expect(itemTitleLabel).toBeInTheDocument()
+    fireEvent.change(itemTitle, {
       target: { value: '新版檢查項目' },
     })
     fireEvent.change(screen.getByLabelText('標準文字'), {
@@ -423,7 +429,7 @@ describe('ProjectItemChangePage', () => {
       ),
     })
     renderPage(api)
-    const name = await screen.findByLabelText('查核項目名稱 *')
+    const name = await screen.findByLabelText('查核項目名稱')
     fireEvent.change(name, { target: { value: '重讀前的名稱' } })
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     fireEvent.click(
@@ -451,10 +457,10 @@ describe('ProjectItemChangePage', () => {
       loadPreview: vi.fn(async () => structuredClone(drafts)),
     })
     renderPage(api)
-    await screen.findByLabelText('查核項目名稱 *')
+    await screen.findByLabelText('查核項目名稱')
     expect(screen.queryByRole('radio', { name: reinspectChoice })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
-    const pointTitles = await screen.findAllByLabelText('項次標題 *')
+    const pointTitles = await screen.findAllByLabelText('項次標題')
     await waitFor(() => expect(pointTitles[1]).toHaveFocus())
     fireEvent.change(pointTitles[1], {
       target: { value: '新增點位' },
@@ -463,10 +469,10 @@ describe('ProjectItemChangePage', () => {
       name: '新增實測欄位',
     })
     fireEvent.click(addFieldButtons[addFieldButtons.length - 1])
-    const fieldNames = await screen.findAllByLabelText('欄位名稱 *')
+    const fieldNames = await screen.findAllByLabelText('欄位名稱')
     const addedFieldName = fieldNames[fieldNames.length - 1]
     fireEvent.change(addedFieldName, { target: { value: '新量測' } })
-    const units = screen.getAllByLabelText('單位 *')
+    const units = screen.getAllByLabelText('單位')
     fireEvent.change(units[units.length - 1], {
       target: { value: 'cm' },
     })
@@ -507,7 +513,7 @@ describe('ProjectItemChangePage', () => {
       }),
     })
     renderPage(api)
-    const name = await screen.findByLabelText('查核項目名稱 *')
+    const name = await screen.findByLabelText('查核項目名稱')
     fireEvent.change(name, { target: { value: '競態後名稱' } })
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     fireEvent.click(
@@ -541,9 +547,9 @@ describe('ProjectItemChangePage', () => {
     expect(screen.getByRole('button', { name: '新增查核項次' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '移除此項次' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '新增實測欄位' })).toBeDisabled()
-    expect(screen.getByLabelText('照片至少幾張 *')).toBeDisabled()
+    expect(screen.getByLabelText('照片至少幾張')).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent('照片需求')
-    const fieldName = screen.getAllByLabelText('欄位名稱 *')[0]
+    const fieldName = screen.getAllByLabelText('欄位名稱')[0]
     expect(fieldName).toBeEnabled()
     expect(
       screen
@@ -552,7 +558,7 @@ describe('ProjectItemChangePage', () => {
     ).toBe(true)
     expect(
       screen
-        .getAllByLabelText('單位 *')
+        .getAllByLabelText('單位')
         .every((field) => (field as HTMLInputElement).disabled),
     ).toBe(true)
     expect(
@@ -561,7 +567,7 @@ describe('ProjectItemChangePage', () => {
         .every((button) => (button as HTMLButtonElement).disabled),
     ).toBe(true)
     expect(screen.getByLabelText(/用來判定的數字欄位/)).toBeDisabled()
-    expect(screen.getByLabelText('標準值 *')).toBeEnabled()
+    expect(screen.getByLabelText('標準值')).toBeEnabled()
     expect(screen.getByRole('radio', { name: '數值' })).toBeDisabled()
     expect(screen.getByRole('radio', { name: '範圍' })).toBeEnabled()
     expect(screen.getByRole('status')).toHaveTextContent(
@@ -608,7 +614,7 @@ describe('ProjectItemChangePage', () => {
   it('focuses the first field error and supports keyboard save and discard', async () => {
     const api = apiWith()
     renderPage(api)
-    const firstPointTitle = await screen.findByLabelText('項次標題 *')
+    const firstPointTitle = await screen.findByLabelText('項次標題')
     fireEvent.change(firstPointTitle, { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     await waitFor(() => expect(firstPointTitle).toHaveFocus())
@@ -648,7 +654,7 @@ describe('ProjectItemChangePage', () => {
 
   it('leaves after discarding without a second dirty confirmation', async () => {
     renderPage(apiWith())
-    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
       target: { value: '未儲存的名稱' },
     })
     fireEvent.click(
@@ -675,7 +681,7 @@ describe('ProjectItemChangePage', () => {
         .mockResolvedValueOnce(updatedPreview),
     })
     renderPage(api)
-    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
       target: { value: '已儲存的名稱' },
     })
     await confirm('yes')
@@ -698,7 +704,7 @@ describe('ProjectItemChangePage', () => {
       title: '第二項次',
     })
     renderPage(apiWith({ loadPreview: vi.fn(async () => twoPoints) }))
-    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
       target: { value: '已修改名稱' },
     })
     fireEvent.click(
@@ -727,7 +733,7 @@ describe('ProjectItemChangePage', () => {
         screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
       ).toHaveFocus(),
     )
-    expect(screen.getByLabelText('查核項目名稱 *')).toHaveValue('已修改名稱')
+    expect(screen.getByLabelText('查核項目名稱')).toHaveValue('已修改名稱')
 
     fireEvent.click(screen.getAllByRole('button', { name: '移除此項次' })[0])
     fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
@@ -900,7 +906,7 @@ describe('ProjectItemChangePage', () => {
     empty.item.inspection_points = []
     const api = apiWith({ loadPreview: vi.fn(async () => empty) })
     renderPage(api)
-    await screen.findByLabelText('查核項目名稱 *')
+    await screen.findByLabelText('查核項目名稱')
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     const pointError = await screen.findByText('請至少新增一個查核項次', {
       selector: 'p[data-error-key="points"]',
@@ -943,7 +949,7 @@ describe('ProjectItemChangePage', () => {
       }),
     )
 
-    const title = await screen.findByLabelText('項次標題 *')
+    const title = await screen.findByLabelText('項次標題')
     expect(title).toHaveAttribute(
       'data-error-key',
       'point:remaining-point:title',
@@ -1098,7 +1104,7 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
     const gate = deferred<ProjectItemChangeResult>()
     const api = apiWith({ update: vi.fn(() => gate.promise) })
     renderPage(api)
-    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
       target: { value: '新版檢查項目' },
     })
     fireEvent.click(
@@ -1122,7 +1128,7 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
       }),
     })
     renderPage(api)
-    fireEvent.change(await screen.findByLabelText('查核項目名稱 *'), {
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
       target: { value: '新版檢查項目' },
     })
     fireEvent.click(
@@ -1142,7 +1148,7 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
   it('ignores IME Enter in the item form', async () => {
     const api = apiWith()
     renderPage(api)
-    const title = await screen.findByLabelText('查核項目名稱 *')
+    const title = await screen.findByLabelText('查核項目名稱')
     fireEvent.change(title, { target: { value: '新版檢查項目' } })
 
     expectImeEnterIgnored(title)
@@ -1154,7 +1160,7 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
   it('a repeated submit opens one confirmation (n/a)', async () => {
     const api = apiWith()
     renderPage(api)
-    const title = await screen.findByLabelText('查核項目名稱 *')
+    const title = await screen.findByLabelText('查核項目名稱')
     fireEvent.click(
       await screen.findByRole('radio', { name: reinspectChoice }),
     )
@@ -1269,7 +1275,7 @@ describe('ProjectItemChangePage review round 2', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '新增查核項次' }),
     )
-    const titles = await screen.findAllByLabelText('項次標題 *')
+    const titles = await screen.findAllByLabelText('項次標題')
     fireEvent.change(titles[1], { target: { value: '新增點位' } })
     await confirm('yes')
     expect(
@@ -1294,7 +1300,7 @@ describe('ProjectItemChangePage review round 2', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '新增查核項次' }),
     )
-    const titles = await screen.findAllByLabelText('項次標題 *')
+    const titles = await screen.findAllByLabelText('項次標題')
     fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     await waitFor(() =>

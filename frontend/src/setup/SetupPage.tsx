@@ -16,7 +16,8 @@ import { listCompanies, type Company, type CreatedUser } from '../admin/api'
 import TemporaryPassword from '../admin/TemporaryPassword'
 import UserForm from '../admin/UserForm'
 import { ApiError } from '../auth/api'
-import AuthLayout, { RequiredMark } from '../auth/AuthLayout'
+import AuthLayout from '../auth/AuthLayout'
+import { RequiredMark } from '../ui/Form'
 import {
   FieldError,
   Form,

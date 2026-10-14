@@ -564,7 +564,7 @@ describe('adding and renaming zones', () => {
 
     expect(
       await screen.findByText('同一專案已有相同名稱的分區。'),
-    ).toHaveClass('tpl-field-error')
+    ).toHaveClass('field-error')
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input).toHaveAttribute(
       'aria-describedby',

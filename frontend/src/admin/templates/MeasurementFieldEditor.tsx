@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { InspectionPoint, MeasurementField } from './api'
+import { RequiredMark } from '../../ui/Form'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { boundField, localizeField } from './templateEditorUtils'
 
@@ -37,9 +38,9 @@ export function MeasurementFieldEditor({
   return (
     <section className="tpl-point-section" aria-label="要記錄什麼">
       <h4>要記錄什麼</h4>
-      <p className="tpl-hint">沒有實測欄位也可以，例如只要拍照。</p>
+      <p className="tpl-hint muted-text">沒有實測欄位也可以，例如只要拍照。</p>
       {point.measurement_fields.length === 0 && (
-        <p className="tpl-empty-small">還沒有實測欄位。</p>
+        <p className="tpl-empty-small muted-text">還沒有實測欄位。</p>
       )}
       {point.measurement_fields.map((field, fieldIndex) => {
         const bound = boundField(point) === field
@@ -56,10 +57,7 @@ export function MeasurementFieldEditor({
         return (
           <div className="tpl-field-card" key={field.clientKey}>
             <label htmlFor={`field-${pointIndex}-${fieldIndex}-name`}>
-              欄位名稱{' '}
-              <b aria-hidden="true" className="tpl-required">
-                *
-              </b>
+              欄位名稱 <RequiredMark />
             </label>
             <input
               aria-invalid={Boolean(errors[`${base}:name`])}
@@ -74,7 +72,7 @@ export function MeasurementFieldEditor({
               value={field.name}
             />
             {errors[`${base}:name`] && (
-              <p className="tpl-field-error">{errors[`${base}:name`]}</p>
+              <p className="field-error">{errors[`${base}:name`]}</p>
             )}
             <label htmlFor={`field-${pointIndex}-${fieldIndex}-type`}>
               欄位型別
@@ -108,20 +106,17 @@ export function MeasurementFieldEditor({
               <option value="number">數字</option>
             </select>
             {errors[`${base}:type`] && (
-              <p className="tpl-field-error">{errors[`${base}:type`]}</p>
+              <p className="field-error">{errors[`${base}:type`]}</p>
             )}
             {actionErrors[`${base}:type`] && (
-              <p className="tpl-field-error" role="alert">
+              <p className="field-error" role="alert">
                 {actionErrors[`${base}:type`]}
               </p>
             )}
             {field.field_type === 'number' && (
               <>
                 <label htmlFor={`field-${pointIndex}-${fieldIndex}-unit`}>
-                  單位{' '}
-                  <b aria-hidden="true" className="tpl-required">
-                    *
-                  </b>
+                  單位 <RequiredMark />
                 </label>
                 <input
                   aria-invalid={Boolean(errors[`${base}:unit`])}
@@ -136,11 +131,13 @@ export function MeasurementFieldEditor({
                   value={field.unit ?? ''}
                 />
                 {errors[`${base}:unit`] && (
-                  <p className="tpl-field-error">{errors[`${base}:unit`]}</p>
+                  <p className="field-error">{errors[`${base}:unit`]}</p>
                 )}
               </>
             )}
-            {bound && <p className="tpl-hint">此欄位用於數值標準。</p>}
+            {bound && (
+              <p className="tpl-hint muted-text">此欄位用於數值標準。</p>
+            )}
             {confirmField === `${pointIndex}:${fieldIndex}` &&
             !structureLocked ? (
               <ConfirmBox
@@ -173,7 +170,7 @@ export function MeasurementFieldEditor({
               </button>
             )}
             {actionErrors[`${base}:remove`] && (
-              <p className="tpl-field-error" role="alert">
+              <p className="field-error" role="alert">
                 {actionErrors[`${base}:remove`]}
               </p>
             )}

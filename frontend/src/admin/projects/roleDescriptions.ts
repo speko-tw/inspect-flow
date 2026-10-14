@@ -1,11 +1,11 @@
-// 前後端共用同一份權限目錄，專案權限由目錄自動帶入描述與摘要。
-import permissionCodeContract from '../../../../backend/app/permission_codes.json'
+// 前後端共用權限目錄；專案權限描述與摘要由目錄帶入。
+import permissionCodeContract from '../../permissionCodeContract'
 
 const PERMISSION_DESCRIPTIONS = permissionCodeContract.codes
   .filter(({ scope }) => scope === 'project')
   .map(({ code, description }) => [code, description] as const)
 
-// Role 只能包含 project-scope 權限碼；module 權限不在角色摘要內。
+// Role 只能包含 project-scope 權限碼；摘要不含 module 權限。
 export const ROLE_SUMMARY_PHRASE_CODES = new Set(
   PERMISSION_DESCRIPTIONS.map(([code]) => code),
 )

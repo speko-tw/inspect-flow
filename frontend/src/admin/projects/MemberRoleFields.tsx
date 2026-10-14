@@ -1,13 +1,9 @@
 import { useId, type Ref } from 'react'
 
+import { RequiredMark } from '../../ui/Form'
 import RolePermissionSummary from './RolePermissionSummary'
 import { describeRole } from './roleDescriptions'
 import type { Role } from './api'
-
-/** 必填欄位的標示；「*」只給視覺，必填由欄位說明表達。 */
-export function RequiredMark() {
-  return <span aria-hidden="true"> *</span>
-}
 
 /**
  * 角色複選：每個角色名稱旁附一行白話說明（依權限碼產生，不顯示代碼）。
@@ -37,7 +33,7 @@ export default function MemberRoleFields({
         專案角色
         <RequiredMark />
       </legend>
-      <p className="member-hint">至少選一個，角色決定這個人能做什麼。</p>
+      <p className="field-hint">至少選一個，角色決定這個人能做什麼。</p>
       {roles.map((role, index) => {
         const nameId = `${baseId}-name-${role.id}`
         const descId = `${baseId}-desc-${role.id}`
@@ -75,7 +71,7 @@ export default function MemberRoleFields({
         )
       })}
       {error && (
-        <p className="member-field-error" id={errorId}>
+        <p className="field-error" id={errorId}>
           {error}
         </p>
       )}

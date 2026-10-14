@@ -110,7 +110,7 @@ describe('shared form errors', () => {
     )
 
     expect(screen.getByText('表單錯誤')).toHaveClass('shared-form-error')
-    expect(screen.getByText('欄位錯誤')).toHaveClass('shared-field-error')
+    expect(screen.getByText('欄位錯誤')).toHaveClass('field-error')
   })
 
   it('supports refs, tabIndex, and repeated error focus', async () => {

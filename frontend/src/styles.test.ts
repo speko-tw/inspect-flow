@@ -20,6 +20,18 @@ function declarationsOf(selector: string, source = css) {
   )
 }
 
+function declarationsIn(rule: string) {
+  const match = /\{([^}]*)/.exec(rule)
+  expect(match, '找不到 CSS 宣告區塊').not.toBeNull()
+  return Object.fromEntries(
+    (match?.[1] ?? '')
+      .split(';')
+      .map((line) => line.split(/:(.*)/s))
+      .filter(([name, value]) => name.trim() && value)
+      .map(([name, value]) => [name.trim(), value.trim()]),
+  )
+}
+
 // #517 的管理頁與專案頁都在共用 main 內，表單和分區列沿用共用間距。
 describe('page and zone spacing', () => {
   it('keeps the same main inset for admin and project sections', () => {
@@ -95,8 +107,7 @@ describe('notice rules', () => {
   )
 
   it('draws role=status neutral, not as a success box', () => {
-    expect(statusRule).toContain('var(--surface-alt)')
-    expect(statusRule).not.toContain('--success')
+    expect(declarationsIn(statusRule).background).toBe('var(--surface-alt)')
   })
 
   it.each(['success', 'info', 'warning', 'error'])(
@@ -104,10 +115,12 @@ describe('notice rules', () => {
     (kind) => {
       const start = css.indexOf(`\n.notice-${kind} {\n  border-color`)
       expect(start).toBeGreaterThan(0)
-      const rule = css.slice(start, css.indexOf('}', start))
-      expect(rule).toContain(`var(--${kind}-bg)`)
-      expect(rule).toContain(`var(--${kind}-text)`)
-      expect(rule).toContain(`var(--${kind}-border)`)
+      const declarations = declarationsIn(
+        css.slice(start, css.indexOf('}', start)),
+      )
+      expect(declarations.background).toBe(`var(--${kind}-bg)`)
+      expect(declarations.color).toBe(`var(--${kind}-text)`)
+      expect(declarations['border-color']).toBe(`var(--${kind}-border)`)
     },
   )
 })
@@ -122,7 +135,11 @@ describe('button rules', () => {
 
   it('shares one base between button and .btn', () => {
     expect(buttons).toMatch(/\nbutton,\n\.btn \{/)
-    expect(buttons).toContain('text-decoration: none')
+    expect(
+      declarationsIn(buttons.match(/\nbutton,\n\.btn \{[^}]*\}/)?.[0] ?? '')[
+        'text-decoration'
+      ],
+    ).toBe('none')
   })
 
   it('does not turn type=submit buttons into primary buttons', () => {
@@ -137,7 +154,11 @@ describe('button rules', () => {
     const start = buttons.indexOf(`\n${selector} {`)
     expect(start).toBeGreaterThan(0)
     const rule = buttons.slice(start, buttons.indexOf('}', start))
-    expect(rule).toContain(`var(${token})`)
+    expect(
+      Object.values(declarationsIn(rule)).some(
+        (value) => value === `var(${token})`,
+      ),
+    ).toBe(true)
   })
 
   it('defines the small size and the back link', () => {
@@ -165,8 +186,9 @@ describe('selected rules', () => {
     expect(rule).toContain('.plan-list button')
     expect(rule).toContain('.tpl-tree-row')
     expect(rule).toContain("[aria-current='false']")
-    expect(rule).toContain('border-left-color: var(--primary)')
-    expect(rule).toContain('font-weight: 700')
+    const declarations = declarationsIn(rule)
+    expect(declarations['border-left-color']).toBe('var(--primary)')
+    expect(declarations['font-weight']).toBe('700')
   })
 
   it('has no second selected style left on the tree or the sidebar', () => {
@@ -177,12 +199,10 @@ describe('selected rules', () => {
 
 // 頁首導覽（#500）：單列、放不下時列內橫向滑動，不讓頁面橫向捲動。
 describe('app header navigation', () => {
-  const start = css.indexOf('\n.app-header-nav {')
-  const rule = css.slice(start, css.indexOf('}', start))
-
   it('keeps the tabs on one scrollable row', () => {
-    expect(rule).toContain('flex-wrap: nowrap')
-    expect(rule).toContain('overflow-x: auto')
+    const declarations = declarationsOf('.app-header-nav')
+    expect(declarations['flex-wrap']).toBe('nowrap')
+    expect(declarations['overflow-x']).toBe('auto')
   })
 
   it('fades the edge that still has hidden tabs, only when scrollable', () => {
@@ -190,7 +210,9 @@ describe('app header navigation', () => {
     expect(css).toContain('.app-header [data-more-start] {')
     expect(css).toContain('.app-header [data-more-start][data-more-end] {')
     const start = css.indexOf('.app-header [data-more-end] {')
-    expect(css.slice(start, css.indexOf('}', start))).toContain('mask-image')
+    expect(
+      Object.keys(declarationsIn(css.slice(start, css.indexOf('}', start)))),
+    ).toContain('mask-image')
   })
 })
 
@@ -231,16 +253,20 @@ describe('named row rules', () => {
 
   it('makes the name bold and larger than the small row buttons', () => {
     const rule = block('.named-row-name')
-    expect(rule).toContain('font-weight: 700')
-    expect(rule).toMatch(/font-size: 1\.\d+rem/)
+    const declarations = declarationsIn(rule)
+    expect(declarations['font-weight']).toBe('700')
+    expect(declarations['font-size']).toMatch(/1\.\d+rem/)
   })
 
   it('separates rows with a line and pushes actions to the right', () => {
-    expect(block('.named-row')).toContain('border-bottom: 1px solid')
-    expect(block('.named-row')).toContain('justify-content: space-between')
+    const declarations = declarationsOf('.named-row')
+    expect(declarations['border-bottom']).toMatch(/^1px solid/)
+    expect(declarations['justify-content']).toBe('space-between')
   })
 
   it('keeps role names on one line while permissions wrap', () => {
-    expect(block('.roles-table tbody th')).toContain('white-space: nowrap')
+    expect(declarationsOf('.roles-table tbody th')['white-space']).toBe(
+      'nowrap',
+    )
   })
 })

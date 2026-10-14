@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import permissionCodeContract from '../../../../backend/app/permission_codes.json'
+import permissionCodeContract from '../../permissionCodeContract'
 
 import {
   NO_PERMISSION_TEXT,

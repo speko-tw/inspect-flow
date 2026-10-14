@@ -84,7 +84,10 @@ export function TemplateLibraryNav({
                   <span aria-hidden="true">{categoryOpen ? '▾' : '▸'}</span>
                   <span>{category.name}</span>
                   {systemCount !== undefined && (
-                    <span aria-hidden="true" className="tpl-tree-count">
+                    <span
+                      aria-hidden="true"
+                      className="tpl-tree-count muted-text"
+                    >
                       {systemCount} 個系統
                     </span>
                   )}
@@ -125,7 +128,7 @@ export function TemplateLibraryNav({
                             {itemCount !== undefined && (
                               <span
                                 aria-hidden="true"
-                                className="tpl-tree-count"
+                                className="tpl-tree-count muted-text"
                               >
                                 {itemCount} 個查核項目
                               </span>
@@ -153,9 +156,14 @@ export function TemplateLibraryNav({
                                             ? 'true'
                                             : undefined
                                         }
-                                        className={`tpl-tree-row tpl-item-row${
-                                          applied ? ' tpl-item-applied' : ''
-                                        }`}
+                                        className={[
+                                          'tpl-tree-row',
+                                          'tpl-item-row',
+                                          'muted-text',
+                                          applied ? 'tpl-item-applied' : '',
+                                        ]
+                                          .filter(Boolean)
+                                          .join(' ')}
                                         onClick={() =>
                                           item.id &&
                                           !applied &&
@@ -171,14 +179,20 @@ export function TemplateLibraryNav({
                                           {item.title || '未命名查核項目'}
                                         </span>
                                         {applied && (
-                                          <span className="tpl-applied-status">
+                                          <span
+                                            className={
+                                              'tpl-applied-status muted-text'
+                                            }
+                                          >
                                             已套用
                                           </span>
                                         )}
                                         {mobile && (
                                           <span
                                             aria-hidden="true"
-                                            className="tpl-item-open"
+                                            className={
+                                              'tpl-item-open muted-text'
+                                            }
                                           >
                                             開啟詳情
                                           </span>
@@ -191,12 +205,14 @@ export function TemplateLibraryNav({
                                 items.filter(
                                   (item) => item.system_id === system.id,
                                 ).length === 0 && (
-                                  <li className="tpl-tree-empty">
+                                  <li className="tpl-tree-empty muted-text">
                                     還沒有查核項目
                                   </li>
                                 )}
                               {!loadedSystemIds.has(system.id) && (
-                                <li className="tpl-tree-empty">載入中…</li>
+                                <li className="tpl-tree-empty muted-text">
+                                  載入中…
+                                </li>
                               )}
                             </ul>
                           )}
@@ -210,7 +226,9 @@ export function TemplateLibraryNav({
           })}
         </ul>
       )}
-      {mobile && <p className="tpl-mobile-hint">點選「開啟詳情」查看內容</p>}
+      {mobile && (
+        <p className="tpl-mobile-hint muted-text">點選「開啟詳情」查看內容</p>
+      )}
     </aside>
   )
 }
