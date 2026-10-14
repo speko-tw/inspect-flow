@@ -273,6 +273,41 @@ def test_new_user_without_external_flag_is_rejected_without_insert(
     )
 
 
+def test_local_external_collaborator_keeps_flag_when_company_changes(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    first_company = client.post(
+        "/api/v1/companies", json={"name": "外部協作者原公司"}
+    )
+    next_company = client.post(
+        "/api/v1/companies", json={"name": "外部協作者新公司"}
+    )
+    assert first_company.status_code == 201
+    assert next_company.status_code == 201
+    external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        username="local.external.company",
+        email="local.external.company@demo.example",
+        name_zh="本地外部協作者",
+        company_id=UUID(first_company.json()["id"]),
+    )
+    db_session.commit()
+
+    response = client.put(
+        f"/api/v1/users/{external.id}/company",
+        json={"company_id": next_company.json()["id"]},
+    )
+
+    assert response.status_code == 200, response.text
+    db_session.expire_all()
+    stored = db_session.get(User, external.id)
+    assert stored is not None
+    assert stored.company_id == UUID(next_company.json()["id"])
+    assert stored.is_external_collaborator is True
+
+
 def test_internal_user_expiry_constraint_returns_422(admin_client, db_session):
     client, _admin = admin_client
     user = create_root_user_with_company(db_session, "EXPIRY01")
