@@ -41,6 +41,7 @@ from app.services.inspection_planning import (
     field_inspection_task_filters,
     get_inspection_plan,
     get_inspection_task,
+    inspection_task_list_filters,
     rename_inspection_plan,
     rename_inspection_task,
     rename_project_zone,
@@ -426,6 +427,12 @@ def test_get_task_hides_drafts_from_inspectors(session, operator, monkeypatch):
             "inspection_task.inspect",
             user=reader,
         )
+        visible_tasks = session.scalars(
+            select(InspectionTask).where(
+                *inspection_task_list_filters(session, project_id=project.id)
+            )
+        ).all()
+        assert visible_tasks == []
         with pytest.raises(PlanningError) as hidden:
             get_inspection_task(session, task_id=draft.id)
         assert hidden.value.code == "inspection_task.not_found"
@@ -438,6 +445,12 @@ def test_get_task_hides_drafts_from_inspectors(session, operator, monkeypatch):
             "app.services.inspection_planning.get_current_operator",
             lambda _: reader,
         )
+        visible_tasks = session.scalars(
+            select(InspectionTask).where(
+                *inspection_task_list_filters(session, project_id=project.id)
+            )
+        ).all()
+        assert visible_tasks == [draft]
         assert get_inspection_task(session, task_id=draft.id) == draft
 
 

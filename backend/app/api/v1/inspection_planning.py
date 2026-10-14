@@ -1,17 +1,21 @@
 """提供 Plan、Task、分區及專案項目 API，統一權限與錯誤契約。
 
-涵蓋 IP-R01～IP-R10、IP-R11（dispatched_at）、IP-R12～IP-R14。
+涵蓋 IP-R01～IP-R10、IP-R11（dispatched_at）、IP-R12～IP-R14，
+以及 IP-R18／IP-R19 的專案進度查詢與詳情。
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
@@ -353,6 +357,7 @@ def _task_summaries(
         User,
         [task.assignee_id for task in tasks if task.assignee_id is not None],
     )
+    plans = load_by_id(db, InspectionPlan, [task.plan_id for task in tasks])
     zones = load_by_id(
         db,
         ProjectZone,
@@ -376,12 +381,26 @@ def _task_summaries(
                 }
             )
         assignee = assignees.get(task.assignee_id)
+        plan = plans[task.plan_id]
         zone = zones.get(task.zone_id)
         result.append(
             {
                 "id": task.id,
                 "project_id": task.project_id,
                 "plan_id": task.plan_id,
+                "plan": {
+                    "id": plan.id,
+                    "name": plan.name,
+                    "archived": plan.is_archived,
+                },
+                "item_summary": {
+                    "first_title": (
+                        details[0]["current_snapshot"]["title"]
+                        if details and details[0]["current_snapshot"]
+                        else None
+                    ),
+                    "count": len(details),
+                },
                 "name": task.name,
                 "status": task.status,
                 "inspection_level": task.inspection_level,
@@ -869,19 +888,122 @@ def project_tasks(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(50, ge=1, le=100),
+    status: Literal[
+        "DRAFT", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
+    ]
+    | None = None,
+    needs_reinspection: Literal["true"] | None = None,
     db: Session = _db_dependency,
 ):
-    """列出專案 Task；無讀取或現場權限時拒絕。"""
-    filters = _call(inspection_task_list_filters, db, project_id=project_id)
-    _project_exists(db, project_id)
-    return page(
-        db,
-        InspectionTask,
-        cursor=cursor,
-        limit=limit,
-        filters=filters,
-        serialize_batch=lambda rows: _task_summaries(db, rows),
+    """依 IP-R18 以資料庫篩選專案 Task 並按派出時間倒序分頁。"""
+    filters = list(
+        _call(inspection_task_list_filters, db, project_id=project_id)
     )
+    _project_exists(db, project_id)
+    if status is not None:
+        filters.append(InspectionTask.status == status)
+    if needs_reinspection:
+        # IP-R11 的待重查數排除封存計畫，且只計至少一項待重查的任務。
+        filters.extend(
+            (
+                InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
+                InspectionTask.plan_id.in_(
+                    select(InspectionPlan.id).where(
+                        InspectionPlan.is_archived.is_(False)
+                    )
+                ),
+                InspectionTask.id.in_(
+                    select(TaskInspectionItem.task_id).where(
+                        TaskInspectionItem.needs_reinspection.is_(True)
+                    )
+                ),
+            )
+        )
+
+    sort_time = func.coalesce(
+        InspectionTask.dispatched_at, InspectionTask.created_at
+    )
+    key = _project_task_cursor_key(cursor, status, bool(needs_reinspection))
+    statement = select(InspectionTask).where(*filters)
+    if key is not None:
+        timestamp, identifier = key
+        statement = statement.where(
+            or_(
+                sort_time < timestamp,
+                and_(sort_time == timestamp, InspectionTask.id < identifier),
+            )
+        )
+    rows = db.scalars(
+        statement.order_by(sort_time.desc(), InspectionTask.id.desc()).limit(
+            limit + 1
+        )
+    ).all()
+    items = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit:
+        last = items[-1]
+        next_cursor = _encode_project_task_cursor(
+            last.dispatched_at or last.created_at,
+            last.id,
+            status,
+            bool(needs_reinspection),
+        )
+    return {
+        "items": _task_summaries(db, items),
+        "next_cursor": next_cursor,
+    }
+
+
+def _encode_project_task_cursor(
+    timestamp: Any,
+    identifier: UUID,
+    status: str | None,
+    needs_reinspection: bool,
+) -> str:
+    """依 IP-R18 將排序鍵及篩選一併綁定，避免跨篩選沿用 cursor。"""
+    payload = {
+        "key": encode_page_cursor(timestamp, identifier),
+        "status": status,
+        "needs_reinspection": needs_reinspection,
+    }
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _project_task_cursor_key(
+    cursor: str | None,
+    status: str | None,
+    needs_reinspection: bool,
+) -> tuple[Any, UUID] | None:
+    if cursor is None:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        payload = json.loads(raw.decode("utf-8"))
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"key", "status", "needs_reinspection"}
+            or payload["status"] != status
+            or payload["needs_reinspection"] is not needs_reinspection
+        ):
+            raise ValueError("cursor filter mismatch")
+        key = page_cursor_key(payload["key"])
+        if (
+            key is None
+            or _encode_project_task_cursor(*key, status, needs_reinspection)
+            != cursor
+        ):
+            raise ValueError("invalid cursor")
+        return key
+    except (
+        ValueError,
+        TypeError,
+        AttributeError,
+        UnicodeDecodeError,
+        binascii.Error,
+        json.JSONDecodeError,
+    ) as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 
 
 @router.get(
@@ -1301,8 +1423,27 @@ def put_task_items(
     ],
 )
 def get_task(task_id: UUID, db: Session = _db_dependency):
-    """讀取 Task 快照；依 IP-R09 隱藏現場不可見的草稿。"""
-    return _task_summary(db, _call(get_inspection_task, db, task_id=task_id))
+    """依 IP-R19 只在內業詳情提供實際開始與完成者姓名。"""
+    task = _call(get_inspection_task, db, task_id=task_id)
+    result = _task_summary(db, task)
+    people = load_by_id(
+        db,
+        User,
+        [
+            person_id
+            for person_id in (task.started_by, task.completed_by)
+            if person_id is not None
+        ],
+    )
+    for field, person_id in (
+        ("started_by_user", task.started_by),
+        ("completed_by_user", task.completed_by),
+    ):
+        person = people.get(person_id)
+        result[field] = (
+            {"id": person.id, "name_zh": person.name_zh} if person else None
+        )
+    return result
 
 
 @router.post(

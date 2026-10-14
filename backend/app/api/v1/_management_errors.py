@@ -2,7 +2,7 @@
 
 from sqlalchemy.exc import IntegrityError
 
-from app.api.errors import ErrorCode
+from app.api.errors import APIError, ErrorCode
 
 _CONFLICT_CODES = {
     ErrorCode.USER_USERNAME_CONFLICT,
@@ -49,3 +49,13 @@ def integrity_error_code(exc: IntegrityError) -> ErrorCode | None:
     ):
         return ErrorCode.REQUEST_VALIDATION_FAILED
     return None
+
+
+def management_api_error(exc: Exception) -> APIError | None:
+    """將已知管理資料衝突轉為 API 錯誤，保留未知資料庫錯誤。"""
+    if not isinstance(exc, IntegrityError):
+        return None
+    code = integrity_error_code(exc)
+    if code is None:
+        return None
+    return APIError(code, management_error_status(code))

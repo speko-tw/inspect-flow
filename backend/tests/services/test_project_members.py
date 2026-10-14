@@ -25,13 +25,9 @@ from app.services import module_permissions
 from app.services.audit import record_audit_event_in_independent_transaction
 from app.services.module_permissions import ExternalRoleAssignmentError
 from app.services.project_members import (
-    RoleAlreadyAssignedError,
-    RoleNotAssignedError,
     add_project_member,
-    assign_role,
     remove_project_member,
     set_project_member_roles,
-    unassign_role,
 )
 from tests.db.conftest import create_root_user_with_company
 
@@ -132,156 +128,6 @@ class TestAddProjectMemberWithRoles:
         )
         assert _field(rows[0].after, "project_id") == str(project.id)
         assert _field(rows[0].after, "user_id") == str(user.id)
-
-
-class TestAssignRole:
-    def test_assign_writes_roles_changed(self, session, operator):
-        project = _new_project(operator, "P-ASSIGN")
-        user = create_root_user_with_company(session, "U-ASSIGN")
-        role_1 = _new_role(operator, "R1-ASSIGN")
-        role_2 = _new_role(operator, "R2-ASSIGN")
-        session.add_all([project, role_1, role_2])
-        session.flush()
-        member = add_project_member(
-            session,
-            project_id=project.id,
-            user_id=user.id,
-            role_ids=[role_1.id],
-        )
-        session.commit()
-
-        assign_role(session, member, role_2.id)
-        session.commit()
-
-        assert {a.role_id for a in member.role_assignments} == {
-            role_1.id,
-            role_2.id,
-        }
-        rows = _audit_rows_for(session, member.id)
-        assert len(rows) == 2
-        latest = rows[-1]
-        assert _field(latest.before, "role_ids") == [str(role_1.id)]
-        assert sorted(_field(latest.after, "role_ids")) == sorted(
-            [str(role_1.id), str(role_2.id)]
-        )
-
-    def test_assign_already_assigned_rejected(self, session, operator):
-        project = _new_project(operator, "P-ASSIGN2")
-        user = create_root_user_with_company(session, "U-ASSIGN2")
-        role_1 = _new_role(operator, "R1-ASSIGN2")
-        session.add_all([project, role_1])
-        session.flush()
-        member = add_project_member(
-            session,
-            project_id=project.id,
-            user_id=user.id,
-            role_ids=[role_1.id],
-        )
-        session.commit()
-        rows_before = _audit_rows_for(session, member.id)
-
-        try:
-            assign_role(session, member, role_1.id)
-        except RoleAlreadyAssignedError:
-            pass
-        else:
-            raise AssertionError("expected RoleAlreadyAssignedError")
-
-        assert {a.role_id for a in member.role_assignments} == {role_1.id}
-        assert _audit_rows_for(session, member.id) == rows_before
-
-
-class TestUnassignRole:
-    def test_unassign_writes_roles_changed(self, session, operator):
-        project = _new_project(operator, "P-UNASSIGN")
-        user = create_root_user_with_company(session, "U-UNASSIGN")
-        role_1 = _new_role(operator, "R1-UNASSIGN")
-        role_2 = _new_role(operator, "R2-UNASSIGN")
-        session.add_all([project, role_1, role_2])
-        session.flush()
-        member = add_project_member(
-            session,
-            project_id=project.id,
-            user_id=user.id,
-            role_ids=[role_1.id, role_2.id],
-        )
-        session.commit()
-
-        unassign_role(session, member, role_1.id)
-        session.commit()
-
-        assert {a.role_id for a in member.role_assignments} == {role_2.id}
-        rows = _audit_rows_for(session, member.id)
-        latest = rows[-1]
-        assert sorted(_field(latest.before, "role_ids")) == sorted(
-            [str(role_1.id), str(role_2.id)]
-        )
-        assert _field(latest.after, "role_ids") == [str(role_2.id)]
-
-    def test_unassign_not_assigned_rejected(self, session, operator):
-        project = _new_project(operator, "P-UNASSIGN2")
-        user = create_root_user_with_company(session, "U-UNASSIGN2")
-        role_1 = _new_role(operator, "R1-UNASSIGN2")
-        session.add_all([project, role_1])
-        session.flush()
-        member = add_project_member(
-            session, project_id=project.id, user_id=user.id
-        )
-        session.commit()
-        rows_before = _audit_rows_for(session, member.id)
-
-        try:
-            unassign_role(session, member, role_1.id)
-        except RoleNotAssignedError:
-            pass
-        else:
-            raise AssertionError("expected RoleNotAssignedError")
-
-        assert list(member.role_assignments) == []
-        assert _audit_rows_for(session, member.id) == rows_before
-
-    def test_unassign_then_reassign_same_transaction(self, session, operator):
-        """:func:`unassign_role` must leave ``member.role_assignments``
-        correctly reflecting the removal for the rest of the same
-        transaction (no ``commit`` in between): re-assigning the same
-        role right after unassigning it must succeed, not raise
-        ``RoleAlreadyAssignedError`` from a stale in-memory
-        collection.
-        """
-        project = _new_project(operator, "P-REASSIGN")
-        user = create_root_user_with_company(session, "U-REASSIGN")
-        role_1 = _new_role(operator, "R1-REASSIGN")
-        session.add_all([project, role_1])
-        session.flush()
-        member = add_project_member(
-            session,
-            project_id=project.id,
-            user_id=user.id,
-            role_ids=[role_1.id],
-        )
-
-        unassign_role(session, member, role_1.id)
-        assert {a.role_id for a in member.role_assignments} == set()
-
-        assign_role(session, member, role_1.id)
-        session.commit()
-
-        assert {a.role_id for a in member.role_assignments} == {role_1.id}
-        remaining = session.scalars(
-            select(ProjectMemberRole).where(
-                ProjectMemberRole.project_member_id == member.id,
-                ProjectMemberRole.role_id == role_1.id,
-            )
-        ).all()
-        assert len(remaining) == 1
-
-        rows = _audit_rows_for(session, member.id)
-        assert len(rows) == 3  # initial roles_changed, unassign, assign
-        unassign_event, assign_event = rows[1], rows[2]
-        assert _field(unassign_event.before, "role_ids") == [str(role_1.id)]
-        assert _field(unassign_event.after, "role_ids") == []
-        assert _field(assign_event.before, "role_ids") == []
-        assert _field(assign_event.after, "role_ids") == [str(role_1.id)]
 
 
 class TestRemoveProjectMember:
@@ -416,7 +262,7 @@ class TestSetProjectMemberRoles:
         assert len(_audit_rows_for(session, member.id)) == 2
 
 
-@pytest.mark.parametrize("write", ["add", "assign", "replace"])
+@pytest.mark.parametrize("write", ["add", "replace"])
 def test_external_member_accepts_external_allowed_read_role(
     session, operator, write
 ):
@@ -444,9 +290,6 @@ def test_external_member_accepts_external_allowed_read_role(
             user_id=target.id,
             role_ids=[role.id],
         )
-    elif write == "assign":
-        assert member is not None
-        assign_role(session, member, role.id)
     else:
         assert member is not None
         set_project_member_roles(session, member, [role.id])
@@ -465,7 +308,7 @@ def test_external_member_accepts_external_allowed_read_role(
         ("inspection_task.inspect", True),
     ],
 )
-@pytest.mark.parametrize("write", ["add", "assign", "replace"])
+@pytest.mark.parametrize("write", ["add", "replace"])
 def test_external_role_assignment_entries_reject_and_audit_once(
     session,
     operator,
@@ -512,9 +355,7 @@ def test_external_role_assignment_entries_reject_and_audit_once(
                 assert member is not None
                 transaction_member = transaction.get(ProjectMember, member.id)
                 assert transaction_member is not None
-                if write == "assign":
-                    assign_role(transaction, transaction_member, role.id)
-                else:
+                if write == "replace":
                     set_project_member_roles(
                         transaction, transaction_member, [role.id]
                     )

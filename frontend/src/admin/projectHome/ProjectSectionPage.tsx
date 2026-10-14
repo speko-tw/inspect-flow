@@ -16,6 +16,7 @@ import ProjectSectionShell, {
 import { useWorkflowSummary } from './WorkflowSummaryProvider'
 import { canViewIndoorSections } from './permissions'
 import ProjectDeniedPage from './ProjectDeniedPage'
+import ProgressPage from '../progress/ProgressPage'
 
 const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
   members: '成員',
@@ -40,6 +41,7 @@ export default function ProjectSectionPage({
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
   const { loadSectionSummary } = useWorkflowSummary()
+  const [retry, setRetry] = useState(0)
   const [result, setResult] = useState<{
     projectId: string
     project: { project_code: string; name: string }
@@ -82,23 +84,32 @@ export default function ProjectSectionPage({
     return () => {
       active = false
     }
-  }, [loadSectionSummary, projectId, section])
+  }, [loadSectionSummary, projectId, retry, section])
 
   const currentResult = result?.projectId === projectId ? result : null
-  if (
-    currentResult &&
-    !currentResult.canViewIndoor &&
-    currentResult.error === undefined
-  ) {
+  if (currentResult && !currentResult.canViewIndoor && !currentResult.error) {
     return <Navigate replace to={landingPath(user)} />
   }
   if (currentResult?.error) {
     if (currentResult.denied) return <ProjectDeniedPage />
     if (currentResult.notFound) return <ProjectNotFound />
-    return <p role="alert">{currentResult.error}</p>
+    return (
+      <p role="alert">
+        {currentResult.error}{' '}
+        <button type="button" onClick={() => setRetry((value) => value + 1)}>
+          重新載入
+        </button>
+      </p>
+    )
   }
   if (!currentResult) {
     return <p role="status">正在確認專案權限…</p>
+  }
+  if (
+    section === 'progress' &&
+    !currentResult.viewerPermissions.includes('inspection_task.read')
+  ) {
+    return <ProjectDeniedPage headingLevel={2} />
   }
 
   const childContent =
@@ -122,6 +133,10 @@ export default function ProjectSectionPage({
         <ProjectZonesPage
           viewerPermissions={currentResult.viewerPermissions}
         />
+      )
+    } else if (section === 'progress') {
+      content = (
+        <ProgressPage viewerPermissions={currentResult.viewerPermissions} />
       )
     } else {
       content = (

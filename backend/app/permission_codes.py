@@ -37,18 +37,23 @@ alone so the future T5 (``services/test_permissions.py``) and T7
 (``services/test_roles.py``) tasks (plan.md) can reuse it without
 duplicating the test enum.
 
-Out of scope here: DOM-R30's format/length check (lives on
-``RolePermission`` itself, in ``app/models/role.py``); the effective-
-permission union calculation and the DOM-R24 "has modify capability"
-judgment (plan.md T5, ``app/services/permissions.py``, issue #133);
-anything about *which* codes a future feature spec should register
--- this module only provides the registry mechanism, not its
-eventual contents.
+權限目錄由前後端共用，讓權限中繼資料只有一份來源。DOM-R30 的格式與長度檢查，
+仍由 ``app/models/role.py`` 的 ``RolePermission`` 負責。
 """
 
+import json
+from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, cast
 
 from app.api.errors import DescribedStrEnum
+
+
+class _PermissionCodeRegistry(Protocol):
+    def __iter__(self) -> Iterator[DescribedStrEnum]: ...
+
+    def __getattr__(self, name: str) -> DescribedStrEnum: ...
 
 
 @dataclass(frozen=True)
@@ -60,124 +65,43 @@ class PermissionDefinition:
     external_allowed: bool = False
 
 
-class PermissionCode(DescribedStrEnum):
-    """DOM-R35 registry of permission codes a ``Role`` may store."""
+_permission_catalog = json.loads(
+    Path(__file__)
+    .with_name("permission_codes.json")
+    .read_text(encoding="utf-8")
+)["codes"]
 
-    PROJECT_MEMBER_MANAGE = (
-        "project_member.manage",
-        "管理專案成員與其角色",
+# 共用 DOM-R35 權限目錄，避免前後端各自維護一份權限定義。
+if TYPE_CHECKING:
+    PermissionCode = cast(_PermissionCodeRegistry, None)
+else:
+    PermissionCode = DescribedStrEnum(
+        "PermissionCode",
+        {
+            item["name"]: (item["code"], item["description"])
+            for item in _permission_catalog
+        },
+        module=__name__,
     )
-    PROJECT_UPDATE = ("project.update", "調整專案")
-    PROJECT_READ = ("project.read", "檢視專案")
-    PROJECT_USE = ("project.use", "使用專案模組")
-    PROJECT_CREATE = ("project.create", "開設專案")
-    ALL_PROJECT_PROGRESS_READ = (
-        "all_project_progress.read",
-        "檢視所有專案進度",
-    )
-    INSPECTION_USE = ("inspection.use", "使用查核模組")
-    TEMPLATE_USE = ("template.use", "使用範本模組")
-    TEMPLATE_MANAGE = ("template.manage", "管理範本庫")
-    PROJECT_INSPECTION_ITEM_EDIT = (
-        "project_inspection_item.edit",
-        "編輯專案查核項目",
-    )
-    PROJECT_INSPECTION_ITEM_READ = (
-        "project_inspection_item.read",
-        "讀取專案查核項目",
-    )
-    PROJECT_ZONE_READ = ("project_zone.read", "讀取專案分區")
-    PROJECT_ZONE_MANAGE = ("project_zone.manage", "管理專案分區")
-    INSPECTION_PLAN_READ = ("inspection_plan.read", "讀取查核計畫")
-    INSPECTION_PLAN_CREATE = ("inspection_plan.create", "建立查核計畫")
-    INSPECTION_PLAN_MANAGE = ("inspection_plan.manage", "管理查核計畫")
-    INSPECTION_PLAN_ARCHIVE = ("inspection_plan.archive", "封存查核計畫")
-    INSPECTION_PLAN_UNARCHIVE = (
-        "inspection_plan.unarchive",
-        "取消封存查核計畫",
-    )
-    INSPECTION_TASK_READ = ("inspection_task.read", "讀取查核任務")
-    INSPECTION_TASK_MANAGE = ("inspection_task.manage", "管理查核任務")
-    INSPECTION_TASK_CREATE = ("inspection_task.create", "建立查核任務")
-    INSPECTION_TASK_DISPATCH = ("inspection_task.dispatch", "派出查核任務")
-    INSPECTION_TASK_ASSIGN = ("inspection_task.assign", "指派查核任務")
-    INSPECTION_TASK_INSPECT = ("inspection_task.inspect", "執行現場查核")
-    INSPECTION_TASK_DELETE_DRAFT = (
-        "inspection_task.delete_draft",
-        "刪除草稿查核任務",
-    )
-    INSPECTION_TASK_CANCEL = ("inspection_task.cancel", "取消或恢復查核任務")
 
 
 # Always ``PermissionCode`` in production. Only
 # ``tests/conftest.py``'s ``registered_permission_codes`` fixture
 # reassigns this, and only for the duration of one test.
-_active_registry: type[DescribedStrEnum] = PermissionCode
+_active_registry: _PermissionCodeRegistry = PermissionCode
 
 MODULES = frozenset({"project", "inspection", "template"})
 
 # Every production permission has explicit scope, owning module, and
 # external-collaborator eligibility. Test-only registry entries use the
 # conservative fallback below.
-_PROJECT_CODES = {
-    "project_member.manage": "project",
-    "project.update": "project",
-    "project.read": "project",
-    "project_inspection_item.edit": "inspection",
-    "project_inspection_item.read": "inspection",
-    "project_zone.read": "inspection",
-    "project_zone.manage": "inspection",
-    "inspection_plan.read": "inspection",
-    "inspection_plan.create": "inspection",
-    "inspection_plan.manage": "inspection",
-    "inspection_plan.archive": "inspection",
-    "inspection_plan.unarchive": "inspection",
-    "inspection_task.read": "inspection",
-    "inspection_task.manage": "inspection",
-    "inspection_task.create": "inspection",
-    "inspection_task.dispatch": "inspection",
-    "inspection_task.assign": "inspection",
-    "inspection_task.inspect": "inspection",
-    "inspection_task.delete_draft": "inspection",
-    "inspection_task.cancel": "inspection",
-}
-_MODULE_CODE_MODULES = {
-    "project.use": "project",
-    "project.create": "project",
-    "all_project_progress.read": "project",
-    "inspection.use": "inspection",
-    "template.use": "template",
-    "template.manage": "template",
-}
-_EXTERNAL_ALLOWED_CODES = frozenset(
-    {
-        "project.read",
-        "project_inspection_item.read",
-        "project_zone.read",
-        "inspection_plan.read",
-        "inspection_task.read",
-        "project.use",
-        "inspection.use",
-        "template.use",
-    }
-)
 PERMISSION_DEFINITIONS = {
-    **{
-        code: PermissionDefinition(
-            scope="project",
-            module=module,
-            external_allowed=code in _EXTERNAL_ALLOWED_CODES,
-        )
-        for code, module in _PROJECT_CODES.items()
-    },
-    **{
-        code: PermissionDefinition(
-            scope="module",
-            module=module,
-            external_allowed=code in _EXTERNAL_ALLOWED_CODES,
-        )
-        for code, module in _MODULE_CODE_MODULES.items()
-    },
+    item["code"]: PermissionDefinition(
+        scope=item["scope"],
+        module=item["module"],
+        external_allowed=item["external_allowed"],
+    )
+    for item in _permission_catalog
 }
 
 

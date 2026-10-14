@@ -618,7 +618,7 @@ def inspection_task_list_filters(
 def get_inspection_task(
     session: Session, *, task_id: uuid.UUID
 ) -> InspectionTask:
-    """讀取 Task；依 IP-R09 對現場隱藏 DRAFT。"""
+    """依 IP-R09 隱藏現場不可見的 DRAFT Task。"""
     task = session.get(InspectionTask, task_id)
     if task is None:
         raise PlanningError("inspection_task.not_found")

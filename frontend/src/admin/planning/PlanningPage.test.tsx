@@ -2135,7 +2135,9 @@ describe('planning forms guard (#507)', () => {
       fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '尚未儲存的計畫' },
       })
-      fireEvent.click(screen.getByRole('button', { name: /橋梁查核（/ }))
+      fireEvent.click(
+        await screen.findByRole('button', { name: /橋梁查核（/ }),
+      )
       await screen.findByRole('heading', { name: '無權限' })
 
       fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
