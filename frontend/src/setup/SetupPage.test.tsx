@@ -386,10 +386,10 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
     const error = await screen.findByRole('alert')
     const code = screen.getByLabelText('首次登入碼')
     expect(
-      document.querySelector('label[for="setup-code"] .auth-required-marker'),
+      document.querySelector('label[for="setup-code"] .required-mark'),
     ).toBeInTheDocument()
     expect(error.textContent).toBe('請輸入首次登入碼。')
-    expect(error).toHaveClass('shared-field-error')
+    expect(error).toHaveClass('field-error')
     expect(code).toHaveAttribute('aria-describedby', error.id)
     expect(code).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(code).toHaveFocus())
@@ -447,17 +447,15 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
     const error = await screen.findByRole('alert')
     const password = screen.getByLabelText('新密碼')
     expect(
-      document.querySelector(
-        'label[for="setup-password"] .auth-required-marker',
-      ),
+      document.querySelector('label[for="setup-password"] .required-mark'),
     ).toBeInTheDocument()
     expect(
       document.querySelector(
-        'label[for="setup-password-confirm"] .auth-required-marker',
+        'label[for="setup-password-confirm"] .required-mark',
       ),
     ).toBeInTheDocument()
     expect(error.textContent).toBe('密碼長度必須介於 8 到 128 個字元。')
-    expect(error).toHaveClass('shared-field-error')
+    expect(error).toHaveClass('field-error')
     expect(password).toHaveAttribute('aria-describedby', error.id)
     await waitFor(() => expect(password).toHaveFocus())
     expect(

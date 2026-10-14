@@ -312,14 +312,10 @@ describe('LoginPage 認證失敗與忙碌提示（AUT-AC29、#258）', () => {
     const account = screen.getByLabelText('帳號名稱或 Email')
     const password = screen.getByLabelText('密碼')
     expect(
-      document.querySelector(
-        'label[for="login-account"] .auth-required-marker',
-      ),
+      document.querySelector('label[for="login-account"] .required-mark'),
     ).toBeInTheDocument()
     expect(
-      document.querySelector(
-        'label[for="login-password"] .auth-required-marker',
-      ),
+      document.querySelector('label[for="login-password"] .required-mark'),
     ).toBeInTheDocument()
 
     fillAndSubmit('user@example.com', 'wrong-password')

@@ -88,7 +88,7 @@ export default function TaskDetail({
       {!task && !error && <p role="status">載入任務詳情中…</p>}
       {error && (
         <section
-          className="field-notice field-error field-detail-error"
+          className="field-notice field-notice-error field-detail-error"
           role="alert"
         >
           <h1>

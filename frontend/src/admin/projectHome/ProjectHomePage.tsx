@@ -187,22 +187,22 @@ export default function ProjectHomePage() {
             </section>
             <dl aria-label="專案關鍵數字" className="project-key-numbers">
               <div>
-                <dt>成員</dt>
+                <dt className="muted-text">成員</dt>
                 <dd>{summary.member_count} 人</dd>
               </div>
               <div>
-                <dt>查核項目</dt>
+                <dt className="muted-text">查核項目</dt>
                 <dd>{summary.inspection_item_count} 項</dd>
               </div>
               {summary.task_counts_visible === false ? (
                 <div>
-                  <dt>任務數字</dt>
+                  <dt className="muted-text">任務數字</dt>
                   <dd>無權查看任務</dd>
                 </div>
               ) : (
                 <>
                   <div>
-                    <dt>草稿任務</dt>
+                    <dt className="muted-text">草稿任務</dt>
                     <dd>
                       {canViewProgress ? (
                         <Link to={`${base}/progress?status=DRAFT`}>
@@ -211,18 +211,18 @@ export default function ProjectHomePage() {
                       ) : (
                         <>{summary.task_counts.DRAFT} 件</>
                       )}
-                      <span className="project-key-number-detail">
+                      <span className="project-key-number-detail muted-text">
                         未指派 {summary.draft_tasks_missing_assignee} 件
                       </span>
                     </dd>
                   </div>
                   <div>
-                    <dt>已派出未完成</dt>
+                    <dt className="muted-text">已派出未完成</dt>
                     <dd>
                       {summary.task_counts.PENDING +
                         summary.task_counts.IN_PROGRESS}{' '}
                       件
-                      <span className="project-key-number-detail">
+                      <span className="project-key-number-detail muted-text">
                         {canViewProgress ? (
                           <>
                             <Link to={`${base}/progress?status=PENDING`}>
@@ -242,7 +242,7 @@ export default function ProjectHomePage() {
                     </dd>
                   </div>
                   <div>
-                    <dt>待重查</dt>
+                    <dt className="muted-text">待重查</dt>
                     <dd>
                       {canViewProgress ? (
                         <Link to={`${base}/progress?status=reinspection`}>

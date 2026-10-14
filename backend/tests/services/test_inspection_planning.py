@@ -41,8 +41,7 @@ from app.services.inspection_planning import (
     field_inspection_task_filters,
     get_inspection_plan,
     get_inspection_task,
-    list_inspection_plans,
-    list_inspection_tasks,
+    inspection_task_list_filters,
     rename_inspection_plan,
     rename_inspection_task,
     rename_project_zone,
@@ -401,9 +400,7 @@ def test_zone_name_uses_trim_casefold_and_length_boundary(session, operator):
     assert zone.name == "North"
 
 
-def test_read_permissions_hide_drafts_and_reject_unauthorized(
-    session, operator, monkeypatch
-):
+def test_get_task_hides_drafts_from_inspectors(session, operator, monkeypatch):
     project = _project(session, operator, "READ")
     _grant(session, operator, project, *_planning_codes())
     plan = create_inspection_plan(
@@ -423,10 +420,6 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
             "app.services.inspection_planning.get_current_operator",
             lambda _: reader,
         )
-        with pytest.raises(PlanningError) as forbidden:
-            list_inspection_plans(session, project_id=project.id)
-        assert forbidden.value.code == "authorization.forbidden"
-
         _grant(
             session,
             operator,
@@ -434,7 +427,12 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
             "inspection_task.inspect",
             user=reader,
         )
-        assert list_inspection_tasks(session, project_id=project.id) == []
+        visible_tasks = session.scalars(
+            select(InspectionTask).where(
+                *inspection_task_list_filters(session, project_id=project.id)
+            )
+        ).all()
+        assert visible_tasks == []
         with pytest.raises(PlanningError) as hidden:
             get_inspection_task(session, task_id=draft.id)
         assert hidden.value.code == "inspection_task.not_found"
@@ -447,7 +445,12 @@ def test_read_permissions_hide_drafts_and_reject_unauthorized(
             "app.services.inspection_planning.get_current_operator",
             lambda _: reader,
         )
-        assert list_inspection_tasks(session, project_id=project.id) == [draft]
+        visible_tasks = session.scalars(
+            select(InspectionTask).where(
+                *inspection_task_list_filters(session, project_id=project.id)
+            )
+        ).all()
+        assert visible_tasks == [draft]
         assert get_inspection_task(session, task_id=draft.id) == draft
 
 

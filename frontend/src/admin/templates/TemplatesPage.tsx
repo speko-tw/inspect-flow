@@ -11,6 +11,7 @@ import {
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { RequiredMark } from '../../ui/Form'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { managementErrorMessage } from '../api'
@@ -892,10 +893,7 @@ export default function TemplatesPage() {
       >
         <h2>{heading}</h2>
         <label htmlFor="tpl-name">
-          名稱{' '}
-          <span aria-hidden="true" className="tpl-required">
-            *
-          </span>
+          名稱 <RequiredMark />
         </label>
         <input
           aria-describedby={errors.name ? 'tpl-name-error' : undefined}
@@ -920,11 +918,11 @@ export default function TemplatesPage() {
           value={nameDraft}
         />
         {(errors.name || duplicate) && (
-          <p className="tpl-field-error" id="tpl-name-error" role="alert">
+          <p className="field-error" id="tpl-name-error" role="alert">
             {errors.name || '已有同名項目，請換個名稱'}
           </p>
         )}
-        <p className="tpl-hint">同一層名稱不可重複。</p>
+        <p className="tpl-hint muted-text">同一層名稱不可重複。</p>
         <div className="tpl-actions">
           <button onClick={resetMode} type="button">
             取消
@@ -936,7 +934,7 @@ export default function TemplatesPage() {
           >
             儲存
           </button>
-          <span className="tpl-hint">Enter 儲存，Esc 取消</span>
+          <span className="tpl-hint muted-text">Enter 儲存，Esc 取消</span>
         </div>
       </form>
     )
@@ -1038,7 +1036,9 @@ export default function TemplatesPage() {
     if (selected.type === 'category' && selectedCategory) {
       return (
         <>
-          <p className="tpl-crumb">範本庫 / {selectedCategory.name}</p>
+          <p className="tpl-crumb muted-text">
+            範本庫 / {selectedCategory.name}
+          </p>
           <h2 tabIndex={-1}>{selectedCategory.name}</h2>
           <div className="tpl-actions">
             {editable && (
@@ -1064,7 +1064,7 @@ export default function TemplatesPage() {
                   刪除
                 </button>
                 {actionError && mode !== 'delete-category' && (
-                  <p className="tpl-field-error" role="alert">
+                  <p className="field-error" role="alert">
                     {actionError}
                   </p>
                 )}
@@ -1099,7 +1099,7 @@ export default function TemplatesPage() {
           </h3>
           {systems.filter((row) => row.category_id === selectedCategory.id)
             .length === 0 ? (
-            <p className="tpl-empty-small">
+            <p className="tpl-empty-small muted-text">
               這個類別還沒有系統。新增第一個系統。
             </p>
           ) : (
@@ -1126,7 +1126,7 @@ export default function TemplatesPage() {
     if (selected.type === 'system' && selectedSystem) {
       return (
         <>
-          <p className="tpl-crumb">
+          <p className="tpl-crumb muted-text">
             範本庫 / {selectedCategory?.name} /{selectedSystem.name}
           </p>
           <h2 tabIndex={-1}>{selectedSystem.name}</h2>
@@ -1154,7 +1154,7 @@ export default function TemplatesPage() {
                   刪除
                 </button>
                 {actionError && mode !== 'delete-system' && (
-                  <p className="tpl-field-error" role="alert">
+                  <p className="field-error" role="alert">
                     {actionError}
                   </p>
                 )}
@@ -1186,7 +1186,7 @@ export default function TemplatesPage() {
           )}
           <h3>查核項目（{systemItems.length}）</h3>
           {systemItems.length === 0 ? (
-            <p className="tpl-empty-small">
+            <p className="tpl-empty-small muted-text">
               這個系統還沒有查核項目。新增第一個查核項目。
             </p>
           ) : (
@@ -1211,7 +1211,7 @@ export default function TemplatesPage() {
     if (selected.type === 'item' && selectedItem) {
       return (
         <>
-          <p className="tpl-crumb">
+          <p className="tpl-crumb muted-text">
             範本庫 / {selectedCategory?.name} /{selectedSystem?.name} /{' '}
             {selectedItem.title}
           </p>
@@ -1237,7 +1237,7 @@ export default function TemplatesPage() {
                   刪除查核項目
                 </button>
                 {actionError && (
-                  <p className="tpl-field-error" role="alert">
+                  <p className="field-error" role="alert">
                     {actionError}
                   </p>
                 )}

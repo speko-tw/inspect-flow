@@ -6,7 +6,7 @@ import {
   type Company,
   type CreatedUser,
 } from './api'
-import { Form, FormSubmitButton } from '../ui/Form'
+import { Form, FormSubmitButton, RequiredMark } from '../ui/Form'
 
 const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ -'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
@@ -15,7 +15,7 @@ const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
 function Required({ children }: { children: ReactNode }) {
   return (
     <span>
-      {children} <span aria-hidden="true">*</span>
+      {children} <RequiredMark />
     </span>
   )
 }

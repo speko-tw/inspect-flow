@@ -1,5 +1,6 @@
 import { request, type Page } from '../api'
-import type { InspectionTask, TaskStatus } from '../planning/api'
+import type { InspectionTask } from '../planning/api'
+import type { TaskStatus } from '../projectItems/api'
 
 export type ProgressFilter = TaskStatus | 'reinspection' | 'all'
 

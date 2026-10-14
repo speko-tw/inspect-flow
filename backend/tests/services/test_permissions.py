@@ -9,11 +9,8 @@ numbering:
   copied onto ``ProjectMember``.
 - DOM-AC17: :func:`role_impact_scope` (DOM-R23) -- how many
   ``ProjectMember`` rows and distinct ``User``s hold a ``Role``.
-- DOM-AC26: :func:`has_modify_capability` (DOM-R24) -- whether any
-  of a ``Role``'s codes is not a ``read`` action.
-
-An extra ``TestReadOnly`` class checks all three functions never
-add, flush or delete anything, per this task's ticket.
+- An extra ``TestReadOnly`` class checks both read functions never
+  add, flush or delete anything, per this task's ticket.
 
 Fixtures (``session``, ``operator``) come from this directory's
 ``conftest.py``; ``registered_permission_codes`` comes from
@@ -37,7 +34,6 @@ from app.services.permissions import (
     RoleImpactScope,
     calculate_effective_access,
     effective_permissions,
-    has_modify_capability,
     role_impact_scope,
 )
 from tests.db.conftest import create_root_user_with_company
@@ -236,44 +232,12 @@ class TestDomAc17RoleImpactScope:
         ) == RoleImpactScope(member_count=0, user_count=0)
 
 
-class TestDomAc26HasModifyCapability:
-    """DOM-AC26 (DOM-R24): a role with no codes, or only
-    ``report.read``, has no modify capability; a role with
-    ``report.read`` plus ``report.approve``, or only
-    ``evidence.delete``, does.
-    """
-
-    def test_dom_ac26_no_codes_is_false(self, operator):
-        role = _new_role(operator, "NoCodes-AC26")
-        assert has_modify_capability(role) is False
-
-    def test_dom_ac26_only_read_is_false(
-        self, operator, registered_permission_codes
-    ):
-        role = _new_role(operator, "OnlyRead-AC26", "report.read")
-        assert has_modify_capability(role) is False
-
-    def test_dom_ac26_read_and_approve_is_true(
-        self, operator, registered_permission_codes
-    ):
-        role = _new_role(
-            operator, "ReadApprove-AC26", "report.read", "report.approve"
-        )
-        assert has_modify_capability(role) is True
-
-    def test_dom_ac26_only_delete_is_true(
-        self, operator, registered_permission_codes
-    ):
-        role = _new_role(operator, "OnlyDelete-AC26", "evidence.delete")
-        assert has_modify_capability(role) is True
-
-
 class TestReadOnly:
-    """This task's ticket: none of the three functions may add,
+    """This task's ticket: neither read function may add,
     flush, commit or otherwise modify any row.
     """
 
-    def test_calling_all_three_leaves_the_session_unchanged(
+    def test_read_functions_leave_the_session_unchanged(
         self, session, operator, registered_permission_codes
     ):
         project = _new_project("P-RO", operator)
@@ -284,14 +248,16 @@ class TestReadOnly:
         role = _new_role(operator, "Role-RO", "report.read")
         session.add(role)
         session.flush()
-
         member = _new_member(operator, project, user, role)
         session.add(member)
-        session.commit()
+        session.flush()
 
-        effective_permissions(session, user_id=user.id, project_id=project.id)
-        role_impact_scope(session, role_id=role.id)
-        has_modify_capability(role)
+        assert effective_permissions(
+            session, user_id=user.id, project_id=project.id
+        ) == frozenset({"report.read"})
+        assert role_impact_scope(session, role_id=role.id) == RoleImpactScope(
+            member_count=1, user_count=1
+        )
 
         assert not session.new
         assert not session.dirty
@@ -301,7 +267,7 @@ class TestReadOnly:
 class TestNoAutoflushOnRead:
     """PR #226 review comment 4113944357: a caller may hold a
     pending (unflushed) edit on a ``Role`` -- e.g. it is mid-way
-    through renaming one -- when it asks one of these three
+    through renaming one -- when it asks one of these
     functions a read-only question. None of them may flush that
     pending edit out as a side effect of their own ``SELECT``s: this
     module's docstring says a caller must flush its own pending
@@ -310,11 +276,7 @@ class TestNoAutoflushOnRead:
     (SQLAlchemy's default autoflush otherwise runs a pending
     ``UPDATE`` before every ``SELECT``).
 
-    ``has_modify_capability``'s only path to the database is a lazy
-    load of ``role.permission_codes`` if that relationship is not
-    already loaded, so ``role`` is expired first to force that lazy
-    load rather than let it silently read already-loaded identity
-    map state.
+    Both functions use ``no_autoflush`` around their database reads.
     """
 
     def test_pending_role_edit_is_not_autoflushed(
@@ -335,66 +297,11 @@ class TestNoAutoflushOnRead:
 
         # A pending, unflushed edit -- this is the state under test.
         role.name = "Role-NOFLUSH-renamed"
-        # Force has_modify_capability's relationship access below to
-        # go through a real lazy load instead of reading already
-        # loaded state.
-        session.expire(role, ["permission_codes"])
-
         with _record_sql_statements(engine) as statements:
             effective_permissions(
                 session, user_id=user.id, project_id=project.id
             )
             role_impact_scope(session, role_id=role.id)
-            has_modify_capability(role)
 
         assert _mutating_statements(statements) == []
         assert role in session.dirty
-
-    def test_pending_role_edit_survives_expired_permission_code_read(
-        self, session, engine, operator, registered_permission_codes
-    ):
-        """PR #226 review 4113974122: even when
-        ``role.permission_codes`` is already loaded (no lazy load
-        needed), ``has_modify_capability`` still reads each
-        ``RolePermission.code`` -- and if one of those ``code``
-        columns has itself been expired (e.g. by
-        ``session.expire(perm, ["code"])``), reading it triggers a
-        refresh, which is a database hit just like a lazy load and
-        must be guarded the same way. This reproduces that: the
-        collection is loaded up front (so no lazy load occurs), one
-        member's ``code`` is expired, and ``role.name`` carries a
-        pending edit that must not be autoflushed out when
-        ``has_modify_capability`` refreshes that expired ``code``.
-        """
-        project = _new_project("P-NOFLUSH-CODE", operator)
-        user = create_root_user_with_company(session, "U-NOFLUSH-CODE")
-        session.add_all([project, user])
-        session.flush()
-
-        role = _new_role(operator, "Role-NOFLUSH-CODE", "report.read")
-        session.add(role)
-        session.flush()
-
-        member = _new_member(operator, project, user, role)
-        session.add(member)
-        session.flush()
-
-        # Load the collection up front so has_modify_capability finds
-        # it already in memory -- no lazy load path is exercised
-        # here, only the per-element ``.code`` read.
-        permission = role.permission_codes[0]
-        assert permission is not None
-
-        # A pending, unflushed edit -- this is the state under test.
-        role.name = "Role-NOFLUSH-CODE-renamed"
-        # Expire just the ``code`` column on the already-loaded
-        # RolePermission, so has_modify_capability's ``.code`` read
-        # below must refresh it from the database.
-        session.expire(permission, ["code"])
-
-        with _record_sql_statements(engine) as statements:
-            result = has_modify_capability(role)
-
-        assert _mutating_statements(statements) == []
-        assert role in session.dirty
-        assert result is False

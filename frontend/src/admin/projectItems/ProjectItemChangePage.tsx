@@ -831,7 +831,7 @@ export default function ProjectItemChangePage({
                 />
                 要，用新標準重新查核
               </label>
-              <p className="tpl-hint" id="reinspect-yes-hint">
+              <p className="tpl-hint muted-text" id="reinspect-yes-hint">
                 {REINSPECT_YES_HINT}
               </p>
               <label className="tpl-radio-option">
@@ -844,7 +844,7 @@ export default function ProjectItemChangePage({
                 />
                 不要，只更正文字與標準值
               </label>
-              <p className="tpl-hint" id="reinspect-no-hint">
+              <p className="tpl-hint muted-text" id="reinspect-no-hint">
                 {REINSPECT_NO_HINT}
               </p>
             </fieldset>

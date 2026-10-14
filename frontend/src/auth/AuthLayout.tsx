@@ -4,12 +4,6 @@
 
 import type { ReactNode } from 'react'
 
-import './authForms.css'
-
-export function RequiredMark() {
-  return <span aria-hidden="true" className="auth-required-marker" />
-}
-
 export default function AuthLayout({
   title,
   lead,

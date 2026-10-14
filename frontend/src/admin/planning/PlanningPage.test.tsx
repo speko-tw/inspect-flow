@@ -18,7 +18,7 @@ import taskAssigneeValidation from './fixtures/task-assignee-validation-422.json
 import taskCancelValidation from './fixtures/task-cancel-validation-422.json'
 import taskCreateValidation from './fixtures/task-create-validation-422.json'
 import taskLocationValidation from './fixtures/task-location-validation-422.json'
-import PlanningPage from './PlanningPage'
+import PlanningPage, { type PlanningPageClient } from './PlanningPage'
 
 function validationError(fixture: {
   error: { code: string; fields: Array<{ path: string; code: string }> }
@@ -874,12 +874,12 @@ describe('planning management page', () => {
       expect(document.getElementById('task-zone-hint')).toHaveClass(
         'field-hint',
       )
-      expect(document.querySelector('.tpl-field-error')).toBeNull()
+      expect(document.querySelector('.field-error')).toBeNull()
 
       fireEvent.click(screen.getByRole('button', { name: '建立草稿任務' }))
       const select = screen.getByLabelText(/任務分區/)
       const error = await screen.findByText('請選擇任務分區。')
-      expect(error).toHaveClass('tpl-field-error')
+      expect(error).toHaveClass('field-error')
       expect(select).toHaveAttribute('aria-invalid', 'true')
       expect(select.getAttribute('aria-describedby')).toContain(error.id)
       await waitFor(() => expect(select).toHaveFocus())
@@ -903,7 +903,7 @@ describe('planning management page', () => {
       fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
 
       const error = await screen.findByText('請輸入計畫名稱。')
-      expect(error).toHaveClass('tpl-field-error')
+      expect(error).toHaveClass('field-error')
       expect(input).toHaveAttribute('aria-invalid', 'true')
       await waitFor(() => expect(input).toHaveFocus())
       expect(createPlan).not.toHaveBeenCalled()
@@ -1039,7 +1039,7 @@ describe('planning forms guard (#507)', () => {
   >
 
   // 讓指定的 client 方法等到 gate 完成才回應，並記錄呼叫次數。
-  function hold(client: PlanningClient, method: Method) {
+  function hold(client: PlanningPageClient, method: Method) {
     const gate = deferred()
     const original = client[method] as (...args: unknown[]) => Promise<unknown>
     const spy = vi.fn(async (...args: unknown[]) => {
@@ -1050,7 +1050,7 @@ describe('planning forms guard (#507)', () => {
     return { gate, spy }
   }
 
-  function watch(client: PlanningClient, method: Method) {
+  function watch(client: PlanningPageClient, method: Method) {
     const original = client[method] as (...args: unknown[]) => Promise<unknown>
     const spy = vi.fn((...args: unknown[]) => original.apply(client, args))
     ;(client as unknown as Record<string, unknown>)[method] = spy
@@ -1075,7 +1075,7 @@ describe('planning forms guard (#507)', () => {
     return { client, zone, plan, task }
   }
 
-  async function openPlan(client: PlanningClient) {
+  async function openPlan(client: PlanningPageClient) {
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
     fireEvent.click(await screen.findByRole('button', { name: /橋梁查核（/ }))
     await openTaskCreationForm()
@@ -1718,7 +1718,7 @@ describe('planning forms guard (#507)', () => {
 
     /** 讓 getPlan 回傳被改過的任務，模擬 API 目前不會產生的舊草稿。 */
     function reshapeTasks(
-      client: PlanningClient,
+      client: PlanningPageClient,
       change: (task: InspectionTask) => InspectionTask,
     ) {
       const original = client.getPlan.bind(client)
@@ -1729,7 +1729,7 @@ describe('planning forms guard (#507)', () => {
     }
 
     /** 任務沒有查核項目時標題是空的，所以改用 article 角色找任務。 */
-    async function openPlanBare(client: PlanningClient) {
+    async function openPlanBare(client: PlanningPageClient) {
       render(
         <PlanningPage client={client} initialProjectId="project-demo-1" />,
       )
@@ -1925,7 +1925,7 @@ describe('planning forms guard (#507)', () => {
 
       const message = await within(form).findByText(
         '請至少選擇一筆查核項目。',
-        { selector: '.tpl-field-error' },
+        { selector: '.field-error' },
       )
       expect(message).toBeVisible()
       const field = within(form).getByRole('group', {
@@ -2135,7 +2135,9 @@ describe('planning forms guard (#507)', () => {
       fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '尚未儲存的計畫' },
       })
-      fireEvent.click(screen.getByRole('button', { name: /橋梁查核（/ }))
+      fireEvent.click(
+        await screen.findByRole('button', { name: /橋梁查核（/ }),
+      )
       await screen.findByRole('heading', { name: '無權限' })
 
       fireEvent.click(screen.getByRole('link', { name: '返回專案清單' }))
@@ -2224,7 +2226,7 @@ describe('planning forms guard (#507)', () => {
 
         const field = within(form).getByLabelText(label)
         expect(await within(form).findByText(new RegExp(message))).toHaveClass(
-          'tpl-field-error',
+          'field-error',
         )
         expect(field).toHaveAttribute('aria-invalid', 'true')
         await waitFor(() => expect(field).toHaveFocus())
@@ -2289,7 +2291,7 @@ describe('planning forms guard (#507)', () => {
               '請先補上項次或改選其他項目。',
             ].join(''),
           ),
-        ).toHaveClass('tpl-field-error')
+        ).toHaveClass('field-error')
         expect(fieldset).toHaveAttribute('aria-invalid', 'true')
         await waitFor(() => expect(fieldset).toHaveFocus())
         expect(within(form).queryByRole('alert')).toBeNull()
@@ -2338,7 +2340,7 @@ describe('planning forms guard (#507)', () => {
       const selector = within(form).getByLabelText('建議指派人')
       expect(
         await within(form).findByText(/建議指派人不是這個專案的成員/),
-      ).toHaveClass('tpl-field-error')
+      ).toHaveClass('field-error')
       expect(selector).toHaveAttribute('aria-invalid', 'true')
       await waitFor(() => expect(selector).toHaveFocus())
       expect(within(form).queryByRole('alert')).toBeNull()

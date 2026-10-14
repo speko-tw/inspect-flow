@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { collectPages, HttpError, isForbidden, isNotFound } from '../../http'
+import { RequiredMark } from '../../ui/Form'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import type { FieldErrorBinding } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
+import { getProject, type Project } from '../projects/api'
+import { listProjectItems, type ProjectItemData } from '../projectItems/api'
 import { planningClient, planningErrorMessage } from './api'
 import { UnsavedLeaveBox } from './UnsavedLeaveBox'
 import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
@@ -15,10 +18,20 @@ import type {
   InspectionTask,
   SuggestedAssignee,
   PlanningClient,
-  PlanningProject,
-  ProjectInspectionItem,
   ProjectZone,
 } from './api'
+
+/** 規劃頁操作與共用專案資料 API 的依賴介面。 */
+export type PlanningPageClient = PlanningClient & {
+  getProject(projectId: string): Promise<Pick<Project, 'id' | 'name'>>
+  listProjectItems(projectId: string): Promise<ProjectItemData[]>
+}
+
+const defaultPlanningPageClient: PlanningPageClient = {
+  ...planningClient,
+  getProject,
+  listProjectItems,
+}
 
 type NoticeArea = 'plans' | 'plan-detail' | 'tasks'
 
@@ -147,7 +160,7 @@ function taskTitle(task: InspectionTask): string {
 
 /** 只在欄位未被手動編輯前更新預設名稱，保留使用者自己的命名。 */
 function suggestedTaskName(
-  items: ProjectInspectionItem[],
+  items: ProjectItemData[],
   itemIds: string[],
   zones: ProjectZone[],
   zoneId: string,
@@ -187,15 +200,15 @@ function draftTaskSummary(task: InspectionTask): string {
  * 後端回 403 後才切成唯讀，實際寫入一律由後端覆核。
  */
 export default function PlanningPage({
-  client = planningClient,
+  client = defaultPlanningPageClient,
   initialProjectId = '',
 }: {
-  client?: PlanningClient
+  client?: PlanningPageClient
   initialProjectId?: string
 }) {
-  const [projects, setProjects] = useState<PlanningProject[]>([])
+  const [projects, setProjects] = useState<Pick<Project, 'id' | 'name'>[]>([])
   const [projectId, setProjectId] = useState('')
-  const [items, setItems] = useState<ProjectInspectionItem[]>([])
+  const [items, setItems] = useState<ProjectItemData[]>([])
   const [zones, setZones] = useState<ProjectZone[]>([])
   const [members, setMembers] = useState<SuggestedAssignee[]>([])
   const [plans, setPlans] = useState<InspectionPlan[]>([])
@@ -833,7 +846,7 @@ export default function PlanningPage({
   const fieldErrorId = (field: FieldKey) => `${field}-field-error`
   const fieldErrorText = (field: FieldKey) =>
     hasFieldError(field) ? (
-      <p className="tpl-field-error" id={fieldErrorId(field)}>
+      <p className="field-error" id={fieldErrorId(field)}>
         {fieldError?.field === field
           ? (FIELD_ERROR[field] ?? '欄位內容不符合規則，請檢查後再試。')
           : serverFieldErrors[field]}
@@ -1141,7 +1154,7 @@ export default function PlanningPage({
                 <h3>建立計畫</h3>
                 <label>
                   <span className="required-label">
-                    計畫名稱 <span aria-hidden="true">*</span>
+                    計畫名稱 <RequiredMark />
                   </span>
                   <input
                     aria-describedby={describedBy(
@@ -1165,7 +1178,7 @@ export default function PlanningPage({
                 {fieldErrorText('plan-name')}
                 {error && errorContext === 'plan-create' && (
                   <p
-                    className="tpl-field-error"
+                    className="field-error"
                     id="plan-name-error"
                     ref={errorMessage}
                     role="alert"
@@ -1265,7 +1278,7 @@ export default function PlanningPage({
                   >
                     <label>
                       <span className="required-label">
-                        計畫名稱 <span aria-hidden="true">*</span>
+                        計畫名稱 <RequiredMark />
                       </span>
                       <input
                         aria-describedby={describedBy(
@@ -1290,7 +1303,7 @@ export default function PlanningPage({
                     {fieldErrorText('plan-rename')}
                     {error && errorContext === 'plan-rename' && (
                       <p
-                        className="tpl-field-error"
+                        className="field-error"
                         id="updated-plan-name-error"
                         ref={errorMessage}
                         role="alert"
@@ -1525,7 +1538,7 @@ export default function PlanningPage({
                         >
                           <h5>修改任務名稱</h5>
                           <label>
-                            任務名稱 <span aria-hidden="true">*</span>
+                            任務名稱 <RequiredMark />
                             <input
                               autoFocus
                               aria-describedby={
@@ -1588,8 +1601,7 @@ export default function PlanningPage({
                             tabIndex={-1}
                           >
                             <legend>
-                              選擇一筆以上查核項目{' '}
-                              <span aria-hidden="true">*</span>
+                              選擇一筆以上查核項目 <RequiredMark />
                             </legend>
                             <p
                               className="field-hint"
@@ -1710,7 +1722,7 @@ export default function PlanningPage({
                             <div>
                               <label>
                                 <span className="required-label">
-                                  分區 <span aria-hidden="true">*</span>
+                                  分區 <RequiredMark />
                                 </span>
                                 <select
                                   autoFocus
@@ -1916,7 +1928,7 @@ export default function PlanningPage({
                 >
                   <h3>新增任務</h3>
                   <label>
-                    任務名稱 <span aria-hidden="true">*</span>
+                    任務名稱 <RequiredMark />
                     <input
                       aria-describedby={
                         hasFieldError('task-name')
@@ -1947,7 +1959,7 @@ export default function PlanningPage({
                     tabIndex={-1}
                   >
                     <legend>
-                      選擇一筆以上查核項目 <span aria-hidden="true">*</span>
+                      選擇一筆以上查核項目 <RequiredMark />
                     </legend>
                     <p className="field-hint" id="task-items-hint">
                       至少選擇一筆查核項目。
@@ -2002,7 +2014,7 @@ export default function PlanningPage({
                     <div>
                       <label>
                         <span className="required-label">
-                          任務分區 <span aria-hidden="true">*</span>
+                          任務分區 <RequiredMark />
                         </span>
                         <select
                           aria-describedby={describedBy(
@@ -2147,7 +2159,7 @@ export default function PlanningPage({
           )}
           <label>
             <span className="required-label">
-              取消原因 <span aria-hidden="true">*</span>
+              取消原因 <RequiredMark />
             </span>
             <textarea
               aria-describedby={describedBy(

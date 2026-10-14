@@ -282,7 +282,7 @@ export default function ProjectZonesPage({
           />
         </label>
         {(nameError || serverNameError) && (
-          <p className="tpl-field-error" id="project-zone-name-error">
+          <p className="field-error" id="project-zone-name-error">
             {nameError ? '請輸入分區名稱。' : serverNameError}
           </p>
         )}

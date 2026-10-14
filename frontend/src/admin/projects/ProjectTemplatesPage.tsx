@@ -19,7 +19,6 @@ import { useSubmitGuard } from '../../ui/submitGuard'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { listMyProjects } from './api'
 import { listProjectItems, type ProjectItemData } from '../projectItems/api'
-import './ProjectTemplatesPage.css'
 import {
   applyTemplate,
   listAllProjects,
@@ -572,7 +571,7 @@ export default function ProjectTemplatesPage({
       >
         {standalone ? '返回範本管理' : '返回查核項目'}
       </BackLink>
-      <p className="tpl-crumb">
+      <p className="tpl-crumb muted-text">
         {standalone ? (
           project ? (
             `${project.project_code}｜${project.name}`
@@ -703,7 +702,11 @@ export default function ProjectTemplatesPage({
                             >
                               {system.name}
                               {system.item_count !== undefined && (
-                                <span className="tpl-mobile-system-count">
+                                <span
+                                  className={
+                                    'tpl-mobile-system-count muted-text'
+                                  }
+                                >
                                   {system.item_count} 個查核項目
                                 </span>
                               )}
@@ -792,7 +795,11 @@ export default function ProjectTemplatesPage({
                             >
                               {system.name}
                               {system.item_count !== undefined && (
-                                <span className="tpl-mobile-system-count">
+                                <span
+                                  className={
+                                    'tpl-mobile-system-count muted-text'
+                                  }
+                                >
                                   {system.item_count} 個查核項目
                                 </span>
                               )}
@@ -805,7 +812,7 @@ export default function ProjectTemplatesPage({
               )}
               {selectedSystem && (
                 <>
-                  <p className="tpl-crumb">
+                  <p className="tpl-crumb muted-text">
                     {selectedCategory?.name} / {selectedSystem.name}
                   </p>
                   <h2>套用範本：{selectedSystem.name}</h2>
@@ -861,12 +868,14 @@ export default function ProjectTemplatesPage({
                           />
                           <span>單一項目：{item.title}</span>
                           {isAlreadyApplied(item, projectItemNames) && (
-                            <span className="tpl-applied-status">已套用</span>
+                            <span className="tpl-applied-status muted-text">
+                              已套用
+                            </span>
                           )}
                         </label>
                         {isAlreadyApplied(item, projectItemNames) && (
                           <p
-                            className="tpl-conflict-hint"
+                            className="tpl-conflict-hint muted-text"
                             id={`applied-template-${item.id}`}
                           >
                             專案已有同名項目，需要第二份請先改名
@@ -891,7 +900,9 @@ export default function ProjectTemplatesPage({
                             <strong>
                               {item.title}
                               {isAlreadyApplied(item, projectItemNames) && (
-                                <span className="tpl-applied-status">
+                                <span
+                                  className={'tpl-applied-status muted-text'}
+                                >
                                   已套用
                                 </span>
                               )}
@@ -926,7 +937,7 @@ export default function ProjectTemplatesPage({
                           </li>
                         ))}
                       </ul>
-                      <p className="tpl-hint">
+                      <p className="tpl-hint muted-text">
                         之後修改範本不會更新已套用的項目。套用後是專案自己的副本。
                       </p>
                     </>
@@ -966,7 +977,7 @@ export default function ProjectTemplatesPage({
                     </div>
                   )}
                   {!canEditProjectItems ? (
-                    <p className="tpl-hint">
+                    <p className="tpl-hint muted-text">
                       你沒有修改此專案查核項目的權限。
                     </p>
                   ) : applyConfirm ? (
@@ -1016,7 +1027,7 @@ export default function ProjectTemplatesPage({
                   )}
                   {selected?.type === 'system' && appliedTemplateCount > 0 && (
                     <p
-                      className="tpl-conflict-hint"
+                      className="tpl-conflict-hint muted-text"
                       id="system-applied-help"
                       role="status"
                     >

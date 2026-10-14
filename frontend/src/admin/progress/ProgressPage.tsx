@@ -1,4 +1,5 @@
-// IP-R18 定義專案任務清單篩選、排序與游標；IP-R19 定義只讀任務詳情。
+// IP-R18 定義清單篩選、排序與游標；
+// IP-R19 定義只讀任務詳情。
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 
@@ -19,7 +20,7 @@ interface ListState {
   scrollY: number
 }
 
-// ADM-R44：從詳情或瀏覽器返回後沿用已載入頁及位置；依帳號隔離。
+// ADM-R44：返回後沿用已載入頁及位置；依帳號隔離。
 const listMemory = new Map<string, ListState>()
 const detailReturnKeys = new Set<string>()
 
@@ -50,7 +51,7 @@ function currentFilter(search: string): ProgressFilter {
   return FILTERS.find(({ id }) => id === value)?.id ?? 'all'
 }
 
-/** 依 IP-R17、ADM-R44 使用已保存的 Task 名稱作清單與詳情標題。 */
+/** 使用已保存 Task 名稱作清單與詳情標題。 */
 export function progressTaskTitle(task: InspectionTask): string {
   return task.name
 }
@@ -63,7 +64,8 @@ function taskLocation(task: InspectionTask): string {
 }
 
 function needsReinspection(task: InspectionTask): boolean {
-  // IP-R18 與 IP-R11 的待重查口徑相同；封存與已完成任務不列入。
+  // IP-R18 與 IP-R11 的待重查口徑相同；
+  // 排除封存與已完成任務。
   return (
     !task.plan.archived &&
     (task.status === 'PENDING' || task.status === 'IN_PROGRESS') &&
@@ -393,7 +395,8 @@ function ProgressDetail({
   const key = `${user.id}:${projectId}:${filter}`
   useEffect(() => {
     return () => {
-      // 返回清單的 effect 會先消耗標記；離開詳情則清除殘留。
+      // 返回清單時 effect 會先消耗標記；
+      // 離開詳情則清除殘留。
       queueMicrotask(() => detailReturnKeys.delete(key))
     }
   }, [key])

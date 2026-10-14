@@ -1,51 +1,14 @@
-// 權限描述沿用 backend/app/permission_codes.py 的 registry 文案。
-// 新增權限碼時，需同步補充描述與摘要合併規則（若有）。
-const PERMISSION_DESCRIPTIONS: Array<[code: string, description: string]> = [
-  ['project_member.manage', '管理專案成員與其角色'],
-  ['project.update', '調整專案'],
-  ['project.read', '檢視專案'],
-  ['project_inspection_item.edit', '編輯專案查核項目'],
-  ['project_inspection_item.read', '讀取專案查核項目'],
-  ['project_zone.read', '讀取專案分區'],
-  ['project_zone.manage', '管理專案分區'],
-  ['inspection_plan.read', '讀取查核計畫'],
-  ['inspection_plan.create', '建立查核計畫'],
-  ['inspection_plan.manage', '管理查核計畫'],
-  ['inspection_plan.archive', '封存查核計畫'],
-  ['inspection_plan.unarchive', '取消封存查核計畫'],
-  ['inspection_task.read', '讀取查核任務'],
-  ['inspection_task.manage', '管理查核任務'],
-  ['inspection_task.create', '建立查核任務'],
-  ['inspection_task.dispatch', '派出查核任務'],
-  ['inspection_task.assign', '指派查核任務'],
-  ['inspection_task.inspect', '執行現場查核'],
-  ['inspection_task.delete_draft', '刪除草稿查核任務'],
-  ['inspection_task.cancel', '取消或恢復查核任務'],
-]
+// 前後端共用權限目錄；專案權限描述與摘要由目錄帶入。
+import permissionCodeContract from '../../permissionCodeContract'
 
-// Role 只能包含 project-scope 權限碼；module 權限不在角色摘要內。
-export const ROLE_SUMMARY_PHRASE_CODES = new Set([
-  'project_member.manage',
-  'project.update',
-  'project.read',
-  'project_inspection_item.edit',
-  'project_inspection_item.read',
-  'project_zone.read',
-  'project_zone.manage',
-  'inspection_plan.read',
-  'inspection_plan.create',
-  'inspection_plan.manage',
-  'inspection_plan.archive',
-  'inspection_plan.unarchive',
-  'inspection_task.read',
-  'inspection_task.create',
-  'inspection_task.manage',
-  'inspection_task.dispatch',
-  'inspection_task.assign',
-  'inspection_task.inspect',
-  'inspection_task.delete_draft',
-  'inspection_task.cancel',
-])
+const PERMISSION_DESCRIPTIONS = permissionCodeContract.codes
+  .filter(({ scope }) => scope === 'project')
+  .map(({ code, description }) => [code, description] as const)
+
+// Role 只能包含 project-scope 權限碼；摘要不含 module 權限。
+export const ROLE_SUMMARY_PHRASE_CODES = new Set(
+  PERMISSION_DESCRIPTIONS.map(([code]) => code),
+)
 
 export const NO_PERMISSION_TEXT = '尚未設定任何權限'
 export const UNKNOWN_PERMISSION_TEXT = '可使用部分功能'

@@ -166,6 +166,35 @@ def test_plan_detail_select_count_is_fixed_for_many_tasks(world):
     assert more_count == count
 
 
+def test_project_item_patch_batches_associated_task_loads(world, db_session):
+    statements: list[str] = []
+
+    def record_select(_conn, _cursor, statement, _params, _context, _many):
+        normalized = statement.lstrip().lower()
+        if (
+            normalized.startswith("select")
+            and "from inspection_tasks" in normalized
+            and "where inspection_tasks.id" in normalized
+        ):
+            statements.append(statement)
+
+    engine = get_engine()
+    event.listen(engine, "before_cursor_execute", record_select)
+    db_session.expire_all()
+    try:
+        response = world["admin"].patch(
+            f"{world['base']}/inspection-items/{world['item'].id}",
+            json={"title": "更新查核項目", "reinspect": False},
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", record_select)
+
+    assert response.status_code == 200, response.text
+    assert len(response.json()["affected_tasks"]) == _TASKS
+    # 權限檢查與修改服務另有固定查詢；路由載入不可隨關聯數增加。
+    assert len(statements) <= 3
+
+
 def test_field_task_permission_select_count_does_not_grow_with_projects(
     world, db_session
 ):

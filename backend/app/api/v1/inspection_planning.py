@@ -1539,11 +1539,20 @@ def patch_project_item(
     }
     operator_id = get_current_operator(db).id
     item.updated_by = operator_id
-    old_status = {}
-    for association in associations:
-        task = db.get(InspectionTask, association.task_id)
-        if task is not None:
-            old_status[association.task_id] = task.status
+    task_ids = {association.task_id for association in associations}
+    tasks_by_id = (
+        {
+            task.id: task
+            for task in db.scalars(
+                select(InspectionTask).where(InspectionTask.id.in_(task_ids))
+            ).all()
+        }
+        if task_ids
+        else {}
+    )
+    old_status = {
+        task_id: task.status for task_id, task in tasks_by_id.items()
+    }
     if body.title is not None:
         if not body.title.strip():
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
@@ -1569,7 +1578,7 @@ def patch_project_item(
     result = project_inspection_item_detail(db, item)
     affected = []
     for association in associations:
-        task = db.get(InspectionTask, association.task_id)
+        task = tasks_by_id.get(association.task_id)
         if task is None:
             continue
         prior = old_status[task.id]
