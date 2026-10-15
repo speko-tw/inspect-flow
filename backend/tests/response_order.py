@@ -1,4 +1,4 @@
-"""Helpers for observing database commits and ASGI response timing."""
+"""提供觀察資料庫 commit 與 ASGI 回應時序的測試工具。"""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,7 +12,7 @@ from app.db.engine import get_engine
 
 @contextmanager
 def observed_client(app: ASGIApp) -> Iterator[tuple[TestClient, list[str]]]:
-    """Capture commit and response-start ordering for one real request."""
+    """記錄單次真實請求中 commit 與 response-start 的先後順序。"""
     events: list[str] = []
     engine = get_engine()
 

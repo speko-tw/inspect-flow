@@ -56,11 +56,10 @@ def register_temporary_password_allowed(
 
 
 def get_db() -> Generator[Session, None, None]:
-    """Yield a ``Session`` scoped to one route function.
+    """提供單一路由函式作用域的 ``Session``。
 
-    FastAPI closes function-scoped yield dependencies before it
-    starts sending the response, so commit failures still become
-    errors instead of following a successful response.
+    FastAPI 會在開始傳送回應前結束 function-scoped yield 依賴，
+    因此 commit 失敗會回傳錯誤，不會等成功回應送出後才發生。
     """
     with unit_of_work() as session:
         yield session

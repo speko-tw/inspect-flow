@@ -1,4 +1,4 @@
-"""HTTP response and commit lifecycle checks for FastAPI yield dependencies."""
+"""檢查 FastAPI yield 依賴的 HTTP 回應與 commit 生命週期。"""
 
 from collections.abc import Generator
 from pathlib import Path
@@ -23,7 +23,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 @pytest.fixture
 def migrated_engine(db_url: str) -> Generator[Engine, None, None]:
-    """Use the selected SQLite or gated PostgreSQL test database."""
+    """依設定使用 SQLite 或受 gate 控制的 PostgreSQL 測試資料庫。"""
     command.upgrade(Config(str(_BACKEND_DIR / "alembic.ini")), "head")
     engine = get_engine()
     try:
