@@ -32,6 +32,17 @@ function declarationsIn(rule: string) {
   )
 }
 
+describe('required field markers', () => {
+  it('keeps a direct required mark beside its label text', () => {
+    expect(
+      declarationsOf(
+        'label:has(> .required-mark):not(:has(input, select, textarea))',
+      ).display,
+    ).toBe('block')
+    expect(declarationsOf('.required-label').display).toBe('inline-flex')
+  })
+})
+
 // #517 的管理頁與專案頁都在共用 main 內，表單和分區列沿用共用間距。
 describe('page and zone spacing', () => {
   it('keeps the same main inset for admin and project sections', () => {

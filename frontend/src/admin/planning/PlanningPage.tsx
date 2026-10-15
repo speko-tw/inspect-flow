@@ -1538,7 +1538,9 @@ export default function PlanningPage({
                         >
                           <h5>修改任務名稱</h5>
                           <label>
-                            任務名稱 <RequiredMark />
+                            <span className="required-label">
+                              任務名稱 <RequiredMark />
+                            </span>
                             <input
                               autoFocus
                               aria-describedby={
@@ -1928,7 +1930,9 @@ export default function PlanningPage({
                 >
                   <h3>新增任務</h3>
                   <label>
-                    任務名稱 <RequiredMark />
+                    <span className="required-label">
+                      任務名稱 <RequiredMark />
+                    </span>
                     <input
                       aria-describedby={
                         hasFieldError('task-name')

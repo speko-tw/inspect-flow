@@ -685,6 +685,11 @@ label {
   font-weight: 600;
 }
 
+/* 包著輸入框的 label 要保留 grid gap，其他直接標記維持文字同行。 */
+label:has(> .required-mark):not(:has(input, select, textarea)) {
+  display: block;
+}
+
 .required-label {
   display: inline-flex;
   gap: 0.2em;
