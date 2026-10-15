@@ -583,11 +583,10 @@ describe('專案範本套用與存為範本（#429）', () => {
       name: '重新載入專案項目',
     })
     fireEvent.click(retry)
-    expect(
-      screen.getByRole('heading', {
-        name: '套用範本到專案',
-      }),
-    ).toHaveFocus()
+    const pageTitle = screen.getByRole('heading', {
+      name: '套用範本到專案',
+    })
+    await waitFor(() => expect(pageTitle).toHaveFocus())
 
     await waitFor(() => expect(apply).toBeEnabled())
     expect(

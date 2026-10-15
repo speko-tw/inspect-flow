@@ -1318,14 +1318,45 @@ describe('admin projects page', () => {
     )
   })
 
-  it('keeps project search hidden until the edit form closes', async () => {
-    projectFetch()
+  // ADM-R38：保留搜尋條件會濾掉卡片；
+  // 焦點需回到新增按鈕。
+  it('restores focus when saving filters the edited card out', async () => {
+    projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
     renderAt('/admin/projects')
     await screen.findAllByText('示範工程')
+
+    fireEvent.change(screen.getByLabelText('搜尋專案'), {
+      target: { value: 'DEMO-001' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+    await screen.findByRole('button', {
+      name: '編輯專案「示範工程」',
+    })
+    expect(screen.queryByText('第二示範工程')).toBeNull()
+
     fireEvent.click(screen.getByRole('button', { name: /編輯專案/ }))
     expect(screen.queryByLabelText('搜尋專案')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(await screen.findByLabelText('搜尋專案')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('專案代號'), {
+      target: { value: 'DEMO-003' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+
+    await waitFor(() =>
+      expect(document.getElementById('project-card-project-1')).toBeNull(),
+    )
+    const addProjectButton = screen.getByRole('button', {
+      name: '新增專案',
+    })
+    await waitFor(() => expect(addProjectButton).toHaveFocus())
   })
 
   it('opens the card edit entry with the existing unsaved guard and saves', async () => {
