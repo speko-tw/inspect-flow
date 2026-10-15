@@ -174,7 +174,7 @@ def is_admin_or_system_role(
 
 
 def _public_marker(
-    _scope: None = Depends(bind_request_scope),  # noqa: B008
+    _scope: None = Depends(bind_request_scope),  # noqa
 ) -> None:
     """Declares 公開: depends directly on ``bind_request_scope``
     (not ``require_login``) so a bare ``FastAPI()`` test app -- which
@@ -192,7 +192,7 @@ _mark(_public_marker, RouteAccessDeclaration(level=AccessLevel.PUBLIC))
 
 # Use as ``dependencies=[PUBLIC]`` on a route decorator/router to
 # declare the 公開 access level.
-PUBLIC: Any = Depends(_public_marker)
+PUBLIC: Any = Depends(_public_marker, scope="function")
 
 # AUT-R18/plan.md's risk section: the single, centralized list of
 # routes allowed to declare 公開. A new public route must be added
@@ -213,7 +213,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
 
 
 def require_login_access(
-    user: User = Depends(require_login),  # noqa: B008
+    user: User = Depends(require_login, scope="function"),  # noqa
 ) -> User:
     """Declares 需登入: a thin, identifiable wrapper around
     ``require_login`` (AUT-R14/AUT-R33) -- it re-checks nothing on
@@ -232,7 +232,7 @@ _mark(
 
 
 def require_admin(
-    user: User = Depends(require_login),  # noqa: B008
+    user: User = Depends(require_login, scope="function"),  # noqa
 ) -> User:
     """Declares 需 Admin: only ``user.is_admin`` passes, otherwise
     403 ``permission.denied`` (AUT-R20). Layered on ``require_login``
@@ -252,8 +252,8 @@ def require_system_role(
     """Build a login-gated dependency for one fixed system role."""
 
     def _check(
-        user: User = Depends(require_login),  # noqa: B008
-        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login, scope="function"),  # noqa
+        db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
         if not _has_system_role(db, user, role_code):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
@@ -274,8 +274,8 @@ def require_admin_or_system_role(
     """Allow Admins and users assigned the selected fixed system role."""
 
     def _check(
-        user: User = Depends(require_login),  # noqa: B008
-        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login, scope="function"),  # noqa
+        db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
         if not is_admin_or_system_role(db, user, role_code):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
@@ -298,8 +298,8 @@ def require_system_role_or_any_project_permission(
         raise ValueError(f"unregistered permission code: {permission_code}")
 
     def _check(
-        user: User = Depends(require_login),  # noqa: B008
-        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login, scope="function"),  # noqa
+        db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
         if user.is_admin or _has_system_role(db, user, role_code):
             return user
@@ -329,8 +329,8 @@ def require_admin_or_any_project_permission(
         raise ValueError(f"unregistered permission code: {permission_code}")
 
     def _check(
-        user: User = Depends(require_login),  # noqa: B008
-        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login, scope="function"),  # noqa
+        db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
         if user.is_admin:
             return user
@@ -396,8 +396,8 @@ def require_project_permission(
 
     def _check(
         request: Request,
-        user: User = Depends(require_login),  # noqa: B008
-        db: Session = Depends(get_db),  # noqa: B008
+        user: User = Depends(require_login, scope="function"),  # noqa
+        db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
         for name in uuid_path_params:
             raw_value = request.path_params.get(name)
@@ -444,7 +444,7 @@ def require_self_or_admin(
 
     def _check(
         request: Request,
-        user: User = Depends(require_login),  # noqa: B008
+        user: User = Depends(require_login, scope="function"),  # noqa
     ) -> User:
         target_id = _parse_uuid(request.path_params.get(param_name))
         if target_id is None:

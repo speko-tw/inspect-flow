@@ -41,7 +41,7 @@ from app.services.roles import (
 router = APIRouter(
     prefix="/roles",
     tags=["roles"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 
 _DEFAULT_PAGE_SIZE = 50
@@ -141,7 +141,7 @@ def _translate_permission_error() -> APIError:
 def list_roles(
     cursor: str | None = None,
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> RoleListResponse:
     """依 API-R08 按建立時間與 UUID 穩定排序並回傳角色分頁。"""
     cursor_key = page_cursor_key(cursor)
@@ -190,7 +190,7 @@ def list_permission_codes() -> PermissionCodeListResponse:
 @router.get("/{role_id}", response_model=RoleResponse)
 def get_role(
     role_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> RoleResponse:
     return _single_role_response(db, _get_role(db, role_id))
 
@@ -198,7 +198,7 @@ def get_role(
 @router.post("", response_model=RoleResponse, status_code=201)
 def add_role(
     body: RoleRequest,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> RoleResponse:
     try:
         role = create_role(
@@ -220,7 +220,7 @@ def add_role(
 def update_role_endpoint(
     role_id: UUID,
     body: RoleUpdateRequest,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> RoleResponse:
     role = _get_role(db, role_id)
     changes = body.model_dump(exclude_unset=True)
@@ -264,7 +264,7 @@ def update_role_endpoint(
 @router.delete("/{role_id}", status_code=204)
 def remove_role(
     role_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> None:
     """Delete a role and its assignments as DOM-R21 requires."""
     role = _get_role(db, role_id)

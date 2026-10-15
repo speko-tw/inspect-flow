@@ -9,7 +9,7 @@ from app.company_roles import list_company_roles
 router = APIRouter(
     prefix="/project-company-roles",
     tags=["projects"],
-    dependencies=[Depends(require_login_access)],
+    dependencies=[Depends(require_login_access, scope="function")],
 )
 
 

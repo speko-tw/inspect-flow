@@ -29,7 +29,7 @@ from app.services.users import (
 router = APIRouter(
     prefix="/companies",
     tags=["companies"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 
 _DEFAULT_PAGE_SIZE = 50
@@ -85,7 +85,7 @@ def list_companies(
     q: str | None = Query(default=None, max_length=256),
     cursor: str | None = None,
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> CompanyListResponse:
     filters = []
     query = (q or "").strip()
@@ -107,7 +107,7 @@ def list_companies(
 @router.get("/{company_id}", response_model=CompanyResponse)
 def get_company(
     company_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Company:
     return _get_company(db, company_id)
 
@@ -118,7 +118,7 @@ def get_company(
 )
 def get_active_users(
     company_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ActiveCompanyUsersResponse:
     _get_company(db, company_id)
     users = list_active_users(db, company_id)
@@ -138,7 +138,7 @@ def get_active_users(
 @router.post("", response_model=CompanyResponse, status_code=201)
 def add_company(
     body: CreateCompanyRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Company:
     try:
         return write_call(
@@ -153,7 +153,7 @@ def add_company(
 def rename_company(
     company_id: UUID,
     body: RenameCompanyRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Company:
     company = _get_company(db, company_id)
     try:
@@ -169,7 +169,7 @@ def rename_company(
 def change_company_status(
     company_id: UUID,
     body: CompanyStatusRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Company:
     company = _get_company(db, company_id)
     if body.is_active and body.disable_user_ids:

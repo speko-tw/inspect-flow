@@ -50,7 +50,7 @@ def _has_password(db: Session, admin: User | None) -> bool:
     "/status", response_model=SetupStatusResponse, dependencies=[PUBLIC]
 )
 def get_setup_status(
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> SetupStatusResponse:
     """Report only whether the built-in admin still needs a password."""
     admin = _get_admin(db)
@@ -61,7 +61,7 @@ def get_setup_status(
 def set_initial_admin_password(
     body: AdminPasswordRequest,
     response: Response,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Response:
     """Set the first admin password and return an authenticated Cookie."""
     admin = _get_admin(db)

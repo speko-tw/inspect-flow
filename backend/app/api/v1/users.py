@@ -36,7 +36,7 @@ from app.services.users import (
 router = APIRouter(
     prefix="/users",
     tags=["users"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 
 _DEFAULT_PAGE_SIZE = 50
@@ -185,7 +185,7 @@ def list_users(
     q: str | None = Query(default=None, max_length=256),
     cursor: str | None = None,
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> UserListResponse:
     filters = []
     query = (q or "").strip()
@@ -215,7 +215,7 @@ def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
     user_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     return _get_user(db, user_id)
 
@@ -224,7 +224,7 @@ def get_user(
 def add_user(
     body: CreateUserRequest,
     response: Response,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> CreatedUserResponse:
     _check_company_exists(db, body.company_id)
 
@@ -254,7 +254,7 @@ def add_user(
 def edit_user(
     user_id: UUID,
     body: UpdateUserRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
@@ -304,7 +304,7 @@ def edit_user(
 def link_company(
     user_id: UUID,
     body: CompanyLinkRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     user = _get_user(db, user_id)
     fields = body.model_dump(exclude_unset=True)
@@ -324,7 +324,7 @@ def link_company(
 def change_admin_status(
     user_id: UUID,
     body: AdminStatusRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     user = _get_user(db, user_id)
     if user.is_admin == body.is_admin:
@@ -332,8 +332,6 @@ def change_admin_status(
 
     def update_admin_status() -> User:
         updated_user = set_is_admin(db, user, body.is_admin)
-        # 管理員身分變更須在成功回應送出前提交，避免回應與資料狀態不一致。
-        db.commit()
         return updated_user
 
     try:
@@ -349,14 +347,12 @@ def change_admin_status(
 def change_active_status(
     user_id: UUID,
     body: ActiveStatusRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     user = _get_user(db, user_id)
 
     def update_active_status() -> User:
         updated_user = set_is_active(db, user, body.is_active)
-        # 停用結果須在成功回應送出前提交，避免回應與資料狀態不一致。
-        db.commit()
         return updated_user
 
     try:

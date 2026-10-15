@@ -326,13 +326,13 @@ def _client_with_operator_probe() -> TestClient:
 
     @router.get("/api/v1/test/operator-probe")
     def operator_probe(
-        _user: User = Depends(require_login),  # noqa: B008
+        _user: User = Depends(require_login, scope="function"),  # noqa
     ) -> dict[str, str | bool | None]:
         return _probe_body()
 
     @router.get("/api/v1/test/public-operator-probe")
     def public_operator_probe(
-        _scope: None = Depends(bind_request_scope),  # noqa: B008
+        _scope: None = Depends(bind_request_scope),  # noqa
     ) -> dict[str, str | bool | None]:
         return _probe_body()
 
