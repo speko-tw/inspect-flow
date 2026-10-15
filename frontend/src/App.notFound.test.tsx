@@ -3,7 +3,7 @@
 // 不存在的回 404、無權限的回 403（無權限頁維持原樣）。
 
 import { act, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { DataMemoryRouter } from './testing/DataMemoryRouter'
 import {
   afterEach,
   beforeAll,
@@ -112,9 +112,9 @@ async function renderApp(path: string) {
   let result: ReturnType<typeof render>
   await act(async () => {
     result = render(
-      <MemoryRouter initialEntries={[path]}>
+      <DataMemoryRouter initialEntries={[path]}>
         <App />
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
   })
   return result!

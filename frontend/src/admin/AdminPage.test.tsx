@@ -6,14 +6,8 @@ import {
   within,
 } from '@testing-library/react'
 import { StrictMode } from 'react'
-import {
-  Link,
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from 'react-router'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -100,7 +94,7 @@ function renderAdmin(
 ) {
   const signedInUser = { ...currentUser, is_admin: isAdmin, ...access }
   const page = (
-    <MemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           element={
@@ -116,7 +110,7 @@ function renderAdmin(
           path="/admin/*"
         />
       </Routes>
-    </MemoryRouter>
+    </DataMemoryRouter>
   )
   return render(strictMode ? <StrictMode>{page}</StrictMode> : page)
 }
@@ -1269,6 +1263,70 @@ describe('admin user and company pages', () => {
     },
   )
 
+  it('guards dirty planning forms from sidebar and top nav', async () => {
+    const fetchMock = managementFetch()
+    const original = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      const path = new URL(String(input), 'http://testserver').pathname
+      if (path === '/api/v1/projects/project-demo-1') {
+        return Response.json({ id: 'project-demo-1', name: '示範工程' })
+      }
+      if (
+        path.endsWith('/zones') ||
+        path.endsWith('/inspection-task-assignees')
+      ) {
+        return Response.json([])
+      }
+      if (path.endsWith('/inspection-plans')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
+      return original(input, init)
+    })
+    renderAdmin('/admin/projects/project-demo-1/planning')
+
+    await screen.findByRole('heading', { name: '計畫與任務' })
+    const planName = await screen.findByLabelText(/計畫名稱/)
+    fireEvent.change(planName, {
+      target: { value: '尚未儲存的計畫名稱' },
+    })
+
+    const sections = screen.getByRole('navigation', { name: '專案區段' })
+    const planningLink = within(sections).getByRole('link', {
+      name: '計畫與任務',
+    })
+    fireEvent.click(planningLink)
+    const selfLinkPrompt = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(
+      within(selfLinkPrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(planName).toHaveValue('尚未儲存的計畫名稱')
+
+    const adminNav = screen.getByRole('navigation', { name: '管理功能' })
+    fireEvent.click(within(adminNav).getByRole('link', { name: '專案' }))
+    const topNavPrompt = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(
+      within(topNavPrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(planName).toHaveValue('尚未儲存的計畫名稱')
+
+    const projectHomeLink = within(sections).getByRole('link', {
+      name: '專案首頁',
+    })
+    fireEvent.click(projectHomeLink)
+    fireEvent.click(
+      within(
+        await screen.findByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+  })
+
   it('allows non-admin users to open project planning routes', async () => {
     managementFetch()
     renderAdmin('/admin/projects/project-demo-1/planning', false)
@@ -1395,7 +1453,7 @@ describe('admin user and company pages', () => {
       has_template_access: false,
     }
     render(
-      <MemoryRouter
+      <DataMemoryRouter
         initialEntries={[
           '/admin/projects/project-demo-1/inspection-items/templates',
         ]}
@@ -1406,7 +1464,7 @@ describe('admin user and company pages', () => {
           </Routes>
           <TestNavigation />
         </CurrentUserProvider>
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     await waitFor(() =>
@@ -1450,7 +1508,7 @@ describe('admin user and company pages', () => {
       has_template_access: true,
     }
     render(
-      <MemoryRouter
+      <DataMemoryRouter
         initialEntries={[
           '/admin/projects/project-demo-1/inspection-items/templates',
         ]}
@@ -1461,7 +1519,7 @@ describe('admin user and company pages', () => {
           </Routes>
           <TestNavigation />
         </CurrentUserProvider>
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     await waitFor(() =>

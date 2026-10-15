@@ -5,7 +5,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Route, Routes } from 'react-router'
+import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
@@ -116,7 +117,7 @@ const systemAdmin = {
 
 function renderAt(path: string, user: CurrentUser = adminUser) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           element={
@@ -127,7 +128,7 @@ function renderAt(path: string, user: CurrentUser = adminUser) {
           path="/admin/*"
         />
       </Routes>
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 

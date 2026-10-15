@@ -6,18 +6,30 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router'
+import {
+  createMemoryRouter,
+  Link,
+  RouterProvider,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useState } from 'react'
 
 import { UnsavedLeaveBox } from './UnsavedLeaveBox'
 import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
 
-function Editor({ dirty }: { dirty: boolean }) {
+function Editor({ initialDirty }: { initialDirty: boolean }) {
+  const [dirty, setDirty] = useState(initialDirty)
   const location = useLocation()
   const guard = useUnsavedNavigationGuard(dirty)
+  const navigate = useNavigate()
   return (
     <>
       <p>編輯中 {location.pathname}</p>
+      <button onClick={() => setDirty(false)} type="button">
+        清除草稿
+      </button>
       <UnsavedLeaveBox guard={guard} />
       <a href="/one#section" data-testid="hash-link">
         同頁錨點
@@ -28,6 +40,18 @@ function Editor({ dirty }: { dirty: boolean }) {
       <Link data-testid="self-link" target="_self" to="/two">
         同頁連結
       </Link>
+      <Link data-testid="after-allow-link" to="/three">
+        確認後再導覽
+      </Link>
+      <Link data-testid="same-url-link" to={location.pathname}>
+        目前頁面連結
+      </Link>
+      <button
+        onClick={() => guard.allowNavigation(() => navigate('/approved'))}
+        type="button"
+      >
+        已確認導覽
+      </button>
       <a href="/two" data-testid="blank-link" target="_blank">
         新分頁連結
       </a>
@@ -41,32 +65,23 @@ function Editor({ dirty }: { dirty: boolean }) {
   )
 }
 
-function BrowserHistoryHarness({ dirty }: { dirty: boolean }) {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<p>第一頁</p>} path="/zero" />
-        <Route element={<Editor dirty={dirty} />} path="/one" />
-        <Route element={<p>第二頁</p>} path="/two" />
-      </Routes>
-    </BrowserRouter>
+async function mountAtEditor(options: { dirty?: boolean } = {}) {
+  const router = createMemoryRouter(
+    [
+      { path: '/zero', element: <p>第一頁</p> },
+      {
+        path: '/one',
+        element: <Editor initialDirty={options.dirty ?? true} />,
+      },
+      { path: '/two', element: <p>第二頁</p> },
+      { path: '/approved', element: <Editor initialDirty /> },
+      { path: '/three', element: <p>第三頁</p> },
+    ],
+    { initialEntries: ['/zero', '/one', '/two'], initialIndex: 1 },
   )
-}
-
-async function mountAtEditor(
-  options: { missingForwardIndex?: boolean; dirty?: boolean } = {},
-) {
-  window.history.replaceState({ idx: 0, key: 'zero' }, '', '/zero')
-  window.history.pushState({ idx: 1, key: 'one' }, '', '/one')
-  window.history.pushState({ idx: 2, key: 'two' }, '', '/two')
-  if (options.missingForwardIndex) {
-    window.history.replaceState({ key: 'external-entry' }, '', '/two')
-  }
-  window.history.back()
-  await waitFor(() => expect(window.location.pathname).toBe('/one'))
-  const view = render(<BrowserHistoryHarness dirty={options.dirty ?? true} />)
+  const view = render(<RouterProvider router={router} />)
   expect(await screen.findByText('編輯中 /one')).toBeInTheDocument()
-  return view
+  return { ...view, router }
 }
 
 afterEach(() => {
@@ -74,7 +89,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('unsaved navigation guard with BrowserRouter history', () => {
+describe('unsaved navigation guard with a data router', () => {
   it.each([
     ['Ctrl', { ctrlKey: true }],
     ['Command', { metaKey: true }],
@@ -89,7 +104,7 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
 
     expect(fireEvent.click(link, options)).toBe(true)
     expect(confirm).not.toHaveBeenCalled()
-    expect(window.location.pathname).toBe('/one')
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
   })
 
   it.each(['_blank', '_parent', '_top'])(
@@ -107,7 +122,7 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
 
       expect(fireEvent.click(link)).toBe(true)
       expect(confirm).not.toHaveBeenCalled()
-      expect(window.location.pathname).toBe('/one')
+      expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     },
   )
 
@@ -121,7 +136,7 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
       name: '有尚未儲存的變更',
     })
     expect(confirm).not.toHaveBeenCalled()
-    expect(window.location.pathname).toBe('/one')
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     // ADM-R38：開啟時焦點在第一個按鈕「保留編輯」。
     // UnsavedLeaveBox 在 effect 聚焦，等 effect 完成再檢查。
     await waitFor(() =>
@@ -175,13 +190,13 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
 
     fireEvent.click(within(box).getByRole('button', { name: '保留編輯' }))
     expect(screen.queryByRole('group')).toBeNull()
-    expect(window.location.pathname).toBe('/one')
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     expect(screen.getByTestId('plain-link')).toHaveFocus()
 
     fireEvent.click(screen.getByTestId('plain-link'))
     fireEvent.keyDown(await screen.findByRole('group'), { key: 'Escape' })
     expect(screen.queryByRole('group')).toBeNull()
-    expect(window.location.pathname).toBe('/one')
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
   })
 
@@ -195,7 +210,31 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
     fireEvent.click(within(box).getByRole('button', { name: '捨棄變更' }))
 
     expect(await screen.findByText('第二頁')).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/two')
+    expect(screen.getByText('第二頁')).toBeInTheDocument()
+  })
+
+  it('blocks a dirty same-URL self-link', async () => {
+    await mountAtEditor()
+
+    fireEvent.click(screen.getByTestId('same-url-link'))
+
+    expect(
+      await screen.findByRole('group', { name: '有尚未儲存的變更' }),
+    ).toBeVisible()
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
+  })
+
+  it('uses confirmed navigation bypass once, then blocks again', async () => {
+    await mountAtEditor()
+
+    fireEvent.click(screen.getByRole('button', { name: '已確認導覽' }))
+    expect(await screen.findByText('編輯中 /approved')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('after-allow-link'))
+    expect(
+      await screen.findByRole('group', { name: '有尚未儲存的變更' }),
+    ).toBeVisible()
+    expect(screen.getByText('編輯中 /approved')).toBeInTheDocument()
   })
 
   it('does not treat a hash-only link as leaving the page (ADM-R28)', async () => {
@@ -207,61 +246,63 @@ describe('unsaved navigation guard with BrowserRouter history', () => {
   })
 
   it('cancels Back once and keeps the editor route mounted', async () => {
-    await mountAtEditor()
+    const { router } = await mountAtEditor()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    window.history.back()
+    router.navigate(-1)
 
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(window.location.pathname).toBe('/one'))
+    await waitFor(() =>
+      expect(screen.getByText('編輯中 /one')).toBeInTheDocument(),
+    )
     expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     expect(confirm).toHaveBeenCalledTimes(1)
   })
 
   it('cancels Forward once and keeps the editor route mounted', async () => {
-    await mountAtEditor()
+    const { router } = await mountAtEditor()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    window.history.forward()
+    router.navigate(1)
 
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(window.location.pathname).toBe('/one'))
+    await waitFor(() =>
+      expect(screen.getByText('編輯中 /one')).toBeInTheDocument(),
+    )
     expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     expect(confirm).toHaveBeenCalledTimes(1)
   })
 
   it('accepts Back and leaves the editor route', async () => {
-    await mountAtEditor()
+    const { router } = await mountAtEditor()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    window.history.back()
+    router.navigate(-1)
 
     expect(await screen.findByText('第一頁')).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/zero')
     expect(confirm).toHaveBeenCalledTimes(1)
   })
 
   it('accepts Forward and leaves the editor route', async () => {
-    await mountAtEditor()
+    const { router } = await mountAtEditor()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    window.history.forward()
+    router.navigate(1)
 
     expect(await screen.findByText('第二頁')).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/two')
+    expect(screen.getByText('第二頁')).toBeInTheDocument()
     expect(confirm).toHaveBeenCalledTimes(1)
   })
 
-  it('restores the editor without guessing when a history entry lacks idx', async () => {
-    await mountAtEditor({ missingForwardIndex: true })
+  it('cancels a Forward transition and keeps the editor mounted', async () => {
+    const { router } = await mountAtEditor()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    window.history.forward()
+    router.navigate(1)
 
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
-    expect(window.location.pathname).toBe('/one')
     expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
-    expect(window.history.state.idx).toEqual(expect.any(Number))
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
     expect(confirm).toHaveBeenCalledTimes(1)
   })
 })
@@ -280,12 +321,12 @@ describe('unsaved navigation guard without unsaved changes', () => {
   })
 
   it('lets Back and Forward through without a native confirm', async () => {
-    await mountAtEditor({ dirty: false })
+    const { router } = await mountAtEditor({ dirty: false })
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
-    window.history.back()
+    router.navigate(-1)
     expect(await screen.findByText('第一頁')).toBeInTheDocument()
-    window.history.forward()
+    router.navigate(1)
     expect(await screen.findByText('編輯中 /one')).toBeInTheDocument()
 
     expect(confirm).not.toHaveBeenCalled()
@@ -316,16 +357,13 @@ describe('unsaved navigation guard lifecycle', () => {
   })
 
   it('does not bring a stale leave box back after the changes are cleared', async () => {
-    const view = await mountAtEditor()
+    await mountAtEditor()
     fireEvent.click(screen.getByTestId('plain-link'))
     await screen.findByRole('group', { name: '有尚未儲存的變更' })
 
-    view.rerender(<BrowserHistoryHarness dirty={false} />)
+    fireEvent.click(screen.getByRole('button', { name: '清除草稿' }))
     await waitFor(() => expect(screen.queryByRole('group')).toBeNull())
-    view.rerender(<BrowserHistoryHarness dirty />)
-
-    expect(screen.queryByRole('group')).toBeNull()
-    expect(window.location.pathname).toBe('/one')
+    expect(screen.getByText('編輯中 /one')).toBeInTheDocument()
   })
 
   it('removes every listener when the page unmounts', async () => {
@@ -341,8 +379,6 @@ describe('unsaved navigation guard lifecycle', () => {
 
     window.dispatchEvent(unload)
     const clickAllowed = fireEvent.click(outside)
-    window.history.back()
-    await waitFor(() => expect(window.location.pathname).toBe('/zero'))
 
     expect(unload.defaultPrevented).toBe(false)
     expect(clickAllowed).toBe(true)

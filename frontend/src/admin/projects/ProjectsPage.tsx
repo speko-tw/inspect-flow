@@ -9,6 +9,8 @@ import { Link, useNavigate } from 'react-router'
 
 import { RequiredMark } from '../../ui/Form'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { UnsavedLeaveBox } from '../planning/UnsavedLeaveBox'
+import * as navigationGuard from '../planning/useUnsavedNavigationGuard'
 import { mapFieldErrors } from '../../ui/fieldErrors'
 import { FieldError, Form, FormError, FormSubmitButton } from '../../ui/Form'
 import { HttpError } from '../../http'
@@ -177,6 +179,8 @@ export default function ProjectsPage() {
         form[key as keyof FormState] !== originalForm[key as keyof FormState],
     ),
   )
+  const leaveGuard =
+    navigationGuard.useUnsavedNavigationGuard(hasUnsavedChanges)
 
   useEffect(() => {
     if (!transition) return
@@ -313,7 +317,7 @@ export default function ProjectsPage() {
       setError('')
     } else {
       setFormMode(null)
-      navigate(next.to)
+      leaveGuard.allowNavigation(() => navigate(next.to))
     }
   }
 
@@ -413,11 +417,13 @@ export default function ProjectsPage() {
       if (creating) {
         setNewDraft(EMPTY_FORM)
         setFormMode(null)
-        navigate(`/admin/projects/${saved.id}`, {
-          state: hasDuplicateCodeWarning(saved)
-            ? { duplicateProjectCode: saved.project_code }
-            : null,
-        })
+        leaveGuard.allowNavigation(() =>
+          navigate(`/admin/projects/${saved.id}`, {
+            state: hasDuplicateCodeWarning(saved)
+              ? { duplicateProjectCode: saved.project_code }
+              : null,
+          }),
+        )
         return
       }
       const savedNotice = hasDuplicateCodeWarning(saved)
@@ -474,6 +480,7 @@ export default function ProjectsPage() {
   return (
     <section aria-labelledby="projects-heading">
       <h1 id="projects-heading">專案</h1>
+      <UnsavedLeaveBox guard={leaveGuard} />
       {notice && (
         <p className="notice-success" ref={noticeRef} role="status">
           {notice}

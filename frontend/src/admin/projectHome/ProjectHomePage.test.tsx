@@ -5,7 +5,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { Link, Route, Routes } from 'react-router'
+import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
@@ -94,7 +95,7 @@ function renderAt(
   },
 ) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter initialEntries={[path]}>
       <CurrentUserProvider
         value={{ user: currentUserFixture(access), clear: vi.fn() }}
       >
@@ -163,7 +164,7 @@ function renderAt(
           </main>
         </WorkflowSummaryProvider>
       </CurrentUserProvider>
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 

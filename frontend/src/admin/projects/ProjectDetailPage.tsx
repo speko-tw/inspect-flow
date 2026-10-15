@@ -10,6 +10,8 @@ import { Link, useParams } from 'react-router'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { UnsavedLeaveBox } from '../planning/UnsavedLeaveBox'
+import * as navigationGuard from '../planning/useUnsavedNavigationGuard'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { ManagementApiError, managementErrorMessage } from '../api'
 import { RequiredMark } from '../../ui/Form'
@@ -120,6 +122,10 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     error: string
     confirmDiscard: boolean
   } | null>(null)
+  const editingDirty = Boolean(
+    editing && !sameSet(editing.roleIds, editing.member.role_ids),
+  )
+  const leaveGuard = navigationGuard.useUnsavedNavigationGuard(editingDirty)
   const editRolesRef = useRef<HTMLInputElement>(null)
   const editHeadingRef = useRef<HTMLHeadingElement>(null)
 
@@ -246,8 +252,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
 
   function cancelEdit() {
     if (!editing) return
-    const dirty = !sameSet(editing.roleIds, editing.member.role_ids)
-    if (dirty && !editing.confirmDiscard) {
+    if (editingDirty && !editing.confirmDiscard) {
       setEditing({ ...editing, confirmDiscard: true })
       return
     }
@@ -336,6 +341,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     return (
       <section aria-labelledby="project-heading">
         <h2 id="project-heading">成員</h2>
+        <UnsavedLeaveBox guard={leaveGuard} />
         <form
           className="member-edit-view"
           noValidate

@@ -1,17 +1,23 @@
 import {
   act,
   fireEvent,
-  render,
+  render as renderWithoutRouter,
   screen,
   waitFor,
   within,
 } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 
 import { expectImeEnterIgnored, holdRequests } from '../../testing/submitGuard'
 import TemplatesPage from './TemplatesPage'
 import wireFixture from './fixtures/template-item-payload.json'
 import type { TemplateItem } from './api'
+
+function render(ui: ReactElement) {
+  return renderWithoutRouter(<DataMemoryRouter>{ui}</DataMemoryRouter>)
+}
 
 const category = { id: 'category-1', name: '土木工程' }
 const otherCategory = { id: 'category-2', name: '建築工程' }

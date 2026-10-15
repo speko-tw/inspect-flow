@@ -954,6 +954,29 @@ export default function PlanningPage({
 
   // 收起新增任務表單並清空輸入；收起後不應留下任何隱藏的未儲存內容，
   // 也不應留下等待確認的捨棄提示。
+  function selectPlan(plan: InspectionPlan): void {
+    if (plan.id === selectedPlanId) return
+    const switchPrompt = [
+      '目前的計畫有尚未儲存的內容。',
+      '切換計畫會捨棄變更，確定切換嗎？',
+    ].join('')
+    if (hasUnsavedChanges && !window.confirm(switchPrompt)) {
+      return
+    }
+    // ADM-R28、ADM-R38：確認後才清除上一份計畫的草稿。
+    resetTaskForm()
+    setPlanName('')
+    setEditingPlanName(false)
+    setUpdatedPlanName('')
+    setEditingLocation(null)
+    setEditingName(null)
+    setEditingTaskItems(null)
+    setEditingAssignee(null)
+    setCancelTask(null)
+    setCancelReason('')
+    setSelectedPlanId(plan.id)
+  }
+
   function resetTaskForm(): void {
     setTaskFormOpen(false)
     taskFormFocus.current = null
@@ -1125,16 +1148,7 @@ export default function PlanningPage({
                     onClick={() => {
                       setNotice(null)
                       clearFieldError()
-                      if (plan.id !== selectedPlanId) {
-                        // 新增任務的輸入與編輯中的表單都屬於上一份計畫，
-                        // 帶到新計畫會誤建任務，也會留下看不見的未儲存內容。
-                        resetTaskForm()
-                        setEditingLocation(null)
-                        setEditingName(null)
-                        setEditingTaskItems(null)
-                        setEditingAssignee(null)
-                      }
-                      setSelectedPlanId(plan.id)
+                      selectPlan(plan)
                     }}
                     type="button"
                   >
