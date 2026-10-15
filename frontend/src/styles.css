@@ -598,6 +598,15 @@ body {
   flex-direction: column;
 }
 
+.page-load-error {
+  width: min(100%, 36rem);
+  margin: auto;
+}
+
+.page-load-error .btn-primary {
+  min-height: 44px;
+}
+
 .version-footer {
   padding: var(--space-2) var(--space-4);
   color: var(--text-muted);
