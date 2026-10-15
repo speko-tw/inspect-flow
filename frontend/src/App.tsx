@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router'
 
 import ChangePasswordPage from './auth/ChangePasswordPage'
@@ -7,6 +7,9 @@ import LoginPage from './auth/LoginPage'
 import RequireAuth from './auth/RequireAuth'
 import NotFoundPage from './NotFoundPage'
 import RequireValidRouteIds from './RequireValidRouteIds'
+import RouteLoadErrorBoundary, {
+  PageLoadError,
+} from './ui/RouteLoadErrorBoundary'
 import SetupGate from './setup/SetupGate'
 import VersionFooter from './VersionFooter'
 
@@ -27,6 +30,31 @@ function LegacyProjectTemplateRedirect() {
 }
 
 export default function App() {
+  const [preloadFailed, setPreloadFailed] = useState(false)
+
+  useEffect(() => {
+    const handlePreloadError = (event: Event) => {
+      event.preventDefault()
+      setPreloadFailed(true)
+    }
+
+    window.addEventListener('vite:preloadError', handlePreloadError)
+    return () => {
+      window.removeEventListener('vite:preloadError', handlePreloadError)
+    }
+  }, [])
+
+  if (preloadFailed) {
+    return (
+      <div className="app-root">
+        <div className="app-content">
+          <PageLoadError variant="updated" />
+        </div>
+        <VersionFooter />
+      </div>
+    )
+  }
+
   return (
     <div className="app-root">
       <div className="app-content">
@@ -48,7 +76,14 @@ export default function App() {
                 </SetupGate>
               }
             />
-            <Route path="/setup" element={<SetupPage />} />
+            <Route
+              path="/setup"
+              element={
+                <RouteLoadErrorBoundary>
+                  <SetupPage />
+                </RouteLoadErrorBoundary>
+              }
+            />
             <Route
               path="/change-password"
               element={
@@ -73,7 +108,9 @@ export default function App() {
                 // 這個問題不會出現）。給不同的 key 強制切換時視為不同
                 // 元件，一律重新掛載並重新查詢。
                 <RequireAuth key="admin">
-                  <AdminPage />
+                  <RouteLoadErrorBoundary>
+                    <AdminPage />
+                  </RouteLoadErrorBoundary>
                 </RequireAuth>
               }
             />
@@ -81,7 +118,9 @@ export default function App() {
               path="/field/*"
               element={
                 <RequireAuth key="field">
-                  <FieldPage />
+                  <RouteLoadErrorBoundary>
+                    <FieldPage />
+                  </RouteLoadErrorBoundary>
                 </RequireAuth>
               }
             />
