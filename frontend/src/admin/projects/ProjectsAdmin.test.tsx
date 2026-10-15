@@ -1410,6 +1410,36 @@ describe('admin projects page', () => {
       screen.getByRole('heading', { name: '編輯專案「第二示範工程」' }),
     ).toBeVisible()
     expect(nextName).toHaveValue('B 的未儲存草稿')
+
+    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
+    const leavePrompt = screen.getByRole('region', {
+      name: '未儲存變更',
+    })
+    fireEvent.click(
+      within(leavePrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(
+      screen.getByRole('heading', {
+        name: '編輯專案「第二示範工程」',
+      }),
+    ).toBeVisible()
+    expect(nextName).toHaveValue('B 的未儲存草稿')
+
+    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    expect(
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', {
+        name: 'DEMO-002｜第二示範工程',
+      }),
+    ).toBeVisible()
   })
 
   // ADM-R38：表單內按鈕卸載後，鍵盤焦點須回到可見清單入口。

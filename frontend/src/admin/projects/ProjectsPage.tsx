@@ -503,7 +503,16 @@ export default function ProjectsPage() {
           {createdProjectLink && (
             <>
               {' '}
-              <Link to={`/admin/projects/${createdProjectLink}`}>
+              {/* ADM-R15：舊 POST 回應的連結仍須確認，避免丟失未存草稿。 */}
+              <Link
+                onClick={(event) =>
+                  guardProjectLink(
+                    event,
+                    `/admin/projects/${createdProjectLink}`,
+                  )
+                }
+                to={`/admin/projects/${createdProjectLink}`}
+              >
                 開啟專案
               </Link>
             </>
