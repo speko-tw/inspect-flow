@@ -522,14 +522,6 @@ export default function ProjectsPage() {
           <h2 ref={editHeadingRef} tabIndex={-1}>
             {editing ? `編輯專案「${editing.name}」` : '新增專案'}
           </h2>
-          {editing && (
-            <button
-              onClick={() => requestTransition({ kind: 'new' })}
-              type="button"
-            >
-              新增專案
-            </button>
-          )}
           <label>
             <span className="required-label">
               本公司在這個案子的角色 <RequiredMark />
@@ -703,121 +695,133 @@ export default function ProjectsPage() {
           </FieldError>
         </ConfirmBox>
       )}
-      {loading ? <p>載入中…</p> : null}
-      <CursorListSearch
-        disabled={loading}
-        label="搜尋專案"
-        onQueryChange={setQuery}
-        onSearch={(event) => {
-          event.preventDefault()
-          void search(query)
-        }}
-        query={query}
-      />
-      <FormError>{listError}</FormError>
-      {projects.length > 0 && (
-        <section aria-labelledby="project-workspace-heading">
-          <h2 id="project-workspace-heading">專案工作台</h2>
-          <div className="project-workspace-grid">
-            {projects.map((project) => {
-              // TPL-R23：導覽與未儲存變更守衛共用
-              // 正式套用路徑，避免守衛後前往舊網址。
-              const applyTemplatesPath = [
-                '/admin/projects',
-                project.id,
-                'inspection-items',
-                'templates',
-              ].join('/')
-              return (
-                <article
-                  className="project-workspace-card"
-                  id={`project-card-${project.id}`}
-                  key={project.id}
-                  tabIndex={-1}
-                >
-                  <p className="project-code">
-                    {project.project_code}
-                    {hasDuplicateCodeWarning(project) ? (
-                      <span>（代號重複）</span>
-                    ) : null}
-                  </p>
-                  <h3>{project.name}</h3>
-                  <p>{project.site_location}</p>
-                  {/* 列表只剩卡片，業主與預定日期不得因此看不到；
+      {!editing && (
+        <>
+          {loading ? <p>載入中…</p> : null}
+          <CursorListSearch
+            disabled={loading}
+            label="搜尋專案"
+            onQueryChange={setQuery}
+            onSearch={(event) => {
+              event.preventDefault()
+              void search(query)
+            }}
+            query={query}
+          />
+          <FormError>{listError}</FormError>
+          {projects.length > 0 && (
+            <section aria-labelledby="project-workspace-heading">
+              <h2 id="project-workspace-heading">專案工作台</h2>
+              <div className="project-workspace-grid">
+                {projects.map((project) => {
+                  // TPL-R23：導覽與未儲存變更守衛共用
+                  // 正式套用路徑，避免守衛後前往舊網址。
+                  const applyTemplatesPath = [
+                    '/admin/projects',
+                    project.id,
+                    'inspection-items',
+                    'templates',
+                  ].join('/')
+                  return (
+                    <article
+                      className="project-workspace-card"
+                      id={`project-card-${project.id}`}
+                      key={project.id}
+                      tabIndex={-1}
+                    >
+                      <p className="project-code">
+                        {project.project_code}
+                        {hasDuplicateCodeWarning(project) ? (
+                          <span>（代號重複）</span>
+                        ) : null}
+                      </p>
+                      <h3>{project.name}</h3>
+                      <p>{project.site_location}</p>
+                      {/* 列表只剩卡片，業主與預定日期不得因此看不到；
                       沒有值就不顯示該行。 */}
-                  {project.client_name ? (
-                    <p>{`業主：${project.client_name}`}</p>
-                  ) : null}
-                  {project.planned_start_date ? (
-                    <p>{`預定開工：${project.planned_start_date}`}</p>
-                  ) : null}
-                  {project.planned_completion_date ? (
-                    <p>{`預定完工：${project.planned_completion_date}`}</p>
-                  ) : null}
-                  <Link
-                    className="btn btn-primary"
-                    onClick={(event) =>
-                      guardProjectLink(event, applyTemplatesPath)
-                    }
-                    to={applyTemplatesPath}
-                  >
-                    套用範本
-                  </Link>
-                  <Link
-                    className="btn"
-                    onClick={(event) =>
-                      guardProjectLink(event, `/admin/projects/${project.id}`)
-                    }
-                    to={`/admin/projects/${project.id}`}
-                  >
-                    開啟專案
-                  </Link>
-                  <Link
-                    className="btn btn-sm"
-                    onClick={(event) =>
-                      guardProjectLink(
-                        event,
-                        `/admin/projects/${project.id}/members`,
-                      )
-                    }
-                    to={`/admin/projects/${project.id}/members`}
-                  >
-                    成員
-                  </Link>
-                  <button
-                    aria-label={`編輯專案「${project.name}」`}
-                    className="btn"
-                    onClick={() => startEdit(project)}
-                    type="button"
-                  >
-                    編輯
-                  </button>
-                </article>
-              )
-            })}
-          </div>
-        </section>
-      )}
-      {!loading && projects.length === 0 ? (
-        appliedQuery ? (
-          <p>
-            找不到符合「{appliedQuery}」的專案。{' '}
-            <button onClick={() => void clearSearch()} type="button">
-              清除搜尋
+                      {project.client_name ? (
+                        <p>{`業主：${project.client_name}`}</p>
+                      ) : null}
+                      <p>
+                        本公司角色：{roleLabel(roles, project.company_role)}
+                      </p>
+                      {project.planned_start_date ? (
+                        <p>{`預定開工：${project.planned_start_date}`}</p>
+                      ) : null}
+                      {project.planned_completion_date ? (
+                        <p>{`預定完工：${project.planned_completion_date}`}</p>
+                      ) : null}
+                      <div className="card-actions">
+                        <Link
+                          className="btn btn-primary"
+                          onClick={(event) =>
+                            guardProjectLink(event, applyTemplatesPath)
+                          }
+                          to={applyTemplatesPath}
+                        >
+                          套用範本
+                        </Link>
+                        <Link
+                          className="btn"
+                          onClick={(event) =>
+                            guardProjectLink(
+                              event,
+                              `/admin/projects/${project.id}`,
+                            )
+                          }
+                          to={`/admin/projects/${project.id}`}
+                        >
+                          開啟專案
+                        </Link>
+                        <Link
+                          className="btn"
+                          onClick={(event) =>
+                            guardProjectLink(
+                              event,
+                              `/admin/projects/${project.id}/members`,
+                            )
+                          }
+                          to={`/admin/projects/${project.id}/members`}
+                        >
+                          成員
+                        </Link>
+                        <button
+                          aria-label={`編輯專案「${project.name}」`}
+                          className="btn"
+                          onClick={() => startEdit(project)}
+                          type="button"
+                        >
+                          編輯
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+          {!loading && projects.length === 0 ? (
+            appliedQuery ? (
+              <p>
+                找不到符合「{appliedQuery}」的專案。{' '}
+                <button onClick={() => void clearSearch()} type="button">
+                  清除搜尋
+                </button>
+              </p>
+            ) : (
+              <p>目前沒有專案。</p>
+            )
+          ) : null}
+          {nextCursor && (
+            <button
+              disabled={loading || loadingMore}
+              onClick={() => void loadMore()}
+              type="button"
+            >
+              {loadingMore ? '載入中…' : '載入更多'}
             </button>
-          </p>
-        ) : (
-          <p>目前沒有專案。</p>
-        )
-      ) : null}
-      {nextCursor && (
-        <button
-          disabled={loading || loadingMore}
-          onClick={() => void loadMore()}
-          type="button"
-        >
-          {loadingMore ? '載入中…' : '載入更多'}
-        </button>
+          )}
+        </>
       )}
     </section>
   )

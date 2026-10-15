@@ -81,7 +81,7 @@ export function templateErrorMessage(
           )
         : []
       return names.length
-        ? `已套用過${names.map((name) => `『${name}』`).join('、')}，本次沒有新增任何項目。`
+        ? `已套用過${names.map((name) => `「${name}」`).join('、')}，本次沒有新增任何項目。`
         : '已套用過同名項目，本次沒有新增任何項目。'
     }
     if (error.status === 409) {

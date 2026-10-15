@@ -1367,7 +1367,7 @@ export default function PlanningPage({
                         <p>取消原因：{task.cancellation_reason}</p>
                       )}
                       {canModify && (
-                        <div>
+                        <div className="card-actions">
                           {task.status === 'DRAFT' && (
                             <>
                               <button
@@ -1382,7 +1382,7 @@ export default function PlanningPage({
                                 type="button"
                               >
                                 修改查核項目
-                              </button>{' '}
+                              </button>
                               <button
                                 disabled={
                                   busy ||
@@ -1403,7 +1403,7 @@ export default function PlanningPage({
                                 type="button"
                               >
                                 派出任務
-                              </button>{' '}
+                              </button>
                               <button
                                 disabled={busy}
                                 onClick={() =>
@@ -1423,7 +1423,7 @@ export default function PlanningPage({
                                 type="button"
                               >
                                 刪除草稿
-                              </button>{' '}
+                              </button>
                             </>
                           )}
                           {['DRAFT', 'PENDING', 'IN_PROGRESS'].includes(
@@ -1441,7 +1441,7 @@ export default function PlanningPage({
                                 type="button"
                               >
                                 修改名稱
-                              </button>{' '}
+                              </button>
                               <button
                                 disabled={busy}
                                 onClick={(event) => {
@@ -1458,7 +1458,7 @@ export default function PlanningPage({
                                 type="button"
                               >
                                 修改地點
-                              </button>{' '}
+                              </button>
                               <button
                                 disabled={busy}
                                 onClick={(event) => {
@@ -1474,7 +1474,7 @@ export default function PlanningPage({
                                 type="button"
                               >
                                 修改建議指派
-                              </button>{' '}
+                              </button>
                             </>
                           )}
                           {['PENDING', 'IN_PROGRESS'].includes(
@@ -1637,7 +1637,9 @@ export default function PlanningPage({
                                       type="checkbox"
                                       value={item.id}
                                     />
-                                    {item.title} — {item.instruction}
+                                    {item.instruction
+                                      ? `${item.title} — ${item.instruction}`
+                                      : item.title}
                                   </label>
                                   <details>
                                     <summary style={{ minHeight: 44 }}>
@@ -1983,7 +1985,9 @@ export default function PlanningPage({
                               type="checkbox"
                               value={item.id}
                             />
-                            {item.title} — {item.instruction}
+                            {item.instruction
+                              ? `${item.title} — ${item.instruction}`
+                              : item.title}
                           </label>
                           {/* IP-R02 允許同項目建立多筆任務，所以只標示已有
                               幾筆、不擋選擇，讓使用者自己避開重複任務。 */}

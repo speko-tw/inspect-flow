@@ -372,6 +372,19 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument()
   })
 
+  it('只顯示套用日期，且存為範本按鈕依內容排版', async () => {
+    mockApi({ canSave: true, projectItems: [PROJECT_ITEM] })
+    renderPage({ ...USER, has_template_access: true })
+
+    const appliedTime = await screen.findByText(/2026/)
+    expect(appliedTime.tagName).toBe('TIME')
+    expect(appliedTime.textContent).toBe('2026/10/4')
+    expect(screen.getByText('來源範本：給排水')).toBeVisible()
+    expect(screen.getByRole('button', { name: '存為範本' })).toHaveClass(
+      'card-action',
+    )
+  })
+
   it('非成員套用頁沒有專案頁框，標題從 h1 開始（F-O08）', async () => {
     mockApi({ canSave: true })
     renderPage({ ...USER, has_template_access: true }, [], false, true)
@@ -401,7 +414,7 @@ describe('專案範本套用與存為範本（#429）', () => {
           ['管線查核'],
         ),
       ),
-    ).toBe('已套用過『管線查核』，本次沒有新增任何項目。')
+    ).toBe('已套用過「管線查核」，本次沒有新增任何項目。')
     expect(templateErrorMessage(new ProjectTemplatesApiError(404))).toBe(
       '找不到指定的資料，請重新整理後再試。',
     )
@@ -440,7 +453,7 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.getByText('標準未設定')).toBeInTheDocument()
   })
 
-  it('單項名稱以 strip 與 casefold 比對，已套用項目不能再次選取', async () => {
+  it('單項名稱以 strip 與 casefold 比對，無可套用項目時只顯示說明', async () => {
     const template = { ...TEMPLATE, title: 'Pump ß' }
     mockApi({
       templates: [template],
@@ -449,19 +462,14 @@ describe('專案範本套用與存為範本（#429）', () => {
     renderPage()
     await chooseSystem('Pump ß')
 
-    const itemRadio = screen.getByRole('radio', {
-      name: '單一項目：Pump ß',
-    })
-    expect(itemRadio).toBeDisabled()
-    await waitFor(() => expect(itemRadio).toBeChecked())
-    expect(screen.getAllByText('已套用').length).toBeGreaterThan(0)
     expect(
-      screen.getAllByText('專案已有同名項目，需要第二份請先改名'),
-    ).toHaveLength(1)
+      await screen.findByText('專案已有這些項目，沒有可套用項目。'),
+    ).toBeVisible()
+    expect(screen.queryByRole('radio')).toBeNull()
     expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
   })
 
-  it('專案項目載入完成前停用套用，載入後更新套用狀態與說明關聯', async () => {
+  it('專案項目載入完成前停用套用，全部已套用後只顯示說明', async () => {
     const calls = mockApi({
       templates: [TEMPLATE],
       projectItems: [PROJECT_ITEM],
@@ -483,20 +491,12 @@ describe('專案範本套用與存為範本（#429）', () => {
 
     gate.resolve()
 
-    const itemRadio = await screen.findByRole('radio', {
-      name: '單一項目：管線查核',
-    })
-    expect(itemRadio).toBeDisabled()
-    expect(apply).toBeDisabled()
-    const systemRadio = screen.getByRole('radio', {
-      name: '整個系統（1 個項目）',
-    })
-    expect(systemRadio).toHaveAttribute('aria-describedby')
     expect(
-      document.getElementById(
-        systemRadio.getAttribute('aria-describedby') ?? '',
-      ),
-    ).toHaveTextContent('專案已有這個系統的全部項目。')
+      await screen.findByText('專案已有這些項目，沒有可套用項目。'),
+    ).toBeVisible()
+    expect(screen.queryByRole('radio')).toBeNull()
+    expect(apply).toBeDisabled()
+    expect(apply).toHaveAttribute('aria-describedby', 'selected-applied-help')
   })
 
   it('切換專案時等新項目載入後才啟用套用', async () => {
@@ -694,28 +694,17 @@ describe('專案範本套用與存為範本（#429）', () => {
     await chooseSystem()
 
     expect(
-      await screen.findByRole('heading', { name: '沒有可套用的項目' }),
+      await screen.findByText('專案已有這些項目，沒有可套用項目。'),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('專案已有這個系統的全部項目。'),
-    ).toBeInTheDocument()
-    const systemRadio = screen.getByLabelText('整個系統（2 個項目）')
-    expect(systemRadio).toBeDisabled()
-    expect(systemRadio).not.toBeChecked()
-    expect(systemRadio).toHaveAttribute(
-      'aria-describedby',
-      'system-applied-help',
-    )
-    const itemRadio = screen.getByRole('radio', {
-      name: '單一項目：管線查核',
-    })
-    expect(itemRadio).toBeDisabled()
-    expect(itemRadio).toBeChecked()
+    expect(screen.queryByRole('heading', { name: /套用預覽/ })).toBeNull()
+    expect(screen.queryByRole('radio')).toBeNull()
+    expect(document.querySelector('.tpl-preview-list')).toBeNull()
+    expect(screen.queryByText('專案已有這個系統的全部項目。')).toBeNull()
     expect(screen.queryByText('將新增 1 個項目')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '套用至專案' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '套用至專案' })).toHaveAttribute(
       'aria-describedby',
-      'system-applied-help',
+      'selected-applied-help',
     )
   })
 
@@ -892,8 +881,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     fireEvent.click(screen.getByRole('button', { name: '管線查核' }))
     fireEvent.click(screen.getByRole('button', { name: '套用至專案' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '已套用過『管線查核』，本次沒有新增任何項目。',
+      '已套用過「管線查核」，本次沒有新增任何項目。',
     )
+    expect(screen.getByRole('heading', { name: '套用項目預覽' })).toBeVisible()
+    expect(screen.queryByText('將新增 1 個項目')).toBeNull()
     // 聚焦在 useEffect 裡；alert 插入 DOM 後才聚焦，所以要等。
     await waitFor(() =>
       expect(

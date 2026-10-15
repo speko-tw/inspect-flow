@@ -43,6 +43,28 @@ describe('required field markers', () => {
   })
 })
 
+describe('trial feedback card actions', () => {
+  it('keeps card actions content-sized and allows wrapping', () => {
+    expect(declarationsOf('.card-actions')).toMatchObject({
+      display: 'flex',
+      'flex-wrap': 'wrap',
+      gap: 'var(--space-2)',
+    })
+    expect(css).toContain('.card-actions > button,')
+    expect(css).toContain('flex: 0 0 auto;')
+    expect(css).toContain('min-height: 44px;')
+    expect(declarationsOf('.card-action').width).toBe('fit-content')
+  })
+
+  it('keeps progress cards readable with compact status badges', () => {
+    expect(declarationsOf('.progress-card').color).toBe('var(--text)')
+    expect(declarationsOf('.progress-card')['text-decoration']).toBe('none')
+    expect(declarationsOf('.progress-card > .badge')['justify-self']).toBe(
+      'start',
+    )
+  })
+})
+
 // #517 的管理頁與專案頁都在共用 main 內，表單和分區列沿用共用間距。
 describe('page and zone spacing', () => {
   it('keeps the same main inset for admin and project sections', () => {

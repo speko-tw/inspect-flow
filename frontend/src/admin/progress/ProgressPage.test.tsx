@@ -249,6 +249,9 @@ it('shows seven server filtered links and a single keyboard reachable card', asy
   const card = await screen.findByRole('link', {
     name: /表面檢查等 2 項/,
   })
+  expect(card.querySelectorAll('a')).toHaveLength(0)
+  expect(card.querySelector('.badge')).toBeVisible()
+  expect(card.querySelector('.badge')?.parentElement).toBe(card)
   expect(card).toHaveAttribute(
     'href',
     `/admin/projects/${projectId}/progress/tasks/${taskId}` +

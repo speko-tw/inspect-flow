@@ -73,6 +73,25 @@ describe('project section navigation state', () => {
     expect(screen.getByRole('link', { name: '查核項目' })).toBeInTheDocument()
   })
 
+  it('shows member and planning sections to viewers with read access', () => {
+    renderShell('/admin/projects/:projectId/planning', [
+      'project_member.manage',
+      'inspection_plan.read',
+    ])
+
+    expect(screen.getByRole('link', { name: '成員' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '計畫與任務' }),
+    ).toBeInTheDocument()
+  })
+
+  it('hides sections without their permissions', () => {
+    renderShell('/admin/projects/:projectId/planning', [])
+
+    expect(screen.queryByRole('link', { name: '成員' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '計畫與任務' })).toBeNull()
+  })
+
   it('hides the zones section from a member who can only manage zones', () => {
     // 該 API 只讓 project_zone.read 讀列表，只有 manage 的人看到入口
     // 會得到 403，所以導覽不顯示（ADM-R17）。
