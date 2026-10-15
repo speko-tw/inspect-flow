@@ -38,21 +38,59 @@ interface RouteLoadErrorBoundaryProps {
 
 interface RouteLoadErrorBoundaryState {
   hasError: boolean
+  isChunkLoadError: boolean
 }
 
-/** 捕捉 lazy route render 時的載入錯誤，避免整頁留白。 */
+function isLazyChunkLoadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+
+  const message = error.message.toLowerCase()
+  return (
+    error.name === 'ChunkLoadError' ||
+    message.includes('failed to fetch dynamically imported module') ||
+    message.includes('importing a module script failed') ||
+    message.includes('chunkloaderror') ||
+    /loading (?:css )?chunk .+ failed/.test(message)
+  )
+}
+
+/** 捕捉路由 render 錯誤，依錯誤類型提供合適的復原方式。 */
 export default class RouteLoadErrorBoundary extends Component<
   RouteLoadErrorBoundaryProps,
   RouteLoadErrorBoundaryState
 > {
-  state: RouteLoadErrorBoundaryState = { hasError: false }
+  state: RouteLoadErrorBoundaryState = {
+    hasError: false,
+    isChunkLoadError: false,
+  }
 
-  static getDerivedStateFromError(): RouteLoadErrorBoundaryState {
-    return { hasError: true }
+  static getDerivedStateFromError(
+    error: unknown,
+  ): RouteLoadErrorBoundaryState {
+    return {
+      hasError: true,
+      isChunkLoadError: isLazyChunkLoadError(error),
+    }
   }
 
   render() {
     if (this.state.hasError) {
+      if (!this.state.isChunkLoadError) {
+        return (
+          <main className="page-load-error" role="alert">
+            <h1>頁面發生錯誤</h1>
+            <p>這個頁面發生錯誤，請重新載入；若持續發生請聯絡管理者。</p>
+            <button
+              className="btn-primary"
+              onClick={this.props.onReload ?? (() => window.location.reload())}
+              type="button"
+            >
+              重新載入
+            </button>
+            <a href="/">回首頁</a>
+          </main>
+        )
+      }
       return <PageLoadError onReload={this.props.onReload} />
     }
     return this.props.children
