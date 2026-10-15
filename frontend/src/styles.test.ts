@@ -34,7 +34,11 @@ function declarationsIn(rule: string) {
 
 describe('required field markers', () => {
   it('keeps a direct required mark beside its label text', () => {
-    expect(declarationsOf('label:has(> .required-mark)').display).toBe('block')
+    expect(
+      declarationsOf(
+        'label:has(> .required-mark):not(:has(input, select, textarea))',
+      ).display,
+    ).toBe('block')
     expect(declarationsOf('.required-label').display).toBe('inline-flex')
   })
 })

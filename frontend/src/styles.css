@@ -685,8 +685,8 @@ label {
   font-weight: 600;
 }
 
-/* 直接放在 label 文字後的星號要留在文字同一行。 */
-label:has(> .required-mark) {
+/* 包著輸入框的 label 要保留 grid gap，其他直接標記維持文字同行。 */
+label:has(> .required-mark):not(:has(input, select, textarea)) {
   display: block;
 }
 

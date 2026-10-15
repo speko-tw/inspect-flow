@@ -1176,6 +1176,9 @@ describe('planning forms guard (#507)', () => {
     const form = formByContext('task')
     fireEvent.click(within(form).getByLabelText(/鋼筋保護層/))
     const input = within(form).getByLabelText(/任務名稱/)
+    expect(
+      input.closest('label')?.querySelector('.required-label .required-mark'),
+    ).not.toBeNull()
     fireEvent.change(input, { target: { value: '   ' } })
     fireEvent.click(within(form).getByRole('button', { name: '建立草稿任務' }))
 
@@ -1578,6 +1581,9 @@ describe('planning forms guard (#507)', () => {
     fireEvent.click(within(article).getByRole('button', { name: '修改名稱' }))
     const form = formByContext('task-rename')
     const input = within(form).getByLabelText(/任務名稱/)
+    expect(
+      input.closest('label')?.querySelector('.required-label .required-mark'),
+    ).not.toBeNull()
     fireEvent.change(input, { target: { value: '新名稱' } })
     fireEvent.click(within(form).getByRole('button', { name: '儲存名稱' }))
 
