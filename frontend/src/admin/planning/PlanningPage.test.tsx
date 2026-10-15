@@ -107,6 +107,12 @@ describe('planning management page', () => {
       const taskArticle = taskHeading.closest('article')
       expect(taskArticle).not.toBeNull()
       expect(
+        (taskArticle as HTMLElement).querySelector('.card-actions'),
+      ).not.toBeNull()
+      expect(
+        within(taskArticle as HTMLElement).getAllByRole('button'),
+      ).toHaveLength(6)
+      expect(
         within(taskArticle as HTMLElement).getByText(
           '查核項目：混凝土外觀、鋼筋保護層',
         ),
@@ -511,6 +517,32 @@ describe('planning management page', () => {
     await openTaskCreationForm()
     const label = (await screen.findByLabelText(/混凝土外觀/)).closest('label')
     expect(label?.textContent).toMatch(/^混凝土外觀/)
+  })
+
+  it('omits the separator when an item has no instruction', async () => {
+    const client = createMockPlanningClient()
+    const listItems = client.listProjectItems.bind(client)
+    client.listProjectItems = async (projectId) => {
+      const items = await listItems(projectId)
+      return items.map((item, index) =>
+        index === 0 ? { ...item, instruction: '' } : item,
+      )
+    }
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
+      target: { value: '無說明項目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '建立計畫' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '無說明項目（草稿）' }),
+    )
+    await openTaskCreationForm()
+
+    const itemLabel = (await screen.findByLabelText(/混凝土外觀/)).closest(
+      'label',
+    )
+    expect(itemLabel).toHaveTextContent('混凝土外觀')
+    expect(itemLabel).not.toHaveTextContent('—')
   })
 
   it('suggests a single item name with optional supplemental location', async () => {

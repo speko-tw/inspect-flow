@@ -41,7 +41,11 @@ const APPLY_CONFIRM_WARNING = [
 
 function formatTime(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('zh-TW')
+  return Number.isNaN(date.valueOf())
+    ? value
+    : new Intl.DateTimeFormat('zh-TW', {
+        dateStyle: 'short',
+      }).format(date)
 }
 
 const PYTHON_WHITESPACE =
@@ -387,6 +391,10 @@ export default function ProjectTemplatesPage({
   const selectedAlreadyApplied = selectedTemplates.some((item) =>
     isAlreadyApplied(item, projectItemNames),
   )
+  const noApplicableSelectedTemplates =
+    !applyConflict &&
+    selectedTemplates.length > 0 &&
+    selectedTemplates.every((item) => isAlreadyApplied(item, projectItemNames))
 
   async function submitApply() {
     // TPL-AC21：先確認既有項目載入完成，避免漏掉同名衝突。
@@ -643,7 +651,7 @@ export default function ProjectTemplatesPage({
                 {projectItems.map((item) => (
                   <li key={item.id}>
                     <strong>{item.title}</strong>
-                    <span>來源：{item.source_template_name}</span>
+                    <span>來源範本：{item.source_template_name}</span>
                     <time dateTime={item.applied_at}>
                       {formatTime(item.applied_at)}
                     </time>
@@ -652,6 +660,7 @@ export default function ProjectTemplatesPage({
                       !saveDenied &&
                       !itemsDenied && (
                         <button
+                          className="card-action"
                           disabled={busy}
                           onClick={() => startSave(item)}
                           type="button"
@@ -816,132 +825,150 @@ export default function ProjectTemplatesPage({
                     {selectedCategory?.name} / {selectedSystem.name}
                   </p>
                   <h2>套用範本：{selectedSystem.name}</h2>
-                  <fieldset>
-                    <legend>要套用什麼</legend>
-                    <label>
-                      <input
-                        aria-describedby={
-                          allSystemItemsApplied
-                            ? 'system-applied-help'
-                            : undefined
-                        }
-                        checked={mode === 'system'}
-                        disabled={allSystemItemsApplied}
-                        name="apply-target"
-                        onChange={() => {
-                          setSelected({
-                            type: 'system',
-                            id: selectedSystem.id,
-                          })
-                          setApplyError('')
-                          setApplyErrorCode('')
-                          setApplyConfirm(false)
-                        }}
-                        type="radio"
-                      />
-                      整個系統（{templates.length} 個項目）
-                    </label>
-                    {templates.map((item) => (
-                      <div className="tpl-apply-item-option" key={item.id}>
-                        <label>
-                          <input
-                            aria-describedby={
-                              isAlreadyApplied(item, projectItemNames)
-                                ? `applied-template-${item.id}`
-                                : undefined
-                            }
-                            aria-label={`單一項目：${item.title}`}
-                            checked={
-                              mode === 'item' &&
-                              activeSelection?.type === 'item' &&
-                              activeSelection.id === item.id
-                            }
-                            disabled={isAlreadyApplied(item, projectItemNames)}
-                            name="apply-target"
-                            onChange={() => {
-                              setSelected({ type: 'item', id: item.id ?? '' })
-                              setApplyError('')
-                              setApplyErrorCode('')
-                              setApplyConfirm(false)
-                            }}
-                            type="radio"
-                          />
-                          <span>單一項目：{item.title}</span>
-                          {isAlreadyApplied(item, projectItemNames) && (
-                            <span className="tpl-applied-status muted-text">
-                              已套用
-                            </span>
-                          )}
-                        </label>
-                        {isAlreadyApplied(item, projectItemNames) && (
-                          <p
-                            className="tpl-conflict-hint muted-text"
-                            id={`applied-template-${item.id}`}
-                          >
-                            專案已有同名項目，需要第二份請先改名
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </fieldset>
-                  {selectedTemplates.length > 0 && (
-                    <>
-                      <h3>
-                        {selected?.type === 'system' &&
-                        appliedTemplateCount > 0
-                          ? allSystemItemsApplied
-                            ? '沒有可套用的項目'
-                            : '系統套用預覽'
-                          : `將新增 ${selectedTemplates.length} 個項目`}
-                      </h3>
-                      <ul className="tpl-preview-list">
-                        {selectedTemplates.map((item) => (
-                          <li key={item.id}>
-                            <strong>
-                              {item.title}
-                              {isAlreadyApplied(item, projectItemNames) && (
-                                <span
-                                  className={'tpl-applied-status muted-text'}
-                                >
-                                  已套用
-                                </span>
+                  {!noApplicableSelectedTemplates && (
+                    <fieldset>
+                      <legend>要套用什麼</legend>
+                      <label>
+                        <input
+                          aria-describedby={
+                            allSystemItemsApplied
+                              ? 'system-applied-help'
+                              : undefined
+                          }
+                          checked={mode === 'system'}
+                          disabled={allSystemItemsApplied}
+                          name="apply-target"
+                          onChange={() => {
+                            setSelected({
+                              type: 'system',
+                              id: selectedSystem.id,
+                            })
+                            setApplyError('')
+                            setApplyErrorCode('')
+                            setApplyConfirm(false)
+                          }}
+                          type="radio"
+                        />
+                        整個系統（{templates.length} 個項目）
+                      </label>
+                      {templates.map((item) => (
+                        <div className="tpl-apply-item-option" key={item.id}>
+                          <label>
+                            <input
+                              aria-describedby={
+                                isAlreadyApplied(item, projectItemNames)
+                                  ? `applied-template-${item.id}`
+                                  : undefined
+                              }
+                              aria-label={`單一項目：${item.title}`}
+                              checked={
+                                mode === 'item' &&
+                                activeSelection?.type === 'item' &&
+                                activeSelection.id === item.id
+                              }
+                              disabled={isAlreadyApplied(
+                                item,
+                                projectItemNames,
                               )}
-                            </strong>
-                            <p>{item.instruction}</p>
-                            {item.inspection_points.map((point) => (
-                              <div key={point.sequence}>
-                                <strong>
-                                  項次 {point.sequence} {point.title}
-                                </strong>
-                                {point.instruction && (
-                                  <p>{point.instruction}</p>
-                                )}
-                                {point.numeric_standard && (
-                                  <p>
-                                    數值標準：{point.title}{' '}
-                                    {formatInspectionStandard(point)}
-                                  </p>
-                                )}
-                                {point.text_standard && (
-                                  <p>文字標準：{point.text_standard.text}</p>
-                                )}
-                                {!point.numeric_standard &&
-                                  !point.text_standard && (
-                                    <p>{formatInspectionStandard(point)}</p>
-                                  )}
-                                {pointEvidenceText(point).map((summary) => (
-                                  <p key={summary}>{summary}</p>
-                                ))}
-                              </div>
-                            ))}
-                          </li>
-                        ))}
-                      </ul>
-                      <p className="tpl-hint muted-text">
-                        之後修改範本不會更新已套用的項目。套用後是專案自己的副本。
-                      </p>
-                    </>
+                              name="apply-target"
+                              onChange={() => {
+                                setSelected({
+                                  type: 'item',
+                                  id: item.id ?? '',
+                                })
+                                setApplyError('')
+                                setApplyErrorCode('')
+                                setApplyConfirm(false)
+                              }}
+                              type="radio"
+                            />
+                            <span>單一項目：{item.title}</span>
+                            {isAlreadyApplied(item, projectItemNames) && (
+                              <span className="tpl-applied-status muted-text">
+                                已套用
+                              </span>
+                            )}
+                          </label>
+                          {isAlreadyApplied(item, projectItemNames) && (
+                            <p
+                              className="tpl-conflict-hint muted-text"
+                              id={`applied-template-${item.id}`}
+                            >
+                              專案已有同名項目，需要第二份請先改名
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </fieldset>
                   )}
+                  {noApplicableSelectedTemplates && (
+                    <p
+                      className="tpl-conflict-hint muted-text"
+                      id="selected-applied-help"
+                      role="status"
+                    >
+                      專案已有這些項目，沒有可套用項目。
+                    </p>
+                  )}
+                  {selectedTemplates.length > 0 &&
+                    !noApplicableSelectedTemplates && (
+                      <>
+                        <h3>
+                          {selected?.type === 'system' &&
+                          appliedTemplateCount > 0
+                            ? '系統套用預覽'
+                            : applyConflict
+                              ? '套用項目預覽'
+                              : `將新增 ${selectedTemplates.length} 個項目`}
+                        </h3>
+                        <ul className="tpl-preview-list">
+                          {selectedTemplates.map((item) => (
+                            <li key={item.id}>
+                              <strong>
+                                {item.title}
+                                {isAlreadyApplied(item, projectItemNames) && (
+                                  <span
+                                    className={'tpl-applied-status muted-text'}
+                                  >
+                                    已套用
+                                  </span>
+                                )}
+                              </strong>
+                              <p>{item.instruction}</p>
+                              {item.inspection_points.map((point) => (
+                                <div key={point.sequence}>
+                                  <strong>
+                                    項次 {point.sequence} {point.title}
+                                  </strong>
+                                  {point.instruction && (
+                                    <p>{point.instruction}</p>
+                                  )}
+                                  {point.numeric_standard && (
+                                    <p>
+                                      數值標準：{point.title}{' '}
+                                      {formatInspectionStandard(point)}
+                                    </p>
+                                  )}
+                                  {point.text_standard && (
+                                    <p>文字標準：{point.text_standard.text}</p>
+                                  )}
+                                  {!point.numeric_standard &&
+                                    !point.text_standard && (
+                                      <p>{formatInspectionStandard(point)}</p>
+                                    )}
+                                  {pointEvidenceText(point).map((summary) => (
+                                    <p key={summary}>{summary}</p>
+                                  ))}
+                                </div>
+                              ))}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="tpl-hint muted-text">
+                          之後修改範本不會更新已套用的項目。套用後是專案自己的副本。
+                        </p>
+                      </>
+                    )}
                   {templates.length === 0 &&
                     loadedSystems.has(selectedSystem.id) && (
                       <p className="notice-info" role="status">
@@ -999,9 +1026,12 @@ export default function ProjectTemplatesPage({
                   ) : (
                     <button
                       aria-describedby={
-                        selected?.type === 'system' && appliedTemplateCount > 0
-                          ? 'system-applied-help'
-                          : undefined
+                        noApplicableSelectedTemplates
+                          ? 'selected-applied-help'
+                          : selected?.type === 'system' &&
+                              appliedTemplateCount > 0
+                            ? 'system-applied-help'
+                            : undefined
                       }
                       className="btn-primary"
                       disabled={
@@ -1025,22 +1055,24 @@ export default function ProjectTemplatesPage({
                       {busy ? '套用中…' : '套用至專案'}
                     </button>
                   )}
-                  {selected?.type === 'system' && appliedTemplateCount > 0 && (
-                    <p
-                      className="tpl-conflict-hint muted-text"
-                      id="system-applied-help"
-                      role="status"
-                    >
-                      {allSystemItemsApplied ? (
-                        '專案已有這個系統的全部項目。'
-                      ) : (
-                        <>
-                          {appliedTemplateCount} 項已套用
-                          {PARTIAL_SYSTEM_APPLIED_HELP}
-                        </>
-                      )}
-                    </p>
-                  )}
+                  {selected?.type === 'system' &&
+                    appliedTemplateCount > 0 &&
+                    !noApplicableSelectedTemplates && (
+                      <p
+                        className="tpl-conflict-hint muted-text"
+                        id="system-applied-help"
+                        role="status"
+                      >
+                        {allSystemItemsApplied ? (
+                          '專案已有這個系統的全部項目。'
+                        ) : (
+                          <>
+                            {appliedTemplateCount} 項已套用
+                            {PARTIAL_SYSTEM_APPLIED_HELP}
+                          </>
+                        )}
+                      </p>
+                    )}
                 </>
               )}
             </>
