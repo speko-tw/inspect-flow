@@ -71,6 +71,7 @@ from app.services.audit import (
 from app.services.companies import create_company, update_company
 from app.services.operator import OperatorNotFoundError
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
+from tests.db.conftest import create_root_user_with_company
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -97,6 +98,109 @@ def test_alg_ac14_ac15_management_event_catalog():
                 secret in field_name
                 for secret in ("password", "secret", "token", "session")
             )
+
+
+def test_alg_ac25_system_operator_uses_username_snapshot(session, operator):
+    log = record_audit_event(
+        session,
+        "user.admin_changed",
+        entity_id=operator.id,
+        before={"is_admin": False},
+        after={"is_admin": True},
+    )
+
+    assert log.created_by == operator.id
+    assert log.actor_snapshot == "admin"
+    session.commit()
+    session.expire_all()
+    assert session.get(AuditLog, log.id).actor_snapshot == "admin"
+
+
+@pytest.mark.parametrize("name_zh", [None, "", "  \t\n", "　"])
+def test_alg_ac25_unnamed_external_operator_omits_missing_unit(
+    session, operator, monkeypatch, name_zh
+):
+    if name_zh is None:
+        operator.is_external_collaborator = True
+    else:
+        operator = create_root_user_with_company(session, "A580UNNAMED")
+        operator.name_zh = name_zh
+        operator.is_external_collaborator = True
+        operator.company_id = None
+        operator.employee_no = None
+        operator.department = None
+        operator.location = None
+        session.flush()
+
+    monkeypatch.setattr(
+        audit_module, "get_current_operator", lambda _session: operator
+    )
+
+    log = record_audit_event(
+        session,
+        "user.admin_changed",
+        entity_id=operator.id,
+        before={"is_admin": False},
+        after={"is_admin": True},
+    )
+
+    assert log.actor_snapshot == operator.username
+
+
+def test_alg_ac25_actor_snapshot_is_persisted_at_write_time(
+    session, monkeypatch
+):
+    internal = create_root_user_with_company(session, "A580INT")
+    external = create_root_user_with_company(session, "A580EXT")
+    no_unit = create_root_user_with_company(session, "A580NOU")
+    internal.name_zh = "內部操作者"
+    external.name_zh = "外部操作者"
+    external.is_external_collaborator = True
+    no_unit.name_zh = "未填單位操作者"
+    no_unit.is_external_collaborator = True
+    no_unit.company_id = None
+    no_unit.employee_no = None
+    no_unit.department = None
+    no_unit.location = None
+    session.flush()
+
+    rows = []
+    for actor in (internal, external, no_unit):
+        monkeypatch.setattr(
+            audit_module,
+            "get_current_operator",
+            lambda _session, current_actor=actor: current_actor,
+        )
+        rows.append(
+            record_audit_event(
+                session,
+                "user.admin_changed",
+                entity_id=actor.id,
+                before={"is_admin": False},
+                after={"is_admin": True},
+            )
+        )
+    assert [row.actor_snapshot for row in rows] == [
+        "內部操作者．Company for A580INT",
+        "外部操作者．外部協作人員．Company for A580EXT",
+        "外部協作人員（未填單位）",
+    ]
+
+    external.name_zh = "修改後姓名"
+    external.is_external_collaborator = False
+    external.company_id = None
+    external.employee_no = None
+    external.department = None
+    external.location = None
+    session.commit()
+    session.expire_all()
+
+    persisted = [session.get(AuditLog, row.id) for row in rows]
+    assert [row.actor_snapshot for row in persisted] == [
+        "內部操作者．Company for A580INT",
+        "外部操作者．外部協作人員．Company for A580EXT",
+        "外部協作人員（未填單位）",
+    ]
 
 
 def test_alg_ac19_to_ac24_two_layer_event_catalog():

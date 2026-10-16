@@ -51,7 +51,16 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, bindparam, delete, inspect, select, text, update
+from sqlalchemy import (
+    Engine,
+    bindparam,
+    delete,
+    inspect,
+    literal,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.types import JSON, Uuid
@@ -114,6 +123,7 @@ def operator(session) -> User:
 
 def _new_log(operator: User, **kwargs) -> AuditLog:
     kwargs.setdefault("created_by", operator.id)
+    kwargs.setdefault("actor_snapshot", "測試操作者．測試公司")
     kwargs.setdefault("event_type", "role.created")
     kwargs.setdefault("entity_type", "role")
     kwargs.setdefault("entity_id", uuid7())
@@ -207,6 +217,7 @@ class TestTableStructure:
             "id",
             "created_at",
             "created_by",
+            "actor_snapshot",
             "project_id",
             "event_type",
             "entity_type",
@@ -220,6 +231,7 @@ class TestTableStructure:
 
         assert columns["created_at"]["nullable"] is False
         assert columns["created_by"]["nullable"] is False
+        assert columns["actor_snapshot"]["nullable"] is False
         assert columns["project_id"]["nullable"] is True
         assert columns["event_type"]["nullable"] is False
         assert columns["entity_type"]["nullable"] is False
@@ -253,7 +265,14 @@ class TestTableStructure:
         assert fetched.after == {"name": "Inspector"}
 
     @pytest.mark.parametrize(
-        "field", ["created_by", "event_type", "entity_type", "entity_id"]
+        "field",
+        [
+            "created_by",
+            "actor_snapshot",
+            "event_type",
+            "entity_type",
+            "entity_id",
+        ],
     )
     def test_required_field_null_is_rejected(self, session, operator, field):
         before = session.query(AuditLog).count()
@@ -1073,9 +1092,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
+            ":actor_snapshot, "
             ":entity_type, :entity_id, :before, :after) "
             "ON CONFLICT (id) DO NOTHING"
         ).bindparams(
@@ -1094,6 +1114,7 @@ class TestAppendOnlyGuard:
                     "created_at": existing_log.created_at,
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1120,9 +1141,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
+            ":actor_snapshot, "
             ":entity_type, :entity_id, :before, :after) "
             "RETURNING 'ON CONFLICT (id) DO UPDATE'"
         ).bindparams(
@@ -1141,6 +1163,7 @@ class TestAppendOnlyGuard:
                     "created_at": clock.utc_now(),
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1166,9 +1189,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT OR IGNORE INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
+            ":actor_snapshot, "
             ":entity_type, :entity_id, :before, :after)"
         ).bindparams(
             bindparam("id", type_=Uuid),
@@ -1186,6 +1210,7 @@ class TestAppendOnlyGuard:
                     "created_at": clock.utc_now(),
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1212,10 +1237,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
-            ":entity_type, :entity_id, :before, :after)"
+            ":actor_snapshot, :entity_type, :entity_id, :before, :after)"
         ).bindparams(
             bindparam("id", type_=Uuid),
             bindparam("created_at", type_=UTCDateTime),
@@ -1232,6 +1257,7 @@ class TestAppendOnlyGuard:
                     "created_at": existing_log.created_at,
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1347,6 +1373,69 @@ class TestAppendOnlyGuard:
                 with pytest.raises(AuditLogImmutableError):
                     conn.execute(text(statement))
                 conn.rollback()
+
+        assert snapshot() == before
+
+    def test_snapshot_backfill_option_only_allows_single_column_update(
+        self, engine, existing_log, snapshot
+    ):
+        """只放行 migration 對 actor_snapshot 單欄位的回填。"""
+        before = snapshot()
+        allowed = update(AuditLog).values(
+            actor_snapshot=AuditLog.actor_snapshot
+        )
+        rejected = [
+            "UPDATE audit_logs SET actor_snapshot = actor_snapshot",
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "UPDATE audit_logs SET actor_snapshot = 'changed', "
+            "entity_type = 'changed'",
+            "UPDATE audit_logs SET actor_snapshot = $$ where $$, id = id",
+            "DELETE FROM audit_logs",
+            "TRUNCATE audit_logs",
+        ]
+        attached_cte = (
+            update(AuditLog)
+            .values(entity_type="changed")
+            .returning(AuditLog.id)
+            .cte("mutate_audit_log")
+        )
+        attached_mutation = allowed.add_cte(attached_cte)
+        nested_cte = (
+            update(AuditLog)
+            .values(entity_type="changed")
+            .returning(AuditLog.id)
+            .cte("nested_mutate_audit_log")
+        )
+        nested_mutation = update(AuditLog).values(
+            actor_snapshot=select(literal("safe"))
+            .select_from(nested_cte)
+            .scalar_subquery()
+        )
+
+        with engine.connect() as conn:
+            conn.execution_options(audit_log_snapshot_backfill_allowed=True)
+            conn.execute(allowed)
+            conn.rollback()
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(attached_mutation)
+            conn.rollback()
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(nested_mutation)
+            conn.rollback()
+
+        for statement in rejected:
+            with engine.connect() as conn:
+                conn.execution_options(
+                    audit_log_snapshot_backfill_allowed=True
+                )
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        with engine.connect() as conn:
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(allowed)
+            conn.rollback()
 
         assert snapshot() == before
 
