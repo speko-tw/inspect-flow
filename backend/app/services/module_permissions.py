@@ -206,13 +206,30 @@ def validate_role_assignment(
     project_member_id: uuid.UUID,
     role_ids: Iterable[uuid.UUID],
 ) -> None:
-    """Enforce external-user role constraints."""
+    """依 DOM-R72 鎖定資料並驗證角色指派限制。"""
     desired_role_ids = set(role_ids)
     roles = list(
-        session.scalars(select(Role).where(Role.id.in_(desired_role_ids)))
+        session.scalars(
+            select(Role)
+            .options(selectinload(Role.permission_codes))
+            .where(Role.id.in_(desired_role_ids))
+            .order_by(Role.id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
     )
     if len(roles) != len(desired_role_ids):
         raise InvalidModulePermissionError("Role does not exist")
+    # 所有寫入都先鎖 Role 再鎖 User，避免使用過期的外部協作標記。
+    locked_user = session.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    if locked_user is None:
+        raise InvalidModulePermissionError("User does not exist")
+    user = locked_user
     for role in roles:
         if user.is_external_collaborator and not role.is_external_allowed:
             _record_denied_role_assignment(
@@ -277,7 +294,16 @@ def validate_role_external_configuration(
     is_external_allowed: bool,
     permission_codes: Iterable[str],
 ) -> None:
-    """Reject role edits that would violate external-user constraints."""
+    """依 DOM-R72 鎖定相關資料並拒絕不安全的角色修改。"""
+    locked_role = session.scalar(
+        select(Role)
+        .where(Role.id == role.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_role is None:
+        raise InvalidModulePermissionError("Role does not exist")
+    role = locked_role
     desired = frozenset(permission_codes)
     creator_role_id = session.scalar(
         select(CreatorRoleSetting.role_id).limit(1)
@@ -290,28 +316,41 @@ def validate_role_external_configuration(
         raise InvalidExternalRoleError(
             "The creator role cannot be externally allowed"
         )
-    holders = session.execute(
-        select(User.name_zh, User.name_en, User.id)
-        .join(ProjectMember, ProjectMember.user_id == User.id)
-        .join(
-            ProjectMemberRole,
-            ProjectMemberRole.project_member_id == ProjectMember.id,
+    holder_ids = list(
+        session.scalars(
+            select(User.id)
+            .join(ProjectMember, ProjectMember.user_id == User.id)
+            .join(
+                ProjectMemberRole,
+                ProjectMemberRole.project_member_id == ProjectMember.id,
+            )
+            .where(ProjectMemberRole.role_id == role.id)
+            .distinct()
+            .order_by(User.id)
         )
-        .where(
-            ProjectMemberRole.role_id == role.id,
-            User.is_external_collaborator.is_(True),
+    )
+    # 先鎖 Role，再依 UUID 鎖持有人，與外部標記轉換採相同順序。
+    holders = list(
+        session.scalars(
+            select(User)
+            .where(User.id.in_(holder_ids))
+            .order_by(User.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
-        .distinct()
-    ).all()
-    if holders and (
+    )
+    external_holders = [
+        user for user in holders if user.is_external_collaborator
+    ]
+    if external_holders and (
         not is_external_allowed
         or any(not permission_code_external_allowed(code) for code in desired)
     ):
         raise ExternalRoleInUseError(
             "Role is held by external collaborators and cannot be restricted",
             details=[
-                f"{name_zh or name_en} ({user_id})"
-                for name_zh, name_en, user_id in holders
+                f"{user.name_zh or user.name_en} ({user.id})"
+                for user in external_holders
             ],
         )
     if is_external_allowed and any(
@@ -487,8 +526,19 @@ def delete_permission_bundle(
 
 
 def change_creator_role(session: Session, *, actor: User, role: Role) -> bool:
-    """Set the designated creator role after validating its invariant."""
+    """依 DOM-R64 設定建立者角色並保護其權限下限。"""
     _require_admin(actor)
+    # 先鎖候選角色再鎖設定列，與角色修改的順序一致。
+    locked_role = session.scalar(
+        select(Role)
+        .options(selectinload(Role.permission_codes))
+        .where(Role.id == role.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_role is None:
+        raise InvalidModulePermissionError("Role does not exist")
+    role = locked_role
     codes = frozenset(permission.code for permission in role.permission_codes)
     if not _CREATOR_ROLE_CODES <= codes:
         raise CreatorRolePermissionsError(
@@ -499,7 +549,11 @@ def change_creator_role(session: Session, *, actor: User, role: Role) -> bool:
         raise InvalidExternalRoleError(
             "The creator role cannot be externally allowed"
         )
-    setting = get_creator_role_setting(session)
+    setting = session.scalar(
+        select(CreatorRoleSetting)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if setting is None:
         raise InvalidModulePermissionError(
             "Creator-role setting must be initialized before it can change"
@@ -632,11 +686,24 @@ def grant_module_delegation(
     user: User,
     module: str,
 ) -> bool:
-    """Admin-only, idempotent module delegation grant."""
+    """依 DOM-R72 管理員授予模組委派。
+
+    外部協作者不得取得模組委派。
+    """
     if not actor.is_admin:
         raise ModulePermissionDeniedError("Only Admin may grant delegation")
     if module not in {"project", "inspection", "template"}:
         raise InvalidModulePermissionError(f"Unregistered module: {module}")
+    # 先鎖 User 並重讀，與外部標記轉換共用相同順序。
+    locked_user = session.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_user is None:
+        raise ModulePermissionDeniedError("User does not exist")
+    user = locked_user
     if user.is_external_collaborator:
         _reject_external_mutation(
             session,
