@@ -162,6 +162,26 @@ def test_template_admin_prevents_external_flag_change(
     )
 
 
+def test_eligible_external_flag_change_requires_confirmation(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    target = create_root_user_with_company(db_session, "R624FLAGCONF")
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/users/{target.id}",
+        json={"is_external_collaborator": True},
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "user.external_confirmation_required"
+    assert error["details"]
+    db_session.refresh(target)
+    assert target.is_external_collaborator is False
+
+
 def test_external_collaborator_cannot_be_created_as_admin(
     admin_client, db_session
 ):

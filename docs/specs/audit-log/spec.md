@@ -98,6 +98,7 @@
 | ALG-R27 | 初始化指令的預建資料（三個專案角色、建立者角色設定、三組預設權限組合，DOM-R68）與改造 migration 的資料轉換（`template_admin` 轉為 `template.manage`、既有成員回填「可使用」，`source = backfill`）**不寫**稽核紀錄，與初始化指令同樣屬於系統搬遷、不含任何人工授權（ALG-R12）；轉換前後的有效權限比對由改造任務驗收（DOM-AC63、AUT-AC74）；回填的授權靠 `source` 欄位追溯 | 必須 | 負責人裁定（[#538 第 14 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（回填只寫在 migration、以自動化測試驗證）；不寫稽核與以 `source` 追溯是規格設計（非負責人裁定）（比照 ALG-R12 的初始化規則）；見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69) | ALG-AC22 |
 | ALG-R28 | 專案事件（[專案事件](#專案事件)）：新增專案**必須**在同一交易寫 `project.created`，修改專案基本欄位**必須**在同一交易寫 `project.updated`；指派被 DOM-R70 或 DOM-R72 擋下、授權被 DOM-R62 或 DOM-R63 拒絕時，後端**必須**分別寫 `project_member.assignment_denied`、`module_permission.grant_denied`，且在獨立交易寫入，使請求失敗後仍保留，這是 ALG-R14「被拒絕不留紀錄」的唯一例外 | 必須 | 負責人裁定（[#538 第 18 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（後端擋下違規並寫稽核）；`project.created`、`project.updated`、獨立交易的做法與授權拒絕事件是規格設計（非負責人裁定）（兩位專家審查建議） | ALG-AC23、ALG-AC24 |
 | ALG-R29 | **操作者身分快照**：每筆稽核紀錄**必須**保存寫入當下的操作者身分快照（欄位 `actor_snapshot`，文字，由寫入入口依操作者當下的姓名、外部協作人員標記與單位組成）：外部協作人員為「姓名．外部協作人員．單位」，沒有單位時為「外部協作人員（未填單位）」，內部人員為「姓名．單位」（沒有單位時只有姓名）；日後人員資料變更不影響已寫入的快照；這是 ALG-R05 的欄位補充，新增一支 migration 加不可空值欄位（既有紀錄以當時 `created_by` 的現值回填一次），事件目錄不變 | 必須 | 負責人裁定（[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-10）第 6 點：每筆紀錄保存寫入當下的身分快照；欄位名稱、組成方式與既有紀錄的回填是規格設計（非負責人裁定） | ALG-AC25 |
+| ALG-R30 | 稽核查詢以 `created_at DESC, id DESC` 穩定分頁；為操作者與事件類型篩選，資料庫**必須**分別建立 `(created_by, created_at, id)` 與 `(event_type, created_at, id)` 複合索引。索引依實際查詢條件及排序設計，不得重建 `audit_logs` | 必須 | 維護者決定（#624，2026-10-16）：依 `query_audit_events` 的篩選欄位與分頁排序新增複合索引 | ALG-AC29 |
 
 ## 第一批事件
 
@@ -289,6 +290,7 @@
 | ALG-AC26 | 非管理者 M；被委派 `template` 的 D；外部協作人員 L | D 為自己授權；D 套用含其他模組代碼的組合；D 對 L 授予 `project.create`；M 把 L 指派為不是外部可用的角色；上述每個操作的主交易都失敗或回滾 | 每個被拒絕的授權寫一筆 `module_permission.grant_denied`、被拒絕的指派寫一筆 `project_member.assignment_denied`，且在主交易回滾後仍保留 | ALG-R28 |
 | ALG-AC27 | 外部協作人員 L（持合格資料）與內部人員 X（合格轉外部）；角色 R | 把 L 由外部改內部；把 X 由內部改外部；修改 R 的 `is_external_allowed`；重新啟用時未勾選的模組權限、模組委派與成員身分 | 兩個方向的標記變更各寫一筆 `user.external_flag_changed`；`role.updated` 記下 `is_external_allowed` 的前後值；未勾選而被收回與移除的項目各寫 `module_permission.revoked`、`module_delegation.revoked`、`project_member.removed` | ALG-R25、ALG-R14 |
 | ALG-AC28 | 專案 P；具專案權限 `project.update` 的成員 M（程式改造完成後的行為） | M 把 `company_role` 由 `contractor` 改為 `supervisor` 並帶原因；再只改專案名稱；再以相同的 `company_role` 重送 | 改角色一筆 `project.updated`：前後值含 `company_role`，後值另含 `company_role_change_reason`；只改名稱的 `project.updated` 不含原因欄；沒有變動不寫 | ALG-R28、DOM-R76 |
+| ALG-AC29 | 已有多筆稽核紀錄的資料庫 | 執行新增複合索引 migration，檢視查詢及 downgrade | `created_by, created_at, id` 與 `event_type, created_at, id` 索引存在且順序正確；既有資料不變；downgrade 移除兩索引且不重建資料表 | ALG-R30 |
 
 ## 待釐清
 
@@ -309,6 +311,8 @@
 - **ALG-Q6：本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）的判讀**（已裁定，負責人確認（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29））。負責人裁定了「哪些事要寫稽核」，事件的做法是本規格的判讀，已由負責人確認：（1）`user.password_set` 標為「得為系統事件」由呼叫端宣告，而不是整個事件固定為系統事件，理由是它另有需要登入者的來源（本人變更、Admin 設臨時密碼）；（2）`user.company_changed` 只在 `company_id` 改變時寫，並一律記錄四個欄位；（3）事件代碼取名 `user.username_changed`、`user.company_changed`，沿用 `user.admin_changed` 的形式；（4）首次設定與 `admin` 重設指令共用 `user.password_set`，紀錄本身分不出兩者，只看得出操作者是系統事件的 `admin`，需要區分時再加欄位。都不影響資料表。
 
 ## 變更紀錄
+
+- 維護者決定（#624，2026-10-16）：新增操作者與事件類型複合索引及 migration 驗收。
 
 - 範圍變更（負責人指示，#411）：依 ALG-Q2 選項 C 納入 Admin 唯讀稽核查詢頁、API、需求與驗收；`project_id` 可空欄位、索引及篩選語意為規格設計（非負責人裁定） — [#107 裁定](https://github.com/speko-tw/inspect-flow/issues/107#issuecomment-5977843511)、[#411](https://github.com/speko-tw/inspect-flow/issues/411)
 - 同步 KD-62 已決定狀態與引用；不影響本規格或稽核紀錄保留範圍 — [#404](https://github.com/speko-tw/inspect-flow/issues/404)

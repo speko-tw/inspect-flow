@@ -701,6 +701,19 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     __table_args__ = (
         Index("ix_audit_logs_created_at_id", "created_at", "id"),
+        # 查詢依操作者或事件類型篩選，再按時間與 ID 穩定分頁。
+        Index(
+            "ix_audit_logs_created_by_created_at_id",
+            "created_by",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_audit_logs_event_type_created_at_id",
+            "event_type",
+            "created_at",
+            "id",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

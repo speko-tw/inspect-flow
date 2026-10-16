@@ -865,7 +865,7 @@ def test_qualifying_internal_user_can_become_external_once(session, operator):
     session.add(member)
     session.commit()
 
-    assert set_external_collaborator(session, user, True)
+    assert set_external_collaborator(session, user, True, confirmed=True)
     session.commit()
 
     assert user.is_external_collaborator is True
@@ -876,3 +876,17 @@ def test_qualifying_internal_user_can_become_external_once(session, operator):
     ]
     assert events[0].before == {"is_external_collaborator": False}
     assert events[0].after == {"is_external_collaborator": True}
+
+
+def test_qualifying_internal_user_requires_confirmation(session, operator):
+    user = create_root_user_with_company(session, "INT2EXT-NOCONF")
+    session.commit()
+
+    with pytest.raises(ExternalFlagChangeError) as error:
+        set_external_collaborator(session, user, True)
+
+    assert error.value.details is not None
+    assert "confirm" in error.value.details[0].lower()
+    session.refresh(user)
+    assert user.is_external_collaborator is False
+    assert _audit_rows_for(session, user.id) == []

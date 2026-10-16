@@ -23,6 +23,7 @@ from app.services.users import (
     CompanyNotActiveError,
     ExternalBasicFieldModificationError,
     ExternalFlagChangeError,
+    ExternalFlagConfirmationRequiredError,
     InvalidUserFieldError,
     LastActiveAdminRemovalError,
     UsernameChangePermissionError,
@@ -291,6 +292,12 @@ def edit_user(
     try:
         return write_call(update_user, error_mapper=management_api_error)
     except _USER_BUSINESS_ERRORS as exc:
+        if isinstance(exc, ExternalFlagConfirmationRequiredError):
+            raise APIError(
+                ErrorCode.USER_EXTERNAL_CONFIRMATION_REQUIRED,
+                422,
+                details=exc.details,
+            ) from exc
         if isinstance(exc, ExternalFlagChangeError):
             raise APIError(
                 ErrorCode.USER_EXTERNAL_NOT_QUALIFIED,

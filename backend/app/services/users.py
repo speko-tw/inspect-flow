@@ -115,6 +115,10 @@ class ExternalFlagChangeError(ValueError):
         super().__init__(message)
 
 
+class ExternalFlagConfirmationRequiredError(ExternalFlagChangeError):
+    """DOM-R73: a status transition requires explicit confirmation."""
+
+
 def _reject_if_company_inactive(
     session: Session, company_id: uuid.UUID
 ) -> None:
@@ -223,9 +227,9 @@ def set_external_collaborator(
     if user.is_external_collaborator == is_external_collaborator:
         return False
     if user.is_external_collaborator and not confirmed:
-        raise ExternalFlagChangeError(
-            "Changing an external collaborator to internal requires "
-            "confirmation"
+        raise ExternalFlagConfirmationRequiredError(
+            "Changing external-collaborator status requires confirmation",
+            details=["Confirm the external-collaborator status change."],
         )
     if is_external_collaborator:
         role_rows = session.execute(
@@ -300,6 +304,11 @@ def set_external_collaborator(
                 f"delegations={delegations}",
                 details=details,
             )
+    if is_external_collaborator and not confirmed:
+        raise ExternalFlagConfirmationRequiredError(
+            "Changing external-collaborator status requires confirmation",
+            details=["Confirm the external-collaborator status change."],
+        )
     previous = user.is_external_collaborator
     user.is_external_collaborator = is_external_collaborator
     if not is_external_collaborator:
