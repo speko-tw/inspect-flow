@@ -1,4 +1,4 @@
-"""Index audit-log actor and event queries (#624).
+"""為 audit-log 操作者與事件查詢建立複合索引（#624）。
 
 Revision ID: 8c624a9d70f1
 Revises: a497f3d2b601
@@ -15,7 +15,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 查詢以 created_at、id 降冪分頁，複合索引可支援兩種篩選。
+    # 依 created_at、id 降冪分頁；複合索引支援兩種篩選。
     op.create_index(
         "ix_audit_logs_created_by_created_at_id",
         "audit_logs",

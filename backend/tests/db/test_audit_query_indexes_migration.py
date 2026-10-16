@@ -1,4 +1,4 @@
-"""ALG-AC29: add query indexes without changing audit rows."""
+"""依 ALG-AC29 驗證新增查詢索引不會變更 audit rows。"""
 
 from pathlib import Path
 

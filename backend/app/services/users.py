@@ -116,7 +116,7 @@ class ExternalFlagChangeError(ValueError):
 
 
 class ExternalFlagConfirmationRequiredError(ExternalFlagChangeError):
-    """DOM-R73: a status transition requires explicit confirmation."""
+    """依 DOM-R73，狀態轉換必須先取得明確確認。"""
 
 
 def _reject_if_company_inactive(
