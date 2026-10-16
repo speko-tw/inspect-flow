@@ -208,17 +208,34 @@ def set_external_collaborator(
     *,
     confirmed: bool = False,
 ) -> bool:
-    """Change external-collaborator status after DOM-R73 checks."""
+    """依 DOM-R73 驗證後變更外部協作人員標記。"""
     operator = get_current_operator(session)
     if not operator.is_admin:
         raise ExternalFlagChangeError("Only Admin may change this flag")
-    # 呼叫端傳入的 user 可能在取鎖前就已載入，需用 populate_existing
-    # 重讀最新旗標。改用 FOR NO KEY UPDATE，與外鍵檢查的 KEY SHARE
-    # 不互鎖，避免死結；與系統角色指派仍共用同一把互斥鎖。
+    assigned_role_ids = list(
+        session.scalars(
+            select(ProjectMemberRole.role_id)
+            .join(
+                ProjectMember,
+                ProjectMember.id == ProjectMemberRole.project_member_id,
+            )
+            .where(ProjectMember.user_id == user.id)
+            .distinct()
+            .order_by(ProjectMemberRole.role_id)
+        )
+    )
+    if assigned_role_ids:
+        session.scalars(
+            select(Role.id)
+            .where(Role.id.in_(assigned_role_ids))
+            .order_by(Role.id)
+            .with_for_update(read=True)
+        ).all()
+    # 呼叫端的人員可能已載入舊值；鎖定前先鎖角色，維持全域順序。
     locked_user = session.scalar(
         select(User)
         .where(User.id == user.id)
-        .with_for_update(key_share=True)
+        .with_for_update()
         .execution_options(populate_existing=True)
     )
     if locked_user is None:
