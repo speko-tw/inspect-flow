@@ -78,6 +78,12 @@ L 與 M 都新增 migration，不同波；N、O 不新增 migration，N 與 O �
 
 R 新增一支 migration；與其他新增 migration 的任務不同波（共用 migration 鏈規則見 [README](../README.md#parallel)）。畫面（開案欄位、專案頁顯示、改角色確認框）由 `admin-dashboard` 任務 T18 承接；workflow summary 的 `project` 物件加 `company_role` 由 `inspection-planning` 任務 T11 承接。
 
+## 角色與人員併發寫入
+
+| 任務 | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
+|---|---|---|---|---|---|
+| PostgreSQL 鎖定順序 | 依 DOM-R72、DOM-R73，角色指派、角色限制修改、外部協作標記轉換與建立者角色更新都先依 Role UUID 升冪鎖角色，再依 User UUID 升冪鎖人員並重讀判斷；SQLite 的列鎖為 no-op，既有行為不變。以 PostgreSQL T1/T2 併發測試驗證互斥寫入，另測過期 ORM 人員物件不會繞過外部角色限制 | `backend/app/services/module_permissions.py`、`backend/app/services/roles.py`、`backend/app/services/users.py`、`backend/tests/db/test_role_user_lock_order.py`（新增）、`backend/tests/services/test_module_permissions.py` | DOM-R72、DOM-R73 | DOM-AC68～DOM-AC70 | #621 |
+
 ## 並行分組
 
 依「改動的檔案」與「依賴」分波；同一波內的任務檔案不重疊，也互不依賴。
