@@ -575,8 +575,8 @@ def test_alg_ac26_authenticated_denial_flushes_after_rollback(
 
     def deny_after_flush(
         malformed: bool = False,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI DI
-        _user=Depends(require_login),  # noqa: B008 -- FastAPI DI
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _user=Depends(require_login, scope="function"),  # noqa
     ):
         company = Company(
             name="Pending Denied Change",
@@ -684,8 +684,8 @@ def _client_with_login_required_audit_route() -> TestClient:
 
     def record_test_event(
         body: _RecordAuditBody,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-        _user=Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _user=Depends(require_login, scope="function"),  # noqa
     ) -> dict[str, str]:
         log = record_audit_event(
             db,
@@ -718,8 +718,8 @@ def _client_with_public_audit_route() -> TestClient:
 
     def record_test_event_public(
         body: _RecordAuditBody,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-        _scope: None = Depends(bind_request_scope),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _scope: None = Depends(bind_request_scope),  # noqa
     ) -> dict[str, str]:
         record_audit_event(
             db,
@@ -763,8 +763,8 @@ def _client_with_generic_login_required_route() -> TestClient:
 
     def record_generic_event(
         body: _GenericAuditBody,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-        _user=Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _user=Depends(require_login, scope="function"),  # noqa
     ) -> dict[str, str]:
         log = record_audit_event(
             db,
@@ -797,8 +797,8 @@ def _client_with_generic_public_route() -> TestClient:
 
     def record_generic_event_public(
         body: _GenericAuditBody,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-        _scope: None = Depends(bind_request_scope),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _scope: None = Depends(bind_request_scope),  # noqa
     ) -> dict[str, str]:
         log = record_audit_event(
             db,
@@ -839,8 +839,8 @@ def _client_with_system_event_audit_route(
 
         def record_event_logged_in(
             body: _SystemEventAuditBody,
-            db: Session = Depends(get_db),  # noqa: B008
-            _user=Depends(require_login),  # noqa: B008
+            db: Session = Depends(get_db, scope="function"),  # noqa
+            _user=Depends(require_login, scope="function"),  # noqa
         ) -> dict[str, str]:
             log = record_audit_event(
                 db,
@@ -858,8 +858,8 @@ def _client_with_system_event_audit_route(
 
         def record_event_public(
             body: _SystemEventAuditBody,
-            db: Session = Depends(get_db),  # noqa: B008
-            _scope: None = Depends(bind_request_scope),  # noqa: B008
+            db: Session = Depends(get_db, scope="function"),  # noqa
+            _scope: None = Depends(bind_request_scope),  # noqa
         ) -> dict[str, str]:
             log = record_audit_event(
                 db,

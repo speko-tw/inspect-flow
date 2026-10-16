@@ -1271,6 +1271,178 @@ describe('admin projects page', () => {
     expect(screen.getByLabelText(/工程名稱/)).toHaveValue('B 的未儲存草稿')
   })
 
+  it('does not show or focus an old save error in the next form', async () => {
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+      failWith: {
+        match: /\/projects\/project-1$/,
+        method: 'PATCH',
+        code: 'request.validation_failed',
+        status: 422,
+      },
+    })
+    const gate = holdRequests(fetchMock, 'PATCH', /\/projects\/project-1$/)
+    renderAt('/admin/projects')
+    await screen.findAllByText('第二示範工程')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+    )
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '無效的 A 修改' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+    )
+    const nextName = screen.getByLabelText(/工程名稱/)
+    nextName.focus()
+    fireEvent.change(nextName, { target: { value: 'B 的草稿' } })
+
+    gate.resolve()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '儲存專案' })).toBeEnabled(),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(nextName).toHaveFocus()
+    expect(nextName).toHaveValue('B 的草稿')
+  })
+
+  it('keeps a reopened draft after an older save resolves', async () => {
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    const gate = holdRequests(fetchMock, 'PATCH', /\/projects\/project-1$/)
+    renderAt('/admin/projects')
+    await screen.findAllByText('第二示範工程')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+    )
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '舊 session 的名稱' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「示範工程」' }),
+    )
+    const reopenedName = screen.getByLabelText(/工程名稱/)
+    fireEvent.change(reopenedName, {
+      target: { value: '新 session 的草稿' },
+    })
+
+    gate.resolve()
+    await screen.findByText('專案「舊 session 的名稱」已儲存。')
+    expect(
+      screen.getByRole('heading', { name: '編輯專案「示範工程」' }),
+    ).toBeVisible()
+    expect(reopenedName).toHaveValue('新 session 的草稿')
+  })
+
+  it('links to a created project without replacing a newer form', async () => {
+    const fetchMock = projectFetch({
+      projects: [
+        makeProject(),
+        makeProject({
+          id: 'project-2',
+          project_code: 'DEMO-002',
+          name: '第二示範工程',
+        }),
+      ],
+    })
+    const gate = holdRequests(fetchMock, 'POST', /\/projects$/)
+    renderAt('/admin/projects')
+    await screen.findAllByText('第二示範工程')
+
+    fillProjectForm()
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: '編輯專案「第二示範工程」' }),
+    )
+    const nextName = screen.getByLabelText(/工程名稱/)
+    fireEvent.change(nextName, { target: { value: 'B 的未儲存草稿' } })
+
+    gate.resolve()
+    expect(await screen.findByText('已建立專案「第二示範工程」')).toBeVisible()
+    expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-3',
+    )
+    expect(
+      screen.getByRole('heading', { name: '編輯專案「第二示範工程」' }),
+    ).toBeVisible()
+    expect(nextName).toHaveValue('B 的未儲存草稿')
+
+    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
+    const leavePrompt = screen.getByRole('region', {
+      name: '未儲存變更',
+    })
+    fireEvent.click(
+      within(leavePrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(
+      screen.getByRole('heading', {
+        name: '編輯專案「第二示範工程」',
+      }),
+    ).toBeVisible()
+    expect(nextName).toHaveValue('B 的未儲存草稿')
+
+    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '未儲存變更' })).getByRole(
+        'button',
+        { name: '捨棄' },
+      ),
+    )
+    expect(
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('heading', {
+        name: 'DEMO-002｜第二示範工程',
+      }),
+    ).toBeVisible()
+  })
+
   // ADM-R38：表單內按鈕卸載後，鍵盤焦點須回到可見清單入口。
   it('restores focus after cancel, discard, and save', async () => {
     projectFetch()

@@ -77,7 +77,7 @@ def _client_with_gated_probe() -> tuple[TestClient, dict[str, int]]:
 
     @router.get("/api/v1/test/gated-probe")
     def gated_probe(
-        _user: User = Depends(require_login),  # noqa: B008
+        _user: User = Depends(require_login, scope="function"),  # noqa
     ) -> dict[str, int]:
         calls["count"] += 1
         return {"count": calls["count"]}

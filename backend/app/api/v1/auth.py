@@ -157,7 +157,7 @@ def _clear_session_cookie(response: Response) -> None:
 def login(
     body: LoginRequest,
     response: Response,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> MeResponse:
     """AUT-R05, AUT-R06: on success, issues a new login state
     (AUT-R13) and returns it as a Cookie plus the current user
@@ -174,8 +174,6 @@ def login(
 
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
-    # FastAPI request-scoped依賴在回應送出後才清理，登入狀態須先提交。
-    db.commit()
     return _me_response(db, user)
 
 
@@ -183,7 +181,7 @@ def login(
 def logout(
     request: Request,
     response: Response,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> None:
     """AUT-R07: deletes the Cookie's login state (if any) and asks
     the browser to clear the Cookie either way -- idempotent, so a
@@ -226,8 +224,8 @@ register_temporary_password_allowed("POST", logout)
 
 @router.get("/me", response_model=MeResponse)
 def get_me(
-    user: User = Depends(require_login_access),  # noqa: B008
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    user: User = Depends(require_login_access, scope="function"),  # noqa
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> MeResponse:
     """AUT-R08: the current user, or 401 ``auth.not_authenticated``
     (raised by ``require_login`` underneath ``require_login_access``)
@@ -243,8 +241,8 @@ register_temporary_password_allowed("GET", get_me)
 def change_password(
     body: ChangePasswordRequest,
     response: Response,
-    user: User = Depends(require_login_access),  # noqa: B008
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    user: User = Depends(require_login_access, scope="function"),  # noqa
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> None:
     """AUT-R34: change the logged-in user's own password.
 
@@ -319,8 +317,6 @@ def change_password(
 
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
-    # 新密碼與替代登入狀態須在成功回應送出前一併持久化。
-    db.commit()
 
 
 # AUT-R33: the allowlist's third and final entry (AUT-AC36) -- a

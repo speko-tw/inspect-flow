@@ -185,63 +185,63 @@ def probe(
 
     @router.get("/api/v1/test/needs-login")
     def needs_login(
-        user: User = Depends(require_login_access),  # noqa: B008
+        user: User = Depends(require_login_access, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["login"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-admin")
     def needs_admin(
-        user: User = Depends(require_admin),  # noqa: B008
+        user: User = Depends(require_admin, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["admin"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/self-or-admin/{user_id}")
     def self_or_admin(
-        user: User = Depends(self_or_admin_dep),  # noqa: B008
+        user: User = Depends(self_or_admin_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["self_or_admin"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-permission/report-read/{project_id}")
     def needs_report_read(
-        user: User = Depends(report_read_dep),  # noqa: B008
+        user: User = Depends(report_read_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["report_read"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-permission/evidence-read/{project_id}")
     def needs_evidence_read(
-        user: User = Depends(evidence_read_dep),  # noqa: B008
+        user: User = Depends(evidence_read_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["evidence_read"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-permission/evidence-create/{project_id}")
     def needs_evidence_create(
-        user: User = Depends(evidence_create_dep),  # noqa: B008
+        user: User = Depends(evidence_create_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["evidence_create"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-permission/evidence-update/{project_id}")
     def needs_evidence_update(
-        user: User = Depends(evidence_update_dep),  # noqa: B008
+        user: User = Depends(evidence_update_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["evidence_update"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-permission/evidence-delete/{project_id}")
     def needs_evidence_delete(
-        user: User = Depends(evidence_delete_dep),  # noqa: B008
+        user: User = Depends(evidence_delete_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["evidence_delete"] += 1
         return {"user_id": str(user.id)}
 
     @router.get("/api/v1/test/needs-permission/report-approve/{project_id}")
     def needs_report_approve(
-        user: User = Depends(report_approve_dep),  # noqa: B008
+        user: User = Depends(report_approve_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["report_approve"] += 1
         return {"user_id": str(user.id)}

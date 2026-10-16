@@ -69,14 +69,18 @@ system_router = APIRouter(
     prefix="/template-systems", tags=["template-library"]
 )
 template_router = APIRouter(prefix="/templates", tags=["template-library"])
-_write = Depends(require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN))
+_write = Depends(
+    require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN),
+    scope="function",
+)
 _read = Depends(
     require_system_role_or_any_project_permission(
         SystemRoleCode.TEMPLATE_ADMIN,
         "project_inspection_item.edit",
-    )
+    ),
+    scope="function",
 )
-_db_dependency: Any = Depends(get_db)
+_db_dependency: Any = Depends(get_db, scope="function")
 _PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 100
 
@@ -421,7 +425,7 @@ def template_item_detail(db: Session, item: TemplateItem) -> dict:
 def list_categories(
     cursor: str | None = None,
     limit: int = Query(default=_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
-    db: Session = _db_dependency,  # noqa: B008
+    db: Session = _db_dependency,  # noqa
 ) -> dict:
     return page(
         db,

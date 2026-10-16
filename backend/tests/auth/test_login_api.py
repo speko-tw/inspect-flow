@@ -5,11 +5,8 @@ AUT-AC03, AUT-AC05~AUT-AC07).
 import logging
 
 from argon2 import PasswordHasher, Type
-from fastapi import Response
 
 from app.api.errors import ErrorCode
-from app.api.v1 import auth as auth_api
-from app.api.v1.auth import LoginRequest
 from app.auth import login as login_module
 from app.auth.passwords import (
     MEMORY_COST_KIB,
@@ -18,55 +15,31 @@ from app.auth.passwords import (
     verify_password,
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, hash_token
+from app.main import create_app
 from app.models import AuthSession, Company, UserPassword
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
 from tests.db.conftest import (
     create_root_user_with_company,
     make_system_admin,
 )
+from tests.response_order import observed_client
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 
 
-def test_login_commits_session_before_building_response(
-    db_session, monkeypatch
-):
-    """登入建立 session 後，必須先提交再組成回應。"""
+def test_login_commits_before_response_start(db_session):
+    """登入 session 須在 ASGI 開始回應前提交。"""
     user = make_local_user(db_session, "R618LOGIN")
     assert user.email is not None
-    events = []
-    original_commit = db_session.commit
-    original_create_session = auth_api.create_session
-    original_response = auth_api._me_response
 
-    def tracked_commit():
-        original_commit()
-        if "session_created" in events:
-            events.append("session_committed")
+    with observed_client(create_app()) as (client, events):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"login": user.email, "password": PASSWORD},
+        )
 
-    def tracked_create_session(session, account):
-        result = original_create_session(session, account)
-        events.append("session_created")
-        return result
-
-    def checked_response(session, account):
-        assert events[-1] == "session_committed"
-        events.append("response_built")
-        return original_response(session, account)
-
-    monkeypatch.setattr(db_session, "commit", tracked_commit)
-    monkeypatch.setattr(auth_api, "create_session", tracked_create_session)
-    monkeypatch.setattr(auth_api, "_me_response", checked_response)
-
-    response = Response()
-    result = auth_api.login(
-        LoginRequest(login=user.email, password=PASSWORD),
-        response,
-        db_session,
-    )
-
-    assert result.id == user.id
-    assert events == ["session_created", "session_committed", "response_built"]
+    assert response.status_code == 200
+    assert events.index("commit") < events.index("response_started")
 
 
 class TestAutAc02RehashOnLogin:
