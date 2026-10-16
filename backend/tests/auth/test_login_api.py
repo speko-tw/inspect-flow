@@ -145,6 +145,10 @@ class TestAutAc05LoginCookieAndBody:
                 "has_field_access": False,
                 "has_template_access": False,
                 "module_permissions": [],
+                "delegated_modules": [],
+                "can_create_project": False,
+                "has_project_access": False,
+                "is_external_collaborator": False,
             }
 
             # AUT-R05: the login body is identical to ``me``'s.
@@ -262,6 +266,10 @@ class TestAutAc08CurrentUser:
             "has_field_access",
             "has_template_access",
             "module_permissions",
+            "delegated_modules",
+            "can_create_project",
+            "has_project_access",
+            "is_external_collaborator",
         }
         for account in (user, admin):
             account_client = make_client()

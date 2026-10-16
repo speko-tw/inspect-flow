@@ -61,6 +61,10 @@ function renderPage(
     has_field_access: true,
     has_template_access: false,
     module_permissions: [],
+    delegated_modules: [],
+    can_create_project: false,
+    has_project_access: false,
+    is_external_collaborator: false,
   }
   const clear = vi.fn()
   const currentUser = { ...user, ...options.user }

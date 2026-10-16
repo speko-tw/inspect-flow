@@ -24,6 +24,7 @@ from app.models import (
     TaskSnapshotMeasurementField,
     TaskSnapshotPoint,
     TaskSnapshotTextStandard,
+    UserModulePermission,
 )
 from app.services.inspection_planning import (
     PlanningError,
@@ -84,6 +85,15 @@ def _grant(session, operator, project, *codes, user=None):
     )
     session.add(member)
     session.flush()
+    if user is not None and "inspection_task.inspect" in codes:
+        session.add(
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="inspection.use",
+                source="manual",
+            )
+        )
+        session.flush()
     return role
 
 
@@ -494,7 +504,9 @@ def test_field_task_filters_use_central_permission_calculation(
     access = EffectiveAccess(
         is_active=True,
         is_admin=False,
+        system_roles=frozenset(),
         module_permissions=frozenset(),
+        delegated_modules=frozenset(),
         project_permissions=frozenset(),
         project_permissions_by_project={
             allowed_project_id: frozenset({"inspection_task.inspect"}),

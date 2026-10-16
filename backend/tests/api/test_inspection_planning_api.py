@@ -34,6 +34,7 @@ from app.models import (
     TaskRequirementSnapshot,
     TaskSnapshotMeasurementField,
     TaskSnapshotPoint,
+    UserModulePermission,
 )
 from tests.db.conftest import create_root_user_with_company
 
@@ -219,6 +220,21 @@ def _planning_world(db_session, make_client):
             item_two_point,
         ]
     )
+    db_session.add_all(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="inspection.use",
+            source="manual",
+        )
+        for user in (
+            field_user,
+            field_reader,
+            field_user_two,
+            reader,
+            plain_member,
+            admin,
+        )
+    )
     db_session.commit()
     tokens = {
         "admin": create_session(db_session, admin)[1],
@@ -298,7 +314,7 @@ def test_single_project_read_is_limited_for_planning_members(
     assert {"client_name", "site_location", "warnings"} <= set(full.json())
 
 
-def test_assignee_candidates_keep_inactive_members_until_ip_r12_activation(
+def test_assignee_candidates_require_active_member_and_inspection_use(
     db_session, make_client
 ):
     world = _planning_world(db_session, make_client)
@@ -313,12 +329,90 @@ def test_assignee_candidates_keep_inactive_members_until_ip_r12_activation(
     assert response.status_code == 200, response.text
     candidate_ids = {UUID(row["id"]) for row in response.json()["items"]}
     assert world["field_user"].id in candidate_ids
-    assert inactive.id in candidate_ids
-    missing = world["admin"].get(
-        "/api/v1/projects/00000000-0000-7000-8000-000000000000"
+    assert inactive.id not in candidate_ids
+
+
+def test_assignee_candidates_exclude_members_without_inspection_use(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    user = world["field_user_two"]
+    permission = db_session.scalar(
+        select(UserModulePermission).where(
+            UserModulePermission.user_id == user.id,
+            UserModulePermission.permission_code == "inspection.use",
+        )
     )
-    assert missing.status_code == 404
-    assert missing.json() == {"error": {"code": "resource.not_found"}}
+    assert permission is not None
+    db_session.delete(permission)
+    db_session.commit()
+
+    response = world["admin"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-task-assignees"
+    )
+
+    assert response.status_code == 200, response.text
+    candidate_ids = {UUID(row["id"]) for row in response.json()["items"]}
+    assert world["field_user"].id in candidate_ids
+    assert user.id not in candidate_ids
+    missing_project_assignees = world["admin"].get(
+        "/api/v1/projects/00000000-0000-7000-8000-000000000000"
+        "/inspection-task-assignees"
+    )
+    assert missing_project_assignees.status_code == 404
+    assert missing_project_assignees.json() == {
+        "error": {"code": "resource.not_found"}
+    }
+
+
+def test_assignee_candidates_require_caller_inspection_use(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    caller = world["plain_user"]
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == world["project"].id,
+            ProjectMember.user_id == caller.id,
+        )
+    )
+    assert member is not None
+    manager_role = db_session.scalar(
+        select(Role).where(Role.name == "API planning manager")
+    )
+    assert manager_role is not None
+    member.role_assignments.append(ProjectMemberRole(role_id=manager_role.id))
+    db_session.commit()
+    path = f"/api/v1/projects/{world['project'].id}/inspection-task-assignees"
+
+    allowed = world["plain"].get(path)
+    assert allowed.status_code == 200, allowed.text
+
+    permission = db_session.scalar(
+        select(UserModulePermission).where(
+            UserModulePermission.user_id == caller.id,
+            UserModulePermission.permission_code == "inspection.use",
+        )
+    )
+    assert permission is not None
+    db_session.delete(permission)
+    db_session.commit()
+
+    denied = world["plain"].get(path)
+    assert denied.status_code == 403
+
+    admin_permission = db_session.scalar(
+        select(UserModulePermission).where(
+            UserModulePermission.user_id == world["admin_user"].id,
+            UserModulePermission.permission_code == "inspection.use",
+        )
+    )
+    assert admin_permission is not None
+    db_session.delete(admin_permission)
+    db_session.commit()
+
+    admin_response = world["admin"].get(path)
+    assert admin_response.status_code == 200, admin_response.text
 
 
 def test_plan_task_authorization_cursor_and_draft_visibility(

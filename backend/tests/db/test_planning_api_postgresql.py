@@ -41,6 +41,7 @@ from app.models import (
     TaskSnapshotNumericStandard,
     TaskSnapshotPoint,
     User,
+    UserModulePermission,
 )
 from tests.api.query_count import select_count
 from tests.api.test_inspection_planning_api import _planning_world
@@ -468,6 +469,13 @@ def create_candidate(
     )
     db_session.add(user)
     db_session.flush()
+    db_session.add(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="inspection.use",
+            source="manual",
+        )
+    )
     db_session.add(
         Company(
             id=company_id,

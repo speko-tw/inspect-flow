@@ -385,7 +385,7 @@ def test_permission_calculation_scope_covers_new_service_boundaries():
         ),
     }
     assert scoped_paths <= set(calculation_functions)
-    assert "project_permissions_for" in _function_names(
+    assert "calculate_effective_access" in _function_names(
         "app/services/project_workflow_summary.py",
         "get_project_workflow_summary",
     )

@@ -407,8 +407,10 @@ def _validate_assignee(
     )
     if (
         project_id not in access.project_memberships
+        or not access.is_active
         or access.is_admin
         or "inspection_task.inspect" not in access.project_permissions
+        or "inspection.use" not in access.module_permissions
     ):
         raise PlanningError("inspection_task.invalid_assignee")
 

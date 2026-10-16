@@ -1106,9 +1106,9 @@ def assignees(
     access = calculate_effective_access(
         db, user_id=_user.id, project_id=project_id
     )
-    if (
-        not access.is_admin
-        and not {
+    if not access.is_admin and (
+        "inspection.use" not in access.module_permissions
+        or not {
             "inspection_task.create",
             "inspection_task.assign",
         }
@@ -1120,6 +1120,8 @@ def assignees(
         db,
         project_id=project_id,
         permission_code="inspection_task.inspect",
+        active_only=True,
+        module_permission_code="inspection.use",
     )
     return page(
         db,

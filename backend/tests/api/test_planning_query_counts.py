@@ -16,6 +16,7 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModulePermission,
 )
 from tests.api.query_count import select_count
 from tests.api.test_inspection_planning_api import _planning_world
@@ -389,6 +390,13 @@ def test_assignee_query_count_and_cursor_page_do_not_grow_with_members(
         if sequence % 2 == 0:
             member.role_assignments.append(
                 ProjectMemberRole(role_id=inspect_role.id)
+            )
+            db_session.add(
+                UserModulePermission(
+                    user_id=person.id,
+                    permission_code="inspection.use",
+                    source="manual",
+                )
             )
         db_session.add(member)
         added_users.append(person)
