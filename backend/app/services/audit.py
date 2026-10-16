@@ -572,7 +572,9 @@ def _resolve_system_operator(session: Session) -> User:
 
 def _format_actor_snapshot(session: Session, operator: User) -> str:
     """依 ALG-R29 保存操作者當下可辨識的姓名、身分與單位。"""
-    name = operator.name_zh or operator.username
+    name_zh = operator.name_zh or ""
+    has_name = bool(name_zh.strip())
+    name = name_zh if has_name else operator.username
     company_name = None
     if operator.company_id is not None:
         company_name = session.scalar(
@@ -581,7 +583,7 @@ def _format_actor_snapshot(session: Session, operator: User) -> str:
 
     if operator.is_external_collaborator:
         if company_name is None:
-            if operator.name_zh is not None:
+            if has_name:
                 return "外部協作人員（未填單位）"
             return name
         return f"{name}．外部協作人員．{company_name}"
@@ -634,43 +636,39 @@ def _record_audit_event(
     operator_id: uuid.UUID | None = None,
     actor_snapshot: str | None = None,
 ) -> AuditLog:
-    """The single entry point for writing an ``AuditLog`` row
-    (ALG-R05). ``entity_type`` is not a parameter: it comes from
-    ``event_type``'s catalog entry. ``created_by`` comes from
-    :func:`app.services.operator.get_current_operator` (or, for a
-    "系統事件", :func:`_resolve_system_operator`) and ``created_at``
-    from :func:`app.db.clock.utc_now`, and ``actor_snapshot`` from the
-    same operator's profile (ALG-R29). Callers cannot override them.
+    """依 ALG-R05 單一入口寫入 AuditLog 紀錄。
 
-    ``project_id`` is the event's project at write time (ALG-R24),
-    even when ``before`` or ``after`` omits that field. Events without
-    project context leave it as ``None``.
+    entity_type 由 event_type 的目錄定義，不接受呼叫端傳入。
+    created_by 取自目前操作者或系統事件的內建管理者；
+    created_at 取自 app.db.clock.utc_now；
+    actor_snapshot 依 ALG-R29 擷取同一操作者的當下資料。
+    呼叫端不得覆寫這些欄位。
 
-    Only ``session.flush()``s (ALG-R06): the caller's own
-    transaction (``app.db.unit_of_work``) commits or rolls back the
-    row together with whatever else it did.
+    project_id 記錄事件發生當下的專案（ALG-R24），即使 before 或
+    after 沒有該欄位；沒有專案脈絡時留為 None。
+
+    本函式只呼叫 session.flush()（ALG-R06）。是否提交或回滾，
+    由呼叫端的交易 app.db.unit_of_work 決定，並與其他變更一起處理。
 
     Raises:
-        UnregisteredAuditEventError: ``event_type`` is not in the
-            catalog (ALG-R07).
-        UndeclaredAuditFieldError: ``before``/``after`` names a field
-            the event does not declare (ALG-R08).
-        MissingProjectAuditEventError: 事件標為 ``project_scoped``
-            但 ``project_id`` 為 ``None``（ALG-R24）；在查找操作者與
-            變更 session 前拒絕。
-        InvalidAuditEventShapeError: ``before``/``after``'s shape
-            does not match the event's kind, a "一律記錄" field is
-            missing, or a declared field's value is ``None``
-            (ALG-R09).
-        UnchangedAuditFieldError: a 修改 event's before/after are
-            identical, or a non-"一律記錄" field did not change
-            (ALG-R09).
-        app.services.operator.OperatorNotAuthenticatedError: called
-            during an HTTP request with nobody logged in (ALG-R05,
-            AUT-R09).
+        UnregisteredAuditEventError: event_type 未登記於事件目錄
+            （ALG-R07）。
+        UndeclaredAuditFieldError: before 或 after 使用事件未宣告的
+            欄位（ALG-R08）。
+        MissingProjectAuditEventError: 事件標為 project_scoped，但
+            project_id 為 None（ALG-R24）；會在查找操作者或修改
+            session 前拒絕。
+        InvalidAuditEventShapeError: before 或 after 的形狀不符事件
+            種類、缺少「一律記錄」欄位，或已宣告欄位值為 None
+            （ALG-R09）。
+        UnchangedAuditFieldError: 修改事件的前後值相同，或一般欄位
+            沒有變動（ALG-R09）。
+        app.services.operator.OperatorNotAuthenticatedError: HTTP 請求
+            中沒有登入操作者（ALG-R05、AUT-R09）。
         app.services.operator.OperatorNotFoundError:
-        app.services.operator.MultipleOperatorsFoundError: see
-            :func:`app.services.operator.get_current_operator`.
+        app.services.operator.MultipleOperatorsFoundError: 目前操作者
+            查找失敗，詳見
+            app.services.operator.get_current_operator。
     """
     definition = _EVENT_CATALOG.get(event_type)
     if definition is None:

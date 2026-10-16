@@ -96,14 +96,11 @@ precision for safety:
    reach ``audit_logs`` the same way ``TRUNCATE ... CASCADE`` can) --
    **unless** the connection this statement runs on was opened with
    the ``audit_log_ddl_allowed`` execution option set to true (see
-   :func:`_block_audit_logs_mutation`), the one deliberate escape
-   hatch in this whole module, needed because Alembic's own migrations
-   must still be able to create, and one day alter, ``audit_logs``
-   itself. That option affects *only* this DDL branch: a ``TRUNCATE``,
-   or a statement matching the modification-keyword rule below, is
-   rejected the same way regardless of it, so a migration can never
-   use it to slip an ``UPDATE``/``DELETE``/``TRUNCATE`` past this
-   guard, only genuine schema DDL.
+   :func:`_block_audit_logs_mutation`); 此 DDL 專用選項讓 Alembic
+   migration 可以建立或調整 ``audit_logs``。
+   此選項只影響 DDL 判斷，不會放行 ``TRUNCATE``、``UPDATE`` 或
+   ``DELETE``。身分快照回填另有更窄的選項，只放行單一欄位更新；
+   詳見下方 ``_SNAPSHOT_BACKFILL_OPTION``。
 4. Otherwise, it is rejected when the statement contains, anywhere,
    both a modification keyword (``UPDATE``, ``DELETE``, ``REPLACE``,
    ``MERGE`` -- covering a bare ``UPDATE``/``DELETE``, SQLite's
@@ -114,6 +111,12 @@ precision for safety:
    either order, anywhere in the statement -- including inside a
    ``WITH`` (CTE) statement in any shape, without this module trying
    to understand the CTE's structure at all.
+
+身分快照回填的 migration 專用例外（維護者決定，#580，
+2026-10-16）：``_SNAPSHOT_BACKFILL_OPTION`` 只允許由 SQLAlchemy Core
+編譯、更新未限定 schema 的 ``audit_logs`` 且只設定
+``actor_snapshot`` 的 UPDATE。原始 SQL、其他 UPDATE 目標、混合欄位
+更新、DELETE 與 TRUNCATE 均不會放行。
 
 None of these checks look at *where* ``audit_logs`` or the keyword
 appears relative to each other, only that both are present (or, for
@@ -294,6 +297,9 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import visitors
+from sqlalchemy.sql.dml import Delete, Insert, Update
+from sqlalchemy.sql.selectable import CTE
 from sqlalchemy.types import JSON, Uuid
 
 from app.db import clock
@@ -618,22 +624,53 @@ def _contains_audit_logs_token(statement: str) -> bool:
 _DDL_ALLOWED_OPTION = "audit_log_ddl_allowed"
 
 
-def _targets_audit_logs(statement: str, *, ddl_allowed: bool = False) -> bool:
-    """Return whether ``statement`` should be rejected as a write to
-    ``audit_logs`` (ALG-R04) -- see the module docstring for the
-    full rationale, what this covers, and the false positives it
-    deliberately accepts in exchange for not missing a real one.
+_SNAPSHOT_BACKFILL_OPTION = "audit_log_snapshot_backfill_allowed"
 
-    Check order matters: ``TRUNCATE`` and a modification keyword
-    (``UPDATE``/``DELETE``/``REPLACE``/``MERGE``, which also covers
-    ``ON CONFLICT ... DO UPDATE``) together with an ``audit_logs``
-    token are decided first and rejected *without ever looking at*
-    ``ddl_allowed`` -- so no ``DROP``/``ALTER`` word anywhere in the
-    statement (for instance an ``AS [DROP]`` alias) can turn the
-    option into a bypass. Only the last step, the DDL rule, reads
-    ``ddl_allowed`` (from the calling connection's
-    :data:`_DDL_ALLOWED_OPTION` execution option -- see
-    :func:`_block_audit_logs_mutation`).
+
+def _is_snapshot_backfill_update(context: object) -> bool:
+    """只接受 migration 編譯出的單欄位 SQLAlchemy Core UPDATE。"""
+    compiled = getattr(context, "compiled", None)
+    statement = getattr(compiled, "statement", None)
+    if not isinstance(statement, Update):
+        return False
+    table = statement.table
+    values = statement._values
+    value_keys = (
+        {getattr(key, "key", key) for key in values}
+        if values is not None
+        else set()
+    )
+    nested_mutation = any(
+        isinstance(node, CTE)
+        or (
+            isinstance(node, (Delete, Insert, Update))
+            and node is not statement
+        )
+        for node in visitors.iterate(statement)
+    )
+    return (
+        getattr(table, "name", None) == "audit_logs"
+        and getattr(table, "schema", None) is None
+        and values is not None
+        and value_keys == {"actor_snapshot"}
+        and not statement._where_criteria
+        and not statement._returning
+        and not nested_mutation
+    )
+
+
+def _targets_audit_logs(
+    statement: str,
+    *,
+    ddl_allowed: bool = False,
+    snapshot_backfill_allowed: bool = False,
+    snapshot_backfill_statement: bool = False,
+) -> bool:
+    """判斷語句是否會違反 ALG-R04 的 append-only 規則。
+
+    DDL 只受 audit_log_ddl_allowed 影響。另一個 migration 專用選項
+    僅放行更新 audit_logs 單一 actor_snapshot 欄位的 SQLAlchemy Core
+    UPDATE；TRUNCATE、原始 SQL 與其他資料修改仍一律拒絕。
     """
     statement = _normalize_sql(statement)
     if _is_truncate_statement(statement):
@@ -643,6 +680,8 @@ def _targets_audit_logs(statement: str, *, ddl_allowed: bool = False) -> bool:
     if _contains_modification_keyword(
         statement
     ) and _contains_audit_logs_token(statement):
+        if snapshot_backfill_allowed and snapshot_backfill_statement:
+            return False
         return True
     if _contains_ddl_keyword(statement):
         if ddl_allowed:
@@ -662,49 +701,38 @@ def _block_audit_logs_mutation(
     context: object,
     executemany: bool,
 ) -> None:
-    """ALG-R04: reject any write reaching ``audit_logs`` that would
-    modify an existing row, remove all of its rows, or change its
-    schema, from whichever layer produced it -- ORM flush, ORM/Core
-    bulk ``update()``/``delete()``, or raw ``text()`` SQL, including
-    ``TRUNCATE`` (plain or ``CASCADE``), SQLite's ``REPLACE INTO``/
-    ``INSERT OR REPLACE``, an ``INSERT ... ON CONFLICT ... DO UPDATE``
-    upsert, ``MERGE``, ``DROP TABLE``/``ALTER TABLE`` (plain or
-    ``CASCADE``), and any of these wrapped in a ``WITH`` (CTE)
-    statement in any shape (issue #233). ``INSERT``/``SELECT``
-    against ``audit_logs`` with no modification keyword elsewhere in
-    the same statement, ``ON CONFLICT DO NOTHING``, and any statement
-    that never mentions ``audit_logs`` at all pass through untouched
-    -- see the module docstring for the false positives this
-    deliberately does not try to avoid.
+    """依 ALG-R04 攔截會修改稽核紀錄資料或結構的語句。
 
-    ``conn``'s :data:`_DDL_ALLOWED_OPTION` execution option (set only
-    by ``backend/alembic/env.py``, on the connection it runs
-    migrations through -- see the module docstring's account of the
-    fifth PR #253 review round) is the one way *any* code can get a
-    DDL statement against ``audit_logs`` past this guard, and it
-    exempts DDL only: it has no effect on the ``TRUNCATE`` or
-    modification-keyword checks.
+    audit_log_ddl_allowed 僅放行 Alembic 的 schema DDL。
+    audit_log_snapshot_backfill_allowed 僅放行 migration 編譯的
+    actor_snapshot 單欄位回填；其他資料修改仍拒絕。
     """
-    ddl_allowed = bool(conn.get_execution_options().get(_DDL_ALLOWED_OPTION))
-    if _targets_audit_logs(statement, ddl_allowed=ddl_allowed):
+    options = conn.get_execution_options()
+    ddl_allowed = bool(options.get(_DDL_ALLOWED_OPTION))
+    snapshot_backfill_allowed = bool(options.get(_SNAPSHOT_BACKFILL_OPTION))
+    snapshot_backfill_statement = _is_snapshot_backfill_update(context)
+    if _targets_audit_logs(
+        statement,
+        ddl_allowed=ddl_allowed,
+        snapshot_backfill_allowed=snapshot_backfill_allowed,
+        snapshot_backfill_statement=snapshot_backfill_statement,
+    ):
         raise AuditLogImmutableError(
             "audit_logs is append-only; this write is rejected (ALG-R04)"
         )
 
 
 class AuditLog(Base):
-    """A permanent, append-only record of one security-relevant
-    change (ALG-R01): who (``created_by`` and ``actor_snapshot``),
-    when (``created_at``), on what (``entity_type``/``entity_id``),
-    which kind of change
-    (``event_type``), and its content before/after
-    (``before``/``after``, both nullable -- ALG-R01, ALG-R09).
+    """永久追加的安全相關變更紀錄（ALG-R01），保存操作者
+    （``created_by`` 與 ``actor_snapshot``）、時間（``created_at``）、
+    對象（``entity_type``／``entity_id``）、變更類型（``event_type``）
+    與變更前後內容（``before``／``after``；兩者皆可為空值，ALG-R01、
+    ALG-R09）。
 
-    Deliberately has no ``updated_at``/``updated_by`` (ALG-R02) and
-    no relationship/back-reference from ``User`` (unlike
-    ``created_by`` columns elsewhere): nothing about this table is
-    meant to be navigated from the ``User`` side, only written once
-    and read by ``entity_id``/``event_type``.
+    刻意不設 ``updated_at``／``updated_by``（ALG-R02），也不在
+    ``User`` 上建立關聯或反向參照（不同於其他含 ``created_by`` 的
+    資料表）：此表不從 ``User`` 端導覽，只寫入一次，並依
+    ``entity_id``／``event_type`` 查詢。
     """
 
     __tablename__ = "audit_logs"

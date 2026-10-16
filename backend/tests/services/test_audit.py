@@ -116,10 +116,22 @@ def test_alg_ac25_system_operator_uses_username_snapshot(session, operator):
     assert session.get(AuditLog, log.id).actor_snapshot == "admin"
 
 
+@pytest.mark.parametrize("name_zh", [None, "", "  \t\n"])
 def test_alg_ac25_unnamed_external_operator_omits_missing_unit(
-    session, operator, monkeypatch
+    session, operator, monkeypatch, name_zh
 ):
-    operator.is_external_collaborator = True
+    if name_zh is None:
+        operator.is_external_collaborator = True
+    else:
+        operator = create_root_user_with_company(session, "A580UNNAMED")
+        operator.name_zh = name_zh
+        operator.is_external_collaborator = True
+        operator.company_id = None
+        operator.employee_no = None
+        operator.department = None
+        operator.location = None
+        session.flush()
+
     monkeypatch.setattr(
         audit_module, "get_current_operator", lambda _session: operator
     )
@@ -132,7 +144,7 @@ def test_alg_ac25_unnamed_external_operator_omits_missing_unit(
         after={"is_admin": True},
     )
 
-    assert log.actor_snapshot == "admin"
+    assert log.actor_snapshot == operator.username
 
 
 def test_alg_ac25_actor_snapshot_is_persisted_at_write_time(

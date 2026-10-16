@@ -98,7 +98,21 @@
 | ALG-R27 | 初始化指令的預建資料（三個專案角色、建立者角色設定、三組預設權限組合，DOM-R68）與改造 migration 的資料轉換（`template_admin` 轉為 `template.manage`、既有成員回填「可使用」，`source = backfill`）**不寫**稽核紀錄，與初始化指令同樣屬於系統搬遷、不含任何人工授權（ALG-R12）；轉換前後的有效權限比對由改造任務驗收（DOM-AC63、AUT-AC74）；回填的授權靠 `source` 欄位追溯 | 必須 | 負責人裁定（[#538 第 14 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（回填只寫在 migration、以自動化測試驗證）；不寫稽核與以 `source` 追溯是規格設計（非負責人裁定）（比照 ALG-R12 的初始化規則）；見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69) | ALG-AC22 |
 | ALG-R28 | 專案事件（[專案事件](#專案事件)）：新增專案**必須**在同一交易寫 `project.created`，修改專案基本欄位**必須**在同一交易寫 `project.updated`；指派被 DOM-R70 或 DOM-R72 擋下、授權被 DOM-R62 或 DOM-R63 拒絕時，後端**必須**分別寫 `project_member.assignment_denied`、`module_permission.grant_denied`，且在獨立交易寫入，使請求失敗後仍保留，這是 ALG-R14「被拒絕不留紀錄」的唯一例外 | 必須 | 負責人裁定（[#538 第 18 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（後端擋下違規並寫稽核）；`project.created`、`project.updated`、獨立交易的做法與授權拒絕事件是規格設計（非負責人裁定）（兩位專家審查建議） | ALG-AC23、ALG-AC24 |
 | ALG-R29 | **操作者身分快照**：每筆稽核紀錄**必須**保存寫入當下的操作者身分快照（欄位 `actor_snapshot`，文字，由寫入入口依操作者當下的姓名、外部協作人員標記與單位組成）：有 `name_zh` 的外部協作人員為「姓名．外部協作人員．單位」，沒有單位時為「外部協作人員（未填單位）」；有 `name_zh` 的內部人員為「姓名．單位」（沒有單位時只有姓名）；沒有 `name_zh` 時以 `username` 作為快照姓名，有單位仍依身分組成，有單位以外的缺項則省略（例如無姓名、無單位的外部帳號只保存 `username`）；日後人員資料變更不影響已寫入的快照；這是 ALG-R05 的欄位補充，新增一支 migration 加不可空值欄位（既有紀錄以當時 `created_by` 的現值回填一次），事件目錄不變 | 必須 | 負責人裁定（[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-10）第 6 點：每筆紀錄保存寫入當下的身分快照；欄位名稱、組成方式與既有紀錄的回填是規格設計（非負責人裁定）；沒有姓名時以 `username` 作快照姓名並省略不存在的單位，依維護者決定（#580，2026-10-16） | ALG-AC25 |
-| ALG-R30 | 稽核查詢以 `created_at DESC, id DESC` 穩定分頁；為操作者與事件類型篩選，資料庫**必須**分別建立 `(created_by, created_at, id)` 與 `(event_type, created_at, id)` 複合索引。索引依實際查詢條件及排序設計，不得重建 `audit_logs` | 必須 | 維護者決定（#624，2026-10-16）：依 `query_audit_events` 的篩選欄位與分頁排序新增複合索引 | ALG-AC29 |
+| ALG-R30 | 稽核查詢以 `created_at DESC, id DESC` 穩定分頁；為操作者與事件類型篩選，資料庫**必須**分別建立 `(created_by, created_at, id)` 與 `(event_type, created_at, id)` 複合索引。索引依實際查詢條件及排序設計；只新增或移除索引的 migration 不得重建 `audit_logs` | 必須 | 維護者決定（#624，2026-10-16）：依 `query_audit_events` 的篩選欄位與分頁排序新增複合索引 | ALG-AC29 |
+
+## Issue #580 維護者決定（2026-10-16）
+
+維護者決定（#580，2026-10-16）：操作者快照 migration 在同一個
+Alembic 交易內，於原表新增可空值欄位、回填後設為不可空值。回填
+僅使用 migration 專用的 audit_log_snapshot_backfill_allowed 連線
+選項；guard 只放行 UPDATE audit_logs 且 SET 子句僅更新
+actor_snapshot 的語句。此選項不放行其他欄位更新、DELETE、
+TRUNCATE 或一般連線；migration 失敗時由交易回滾。
+
+PostgreSQL 在原表執行 ALTER COLUMN SET NOT NULL，升級與降級都不
+重建 audit_logs。SQLite 為了設置 NOT NULL 及移除欄位，得使用
+Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
+索引的 migration，不限制必要的欄位 migration。
 
 ## 第一批事件
 

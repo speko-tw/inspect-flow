@@ -51,7 +51,16 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import Engine, bindparam, delete, inspect, select, text, update
+from sqlalchemy import (
+    Engine,
+    bindparam,
+    delete,
+    inspect,
+    literal,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.types import JSON, Uuid
@@ -1364,6 +1373,69 @@ class TestAppendOnlyGuard:
                 with pytest.raises(AuditLogImmutableError):
                     conn.execute(text(statement))
                 conn.rollback()
+
+        assert snapshot() == before
+
+    def test_snapshot_backfill_option_only_allows_single_column_update(
+        self, engine, existing_log, snapshot
+    ):
+        """只放行 migration 對 actor_snapshot 單欄位的回填。"""
+        before = snapshot()
+        allowed = update(AuditLog).values(
+            actor_snapshot=AuditLog.actor_snapshot
+        )
+        rejected = [
+            "UPDATE audit_logs SET actor_snapshot = actor_snapshot",
+            "UPDATE audit_logs SET entity_type = 'changed'",
+            "UPDATE audit_logs SET actor_snapshot = 'changed', "
+            "entity_type = 'changed'",
+            "UPDATE audit_logs SET actor_snapshot = $$ where $$, id = id",
+            "DELETE FROM audit_logs",
+            "TRUNCATE audit_logs",
+        ]
+        attached_cte = (
+            update(AuditLog)
+            .values(entity_type="changed")
+            .returning(AuditLog.id)
+            .cte("mutate_audit_log")
+        )
+        attached_mutation = allowed.add_cte(attached_cte)
+        nested_cte = (
+            update(AuditLog)
+            .values(entity_type="changed")
+            .returning(AuditLog.id)
+            .cte("nested_mutate_audit_log")
+        )
+        nested_mutation = update(AuditLog).values(
+            actor_snapshot=select(literal("safe"))
+            .select_from(nested_cte)
+            .scalar_subquery()
+        )
+
+        with engine.connect() as conn:
+            conn.execution_options(audit_log_snapshot_backfill_allowed=True)
+            conn.execute(allowed)
+            conn.rollback()
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(attached_mutation)
+            conn.rollback()
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(nested_mutation)
+            conn.rollback()
+
+        for statement in rejected:
+            with engine.connect() as conn:
+                conn.execution_options(
+                    audit_log_snapshot_backfill_allowed=True
+                )
+                with pytest.raises(AuditLogImmutableError):
+                    conn.execute(text(statement))
+                conn.rollback()
+
+        with engine.connect() as conn:
+            with pytest.raises(AuditLogImmutableError):
+                conn.execute(allowed)
+            conn.rollback()
 
         assert snapshot() == before
 
