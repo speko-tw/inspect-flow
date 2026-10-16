@@ -516,7 +516,6 @@ def test_project_read_and_project_use_open_summary_without_task_counts(
 
     assert response.status_code == 200, response.text
     assert set(response.json()["viewer_permission_codes"]) == {
-        "inspection_task.read",
         "project.read",
     }
     assert response.json()["task_counts_visible"] is False

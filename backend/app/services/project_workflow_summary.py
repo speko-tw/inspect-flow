@@ -78,6 +78,7 @@ def get_project_workflow_summary(
     access = calculate_effective_access(
         session, user_id=operator.id, project_id=project_id
     )
+    # IP-R11 回傳的碼供前端判斷入口，須反映模組可使用總開關。
     permissions = (
         frozenset(
             code.value
@@ -85,7 +86,14 @@ def get_project_workflow_summary(
             if permission_code_scope(code.value) == "project"
         )
         if access.is_admin
-        else access.project_permissions
+        else frozenset(
+            code
+            for code in access.project_permissions
+            if (
+                (module := permission_code_module(code)) is not None
+                and f"{module}.use" in access.module_permissions
+            )
+        )
     )
     readable_permissions = {
         "project.read",

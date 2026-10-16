@@ -288,7 +288,39 @@ def test_single_project_read_is_limited_for_planning_members(
     project_id = world["project"].id
     path = f"/api/v1/projects/{project_id}"
 
-    basic = world["reader"].get(path)
+    assert world["reader"].get(path).status_code == 403
+    assert world["field"].get(path).status_code == 403
+    assert world["outsider"].get(path).status_code == 403
+
+    project_reader = world["plain_user"]
+    project_reader_permission = Role(
+        name="Project basic reader",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+        permission_codes=[RolePermission(code="project.read")],
+    )
+    db_session.add(project_reader_permission)
+    db_session.flush()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == project_reader.id,
+        )
+    )
+    assert member is not None
+    member.role_assignments.append(
+        ProjectMemberRole(role_id=project_reader_permission.id)
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=project_reader.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
+    db_session.commit()
+
+    basic = world["plain"].get(path)
     assert basic.status_code == 200, basic.text
     assert set(basic.json()) == {
         "id",
@@ -300,8 +332,14 @@ def test_single_project_read_is_limited_for_planning_members(
     }
     assert basic.json()["project_code"] == "PLAN-API-1"
     assert basic.json()["company_role"] == "contractor"
-    assert world["field"].get(path).status_code == 403
-    assert world["outsider"].get(path).status_code == 403
+
+    db_session.query(UserModulePermission).filter_by(
+        user_id=project_reader.id,
+        permission_code="project.use",
+    ).delete()
+    db_session.commit()
+    assert world["plain"].get(path).status_code == 403
+
     world["admin"].post(
         f"/api/v1/projects/{project_id}/zones", json={"name": "讀取區"}
     )
@@ -2563,6 +2601,54 @@ def test_task_name_is_returned_by_every_task_read_surface(
     ] == ["示範任務"]
 
 
+def test_field_access_revocation_blocks_reads_and_start_without_mutation(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    _, task_id = _dispatched_field_task(
+        world, "收回查核模組使用權", world["field_user"].id
+    )
+    permission = db_session.scalar(
+        select(UserModulePermission).where(
+            UserModulePermission.user_id == world["field_user"].id,
+            UserModulePermission.permission_code == "inspection.use",
+        )
+    )
+    assert permission is not None
+    db_session.delete(permission)
+    db_session.commit()
+
+    list_response = world["field"].get(
+        "/api/v1/field/inspection-tasks",
+        params={"assigned_to_me": "false"},
+    )
+    detail_response = world["field"].get(
+        f"/api/v1/field/inspection-tasks/{task_id}"
+    )
+    start_response = world["field"].post(
+        f"/api/v1/inspection-tasks/{task_id}:start"
+    )
+
+    assert list_response.status_code == 403
+    assert detail_response.status_code == 404
+    assert start_response.status_code == 403
+    db_session.expire_all()
+    task = db_session.get(InspectionTask, UUID(task_id))
+    assert task is not None
+    assert task.status == "PENDING"
+    assert task.started_at is None
+    assert task.started_by is None
+
+    outsider_detail = world["outsider"].get(
+        f"/api/v1/field/inspection-tasks/{task_id}"
+    )
+    outsider_start = world["outsider"].post(
+        f"/api/v1/inspection-tasks/{task_id}:start"
+    )
+    assert outsider_detail.status_code == 404
+    assert outsider_start.status_code == 404
+
+
 def test_field_start_rejections_map_to_distinct_error_codes(
     db_session, make_client
 ):
@@ -3395,6 +3481,13 @@ def test_global_plan_task_writes_hide_nonmember_resources(
             created_by=world["admin_user"].id,
             updated_by=world["admin_user"].id,
             role_assignments=[ProjectMemberRole(role_id=role.id)],
+        )
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=manager_user.id,
+            permission_code="inspection.use",
+            source="manual",
         )
     )
     db_session.commit()

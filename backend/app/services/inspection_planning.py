@@ -28,7 +28,6 @@ from app.services.audit import (
 from app.services.operator import get_current_operator
 from app.services.permissions import (
     calculate_effective_access,
-    effective_permissions,
 )
 
 
@@ -134,17 +133,21 @@ def _require_permission(
 def project_permissions_for(
     session: Session, project_id: uuid.UUID
 ) -> frozenset[str]:
-    """取得操作者在專案內的有效權限；Admin 依 KD-69 取得所有專案權限。"""
+    """依 AUT-R19 回傳 Admin 全權限或查核模組可使用的專案權限。"""
     operator = get_current_operator(session)
-    if operator.is_admin:
+    access = calculate_effective_access(
+        session, user_id=operator.id, project_id=project_id
+    )
+    if access.is_admin:
         return frozenset(
             code.value
             for code in PermissionCode
             if permission_code_scope(code.value) == "project"
         )
-    return effective_permissions(
-        session, user_id=operator.id, project_id=project_id
-    )
+    # 依 AUT-R19，inspection.use 是查核專案內動作的總開關。
+    if "inspection.use" not in access.module_permissions:
+        return frozenset()
+    return access.project_permissions
 
 
 def _project_permissions(
@@ -646,18 +649,20 @@ def field_inspection_task_filters(
         session, user_id=user_id, project_id=project_id
     )
     is_admin = access.is_admin
+    has_inspection_use = "inspection.use" in access.module_permissions
     if project_id is None:
         permissioned_projects = set()
         for (
             member_project_id,
             permissions,
         ) in access.project_permissions_by_project.items():
-            if "inspection_task.inspect" in permissions:
+            if has_inspection_use and "inspection_task.inspect" in permissions:
                 permissioned_projects.add(member_project_id)
     else:
         permissioned_projects = (
             {project_id}
-            if "inspection_task.inspect" in access.project_permissions
+            if has_inspection_use
+            and "inspection_task.inspect" in access.project_permissions
             else set()
         )
     if not is_admin:
@@ -693,14 +698,18 @@ def get_field_inspection_task(
     *,
     task_id: uuid.UUID,
     user_id: uuid.UUID,
-    is_admin: bool,
 ) -> InspectionTask:
     """讀取現場任務；不存在、DRAFT 或無專案權限均隱藏。"""
     task = session.get(InspectionTask, task_id)
     if task is None or task.status == "DRAFT":
         raise PlanningError("inspection_task.not_found")
-    if not is_admin and "inspection_task.inspect" not in effective_permissions(
+    access = calculate_effective_access(
         session, user_id=user_id, project_id=task.project_id
+    )
+    if not access.is_admin and (
+        task.project_id not in access.project_memberships
+        or "inspection.use" not in access.module_permissions
+        or "inspection_task.inspect" not in access.project_permissions
     ):
         raise PlanningError("inspection_task.not_found")
     return task
@@ -1059,10 +1068,13 @@ def start_inspection_task(
 ) -> InspectionTask:
     """開始待辦 Task；無查核權限、封存或狀態不符時拒絕。"""
     operator = get_current_operator(session)
-    permissions = effective_permissions(
+    access = calculate_effective_access(
         session, user_id=operator.id, project_id=task.project_id
     )
-    if not operator.is_admin and "inspection_task.inspect" not in permissions:
+    if not access.is_admin and (
+        "inspection.use" not in access.module_permissions
+        or "inspection_task.inspect" not in access.project_permissions
+    ):
         raise PlanningError("authorization.forbidden")
     plan, task = _lock_plan_and_task(session, task.id)
     if plan is not None and plan.is_archived:
@@ -1083,10 +1095,13 @@ def complete_inspection_task(
 ) -> InspectionTask:
     """完成進行中 Task；依 IP-R06 拒絕仍待重查的項目。"""
     operator = get_current_operator(session)
-    permissions = effective_permissions(
+    access = calculate_effective_access(
         session, user_id=operator.id, project_id=task.project_id
     )
-    if not operator.is_admin and "inspection_task.inspect" not in permissions:
+    if not access.is_admin and (
+        "inspection.use" not in access.module_permissions
+        or "inspection_task.inspect" not in access.project_permissions
+    ):
         raise PlanningError("authorization.forbidden")
     plan, task = _lock_plan_and_task(session, task.id)
     if plan is not None and plan.is_archived:

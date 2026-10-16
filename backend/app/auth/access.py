@@ -335,8 +335,12 @@ def require_admin_or_any_project_permission(
         if user.is_admin:
             return user
         access = calculate_effective_access(db, user_id=user.id)
+        # 依 AUT-R19，專案代碼須搭配其模組可使用權限。
+        module = permission_code_module(permission_code)
+        module_use = f"{module}.use" if module is not None else None
         if not any(
             permission_code in codes
+            and module_use in access.module_permissions
             for codes in access.project_permissions_by_project.values()
         ):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
