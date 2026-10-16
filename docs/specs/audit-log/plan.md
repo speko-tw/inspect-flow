@@ -55,7 +55,7 @@
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
 | T6 | 事件目錄登記模組權限事件、專案事件、`user.external_flag_changed`，補 `user.active_changed` 的欄位與「得為系統事件」；授權拒絕與違規指派在獨立交易寫入（ALG-R25～ALG-R28）；授權事件含 `source`；本任務只驗事件目錄與獨立交易寫入入口，端到端驗收由 `domain-model` 任務 L、N、O 承接 | 本計畫 T2 | ALG-AC19～ALG-AC24、ALG-AC26、ALG-AC27 | #573 |
-| T7 | 操作者身分快照：`AuditLog.actor_snapshot` 不可空值欄位的 migration（既有紀錄回填一次）與寫入入口組成快照（ALG-R29）；`domain-model` DOM-R74 的驗收 | T6；`domain-model` 任務 L（`User.is_external_collaborator`，快照需要此欄位） | ALG-AC25、DOM-AC71 | #580 |
+| T7 | 操作者身分快照：`AuditLog.actor_snapshot` 不可空值欄位的 migration（既有紀錄回填一次）與寫入入口組成快照（ALG-R29）；`domain-model` DOM-R74 的驗收。具體檔案：`backend/app/models/audit_log.py`、`backend/app/services/audit.py`、`backend/alembic/versions/`（新增一支）、`backend/tests/db/test_audit_actor_snapshot_migration.py`、`backend/tests/db/test_audit_log.py`、`backend/tests/services/test_audit.py`、`backend/tests/api/test_audit_logs.py`、本規格與 `domain-model` 規格 | T6；`domain-model` 任務 L（`User.is_external_collaborator`，快照需要此欄位） | ALG-AC25、DOM-AC71 | #580 |
 
 ## 本公司角色後續實作
 

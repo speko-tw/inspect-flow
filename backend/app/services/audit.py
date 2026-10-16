@@ -85,7 +85,7 @@ from sqlalchemy.orm import Session
 
 from app.db import clock
 from app.db.engine import get_session_factory
-from app.models import AuditLog, User
+from app.models import AuditLog, Company, User
 from app.services.operator import (
     OperatorNotFoundError,
     get_current_operator,
@@ -158,6 +158,7 @@ class _PendingAuditEvent:
     project_id: uuid.UUID | None
     audit_log_id: uuid.UUID
     operator_id: uuid.UUID | None
+    actor_snapshot: str | None
 
 
 def begin_pending_independent_audit_events(
@@ -569,6 +570,26 @@ def _resolve_system_operator(session: Session) -> User:
     return get_system_operator(session)
 
 
+def _format_actor_snapshot(session: Session, operator: User) -> str:
+    """依 ALG-R29 保存操作者當下可辨識的姓名、身分與單位。"""
+    name = operator.name_zh or operator.username
+    company_name = None
+    if operator.company_id is not None:
+        company_name = session.scalar(
+            select(Company.name).where(Company.id == operator.company_id)
+        )
+
+    if operator.is_external_collaborator:
+        if company_name is None:
+            if operator.name_zh is not None:
+                return "外部協作人員（未填單位）"
+            return name
+        return f"{name}．外部協作人員．{company_name}"
+    if company_name is None:
+        return name
+    return f"{name}．{company_name}"
+
+
 def record_audit_event(
     session: Session,
     event_type: str,
@@ -611,14 +632,15 @@ def _record_audit_event(
     project_id: uuid.UUID | None = None,
     audit_log_id: uuid.UUID | None = None,
     operator_id: uuid.UUID | None = None,
+    actor_snapshot: str | None = None,
 ) -> AuditLog:
     """The single entry point for writing an ``AuditLog`` row
     (ALG-R05). ``entity_type`` is not a parameter: it comes from
     ``event_type``'s catalog entry. ``created_by`` comes from
     :func:`app.services.operator.get_current_operator` (or, for a
     "系統事件", :func:`_resolve_system_operator`) and ``created_at``
-    from :func:`app.db.clock.utc_now` -- there is no way for a caller
-    to supply either.
+    from :func:`app.db.clock.utc_now`, and ``actor_snapshot`` from the
+    same operator's profile (ALG-R29). Callers cannot override them.
 
     ``project_id`` is the event's project at write time (ALG-R24),
     even when ``before`` or ``after`` omits that field. Events without
@@ -688,9 +710,12 @@ def _record_audit_event(
         raise OperatorNotFoundError(
             f"Audit operator {operator_id} does not exist"
         )
+    if actor_snapshot is None:
+        actor_snapshot = _format_actor_snapshot(session, operator)
     log_values = dict(
         created_at=clock.utc_now(),
         created_by=operator.id,
+        actor_snapshot=actor_snapshot,
         project_id=project_id,
         event_type=event_type,
         entity_type=definition.entity_type,
@@ -778,6 +803,7 @@ def record_audit_event_in_independent_transaction(
                 project_id=project_id,
                 audit_log_id=audit_log_id,
                 operator_id=operator.id,
+                actor_snapshot=_format_actor_snapshot(session, operator),
             )
         )
         return audit_log_id
@@ -791,6 +817,7 @@ def record_audit_event_in_independent_transaction(
         project_id=project_id,
         audit_log_id=audit_log_id,
         operator_id=None,
+        actor_snapshot=None,
     )
     return _write_independent_audit_event(item)
 
@@ -808,6 +835,7 @@ def _write_independent_audit_event(item: _PendingAuditEvent) -> uuid.UUID:
             project_id=item.project_id,
             audit_log_id=item.audit_log_id,
             operator_id=item.operator_id,
+            actor_snapshot=item.actor_snapshot,
         )
         event_id = log.id
     return event_id

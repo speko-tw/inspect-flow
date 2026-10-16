@@ -114,6 +114,7 @@ def operator(session) -> User:
 
 def _new_log(operator: User, **kwargs) -> AuditLog:
     kwargs.setdefault("created_by", operator.id)
+    kwargs.setdefault("actor_snapshot", "測試操作者．測試公司")
     kwargs.setdefault("event_type", "role.created")
     kwargs.setdefault("entity_type", "role")
     kwargs.setdefault("entity_id", uuid7())
@@ -207,6 +208,7 @@ class TestTableStructure:
             "id",
             "created_at",
             "created_by",
+            "actor_snapshot",
             "project_id",
             "event_type",
             "entity_type",
@@ -220,6 +222,7 @@ class TestTableStructure:
 
         assert columns["created_at"]["nullable"] is False
         assert columns["created_by"]["nullable"] is False
+        assert columns["actor_snapshot"]["nullable"] is False
         assert columns["project_id"]["nullable"] is True
         assert columns["event_type"]["nullable"] is False
         assert columns["entity_type"]["nullable"] is False
@@ -253,7 +256,14 @@ class TestTableStructure:
         assert fetched.after == {"name": "Inspector"}
 
     @pytest.mark.parametrize(
-        "field", ["created_by", "event_type", "entity_type", "entity_id"]
+        "field",
+        [
+            "created_by",
+            "actor_snapshot",
+            "event_type",
+            "entity_type",
+            "entity_id",
+        ],
     )
     def test_required_field_null_is_rejected(self, session, operator, field):
         before = session.query(AuditLog).count()
@@ -1073,9 +1083,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
+            ":actor_snapshot, "
             ":entity_type, :entity_id, :before, :after) "
             "ON CONFLICT (id) DO NOTHING"
         ).bindparams(
@@ -1094,6 +1105,7 @@ class TestAppendOnlyGuard:
                     "created_at": existing_log.created_at,
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1120,9 +1132,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
+            ":actor_snapshot, "
             ":entity_type, :entity_id, :before, :after) "
             "RETURNING 'ON CONFLICT (id) DO UPDATE'"
         ).bindparams(
@@ -1141,6 +1154,7 @@ class TestAppendOnlyGuard:
                     "created_at": clock.utc_now(),
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1166,9 +1180,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT OR IGNORE INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
+            ":actor_snapshot, "
             ":entity_type, :entity_id, :before, :after)"
         ).bindparams(
             bindparam("id", type_=Uuid),
@@ -1186,6 +1201,7 @@ class TestAppendOnlyGuard:
                     "created_at": clock.utc_now(),
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,
@@ -1212,10 +1228,10 @@ class TestAppendOnlyGuard:
         insert_stmt = text(
             "INSERT INTO audit_logs "
             "(id, created_at, created_by, event_type, "
-            "entity_type, entity_id, before, after) "
+            "actor_snapshot, entity_type, entity_id, before, after) "
             "VALUES "
             "(:id, :created_at, :created_by, :event_type, "
-            ":entity_type, :entity_id, :before, :after)"
+            ":actor_snapshot, :entity_type, :entity_id, :before, :after)"
         ).bindparams(
             bindparam("id", type_=Uuid),
             bindparam("created_at", type_=UTCDateTime),
@@ -1232,6 +1248,7 @@ class TestAppendOnlyGuard:
                     "created_at": existing_log.created_at,
                     "created_by": operator.id,
                     "event_type": "role.updated",
+                    "actor_snapshot": "測試操作者",
                     "entity_type": "role",
                     "entity_id": uuid7(),
                     "before": None,

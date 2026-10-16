@@ -284,7 +284,15 @@ import re
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Connection, Engine, ForeignKey, Index, String, event
+from sqlalchemy import (
+    Connection,
+    Engine,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    event,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON, Uuid
 
@@ -686,8 +694,9 @@ def _block_audit_logs_mutation(
 
 class AuditLog(Base):
     """A permanent, append-only record of one security-relevant
-    change (ALG-R01): who (``created_by``), when (``created_at``),
-    on what (``entity_type``/``entity_id``), which kind of change
+    change (ALG-R01): who (``created_by`` and ``actor_snapshot``),
+    when (``created_at``), on what (``entity_type``/``entity_id``),
+    which kind of change
     (``event_type``), and its content before/after
     (``before``/``after``, both nullable -- ALG-R01, ALG-R09).
 
@@ -725,6 +734,7 @@ class AuditLog(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id"), nullable=False
     )
+    actor_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, nullable=True, index=True
     )
