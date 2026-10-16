@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { Route, Routes } from 'react-router'
+import { Link, Route, Routes, useNavigate } from 'react-router'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -115,20 +115,43 @@ const systemAdmin = {
   is_system: true,
 }
 
-function renderAt(path: string, user: CurrentUser = adminUser) {
+function renderAt(
+  path: string,
+  user: CurrentUser = adminUser,
+  history?: { entries: string[]; index: number },
+) {
   return render(
-    <DataMemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter
+      initialEntries={history?.entries ?? [path]}
+      initialIndex={history?.index}
+    >
       <Routes>
         <Route
           element={
             <CurrentUserProvider value={{ user, clear: vi.fn() }}>
               <AdminPage />
+              <MemberTestNavigation />
             </CurrentUserProvider>
           }
           path="/admin/*"
         />
       </Routes>
     </DataMemoryRouter>,
+  )
+}
+
+function MemberTestNavigation() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <Link to="/admin/projects">離開成員頁</Link>
+      <button onClick={() => navigate(-1)} type="button">
+        成員頁上一頁
+      </button>
+      <button onClick={() => navigate(1)} type="button">
+        成員頁下一頁
+      </button>
+    </>
   )
 }
 
@@ -1828,6 +1851,60 @@ function addForm(): HTMLElement {
   return screen.getByRole('heading', { name: '加入成員' })
     .parentElement as HTMLElement
 }
+
+describe('專案成員表單未儲存導覽防護', () => {
+  function selectMember() {
+    fireEvent.change(screen.getByLabelText(/使用者/), {
+      target: { value: bob.id },
+    })
+  }
+
+  it('實際選擇成員後攔截站內導覽與 Back/Forward', async () => {
+    projectFetch()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAt('/admin/projects/project-1/members', adminUser, {
+      entries: [
+        '/admin/projects',
+        '/admin/projects/project-1/members',
+        '/admin/projects',
+      ],
+      index: 1,
+    })
+    await screen.findByText('目前沒有成員。')
+    selectMember()
+
+    fireEvent.click(screen.getByRole('link', { name: '離開成員頁' }))
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '成員頁上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(
+      screen.getByRole('heading', { name: '加入成員' }),
+    ).toBeInTheDocument()
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: '成員頁下一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
+    expect(
+      await screen.findByRole('heading', { name: '專案' }),
+    ).toBeInTheDocument()
+  })
+
+  it('實際選擇成員後攔截 beforeunload', async () => {
+    projectFetch()
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('目前沒有成員。')
+    selectMember()
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+})
 
 describe('admin project members', () => {
   it('shows member cards with company and role summary, not a table', async () => {

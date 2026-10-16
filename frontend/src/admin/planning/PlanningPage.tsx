@@ -11,8 +11,8 @@ import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { getProject, type Project } from '../projects/api'
 import { listProjectItems, type ProjectItemData } from '../projectItems/api'
 import { planningClient, planningErrorMessage } from './api'
-import { UnsavedLeaveBox } from './UnsavedLeaveBox'
-import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
+import { UnsavedLeaveBox } from '../../ui/navigation'
+import { useUnsavedNavigationGuard } from '../../ui/navigation'
 import type {
   InspectionPlan,
   InspectionTask,

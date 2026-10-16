@@ -5,6 +5,8 @@ import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
 import { useSubmitGuard } from '../ui/submitGuard'
+import { UnsavedLeaveBox } from '../ui/navigation'
+import * as navigationGuard from '../ui/navigation'
 import {
   createCompany,
   listActiveCompanyUsers,
@@ -45,6 +47,12 @@ export default function CompaniesPage() {
   } | null>(null)
   const [saving, setSaving] = useState(false)
   const saveGuard = useSubmitGuard()
+  const renamedCompany = companies.find((item) => item.id === renamingId)
+  const hasUnsavedChanges = renamingId
+    ? renameValue !== (renamedCompany?.name ?? '')
+    : name !== ''
+  const leaveGuard =
+    navigationGuard.useUnsavedNavigationGuard(hasUnsavedChanges)
   const [deactivating, setDeactivating] = useState<{
     company: Company
     users: Array<{ id: string; username: string; name_zh: string | null }>
@@ -130,6 +138,7 @@ export default function CompaniesPage() {
 
   return (
     <section aria-labelledby="companies-heading">
+      <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="companies-heading">公司管理</h1>
       <FormError>{error}</FormError>
       {deactivating && (

@@ -14,7 +14,7 @@ export interface UnsavedNavigationGuard {
 }
 
 /**
- * 依 ADM-R15、ADM-R28、ADM-R38 保護未儲存的 Admin 表單。
+ * 依 ADM-R15、ADM-R28、ADM-R38 保護含有未儲存草稿的頁面。
  *
  * Data Router blocker 可攔截站內連結與瀏覽器返回；
  * POP、重新整理與關閉分頁均使用瀏覽器原生確認。

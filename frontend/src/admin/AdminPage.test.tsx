@@ -91,10 +91,14 @@ function renderAdmin(
     >
   > = {},
   strictMode = false,
+  history?: { entries: string[]; index: number },
 ) {
   const signedInUser = { ...currentUser, is_admin: isAdmin, ...access }
   const page = (
-    <DataMemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter
+      initialEntries={history?.entries ?? [path]}
+      initialIndex={history?.index}
+    >
       <Routes>
         <Route
           element={
@@ -122,8 +126,12 @@ function TestNavigation() {
     <>
       <output data-testid="pathname">{location.pathname}</output>
       <Link to="/admin/companies">測試 SPA 管理頁導覽</Link>
+      <Link to="/admin/roles">測試 SPA 離開管理頁</Link>
       <button onClick={() => navigate(-1)} type="button">
         測試瀏覽器上一頁
+      </button>
+      <button onClick={() => navigate(1)} type="button">
+        測試瀏覽器下一頁
       </button>
     </>
   )
@@ -387,7 +395,112 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('管理表單未儲存導覽防護', () => {
+  const cases = [
+    {
+      label: '使用者',
+      path: '/admin/users',
+      entries: ['/admin/roles', '/admin/users', '/admin/companies'],
+      input: /^帳號名稱/,
+      value: 'unsaved-user',
+    },
+    {
+      label: '公司',
+      path: '/admin/companies',
+      entries: ['/admin/users', '/admin/companies', '/admin/roles'],
+      input: '公司名稱',
+      value: '未儲存公司',
+    },
+  ] as const
+
+  it.each(cases)('$label表單攔截站內導覽與 Back/Forward', async (item) => {
+    managementFetch()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAdmin(item.path, true, {}, false, {
+      entries: [...item.entries],
+      index: 1,
+    })
+    await screen.findByRole('heading', {
+      name: item.label === '使用者' ? '使用者管理' : '公司管理',
+    })
+    fireEvent.change(screen.getByLabelText(item.input), {
+      target: { value: item.value },
+    })
+
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(confirm).toHaveBeenLastCalledWith(
+      '有尚未儲存的變更。確定要離開嗎？',
+    )
+    expect(screen.getByTestId('pathname')).toHaveTextContent(item.path)
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
+    const nextHeading =
+      item.entries[2] === '/admin/companies' ? '公司管理' : '角色管理'
+    expect(
+      await screen.findByRole('heading', { name: nextHeading }),
+    ).toBeInTheDocument()
+  })
+
+  it.each(cases)('$label表單輸入後會攔截 beforeunload', async (item) => {
+    managementFetch()
+    renderAdmin(item.path)
+    await screen.findByRole('heading', {
+      name: item.label === '使用者' ? '使用者管理' : '公司管理',
+    })
+    fireEvent.change(screen.getByLabelText(item.input), {
+      target: { value: item.value },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+})
+
 describe('admin user and company pages', () => {
+  it('guards edited user details after actual input', async () => {
+    managementFetch()
+    renderAdmin('/admin/users')
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '修改資料' }))
+    const form = screen
+      .getByRole('heading', { name: '修改使用者資料' })
+      .closest('form') as HTMLFormElement
+    fireEvent.change(within(form).getByLabelText('帳號名稱'), {
+      target: { value: 'changed-user' },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('guards edited company names after actual input', async () => {
+    managementFetch()
+    renderAdmin('/admin/companies')
+    const companyRow = await screen.findByRole('row', { name: /示範公司/ })
+    fireEvent.click(within(companyRow).getByRole('button', { name: '改名稱' }))
+    fireEvent.change(screen.getByLabelText('公司名稱'), {
+      target: { value: '更新公司' },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+
   it('starts one user list request when StrictMode replays the mount', async () => {
     const fetchMock = managementFetch()
     renderAdmin('/admin/users', true, {}, true)

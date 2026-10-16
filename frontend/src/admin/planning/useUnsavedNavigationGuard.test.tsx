@@ -16,8 +16,8 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 
-import { UnsavedLeaveBox } from './UnsavedLeaveBox'
-import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
+import { UnsavedLeaveBox } from '../../ui/navigation'
+import { useUnsavedNavigationGuard } from '../../ui/navigation'
 
 function Editor({ initialDirty }: { initialDirty: boolean }) {
   const [dirty, setDirty] = useState(initialDirty)
