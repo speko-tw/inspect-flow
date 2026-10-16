@@ -8,18 +8,18 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.errors import ErrorCode
-from app.api.v1 import users as users_api
-from app.api.v1.users import ActiveStatusRequest, AdminStatusRequest
 from app.auth.passwords import (
     MAX_PASSWORD_LENGTH,
     MIN_PASSWORD_LENGTH,
     verify_password,
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.main import create_app
 from app.models import AuditLog, SystemRoleAssignment, User, UserPassword
 from app.services.audit import InvalidAuditEventShapeError
 from app.services.users import create_user
 from tests.db.conftest import create_root_user_with_company
+from tests.response_order import observed_client
 
 
 @pytest.fixture
@@ -83,72 +83,42 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
     }
 
 
-def test_active_status_commits_before_return(
-    admin_client, db_session, monkeypatch
-):
-    """帳號停用結果須在端點返回前提交。"""
+def test_deactivate_commits_before_response(admin_client, db_session):
+    """停用帳號須在 ASGI 開始回應前提交。"""
+    original_client, _admin = admin_client
+    token = original_client.cookies.get(SESSION_COOKIE_NAME)
     user = create_root_user_with_company(db_session, "R618ACTIVE")
     db_session.commit()
-    events = []
-    original_commit = db_session.commit
-    original_set_active = users_api.set_is_active
 
-    def tracked_commit():
-        original_commit()
-        if "active_changed" in events:
-            events.append("active_committed")
+    with observed_client(create_app()) as (client, events):
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.put(
+            f"/api/v1/users/{user.id}/active",
+            json={"is_active": False},
+        )
 
-    def tracked_set_active(session, target, is_active):
-        result = original_set_active(session, target, is_active)
-        events.append("active_changed")
-        return result
-
-    monkeypatch.setattr(db_session, "commit", tracked_commit)
-    monkeypatch.setattr(users_api, "set_is_active", tracked_set_active)
-
-    result = users_api.change_active_status(
-        user.id,
-        ActiveStatusRequest(is_active=False),
-        db_session,
-    )
-
-    assert result is user
-    assert events == ["active_changed", "active_committed"]
+    assert response.status_code == 200
+    assert events.index("commit") < events.index("response_started")
     db_session.expire(user)
     assert user.is_active is False
 
 
-def test_admin_status_commits_before_return(
-    admin_client, db_session, monkeypatch
-):
-    """管理員身分變更結果須在端點返回前提交。"""
+def test_admin_status_commits_before_response_start(admin_client, db_session):
+    """管理員身分變更須在 ASGI 開始回應前提交。"""
+    original_client, _admin = admin_client
+    token = original_client.cookies.get(SESSION_COOKIE_NAME)
     user = create_root_user_with_company(db_session, "R618ADMIN")
     db_session.commit()
-    events = []
-    original_commit = db_session.commit
-    original_set_admin = users_api.set_is_admin
 
-    def tracked_commit():
-        original_commit()
-        if "admin_changed" in events:
-            events.append("admin_committed")
+    with observed_client(create_app()) as (client, events):
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.put(
+            f"/api/v1/users/{user.id}/admin",
+            json={"is_admin": True},
+        )
 
-    def tracked_set_admin(session, target, is_admin):
-        result = original_set_admin(session, target, is_admin)
-        events.append("admin_changed")
-        return result
-
-    monkeypatch.setattr(db_session, "commit", tracked_commit)
-    monkeypatch.setattr(users_api, "set_is_admin", tracked_set_admin)
-
-    result = users_api.change_admin_status(
-        user.id,
-        AdminStatusRequest(is_admin=True),
-        db_session,
-    )
-
-    assert result is user
-    assert events == ["admin_changed", "admin_committed"]
+    assert response.status_code == 200
+    assert events.index("commit") < events.index("response_started")
     db_session.expire(user)
     assert user.is_admin is True
 

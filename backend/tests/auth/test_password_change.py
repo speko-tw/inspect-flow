@@ -12,15 +12,13 @@ code catalog, and the audit trail across both entry points.
 import uuid
 
 import pytest
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode, build_error_code_descriptions
-from app.api.v1 import auth as auth_api
 from app.api.v1.auth import (
-    ChangePasswordRequest,
     change_password,
     get_me,
     logout,
@@ -42,45 +40,30 @@ from tests.auth.test_password_gate import (
 )
 from tests.contract.test_route_conventions import _iter_business_routes
 from tests.db.conftest import create_root_user_with_company, make_system_admin
+from tests.response_order import observed_client
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 NEW_PASSWORD = "Demo-New-Pass1"
 
 
-def test_password_change_commits_before_return(db_session, monkeypatch):
-    """新密碼與替代登入狀態須在端點返回前提交。"""
+def test_password_change_commits_before_response_start(db_session):
+    """新密碼與替代登入狀態須在 ASGI 回應前一併提交。"""
     user = make_local_user(db_session, "R618PASS")
-    make_system_admin(make_local_user(db_session, "R618SYS"))
-    _session, _token = create_session(db_session, user)
+    _row, token = create_session(db_session, user)
     db_session.commit()
-    events = []
-    original_commit = db_session.commit
-    original_create_session = auth_api.create_session
 
-    def tracked_commit():
-        original_commit()
-        if "session_created" in events:
-            events.append("session_committed")
+    with observed_client(create_app()) as (client, events):
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.post(
+            "/api/v1/auth/password",
+            json={
+                "current_password": PASSWORD,
+                "new_password": NEW_PASSWORD,
+            },
+        )
 
-    def tracked_create_session(session, account):
-        result = original_create_session(session, account)
-        events.append("session_created")
-        return result
-
-    monkeypatch.setattr(db_session, "commit", tracked_commit)
-    monkeypatch.setattr(auth_api, "create_session", tracked_create_session)
-
-    auth_api.change_password(
-        ChangePasswordRequest(
-            current_password=PASSWORD,
-            new_password=NEW_PASSWORD,
-        ),
-        Response(),
-        user,
-        db_session,
-    )
-
-    assert events == ["session_created", "session_committed"]
+    assert response.status_code == 204
+    assert events.index("commit") < events.index("response_started")
     db_session.expire_all()
     stored_password = (
         db_session.query(UserPassword).filter_by(user_id=user.id).one()
@@ -386,8 +369,8 @@ def _client_with_admin_set_password_route() -> TestClient:
 
     def admin_set_password(
         body: _SetPasswordBody,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-        _caller: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _caller: User = Depends(require_login, scope="function"),  # noqa
     ) -> dict[str, bool]:
         target = db.get(User, uuid.UUID(body.user_id))
         assert target is not None

@@ -18,7 +18,7 @@ from app.services.audit import query_audit_events
 router = APIRouter(
     prefix="/audit-logs",
     tags=["audit-logs"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 
 _EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
@@ -51,7 +51,7 @@ def list_audit_logs(
     event_type: str | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> dict[str, object]:
     start = _utc_time(from_time)
     end = _utc_time(to_time)

@@ -42,8 +42,8 @@ class MyProjectResponse(BaseModel):
 
 @router.get("/projects", response_model=list[MyProjectResponse])
 def list_my_projects(
-    user: User = Depends(require_login_access),  # noqa: B008
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    user: User = Depends(require_login_access, scope="function"),  # noqa
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> list[MyProjectResponse]:
     """Projects the current user is a member of (DOM-R25), ordered by
     project code, name, then id. Not paginated: one person's project

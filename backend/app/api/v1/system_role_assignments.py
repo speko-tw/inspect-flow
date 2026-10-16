@@ -22,7 +22,7 @@ from app.services.system_roles import (
 router = APIRouter(
     prefix="/system-role-assignments",
     tags=["system-role-assignments"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 
 
@@ -50,7 +50,7 @@ def _is_duplicate_assignment_error(exc: IntegrityError) -> bool:
 @router.put("/template_admin/{user_id}", status_code=204)
 def assign_template_admin(
     user_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Response:
     """Ensure the user has the fixed template_admin role."""
     _get_user(db, user_id)
@@ -83,7 +83,7 @@ def assign_template_admin(
 @router.delete("/template_admin/{user_id}", status_code=204)
 def revoke_template_admin(
     user_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> Response:
     """Remove the user's fixed template_admin role."""
     _get_user(db, user_id)

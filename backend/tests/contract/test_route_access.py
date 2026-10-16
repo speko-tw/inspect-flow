@@ -84,7 +84,9 @@ def test_aut_ac16_admin_at_include_level_uncovers_declaration() -> None:
         return {"ok": True}
 
     app = FastAPI()
-    app.include_router(router, dependencies=[Depends(require_admin)])
+    app.include_router(
+        router, dependencies=[Depends(require_admin, scope="function")]
+    )
 
     assert "GET /api/v1/test/public-then-admin-gated" in undeclared_routes(app)
     assert (
@@ -107,7 +109,9 @@ def test_aut_ac16_include_level_dependency_alone_counts_as_declared() -> None:
         return {"ok": True}
 
     app = FastAPI()
-    app.include_router(router, dependencies=[Depends(require_admin)])
+    app.include_router(
+        router, dependencies=[Depends(require_admin, scope="function")]
+    )
 
     infos = [
         info

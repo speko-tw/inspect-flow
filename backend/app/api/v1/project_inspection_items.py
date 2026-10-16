@@ -38,7 +38,8 @@ from app.services.project_templates import (
 
 router = APIRouter(prefix="/projects", tags=["project-inspection-items"])
 _TEMPLATE_WRITE = Depends(
-    require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN)
+    require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN),
+    scope="function",
 )
 
 
@@ -80,14 +81,17 @@ class CreateTemplateFromProjectRequest(BaseModel):
     response_model=list[AppliedItemResponse],
     status_code=201,
     dependencies=[
-        Depends(require_project_permission("project_inspection_item.edit"))
+        Depends(
+            require_project_permission("project_inspection_item.edit"),
+            scope="function",
+        )
     ],
 )
 def apply_template_to_project(
     project_id: UUID,
     body: ApplyTemplateRequest,
     response: Response,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> list[dict[str, object]]:
     """依 KD-47 複製範本到專案；不存在或名稱重複時拒絕。"""
     if db.get(Project, project_id) is None:
@@ -129,7 +133,7 @@ def apply_template_to_project(
 def save_project_item_as_template(
     project_id: UUID,
     body: CreateTemplateFromProjectRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> dict:
     """將專案項目存回範本庫；缺管理權限或來源不存在時拒絕。"""
     if db.get(Project, project_id) is None:
@@ -153,8 +157,8 @@ def list_project_inspection_items(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),  # noqa: B008
-    user: User = Depends(require_login_access),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    user: User = Depends(require_login_access, scope="function"),  # noqa
 ) -> dict:
     """列出專案查核項目；Admin 與範本管理者可讀，其他非成員拒絕。"""
     if not is_admin_or_system_role(db, user, SystemRoleCode.TEMPLATE_ADMIN):

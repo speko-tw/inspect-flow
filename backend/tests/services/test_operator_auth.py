@@ -60,8 +60,8 @@ def _client_with_company_route() -> TestClient:
 
     def create_test_company(
         body: _CreateCompanyBody,
-        db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-        _user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        _user: User = Depends(require_login, scope="function"),  # noqa
     ) -> dict[str, str]:
         company = create_company(db, name=f"AC09 {body.code}")
         return {
@@ -150,8 +150,8 @@ class TestAutR09NotLoggedInDuringRequestIsRejected:
         app = FastAPI()
 
         def probe(
-            db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
-            _scope: None = Depends(bind_request_scope),  # noqa: B008
+            db: Session = Depends(get_db, scope="function"),  # noqa
+            _scope: None = Depends(bind_request_scope),  # noqa
         ) -> None:
             get_current_operator(db)
 
@@ -206,7 +206,7 @@ class TestForgottenRouteStillRejectedByAppLevelScope:
 
         def create_test_company_no_scope(
             body: _CreateCompanyBody,
-            db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI
+            db: Session = Depends(get_db, scope="function"),  # noqa
         ) -> dict[str, str]:
             company = create_company(db, name=f"AC09 {body.code}")
             return {"id": str(company.id)}

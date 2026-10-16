@@ -56,14 +56,10 @@ def register_temporary_password_allowed(
 
 
 def get_db() -> Generator[Session, None, None]:
-    """Yield a ``Session`` scoped to this request.
+    """提供單一路由函式作用域的 ``Session``。
 
-    Wraps ``app.db.unit_of_work``: the transaction commits once
-    every dependency and the route handler sharing this session
-    (FastAPI resolves ``Depends(get_db)`` once per request and
-    reuses the result) finish without raising, and rolls back
-    otherwise -- including when a route handler raises ``APIError``
-    after this generator already yielded.
+    FastAPI 會在開始傳送回應前結束 function-scoped yield 依賴，
+    因此 commit 失敗會回傳錯誤，不會等成功回應送出後才發生。
     """
     with unit_of_work() as session:
         yield session
@@ -142,7 +138,7 @@ async def bind_request_scope() -> AsyncGenerator[None, None]:
 
 def _check_login(
     request: Request,
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     """The DB/Cookie half of the "需登入" check (AUT-R14, AUT-R18).
 
@@ -224,8 +220,8 @@ def _matched_route_endpoint(request: Request) -> Callable[..., Any] | None:
 
 def _check_temporary_password_gate(
     request: Request,
-    user: User = Depends(_check_login),  # noqa: B008 -- FastAPI's DI
-    db: Session = Depends(get_db),  # noqa: B008 -- FastAPI's DI pattern
+    user: User = Depends(_check_login, scope="function"),  # noqa
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
     """AUT-R33: once AUT-R14 (``_check_login``) has confirmed the
     login state itself is valid, reject a still-temporary ``local``
@@ -243,8 +239,10 @@ def _check_temporary_password_gate(
 
 
 async def require_login(
-    _scope: None = Depends(bind_request_scope),  # noqa: B008
-    user: User = Depends(_check_temporary_password_gate),  # noqa: B008
+    _scope: None = Depends(bind_request_scope),  # noqa
+    user: User = Depends(  # noqa
+        _check_temporary_password_gate, scope="function"
+    ),
 ) -> AsyncGenerator[User, None]:
     """The "需登入" access level (AUT-R14, AUT-R18) plus the
     temporary-password gate on top of it (AUT-R33):

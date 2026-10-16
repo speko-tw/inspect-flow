@@ -105,8 +105,8 @@ from app.services.template_library import (
 router = APIRouter(
     tags=["inspection-planning"],
 )
-_db_dependency: Any = Depends(get_db)
-_login_dependency: Any = Depends(require_login_access)
+_db_dependency: Any = Depends(get_db, scope="function")
+_login_dependency: Any = Depends(require_login_access, scope="function")
 
 
 class StrictBody(BaseModel):
@@ -255,8 +255,8 @@ def _is_project_member(
 def _resource_permission(resource_type: str, permission: str):
     def check(
         request: Request,
-        db: Session = Depends(get_db),  # noqa: B008
-        user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        user: User = Depends(require_login, scope="function"),  # noqa
     ) -> User:
         model = InspectionPlan if resource_type == "plan" else InspectionTask
         parameter = "plan_id" if resource_type == "plan" else "task_id"
@@ -287,8 +287,8 @@ def _resource_permission(resource_type: str, permission: str):
 def _task_read_permission():
     def check(
         task_id: UUID,
-        db: Session = Depends(get_db),  # noqa: B008
-        user: User = Depends(require_login),  # noqa: B008
+        db: Session = Depends(get_db, scope="function"),  # noqa
+        user: User = Depends(require_login, scope="function"),  # noqa
     ) -> User:
         task = db.get(InspectionTask, task_id)
         if task is None:
@@ -653,7 +653,10 @@ def _one_task(db: Session, task_id: UUID) -> InspectionTask:
 @router.get(
     "/projects/{project_id}/inspection-plans",
     dependencies=[
-        Depends(require_project_permission("inspection_plan.read")),
+        Depends(
+            require_project_permission("inspection_plan.read"),
+            scope="function",
+        ),
     ],
 )
 def plans(
@@ -677,7 +680,10 @@ def plans(
     "/projects/{project_id}/inspection-plans",
     status_code=201,
     dependencies=[
-        Depends(require_project_permission("inspection_plan.create")),
+        Depends(
+            require_project_permission("inspection_plan.create"),
+            scope="function",
+        ),
     ],
 )
 def create_plan(
@@ -723,10 +729,13 @@ def zones(
     )
 
 
+_manage_project_zone = require_project_permission("project_zone.manage")
+
+
 @router.post(
     "/projects/{project_id}/zones",
     status_code=201,
-    dependencies=[Depends(require_project_permission("project_zone.manage"))],
+    dependencies=[Depends(_manage_project_zone, scope="function")],
 )
 def add_zone(project_id: UUID, body: NameBody, db: Session = _db_dependency):
     """建立專案分區；缺管理權限或名稱衝突時拒絕。"""
@@ -742,7 +751,8 @@ def add_zone(project_id: UUID, body: NameBody, db: Session = _db_dependency):
         Depends(
             require_project_permission(
                 "project_zone.manage", uuid_path_params=("zone_id",)
-            )
+            ),
+            scope="function",
         )
     ],
 )
@@ -780,7 +790,8 @@ def _zone_response(zone: ProjectZone, *, include_project: bool = False):
         Depends(
             require_project_permission(
                 "project_zone.manage", uuid_path_params=("zone_id",)
-            )
+            ),
+            scope="function",
         )
     ],
 )
@@ -799,8 +810,11 @@ def remove_zone(project_id: UUID, zone_id: UUID, db: Session = _db_dependency):
 @router.get(
     "/inspection-plans/{plan_id}",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.read")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("plan", "inspection_plan.read"),
+            scope="function",
+        ),
     ],
 )
 def get_plan(plan_id: UUID, db: Session = _db_dependency):
@@ -812,8 +826,11 @@ def get_plan(plan_id: UUID, db: Session = _db_dependency):
 @router.patch(
     "/inspection-plans/{plan_id}",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.manage")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("plan", "inspection_plan.manage"),
+            scope="function",
+        ),
     ],
 )
 def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
@@ -828,8 +845,11 @@ def patch_plan(plan_id: UUID, body: NameBody, db: Session = _db_dependency):
     "/inspection-plans/{plan_id}/tasks",
     status_code=201,
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_task.create")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("plan", "inspection_task.create"),
+            scope="function",
+        ),
     ],
 )
 def add_task(
@@ -853,8 +873,11 @@ def add_task(
 @router.get(
     "/inspection-plans/{plan_id}/tasks",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.read")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("plan", "inspection_plan.read"),
+            scope="function",
+        ),
     ],
 )
 def plan_tasks(
@@ -882,7 +905,7 @@ def plan_tasks(
 
 @router.get(
     "/projects/{project_id}/inspection-tasks",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[Depends(require_login_access, scope="function")],
 )
 def project_tasks(
     project_id: UUID,
@@ -1015,7 +1038,8 @@ def _project_task_cursor_key(
                 "project_inspection_item.edit",
                 param_name="project_id",
                 uuid_path_params=("project_inspection_item_id",),
-            )
+            ),
+            scope="function",
         )
     ],
 )
@@ -1110,8 +1134,11 @@ def assignees(
 @router.post(
     "/inspection-tasks/{task_id}:dispatch",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.dispatch")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.dispatch"),
+            scope="function",
+        ),
     ],
 )
 def dispatch(task_id: UUID, db: Session = _db_dependency):
@@ -1120,13 +1147,14 @@ def dispatch(task_id: UUID, db: Session = _db_dependency):
     return _task_summary(db, _call(dispatch_inspection_task, db, task))
 
 
+_inspect_any_task = require_admin_or_any_project_permission(
+    "inspection_task.inspect"
+)
+
+
 @router.get(
     "/field/inspection-tasks",
-    dependencies=[
-        Depends(
-            require_admin_or_any_project_permission("inspection_task.inspect")
-        )
-    ],
+    dependencies=[Depends(_inspect_any_task, scope="function")],
 )
 def field_inspection_tasks(
     assigned_to_me: bool = True,
@@ -1135,7 +1163,7 @@ def field_inspection_tasks(
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = _db_dependency,
-    user: User = Depends(require_login),  # noqa: B008
+    user: User = Depends(require_login, scope="function"),  # noqa
 ):
     """列出現場可見的已派 Task；無可查核專案時拒絕。"""
     try:
@@ -1247,12 +1275,12 @@ def field_inspection_tasks(
 
 @router.get(
     "/field/inspection-tasks/{task_id}",
-    dependencies=[Depends(require_login_access)],
+    dependencies=[Depends(require_login_access, scope="function")],
 )
 def field_inspection_task(
     task_id: UUID,
     db: Session = _db_dependency,
-    user: User = Depends(require_login),  # noqa: B008
+    user: User = Depends(require_login, scope="function"),  # noqa
 ):
     """讀取現場 Task；依 IP-R09 隱藏草稿與無權限資源。"""
     task = _call(
@@ -1268,8 +1296,11 @@ def field_inspection_task(
 @router.post(
     "/inspection-tasks/{task_id}:assign",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.assign")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.assign"),
+            scope="function",
+        ),
     ],
 )
 def assign(task_id: UUID, body: AssignBody, db: Session = _db_dependency):
@@ -1284,8 +1315,11 @@ def assign(task_id: UUID, body: AssignBody, db: Session = _db_dependency):
 @router.post(
     "/inspection-tasks/{task_id}:start",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.inspect")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.inspect"),
+            scope="function",
+        ),
     ],
 )
 def start(task_id: UUID, db: Session = _db_dependency):
@@ -1297,8 +1331,11 @@ def start(task_id: UUID, db: Session = _db_dependency):
 @router.post(
     "/inspection-tasks/{task_id}:complete",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.inspect")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.inspect"),
+            scope="function",
+        ),
     ],
 )
 def complete(task_id: UUID, db: Session = _db_dependency):
@@ -1311,8 +1348,11 @@ def complete(task_id: UUID, db: Session = _db_dependency):
     "/inspection-tasks/{task_id}",
     status_code=204,
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.delete_draft")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.delete_draft"),
+            scope="function",
+        ),
     ],
 )
 def delete_task(task_id: UUID, db: Session = _db_dependency):
@@ -1324,8 +1364,11 @@ def delete_task(task_id: UUID, db: Session = _db_dependency):
 @router.post(
     "/inspection-tasks/{task_id}:cancel",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.cancel")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.cancel"),
+            scope="function",
+        ),
     ],
 )
 def cancel(
@@ -1350,8 +1393,11 @@ def cancel(
 @router.post(
     "/inspection-tasks/{task_id}:restore",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.cancel")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.cancel"),
+            scope="function",
+        ),
     ],
 )
 def restore(task_id: UUID, db: Session = _db_dependency):
@@ -1363,8 +1409,11 @@ def restore(task_id: UUID, db: Session = _db_dependency):
 @router.patch(
     "/inspection-tasks/{task_id}",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.manage")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.manage"),
+            scope="function",
+        ),
     ],
 )
 def patch_task(
@@ -1397,8 +1446,11 @@ def patch_task(
 @router.put(
     "/inspection-tasks/{task_id}/items",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("task", "inspection_task.manage")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("task", "inspection_task.manage"),
+            scope="function",
+        ),
     ],
 )
 def put_task_items(
@@ -1418,8 +1470,8 @@ def put_task_items(
 @router.get(
     "/inspection-tasks/{task_id}",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_task_read_permission()),
+        Depends(require_login_access, scope="function"),
+        Depends(_task_read_permission(), scope="function"),
     ],
 )
 def get_task(task_id: UUID, db: Session = _db_dependency):
@@ -1449,8 +1501,11 @@ def get_task(task_id: UUID, db: Session = _db_dependency):
 @router.post(
     "/inspection-plans/{plan_id}:archive",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.archive")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("plan", "inspection_plan.archive"),
+            scope="function",
+        ),
     ],
 )
 def archive(plan_id: UUID, db: Session = _db_dependency):
@@ -1464,8 +1519,11 @@ def archive(plan_id: UUID, db: Session = _db_dependency):
 @router.post(
     "/inspection-plans/{plan_id}:unarchive",
     dependencies=[
-        Depends(require_login_access),
-        Depends(_resource_permission("plan", "inspection_plan.unarchive")),
+        Depends(require_login_access, scope="function"),
+        Depends(
+            _resource_permission("plan", "inspection_plan.unarchive"),
+            scope="function",
+        ),
     ],
 )
 def unarchive(plan_id: UUID, db: Session = _db_dependency):
@@ -1489,7 +1547,8 @@ def _project_exists(db: Session, project_id: UUID) -> None:
                 "project_inspection_item.edit",
                 param_name="project_id",
                 uuid_path_params=("project_inspection_item_id",),
-            )
+            ),
+            scope="function",
         )
     ],
 )

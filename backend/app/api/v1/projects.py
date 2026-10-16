@@ -55,12 +55,13 @@ from app.services.projects import (
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 _PROJECT_PLANNING_READ_ACCESS = Depends(
-    require_project_permission("inspection_plan.read")
+    require_project_permission("inspection_plan.read"), scope="function"
 )
 _PROJECT_MEMBER_ACCESS = Depends(
     require_project_permission(
         "project_member.manage", uuid_path_params=("user_id",)
-    )
+    ),
+    scope="function",
 )
 
 
@@ -344,14 +345,17 @@ def _member_conflict(exc: IntegrityError) -> bool:
     "",
     response_model=ProjectListResponse,
     dependencies=[
-        Depends(require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN))
+        Depends(
+            require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN),
+            scope="function",
+        )
     ],
 )
 def list_projects(
     q: str | None = Query(default=None, max_length=256),
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectListResponse:
     filters = []
     query = (q or "").strip()
@@ -387,7 +391,7 @@ def list_projects(
 @router.get("/{project_id}")
 def get_project(
     project_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = _PROJECT_PLANNING_READ_ACCESS,
 ) -> ProjectResponse | ProjectPlanningResponse:
     project = _get_project(db, project_id)
@@ -409,8 +413,8 @@ def get_project(
 )
 def get_workflow_summary(
     project_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
-    user: User = Depends(require_login_access),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    user: User = Depends(require_login_access, scope="function"),  # noqa
 ) -> ProjectWorkflowSummaryResponse:
     """Return aggregate workflow counts to members with project read access."""
     if user.is_admin:
@@ -448,11 +452,11 @@ def get_workflow_summary(
     "",
     response_model=ProjectResponse,
     status_code=201,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 def add_project(
     body: CreateProjectRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectResponse:
     try:
         project = create_project(db, **body.model_dump())
@@ -466,12 +470,12 @@ def add_project(
 @router.patch(
     "/{project_id}",
     response_model=ProjectResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin, scope="function")],
 )
 def edit_project(
     project_id: UUID,
     body: UpdateProjectRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectResponse:
     project = _get_project(db, project_id)
     fields = body.model_dump(exclude_unset=True)
@@ -506,7 +510,7 @@ def edit_project(
 )
 def list_members(
     project_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> list[ProjectMemberDetailResponse]:
     """List a project's members (not paginated; the count is small)."""
     _get_project(db, project_id)
@@ -535,7 +539,7 @@ def list_member_candidates(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = _PROJECT_MEMBER_ACCESS,
 ) -> MemberCandidateListResponse:
     """List users who can still join the project.
@@ -580,7 +584,7 @@ def list_assignable_roles(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
     _caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> AssignableRoleListResponse:
     """List role definitions for the project member assignment UI.
@@ -626,7 +630,7 @@ def list_assignable_roles(
 def add_member(
     project_id: UUID,
     body: AddProjectMemberRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
     caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> ProjectMemberResponse:
     _get_project(db, project_id)
@@ -668,7 +672,7 @@ def edit_member_roles(
     project_id: UUID,
     user_id: UUID,
     body: SetProjectMemberRolesRequest,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectMemberResponse:
     member = _get_member(db, project_id, user_id)
     _require_roles(body.role_ids)
@@ -690,7 +694,7 @@ def edit_member_roles(
 def remove_member(
     project_id: UUID,
     user_id: UUID,
-    db: Session = Depends(get_db),  # noqa: B008
+    db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> None:
     member = _get_member(db, project_id, user_id)
     remove_project_member(db, member)
