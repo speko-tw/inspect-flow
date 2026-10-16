@@ -129,6 +129,9 @@ export default function ProjectsPage() {
   } = projectList
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [createdProjectLink, setCreatedProjectLink] = useState<string | null>(
+    null,
+  )
   const [saving, setSaving] = useState(false)
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [newDraft, setNewDraft] = useState<FormState>(EMPTY_FORM)
@@ -156,6 +159,7 @@ export default function ProjectsPage() {
   const noticeRef = useRef<HTMLParagraphElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const restoreFocusAfterTransition = useRef(false)
+  const formSessionRef = useRef(0)
   const previousFormModeRef = useRef<FormMode>(null)
   const focusAfterCloseRef = useRef<FormMode>(null)
   const newProjectButtonRef = useRef<HTMLButtonElement>(null)
@@ -295,9 +299,11 @@ export default function ProjectsPage() {
   }
 
   function applyTransition(next: Transition) {
+    formSessionRef.current += 1
     setTransition(null)
     resetRoleConfirm()
     discardActiveDraft()
+    setCreatedProjectLink(null)
     if (next.kind === 'edit') {
       setFormMode(next)
       setEditFocusRequest((request) => request + 1)
@@ -381,8 +387,10 @@ export default function ProjectsPage() {
 
   async function persist(changeReason: string | null) {
     if (!form || !formMode) return
+    const savingFormSession = formSessionRef.current
     setError('')
     setNotice('')
+    setCreatedProjectLink(null)
     setRoleFieldError('')
     const input = toInput(form)
     const creating = editing === null
@@ -409,9 +417,24 @@ export default function ProjectsPage() {
       } else {
         saved = await createProject(input)
       }
+      const savedNotice = hasDuplicateCodeWarning(saved)
+        ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
+        : `專案「${saved.name}」已儲存。`
+      if (formSessionRef.current !== savingFormSession) {
+        // 舊請求不可改動後來開啟的表單；新專案只提供可返回的連結。
+        void reload()
+        if (creating) {
+          setNotice(`已建立專案「${saved.name}」`)
+          setCreatedProjectLink(saved.id)
+        } else {
+          setNotice(savedNotice)
+        }
+        return
+      }
       resetRoleConfirm()
       if (creating) {
         setNewDraft(EMPTY_FORM)
+        formSessionRef.current += 1
         setFormMode(null)
         navigate(`/admin/projects/${saved.id}`, {
           state: hasDuplicateCodeWarning(saved)
@@ -420,10 +443,8 @@ export default function ProjectsPage() {
         })
         return
       }
-      const savedNotice = hasDuplicateCodeWarning(saved)
-        ? `專案「${saved.name}」已儲存。警告：專案代號「${saved.project_code}」與其他專案重複，仍已儲存。`
-        : `專案「${saved.name}」已儲存。`
       if (savingProjectId) dropDraft(savingProjectId)
+      formSessionRef.current += 1
       // ADM-R15：A 的回應晚於表單切換時，只關 A，不捨棄 B 的草稿。
       setFormMode((current) =>
         current?.kind === 'edit' && current.project.id === savingProjectId
@@ -433,7 +454,9 @@ export default function ProjectsPage() {
       setNotice(savedNotice)
       void reload()
     } catch (caught) {
-      showSaveError(caught)
+      if (formSessionRef.current === savingFormSession) {
+        showSaveError(caught)
+      }
     } finally {
       setSaving(false)
     }
@@ -477,6 +500,23 @@ export default function ProjectsPage() {
       {notice && (
         <p className="notice-success" ref={noticeRef} role="status">
           {notice}
+          {createdProjectLink && (
+            <>
+              {' '}
+              {/* ADM-R15：舊 POST 回應的連結仍須確認，避免丟失未存草稿。 */}
+              <Link
+                onClick={(event) =>
+                  guardProjectLink(
+                    event,
+                    `/admin/projects/${createdProjectLink}`,
+                  )
+                }
+                to={`/admin/projects/${createdProjectLink}`}
+              >
+                開啟專案
+              </Link>
+            </>
+          )}
         </p>
       )}
       {transition && (
