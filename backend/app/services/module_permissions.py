@@ -645,6 +645,10 @@ def grant_module_delegation(
             module=module,
             reason="external_collaborator_delegation",
         )
+    if user.is_admin:
+        raise ModulePermissionDeniedError(
+            "Admin module access is implicit and cannot be stored"
+        )
     existing = session.scalar(
         select(UserModuleDelegation.id).where(
             UserModuleDelegation.user_id == user.id,

@@ -77,6 +77,12 @@
 - `backend/app/models/__init__.py`：T1 加一行 import；和同時期的 `domain-model` T3（`Role`、`ProjectMember`）會碰同一個檔案，後合併的一方 rebase。
 - 事件目錄（`backend/app/services/audit.py`）：之後其他規格登記事件時各自只加自己的條目，不改別人的。
 
+## Issue #624 維護者決定（2026-10-16）
+
+- 新增 `created_by, created_at, id` 與 `event_type, created_at, id` 索引，不重建表；migration 含 downgrade。
+- `backend/tests/db/test_audit_query_indexes_migration.py` 驗證索引欄位順序與回退。
+- 依據：維護者決定（#624，2026-10-16）；`query_audit_events` 以 `created_at DESC, id DESC` 分頁。
+
 ## 風險
 
 - **攔截靠比對 SQL 文字**：`before_cursor_execute` 拿到的是最後的 SQL 字串，要能辨認帶引號的表名（`"audit_logs"`）、`DELETE FROM`、大小寫與前置空白，也不能誤擋 `INSERT` 或 `SELECT`。ALG-AC03 在 SQLite 與 PostgreSQL 都跑 ORM、Core 與 `text()` 的各種寫法（引號、schema 前綴、大小寫、前置空白），並確認新增與讀取照常。後端以外直接連資料庫（例如 `sqlite3` 指令）仍改得動，要防這條需要資料庫層保護，本規格不要求（PR-03）。

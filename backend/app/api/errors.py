@@ -136,6 +136,10 @@ class ErrorCode(DescribedStrEnum):
         "user.external_not_qualified",
         "This user does not qualify as an external collaborator.",
     )
+    USER_EXTERNAL_CONFIRMATION_REQUIRED = (
+        "user.external_confirmation_required",
+        "Confirm this external-collaborator status change.",
+    )
     SETUP_INVALID_CODE = (
         "setup.invalid_code",
         "The first-login code is invalid.",

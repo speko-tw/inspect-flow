@@ -1539,6 +1539,102 @@ def _project_exists(db: Session, project_id: UUID) -> None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
 
+def _project_item_patch_matches_current(
+    db: Session, item: ProjectInspectionItem, body: ProjectItemPatchBody
+) -> bool:
+    """判斷 PATCH 是否只重送目前內容，避免產生空白修訂。"""
+    if body.reinspect is not None:
+        return False
+    if body.title is not None and body.title.strip() != item.title:
+        return False
+    if body.instruction is not None and body.instruction != item.instruction:
+        return False
+    if body.inspection_points is None:
+        return True
+
+    current_points = project_inspection_item_detail(db, item)[
+        "inspection_points"
+    ]
+    if len(body.inspection_points) != len(current_points):
+        return False
+    for requested, current in zip(
+        body.inspection_points, current_points, strict=True
+    ):
+        if (
+            requested.id != current["id"]
+            or requested.sequence != current["sequence"]
+            or requested.title != current["title"]
+            or requested.instruction != current["instruction"]
+        ):
+            return False
+
+        text_standard = requested.text_standard
+        current_text = current["text_standard"]
+        if (text_standard is None) != (current_text is None):
+            return False
+        if (
+            text_standard is not None
+            and text_standard.text != current_text["text"]
+        ):
+            return False
+
+        fields = current["measurement_fields"]
+        requested_fields = requested.measurement_fields
+        if len(requested_fields) != len(fields):
+            return False
+        if any(
+            field.id != existing["id"]
+            or field.name != existing["name"]
+            or field.field_type != existing["field_type"]
+            or field.unit != existing["unit"]
+            for field, existing in zip(requested_fields, fields, strict=True)
+        ):
+            return False
+
+        numeric = requested.numeric_standard
+        current_numeric = current["numeric_standard"]
+        if (numeric is None) != (current_numeric is None):
+            return False
+        if numeric is not None:
+            bound_field = next(
+                (
+                    field.id
+                    for field in requested_fields
+                    if numeric.measurement_field_client_id
+                    in {field.id, field.client_id}
+                ),
+                None,
+            )
+            if bound_field != current_numeric["measurement_field_id"]:
+                return False
+            if numeric.model_dump(exclude={"measurement_field_client_id"}) != {
+                key: current_numeric[key]
+                for key in (
+                    "value",
+                    "condition",
+                    "unit",
+                    "tolerance",
+                    "range_form",
+                    "lower_bound",
+                    "upper_bound",
+                )
+            }:
+                return False
+
+        requested_evidence = requested.evidence_requirements
+        current_evidence = current["evidence_requirements"]
+        if len(requested_evidence) != len(current_evidence):
+            return False
+        if any(
+            required.min_count != existing["min_count"]
+            for required, existing in zip(
+                requested_evidence, current_evidence, strict=True
+            )
+        ):
+            return False
+    return True
+
+
 @router.patch(
     "/projects/{project_id}/inspection-items/{project_inspection_item_id}",
     dependencies=[
@@ -1558,7 +1654,7 @@ def patch_project_item(
     body: ProjectItemPatchBody,
     db: Session = _db_dependency,
 ):
-    """依 KD-55 修改專案項目；有 Task 卻未提供 reinspect 時拒絕（422）。"""
+    """依 KD-55 修改專案項目；無變更時不建立新修訂或稽核。"""
     # 依 IP-R03（#555），先鎖來源項目，再由服務層鎖 Plan／Task；
     # 建立 Task 也遵守此順序，快照不會跨越標準修訂邊界。
     item = db.scalar(
@@ -1586,6 +1682,11 @@ def patch_project_item(
             has_tasks=bool(associations),
             reinspect=body.reinspect,
         )
+    if _project_item_patch_matches_current(db, item, body):
+        result = project_inspection_item_detail(db, item)
+        result["affected_tasks"] = []
+        result["reinspection_selected"] = body.reinspect
+        return result
     if associations and body.reinspect is None:
         raise APIError(
             ErrorCode.PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED, 422

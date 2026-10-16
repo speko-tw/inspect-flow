@@ -1429,6 +1429,25 @@ def test_admin_delegation_grant_and_revoke_are_idempotent(
         )
 
 
+def test_admin_cannot_receive_module_delegation(session, operator):
+    with pytest.raises(service.ModulePermissionDeniedError) as error:
+        service.grant_module_delegation(
+            session, actor=operator, user=operator, module="project"
+        )
+
+    assert str(error.value) == (
+        "Admin module access is implicit and cannot be stored"
+    )
+    assert (
+        session.scalar(
+            select(UserModuleDelegation.id).where(
+                UserModuleDelegation.user_id == operator.id
+            )
+        )
+        is None
+    )
+
+
 def test_bundle_crud_and_application_preserve_grant_sources(session, operator):
     target = create_root_user_with_company(session, "BND003")
     bundle = service.create_permission_bundle(

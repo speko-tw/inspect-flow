@@ -98,6 +98,12 @@ R 新增一支 migration；與其他新增 migration 的任務不同波（共用
 - `Makefile`：只有 T6 加一個 target。
 - `backend/app/main.py`：本計畫不改；Service 層由之後的功能規格在 API 層取用。
 
+## Issue #624 維護者決定（2026-10-16）
+
+- 外部協作標記任一方向轉換均要求明確確認；缺確認用 `user.external_confirmation_required` 與 details，資格不合格維持 `user.external_not_qualified`。
+- `grant_module_delegation` 拒絕 Admin target，沿用模組權限的授權錯誤；前端目前無標記轉換呼叫處。
+- 依據：維護者決定（#624，2026-10-16）。
+
 ## 風險
 
 - **`User.company_id` 與 `Company.created_by` 互相引用**（本次變更後不再成立：`company_id` 改為可空值，內建 `admin` 不屬於任何公司，初始化也不建公司，`Company.created_by` 之後永遠指向已存在的人員；B 的 migration 可一併移除「可延後檢查」的外鍵設定，是否移除由 B 決定；下列是當時的風險紀錄）：兩者都不可空值，初始化時不論先寫哪張表，當下都會違反外鍵。降低方式：T2 把 `User.company_id` 設為 `DEFERRABLE INITIALLY DEFERRED`（SQLite 與 PostgreSQL 都支援），`Company.created_by` 維持立即檢查，不改 T1 的資料表與共用的建立及修改紀錄欄位。因此同一個交易的寫入順序是：先寫帳號（`company_id` 指向由應用端預先產生 UUID、尚未寫入的公司），再寫公司（`created_by` 指向該帳號），外鍵在提交時才檢查。T6 照這個順序寫入；T2 的測試要包含這個情境，以及提交時公司仍不存在會被拒絕的反向情境，並由 `database-foundation` T3 的 CI 在 PostgreSQL 上補驗。

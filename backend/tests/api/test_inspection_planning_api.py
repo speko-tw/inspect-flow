@@ -22,6 +22,7 @@ from app.models import (
     Project,
     ProjectEvidenceRequirement,
     ProjectInspectionItem,
+    ProjectInspectionItemChange,
     ProjectInspectionPoint,
     ProjectMeasurementField,
     ProjectMember,
@@ -1071,6 +1072,40 @@ def test_field_task_detail_keeps_numeric_measurement_mapping_and_order(
     assert (
         point_detail["numeric_standard"]["measurement_field_id"]
         == (point_detail["measurement_fields"][0]["id"])
+    )
+
+
+def test_project_item_patch_noop_preserves_revision_and_audit(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    item = world["item"]
+    path = f"/api/v1/projects/{world['project'].id}/inspection-items/{item.id}"
+    revision = item.standard_revision
+    change_count = db_session.scalar(
+        select(func.count()).select_from(ProjectInspectionItemChange)
+    )
+    audit_count = db_session.scalar(select(func.count()).select_from(AuditLog))
+
+    response = world["admin"].patch(path, json={})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == str(item.id)
+    same_response = world["admin"].patch(
+        path, json={"title": item.title, "instruction": item.instruction}
+    )
+    assert same_response.status_code == 200, same_response.text
+    db_session.refresh(item)
+    assert item.standard_revision == revision
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(ProjectInspectionItemChange)
+        )
+        == change_count
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(AuditLog))
+        == audit_count
     )
 
 
