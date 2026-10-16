@@ -41,7 +41,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 
 from sqlalchemy import distinct, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
     CreatorRoleSetting,
@@ -186,6 +186,17 @@ def update_role(
             ``flush``/``commit`` in the same transaction with no
             ``role.updated`` event to show for it.
     """
+    # 先鎖定並刷新 Role，之後才能依固定順序檢查與鎖持有人 User。
+    locked_role = session.scalar(
+        select(Role)
+        .options(selectinload(Role.permission_codes))
+        .where(Role.id == role.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_role is None:
+        raise ValueError(f"Role {role.id} does not exist")
+    role = locked_role
     current_name = role.name
     current_codes = frozenset(
         permission.code for permission in role.permission_codes

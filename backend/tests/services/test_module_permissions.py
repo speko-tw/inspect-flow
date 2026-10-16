@@ -3,7 +3,7 @@
 import uuid
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
@@ -1629,6 +1629,39 @@ def test_external_allowed_role_cannot_become_creator_role(session, operator):
 
     session.refresh(setting)
     assert setting.role_id == current.id
+
+
+def test_role_assignment_reloads_external_flag_before_validation(
+    session, operator
+):
+    user = create_root_user_with_company(session, "LOCK-STALE-USER")
+    role = Role(
+        name="Internal only stale check",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project_member.manage")],
+    )
+    session.add(role)
+    session.commit()
+    stale_user = session.get(User, user.id)
+    assert stale_user is not None
+    assert stale_user.is_external_collaborator is False
+
+    session.execute(
+        update(User)
+        .where(User.id == user.id)
+        .values(is_external_collaborator=True)
+        .execution_options(synchronize_session=False)
+    )
+
+    with pytest.raises(service.ExternalRoleAssignmentError):
+        service.validate_role_assignment(
+            session,
+            user=stale_user,
+            project_id=uuid.uuid4(),
+            project_member_id=uuid.uuid4(),
+            role_ids={role.id},
+        )
 
 
 def test_grant_and_revoke_events_preserve_permission_source(
