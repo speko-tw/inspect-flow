@@ -1,9 +1,10 @@
-"""DOM-R72/R73 role and user lock-order acceptance tests."""
+"""DOM-R72/R73 角色與人員鎖定順序的驗收測試。"""
 
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
+from time import monotonic, sleep
 
 import pytest
 from alembic.config import Config
@@ -19,6 +20,7 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModuleDelegation,
 )
 from app.services import module_permissions, users
 from app.services.project_members import add_project_member
@@ -27,6 +29,24 @@ from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
+
+
+def _wait_for_lock_wait(engine: Engine, pid: int) -> None:
+    """確認交易等待 PostgreSQL 鎖，避免 Event 造成假同步。"""
+    deadline = monotonic() + 5
+    while monotonic() < deadline:
+        with Session(engine) as observer:
+            wait_type = observer.execute(
+                text(
+                    "SELECT wait_event_type FROM pg_stat_activity "
+                    "WHERE pid = :pid"
+                ),
+                {"pid": pid},
+            ).scalar_one_or_none()
+        if wait_type == "Lock":
+            return
+        sleep(0.01)
+    raise AssertionError(f"backend {pid} did not enter a PostgreSQL lock wait")
 
 
 @pytest.fixture(autouse=True)
@@ -99,6 +119,8 @@ def test_postgres_role_update_serializes_before_external_transition(
 
     role_locked = Event()
     external_started = Event()
+    release_role = Event()
+    backend_pid: dict[str, int] = {}
 
     def edit_role() -> str:
         with Session(postgres_engine) as worker:
@@ -109,6 +131,7 @@ def test_postgres_role_update_serializes_before_external_transition(
                 )
                 role_locked.set()
                 assert external_started.wait(timeout=5)
+                assert release_role.wait(timeout=5)
                 role_row = worker.get(Role, role_id)
                 assert role_row is not None
                 update_role(worker, role_row, is_external_allowed=False)
@@ -119,6 +142,9 @@ def test_postgres_role_update_serializes_before_external_transition(
         with Session(postgres_engine) as worker:
             with worker.begin():
                 worker.execute(text("SET LOCAL lock_timeout = '5s'"))
+                backend_pid["external"] = worker.execute(
+                    text("SELECT pg_backend_pid()")
+                ).scalar_one()
                 target_row = worker.get(User, target_id)
                 assert target_row is not None
                 external_started.set()
@@ -133,6 +159,9 @@ def test_postgres_role_update_serializes_before_external_transition(
     with ThreadPoolExecutor(max_workers=2) as pool:
         role_future = pool.submit(edit_role)
         external_future = pool.submit(make_external)
+        assert external_started.wait(timeout=5)
+        _wait_for_lock_wait(postgres_engine, backend_pid["external"])
+        release_role.set()
         outcomes = {
             role_future.result(timeout=10),
             external_future.result(timeout=10),
@@ -159,6 +188,7 @@ def test_postgres_external_transition_serializes_before_role_update(
     external_updated = Event()
     release_external = Event()
     role_update_started = Event()
+    backend_pid: dict[str, int] = {}
     original_audit = users.record_audit_event
 
     def pause_after_external_update(*args, **kwargs):
@@ -187,6 +217,9 @@ def test_postgres_external_transition_serializes_before_role_update(
         with Session(postgres_engine) as worker:
             with worker.begin():
                 worker.execute(text("SET LOCAL lock_timeout = '5s'"))
+                backend_pid["role"] = worker.execute(
+                    text("SELECT pg_backend_pid()")
+                ).scalar_one()
                 role_row = worker.get(Role, role_id)
                 assert role_row is not None
                 role_update_started.set()
@@ -200,6 +233,7 @@ def test_postgres_external_transition_serializes_before_role_update(
         external_future = pool.submit(make_external)
         role_future = pool.submit(edit_role)
         assert role_update_started.wait(timeout=5)
+        _wait_for_lock_wait(postgres_engine, backend_pid["role"])
         release_external.set()
         outcomes = {
             external_future.result(timeout=10),
@@ -228,6 +262,8 @@ def test_postgres_assignment_serializes_with_external_transition(
 
     assignment_locked = Event()
     transition_started = Event()
+    release_assignment = Event()
+    backend_pid: dict[str, int] = {}
 
     def assign_role() -> str:
         with Session(postgres_engine) as worker:
@@ -238,8 +274,14 @@ def test_postgres_assignment_serializes_with_external_transition(
                     .where(Role.id == role_id)
                     .with_for_update(read=True)
                 )
+                worker.execute(
+                    select(User.id)
+                    .where(User.id == target_id)
+                    .with_for_update(read=True)
+                )
                 assignment_locked.set()
                 assert transition_started.wait(timeout=5)
+                assert release_assignment.wait(timeout=5)
                 try:
                     add_project_member(
                         worker,
@@ -256,6 +298,9 @@ def test_postgres_assignment_serializes_with_external_transition(
         with Session(postgres_engine) as worker:
             with worker.begin():
                 worker.execute(text("SET LOCAL lock_timeout = '5s'"))
+                backend_pid["transition"] = worker.execute(
+                    text("SELECT pg_backend_pid()")
+                ).scalar_one()
                 target_row = worker.get(User, target_id)
                 assert target_row is not None
                 transition_started.set()
@@ -270,6 +315,9 @@ def test_postgres_assignment_serializes_with_external_transition(
     with ThreadPoolExecutor(max_workers=2) as pool:
         assignment_future = pool.submit(assign_role)
         transition_future = pool.submit(make_external)
+        assert transition_started.wait(timeout=5)
+        _wait_for_lock_wait(postgres_engine, backend_pid["transition"])
+        release_assignment.set()
         outcomes = {
             assignment_future.result(timeout=10),
             transition_future.result(timeout=10),
@@ -294,3 +342,86 @@ def test_postgres_assignment_serializes_with_external_transition(
             )
         )
         assert not (user.is_external_collaborator and assignment_exists)
+
+
+def test_postgres_delegation_serializes_with_external_transition(
+    postgres_engine: Engine,
+) -> None:
+    """委派競爭時，先取得人員鎖的一方決定結果。
+
+    競爭交易必須進入 PostgreSQL lock wait 才能放行持鎖交易。
+    """
+    with Session(postgres_engine) as setup:
+        actor, target, _, _ = _prepare_race(setup, assign_target=False)
+        actor_id, target_id = actor.id, target.id
+
+    delegation_ready = Event()
+    release_delegation = Event()
+    transition_started = Event()
+    backend_pid: dict[str, int] = {}
+
+    def grant() -> str:
+        with Session(postgres_engine) as worker:
+            with worker.begin():
+                worker.execute(text("SET LOCAL lock_timeout = '5s'"))
+                backend_pid["grant"] = worker.execute(
+                    text("SELECT pg_backend_pid()")
+                ).scalar_one()
+                actor_row = worker.get(User, actor_id)
+                target_row = worker.get(User, target_id)
+                assert actor_row is not None
+                assert target_row is not None
+                assert module_permissions.grant_module_delegation(
+                    worker,
+                    actor=actor_row,
+                    user=target_row,
+                    module="project",
+                )
+                delegation_ready.set()
+                assert release_delegation.wait(timeout=5)
+        return "grant"
+
+    def make_external() -> str:
+        assert delegation_ready.wait(timeout=5)
+        with Session(postgres_engine) as worker:
+            with worker.begin():
+                worker.execute(text("SET LOCAL lock_timeout = '5s'"))
+                backend_pid["external"] = worker.execute(
+                    text("SELECT pg_backend_pid()")
+                ).scalar_one()
+                target_row = worker.get(User, target_id)
+                assert target_row is not None
+                transition_started.set()
+                try:
+                    users.set_external_collaborator(
+                        worker, target_row, True, confirmed=True
+                    )
+                except users.ExternalFlagChangeError:
+                    return "external-rejected"
+        return "external"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        grant_future = pool.submit(grant)
+        transition_future = pool.submit(make_external)
+        assert transition_started.wait(timeout=5)
+        _wait_for_lock_wait(postgres_engine, backend_pid["external"])
+        release_delegation.set()
+        outcomes = {
+            grant_future.result(timeout=10),
+            transition_future.result(timeout=10),
+        }
+
+    assert outcomes == {"grant", "external-rejected"}
+    with Session(postgres_engine) as check:
+        user = check.get(User, target_id)
+        assert user is not None
+        assert not user.is_external_collaborator
+        assert (
+            check.scalar(
+                select(UserModuleDelegation.id).where(
+                    UserModuleDelegation.user_id == target_id,
+                    UserModuleDelegation.module == "project",
+                )
+            )
+            is not None
+        )

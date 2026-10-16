@@ -686,11 +686,24 @@ def grant_module_delegation(
     user: User,
     module: str,
 ) -> bool:
-    """Admin-only, idempotent module delegation grant."""
+    """依 DOM-R72 管理員授予模組委派。
+
+    外部協作者不得取得模組委派。
+    """
     if not actor.is_admin:
         raise ModulePermissionDeniedError("Only Admin may grant delegation")
     if module not in {"project", "inspection", "template"}:
         raise InvalidModulePermissionError(f"Unregistered module: {module}")
+    # 先鎖 User 並重讀，與外部標記轉換共用相同順序。
+    locked_user = session.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_user is None:
+        raise ModulePermissionDeniedError("User does not exist")
+    user = locked_user
     if user.is_external_collaborator:
         _reject_external_mutation(
             session,
