@@ -116,7 +116,7 @@ def test_alg_ac25_system_operator_uses_username_snapshot(session, operator):
     assert session.get(AuditLog, log.id).actor_snapshot == "admin"
 
 
-@pytest.mark.parametrize("name_zh", [None, "", "  \t\n"])
+@pytest.mark.parametrize("name_zh", [None, "", "  \t\n", "　"])
 def test_alg_ac25_unnamed_external_operator_omits_missing_unit(
     session, operator, monkeypatch, name_zh
 ):

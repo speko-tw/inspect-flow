@@ -21,8 +21,9 @@ from sqlalchemy.orm import Session
 from alembic import command
 from app.db.base import uuid7
 from app.db.engine import create_engine_from_settings
-from app.models import Company
+from app.models import Company, User
 from app.models.audit_log import AuditLogImmutableError
+from app.services.audit import _format_actor_snapshot
 from tests.db.conftest import create_root_user_with_company, make_system_admin
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -78,7 +79,8 @@ def test_actor_snapshot_migration_backfills_and_round_trips(db_url):
     engine = create_engine_from_settings(db_url)
     actors = []
     fallback_usernames = []
-    event_ids = [uuid7() for _ in range(6)]
+    fullwidth_actor_id = None
+    event_ids = [uuid7() for _ in range(7)]
     try:
         with Session(engine) as session:
             internal = create_root_user_with_company(session, "A580INT")
@@ -120,20 +122,33 @@ def test_actor_snapshot_migration_backfills_and_round_trips(db_url):
             whitespace_name.department = None
             whitespace_name.location = None
 
+            fullwidth_space_name = create_root_user_with_company(
+                session, "A580FULLSPACE"
+            )
+            fullwidth_space_name.name_zh = "　"
+            fullwidth_space_name.is_external_collaborator = True
+            fullwidth_space_name.company_id = None
+            fullwidth_space_name.employee_no = None
+            fullwidth_space_name.department = None
+            fullwidth_space_name.location = None
+
             system = create_root_user_with_company(session, "A580SYS")
             make_system_admin(system)
             system.is_external_collaborator = True
             fallback_usernames = [
                 blank_name.username,
                 whitespace_name.username,
+                fullwidth_space_name.username,
             ]
             session.commit()
+            fullwidth_actor_id = fullwidth_space_name.id
             actors = [
                 internal,
                 external,
                 no_unit,
                 blank_name,
                 whitespace_name,
+                fullwidth_space_name,
                 system,
             ]
 
@@ -175,13 +190,21 @@ def test_actor_snapshot_migration_backfills_and_round_trips(db_url):
             rows = connection.execute(
                 select(table.c.id, table.c.actor_snapshot)
             ).all()
+        with Session(engine) as session:
+            fullwidth_actor = session.get(User, fullwidth_actor_id)
+            assert fullwidth_actor is not None
+            assert (
+                _format_actor_snapshot(session, fullwidth_actor)
+                == dict(rows)[event_ids[5]]
+            )
         assert dict(rows) == {
             event_ids[0]: "內部人員．內部單位",
             event_ids[1]: "外部人員．外部協作人員．外部單位",
             event_ids[2]: "外部協作人員（未填單位）",
             event_ids[3]: fallback_usernames[0],
             event_ids[4]: fallback_usernames[1],
-            event_ids[5]: "admin",
+            event_ids[5]: fallback_usernames[2],
+            event_ids[6]: "admin",
         }
         indexes = {
             index["name"]: index["column_names"]
@@ -232,7 +255,8 @@ def test_actor_snapshot_migration_backfills_and_round_trips(db_url):
             event_ids[2]: "外部協作人員（未填單位）",
             event_ids[3]: fallback_usernames[0],
             event_ids[4]: fallback_usernames[1],
-            event_ids[5]: "admin",
+            event_ids[5]: fallback_usernames[2],
+            event_ids[6]: "admin",
         }
 
         for statement in (
