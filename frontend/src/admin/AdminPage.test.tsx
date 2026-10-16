@@ -904,6 +904,9 @@ describe('admin user and company pages', () => {
     expect(await screen.findByText('leave-page-password')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    expect(
+      await screen.findByRole('heading', { name: '公司管理' }),
+    ).toBeInTheDocument()
     expect(screen.queryByText('leave-page-password')).not.toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: '公司管理' }),
