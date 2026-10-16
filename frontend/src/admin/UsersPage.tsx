@@ -14,6 +14,8 @@ import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
 import { activeStatus } from '../ui/statusBadge'
 import { useSubmitGuard } from '../ui/submitGuard'
+import { UnsavedLeaveBox } from '../ui/navigation'
+import * as navigationGuard from '../ui/navigation'
 import { CursorListSearch } from './CursorListSearch'
 import {
   linkUserCompany,
@@ -76,9 +78,18 @@ export default function UsersPage({
     null,
   )
   const [actionError, setActionError] = useState('')
+  const [dirtyForms, setDirtyForms] = useState<Record<string, boolean>>({})
   const confirmationRef = useRef<HTMLDivElement>(null)
   const companyRequestId = useRef(0)
   const actionGuard = useSubmitGuard()
+  const leaveGuard = navigationGuard.useUnsavedNavigationGuard(
+    Object.values(dirtyForms).some(Boolean),
+  )
+  const reportDirty = useCallback((key: string, dirty: boolean) => {
+    setDirtyForms((current) =>
+      current[key] === dirty ? current : { ...current, [key]: dirty },
+    )
+  }, [])
 
   useEffect(() => {
     if (!pendingAction) return
@@ -119,6 +130,7 @@ export default function UsersPage({
       await operation()
       setEditingUser(null)
       setEditingCompany(null)
+      setDirtyForms({})
       await reload()
     } catch (caught) {
       setSaveError((previous) => ({
@@ -222,6 +234,7 @@ export default function UsersPage({
   }
 
   function created(user: { username: string; temporary_password: string }) {
+    setDirtyForms({})
     onTemporaryPassword(user.username, user.temporary_password)
     void reload()
     void loadCompanies()
@@ -229,6 +242,7 @@ export default function UsersPage({
 
   return (
     <section aria-labelledby="users-heading">
+      <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="users-heading">使用者管理</h1>
       {loading ? <p>載入中…</p> : null}
       <div>
@@ -370,7 +384,11 @@ export default function UsersPage({
                               onCancel={() => {
                                 setSaveError(null)
                                 setEditingUser(null)
+                                reportDirty(`details:${user.id}`, false)
                               }}
+                              onDirtyChange={(dirty) =>
+                                reportDirty(`details:${user.id}`, dirty)
+                              }
                               onSave={(fields) =>
                                 act(user.id, 'details', () =>
                                   updateUser(user.id, fields),
@@ -388,7 +406,11 @@ export default function UsersPage({
                               onCancel={() => {
                                 setSaveError(null)
                                 setEditingCompany(null)
+                                reportDirty(`company:${user.id}`, false)
                               }}
+                              onDirtyChange={(dirty) =>
+                                reportDirty(`company:${user.id}`, dirty)
+                              }
                               onSave={(companyId, fields) =>
                                 act(user.id, 'company', () =>
                                   companyId === user.company_id
@@ -422,7 +444,11 @@ export default function UsersPage({
           </button>
         )}
       </div>
-      <UserForm companies={companies} onCreated={created} />
+      <UserForm
+        companies={companies}
+        onCreated={created}
+        onDirtyChange={(dirty) => reportDirty('create', dirty)}
+      />
     </section>
   )
 }
@@ -444,6 +470,7 @@ function UserDetailsForm({
   errorFocusRequest,
   onCancel,
   onSave,
+  onDirtyChange,
 }: {
   user: User
   /** 任何一個動作進行中就停用儲存，與送出防護的範圍一致。 */
@@ -451,6 +478,7 @@ function UserDetailsForm({
   error: string
   errorFocusRequest: number | undefined
   onCancel: () => void
+  onDirtyChange: (dirty: boolean) => void
   onSave: (fields: {
     username: string
     email: string
@@ -462,6 +490,16 @@ function UserDetailsForm({
   const [email, setEmail] = useState(user.email ?? '')
   const [nameZh, setNameZh] = useState(user.name_zh ?? '')
   const [nameEn, setNameEn] = useState(user.name_en ?? '')
+  const dirty = Boolean(
+    username !== user.username ||
+    email !== (user.email ?? '') ||
+    nameZh !== (user.name_zh ?? '') ||
+    nameEn !== (user.name_en ?? ''),
+  )
+
+  useEffect(() => {
+    onDirtyChange(dirty)
+  }, [dirty, onDirtyChange])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -531,6 +569,7 @@ function CompanyLinkForm({
   errorFocusRequest,
   onCancel,
   onSave,
+  onDirtyChange,
 }: {
   user: User
   /** 任何一個動作進行中就停用儲存，與送出防護的範圍一致。 */
@@ -539,6 +578,7 @@ function CompanyLinkForm({
   error: string
   errorFocusRequest: number | undefined
   onCancel: () => void
+  onDirtyChange: (dirty: boolean) => void
   onSave: (
     companyId: string | null,
     fields: Pick<User, 'department' | 'location' | 'employee_no'>,
@@ -549,6 +589,16 @@ function CompanyLinkForm({
   const [location, setLocation] = useState(user.location ?? '')
   const [employeeNo, setEmployeeNo] = useState(user.employee_no ?? '')
   const disabled = companyId === ''
+  const dirty = Boolean(
+    companyId !== (user.company_id ?? '') ||
+    department !== (user.department ?? '') ||
+    location !== (user.location ?? '') ||
+    employeeNo !== (user.employee_no ?? ''),
+  )
+
+  useEffect(() => {
+    onDirtyChange(dirty)
+  }, [dirty, onDirtyChange])
 
   function changeCompany(value: string) {
     setCompanyId(value)

@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
-import { MemoryRouter, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
+import { DataMemoryRouter } from './testing/DataMemoryRouter'
 import {
   afterEach,
   beforeAll,
@@ -75,9 +76,9 @@ describe('App routing', () => {
   it('renders the admin user management page on /admin', async () => {
     await act(async () => {
       render(
-        <MemoryRouter initialEntries={['/admin']}>
+        <DataMemoryRouter initialEntries={['/admin']}>
           <App />
-        </MemoryRouter>,
+        </DataMemoryRouter>,
       )
     })
 
@@ -92,9 +93,9 @@ describe('App routing', () => {
 
   it('renders Field tasks on /field', async () => {
     render(
-      <MemoryRouter initialEntries={['/field']}>
+      <DataMemoryRouter initialEntries={['/field']}>
         <App />
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     expect(
@@ -110,10 +111,10 @@ describe('App routing', () => {
     const visitedPaths: string[] = []
     const recordPath = (path: string) => visitedPaths.push(path)
     render(
-      <MemoryRouter initialEntries={['/field/projects/project-1']}>
+      <DataMemoryRouter initialEntries={['/field/projects/project-1']}>
         <LocationProbe onPathname={recordPath} />
         <App />
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     await waitFor(() =>
@@ -126,9 +127,9 @@ describe('App routing', () => {
 
   it('shows the release version on the login page', async () => {
     render(
-      <MemoryRouter initialEntries={['/login']}>
+      <DataMemoryRouter initialEntries={['/login']}>
         <App />
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     expect(
@@ -145,9 +146,9 @@ describe('App routing', () => {
       vi.fn(async () => Response.json({ setup_required: true })),
     )
     render(
-      <MemoryRouter initialEntries={['/setup']}>
+      <DataMemoryRouter initialEntries={['/setup']}>
         <App />
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     expect(await screen.findByLabelText('首次登入碼')).toBeInTheDocument()

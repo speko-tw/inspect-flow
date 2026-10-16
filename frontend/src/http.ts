@@ -93,6 +93,9 @@ export async function request<T>(
   })
 
   if (!response.ok) {
+    if (response.status === 401) {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+    }
     let code: string | undefined
     let details: unknown
     let fields: HttpFieldError[] | undefined
@@ -159,6 +162,7 @@ export function listAllPages<T>(
 
 export const NETWORK_ERROR_MESSAGE = '無法連線到伺服器，請稍後再試。'
 export const SESSION_EXPIRED_MESSAGE = '登入狀態已失效，請重新登入。'
+export const SESSION_EXPIRED_EVENT = 'inspectflow:session-expired'
 export const FORBIDDEN_MESSAGE = '你沒有權限執行這項操作。'
 export const SERVER_ERROR_MESSAGE = '伺服器暫時無法處理，請稍後再試。'
 export const GENERIC_FAILURE_MESSAGE = '操作失敗，請稍後再試。'

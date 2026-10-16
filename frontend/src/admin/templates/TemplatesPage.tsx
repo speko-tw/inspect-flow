@@ -11,6 +11,8 @@ import {
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
 import { ConfirmBox } from '../../ui/ConfirmBox'
+import { UnsavedLeaveBox } from '../../ui/navigation'
+import * as navigationGuard from '../../ui/navigation'
 import { RequiredMark } from '../../ui/Form'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
@@ -192,6 +194,7 @@ export default function TemplatesPage() {
     selectedCategory?.name,
     selectedSystem?.name,
   ])
+  const leaveGuard = navigationGuard.useUnsavedNavigationGuard(dirty)
 
   useEffect(() => {
     let active = true
@@ -1276,6 +1279,7 @@ export default function TemplatesPage() {
 
   return (
     <section aria-labelledby="templates-heading" className="tpl-page">
+      <UnsavedLeaveBox guard={leaveGuard} />
       <header className="tpl-page-heading">
         <h1 id="templates-heading">範本管理</h1>
         {readOnly && <span className="tpl-readonly">唯讀瀏覽</span>}

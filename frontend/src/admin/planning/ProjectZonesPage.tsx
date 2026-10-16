@@ -13,8 +13,8 @@ import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { planningClient, planningErrorMessage } from './api'
 import type { PlanningClient, ProjectZone } from './api'
-import { UnsavedLeaveBox } from './UnsavedLeaveBox'
-import { useUnsavedNavigationGuard } from './useUnsavedNavigationGuard'
+import { UnsavedLeaveBox } from '../../ui/navigation'
+import { useUnsavedNavigationGuard } from '../../ui/navigation'
 
 // 業務錯誤碼（非 422 欄位清單）直接對應到名稱欄，與 ADM-R28 的欄旁錯誤一致。
 const NAME_FIELD_CODES: ReadonlySet<string> = new Set([

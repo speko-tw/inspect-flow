@@ -1,4 +1,11 @@
-import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 
 import {
   createUser,
@@ -10,6 +17,7 @@ import { Form, FormSubmitButton, RequiredMark } from '../ui/Form'
 
 const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ -'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
+const ignoreDirtyChange = (): void => undefined
 
 /** 必填欄位的標示；「*」對讀屏無意義，必填已由 `required` 表達。 */
 function Required({ children }: { children: ReactNode }) {
@@ -23,9 +31,12 @@ function Required({ children }: { children: ReactNode }) {
 export default function UserForm({
   companies,
   onCreated,
+  onDirtyChange = ignoreDirtyChange,
 }: {
   companies: Company[]
   onCreated: (user: CreatedUser) => void
+  /** 回報草稿狀態；不需離頁保護的設定流程可省略。 */
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
@@ -48,6 +59,22 @@ export default function UserForm({
   const companyHintIds = [useId(), useId(), useId()]
   const accountTypeErrorId = useId()
   const accountTypeRef = useRef<HTMLInputElement>(null)
+  const dirty = Boolean(
+    username ||
+    email ||
+    nameZh ||
+    nameEn ||
+    companyId ||
+    department ||
+    location ||
+    employeeNo ||
+    isAdmin ||
+    isExternalCollaborator !== null,
+  )
+
+  useEffect(() => {
+    onDirtyChange(dirty)
+  }, [dirty, onDirtyChange])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

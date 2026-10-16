@@ -7,7 +7,8 @@
 // `/api/v1/auth/me` 一併模擬。
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, Route, Routes, useNavigate } from 'react-router'
+import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import App from '../App'
@@ -46,12 +47,13 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url
 }
 
-function renderPage() {
+function renderPage(entries = ['/change-password'], initialIndex?: number) {
   return render(
-    <MemoryRouter initialEntries={['/change-password']}>
+    <DataMemoryRouter initialEntries={entries} initialIndex={initialIndex}>
       <Routes>
         <Route path="/" element={<h1>首頁</h1>} />
         <Route path="/login" element={<h1>登入</h1>} />
+        <Route path="/other" element={<h1>其他頁</h1>} />
         <Route
           path="/change-password"
           element={
@@ -60,8 +62,25 @@ function renderPage() {
             </RequireAuth>
           }
         />
+        <Route path="/test-nav" element={<TestPasswordNavigation />} />
       </Routes>
-    </MemoryRouter>,
+      <TestPasswordNavigation />
+    </DataMemoryRouter>,
+  )
+}
+
+function TestPasswordNavigation() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <Link to="/other">離開變更密碼</Link>
+      <button onClick={() => navigate(-1)} type="button">
+        密碼頁上一頁
+      </button>
+      <button onClick={() => navigate(1)} type="button">
+        密碼頁下一頁
+      </button>
+    </>
   )
 }
 
@@ -69,6 +88,57 @@ async function renderReadyPage() {
   renderPage()
   await screen.findByRole('heading', { name: '變更密碼' })
 }
+
+describe('變更密碼草稿導覽防護', () => {
+  function mockAuth() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(TEMP_PASSWORD_USER)),
+    )
+  }
+
+  it('實際輸入後攔截站內導覽與 Back/Forward', async () => {
+    mockAuth()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderPage(['/other', '/change-password', '/other'], 1)
+    await screen.findByRole('heading', { name: '變更密碼' })
+    fireEvent.change(screen.getByLabelText('目前密碼'), {
+      target: { value: 'private-current-password' },
+    })
+
+    fireEvent.click(screen.getByRole('link', { name: '離開變更密碼' }))
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+    fireEvent.click(screen.getByRole('button', { name: '密碼頁上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(
+      screen.getByRole('heading', { name: '變更密碼' }),
+    ).toBeInTheDocument()
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: '密碼頁上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
+    expect(
+      await screen.findByRole('heading', { name: '其他頁' }),
+    ).toBeInTheDocument()
+  })
+
+  it('實際輸入後攔截 beforeunload', async () => {
+    mockAuth()
+    renderPage()
+    await screen.findByRole('heading', { name: '變更密碼' })
+    fireEvent.change(screen.getByLabelText('目前密碼'), {
+      target: { value: 'private-current-password' },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+})
 
 describe.each([['變更密碼頁', '/api/v1/auth/password']])(
   '%s 共用表單',
@@ -412,9 +482,9 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
   function renderAt(entry: { pathname: string; state?: unknown }) {
     render(
-      <MemoryRouter initialEntries={[entry]}>
+      <DataMemoryRouter initialEntries={[entry]}>
         <App />
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
   }
 

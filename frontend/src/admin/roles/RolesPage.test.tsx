@@ -5,7 +5,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, Route, Routes, useNavigate } from 'react-router'
+import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../../auth/api'
@@ -53,20 +54,42 @@ const currentUser: CurrentUser = {
   module_permissions: [],
 }
 
-function renderRoles(path = '/admin/roles') {
+function RoleNavigation() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <Link to="/admin/users">離開角色管理</Link>
+      <button onClick={() => navigate(-1)} type="button">
+        上一頁
+      </button>
+      <button onClick={() => navigate(1)} type="button">
+        下一頁
+      </button>
+    </>
+  )
+}
+
+function renderRoles(
+  path = '/admin/roles',
+  history?: { entries: string[]; index: number },
+) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter
+      initialEntries={history?.entries ?? [path]}
+      initialIndex={history?.index}
+    >
       <Routes>
         <Route
           element={
             <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
               <AdminPage />
+              <RoleNavigation />
             </CurrentUserProvider>
           }
           path="/admin/*"
         />
       </Routes>
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 
@@ -158,6 +181,72 @@ function calls(
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('角色表單未儲存導覽防護', () => {
+  function fillName() {
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: '未儲存角色' },
+    })
+  }
+
+  it('實際輸入後攔截站內導覽與 Back/Forward', async () => {
+    rolesFetch()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderRoles('/admin/roles', {
+      entries: ['/admin/users', '/admin/roles', '/admin/companies'],
+      index: 1,
+    })
+    await screen.findByRole('heading', { name: '角色管理' })
+    fillName()
+
+    fireEvent.click(screen.getByRole('link', { name: '離開角色管理' }))
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+
+    confirm.mockReturnValue(false)
+    fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(
+      screen.getByRole('heading', { name: '角色管理' }),
+    ).toBeInTheDocument()
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
+    expect(
+      await screen.findByRole('heading', { name: '公司管理' }),
+    ).toBeInTheDocument()
+  })
+
+  it('編輯既有角色時以原始值判斷 dirty state', async () => {
+    rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
+    renderRoles()
+    await screen.findByRole('row', { name: /檢視者/ })
+    fireEvent.click(screen.getByRole('button', { name: '修改角色 檢視者' }))
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: '未儲存檢視者' },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('實際輸入後攔截 beforeunload', async () => {
+    rolesFetch()
+    renderRoles('/admin/roles')
+    await screen.findByRole('heading', { name: '角色管理' })
+    fillName()
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
 })
 
 describe('admin role management page', () => {

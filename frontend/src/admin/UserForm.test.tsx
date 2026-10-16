@@ -8,7 +8,13 @@ import UserForm from './UserForm'
 const companies = [{ id: 'company-1', name: '示範公司', is_active: true }]
 
 function renderForm() {
-  return render(<UserForm companies={companies} onCreated={() => {}} />)
+  return render(
+    <UserForm
+      companies={companies}
+      onCreated={() => {}}
+      onDirtyChange={() => {}}
+    />,
+  )
 }
 
 afterEach(() => {

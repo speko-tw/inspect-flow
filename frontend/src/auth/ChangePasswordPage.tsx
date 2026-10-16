@@ -22,6 +22,8 @@ import { useLocation, useNavigate } from 'react-router'
 import { BackLink } from '../layout/BackLink'
 import { ApiError, changePassword } from './api'
 import AuthLayout from './AuthLayout'
+import { UnsavedLeaveBox } from '../ui/navigation'
+import * as navigationGuard from '../ui/navigation'
 import { RequiredMark } from '../ui/Form'
 import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
@@ -77,6 +79,9 @@ export default function ChangePasswordPage() {
   const currentInput = useRef<HTMLInputElement>(null)
   const newInput = useRef<HTMLInputElement>(null)
   const confirmationInput = useRef<HTMLInputElement>(null)
+  const leaveGuard = navigationGuard.useUnsavedNavigationGuard(
+    Boolean(currentPassword || newPassword || confirmPassword),
+  )
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -114,10 +119,12 @@ export default function ChangePasswordPage() {
 
       const state = location.state as RedirectState | null
       const from = state?.from
-      navigate(isSafeRedirectPath(from) ? from : '/', {
-        replace: true,
-        state: { notice: SUCCESS_NOTICE },
-      })
+      leaveGuard.allowNavigation(() =>
+        navigate(isSafeRedirectPath(from) ? from : '/', {
+          replace: true,
+          state: { notice: SUCCESS_NOTICE },
+        }),
+      )
     } catch (caught) {
       const code = caught instanceof ApiError ? caught.code : undefined
       setError(
@@ -148,6 +155,7 @@ export default function ChangePasswordPage() {
       title="變更密碼"
       lead="請輸入目前密碼，並設定新的密碼。"
     >
+      <UnsavedLeaveBox guard={leaveGuard} />
       <Form onSubmit={handleSubmit} noValidate>
         <div>
           <label htmlFor="change-password-current">

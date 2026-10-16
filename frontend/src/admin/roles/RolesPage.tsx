@@ -4,6 +4,8 @@ import { ManagementApiError } from '../api'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../../ui/Form'
 import { useSubmitGuard } from '../../ui/submitGuard'
+import { UnsavedLeaveBox } from '../../ui/navigation'
+import * as navigationGuard from '../../ui/navigation'
 import RolePermissionSummary from '../projects/RolePermissionSummary'
 import {
   createRole,
@@ -48,7 +50,6 @@ export default function RolesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const guard = useSubmitGuard()
-
   const descriptions = new Map(
     permissions.map((item) => [item.code, item.description]),
   )
@@ -59,6 +60,11 @@ export default function RolesPage() {
   const unregistered = (editing?.permission_codes ?? []).filter(
     (code) => !descriptions.has(code),
   )
+  const hasUnsavedChanges = editing
+    ? name !== editing.name || !sameCodes(selected, editing.permission_codes)
+    : name !== '' || selected.length > 0
+  const leaveGuard =
+    navigationGuard.useUnsavedNavigationGuard(hasUnsavedChanges)
 
   async function reload() {
     try {
@@ -260,6 +266,7 @@ export default function RolesPage() {
 
   return (
     <section aria-labelledby="roles-heading">
+      <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="roles-heading">角色管理</h1>
       <FormError>{error}</FormError>
       {deleting && (
