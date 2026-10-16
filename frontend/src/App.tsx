@@ -1,5 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useParams } from 'react-router'
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from 'react-router'
 
 import ChangePasswordPage from './auth/ChangePasswordPage'
 import HomeRedirect from './auth/HomeRedirect'
@@ -12,6 +19,7 @@ import RouteLoadErrorBoundary, {
 } from './ui/RouteLoadErrorBoundary'
 import SetupGate from './setup/SetupGate'
 import VersionFooter from './VersionFooter'
+import { SESSION_EXPIRED_EVENT } from './http'
 
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
@@ -29,8 +37,13 @@ function LegacyProjectTemplateRedirect() {
   )
 }
 
+/** 管理登入、路由錯誤邊界與逾時提示，並呈現應用程式路由。 */
 export default function App() {
   const [preloadFailed, setPreloadFailed] = useState(false)
+  const [sessionExpiredKey, setSessionExpiredKey] = useState<string | null>(
+    null,
+  )
+  const location = useLocation()
 
   useEffect(() => {
     const handlePreloadError = (event: Event) => {
@@ -43,6 +56,14 @@ export default function App() {
       window.removeEventListener('vite:preloadError', handlePreloadError)
     }
   }, [])
+
+  useEffect(() => {
+    const handleSessionExpired = () => setSessionExpiredKey(location.key)
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired)
+    }
+  }, [location.key])
 
   if (preloadFailed) {
     return (
@@ -58,6 +79,20 @@ export default function App() {
   return (
     <div className="app-root">
       <div className="app-content">
+        {sessionExpiredKey === location.key &&
+        location.pathname !== '/login' ? (
+          <p className="session-expired-notice" role="alert">
+            登入狀態已失效。
+            <Link
+              state={{
+                from: `${location.pathname}${location.search}${location.hash}`,
+              }}
+              to="/login"
+            >
+              重新登入
+            </Link>
+          </p>
+        ) : null}
         <Suspense fallback={null}>
           <Routes>
             <Route

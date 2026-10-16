@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router'
+import { useLocation } from 'react-router'
+import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import {
   afterEach,
   beforeEach,
@@ -56,10 +57,10 @@ function LocationProbe() {
 
 function renderApp(initialEntries: string[]) {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
+    <DataMemoryRouter initialEntries={initialEntries}>
       <LocationProbe />
       <App />
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 

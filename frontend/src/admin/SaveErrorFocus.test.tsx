@@ -10,7 +10,7 @@ import {
   within,
 } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { MemoryRouter } from 'react-router'
+import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -97,11 +97,11 @@ function stubBackend(conflictCode: string) {
 
 function renderPage(page: ReactNode) {
   render(
-    <MemoryRouter>
+    <DataMemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
         {page}
       </CurrentUserProvider>
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 

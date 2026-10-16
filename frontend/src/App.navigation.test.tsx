@@ -8,7 +8,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
+import { DataMemoryRouter } from './testing/DataMemoryRouter'
 import {
   afterEach,
   beforeAll,
@@ -23,6 +24,7 @@ import {
 import App from './App'
 import type { CurrentUser } from './auth/api'
 import { rememberUser, resetSessionMemory } from './auth/sessionMemory'
+import { request } from './http'
 import {
   currentUserFixture,
   myProjectFixture,
@@ -216,9 +218,9 @@ function stubBackend(
 
 function renderApp(path: string, state?: unknown) {
   return render(
-    <MemoryRouter initialEntries={[{ pathname: path, state }]}>
+    <DataMemoryRouter initialEntries={[{ pathname: path, state }]}>
       <App />
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 
@@ -234,10 +236,13 @@ function BackButton() {
 /** 有多筆歷史的畫面，可用「測試用上一頁」模擬瀏覽器的上一頁。 */
 function renderAppWithHistory(entries: string[]) {
   return render(
-    <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
+    <DataMemoryRouter
+      initialEntries={entries}
+      initialIndex={entries.length - 1}
+    >
       <BackButton />
       <App />
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 
@@ -716,6 +721,80 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
     expect(
       screen.getByRole('heading', { name: '使用者管理' }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('登入逾時與未儲存頁面（#623）', () => {
+  it('確認捨棄後登入，回到原專案頁', async () => {
+    const backend = stubBackend(ADMIN, ADMIN)
+    const original = backend.fetchMock.getMockImplementation()!
+    backend.fetchMock.mockImplementation(async (input, init) => {
+      const url = new URL(String(input), 'http://testserver')
+      if (url.pathname === '/api/v1/projects' && init?.method !== 'POST') {
+        return Response.json({ items: [], next_cursor: null })
+      }
+      return original(input, init)
+    })
+    renderApp('/admin/projects')
+    await screen.findByRole('heading', { name: '專案' })
+    const createProjectButton = await screen.findByRole('button', {
+      name: '新增專案',
+    })
+    fireEvent.click(createProjectButton)
+    const projectName = screen.getByLabelText(/工程名稱/)
+    fireEvent.change(projectName, {
+      target: { value: '逾時前的草稿' },
+    })
+    const adminNav = screen.getByRole('navigation', { name: '管理功能' })
+    fireEvent.click(within(adminNav).getByRole('link', { name: '專案' }))
+    const selfLinkPrompt = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(
+      within(selfLinkPrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(projectName).toHaveValue('逾時前的草稿')
+
+    const currentFetch = backend.fetchMock.getMockImplementation()!
+    backend.fetchMock.mockImplementationOnce(async (input, init) => {
+      if (String(input).endsWith('/session-expired-probe')) {
+        backend.me = null
+        return Response.json(
+          { error: { code: 'auth.not_authenticated' } },
+          { status: 401 },
+        )
+      }
+      return currentFetch(input, init)
+    })
+    await expect(request('/session-expired-probe')).rejects.toMatchObject({
+      status: 401,
+    })
+
+    const loginLink = await screen.findByRole('link', { name: '重新登入' })
+    fireEvent.click(loginLink)
+    const prompt = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    expect(projectName).toHaveValue('逾時前的草稿')
+    const keepEditingButton = within(prompt).getByRole('button', {
+      name: '保留編輯',
+    })
+    fireEvent.click(keepEditingButton)
+    expect(projectName).toHaveValue('逾時前的草稿')
+
+    fireEvent.click(screen.getByRole('link', { name: '重新登入' }))
+    fireEvent.click(
+      within(
+        await screen.findByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
+    )
+    await screen.findByRole('heading', { name: '登入' })
+    await signIn()
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '專案' }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: '新增專案' })).toBeVisible()
   })
 })
 

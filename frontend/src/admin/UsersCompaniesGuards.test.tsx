@@ -7,7 +7,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -126,11 +126,11 @@ function stubBackend(
 
 function renderUsers() {
   render(
-    <MemoryRouter>
+    <DataMemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
         <UsersPage onTemporaryPassword={vi.fn()} />
       </CurrentUserProvider>
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 
@@ -146,7 +146,8 @@ const userFormCases = [
     input: '帳號名稱',
     method: 'PATCH',
     path: '/api/v1/users/user-1',
-    prepare: () => {},
+    prepare: (input: HTMLElement) =>
+      fireEvent.change(input, { target: { value: 'changed' } }),
   },
   {
     name: '使用者公司連結',
@@ -174,6 +175,17 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
       input: within(button.closest('form')!).getByLabelText(formCase.input),
     }
   }
+
+  it('實際修改欄位會攔截 beforeunload', async () => {
+    const { form, input } = await openForm()
+    formCase.prepare(input)
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(form).toBeInTheDocument()
+    expect(event.defaultPrevented).toBe(true)
+  })
 
   it('pending 期間只呼叫一次 API，並停用送出按鈕', async () => {
     const gate = deferred()
@@ -354,7 +366,11 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
       fail: (call) =>
         fail && call.method === formCase.method && call.path === formCase.path,
     })
-    render(<CompaniesPage />)
+    render(
+      <DataMemoryRouter>
+        <CompaniesPage />
+      </DataMemoryRouter>,
+    )
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: formCase.button })
     const form = button.closest('form')!
@@ -615,7 +631,11 @@ describe('CompaniesPage 停用公司（#507）', () => {
     const backend = stubBackend({
       hold: (call) => (call.path.endsWith('/active-users') ? gate : undefined),
     })
-    render(<CompaniesPage />)
+    render(
+      <DataMemoryRouter>
+        <CompaniesPage />
+      </DataMemoryRouter>,
+    )
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: '停用公司' })
     expect(screen.getByText('停用公司不會自動停用人員帳號。')).toBeVisible()
@@ -638,7 +658,11 @@ describe('CompaniesPage 停用公司（#507）', () => {
     const backend = stubBackend({
       hold: (call) => (call.method === 'PUT' ? gate : undefined),
     })
-    render(<CompaniesPage />)
+    render(
+      <DataMemoryRouter>
+        <CompaniesPage />
+      </DataMemoryRouter>,
+    )
     await screen.findByText('示範公司')
     fireEvent.click(screen.getByRole('button', { name: '停用公司' }))
     const confirm = await screen.findByRole('button', {

@@ -6,7 +6,8 @@ import {
   within,
 } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { Link, Route, Routes } from 'react-router'
+import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { describe, expect, it, vi } from 'vitest'
 
 import { deferred, expectImeEnterIgnored } from '../../testing/submitGuard'
@@ -29,7 +30,7 @@ function validationError(fixture: {
 }
 
 function render(ui: ReactElement) {
-  return renderWithoutRouter(ui, { wrapper: MemoryRouter })
+  return renderWithoutRouter(ui, { wrapper: DataMemoryRouter })
 }
 
 async function expectNotice(text: string) {
@@ -945,7 +946,7 @@ describe('planning management page', () => {
       const client = createMockPlanningClient()
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
       renderWithoutRouter(
-        <MemoryRouter
+        <DataMemoryRouter
           initialEntries={['/admin/projects/project-demo-1/planning']}
         >
           <Routes>
@@ -963,7 +964,7 @@ describe('planning management page', () => {
             />
             <Route element={<p>已離開計畫頁</p>} path="/outside" />
           </Routes>
-        </MemoryRouter>,
+        </DataMemoryRouter>,
       )
 
       fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
@@ -1109,7 +1110,10 @@ describe('planning forms guard (#507)', () => {
 
   async function openPlan(client: PlanningPageClient) {
     render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
-    fireEvent.click(await screen.findByRole('button', { name: /橋梁查核（/ }))
+    const originalPlanButton = await screen.findByRole('button', {
+      name: /橋梁查核（/,
+    })
+    fireEvent.click(originalPlanButton)
     await openTaskCreationForm()
     return (
       await screen.findByRole('heading', { name: /混凝土外觀/ })
@@ -1120,6 +1124,45 @@ describe('planning forms guard (#507)', () => {
     document.querySelector(
       `[data-error-context="${context}"]`,
     ) as HTMLFormElement
+
+  it('confirms plan switches with a dirty task form (ADM-R38)', async () => {
+    const { client } = await seeded()
+    const nextPlan = await client.createPlan('project-demo-1', {
+      name: '第二計畫',
+    })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<PlanningPage client={client} initialProjectId="project-demo-1" />)
+    const originalPlanButton = await screen.findByRole('button', {
+      name: /橋梁查核（/,
+    })
+    fireEvent.click(originalPlanButton)
+    await openTaskCreationForm()
+    fireEvent.change(screen.getByLabelText('補充地點'), {
+      target: { value: '尚未儲存的地點' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /第二計畫（/ }))
+    const switchPrompt = [
+      '目前的計畫有尚未儲存的內容。',
+      '切換計畫會捨棄變更，確定切換嗎？',
+    ].join('')
+    expect(confirm).toHaveBeenCalledWith(switchPrompt)
+    const locationInput = screen.getByLabelText('補充地點')
+    expect(locationInput).toHaveValue('尚未儲存的地點')
+    expect(originalPlanButton).toHaveAttribute('aria-current', 'true')
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: /第二計畫（/ }))
+    expect(
+      await screen.findByRole('button', { name: /第二計畫（/ }),
+    ).toHaveAttribute('aria-current', 'true')
+    expect(screen.queryByLabelText('補充地點')).toBeNull()
+    const addTaskButton = screen.getByRole('button', {
+      name: '＋ 新增任務',
+    })
+    expect(addTaskButton).toBeVisible()
+    expect(nextPlan.name).toBe('第二計畫')
+  })
 
   it('maps plan creation 422 fields and focuses the reported name', async () => {
     const client = createMockPlanningClient()
@@ -2149,11 +2192,12 @@ describe('planning forms guard (#507)', () => {
 
     it('lets the back link leave at once when the page turned into no-permission', async () => {
       const { client } = await seeded()
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
       client.getPlan = vi
         .fn()
         .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
       renderWithoutRouter(
-        <MemoryRouter
+        <DataMemoryRouter
           initialEntries={['/admin/projects/project-demo-1/planning']}
         >
           <Routes>
@@ -2168,7 +2212,7 @@ describe('planning forms guard (#507)', () => {
             />
             <Route element={<p>專案清單頁</p>} path="/admin/projects" />
           </Routes>
-        </MemoryRouter>,
+        </DataMemoryRouter>,
       )
       fireEvent.change(await screen.findByLabelText(/計畫名稱/), {
         target: { value: '尚未儲存的計畫' },
@@ -2556,6 +2600,7 @@ describe('planning trial fixes (#634)', () => {
 
   it('resets the creation form when another plan is opened', async () => {
     await setup({ otherPlan: true })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: '＋ 新增任務' }))
     fireEvent.click(screen.getByLabelText(/鋼筋保護層/))
     expect(screen.getByLabelText(/鋼筋保護層/)).toBeChecked()

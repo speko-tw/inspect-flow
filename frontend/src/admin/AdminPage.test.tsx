@@ -6,14 +6,8 @@ import {
   within,
 } from '@testing-library/react'
 import { StrictMode } from 'react'
-import {
-  Link,
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from 'react-router'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { DataMemoryRouter } from '../testing/DataMemoryRouter'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../auth/api'
@@ -97,10 +91,14 @@ function renderAdmin(
     >
   > = {},
   strictMode = false,
+  history?: { entries: string[]; index: number },
 ) {
   const signedInUser = { ...currentUser, is_admin: isAdmin, ...access }
   const page = (
-    <MemoryRouter initialEntries={[path]}>
+    <DataMemoryRouter
+      initialEntries={history?.entries ?? [path]}
+      initialIndex={history?.index}
+    >
       <Routes>
         <Route
           element={
@@ -116,7 +114,7 @@ function renderAdmin(
           path="/admin/*"
         />
       </Routes>
-    </MemoryRouter>
+    </DataMemoryRouter>
   )
   return render(strictMode ? <StrictMode>{page}</StrictMode> : page)
 }
@@ -128,8 +126,12 @@ function TestNavigation() {
     <>
       <output data-testid="pathname">{location.pathname}</output>
       <Link to="/admin/companies">測試 SPA 管理頁導覽</Link>
+      <Link to="/admin/roles">測試 SPA 離開管理頁</Link>
       <button onClick={() => navigate(-1)} type="button">
         測試瀏覽器上一頁
+      </button>
+      <button onClick={() => navigate(1)} type="button">
+        測試瀏覽器下一頁
       </button>
     </>
   )
@@ -393,7 +395,112 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('管理表單未儲存導覽防護', () => {
+  const cases = [
+    {
+      label: '使用者',
+      path: '/admin/users',
+      entries: ['/admin/roles', '/admin/users', '/admin/companies'],
+      input: /^帳號名稱/,
+      value: 'unsaved-user',
+    },
+    {
+      label: '公司',
+      path: '/admin/companies',
+      entries: ['/admin/users', '/admin/companies', '/admin/roles'],
+      input: '公司名稱',
+      value: '未儲存公司',
+    },
+  ] as const
+
+  it.each(cases)('$label表單攔截站內導覽與 Back/Forward', async (item) => {
+    managementFetch()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAdmin(item.path, true, {}, false, {
+      entries: [...item.entries],
+      index: 1,
+    })
+    await screen.findByRole('heading', {
+      name: item.label === '使用者' ? '使用者管理' : '公司管理',
+    })
+    fireEvent.change(screen.getByLabelText(item.input), {
+      target: { value: item.value },
+    })
+
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(confirm).toHaveBeenLastCalledWith(
+      '有尚未儲存的變更。確定要離開嗎？',
+    )
+    expect(screen.getByTestId('pathname')).toHaveTextContent(item.path)
+
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
+    const nextHeading =
+      item.entries[2] === '/admin/companies' ? '公司管理' : '角色管理'
+    expect(
+      await screen.findByRole('heading', { name: nextHeading }),
+    ).toBeInTheDocument()
+  })
+
+  it.each(cases)('$label表單輸入後會攔截 beforeunload', async (item) => {
+    managementFetch()
+    renderAdmin(item.path)
+    await screen.findByRole('heading', {
+      name: item.label === '使用者' ? '使用者管理' : '公司管理',
+    })
+    fireEvent.change(screen.getByLabelText(item.input), {
+      target: { value: item.value },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+})
+
 describe('admin user and company pages', () => {
+  it('guards edited user details after actual input', async () => {
+    managementFetch()
+    renderAdmin('/admin/users')
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '修改資料' }))
+    const form = screen
+      .getByRole('heading', { name: '修改使用者資料' })
+      .closest('form') as HTMLFormElement
+    fireEvent.change(within(form).getByLabelText('帳號名稱'), {
+      target: { value: 'changed-user' },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('guards edited company names after actual input', async () => {
+    managementFetch()
+    renderAdmin('/admin/companies')
+    const companyRow = await screen.findByRole('row', { name: /示範公司/ })
+    fireEvent.click(within(companyRow).getByRole('button', { name: '改名稱' }))
+    fireEvent.change(screen.getByLabelText('公司名稱'), {
+      target: { value: '更新公司' },
+    })
+    const event = new Event('beforeunload', { cancelable: true })
+
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+  })
+
   it('starts one user list request when StrictMode replays the mount', async () => {
     const fetchMock = managementFetch()
     renderAdmin('/admin/users', true, {}, true)
@@ -1269,6 +1376,70 @@ describe('admin user and company pages', () => {
     },
   )
 
+  it('guards dirty planning forms from sidebar and top nav', async () => {
+    const fetchMock = managementFetch()
+    const original = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input, init) => {
+      const path = new URL(String(input), 'http://testserver').pathname
+      if (path === '/api/v1/projects/project-demo-1') {
+        return Response.json({ id: 'project-demo-1', name: '示範工程' })
+      }
+      if (
+        path.endsWith('/zones') ||
+        path.endsWith('/inspection-task-assignees')
+      ) {
+        return Response.json([])
+      }
+      if (path.endsWith('/inspection-plans')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
+      return original(input, init)
+    })
+    renderAdmin('/admin/projects/project-demo-1/planning')
+
+    await screen.findByRole('heading', { name: '計畫與任務' })
+    const planName = await screen.findByLabelText(/計畫名稱/)
+    fireEvent.change(planName, {
+      target: { value: '尚未儲存的計畫名稱' },
+    })
+
+    const sections = screen.getByRole('navigation', { name: '專案區段' })
+    const planningLink = within(sections).getByRole('link', {
+      name: '計畫與任務',
+    })
+    fireEvent.click(planningLink)
+    const selfLinkPrompt = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(
+      within(selfLinkPrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(planName).toHaveValue('尚未儲存的計畫名稱')
+
+    const adminNav = screen.getByRole('navigation', { name: '管理功能' })
+    fireEvent.click(within(adminNav).getByRole('link', { name: '專案' }))
+    const topNavPrompt = await screen.findByRole('group', {
+      name: '有尚未儲存的變更',
+    })
+    fireEvent.click(
+      within(topNavPrompt).getByRole('button', { name: '保留編輯' }),
+    )
+    expect(planName).toHaveValue('尚未儲存的計畫名稱')
+
+    const projectHomeLink = within(sections).getByRole('link', {
+      name: '專案首頁',
+    })
+    fireEvent.click(projectHomeLink)
+    fireEvent.click(
+      within(
+        await screen.findByRole('group', { name: '有尚未儲存的變更' }),
+      ).getByRole('button', { name: '捨棄變更' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+  })
+
   it('allows non-admin users to open project planning routes', async () => {
     managementFetch()
     renderAdmin('/admin/projects/project-demo-1/planning', false)
@@ -1395,7 +1566,7 @@ describe('admin user and company pages', () => {
       has_template_access: false,
     }
     render(
-      <MemoryRouter
+      <DataMemoryRouter
         initialEntries={[
           '/admin/projects/project-demo-1/inspection-items/templates',
         ]}
@@ -1406,7 +1577,7 @@ describe('admin user and company pages', () => {
           </Routes>
           <TestNavigation />
         </CurrentUserProvider>
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     await waitFor(() =>
@@ -1450,7 +1621,7 @@ describe('admin user and company pages', () => {
       has_template_access: true,
     }
     render(
-      <MemoryRouter
+      <DataMemoryRouter
         initialEntries={[
           '/admin/projects/project-demo-1/inspection-items/templates',
         ]}
@@ -1461,7 +1632,7 @@ describe('admin user and company pages', () => {
           </Routes>
           <TestNavigation />
         </CurrentUserProvider>
-      </MemoryRouter>,
+      </DataMemoryRouter>,
     )
 
     await waitFor(() =>

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-import { ConfirmBox } from '../../ui/ConfirmBox'
+import { ConfirmBox } from '../ConfirmBox'
 import type { UnsavedNavigationGuard } from './useUnsavedNavigationGuard'
 
 /**

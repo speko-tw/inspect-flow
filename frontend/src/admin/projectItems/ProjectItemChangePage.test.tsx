@@ -5,7 +5,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { Link, Route, Routes } from 'react-router'
+import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import { describe, expect, it, vi } from 'vitest'
 
 import { CurrentUserProvider } from '../../auth/useCurrentUser'
@@ -158,7 +159,7 @@ function apiWith(overrides: Partial<ProjectItemApi> = {}): ProjectItemApi {
 
 function renderPage(api: ProjectItemApi) {
   return render(
-    <MemoryRouter initialEntries={['/admin/projects/p/items/item-1']}>
+    <DataMemoryRouter initialEntries={['/admin/projects/p/items/item-1']}>
       <CurrentUserProvider
         value={{
           user: currentUserFixture({ is_admin: true }),
@@ -177,7 +178,7 @@ function renderPage(api: ProjectItemApi) {
           />
         </Routes>
       </CurrentUserProvider>
-    </MemoryRouter>,
+    </DataMemoryRouter>,
   )
 }
 
