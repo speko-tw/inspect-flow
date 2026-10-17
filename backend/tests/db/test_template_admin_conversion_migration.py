@@ -12,7 +12,16 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from app.db.engine import create_engine_from_settings, dispose_engine
-from app.models import AuditLog, User, UserModulePermission
+from app.models import (
+    AuditLog,
+    Project,
+    ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
+    User,
+    UserModulePermission,
+)
 from app.services.access_summary import summarize_access
 from app.services.permissions import calculate_effective_access
 from tests.db.conftest import create_root_user_with_company
@@ -62,6 +71,48 @@ def _insert_legacy_assignment(session: Session, user: User) -> None:
     )
 
 
+def _add_legacy_project_template_read(
+    session: Session, actor: User, user: User
+) -> None:
+    role = Role(
+        name=f"舊範本讀取 {user.id.hex[:8]}",
+        is_external_allowed=True,
+        created_by=actor.id,
+        updated_by=actor.id,
+        permission_codes=[RolePermission(code="project_inspection_item.edit")],
+    )
+    project = Project(
+        project_code=f"P-{user.id.hex[:8]}",
+        name="舊範本讀取路徑",
+        client_name="測試業主",
+        site_location="測試工地",
+        created_by=actor.id,
+        updated_by=actor.id,
+    )
+    session.add_all([role, project])
+    session.flush()
+    session.add(
+        ProjectMember(
+            project_id=project.id,
+            user_id=user.id,
+            created_by=actor.id,
+            updated_by=actor.id,
+            role_assignments=[ProjectMemberRole(role=role)],
+        )
+    )
+
+
+def _current_revision(db_url: str) -> str:
+    engine = create_engine_from_settings(db_url)
+    try:
+        with engine.connect() as connection:
+            return connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+    finally:
+        engine.dispose()
+
+
 def test_template_admin_conversion_preserves_internal_and_external_read(
     db_url,
 ):
@@ -78,6 +129,7 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
             external.is_external_collaborator = True
             admin.is_admin = True
             admin_without_role.is_admin = True
+            _add_legacy_project_template_read(session, internal, external)
             session.add(
                 UserModulePermission(
                     user_id=external.id,
@@ -120,7 +172,7 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
                 {"template.manage", "template.use"}
             )
             assert external_access.module_permissions == frozenset(
-                {"template.use"}
+                {"template.use", "project.use", "inspection.use"}
             )
             assert {"template.manage", "template.use"} <= (
                 admin_access.module_permissions
@@ -160,13 +212,21 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
                 is False
             )
             assert session.scalars(
-                select(UserModulePermission.permission_code).where(
-                    UserModulePermission.user_id == external_id
+                select(UserModulePermission.permission_code)
+                .where(UserModulePermission.user_id == external_id)
+                .where(
+                    UserModulePermission.permission_code.in_(
+                        {"template.manage", "template.use"}
+                    )
                 )
             ).all() == ["template.use"]
             external_permissions = session.scalars(
-                select(UserModulePermission).where(
-                    UserModulePermission.user_id == external_id
+                select(UserModulePermission)
+                .where(UserModulePermission.user_id == external_id)
+                .where(
+                    UserModulePermission.permission_code.in_(
+                        {"template.manage", "template.use"}
+                    )
                 )
             ).all()
             assert len(external_permissions) == 1
@@ -197,25 +257,70 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
         downgraded_engine.dispose()
 
 
-@pytest.mark.parametrize("is_admin", [False, True])
-def test_downgrade_rejects_ambiguous_manual_template_manager(db_url, is_admin):
+def test_downgrade_rejects_all_ambiguous_manual_template_managers(db_url):
     command.upgrade(_cfg(), _PARENT_REVISION)
     old_engine = create_engine_from_settings(db_url)
     try:
         with Session(old_engine) as session:
-            manager = create_root_user_with_company(session, "M579M")
-            manager.is_admin = is_admin
-            session.add(
-                UserModulePermission(
-                    user_id=manager.id,
-                    permission_code="template.manage",
-                    source="manual",
+            managers = [
+                create_root_user_with_company(session, "M579M"),
+                create_root_user_with_company(session, "M579A"),
+            ]
+            managers[1].is_admin = True
+            for manager in managers:
+                session.add(
+                    UserModulePermission(
+                        user_id=manager.id,
+                        permission_code="template.manage",
+                        source="manual",
+                    )
                 )
-            )
             session.commit()
+            manager_ids = [str(manager.id) for manager in managers]
     finally:
         old_engine.dispose()
 
     command.upgrade(_cfg(), "head")
-    with pytest.raises(RuntimeError, match="cannot be mapped"):
+    with pytest.raises(RuntimeError) as error:
         command.downgrade(_cfg(), _CONVERSION_PARENT)
+    for manager_id in manager_ids:
+        assert manager_id in str(error.value)
+    assert "2 人" in str(error.value)
+    assert "PR-13" in str(error.value)
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert (
+            "system_role_assignments" not in inspect(engine).get_table_names()
+        )
+    finally:
+        engine.dispose()
+    assert _current_revision(db_url) == "b72e4c19f6a3"
+
+
+def test_downgrade_rejects_external_reader_without_legacy_read_path(db_url):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    old_engine = create_engine_from_settings(db_url)
+    try:
+        with Session(old_engine) as session:
+            external = create_root_user_with_company(session, "M579E")
+            external.is_external_collaborator = True
+            _insert_legacy_assignment(session, external)
+            session.commit()
+            external_id = str(external.id)
+    finally:
+        old_engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    with pytest.raises(RuntimeError) as error:
+        command.downgrade(_cfg(), _CONVERSION_PARENT)
+    assert external_id in str(error.value)
+    assert "外部唯讀權限會失效" in str(error.value)
+    assert "PR-13" in str(error.value)
+    engine = create_engine_from_settings(db_url)
+    try:
+        assert (
+            "system_role_assignments" not in inspect(engine).get_table_names()
+        )
+    finally:
+        engine.dispose()
+    assert _current_revision(db_url) == "b72e4c19f6a3"

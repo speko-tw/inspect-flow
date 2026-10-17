@@ -110,12 +110,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """還原可辨識的內部管理者指派，拒絕有歧義的降版。
+    """僅在權限可忠實還原時重建舊範本管理者指派。
 
     #575 回填非 Admin 舊管理者；此處為 Admin 舊角色加標記。
-    其他來源可能是手動授權，無法判斷是否曾有舊角色。
-    因此拒絕猜測，以免擴大舊制權限。
-    外部協作者的歷史指派依 #612 不還原。
+    外部使用者只有在仍有舊制專案讀取權限時才可降版；否則拒絕，
+    因舊制範本讀取不認得 template.use。其他來源可能是手動授權，
+    無法判斷是否曾有舊角色，也拒絕猜測。外部指派依 #612 不還原。
+    拒絕時先提供受影響 ID 與 PR-13 備份還原或調整授權的指引。
     """
     connection = op.get_bind()
     users = sa.table(
@@ -130,6 +131,72 @@ def downgrade() -> None:
         sa.column("permission_code", sa.String(64)),
         sa.column("source", sa.String(16)),
     )
+    project_members = sa.table(
+        "project_members",
+        sa.column("id", sa.Uuid()),
+        sa.column("user_id", sa.Uuid()),
+    )
+    project_member_roles = sa.table(
+        "project_member_roles",
+        sa.column("project_member_id", sa.Uuid()),
+        sa.column("role_id", sa.Uuid()),
+    )
+    roles = sa.table("roles", sa.column("id", sa.Uuid()))
+    role_permissions = sa.table(
+        "role_permissions",
+        sa.column("role_id", sa.Uuid()),
+        sa.column("code", sa.String(64)),
+    )
+    external_readers = (
+        sa.select(users.c.id)
+        .join(permissions, permissions.c.user_id == users.c.id)
+        .where(users.c.is_external_collaborator.is_(True))
+        .where(permissions.c.permission_code == "template.use")
+        .where(permissions.c.source == "backfill")
+        .where(
+            ~sa.exists(
+                sa.select(1)
+                .select_from(
+                    project_members.join(
+                        project_member_roles,
+                        project_member_roles.c.project_member_id
+                        == project_members.c.id,
+                    )
+                    .join(
+                        roles,
+                        roles.c.id == project_member_roles.c.role_id,
+                    )
+                    .join(
+                        role_permissions,
+                        role_permissions.c.role_id == roles.c.id,
+                    )
+                )
+                .where(project_members.c.user_id == users.c.id)
+                .where(
+                    role_permissions.c.code == "project_inspection_item.edit"
+                )
+            )
+        )
+        .distinct()
+    )
+    external_ids = list(connection.execute(external_readers).scalars().all())
+    ambiguous_ids = list(
+        connection.execute(
+            sa.select(permissions.c.user_id)
+            .join(users, users.c.id == permissions.c.user_id)
+            .where(permissions.c.permission_code == "template.manage")
+            .where(permissions.c.source != "backfill")
+            .where(users.c.is_external_collaborator.is_(False))
+            .distinct()
+        )
+        .scalars()
+        .all()
+    )
+    if external_ids or ambiguous_ids:
+        raise RuntimeError(
+            _downgrade_block_message(external_ids, ambiguous_ids)
+        )
+
     legacy_assignments = sa.table(
         "system_role_assignments",
         sa.column("id", sa.Uuid()),
@@ -140,23 +207,6 @@ def downgrade() -> None:
         sa.column("user_id", sa.Uuid()),
         sa.column("role_code", sa.String(64)),
     )
-    ambiguous_users = (
-        connection.execute(
-            sa.select(permissions.c.user_id)
-            .join(users, users.c.id == permissions.c.user_id)
-            .where(permissions.c.permission_code == "template.manage")
-            .where(permissions.c.source != "backfill")
-            .where(users.c.is_external_collaborator.is_(False))
-            .limit(1)
-        )
-        .scalars()
-        .first()
-    )
-    if ambiguous_users is not None:
-        raise RuntimeError(
-            "Cannot downgrade: internal template.manage grants with a "
-            "non-backfill source cannot be mapped to legacy assignments."
-        )
 
     op.create_table(
         "system_role_assignments",
@@ -210,3 +260,24 @@ def downgrade() -> None:
                 role_code="template_admin",
             )
         )
+
+
+def _downgrade_block_message(
+    external_ids: list[object], ambiguous_ids: list[object]
+) -> str:
+    """提供無法安全降版的資料分類、帳號 ID 與處置方式。"""
+    details: list[str] = []
+    for label, user_ids in (
+        ("外部唯讀權限會失效", external_ids),
+        ("內部非 backfill 管理權限", ambiguous_ids),
+    ):
+        if not user_ids:
+            continue
+        shown = ", ".join(str(user_id) for user_id in user_ids[:20])
+        details.append(f"{label}：{shown}；共 {len(user_ids)} 人")
+    return (
+        "無法安全降版；"
+        + "；".join(details)
+        + "。請以升級前的資料庫備份還原（PR-13），或先移除／調整"
+        "上述授權後再降版。"
+    )
