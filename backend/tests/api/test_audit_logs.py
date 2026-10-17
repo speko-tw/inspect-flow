@@ -162,6 +162,48 @@ def test_admin_query_filters_and_descending_cursor(db_session, make_client):
     assert db_session.query(AuditLog).count() == len(rows)
 
 
+def test_admin_can_read_historical_system_role_assignment_event(
+    db_session, make_client
+):
+    admin = create_root_user_with_company(db_session, "AUD579H")
+    admin.is_admin = True
+    _, token = create_session(db_session, admin)
+    row = AuditLog(
+        id=UUID(int=579),
+        created_at=datetime(2026, 10, 10, 8, 30, tzinfo=UTC),
+        created_by=admin.id,
+        actor_snapshot="歷史稽核操作者",
+        event_type="system_role_assignment.created",
+        entity_type="system_role_assignment",
+        entity_id=UUID(int=580),
+        after={"role_code": "template_admin"},
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    client = make_client()
+    client.cookies.set(SESSION_COOKIE_NAME, token)
+    response = client.get(
+        "/api/v1/audit-logs",
+        params={"event_type": row.event_type},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "id": str(row.id),
+            "created_at": "2026-10-10T08:30:00Z",
+            "created_by": str(admin.id),
+            "project_id": None,
+            "event_type": "system_role_assignment.created",
+            "entity_type": "system_role_assignment",
+            "entity_id": str(row.entity_id),
+            "before": None,
+            "after": {"role_code": "template_admin"},
+        }
+    ]
+
+
 def test_audit_query_authentication_and_validation(db_session, make_client):
     admin = create_root_user_with_company(db_session, "AUD412C")
     admin.is_admin = True

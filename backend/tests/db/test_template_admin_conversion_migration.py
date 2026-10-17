@@ -3,7 +3,7 @@
 from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic.config import Config
@@ -20,6 +20,7 @@ from tests.db.conftest import create_root_user_with_company
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 _PARENT_REVISION = "6eaaafbe0ef2"
+_CONVERSION_PARENT = "9b7a6c2d1e45"
 
 
 @pytest.fixture(autouse=True)
@@ -70,7 +71,13 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
         with Session(old_engine) as session:
             internal = create_root_user_with_company(session, "M579I")
             external = create_root_user_with_company(session, "M579E")
+            admin = create_root_user_with_company(session, "M579A")
+            admin_without_role = create_root_user_with_company(
+                session, "M579N"
+            )
             external.is_external_collaborator = True
+            admin.is_admin = True
+            admin_without_role.is_admin = True
             session.add(
                 UserModulePermission(
                     user_id=external.id,
@@ -80,9 +87,17 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
             )
             _insert_legacy_assignment(session, internal)
             _insert_legacy_assignment(session, external)
+            _insert_legacy_assignment(session, admin)
             session.commit()
             internal_id = internal.id
             external_id = external.id
+            admin_id = admin.id
+            admin_without_role_id = admin_without_role.id
+            expected_legacy_rows = {
+                (str(internal.id), "template_admin"),
+                (str(external.id), "template_admin"),
+                (str(admin.id), "template_admin"),
+            }
     finally:
         old_engine.dispose()
 
@@ -98,11 +113,39 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
             external_access = calculate_effective_access(
                 session, user_id=external_id
             )
+            admin_access = calculate_effective_access(
+                session, user_id=admin_id
+            )
             assert internal_access.module_permissions == frozenset(
                 {"template.manage", "template.use"}
             )
             assert external_access.module_permissions == frozenset(
                 {"template.use"}
+            )
+            assert {"template.manage", "template.use"} <= (
+                admin_access.module_permissions
+            )
+            admin_permissions = set(
+                session.scalars(
+                    select(UserModulePermission.permission_code).where(
+                        UserModulePermission.user_id == admin_id
+                    )
+                ).all()
+            )
+            admin_without_role_permissions = set(
+                session.scalars(
+                    select(UserModulePermission.permission_code).where(
+                        UserModulePermission.user_id == admin_without_role_id
+                    )
+                ).all()
+            )
+            assert {"template.manage", "template.use"} <= admin_permissions
+            assert (
+                not {
+                    "template.manage",
+                    "template.use",
+                }
+                & admin_without_role_permissions
             )
             internal_user = session.get(User, internal_id)
             external_user = session.get(User, external_id)
@@ -131,3 +174,48 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
             assert session.scalars(select(AuditLog)).all() == []
     finally:
         engine.dispose()
+
+    command.downgrade(_cfg(), _CONVERSION_PARENT)
+    downgraded_engine = create_engine_from_settings(db_url)
+    try:
+        with downgraded_engine.connect() as connection:
+            restored_rows = {
+                (str(UUID(str(user_id))), role_code)
+                for user_id, role_code in connection.execute(
+                    text(
+                        "SELECT user_id, role_code "
+                        "FROM system_role_assignments"
+                    )
+                )
+            }
+        assert restored_rows == {
+            row
+            for row in expected_legacy_rows
+            if row[0] in {str(internal_id), str(admin_id)}
+        }
+    finally:
+        downgraded_engine.dispose()
+
+
+@pytest.mark.parametrize("is_admin", [False, True])
+def test_downgrade_rejects_ambiguous_manual_template_manager(db_url, is_admin):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    old_engine = create_engine_from_settings(db_url)
+    try:
+        with Session(old_engine) as session:
+            manager = create_root_user_with_company(session, "M579M")
+            manager.is_admin = is_admin
+            session.add(
+                UserModulePermission(
+                    user_id=manager.id,
+                    permission_code="template.manage",
+                    source="manual",
+                )
+            )
+            session.commit()
+    finally:
+        old_engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    with pytest.raises(RuntimeError, match="cannot be mapped"):
+        command.downgrade(_cfg(), _CONVERSION_PARENT)
