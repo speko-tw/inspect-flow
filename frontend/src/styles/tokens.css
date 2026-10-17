@@ -14,6 +14,8 @@
   --color-text-disabled: #536174;
   --color-text-on-accent: #202b3b;
   --color-border: #d4dce7;
+  /* UDS-AC09：核可原型 #8492a6 對 #f3f6fa 為 2.92:1，低於
+     控制邊界 3:1；改用 #7d8a9a，對比為 3.24:1。 */
   --color-border-control: #7d8a9a;
   --color-border-strong: #7d8a9a;
   --color-focus: #1670a6;
