@@ -2,6 +2,7 @@
 
 import secrets
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -14,7 +15,7 @@ from app.api.pagination import ilike_contains, page_by_text_key, write_call
 from app.api.v1._management_errors import (
     management_api_error,
 )
-from app.auth.access import require_admin
+from app.auth.access import require_admin, require_module_delegation
 from app.auth.dependencies import get_db
 from app.auth.password_service import PasswordLengthError, set_password
 from app.models import Company, User
@@ -39,6 +40,11 @@ router = APIRouter(
     tags=["users"],
     dependencies=[Depends(require_admin, scope="function")],
 )
+module_delegate_router = APIRouter(
+    prefix="/module-delegate/users",
+    tags=["users"],
+)
+_module_delegate_access = require_module_delegation()
 
 _DEFAULT_PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 100
@@ -72,6 +78,19 @@ class UserResponse(BaseModel):
 
 class UserListResponse(BaseModel):
     items: list[UserResponse]
+    next_cursor: str | None
+
+
+class ModuleDelegateUserResponse(BaseModel):
+    """委派者選人查詢回傳的人員最小欄位（AUT-R49）。"""
+
+    id: UUID
+    username: str
+    name_zh: str | None
+
+
+class ModuleDelegateUserListResponse(BaseModel):
+    items: list[ModuleDelegateUserResponse]
     next_cursor: str | None
 
 
@@ -211,6 +230,44 @@ def list_users(
         filters=filters,
     )
     return UserListResponse(**result)
+
+
+@module_delegate_router.get("", response_model=ModuleDelegateUserListResponse)
+def list_module_delegate_users(
+    q: str | None = Query(default=None, max_length=256),
+    cursor: str | None = None,
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    _caller: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> ModuleDelegateUserListResponse:
+    """列出委派者可選的人員，不開放全域使用者資料。"""
+    filters: list[Any] = [
+        User.is_active.is_(True),
+        User.is_system.is_(False),
+    ]
+    query = (q or "").strip()
+    if query:
+        filters.append(
+            or_(
+                ilike_contains(User.username, query),
+                ilike_contains(User.name_zh, query),
+            )
+        )
+    result = page_by_text_key(
+        db,
+        User,
+        sort_key=User.username,
+        key_name="username",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda user: ModuleDelegateUserResponse(
+            id=user.id,
+            username=user.username,
+            name_zh=user.name_zh,
+        ),
+        filters=filters,
+    )
+    return ModuleDelegateUserListResponse(**result)
 
 
 @router.get("/{user_id}", response_model=UserResponse)

@@ -24,6 +24,7 @@ from app.models import (
     TaskSnapshotMeasurementField,
     TaskSnapshotPoint,
     TaskSnapshotTextStandard,
+    UserModulePermission,
 )
 from app.services.inspection_planning import (
     PlanningError,
@@ -84,6 +85,15 @@ def _grant(session, operator, project, *codes, user=None):
     )
     session.add(member)
     session.flush()
+    if user is not None and "inspection_task.inspect" in codes:
+        session.add(
+            UserModulePermission(
+                user_id=user.id,
+                permission_code="inspection.use",
+                source="manual",
+            )
+        )
+        session.flush()
     return role
 
 
@@ -272,6 +282,13 @@ def test_unchanged_task_name_by_another_operator_changes_nothing(
     )
     other = create_root_user_with_company(session, "RENAMENOOP-OTHER")
     _grant(session, operator, project, "inspection_task.manage", user=other)
+    session.add(
+        UserModulePermission(
+            user_id=other.id,
+            permission_code="inspection.use",
+            source="manual",
+        )
+    )
     session.flush()
     before_by = task.updated_by
     before_at = task.updated_at
@@ -494,7 +511,9 @@ def test_field_task_filters_use_central_permission_calculation(
     access = EffectiveAccess(
         is_active=True,
         is_admin=False,
-        module_permissions=frozenset(),
+        system_roles=frozenset(),
+        module_permissions=frozenset({"inspection.use"}),
+        delegated_modules=frozenset(),
         project_permissions=frozenset(),
         project_permissions_by_project={
             allowed_project_id: frozenset({"inspection_task.inspect"}),
@@ -521,6 +540,29 @@ def test_field_task_filters_use_central_permission_calculation(
     assert calls == [(user_id, None)]
     project_filter = filters[1]
     assert set(project_filter.right.value) == {allowed_project_id}
+
+    denied_access = EffectiveAccess(
+        is_active=True,
+        is_admin=False,
+        system_roles=frozenset(),
+        module_permissions=frozenset(),
+        delegated_modules=frozenset(),
+        project_permissions=frozenset(),
+        project_permissions_by_project={
+            allowed_project_id: frozenset({"inspection_task.inspect"}),
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.inspection_planning.calculate_effective_access",
+        lambda session, **kwargs: denied_access,
+    )
+    with pytest.raises(PlanningError, match="authorization.forbidden"):
+        field_inspection_task_filters(
+            session,
+            user_id=user_id,
+            is_admin=False,
+            assigned_to_me=False,
+        )
 
 
 def test_non_assignee_with_inspection_permission_can_start_task(

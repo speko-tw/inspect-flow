@@ -21,6 +21,10 @@ export interface CurrentUser {
   has_field_access: boolean
   has_template_access: boolean
   module_permissions: string[]
+  delegated_modules: string[]
+  can_create_project: boolean
+  has_project_access: boolean
+  is_external_collaborator: boolean
   // 登入與 `me` 回傳同一份本體（AUT-R05、AUT-R08）；這四個公司欄位
   // 由我的工作台讀取，其他呼叫端不需要，所以型別上選填。
   company?: { id: string; name: string } | null

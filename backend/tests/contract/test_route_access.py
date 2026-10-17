@@ -209,7 +209,7 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
     declaration = routes[planning_project_get]
     assert declaration is not None
     assert declaration.level is AccessLevel.PROJECT_PERMISSION
-    assert declaration.permission_code == "inspection_plan.read"
+    assert declaration.permission_code == "project.read"
     declaration = routes[workflow_summary]
     assert declaration is not None
     assert declaration.level is AccessLevel.LOGIN_REQUIRED

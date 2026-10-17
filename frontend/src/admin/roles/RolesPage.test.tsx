@@ -52,6 +52,10 @@ const currentUser: CurrentUser = {
   has_field_access: true,
   has_template_access: true,
   module_permissions: [],
+  delegated_modules: [],
+  can_create_project: true,
+  has_project_access: true,
+  is_external_collaborator: false,
 }
 
 function RoleNavigation() {

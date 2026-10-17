@@ -18,8 +18,11 @@ from app.models import (
     ProjectMember,
     ProjectMemberRole,
     RolePermission,
+    SystemRoleAssignment,
 )
+from app.permission_codes import MODULES
 from app.services.module_permissions import (
+    list_user_module_delegations,
     query_people_access,
     query_person_access,
 )
@@ -35,7 +38,9 @@ class EffectiveAccess:
 
     is_active: bool
     is_admin: bool
+    system_roles: frozenset[str]
     module_permissions: frozenset[str]
+    delegated_modules: frozenset[str]
     project_permissions: frozenset[str]
     project_permissions_by_project: dict[uuid.UUID, frozenset[str]]
     project_memberships: frozenset[uuid.UUID] = frozenset()
@@ -55,9 +60,34 @@ def calculate_effective_access(
     with session.no_autoflush:
         person = query_person_access(session, user_id=user_id)
         if person is None:
-            return EffectiveAccess(False, False, frozenset(), frozenset(), {})
+            return EffectiveAccess(
+                False,
+                False,
+                frozenset(),
+                frozenset(),
+                frozenset(),
+                frozenset(),
+                {},
+            )
         project_map = _project_permissions_by_project(
             session, user_id=user_id, project_id=project_id
+        )
+        delegated_modules = (
+            frozenset(MODULES)
+            if person.is_admin
+            else frozenset(
+                item.module
+                for item in list_user_module_delegations(
+                    session, user_id=user_id
+                )
+            )
+        )
+        system_roles = frozenset(
+            session.scalars(
+                select(SystemRoleAssignment.role_code).where(
+                    SystemRoleAssignment.user_id == user_id
+                )
+            ).all()
         )
         project_codes = (
             project_map.get(project_id, frozenset())
@@ -67,7 +97,9 @@ def calculate_effective_access(
     return EffectiveAccess(
         is_active=person.is_active,
         is_admin=person.is_admin,
+        system_roles=system_roles,
         module_permissions=person.module_permissions,
+        delegated_modules=delegated_modules,
         project_permissions=project_codes,
         project_permissions_by_project=project_map,
         project_memberships=frozenset(project_map),
@@ -80,13 +112,14 @@ def project_member_ids_with_permission(
     project_id: uuid.UUID,
     permission_code: str,
     active_only: bool = False,
+    module_permission_code: str | None = None,
 ) -> frozenset[uuid.UUID]:
     """DOM-R69：回傳具指定動作權限且非 Admin 的專案成員。
 
     先由中央 Service 取得角色權限候選人，再由 DOM-R60 人員 Service
     批次核對帳號狀態與 Admin 身分，避免端點自行重算授權。
-    IP-R12 規定停用帳號過濾要等 authentication 任務 P 合併後才啟用，
-    因此預設保留目前行為，由該任務明確傳入 `active_only=True`。
+    IP-R12 呼叫端可要求只保留有效帳號與指定模組使用權，
+    讓候選清單和實際指派驗證使用相同條件。
     """
     with session.no_autoflush:
         candidate_permissions: dict[uuid.UUID, set[str]] = {}
@@ -115,6 +148,10 @@ def project_member_ids_with_permission(
         if (person.is_active or not active_only)
         and not person.is_admin
         and permission_code in candidate_permissions[user_id]
+        and (
+            module_permission_code is None
+            or module_permission_code in person.module_permissions
+        )
     )
 
 

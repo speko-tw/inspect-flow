@@ -1,14 +1,18 @@
 {
   "current_user_keys": [
+    "can_create_project",
     "company",
+    "delegated_modules",
     "department",
     "email",
     "employee_no",
     "has_field_access",
     "has_office_access",
+    "has_project_access",
     "has_template_access",
     "id",
     "is_admin",
+    "is_external_collaborator",
     "location",
     "module_permissions",
     "must_change_password",

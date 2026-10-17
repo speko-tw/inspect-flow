@@ -7,10 +7,18 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import SystemRoleCode, User, UserModulePermission
+from app.models import (
+    ProjectMember,
+    ProjectMemberRole,
+    SystemRoleCode,
+    User,
+    UserModuleDelegation,
+    UserModulePermission,
+)
 from app.permission_codes import PermissionCode, permission_code_scope
 from app.services.access_summary import (
     FIELD_PERMISSION_CODES,
@@ -87,6 +95,7 @@ def world(db_session: Session, make_client):
         db_session,
         name="內業",
         permission_codes=[
+            "project.read",
             "project_member.manage",
             "inspection_plan.read",
         ],
@@ -99,7 +108,7 @@ def world(db_session: Session, make_client):
     read_only_role = create_role(
         db_session,
         name="只讀任務",
-        permission_codes=["inspection_task.read"],
+        permission_codes=["project.read", "inspection_task.read"],
     )
     empty_role = create_role(db_session, name="空角色", permission_codes=[])
     template_role = create_role(
@@ -117,6 +126,9 @@ def world(db_session: Session, make_client):
     template_admin = person("tpladmin")
     editor = person("editor")
     module_only = person("moduleonly")
+    delegated = person("delegate")
+    external = person("external")
+    external.is_external_collaborator = True
     member_only = person("memberonly")
     add_project_member(
         db_session,
@@ -188,6 +200,33 @@ def world(db_session: Session, make_client):
             source="manual",
         )
     )
+    db_session.add(
+        UserModulePermission(
+            user_id=module_only.id,
+            permission_code="project.create",
+            source="manual",
+        )
+    )
+    db_session.add(
+        UserModuleDelegation(user_id=delegated.id, module="template")
+    )
+    module_codes = {
+        office.id: ("project.use", "inspection.use"),
+        field.id: ("inspection.use",),
+        both.id: ("project.use", "inspection.use"),
+        split.id: ("project.use", "inspection.use"),
+        reader.id: ("project.use", "inspection.use"),
+        editor.id: ("inspection.use",),
+    }
+    for user_id, codes in module_codes.items():
+        db_session.add_all(
+            UserModulePermission(
+                user_id=user_id,
+                permission_code=code,
+                source="manual",
+            )
+            for code in codes
+        )
     db_session.commit()
 
     def client(user: User) -> TestClient:
@@ -204,7 +243,10 @@ def world(db_session: Session, make_client):
         "tpladmin": client(template_admin),
         "editor": client(editor),
         "module_only": client(module_only),
+        "delegated": client(delegated),
+        "external": client(external),
         "member_only": client(member_only),
+        "member_only_user": member_only,
         "project_a": project_a,
         "project_b": project_b,
         "make_client": make_client,
@@ -253,6 +295,28 @@ def test_me_reports_access_summary(world, who, expected) -> None:
     assert _access(resp.json()) == expected
 
 
+def test_me_reports_new_project_and_delegation_flags(world) -> None:
+    admin = world["admin"].get(ME).json()
+    assert admin["can_create_project"] is True
+    assert admin["has_project_access"] is True
+    assert admin["delegated_modules"] == ["inspection", "project", "template"]
+
+    office = world["office"].get(ME).json()
+    assert office["has_project_access"] is True
+    assert office["can_create_project"] is False
+
+    creator = world["module_only"].get(ME).json()
+    assert creator["can_create_project"] is True
+    assert creator["has_project_access"] is False
+
+    delegated = world["delegated"].get(ME).json()
+    assert delegated["delegated_modules"] == ["template"]
+    assert delegated["has_template_access"] is False
+
+    external = world["external"].get(ME).json()
+    assert external["is_external_collaborator"] is True
+
+
 def test_access_summary_select_count_is_constant(world) -> None:
     few, _ = select_count(world["office"], ME)
     # ``split`` is a member of two projects with several role codes;
@@ -281,9 +345,9 @@ def test_permission_views_agree_across_project_and_person_endpoints(world):
             200,
             200,
             200,
-            ["DEMO-480-A", "DEMO-480-B"],
+            ["DEMO-480-A"],
         ),
-        "nobody": (403, 403, 403, ["DEMO-480-A"]),
+        "nobody": (403, 403, 403, []),
         "module_only": (403, 403, 403, []),
     }
     for who, (
@@ -297,10 +361,10 @@ def test_permission_views_agree_across_project_and_person_endpoints(world):
         assert profile.status_code == 200
         module_permissions = set(profile.json()["module_permissions"])
         if who == "module_only":
-            assert module_permissions == {"project.use"}
+            assert module_permissions == {"project.use", "project.create"}
         elif who == "admin":
             assert module_permissions
-        else:
+        elif who == "nobody":
             assert module_permissions == set()
 
         projects = client.get(ME_PROJECTS)
@@ -309,7 +373,7 @@ def test_permission_views_agree_across_project_and_person_endpoints(world):
         if who == "office":
             assert projects.json()[0]["has_office_access"] is True
         if who == "nobody":
-            assert projects.json()[0]["has_office_access"] is False
+            assert projects.json() == []
 
         project = client.get(f"/api/v1/projects/{project_id}")
         workflow = client.get(
@@ -321,11 +385,47 @@ def test_permission_views_agree_across_project_and_person_endpoints(world):
         assert members.status_code == members_status, members.text
         if who == "office":
             assert set(workflow.json()["viewer_permission_codes"]) == {
+                "project.read",
                 "inspection_plan.read",
                 "project_member.manage",
             }
         if who == "admin":
             assert workflow.json()["viewer_permission_codes"]
+
+
+def test_project_read_requires_project_use_and_membership(world) -> None:
+    user = world["member_only_user"]
+    project = world["project_a"]
+    role = create_role(
+        world["db"], name="只讀專案", permission_codes=["project.read"]
+    )
+    member = world["db"].scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == user.id,
+        )
+    )
+    assert member is not None
+    member.role_assignments.append(ProjectMemberRole(role_id=role.id))
+    world["db"].commit()
+
+    project_path = f"/api/v1/projects/{project.id}/workflow-summary"
+    denied_without_module = world["member_only"].get(project_path)
+    assert denied_without_module.status_code == 403
+
+    world["db"].add(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
+    world["db"].commit()
+    allowed_with_both_layers = world["member_only"].get(project_path)
+    assert allowed_with_both_layers.status_code == 200
+
+    nonmember_with_module = world["module_only"].get(project_path)
+    assert nonmember_with_module.status_code == 403
 
 
 def test_inspection_item_list_accepts_membership_without_role(world) -> None:

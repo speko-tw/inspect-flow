@@ -18,6 +18,8 @@ from app.api.errors import ErrorCode
 from app.auth.access import (
     require_admin,
     require_login_access,
+    require_module_or_any_project_permission,
+    require_module_permission,
     require_project_permission,
     require_self_or_admin,
 )
@@ -31,6 +33,8 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModuleDelegation,
+    UserModulePermission,
     UserPassword,
 )
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
@@ -155,6 +159,8 @@ def probe(
         "evidence_update": 0,
         "evidence_delete": 0,
         "report_approve": 0,
+        "module_use": 0,
+        "module_or_project": 0,
     }
     app = create_app()
     router = APIRouter()
@@ -181,6 +187,10 @@ def probe(
     )
     report_approve_dep = require_project_permission(
         registered_permission_codes.REPORT_APPROVE.value
+    )
+    module_use_dep = require_module_permission("project.use")
+    module_or_project_dep = require_module_or_any_project_permission(
+        "project.use", registered_permission_codes.REPORT_APPROVE.value
     )
 
     @router.get("/api/v1/test/needs-login")
@@ -244,6 +254,20 @@ def probe(
         user: User = Depends(report_approve_dep, scope="function"),  # noqa
     ) -> dict[str, str]:
         calls["report_approve"] += 1
+        return {"user_id": str(user.id)}
+
+    @router.get("/api/v1/test/needs-project-use")
+    def needs_project_use(
+        user: User = Depends(module_use_dep, scope="function"),  # noqa
+    ) -> dict[str, str]:
+        calls["module_use"] += 1
+        return {"user_id": str(user.id)}
+
+    @router.get("/api/v1/test/project-use-or-project-read")
+    def needs_module_or_project_read(
+        user: User = Depends(module_or_project_dep, scope="function"),  # noqa
+    ) -> dict[str, str]:
+        calls["module_or_project"] += 1
         return {"user_id": str(user.id)}
 
     app.include_router(router)
@@ -326,6 +350,20 @@ def _build_project_permission_scenario(
 
     user_u = make_local_user(db_session, f"E9{suffix}1")
     _add_member(db_session, creator, project_p, user_u, [role_r1, role_r2])
+    db_session.add(
+        UserModulePermission(
+            user_id=user_u.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=user_u.id,
+            permission_code="inspection.use",
+            source="manual",
+        )
+    )
     db_session.commit()
 
     admin_a = _make_admin_user(db_session, f"E9{suffix}2")
@@ -446,6 +484,52 @@ def test_aut_ac19_effective_permission_change_is_immediate(
     assert response.status_code == 200
     assert calls["evidence_read"] > 0
     assert calls["report_read"] > 0
+
+
+def test_module_permission_does_not_accept_delegation_as_authority(
+    db_session: Session,
+    probe_client: tuple[TestClient, dict[str, int]],
+    registered_permission_codes: type[_TestPermissionCode],
+) -> None:
+    client, _calls = probe_client
+    scenario = _build_project_permission_scenario(
+        db_session, registered_permission_codes, "MODULE"
+    )
+    project_use = (
+        db_session.query(UserModulePermission)
+        .filter_by(
+            user_id=scenario.user_u.id,
+            permission_code="project.use",
+        )
+        .one()
+    )
+    db_session.delete(project_use)
+    db_session.add(
+        UserModuleDelegation(
+            user_id=scenario.user_u.id,
+            module="project",
+        )
+    )
+    db_session.commit()
+    cookies = {SESSION_COOKIE_NAME: _login(client, scenario.user_u)}
+
+    denied = client.get("/api/v1/test/needs-project-use", cookies=cookies)
+    assert denied.status_code == 403
+    project_role = client.get(
+        "/api/v1/test/project-use-or-project-read", cookies=cookies
+    )
+    assert project_role.status_code == 200
+
+    db_session.add(
+        UserModulePermission(
+            user_id=scenario.user_u.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
+    db_session.commit()
+    granted = client.get("/api/v1/test/needs-project-use", cookies=cookies)
+    assert granted.status_code == 200
 
 
 def test_aut_r19_admin_gets_validation_error_for_invalid_project_id(
