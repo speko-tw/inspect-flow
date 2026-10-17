@@ -32,13 +32,19 @@
 
 .dashboard-shell .app-header-tab[aria-current='page'] {
   border-bottom-color: var(--color-brand-accent);
+  background: var(--color-header-nav-current);
   color: var(--color-brand-accent);
 }
 
 .dashboard-shell .app-header-tab:hover,
 .dashboard-shell .app-header-account button:hover {
-  background: rgb(255 255 255 / 12%);
+  background: var(--color-header-nav-hover);
   color: var(--color-text-inverse);
+}
+
+.dashboard-shell .app-header-tab:active,
+.dashboard-shell .app-header-account button:active {
+  background: var(--color-header-nav-pressed);
 }
 
 .dashboard-heading {
@@ -253,7 +259,7 @@
 .dashboard-project-head,
 .dashboard-project-row {
   grid-template-columns:
-    minmax(12rem, 1.6fr) repeat(3, minmax(4.5rem, 0.65fr))
+    minmax(12rem, 1.6fr) repeat(4, minmax(4.5rem, 0.65fr))
     minmax(7rem, 0.85fr);
 }
 

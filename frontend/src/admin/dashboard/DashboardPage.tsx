@@ -52,10 +52,12 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
   const [projectCursor, setProjectCursor] = useState<string | null>(null)
   const [projectListState, setProjectListState] =
     useState<LoadState>('loading')
+  const [projectListKey, setProjectListKey] = useState('')
   const [engineerQuery, setEngineerQuery] = useState('')
   const [engineers, setEngineers] = useState<DashboardEngineer[]>([])
   const [engineerCursor, setEngineerCursor] = useState<string | null>(null)
   const [engineerState, setEngineerState] = useState<LoadState>('loading')
+  const [engineerListKey, setEngineerListKey] = useState('')
   const [retryKey, setRetryKey] = useState(0)
   const projectRequestKey = `${projectQuery}:${retryKey}:${tab}`
   const engineerRequestKey = [
@@ -64,6 +66,10 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     retryKey,
     tab,
   ].join(':')
+  const visibleProjectListState =
+    projectListKey === projectRequestKey ? projectListState : 'loading'
+  const visibleEngineerListState =
+    engineerListKey === engineerRequestKey ? engineerState : 'loading'
   const projectRequestKeyRef = useRef(projectRequestKey)
   const engineerRequestKeyRef = useRef(engineerRequestKey)
   useLayoutEffect(() => {
@@ -93,7 +99,13 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     !globalAccess &&
     !selectedProject
   const visibleEngineers = noEngineerScope ? [] : engineers
-  const visibleEngineerState = noEngineerScope ? 'ready' : engineerState
+  const visibleEngineerState = noEngineerScope
+    ? 'ready'
+    : visibleEngineerListState
+  const visibleProjectCursor =
+    projectListKey === projectRequestKey ? projectCursor : null
+  const visibleEngineerCursor =
+    engineerListKey === engineerRequestKey ? engineerCursor : null
 
   useEffect(() => {
     let active = true
@@ -150,6 +162,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     if (tab !== 'projects') return
     let active = true
     const timer = window.setTimeout(() => {
+      setProjectListKey(projectRequestKey)
       setProjectListState('loading')
       listDashboardProjects({ q: projectQuery, limit: PAGE_SIZE })
         .then((page) => {
@@ -167,12 +180,13 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
       active = false
       window.clearTimeout(timer)
     }
-  }, [projectQuery, retryKey, tab])
+  }, [projectQuery, projectRequestKey, retryKey, tab])
 
   useEffect(() => {
     if (tab !== 'engineers' || noEngineerScope) return
     let active = true
     const timer = window.setTimeout(() => {
+      setEngineerListKey(engineerRequestKey)
       setEngineerState('loading')
       listDashboardEngineers({
         projectId: selectedProject || undefined,
@@ -194,7 +208,14 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
       active = false
       window.clearTimeout(timer)
     }
-  }, [engineerQuery, noEngineerScope, retryKey, selectedProject, tab])
+  }, [
+    engineerQuery,
+    engineerRequestKey,
+    noEngineerScope,
+    retryKey,
+    selectedProject,
+    tab,
+  ])
 
   const selectedProjectRow = projects.find(
     (item) => item.project_id === selectedProject,
@@ -395,43 +416,45 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
               />
             </label>
           </div>
-          {projectListState === 'loading' && (
+          {visibleProjectListState === 'loading' && (
             <p className="dashboard-status" role="status">
               正在載入專案進度…
             </p>
           )}
-          {projectListState === 'error' && (
+          {visibleProjectListState === 'error' && (
             <RetryNotice onRetry={retry} text="專案進度載入失敗，請重試。" />
           )}
-          {projectListState === 'ready' && visibleProjects.length === 0 && (
-            <div className="dashboard-notice is-empty">
-              <p>
-                {projectQuery.trim()
-                  ? `找不到符合「${projectQuery.trim()}」的專案。`
-                  : '目前沒有可查看的專案進度。'}
-              </p>
-              {projectQuery && (
-                <button
-                  className="dashboard-button"
-                  onClick={() => setProjectQuery('')}
-                  type="button"
-                >
-                  清除搜尋
-                </button>
-              )}
-            </div>
-          )}
-          {projectListState === 'ready' && visibleProjects.length > 0 && (
-            <ProjectList
-              onSelect={setSelectedProject}
-              projects={visibleProjects}
-              scopeLabel={scopeLabel}
-            />
-          )}
+          {visibleProjectListState === 'ready' &&
+            visibleProjects.length === 0 && (
+              <div className="dashboard-notice is-empty">
+                <p>
+                  {projectQuery.trim()
+                    ? `找不到符合「${projectQuery.trim()}」的專案。`
+                    : '目前沒有可查看的專案進度。'}
+                </p>
+                {projectQuery && (
+                  <button
+                    className="dashboard-button"
+                    onClick={() => setProjectQuery('')}
+                    type="button"
+                  >
+                    清除搜尋
+                  </button>
+                )}
+              </div>
+            )}
+          {visibleProjectListState === 'ready' &&
+            visibleProjects.length > 0 && (
+              <ProjectList
+                onSelect={setSelectedProject}
+                projects={visibleProjects}
+                scopeLabel={scopeLabel}
+              />
+            )}
           {globalAccess &&
             !selectedProject &&
-            projectCursor &&
-            projectListState === 'ready' && (
+            visibleProjectCursor &&
+            visibleProjectListState === 'ready' && (
               <div className="dashboard-load-row">
                 <button
                   className="dashboard-button"
@@ -499,7 +522,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           {visibleEngineerState === 'ready' && visibleEngineers.length > 0 && (
             <EngineerList engineers={visibleEngineers} />
           )}
-          {engineerCursor && visibleEngineerState === 'ready' && (
+          {visibleEngineerCursor && visibleEngineerState === 'ready' && (
             <div className="dashboard-load-row">
               <button
                 className="dashboard-button"
@@ -548,6 +571,7 @@ function ProjectList({
         <span role="columnheader">待開始</span>
         <span role="columnheader">進行中</span>
         <span role="columnheader">已完成</span>
+        <span role="columnheader">已派出</span>
         <span role="columnheader">完成率</span>
       </div>
       {projects.map((project) => (
@@ -589,6 +613,14 @@ function ProjectList({
             role="cell"
           >
             {project.completed_count.toLocaleString('zh-TW')}
+          </span>
+          <span
+            aria-label={`已派出：${project.completion_denominator_count}`}
+            className="dashboard-count"
+            data-label="已派出"
+            role="cell"
+          >
+            {project.completion_denominator_count.toLocaleString('zh-TW')}
           </span>
           <span
             aria-label={`完成率：${formatRate(project.completion_rate)}`}

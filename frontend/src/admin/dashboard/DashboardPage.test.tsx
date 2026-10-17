@@ -107,6 +107,10 @@ describe('Dashboard 頁面', () => {
     expect(
       screen.getByText('只顯示進度，不含照片與查核結果。'),
     ).toBeInTheDocument()
+    expect(await screen.findByLabelText('已派出：6')).toHaveTextContent('6')
+    expect(
+      screen.getAllByRole('columnheader').map((node) => node.textContent),
+    ).toEqual(['專案', '待開始', '進行中', '已完成', '已派出', '完成率'])
 
     fireEvent.change(screen.getByLabelText('檢視範圍'), {
       target: { value: 'project-1' },
@@ -115,7 +119,9 @@ describe('Dashboard 頁面', () => {
     await waitFor(() =>
       expect(api.getDashboardSummary).toHaveBeenLastCalledWith('project-1'),
     )
-    expect(screen.getByText('東區工程')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '東區工程' }),
+    ).toBeInTheDocument()
   })
 
   it('以 API 搜尋專案並載入下一頁', async () => {
@@ -175,6 +181,24 @@ describe('Dashboard 頁面', () => {
     expect(
       screen.queryByRole('button', { name: '東區工程' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('專案搜尋在 debounce 期間隱藏舊列與舊分頁', async () => {
+    setup()
+    await screen.findByRole('button', { name: '載入更多專案' })
+    vi.useFakeTimers()
+
+    fireEvent.change(screen.getByLabelText('搜尋專案'), {
+      target: { value: '西側' },
+    })
+
+    expect(
+      screen.queryByRole('button', { name: '東區工程' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '載入更多專案' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('正在載入專案進度')
   })
 
   it('保留四種工程師歸屬且以目前專案查詢', async () => {
@@ -257,6 +281,37 @@ describe('Dashboard 頁面', () => {
     })
     expect(
       screen.queryByText('舊專案工程師（stale-engineer）'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('工程師搜尋與範圍切換在 debounce 期間隱藏舊列與分頁', async () => {
+    setup(false)
+    fireEvent.click(screen.getByRole('tab', { name: '工程師工作量' }))
+    await screen.findByRole('button', { name: '載入更多工程師' })
+    vi.useFakeTimers()
+
+    fireEvent.change(screen.getByLabelText('搜尋工程師'), {
+      target: { value: '新名字' },
+    })
+
+    expect(
+      screen.queryByText('陳工程師（engineer-1）'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '載入更多工程師' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '正在載入工程師工作量',
+    )
+
+    fireEvent.change(screen.getByLabelText('檢視範圍'), {
+      target: { value: 'project-2' },
+    })
+    expect(
+      screen.queryByText('陳工程師（engineer-1）'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '載入更多工程師' }),
     ).not.toBeInTheDocument()
   })
 

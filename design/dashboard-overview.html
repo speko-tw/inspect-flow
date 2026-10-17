@@ -179,7 +179,10 @@ progress { display: block; width: 100%; height: 9px; margin-top: 9px; accent-col
 .table { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
 .table-head, .project-row, .engineer-row { display: grid; align-items: center; gap: 14px; padding: 12px 16px; }
 .table-head { color: var(--muted); background: var(--muted-surface); font-size: 12px; font-weight: 750; }
-.project-grid { grid-template-columns: minmax(210px, 1.6fr) repeat(3, minmax(76px, .65fr)) minmax(110px, .85fr); }
+.project-grid {
+  grid-template-columns: minmax(210px, 1.6fr) repeat(4, minmax(76px, .65fr))
+    minmax(110px, .85fr);
+}
 .engineer-grid { grid-template-columns: minmax(170px, 1.3fr) repeat(4, minmax(100px, .8fr)); }
 .project-row, .engineer-row { min-height: 70px; border-top: 1px solid var(--line); }
 .project-row[hidden], .engineer-row[hidden] { display: none; }
@@ -326,25 +329,40 @@ progress { display: block; width: 100%; height: 9px; margin-top: 9px; accent-col
       <div class="toolbar"><label class="visually-hidden" for="project-search">搜尋專案</label><input type="search" id="project-search" placeholder="搜尋專案名稱" autocomplete="off"></div>
     </div>
     <div class="table" id="project-list">
-      <div class="table-head project-grid" aria-hidden="true"><span>專案</span><span>待開始</span><span>進行中</span><span>已完成</span><span>完成率</span></div>
+      <div class="table-head project-grid" aria-hidden="true">
+        <span>專案</span><span>待開始</span><span>進行中</span>
+        <span>已完成</span><span>已派出</span><span>完成率</span>
+      </div>
       <div class="project-row project-grid" data-project="east">
         <div class="name-cell"><button class="select-project" data-select="east">東區排水改善工程</button><small>示意資料</small></div>
-        <div class="count"><span class="count-label">待開始</span>2</div><div class="count"><span class="count-label">進行中</span>4</div><div class="count"><span class="count-label">已完成</span>8</div>
+        <div class="count"><span class="count-label">待開始</span>2</div>
+        <div class="count"><span class="count-label">進行中</span>4</div>
+        <div class="count"><span class="count-label">已完成</span>8</div>
+        <div class="count"><span class="count-label">已派出</span>14</div>
         <div class="rate"><strong>57%</strong><progress max="100" value="57">57%</progress></div>
       </div>
       <div class="project-row project-grid" data-project="west">
         <div class="name-cell"><button class="select-project" data-select="west">西側管線更新工程</button><small>示意資料</small></div>
-        <div class="count"><span class="count-label">待開始</span>1</div><div class="count"><span class="count-label">進行中</span>2</div><div class="count"><span class="count-label">已完成</span>7</div>
+        <div class="count"><span class="count-label">待開始</span>1</div>
+        <div class="count"><span class="count-label">進行中</span>2</div>
+        <div class="count"><span class="count-label">已完成</span>7</div>
+        <div class="count"><span class="count-label">已派出</span>10</div>
         <div class="rate"><strong>70%</strong><progress max="100" value="70">70%</progress></div>
       </div>
       <div class="project-row project-grid" data-project="north" hidden>
         <div class="name-cell"><button class="select-project" data-select="north">北區擋土牆工程</button><small>示意資料</small></div>
-        <div class="count"><span class="count-label">待開始</span>6</div><div class="count"><span class="count-label">進行中</span>0</div><div class="count"><span class="count-label">已完成</span>0</div>
+        <div class="count"><span class="count-label">待開始</span>6</div>
+        <div class="count"><span class="count-label">進行中</span>0</div>
+        <div class="count"><span class="count-label">已完成</span>0</div>
+        <div class="count"><span class="count-label">已派出</span>6</div>
         <div class="rate"><strong>0%</strong><progress max="100" value="0">0%</progress></div>
       </div>
       <div class="project-row project-grid" data-project="south" hidden>
         <div class="name-cell"><button class="select-project" data-select="south">南區道路改善工程</button><small>示意資料</small></div>
-        <div class="count"><span class="count-label">待開始</span>1</div><div class="count"><span class="count-label">進行中</span>1</div><div class="count"><span class="count-label">已完成</span>4</div>
+        <div class="count"><span class="count-label">待開始</span>1</div>
+        <div class="count"><span class="count-label">進行中</span>1</div>
+        <div class="count"><span class="count-label">已完成</span>4</div>
+        <div class="count"><span class="count-label">已派出</span>6</div>
         <div class="rate"><strong>67%</strong><progress max="100" value="67">67%</progress></div>
       </div>
     </div>

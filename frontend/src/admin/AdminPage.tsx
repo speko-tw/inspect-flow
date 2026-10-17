@@ -515,7 +515,7 @@ function memberNavigationItems(
   access: DashboardAccessState,
 ) {
   const items = memberNavItems(user)
-  if (access.kind !== 'allowed' && access.kind !== 'error') return items
+  if (access.kind !== 'allowed') return items
   items.splice(Math.max(0, items.length - 1), 0, DASHBOARD_NAV_ITEM)
   return items
 }

@@ -135,4 +135,23 @@ describe('Dashboard 導覽與路由權限', () => {
       await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
     ).toBeInTheDocument()
   })
+
+  it('無權使用者遇到 5xx 時隱藏入口並保留直達路由重試', async () => {
+    mocks.canOpenDashboard.mockRejectedValueOnce(new Error('HTTP 503'))
+    const user = currentUserFixture({
+      has_office_access: false,
+      module_permissions: ['inspection.use'],
+    })
+    renderAdmin('/admin/dashboard', user)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '目前無法確認 Dashboard 權限，請重試。',
+    )
+    expect(
+      screen.queryByRole('link', { name: 'Dashboard' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '重新確認' }),
+    ).toBeInTheDocument()
+  })
 })
