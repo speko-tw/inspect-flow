@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard 原型</title><style>
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --brand: #002060;
+  --accent: #ffc200;
+  --header-ink: #ffffff;
+  --header-muted: #d6e0ef;
+  --header-border: rgb(255 255 255 / 45%);
+  --header-hover: rgb(255 255 255 / 11%);
+  --header-selected: rgb(255 255 255 / 15%);
+  --header-selected-border: rgb(255 255 255 / 22%);
+  --header-demo: #fff1b8;
+  --header-quiet: rgb(255 255 255 / 8%);
+  --header-quiet-hover: rgb(255 255 255 / 16%);
+  --page: #f3f6fa;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --muted-surface: #eaf0f7;
+  --ink: #101828;
+  --muted: #536174;
+  --line: #d4dce7;
+  --line-strong: #7d8a9a;
+  --primary: #002060;
+  --primary-hover: #123b79;
+  --on-primary: #ffffff;
+  --focus: #1670a6;
+  --success: #176b3a;
+  --success-bg: #e6f5eb;
+  --warning: #765000;
+  --warning-bg: #fff3cf;
+  --danger: #a12b25;
+  --danger-bg: #fff0ed;
+  --shadow: 0 2px 6px rgb(20 38 66 / 5%), 0 12px 28px rgb(20 38 66 / 4%);
+  --radius: 8px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b1422;
+  --surface: #111f32;
+  --raised: #172941;
+  --muted-surface: #1c3049;
+  --ink: #eff4fb;
+  --muted: #b8c5d6;
+  --line: #344960;
+  --line-strong: #8298b2;
+  --primary: #8cc4ff;
+  --primary-hover: #a8d2ff;
+  --on-primary: #0b1422;
+  --focus: #82c9f2;
+  --success: #8de1aa;
+  --success-bg: #153b2a;
+  --warning: #ffda82;
+  --warning-bg: #45371a;
+  --danger: #ffaaa0;
+  --danger-bg: #482722;
+  --shadow: 0 8px 28px rgb(0 0 0 / 18%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0b1422;
+    --surface: #111f32;
+    --raised: #172941;
+    --muted-surface: #1c3049;
+    --ink: #eff4fb;
+    --muted: #b8c5d6;
+    --line: #344960;
+    --line-strong: #8298b2;
+    --primary: #8cc4ff;
+    --primary-hover: #a8d2ff;
+    --on-primary: #0b1422;
+    --focus: #82c9f2;
+    --success: #8de1aa;
+    --success-bg: #153b2a;
+    --warning: #ffda82;
+    --warning-bg: #45371a;
+    --danger: #ffaaa0;
+    --danger-bg: #482722;
+    --shadow: 0 8px 28px rgb(0 0 0 / 18%);
+  }
+}
+
+* { box-sizing: border-box; }
+html { min-width: 0; background: var(--page); }
+body {
+  min-width: 0;
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.58 "Noto Sans TC", "Microsoft JhengHei", "PingFang TC",
+    system-ui, sans-serif;
+}
+button, select, input { font: inherit; }
+button, select, input { touch-action: manipulation; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.topbar {
+  background: var(--brand);
+  color: var(--header-ink);
+  border-bottom: 3px solid var(--accent);
+}
+.topbar-inner {
+  width: min(100% - 48px, 1280px);
+  min-height: 72px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border: 1px solid var(--header-border); border-radius: 6px;
+  color: var(--accent); font-size: 18px; font-weight: 800;
+}
+.brand-name { font-size: 16px; font-weight: 750; white-space: nowrap; }
+.nav { display: flex; align-self: stretch; align-items: center; gap: 4px; }
+.tab {
+  min-height: 44px; padding: 9px 14px; border: 1px solid transparent;
+  border-radius: 5px; background: transparent; color: var(--header-muted);
+  font-weight: 650; white-space: nowrap;
+}
+.tab:hover { color: var(--header-ink); background: var(--header-hover); }
+.tab[aria-selected="true"] {
+  color: var(--header-ink); background: var(--header-selected);
+  border-color: var(--header-selected-border);
+}
+.top-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.demo-chip {
+  padding: 4px 9px; border: 1px solid var(--header-border);
+  border-radius: 4px; color: var(--header-demo); font-size: 12px; font-weight: 700;
+  white-space: nowrap;
+}
+.theme-button {
+  min-height: 40px; padding: 7px 11px; border: 1px solid var(--header-border);
+  border-radius: 5px; background: var(--header-quiet); color: var(--header-ink);
+}
+.theme-button:hover { background: var(--header-quiet-hover); }
+main { width: min(100% - 48px, 1280px); min-height: calc(100vh - 75px); margin: auto; padding: 32px 0 64px; }
+.page-head { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 24px; }
+.eyebrow { margin: 0 0 5px; color: var(--muted); font-size: 13px; font-weight: 650; }
+h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); line-height: 1.25; letter-spacing: -.025em; }
+h2 { margin: 0; font-size: 19px; line-height: 1.35; }
+h3 { margin: 0; font-size: 16px; line-height: 1.4; }
+p { margin: 0 0 10px; }
+.api-note { max-width: 440px; color: var(--muted); font-size: 13px; text-align: right; }
+.scope-card, .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.scope-card { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; padding: 14px 18px; }
+.scope-card label { font-weight: 700; }
+select, input[type="search"] {
+  min-height: 44px; padding: 8px 12px; border: 1px solid var(--line-strong);
+  border-radius: 5px; background: var(--surface); color: var(--ink);
+}
+select { min-width: min(100%, 330px); }
+.scope-hint { margin-left: auto; color: var(--muted); font-size: 13px; }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin: 28px 0 12px; padding-bottom: 11px; border-bottom: 2px solid var(--accent); }
+.section-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.summary { display: grid; grid-template-columns: minmax(210px, 1.25fr) repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.completion, .metric { min-width: 0; padding: 20px; }
+.completion { border-left: 4px solid var(--accent); }
+.metric { border-left: 1px solid var(--line); }
+.metric-label { display: block; color: var(--muted); font-size: 13px; font-weight: 650; }
+.completion-value { display: block; margin: 3px 0 8px; color: var(--primary); font-size: clamp(34px, 4vw, 48px); font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.metric-value { display: block; margin-top: 5px; font-size: 30px; font-weight: 750; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.pending .metric-value { color: var(--warning); }
+.active .metric-value { color: var(--primary); }
+.complete .metric-value { color: var(--success); }
+progress { display: block; width: 100%; height: 9px; margin-top: 9px; accent-color: var(--primary); }
+.toolbar { display: flex; align-items: center; gap: 10px; }
+.toolbar input { width: min(300px, 34vw); }
+.table { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.table-head, .project-row, .engineer-row { display: grid; align-items: center; gap: 14px; padding: 12px 16px; }
+.table-head { color: var(--muted); background: var(--muted-surface); font-size: 12px; font-weight: 750; }
+.project-grid { grid-template-columns: minmax(210px, 1.6fr) repeat(3, minmax(76px, .65fr)) minmax(110px, .85fr); }
+.engineer-grid { grid-template-columns: minmax(170px, 1.3fr) repeat(4, minmax(100px, .8fr)); }
+.project-row, .engineer-row { min-height: 70px; border-top: 1px solid var(--line); }
+.project-row[hidden], .engineer-row[hidden] { display: none; }
+.name-cell { min-width: 0; }
+.name-cell strong { display: block; color: var(--ink); }
+.name-cell small { display: block; margin-top: 2px; color: var(--muted); }
+.select-project { padding: 0; border: 0; background: transparent; color: var(--primary); font-weight: 750; text-align: left; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.count { font-variant-numeric: tabular-nums; font-weight: 700; }
+.count-value { display: block; font-variant-numeric: tabular-nums; }
+.count-label { display: none; color: var(--muted); font-size: 12px; font-weight: 550; }
+.rate strong { display: block; margin-bottom: 3px; font-variant-numeric: tabular-nums; }
+.rate progress { height: 7px; margin: 0; }
+.status-line { min-height: 27px; margin: 9px 0 0; color: var(--muted); font-size: 13px; }
+.button {
+  min-height: 44px; padding: 8px 14px; border: 1px solid var(--line-strong);
+  border-radius: 5px; background: var(--surface); color: var(--ink); font-weight: 700;
+}
+.button:hover { background: var(--muted-surface); }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.button.primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+.button.primary:hover { background: var(--primary-hover); }
+.load-row { display: flex; justify-content: center; padding: 14px; }
+.notice { margin-top: 12px; padding: 13px 15px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--muted-surface); }
+.notice.error { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.notice.empty { border-style: dashed; }
+.notice p { margin-bottom: 8px; }
+[hidden] { display: none !important; }
+.footnote { margin-top: 14px; color: var(--muted); font-size: 13px; }
+.role-note { margin: 12px 0 0; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--muted-surface); color: var(--muted); font-size: 13px; }
+.mobile-counts { display: none; }
+
+@media (max-width: 760px) {
+  .topbar-inner { width: 100%; min-height: 0; flex-wrap: wrap; gap: 8px 12px; padding: 10px 16px 8px; }
+  .brand { flex: 1 1 auto; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-name { font-size: 14px; }
+  .top-actions { margin-left: 0; }
+  .demo-chip { display: none; }
+  .theme-button { min-height: 38px; padding: 6px 9px; font-size: 13px; }
+  .nav { order: 3; width: 100%; overflow-x: auto; }
+  .tab { min-height: 42px; padding: 7px 12px; }
+  main { width: min(100% - 32px, 560px); padding-top: 22px; }
+  .page-head { display: block; margin-bottom: 18px; }
+  .api-note { margin-top: 9px; text-align: left; }
+  .scope-card { align-items: stretch; flex-direction: column; gap: 8px; padding: 13px; }
+  select { width: 100%; }
+  .scope-hint { margin-left: 0; }
+  .section-head { align-items: start; flex-direction: column; gap: 4px; margin-top: 22px; }
+  .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .completion { grid-column: 1 / -1; border-bottom: 1px solid var(--line); }
+  .completion, .metric { padding: 15px 12px; }
+  .metric { border-left: 0; text-align: center; }
+  .metric + .metric { border-left: 1px solid var(--line); }
+  .metric-value { font-size: 24px; }
+  .toolbar { width: 100%; }
+  .toolbar input { width: 100%; }
+  .table-head { display: none; }
+  .project-row, .engineer-row { display: block; padding: 14px; }
+  .project-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; }
+  .project-row .name-cell { grid-column: 1 / -1; }
+  .project-row .rate { grid-column: 1 / -1; }
+  .project-row .count-label { display: block; }
+  .project-row .count { display: block; }
+  .engineer-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 10px; }
+  .engineer-row .name-cell { grid-column: 1 / -1; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .engineer-row .count-label { display: block; }
+  .engineer-row .count { display: block; }
+}
+
+@media (max-width: 390px) {
+  .brand-name { max-width: 150px; white-space: normal; line-height: 1.2; }
+  .topbar-inner { column-gap: 8px; }
+  main { width: calc(100% - 28px); }
+  .metric-label { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand" aria-label="InspectFlow">
+      <span class="brand-mark" aria-hidden="true">I</span>
+      <span class="brand-name">InspectFlow 工程查核系統</span>
+    </div>
+    <nav class="nav" role="tablist" aria-label="Dashboard 檢視">
+      <button class="tab" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview">專案進度</button>
+      <button class="tab" id="tab-engineers" role="tab" aria-selected="false" aria-controls="panel-engineers" tabindex="-1">工程師工作量</button>
+    </nav>
+    <div class="top-actions">
+      <span class="demo-chip">示意資料</span>
+      <button class="theme-button" id="theme-toggle" type="button" aria-label="切換色彩主題">主題：跟隨系統</button>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Dashboard / 唯讀總覽</p>
+      <h1 id="page-title">專案進度總覽</h1>
+    </div>
+    <p class="api-note">畫面中的數值均為示意資料。正式數值由 #408 API 提供；前端只呈現 API 回應，不自行加總或推算。</p>
+  </div>
+
+  <section class="scope-card" aria-labelledby="scope-label">
+    <label id="scope-label" for="scope">檢視範圍</label>
+    <select id="scope">
+      <option value="all">全部可查看專案</option>
+      <option value="east">東區排水改善工程</option>
+      <option value="west">西側管線更新工程</option>
+      <option value="north">北區擋土牆工程</option>
+      <option value="south">南區道路改善工程</option>
+    </select>
+    <span class="scope-hint" id="scope-hint">只顯示目前帳號有權查看的進度或工作量</span>
+  </section>
+
+  <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+    <div class="section-head">
+      <h2>進度摘要</h2>
+      <p>依所選範圍顯示 API 回傳值</p>
+    </div>
+    <div class="summary" aria-label="進度摘要示意資料">
+      <div class="completion">
+        <span class="metric-label">完成率</span>
+        <strong class="completion-value" id="completion-rate">53%</strong>
+        <progress id="completion-bar" max="100" value="53">53%</progress>
+      </div>
+      <div class="metric pending"><span class="metric-label">待開始</span><strong class="metric-value" id="pending-count">10</strong></div>
+      <div class="metric active"><span class="metric-label">進行中</span><strong class="metric-value" id="active-count">7</strong></div>
+      <div class="metric complete"><span class="metric-label">已完成</span><strong class="metric-value" id="completed-count">19</strong></div>
+    </div>
+
+    <div class="section-head">
+      <div><h2>專案進度</h2><p id="project-count-label">目前顯示 3 個可查看專案</p></div>
+      <div class="toolbar"><label class="visually-hidden" for="project-search">搜尋專案</label><input type="search" id="project-search" placeholder="搜尋專案名稱" autocomplete="off"></div>
+    </div>
+    <div class="table" id="project-list">
+      <div class="table-head project-grid" aria-hidden="true"><span>專案</span><span>待開始</span><span>進行中</span><span>已完成</span><span>完成率</span></div>
+      <div class="project-row project-grid" data-project="east">
+        <div class="name-cell"><button class="select-project" data-select="east">東區排水改善工程</button><small>示意資料</small></div>
+        <div class="count"><span class="count-label">待開始</span>2</div><div class="count"><span class="count-label">進行中</span>4</div><div class="count"><span class="count-label">已完成</span>8</div>
+        <div class="rate"><strong>57%</strong><progress max="100" value="57">57%</progress></div>
+      </div>
+      <div class="project-row project-grid" data-project="west">
+        <div class="name-cell"><button class="select-project" data-select="west">西側管線更新工程</button><small>示意資料</small></div>
+        <div class="count"><span class="count-label">待開始</span>1</div><div class="count"><span class="count-label">進行中</span>2</div><div class="count"><span class="count-label">已完成</span>7</div>
+        <div class="rate"><strong>70%</strong><progress max="100" value="70">70%</progress></div>
+      </div>
+      <div class="project-row project-grid" data-project="north" hidden>
+        <div class="name-cell"><button class="select-project" data-select="north">北區擋土牆工程</button><small>示意資料</small></div>
+        <div class="count"><span class="count-label">待開始</span>6</div><div class="count"><span class="count-label">進行中</span>0</div><div class="count"><span class="count-label">已完成</span>0</div>
+        <div class="rate"><strong>0%</strong><progress max="100" value="0">0%</progress></div>
+      </div>
+      <div class="project-row project-grid" data-project="south" hidden>
+        <div class="name-cell"><button class="select-project" data-select="south">南區道路改善工程</button><small>示意資料</small></div>
+        <div class="count"><span class="count-label">待開始</span>1</div><div class="count"><span class="count-label">進行中</span>1</div><div class="count"><span class="count-label">已完成</span>4</div>
+        <div class="rate"><strong>67%</strong><progress max="100" value="67">67%</progress></div>
+      </div>
+    </div>
+    <p class="status-line" id="project-status" role="status" aria-live="polite">只顯示進度，不含照片與查核結果。</p>
+    <div class="notice empty" id="project-empty" role="status" hidden><p><strong>目前沒有符合條件的專案。</strong></p><p>請清除搜尋，或確認目前可查看的專案範圍。</p><button class="button" data-clear="project-search">清除搜尋</button></div>
+    <div class="notice error" id="project-error" role="alert" hidden><p><strong>暫時無法載入專案進度。</strong></p><p>請確認連線後重試。</p><button class="button primary" data-retry="project">重新載入</button></div>
+    <div class="notice" id="project-loading" role="status" hidden>正在載入專案進度…</div>
+    <div class="load-row"><button class="button" id="project-more">載入更多專案</button></div>
+  </section>
+
+  <section id="panel-engineers" role="tabpanel" aria-labelledby="tab-engineers" hidden>
+    <div class="section-head">
+      <div><h2>工程師工作量</h2><p id="engineer-count-label">目前顯示 3 位工程師</p></div>
+      <div class="toolbar"><label class="visually-hidden" for="engineer-search">搜尋工程師</label><input type="search" id="engineer-search" placeholder="搜尋姓名或帳號" autocomplete="off"></div>
+    </div>
+    <p class="role-note">三種人員歸屬分開呈現：派任數、開始者數、完成人數彼此可能重疊，不可相加當作互斥總人數。正式數值由 #408 Engineers API 提供。</p>
+    <div class="table" id="engineer-list">
+      <div class="table-head engineer-grid" aria-hidden="true"><span>工程師</span><span>派任待開始</span><span>派任進行中</span><span>開始者進行中</span><span>完成查核</span></div>
+      <div class="engineer-row engineer-grid" data-engineer="1" data-east="true" data-west="true" data-north="true" data-south="true">
+        <div class="name-cell"><strong>林志明</strong><small>lin.zhiming · 示意資料</small></div>
+        <div class="count"><span class="count-label">派任待開始</span><strong class="count-value" data-all="3" data-east="1" data-west="2" data-north="0" data-south="0">3</strong></div><div class="count"><span class="count-label">派任進行中</span><strong class="count-value" data-all="2" data-east="1" data-west="1" data-north="0" data-south="0">2</strong></div><div class="count"><span class="count-label">開始者進行中</span><strong class="count-value" data-all="1" data-east="1" data-west="0" data-north="0" data-south="0">1</strong></div><div class="count"><span class="count-label">完成查核</span><strong class="count-value" data-all="8" data-east="3" data-west="3" data-north="1" data-south="1">8</strong></div>
+      </div>
+      <div class="engineer-row engineer-grid" data-engineer="2" data-east="true" data-west="true" data-north="false" data-south="true">
+        <div class="name-cell"><strong>陳怡君</strong><small>chen.yijun · 示意資料</small></div>
+        <div class="count"><span class="count-label">派任待開始</span><strong class="count-value" data-all="1" data-east="0" data-west="1" data-north="0" data-south="0">1</strong></div><div class="count"><span class="count-label">派任進行中</span><strong class="count-value" data-all="4" data-east="2" data-west="2" data-north="0" data-south="0">4</strong></div><div class="count"><span class="count-label">開始者進行中</span><strong class="count-value" data-all="3" data-east="1" data-west="2" data-north="0" data-south="0">3</strong></div><div class="count"><span class="count-label">完成查核</span><strong class="count-value" data-all="6" data-east="2" data-west="2" data-north="0" data-south="2">6</strong></div>
+      </div>
+      <div class="engineer-row engineer-grid" data-engineer="3" data-east="true" data-west="true" data-north="true" data-south="true">
+        <div class="name-cell"><strong>王建宏</strong><small>wang.jianhong · 示意資料</small></div>
+        <div class="count"><span class="count-label">派任待開始</span><strong class="count-value" data-all="2" data-east="1" data-west="0" data-north="1" data-south="0">2</strong></div><div class="count"><span class="count-label">派任進行中</span><strong class="count-value" data-all="1" data-east="0" data-west="1" data-north="0" data-south="0">1</strong></div><div class="count"><span class="count-label">開始者進行中</span><strong class="count-value" data-all="1" data-east="0" data-west="1" data-north="0" data-south="0">1</strong></div><div class="count"><span class="count-label">完成查核</span><strong class="count-value" data-all="5" data-east="1" data-west="2" data-north="1" data-south="1">5</strong></div>
+      </div>
+      <div class="engineer-row engineer-grid" data-engineer="4" data-east="false" data-west="false" data-north="true" data-south="true" hidden>
+        <div class="name-cell"><strong>許雅婷</strong><small>hsu.yating · 示意資料</small></div>
+        <div class="count"><span class="count-label">派任待開始</span><strong class="count-value" data-all="4" data-east="0" data-west="0" data-north="4" data-south="0">4</strong></div><div class="count"><span class="count-label">派任進行中</span><strong class="count-value" data-all="0" data-east="0" data-west="0" data-north="0" data-south="0">0</strong></div><div class="count"><span class="count-label">開始者進行中</span><strong class="count-value" data-all="0" data-east="0" data-west="0" data-north="0" data-south="0">0</strong></div><div class="count"><span class="count-label">完成查核</span><strong class="count-value" data-all="2" data-east="0" data-west="0" data-north="0" data-south="2">2</strong></div>
+      </div>
+    </div>
+    <p class="status-line" id="engineer-status" role="status" aria-live="polite">只顯示工作量統計，不含照片與查核結果。</p>
+    <div class="notice empty" id="engineer-empty" role="status" hidden><p><strong>目前沒有符合條件的工程師。</strong></p><p>請清除搜尋，或確認目前可查看的專案範圍。</p><button class="button" data-clear="engineer-search">清除搜尋</button></div>
+    <div class="notice error" id="engineer-error" role="alert" hidden><p><strong>暫時無法載入工程師工作量。</strong></p><p>請確認連線後重試。</p><button class="button primary" data-retry="engineer">重新載入</button></div>
+    <div class="notice" id="engineer-loading" role="status" hidden>正在載入工程師工作量…</div>
+    <div class="load-row"><button class="button" id="engineer-more">載入更多工程師</button></div>
+  </section>
+
+  <div class="section-head"><h2>原型狀態</h2><p>只用來走查，不會送出資料</p></div>
+  <div class="toolbar" aria-label="原型狀態控制">
+    <button class="button" data-state="loading">模擬載入</button>
+    <button class="button" data-state="empty">模擬空資料</button>
+    <button class="button" data-state="error">模擬錯誤</button>
+    <button class="button" data-state="ready">還原示意資料</button>
+  </div>
+  <p class="footnote">全部專案範圍及工程師統計的正式存取條件依 ADM-R06 與 #408 API 驗證；原型不判斷或擴張權限。</p>
+</main>
+<script>
+const projects = {
+  all: { pending: 10, active: 7, completed: 19, rate: 53 },
+  east: { pending: 2, active: 4, completed: 8, rate: 57 },
+  west: { pending: 1, active: 2, completed: 7, rate: 70 },
+  north: { pending: 6, active: 0, completed: 0, rate: 0 },
+  south: { pending: 1, active: 1, completed: 4, rate: 67 },
+}
+const scope = document.querySelector('#scope')
+const tabs = [...document.querySelectorAll('[role="tab"]')]
+const panels = [...document.querySelectorAll('[role="tabpanel"]')]
+const projectRows = [...document.querySelectorAll('.project-row')]
+const engineerRows = [...document.querySelectorAll('.engineer-row')]
+let projectLimit = 2
+let engineerLimit = 3
+let dataState = 'ready'
+
+function activeView() {
+  return document.querySelector('[role="tab"][aria-selected="true"]')
+    .id === 'tab-engineers' ? 'engineer' : 'project'
+}
+
+function renderView(view) {
+  tabs.forEach((tab) => {
+    const selected = tab.id === `tab-${view === 'project' ? 'overview' : 'engineers'}`
+    tab.setAttribute('aria-selected', String(selected))
+    tab.tabIndex = selected ? 0 : -1
+  })
+  panels.forEach((panel) => {
+    panel.hidden = panel.id !== `panel-${view === 'project' ? 'overview' : 'engineers'}`
+  })
+  document.querySelector('#page-title').textContent = view === 'project'
+    ? '專案進度總覽' : '工程師工作量'
+}
+
+function filterRows() {
+  const query = document.querySelector(`#${activeView()}-search`).value
+    .trim().toLocaleLowerCase()
+  const isEngineer = activeView() === 'engineer'
+  const rows = isEngineer ? engineerRows : projectRows
+  const limit = isEngineer ? engineerLimit : projectLimit
+  let visible = 0
+  rows.forEach((row, index) => {
+    const matchesScope = isEngineer
+      ? scope.value === 'all' || row.dataset[scope.value] === 'true'
+      : scope.value === 'all' || row.dataset.project === scope.value
+    const loaded = scope.value !== 'all' && !isEngineer ? true : index < limit
+    const matches = matchesScope && loaded
+      && row.textContent.toLocaleLowerCase().includes(query)
+    row.hidden = !matches
+    if (matches) visible += 1
+  })
+  const prefix = isEngineer ? 'engineer' : 'project'
+  document.querySelector(`#${prefix}-list`).hidden = visible === 0
+  document.querySelector(`#${prefix}-empty`).hidden = visible !== 0
+  document.querySelector(`#${prefix}-count-label`).textContent = isEngineer
+    ? `目前顯示 ${visible} 位工程師` : `目前顯示 ${visible} 個可查看專案`
+  document.querySelector(`#${prefix}-more`).hidden =
+    (isEngineer ? engineerLimit >= rows.length : scope.value !== 'all'
+      || projectLimit >= rows.length)
+}
+
+function showState(state, view = activeView()) {
+  dataState = state
+  const prefix = view === 'engineer' ? 'engineer' : 'project'
+  const isReady = state === 'ready'
+  document.querySelector(`#${prefix}-list`).hidden = !isReady
+  document.querySelector(`#${prefix}-empty`).hidden = state !== 'empty'
+  document.querySelector(`#${prefix}-error`).hidden = state !== 'error'
+  document.querySelector(`#${prefix}-loading`).hidden = state !== 'loading'
+  document.querySelector(`#${prefix}-status`).hidden = !isReady
+  document.querySelector(`#${prefix}-more`).hidden = !isReady
+  if (isReady) filterRows()
+}
+
+function setScope(value) {
+  const values = projects[value]
+  document.querySelector('#pending-count').textContent = values.pending
+  document.querySelector('#active-count').textContent = values.active
+  document.querySelector('#completed-count').textContent = values.completed
+  document.querySelector('#completion-rate').textContent = `${values.rate}%`
+  document.querySelector('#completion-bar').value = values.rate
+  document.querySelector('#scope-hint').textContent = value === 'all'
+    ? '只顯示目前帳號有權查看的進度或工作量'
+    : '摘要與工作量均限定在選取專案範圍'
+  document.querySelectorAll('.count-value').forEach((count) => {
+    count.textContent = count.dataset[value] ?? count.dataset.all
+  })
+  showState('ready')
+}
+
+function setTheme(theme) {
+  const root = document.documentElement
+  if (theme === 'system') root.removeAttribute('data-theme')
+  else root.dataset.theme = theme
+  const label = theme === 'system' ? '跟隨系統'
+    : theme === 'dark' ? '深色' : '淺色'
+  document.querySelector('#theme-toggle').textContent = `主題：${label}`
+  document.querySelector('#theme-toggle').dataset.mode = theme
+}
+
+tabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => {
+    renderView(tab.id === 'tab-overview' ? 'project' : 'engineer')
+    if (dataState !== 'ready') showState(dataState)
+    else filterRows()
+  })
+  tab.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+    event.preventDefault()
+    const next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]
+    next.focus()
+    next.click()
+  })
+})
+scope.addEventListener('change', () => setScope(scope.value))
+document.querySelectorAll('[data-select]').forEach((button) => {
+  button.addEventListener('click', () => {
+    scope.value = button.dataset.select
+    setScope(scope.value)
+    scope.focus()
+  })
+})
+document.querySelectorAll('input[type="search"]').forEach((input) => {
+  input.addEventListener('input', () => {
+    if (dataState === 'ready') filterRows()
+  })
+})
+document.querySelectorAll('[data-clear]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const input = document.querySelector(`#${button.dataset.clear}`)
+    input.value = ''
+    showState('ready')
+    input.focus()
+  })
+})
+document.querySelector('#project-more').addEventListener('click', () => {
+  projectLimit = projectRows.length
+  filterRows()
+})
+document.querySelector('#engineer-more').addEventListener('click', () => {
+  engineerLimit = engineerRows.length
+  filterRows()
+})
+document.querySelectorAll('[data-state]').forEach((button) => {
+  button.addEventListener('click', () => showState(button.dataset.state))
+})
+document.querySelectorAll('[data-retry]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const view = button.dataset.retry
+    showState('loading', view)
+    window.setTimeout(() => showState('ready', view), 250)
+  })
+})
+document.querySelector('#theme-toggle').addEventListener('click', (event) => {
+  const next = { system: 'light', light: 'dark', dark: 'system' }
+  setTheme(next[event.currentTarget.dataset.mode || 'system'])
+})
+setTheme('system')
+filterRows()
+</script>
+</body>
+</html>
