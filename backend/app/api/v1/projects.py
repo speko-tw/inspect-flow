@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
-    require_admin,
     require_admin_or_system_role,
     require_login_access,
     require_module_permission,
@@ -41,6 +40,7 @@ from app.services.module_permissions import (
     SelfRoleChangeError,
     query_people_access,
 )
+from app.services.permissions import calculate_effective_access
 from app.services.project_members import (
     add_project_member,
     list_project_members,
@@ -64,6 +64,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 _PROJECT_PLANNING_READ_ACCESS = Depends(
     require_project_permission("project.read"), scope="function"
 )
+_PROJECT_UPDATE_ACCESS = require_project_permission("project.update")
 _PROJECT_MEMBER_ACCESS = Depends(
     require_project_permission(
         "project_member.manage", uuid_path_params=("user_id",)
@@ -456,8 +457,15 @@ def get_project(
     db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = _PROJECT_PLANNING_READ_ACCESS,
 ) -> ProjectResponse | ProjectPlanningResponse:
+    """回傳專案基本資料；有有效修改權者可讀完整欄位（DOM-R66）。"""
     project = _get_project(db, project_id)
-    if user.is_admin:
+    access = calculate_effective_access(
+        db, user_id=user.id, project_id=project.id
+    )
+    if user.is_admin or (
+        "project.update" in access.project_permissions
+        and "project.use" in access.module_permissions
+    ):
         return _single_project_response(db, project)
     return ProjectPlanningResponse(
         id=project.id,
@@ -540,13 +548,14 @@ def add_project(
 @router.patch(
     "/{project_id}",
     response_model=ProjectResponse,
-    dependencies=[Depends(require_admin, scope="function")],
+    dependencies=[Depends(_PROJECT_UPDATE_ACCESS, scope="function")],
 )
 def edit_project(
     project_id: UUID,
     body: UpdateProjectRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectResponse:
+    """修改有有效專案權限的專案並記錄變更（DOM-R66）。"""
     project = _get_project(db, project_id)
     fields = body.model_dump(exclude_unset=True)
     if any(

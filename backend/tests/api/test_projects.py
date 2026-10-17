@@ -23,6 +23,7 @@ from app.models import (
     CreatorRoleSetting,
     Project,
     ProjectMember,
+    ProjectMemberRole,
     Role,
     SystemRoleAssignment,
     SystemRoleCode,
@@ -620,7 +621,9 @@ def test_project_list_search_cursor_and_validation(project_api):
         assert client.get("/api/v1/projects", params=params).status_code == 422
 
 
-def test_project_crud_requires_admin(project_api):
+def test_project_listing_and_creation_require_admin_or_permission(
+    project_api, db_session: Session
+):
     actor_client = project_api["actor_client"]
     project = project_api["project"]
     project_id = project.id
@@ -641,6 +644,108 @@ def test_project_crud_requires_admin(project_api):
         ).status_code
         == 403
     )
+    db_session.expire_all()
+    unchanged = db_session.get(Project, project_id)
+    assert unchanged is not None
+    assert unchanged.name == "示範工程"
+
+
+def test_project_update_permission_is_scoped_and_audited(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    actor = project_api["actor"]
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == actor.id,
+        )
+    )
+    assert member is not None
+    editor_role = create_role(
+        db_session,
+        name="專案資料編輯者",
+        permission_codes=["project.update", "project.read"],
+    )
+    member.role_assignments.append(ProjectMemberRole(role_id=editor_role.id))
+    db_session.commit()
+
+    response = project_api["actor_client"].patch(
+        f"/api/v1/projects/{project.id}", json={"name": "更新後名稱"}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "更新後名稱"
+    [event] = _events(db_session, "project.updated", str(project.id))
+    assert event.before == {"name": "示範工程"}
+    assert event.after == {"name": "更新後名稱"}
+    assert event.created_by == actor.id
+
+    denied = project_api["actor_client"].patch(
+        f"/api/v1/projects/{other_project.id}",
+        json={"name": "不得跨專案修改"},
+    )
+
+    assert denied.status_code == 403
+    db_session.expire_all()
+    unchanged = db_session.get(Project, other_project.id)
+    assert unchanged is not None
+    assert unchanged.name == "另一示範工程"
+    assert _events(db_session, "project.updated", str(other_project.id)) == []
+
+
+def test_project_read_response_depends_on_effective_update_permission(
+    project_api, db_session: Session, make_client
+):
+    project = project_api["project"]
+    reader = project_api["target"]
+    actor_member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == project_api["actor"].id,
+        )
+    )
+    assert actor_member is not None
+    editor_role = create_role(
+        db_session,
+        name="專案資料編輯者供讀取測試",
+        permission_codes=["project.update", "project.read"],
+    )
+    actor_member.role_assignments.append(
+        ProjectMemberRole(role_id=editor_role.id)
+    )
+    reader_module_permission = UserModulePermission(
+        user_id=reader.id,
+        permission_code="project.use",
+        source="manual",
+    )
+    reader_role = create_role(
+        db_session,
+        name="專案基本資料查閱者",
+        permission_codes=["project.read"],
+    )
+    db_session.add(reader_module_permission)
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=reader.id,
+        role_ids=[reader_role.id],
+    )
+    db_session.commit()
+    reader_client = _make_user_client(db_session, make_client, reader)
+
+    full = project_api["actor_client"].get(f"/api/v1/projects/{project.id}")
+    admin = project_api["admin_client"].get(f"/api/v1/projects/{project.id}")
+    basic = reader_client.get(f"/api/v1/projects/{project.id}")
+
+    assert full.status_code == admin.status_code == 200
+    assert basic.status_code == 200
+    assert full.json()["client_name"] == admin.json()["client_name"]
+    assert full.json()["site_location"] == admin.json()["site_location"]
+    assert basic.json()["name"] == project.name
+    assert "client_name" not in basic.json()
+    assert "site_location" not in basic.json()
 
 
 def _create_body(**extra):
@@ -937,7 +1042,7 @@ def test_company_role_api_matches_frontend_contract_fixture(
     assert changed.json()["company_role"] == patch_body["company_role"]
 
 
-def test_company_role_change_is_admin_only_during_transition(
+def test_company_role_change_requires_project_update_permission(
     project_api, db_session
 ):
     project = project_api["project"]
