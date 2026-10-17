@@ -33,6 +33,7 @@ class _TestPermissionCode(DescribedStrEnum):
     EVIDENCE_DELETE = ("evidence.delete", "test")
     PROJECT_MEMBER_MANAGE = ("project_member.manage", "test")
     PROJECT_USE = ("project.use", "test")
+    INSPECTION_USE = ("inspection.use", "test")
 
 
 @pytest.fixture
@@ -58,13 +59,18 @@ def registered_permission_codes(
             code: PermissionDefinition(scope="project", module="project")
             for code in (
                 "report.read",
-                "report.approve",
                 "evidence.read",
                 "evidence.create",
                 "evidence.update",
                 "evidence.delete",
             )
         }
+    )
+    definitions["report.approve"] = PermissionDefinition(
+        scope="project", module="inspection"
+    )
+    definitions["inspection.use"] = PermissionDefinition(
+        scope="module", module="inspection"
     )
     monkeypatch.setattr(
         permission_codes, "PERMISSION_DEFINITIONS", definitions

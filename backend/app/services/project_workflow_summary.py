@@ -15,12 +15,17 @@ from app.models import (
     ProjectZone,
     TaskInspectionItem,
 )
+from app.permission_codes import (
+    PermissionCode,
+    permission_code_module,
+    permission_code_scope,
+)
 from app.services.inspection_planning import (
     PlanningError,
     inspection_task_visibility_filters,
-    project_permissions_for,
 )
 from app.services.operator import get_current_operator
+from app.services.permissions import calculate_effective_access
 
 TaskStatus = Literal[
     "DRAFT", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
@@ -69,15 +74,45 @@ def get_project_workflow_summary(
     project_id: UUID,
 ) -> ProjectWorkflowSummary:
     """Return visible project counts using SQL aggregates."""
-    permissions = project_permissions_for(session, project_id)
-    is_admin = get_current_operator(session).is_admin
+    operator = get_current_operator(session)
+    access = calculate_effective_access(
+        session, user_id=operator.id, project_id=project_id
+    )
+    # IP-R11 回傳的碼供前端判斷入口，須反映模組可使用總開關。
+    permissions = (
+        frozenset(
+            code.value
+            for code in PermissionCode
+            if permission_code_scope(code.value) == "project"
+        )
+        if access.is_admin
+        else frozenset(
+            code
+            for code in access.project_permissions
+            if (
+                (module := permission_code_module(code)) is not None
+                and f"{module}.use" in access.module_permissions
+            )
+        )
+    )
     readable_permissions = {
+        "project.read",
         "inspection_plan.read",
         "project_zone.read",
         "inspection_task.read",
         "inspection_task.inspect",
     }
-    if not is_admin and not readable_permissions.intersection(permissions):
+
+    def can_read_project_code(code: str) -> bool:
+        module = permission_code_module(code)
+        return (
+            code in permissions
+            and f"{module}.use" in access.module_permissions
+        )
+
+    if not access.is_admin and not any(
+        can_read_project_code(code) for code in readable_permissions
+    ):
         raise PlanningError("authorization.forbidden")
 
     project = session.get(Project, project_id)
@@ -124,9 +159,12 @@ def get_project_workflow_summary(
         "COMPLETED": 0,
         "CANCELLED": 0,
     }
-    task_counts_visible = is_admin or bool(
-        {"inspection_task.read", "inspection_task.inspect"}.intersection(
-            permissions
+    task_counts_visible = access.is_admin or (
+        "inspection.use" in access.module_permissions
+        and bool(
+            {"inspection_task.read", "inspection_task.inspect"}.intersection(
+                permissions
+            )
         )
     )
     pending_reinspection_count = 0

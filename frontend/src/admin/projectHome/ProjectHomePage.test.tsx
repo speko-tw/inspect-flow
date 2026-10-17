@@ -608,6 +608,27 @@ describe('project home', () => {
     expect(mocks.getProject).not.toHaveBeenCalled()
   })
 
+  it('uses the filtered summary after project module access is revoked', async () => {
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: ['project.read'],
+        task_counts_visible: false,
+        primary_step: null,
+      }),
+    )
+
+    renderAt('/admin/projects/project-1', {
+      has_office_access: false,
+      has_field_access: true,
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: '專案首頁' }),
+    ).toBeVisible()
+    expect(screen.getByText('無權查看任務')).toBeVisible()
+    expect(screen.queryByText('Field 工作台')).not.toBeInTheDocument()
+  })
+
   it('complete_reinspection step opens the reinspection filter', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(

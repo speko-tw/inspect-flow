@@ -31,6 +31,10 @@ const USER: CurrentUser = {
   has_field_access: false,
   has_template_access: false,
   module_permissions: [],
+  delegated_modules: [],
+  can_create_project: false,
+  has_project_access: false,
+  is_external_collaborator: false,
 }
 
 const PROJECT_ITEM: ProjectItemData = {

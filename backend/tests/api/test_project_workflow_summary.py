@@ -13,6 +13,7 @@ from app.models import (
     Role,
     RolePermission,
     TaskInspectionItem,
+    UserModulePermission,
 )
 from app.permission_codes import PermissionCode, permission_code_scope
 from tests.api.test_inspection_planning_api import _planning_world
@@ -489,3 +490,47 @@ def test_task_count_visibility_draft_permissions_and_access_errors(
     assert missing.json() == {"error": {"code": "resource.not_found"}}
     invalid_uuid = world["admin"].get(_summary_path("not-a-uuid"))
     assert invalid_uuid.status_code == 422
+
+
+def test_project_read_and_project_use_open_summary_without_task_counts(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    user = world["plain_user"]
+    db_session.add(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
+    db_session.query(UserModulePermission).filter_by(
+        user_id=user.id,
+        permission_code="inspection.use",
+    ).delete()
+    db_session.commit()
+    _grant_permission(db_session, world, user, "project.read")
+    _grant_permission(db_session, world, user, "inspection_task.read")
+
+    response = world["plain"].get(_summary_path(world["project"].id))
+
+    assert response.status_code == 200, response.text
+    assert set(response.json()["viewer_permission_codes"]) == {
+        "project.read",
+    }
+    assert response.json()["task_counts_visible"] is False
+    assert set(response.json()["task_counts"].values()) == {0}
+
+    db_session.add(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="inspection.use",
+            source="manual",
+        )
+    )
+    db_session.commit()
+    response_with_module = world["plain"].get(
+        _summary_path(world["project"].id)
+    )
+    assert response_with_module.status_code == 200
+    assert response_with_module.json()["task_counts_visible"] is True

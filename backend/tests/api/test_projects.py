@@ -26,6 +26,7 @@ from app.models import (
     SystemRoleAssignment,
     SystemRoleCode,
     User,
+    UserModulePermission,
 )
 from app.services.companies import create_company
 from app.services.project_members import add_project_member
@@ -136,6 +137,13 @@ def project_api(
         db_session,
         name="專案成員管理",
         permission_codes=["project_member.manage"],
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=actor.id,
+            permission_code="project.use",
+            source="manual",
+        )
     )
     add_project_member(
         db_session,

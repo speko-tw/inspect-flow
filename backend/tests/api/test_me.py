@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
-from app.models import User
+from app.models import User, UserModulePermission
 from app.services.companies import create_company
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
@@ -90,13 +90,13 @@ def seed(db_session: Session, make_client):
     inspector = create_role(
         db_session,
         name="查核員",
-        permission_codes=["project_member.manage"],
+        permission_codes=["project.read", "project_member.manage"],
     )
     reviewer = create_role(db_session, name="審核員", permission_codes=[])
     other_role = create_role(
         db_session,
         name="別人的角色",
-        permission_codes=[],
+        permission_codes=["project.read"],
     )
     add_project_member(
         db_session,
@@ -112,6 +112,20 @@ def seed(db_session: Session, make_client):
         project_id=others.id,
         user_id=bob.id,
         role_ids=[other_role.id],
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=alice.id,
+            permission_code="project.use",
+            source="manual",
+        )
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=bob.id,
+            permission_code="project.use",
+            source="manual",
+        )
     )
     db_session.commit()
     return {
@@ -175,17 +189,6 @@ def test_my_projects_lists_only_own_projects_with_own_roles(seed):
             "role_names": ["審核員", "查核員"],
             "has_office_access": True,
         },
-        {
-            "id": str(seed["also_mine"].id),
-            "project_code": "DEMO-290-B",
-            "name": "示範工程乙",
-            "client_name": "示範業主",
-            "site_location": "示範工地乙",
-            "planned_start_date": None,
-            "planned_completion_date": None,
-            "role_names": [],
-            "has_office_access": False,
-        },
     ]
 
 
@@ -195,7 +198,7 @@ def test_my_projects_role_name_query_count_does_not_grow(
     client = seed["alice_client"]
     few_queries, few_items = select_count(client, ME_PROJECTS)
     assert few_queries > 0
-    assert few_items == 2
+    assert few_items == 1
 
     extra_codes = [f"DEMO-290-C{index}" for index in range(8)]
     for code in extra_codes:
@@ -216,19 +219,17 @@ def test_my_projects_role_name_query_count_does_not_grow(
 
     many_queries, many_items = select_count(client, ME_PROJECTS)
     assert many_queries == few_queries
-    assert many_items == 10
+    assert many_items == 9
 
     response = client.get(ME_PROJECTS)
     assert response.status_code == 200
     body = response.json()
     assert [project["project_code"] for project in body] == [
         "DEMO-290-A",
-        "DEMO-290-B",
         *extra_codes,
     ]
     assert [project["role_names"] for project in body] == [
         ["審核員", "查核員"],
-        [],
         *([["查核員"]] * len(extra_codes)),
     ]
     assert all(
