@@ -18,7 +18,6 @@ from app.models import (
     ProjectMember,
     ProjectMemberRole,
     RolePermission,
-    SystemRoleAssignment,
 )
 from app.permission_codes import MODULES
 from app.services.module_permissions import (
@@ -38,7 +37,6 @@ class EffectiveAccess:
 
     is_active: bool
     is_admin: bool
-    system_roles: frozenset[str]
     module_permissions: frozenset[str]
     delegated_modules: frozenset[str]
     project_permissions: frozenset[str]
@@ -66,7 +64,6 @@ def calculate_effective_access(
                 frozenset(),
                 frozenset(),
                 frozenset(),
-                frozenset(),
                 {},
             )
         project_map = _project_permissions_by_project(
@@ -82,13 +79,6 @@ def calculate_effective_access(
                 )
             )
         )
-        system_roles = frozenset(
-            session.scalars(
-                select(SystemRoleAssignment.role_code).where(
-                    SystemRoleAssignment.user_id == user_id
-                )
-            ).all()
-        )
         project_codes = (
             project_map.get(project_id, frozenset())
             if project_id
@@ -97,7 +87,6 @@ def calculate_effective_access(
     return EffectiveAccess(
         is_active=person.is_active,
         is_admin=person.is_admin,
-        system_roles=system_roles,
         module_permissions=person.module_permissions,
         delegated_modules=delegated_modules,
         project_permissions=project_codes,

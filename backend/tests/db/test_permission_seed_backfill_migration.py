@@ -1,11 +1,13 @@
 """驗證 DOM-AC56/63 與 AUT-AC74 的預建資料及權限回填。"""
 
 from collections.abc import Generator
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import select
+from sqlalchemy import Uuid, bindparam, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from alembic import command
@@ -21,8 +23,6 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
-    SystemRoleAssignment,
-    SystemRoleCode,
     User,
     UserModulePermission,
 )
@@ -32,6 +32,7 @@ from tests.db.conftest import create_root_user_with_company, make_system_admin
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
 _PARENT_REVISION = "6eaaafbe0ef2"
+_PERMISSION_MIGRATION_REVISION = "9b7a6c2d1e45"
 # migration 的回填條件是歷史資料契約，測試不可隨 runtime registry 增碼而改變。
 _PROJECT_CODES = {
     "project_member.manage",
@@ -95,18 +96,52 @@ def _legacy_access_snapshot(session, user_id, project_id):
             module_codes.update({"project.use", "inspection.use"})
         if applicable:
             module_codes.add("template.use")
-        if (
-            session.scalar(
-                select(SystemRoleAssignment.id).where(
-                    SystemRoleAssignment.user_id == user_id,
-                    SystemRoleAssignment.role_code
-                    == SystemRoleCode.TEMPLATE_ADMIN.value,
-                )
-            )
-            is not None
+        if not user.is_external_collaborator and _has_legacy_template_admin(
+            session, user_id
         ):
             module_codes.update({"template.manage", "template.use"})
     return frozenset(module_codes), frozenset(project_codes)
+
+
+def _has_legacy_template_admin(session: Session, user_id) -> bool:
+    return bool(
+        session.scalar(
+            text(
+                """SELECT EXISTS (
+                    SELECT 1 FROM system_role_assignments
+                    WHERE user_id = :user_id
+                      AND role_code = 'template_admin'
+                )"""
+            ).bindparams(bindparam("user_id", type_=Uuid())),
+            {"user_id": user_id},
+        )
+    )
+
+
+def _insert_legacy_template_admin(session: Session, user_id, actor_id):
+    now = datetime.now(UTC)
+    session.execute(
+        text(
+            """INSERT INTO system_role_assignments
+               (id, created_at, updated_at, created_by, updated_by,
+                user_id, role_code)
+               VALUES (:id, :created_at, :updated_at, :created_by,
+                       :updated_by, :user_id, 'template_admin')"""
+        ).bindparams(
+            bindparam("id", type_=Uuid()),
+            bindparam("created_by", type_=Uuid()),
+            bindparam("updated_by", type_=Uuid()),
+            bindparam("user_id", type_=Uuid()),
+        ),
+        {
+            "id": uuid4(),
+            "created_at": now,
+            "updated_at": now,
+            "created_by": actor_id,
+            "updated_by": actor_id,
+            "user_id": user_id,
+        },
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -199,14 +234,7 @@ def test_migration_backfills_demo_and_trial_permissions_without_loss(db_url):
                     _new_member(actor, trial_project, empty_member),
                 ]
             )
-            session.add(
-                SystemRoleAssignment(
-                    user_id=template_admin.id,
-                    role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
-                    created_by=actor.id,
-                    updated_by=actor.id,
-                )
-            )
+            _insert_legacy_template_admin(session, template_admin.id, actor.id)
             session.add(
                 UserModulePermission(
                     user_id=demo_user.id,
@@ -239,7 +267,7 @@ def test_migration_backfills_demo_and_trial_permissions_without_loss(db_url):
     finally:
         old_engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -330,13 +358,9 @@ def test_migration_backfills_demo_and_trial_permissions_without_loss(db_url):
                 "template.manage": "backfill",
                 "template.use": "backfill",
             }
-            assert session.scalars(
-                select(SystemRoleAssignment).where(
-                    SystemRoleAssignment.user_id == user_ids["template_admin"],
-                    SystemRoleAssignment.role_code
-                    == SystemRoleCode.TEMPLATE_ADMIN.value,
-                )
-            ).one()
+            assert _has_legacy_template_admin(
+                session, user_ids["template_admin"]
+            )
             assert session.scalars(select(AuditLog)).all() == []
 
             seeded_roles = {
@@ -411,20 +435,15 @@ def test_backfill_does_not_create_module_rows_for_admin_members(db_url):
             session.add_all(
                 [
                     _new_member(admin, project, admin, role),
-                    SystemRoleAssignment(
-                        user_id=admin.id,
-                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
-                        created_by=admin.id,
-                        updated_by=admin.id,
-                    ),
                 ]
             )
+            _insert_legacy_template_admin(session, admin.id, admin.id)
             admin_id = admin.id
             session.commit()
     finally:
         old_engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -458,20 +477,15 @@ def test_external_template_admin_backfill_keeps_only_external_codes(db_url):
             session.add_all(
                 [
                     _new_member(actor, project, external, applicable_role),
-                    SystemRoleAssignment(
-                        user_id=external.id,
-                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
-                        created_by=actor.id,
-                        updated_by=actor.id,
-                    ),
                 ]
             )
+            _insert_legacy_template_admin(session, external.id, actor.id)
             external_id = external.id
             session.commit()
     finally:
         old_engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -548,20 +562,10 @@ def test_migration_preserves_legacy_access_across_mixed_members(db_url):
                     _new_member(
                         admin, demo_project, external_user, external_role
                     ),
-                    SystemRoleAssignment(
-                        user_id=admin.id,
-                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
-                        created_by=admin.id,
-                        updated_by=admin.id,
-                    ),
-                    SystemRoleAssignment(
-                        user_id=template_admin.id,
-                        role_code=SystemRoleCode.TEMPLATE_ADMIN.value,
-                        created_by=admin.id,
-                        updated_by=admin.id,
-                    ),
                 ]
             )
+            _insert_legacy_template_admin(session, admin.id, admin.id)
+            _insert_legacy_template_admin(session, template_admin.id, admin.id)
             session.flush()
             cases = [
                 (admin.id, demo_project.id),
@@ -578,7 +582,7 @@ def test_migration_preserves_legacy_access_across_mixed_members(db_url):
     finally:
         old_engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -635,7 +639,7 @@ def test_migration_seeds_named_defaults_without_overwriting_existing_rows(
     finally:
         old_engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -674,7 +678,7 @@ def test_migration_seeds_named_defaults_without_overwriting_existing_rows(
         engine.dispose()
 
     command.downgrade(_cfg(), _PARENT_REVISION)
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -711,7 +715,7 @@ def test_reapplying_migration_after_preset_rename_preserves_renamed_role(
     finally:
         engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -726,7 +730,7 @@ def test_reapplying_migration_after_preset_rename_preserves_renamed_role(
         engine.dispose()
 
     # Alembic 已記錄 revision；再次 upgrade 不應重建或覆寫管理員改名的角色。
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -758,7 +762,7 @@ def test_init_after_migration_does_not_duplicate_default_permissions(
     finally:
         engine.dispose()
 
-    command.upgrade(_cfg(), "head")
+    command.upgrade(_cfg(), _PERMISSION_MIGRATION_REVISION)
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:

@@ -15,8 +15,8 @@ from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
     require_admin,
-    require_admin_or_system_role,
     require_login_access,
+    require_module_permission,
     require_project_permission,
 )
 from app.auth.dependencies import get_db
@@ -27,7 +27,6 @@ from app.models import (
     ProjectMember,
     Role,
     RolePermission,
-    SystemRoleCode,
     User,
 )
 from app.services.inspection_planning import PlanningError
@@ -346,7 +345,7 @@ def _member_conflict(exc: IntegrityError) -> bool:
     response_model=ProjectListResponse,
     dependencies=[
         Depends(
-            require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN),
+            require_module_permission("template.manage"),
             scope="function",
         )
     ],

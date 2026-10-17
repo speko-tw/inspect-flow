@@ -15,7 +15,7 @@ from app.auth.passwords import (
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.main import create_app
-from app.models import AuditLog, SystemRoleAssignment, User, UserPassword
+from app.models import AuditLog, User, UserModulePermission, UserPassword
 from app.services.audit import InvalidAuditEventShapeError
 from app.services.users import create_user
 from tests.db.conftest import create_root_user_with_company
@@ -123,18 +123,17 @@ def test_admin_status_commits_before_response_start(admin_client, db_session):
     assert user.is_admin is True
 
 
-def test_template_admin_prevents_external_flag_change(
+def test_template_manage_prevents_external_flag_change(
     admin_client, db_session
 ):
-    """外部身分切換回應須列出並保留不相容的 template_admin。"""
+    """外部身分切換須拒絕不允許的範本管理權限。"""
     client, admin = admin_client
     target = create_root_user_with_company(db_session, "R618TPLFLAG")
     db_session.add(
-        SystemRoleAssignment(
+        UserModulePermission(
             user_id=target.id,
-            role_code="template_admin",
-            created_by=admin.id,
-            updated_by=admin.id,
+            permission_code="template.manage",
+            source="manual",
         )
     )
     db_session.commit()
@@ -147,15 +146,15 @@ def test_template_admin_prevents_external_flag_change(
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "user.external_not_qualified"
     assert response.json()["error"]["details"] == [
-        "system role: template_admin"
+        "module permission: template.manage"
     ]
     db_session.refresh(target)
     assert target.is_external_collaborator is False
     assert (
         db_session.scalar(
-            select(SystemRoleAssignment.id).where(
-                SystemRoleAssignment.user_id == target.id,
-                SystemRoleAssignment.role_code == "template_admin",
+            select(UserModulePermission.id).where(
+                UserModulePermission.user_id == target.id,
+                UserModulePermission.permission_code == "template.manage",
             )
         )
         is not None

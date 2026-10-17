@@ -25,7 +25,6 @@ from app.models import (
     ProjectTextStandard,
     Role,
     RolePermission,
-    SystemRoleAssignment,
     TemplateEvidenceRequirement,
     TemplateInspectionPoint,
     TemplateMeasurementField,
@@ -93,23 +92,28 @@ def _world(db_session, make_client):
         )
     )
     db_session.add(
-        SystemRoleAssignment(
-            user_id=admin.id,
-            role_code="template_admin",
-            created_by=admin.id,
-            updated_by=admin.id,
+        UserModulePermission(
+            user_id=editor.id,
+            permission_code="template.use",
+            source="manual",
         )
     )
     template_admin = create_root_user_with_company(
         db_session, "APPLY-TPL-ADMIN"
     )
-    db_session.add(
-        SystemRoleAssignment(
-            user_id=template_admin.id,
-            role_code="template_admin",
-            created_by=admin.id,
-            updated_by=admin.id,
-        )
+    db_session.add_all(
+        [
+            UserModulePermission(
+                user_id=template_admin.id,
+                permission_code="template.manage",
+                source="manual",
+            ),
+            UserModulePermission(
+                user_id=template_admin.id,
+                permission_code="template.use",
+                source="manual",
+            ),
+        ]
     )
     db_session.commit()
     tokens = {
@@ -770,23 +774,52 @@ def test_apply_requires_project_edit_permission(db_session, make_client):
         f"/api/v1/projects/{world['project'].id}"
         "/inspection-items:apply-template"
     )
+    project_models = (
+        ProjectInspectionItem,
+        ProjectInspectionPoint,
+        ProjectEvidenceRequirement,
+        ProjectMeasurementField,
+        ProjectNumericStandard,
+        ProjectTextStandard,
+        AuditLog,
+    )
+
+    def state_snapshot():
+        db_session.expire_all()
+        return tuple(
+            tuple(
+                tuple(
+                    getattr(row, column.key)
+                    for column in model.__table__.columns
+                )
+                for row in db_session.scalars(
+                    select(model).order_by(model.id)
+                ).all()
+            )
+            for model in project_models
+        )
+
+    unchanged = state_snapshot()
     response = world["outsider"].post(
         url, json={"template_id": template_ids[0]}
     )
     assert response.status_code == 403
     assert response.json() == {"error": {"code": "permission.denied"}}
+    assert state_snapshot() == unchanged
     cross_project = world["editor"].post(
         f"/api/v1/projects/{world['other_project'].id}"
         "/inspection-items:apply-template",
         json={"template_id": template_ids[0]},
     )
     assert cross_project.status_code == 403
+    assert state_snapshot() == unchanged
     template_admin_only = world["template_admin"].post(
         f"/api/v1/projects/{world['project'].id}"
         "/inspection-items:apply-template",
         json={"template_id": template_ids[0]},
     )
     assert template_admin_only.status_code == 403
+    assert state_snapshot() == unchanged
     admin_apply = world["admin"].post(
         f"/api/v1/projects/{world['project'].id}"
         "/inspection-items:apply-template",

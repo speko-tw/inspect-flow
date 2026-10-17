@@ -31,12 +31,10 @@ from app.api.limits import (
 )
 from app.api.pagination import page, write_call
 from app.auth.access import (
-    require_admin_or_system_role,
-    require_system_role_or_any_project_permission,
+    require_module_permission,
 )
 from app.auth.dependencies import get_db
 from app.models import (
-    SystemRoleCode,
     TemplateCategory,
     TemplateEvidenceRequirement,
     TemplateInspectionPoint,
@@ -70,14 +68,11 @@ system_router = APIRouter(
 )
 template_router = APIRouter(prefix="/templates", tags=["template-library"])
 _write = Depends(
-    require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN),
+    require_module_permission("template.manage"),
     scope="function",
 )
 _read = Depends(
-    require_system_role_or_any_project_permission(
-        SystemRoleCode.TEMPLATE_ADMIN,
-        "project_inspection_item.edit",
-    ),
+    require_module_permission("template.use"),
     scope="function",
 )
 _db_dependency: Any = Depends(get_db, scope="function")

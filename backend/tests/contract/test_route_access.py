@@ -204,8 +204,8 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         assert declaration.level is AccessLevel.ADMIN_REQUIRED
     declaration = routes[template_admin_list]
     assert declaration is not None
-    assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
-    assert declaration.permission_code == "template_admin"
+    assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+    assert declaration.module_permission_code == "template.manage"
     declaration = routes[planning_project_get]
     assert declaration is not None
     assert declaration.level is AccessLevel.PROJECT_PERMISSION
@@ -220,12 +220,15 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         assert declaration.permission_code == "project_member.manage"
     declaration = routes[apply_template]
     assert declaration is not None
-    assert declaration.level is AccessLevel.PROJECT_PERMISSION
-    assert declaration.permission_code == "project_inspection_item.edit"
+    assert declaration.level is AccessLevel.MODULE_AND_PROJECT_PERMISSION
+    assert declaration.module_permission_code == "template.use"
+    assert declaration.project_permission_code == (
+        "project_inspection_item.edit"
+    )
     declaration = routes[save_template]
     assert declaration is not None
-    assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
-    assert declaration.permission_code == "template_admin"
+    assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+    assert declaration.module_permission_code == "template.manage"
     declaration = routes[list_inspection_items]
     assert declaration is not None
     assert declaration.level is AccessLevel.LOGIN_REQUIRED
@@ -289,29 +292,14 @@ def test_issue_361_does_not_expose_result_photo_or_manual_reopen_routes() -> (
     )
 
 
-def test_system_role_assignment_routes_require_admin() -> None:
+def test_system_role_assignment_routes_are_removed() -> None:
     app = create_app()
     routes = {
         (info.method, info.path): info.declaration
         for info in iter_route_access(app)
         if info.path.startswith("/api/v1/system-role-assignments/")
     }
-    expected = {
-        (
-            "PUT",
-            "/api/v1/system-role-assignments/template_admin/{user_id}",
-        ),
-        (
-            "DELETE",
-            "/api/v1/system-role-assignments/template_admin/{user_id}",
-        ),
-    }
-
-    assert set(routes) == expected
-    for route in expected:
-        declaration = routes[route]
-        assert declaration is not None
-        assert declaration.level is AccessLevel.ADMIN_REQUIRED
+    assert routes == {}
 
 
 def test_audit_query_route_requires_admin() -> None:
@@ -344,16 +332,11 @@ def test_template_library_routes_declare_read_and_write_access() -> None:
     for (method, _path), declaration in routes.items():
         assert declaration is not None
         if method == "GET":
-            assert declaration.level is (
-                AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION
-            )
-            assert declaration.system_role_code == "template_admin"
-            assert (
-                declaration.permission_code == "project_inspection_item.edit"
-            )
+            assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+            assert declaration.module_permission_code == "template.use"
         else:
-            assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
-            assert declaration.permission_code == "template_admin"
+            assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+            assert declaration.module_permission_code == "template.manage"
 
 
 def test_aut_ac22_error_code_registry_has_the_three_access_codes() -> None:
@@ -414,8 +397,7 @@ def test_issue_416_field_routes_declare_their_access_contract() -> None:
     listing = routes[("GET", "/api/v1/field/inspection-tasks")]
     detail = routes[("GET", "/api/v1/field/inspection-tasks/{task_id}")]
     assert listing is not None
-    assert listing.level is AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION
+    assert listing.level is AccessLevel.ADMIN_OR_ANY_PROJECT_PERMISSION
     assert listing.permission_code == "inspection_task.inspect"
-    assert listing.system_role_code == "admin"
     assert detail is not None
     assert detail.level is AccessLevel.LOGIN_REQUIRED

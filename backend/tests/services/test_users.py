@@ -18,7 +18,6 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
-    SystemRoleAssignment,
     User,
     UserModuleDelegation,
     UserModulePermission,
@@ -771,17 +770,16 @@ def test_external_collaborator_cannot_be_promoted_to_admin(session, operator):
     assert _audit_rows_for(session, user.id) == []
 
 
-def test_external_flag_change_lists_template_admin_system_role(
+def test_external_flag_change_rejects_template_manage_permission(
     session, operator
 ):
-    """設定外部身分時須列出並保留不相容的範本管理系統角色。"""
+    """DOM-R71 禁止外部協作者持有範本管理模組權限。"""
     user = create_root_user_with_company(session, "EXTTPLADMIN")
     session.add(
-        SystemRoleAssignment(
+        UserModulePermission(
             user_id=user.id,
-            role_code="template_admin",
-            created_by=operator.id,
-            updated_by=operator.id,
+            permission_code="template.manage",
+            source="manual",
         )
     )
     session.commit()
@@ -789,14 +787,14 @@ def test_external_flag_change_lists_template_admin_system_role(
     with pytest.raises(ExternalFlagChangeError) as error:
         set_external_collaborator(session, user, True)
 
-    assert error.value.details == ["system role: template_admin"]
+    assert error.value.details == ["module permission: template.manage"]
     session.refresh(user)
     assert user.is_external_collaborator is False
     assert (
         session.scalar(
-            select(SystemRoleAssignment.id).where(
-                SystemRoleAssignment.user_id == user.id,
-                SystemRoleAssignment.role_code == "template_admin",
+            select(UserModulePermission.id).where(
+                UserModulePermission.user_id == user.id,
+                UserModulePermission.permission_code == "template.manage",
             )
         )
         is not None
