@@ -1191,9 +1191,17 @@ output {
   text-align: center;
 }
 
-/* 標籤只在詞組之間換行：窄螢幕不會把詞拆出孤字（#306）。 */
+/* 保留 setup 步驟詞語；只在空間不足時才准溢出斷行（#317）。 */
 .steps-label {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
   text-wrap: balance;
+}
+
+/* 說明優先保留中文詞語，窄到溢出時仍可安全換行（#317）。 */
+.auth-card:has(> .steps) .lead {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .steps-phrase {
@@ -1451,6 +1459,17 @@ a.app-header-tab[aria-current='page'] {
 
   .auth-card {
     padding: var(--space-5) var(--space-4);
+  }
+
+  /* 讓窄螢幕逐項閱讀設定流程，避免三步橫擠在同一列（UDS-R13）。 */
+  .steps {
+    flex-direction: column;
+  }
+
+  .steps li {
+    flex: initial;
+    flex-direction: row;
+    text-align: left;
   }
 
   .app-header-bar {
