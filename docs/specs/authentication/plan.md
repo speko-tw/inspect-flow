@@ -29,6 +29,11 @@
 - 依 plan 開 task issue 時才建立上表的 issue 編號；本 PR 只寫文件，不開 task issue。開 issue 時，若依賴的裁定或其他規格的任務尚未完成，issue 標 `blocked` 並寫明原因。
 - AUT-R31（前端隱藏功能不取代後端檢查）沒有獨立的任務，由 T4 的後端測試保證。
 
+跨規格實作補充（#578）：domain-model 任務 O 落地 DOM-R75 後，AUT-R14
+的到期檢查已接到既有 session 驗證與密碼登入；首次偵測到期時，停用、撤銷
+所有 session 與單筆系統稽核同交易提交。行為由
+`backend/tests/auth/test_sessions.py::TestAutAc14ExternalExpiry` 覆蓋。
+
 ## 本次變更後續實作
 
 依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29）。本次是範圍變更：`admin` 密碼改由首次登入碼在網頁上設定、登入改用帳號名稱或 email、一般的設定密碼指令移除、新增 `admin` 重設指令。T1～T12 的內容不改寫；已完成的部分不重做，由下列任務在既有程式上修改。每個任務一個 PR，先開 issue 再動工。

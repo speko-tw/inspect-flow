@@ -248,6 +248,11 @@ def remove_project_member(
         before=before,
         after=None,
     )
+    from app.services.user_lifecycle import (
+        deactivate_external_account_without_memberships,
+    )
+
+    deactivate_external_account_without_memberships(session, user.id)
 
 
 __all__ = [

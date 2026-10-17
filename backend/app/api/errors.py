@@ -156,6 +156,18 @@ class ErrorCode(DescribedStrEnum):
         "user.last_admin",
         "The last active administrator cannot be removed.",
     )
+    USER_REACTIVATION_REQUIRED = (
+        "user.reactivation_required",
+        "Use the restore workflow to reactivate this account.",
+    )
+    USER_ACCOUNT_EXPIRY_PASSED = (
+        "user.account_expiry_passed",
+        "Extend or clear the expiry date before reactivation.",
+    )
+    USER_RESTORE_SELECTION_INVALID = (
+        "user.restore_selection_invalid",
+        "One or more restore selections are no longer valid.",
+    )
     USER_EXTERNAL_MANAGED = (
         "user.external_managed",
         "This account's basic fields are managed externally.",

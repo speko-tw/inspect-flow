@@ -290,21 +290,24 @@ class TestAlgAc11WriteTimingSequence:
         session.commit()
         tracker.assert_none()
 
-        # 10. 停用一位非 Admin 的帳號 -> DOM-R22 範圍外，不寫紀錄
+        # 10. 停用帳號依 DOM-R67 寫一筆狀態稽核。
         set_is_active(session, user_u, False)
         session.commit()
-        tracker.assert_none()
+        row = tracker.assert_one("user.active_changed")
+        assert row.entity_id == user_u.id
+        assert row.before == {"is_active": True}
+        assert row.after == {"is_active": False}
 
         # -- Then: every row this sequence wrote has the current
         #    operator as its creator, and nothing else landed in
-        #    audit_logs beyond the seven asserted above.
+        #    audit_logs beyond the eight asserted above.
         assert (
             session.scalars(
                 select(AuditLog.created_by).where(
                     AuditLog.id.in_(tracker.all_ids)
                 )
             ).all()
-            == [operator.id] * 7
+            == [operator.id] * 8
         )
         assert tracker.diff() == []
 
