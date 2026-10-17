@@ -43,6 +43,29 @@ describe('required field markers', () => {
   })
 })
 
+describe('setup page line breaks (#317, UDS-R13)', () => {
+  const narrowRules = css.slice(css.indexOf('@media (max-width: 40rem)'))
+
+  it('keeps step labels intact with a safe overflow break', () => {
+    expect(declarationsOf('.steps-label')).toMatchObject({
+      'word-break': 'keep-all',
+      'overflow-wrap': 'anywhere',
+    })
+  })
+
+  it('keeps setup descriptions intact with a safe overflow break', () => {
+    expect(declarationsOf('.auth-card:has(> .steps) .lead')).toMatchObject({
+      'word-break': 'keep-all',
+      'overflow-wrap': 'anywhere',
+    })
+  })
+
+  it('stacks steps and labels vertically on narrow screens', () => {
+    expect(narrowRules).toMatch(/\.steps \{[^}]*flex-direction: column;/)
+    expect(narrowRules).toMatch(/\.steps li \{[^}]*flex-direction: row;/)
+  })
+})
+
 describe('trial feedback card actions', () => {
   it('keeps card actions content-sized and allows wrapping', () => {
     expect(declarationsOf('.card-actions')).toMatchObject({
