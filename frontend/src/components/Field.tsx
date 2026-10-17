@@ -33,9 +33,12 @@ export function Field({
       <label className={styles.fieldLabel} htmlFor={id}>
         {label}
         {required ? (
-          <span aria-hidden="true" className={styles.required}>
-            *
-          </span>
+          <>
+            <span aria-hidden="true" className={styles.required}>
+              *
+            </span>
+            <span className="visually-hidden">（必填）</span>
+          </>
         ) : null}
       </label>
       {children ? (

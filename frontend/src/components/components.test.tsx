@@ -240,7 +240,9 @@ describe('Field and Input', () => {
         <Input />
       </Field>,
     )
-    const input = screen.getByRole('textbox', { name: '專案名稱' })
+    const input = screen.getByRole('textbox', {
+      name: '專案名稱（必填）',
+    })
     expect(input).toHaveAttribute('id', 'project-name')
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input).toBeRequired()
