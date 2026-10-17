@@ -57,6 +57,7 @@ def list_my_projects(
     ).all()
     access = calculate_effective_access(db, user_id=user.id)
     codes_by_project = access.project_permissions_by_project
+    has_project_module = "project.use" in access.module_permissions
     role_names_by_member: dict[UUID, list[str]] = defaultdict(list)
     if rows:
         member_ids = [member_id for _, member_id in rows]
@@ -78,6 +79,10 @@ def list_my_projects(
     result: list[MyProjectResponse] = []
     for project, member_id in rows:
         project_codes = codes_by_project.get(project.id, frozenset())
+        if not access.is_admin and (
+            not has_project_module or "project.read" not in project_codes
+        ):
+            continue
         result.append(
             MyProjectResponse(
                 id=project.id,
@@ -89,10 +94,13 @@ def list_my_projects(
                 planned_completion_date=project.planned_completion_date,
                 role_names=role_names_by_member[member_id],
                 has_office_access=bool(
-                    project_codes
-                    & (
-                        PROJECT_OFFICE_PERMISSION_CODES
-                        | INSPECTION_OFFICE_PERMISSION_CODES
+                    (
+                        "project.use" in access.module_permissions
+                        and project_codes & PROJECT_OFFICE_PERMISSION_CODES
+                    )
+                    or (
+                        "inspection.use" in access.module_permissions
+                        and project_codes & INSPECTION_OFFICE_PERMISSION_CODES
                     )
                 ),
             )

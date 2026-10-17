@@ -55,7 +55,7 @@ from app.services.projects import (
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 _PROJECT_PLANNING_READ_ACCESS = Depends(
-    require_project_permission("inspection_plan.read"), scope="function"
+    require_project_permission("project.read"), scope="function"
 )
 _PROJECT_MEMBER_ACCESS = Depends(
     require_project_permission(

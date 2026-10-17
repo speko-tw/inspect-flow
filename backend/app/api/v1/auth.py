@@ -104,6 +104,10 @@ class MeResponse(CurrentUserResponse):
     has_field_access: bool
     has_template_access: bool
     module_permissions: list[str]
+    delegated_modules: list[str]
+    can_create_project: bool
+    has_project_access: bool
+    is_external_collaborator: bool
 
 
 def _current_user_response(db: Session, user: User) -> CurrentUserResponse:
@@ -140,6 +144,10 @@ def _me_response(db: Session, user: User) -> MeResponse:
         has_field_access=access.has_field_access,
         has_template_access=access.has_template_access,
         module_permissions=sorted(access.module_permissions),
+        delegated_modules=sorted(access.delegated_modules),
+        can_create_project=access.can_create_project,
+        has_project_access=access.has_project_access,
+        is_external_collaborator=user.is_external_collaborator,
     )
 
 

@@ -62,6 +62,7 @@ from app.models import (
     TaskSnapshotTextStandard,
     User,
 )
+from app.permission_codes import permission_code_module
 from app.services.batch_load import load_by_id, load_grouped
 from app.services.inspection_details import project_inspection_item_detail
 from app.services.inspection_planning import (
@@ -82,6 +83,7 @@ from app.services.inspection_planning import (
     get_inspection_task,
     inspection_task_list_filters,
     inspection_task_visibility_filters,
+    project_permissions_for,
     rename_inspection_plan,
     rename_inspection_task,
     rename_project_zone,
@@ -94,7 +96,6 @@ from app.services.inspection_planning import (
 from app.services.operator import get_current_operator
 from app.services.permissions import (
     calculate_effective_access,
-    effective_permissions,
     project_member_ids_with_permission,
 )
 from app.services.template_library import (
@@ -270,14 +271,17 @@ def _resource_permission(resource_type: str, permission: str):
             raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
         if user.is_admin:
             return user
-        if not _is_project_member(
-            db, user_id=user.id, project_id=resource.project_id
-        ):
-            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-        permissions = effective_permissions(
+        access = calculate_effective_access(
             db, user_id=user.id, project_id=resource.project_id
         )
-        if permission not in permissions:
+        if resource.project_id not in access.project_memberships:
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+        module = permission_code_module(permission)
+        module_use = f"{module}.use" if module is not None else None
+        if (
+            permission not in access.project_permissions
+            or module_use not in access.module_permissions
+        ):
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -293,20 +297,21 @@ def _task_read_permission():
         task = db.get(InspectionTask, task_id)
         if task is None:
             raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-        permissions = effective_permissions(
+        access = calculate_effective_access(
             db, user_id=user.id, project_id=task.project_id
         )
-        if (
-            not user.is_admin
-            and not {
+        permissions = access.project_permissions
+        module = permission_code_module("inspection_task.read")
+        module_use = f"{module}.use" if module is not None else None
+        if not user.is_admin and (
+            not {
                 "inspection_task.read",
                 "inspection_task.inspect",
             }
             & permissions
+            or module_use not in access.module_permissions
         ):
-            if not _is_project_member(
-                db, user_id=user.id, project_id=task.project_id
-            ):
+            if task.project_id not in access.project_memberships:
                 raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         if (
@@ -706,9 +711,7 @@ def zones(
 ):
     """依 IP-R10 列出分區；無 Plan 或分區讀取權限時拒絕。"""
     # inspection_plan.read 也可取顯示 Plan 所需的分區名稱。
-    permissions = effective_permissions(
-        db, user_id=_user.id, project_id=project_id
-    )
+    permissions = project_permissions_for(db, project_id)
     if (
         not _user.is_admin
         and not {"project_zone.read", "inspection_plan.read"} & permissions
@@ -1106,9 +1109,9 @@ def assignees(
     access = calculate_effective_access(
         db, user_id=_user.id, project_id=project_id
     )
-    if (
-        not access.is_admin
-        and not {
+    if not access.is_admin and (
+        "inspection.use" not in access.module_permissions
+        or not {
             "inspection_task.create",
             "inspection_task.assign",
         }
@@ -1120,6 +1123,8 @@ def assignees(
         db,
         project_id=project_id,
         permission_code="inspection_task.inspect",
+        active_only=True,
+        module_permission_code="inspection.use",
     )
     return page(
         db,
@@ -1288,7 +1293,6 @@ def field_inspection_task(
         db,
         task_id=task_id,
         user_id=user.id,
-        is_admin=user.is_admin,
     )
     return _field_task_summary(db, task, detail=True, viewer_id=user.id)
 
