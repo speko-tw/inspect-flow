@@ -20,6 +20,7 @@ from app.db.engine import get_engine
 from app.models import (
     AuditLog,
     Company,
+    CreatorRoleSetting,
     Project,
     ProjectMember,
     Role,
@@ -28,7 +29,9 @@ from app.models import (
     User,
     UserModulePermission,
 )
+from app.services import projects as project_service
 from app.services.companies import create_company
+from app.services.module_permissions import InvalidCreatorRoleUserError
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
@@ -138,6 +141,7 @@ def project_api(
         name="專案成員管理",
         permission_codes=["project_member.manage"],
     )
+    manage_role.is_assignable = True
     db_session.add(
         UserModulePermission(
             user_id=actor.id,
@@ -168,11 +172,7 @@ def project_api(
 
 
 def _same_company(db_session: Session, project_api: ProjectApiContext):
-    """Put the manager and the add-target in one company (#481).
-
-    A non-Admin may only add people of their own company, so tests that
-    add the target as the manager need them to share one.
-    """
+    """Give the manager and add-target company data for related assertions."""
     company = create_company(db_session, name="示範同公司")
     for key in ("actor", "target"):
         user = project_api[key]
@@ -182,7 +182,7 @@ def _same_company(db_session: Session, project_api: ProjectApiContext):
     return company
 
 
-def test_role_assignment_does_not_enforce_assignable_flag(
+def test_non_admin_cannot_assign_role_outside_approved_list(
     project_api, db_session
 ):
     target = project_api["target"]
@@ -203,7 +203,11 @@ def test_role_assignment_does_not_enforce_assignable_flag(
         },
     )
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 422, response.text
+    assert (
+        response.json()["error"]["code"]
+        == ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
+    )
     db_session.expire_all()
     assert (
         db_session.scalar(
@@ -212,17 +216,102 @@ def test_role_assignment_does_not_enforce_assignable_flag(
                 ProjectMember.user_id == target.id,
             )
         )
-        is not None
-    )
-    assert (
-        db_session.scalar(
-            select(AuditLog).where(
-                AuditLog.event_type == "project_member.assignment_denied",
-                AuditLog.project_id == project.id,
-            )
-        )
         is None
     )
+    denied = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "project_member.assignment_denied",
+            AuditLog.project_id == project.id,
+        )
+    )
+    assert denied is not None
+    assert (
+        denied.after["reason"] == ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
+    )
+
+
+@pytest.mark.parametrize(
+    "action", ["replace", "remove_roles", "remove_member"]
+)
+def test_non_admin_cannot_remove_existing_unapproved_role(
+    project_api, db_session: Session, action: str
+):
+    project = project_api["project"]
+    target = project_api["target"]
+    restricted_role = create_role(
+        db_session,
+        name=f"既有不可指派角色-{action}",
+        permission_codes=["project.read"],
+    )
+    db_session.commit()
+    seeded = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members",
+        json={
+            "user_id": str(target.id),
+            "role_ids": [str(restricted_role.id)],
+        },
+    )
+    assert seeded.status_code == 201, seeded.text
+
+    member_url = f"/api/v1/projects/{project.id}/members/{target.id}"
+    if action == "replace":
+        response = project_api["actor_client"].put(
+            f"{member_url}/roles",
+            json={"role_ids": [str(project_api["role"].id)]},
+        )
+    elif action == "remove_roles":
+        response = project_api["actor_client"].put(
+            f"{member_url}/roles", json={"role_ids": []}
+        )
+    else:
+        response = project_api["actor_client"].delete(member_url)
+
+    assert response.status_code == 422, response.text
+    assert (
+        response.json()["error"]["code"]
+        == ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
+    )
+    db_session.expire_all()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert member is not None
+    assert {assignment.role_id for assignment in member.role_assignments} == {
+        restricted_role.id
+    }
+    denied = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "project_member.assignment_denied",
+            AuditLog.project_id == project.id,
+            AuditLog.after["reason"].as_string()
+            == ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value,
+        )
+    )
+    assert denied is not None
+
+
+def test_admin_can_assign_unapproved_project_role(project_api, db_session):
+    project = project_api["project"]
+    target = project_api["target"]
+    restricted_role = create_role(
+        db_session,
+        name="Admin 可指派的角色",
+        permission_codes=["project.read"],
+    )
+    db_session.commit()
+
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members",
+        json={
+            "user_id": str(target.id),
+            "role_ids": [str(restricted_role.id)],
+        },
+    )
+
+    assert response.status_code == 201, response.text
 
 
 def test_project_crud_duplicate_code_warning_and_dates(project_api):
@@ -269,6 +358,169 @@ def test_project_crud_duplicate_code_warning_and_dates(project_api):
     fetched = client.get(f"/api/v1/projects/{first_body['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["warnings"] == [{"code": "project_code.duplicate"}]
+
+
+def test_project_creator_membership_and_admin_handoff(
+    project_api, db_session: Session
+):
+    actor = project_api["actor"]
+    db_session.add(
+        UserModulePermission(
+            user_id=actor.id,
+            permission_code="project.create",
+            source="manual",
+        )
+    )
+    creator_role = create_role(
+        db_session,
+        name="建立者角色",
+        permission_codes=[
+            "project.update",
+            "project_member.manage",
+            "project.read",
+        ],
+    )
+    db_session.add(CreatorRoleSetting(role_id=creator_role.id))
+    db_session.commit()
+    body = {
+        "project_code": "CREATOR-AUTO",
+        "name": "建立者自動加入",
+        "client_name": "示範業主",
+        "site_location": "示範工地",
+    }
+    created = project_api["actor_client"].post("/api/v1/projects", json=body)
+    assert created.status_code == 201, created.text
+    project_id = UUID(created.json()["id"])
+    creator_role_id = db_session.scalar(
+        select(CreatorRoleSetting.role_id).where(
+            CreatorRoleSetting.setting_key == "creator_role"
+        )
+    )
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == actor.id,
+        )
+    )
+    assert member is not None
+    assert [item.role_id for item in member.role_assignments] == [
+        creator_role_id
+    ]
+    event_types = set(
+        db_session.scalars(
+            select(AuditLog.event_type).where(
+                AuditLog.project_id == project_id
+            )
+        )
+    )
+    assert event_types == {"project.created", "project_member.roles_changed"}
+
+    rejected_override = project_api["actor_client"].post(
+        "/api/v1/projects",
+        json={
+            **body,
+            "project_code": "CREATOR-OVERRIDE",
+            "creator_role_user_id": None,
+        },
+    )
+    assert rejected_override.status_code == 422
+
+    admin_created = project_api["admin_client"].post(
+        "/api/v1/projects",
+        json={**body, "project_code": "CREATOR-ADMIN"},
+    )
+    assert admin_created.status_code == 201
+    admin_project_id = UUID(admin_created.json()["id"])
+    assert (
+        db_session.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == admin_project_id,
+                ProjectMember.user_id == project_api["admin"].id,
+            )
+        )
+        is None
+    )
+
+    handoff = project_api["admin_client"].post(
+        "/api/v1/projects",
+        json={
+            **body,
+            "project_code": "CREATOR-HANDOFF",
+            "creator_role_user_id": str(project_api["target"].id),
+        },
+    )
+    assert handoff.status_code == 201
+    handoff_project_id = UUID(handoff.json()["id"])
+    assert (
+        db_session.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == handoff_project_id,
+                ProjectMember.user_id == project_api["target"].id,
+            )
+        )
+        is not None
+    )
+
+
+def test_project_creator_membership_failure_rolls_back_all_writes(
+    project_api, db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    actor = project_api["actor"]
+    db_session.add(
+        UserModulePermission(
+            user_id=actor.id,
+            permission_code="project.create",
+            source="manual",
+        )
+    )
+    creator_role = create_role(
+        db_session,
+        name="回滾測試建立者角色",
+        permission_codes=[
+            "project.update",
+            "project_member.manage",
+            "project.read",
+        ],
+    )
+    db_session.add(CreatorRoleSetting(role_id=creator_role.id))
+    db_session.commit()
+    before_events = db_session.scalar(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.event_type == "project.created"
+        )
+    )
+
+    def fail_membership(*args, **kwargs):
+        raise InvalidCreatorRoleUserError("injected membership failure")
+
+    monkeypatch.setattr(project_service, "add_project_member", fail_membership)
+    response = project_api["actor_client"].post(
+        "/api/v1/projects",
+        json={
+            "project_code": "CREATOR-ROLLBACK",
+            "name": "回滾專案",
+            "client_name": "示範業主",
+            "site_location": "示範工地",
+        },
+    )
+    assert response.status_code == 422
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(Project.id).where(
+                Project.project_code == "CREATOR-ROLLBACK"
+            )
+        )
+        is None
+    )
+    assert (
+        db_session.scalar(
+            select(func.count(AuditLog.id)).where(
+                AuditLog.event_type == "project.created"
+            )
+        )
+        == before_events
+    )
 
 
 def test_project_list_query_count_does_not_grow(
@@ -1083,6 +1335,7 @@ def test_member_operations_require_project_permission_and_audit(
         name="現場查核",
         permission_codes=["project_member.manage"],
     )
+    other_role.is_assignable = True
     db_session.commit()
     replaced = client.put(
         f"/api/v1/projects/{project.id}/members/{target.id}/roles",
@@ -1121,6 +1374,49 @@ def test_member_operations_require_project_permission_and_audit(
         )
     )
     assert all_events[-1].event_type == "project_member.removed"
+
+
+def test_non_admin_cannot_change_own_project_roles(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    actor = project_api["actor"]
+    role = create_role(
+        db_session,
+        name="另一個可指派角色",
+        permission_codes=["project.read"],
+    )
+    role.is_assignable = True
+    db_session.commit()
+
+    response = project_api["actor_client"].put(
+        f"/api/v1/projects/{project.id}/members/{actor.id}/roles",
+        json={"role_ids": [str(role.id)]},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == (
+        ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE.value
+    )
+    db_session.expire_all()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == actor.id,
+        )
+    )
+    assert member is not None
+    assert {item.role_id for item in member.role_assignments} == {
+        project_api["role"].id
+    }
+    denied = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "project_member.assignment_denied",
+            AuditLog.project_id == project.id,
+            AuditLog.after["reason"].as_string()
+            == ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE.value,
+        )
+    )
+    assert denied is not None
 
 
 def test_member_nested_malformed_user_ids_return_validation_error(project_api):
@@ -1338,9 +1634,17 @@ def test_member_api_matches_frontend_contract_fixture(
         for row in listed.json()
     )
 
+    zero_role_target = create_user(
+        db_session,
+        is_external_collaborator=False,
+        username="contract.zero_role",
+        email="contract.zero_role@demo.example",
+        name_zh="零角色測試",
+    )
+    db_session.commit()
     refused = client.post(
         members_url,
-        json={"user_id": str(target.id), "role_ids": []},
+        json={"user_id": str(zero_role_target.id), "role_ids": []},
     )
     expected = fixture["zero_role_error"]
     assert refused.status_code == expected["status"]
@@ -1509,8 +1813,8 @@ def test_list_members_includes_company_and_inactive_user(
     company = db_session.get(Company, root.company_id)
     assert company is not None
     target.company_id = company.id
-    target.is_active = False
     add_project_member(db_session, project_id=project.id, user_id=target.id)
+    target.is_active = False
     db_session.commit()
 
     response = project_api["admin_client"].get(
@@ -1634,7 +1938,7 @@ def _candidate_world(db_session: Session, project_api: ProjectApiContext):
     return users
 
 
-def test_member_candidates_are_company_scoped_for_non_admin(
+def test_member_candidates_include_cross_company_display_data(
     project_api, db_session: Session
 ):
     users = _candidate_world(db_session, project_api)
@@ -1646,20 +1950,29 @@ def test_member_candidates_are_company_scoped_for_non_admin(
     assert response.status_code == 200
     body = response.json()
     assert sorted(body) == _contract_fixture()["candidate_page_keys"]
-    # Same company only; members, inactive and other-company users are
-    # left out, and so is the caller (already a member).
-    assert [row["username"] for row in body["items"]] == [
+    names = [row["username"] for row in body["items"]]
+    assert names == [
+        "cand.other_company",
         "cand.same_a",
         "cand.same_b",
+        "project.member",
+        "project.viewer",
     ]
+    assert "cand.same_joined" not in names
+    assert "cand.same_inactive" not in names
+    assert "project.manager" not in names
     assert body["next_cursor"] is None
     expected_keys = _contract_fixture()["member_candidate_item_keys"]
     assert all(sorted(row) == expected_keys for row in body["items"])
-    assert body["items"][0]["id"] == str(users["same_a"].id)
-    assert body["items"][0]["name_zh"] == "候選 same_a"
+    other_company = body["items"][0]
+    assert other_company["id"] == str(users["other_company"].id)
+    assert other_company["company_name"] == "示範公司乙"
+    assert other_company["module_status"] == {
+        "project_use": False,
+        "inspection_use": False,
+    }
     serialized = json.dumps(body)
     assert "demo.example" not in serialized
-    assert "other_company" not in serialized
 
 
 def test_member_candidates_for_admin_cover_every_company(
@@ -1681,17 +1994,19 @@ def test_member_candidates_for_admin_cover_every_company(
     assert "project.manager" not in names
 
 
-def test_member_candidates_are_empty_for_a_caller_without_company(
+def test_member_candidates_include_users_when_caller_has_no_company(
     project_api,
 ):
     project = project_api["project"]
     assert isinstance(project, Project)
-    # The default manager has no company: nobody can be offered.
+    # 沒有公司歸屬的管理者仍能指派任何公司的人員。
     response = project_api["actor_client"].get(
         f"/api/v1/projects/{project.id}/member-candidates"
     )
     assert response.status_code == 200
-    assert response.json() == {"items": [], "next_cursor": None}
+    assert "project.member" in {
+        row["username"] for row in response.json()["items"]
+    }
 
 
 def test_member_candidates_follow_cursor_pages(
@@ -1704,15 +2019,15 @@ def test_member_candidates_follow_cursor_pages(
     url = f"/api/v1/projects/{project.id}/member-candidates"
     first = client.get(url, params={"limit": 1})
     assert [row["username"] for row in first.json()["items"]] == [
-        "cand.same_a"
+        "cand.other_company"
     ]
     cursor = first.json()["next_cursor"]
     assert cursor
     second = client.get(url, params={"limit": 1, "cursor": cursor})
     assert [row["username"] for row in second.json()["items"]] == [
-        "cand.same_b"
+        "cand.same_a"
     ]
-    assert second.json()["next_cursor"] is None
+    assert second.json()["next_cursor"] is not None
     assert client.get(url, params={"cursor": "bad"}).status_code == 422
     assert client.get(url, params={"limit": 0}).status_code == 422
 
@@ -1729,6 +2044,7 @@ def test_assignable_roles_expose_only_display_fields(
         name="現場查核",
         permission_codes=["inspection_task.read", "project.read"],
     )
+    extra.is_assignable = True
     db_session.commit()
     url = f"/api/v1/projects/{project.id}/assignable-roles"
 
@@ -1818,7 +2134,7 @@ def test_candidate_endpoints_query_count_does_not_grow(
         assert len(expanded) == len(baseline)
 
 
-def test_non_admin_can_only_add_users_of_their_own_company(
+def test_non_admin_can_add_users_across_companies(
     project_api, db_session: Session
 ):
     users = _candidate_world(db_session, project_api)
@@ -1830,37 +2146,19 @@ def test_non_admin_can_only_add_users_of_their_own_company(
     client = project_api["actor_client"]
 
     for key in ("other_company",):
-        refused = client.post(
+        accepted = client.post(
             url,
             json={"user_id": str(users[key].id), "role_ids": [str(role.id)]},
         )
-        assert refused.status_code == 422
-        assert (
-            refused.json()["error"]["code"]
-            == ErrorCode.PROJECT_MEMBER_COMPANY_MISMATCH.value
-            == _contract_fixture()["company_mismatch_error"]["code"]
-        )
-        assert (
-            refused.status_code
-            == _contract_fixture()["company_mismatch_error"]["status"]
-        )
-    # A user without a company is not "the same company" either.
-    refused = client.post(
+        assert accepted.status_code == 201
+    accepted = client.post(
         url,
         json={
             "user_id": str(project_api["target"].id),
             "role_ids": [str(role.id)],
         },
     )
-    assert refused.status_code == 422
-    assert refused.json()["error"]["code"] == "project.member_company_mismatch"
-    # The company rule comes before the zero-role rule, after existence.
-    mismatch_first = client.post(
-        url, json={"user_id": str(users["other_company"].id)}
-    )
-    assert mismatch_first.json()["error"]["code"] == (
-        "project.member_company_mismatch"
-    )
+    assert accepted.status_code == 201
     missing = client.post(
         url, json={"user_id": "00000000-0000-7000-8000-000000000004"}
     )
@@ -1873,8 +2171,8 @@ def test_non_admin_can_only_add_users_of_their_own_company(
             )
         )
     )
-    assert users["other_company"].id not in joined
-    assert project_api["target"].id not in joined
+    assert users["other_company"].id in joined
+    assert project_api["target"].id in joined
 
     ok = client.post(
         url,
@@ -1893,7 +2191,7 @@ def test_non_admin_can_only_add_users_of_their_own_company(
         assert accepted.status_code == 201, row
 
 
-def test_non_admin_without_company_cannot_add_anyone(
+def test_non_admin_without_company_can_add_anyone(
     project_api, db_session: Session
 ):
     project = project_api["project"]
@@ -1911,12 +2209,11 @@ def test_non_admin_without_company_cannot_add_anyone(
         company_id=company.id,
     )
     db_session.commit()
-    refused = project_api["actor_client"].post(
+    accepted = project_api["actor_client"].post(
         f"/api/v1/projects/{project.id}/members",
         json={"user_id": str(member.id), "role_ids": [str(role.id)]},
     )
-    assert refused.status_code == 422
-    assert refused.json()["error"]["code"] == "project.member_company_mismatch"
+    assert accepted.status_code == 201
 
 
 def test_admin_can_add_users_of_any_company(project_api, db_session: Session):

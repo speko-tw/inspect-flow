@@ -87,6 +87,9 @@ def add_project_member(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
     role_ids: Iterable[uuid.UUID] = (),
+    actor_user_id: uuid.UUID | None = None,
+    allow_self_assignment: bool = False,
+    require_creator_user: bool = False,
 ) -> ProjectMember:
     """Add ``user_id`` to ``project_id`` (DOM-R25), optionally
     assigning ``role_ids`` at the same time. Records one
@@ -106,6 +109,9 @@ def add_project_member(
         project_id=project_id,
         project_member_id=member_id,
         role_ids=role_id_set,
+        actor_user_id=actor_user_id or operator.id,
+        allow_self_assignment=allow_self_assignment,
+        require_creator_user=require_creator_user,
     )
     member = ProjectMember(
         id=member_id,
@@ -133,6 +139,8 @@ def set_project_member_roles(
     session: Session,
     member: ProjectMember,
     role_ids: Iterable[uuid.UUID],
+    *,
+    actor_user_id: uuid.UUID | None = None,
 ) -> ProjectMember:
     """Replace a member's full role set with one audit event.
 
@@ -157,6 +165,9 @@ def set_project_member_roles(
         project_id=member.project_id,
         project_member_id=member.id,
         role_ids=after_role_ids,
+        actor_user_id=actor_user_id or operator.id,
+        previous_role_ids=before_role_ids,
+        check_last_manager=True,
     )
     for assignment in member.role_assignments:
         if assignment.role_id in to_remove:
@@ -194,7 +205,12 @@ def list_project_members(
     )
 
 
-def remove_project_member(session: Session, member: ProjectMember) -> None:
+def remove_project_member(
+    session: Session,
+    member: ProjectMember,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+) -> None:
     """Remove ``member`` from its project (DOM-R36): deletes the
     ``ProjectMember`` row outright, relying on the database's own
     ``ON DELETE CASCADE`` to remove its role assignments (see
@@ -211,6 +227,10 @@ def remove_project_member(session: Session, member: ProjectMember) -> None:
         project_id=member.project_id,
         project_member_id=member.id,
         role_ids=(),
+        actor_user_id=actor_user_id or get_current_operator(session).id,
+        previous_role_ids=_current_role_ids(member),
+        check_last_manager=True,
+        require_active=False,
     )
     before = {
         "project_id": member.project_id,

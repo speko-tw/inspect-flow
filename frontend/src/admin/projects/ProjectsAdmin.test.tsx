@@ -101,6 +101,7 @@ const roleA: Role = {
   id: 'role-a',
   name: '查核員',
   permission_codes: ['inspection_task.inspect', 'inspection_task.read'],
+  is_external_allowed: true,
 }
 const roleB: Role = {
   id: 'role-b',
@@ -110,6 +111,7 @@ const roleB: Role = {
     'inspection_task.create',
     'inspection_task.dispatch',
   ],
+  is_external_allowed: true,
 }
 const anna = makeUser('user-1', 'anna.deng', '鄧安娜')
 const bob = makeUser('user-2', 'bob.lin', '林鮑伯')
@@ -330,6 +332,7 @@ function projectFetch({
           company_id: null,
           company_name: null,
           is_active: true,
+          module_status: { project_use: true, inspection_use: true },
         }
         memberRows.push(added)
         const { id, user_id, username, role_ids } = added
@@ -372,18 +375,28 @@ function projectFetch({
             (user) =>
               user.is_active && !user.is_system && !joined.has(user.id),
           )
-          .map(({ id, username, name_zh }) => ({ id, username, name_zh }))
+          .map((user) => ({
+            id: user.id,
+            username: user.username,
+            name_zh: user.name_zh,
+            company_name: null,
+            is_external_collaborator: false,
+            module_status: { project_use: true, inspection_use: true },
+          }))
         return Response.json({ items, next_cursor: null })
       }
       if (/\/projects\/[^/]+\/assignable-roles$/.test(parsed.pathname)) {
         const cursor = parsed.searchParams.get('cursor')
         const index = cursor ? Number(cursor) : 0
         return Response.json({
-          items: rolePages[index].map(({ id, name, permission_codes }) => ({
-            id,
-            name,
-            permission_codes,
-          })),
+          items: rolePages[index].map(
+            ({ id, name, permission_codes, is_external_allowed }) => ({
+              id,
+              name,
+              permission_codes,
+              is_external_allowed,
+            }),
+          ),
           next_cursor: index + 1 < rolePages.length ? String(index + 1) : null,
         })
       }
@@ -1853,6 +1866,7 @@ const memberAnna: ProjectMember = {
   company_id: 'company-1',
   company_name: '示範公司',
   is_active: true,
+  module_status: { project_use: true, inspection_use: true },
 }
 
 function addForm(): HTMLElement {
@@ -2070,36 +2084,6 @@ describe('admin project members', () => {
     expect(screen.getByLabelText('查核員')).toHaveFocus()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.getByLabelText(/使用者/)).toHaveValue(anna.id)
-  })
-
-  it('maps the server company mismatch 422 to the user field', async () => {
-    // 前端候選清單已限制同公司；伺服器仍會再檢查一次（例如對方剛換公司）。
-    projectFetch({
-      office: true,
-      failWith: {
-        match: /\/members$/,
-        method: 'POST',
-        code: contract.company_mismatch_error.code,
-        status: contract.company_mismatch_error.status,
-      },
-    })
-    renderAt('/admin/projects/project-1/members', officeUser)
-    await screen.findByText('目前沒有成員。')
-
-    fireEvent.change(screen.getByLabelText(/使用者/), {
-      target: { value: anna.id },
-    })
-    fireEvent.click(within(addForm()).getByLabelText('查核員'))
-    fireEvent.click(
-      within(addForm()).getByRole('button', { name: '加入成員' }),
-    )
-
-    expect(
-      await screen.findByText('只能加入和你同公司的使用者，請重新選擇。'),
-    ).toBeVisible()
-    expect(screen.getByLabelText(/使用者/)).toHaveFocus()
-    expect(screen.getByLabelText('查核員')).toBeChecked()
-    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('edits roles on a separate screen and requires at least one role', async () => {
