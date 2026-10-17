@@ -1,5 +1,6 @@
-import { useId, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react'
 
+import { Button } from '../Button'
 import '../../styles/layout-patterns.css'
 
 /**
@@ -30,13 +31,13 @@ export function ListDetailLayout({
       </section>
       {hasDetail && (
         <section className="layout-detail-pane" aria-label={detailTitle}>
-          <button
+          <Button
+            variant="tertiary"
             className="layout-mobile-back"
-            type="button"
             onClick={onBack}
           >
             返回{listTitle}
-          </button>
+          </Button>
           {detail}
         </section>
       )}
@@ -103,13 +104,13 @@ export function ResourceState({
       <h2 className="layout-keep-words">{title}</h2>
       <p className="layout-prose">{message}</p>
       {actionLabel && onAction && !isLoading && (
-        <button
+        <Button
+          variant="secondary"
           className="layout-state-action"
-          type="button"
           onClick={onAction}
         >
           {actionLabel}
-        </button>
+        </Button>
       )}
     </section>
   )
@@ -143,7 +144,8 @@ export function ListStatus(
 }
 
 /**
- * 在頁面內說明確認對象與影響，並分開取消和執行動作。
+ * 呈現確認後果，並將初始焦點與取消後焦點放在安全的使用者路徑上。
+ * @remarks 對應 UDS-R09；呼叫端需將焦點返回函式連到觸發元件。
  */
 export function ConfirmationPanel({
   tone,
@@ -152,8 +154,10 @@ export function ConfirmationPanel({
   impact,
   cancelLabel,
   confirmLabel,
+  confirming = false,
   onCancel,
   onConfirm,
+  returnFocus,
 }: {
   tone: 'neutral' | 'danger'
   title: string
@@ -161,33 +165,92 @@ export function ConfirmationPanel({
   impact: string
   cancelLabel: string
   confirmLabel: string
+  confirming?: boolean
   onCancel: () => void
   onConfirm: () => void
+  returnFocus: () => void
 }) {
   const titleId = useId()
+  const descriptionId = useId()
+  const panelRef = useRef<HTMLElement>(null)
+  const canceledRef = useRef(false)
+
+  const cancel = useCallback(() => {
+    if (canceledRef.current) return
+    canceledRef.current = true
+    onCancel()
+    returnFocus()
+  }, [onCancel, returnFocus])
+
+  useEffect(() => {
+    const panel = panelRef.current
+    const cancelButton = panel?.querySelector<HTMLButtonElement>(
+      '[data-confirmation-cancel]',
+    )
+    cancelButton?.focus()
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        cancel()
+        return
+      }
+      if (event.key !== 'Tab' || !panel) return
+
+      const buttons = Array.from(
+        panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+      )
+      const first = buttons[0]
+      const last = buttons.at(-1)
+      if (!first || !last) return
+
+      if (
+        !panel.contains(document.activeElement) ||
+        (event.shiftKey && document.activeElement === first)
+      ) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [cancel])
 
   return (
     <section
+      ref={panelRef}
       className={`layout-confirmation layout-confirmation-${tone}`}
       role="alertdialog"
       aria-labelledby={titleId}
+      aria-describedby={descriptionId}
     >
       <h2 id={titleId}>{title}</h2>
-      <p>
-        <strong>對象：</strong>
-        {subject}
-      </p>
-      <p>
-        <strong>影響：</strong>
-        {impact}
-      </p>
+      <div id={descriptionId}>
+        <p>
+          <strong>對象：</strong>
+          {subject}
+        </p>
+        <p>
+          <strong>影響：</strong>
+          {impact}
+        </p>
+      </div>
       <div className="layout-confirmation-actions">
-        <button type="button" onClick={onCancel}>
+        <Button variant="secondary" data-confirmation-cancel onClick={cancel}>
           {cancelLabel}
-        </button>
-        <button type="button" onClick={onConfirm}>
+        </Button>
+        <Button
+          variant={tone === 'danger' ? 'destructive' : 'primary'}
+          loading={confirming}
+          loadingText="確認中…"
+          onClick={onConfirm}
+        >
           {confirmLabel}
-        </button>
+        </Button>
       </div>
     </section>
   )

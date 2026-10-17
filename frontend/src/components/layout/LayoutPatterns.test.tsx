@@ -148,7 +148,47 @@ describe('ConfirmationPanel', () => {
   it('uses a neutral primary confirmation for non-destructive changes', () => {
     const onCancel = vi.fn()
     const onConfirm = vi.fn()
+    const returnFocus = vi.fn(() => {
+      screen.getByRole('button', { name: '開啟確認' }).focus()
+    })
     const { container } = render(
+      <>
+        <button type="button">開啟確認</button>
+        <ConfirmationPanel
+          tone="neutral"
+          title="開始查核"
+          subject="南港廠區查核"
+          impact="現場人員會收到查核任務。"
+          cancelLabel="取消"
+          confirmLabel="開始查核"
+          onCancel={onCancel}
+          onConfirm={onConfirm}
+          returnFocus={returnFocus}
+        />
+      </>,
+    )
+
+    const panel = screen.getByRole('alertdialog')
+    expect(panel).toHaveClass('layout-confirmation-neutral')
+    expect(panel).toHaveTextContent('對象：南港廠區查核')
+    expect(panel).toHaveAttribute('aria-labelledby')
+    expect(panel).toHaveAttribute('aria-describedby')
+    const cancelButton = screen.getByRole('button', { name: '取消' })
+    expect(cancelButton).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(returnFocus).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: '開啟確認' })).toHaveFocus()
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    expect(container.querySelector('.layout-confirmation-danger')).toBeNull()
+  })
+
+  it('confirms neutral actions through the primary button', () => {
+    const onConfirm = vi.fn()
+    render(
       <ConfirmationPanel
         tone="neutral"
         title="開始查核"
@@ -156,23 +196,72 @@ describe('ConfirmationPanel', () => {
         impact="現場人員會收到查核任務。"
         cancelLabel="取消"
         confirmLabel="開始查核"
-        onCancel={onCancel}
+        onCancel={vi.fn()}
         onConfirm={onConfirm}
+        returnFocus={vi.fn()}
       />,
     )
 
-    expect(screen.getByRole('alertdialog')).toHaveClass(
-      'layout-confirmation-neutral',
-    )
-    expect(screen.getByRole('alertdialog')).toHaveTextContent(
-      '對象：南港廠區查核',
-    )
-    fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(onCancel).toHaveBeenCalledOnce()
-    expect(onConfirm).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '開始查核' }))
     expect(onConfirm).toHaveBeenCalledOnce()
-    expect(container.querySelector('.layout-confirmation-danger')).toBeNull()
+  })
+
+  it('cancels on Escape and keeps keyboard focus within the panel', () => {
+    const onCancel = vi.fn()
+    const returnFocus = vi.fn()
+    render(
+      <ConfirmationPanel
+        tone="danger"
+        title="撤銷權限"
+        subject="南港廠區成員"
+        impact="成員將無法再查看此專案。"
+        cancelLabel="取消"
+        confirmLabel="確認撤銷"
+        onCancel={onCancel}
+        onConfirm={vi.fn()}
+        returnFocus={returnFocus}
+      />,
+    )
+
+    const cancelButton = screen.getByRole('button', { name: '取消' })
+    const confirmButton = screen.getByRole('button', { name: '確認撤銷' })
+    fireEvent.keyDown(cancelButton, { key: 'Tab', shiftKey: true })
+    expect(confirmButton).toHaveFocus()
+    fireEvent.keyDown(confirmButton, { key: 'Tab' })
+    expect(cancelButton).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(returnFocus).toHaveBeenCalledOnce()
+  })
+
+  it('blocks duplicate confirms while destructive action is loading', () => {
+    const onConfirm = vi.fn()
+    const returnFocus = vi.fn()
+    const props = {
+      tone: 'danger' as const,
+      title: '刪除範本',
+      subject: '年度檢查範本',
+      impact: '範本將無法復原。',
+      cancelLabel: '取消',
+      confirmLabel: '確認刪除',
+      onCancel: vi.fn(),
+      onConfirm,
+      returnFocus,
+    }
+    const { rerender } = render(<ConfirmationPanel {...props} />)
+    const confirmButton = screen.getByRole('button', { name: '確認刪除' })
+    fireEvent.click(confirmButton)
+    expect(onConfirm).toHaveBeenCalledOnce()
+
+    rerender(<ConfirmationPanel {...props} confirming />)
+    const loadingButton = screen.getByRole('button', {
+      name: '確認中…',
+    })
+    expect(loadingButton).toBeDisabled()
+    expect(loadingButton).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(loadingButton)
+    expect(onConfirm).toHaveBeenCalledOnce()
   })
 })
 

@@ -110,30 +110,6 @@
   margin-block-start: var(--space-4);
 }
 
-.layout-confirmation-actions button {
-  min-height: 44px;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font: inherit;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.layout-confirmation-neutral .layout-confirmation-actions button:last-child {
-  border-color: var(--color-action-primary);
-  background: var(--color-action-primary);
-  color: var(--color-text-on-primary);
-}
-
-.layout-confirmation-danger .layout-confirmation-actions button:last-child {
-  border-color: var(--color-status-danger);
-  background: var(--color-status-danger);
-  color: var(--color-text-on-danger);
-}
-
 .layout-form-error-summary ul {
   margin: 0;
   padding-inline-start: var(--space-5);
@@ -176,25 +152,9 @@
 }
 
 .layout-state-action {
-  min-height: 44px;
   margin-block-start: var(--space-4);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font: inherit;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition:
-    background-color var(--motion-fast),
-    border-color var(--motion-fast),
-    color var(--motion-fast);
 }
 
-.layout-state-action:focus-visible,
-.layout-mobile-back:focus-visible,
-.layout-confirmation-actions button:focus-visible,
 .layout-form-error-summary a:focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 3px;
@@ -275,13 +235,6 @@
   font-size: 0.75rem;
 }
 
-@media (hover: hover) {
-  .layout-state-action:hover {
-    border-color: var(--color-selection);
-    background: var(--color-bg-muted);
-  }
-}
-
 @media (max-width: 850px) {
   .layout-list-detail {
     grid-template-columns: minmax(0, 1fr);
@@ -312,17 +265,7 @@
 
   .layout-mobile-back {
     display: inline-flex;
-    min-height: 44px;
-    align-items: center;
     margin-block-end: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--color-border-control);
-    border-radius: var(--radius-sm);
-    background: var(--color-bg-surface);
-    color: var(--color-text-primary);
-    font: inherit;
-    cursor: pointer;
-    touch-action: manipulation;
   }
 
   .layout-form-page {
