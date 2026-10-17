@@ -469,6 +469,10 @@ def get_deactivation_check(
     user_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> dict[str, Any]:
+    """列出停用此帳號後會失去啟用管理者的專案（DOM-R67）。
+
+    僅 Admin 可呼叫；帳號不存在時回傳 404。停用帳號不會列出警示專案。
+    """
     user = _get_user(db, user_id)
     projects = deactivation_check(db, user)
     return {
@@ -489,6 +493,10 @@ def get_reactivation_preview(
     user_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> dict[str, Any]:
+    """預覽停用帳號現有且可由 Admin 選擇恢復的項目（DOM-R67）。
+
+    僅 Admin 可呼叫；帳號不存在或仍啟用時分別回傳 404、422。
+    """
     user = _get_user(db, user_id)
     if user.is_active:
         raise APIError(ErrorCode.USER_REACTIVATION_REQUIRED, 422)
@@ -501,6 +509,10 @@ def restore_user(
     body: ReactivateRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> User:
+    """依 Admin 選取的預覽項目重新啟用帳號（DOM-R67）。
+
+    僅 Admin 可呼叫；不存在的帳號回傳 404，到期帳號或無效選項回傳 422。
+    """
     _get_user(db, user_id)
     try:
         return write_call(
@@ -527,6 +539,12 @@ def list_external_users_without_project(
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> LifecycleListResponse:
+    """分頁列出尚未加入專案的啟用外部協作者（DOM-R75）。
+
+    僅 Admin 可呼叫；讀取時先停用已到期帳號，因此過期或已有專案的
+    帳號不會出現在結果中。
+    """
+
     def list_users_and_expire() -> LifecycleListResponse:
         expire_due_external_accounts(db)
         result = page_by_text_key(
@@ -581,6 +599,10 @@ def list_unmanaged_projects(
     limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> LifecycleListResponse:
+    """分頁列出沒有啟用專案管理成員的專案（DOM-R75）。
+
+    僅 Admin 可呼叫；管理者資格依有效的 `project_member.manage` 權限判定。
+    """
     project_ids = unmanaged_project_ids(db)
     member_counts = (
         dict(
