@@ -168,11 +168,14 @@ describe('ConfirmationPanel', () => {
       </>,
     )
 
-    const panel = screen.getByRole('alertdialog')
+    const panel = screen.getByRole('region', { name: '開始查核' })
     expect(panel).toHaveClass('layout-confirmation-neutral')
     expect(panel).toHaveTextContent('對象：南港廠區查核')
     expect(panel).toHaveAttribute('aria-labelledby')
     expect(panel).toHaveAttribute('aria-describedby')
+    expect(screen.getByRole('status')).toHaveTextContent('開始查核')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(panel).not.toHaveAttribute('aria-modal')
     const cancelButton = screen.getByRole('button', { name: '取消' })
     expect(cancelButton).toHaveFocus()
 
@@ -206,7 +209,7 @@ describe('ConfirmationPanel', () => {
     expect(onConfirm).toHaveBeenCalledOnce()
   })
 
-  it('cancels on Escape and keeps keyboard focus within the panel', () => {
+  it('cancels on Escape only while focus is inside the panel', () => {
     const onCancel = vi.fn()
     const returnFocus = vi.fn()
     render(
@@ -224,15 +227,89 @@ describe('ConfirmationPanel', () => {
     )
 
     const cancelButton = screen.getByRole('button', { name: '取消' })
-    const confirmButton = screen.getByRole('button', { name: '確認撤銷' })
-    fireEvent.keyDown(cancelButton, { key: 'Tab', shiftKey: true })
-    expect(confirmButton).toHaveFocus()
-    fireEvent.keyDown(confirmButton, { key: 'Tab' })
-    expect(cancelButton).toHaveFocus()
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(onCancel).not.toHaveBeenCalled()
 
-    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.keyDown(cancelButton, { key: 'Escape' })
     expect(onCancel).toHaveBeenCalledOnce()
     expect(returnFocus).toHaveBeenCalledOnce()
+  })
+
+  it('allows Tab to continue to controls after the panel', () => {
+    render(
+      <>
+        <ConfirmationPanel
+          tone="danger"
+          title="撤銷權限"
+          subject="南港廠區成員"
+          impact="成員將無法再查看此專案。"
+          cancelLabel="取消"
+          confirmLabel="確認撤銷"
+          onCancel={vi.fn()}
+          onConfirm={vi.fn()}
+          returnFocus={vi.fn()}
+        />
+        <button type="button">背景操作</button>
+      </>,
+    )
+
+    const confirmButton = screen.getByRole('button', { name: '確認撤銷' })
+    confirmButton.focus()
+    const tabEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Tab',
+    })
+    confirmButton.dispatchEvent(tabEvent)
+
+    expect(tabEvent.defaultPrevented).toBe(false)
+    screen.getByRole('button', { name: '背景操作' }).focus()
+    expect(screen.getByRole('button', { name: '背景操作' })).toHaveFocus()
+  })
+
+  it('does not refocus on callback changes or while confirming', () => {
+    const props = {
+      tone: 'danger' as const,
+      title: '刪除範本',
+      subject: '年度檢查範本',
+      impact: '範本將無法復原。',
+      cancelLabel: '取消',
+      confirmLabel: '確認刪除',
+      onCancel: vi.fn(),
+      onConfirm: vi.fn(),
+      returnFocus: vi.fn(),
+    }
+    const { rerender } = render(
+      <>
+        <button type="button">背景操作</button>
+        <ConfirmationPanel {...props} />
+      </>,
+    )
+
+    const confirmButton = screen.getByRole('button', {
+      name: '確認刪除',
+    })
+    confirmButton.focus()
+    rerender(
+      <>
+        <button type="button">背景操作</button>
+        <ConfirmationPanel
+          {...props}
+          onCancel={vi.fn()}
+          returnFocus={vi.fn()}
+          confirming
+        />
+      </>,
+    )
+
+    expect(screen.getByRole('button', { name: '取消' })).toBeDisabled()
+    const loadingButton = screen.getByRole('button', {
+      name: '確認中…',
+    })
+    expect(loadingButton).toBeDisabled()
+    expect(loadingButton).toHaveFocus()
+    fireEvent.keyDown(loadingButton, { key: 'Escape' })
+    expect(props.onCancel).not.toHaveBeenCalled()
   })
 
   it('blocks duplicate confirms while destructive action is loading', () => {

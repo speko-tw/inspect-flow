@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react'
 
 import { Button } from '../Button'
 import '../../styles/layout-patterns.css'
@@ -146,6 +152,7 @@ export function ListStatus(
 /**
  * 呈現確認後果，並將初始焦點與取消後焦點放在安全的使用者路徑上。
  * @remarks 對應 UDS-R09；呼叫端需將焦點返回函式連到觸發元件。
+ * 頁內確認保留背景操作，因此使用非 modal 的區域語意。
  */
 export function ConfirmationPanel({
   tone,
@@ -173,61 +180,52 @@ export function ConfirmationPanel({
   const titleId = useId()
   const descriptionId = useId()
   const panelRef = useRef<HTMLElement>(null)
+  const hasFocusedOnOpenRef = useRef(false)
   const canceledRef = useRef(false)
-
-  const cancel = useCallback(() => {
-    if (canceledRef.current) return
-    canceledRef.current = true
-    onCancel()
-    returnFocus()
-  }, [onCancel, returnFocus])
+  const onCancelRef = useRef(onCancel)
+  const returnFocusRef = useRef(returnFocus)
 
   useEffect(() => {
+    onCancelRef.current = onCancel
+    returnFocusRef.current = returnFocus
+  }, [onCancel, returnFocus])
+
+  const cancel = () => {
+    if (confirming || canceledRef.current) return
+    canceledRef.current = true
+    onCancelRef.current()
+    returnFocusRef.current()
+  }
+
+  useEffect(() => {
+    if (hasFocusedOnOpenRef.current) return
+    hasFocusedOnOpenRef.current = true
+
     const panel = panelRef.current
     const cancelButton = panel?.querySelector<HTMLButtonElement>(
       '[data-confirmation-cancel]',
     )
     cancelButton?.focus()
+  }, [])
 
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        cancel()
-        return
-      }
-      if (event.key !== 'Tab' || !panel) return
-
-      const buttons = Array.from(
-        panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
-      )
-      const first = buttons[0]
-      const last = buttons.at(-1)
-      if (!first || !last) return
-
-      if (
-        !panel.contains(document.activeElement) ||
-        (event.shiftKey && document.activeElement === first)
-      ) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [cancel])
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Escape' || confirming) return
+    event.preventDefault()
+    cancel()
+  }
 
   return (
     <section
       ref={panelRef}
       className={`layout-confirmation layout-confirmation-${tone}`}
-      role="alertdialog"
+      role="region"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      onKeyDown={handleKeyDown}
     >
+      <p className="visually-hidden" role="status">
+        {title}
+      </p>
       <h2 id={titleId}>{title}</h2>
       <div id={descriptionId}>
         <p>
@@ -240,7 +238,12 @@ export function ConfirmationPanel({
         </p>
       </div>
       <div className="layout-confirmation-actions">
-        <Button variant="secondary" data-confirmation-cancel onClick={cancel}>
+        <Button
+          variant="secondary"
+          data-confirmation-cancel
+          disabled={confirming}
+          onClick={cancel}
+        >
           {cancelLabel}
         </Button>
         <Button
