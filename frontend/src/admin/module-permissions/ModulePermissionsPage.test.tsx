@@ -358,13 +358,34 @@ describe('ModulePermissionsPage', () => {
     ).toBe(false)
   })
 
-  it('cancels a revoke preview without sending a permission write', async () => {
+  it('keeps summary visible and grants advanced', async () => {
     const { calls } = permissionPage({ permissionCodes: ['project.use'] })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.change(screen.getByRole('combobox', { name: '選擇人員' }), {
       target: { value: 'person' },
     })
-    const permission = await screen.findByLabelText(/project.use/)
+    const summaryText = ['能力摘要：', '使用專案模組'].join('')
+    const capabilitySummary = await screen.findByText(summaryText)
+    expect(capabilitySummary).toBeVisible()
+    const advancedSummary =
+      screen.getByText('進階設定：委派、權限組合與逐項授權')
+    expect(advancedSummary.closest('details')).not.toHaveAttribute('open')
+    const grantGroup = screen.getByRole('group', { name: /模組授權/ })
+    expect(grantGroup).not.toBeVisible()
+
+    fireEvent.click(advancedSummary)
+    expect(grantGroup).toBeVisible()
+    const grant = await screen.findByLabelText(/inspection.use/)
+    fireEvent.click(grant)
+    await waitFor(() => expect(grant).toBeChecked())
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'PUT' && call.path.endsWith('/inspection.use'),
+      ),
+    ).toBe(true)
+
+    const permission = screen.getByLabelText(/project.use/)
     fireEvent.click(permission)
     expect(
       await screen.findByRole('heading', {
@@ -402,7 +423,12 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查有效權限' }))
     expect(await screen.findByText(/缺少「inspection.use」/)).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: '補上缺少的模組權限' }))
+    const summary = screen.getByRole('region', { name: '人員能力摘要' })
+    fireEvent.click(
+      within(summary).getByRole('button', {
+        name: '補上缺少的模組權限',
+      }),
+    )
     await waitFor(() => {
       expect(
         calls.some(
@@ -511,8 +537,9 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查有效權限' }))
     expect(await screen.findByText(/缺少專案角色權限/)).toBeVisible()
+    const summary = screen.getByRole('region', { name: '人員能力摘要' })
     fireEvent.click(
-      screen.getByRole('button', {
+      within(summary).getByRole('button', {
         name: '補上缺少的專案角色權限',
       }),
     )
@@ -543,8 +570,9 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查有效權限' }))
     expect(await screen.findByText(/缺少專案角色權限/)).toBeVisible()
+    const summary = screen.getByRole('region', { name: '人員能力摘要' })
     fireEvent.click(
-      screen.getByRole('button', {
+      within(summary).getByRole('button', {
         name: '補上缺少的專案角色權限',
       }),
     )

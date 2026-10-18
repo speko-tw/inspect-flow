@@ -447,6 +447,9 @@ export default function ModulePermissionsPage() {
     }
   }
 
+  const canRepairProjectRole =
+    notice.includes('缺少專案角色權限') && Boolean(diagnosticProject)
+
   return (
     <div className="admin-page permission-management">
       <SectionHeader
@@ -454,7 +457,7 @@ export default function ModulePermissionsPage() {
         description="先選職務，再確認人員實際可使用的功能。"
       />
       {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {notice && !selectedUser && <p role="status">{notice}</p>}
       <Card>
         <h2>職務起手式</h2>
         <p>建立後可再調整；系統管理者不套用一般權限組合。</p>
@@ -623,6 +626,54 @@ export default function ModulePermissionsPage() {
             ))}
           </select>
         </label>
+        {selectedUser && (
+          <div aria-label="人員能力摘要" role="region">
+            <p role="status">
+              能力摘要：
+              {users.find((user) => user.id === selectedUser)?.is_admin
+                ? '系統管理者可使用全部系統功能。'
+                : permissions
+                    .filter((item) => userAccess.includes(item.code))
+                    .map((item) => item.description)
+                    .join('、') || '尚無模組使用權。'}
+              {memberRoles.length > 0 &&
+                `；目前專案角色：${memberRoles
+                  .map((role) => role.name)
+                  .join('、')}`}
+            </p>
+            {notice && <p role="status">{notice}</p>}
+            {canRepairProjectRole && (
+              <>
+                <Button
+                  disabled={busy}
+                  onClick={() => void repairDiagnosticRole()}
+                >
+                  補上缺少的專案角色權限
+                </Button>
+                <Link to={`/admin/projects/${diagnosticProject}/members`}>
+                  前往指派專案角色
+                </Link>
+              </>
+            )}
+            {notice.startsWith('缺少「') && notice.includes('模組') && (
+              <Button
+                onClick={() => {
+                  const code =
+                    diagnosticAction === 'create-project'
+                      ? 'project.create'
+                      : diagnosticAction === 'template'
+                        ? 'template.manage'
+                        : diagnosticAction === 'members'
+                          ? 'project.use'
+                          : 'inspection.use'
+                  void togglePermission(code, true)
+                }}
+              >
+                補上缺少的模組權限
+              </Button>
+            )}
+          </div>
+        )}
         <label>
           要檢查的操作
           <select
@@ -661,38 +712,6 @@ export default function ModulePermissionsPage() {
           任務清單需 inspection.use 與專案任務讀取／執行角色； 成員管理需
           project.use 與 project_member.manage。
         </p>
-        {notice.includes('缺少專案角色權限') && diagnosticProject && (
-          <>
-            <Button
-              disabled={busy}
-              onClick={() => void repairDiagnosticRole()}
-            >
-              補上缺少的專案角色權限
-            </Button>
-            <Link to={`/admin/projects/${diagnosticProject}/members`}>
-              前往指派專案角色
-            </Link>
-          </>
-        )}
-        {notice.startsWith('缺少「') &&
-          notice.includes('模組') &&
-          selectedUser && (
-            <Button
-              onClick={() => {
-                const code =
-                  diagnosticAction === 'create-project'
-                    ? 'project.create'
-                    : diagnosticAction === 'template'
-                      ? 'template.manage'
-                      : diagnosticAction === 'members'
-                        ? 'project.use'
-                        : 'inspection.use'
-                void togglePermission(code, true)
-              }}
-            >
-              補上缺少的模組權限
-            </Button>
-          )}
         <label>
           搜尋人員
           <Input
@@ -710,44 +729,36 @@ export default function ModulePermissionsPage() {
             </li>
           ))}
         </ul>
-        {selectedUser && (
-          <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
-            <legend>模組授權（已選取 {userAccess.length} 項）</legend>
-            {permissions.map((item) => (
-              <label key={item.code}>
-                <input
-                  checked={userAccess.includes(item.code)}
-                  type="checkbox"
-                  onChange={(event) => {
-                    if (!event.target.checked) {
-                      revokeTrigger.current = event.currentTarget
-                    }
-                    void togglePermission(item.code, event.target.checked)
-                  }}
-                />{' '}
-                {item.description} <code>{item.code}</code>
-              </label>
-            ))}
-          </fieldset>
-        )}
-        {selectedUser && (
-          <p role="status">
-            能力摘要：
-            {users.find((user) => user.id === selectedUser)?.is_admin
-              ? '系統管理者可使用全部系統功能。'
-              : permissions
-                  .filter((item) => userAccess.includes(item.code))
-                  .map((item) => item.description)
-                  .join('、') || '尚無模組使用權。'}
-            {memberRoles.length > 0 &&
-              `；目前專案角色：${memberRoles
-                .map((role) => role.name)
-                .join('、')}`}
-          </p>
-        )}
       </Card>
       <details>
         <summary>進階設定：委派、權限組合與逐項授權</summary>
+        <Card>
+          <h2>逐項模組授權</h2>
+          {selectedUser && (
+            <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
+              <legend>
+                {'模組授權（已選取 '}
+                {userAccess.length}
+                {' 項）'}
+              </legend>
+              {permissions.map((item) => (
+                <label key={item.code}>
+                  <input
+                    checked={userAccess.includes(item.code)}
+                    type="checkbox"
+                    onChange={(event) => {
+                      if (!event.target.checked) {
+                        revokeTrigger.current = event.currentTarget
+                      }
+                      void togglePermission(item.code, event.target.checked)
+                    }}
+                  />{' '}
+                  {item.description} <code>{item.code}</code>
+                </label>
+              ))}
+            </fieldset>
+          )}
+        </Card>
         <Card>
           <h2>委派管理</h2>
           <p>收回委派不會移除對方已授予的人員權限。</p>
