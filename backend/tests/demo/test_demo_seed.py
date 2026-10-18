@@ -118,7 +118,7 @@ def test_demo_accounts_cover_two_layer_access_identities():
     project_roles = {key: [] for key in accounts}
     project_roles["admin"] = []
     for project in projects:
-        # POST /projects automatically gives the creator the office role.
+        # 專案建立 API 會自動給建立者內業角色，因此要補入角色預期。
         project_roles["office"].append(role_names["office"])
         for member, role in project["members"]:
             project_roles[member].append(role_names[role])
