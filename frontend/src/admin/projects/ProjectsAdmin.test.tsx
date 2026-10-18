@@ -2147,7 +2147,7 @@ describe('admin project members', () => {
         name: /合作公司 · 外部協作人員/,
       }),
     ).toBeVisible()
-    expect(await screen.findByText(/尚未開通專案模組/)).toBeVisible()
+    expect(await screen.findByText(/尚未開通專案權限/)).toBeVisible()
     expect(screen.getByLabelText('查核員')).toBeVisible()
     expect(screen.queryByLabelText('內部角色')).toBeNull()
   })

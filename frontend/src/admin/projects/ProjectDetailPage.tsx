@@ -505,10 +505,10 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   {[
                     selectedCandidate.module_status.project_use
                       ? null
-                      : '尚未開通專案模組，請系統管理者或被委派者開通',
+                      : '尚未開通專案權限，請系統管理者或被委派者開通',
                     selectedCandidate.module_status.inspection_use
                       ? null
-                      : '尚未開通查核模組，請系統管理者或被委派者開通',
+                      : '尚未開通查核權限，請系統管理者或被委派者開通',
                   ]
                     .filter(Boolean)
                     .join('；')}

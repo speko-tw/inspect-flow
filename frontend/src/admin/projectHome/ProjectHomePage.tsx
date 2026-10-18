@@ -96,6 +96,10 @@ export default function ProjectHomePage() {
   const base = `/admin/projects/${projectId}`
   const canViewProgress =
     summary?.viewer_permission_codes.includes('inspection_task.read') ?? false
+  const canEditInspectionItems =
+    summary?.viewer_permission_codes.includes(
+      'project_inspection_item.edit',
+    ) ?? false
   const canViewPlanning =
     summary?.viewer_permission_codes.includes('inspection_plan.read') ?? false
   const progressFallback = canViewProgress ? '/progress' : '/planning'
@@ -158,21 +162,29 @@ export default function ProjectHomePage() {
               <h3 id="project-next-step-heading">下一步</h3>
               {primary ? (
                 <>
-                  <p>{STEP_CONTENT[primary].label}</p>
+                  <p>
+                    {primary === 'add_inspection_items' &&
+                    !canEditInspectionItems
+                      ? '目前沒有你可執行的下一步。'
+                      : STEP_CONTENT[primary].label}
+                  </p>
                   {(primary !== 'complete_reinspection' ||
                     canViewProgress ||
-                    canViewPlanning) && (
-                    <Link
-                      className="btn btn-primary"
-                      to={`${base}${
-                        primary === 'complete_reinspection' && !canViewProgress
-                          ? '/planning'
-                          : STEP_CONTENT[primary].suffix
-                      }`}
-                    >
-                      {STEP_CONTENT[primary].action}
-                    </Link>
-                  )}
+                    canViewPlanning) &&
+                    (primary !== 'add_inspection_items' ||
+                      canEditInspectionItems) && (
+                      <Link
+                        className="btn btn-primary"
+                        to={`${base}${
+                          primary === 'complete_reinspection' &&
+                          !canViewProgress
+                            ? '/planning'
+                            : STEP_CONTENT[primary].suffix
+                        }`}
+                      >
+                        {STEP_CONTENT[primary].action}
+                      </Link>
+                    )}
                 </>
               ) : (
                 <>

@@ -209,6 +209,47 @@ describe('project home', () => {
     expect(mocks.getProject).not.toHaveBeenCalled()
   })
 
+  it('唯讀成員不會看到新增查核項目的誤導文案或入口', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'add_inspection_items',
+        viewer_permission_codes: [
+          'project.read',
+          'project_inspection_item.read',
+        ],
+      }),
+    )
+
+    renderAt('/admin/projects/project-1', {
+      has_office_access: true,
+      has_field_access: true,
+    })
+
+    expect(await screen.findByText('目前沒有你可執行的下一步。')).toBeVisible()
+    expect(screen.queryByText('新增查核項目')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '前往新增查核項目' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('可編輯查核項目的成員會看到新增文案與入口', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ primary_step: 'add_inspection_items' }),
+    )
+
+    renderAt('/admin/projects/project-1', {
+      has_office_access: true,
+      has_field_access: true,
+    })
+
+    expect(await screen.findByText('新增查核項目')).toBeVisible()
+    expect(
+      screen.getByRole('link', { name: '前往新增查核項目' }),
+    ).toHaveAttribute('href', '/admin/projects/project-1/inspection-items')
+  })
+
   it('leaves the role blank while the label list is loading', async () => {
     let resolveRoles: (roles: unknown[]) => void = () => {}
     mocks.listCompanyRoles.mockReturnValue(
