@@ -13,7 +13,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 
 import type { CurrentUser } from '../auth/api'
-import { landingPath } from '../auth/landing'
+import { canBrowseTemplates, landingPath } from '../auth/landing'
 import LogoutButton from '../auth/LogoutButton'
 
 export const SYSTEM_NAME = 'InspectFlow 工程查核系統'
@@ -33,6 +33,7 @@ type HeaderUser = Pick<
   | 'has_office_access'
   | 'has_field_access'
   | 'has_template_access'
+  | 'can_browse_templates'
   | 'can_manage_template_library'
 >
 
@@ -48,7 +49,7 @@ export function memberNavItems(
   if (user.has_office_access) {
     items.push({ to: '/admin/projects', label: '我的專案' })
   }
-  if (user.can_manage_template_library ?? user.has_template_access) {
+  if (canBrowseTemplates(user)) {
     items.push({ to: '/admin/templates', label: '範本管理' })
   }
   if (user.has_field_access) items.push({ to: '/field', label: '今日任務' })

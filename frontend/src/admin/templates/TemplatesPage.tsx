@@ -95,7 +95,10 @@ function apiMessage(error: unknown): string {
   return managementErrorMessage(error)
 }
 
-export default function TemplatesPage() {
+/**
+ * 顯示範本庫；只有具 `template.manage` 的使用者可進行寫入。
+ */
+export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   const [categories, setCategories] = useState<TemplateCategory[]>([])
   const [systems, setSystems] = useState<TemplateSystem[]>([])
   const [items, setItems] = useState<TemplateItem[]>([])
@@ -123,7 +126,7 @@ export default function TemplatesPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
-  const [readOnly, setReadOnly] = useState(false)
+  const [readOnly, setReadOnly] = useState(!canManage)
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
   const [isMobile, setIsMobile] = useState(
     () =>

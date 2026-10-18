@@ -23,6 +23,10 @@ const MIXED = currentUserFixture({
   has_office_access: true,
   has_field_access: true,
 })
+const TEMPLATE_USE_ONLY = currentUserFixture({
+  can_browse_templates: true,
+  can_manage_template_library: false,
+})
 
 function renderHeader(
   user: CurrentUser,
@@ -44,6 +48,16 @@ function renderHeader(
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe('範本瀏覽導覽（TPL-R09）', () => {
+  it('template.use-only 使用者可從頁首進入範本庫', () => {
+    renderHeader(TEMPLATE_USE_ONLY)
+    expect(screen.getByRole('link', { name: '範本管理' })).toHaveAttribute(
+      'href',
+      '/admin/templates',
+    )
+  })
+})
 
 describe('AppHeader 窄螢幕導覽（#500）', () => {
   it('導覽是單列可滑動的一個 nav，目前的分頁被捲進可見範圍', () => {

@@ -37,7 +37,7 @@ export function landingPath(user: AccessSummary): string {
   if (user.is_admin) return '/admin'
   if (user.has_office_access) return '/admin/projects'
   if (user.has_field_access) return '/field'
-  return canManageTemplateLibrary(user) ? '/admin/templates' : '/field'
+  return canBrowseTemplates(user) ? '/admin/templates' : '/field'
 }
 
 /** 落點的白話名稱，用在「返回…」連結上。 */
@@ -66,7 +66,7 @@ export function canVisit(user: AccessSummary, path: string): boolean {
   if (!underPrefix(pathname, '/admin')) return true
   if (user.is_admin) return true
   if (underPrefix(pathname, '/admin/templates')) {
-    return canManageTemplateLibrary(user)
+    return canBrowseTemplates(user)
   }
   if (underPrefix(pathname, '/admin/projects')) {
     // 專案的範本頁也開給範本管理員；其餘專案頁屬內業。

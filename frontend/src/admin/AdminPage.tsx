@@ -405,7 +405,7 @@ function AdminPageContent() {
               path="templates"
               element={
                 <AdminRouteSuspense>
-                  <TemplatesPage />
+                  <TemplatesPage canManage />
                 </AdminRouteSuspense>
               }
             />
@@ -437,7 +437,7 @@ function MemberAdminShell({
     /^\/admin\/(?:users|companies|roles|audit-logs)(?:\/|$)/.test(
       location.pathname,
     ) ||
-    (!canManageTemplateLibrary(user) &&
+    (!canBrowseTemplates(user) &&
       /^\/admin\/templates(?:\/|$)/.test(location.pathname))
   return (
     <div
@@ -488,12 +488,12 @@ function MemberAdminShell({
             }
           />
           {PROJECT_ROUTES}
-          {canManageTemplateLibrary(user) && (
+          {canBrowseTemplates(user) && (
             <Route
               path="templates"
               element={
                 <AdminRouteSuspense>
-                  <TemplatesPage />
+                  <TemplatesPage canManage={canManageTemplateLibrary(user)} />
                 </AdminRouteSuspense>
               }
             />
@@ -509,7 +509,7 @@ function MemberAdminShell({
                   <h1>無權限</h1>
                   <p role="alert">
                     {location.pathname.startsWith('/admin/templates')
-                      ? '只有系統管理者或範本管理員可以使用範本管理。'
+                      ? '你沒有權限瀏覽範本庫。'
                       : '只有系統管理者可以使用這個管理頁面。'}
                   </p>
                   <Link className="btn" to={indexTarget}>
