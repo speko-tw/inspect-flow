@@ -267,7 +267,7 @@ describe('ConfirmationPanel', () => {
     expect(screen.getByRole('button', { name: '背景操作' })).toHaveFocus()
   })
 
-  it('does not refocus on callback changes or while confirming', () => {
+  it('moves focus to progress without later focus jumps', () => {
     const props = {
       tone: 'danger' as const,
       title: '刪除範本',
@@ -307,9 +307,34 @@ describe('ConfirmationPanel', () => {
       name: '確認中…',
     })
     expect(loadingButton).toBeDisabled()
-    expect(loadingButton).toHaveFocus()
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('確認中…')
+    expect(status).toHaveAttribute('tabindex', '-1')
+    expect(status).toHaveFocus()
     fireEvent.keyDown(loadingButton, { key: 'Escape' })
     expect(props.onCancel).not.toHaveBeenCalled()
+
+    screen.getByRole('button', { name: '背景操作' }).focus()
+    rerender(
+      <>
+        <button type="button">背景操作</button>
+        <ConfirmationPanel
+          {...props}
+          onCancel={vi.fn()}
+          returnFocus={vi.fn()}
+          confirming
+        />
+      </>,
+    )
+    expect(screen.getByRole('button', { name: '背景操作' })).toHaveFocus()
+
+    rerender(
+      <>
+        <button type="button">背景操作</button>
+        <ConfirmationPanel {...props} />
+      </>,
+    )
+    expect(screen.getByRole('button', { name: '背景操作' })).toHaveFocus()
   })
 
   it('blocks duplicate confirms while destructive action is loading', () => {

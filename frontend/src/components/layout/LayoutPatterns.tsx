@@ -153,6 +153,7 @@ export function ListStatus(
  * 呈現確認後果，並將初始焦點與取消後焦點放在安全的使用者路徑上。
  * @remarks 對應 UDS-R09；呼叫端需將焦點返回函式連到觸發元件。
  * 頁內確認保留背景操作，因此使用非 modal 的區域語意。
+ * 停用原按鈕會失去焦點，因此將焦點移至確認進度。
  */
 export function ConfirmationPanel({
   tone,
@@ -180,6 +181,8 @@ export function ConfirmationPanel({
   const titleId = useId()
   const descriptionId = useId()
   const panelRef = useRef<HTMLElement>(null)
+  const statusRef = useRef<HTMLParagraphElement>(null)
+  const wasConfirmingRef = useRef(confirming)
   const hasFocusedOnOpenRef = useRef(false)
   const canceledRef = useRef(false)
   const onCancelRef = useRef(onCancel)
@@ -208,6 +211,13 @@ export function ConfirmationPanel({
     cancelButton?.focus()
   }, [])
 
+  useEffect(() => {
+    if (confirming && !wasConfirmingRef.current) {
+      statusRef.current?.focus()
+    }
+    wasConfirmingRef.current = confirming
+  }, [confirming])
+
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Escape' || confirming) return
     event.preventDefault()
@@ -223,8 +233,13 @@ export function ConfirmationPanel({
       aria-describedby={descriptionId}
       onKeyDown={handleKeyDown}
     >
-      <p className="visually-hidden" role="status">
-        {title}
+      <p
+        ref={statusRef}
+        className="visually-hidden"
+        role="status"
+        tabIndex={-1}
+      >
+        {confirming ? '確認中…' : title}
       </p>
       <h2 id={titleId}>{title}</h2>
       <div id={descriptionId}>
