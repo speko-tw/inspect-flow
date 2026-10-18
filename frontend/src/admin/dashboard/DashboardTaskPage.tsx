@@ -15,6 +15,7 @@ import {
   type DashboardTask,
 } from './api'
 import './DashboardTaskPage.css'
+import '../../styles/g7-shell.css'
 
 type LoadState = 'loading' | 'ready' | 'error' | 'denied'
 
@@ -309,11 +310,13 @@ function TaskList({
                   state={{ projectName }}
                 >
                   <span className="dashboard-task-row-title">
-                    <strong>{task.task_id}</strong>
+                    <strong>{taskLocation(task)}</strong>
                     <Badge variant={status.variant}>{status.label}</Badge>
                   </span>
                   <span className="dashboard-task-row-meta">
-                    <span>地點：{taskLocation(task)}</span>
+                    <small className="dashboard-task-number">
+                      任務編號：{task.task_id}
+                    </small>
                     <span>建議指派：{assignee}</span>
                   </span>
                 </Link>
@@ -375,7 +378,10 @@ function TaskDetail({
     <article className="dashboard-task-detail">
       <header className="dashboard-task-detail-heading">
         <div>
-          <h2>{detail.task_id}</h2>
+          <h2>{taskLocation(detail)}</h2>
+          <small className="dashboard-task-number">
+            任務編號：{detail.task_id}
+          </small>
           <p>{projectName}</p>
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>

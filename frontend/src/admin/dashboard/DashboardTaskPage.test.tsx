@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -62,13 +68,29 @@ describe('Dashboard 任務唯讀頁', () => {
     renderAt('/admin/dashboard/projects/project-1/tasks/task-2048')
 
     expect(
-      await screen.findByRole('heading', { name: 'task-2048' }),
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'A 棟・二樓機房',
+      }),
     ).toBeInTheDocument()
+    expect(screen.queryByText('管理後台')).not.toBeInTheDocument()
+    expect(
+      screen
+        .getAllByText('任務編號：task-2048')
+        .every((node) => node.matches('small')),
+    ).toBe(true)
+    expect(
+      screen.queryByRole('heading', { name: 'task-2048' }),
+    ).not.toBeInTheDocument()
     expect(
       screen.getByRole('heading', { level: 1, name: '新竹廠一期' }),
     ).toBeInTheDocument()
     expect(screen.getAllByText('進行中').length).toBeGreaterThan(0)
-    expect(screen.getByText('A 棟・二樓機房')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '任務清單' })).getByText(
+        'A 棟・二樓機房',
+      ),
+    ).toBeInTheDocument()
     expect(screen.getAllByText('陳建宏').length).toBeGreaterThan(0)
     expect(screen.getByText('全部進度・唯讀')).toBeInTheDocument()
     expect(screen.getAllByText('唯讀')).toHaveLength(1)
@@ -84,7 +106,7 @@ describe('Dashboard 任務唯讀頁', () => {
       '/admin/dashboard/projects/project-1/tasks/task-2048',
     )
 
-    await screen.findByRole('heading', { name: 'task-2048' })
+    await screen.findByRole('heading', { name: 'A 棟・二樓機房' })
     expect(
       container.querySelector('[data-active-pane="detail"]'),
     ).toBeInTheDocument()
@@ -115,7 +137,7 @@ describe('Dashboard 任務唯讀頁', () => {
     const retryOptions = { name: '重新載入' }
     const retryButton = await screen.findByRole('button', retryOptions)
     fireEvent.click(retryButton)
-    expect(await screen.findByText('task-2048')).toBeInTheDocument()
+    expect(await screen.findByText('任務編號：task-2048')).toBeInTheDocument()
     expect(api.listDashboardTasks).toHaveBeenCalledTimes(2)
   })
 
