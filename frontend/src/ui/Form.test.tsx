@@ -172,6 +172,50 @@ describe('Form submission failures and guards', () => {
     error.mockRestore()
   })
 
+  it('uses the configured fallback for synchronous submission errors', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <Form
+        onSubmit={() => {
+          throw new Error('sync failure')
+        }}
+        unexpectedErrorMessage="送出失敗。請檢查資料後再試一次。"
+      >
+        <FormSubmitButton>儲存</FormSubmitButton>
+      </Form>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '儲存' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '送出失敗。請檢查資料後再試一次。',
+    )
+    error.mockRestore()
+  })
+
+  it('uses the fallback and restores pending after rejection', async () => {
+    const gate = deferred<void>()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <Form
+        onSubmit={() => gate.promise}
+        unexpectedErrorMessage="送出失敗。請檢查資料後再試一次。"
+      >
+        <FormSubmitButton>儲存</FormSubmitButton>
+      </Form>,
+    )
+    const button = screen.getByRole('button', { name: '儲存' })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    await act(async () => gate.reject(new Error('async failure')))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '送出失敗。請檢查資料後再試一次。',
+    )
+    expect(button).toBeEnabled()
+    error.mockRestore()
+  })
+
   it('releases after a rejected Promise', async () => {
     const guard = createGuard(true)
     const onSubmit = vi.fn(() => Promise.reject(new Error('async failure')))
