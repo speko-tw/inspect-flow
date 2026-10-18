@@ -1812,12 +1812,15 @@ describe('admin user and company pages', () => {
         has_office_access: true,
         has_field_access: false,
         has_template_access: false,
+        has_project_access: false,
+        can_create_project: false,
       })
 
       expect(labels()).toEqual(['我的專案', '變更密碼'])
       expect(
         await screen.findByRole('heading', { name: '我的專案' }),
       ).toBeInTheDocument()
+      expect(await screen.findByText(/目前沒有可檢視的專案/)).toBeVisible()
     })
 
     it.each([

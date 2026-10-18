@@ -8,6 +8,7 @@ import type { Company, User } from '../api'
 import {
   addProjectMember,
   listProjectMembers,
+  setProjectMemberRoles,
   type Project,
 } from '../projects/api'
 import {
@@ -35,18 +36,57 @@ import {
 } from './api'
 
 type Profile = 'system' | 'office' | 'field' | 'contractor'
+type StaffIdentity = 'internal' | 'external'
 
 const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
   [
-    { id: 'system', label: '系統管理者', summary: '管理所有系統功能' },
-    { id: 'office', label: '專案工程師', summary: '管理專案並檢視查核工作' },
-    { id: 'field', label: '現場工程師', summary: '執行指派的現場查核工作' },
+    {
+      id: 'system',
+      label: '系統管理',
+      summary: '管理所有系統功能',
+    },
+    {
+      id: 'office',
+      label: '內業規劃',
+      summary: '規劃與管理已授權專案',
+    },
+    {
+      id: 'field',
+      label: '現場查核',
+      summary: '執行指派的現場查核工作',
+    },
     {
       id: 'contractor',
-      label: '外部協作者',
+      label: '外包顧問',
       summary: '只取得核准的外部可用功能',
     },
   ]
+
+const PROFILE_ACCESS: Record<
+  Profile,
+  { can: string[]; cannot: string[]; projectRole: string }
+> = {
+  system: {
+    can: ['管理人員與權限', '查看全部專案進度', '管理專案成員'],
+    cannot: ['外部協作人員不能設為系統管理者', '不能替自己建立額外權限'],
+    projectRole: '專案工程師',
+  },
+  office: {
+    can: ['規劃與查看已授權專案', '建立專案', '使用查核與範本功能'],
+    cannot: ['查看未授權的專案', '管理範本庫'],
+    projectRole: '專案工程師',
+  },
+  field: {
+    can: ['查看已加入的專案', '使用查核任務'],
+    cannot: ['建立專案', '管理專案成員', '管理範本庫'],
+    projectRole: '現場工程師',
+  },
+  contractor: {
+    can: ['查看已加入且有查閱角色的專案', '依專案角色查看查核資料'],
+    cannot: ['建立專案', '查看其他專案', '管理成員、權限或範本庫'],
+    projectRole: '專案查閱人員',
+  },
+}
 
 const PROFILE_BUNDLES: Partial<Record<Profile, string>> = {
   office: '專案工程師常用',
@@ -71,6 +111,7 @@ export default function ModulePermissionsPage() {
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
   const [profile, setProfile] = useState<Profile>('office')
+  const [identity, setIdentity] = useState<StaffIdentity>('internal')
   const [step, setStep] = useState(0)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -97,6 +138,20 @@ export default function ModulePermissionsPage() {
   const [creatorRoleId, setCreatorRoleId] = useState('')
   const revokeTrigger = useRef<HTMLInputElement>(null)
   const bundleDeleteTrigger = useRef<HTMLButtonElement>(null)
+
+  const profileIsAllowed =
+    identity === 'external'
+      ? profile === 'contractor'
+      : profile !== 'contractor'
+
+  function goToStep(nextStep: number) {
+    if (!profileIsAllowed) {
+      setError('請先依人員身分選擇可用職務。')
+      return
+    }
+    setError('')
+    setStep(nextStep)
+  }
 
   async function refresh() {
     const [
@@ -225,6 +280,10 @@ export default function ModulePermissionsPage() {
   }
 
   async function createStaff() {
+    if (!profileIsAllowed) {
+      setError('請確認人員身分與職務相符。')
+      return
+    }
     setBusy(true)
     setError('')
     setPartial('')
@@ -235,7 +294,7 @@ export default function ModulePermissionsPage() {
         email: email.trim(),
         name_zh: name.trim(),
         company_id: companyId || null,
-        is_external_collaborator: profile === 'contractor',
+        is_external_collaborator: identity === 'external',
         is_admin: profile === 'system',
       })
       createdUserId = created.id
@@ -248,14 +307,7 @@ export default function ModulePermissionsPage() {
         if (!bundle) throw new Error(`找不到預設權限組合「${bundleName}」。`)
         await applyPermissionBundle(created.id, bundle.id)
       }
-      const roleName =
-        profile === 'field'
-          ? '現場工程師'
-          : profile === 'contractor'
-            ? '專案查閱人員'
-            : profile === 'office'
-              ? '專案工程師'
-              : ''
+      const roleName = PROFILE_ACCESS[profile].projectRole
       const role = roles.find((item) => item.name === roleName)
       if (projectId && role) {
         await addProjectMember(projectId, created.id, [role.id])
@@ -341,6 +393,60 @@ export default function ModulePermissionsPage() {
     )
   }
 
+  async function repairDiagnosticRole() {
+    if (!selectedUser || !diagnosticProject) return
+    const selected = users.find((user) => user.id === selectedUser)
+    if (!selected || selected.is_admin) return
+    const requiredCode =
+      diagnosticAction === 'members'
+        ? 'project_member.manage'
+        : diagnosticAction === 'task-list'
+          ? null
+          : undefined
+    if (requiredCode === undefined) return
+    const candidateRoles = roles.filter((role) => {
+      const allowed = requiredCode
+        ? role.permission_codes.includes(requiredCode)
+        : role.permission_codes.some((code) =>
+            ['inspection_task.read', 'inspection_task.inspect'].includes(code),
+          )
+      const externalAllowed =
+        !selected.is_external_collaborator || role.is_external_allowed
+      return allowed && externalAllowed
+    })
+    const candidate = candidateRoles.sort((left, right) => {
+      const order = ['現場工程師', '專案工程師', '專案查閱人員']
+      return order.indexOf(left.name) - order.indexOf(right.name)
+    })[0]
+    if (!candidate) {
+      setError('找不到符合此人身分的專案角色，沒有變更資料。')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const members = await listProjectMembers(diagnosticProject)
+      const member = members.find((item) => item.user_id === selectedUser)
+      if (member) {
+        if (member.role_ids.includes(candidate.id)) {
+          setError('目前角色已包含所需權限，沒有變更資料。')
+          return
+        }
+        await setProjectMemberRoles(diagnosticProject, selectedUser, [
+          ...member.role_ids,
+          candidate.id,
+        ])
+      } else {
+        await addProjectMember(diagnosticProject, selectedUser, [candidate.id])
+      }
+      await diagnose()
+    } catch (caught) {
+      setError(message(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="admin-page permission-management">
       <SectionHeader
@@ -354,13 +460,31 @@ export default function ModulePermissionsPage() {
         <p>建立後可再調整；系統管理者不套用一般權限組合。</p>
         <div aria-label="建立人員步驟" className="setup-steps">
           {['身分', '職務', '專案', '確認'].map((label, index) => (
-            <Button key={label} onClick={() => setStep(index)}>
+            <Button key={label} onClick={() => goToStep(index)}>
               {index + 1}. {label}
             </Button>
           ))}
         </div>
         {step === 0 && (
           <div className="form-grid">
+            <label>
+              身分
+              <select
+                value={identity}
+                onChange={(event) => {
+                  const next = event.target.value as StaffIdentity
+                  setIdentity(next)
+                  setProfile(next === 'external' ? 'contractor' : 'office')
+                  setError('')
+                }}
+              >
+                <option value="internal">內部人員</option>
+                <option value="external">外部協作人員</option>
+              </select>
+              {identity === 'external' && (
+                <small>外部協作人員只能選「外包顧問」。</small>
+              )}
+            </label>
             <Field id="staff-username" label="帳號">
               <Input
                 value={username}
@@ -399,7 +523,11 @@ export default function ModulePermissionsPage() {
         {step === 1 && (
           <fieldset>
             <legend>選擇職務</legend>
-            {PROFILE_OPTIONS.map((option) => (
+            {PROFILE_OPTIONS.filter((option) =>
+              identity === 'external'
+                ? option.id === 'contractor'
+                : option.id !== 'contractor',
+            ).map((option) => (
               <label key={option.id}>
                 <input
                   checked={profile === option.id}
@@ -436,11 +564,38 @@ export default function ModulePermissionsPage() {
               {PROFILE_OPTIONS.find((item) => item.id === profile)?.label}
               」加入。
             </p>
-            <p>
-              {profile === 'system'
-                ? '系統管理者權限由系統身分提供。'
-                : `將套用「${PROFILE_BUNDLES[profile]}」權限組合。`}
-            </p>
+            <section aria-label="可以做">
+              <h4>可以做</h4>
+              <ul>
+                {PROFILE_ACCESS[profile].can.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+                {projectId && (
+                  <li>
+                    在「
+                    {projects.find((item) => item.id === projectId)?.name}
+                    」擁有「{PROFILE_ACCESS[profile].projectRole}」角色
+                  </li>
+                )}
+              </ul>
+            </section>
+            <section aria-label="不能做">
+              <h4>不能做</h4>
+              <ul>
+                {PROFILE_ACCESS[profile].cannot.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+            <small>
+              進階參考：
+              {PROFILE_BUNDLES[profile]
+                ? `權限組合「${PROFILE_BUNDLES[profile]}」`
+                : 'Admin 權限來自系統身分，不寫入一般組合'}
+              {`；預設專案角色「${PROFILE_ACCESS[profile].projectRole}」。`}
+              {identity === 'external' &&
+                ' 外部人員只會取得外部可用權限與角色。'}
+            </small>
             <p>後續步驟若失敗，帳號會保留並顯示可重試的部分狀態。</p>
             <Button
               disabled={busy || !username || !name || !email}
@@ -507,9 +662,17 @@ export default function ModulePermissionsPage() {
           project.use 與 project_member.manage。
         </p>
         {notice.includes('缺少專案角色權限') && diagnosticProject && (
-          <Link to={`/admin/projects/${diagnosticProject}/members`}>
-            前往指派專案角色
-          </Link>
+          <>
+            <Button
+              disabled={busy}
+              onClick={() => void repairDiagnosticRole()}
+            >
+              補上缺少的專案角色權限
+            </Button>
+            <Link to={`/admin/projects/${diagnosticProject}/members`}>
+              前往指派專案角色
+            </Link>
+          </>
         )}
         {notice.startsWith('缺少「') &&
           notice.includes('模組') &&

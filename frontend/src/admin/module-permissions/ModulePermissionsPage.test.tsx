@@ -14,12 +14,14 @@ interface FixtureOptions {
   permissionCodes?: string[]
   failBundleOnce?: boolean
   memberRoleIds?: string[]
+  failMemberWriteOnce?: boolean
 }
 
 function permissionPage(options: FixtureOptions = {}) {
   const permissionCodes = [...(options.permissionCodes ?? [])]
   let failBundleOnce = options.failBundleOnce ?? false
-  const memberRoleIds = options.memberRoleIds ?? []
+  let memberRoleIds = [...(options.memberRoleIds ?? [])]
+  let failMemberWriteOnce = options.failMemberWriteOnce ?? false
   const member = {
     id: 'person',
     username: 'person.one',
@@ -157,7 +159,7 @@ function permissionPage(options: FixtureOptions = {}) {
       }
       if (method === 'GET' && path === '/projects/project-1/members') {
         return Response.json([
-          ...(memberRoleIds.length
+          ...(memberRoleIds.length || options.memberRoleIds
             ? [{ user_id: 'person', role_ids: memberRoleIds }]
             : []),
         ])
@@ -206,6 +208,17 @@ function permissionPage(options: FixtureOptions = {}) {
         if (!permissionCodes.includes(code)) permissionCodes.push(code)
         return new Response(null, { status: 204 })
       }
+      if (method === 'PUT' && path.endsWith('/members/person/roles')) {
+        if (failMemberWriteOnce) {
+          failMemberWriteOnce = false
+          return Response.json(
+            { error: { code: 'project.role_not_assignable' } },
+            { status: 422 },
+          )
+        }
+        memberRoleIds = (JSON.parse(body) as { role_ids: string[] }).role_ids
+        return Response.json({ user_id: 'person', role_ids: memberRoleIds })
+      }
       if (method === 'DELETE' && path.includes('/module-permissions/')) {
         const code = path.split('/').at(-1) ?? ''
         const index = permissionCodes.indexOf(code)
@@ -216,7 +229,12 @@ function permissionPage(options: FixtureOptions = {}) {
         return new Response(null, { status: 204 })
       }
       if (method === 'POST' && path.endsWith('/members')) {
-        return Response.json({ id: 'member-1' })
+        const input = JSON.parse(body) as {
+          user_id: string
+          role_ids: string[]
+        }
+        if (input.user_id === 'person') memberRoleIds = input.role_ids
+        return Response.json({ id: 'member-1', ...input })
       }
       return Response.json(
         { error: { code: 'unexpected_request' } },
@@ -234,6 +252,11 @@ function permissionPage(options: FixtureOptions = {}) {
 }
 
 async function chooseProfile(profile: string) {
+  if (profile === '外包顧問') {
+    fireEvent.change(screen.getByLabelText('身分'), {
+      target: { value: 'external' },
+    })
+  }
   fireEvent.click(screen.getByRole('button', { name: /2\. 職務/ }))
   fireEvent.click(screen.getByRole('radio', { name: new RegExp(profile) }))
   fireEvent.click(screen.getByRole('button', { name: /4\. 確認/ }))
@@ -255,10 +278,10 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
   it.each([
-    ['系統管理者', true, false, null],
-    ['專案工程師', false, false, '專案工程師常用'],
-    ['現場工程師', false, false, '現場工程師常用'],
-    ['外部協作者', false, true, '現場工程師常用'],
+    ['系統管理', true, false, null],
+    ['內業規劃', false, false, '專案工程師常用'],
+    ['現場查核', false, false, '現場工程師常用'],
+    ['外包顧問', false, true, '現場工程師常用'],
   ])(
     'creates the %s profile with its approved access bundle',
     async (label, isAdmin, isExternal, bundleName) => {
@@ -303,7 +326,7 @@ describe('ModulePermissionsPage', () => {
     const { calls } = permissionPage({ failBundleOnce: true })
     await screen.findByRole('heading', { name: '職務起手式' })
     await fillIdentity('retry.user')
-    await chooseProfile('專案工程師')
+    await chooseProfile('內業規劃')
     fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
 
     expect(await screen.findByText(/帳號已建立；後續授權/)).toBeVisible()
@@ -393,6 +416,146 @@ describe('ModulePermissionsPage', () => {
     expect(
       screen.getByRole('link', { name: '前往指派專案角色' }),
     ).toHaveAttribute('href', '/admin/projects/project-1/members')
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '補上缺少的專案角色權限',
+      }),
+    )
+    expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
+    const memberWrite = calls.find(
+      (call) => call.path.endsWith('/members') && call.method === 'POST',
+    )
+    expect(memberWrite).toBeDefined()
+    expect(JSON.parse(memberWrite?.body ?? '{}')).toEqual({
+      user_id: 'person',
+      role_ids: ['field-role'],
+    })
+  })
+
+  it('filters job options by identity', async () => {
+    const { calls } = permissionPage()
+    await screen.findByRole('heading', { name: '職務起手式' })
+    fireEvent.change(screen.getByLabelText('身分'), {
+      target: { value: 'external' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /2\. 職務/ }))
+
+    expect(screen.getByRole('radio', { name: /外包顧問/ })).toBeVisible()
+    expect(screen.queryByRole('radio', { name: /系統管理/ })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /內業規劃/ })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /現場查核/ })).toBeNull()
+    expect(calls.some((call) => call.method === 'POST')).toBe(false)
+  })
+
+  it('previews abilities and project role in plain language', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '職務起手式' })
+    await fillIdentity('preview.user')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: /3\. 專案/ }))
+    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /4\. 確認/ }))
+
+    expect(screen.getByRole('region', { name: '可以做' })).toHaveTextContent(
+      '建立專案',
+    )
+    expect(screen.getByRole('region', { name: '不能做' })).toHaveTextContent(
+      '查看未授權的專案',
+    )
+    expect(
+      screen.getByText(/預設專案角色/, { selector: 'small' }),
+    ).toBeVisible()
+    expect(screen.getByText(/預設專案角色「專案工程師」/)).toBeVisible()
+  })
+
+  it('assigns Admin the selected project role', async () => {
+    const { calls } = permissionPage()
+    await screen.findByRole('heading', { name: '職務起手式' })
+    await fillIdentity('admin.new')
+    await chooseProfile('系統管理')
+    fireEvent.click(screen.getByRole('button', { name: /3\. 專案/ }))
+    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /4\. 確認/ }))
+    expect(screen.getByText(/預設專案角色「專案工程師」/)).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+
+    expect(
+      await screen.findByText('帳號、權限組合及所選專案已完成。'),
+    ).toBeVisible()
+    const memberWrite = calls.find(
+      (call) => call.path.endsWith('/members') && call.method === 'POST',
+    )
+    expect(JSON.parse(memberWrite?.body ?? '{}')).toEqual({
+      user_id: 'created-person',
+      role_ids: ['office-role'],
+    })
+    expect(calls.some((call) => call.path.includes(':apply'))).toBe(false)
+  })
+
+  it('adds a missing role and preserves existing roles', async () => {
+    const { calls } = permissionPage({
+      memberRoleIds: ['office-role'],
+      permissionCodes: ['inspection.use'],
+    })
+    await screen.findByRole('heading', { name: '職務起手式' })
+    fireEvent.change(screen.getByRole('combobox', { name: '選擇人員' }), {
+      target: { value: 'person' },
+    })
+    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查有效權限' }))
+    expect(await screen.findByText(/缺少專案角色權限/)).toBeVisible()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '補上缺少的專案角色權限',
+      }),
+    )
+    expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
+
+    const write = calls.find(
+      (call) => call.method === 'PUT' && call.path.endsWith('/roles'),
+    )
+    expect(write?.method).toBe('PUT')
+    expect(JSON.parse(write?.body ?? '{}')).toEqual({
+      role_ids: ['office-role', 'field-role'],
+    })
+  })
+
+  it('keeps membership when role assignment fails', async () => {
+    const { calls } = permissionPage({
+      failMemberWriteOnce: true,
+      memberRoleIds: ['office-role'],
+      permissionCodes: ['inspection.use'],
+    })
+    await screen.findByRole('heading', { name: '職務起手式' })
+    fireEvent.change(screen.getByRole('combobox', { name: '選擇人員' }), {
+      target: { value: 'person' },
+    })
+    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查有效權限' }))
+    expect(await screen.findByText(/缺少專案角色權限/)).toBeVisible()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '補上缺少的專案角色權限',
+      }),
+    )
+
+    expect(await screen.findByRole('alert')).toBeVisible()
+    expect(
+      calls.filter(
+        (call) => call.method === 'PUT' && call.path.endsWith('/roles'),
+      ),
+    ).toHaveLength(1)
+    expect(screen.getByText('目前角色：專案工程師')).toBeVisible()
   })
 
   it('retains direct grants when delegated authority is removed', async () => {
