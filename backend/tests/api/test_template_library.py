@@ -16,13 +16,15 @@ from app.models import (
     ProjectMemberRole,
     Role,
     RolePermission,
-    SystemRoleAssignment,
+    TemplateCategory,
     TemplateEvidenceRequirement,
     TemplateInspectionPoint,
     TemplateItem,
     TemplateMeasurementField,
     TemplateNumericStandard,
+    TemplateSystem,
     TemplateTextStandard,
+    UserModulePermission,
 )
 from tests.db.conftest import create_root_user_with_company
 
@@ -35,12 +37,21 @@ def clients(db_session, make_client):
     editor = create_root_user_with_company(db_session, "TPL-EDITOR")
     outsider = create_root_user_with_company(db_session, "TPL-OUTSIDER")
     db_session.flush()
+    db_session.add_all(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="template.manage"
+            if user is manager
+            else "template.use",
+            source="manual",
+        )
+        for user in (manager, editor)
+    )
     db_session.add(
-        SystemRoleAssignment(
+        UserModulePermission(
             user_id=manager.id,
-            role_code="template_admin",
-            created_by=admin.id,
-            updated_by=admin.id,
+            permission_code="template.use",
+            source="manual",
         )
     )
     project = Project(
@@ -149,6 +160,32 @@ def _template(system_id, title="Foundation"):
             },
         ],
     }
+
+
+def _template_snapshot(db_session):
+    """讀取範本資料列，確認拒絕的寫入沒有留下變更。"""
+    models = (
+        TemplateCategory,
+        TemplateSystem,
+        TemplateItem,
+        TemplateInspectionPoint,
+        TemplateEvidenceRequirement,
+        TemplateMeasurementField,
+        TemplateNumericStandard,
+        TemplateTextStandard,
+    )
+    db_session.expire_all()
+    return tuple(
+        tuple(
+            tuple(
+                getattr(row, column.key) for column in model.__table__.columns
+            )
+            for row in db_session.scalars(
+                select(model).order_by(model.id)
+            ).all()
+        )
+        for model in models
+    )
 
 
 @pytest.mark.parametrize(
@@ -402,7 +439,7 @@ def test_access_and_name_conflicts(clients):
     }
 
 
-def test_admin_can_perform_all_template_library_writes(clients):
+def test_admin_can_perform_all_template_library_writes(clients, db_session):
     admin = clients["admin"]
     member = clients["editor"]
     category = admin.post(
@@ -467,8 +504,10 @@ def test_admin_can_perform_all_template_library_writes(clients):
         ),
     ]
     for method, path, body in writes:
+        before = _template_snapshot(db_session)
         response = member.request(method, path, json=body)
         assert response.status_code == 403, (method, path, response.text)
+        assert _template_snapshot(db_session) == before
 
     assert (
         admin.patch(

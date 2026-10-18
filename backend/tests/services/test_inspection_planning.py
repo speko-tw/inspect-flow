@@ -511,7 +511,6 @@ def test_field_task_filters_use_central_permission_calculation(
     access = EffectiveAccess(
         is_active=True,
         is_admin=False,
-        system_roles=frozenset(),
         module_permissions=frozenset({"inspection.use"}),
         delegated_modules=frozenset(),
         project_permissions=frozenset(),
@@ -544,7 +543,6 @@ def test_field_task_filters_use_central_permission_calculation(
     denied_access = EffectiveAccess(
         is_active=True,
         is_admin=False,
-        system_roles=frozenset(),
         module_permissions=frozenset(),
         delegated_modules=frozenset(),
         project_permissions=frozenset(),

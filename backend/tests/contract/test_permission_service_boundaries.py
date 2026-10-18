@@ -187,7 +187,8 @@ def test_project_authorization_decisions_use_central_permission_entries():
     )
     for outer in (
         "require_admin_or_any_project_permission",
-        "require_system_role_or_any_project_permission",
+        "require_module_or_any_project_permission",
+        "require_module_and_project_permission",
     ):
         assert "calculate_effective_access" in _function_names(
             access_path, "_check", enclosing=outer
@@ -372,7 +373,8 @@ def test_permission_calculation_scope_covers_new_service_boundaries():
         "app/auth/access.py": (
             ("_check", "require_project_permission"),
             ("_check", "require_admin_or_any_project_permission"),
-            ("_check", "require_system_role_or_any_project_permission"),
+            ("_check", "require_module_or_any_project_permission"),
+            ("_check", "require_module_and_project_permission"),
         ),
         "app/services/project_workflow_summary.py": (),
         "app/services/project_members.py": (("add_project_member", None),),

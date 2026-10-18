@@ -14,7 +14,6 @@ from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
     ProjectMember,
     ProjectMemberRole,
-    SystemRoleCode,
     User,
     UserModuleDelegation,
     UserModulePermission,
@@ -28,7 +27,6 @@ from app.services.access_summary import (
 from app.services.project_members import add_project_member
 from app.services.projects import create_project
 from app.services.roles import create_role
-from app.services.system_roles import assign_system_role
 from app.services.users import create_user
 from tests.api.query_count import select_count
 from tests.db.conftest import create_root_user_with_company
@@ -190,8 +188,12 @@ def world(db_session: Session, make_client):
         user_id=editor.id,
         role_ids=[template_role.id],
     )
-    assign_system_role(
-        db_session, template_admin.id, SystemRoleCode.TEMPLATE_ADMIN
+    db_session.add(
+        UserModulePermission(
+            user_id=template_admin.id,
+            permission_code="template.manage",
+            source="manual",
+        )
     )
     db_session.add(
         UserModulePermission(
