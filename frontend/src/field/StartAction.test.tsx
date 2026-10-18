@@ -136,11 +136,18 @@ describe('開始查核：確認步驟', () => {
       '取消',
       '確認開始查核',
     ])
-    expect(buttons[0]).not.toHaveClass('btn-primary')
-    expect(buttons[1]).toHaveClass('btn-primary')
+    expect(buttons[0]).toHaveAttribute('data-confirmation-cancel')
+    expect(
+      screen.getByRole('region', {
+        name: '確認開始「外牆鋼筋查核－一樓」？',
+      }),
+    ).toHaveClass('layout-confirmation-neutral')
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByText(/確認開始/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '開始查核' })).toBeEnabled()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '開始查核' })).toHaveFocus(),
+    )
     expect(posts()).toHaveLength(0)
   })
 
@@ -193,8 +200,8 @@ describe('開始查核：成功', () => {
       start: () => Response.json(START_RESPONSE),
     })
     await confirm()
-    const ok = await screen.findByRole('status')
-    expect(within(ok).getByText('查核進行中')).toBeInTheDocument()
+    expect(await screen.findByText('查核進行中')).toBeInTheDocument()
+    const ok = screen.getByRole('status', { name: '' })
     expect(
       within(ok).getByText('實際開始者：示範查核員（你）'),
     ).toBeInTheDocument()
@@ -226,7 +233,7 @@ describe('開始查核：成功', () => {
       start: () => pending,
     })
     await confirm()
-    const busy = screen.getByRole('button', { name: '開始中…' })
+    const busy = screen.getByRole('button', { name: '確認中…' })
     expect(busy).toBeDisabled()
     expect(screen.getByRole('button', { name: '取消' })).toBeDisabled()
     fireEvent.click(busy)

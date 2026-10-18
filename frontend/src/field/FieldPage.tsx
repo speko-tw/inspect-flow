@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
 import { landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
+import { Button } from '../components/Button'
+import { ResourceState } from '../components/layout/LayoutPatterns'
 import { isForbidden } from '../http'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import RouteNotFound from '../RouteNotFound'
@@ -10,6 +12,7 @@ import { StatusBadge } from '../ui/Badge'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
 import type { TaskListChange } from './StartAction'
 import TaskDetail from './TaskDetail'
+import './field-redesign.css'
 
 type Scope = 'mine' | 'all'
 type Status = 'all' | FieldTask['status']
@@ -79,7 +82,7 @@ export default function FieldPage() {
         navLabel="我的功能"
         user={user}
       />
-      <div className="field-shell">
+      <div className="field-shell field-redesign">
         <main>
           {typeof notice === 'string' && (
             <p className="notice-success" role="status">
@@ -245,22 +248,26 @@ function TaskList({
         <>
           <div className="field-scope" aria-label="任務範圍">
             {(['mine', 'all'] as const).map((value) => (
-              <button
+              <Button
                 key={value}
+                variant="secondary"
                 type="button"
                 aria-pressed={scope === value}
+                className="field-filter-button"
                 onClick={() => updateFilter(value, status)}
               >
                 {value === 'mine' ? '我的任務' : '全部'}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="field-filter" aria-label="任務狀態">
             {(['all', 'PENDING', 'IN_PROGRESS'] as const).map((value) => (
-              <button
+              <Button
                 key={value}
+                variant="secondary"
                 type="button"
                 aria-pressed={status === value}
+                className="field-filter-button"
                 onClick={() => updateFilter(scope, value)}
               >
                 {
@@ -270,12 +277,18 @@ function TaskList({
                     IN_PROGRESS: '進行中',
                   }[value]
                 }
-              </button>
+              </Button>
             ))}
           </div>
         </>
       )}
-      {loading && !state && <p role="status">載入任務中…</p>}
+      {loading && !state && (
+        <ResourceState
+          state="loading"
+          title="載入任務中"
+          message="正在取得可查核任務。"
+        />
+      )}
       {error === 'forbidden' && (
         <section className="field-notice field-notice-error" role="alert">
           <h2>目前無法查看現場任務</h2>
@@ -321,12 +334,14 @@ function TaskList({
               <h2>目前沒有符合的任務</h2>
               <p>你有現場查核權限，但目前沒有符合範圍與狀態的任務。</p>
               {scope === 'mine' && (
-                <button
+                <Button
+                  variant="secondary"
                   type="button"
+                  className="field-inline-action"
                   onClick={() => updateFilter('all', status)}
                 >
                   查看全部任務
-                </button>
+                </Button>
               )}
             </section>
           ) : (
@@ -382,14 +397,15 @@ function TaskList({
           )}
           {state.nextCursor && (
             <>
-              <button
+              <Button
+                variant="secondary"
                 type="button"
                 className="field-more"
                 disabled={loading}
                 onClick={loadMore}
               >
                 {loading ? '載入中…' : '載入更多'}
-              </button>
+              </Button>
               {error === 'other' && (
                 <section
                   className="field-notice field-notice-error"
@@ -397,9 +413,13 @@ function TaskList({
                 >
                   <h2>無法載入任務</h2>
                   <p>請稍後再試。</p>
-                  <button type="button" onClick={() => void loadMore()}>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => void loadMore()}
+                  >
                     重試
-                  </button>
+                  </Button>
                 </section>
               )}
             </>
