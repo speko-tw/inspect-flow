@@ -70,7 +70,7 @@ class AccessSummary:
 
 
 def summarize_access(session: Session, user: User) -> AccessSummary:
-    """計算 AUT-R08 欄位，並沿用過渡期的範本管理員摘要。"""
+    """依 AUT-R08 計算目前使用者的正式存取摘要。"""
     access = calculate_effective_access(session, user_id=user.id)
     if access.is_admin:
         return AccessSummary(
@@ -95,10 +95,7 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         module = permission_code_module(code)
         return module is not None and f"{module}.use" in module_permissions
 
-    is_template_admin = "template_admin" in access.system_roles
-    has_template_access = (
-        "template.manage" in module_permissions or is_template_admin
-    )
+    has_template_access = "template.manage" in module_permissions
     office_access = any(
         code in OFFICE_PERMISSION_CODES and has_module_for_code(code)
         for code in project_access_codes

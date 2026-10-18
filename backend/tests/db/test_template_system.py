@@ -1,15 +1,12 @@
 """Database acceptance for template-system T1 and DBF-AC12/13."""
 
 from collections.abc import Generator
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Barrier, Event
-from time import monotonic, sleep
 
 import pytest
 from alembic.config import Config
-from sqlalchemy import JSON, Engine, func, inspect, select, text
+from sqlalchemy import JSON, Engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,8 +20,6 @@ from app.models import (
     ProjectMeasurementField,
     ProjectNumericStandard,
     ProjectTextStandard,
-    SystemRoleAssignment,
-    SystemRoleCode,
     TemplateCategory,
     TemplateEvidenceRequirement,
     TemplateInspectionPoint,
@@ -35,9 +30,6 @@ from app.models import (
     TemplateTextStandard,
     User,
 )
-from app.services import system_roles
-from app.services import users as user_services
-from app.services.audit import AuditLog
 from tests.db.conftest import create_root_user_with_company
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -461,225 +453,6 @@ def test_tpl_ac09_numeric_standard_binding_constraints(
     session.rollback()
 
 
-def test_tpl_ac08_system_role_assignment_and_audit_share_transaction(
-    session: Session, creator: User, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        system_roles, "get_current_operator", lambda _: creator
-    )
-    monkeypatch.setattr(
-        "app.services.audit.get_current_operator", lambda _: creator
-    )
-    assignment = system_roles.assign_system_role(
-        session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
-    )
-    assert assignment.role_code == "template_admin"
-    created_event = session.scalar(
-        select(AuditLog).where(
-            AuditLog.event_type == "system_role_assignment.created"
-        )
-    )
-    assert created_event is not None
-    assert created_event.entity_id == assignment.id
-    assert created_event.created_by == creator.id
-    assert created_event.before is None
-    assert created_event.after == {
-        "user_id": str(creator.id),
-        "role_code": "template_admin",
-    }
-    session.rollback()
-    assert session.get(SystemRoleAssignment, assignment.id) is None
-    assert (
-        session.scalar(
-            select(AuditLog.id).where(
-                AuditLog.event_type == "system_role_assignment.created"
-            )
-        )
-        is None
-    )
-
-    assignment = system_roles.assign_system_role(
-        session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
-    )
-    session.commit()
-
-    with pytest.raises(system_roles.SystemRoleAlreadyAssignedError):
-        system_roles.assign_system_role(
-            session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
-        )
-    created_count = session.scalar(
-        select(func.count(AuditLog.id)).where(
-            AuditLog.event_type == "system_role_assignment.created"
-        )
-    )
-    assert created_count == 1
-
-    deleted = system_roles.revoke_system_role(
-        session, creator.id, SystemRoleCode.TEMPLATE_ADMIN
-    )
-    assert deleted.id == assignment.id
-    assert session.get(SystemRoleAssignment, assignment.id) is None
-    deleted_event = session.scalar(
-        select(AuditLog).where(
-            AuditLog.event_type == "system_role_assignment.deleted"
-        )
-    )
-    assert deleted_event is not None
-    assert deleted_event.entity_id == assignment.id
-    assert deleted_event.created_by == creator.id
-    assert deleted_event.before == {
-        "user_id": str(creator.id),
-        "role_code": "template_admin",
-    }
-    assert deleted_event.after is None
-
-
-def test_template_admin_and_external_flag_updates_serialize_on_user_row(
-    engine: Engine,
-    session: Session,
-    creator: User,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    if engine.dialect.name != "postgresql":
-        pytest.skip("PostgreSQL row locks are required")
-
-    creator.is_admin = True
-    creator_id = creator.id
-    target = create_root_user_with_company(session, "TMP326")
-    target_id = target.id
-    session.commit()
-    monkeypatch.setattr(
-        system_roles,
-        "get_current_operator",
-        lambda worker_session: worker_session.get(User, creator_id),
-    )
-    monkeypatch.setattr(
-        user_services,
-        "get_current_operator",
-        lambda worker_session: worker_session.get(User, creator_id),
-    )
-    monkeypatch.setattr(
-        "app.services.audit.get_current_operator",
-        lambda worker_session: worker_session.get(User, creator_id),
-    )
-    barrier = Barrier(2)
-    release_winner = Event()
-    winner_finished_operation = Event()
-    backend_pids: dict[str, int] = {}
-    successful_pids: list[int] = []
-
-    def assign_role() -> tuple[str, int]:
-        with Session(engine) as worker_session:
-            worker_pid = -1
-            try:
-                with worker_session.begin():
-                    backend_pid = worker_session.scalar(
-                        select(func.pg_backend_pid())
-                    )
-                    assert backend_pid is not None
-                    worker_pid = backend_pid
-                    backend_pids["assign"] = worker_pid
-                    barrier.wait(timeout=10)
-                    system_roles.assign_system_role(
-                        worker_session,
-                        target_id,
-                        SystemRoleCode.TEMPLATE_ADMIN,
-                    )
-                    successful_pids.append(worker_pid)
-                    winner_finished_operation.set()
-                    assert release_winner.wait(timeout=20)
-                return "assigned", worker_pid
-            except system_roles.ExternalUserSystemRoleError:
-                worker_session.rollback()
-                return "role_rejected", worker_pid
-
-    def enable_external() -> tuple[str, int]:
-        with Session(engine) as worker_session:
-            worker_pid = -1
-            try:
-                with worker_session.begin():
-                    backend_pid = worker_session.scalar(
-                        select(func.pg_backend_pid())
-                    )
-                    assert backend_pid is not None
-                    worker_pid = backend_pid
-                    backend_pids["external"] = worker_pid
-                    worker = worker_session.get(User, target_id)
-                    assert worker is not None
-                    barrier.wait(timeout=10)
-                    user_services.set_external_collaborator(
-                        worker_session, worker, True
-                    )
-                    successful_pids.append(worker_pid)
-                    winner_finished_operation.set()
-                    assert release_winner.wait(timeout=20)
-                return "external_enabled", worker_pid
-            except user_services.ExternalFlagChangeError:
-                worker_session.rollback()
-                return "external_rejected", worker_pid
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        assign_future = pool.submit(assign_role)
-        external_future = pool.submit(enable_external)
-        if not winner_finished_operation.wait(timeout=10):
-            release_winner.set()
-            raise AssertionError(
-                "neither operation acquired the User row lock"
-            )
-        winner_pid = successful_pids[0]
-        loser_pid = next(
-            pid for pid in backend_pids.values() if pid != winner_pid
-        )
-        try:
-            deadline = monotonic() + 10
-            blocked_by_winner = False
-            while monotonic() < deadline:
-                with Session(engine) as monitor_session:
-                    activity = monitor_session.execute(
-                        text(
-                            "SELECT wait_event_type, pg_blocking_pids(pid) "
-                            "FROM pg_stat_activity WHERE pid = :pid"
-                        ),
-                        {"pid": loser_pid},
-                    ).one_or_none()
-                if (
-                    activity is not None
-                    and activity.wait_event_type == "Lock"
-                    and winner_pid in activity.pg_blocking_pids
-                ):
-                    blocked_by_winner = True
-                    release_winner.set()
-                    break
-                sleep(0.05)
-            assert blocked_by_winner
-        finally:
-            release_winner.set()
-        outcomes = {
-            assign_future.result(timeout=20)[0],
-            external_future.result(timeout=20)[0],
-        }
-
-    assert outcomes in (
-        {"assigned", "external_rejected"},
-        {"role_rejected", "external_enabled"},
-    )
-    with Session(engine) as verify_session:
-        persisted_user = verify_session.get(User, target_id)
-        assert persisted_user is not None
-        has_template_admin = (
-            verify_session.scalar(
-                select(SystemRoleAssignment.id).where(
-                    SystemRoleAssignment.user_id == target_id,
-                    SystemRoleAssignment.role_code == "template_admin",
-                )
-            )
-            is not None
-        )
-        assert not (
-            persisted_user.is_external_collaborator and has_template_admin
-        )
-
-
 def test_dbf_ac12_schema_shape(
     session: Session,
     creator: User,
@@ -759,7 +532,6 @@ def test_dbf_ac12_schema_shape(
         "project_numeric_standards",
         "project_measurement_fields",
         "project_evidence_requirements",
-        "system_role_assignments",
     }
     assert expected <= tables
     for table in expected:
@@ -790,17 +562,7 @@ def test_dbf_ac12_schema_shape(
         )
     assert "template_versions" not in tables
     assert "system_roles" not in tables
-    assert any(
-        fk["referred_table"] == "users"
-        for fk in inspector.get_foreign_keys("system_role_assignments")
-    )
-    unique_columns = {
-        tuple(constraint["column_names"])
-        for constraint in inspector.get_unique_constraints(
-            "system_role_assignments"
-        )
-    }
-    assert ("user_id", "role_code") in unique_columns
+    assert "system_role_assignments" not in tables
     assert project.id is not None
     assert session.get(ProjectInspectionItem, snapshot.id) is not None
 
@@ -894,14 +656,6 @@ def test_dbf_ac12_rejects_invalid_evidence_roles_and_snapshot_links(
     for row in invalid_project_evidence:
         _assert_integrity_error(session, row)
 
-    _assert_integrity_error(
-        session,
-        SystemRoleAssignment(
-            user_id=creator.id,
-            role_code="project_admin",
-            **_audit(creator),
-        ),
-    )
     _assert_integrity_error(
         session,
         ProjectTextStandard(
