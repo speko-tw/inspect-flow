@@ -16,7 +16,7 @@
 // 頁面也放了 `LogoutButton`：臨時密碼帳號被導到本頁後，若不想現
 // 在改密碼，仍可登出（AUT-R30、AUT-R33 允許登出）。
 
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 
 import { BackLink } from '../layout/BackLink'
@@ -24,12 +24,12 @@ import { ApiError, changePassword } from './api'
 import AuthLayout from './AuthLayout'
 import { UnsavedLeaveBox } from '../ui/navigation'
 import * as navigationGuard from '../ui/navigation'
-import { RequiredMark } from '../ui/Form'
 import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 import { useCurrentUser } from './useCurrentUser'
-import { FieldError, Form, FormError, FormSubmitButton } from '../ui/Form'
+import { FormErrorSummary, FormField, FormGroup } from '../components'
+import { Form, FormError, FormSubmitButton } from '../ui/Form'
 
 // AUT-R04：新密碼長度必須介於 8～128 個字元（含兩端），以 Unicode
 // code point 計算；集中成常數只為了組出下面的錯誤訊息，前端不會
@@ -40,14 +40,15 @@ const PASSWORD_MAX_LENGTH = 128
 const PASSWORD_RULE_TEXT =
   `新密碼長度為 ${PASSWORD_MIN_LENGTH}～${PASSWORD_MAX_LENGTH} 個字元，` +
   '不限大小寫、數字或符號，也不能和目前密碼相同。'
-const MISMATCH_MESSAGE = '兩次輸入的新密碼不一致，請重新輸入。'
-const CURRENT_PASSWORD_INCORRECT_MESSAGE = '目前密碼錯誤，請再試一次。'
+const MISMATCH_MESSAGE = '新密碼與確認密碼不一致。請重新輸入新密碼。'
+const CURRENT_PASSWORD_INCORRECT_MESSAGE =
+  '目前密碼錯誤。請確認目前密碼後再試一次。'
 const PASSWORD_INVALID_MESSAGE =
-  `新密碼長度需為 ${PASSWORD_MIN_LENGTH}～${PASSWORD_MAX_LENGTH}` +
-  ' 個字元，請重新輸入。'
-const PASSWORD_UNCHANGED_MESSAGE = '新密碼不能與目前密碼相同，請重新輸入。'
-const PERMISSION_DENIED_MESSAGE = '此帳號無法變更密碼，請洽系統管理員。'
-const GENERIC_ERROR_MESSAGE = '變更密碼失敗，請稍後再試。'
+  `新密碼長度不符合規定。請設定 ${PASSWORD_MIN_LENGTH}～` +
+  `${PASSWORD_MAX_LENGTH} 個字元後再試一次。`
+const PASSWORD_UNCHANGED_MESSAGE = '新密碼與目前密碼相同。請改用不同的新密碼。'
+const PERMISSION_DENIED_MESSAGE = '此帳號沒有變更密碼的權限。請洽系統管理員。'
+const GENERIC_ERROR_MESSAGE = '變更密碼失敗。請稍後再試，或聯絡系統管理員。'
 // 成功後帶到落點頁的提示（router state `notice`；工作台與管理頁
 // 都會顯示）。
 const SUCCESS_NOTICE = '密碼已變更。'
@@ -76,12 +77,19 @@ export default function ChangePasswordPage() {
     'current' | 'new' | 'confirmation' | 'form' | null
   >(null)
   const [errorAttempt, setErrorAttempt] = useState(0)
-  const currentInput = useRef<HTMLInputElement>(null)
-  const newInput = useRef<HTMLInputElement>(null)
-  const confirmationInput = useRef<HTMLInputElement>(null)
   const leaveGuard = navigationGuard.useUnsavedNavigationGuard(
     Boolean(currentPassword || newPassword || confirmPassword),
   )
+
+  useEffect(() => {
+    if (!errorAttempt || !errorField || errorField === 'form') return
+    const fieldIds = {
+      current: 'change-password-current',
+      new: 'change-password-new',
+      confirmation: 'change-password-confirm',
+    }
+    document.getElementById(fieldIds[errorField])?.focus()
+  }, [errorAttempt, errorField])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -89,19 +97,19 @@ export default function ChangePasswordPage() {
     setErrorField(null)
 
     if (currentPassword === '') {
-      setError('請輸入目前密碼。')
+      setError('目前密碼尚未填寫。請輸入目前密碼。')
       setErrorField('current')
       setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (newPassword === '') {
-      setError('請輸入新密碼。')
+      setError('新密碼尚未填寫。請輸入要設定的新密碼。')
       setErrorField('new')
       setErrorAttempt((attempt) => attempt + 1)
       return
     }
     if (confirmPassword === '') {
-      setError('請再次輸入新密碼。')
+      setError('尚未確認新密碼。請再次輸入新密碼。')
       setErrorField('confirmation')
       setErrorAttempt((attempt) => attempt + 1)
       return
@@ -156,115 +164,106 @@ export default function ChangePasswordPage() {
       lead="請輸入目前密碼，並設定新的密碼。"
     >
       <UnsavedLeaveBox guard={leaveGuard} />
-      <Form onSubmit={handleSubmit} noValidate>
-        <div>
-          <label htmlFor="change-password-current">
-            目前密碼 <RequiredMark />
-          </label>
-          <input
+      <Form
+        onSubmit={handleSubmit}
+        noValidate
+        unexpectedErrorMessage={GENERIC_ERROR_MESSAGE}
+      >
+        <FormErrorSummary
+          focusRequest={0}
+          errors={
+            error && errorField && errorField !== 'form'
+              ? [
+                  {
+                    fieldId:
+                      errorField === 'current'
+                        ? 'change-password-current'
+                        : errorField === 'new'
+                          ? 'change-password-new'
+                          : 'change-password-confirm',
+                    fieldLabel:
+                      errorField === 'current'
+                        ? '目前密碼'
+                        : errorField === 'new'
+                          ? '新密碼'
+                          : '再輸入一次新密碼',
+                    message: error,
+                  },
+                ]
+              : []
+          }
+        />
+        <FormGroup title="設定新密碼" description="請依序輸入目前與新密碼。">
+          <FormField
+            label="目前密碼"
             id="change-password-current"
-            name="current-password"
-            type="password"
-            autoComplete="current-password"
-            ref={currentInput}
             required
-            value={currentPassword}
-            aria-invalid={errorField === 'current'}
-            aria-describedby={
-              errorField === 'current'
-                ? 'change-password-current-error'
-                : undefined
-            }
-            onChange={(event) => {
-              setCurrentPassword(event.target.value)
-              setError(null)
-              setErrorField(null)
-            }}
-          />
-          {errorField === 'current' && error !== null ? (
-            <FieldError
-              focusRequest={errorAttempt}
-              focusTarget={currentInput}
-              id="change-password-current-error"
-              tabIndex={-1}
-            >
-              {error}
-            </FieldError>
-          ) : null}
-        </div>
-        <div>
-          <label htmlFor="change-password-new">
-            新密碼 <RequiredMark />
-          </label>
-          <input
+            error={errorField === 'current' ? (error ?? undefined) : undefined}
+          >
+            {(control) => (
+              <input
+                {...control}
+                name="current-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={currentPassword}
+                onChange={(event) => {
+                  setCurrentPassword(event.target.value)
+                  setError(null)
+                  setErrorField(null)
+                }}
+              />
+            )}
+          </FormField>
+          <FormField
+            label="新密碼"
             id="change-password-new"
-            name="new-password"
-            type="password"
-            autoComplete="new-password"
-            ref={newInput}
             required
-            value={newPassword}
-            aria-invalid={errorField === 'new'}
-            aria-describedby={
-              errorField === 'new'
-                ? 'change-password-rule change-password-new-error'
-                : 'change-password-rule'
-            }
-            onChange={(event) => {
-              setNewPassword(event.target.value)
-              setError(null)
-              setErrorField(null)
-            }}
-          />
-          <p className="tpl-hint muted-text" id="change-password-rule">
-            {PASSWORD_RULE_TEXT}
-          </p>
-          {errorField === 'new' && error !== null ? (
-            <FieldError
-              focusRequest={errorAttempt}
-              focusTarget={newInput}
-              id="change-password-new-error"
-              tabIndex={-1}
-            >
-              {error}
-            </FieldError>
-          ) : null}
-        </div>
-        <div>
-          <label htmlFor="change-password-confirm">
-            再輸入一次新密碼 <RequiredMark />
-          </label>
-          <input
+            description={PASSWORD_RULE_TEXT}
+            error={errorField === 'new' ? (error ?? undefined) : undefined}
+          >
+            {(control) => (
+              <input
+                {...control}
+                name="new-password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={newPassword}
+                onChange={(event) => {
+                  setNewPassword(event.target.value)
+                  setError(null)
+                  setErrorField(null)
+                }}
+              />
+            )}
+          </FormField>
+          <FormField
+            label="再輸入一次新密碼"
             id="change-password-confirm"
-            name="confirm-password"
-            type="password"
-            autoComplete="new-password"
-            ref={confirmationInput}
             required
-            value={confirmPassword}
-            aria-invalid={errorField === 'confirmation'}
-            aria-describedby={
-              errorField === 'confirmation'
-                ? 'change-password-confirm-error'
-                : undefined
+            error={
+              errorField === 'confirmation' ? (error ?? undefined) : undefined
             }
-            onChange={(event) => {
-              setConfirmPassword(event.target.value)
-              setError(null)
-              setErrorField(null)
-            }}
-          />
-          {errorField === 'confirmation' && error !== null ? (
-            <FieldError
-              focusRequest={errorAttempt}
-              focusTarget={confirmationInput}
-              id="change-password-confirm-error"
-              tabIndex={-1}
-            >
-              {error}
-            </FieldError>
-          ) : null}
-        </div>
+          >
+            {(control) => (
+              <input
+                {...control}
+                name="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={confirmPassword}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value)
+                  setError(null)
+                  setErrorField(null)
+                }}
+              />
+            )}
+          </FormField>
+        </FormGroup>
         {errorField === 'form' && error !== null ? (
           <FormError focusRequest={errorAttempt} tabIndex={-1}>
             {error}

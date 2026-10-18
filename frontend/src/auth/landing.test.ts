@@ -8,10 +8,16 @@ const NONE = {
   has_office_access: false,
   has_field_access: false,
   has_template_access: false,
+  has_project_access: false,
+  can_create_project: false,
 }
 const ADMIN = { ...NONE, is_admin: true }
 const OFFICE = { ...NONE, has_office_access: true }
 const FIELD = { ...NONE, has_field_access: true }
+const FIELD_PROJECT = {
+  ...FIELD,
+  has_project_access: true,
+}
 const TEMPLATE = { ...NONE, has_template_access: true }
 const TEMPLATE_USE_ONLY = {
   ...NONE,
@@ -25,6 +31,8 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [ADMIN, '/field/tasks/t1?scope=all'],
     [OFFICE, '/admin/projects'],
     [OFFICE, '/admin/projects/p1/planning?x=1#top'],
+    [FIELD_PROJECT, '/admin/projects'],
+    [FIELD_PROJECT, '/admin/projects/p1'],
     [FIELD, '/field'],
     [FIELD, '/field/tasks/t1'],
     [TEMPLATE, '/admin/templates'],
@@ -42,6 +50,7 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
 
   it.each([
     [FIELD, '/admin/projects'],
+    [FIELD, '/admin/projects/p1'],
     [FIELD, '/admin/users'],
     [OFFICE, '/field'],
     [OFFICE, '/admin/templates'],
@@ -102,6 +111,11 @@ describe('loginTarget：登入後要去哪（#489）', () => {
     expect(
       loginTarget(TEMPLATE_USE_ONLY, '/admin/templates', NOBODY_BEFORE),
     ).toBe('/admin/templates')
+  })
+
+  it('現場加唯讀專案權限仍以今日任務為落點', () => {
+    expect(landingPath(FIELD_PROJECT)).toBe('/field')
+    expect(loginTarget(FIELD_PROJECT, undefined, NOBODY_BEFORE)).toBe('/field')
   })
 
   it('沒有原頁面或不安全的路徑，去落點', () => {

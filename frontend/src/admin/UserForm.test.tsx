@@ -28,8 +28,9 @@ describe('UserForm 必填標示（#284 第 4 項）', () => {
     for (const label of [/^帳號名稱/, /^Email/, /^中文姓名/]) {
       const field = screen.getByLabelText(label)
       expect(field).toBeRequired()
+      const id = field.getAttribute('id')
       expect(
-        field.closest('label')?.querySelector('.required-mark'),
+        document.querySelector(`label[for="${id}"] .required-mark`),
       ).toBeInTheDocument()
     }
     expect(
@@ -41,10 +42,10 @@ describe('UserForm 必填標示（#284 第 4 項）', () => {
     ).not.toBeChecked()
     for (const label of [/^英文姓名/, /^公司/, /^部門/, /^地點/, /^工號/]) {
       expect(
-        screen
-          .getByLabelText(label)
-          .closest('label')
-          ?.querySelector('.required-mark'),
+        document.querySelector(
+          `label[for="${screen.getByLabelText(label).getAttribute('id')}"] ` +
+            '.required-mark',
+        ),
       ).not.toBeInTheDocument()
     }
     // 「*」只是視覺標示，不進入無障礙名稱。
@@ -100,10 +101,21 @@ describe('UserForm 帳號名稱規則說明（#284 第 6 項）', () => {
 describe('UserForm 帳號類型（DOM-R71）', () => {
   it('未選帳號類型時顯示欄位錯誤並聚焦第一個選項', () => {
     renderForm()
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
+      target: { value: 'ben.lin' },
+    })
+    fireEvent.change(screen.getByLabelText(/^Email/), {
+      target: { value: 'ben@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/^中文姓名/), {
+      target: { value: '林本' },
+    })
     const submit = screen.getByRole('button', { name: '新增使用者' })
     fireEvent.submit(submit.closest('form')!)
 
-    expect(screen.getByRole('alert')).toHaveTextContent('請選擇帳號類型。')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '帳號類型尚未選擇。請選擇內部人員或外部協作人員。',
+    )
     expect(screen.getByRole('radio', { name: '內部人員' })).toHaveFocus()
   })
 
@@ -162,5 +174,21 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     expect(JSON.parse(init?.body as string)).toMatchObject({
       is_external_collaborator: expected,
     })
+  })
+
+  it('必填錯誤顯示在欄旁與摘要，聚焦第一個欄位並保留已輸入內容', () => {
+    renderForm()
+    const username = screen.getByLabelText(/^帳號名稱/)
+    fireEvent.change(username, { target: { value: 'ab' } })
+    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '帳號名稱格式不符。請依欄位說明修正後再試一次。',
+    )
+    expect(username).toHaveAttribute('aria-invalid', 'true')
+    expect(username).toHaveFocus()
+    expect(username).toHaveValue('ab')
+    fireEvent.click(screen.getByRole('link', { name: /帳號名稱/ }))
+    expect(username).toHaveFocus()
   })
 })

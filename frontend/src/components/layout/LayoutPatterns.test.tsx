@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { FormErrorSummary as SharedSummary } from '../forms/FormPatterns'
 import {
   ConfirmationPanel,
   FormErrorSummary,
@@ -368,6 +369,10 @@ describe('ConfirmationPanel', () => {
 })
 
 describe('FormErrorSummary', () => {
+  it('保留 layout 匯出路徑並重用 forms 的唯一實作', () => {
+    expect(FormErrorSummary).toBe(SharedSummary)
+  })
+
   it('links an error to its field and focuses that field', () => {
     render(
       <>

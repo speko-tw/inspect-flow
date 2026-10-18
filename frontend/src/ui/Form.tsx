@@ -34,6 +34,8 @@ export type FormProps = Omit<
   errorFocusRequest?: number
   errorTabIndex?: number
   guard?: SubmitGuard
+  /** 依表單用途提供可修正的非預期錯誤提示。 */
+  unexpectedErrorMessage?: string
 }
 
 /** Shared form submission, IME handling, and error presentation. */
@@ -42,6 +44,7 @@ export function Form({
   error,
   errorFocusRequest,
   errorTabIndex,
+  unexpectedErrorMessage,
   onKeyDown,
   onSubmit,
   guard,
@@ -69,7 +72,7 @@ export function Form({
       result = onSubmit(event)
     } catch (error) {
       console.error('Shared form submission failed:', error)
-      setUnexpectedError(GENERIC_FAILURE_MESSAGE)
+      setUnexpectedError(unexpectedErrorMessage ?? GENERIC_FAILURE_MESSAGE)
       release()
       return
     }
@@ -77,7 +80,7 @@ export function Form({
       return Promise.resolve(result)
         .catch((error) => {
           console.error('Shared form submission failed:', error)
-          setUnexpectedError(GENERIC_FAILURE_MESSAGE)
+          setUnexpectedError(unexpectedErrorMessage ?? GENERIC_FAILURE_MESSAGE)
         })
         .finally(release)
     }

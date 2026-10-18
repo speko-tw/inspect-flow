@@ -19,6 +19,10 @@ const ADMIN = currentUserFixture({
 })
 const OFFICE = currentUserFixture({ has_office_access: true })
 const FIELD = currentUserFixture({ has_field_access: true })
+const FIELD_PROJECT = currentUserFixture({
+  has_field_access: true,
+  has_project_access: true,
+})
 const MIXED = currentUserFixture({
   has_office_access: true,
   has_field_access: true,
@@ -185,6 +189,15 @@ describe('AppHeader', () => {
       '今日任務',
       '變更密碼',
     ])
+  })
+
+  it('現場加唯讀專案權限可由頁首進入我的專案', () => {
+    renderHeader(FIELD_PROJECT)
+    const nav = screen.getByRole('navigation', { name: '管理功能' })
+    expect(
+      within(nav).getByRole('link', { name: '我的專案' }),
+    ).toHaveAttribute('href', '/admin/projects')
+    expect(within(nav).getByRole('link', { name: '今日任務' })).toBeVisible()
   })
 
   it('目前所在的頁面用 aria-current 標示，其他不標', () => {

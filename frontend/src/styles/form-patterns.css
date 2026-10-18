@@ -1,0 +1,104 @@
+.form-pattern-group {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.form-pattern-group legend {
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.form-pattern-group-description,
+.form-pattern-description {
+  margin: calc(var(--space-3) * -1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.form-pattern-group-fields {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.form-pattern-field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.form-pattern-label {
+  font-weight: 700;
+}
+
+.form-pattern-field input,
+.form-pattern-field select,
+.form-pattern-field textarea {
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.form-pattern-field input:focus-visible,
+.form-pattern-field select:focus-visible,
+.form-pattern-field textarea:focus-visible {
+  border-color: var(--color-focus);
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-focus);
+}
+
+.form-pattern-field [aria-invalid='true'] {
+  border-color: var(--color-status-danger);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--color-status-danger) 15%, transparent);
+}
+
+.form-pattern-description,
+.form-pattern-field-error {
+  margin-block: 0;
+  font-size: var(--font-size-small);
+}
+
+.form-pattern-field-error {
+  color: var(--color-status-danger);
+  font-weight: 650;
+}
+
+.form-pattern-error-summary {
+  padding: var(--space-5);
+  border: 1px solid
+    color-mix(in srgb, var(--color-status-danger) 45%, var(--color-border));
+  border-inline-start: 4px solid var(--color-status-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger);
+}
+
+.form-pattern-error-summary h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+
+.form-pattern-error-summary ul {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.form-pattern-error-summary a {
+  color: inherit;
+}
+
+.form-pattern-error-summary:focus-visible,
+.form-pattern-error-summary a:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}

@@ -32,6 +32,8 @@ type HeaderUser = Pick<
   | 'is_admin'
   | 'has_office_access'
   | 'has_field_access'
+  | 'can_create_project'
+  | 'has_project_access'
   | 'has_template_access'
   | 'can_browse_templates'
   | 'can_manage_template_library'
@@ -46,7 +48,11 @@ export function memberNavItems(
   changePasswordState?: unknown,
 ): HeaderNavItem[] {
   const items: HeaderNavItem[] = []
-  if (user.has_office_access) {
+  if (
+    user.has_office_access ||
+    user.has_project_access ||
+    user.can_create_project
+  ) {
     items.push({ to: '/admin/projects', label: '我的專案' })
   }
   if (canBrowseTemplates(user)) {
