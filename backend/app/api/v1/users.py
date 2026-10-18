@@ -352,6 +352,16 @@ def _get_user(db: Session, user_id: UUID) -> User:
     return user
 
 
+def _get_module_permission_target(
+    db: Session, user_id: UUID, actor: User
+) -> User:
+    """拒絕委派者讀取或修改 Admin 帳號的模組權限。"""
+    target = _get_user(db, user_id)
+    if not actor.is_admin and target.is_admin:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    return target
+
+
 def _module_error(exc: ValueError, *, bundle: bool = False) -> APIError:
     if isinstance(exc, ModulePermissionDeniedError):
         return APIError(
@@ -829,7 +839,7 @@ def get_user_module_permissions(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> UserModulePermissionResponse:
     """讀取人員的模組授權，委派者只能看到受委派模組。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     access = calculate_effective_access(db, user_id=actor.id)
     allowed_modules = MODULES if actor.is_admin else access.delegated_modules
     permission_codes = sorted(
@@ -860,13 +870,10 @@ def get_user_effective_access(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> UserEffectiveAccessResponse:
     """依 ADM-R45 回傳目標在指定專案的唯讀有效權限診斷。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     target_access = calculate_effective_access(
         db, user_id=target.id, project_id=project_id
     )
-    if not actor.is_admin and target_access.is_admin:
-        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-
     membership_id = db.scalar(
         select(ProjectMember.id).where(
             ProjectMember.user_id == target.id,
@@ -996,7 +1003,7 @@ def grant_user_module_permission(
 
     DOM-R62 要求安全事件不隨 API 主交易回滾。
     """
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     try:
         grant_module_permission(
             db, actor=actor, user=target, permission_code=code
@@ -1018,7 +1025,7 @@ def revoke_user_module_permission(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> Response:
     """冪等收回單一模組權限。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     try:
         revoke_module_permission(
             db, actor=actor, user=target, permission_code=code
@@ -1043,7 +1050,7 @@ def get_module_permission_revoke_impact(
 
     此預覽依 ADM-R10 僅讀取資料，不改變任何授權或專案狀態。
     """
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     if permission_code_scope(code) != "module":
         raise APIError(ErrorCode.MODULE_PERMISSION_CODE_INVALID, 422)
     access = calculate_effective_access(db, user_id=actor.id)
@@ -1249,7 +1256,7 @@ def apply_user_permission_bundle(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> PermissionBundleApplyResponse:
     """完整檢查授權範圍後套用組合，避免部分寫入。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     bundle = db.scalar(
         select(PermissionBundle)
         .options(selectinload(PermissionBundle.permission_codes))
