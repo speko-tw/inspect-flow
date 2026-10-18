@@ -8,6 +8,9 @@ const NONE = {
   has_office_access: false,
   has_field_access: false,
   has_template_access: false,
+  has_project_access: false,
+  module_permissions: [],
+  delegated_modules: [],
 }
 const ADMIN = { ...NONE, is_admin: true }
 const OFFICE = { ...NONE, has_office_access: true }
@@ -18,10 +21,24 @@ const TEMPLATE_USE_ONLY = {
   can_browse_templates: true,
   can_manage_template_library: false,
 }
+const DELEGATE = { ...NONE, delegated_modules: ['template.manage'] }
+const SUPERVISOR = {
+  ...NONE,
+  has_project_access: true,
+  module_permissions: ['all_project_progress.read'],
+}
+const EXTERNAL = {
+  ...NONE,
+  has_project_access: true,
+  is_external_collaborator: true,
+}
 
 describe('canVisit：新帳號看得到的頁面（#489）', () => {
   it.each([
-    [ADMIN, '/admin/users'],
+    [ADMIN, '/admin/people'],
+    [ADMIN, '/admin/people/user-1'],
+    [DELEGATE, '/admin/people'],
+    [DELEGATE, '/admin/people/user-1'],
     [ADMIN, '/field/tasks/t1?scope=all'],
     [OFFICE, '/admin/projects'],
     [OFFICE, '/admin/projects/p1/planning?x=1#top'],
@@ -42,10 +59,15 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
 
   it.each([
     [FIELD, '/admin/projects'],
-    [FIELD, '/admin/users'],
+    [FIELD, '/admin/people'],
+    [FIELD, '/admin/people/user-1'],
     [OFFICE, '/field'],
     [OFFICE, '/admin/templates'],
-    [OFFICE, '/admin/users'],
+    [OFFICE, '/admin/people'],
+    [OFFICE, '/admin/people/user-1'],
+    [DELEGATE, '/admin/companies'],
+    [DELEGATE, '/admin/roles'],
+    [DELEGATE, '/admin/audit-logs'],
     [OFFICE, '/admin'],
     [TEMPLATE, '/admin/projects'],
     [TEMPLATE, '/admin/projects/p1/members'],
@@ -53,6 +75,21 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [NONE, '/admin/projects'],
   ])('不可以：%j → %s', (user, path) => {
     expect(canVisit(user, path)).toBe(false)
+  })
+})
+
+describe('各身分登入落點（role-tasks.md）', () => {
+  it.each([
+    ['系統管理者', ADMIN, '/admin/dashboard'],
+    ['全專案進度主管', SUPERVISOR, '/admin/dashboard'],
+    ['內業工程師', OFFICE, '/admin/projects'],
+    ['現場工程師', FIELD, '/field'],
+    ['範本管理者', TEMPLATE, '/admin/templates'],
+    ['委派者', DELEGATE, '/admin/people'],
+    ['外部協作', EXTERNAL, '/admin/projects'],
+    ['全無權限', NONE, '/change-password'],
+  ])('%s → %s', (_label, user, expected) => {
+    expect(landingPath(user)).toBe(expected)
   })
 })
 
@@ -102,6 +139,16 @@ describe('loginTarget：登入後要去哪（#489）', () => {
     expect(
       loginTarget(TEMPLATE_USE_ONLY, '/admin/templates', NOBODY_BEFORE),
     ).toBe('/admin/templates')
+  })
+
+  it('管理者登入後直接進總覽', () => {
+    expect(landingPath(ADMIN)).toBe('/admin/dashboard')
+  })
+
+  it('全無權限帳號登入後進設定頁', () => {
+    expect(loginTarget(NONE, undefined, NOBODY_BEFORE)).toBe(
+      '/change-password',
+    )
   })
 
   it('沒有原頁面或不安全的路徑，去落點', () => {

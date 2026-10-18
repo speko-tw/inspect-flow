@@ -263,13 +263,26 @@ describe('不存在的子路徑', () => {
     expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
   })
 
-  it('非管理者開管理者專用頁仍顯示無權限', async () => {
-    stubBackend(OFFICE)
+  it.each(['/admin/people', '/admin/people/user-1'])(
+    '非管理者開人員頁仍顯示無權限：%s',
+    async (path) => {
+      stubBackend(OFFICE)
+      await renderApp(path)
+
+      expect(
+        await screen.findByRole('heading', { name: '無權限' }),
+      ).toBeVisible()
+    },
+  )
+
+  it('尚未正式發布的舊管理路徑顯示找不到，不導向新頁', async () => {
+    stubBackend(ADMIN)
     await renderApp('/admin/users')
 
     expect(
-      await screen.findByRole('heading', { name: '無權限' }),
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '人員', level: 1 })).toBeNull()
   })
 
   it('現場帳號：/field 底下不存在的路徑顯示找不到，回首頁回任務清單', async () => {

@@ -5,10 +5,17 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { Link } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import ModulePermissionsPage from './ModulePermissionsPage'
+
+const currentUserMock = vi.hoisted(() => vi.fn())
+
+vi.mock('../../auth/useCurrentUser', () => ({
+  useCurrentUser: currentUserMock,
+}))
 
 interface FixtureOptions {
   permissionCodes?: string[]
@@ -24,9 +31,20 @@ interface FixtureOptions {
   conflictMembershipState?: 'matching' | 'absent' | 'wrong-role'
   memberRoleIds?: string[]
   failMemberWriteOnce?: boolean
+  embedded?: boolean
+  selectedUserId?: string
+  delegateMode?: boolean
+  externalAccount?: boolean
+  testNavigation?: boolean
+  onTemporaryPassword?: (username: string, password: string) => void
+  failCreate?: boolean
 }
 
 function permissionPage(options: FixtureOptions = {}) {
+  currentUserMock.mockReturnValue({
+    user: { is_admin: !options.delegateMode },
+    clear: vi.fn(),
+  })
   const permissionCodes = [...(options.permissionCodes ?? [])]
   let failBundleOnce = options.failBundleOnce ?? false
   let loseMemberResponseOnce = options.loseMemberResponseOnce ?? false
@@ -56,6 +74,7 @@ function permissionPage(options: FixtureOptions = {}) {
     is_external_collaborator: false,
     account_expires_on: null,
   }
+  if (options.externalAccount) member.is_external_collaborator = true
   const roles = [
     {
       id: 'office-role',
@@ -123,6 +142,13 @@ function permissionPage(options: FixtureOptions = {}) {
   }
   const bundles = [
     {
+      id: 'manager-bundle',
+      name: '公司主管',
+      permission_codes: ['project.use', 'all_project_progress.read'],
+      created_at: '',
+      updated_at: '',
+    },
+    {
       id: 'office-bundle',
       name: '專案工程師常用',
       permission_codes: [
@@ -143,10 +169,15 @@ function permissionPage(options: FixtureOptions = {}) {
     },
   ]
   if (options.tamperedNamedBundle) {
-    bundles[0].permission_codes.push('template.manage')
+    bundles
+      .find((bundle) => bundle.id === 'office-bundle')
+      ?.permission_codes.push('template.manage')
   }
   if (options.renamedDefaults) {
-    bundles[0].name = '內業預設授權組'
+    const officeBundle = bundles.find(
+      (bundle) => bundle.id === 'office-bundle',
+    )
+    if (officeBundle) officeBundle.name = '內業預設授權組'
     const officeRole = roles.find((role) => role.id === 'office-role')
     if (officeRole) officeRole.name = '專案負責角色'
   }
@@ -161,33 +192,53 @@ function permissionPage(options: FixtureOptions = {}) {
       if (method === 'GET' && path === '/users') {
         return Response.json({ items: [member], next_cursor: null })
       }
+      if (method === 'GET' && path === '/module-delegate/users') {
+        return Response.json({
+          items: [
+            {
+              id: member.id,
+              username: member.username,
+              name_zh: member.name_zh,
+            },
+          ],
+          next_cursor: null,
+        })
+      }
       if (method === 'GET' && path === '/companies') {
         return Response.json({ items: [], next_cursor: null })
       }
       if (method === 'GET' && path === '/module-permissions') {
         return Response.json({
-          items: [
-            {
-              code: 'project.use',
-              module: 'project',
-              description: '使用專案模組',
-            },
-            {
-              code: 'inspection.use',
-              module: 'inspection',
-              description: '使用查核模組',
-            },
-            {
-              code: 'project.create',
-              module: 'project',
-              description: '建立專案',
-            },
-            {
-              code: 'template.manage',
-              module: 'template',
-              description: '管理範本庫',
-            },
-          ],
+          items: options.delegateMode
+            ? [
+                {
+                  code: 'project.use',
+                  module: 'project',
+                  description: '使用專案模組',
+                },
+              ]
+            : [
+                {
+                  code: 'project.use',
+                  module: 'project',
+                  description: '使用專案模組',
+                },
+                {
+                  code: 'inspection.use',
+                  module: 'inspection',
+                  description: '使用查核模組',
+                },
+                {
+                  code: 'project.create',
+                  module: 'project',
+                  description: '建立專案',
+                },
+                {
+                  code: 'template.manage',
+                  module: 'template',
+                  description: '管理範本庫',
+                },
+              ],
         })
       }
       if (method === 'GET' && path === '/permission-bundles') {
@@ -249,6 +300,12 @@ function permissionPage(options: FixtureOptions = {}) {
         })
       }
       if (method === 'POST' && path === '/users') {
+        if (options.failCreate) {
+          return Response.json(
+            { error: { code: 'user.email_conflict' } },
+            { status: 409 },
+          )
+        }
         const input = JSON.parse(body) as Record<string, unknown>
         return Response.json({
           ...member,
@@ -336,21 +393,23 @@ function permissionPage(options: FixtureOptions = {}) {
   vi.stubGlobal('fetch', fetchMock)
   render(
     <DataMemoryRouter>
-      <ModulePermissionsPage />
+      <>
+        <ModulePermissionsPage
+          embedded={options.embedded}
+          selectedUserId={options.selectedUserId}
+          onTemporaryPassword={options.onTemporaryPassword}
+        />
+        {options.testNavigation && <Link to="/other">離開精靈</Link>}
+      </>
     </DataMemoryRouter>,
   )
   if (options.openWizard !== false) {
-    fireEvent.click(screen.getByRole('button', { name: '新增人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
   }
   return { calls, fetchMock }
 }
 
 async function chooseProfile(profile: string) {
-  if (profile === '外包顧問') {
-    fireEvent.change(screen.getByLabelText('身分'), {
-      target: { value: 'external' },
-    })
-  }
   fireEvent.click(screen.getByRole('button', { name: /職務/ }))
   fireEvent.click(screen.getByRole('radio', { name: new RegExp(profile) }))
   fireEvent.click(screen.getByRole('button', { name: /確認/ }))
@@ -390,11 +449,175 @@ function assignCandidateRole(roleName: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
+  it('shows the localized account conflict after a rejected create request', async () => {
+    permissionPage({ failCreate: true })
+    await screen.findByRole('heading', { name: '職務起手式' })
+    await fillIdentity('conflict.account')
+    await chooseProfile('系統管理')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Email 已被使用。',
+    )
+  })
+
+  it('hands a created account password to the containing admin page', async () => {
+    const onTemporaryPassword = vi.fn()
+    permissionPage({ onTemporaryPassword })
+    await screen.findByRole('heading', { name: '職務起手式' })
+    await fillIdentity('handoff.account')
+    await chooseProfile('系統管理')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+
+    await waitFor(() =>
+      expect(onTemporaryPassword).toHaveBeenCalledWith(
+        'handoff.account',
+        'temporary-secret',
+      ),
+    )
+  })
+
+  it('guards an unfinished account wizard from SPA navigation and beforeunload', async () => {
+    permissionPage({ testNavigation: true })
+    await screen.findByRole('heading', { name: '職務起手式' })
+    fireEvent.change(screen.getByLabelText('帳號名稱'), {
+      target: { value: 'draft.account' },
+    })
+
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+
+    fireEvent.click(screen.getByRole('link', { name: '離開精靈' }))
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByRole('heading', { name: '職務起手式' })).toBeVisible()
+  })
+
+  it('loads only delegated people and permission options for a delegate', async () => {
+    const { calls } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      delegateMode: true,
+    })
+
+    await screen.findByRole('heading', { name: '模組授權' })
+
+    expect(calls.some((call) => call.path === '/module-delegate/users')).toBe(
+      true,
+    )
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+    expect(calls.some((call) => call.path === '/permission-bundles')).toBe(
+      false,
+    )
+    expect(
+      screen.getByLabelText('使用專案模組').closest('label'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('管理查核模組')).toBeNull()
+    expect(screen.queryByRole('heading', { name: '能做什麼' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '套用權限組合' })).toBeNull()
+    expect(screen.queryByText('角色治理')).toBeNull()
+    expect(screen.queryByRole('heading', { name: '角色治理' })).toBeNull()
+    expect(screen.queryByLabelText('使用查核模組')).toBeNull()
+    expect(screen.queryByRole('heading', { name: '基本資料' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '修改資料' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
+    expect(screen.queryByText('操作紀錄')).toBeNull()
+  })
+
+  it('applies a job to an existing person without creating an account', async () => {
+    const { calls } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      memberRoleIds: ['viewer-role'],
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '套用職務' }))
+    fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    const applyButtons = screen.getAllByRole('button', { name: '套用職務' })
+    fireEvent.click(applyButtons[applyButtons.length - 1])
+
+    expect(
+      await screen.findByText('林沐青 的職務與授權設定已完成。'),
+    ).toBeInTheDocument()
+    expect(
+      calls.some((call) => call.method === 'POST' && call.path === '/users'),
+    ).toBe(false)
+    const membershipUpdate = calls.find(
+      (call) =>
+        call.method === 'PUT' &&
+        call.path === '/projects/project-1/members/person/roles',
+    )
+    expect(membershipUpdate?.body).toContain('viewer-role')
+    expect(membershipUpdate?.body).toContain('office-role')
+  })
+
+  it('rejects an external job for an internal account before any writes', async () => {
+    const { calls } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '套用職務' }))
+    fireEvent.click(screen.getByRole('radio', { name: /外部協作/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(
+      screen.getAllByRole('button', { name: '套用職務' }).at(-1)!,
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '帳號外部身分與所選職務不符，未變更授權。',
+    )
+    expect(calls.some((call) => call.method !== 'GET')).toBe(false)
+  })
+
+  it('applies the external job to an imported zero-permission account', async () => {
+    const { calls } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      externalAccount: true,
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: '套用職務' }))
+    fireEvent.click(screen.getByRole('radio', { name: /外部協作/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(
+      screen.getAllByRole('button', { name: '套用職務' }).at(-1)!,
+    )
+
+    expect(
+      await screen.findByText('林沐青 的職務與授權設定已完成。'),
+    ).toBeInTheDocument()
+    expect(
+      calls.some((call) => call.method === 'POST' && call.path === '/users'),
+    ).toBe(false)
+    expect(
+      calls.some((call) =>
+        call.path.endsWith('/permission-bundles/field-bundle:apply'),
+      ),
+    ).toBe(true)
+  })
+
   it.each([
     ['系統管理', true, false, null],
+    ['主管', false, false, '公司主管'],
     ['內業規劃', false, false, '專案工程師常用'],
     ['現場查核', false, false, '現場工程師常用'],
-    ['外包顧問', false, true, '現場工程師常用'],
+    ['外部協作', false, true, '現場工程師常用'],
   ])(
     'creates the %s profile with its approved access bundle',
     async (label, isAdmin, isExternal, bundleName) => {
@@ -409,7 +632,7 @@ describe('ModulePermissionsPage', () => {
             element?.textContent === `林沐青將以「${String(label)}」加入。`,
         ),
       ).toBeVisible()
-      fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+      fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
       await waitFor(() => {
         expect(
@@ -428,9 +651,12 @@ describe('ModulePermissionsPage', () => {
       if (bundleName === null) {
         expect(applyCall).toBeUndefined()
       } else {
-        expect(applyCall?.path).toContain(
-          bundleName === '專案工程師常用' ? 'office-bundle' : 'field-bundle',
-        )
+        const bundleId = {
+          公司主管: 'manager-bundle',
+          專案工程師常用: 'office-bundle',
+          現場工程師常用: 'field-bundle',
+        }[String(bundleName)]
+        expect(applyCall?.path).toContain(bundleId)
       }
     },
   )
@@ -440,7 +666,7 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '職務起手式' })
     await fillIdentity('retry.user')
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(await screen.findByText(/帳號已建立；後續授權/)).toBeVisible()
     expect(screen.getAllByRole('button', { name: '林沐青' })).toHaveLength(2)
@@ -454,7 +680,7 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '職務起手式' })
     await fillIdentity('retry.only')
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
       await screen.findByRole('button', { name: '重試未完成的步驟' }),
@@ -466,7 +692,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
     expect(
-      await screen.findByRole('heading', { name: '人員已建立' }),
+      await screen.findByRole('heading', { name: '帳號已建立' }),
     ).toBeVisible()
     expect(
       calls.filter((call) => call.path === '/users' && call.method === 'POST'),
@@ -485,7 +711,7 @@ describe('ModulePermissionsPage', () => {
       target: { value: 'project-1' },
     })
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
       await screen.findByText(/帳號已建立；後續授權或專案加入未完成/),
@@ -496,7 +722,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
     expect(
-      await screen.findByRole('heading', { name: '人員已建立' }),
+      await screen.findByRole('heading', { name: '帳號已建立' }),
     ).toBeVisible()
     expect(
       calls.filter((call) => call.method === 'POST' && call.path === '/users'),
@@ -530,12 +756,12 @@ describe('ModulePermissionsPage', () => {
         target: { value: 'project-1' },
       })
       await chooseProfile('內業規劃')
-      fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+      fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
       await screen.findByText(/帳號已建立；後續授權或專案加入未完成/)
       fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
       expect(await screen.findByRole('alert')).toHaveTextContent(/409/)
-      expect(screen.queryByRole('heading', { name: '人員已建立' })).toBeNull()
+      expect(screen.queryByRole('heading', { name: '帳號已建立' })).toBeNull()
       expect(
         calls.filter(
           (call) => call.method === 'POST' && call.path === '/users',
@@ -552,7 +778,7 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '職務起手式' })
     await fillIdentity('preflight.user')
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/無法建立/)
     expect(
@@ -569,10 +795,10 @@ describe('ModulePermissionsPage', () => {
       target: { value: 'project-1' },
     })
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
-      await screen.findByRole('heading', { name: '人員已建立' }),
+      await screen.findByRole('heading', { name: '帳號已建立' }),
     ).toBeVisible()
     expect(
       calls.some(
@@ -596,7 +822,7 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '職務起手式' })
     await fillIdentity('tampered.bundle')
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/無法建立/)
     expect(
@@ -609,12 +835,37 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '職務起手式' })
     await fillIdentity('password.user')
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'temporary-secret',
     )
     expect(screen.getByText(/離開此畫面後就無法再查看/)).toBeVisible()
+  })
+
+  it('creates a field account, adds it to a project, and shows its password', async () => {
+    const { calls } = permissionPage()
+    await screen.findByRole('heading', { name: '職務起手式' })
+    await fillIdentity('field.account')
+    await chooseProfile('現場查核')
+    fireEvent.click(screen.getByRole('button', { name: /3專案/ }))
+    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /4確認/ }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'POST' &&
+          call.path === '/projects/project-1/members' &&
+          JSON.parse(call.body).role_ids[0] === 'field-role',
+      ),
+    ).toBe(true)
   })
 
   it('submits all supported account profile fields from the wizard', async () => {
@@ -634,7 +885,7 @@ describe('ModulePermissionsPage', () => {
       target: { value: 'E-123' },
     })
     await chooseProfile('內業規劃')
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     await waitFor(() => {
       const create = calls.find(
@@ -651,16 +902,16 @@ describe('ModulePermissionsPage', () => {
 
   it('marks the current step and keeps the people list as the main entry', async () => {
     permissionPage({ openWizard: false })
-    await screen.findByRole('heading', { name: '人員權限' })
+    await screen.findByRole('heading', { name: '帳號權限' })
 
-    expect(screen.getByRole('button', { name: '新增人員' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '新增帳號' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: '職務起手式' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '新增人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
     expect(
       await screen.findByRole('heading', { name: '職務起手式' }),
     ).toBeVisible()
     expect(
-      screen.getByRole('navigation', { name: '建立人員步驟' }),
+      screen.getByRole('navigation', { name: '帳號設定步驟' }),
     ).toBeVisible()
   })
 
@@ -668,7 +919,7 @@ describe('ModulePermissionsPage', () => {
     permissionPage()
     await screen.findByRole('heading', { name: '職務起手式' })
 
-    expect(screen.getByRole('button', { name: /身分/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /帳號資料/ })).toHaveAttribute(
       'aria-current',
       'step',
     )
@@ -737,7 +988,7 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '檢查有效權限' }))
     expect(await screen.findByText(/缺少查核功能的模組使用權/)).toBeVisible()
-    const summary = screen.getByRole('region', { name: '人員能力摘要' })
+    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
     fireEvent.click(
       within(summary).getByRole('button', {
         name: '補上缺少的模組權限',
@@ -843,18 +1094,23 @@ describe('ModulePermissionsPage', () => {
     expect(screen.queryByRole('button', { name: '指派所選角色' })).toBeNull()
   })
 
-  it('filters job options by identity', async () => {
+  it('offers all five jobs without a separate identity step', async () => {
     const { calls } = permissionPage()
     await screen.findByRole('heading', { name: '職務起手式' })
-    fireEvent.change(screen.getByLabelText('身分'), {
-      target: { value: 'external' },
-    })
     fireEvent.click(screen.getByRole('button', { name: /職務/ }))
 
-    expect(screen.getByRole('radio', { name: /外包顧問/ })).toBeVisible()
-    expect(screen.queryByRole('radio', { name: /系統管理/ })).toBeNull()
-    expect(screen.queryByRole('radio', { name: /內業規劃/ })).toBeNull()
-    expect(screen.queryByRole('radio', { name: /現場查核/ })).toBeNull()
+    for (const job of [
+      '系統管理',
+      '主管',
+      '內業規劃',
+      '現場查核',
+      '外部協作',
+    ]) {
+      const option = screen.getByRole('radio', { name: new RegExp(job) })
+      expect(option).toBeVisible()
+      expect(option).not.toBeChecked()
+    }
+    expect(screen.queryByLabelText('身分')).toBeNull()
     expect(calls.some((call) => call.method === 'POST')).toBe(false)
   })
 
@@ -892,10 +1148,10 @@ describe('ModulePermissionsPage', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /確認/ }))
     expect(screen.getByText(/預設專案角色「專案工程師」/)).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: '建立人員' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
-      await screen.findByRole('heading', { name: '人員已建立' }),
+      await screen.findByRole('heading', { name: '帳號已建立' }),
     ).toBeVisible()
     const memberWrite = calls.find(
       (call) => call.path.endsWith('/members') && call.method === 'POST',
@@ -959,7 +1215,7 @@ describe('ModulePermissionsPage', () => {
       ),
     ).toHaveLength(1)
     expect(
-      screen.getByRole('region', { name: '人員能力摘要' }),
+      screen.getByRole('region', { name: '帳號能力摘要' }),
     ).toHaveTextContent('目前專案角色：專案工程師')
   })
 
@@ -1002,7 +1258,7 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('heading', { name: '職務起手式' }),
     ).toBeVisible()
-    expect(screen.getByText('人員清單')).toBeVisible()
-    expect(screen.getByText(/選取人員查看目前能力/)).toBeVisible()
+    expect(screen.getByText('帳號清單')).toBeVisible()
+    expect(screen.getByText(/選取帳號查看目前能力/)).toBeVisible()
   })
 })

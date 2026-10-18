@@ -28,6 +28,13 @@ const TEMP_PASSWORD_USER = {
   has_office_access: false,
   has_field_access: true,
   has_template_access: false,
+  can_browse_templates: false,
+  can_manage_template_library: false,
+  can_create_project: false,
+  has_project_access: false,
+  is_external_collaborator: false,
+  module_permissions: [],
+  delegated_modules: [],
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -86,8 +93,48 @@ function TestPasswordNavigation() {
 
 async function renderReadyPage() {
   renderPage()
-  await screen.findByRole('heading', { name: '變更密碼' })
+  await screen.findByRole('heading', { name: '個人設定' })
 }
+
+describe('全無權限帳號的設定落點（role-tasks.md）', () => {
+  it('顯示尚未開通功能的說明並保留變更密碼表單', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          ...TEMP_PASSWORD_USER,
+          has_field_access: false,
+          has_office_access: false,
+          has_template_access: false,
+          can_browse_templates: false,
+          can_manage_template_library: false,
+          has_project_access: false,
+          can_create_project: false,
+          module_permissions: [],
+          delegated_modules: [],
+        }),
+      ),
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { name: '個人設定' })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '尚未開通任何功能，請洽系統管理者',
+    )
+    expect(screen.getByLabelText('目前密碼')).toBeVisible()
+  })
+
+  it('不對仍有功能權限、只是開啟設定的帳號顯示說明', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(TEMP_PASSWORD_USER)),
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { name: '個人設定' })
+    expect(screen.queryByText('尚未開通任何功能，請洽系統管理者')).toBeNull()
+  })
+})
 
 describe('變更密碼草稿導覽防護', () => {
   function mockAuth() {
@@ -101,7 +148,7 @@ describe('變更密碼草稿導覽防護', () => {
     mockAuth()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderPage(['/other', '/change-password', '/other'], 1)
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'private-current-password' },
     })
@@ -114,7 +161,7 @@ describe('變更密碼草稿導覽防護', () => {
     fireEvent.click(screen.getByRole('button', { name: '密碼頁上一頁' }))
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
     expect(
-      screen.getByRole('heading', { name: '變更密碼' }),
+      screen.getByRole('heading', { name: '個人設定' }),
     ).toBeInTheDocument()
 
     confirm.mockReturnValue(true)
@@ -128,7 +175,7 @@ describe('變更密碼草稿導覽防護', () => {
   it('實際輸入後攔截 beforeunload', async () => {
     mockAuth()
     renderPage()
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'private-current-password' },
     })
@@ -511,7 +558,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
   }
 
   async function submitChange() {
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
     fillAndSubmit('current-pw', 'new-password', 'new-password')
   }
 
@@ -521,7 +568,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
     await submitChange()
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
     expect((await screen.findByRole('status')).textContent).toBe(
       '密碼已變更。',
     )

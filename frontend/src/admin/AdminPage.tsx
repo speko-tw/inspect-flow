@@ -19,13 +19,14 @@ import {
 } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
+import { NAV_LABELS, PAGE_TITLES } from '../layout/navigationLabels'
 import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
 import { isResourceId } from '../resourceId'
 import { canOpenDashboard, hasGlobalDashboardAccess } from './dashboard/api'
 import CompaniesPage from './CompaniesPage'
+import PeoplePage from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
-import ModulePermissionsPage from './module-permissions/ModulePermissionsPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
@@ -33,7 +34,6 @@ import ProjectsPage from './projects/ProjectsPage'
 import { projectItemApi } from './projectItems/api'
 import { listMyProjects } from './projects/api'
 import TemporaryPassword from './TemporaryPassword'
-import UsersPage from './UsersPage'
 
 const PlanningPage = lazy(() => import('./planning/PlanningPage'))
 const AuditLogPage = lazy(() => import('./audit-log/AuditLogPage'))
@@ -205,27 +205,21 @@ const PROJECT_ROUTES = (
 
 const DASHBOARD_NAV_ITEM = {
   to: '/admin/dashboard',
-  label: 'Dashboard',
+  label: NAV_LABELS.overview,
 }
 
-const NAV_ITEMS = [
-  { to: '/admin/users', label: '使用者' },
-  { to: '/admin/companies', label: '公司' },
-  { to: '/admin/roles', label: '角色' },
-  { to: '/admin/permissions', label: '人員權限' },
-  { to: '/admin/projects', label: '專案' },
-  DASHBOARD_NAV_ITEM,
-  { to: '/admin/audit-logs', label: '稽核紀錄' },
-  { to: '/admin/templates', label: '範本管理' },
-  { to: '/change-password', label: '變更密碼' },
+const MANAGEMENT_ITEMS = [
+  { to: '/admin/people', label: PAGE_TITLES.account },
+  { to: '/admin/companies', label: PAGE_TITLES.company },
+  { to: '/admin/roles', label: NAV_LABELS.roles },
+  { to: '/admin/audit-logs', label: NAV_LABELS.records },
 ]
 
 export default function AdminPage() {
-  const location = useLocation()
   const { user } = useCurrentUser()
   return (
     <WorkflowSummaryProvider key={user.id}>
-      <AdminPageContent key={location.key} />
+      <AdminPageContent />
     </WorkflowSummaryProvider>
   )
 }
@@ -283,6 +277,16 @@ function AdminPageContent() {
     if (temporaryPassword) resultHeadingRef.current?.focus()
   }, [temporaryPassword])
 
+  useEffect(() => {
+    if (
+      temporaryPassword &&
+      (location.pathname !== '/admin/people' ||
+        location.key !== temporaryPassword.locationKey)
+    ) {
+      setTemporaryPassword(null)
+    }
+  }, [location.key, location.pathname, temporaryPassword])
+
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
@@ -319,7 +323,8 @@ function AdminPageContent() {
         }
         locked={temporaryPassword !== null}
         lockedNote="請先抄下臨時密碼，才能離開這一頁。"
-        navItems={NAV_ITEMS}
+        navItems={adminNavigationItems(user, dashboardAccess)}
+        managementItems={MANAGEMENT_ITEMS}
         navLabel="管理功能"
         onNavigate={() => setTemporaryPassword(null)}
         user={user}
@@ -331,7 +336,7 @@ function AdminPageContent() {
           </p>
         )}
         {temporaryPassword &&
-        location.pathname === '/admin/users' &&
+        location.pathname === '/admin/people' &&
         location.key === temporaryPassword.locationKey ? (
           <section
             aria-labelledby="temporary-password-heading"
@@ -343,7 +348,7 @@ function AdminPageContent() {
               ref={resultHeadingRef}
               tabIndex={-1}
             >
-              使用者已新增
+              帳號已新增
             </h2>
             <p>帳號：{temporaryPassword.username}</p>
             <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
@@ -351,11 +356,11 @@ function AdminPageContent() {
             <button
               onClick={() => {
                 setTemporaryPassword(null)
-                navigate('/admin/users', { replace: true })
+                navigate('/admin/people', { replace: true })
               }}
               type="button"
             >
-              已抄下，回到使用者列表
+              已抄下，回到帳號列表
             </button>
           </section>
         ) : (
@@ -363,13 +368,13 @@ function AdminPageContent() {
             <Route
               index
               element={
-                <Navigate replace state={location.state} to="/admin/users" />
+                <Navigate replace state={location.state} to="/admin/people" />
               }
             />
             <Route
-              path="users"
+              path="people/:personId?"
               element={
-                <UsersPage
+                <PeoplePage
                   onTemporaryPassword={(username, password) =>
                     setTemporaryPassword({
                       username,
@@ -382,7 +387,6 @@ function AdminPageContent() {
             />
             <Route path="companies" element={<CompaniesPage />} />
             <Route path="roles" element={<RolesPage />} />
-            <Route path="permissions" element={<ModulePermissionsPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route
               path="dashboard"
@@ -420,7 +424,7 @@ function AdminPageContent() {
 }
 
 // 非系統管理者的管理頁外殼（#480）：頂部導覽只列後端存取摘要確認
-// 有權限的項目，不出現點了才 403 的入口；使用者、公司、角色管理
+// 有權限的項目，不出現點了才 403 的入口；人員、公司、角色管理
 // 只屬系統管理者，這裡一律不列。
 function MemberAdminShell({
   dashboardAccess,
@@ -435,8 +439,11 @@ function MemberAdminShell({
   // 從別頁導來時帶的提示（例如套用範本成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
+  const canManageAccounts = user.delegated_modules.length > 0
   const restrictedPage =
-    /^\/admin\/(?:users|companies|roles|permissions|audit-logs)(?:\/|$)/.test(
+    (/^\/admin\/people(?:\/|$)/.test(location.pathname) &&
+      !canManageAccounts) ||
+    /^\/admin\/(?:companies|roles|audit-logs)(?:\/|$)/.test(
       location.pathname,
     ) ||
     (!canBrowseTemplates(user) &&
@@ -451,6 +458,11 @@ function MemberAdminShell({
     >
       <AppHeader
         navItems={memberNavigationItems(user, dashboardAccess)}
+        managementItems={
+          canManageAccounts
+            ? [{ to: '/admin/people', label: PAGE_TITLES.account }]
+            : []
+        }
         navLabel="管理功能"
         user={user}
       />
@@ -542,10 +554,26 @@ function memberNavigationItems(
       user.can_create_project) &&
     !items.some((item) => item.to === '/admin/projects')
   ) {
-    items.unshift({ to: '/admin/projects', label: '我的專案' })
+    items.unshift({ to: '/admin/projects', label: NAV_LABELS.projects })
   }
-  if (access.kind !== 'allowed') return items
-  items.splice(Math.max(0, items.length - 1), 0, DASHBOARD_NAV_ITEM)
+  if (access.kind === 'allowed') items.push(DASHBOARD_NAV_ITEM)
+  return items
+}
+
+function adminNavigationItems(
+  user: CurrentUser,
+  access: DashboardAccessState,
+) {
+  const items = memberNavItems(user)
+  if (user.is_admin || user.has_office_access) {
+    if (!items.some((item) => item.to === '/admin/projects')) {
+      items.push({ to: '/admin/projects', label: NAV_LABELS.projects })
+    }
+  }
+  if ((user.is_admin || access.kind === 'allowed') &&
+      !items.some((item) => item.to === DASHBOARD_NAV_ITEM.to)) {
+    items.push(DASHBOARD_NAV_ITEM)
+  }
   return items
 }
 
@@ -559,7 +587,7 @@ function DashboardRoute({
   user: CurrentUser
 }) {
   if (access.kind === 'checking') {
-    return <p role="status">正在確認 Dashboard 權限…</p>
+    return <p role="status">正在確認總覽權限…</p>
   }
   if (access.kind === 'denied') {
     return (
@@ -572,8 +600,8 @@ function DashboardRoute({
   if (access.kind === 'error') {
     return (
       <section aria-labelledby="dashboard-access-error-heading">
-        <h1 id="dashboard-access-error-heading">Dashboard</h1>
-        <p role="alert">目前無法確認 Dashboard 權限，請重試。</p>
+        <h1 id="dashboard-access-error-heading">{PAGE_TITLES.overview}</h1>
+        <p role="alert">目前無法確認總覽權限，請重試。</p>
         <button className="btn" onClick={onRetry} type="button">
           重新確認
         </button>

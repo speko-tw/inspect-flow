@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
+import { useCurrentUser } from '../../auth/useCurrentUser'
 import {
   Button,
   Card,
@@ -11,9 +12,18 @@ import {
   SectionHeader,
 } from '../../components'
 import { ConfirmationPanel } from '../../components/layout/LayoutPatterns'
+import {
+  UnsavedLeaveBox,
+  useUnsavedNavigationGuard,
+} from '../../ui/navigation'
 import { ManagementApiError } from '../api'
 import TemporaryPassword from '../TemporaryPassword'
-import { createUser, listAllPages, listCompanies } from '../api'
+import {
+  createUser,
+  listAllPages,
+  listCompanies,
+  managementErrorMessage,
+} from '../api'
 import type { Company, CreatedUser, User } from '../api'
 import { describeRole } from '../projects/roleDescriptions'
 import {
@@ -46,8 +56,7 @@ import {
   type RevokeImpact,
 } from './api'
 
-type Profile = 'system' | 'office' | 'field' | 'contractor'
-type StaffIdentity = 'internal' | 'external'
+type Profile = 'system' | 'manager' | 'office' | 'field' | 'external'
 type Provisioning = {
   userId: string
   bundleId: string | null
@@ -55,6 +64,7 @@ type Provisioning = {
   projectId: string
   bundleDone: boolean
   memberDone: boolean
+  mergeExistingRoles: boolean
 }
 
 const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
@@ -63,6 +73,11 @@ const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
       id: 'system',
       label: '系統管理',
       summary: '管理所有系統功能',
+    },
+    {
+      id: 'manager',
+      label: '主管',
+      summary: '套用公司主管權限組合，查看全公司專案進度',
     },
     {
       id: 'office',
@@ -75,8 +90,8 @@ const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
       summary: '執行指派的現場查核工作',
     },
     {
-      id: 'contractor',
-      label: '外包顧問',
+      id: 'external',
+      label: '外部協作',
       summary: '只取得核准的外部可用功能',
     },
   ]
@@ -86,9 +101,14 @@ const PROFILE_ACCESS: Record<
   { can: string[]; cannot: string[]; projectRole: string }
 > = {
   system: {
-    can: ['管理人員與權限', '查看全部專案進度', '管理專案成員'],
+    can: ['管理帳號與權限', '查看全部專案進度', '管理專案成員'],
     cannot: ['外部協作人員不能設為系統管理者', '不能替自己建立額外權限'],
     projectRole: '專案工程師',
+  },
+  manager: {
+    can: ['查看全部專案進度'],
+    cannot: ['不能建立專案', '不能管理專案成員'],
+    projectRole: '無',
   },
   office: {
     can: ['規劃與查看已授權專案', '建立專案', '使用查核與範本功能'],
@@ -100,7 +120,7 @@ const PROFILE_ACCESS: Record<
     cannot: ['建立專案', '管理專案成員', '管理範本庫'],
     projectRole: '現場工程師',
   },
-  contractor: {
+  external: {
     can: ['查看已加入且有查閱角色的專案', '依專案角色查看查核資料'],
     cannot: ['建立專案', '查看其他專案', '管理成員、權限或範本庫'],
     projectRole: '專案查閱人員',
@@ -108,15 +128,17 @@ const PROFILE_ACCESS: Record<
 }
 
 const PROFILE_BUNDLES: Partial<Record<Profile, string>> = {
+  manager: '公司主管',
   office: '專案工程師常用',
   field: '現場工程師常用',
-  contractor: '現場工程師常用',
+  external: '現場工程師常用',
 }
 
 const PROFILE_BUNDLE_CODES: Partial<Record<Profile, string[]>> = {
+  manager: ['project.use', 'all_project_progress.read'],
   office: ['project.use', 'project.create', 'inspection.use', 'template.use'],
   field: ['project.use', 'inspection.use'],
-  contractor: ['project.use', 'inspection.use'],
+  external: ['project.use', 'inspection.use'],
 }
 
 const PROJECT_READ_ROLE_CODES = [
@@ -129,7 +151,7 @@ const PROJECT_READ_ROLE_CODES = [
 
 const PROFILE_ROLE_CODES: Partial<Record<Profile, string[]>> = {
   field: [...PROJECT_READ_ROLE_CODES, 'inspection_task.inspect'],
-  contractor: PROJECT_READ_ROLE_CODES,
+  external: PROJECT_READ_ROLE_CODES,
 }
 
 function samePermissionCodes(left: string[], right: string[]): boolean {
@@ -167,6 +189,7 @@ function profileDefaultRole(
   profile: Profile,
   creatorRoleId: string,
 ): Role | null {
+  if (profile === 'manager') return null
   if (profile === 'system' || profile === 'office') {
     return roles.find((role) => role.id === creatorRoleId) ?? null
   }
@@ -175,7 +198,7 @@ function profileDefaultRole(
   const matching = roles.filter(
     (role) =>
       role.is_assignable === true &&
-      role.is_external_allowed === (profile === 'contractor') &&
+      role.is_external_allowed === (profile === 'external') &&
       samePermissionCodes(role.permission_codes, expectedCodes),
   )
   return matching.length === 1 ? matching[0] : null
@@ -196,7 +219,31 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : '操作失敗，請重試。'
 }
 
-export default function ModulePermissionsPage() {
+function ModulePermissionsNavigationGuard({
+  hasUnsavedChanges,
+}: {
+  hasUnsavedChanges: boolean
+}) {
+  const guard = useUnsavedNavigationGuard(hasUnsavedChanges)
+  return <UnsavedLeaveBox guard={guard} />
+}
+
+export default function ModulePermissionsPage({
+  embedded = false,
+  openWizardRequest = 0,
+  selectedUserId,
+  onTemporaryPassword,
+  externalNavigationGuard = false,
+  onDirtyChange,
+}: {
+  embedded?: boolean
+  openWizardRequest?: number
+  selectedUserId?: string
+  onTemporaryPassword?: (username: string, password: string) => void
+  externalNavigationGuard?: boolean
+  onDirtyChange?: (dirty: boolean) => void
+} = {}) {
+  const { user: currentUser } = useCurrentUser()
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [permissions, setPermissions] = useState<ModulePermission[]>([])
@@ -211,10 +258,10 @@ export default function ModulePermissionsPage() {
   const [userAccess, setUserAccess] = useState<string[]>([])
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
-  const [profile, setProfile] = useState<Profile>('office')
-  const [identity, setIdentity] = useState<StaffIdentity>('internal')
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [step, setStep] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [existingAccount, setExistingAccount] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -237,6 +284,7 @@ export default function ModulePermissionsPage() {
   const [companyId, setCompanyId] = useState('')
   const [projectId, setProjectId] = useState('')
   const [createdId, setCreatedId] = useState('')
+  const [createdUsername, setCreatedUsername] = useState('')
   const [temporaryPassword, setTemporaryPassword] = useState('')
   const [createdName, setCreatedName] = useState('')
   const [provisioning, setProvisioning] = useState<Provisioning | null>(null)
@@ -245,17 +293,21 @@ export default function ModulePermissionsPage() {
   const [diagnosticProject, setDiagnosticProject] = useState('')
   const [diagnosticAction, setDiagnosticAction] = useState('task-list')
   const [creatorRoleId, setCreatorRoleId] = useState('')
+  const wizardHasDraft = Boolean(
+    wizardOpen &&
+      step !== 4 &&
+      (username || email || name || nameEn || department || location ||
+        employeeNo || companyId || projectId || profile || busy || partial),
+  )
+  useEffect(() => {
+    onDirtyChange?.(wizardHasDraft)
+  }, [onDirtyChange, wizardHasDraft])
   const revokeTrigger = useRef<HTMLInputElement>(null)
   const bundleDeleteTrigger = useRef<HTMLButtonElement>(null)
 
-  const profileIsAllowed =
-    identity === 'external'
-      ? profile === 'contractor'
-      : profile !== 'contractor'
-
   function goToStep(nextStep: number) {
-    if (!profileIsAllowed) {
-      setError('請先依人員身分選擇可用職務。')
+    if (nextStep >= 3 && profile === null) {
+      setError('請先選擇職務，再繼續設定。')
       return
     }
     setError('')
@@ -272,10 +324,11 @@ export default function ModulePermissionsPage() {
     setEmployeeNo('')
     setCompanyId('')
     setProjectId('')
-    setIdentity('internal')
-    setProfile('office')
+    setProfile(null)
     setStep(0)
+    setExistingAccount(false)
     setCreatedId('')
+    setCreatedUsername('')
     setCreatedName('')
     setTemporaryPassword('')
     setProvisioning(null)
@@ -283,24 +336,32 @@ export default function ModulePermissionsPage() {
     setError('')
   }
 
+  function startExistingJob() {
+    const selected = users.find((user) => user.id === selectedUser)
+    if (!selected || selected.is_admin) return
+    resetWizard()
+    setExistingAccount(true)
+    setProfile(null)
+    setStep(1)
+    setWizardOpen(true)
+  }
+
   async function refresh() {
-    const [
-      userRows,
-      companyRows,
-      permissionRows,
-      bundleRows,
-      roleRows,
-      projectRows,
-      creatorRole,
-    ] = await Promise.all([
-      listAllPages<User>('/users'),
-      listCompanies(),
+    const userPath = currentUser.is_admin ? '/users' : '/module-delegate/users'
+    const [userRows, permissionRows, bundleRows] = await Promise.all([
+      listAllPages<User>(userPath),
       listModulePermissions(),
-      listPermissionBundles(),
-      listRoles(),
-      listAllPages<Project>('/projects'),
-      getCreatorRole(),
+      currentUser.is_admin ? listPermissionBundles() : Promise.resolve([]),
     ])
+    const [companyRows, roleRows, projectRows, creatorRole] =
+      currentUser.is_admin
+        ? await Promise.all([
+            listCompanies(),
+            listRoles(),
+            listAllPages<Project>('/projects'),
+            getCreatorRole(),
+          ])
+        : [[], [], [], { role_id: '' }]
     setUsers(userRows)
     setCompanies(companyRows)
     setPermissions(permissionRows)
@@ -323,7 +384,18 @@ export default function ModulePermissionsPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [currentUser.is_admin])
+
+  useEffect(() => {
+    if (selectedUserId !== undefined) setSelectedUser(selectedUserId)
+  }, [selectedUserId])
+
+  useEffect(() => {
+    if (!openWizardRequest) return
+    setExistingAccount(false)
+    resetWizard()
+    setWizardOpen(true)
+  }, [openWizardRequest])
 
   useEffect(() => {
     if (!selectedUser) return
@@ -404,7 +476,7 @@ export default function ModulePermissionsPage() {
       setBundleCodes([])
       setEditingBundle(null)
       setBundles(await listPermissionBundles())
-      setNotice('權限組合已儲存；既有使用者授權不會被改動。')
+      setNotice('權限組合已儲存；既有帳號授權不會被改動。')
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -413,8 +485,8 @@ export default function ModulePermissionsPage() {
   }
 
   async function createStaff() {
-    if (!profileIsAllowed) {
-      setError('請確認人員身分與職務相符。')
+    if (!profile) {
+      setError('請先選擇職務，再繼續設定。')
       return
     }
     const bundleName = PROFILE_BUNDLES[profile]
@@ -424,48 +496,84 @@ export default function ModulePermissionsPage() {
       setError(`無法建立帳號：找不到唯一的預設權限組合「${bundleName}」。`)
       return
     }
-    if (!role) {
+    if (!role && profile !== 'manager') {
       setError(
         `無法建立帳號：找不到唯一且符合權限需求的預設專案角色「${PROFILE_ACCESS[profile].projectRole}」。`,
       )
+      return
+    }
+    const existing = existingAccount
+      ? users.find((user) => user.id === selectedUser)
+      : undefined
+    if (existingAccount && (!existing || existing.is_admin)) {
+      setError('找不到可套用職務的帳號，請重新選取。')
+      return
+    }
+    if (existingAccount && profile === 'system') {
+      setError('系統管理者不套用一般職務。')
+      return
+    }
+    if (
+      existing &&
+      existing.is_external_collaborator !== (profile === 'external')
+    ) {
+      setError('帳號外部身分與所選職務不符，未變更授權。')
       return
     }
     setBusy(true)
     setError('')
     setPartial('')
     try {
-      const created = await createUser({
-        username: username.trim(),
-        email: email.trim(),
-        name_zh: name.trim(),
-        name_en: nameEn.trim() || null,
-        company_id: companyId || null,
-        department: department.trim() || null,
-        location: location.trim() || null,
-        employee_no: employeeNo.trim() || null,
-        is_external_collaborator: identity === 'external',
-        is_admin: profile === 'system',
-      })
-      setCreatedId(created.id)
-      setCreatedName(created.name_zh || created.username)
-      setTemporaryPassword(created.temporary_password)
-      setUsers((current) => [
-        created,
-        ...current.filter((row) => row.id !== created.id),
-      ])
-      setSelectedUser(created.id)
+      const created = existingAccount
+        ? undefined
+        : await createUser({
+            username: username.trim(),
+            email: email.trim(),
+            name_zh: name.trim(),
+            name_en: nameEn.trim() || null,
+            company_id: companyId || null,
+            department: department.trim() || null,
+            location: location.trim() || null,
+            employee_no: employeeNo.trim() || null,
+            is_external_collaborator: profile === 'external',
+            is_admin: profile === 'system',
+          })
+      const target = existing ?? created
+      if (!target) throw new Error('找不到授權對象。')
+      setCreatedId(target.id)
+      setCreatedName(target.name_zh || target.username)
+      setTemporaryPassword(created?.temporary_password ?? '')
+      if (created) {
+        setUsers((current) => [
+          created,
+          ...current.filter((row) => row.id !== created.id),
+        ])
+      }
+      setSelectedUser(target.id)
       const nextProvisioning: Provisioning = {
-        userId: created.id,
+        userId: target.id,
         bundleId: matchingBundle?.id ?? null,
-        roleId: role.id,
+        roleId: role?.id ?? '',
         projectId,
         bundleDone: profile === 'system',
-        memberDone: !projectId,
+        memberDone: !projectId || profile === 'manager',
+        mergeExistingRoles: existingAccount,
       }
       setProvisioning(nextProvisioning)
-      await finishProvisioning(nextProvisioning, created)
+      if (created) setCreatedUsername(created.username)
+      const completed = await finishProvisioning(nextProvisioning, created)
+      if (created && completed) {
+        onTemporaryPassword?.(
+          created.username,
+          created.temporary_password,
+        )
+      }
     } catch (caught) {
-      setError(message(caught))
+      const errorMessage = managementErrorMessage(caught).replace(
+        /[。.!?]+$/,
+        '',
+      )
+      setError(`${errorMessage}。請檢查資料後再試一次。`)
     } finally {
       setBusy(false)
     }
@@ -474,7 +582,7 @@ export default function ModulePermissionsPage() {
   async function finishProvisioning(
     pending: Provisioning,
     created?: CreatedUser,
-  ) {
+  ): Promise<boolean> {
     let next = pending
     try {
       if (next.bundleId && !next.bundleDone) {
@@ -483,27 +591,48 @@ export default function ModulePermissionsPage() {
         setProvisioning(next)
       }
       if (next.projectId && !next.memberDone) {
-        try {
-          await addProjectMember(next.projectId, next.userId, [next.roleId])
-        } catch (caught) {
-          const isConflict =
-            caught instanceof ManagementApiError &&
-            caught.status === 409 &&
-            caught.code === 'project.member_conflict'
-          if (!isConflict) throw caught
+        if (next.mergeExistingRoles) {
           const members = await listProjectMembers(next.projectId)
           const existingMember = members.find(
             (member) => member.user_id === next.userId,
           )
-          const expectedRoleExists =
-            existingMember?.role_ids.length === 1 &&
-            existingMember.role_ids.includes(next.roleId)
-          if (!expectedRoleExists) throw caught
+          if (existingMember) {
+            const roleIds = existingMember.role_ids.includes(next.roleId)
+              ? existingMember.role_ids
+              : [...existingMember.role_ids, next.roleId]
+            if (roleIds !== existingMember.role_ids) {
+              await setProjectMemberRoles(next.projectId, next.userId, roleIds)
+            }
+          } else {
+            await addProjectMember(next.projectId, next.userId, [next.roleId])
+          }
+        } else {
+          try {
+            await addProjectMember(next.projectId, next.userId, [next.roleId])
+          } catch (caught) {
+            const isConflict =
+              caught instanceof ManagementApiError &&
+              caught.status === 409 &&
+              caught.code === 'project.member_conflict'
+            if (!isConflict) throw caught
+            const members = await listProjectMembers(next.projectId)
+            const existingMember = members.find(
+              (member) => member.user_id === next.userId,
+            )
+            const expectedRoleExists =
+              existingMember?.role_ids.length === 1 &&
+              existingMember.role_ids.includes(next.roleId)
+            if (!expectedRoleExists) throw caught
+          }
         }
         next = { ...next, memberDone: true }
         setProvisioning(next)
       }
-      setPartial('帳號、權限組合及所選專案已完成。')
+      setPartial(
+        next.mergeExistingRoles
+          ? '職務、權限組合及所選專案已完成。'
+          : '帳號、權限組合及所選專案已完成。',
+      )
       setStep(4)
       setUsername('')
       setEmail('')
@@ -518,9 +647,15 @@ export default function ModulePermissionsPage() {
         setCreatedName(created.name_zh || created.username)
         setTemporaryPassword(created.temporary_password)
       }
+      return true
     } catch (caught) {
       setError(message(caught))
-      setPartial('帳號已建立；後續授權或專案加入未完成。')
+      setPartial(
+        next.mergeExistingRoles
+          ? '帳號資料保留；後續授權或專案加入未完成。'
+          : '帳號已建立；後續授權或專案加入未完成。',
+      )
+      return false
     }
   }
 
@@ -528,7 +663,10 @@ export default function ModulePermissionsPage() {
     if (!provisioning) return
     setBusy(true)
     setError('')
-    await finishProvisioning(provisioning)
+    const completed = await finishProvisioning(provisioning)
+    if (completed && createdUsername && temporaryPassword) {
+      onTemporaryPassword?.(createdUsername, temporaryPassword)
+    }
     setBusy(false)
   }
 
@@ -672,55 +810,67 @@ export default function ModulePermissionsPage() {
 
   return (
     <div className="admin-page permission-management">
-      <SectionHeader
-        title="人員權限"
-        description="先選職務，再確認人員實際可使用的功能。"
-      />
+      {!externalNavigationGuard && (
+        <ModulePermissionsNavigationGuard hasUnsavedChanges={wizardHasDraft} />
+      )}
+      {!embedded && (
+        <SectionHeader
+          title="帳號權限"
+          description="先選職務，再確認帳號實際可使用的功能。"
+        />
+      )}
       {error && <p role="alert">{error}</p>}
-      <Card>
-        <h2>人員清單</h2>
-        <p>選取人員查看目前能力，或新增人員並依職務完成設定。</p>
-        <Button onClick={() => setWizardOpen(true)}>新增人員</Button>
-        <Field id="people-search" label="搜尋人員">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </Field>
-        <ul aria-label="人員清單">
-          {visibleUsers.map((user) => (
-            <li key={user.id}>
-              <Button
-                variant="tertiary"
-                onClick={() => {
-                  setSelectedUser(user.id)
-                  setWizardOpen(false)
-                  setTemporaryPassword('')
-                  if (step === 4) resetWizard()
-                }}
-              >
-                {user.name_zh || user.username}
-              </Button>
-              {' · '}
-              {user.is_external_collaborator
-                ? '外部協作人員'
-                : user.is_admin
-                  ? '系統管理者'
-                  : '內部人員'}
-              {' · '}
-              {user.is_admin
-                ? '系統管理'
-                : user.is_external_collaborator
-                  ? '外包顧問'
-                  : '依模組權限與專案角色'}
-            </li>
-          ))}
-        </ul>
-      </Card>
-      {selectedUser && (
+      {!embedded && (
         <Card>
-          <h2>人員能力與快速檢查</h2>
-          <div aria-label="人員能力摘要" role="region">
+          <h2>帳號清單</h2>
+          <p>選取帳號查看目前能力，或新增帳號並依職務完成設定。</p>
+          <Button onClick={() => setWizardOpen(true)}>新增帳號</Button>
+          <Field id="people-search" label="搜尋帳號">
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </Field>
+          <ul aria-label="帳號清單">
+            {visibleUsers.map((user) => (
+              <li key={user.id}>
+                <Button
+                  variant="tertiary"
+                  onClick={() => {
+                    setSelectedUser(user.id)
+                    setWizardOpen(false)
+                    setTemporaryPassword('')
+                    if (step === 4) resetWizard()
+                  }}
+                >
+                  {user.name_zh || user.username}
+                </Button>
+                {' · '}
+                {user.is_external_collaborator
+                  ? '外部協作人員'
+                  : user.is_admin
+                    ? '系統管理者'
+                    : '內部帳號'}
+                {' · '}
+                {user.is_admin
+                  ? '系統管理'
+                  : user.is_external_collaborator
+                    ? '外部協作'
+                    : '依模組權限與專案角色'}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {selectedUser && currentUser.is_admin && (
+        <Card>
+          <h2>{embedded ? '能做什麼' : '帳號能力與快速檢查'}</h2>
+          {embedded &&
+            currentUser.is_admin &&
+            !users.find((user) => user.id === selectedUser)?.is_admin && (
+              <Button onClick={startExistingJob}>套用職務</Button>
+            )}
+          <div aria-label="帳號能力摘要" role="region">
             <p role="status">
               能力摘要：
               {users.find((user) => user.id === selectedUser)?.is_admin
@@ -835,16 +985,55 @@ export default function ModulePermissionsPage() {
           </div>
         </Card>
       )}
-      {wizardOpen && (
+      {embedded && !currentUser.is_admin && selectedUser && (
+        <Card>
+          <h2>模組授權</h2>
+          <p>只能授予你受委派模組內的權限，不能替自己授權或轉委派。</p>
+          <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
+            {permissions.map((item) => (
+              <label key={item.code}>
+                <input
+                  checked={userAccess.includes(item.code)}
+                  type="checkbox"
+                  onChange={(event) => {
+                    if (!event.target.checked) {
+                      revokeTrigger.current = event.currentTarget
+                    }
+                    void togglePermission(item.code, event.target.checked)
+                  }}
+                />{' '}
+                {item.description}
+              </label>
+            ))}
+          </fieldset>
+        </Card>
+      )}
+      {wizardOpen && currentUser.is_admin && (
         <Card>
           {step === 4 ? (
             <section aria-label="建立完成">
-              <h2>人員已建立</h2>
-              <p>{createdName} 的帳號與授權設定已完成。</p>
-              <p>請現在把以下臨時密碼交給本人；離開此畫面後就無法再查看。</p>
-              <TemporaryPassword password={temporaryPassword} />
-              <p>下一步可以新增另一位人員，或查看這位人員的能力摘要。</p>
-              <Button onClick={startAnotherStaff}>新增另一位人員</Button>
+              <h2>{existingAccount ? '職務已套用' : '帳號已建立'}</h2>
+              <p>
+                {existingAccount
+                  ? `${createdName} 的職務與授權設定已完成。`
+                  : `${createdName} 的帳號與授權設定已完成。`}
+              </p>
+              {!existingAccount && (
+                <>
+                  <p>
+                    請現在把以下臨時密碼交給本人；離開此畫面後就無法再查看。
+                  </p>
+                  <TemporaryPassword password={temporaryPassword} />
+                </>
+              )}
+              <p>
+                {existingAccount
+                  ? '下一步可以查看此人的能力摘要。'
+                  : '下一步可以新增另一個帳號，或查看這個帳號的能力摘要。'}
+              </p>
+              {!existingAccount && (
+                <Button onClick={startAnotherStaff}>新增另一個帳號</Button>
+              )}
               <Button
                 onClick={() => {
                   setWizardOpen(false)
@@ -852,16 +1041,16 @@ export default function ModulePermissionsPage() {
                   setSelectedUser(createdId)
                 }}
               >
-                查看這個人的能力
+                查看這個帳號的能力
               </Button>
             </section>
           ) : (
             <>
               <h2>職務起手式</h2>
               <p>建立後可再調整；系統管理者不套用一般權限組合。</p>
-              <nav aria-label="建立人員步驟">
+              <nav aria-label="帳號設定步驟">
                 <ol className="layout-setup-steps module-permission-wizard-steps">
-                  {['身分', '職務', '專案', '確認'].map((label, index) => {
+                  {['帳號資料', '職務', '專案', '確認'].map((label, index) => {
                     const stateClass =
                       index < step
                         ? 'layout-step-complete'
@@ -894,28 +1083,11 @@ export default function ModulePermissionsPage() {
                   })}
                 </ol>
               </nav>
-              {step === 0 && (
-                <FormGroup title="帳號資料" description="設定登入與人員資料。">
-                  <FormField label="身分">
-                    {(control) => (
-                      <select
-                        {...control}
-                        disabled={Boolean(createdId)}
-                        value={identity}
-                        onChange={(event) => {
-                          const next = event.target.value as StaffIdentity
-                          setIdentity(next)
-                          setProfile(
-                            next === 'external' ? 'contractor' : 'office',
-                          )
-                          setError('')
-                        }}
-                      >
-                        <option value="internal">內部人員</option>
-                        <option value="external">外部協作人員</option>
-                      </select>
-                    )}
-                  </FormField>
+              {step === 0 && !existingAccount && (
+                <FormGroup
+                  title="帳號資料"
+                  description="設定登入帳號與基本資料。"
+                >
                   <FormField label="帳號名稱" required>
                     {(control) => (
                       <Input
@@ -1009,11 +1181,7 @@ export default function ModulePermissionsPage() {
               {step === 1 && (
                 <fieldset>
                   <legend>選擇職務</legend>
-                  {PROFILE_OPTIONS.filter((option) =>
-                    identity === 'external'
-                      ? option.id === 'contractor'
-                      : option.id !== 'contractor',
-                  ).map((option) => (
+                  {PROFILE_OPTIONS.map((option) => (
                     <label
                       key={option.id}
                       style={{
@@ -1062,11 +1230,14 @@ export default function ModulePermissionsPage() {
                   </select>
                 </label>
               )}
-              {step === 3 && (
+              {step === 3 && profile && (
                 <div>
-                  <h3>建立前確認</h3>
+                  <h3>{existingAccount ? '套用前確認' : '建立前確認'}</h3>
                   <p>
-                    {name || '新同仁'}將以「
+                    {(existingAccount
+                      ? users.find((user) => user.id === selectedUser)?.name_zh
+                      : name) || '新同仁'}
+                    將以「
                     {
                       PROFILE_OPTIONS.find((item) => item.id === profile)
                         ?.label
@@ -1079,7 +1250,7 @@ export default function ModulePermissionsPage() {
                       {PROFILE_ACCESS[profile].can.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
-                      {projectId && (
+                      {projectId && profile !== 'manager' && (
                         <li>
                           在「
                           {
@@ -1107,15 +1278,18 @@ export default function ModulePermissionsPage() {
                       ? `權限組合「${PROFILE_BUNDLES[profile]}」`
                       : '系統管理者權限來自系統身分'}
                     {`；預設專案角色「${profileRoleLabel(roles, profile, creatorRoleId)}」。`}
-                    {identity === 'external' &&
-                      ' 外部人員只會取得外部可用權限與角色。'}
+                    {profile === 'external' &&
+                      ' 外部協作帳號只會取得外部可用權限與角色。'}
                   </small>
                   {!createdId ? (
                     <Button
-                      disabled={busy || !username || !name || !email}
+                      disabled={
+                        busy ||
+                        (!existingAccount && (!username || !name || !email))
+                      }
                       onClick={() => void createStaff()}
                     >
-                      建立人員
+                      {existingAccount ? '套用職務' : '建立帳號'}
                     </Button>
                   ) : (
                     <>
@@ -1160,236 +1334,289 @@ export default function ModulePermissionsPage() {
           )}
         </Card>
       )}
-      <details>
-        <summary>進階設定：委派、權限組合與逐項授權</summary>
-        <Card>
-          <h2>逐項模組授權</h2>
-          {selectedUser && (
-            <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
-              <legend>
-                {'模組授權（已選取 '}
-                {userAccess.length}
-                {' 項）'}
-              </legend>
-              {permissions.map((item) => (
-                <label key={item.code}>
-                  <input
-                    checked={userAccess.includes(item.code)}
-                    type="checkbox"
-                    onChange={(event) => {
-                      if (!event.target.checked) {
-                        revokeTrigger.current = event.currentTarget
-                      }
-                      void togglePermission(item.code, event.target.checked)
-                    }}
-                  />{' '}
-                  {item.description} <code>{item.code}</code>
-                </label>
-              ))}
-            </fieldset>
+      {(!embedded || currentUser.is_admin) && (
+        <details>
+          <summary>進階設定：委派、權限組合與逐項授權</summary>
+          <Card>
+            <h2>逐項模組授權</h2>
+            {selectedUser && (
+              <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
+                <legend>
+                  {'模組授權（已選取 '}
+                  {userAccess.length}
+                  {' 項）'}
+                </legend>
+                {permissions.map((item) => (
+                  <label key={item.code}>
+                    <input
+                      checked={userAccess.includes(item.code)}
+                      type="checkbox"
+                      onChange={(event) => {
+                        if (!event.target.checked) {
+                          revokeTrigger.current = event.currentTarget
+                        }
+                        void togglePermission(item.code, event.target.checked)
+                      }}
+                    />{' '}
+                    {item.description} <code>{item.code}</code>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+          </Card>
+          {currentUser.is_admin && (
+            <Card>
+              <h2>委派管理</h2>
+              <p>收回委派不會移除對方已授予帳號的權限。</p>
+              {selectedUser &&
+                ['project', 'inspection', 'template'].map((module) => (
+                  <label key={module}>
+                    <input
+                      disabled={accessLoadedFor !== selectedUser}
+                      checked={delegatedModules.includes(module)}
+                      type="checkbox"
+                      onChange={(event) => {
+                        const enabled = event.target.checked
+                        setModuleDelegation(selectedUser, module, enabled)
+                          .then(() =>
+                            setDelegatedModules((current) =>
+                              enabled
+                                ? [...new Set([...current, module])]
+                                : current.filter((item) => item !== module),
+                            ),
+                          )
+                          .catch((caught: unknown) =>
+                            setError(message(caught)),
+                          )
+                      }}
+                    />
+                    可管理 {module} 模組授權
+                  </label>
+                ))}
+            </Card>
           )}
-        </Card>
-        <Card>
-          <h2>委派管理</h2>
-          <p>收回委派不會移除對方已授予的人員權限。</p>
-          {selectedUser &&
-            ['project', 'inspection', 'template'].map((module) => (
-              <label key={module}>
-                <input
-                  disabled={accessLoadedFor !== selectedUser}
-                  checked={delegatedModules.includes(module)}
-                  type="checkbox"
-                  onChange={(event) => {
-                    const enabled = event.target.checked
-                    setModuleDelegation(selectedUser, module, enabled)
-                      .then(() =>
-                        setDelegatedModules((current) =>
-                          enabled
-                            ? [...new Set([...current, module])]
-                            : current.filter((item) => item !== module),
-                        ),
-                      )
-                      .catch((caught: unknown) => setError(message(caught)))
-                  }}
+          {embedded && currentUser.is_admin && (
+            <Card>
+              <h2>套用權限組合</h2>
+              <ul>
+                {bundles.map((bundle) => (
+                  <li key={bundle.id}>
+                    <span>{bundle.name}</span>{' '}
+                    <Button
+                      disabled={!selectedUser || busy}
+                      onClick={() =>
+                        selectedUser &&
+                        applyPermissionBundle(selectedUser, bundle.id)
+                          .then(async () => {
+                            const access =
+                              await getUserModulePermissions(selectedUser)
+                            setUserAccess(access.permission_codes)
+                            setNotice('權限組合已套用。')
+                          })
+                          .catch((caught: unknown) =>
+                            setError(message(caught)),
+                          )
+                      }
+                    >
+                      套用
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          {!embedded && (
+            <Card>
+              <h2>權限組合</h2>
+              <ul>
+                {bundles.map((bundle) => (
+                  <li
+                    key={bundle.id}
+                    style={{
+                      display: 'grid',
+                      gap: 'var(--space-2)',
+                      paddingBlock: 'var(--space-3)',
+                      borderBlockEnd: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <strong>{bundle.name}</strong>
+                    <span>{bundle.permission_codes.join('、')}</span>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 'var(--space-2)',
+                      }}
+                    >
+                      <Button
+                        onClick={() => {
+                          setEditingBundle(bundle.id)
+                          setBundleName(bundle.name)
+                          setBundleCodes(bundle.permission_codes)
+                        }}
+                      >
+                        編輯
+                      </Button>
+                      <Button
+                        onClick={() =>
+                          selectedUser &&
+                          applyPermissionBundle(selectedUser, bundle.id)
+                            .then(async () => {
+                              const access =
+                                await getUserModulePermissions(selectedUser)
+                              setUserAccess(access.permission_codes)
+                              setNotice('權限組合已完整套用。')
+                            })
+                            .catch((caught: unknown) =>
+                              setError(message(caught)),
+                            )
+                        }
+                      >
+                        套用至所選帳號
+                      </Button>
+                      <Button
+                        onClick={(event) => {
+                          bundleDeleteTrigger.current = event.currentTarget
+                          setBundleToDelete(bundle)
+                        }}
+                      >
+                        刪除定義
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Field id="bundle-name" label="組合名稱">
+                <Input
+                  value={bundleName}
+                  onChange={(event) => setBundleName(event.target.value)}
                 />
-                可管理 {module} 模組授權
-              </label>
-            ))}
-        </Card>
-        <Card>
-          <h2>權限組合</h2>
-          <ul>
-            {bundles.map((bundle) => (
-              <li
-                key={bundle.id}
-                style={{
-                  display: 'grid',
-                  gap: 'var(--space-2)',
-                  paddingBlock: 'var(--space-3)',
-                  borderBlockEnd: '1px solid var(--color-border)',
-                }}
+              </Field>
+              <fieldset>
+                <legend>包含權限</legend>
+                {permissions.map((item) => (
+                  <label key={item.code}>
+                    <input
+                      checked={bundleCodes.includes(item.code)}
+                      type="checkbox"
+                      onChange={(event) =>
+                        setBundleCodes((current) =>
+                          event.target.checked
+                            ? [...current, item.code]
+                            : current.filter((code) => code !== item.code),
+                        )
+                      }
+                    />
+                    {item.description}
+                  </label>
+                ))}
+              </fieldset>
+              <Button
+                disabled={busy || !bundleName.trim()}
+                onClick={() => void saveBundle()}
               >
-                <strong>{bundle.name}</strong>
-                <span>{bundle.permission_codes.join('、')}</span>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 'var(--space-2)',
-                  }}
-                >
-                  <Button
-                    onClick={() => {
-                      setEditingBundle(bundle.id)
-                      setBundleName(bundle.name)
-                      setBundleCodes(bundle.permission_codes)
+                {editingBundle ? '儲存組合' : '新增組合'}
+              </Button>
+            </Card>
+          )}
+          {!embedded && (
+            <Card>
+              <h2>快速診斷</h2>
+              <p>
+                建立專案需 project.create；管理成員需 project.use 與
+                project_member.manage；範本管理需 template.manage。
+              </p>
+              <p>收回模組權限前會先重新讀取影響範圍；取消不送出收回請求。</p>
+            </Card>
+          )}
+          {!embedded && currentUser.is_admin && (
+            <Card>
+              <h2>角色治理</h2>
+              <p>
+                可指派角色會出現在專案成員選單；外部可用角色僅供外部協作者。
+              </p>
+              <ul aria-label="角色治理清單">
+                {roles.map((role) => (
+                  <li
+                    key={role.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                      alignItems: 'center',
+                      gap: 'var(--space-2)',
+                      paddingBlock: 'var(--space-2)',
+                      borderBlockEnd: '1px solid var(--color-border)',
                     }}
                   >
-                    編輯
-                  </Button>
-                  <Button
-                    onClick={() =>
-                      selectedUser &&
-                      applyPermissionBundle(selectedUser, bundle.id)
-                        .then(async () => {
-                          const access =
-                            await getUserModulePermissions(selectedUser)
-                          setUserAccess(access.permission_codes)
-                          setNotice('權限組合已完整套用。')
-                        })
-                        .catch((caught: unknown) => setError(message(caught)))
-                    }
-                  >
-                    套用至所選人員
-                  </Button>
-                  <Button
-                    onClick={(event) => {
-                      bundleDeleteTrigger.current = event.currentTarget
-                      setBundleToDelete(bundle)
-                    }}
-                  >
-                    刪除定義
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Field id="bundle-name" label="組合名稱">
-            <Input
-              value={bundleName}
-              onChange={(event) => setBundleName(event.target.value)}
-            />
-          </Field>
-          <fieldset>
-            <legend>包含權限</legend>
-            {permissions.map((item) => (
-              <label key={item.code}>
-                <input
-                  checked={bundleCodes.includes(item.code)}
-                  type="checkbox"
-                  onChange={(event) =>
-                    setBundleCodes((current) =>
-                      event.target.checked
-                        ? [...current, item.code]
-                        : current.filter((code) => code !== item.code),
+                    <strong>{role.name}</strong>
+                    <label>
+                      <input
+                        checked={role.is_assignable ?? true}
+                        type="checkbox"
+                        onChange={(event) =>
+                          updateRole(role.id, {
+                            is_assignable: event.target.checked,
+                          })
+                            .then(() => listRoles().then(setRoles))
+                            .catch((caught: unknown) =>
+                              setError(message(caught)),
+                            )
+                        }
+                      />
+                      可指派
+                    </label>
+                    <label>
+                      <input
+                        checked={role.is_external_allowed ?? false}
+                        type="checkbox"
+                        onChange={(event) =>
+                          updateRole(role.id, {
+                            is_external_allowed: event.target.checked,
+                          })
+                            .then(() => listRoles().then(setRoles))
+                            .catch((caught: unknown) =>
+                              setError(message(caught)),
+                            )
+                        }
+                      />
+                      外部可用
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <label>
+                專案建立者角色
+                <select
+                  value={creatorRoleId}
+                  onFocus={() =>
+                    getCreatorRole().then((item) =>
+                      setCreatorRoleId(item.role_id),
                     )
                   }
-                />
-                {item.description}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setCreatorRole(value)
+                      .then((item) => setCreatorRoleId(item.role_id))
+                      .catch((caught: unknown) => setError(message(caught)))
+                  }}
+                >
+                  <option value="">選擇角色</option>
+                  {roles
+                    .filter(
+                      (role) =>
+                        role.is_assignable && !role.is_external_allowed,
+                    )
+                    .map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                </select>
               </label>
-            ))}
-          </fieldset>
-          <Button
-            disabled={busy || !bundleName.trim()}
-            onClick={() => void saveBundle()}
-          >
-            {editingBundle ? '儲存組合' : '新增組合'}
-          </Button>
-        </Card>
-        <Card>
-          <h2>快速診斷</h2>
-          <p>
-            建立專案需 project.create；管理成員需 project.use 與
-            project_member.manage；範本管理需 template.manage。
-          </p>
-          <p>收回模組權限前會先重新讀取影響範圍；取消不送出收回請求。</p>
-        </Card>
-        <Card>
-          <h2>角色治理</h2>
-          <p>可指派角色會出現在專案成員選單；外部可用角色僅供外部協作者。</p>
-          <ul aria-label="角色治理清單">
-            {roles.map((role) => (
-              <li
-                key={role.id}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-                  alignItems: 'center',
-                  gap: 'var(--space-2)',
-                  paddingBlock: 'var(--space-2)',
-                  borderBlockEnd: '1px solid var(--color-border)',
-                }}
-              >
-                <strong>{role.name}</strong>
-                <label>
-                  <input
-                    checked={role.is_assignable ?? true}
-                    type="checkbox"
-                    onChange={(event) =>
-                      updateRole(role.id, {
-                        is_assignable: event.target.checked,
-                      })
-                        .then(() => listRoles().then(setRoles))
-                        .catch((caught: unknown) => setError(message(caught)))
-                    }
-                  />
-                  可指派
-                </label>
-                <label>
-                  <input
-                    checked={role.is_external_allowed ?? false}
-                    type="checkbox"
-                    onChange={(event) =>
-                      updateRole(role.id, {
-                        is_external_allowed: event.target.checked,
-                      })
-                        .then(() => listRoles().then(setRoles))
-                        .catch((caught: unknown) => setError(message(caught)))
-                    }
-                  />
-                  外部可用
-                </label>
-              </li>
-            ))}
-          </ul>
-          <label>
-            專案建立者角色
-            <select
-              value={creatorRoleId}
-              onFocus={() =>
-                getCreatorRole().then((item) => setCreatorRoleId(item.role_id))
-              }
-              onChange={(event) => {
-                const value = event.target.value
-                setCreatorRole(value)
-                  .then((item) => setCreatorRoleId(item.role_id))
-                  .catch((caught: unknown) => setError(message(caught)))
-              }}
-            >
-              <option value="">選擇角色</option>
-              {roles
-                .filter(
-                  (role) => role.is_assignable && !role.is_external_allowed,
-                )
-                .map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-        </Card>
-      </details>
+            </Card>
+          )}
+        </details>
+      )}
       {revoke && (
         <ConfirmationPanel
           tone="danger"
@@ -1418,7 +1645,7 @@ export default function ModulePermissionsPage() {
           tone="danger"
           title="刪除權限組合定義"
           subject={bundleToDelete.name}
-          impact="既有使用者已取得的權限會保留；之後無法再套用這個組合。"
+          impact="既有帳號已取得的權限會保留；之後無法再套用這個組合。"
           cancelLabel="取消"
           confirmLabel="刪除定義"
           onCancel={() => setBundleToDelete(null)}

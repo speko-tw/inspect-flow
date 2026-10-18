@@ -62,7 +62,7 @@ function RoleNavigation() {
   const navigate = useNavigate()
   return (
     <>
-      <Link to="/admin/users">離開角色管理</Link>
+      <Link to="/admin/people">返回帳號</Link>
       <button onClick={() => navigate(-1)} type="button">
         上一頁
       </button>
@@ -100,6 +100,7 @@ function renderRoles(
 interface FakeOptions {
   roles?: Role[]
   permissions?: PermissionCode[]
+  creatorRoleId?: string
   // 針對指定的 method + 路徑尾端回傳錯誤碼，例如 'POST /roles'。
   failures?: Record<string, { status: number; code: string }>
   pageSize?: number
@@ -108,6 +109,7 @@ interface FakeOptions {
 function rolesFetch({
   roles = [],
   permissions = [MANAGE],
+  creatorRoleId = '',
   failures = {},
   pageSize = 100,
 }: FakeOptions = {}) {
@@ -118,6 +120,11 @@ function rolesFetch({
       const url = new URL(String(input), 'http://localhost')
       const method = init?.method ?? 'GET'
       const path = url.pathname.replace('/api/v1', '')
+      const body = init?.body
+        ? (JSON.parse(String(init.body)) as Partial<Role> & {
+            role_id?: string
+          })
+        : {}
       const failure = failures[`${method} ${path}`]
       if (failure) {
         return Response.json(
@@ -128,6 +135,14 @@ function rolesFetch({
       if (method === 'GET' && path === '/roles/permission-codes') {
         return Response.json({ items: permissions })
       }
+      if (path === '/roles/creator-role') {
+        if (method === 'GET') {
+          return Response.json({ role_id: creatorRoleId })
+        }
+        if (method === 'PATCH') {
+          return Response.json({ role_id: body.role_id })
+        }
+      }
       if (method === 'GET' && path === '/roles') {
         const start = Number(url.searchParams.get('cursor') ?? 0)
         const items = rows.slice(start, start + pageSize)
@@ -137,9 +152,6 @@ function rolesFetch({
           next_cursor: end < rows.length ? String(end) : null,
         })
       }
-      const body = init?.body
-        ? (JSON.parse(String(init.body)) as Partial<Role>)
-        : {}
       if (method === 'POST' && path === '/roles') {
         const created = makeRole(
           `new-${nextId++}`,
@@ -198,13 +210,13 @@ describe('角色表單未儲存導覽防護', () => {
     rolesFetch()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderRoles('/admin/roles', {
-      entries: ['/admin/users', '/admin/roles', '/admin/companies'],
+      entries: ['/admin/people', '/admin/roles', '/admin/companies'],
       index: 1,
     })
-    await screen.findByRole('heading', { name: '角色管理' })
+    await screen.findByRole('heading', { name: '專案角色' })
     fillName()
 
-    fireEvent.click(screen.getByRole('link', { name: '離開角色管理' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回帳號' }))
     expect(
       await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
     ).toBeInTheDocument()
@@ -214,7 +226,7 @@ describe('角色表單未儲存導覽防護', () => {
     fireEvent.click(screen.getByRole('button', { name: '上一頁' }))
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
     expect(
-      screen.getByRole('heading', { name: '角色管理' }),
+      screen.getByRole('heading', { name: '專案角色' }),
     ).toBeInTheDocument()
 
     confirm.mockReturnValue(true)
@@ -243,7 +255,7 @@ describe('角色表單未儲存導覽防護', () => {
   it('實際輸入後攔截 beforeunload', async () => {
     rolesFetch()
     renderRoles('/admin/roles')
-    await screen.findByRole('heading', { name: '角色管理' })
+    await screen.findByRole('heading', { name: '專案角色' })
     fillName()
     const event = new Event('beforeunload', { cancelable: true })
 
@@ -254,27 +266,94 @@ describe('角色表單未儲存導覽防護', () => {
 })
 
 describe('admin role management page', () => {
-  it('opens from the admin navigation and lists roles', async () => {
+  it('管理→角色→現場工程師持有人數只需兩次點擊', async () => {
     rolesFetch({
       roles: [
-        makeRole('r1', 'Viewer'),
+        makeRole('r1', '現場工程師', [], { user_count: 3, project_count: 2 }),
         makeRole('r2', 'Coordinator', [MANAGE.code]),
       ],
     })
-    renderRoles('/admin/users')
+    renderRoles('/admin/people')
 
+    fireEvent.click(screen.getByRole('button', { name: /管理/ }))
     fireEvent.click(screen.getByRole('link', { name: '角色' }))
 
     expect(
-      await screen.findByRole('heading', { name: '角色管理' }),
+      await screen.findByRole('heading', { name: '專案角色' }),
     ).toBeInTheDocument()
     const coordinator = await screen.findByRole('row', {
       name: /Coordinator/,
     })
     expect(coordinator).toHaveTextContent('管理專案成員與其角色')
-    expect(screen.getByRole('row', { name: /Viewer/ })).toHaveTextContent(
-      '（無）',
+    const fieldRole = screen.getByRole('row', { name: /現場工程師/ })
+    expect(fieldRole).toHaveTextContent('3 個帳號持有此角色')
+    expect(within(fieldRole).queryByRole('link')).toBeNull()
+    expect(screen.queryByText(/權限組合/)).toBeNull()
+  })
+
+  it('編輯可指派與外部協作帳號可用旗標', async () => {
+    const fetchMock = rolesFetch({
+      roles: [
+        {
+          ...makeRole('r1', '現場工程師'),
+          is_assignable: true,
+          is_external_allowed: false,
+        },
+      ],
+    })
+    renderRoles()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改角色 現場工程師' }),
     )
+    const assignable = screen.getByRole('checkbox', {
+      name: '非管理者可指派',
+    })
+    const external = screen.getByRole('checkbox', {
+      name: '外部協作帳號可用',
+    })
+    expect(assignable).toBeChecked()
+    expect(external).not.toBeChecked()
+    fireEvent.click(assignable)
+    fireEvent.click(external)
+    fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認修改角色' }),
+    )
+
+    await waitFor(() => expect(calls(fetchMock, 'PATCH')).toHaveLength(1))
+    expect(JSON.parse(String(calls(fetchMock, 'PATCH')[0][1]?.body))).toEqual({
+      is_assignable: false,
+      is_external_allowed: true,
+    })
+  })
+
+  it('顯示並更新新專案預設角色', async () => {
+    const fetchMock = rolesFetch({
+      roles: [makeRole('r1', '專案工程師'), makeRole('r2', '現場工程師')],
+      creatorRoleId: 'r1',
+    })
+    renderRoles()
+
+    const select = await screen.findByRole('combobox', {
+      name: '新專案預設角色',
+    })
+    expect(select).toHaveValue('r1')
+    fireEvent.change(select, { target: { value: 'r2' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存預設角色' }))
+
+    await waitFor(() =>
+      expect(
+        calls(fetchMock, 'PATCH').some(([url]) =>
+          url.endsWith('/roles/creator-role'),
+        ),
+      ).toBe(true),
+    )
+    const [[url, init]] = calls(fetchMock, 'PATCH').filter(([target]) =>
+      target.endsWith('/roles/creator-role'),
+    )
+    expect(url).toBe('/api/v1/roles/creator-role')
+    expect(JSON.parse(String(init?.body))).toEqual({ role_id: 'r2' })
   })
 
   it('keeps the role name column from wrapping (#526)', async () => {
@@ -363,7 +442,7 @@ describe('admin role management page', () => {
       name: '修改「Viewer」',
     })
     expect(confirmation).toHaveTextContent(
-      '此變更會影響 2 個專案中的 5 位使用者',
+      '此變更會影響 2 個專案中的 5 個帳號',
     )
     // 影響範圍向後端重新取得，而且確認前不送出修改。
     expect(calls(fetchMock, 'GET').map(([url]) => url)).toContain(
@@ -404,7 +483,7 @@ describe('admin role management page', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
 
     expect(
-      await screen.findByText(/此變更會影響 0 個專案中的 0 位使用者/),
+      await screen.findByText(/此變更會影響 0 個專案中的 0 個帳號/),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '確認修改角色' }))
     await waitFor(() => expect(calls(fetchMock, 'PATCH')).toHaveLength(1))
@@ -445,9 +524,7 @@ describe('admin role management page', () => {
     const confirmation = await screen.findByRole('region', {
       name: '刪除「Viewer」',
     })
-    expect(confirmation).toHaveTextContent(
-      '刪除會影響 2 個專案中的 1 位使用者',
-    )
+    expect(confirmation).toHaveTextContent('刪除會影響 2 個專案中的 1 個帳號')
     expect(confirmation).toHaveTextContent('角色指派都會一併移除')
     // 確認區沿用共用的確認框樣式，[取消][確認] 兩顆按鈕之間有間距（#500）。
     expect(confirmation).toHaveClass('confirm-box-danger')
@@ -486,7 +563,7 @@ describe('admin role management page', () => {
       await screen.findByRole('button', { name: '刪除角色 Viewer' }),
     )
     expect(
-      await screen.findByText(/刪除會影響 0 個專案中的 0 位使用者/),
+      await screen.findByText(/刪除會影響 0 個專案中的 0 個帳號/),
     ).toBeInTheDocument()
   })
 
@@ -658,7 +735,7 @@ describe.each([['角色管理新增／編輯', '新增角色']])(
     it('真實頁面 API pending 時只送一次並停用按鈕', async () => {
       const fetchMock = rolesFetch()
       renderRoles()
-      await screen.findByRole('heading', { name: '角色管理' })
+      await screen.findByRole('heading', { name: '專案角色' })
       fillForm()
       const button = screen.getByRole('button', { name: submitLabel })
       const form = button.closest('form')!
@@ -678,7 +755,7 @@ describe.each([['角色管理新增／編輯', '新增角色']])(
     it('IME Enter 不送出真實 API', async () => {
       const fetchMock = rolesFetch()
       renderRoles()
-      await screen.findByRole('heading', { name: '角色管理' })
+      await screen.findByRole('heading', { name: '專案角色' })
       fillForm()
 
       expectImeEnterIgnored(screen.getByLabelText('角色名稱'))
@@ -691,7 +768,7 @@ describe.each([['角色管理新增／編輯', '新增角色']])(
       }
       const fetchMock = rolesFetch({ failures })
       renderRoles()
-      await screen.findByRole('heading', { name: '角色管理' })
+      await screen.findByRole('heading', { name: '專案角色' })
       fillForm()
       const button = screen.getByRole('button', { name: submitLabel })
       const form = button.closest('form')!

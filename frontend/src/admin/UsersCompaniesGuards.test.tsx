@@ -171,11 +171,18 @@ function stubBackend(
   return { calls, count }
 }
 
-function renderUsers() {
+function renderUsers(
+  pageProps: {
+    detailUserId?: string | null
+    initialQuery?: string
+    onQueryApplied?: (query: string) => void
+    onSelectUser?: (id: string) => void
+  } = {},
+) {
   render(
     <DataMemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
-        <UsersPage onTemporaryPassword={vi.fn()} />
+        <UsersPage onTemporaryPassword={vi.fn()} {...pageProps} />
       </CurrentUserProvider>
     </DataMemoryRouter>,
   )
@@ -183,6 +190,36 @@ function renderUsers() {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('UsersPage 帳號詳情', () => {
+  it('shows basic account data without the list or create form', async () => {
+    stubBackend()
+    renderUsers({ detailUserId: 'user-1' })
+
+    expect(
+      await screen.findByRole('heading', { name: '基本資料' }),
+    ).toBeVisible()
+    expect(screen.getByText('鄧安娜（anna.deng）')).toBeVisible()
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
+  })
+
+  it('keeps system and non-local account edit guards in detail', async () => {
+    const protectedAccount = {
+      ...regularUser,
+      is_system: true,
+      auth_source: 'external',
+    }
+    stubBackend({ users: [protectedAccount] })
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '基本資料' })
+
+    expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '公司連結' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
+  })
 })
 
 const userFormCases = [
@@ -338,7 +375,7 @@ describe('使用者管理搜尋共用表單', () => {
     })
     renderUsers()
     await screen.findByRole('row', { name: /anna\.deng/ })
-    const input = screen.getByLabelText('搜尋使用者')
+    const input = screen.getByLabelText('搜尋帳號')
     const button = screen.getByRole('button', { name: '搜尋' })
     const form = button.closest('form')!
 

@@ -1,17 +1,19 @@
 // 登入、變更密碼後沒有指定回到哪裡時的預設落點，只依後端 `/auth/me`
 // 的存取摘要（#480）決定，前端不自行猜測：
 //
-// - 系統管理者 → `/admin`
+// - 系統管理者或全專案進度主管 → `/admin/dashboard`
+// - 委派者 → `/admin/people`
 // - 有內業權限（含兩種權限都有）→ `/admin/projects`（我的專案清單）
 // - 只有現場權限（含現場加範本）→ `/field`
 // - 只有範本管理權限 → `/admin/templates`
-// - 都沒有 → `/field`，由該頁顯示沒有權限的說明
+// - 都沒有 → `/change-password`，由設定頁顯示無功能權限的說明
 //
 // 只決定 UI 導向；各頁能不能看由後端權限與 `RequireAuth` 把關。
 
 import type { CurrentUser } from './api'
 import { isSafeRedirectPath } from './safeRedirect'
 import type { PreviousSession } from './sessionMemory'
+import { PAGE_TITLES } from '../layout/navigationLabels'
 
 type AccessSummary = Pick<
   CurrentUser,
@@ -21,7 +23,9 @@ type AccessSummary = Pick<
   | 'has_template_access'
   | 'can_browse_templates'
   | 'can_manage_template_library'
->
+  | 'delegated_modules'
+> &
+  Partial<Pick<CurrentUser, 'module_permissions' | 'has_project_access'>>
 
 /** 依 TPL-R09 判斷是否具範本庫管理權，支援舊摘要欄位過渡。 */
 export function canManageTemplateLibrary(user: AccessSummary): boolean {
@@ -34,18 +38,29 @@ export function canBrowseTemplates(user: AccessSummary): boolean {
 }
 
 export function landingPath(user: AccessSummary): string {
-  if (user.is_admin) return '/admin'
+  if (
+    user.is_admin ||
+    user.module_permissions?.includes('all_project_progress.read')
+  ) {
+    return '/admin/dashboard'
+  }
+  if (user.delegated_modules.length > 0) return '/admin/people'
   if (user.has_office_access) return '/admin/projects'
+  if (user.has_project_access) return '/admin/projects'
   if (user.has_field_access) return '/field'
-  return canBrowseTemplates(user) ? '/admin/templates' : '/field'
+  return canBrowseTemplates(user) ? '/admin/templates' : '/change-password'
 }
 
 /** 落點的白話名稱，用在「返回…」連結上。 */
 export function landingLabel(path: string): string {
-  if (path === '/admin') return '管理頁'
-  if (path === '/admin/projects') return '我的專案'
-  if (path === '/admin/templates') return '範本管理'
-  return '今日任務'
+  if (path === '/admin' || path === '/admin/people') {
+    return PAGE_TITLES.account
+  }
+  if (path === '/admin/projects') return PAGE_TITLES.projects
+  if (path === '/admin/dashboard') return PAGE_TITLES.overview
+  if (path === '/admin/templates') return PAGE_TITLES.templates
+  if (path === '/change-password') return PAGE_TITLES.personalSettings
+  return PAGE_TITLES.tasks
 }
 
 function underPrefix(path: string, prefix: string): boolean {
@@ -62,6 +77,9 @@ export function canVisit(user: AccessSummary, path: string): boolean {
   if (underPrefix(pathname, '/change-password')) return true
   if (underPrefix(pathname, '/field')) {
     return user.is_admin || user.has_field_access
+  }
+  if (underPrefix(pathname, '/admin/people')) {
+    return user.is_admin || user.delegated_modules.length > 0
   }
   if (!underPrefix(pathname, '/admin')) return true
   if (user.is_admin) return true

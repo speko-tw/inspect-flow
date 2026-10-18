@@ -1288,6 +1288,7 @@ output {
 
 /* 帳號區：名字與登出鈕是一組，窄螢幕換行時整組一起移動。 */
 .app-header-account {
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   align-items: center;
@@ -1310,6 +1311,86 @@ output {
   min-height: 2rem;
   padding: var(--space-1) var(--space-3);
   font-size: 0.875rem;
+}
+
+.app-header-personal-trigger {
+  border: 0;
+  background: transparent;
+  text-align: right;
+}
+
+.app-header-personal-trigger:hover {
+  color: var(--text);
+}
+
+.app-header-personal-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  display: grid;
+  min-width: 12rem;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.app-header-personal-menu a,
+.app-header-personal-menu button {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+}
+
+.app-header-personal-menu a:hover,
+.app-header-personal-menu button:hover {
+  background: var(--surface-alt);
+}
+
+.app-header-management {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+}
+.app-header-management-trigger {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.app-header-management-trigger[aria-current='page'] {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+.app-header-management-menu {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  min-width: 9rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.app-header-management-menu a {
+  display: block;
+  padding: 0.65rem 0.8rem;
+  color: var(--text);
+  text-decoration: none;
+}
+.app-header-management-menu a:hover,
+.app-header-management-menu a[aria-current='page'] {
+  background: var(--surface-alt);
+  color: var(--primary);
 }
 
 /* 導覽分頁永遠是單列：放不下時在這一列內橫向滑動，頁面本身不會出現
