@@ -2033,6 +2033,14 @@ describe('admin project members', () => {
     expect(within(bobCard).getByText(/尚未指派角色/)).toBeVisible()
   })
 
+  it('labels an inactive project member', async () => {
+    projectFetch({ members: [{ ...memberAnna, is_active: false }] })
+    renderAt('/admin/projects/project-1/members')
+
+    const card = await screen.findByRole('listitem')
+    expect(within(card).getByText('（已停用）')).toBeVisible()
+  })
+
   it('explains each role in plain language without showing codes', async () => {
     projectFetch()
     renderAt('/admin/projects/project-1/members')
@@ -2105,6 +2113,61 @@ describe('admin project members', () => {
     expect(await screen.findByText(/尚未開通專案模組/)).toBeVisible()
     expect(screen.getByLabelText('查核員')).toBeVisible()
     expect(screen.queryByLabelText('內部角色')).toBeNull()
+  })
+
+  it('shows the not-assignable error by role choices', async () => {
+    const fetchMock = projectFetch({
+      failWith: {
+        match: /\/members$/,
+        method: 'POST',
+        code: 'project.role_not_assignable',
+        status: 422,
+      },
+    })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('目前沒有成員。')
+    fireEvent.change(screen.getByLabelText(/使用者/), {
+      target: { value: bob.id },
+    })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    const error = await screen.findByText(
+      '你不能指派這個角色，請選擇可指派的角色。',
+    )
+    expect(addForm().contains(error)).toBe(true)
+    expect(screen.getByLabelText(/使用者/)).toHaveValue(bob.id)
+    expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(1)
+  })
+
+  it('shows the external-role error by role choices', async () => {
+    const fetchMock = projectFetch({
+      candidates: [externalCandidate],
+      failWith: {
+        match: /\/members$/,
+        method: 'POST',
+        code: 'project.external_role_not_allowed',
+        status: 422,
+      },
+    })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('目前沒有成員。')
+    fireEvent.change(screen.getByLabelText(/使用者/), {
+      target: { value: externalCandidate.id },
+    })
+    fireEvent.click(screen.getByLabelText('查核員'))
+    fireEvent.click(
+      within(addForm()).getByRole('button', { name: '加入成員' }),
+    )
+
+    const error = await screen.findByText(
+      '外部協作人員只能指派外部可用的角色。',
+    )
+    expect(addForm().contains(error)).toBe(true)
+    expect(screen.getByLabelText(/使用者/)).toHaveValue(externalCandidate.id)
+    expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(1)
   })
 
   it('blocks a member without roles, shows the error by the field, and keeps the chosen person', async () => {
@@ -2627,6 +2690,8 @@ describe('project members for an office user (not admin, #481)', () => {
 
     expect(await screen.findByText('沒有可加入的使用者。')).toBeVisible()
     expect(screen.getByText(/需要新增帳號請洽系統管理者/)).toBeVisible()
+    expect(screen.getByText(/可加入尚未參與這個專案的人員/)).toBeVisible()
+    expect(screen.queryByText(/只能加入和你同公司/)).toBeNull()
     // 內業沒有系統管理頁，不放連結。
     expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
   })

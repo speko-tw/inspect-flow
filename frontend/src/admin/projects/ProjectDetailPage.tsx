@@ -464,8 +464,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
               </p>
             ) : (
               <p className="field-hint">
-                只能加入和你同公司、還沒加入這個專案的使用者；
-                需要新增帳號請洽系統管理者。
+                可加入尚未參與這個專案的人員； 需要新增帳號請洽系統管理者。
               </p>
             )}
           </>
