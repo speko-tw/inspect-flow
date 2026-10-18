@@ -91,7 +91,11 @@ function renderAdmin(
   access: Partial<
     Pick<
       CurrentUser,
-      'has_office_access' | 'has_field_access' | 'has_template_access'
+      | 'has_office_access'
+      | 'has_field_access'
+      | 'has_template_access'
+      | 'can_browse_templates'
+      | 'can_manage_template_library'
     >
   > = {},
   strictMode = false,
@@ -1664,7 +1668,7 @@ describe('admin user and company pages', () => {
       fetchMock.mock.calls.some(([input]) =>
         String(input).endsWith('/workflow-summary'),
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('opens template bypass for a non-member manager', async () => {
@@ -1733,6 +1737,7 @@ describe('admin user and company pages', () => {
         has_office_access: true,
         has_field_access: false,
         has_template_access: false,
+        can_browse_templates: true,
       },
     )
 

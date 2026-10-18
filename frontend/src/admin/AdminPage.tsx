@@ -11,7 +11,12 @@ import {
 } from 'react-router'
 
 import type { CurrentUser } from '../auth/api'
-import { landingLabel, landingPath } from '../auth/landing'
+import {
+  canBrowseTemplates,
+  canManageTemplateLibrary,
+  landingLabel,
+  landingPath,
+} from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import RequireValidRouteIds from '../RequireValidRouteIds'
@@ -78,13 +83,15 @@ function ProjectTemplatesRedirect() {
 function ProjectTemplatesRoute() {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
+  const canManageTemplates = canManageTemplateLibrary(user)
+  const canBrowseTemplateLibrary = canBrowseTemplates(user)
   const [membership, setMembership] = useState<{
     projectId: string
     isMember: boolean
   } | null>(null)
 
   useEffect(() => {
-    if (user.is_admin || !user.has_template_access) return
+    if (user.is_admin) return
     let active = true
     listMyProjects()
       .then((projects) => {
@@ -101,16 +108,23 @@ function ProjectTemplatesRoute() {
     return () => {
       active = false
     }
-  }, [projectId, user.has_template_access, user.is_admin])
+  }, [canManageTemplates, projectId, user.is_admin])
 
   const isProjectMember =
     membership?.projectId === projectId ? membership.isMember : null
 
   // ADM-R17、TPL-R23：非成員範本管理員直接瀏覽獨立頁，
   // 不載入 workflow-summary；成員仍由 ProjectSectionPage 依 ADM-R25 分流。
-  if (!user.is_admin && user.has_template_access && isProjectMember !== true) {
+  if (!user.is_admin && !canBrowseTemplateLibrary) {
+    return <Navigate replace to={landingPath(user)} />
+  }
+
+  if (!user.is_admin && isProjectMember !== true) {
     if (isProjectMember === null) {
       return <p role="status">正在確認專案權限…</p>
+    }
+    if (!canManageTemplates) {
+      return <Navigate replace to={landingPath(user)} />
     }
     return (
       <AdminRouteSuspense>
@@ -121,9 +135,12 @@ function ProjectTemplatesRoute() {
 
   return (
     <ProjectSectionPage section="inspection-items">
-      {(viewerPermissions) => (
+      {(viewerPermissions, canApplyTemplates) => (
         <AdminRouteSuspense>
-          <ProjectTemplatesPage viewerPermissions={viewerPermissions} />
+          <ProjectTemplatesPage
+            canApplyTemplates={canApplyTemplates}
+            viewerPermissions={viewerPermissions}
+          />
         </AdminRouteSuspense>
       )}
     </ProjectSectionPage>
@@ -420,7 +437,7 @@ function MemberAdminShell({
     /^\/admin\/(?:users|companies|roles|audit-logs)(?:\/|$)/.test(
       location.pathname,
     ) ||
-    (!user.has_template_access &&
+    (!canManageTemplateLibrary(user) &&
       /^\/admin\/templates(?:\/|$)/.test(location.pathname))
   return (
     <div
@@ -471,7 +488,7 @@ function MemberAdminShell({
             }
           />
           {PROJECT_ROUTES}
-          {user.has_template_access && (
+          {canManageTemplateLibrary(user) && (
             <Route
               path="templates"
               element={

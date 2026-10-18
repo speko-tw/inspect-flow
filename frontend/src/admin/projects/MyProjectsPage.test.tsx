@@ -17,6 +17,7 @@ const PROJECT: MyProject = {
   planned_completion_date: null,
   role_names: ['現場工程師'],
   has_office_access: true,
+  can_apply_templates: true,
 }
 
 beforeEach(() => vi.mocked(listMyProjects).mockReset())
@@ -33,5 +34,23 @@ describe('我的專案頁', () => {
     expect(await screen.findByText('你參與的專案會列在這裡。')).toBeVisible()
     expect(screen.queryByText(/有內業權限的專案/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '示範工程甲' })).toBeVisible()
+    expect(screen.getByRole('link', { name: '套用範本' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1/inspection-items/templates',
+    )
+  })
+
+  it('沒有套用能力時不顯示範本入口', async () => {
+    vi.mocked(listMyProjects).mockResolvedValue([
+      { ...PROJECT, can_apply_templates: false },
+    ])
+    render(
+      <MemoryRouter>
+        <MyProjectsPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: '示範工程甲' })
+    expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })
 })
