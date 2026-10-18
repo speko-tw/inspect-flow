@@ -65,9 +65,11 @@ export function PeoplePage({
           </Link>
         </p>
       ) : (
-        <button onClick={() => setWizardRequest((value) => value + 1)}>
-          新增帳號
-        </button>
+        user.is_admin && (
+          <button onClick={() => setWizardRequest((value) => value + 1)}>
+            新增帳號
+          </button>
+        )
       )}
       {user.is_admin ? (
         <UsersPage

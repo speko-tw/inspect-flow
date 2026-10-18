@@ -71,6 +71,7 @@ describe('PeoplePage', () => {
       </DataMemoryRouter>,
     )
 
+    expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
     fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
 
     expect(await screen.findByText('模組授權')).toBeInTheDocument()

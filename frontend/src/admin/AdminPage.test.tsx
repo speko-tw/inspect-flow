@@ -2064,6 +2064,64 @@ describe('admin user and company pages', () => {
       ).toBeNull()
     })
 
+    it('opens delegated account list and detail without admin actions', async () => {
+      const fetchMock = managementFetch()
+      const original = fetchMock.getMockImplementation()!
+      fetchMock.mockImplementation(async (input, init) => {
+        const path = new URL(String(input), 'http://testserver').pathname
+        if (
+          path === '/api/v1/module-delegate/users' &&
+          (init?.method ?? 'GET') === 'GET'
+        ) {
+          return Response.json({
+            items: [
+              {
+                id: 'user-1',
+                username: 'anna.deng',
+                name_zh: '鄧安娜',
+                is_admin: false,
+              },
+            ],
+            next_cursor: null,
+          })
+        }
+        if (path === '/api/v1/users/user-1/module-permissions') {
+          return Response.json({ permission_codes: [], delegated_modules: [] })
+        }
+        return original(input, init)
+      })
+      renderAdmin('/admin/people', false, {
+        delegated_modules: ['template.manage'],
+      })
+
+      expect(
+        await screen.findByRole('heading', { name: '帳號', level: 1 }),
+      ).toBeVisible()
+      expect(
+        await screen.findByRole('button', { name: '鄧安娜' }),
+      ).toBeVisible()
+      expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
+      expect(screen.queryByRole('heading', { name: '基本資料' })).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: '鄧安娜' }))
+      expect(
+        await screen.findByRole('heading', { name: '模組授權' }),
+      ).toBeVisible()
+      expect(screen.getByTestId('pathname')).toHaveTextContent(
+        '/admin/people/user-1',
+      )
+      expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '修改資料' })).toBeNull()
+      expect(screen.queryByRole('heading', { name: '基本資料' })).toBeNull()
+      expect(
+        fetchMock.mock.calls.some(
+          ([url]) =>
+            new URL(String(url), 'http://testserver').pathname ===
+            '/api/v1/users',
+        ),
+      ).toBe(false)
+    })
+
     it('shows templates for a template.use-only user', () => {
       managementFetch()
       renderAdmin('/admin/projects', false, {

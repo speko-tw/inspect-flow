@@ -492,6 +492,12 @@ function MemberAdminShell({
               )
             }
           />
+          {canManageAccounts && (
+            <Route
+              path="people/:personId?"
+              element={<PeoplePage onTemporaryPassword={() => undefined} />}
+            />
+          )}
           <Route
             path="dashboard/*"
             element={
