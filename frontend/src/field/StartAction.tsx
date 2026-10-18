@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
+import { Button } from '../components/Button'
+import { ConfirmationPanel } from '../components/layout/LayoutPatterns'
 import {
   fetchFieldTaskDetail,
   FieldApiError,
   startFieldTask,
   type FieldTaskDetail,
 } from './api'
-import { ConfirmBox } from '../ui/ConfirmBox'
 import { useSubmitGuard } from '../ui/submitGuard'
 import { personLabel, startMessages } from './startMessages'
 
@@ -17,6 +18,7 @@ export type TaskListChange =
 
 type Failure = { message: string; retryable: boolean }
 
+/** 提供 Field 任務開始確認與狀態回饋，維持 FUI-R03 的操作限制。 */
 export default function StartAction({
   task,
   title,
@@ -200,39 +202,46 @@ export default function StartAction({
       {failed ? (
         <TaskListLink back={back} />
       ) : confirming ? (
-        <ConfirmBox
-          busy={submitting}
-          confirmLabel={submitting ? '開始中…' : '確認開始查核'}
-          headingLevel={3}
+        <ConfirmationPanel
+          tone="neutral"
+          confirming={submitting}
+          confirmLabel="確認開始查核"
+          cancelLabel="取消"
+          impact="開始後會改為進行中，並記錄你是實際開始者。"
+          subject={title}
           onCancel={() => {
             setConfirming(false)
             setFailure(null)
           }}
           onConfirm={confirmStart}
+          returnFocus={() => {
+            queueMicrotask(() =>
+              document.getElementById('field-start-task')?.focus(),
+            )
+          }}
           title={`確認開始「${title}」？`}
-        >
-          <p>開始後會改為進行中，並記錄你是實際開始者。</p>
-          {assignee && !assignee.is_me && (
-            <p>
-              這筆任務建議由{assignee.name_zh ?? '其他成員'}
-              執行。你仍可以開始，系統會記錄你是實際開始者。
-            </p>
-          )}
-        </ConfirmBox>
+        />
       ) : (
         <>
           <p>看完需求後開始查核。</p>
-          <button
-            type="button"
-            className="btn-primary"
+          <Button
+            id="field-start-task"
+            variant="primary"
+            className="field-primary-action"
             onClick={() => {
               setFailure(null)
               setConfirming(true)
             }}
           >
             開始查核
-          </button>
+          </Button>
         </>
+      )}
+      {confirming && assignee && !assignee.is_me && (
+        <p className="field-confirm-assignee-note">
+          這筆任務建議由{assignee.name_zh ?? '其他成員'}
+          執行。你仍可以開始，系統會記錄你是實際開始者。
+        </p>
       )}
     </>
   )
