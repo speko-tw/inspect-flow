@@ -27,20 +27,113 @@ def test_demo_accounts_cover_two_layer_access_identities():
     data = load_seed_data()
     accounts = {account["key"]: account for account in data["accounts"]}
 
-    assert data["company"] == "示範廠機電工程"
+    assert data["company"] == "示範公司"
     assert set(accounts) == {
         "office",
+        "manager",
         "field_a",
         "field_b",
         "consultant",
         "template_delegate",
+        "template_manager",
+        "no_access",
     }
-    assert "project.create" in accounts["office"]["permissions"]
-    assert "inspection_task.inspect" not in (accounts["office"]["permissions"])
-    assert accounts["consultant"]["external"] is True
-    assert "template.use" in accounts["consultant"]["permissions"]
-    assert accounts["template_delegate"]["delegated_modules"] == ["template"]
-    assert accounts["template_delegate"]["permissions"] == []
+    assert len(accounts) + 1 == 9
+    assert data["admin"] == {
+        "username": "admin",
+        "password": "DemoAdmin2026",
+    }
+
+    expected = {
+        "office": (
+            "demo-office",
+            {"project.create", "inspection.use", "template.use"},
+            [],
+            False,
+        ),
+        "manager": (
+            "demo-manager",
+            {"all_project_progress.read"},
+            [],
+            False,
+        ),
+        "field_a": (
+            "demo-field-a",
+            {"project.use", "inspection.use"},
+            [],
+            False,
+        ),
+        "field_b": (
+            "demo-field-b",
+            {"project.use", "inspection.use"},
+            [],
+            False,
+        ),
+        "consultant": (
+            "demo-consultant",
+            {"project.use", "inspection.use", "template.use"},
+            [],
+            True,
+        ),
+        "template_delegate": (
+            "demo-template-delegate",
+            set(),
+            ["template"],
+            False,
+        ),
+        "template_manager": (
+            "demo-template-manager",
+            {"template.manage"},
+            [],
+            False,
+        ),
+        "no_access": (
+            "demo-no-access",
+            set(),
+            [],
+            False,
+        ),
+    }
+    for key, (username, permissions, delegated, external) in (
+        expected.items()
+    ):
+        account = accounts[key]
+        assert account["username"] == username
+        assert set(account["permissions"]) == permissions
+        assert account["delegated_modules"] == delegated
+        assert account["external"] is external
+
+    assert "template.manage" not in accounts["template_delegate"][
+        "permissions"
+    ]
+    assert accounts["no_access"]["permissions"] == []
+    assert accounts["no_access"]["delegated_modules"] == []
+
+    projects = data["projects"]
+    assert {project["client"] for project in projects} == {
+        "示範公司",
+        "示範廠機電工程",
+    }
+    role_names = data["roles"]
+    project_roles = {key: [] for key in accounts}
+    project_roles["admin"] = []
+    for project in projects:
+        # POST /projects automatically gives the creator the office role.
+        project_roles["office"].append(role_names["office"])
+        for member, role in project["members"]:
+            project_roles[member].append(role_names[role])
+
+    assert project_roles == {
+        "admin": [],
+        "office": ["專案工程師", "專案工程師"],
+        "manager": [],
+        "field_a": ["現場工程師", "現場工程師"],
+        "field_b": ["現場工程師", "現場工程師"],
+        "consultant": ["專案查閱人員"],
+        "template_delegate": [],
+        "template_manager": [],
+        "no_access": [],
+    }
 
 
 def test_demo_projects_cover_statuses_and_real_dispatch_walkthrough():
