@@ -1,0 +1,1141 @@
+<title>權限管理原型</title>
+<style>
+:root{
+ color-scheme:light;
+ --navy:#002060;--yellow:#ffc200;--canvas:#f3f6fa;--paper:#ffffff;
+ --ink:#101828;--muted:#536174;--line:#d4dce7;--line-control:#7d8a9a;
+ --raised:#ffffff;--soft:#eaf0f7;--link:#174f9b;--focus:#1670a6;
+ --success:#176b3a;--success-bg:#e6f5eb;--warning:#765000;
+ --warning-bg:#fff3cf;--danger:#a12b25;--danger-bg:#fff0ed;
+ --info:#00577d;--info-bg:#e5f4fb;--neutral:#46566b;
+ --neutral-bg:#edf1f5;--inverse:#ffffff;--accent-ink:#202b3b;
+ --shadow-header:0 1px 0 rgb(16 24 40 / 6%);
+ --shadow-panel:0 2px 6px rgb(20 38 66 / 5%),0 12px 28px rgb(20 38 66 / 4%);
+ --shadow-focus:0 0 0 3px rgb(22 112 166 / 24%);
+ --header-rule:rgb(255 255 255 / 38%);
+ --header-outline:rgb(255 255 255 / 46%);
+ --header-outline-soft:rgb(255 255 255 / 45%);
+ --header-wash:rgb(255 255 255 / 8%);
+ --font:"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+ --radius-sm:4px;--radius-md:8px;--radius-lg:12px;
+ --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
+ --space-5:20px;--space-6:24px;--space-8:32px;--motion-fast:130ms;
+}
+@media (prefers-color-scheme: dark){
+ :root:not([data-theme="light"]){
+  color-scheme:dark;
+  --canvas:#0b1422;--paper:#111f32;--raised:#172941;--soft:#1c3049;
+  --ink:#eff4fb;--muted:#b8c5d6;--line:#344960;--line-control:#8298b2;
+  --link:#aad0ff;--focus:#82c9f2;--success:#8de1aa;
+  --success-bg:#153b2a;--warning:#ffda82;--warning-bg:#45371a;
+  --danger:#ffaaa0;--danger-bg:#482722;--info:#9cddf3;
+  --info-bg:#15384b;--neutral:#c2cfdd;--neutral-bg:#283a4e;
+  --shadow-header:0 1px 0 rgb(255 255 255 / 7%);
+  --shadow-panel:0 8px 28px rgb(0 0 0 / 18%);
+  --shadow-focus:0 0 0 3px rgb(130 201 242 / 24%);
+  --header-rule:rgb(255 255 255 / 38%);
+  --header-outline:rgb(255 255 255 / 46%);
+  --header-outline-soft:rgb(255 255 255 / 45%);
+  --header-wash:rgb(255 255 255 / 8%);
+ }
+}
+:root[data-theme="dark"]{
+ color-scheme:dark;
+ --canvas:#0b1422;--paper:#111f32;--raised:#172941;--soft:#1c3049;
+ --ink:#eff4fb;--muted:#b8c5d6;--line:#344960;--line-control:#8298b2;
+ --link:#aad0ff;--focus:#82c9f2;--success:#8de1aa;
+ --success-bg:#153b2a;--warning:#ffda82;--warning-bg:#45371a;
+ --danger:#ffaaa0;--danger-bg:#482722;--info:#9cddf3;
+ --info-bg:#15384b;--neutral:#c2cfdd;--neutral-bg:#283a4e;
+ --shadow-header:0 1px 0 rgb(255 255 255 / 7%);
+ --shadow-panel:0 8px 28px rgb(0 0 0 / 18%);
+ --shadow-focus:0 0 0 3px rgb(130 201 242 / 24%);
+ --header-rule:rgb(255 255 255 / 38%);
+ --header-outline:rgb(255 255 255 / 46%);
+ --header-outline-soft:rgb(255 255 255 / 45%);
+ --header-wash:rgb(255 255 255 / 8%);
+}
+*{box-sizing:border-box}
+html{scrollbar-gutter:stable}
+body{margin:0;background:var(--canvas);color:var(--ink);font:15px/1.58 var(--font)}
+button,input,select{font:inherit}
+button,select,input{touch-action:manipulation}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px;box-shadow:var(--shadow-focus)}
+[hidden]{display:none!important}
+.topbar{position:sticky;top:0;z-index:20;background:var(--navy);color:var(--inverse);border-bottom:3px solid var(--yellow);box-shadow:var(--shadow-header)}
+.topbar-inner{max-width:1480px;min-height:68px;margin:auto;padding:10px 28px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:center;gap:11px;min-width:0;font-weight:760;letter-spacing:.02em}
+.brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--yellow);color:var(--accent-ink);font-size:13px;font-weight:900;border-radius:var(--radius-sm)}
+.brand-name{font-size:17px}
+.brand-context{padding-left:12px;border-left:1px solid var(--header-rule);font-size:13px;font-weight:500;color:var(--inverse)}
+.topbar-tools{display:flex;align-items:center;gap:10px;margin-left:auto}
+.demo-label{padding:4px 9px;border:1px solid var(--header-outline);border-radius:var(--radius-sm);font-size:12px;color:var(--inverse)}
+.theme-button,.header-select{min-height:42px;border:1px solid var(--header-outline-soft);border-radius:var(--radius-sm);background:var(--header-wash);color:var(--inverse);padding:8px 11px}
+.header-select option{background:var(--paper);color:var(--ink)}
+.workspace{max-width:1480px;min-height:calc(100vh - 71px);margin:auto;display:grid;grid-template-columns:250px minmax(0,1fr)}
+.rail{padding:23px 15px 28px 24px;border-right:1px solid var(--line);background:var(--paper)}
+.rail-heading{margin:0 0 4px;font-size:20px;letter-spacing:-.02em}
+.rail-subtitle{margin:0 0 18px;color:var(--muted);font-size:13px}
+.model-note{padding:12px 13px;margin:0 0 18px;border-left:3px solid var(--yellow);background:var(--soft);font-size:12px;line-height:1.55;color:var(--muted)}
+.model-note strong{display:block;margin-bottom:3px;color:var(--ink);font-size:13px}
+.nav-list{display:grid;gap:3px}
+.nav-button{display:flex;align-items:center;gap:10px;min-height:44px;width:100%;padding:9px 11px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--muted);text-align:left}
+.nav-button:hover{background:var(--soft);color:var(--ink)}
+.nav-button[aria-current="page"]{border-left:3px solid var(--yellow);background:var(--soft);color:var(--navy);font-weight:700}
+:root[data-theme="dark"] .nav-button[aria-current="page"]{color:var(--ink)}
+.nav-symbol{display:grid;place-items:center;width:23px;height:23px;border:1px solid var(--line-control);border-radius:50%;font-size:11px;font-weight:800}
+.persona-box{margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}
+.persona-box label,.form-label{display:block;margin-bottom:6px;font-size:13px;font-weight:700}
+.persona-box select,.control,.select-control{width:100%;min-height:44px;padding:9px 11px;border:1px solid var(--line-control);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink)}
+.persona-description{margin:8px 0 0;color:var(--muted);font-size:12px}
+main{min-width:0;padding:28px 34px 50px}
+.breadcrumb{display:flex;align-items:center;gap:8px;margin-bottom:7px;color:var(--muted);font-size:12px}
+.breadcrumb-mark{width:18px;height:3px;background:var(--yellow)}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin:0 0 22px}
+.page-head h1{margin:0;font-size:26px;line-height:1.32;letter-spacing:-.025em}
+.page-head p{max-width:720px;margin:7px 0 0;color:var(--muted);font-size:14px}
+.page-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+.view-switch{display:flex;gap:4px;padding:4px;margin:0 0 17px;border-bottom:1px solid var(--line);overflow-x:auto}
+.view-switch button{min-height:42px;padding:8px 14px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--muted);white-space:nowrap}
+.view-switch button[aria-current="page"]{border-bottom-color:var(--yellow);color:var(--ink);font-weight:700}
+.panel{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:var(--shadow-panel)}
+.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.panel-heading h2,.panel-heading h3{margin:0;font-size:17px;line-height:1.35}
+.panel-heading p{margin:5px 0 0;color:var(--muted);font-size:13px}
+.panel-body{padding:18px 20px}
+.people-layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(260px,.7fr);gap:18px;align-items:start}
+.people-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.person-summary{display:flex;align-items:center;gap:12px;padding:13px 15px;margin-bottom:17px;background:var(--soft);border-left:3px solid var(--navy)}
+.avatar{flex:0 0 38px;width:38px;height:38px;display:grid;place-items:center;border-radius:50%;background:var(--navy);color:var(--inverse);font-weight:750}
+.person-summary strong{display:block}
+.person-summary small{display:block;color:var(--muted);font-size:12px}
+.state-pill{margin-left:auto;padding:3px 8px;border:1px solid var(--success);border-radius:99px;color:var(--success);font-size:11px;white-space:nowrap}
+.permission-module{margin:0 0 16px;border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
+.module-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;background:var(--soft);border-bottom:1px solid var(--line)}
+.module-heading strong{font-size:14px}
+.module-heading span{color:var(--muted);font-size:12px}
+.permission-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.permission-row:last-child{border-bottom:0}
+.permission-main{display:flex;align-items:flex-start;gap:11px;min-width:0}
+.permission-checkbox{flex:0 0 20px;width:20px;height:20px;margin:3px 0 0;accent-color:var(--navy)}
+.permission-name{font-size:14px;font-weight:700}
+.permission-meta{display:block;margin-top:2px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.permission-source{padding:3px 7px;border-radius:var(--radius-sm);background:var(--neutral-bg);color:var(--neutral);font-size:11px;white-space:nowrap}
+.permission-source.implied{background:var(--info-bg);color:var(--info)}
+.permission-source.backfill{background:var(--warning-bg);color:var(--warning)}
+.permission-row.is-restricted{background:var(--canvas)}
+.permission-row.is-restricted .permission-name{color:var(--muted)}
+.inline-confirm{grid-column:1/-1;padding:13px 14px;margin-top:4px;border-left:3px solid var(--warning);background:var(--warning-bg);color:var(--ink)}
+.inline-confirm h4{margin:0 0 4px;font-size:14px}
+.inline-confirm p{margin:3px 0 10px;font-size:13px}
+.impact-list{display:grid;gap:4px;padding-left:18px;margin:7px 0 12px;font-size:13px}
+.confirm-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:9px 14px;border:1px solid var(--line-control);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink);font-weight:650;text-decoration:none}
+.button:hover{background:var(--soft)}
+.button.primary{border-color:var(--navy);background:var(--navy);color:var(--inverse)}
+.button.primary:hover{opacity:.9}
+.button.danger{border-color:var(--danger);background:var(--danger);color:var(--inverse)}
+.button.quiet{border-color:transparent;background:transparent;color:var(--link)}
+.button.small{min-height:36px;padding:6px 10px;font-size:13px}
+.button:disabled,select:disabled,input:disabled{cursor:not-allowed;opacity:.57}
+.status{padding:11px 13px;border-left:3px solid var(--info);background:var(--info-bg);color:var(--ink);font-size:13px}
+.status.success{border-color:var(--success);background:var(--success-bg)}
+.status.warning{border-color:var(--warning);background:var(--warning-bg)}
+.status.error{border-color:var(--danger);background:var(--danger-bg)}
+.note{color:var(--muted);font-size:12px}
+.mini-stat{padding:15px 16px;border-bottom:1px solid var(--line)}
+.mini-stat:last-child{border-bottom:0}
+.mini-stat strong{display:block;font-size:20px;line-height:1.2}
+.mini-stat span{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+.side-panel-title{padding:16px 17px 12px;border-bottom:1px solid var(--line)}
+.side-panel-title h3{margin:0;font-size:15px}
+.side-panel-title p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.person-options{display:grid;gap:8px;padding:14px}
+.person-option{display:flex;align-items:center;gap:10px;width:100%;padding:9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink);text-align:left}
+.person-option[aria-pressed="true"]{border-color:var(--navy);box-shadow:inset 3px 0 0 var(--yellow)}
+.person-option .avatar{width:32px;height:32px;flex-basis:32px;font-size:12px}
+.person-option small{display:block;color:var(--muted);font-size:11px}
+.action-bar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.two-column{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.stack{display:grid;gap:15px}
+.field{min-width:0}
+.field label{display:block;margin-bottom:6px;font-size:13px;font-weight:700}
+.field-help{margin:5px 0 0;color:var(--muted);font-size:12px}
+.input-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.table-wrap{max-width:100%;overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;text-align:left}
+.data-table th,.data-table td{padding:12px 13px;border-bottom:1px solid var(--line);vertical-align:middle}
+.data-table th{background:var(--soft);color:var(--muted);font-size:12px;font-weight:700}
+.data-table td{font-size:13px}
+.data-table tr:last-child td{border-bottom:0}
+.badge{display:inline-flex;align-items:center;min-height:24px;padding:3px 8px;border-radius:99px;background:var(--neutral-bg);color:var(--neutral);font-size:11px;white-space:nowrap}
+.badge.good{background:var(--success-bg);color:var(--success)}
+.badge.warn{background:var(--warning-bg);color:var(--warning)}
+.badge.info{background:var(--info-bg);color:var(--info)}
+.badge.bad{background:var(--danger-bg);color:var(--danger)}
+.bundle-grid,.role-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.bundle-item,.role-item{min-width:0;padding:15px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--paper)}
+.bundle-item.selected,.role-item.selected{border-color:var(--navy);box-shadow:inset 3px 0 0 var(--yellow)}
+.bundle-item h3,.role-item h3{margin:0;font-size:15px}
+.bundle-item p,.role-item p{margin:5px 0 10px;color:var(--muted);font-size:12px}
+.code-list{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 12px}
+.code-chip{max-width:100%;padding:4px 7px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--soft);font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.check-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}
+.check-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;font-size:13px}
+.check-row input{width:18px;height:18px;flex:0 0 18px;margin:2px 0 0;accent-color:var(--navy)}
+.card-actions{display:flex;gap:6px;flex-wrap:wrap}
+.form-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,.65fr);gap:18px}
+.form-panel{padding:17px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--paper)}
+.form-panel h3{margin:0 0 13px;font-size:16px}
+.empty-state{padding:30px 22px;text-align:center;border:1px dashed var(--line-control);border-radius:var(--radius-md);background:var(--paper)}
+.empty-mark{display:grid;place-items:center;width:42px;height:42px;margin:0 auto 12px;border:2px solid var(--yellow);border-radius:50%;font-size:18px;font-weight:800}
+.empty-state h2{margin:0;font-size:18px}
+.empty-state p{max-width:500px;margin:8px auto 16px;color:var(--muted);font-size:13px}
+.project-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius-md);overflow:hidden}
+.project-summary>div{padding:13px;border-right:1px solid var(--line)}
+.project-summary>div:last-child{border-right:0}
+.project-summary strong{display:block;font-size:14px}
+.project-summary span{display:block;margin-top:2px;color:var(--muted);font-size:11px}
+.error-detail{margin-top:11px;padding:12px;border:1px solid var(--danger);border-radius:var(--radius-sm);background:var(--danger-bg)}
+.error-detail strong{display:block;color:var(--danger)}
+.error-detail code{display:block;margin-top:4px;overflow-wrap:anywhere;font-size:12px}
+.rule-callout{padding:14px 15px;border-left:3px solid var(--navy);background:var(--soft);font-size:13px}
+.role-settings{display:grid;gap:10px}
+.role-setting{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border-bottom:1px solid var(--line)}
+.role-setting:last-child{border-bottom:0}
+.role-setting p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.toggle{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:36px}
+.toggle input{width:20px;height:20px;accent-color:var(--navy)}
+.toast{position:fixed;right:22px;bottom:18px;z-index:40;max-width:min(420px,calc(100vw - 28px));padding:12px 15px;border:1px solid var(--line-control);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink);box-shadow:var(--shadow-panel)}
+.toast:empty{display:none}
+.footer-note{max-width:1480px;margin:0 auto;padding:12px 28px 24px;color:var(--muted);font-size:11px}
+@media(max-width:980px){
+ .workspace{grid-template-columns:210px minmax(0,1fr)}
+ main{padding:24px 22px 42px}
+ .people-layout{grid-template-columns:minmax(0,1fr)}
+ .people-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:680px){
+ .topbar-inner{min-height:60px;padding:8px 12px;gap:9px}
+ .brand-context{display:none}
+ .brand-name{font-size:15px}
+ .brand-mark{width:30px;height:30px}
+ .topbar-tools{gap:6px}
+ .demo-label{font-size:10px;padding:3px 6px}
+ .theme-button{min-height:40px;padding:7px 9px;font-size:12px}
+ .header-select{max-width:120px;min-height:40px;padding:6px;font-size:12px}
+ .workspace{display:block;min-height:0}
+ .rail{padding:13px 12px 10px;border-right:0;border-bottom:1px solid var(--line)}
+ .rail-heading{font-size:17px}
+ .rail-subtitle{display:none}
+ .model-note{padding:8px 10px;margin:8px 0 10px;font-size:11px}
+ .model-note strong{display:inline;margin-right:6px}
+ .nav-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+ .nav-button{min-height:42px;padding:7px 8px;font-size:12px}
+ .nav-symbol{width:20px;height:20px;flex:0 0 20px}
+ .persona-box{display:grid;grid-template-columns:75px minmax(0,1fr);gap:7px;align-items:center;margin-top:10px;padding-top:10px}
+ .persona-box label{margin:0;font-size:12px}
+ .persona-box select{min-height:40px;padding:7px;font-size:12px}
+ .persona-description{grid-column:1/-1;margin:0;font-size:11px}
+ main{padding:17px 12px 30px}
+ .breadcrumb{margin-bottom:5px}
+ .page-head{display:block;margin-bottom:16px}
+ .page-head h1{font-size:22px}
+ .page-head-actions{margin-top:10px}
+ .page-head p{font-size:13px}
+ .panel-heading{padding:14px 13px 11px}
+ .panel-heading h2{font-size:16px}
+ .panel-body{padding:13px}
+ .two-column,.form-grid,.input-row,.bundle-grid,.role-grid,.check-list{grid-template-columns:minmax(0,1fr)}
+ .people-toolbar{display:block}
+ .people-toolbar .control{margin-top:7px}
+ .person-summary{padding:10px}
+ .permission-row{grid-template-columns:minmax(0,1fr);gap:6px;padding:11px}
+ .permission-source{justify-self:start;margin-left:31px}
+ .permission-meta{font-size:11px}
+ .inline-confirm{grid-column:1;padding:11px}
+ .confirm-actions .button{flex:1 1 120px}
+ .people-side{display:block}
+ .project-summary{grid-template-columns:minmax(0,1fr)}
+ .project-summary>div{border-right:0;border-bottom:1px solid var(--line)}
+ .project-summary>div:last-child{border-bottom:0}
+ .table-wrap{overflow:visible}
+ .data-table,.data-table tbody,.data-table tr,.data-table td{display:block;width:100%}
+ .data-table thead{display:none}
+ .data-table tr{padding:9px 0;border-bottom:1px solid var(--line)}
+ .data-table td{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;padding:6px 3px;border:0}
+ .data-table td:before{content:attr(data-label);color:var(--muted);font-size:11px;font-weight:700}
+ .action-bar{align-items:stretch}
+ .action-bar .button{flex:1 1 130px}
+ .role-setting{grid-template-columns:minmax(0,1fr) auto;padding:10px 8px}
+ .footer-note{padding:12px}
+}
+@media(max-width:390px){
+ .brand-name{font-size:14px}
+ .topbar-inner{gap:6px}
+ .topbar-tools{gap:4px}
+ .theme-button{max-width:76px;white-space:normal;line-height:1.2}
+ .demo-label{max-width:62px;text-align:center}
+ .nav-button{gap:6px}
+}
+.tour{position:fixed;right:18px;bottom:18px;z-index:30;width:min(400px,calc(100vw - 24px));max-height:min(70vh,560px);display:flex;flex-direction:column;background:var(--paper);color:var(--ink);border:1px solid var(--line-control);border-top:4px solid var(--yellow);border-radius:var(--radius-md);box-shadow:var(--shadow-panel)}
+.tour-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 15px 8px}
+.tour-step{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.04em}
+.tour-toggle{min-height:36px;padding:5px 10px;border:1px solid var(--line-control);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink);font-size:12px}
+.tour-body{overflow-y:auto;padding:0 15px 4px}
+.tour-body h2{margin:0 0 8px;font-size:17px;line-height:1.4}
+.tour-part-label{margin:10px 0 4px;font-size:12px;color:var(--muted)}
+.tour-part-label{margin:10px 0 4px;font-size:12px;color:var(--muted)}
+.tour-story{margin:0 0 10px;padding:10px 12px;border-left:3px solid var(--navy);background:var(--soft);font-size:13px;line-height:1.7}
+:root[data-theme="dark"] .tour-story{border-left-color:var(--link)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tour-story{border-left-color:var(--link)}}
+.tour-do{margin:0 0 6px;font-size:12px;font-weight:700;color:var(--muted)}
+.tour-steps{margin:0 0 10px;padding-left:20px;font-size:13px;line-height:1.65}
+.tour-steps li{margin-bottom:4px}
+.tour-why{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.6}
+.tour-nav{display:flex;gap:8px;padding:10px 15px 13px;border-top:1px solid var(--line)}
+.tour-nav .button{flex:1 1 0}
+.tour.collapsed .tour-body,.tour.collapsed .tour-nav{display:none}
+body.has-tour{padding-bottom:min(70vh,560px)}
+body.has-tour.tour-collapsed{padding-bottom:70px}
+.toast{bottom:auto;top:84px}
+@media(max-width:680px){.tour{right:12px;bottom:12px;max-height:62vh}body.has-tour{padding-bottom:62vh}}
+.tour-cast{margin:0 0 8px;font-size:12px;color:var(--muted)}
+.tour-list{display:grid;gap:8px;margin-bottom:10px}
+.tour-pick{display:grid;gap:3px;width:100%;padding:11px 12px;border:1px solid var(--line);border-left:3px solid var(--yellow);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink);text-align:left}
+.tour-pick:hover{background:var(--soft)}
+.tour-pick strong{font-size:14px}
+.tour-pick span{font-size:12px;color:var(--muted);line-height:1.55}
+.tour-pick .tour-pick-tag{justify-self:start;padding:1px 7px;border-radius:99px;background:var(--info-bg);color:var(--info);font-size:11px}
+.tour-pick .tour-pick-meta{font-size:11px}
+@media(prefers-reduced-motion:reduce){
+ *,*::before,*::after{scroll-behavior:auto!important;animation-duration:0.01ms!important;transition-duration:0.01ms!important}
+}
+
+/* G3：新人起手式、能力摘要與權限檢查。 */
+.primary-entry{display:grid;gap:14px;margin-bottom:18px;padding:18px;border:1px solid var(--line);border-top:4px solid var(--yellow);border-radius:var(--radius-md);background:var(--paper);box-shadow:var(--shadow-panel)}
+.primary-entry h2,.primary-entry h3{margin:0;font-size:18px}
+.primary-entry>p{margin:0;color:var(--muted);font-size:13px}
+.wizard-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;padding:0;margin:0;list-style:none}
+.wizard-progress li{padding:8px 9px;border-bottom:3px solid var(--line);color:var(--muted);font-size:12px}
+.wizard-progress li[aria-current="step"]{border-color:var(--navy);color:var(--ink);font-weight:700}
+.wizard-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.choice-card{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--paper);color:var(--ink)}
+.choice-card:has(input:checked){border-color:var(--navy);box-shadow:inset 3px 0 var(--yellow)}
+.choice-card input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--navy)}
+.choice-card strong,.choice-card small{display:block}
+.choice-card small{margin-top:3px;color:var(--muted);font-size:12px}
+.wizard-actions{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.wizard-preview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.wizard-preview>section{padding:13px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--soft)}
+.wizard-preview h3{margin-bottom:7px;font-size:15px}
+.wizard-preview ul{padding-left:20px;margin:0}
+.wizard-preview small{display:block;margin-top:8px;color:var(--muted);font-size:12px}
+.capability-summary{display:grid;gap:9px;padding:15px;margin-bottom:13px;border-left:4px solid var(--navy);background:var(--soft)}
+.capability-summary h2{margin:0;font-size:17px}
+.capability-summary p{margin:0}
+.capability-list{display:flex;flex-wrap:wrap;gap:7px}
+.capability-list .badge{white-space:normal}
+.layer-hint{padding:12px 14px;border-left:3px solid var(--warning);background:var(--warning-bg)}
+.layer-hint p{margin:0 0 8px}
+.layer-hint .button{min-height:40px}
+.diagnostic-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.7fr);gap:14px;align-items:start}
+.diagnostic-result{padding:14px;border-left:4px solid var(--success);background:var(--success-bg)}
+.diagnostic-result.needs-layer{border-color:var(--warning);background:var(--warning-bg)}
+.diagnostic-result h3{margin:0 0 6px}
+.diagnostic-result p{margin:5px 0}
+.advanced-nav{grid-column:1/-1;margin-top:8px;border-top:1px solid var(--line);padding-top:10px}
+.advanced-nav summary,.advanced-panel summary,.advanced-inline summary{min-height:42px;display:flex;align-items:center;cursor:pointer;font-weight:700;color:var(--ink)}
+.advanced-nav-items{display:grid;gap:3px;padding:4px 0 0 10px}
+.advanced-nav-items .nav-button{font-size:12px}
+.advanced-panel{margin:16px 0;padding:12px 15px;border:1px solid var(--line-control);border-radius:var(--radius-md);background:var(--paper)}
+.advanced-panel[open]>summary{margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.advanced-inline{margin-top:14px;padding:10px 13px;border:1px dashed var(--line-control);border-radius:var(--radius-sm)}
+.advanced-inline[open]>summary{margin-bottom:10px}
+@media(max-width:680px){
+ .wizard-fields,.choice-grid,.wizard-preview,.diagnostic-layout{grid-template-columns:minmax(0,1fr)}
+ .wizard-progress{gap:3px}
+ .wizard-progress li{padding:7px 4px;font-size:10px;overflow-wrap:anywhere}
+ .primary-entry{padding:14px 12px}
+ .wizard-actions .button{flex:1 1 120px}
+}
+
+</style>
+<div class="topbar">
+ <div class="topbar-inner">
+  <div class="brand"><span class="brand-mark">IF</span><span class="brand-name">InspectFlow</span><span class="brand-context">工程查核管理</span></div>
+  <div class="topbar-tools"><span class="demo-label">示意資料</span><button class="theme-button" id="theme-toggle" type="button" aria-label="切換色彩主題">主題：跟隨系統</button></div>
+ </div>
+</div>
+<div class="workspace">
+ <aside class="rail">
+  <h1 class="rail-heading">權限工作台</h1>
+  <p class="rail-subtitle">人員、專案與角色設定</p>
+  <div class="model-note"><strong>兩層權限</strong>人員模組控制可使用範圍；專案角色決定專案內的動作。</div>
+  <nav class="nav-list" id="navigation" aria-label="工作導覽"></nav>
+  <div class="persona-box">
+   <label for="persona">檢視身分</label>
+   <select id="persona" class="control">
+    <option value="admin">陳以安｜系統管理者</option>
+    <option value="templateDelegate">林沐青｜範本模組委派者</option>
+    <option value="projectManager">周允辰｜專案工程師</option>
+    <option value="projectCreator">葉書寧｜可開設、尚無專案</option>
+    <option value="u10">許庭安｜有內業權限、無專案清單</option>
+    <option value="external">許婉庭｜外部協作人員</option>
+   </select>
+   <p class="persona-description" id="persona-description"></p>
+  </div>
+ </aside>
+ <main>
+  <div class="breadcrumb"><span class="breadcrumb-mark"></span><span>系統管理</span><span>/</span><span id="crumb-label">人員權限</span></div>
+  <div id="content"></div>
+ </main>
+</div>
+<div class="footer-note">原型示範操作與狀態，不連線或寫入實際資料。權限選項依 DOM-R35 登記表呈現；專案角色與模組權限分開管理。</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<aside class="tour" id="tour" aria-label="情境導覽">
+ <div class="tour-head"><span class="tour-step" id="tour-step"></span><button class="tour-toggle" id="tour-toggle" type="button" aria-expanded="true">收合</button></div>
+ <div class="tour-body" id="tour-body"></div>
+ <div class="tour-nav"><button class="button" id="tour-prev" type="button">上一步</button><button class="button primary" id="tour-next" type="button">下一步</button></div>
+</aside>
+<script>
+const registry = [
+ {module:"project",title:"專案模組",code:"project.use",label:"可使用",description:"查看有權限的專案與使用專案功能。",external:true},
+ {module:"project",title:"專案模組",code:"project.create",label:"開設專案",description:"新增專案；非 Admin 開設後自動以建立者角色加入。",external:false,implies:"project.use"},
+ {module:"project",title:"專案模組",code:"all_project_progress.read",label:"看全部專案進度",description:"檢視所有專案的進度；只有 Admin 可以授予。",external:false},
+ {module:"inspection",title:"查核模組",code:"inspection.use",label:"可使用",description:"使用已開通且具備專案角色的查核功能。",external:true},
+ {module:"template",title:"範本模組",code:"template.use",label:"可使用",description:"瀏覽範本並套用到有權限的專案。",external:true},
+ {module:"template",title:"範本模組",code:"template.manage",label:"管理範本庫",description:"維護範本庫；委派本身不含此能力。",external:false,implies:"template.use"}
+];
+const users = {
+ "林沐青":{initial:"林",kind:"內部人員",company:"工程管理處",active:true},
+ "周允辰":{initial:"周",kind:"內部人員",company:"工程管理處",active:true},
+ "許婉庭":{initial:"許",kind:"外部協作人員",company:"山嶼工程顧問",active:true},
+ "葉書寧":{initial:"葉",kind:"內部人員",company:"工程管理處",active:true},
+ "許庭安":{initial:"許",kind:"內部人員",company:"工程管理處",active:true}
+};
+const permissionState = {
+ "林沐青":["project.use","inspection.use","template.use"],
+ "周允辰":["project.use","inspection.use","template.use"],
+ "許婉庭":["project.use","inspection.use"],
+ "葉書寧":["project.use"],
+ "許庭安":["project.use","inspection.use"]
+};
+const personaConfig = {
+ admin:{label:"系統管理者",name:"陳以安",description:"可管理所有模組；建立專案時不自動成為成員。"},
+ templateDelegate:{label:"範本模組委派者",name:"林沐青",description:"只能管理範本模組授權；不能替自己授權或管理範本庫。"},
+ projectManager:{label:"專案工程師",name:"周允辰",description:"只能在本人可管理的專案內管理成員與角色。"},
+ projectCreator:{label:"可開設專案",name:"葉書寧",description:"有 project.create；尚無專案時仍可進入專案清單並開設專案。"},
+ u10:{label:"內業權限但無專案清單",name:"許庭安",description:"有內業能力但沒有可讀專案；停留在空清單並看到說明。"},
+ external:{label:"外部協作人員",name:"許婉庭",description:"只能被指派外部可用角色；不可取得 Admin 專屬模組權限。"}
+};
+const navItems = [
+ {id:"people",label:"人員與職務",symbol:"人",audience:["admin","templateDelegate"]},
+ {id:"diagnostic",label:"權限檢查",symbol:"查",audience:["admin","templateDelegate"]},
+ {id:"delegations",label:"模組委派",symbol:"委",audience:["admin"],advanced:true},
+ {id:"bundles",label:"權限組合",symbol:"組",audience:["admin","templateDelegate"],advanced:true},
+ {id:"roles",label:"角色核准",symbol:"角",audience:["admin"],advanced:true},
+ {id:"projects",label:"專案與成員",symbol:"專",audience:["admin","projectManager","projectCreator","u10","external"]}
+];
+const bundleSeed = [
+ {id:"managers",name:"公司主管",codes:["project.use","all_project_progress.read"]},
+ {id:"engineers",name:"專案工程師常用",codes:["project.use","project.create","inspection.use","template.use"]},
+ {id:"field",name:"現場工程師常用",codes:["project.use","inspection.use"]},
+ {id:"template",name:"範本模組常用（示意）",codes:["template.use","template.manage"]}
+];
+const jobProfiles = {
+ system:{label:"系統管理",bundle:"公司主管",role:"專案工程師",codes:["project.use","all_project_progress.read"],
+  can:["管理人員與權限","查看全部專案進度","管理專案成員"],
+  cannot:["外部協作人員不能設為系統管理者","不能替自己建立額外權限"]},
+ office:{label:"內業規劃",bundle:"專案工程師常用",role:"專案工程師",codes:["project.use","project.create","inspection.use","template.use"],
+  can:["規劃與查看已授權專案","建立專案並成為建立者","使用查核與範本功能"],
+  cannot:["查看未授權的專案","管理範本庫"]},
+ field:{label:"現場查核",bundle:"現場工程師常用",role:"現場工程師",codes:["project.use","inspection.use"],
+  can:["查看已加入的專案","使用查核任務"],
+  cannot:["建立專案","管理專案成員","管理範本庫"]},
+ contractor:{label:"外包顧問",bundle:"現場工程師常用",role:"專案查閱人員",codes:["project.use","inspection.use"],
+  can:["查看已加入且有查閱角色的專案","依專案角色查看查核資料"],
+  cannot:["建立專案","查看其他專案","管理成員、權限或範本庫"]}
+};
+const projectOptions = ["東區排水改善工程","西側管線更新"];
+const roleSeed = [
+ {id:"engineer",name:"專案工程師",assignable:false,externalAllowed:false,creator:true,codes:["project.update","project_member.manage","project.read"]},
+ {id:"field",name:"現場工程師",assignable:true,externalAllowed:false,creator:false,codes:["inspection_task.inspect","inspection_task.read"]},
+ {id:"viewer",name:"專案查閱人員",assignable:true,externalAllowed:true,creator:false,codes:["project.read","inspection_task.read"]}
+];
+const state = {
+ persona:"admin",view:"people",projectTab:"mine",selectedUser:"許庭安",
+ advancedOpen:false,pageAdvancedOpen:false,inlineAdvancedOpen:false,wizard:{step:0,name:"",identity:"internal",job:"office",projects:[]},
+ wizardDone:null,diagnostic:{person:"許庭安",action:"inspection"},
+ projectRoles:{
+  "林沐青":[{project:"東區排水改善工程",role:"專案工程師"}],
+  "周允辰":[{project:"東區排水改善工程",role:"專案工程師"}],
+  "許婉庭":[{project:"東區排水改善工程",role:"專案查閱人員"}],
+  "葉書寧":[],"許庭安":[]
+ },
+ pendingRevoke:null,delegationTarget:"周允辰",delegationModule:"project",delegations:[
+  {name:"林沐青",module:"template"},
+  {name:"周允辰",module:"inspection"}
+ ],pendingDelegation:null,bundles:bundleSeed.map(function(item){return {...item,codes:item.codes.slice()}}),
+ selectedBundle:"engineers",editingBundleId:null,bundleTarget:"周允辰",pendingBundleDelete:null,bundleError:"",
+ creatorRole:"engineer",roles:roleSeed.map(function(item){return {...item,codes:item.codes.slice()}}),
+ assignmentTarget:"許婉庭",assignmentRole:"viewer",projectCreated:false,notice:"",projectStatus:"",
+ memberError:false,projectName:"",projectCode:""
+};
+function esc(value){
+ return String(value).replace(/[&<>"']/g,function(char){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char];
+ });
+}
+function hasCode(user,code){
+ const direct=permissionState[user]||[];
+ if(direct.indexOf(code)>=0)return true;
+ return registry.some(function(item){
+  return item.implies===code&&direct.indexOf(item.code)>=0;
+ });
+}
+function toast(message){const node=document.getElementById("toast");node.textContent=message;window.setTimeout(function(){if(node.textContent===message)node.textContent=""},2800)}
+function setNotice(message,type){
+ state.notice=message;
+ const node=document.getElementById("notice");
+ if(node){node.className="status "+(type||"");node.textContent=message}
+}
+function personaLabel(){return personaConfig[state.persona].label}
+function canSee(view){
+ return navItems.some(function(item){return item.id===view&&item.audience.indexOf(state.persona)>=0})
+}
+function setPersona(value){
+ if(state.persona!==value){state.projectCreated=false;state.projectName="";state.projectCode=""}
+ state.persona=value;
+ if(!canSee(state.view))state.view=value==="admin"||value==="templateDelegate"?"people":"projects";
+ state.pendingRevoke=null;state.pendingDelegation=null;state.bundleError="";
+ render();
+}
+function renderNavigation(){
+ const nav=document.getElementById("navigation");
+ const visible=navItems.filter(function(item){return item.audience.indexOf(state.persona)>=0});
+ const buttons=visible.filter(function(item){return !item.advanced}).map(navButton).join("");
+ const advanced=visible.filter(function(item){return item.advanced}).map(navButton).join("");
+ nav.innerHTML=buttons+(advanced?'<details class="advanced-nav" '+(state.advancedOpen?"open":"")+'><summary>進階設定</summary><div class="advanced-nav-items">'+advanced+'</div></details>':"");
+ document.getElementById("persona").value=state.persona;
+ document.getElementById("persona-description").textContent=personaConfig[state.persona].description;
+ document.getElementById("crumb-label").textContent=(navItems.find(function(item){return item.id===state.view})||navItems[0]).label;
+}
+function navButton(item){
+ return '<button class="nav-button" type="button" data-nav="'+item.id+'" aria-current="'+(state.view===item.id?"page":"false")+'"><span class="nav-symbol" aria-hidden="true">'+item.symbol+'</span><span>'+item.label+'</span></button>';
+}
+function profileForJob(job){return jobProfiles[job]||jobProfiles.office}
+function wizardProjects(){
+ return projectOptions.map(function(project){
+  const checked=state.wizard.projects.indexOf(project)>=0;
+  return '<label class="choice-card"><input type="checkbox" data-wizard-project="'+esc(project)+'" '+(checked?"checked":"")+'><span><strong>'+esc(project)+'</strong><small>可略過；之後仍可加入。</small></span></label>'
+ }).join("");
+}
+function wizardPreview(){
+ const profile=profileForJob(state.wizard.job);
+ const external=state.wizard.identity==="external";
+ const projectRole=external?"專案查閱人員":profile.role;
+ return '<div class="wizard-preview"><section><h3>可以做</h3><ul>'+profile.can.map(function(item){return '<li>'+esc(item)+'</li>'}).join("")+'</ul></section><section><h3>不能做</h3><ul>'+profile.cannot.map(function(item){return '<li>'+esc(item)+'</li>'}).join("")+'</ul></section></div><small>進階參考：權限組合「'+esc(profile.bundle)+'」；預設專案角色「'+esc(projectRole)+'」。'+(external?'外部人員只會取得外部可用權限與角色。':'')+'</small>';
+}
+function wizardStep(){
+ const step=state.wizard.step;
+ if(step===0)return '<div class="wizard-fields"><div class="field"><label for="wizard-name">姓名</label><input class="control" id="wizard-name" value="'+esc(state.wizard.name)+'" placeholder="例如：林知行"></div><div class="field"><label for="wizard-identity">身分</label><select class="control" id="wizard-identity"><option value="internal" '+(state.wizard.identity==="internal"?"selected":"")+'>內部人員</option><option value="external" '+(state.wizard.identity==="external"?"selected":"")+'>外部協作人員</option></select><p class="field-help">外部協作人員只能選「外包顧問」。</p></div></div>';
+ if(step===1){
+  const options=state.wizard.identity==="external"?["contractor"]:["system","office","field"];
+  return '<div class="choice-grid">'+options.map(function(job){const profile=profileForJob(job);return '<label class="choice-card"><input type="radio" name="wizard-job" data-wizard-job="'+job+'" '+(state.wizard.job===job?"checked":"")+'><span><strong>'+profile.label+'</strong><small>'+profile.can.slice(0,2).join("、")+'</small></span></label>'}).join("")+'</div>';
+ }
+ if(step===2)return '<p class="field-help">選擇目前要加入的專案；也可以先略過。</p><div class="choice-grid">'+wizardProjects()+'</div><button class="button quiet" type="button" data-action="wizard-skip-projects">先略過專案</button>';
+ return wizardPreview();
+}
+function personWizard(){
+ if(state.persona!=="admin")return "";
+ const steps=["身分","職務","專案","預覽"];
+ const progress='<ol class="wizard-progress">'+steps.map(function(label,index){return '<li aria-current="'+(index===state.wizard.step?"step":"false")+'">'+(index+1)+". "+label+'</li>'}).join("")+'</ol>';
+ const complete=state.wizardDone?'<div class="status success" role="status"><strong>'+esc(state.wizardDone.name)+' 已建立。</strong> '+esc(state.wizardDone.message)+' 權限套用若失敗，可到人員頁重試。</div>':'';
+ const feedback=state.notice?'<p class="status" role="status">'+esc(state.notice)+'</p>':'';
+ const back=state.wizard.step>0?'<button class="button" type="button" data-action="wizard-back">上一步</button>':'<span></span>';
+ const next=state.wizard.step<3?'<button class="button primary" type="button" data-action="wizard-next">下一步</button>':'<button class="button primary" type="button" data-action="wizard-create">建立人員並套用</button>';
+ return '<section class="primary-entry" aria-labelledby="wizard-heading"><h2 id="wizard-heading">新增人員：職務起手式</h2><p>先選身分與日常工作，系統會帶入合適的權限組合和預設專案角色。</p>'+progress+complete+feedback+'<div class="stack">'+wizardStep()+'</div><div class="wizard-actions">'+back+next+'</div></section>';
+}
+function assignedRoles(name){return state.projectRoles[name]||[]}
+function capabilitySummary(name){
+ const user=users[name],codes=permissionState[name]||[],roles=assignedRoles(name);
+ const labels=[];
+ if(user&&user.is_admin)labels.push("管理人員與系統設定");
+ if(codes.indexOf("project.create")>=0)labels.push("建立專案");
+ if(codes.indexOf("project.use")>=0)labels.push("使用已授權的專案");
+ if(codes.indexOf("inspection.use")>=0)labels.push("使用查核功能");
+ if(codes.indexOf("template.manage")>=0)labels.push("管理範本庫");
+ if(codes.indexOf("template.use")>=0)labels.push("使用範本");
+ if(roles.length)labels.push("專案角色："+Array.from(new Set(roles.map(function(item){return item.role}))).join("、"));
+ return labels.length?labels:["目前沒有模組權限或專案角色"];
+}
+function firstMissingLayer(name){
+ const codes=permissionState[name]||[];
+ if(codes.indexOf("inspection.use")<0)return {kind:"module",label:"查核模組使用權"};
+ if(!assignedRoles(name).length)return {kind:"role",label:"東區排水改善工程的專案角色"};
+ if(codes.indexOf("project.use")<0)return {kind:"module",label:"專案模組使用權"};
+ return null;
+}
+function diagnosticResult(){
+ const name=state.diagnostic.person,action=state.diagnostic.action,user=users[name];
+ if(user&&user.is_admin)return {ok:true,missing:[],message:"系統管理者可執行此動作。"};
+ const codes=permissionState[name]||[],roles=assignedRoles(name);
+ const moduleNeed={inspection:["inspection.use"],create:["project.create"],template:["template.manage"],members:["project.use"]}[action]||[];
+ const roleNeed={inspection:"現場工程師",members:"專案工程師"}[action];
+ const roleOk={inspection:["現場工程師","專案工程師","專案查閱人員"],members:["專案工程師"]}[action]||[];
+ const missing=[];
+ if(action==="create"&&user&&user.kind==="外部協作人員")missing.push({kind:"rule",label:"外部協作人員不能開設專案"});
+ moduleNeed.forEach(function(code){
+  if(codes.indexOf(code)<0){const item=registry.find(function(row){return row.code===code});missing.push({kind:"module",label:(item?item.label:code)+"模組權限",code:code})}
+ });
+ if(roleNeed&&!roles.some(function(item){return roleOk.indexOf(item.role)>=0}))missing.push({kind:"role",label:"東區排水改善工程的專案角色（例如「"+roleNeed+"」）",role:roleNeed});
+ return {ok:missing.length===0,missing:missing,message:missing.length?"還差一層授權，以下列出原因和補法。":"已具備所需的模組權限與專案角色。"};
+}
+function diagnosticPage(){
+ const people=Object.keys(users);
+ const personOptions=people.map(function(name){return '<option value="'+esc(name)+'" '+(name===state.diagnostic.person?"selected":"")+'>'+esc(name)+'</option>'}).join("");
+ const actions=[['inspection','看查核任務'],['create','開新專案'],['template','管理範本庫'],['members','管理專案成員']];
+ const actionOptions=actions.map(function(item){return '<option value="'+item[0]+'" '+(item[0]===state.diagnostic.action?"selected":"")+'>'+item[1]+'</option>'}).join("");
+ const result=diagnosticResult();
+ const blocked=result.missing.some(function(item){return item.kind==="rule"});
+ const fix=result.ok||blocked?"":'<div class="action-bar"><button class="button primary" type="button" data-action="diagnostic-fix">補上缺少的一層</button><button class="button" type="button" data-action="diagnostic-rerun">重新檢查</button></div>';
+ const content='<div class="diagnostic-layout"><section class="form-panel"><h2>為什麼他不能做這件事？</h2><div class="stack"><div class="field"><label for="diagnostic-person">人員</label><select id="diagnostic-person" class="control">'+personOptions+'</select></div><div class="field"><label for="diagnostic-action">想執行的動作</label><select id="diagnostic-action" class="control">'+actionOptions+'</select></div><button class="button primary" type="button" data-action="diagnostic-run">檢查權限</button></div></section><section class="diagnostic-result '+(result.ok?"":"needs-layer")+'" aria-live="polite"><h3>'+(result.ok?"可以執行":"還不能執行")+'</h3><p>'+esc(result.message)+'</p>'+(result.missing.length?'<ul>'+result.missing.map(function(item){return '<li>缺少：'+esc(item.label)+(item.code?'<small>進階：'+esc(item.code)+'</small>':"")+'</li>'}).join("")+'</ul><p>補上必要層級後再檢查；不會自動改動其他權限。</p>':'<p>目前的有效權限足以執行。</p>')+fix+'</section></div>';
+ return pageHead("權限檢查","選一位人員和一個動作，查看卡在哪一層以及可以怎麼補。")+panel("檢查結果","模組權限決定能否使用功能；專案角色決定能否在專案執行動作。",content);
+}
+function advancedPage(title,description,content){
+ return pageHead(title,description)+'<details class="advanced-panel" '+(state.pageAdvancedOpen?"open":"")+'><summary>進階設定：'+esc(title)+'</summary>'+content+'</details>';
+}
+function pageHead(title,description,actions){
+ return '<div class="page-head"><div><h1>'+title+'</h1><p>'+description+'</p></div><div class="page-head-actions">'+(actions||"")+'</div></div>';
+}
+function panel(title,description,content,extra){
+ return '<section class="panel '+(extra||"")+'"><div class="panel-heading"><div><h2>'+title+'</h2><p>'+description+'</p></div></div><div class="panel-body">'+content+'</div></section>';
+}
+function personSelect(id,selected,options){
+ return '<select class="control" id="'+id+'">'+options.map(function(name){return '<option value="'+esc(name)+'" '+(name===selected?"selected":"")+'>'+esc(name)+(users[name]&&users[name].kind==="外部協作人員"?"（外部協作人員）":"")+'</option>'}).join("")+'</select>';
+}
+function personOption(name){
+ const user=users[name];
+ return '<button class="person-option" type="button" data-person="'+esc(name)+'" aria-pressed="'+(state.selectedUser===name)+'"><span class="avatar">'+user.initial+'</span><span><strong>'+esc(name)+'</strong><small>'+user.kind+'｜'+user.company+'</small></span></button>';
+}
+function modulePermissionRow(item){
+ const current=hasCode(state.selectedUser,item.code);
+ const impliedLocked=(item.code==="project.use"&&hasCode(state.selectedUser,"project.create"))||(item.code==="template.use"&&hasCode(state.selectedUser,"template.manage"));
+ const delegate=state.persona==="templateDelegate";
+ const moduleAllowed=state.persona==="admin"||(delegate&&item.module==="template");
+ const selfDenied=delegate&&state.selectedUser===personaConfig[state.persona].name;
+ const externalDenied=users[state.selectedUser].kind==="外部協作人員"&&!item.external;
+ const delegateAdminCode=delegate&&item.code==="all_project_progress.read"&&!current;
+ const disabled=impliedLocked||!moduleAllowed||selfDenied||externalDenied||delegateAdminCode;
+ let reason="";
+ if(impliedLocked)reason="由 "+(item.code==="project.use"?"project.create":"template.manage")+" 自動包含，須先收回該權限";
+ else if(externalDenied)reason="外部協作人員不可取得此權限";
+ else if(selfDenied)reason="委派者不能替自己授權";
+ else if(delegateAdminCode)reason="只有 Admin 能授予此權限";
+ const badge=current?'<span class="permission-source '+(item.code==="project.use"&&hasCode(state.selectedUser,"project.create")||item.code==="template.use"&&hasCode(state.selectedUser,"template.manage")?"implied":"")+'">'+(impliedLocked?"自動包含":"已授予")+'</span>':'<span class="permission-source">未授予</span>';
+ let confirm="";
+ if(state.pendingRevoke&&state.pendingRevoke.code===item.code){
+  const impact=item.code==="project.use"?'<p>收回後仍保留專案成員身分，但此人無法再使用專案模組。</p><div><strong>目前成員身分 2 個</strong><ul class="impact-list"><li>東區排水改善工程</li><li>西側管線更新（將變成無人管理）</li></ul></div>':'<p>對象：'+esc(state.selectedUser)+'。收回後無法再使用「'+item.label+'」。專案成員與專案角色不會改變。</p>';
+  confirm='<div class="inline-confirm"><h4>確認收回「'+item.label+'」？</h4>'+impact+'<div class="confirm-actions"><button class="button small" type="button" data-action="cancel-revoke">取消</button><button class="button danger small" type="button" data-action="confirm-revoke">確認收回</button></div></div>';
+ }
+ return '<div class="permission-row '+(disabled?"is-restricted":"")+'"><label class="permission-main"><input class="permission-checkbox" type="checkbox" data-permission="'+item.code+'" '+(current?"checked":"")+' '+(disabled?"disabled":"")+' aria-label="'+item.label+'"><span><span class="permission-name">'+item.label+'</span><span class="permission-meta">'+item.description+(reason?" "+reason:"")+'</span></span></label>'+badge+confirm+'</div>';
+}
+function peoplePage(){
+ const target=state.selectedUser;
+ const wizard=personWizard();
+ const modules=registry.filter(function(item){return state.persona==="admin"||item.module==="template"});
+ const groups=["project","inspection","template"].map(function(module){
+  const rows=modules.filter(function(item){return item.module===module});
+  if(!rows.length)return "";
+  const title=rows[0].title;
+  return '<section class="permission-module"><div class="module-heading"><strong>'+title+'</strong><span>進階選項</span></div>'+rows.map(modulePermissionRow).join("")+'</section>';
+ }).join("");
+ const options=Object.keys(users).map(function(name){return '<option value="'+esc(name)+'" '+(target===name?"selected":"")+'>'+esc(name)+'</option>'}).join("");
+ const summary='<section class="capability-summary"><h2>目前可以做什麼</h2><p>'+esc(target)+'：'+capabilitySummary(target).map(esc).join("、")+'</p></section>';
+ const missing=firstMissingLayer(target);
+ const hint=missing?'<section class="layer-hint"><p><strong>缺少：'+esc(missing.label)+'</strong></p><p>補上這一層後，相關功能才會開通；不會連帶變更其他權限。</p><button class="button" type="button" data-action="repair-person-layer">一鍵補上</button></section>':'<p class="status success">目前沒有明顯缺少的常用授權層。</p>';
+ const status=state.wizardDone?'<p class="status success" role="status">'+esc(state.wizardDone.name)+' 已建立；'+esc(state.wizardDone.message)+'</p>':'';
+ const peopleOptions=Object.keys(users).map(function(name){return '<button class="person-option" type="button" data-person="'+esc(name)+'" aria-pressed="'+(target===name)+'"><span class="avatar">'+esc(users[name].initial)+'</span><span><strong>'+esc(name)+'</strong><small>'+esc(users[name].kind)+'｜'+esc(users[name].company)+'</small></span></button>'}).join("");
+ const advanced='<details class="advanced-inline"><summary>進階：逐項調整模組權限</summary><p class="rule-callout">人員模組權限與專案角色分開管理。管理者與委派者的操作範圍依身分限制。</p>'+groups+'<p class="note" id="notice" role="status" aria-live="polite">'+esc(state.notice)+'</p></details>';
+ const person='<section class="panel"><div class="panel-heading"><div><h2>人員權限概況</h2><p>先看白話能力摘要；若少一層，可直接補上。</p></div></div><div class="panel-body"><div class="field"><label for="person-target">檢視人員</label><select class="control" id="person-target">'+options+'</select></div>'+summary+hint+advanced+'</div></section>';
+ const side='<aside class="people-side stack"><section class="panel"><div class="side-panel-title"><h3>示意人員</h3><p>切換人員以檢視不同能力狀態。</p></div><div class="person-options">'+peopleOptions+'</div></section></aside>';
+ return pageHead("人員與職務","用工作內容開始設定，再查看每位人員目前能做什麼。")+wizard+status+'<div class="people-layout">'+person+side+'</div>';
+}
+function delegationsPage(){
+ const targetOptions=Object.keys(users).filter(function(name){return name!==personaConfig[state.persona].name});
+ const body='<div class="form-grid"><section class="form-panel"><h3>新增模組委派</h3><div class="stack"><div class="field"><label for="delegation-target">被委派人員</label>'+personSelect("delegation-target",state.delegationTarget,targetOptions)+'</div><div class="field"><label for="delegation-module">模組</label><select class="control" id="delegation-module"><option value="project" '+(state.delegationModule==="project"?"selected":"")+'>專案模組</option><option value="inspection" '+(state.delegationModule==="inspection"?"selected":"")+'>查核模組</option><option value="template" '+(state.delegationModule==="template"?"selected":"")+'>範本模組</option></select><p class="field-help">委派只允許授予／收回該模組權限，不會取得模組編輯能力。</p></div><button class="button primary" type="button" data-action="grant-delegation">指派委派者</button></div></section><section class="form-panel"><h3>現有委派</h3><p class="field-help">只有 Admin 能指派或收回委派；被委派者不能再轉委派。</p><div class="table-wrap"><table class="data-table"><thead><tr><th>人員</th><th>模組</th><th>範圍</th><th>操作</th></tr></thead><tbody>'+state.delegations.map(function(item,index){return '<tr><td data-label="人員">'+esc(item.name)+'</td><td data-label="模組">'+({project:"專案模組",inspection:"查核模組",template:"範本模組"}[item.module])+'</td><td data-label="範圍"><span class="badge info">只授權，不含編輯</span></td><td data-label="操作"><button class="button small" type="button" data-action="revoke-delegation" data-index="'+index+'">收回</button></td></tr>'}).join("")+'</tbody></table></div></section></div>'+
+ (state.pendingDelegation!==null?'<div class="inline-confirm" style="margin-top:15px"><h4>確認收回委派？</h4><p>'+esc(state.pendingDelegation.name)+' 的「'+({project:"專案模組",inspection:"查核模組",template:"範本模組"}[state.pendingDelegation.module])+'」委派將被收回；既有模組權限與專案角色不會因此改變。</p><div class="confirm-actions"><button class="button small" data-action="cancel-delegation">取消</button><button class="button danger small" data-action="confirm-delegation">確認收回委派</button></div></div>':"")+
+ '<p class="status" id="notice" role="status">'+esc(state.notice)+'</p>';
+ return advancedPage("模組委派","只將特定模組的權限管理交給指定人員。",'<div class="stack">'+panel("管理委派","委派不附帶模組編輯能力。",body)+'</div>');
+}
+function bundleCodes(bundle){
+ return bundle.codes.map(function(code){const entry=registry.find(function(item){return item.code===code});return '<span class="code-chip">'+esc(code)+(entry?"｜"+esc(entry.label):"")+'</span>'}).join("");
+}
+function visibleBundles(){
+ if(state.persona==="admin")return state.bundles;
+ return state.bundles.filter(function(bundle){return bundle.codes.every(function(code){return code.indexOf("template.")===0})});
+}
+function bundlesPage(){
+ const list=visibleBundles();
+ const selected=state.bundles.find(function(bundle){return bundle.id===state.selectedBundle})||list[0];
+ if(selected)state.selectedBundle=selected.id;
+ const cards=list.map(function(bundle){
+  return '<article class="bundle-item '+(selected&&selected.id===bundle.id?"selected":"")+'"><h3>'+esc(bundle.name)+'</h3><p>'+bundle.codes.length+' 項模組權限</p><div class="code-list">'+bundleCodes(bundle)+'</div><div class="card-actions"><button class="button small" type="button" data-action="select-bundle" data-id="'+bundle.id+'">選取</button>'+(state.persona==="admin"?'<button class="button quiet small" type="button" data-action="edit-bundle" data-id="'+bundle.id+'">編輯</button><button class="button quiet small" type="button" data-action="delete-bundle" data-id="'+bundle.id+'">刪除</button>':"")+'</div>'+(state.pendingBundleDelete===bundle.id?'<div class="inline-confirm"><h4>刪除此組合？</h4><p>已套用到人員的權限不會改變。</p><div class="confirm-actions"><button class="button small" data-action="cancel-bundle-delete">取消</button><button class="button danger small" data-action="confirm-bundle-delete">確認刪除</button></div></div>':"")+'</article>';
+ }).join("");
+ const targetOptions=Object.keys(users).filter(function(name){return name!==personaConfig[state.persona].name});
+ const apply='<section class="form-panel"><h3>套用到人員</h3><div class="field"><label for="bundle-target">套用對象</label>'+personSelect("bundle-target",state.bundleTarget,targetOptions)+'</div><p class="field-help">套用前會逐項檢查授權範圍；任一項不符時整組都不套用。</p><div class="action-bar"><button class="button primary" type="button" data-action="apply-bundle" '+(!selected?"disabled":"")+'>'+(selected?"套用「"+esc(selected.name)+"」":"沒有可套用組合")+'</button><button class="button" type="button" data-action="show-bundle-denial">預覽越權套用的錯誤</button></div>'+(state.bundleError?'<div class="error-detail" role="alert"><strong>權限尚未套用</strong><span>'+esc(state.bundleError)+'</span><p>沒有任何部分權限寫入。調整對象或選擇範圍內的組合後可重試。</p><button class="button small" type="button" data-action="retry-bundle">重試</button></div>':"")+'</section>';
+ let editor="";
+ if(state.persona==="admin"){
+  const editing=state.bundles.find(function(item){return item.id===state.editingBundleId});
+  editor='<section class="form-panel"><h3>'+(editing?"編輯權限組合":"新增權限組合")+'</h3><div class="field"><label for="bundle-name">組合名稱</label><input class="control" id="bundle-name" maxlength="64" placeholder="例如：查核主管常用" value="'+esc(editing?editing.name:"")+'"></div><p class="field-help">權限組合只是勾選捷徑；修改或刪除不會追改已套用的人。</p><div class="check-list">'+registry.map(function(item){return '<label class="check-row"><input type="checkbox" data-new-bundle-code="'+item.code+'" '+(editing&&editing.codes.indexOf(item.code)>=0?"checked":"")+'><span>'+item.label+'<small class="permission-meta">'+item.code+'</small></span></label>'}).join("")+'</div><div class="action-bar"><button class="button primary" style="margin-top:13px" type="button" data-action="create-bundle">'+(editing?"儲存變更":"新增組合")+'</button>'+(editing?'<button class="button" style="margin-top:13px" type="button" data-action="cancel-edit-bundle">取消編輯</button>':"")+'</div></section>';
+ }else{
+  editor='<section class="form-panel"><h3>委派者可見範圍</h3><p>只列出組合內每一項權限都屬於範本模組的項目。新增、修改、刪除組合只有 Admin 可用。</p><div class="status">目前委派範圍：範本模組。其他模組的組合不會出現在清單。</div></section>';
+ }
+ return advancedPage("權限組合","Admin 維護組合；套用後成為逐人權限。",'<div class="stack">'+panel("已登記組合","委派者只看到可完整套用的組合。",'<div class="bundle-grid">'+cards+'</div>')+'<div class="two-column">'+apply+editor+'</div><p class="status '+(state.bundleError?"error":"")+'" id="notice" role="status">'+esc(state.notice)+'</p></div>');
+}
+function roleItem(role){
+ const canExternal=role.codes.every(function(code){const item=registry.find(function(entry){return entry.code===code});return !item||item.external});
+ return '<article class="role-item"><h3>'+esc(role.name)+(role.creator?' <span class="badge info">建立者角色</span>':"")+'</h3><p>'+role.codes.map(esc).join("、")+'</p><div class="role-settings"><label class="role-setting"><span><strong>核准可指派</strong><p>非 Admin 的候選清單會依此白名單過濾。</p></span><span class="toggle"><input type="checkbox" data-role-assignable="'+role.id+'" '+(role.assignable?"checked":"")+'><span>'+ (role.assignable?"已核准":"未核准")+'</span></span></label><label class="role-setting"><span><strong>外部可用</strong><p>'+(role.creator?"建立者角色不得外部可用。":!canExternal?"含不可外部使用的權限碼。":"外部指派仍受此標記限制。")+'</p></span><span class="toggle"><input type="checkbox" data-role-external="'+role.id+'" '+(role.externalAllowed?"checked":"")+' '+(!canExternal||role.creator?"disabled":"")+'><span>'+ (role.externalAllowed?"已開放":"未開放")+'</span></span></label></div></article>';
+}
+function rolesPage(){
+ const creator=state.roles.find(function(role){return role.id===state.creatorRole});
+ const choices=state.roles.map(function(role){
+  const okay=role.codes.indexOf("project.update")>=0&&role.codes.indexOf("project_member.manage")>=0&&role.codes.indexOf("project.read")>=0;
+  return '<option value="'+role.id+'" '+(role.id===state.creatorRole?"selected":"")+' '+(!okay?"disabled":"")+'>'+esc(role.name)+(okay?"":"（缺少必要權限）")+'</option>';
+ }).join("");
+ return advancedPage("角色核准","角色是專案內的動作權限；模組權限另行管理。",'<div class="stack">'+panel("建立者角色","新專案沿用此角色；Admin 可選填其他建立者。",'<div class="two-column"><div class="field"><label for="creator-role">目前建立者角色</label><select id="creator-role" class="control">'+choices+'</select><p class="field-help">必須含調整專案、管理成員與檢視專案。</p></div><div class="field"><label>目前設定</label><div class="rule-callout"><strong>'+esc(creator?creator.name:"")+'</strong> 的必要權限由系統保留；建立者角色不能刪除。</div></div></div><div class="action-bar"><button class="button primary" data-action="save-creator-role">儲存建立者角色</button><button class="button" data-action="invalid-creator-role">預覽不合格設定</button></div><p class="status" id="notice" role="status">'+esc(state.notice)+'</p>')+panel("可指派與外部可用角色","Admin 核准角色；外部人員只可使用符合限制的角色。",'<div class="role-grid">'+state.roles.map(roleItem).join("")+'</div>')+'</div>');
+}
+function projectSubnav(){
+ const tabs=[["mine","我的專案"],["create","新增專案"],["members","成員區"]];
+ return '<div class="view-switch" role="tablist" aria-label="專案示意畫面">'+tabs.map(function(tab){return '<button type="button" role="tab" data-project-tab="'+tab[0]+'" aria-current="'+(state.projectTab===tab[0]?"page":"false")+'">'+tab[1]+'</button>'}).join("")+'</div>';
+}
+function projectListPage(){
+ const admin=state.persona==="admin";
+ const canCreate=admin||state.persona==="projectCreator";
+ const hasProject=state.persona==="projectManager"||state.persona==="external";
+ const hasOffice=state.persona==="u10";
+ if(state.projectCreated)return '<div class="status success" id="notice" role="status">'+esc(state.projectStatus)+'</div><div class="project-summary"><div><strong>'+esc(state.projectName||"東區排水改善工程")+'</strong><span>新建專案</span></div><div><strong>'+(admin?"葉書寧（指定建立者）":"目前使用者")+'</strong><span>'+(admin?"指定建立者角色人選":"自動加入建立者角色")+'</span></div><div><strong>'+(admin?"Admin 不在成員清單":"建立者已成為成員")+'</strong><span>建立行為示意</span></div></div>';
+ if(hasProject)return '<div class="stack"><div class="project-summary"><div><strong>東區排水改善工程</strong><span>專案成員｜專案工程師</span></div><div><strong>西側管線更新</strong><span>唯讀成員｜專案查閱人員</span></div><div><strong>我的專案</strong><span>依 project.read 顯示</span></div></div><p class="note">外部協作人員只看到被加入且具 project.read 的專案。</p></div>';
+ if(canCreate)return '<div class="empty-state"><div class="empty-mark">＋</div><h2>還沒有加入任何專案</h2><p>'+(admin?"Admin 可建立專案，不會自動成為成員；可選填一位建立者角色人選。":"你有開設專案權限，建立後會自動以建立者角色加入新專案。")+'</p><button class="button primary" type="button" data-project-tab="create">新增專案</button></div>';
+ if(hasOffice)return '<div class="empty-state"><div class="empty-mark">i</div><h2>目前沒有可查看的專案</h2><p>你有內業權限，但目前沒有 project.read 的專案。此頁保留空清單與說明，不會導回其他頁面。</p><button class="button" type="button" data-action="show-project-access">查看需要的權限</button></div>';
+ return '<div class="empty-state"><div class="empty-mark">i</div><h2>目前沒有可查看的專案</h2><p>專案清單依 project.read 與成員角色決定。請由專案管理者加入成員並指派角色。</p></div>';
+}
+function projectCreatePage(){
+ const admin=state.persona==="admin";
+ const allowed=admin||state.persona==="projectCreator";
+ if(!allowed)return '<div class="empty-state"><div class="empty-mark">!</div><h2>目前沒有開設專案權限</h2><p>此入口只對 Admin 或具 project.create 的人員顯示；一般成員不會看到建立表單。</p></div>';
+ const creatorChoices=Object.keys(users).filter(function(name){return users[name].kind==="內部人員"&&users[name].active&&name!==personaConfig.admin.name});
+ return '<div class="form-grid"><section class="form-panel"><h2>新增專案</h2><p class="field-help">基本資料與建立者成員會在同一個建立動作完成。</p><div class="stack"><div class="input-row"><div class="field"><label for="project-code">專案代碼</label><input id="project-code" class="control" placeholder="PRJ-2026-014"></div><div class="field"><label for="project-name">專案名稱</label><input id="project-name" class="control" placeholder="東區排水改善工程"></div></div><div class="field"><label for="project-client">業主</label><input id="project-client" class="control" placeholder="示意單位"></div>'+(admin?'<div class="field"><label for="creator-candidate">建立者角色人選（選填）</label><select class="control" id="creator-candidate"><option value="">不指定</option>'+creatorChoices.map(function(name){return '<option value="'+esc(name)+'">'+esc(name)+'</option>'}).join("")+'</select><p class="field-help">Admin 不會自動成為成員。只能選啟用中的內部人員。</p></div>':'<div class="rule-callout"><strong>建立後自動加入</strong>你會以目前的建立者角色成為新專案成員，不需再手動加入。</div>')+'<button class="button primary" type="button" data-action="create-project">建立專案</button></div></section><aside class="form-panel"><h3>建立前確認</h3><ul class="impact-list"><li>建立專案只新增這個專案，不取得其他專案的權限。</li><li>'+(admin?"Admin 保持非成員；指定的人選才會成為建立者成員。":"你會在同一個動作中成為建立者成員。")+'</li><li>專案角色不會增加人員模組權限。</li></ul></aside></div>';
+}
+function membersPage(){
+ const manager=state.persona==="admin"||state.persona==="projectManager";
+ const recipientOptions=state.assignmentTarget==="許婉庭"?["許婉庭"]:["林沐青","葉書寧"];
+ const target=state.assignmentTarget;
+ const targetIsExternal=users[target].kind==="外部協作人員";
+ const available=state.roles.filter(function(role){
+  if(targetIsExternal&&!role.externalAllowed)return false;
+  if(!manager&&!role.assignable)return false;
+  return true;
+ });
+ const selectedRole=state.roles.find(function(role){return role.id===state.assignmentRole});
+ const roleOptions=available.map(function(role){return '<option value="'+role.id+'" '+(role.id===state.assignmentRole?"selected":"")+'>'+esc(role.name)+(role.externalAllowed&&targetIsExternal?"（外部可用）":"")+'</option>'}).join("");
+ const selfName=personaConfig[state.persona].name;
+ const panel='<div class="two-column"><section class="form-panel"><h3>指派專案角色</h3><div class="stack"><div class="field"><label for="member-target">成員</label>'+personSelect("member-target",target,Object.keys(users).filter(function(name){return name!==selfName}))+'</div><div class="field"><label for="member-role">角色</label><select class="control" id="member-role">'+roleOptions+'</select><p class="field-help">'+(targetIsExternal?"外部協作人員只會列出外部可用角色。":manager?"Admin 可選所有合規角色。":"只列出 Admin 核准可指派的角色。")+'</p></div><button class="button primary" type="button" data-action="assign-role">指派角色</button><button class="button" type="button" data-action="simulate-role-denial">預覽違規指派的 422 錯誤</button>'+(state.memberError?'<div class="error-detail" role="alert"><strong>角色無法指派</strong><span>許婉庭是外部協作人員，「專案工程師」未標記為外部可用。</span><code>role.external_not_allowed</code><p>資料未變更。請選擇外部可用的「專案查閱人員」。</p></div>':"")+'</div></section><section class="form-panel"><h3>目前成員</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>人員</th><th>公司</th><th>專案角色</th><th>狀態</th></tr></thead><tbody><tr><td data-label="人員">周允辰（自己）</td><td data-label="公司">工程管理處</td><td data-label="專案角色">專案工程師</td><td data-label="狀態"><span class="badge info">不可改自己的角色</span></td></tr><tr><td data-label="人員">許婉庭</td><td data-label="公司">山嶼工程顧問</td><td data-label="專案角色">專案查閱人員</td><td data-label="狀態"><span class="badge good">外部可用</span></td></tr><tr><td data-label="人員">林沐青</td><td data-label="公司">工程管理處</td><td data-label="專案角色">現場工程師</td><td data-label="狀態"><button class="button small" type="button" data-action="remove-member">移出</button></td></tr></tbody></table></div></section></div>';
+ return '<div class="stack">'+panel+'<div class="rule-callout">非 Admin 不能修改自己的角色；外部人員要同時符合角色核准與外部可用限制。管理成員的專案角色不會改變模組權限。</div></div>';
+}
+function projectsPage(){
+ const tabs=projectSubnav();
+ const body=state.projectTab==="mine"?projectListPage():state.projectTab==="create"?projectCreatePage():membersPage();
+ return pageHead("專案與成員","入口由有效權限決定；專案內角色只影響該專案的動作。")+
+ tabs+'<div class="stack">'+panel(state.projectTab==="mine"?"我的專案":state.projectTab==="create"?"建立專案":"成員區",state.projectTab==="members"?"候選角色依 Admin 核准與外部可用標記過濾。":"此處為互動示意，不會建立實際專案。",body)+'</div>';
+}
+function render(){
+ renderNavigation();
+ const pages={people:peoplePage,diagnostic:diagnosticPage,delegations:delegationsPage,bundles:bundlesPage,roles:rolesPage,projects:projectsPage};
+ document.getElementById("content").innerHTML=pages[state.view]();
+}
+function grantCode(code){
+ const current=permissionState[state.selectedUser]||[];
+ if(current.indexOf(code)<0)current.push(code);
+ const item=registry.find(function(entry){return entry.code===code});
+ permissionState[state.selectedUser]=current;
+ state.pendingRevoke=null;
+ render();
+ const notice=document.getElementById("notice");
+ if(notice){notice.className="status success";notice.textContent="已授予 "+code+"；蘊含權限已生效。"}
+}
+function openRevoke(code){
+ state.pendingRevoke={code:code};
+ render();
+}
+function confirmRevoke(){
+ if(!state.pendingRevoke)return;
+ const code=state.pendingRevoke.code;
+ const current=permissionState[state.selectedUser]||[];
+ if((code==="project.use"&&current.indexOf("project.create")>=0)||(code==="template.use"&&current.indexOf("template.manage")>=0)){
+  state.notice="此權限由其他權限自動包含，請先收回上層權限。";
+  state.pendingRevoke=null;render();return;
+ }
+ permissionState[state.selectedUser]=current.filter(function(item){return item!==code});
+ state.pendingRevoke=null;state.notice="已收回 "+code+"；專案成員與角色保持不變。";
+ render();
+}
+function applyBundle(){
+ const bundle=state.bundles.find(function(item){return item.id===state.selectedBundle});
+ if(!bundle)return;
+ const target=state.bundleTarget;
+ const denied=bundle.codes.filter(function(code){
+  if(state.persona==="admin")return false;
+  return code.indexOf("template.")!==0||target===personaConfig[state.persona].name;
+ });
+ const externalDenied=users[target].kind==="外部協作人員"?bundle.codes.filter(function(code){
+  const item=registry.find(function(entry){return entry.code===code});
+  return item&&!item.external;
+ }):[];
+ if(denied.length||externalDenied.length){
+  state.bundleError="拒絕代碼："+Array.from(new Set(denied.concat(externalDenied))).join(", ")+"。整組未套用。";
+  render();return;
+ }
+ permissionState[target]=Array.from(new Set((permissionState[target]||[]).concat(bundle.codes)));
+ state.bundleError="";state.notice="權限組合已套用；顯示新增權限並保留原有權限。";render();
+}
+document.addEventListener("click",function(event){
+ const button=event.target.closest("button");if(!button)return;
+ const action=button.dataset.action;
+ if(button.dataset.nav){
+  const item=navItems.find(function(row){return row.id===button.dataset.nav});
+  if(item&&item.advanced)state.advancedOpen=true;
+  state.view=button.dataset.nav;state.pendingRevoke=null;state.notice="";render();return}
+ if(action==="wizard-next"){
+  if(state.wizard.step===0&&!state.wizard.name.trim()){state.notice="請先填寫姓名。";render();return}
+  state.wizard.step=Math.min(3,state.wizard.step+1);state.wizardDone=null;render();return
+ }
+ if(action==="wizard-back"){state.wizard.step=Math.max(0,state.wizard.step-1);render();return}
+ if(action==="wizard-skip-projects"){state.wizard.projects=[];state.wizard.step=3;render();return}
+ if(action==="wizard-create"){
+  const name=state.wizard.name.trim();
+  if(!name){state.notice="請先填寫姓名。";render();return}
+  if(users[name]){state.notice="已有同名示意人員，請調整姓名。";render();return}
+  const job=state.wizard.identity==="external"?"contractor":state.wizard.job;
+  const profile=profileForJob(job),external=state.wizard.identity==="external";
+  users[name]={initial:name.slice(0,1),kind:external?"外部協作人員":"內部人員",company:external?"青禾顧問":"工程管理處",active:true,is_admin:job==="system"};
+  permissionState[name]=profile.codes.filter(function(code){const item=registry.find(function(row){return row.code===code});return !external||!item||item.external});
+  state.projectRoles[name]=[];
+  state.wizard.projects.forEach(function(project){state.projectRoles[name].push({project:project,role:external?"專案查閱人員":profile.role})});
+  state.selectedUser=name;state.wizardDone={name:name,message:"已套用「"+profile.bundle+"」，預設角色為「"+(external?"專案查閱人員":profile.role)+"」。"};
+  state.wizard.step=0;state.wizard.name="";state.wizard.projects=[];state.wizard.identity="internal";state.wizard.job="office";render();return
+ }
+ if(action==="repair-person-layer"){
+  const missing=firstMissingLayer(state.selectedUser);
+  if(!missing){state.notice="目前沒有可一鍵補上的常用缺項。";render();return}
+  if(missing.kind==="module"){
+   const codes=permissionState[state.selectedUser]||[];
+   const code=codes.indexOf("inspection.use")<0?"inspection.use":"project.use";
+   if(!codes.includes(code))codes.push(code);
+  }else{
+   state.projectRoles[state.selectedUser]=[{project:"東區排水改善工程",role:"現場工程師"}];
+  }
+  state.notice="已補上「"+missing.label+"」。";render();return
+ }
+ if(action==="diagnostic-run"||action==="diagnostic-rerun"){render();return}
+ if(action==="diagnostic-fix"){
+  const result=diagnosticResult(),missing=result.missing[0];
+  if(missing&&missing.kind==="module"){
+   const codes=permissionState[state.diagnostic.person]||[];if(!codes.includes(missing.code))codes.push(missing.code);
+  }else if(missing&&missing.kind==="role"){
+   state.projectRoles[state.diagnostic.person]=[{project:"東區排水改善工程",role:missing.role}];
+  }
+  render();return
+ }
+ if(button.dataset.projectTab){state.projectTab=button.dataset.projectTab;state.view="projects";state.memberError=false;render();return}
+ if(button.dataset.person){state.selectedUser=button.dataset.person;state.pendingRevoke=null;state.notice="";render();return}
+ if(action==="cancel-revoke"){state.pendingRevoke=null;render();return}
+ if(action==="confirm-revoke"){confirmRevoke();return}
+ if(action==="grant-delegation"){
+  const person=document.getElementById("delegation-target").value;
+  const module=document.getElementById("delegation-module").value;
+  if(!state.delegations.some(function(item){return item.name===person&&item.module===module}))state.delegations.push({name:person,module:module});
+  state.notice="已指派 "+person+" 為 "+module+" 模組委派者。";render();return
+ }
+ if(action==="revoke-delegation"){state.pendingDelegation=state.delegations[Number(button.dataset.index)];render();return}
+ if(action==="cancel-delegation"){state.pendingDelegation=null;render();return}
+ if(action==="confirm-delegation"){
+  state.delegations=state.delegations.filter(function(item){return !(item.name===state.pendingDelegation.name&&item.module===state.pendingDelegation.module)});
+  state.notice="委派已收回；對方既有模組權限與專案角色不變。";state.pendingDelegation=null;render();return
+ }
+ if(action==="select-bundle"){state.selectedBundle=button.dataset.id;state.bundleError="";render();return}
+ if(action==="edit-bundle"){state.editingBundleId=button.dataset.id;render();return}
+ if(action==="cancel-edit-bundle"){state.editingBundleId=null;render();return}
+ if(action==="apply-bundle"){applyBundle();return}
+ if(action==="show-bundle-denial"){
+  state.bundleError="project.create、inspection.use、template.use 超出範本模組委派範圍；整組未套用。";
+  render();return
+ }
+ if(action==="retry-bundle"){state.bundleError="";state.notice="請修正套用對象或選擇可完整套用的組合，再次送出。";render();return}
+ if(action==="delete-bundle"){state.pendingBundleDelete=button.dataset.id;render();return}
+ if(action==="cancel-bundle-delete"){state.pendingBundleDelete=null;render();return}
+ if(action==="confirm-bundle-delete"){
+  const bundle=state.bundles.find(function(item){return item.id===state.pendingBundleDelete});
+  state.bundles=state.bundles.filter(function(item){return item.id!==state.pendingBundleDelete});
+  state.pendingBundleDelete=null;state.notice="已刪除組合；既有人員權限不變。";
+  if(bundle&&state.selectedBundle===bundle.id)state.selectedBundle=state.bundles[0]?state.bundles[0].id:"";
+  render();return
+ }
+ if(action==="create-bundle"){
+  const name=(document.getElementById("bundle-name").value||"").trim();
+  const codes=Array.from(document.querySelectorAll("[data-new-bundle-code]:checked")).map(function(input){return input.dataset.newBundleCode});
+  if(!name){state.notice="請填寫組合名稱。";render();return}
+  if(state.bundles.some(function(item){return item.id!==state.editingBundleId&&item.name.toLowerCase()===name.toLowerCase()})){state.notice="這個名稱已存在，請使用其他名稱。";render();return}
+  if(state.editingBundleId){
+   const bundle=state.bundles.find(function(item){return item.id===state.editingBundleId});
+   bundle.name=name;bundle.codes=codes;state.selectedBundle=bundle.id;
+   state.editingBundleId=null;state.notice="已更新權限組合；既有人員權限不變。";
+  }else{
+   const id="custom-"+Date.now();state.bundles.push({id:id,name:name,codes:codes});state.selectedBundle=id;state.notice="已新增權限組合。";
+  }
+  render();return
+ }
+ if(action==="save-creator-role"){
+  const value=document.getElementById("creator-role").value;
+  const role=state.roles.find(function(item){return item.id===value});
+  if(!role||role.codes.indexOf("project.update")<0||role.codes.indexOf("project_member.manage")<0||role.codes.indexOf("project.read")<0){state.notice="建立者角色必須包含調整專案、管理成員與檢視專案；設定未變更。";render();return}
+  state.creatorRole=value;state.notice="已更新建立者角色，並寫入稽核紀錄。";render();return
+ }
+ if(action==="invalid-creator-role"){state.notice="422 creator_role.invalid：專案查閱人員缺少 project.update 與 project_member.manage；設定未變更。";render();return}
+ if(action==="create-project"){
+  const name=(document.getElementById("project-name").value||"東區排水改善工程").trim();
+  const creator=state.persona==="admin"?document.getElementById("creator-candidate").value:"";
+  state.projectName=name;state.projectCreated=true;
+  state.projectStatus=state.persona==="admin"?(creator?"專案已建立；"+creator+" 已成為建立者成員，Admin 未加入成員清單。":"專案已建立；Admin 未自動成為成員。"):"專案已建立；你已在同一個建立動作加入並取得建立者角色。";
+  state.projectTab="mine";render();return
+ }
+ if(action==="show-project-access"){toast("需要 project.read 才會出現在可查看的專案清單。");return}
+ if(action==="assign-role"){
+  state.memberError=false;toast("角色已指派；此為示意操作。");return
+ }
+ if(action==="simulate-role-denial"){state.memberError=true;render();return}
+ if(action==="remove-member"){toast("此為示意資料；移出前須確認後果。");return}
+});
+document.addEventListener("change",function(event){
+ const target=event.target;
+ if(target.id==="persona"){setPersona(target.value);return}
+ if(target.id==="wizard-name"){state.wizard.name=target.value;return}
+ if(target.id==="wizard-identity"){
+  state.wizard.identity=target.value;
+  if(target.value==="external")state.wizard.job="contractor";
+  else if(state.wizard.job==="contractor")state.wizard.job="office";
+  render();return
+ }
+ if(target.id==="diagnostic-person"){state.diagnostic.person=target.value;render();return}
+ if(target.id==="diagnostic-action"){state.diagnostic.action=target.value;render();return}
+ if(target.dataset.wizardJob){state.wizard.job=target.dataset.wizardJob;render();return}
+ if(target.dataset.wizardProject){
+  const project=target.dataset.wizardProject;
+  state.wizard.projects=target.checked?Array.from(new Set(state.wizard.projects.concat(project))):state.wizard.projects.filter(function(item){return item!==project});
+  return
+ }
+ if(target.id==="person-target"){state.selectedUser=target.value;state.pendingRevoke=null;render();return}
+ if(target.id==="bundle-target"){state.bundleTarget=target.value;state.bundleError="";return}
+ if(target.id==="delegation-target"){state.delegationTarget=target.value;return}
+ if(target.id==="delegation-module"){state.delegationModule=target.value;return}
+ if(target.id==="member-target"){
+  state.assignmentTarget=target.value;
+  const personIsExternal=users[target.value].kind==="外部協作人員";
+  state.assignmentRole=personIsExternal?"viewer":"field";
+  state.memberError=false;render();return
+ }
+ if(target.id==="member-role"){state.assignmentRole=target.value;return}
+ if(target.dataset.permission){
+  const code=target.dataset.permission;
+  if(!target.checked){target.checked=true;openRevoke(code);return}
+  const item=registry.find(function(entry){return entry.code===code});
+  if(users[state.selectedUser].kind==="外部協作人員"&&item&&!item.external){target.checked=false;state.notice="外部協作人員不可取得 "+code+"。";render();return}
+  if(state.persona==="templateDelegate"&&(item.module!=="template"||state.selectedUser===personaConfig.templateDelegate.name||code==="all_project_progress.read")){target.checked=false;state.notice="此操作超出委派範圍或不能自授，資料未變更。";render();return}
+  grantCode(code);return
+ }
+ if(target.dataset.roleAssignable){
+  const role=state.roles.find(function(item){return item.id===target.dataset.roleAssignable});role.assignable=target.checked;render();return
+ }
+ if(target.dataset.roleExternal){
+  const role=state.roles.find(function(item){return item.id===target.dataset.roleExternal});role.externalAllowed=target.checked;render();return
+ }
+});
+let themeMode="system";
+document.getElementById("theme-toggle").addEventListener("click",function(){
+ themeMode={system:"light",light:"dark",dark:"system"}[themeMode];
+ const root=document.documentElement;
+ if(themeMode==="system")root.removeAttribute("data-theme");
+ else root.dataset.theme=themeMode;
+ this.textContent="主題："+{system:"跟隨系統",light:"淺色",dark:"深色"}[themeMode];
+});
+render();
+const tourStories=[
+ {id:"onboard",title:"新人報到：用職務起手式開始",tag:"新增人員・職務起手式",
+  summary:"新人要加入公司；先說明身分和工作，再預覽能做什麼。",
+  cast:"管理者陳以安、新人許以禾",
+  scenes:[
+   {title:"先選身分，再說明職務",setup:{persona:"admin",view:"people",wizard:{step:0,identity:"internal",job:"office"}},
+    story:"早上新人報到。陳以安不用先理解權限名稱，只要說明新人是內部同仁、負責內業規劃。",
+    steps:["在「新增人員：職務起手式」填姓名。","身分選「內部人員」，按「下一步」。","職務選「內業規劃」。"],
+    why:"先用身分與日常職務描述需求，減少直接操作權限清冊造成的誤授。"},
+   {title:"可略過專案，先看白話預覽",setup:{persona:"admin",view:"people",wizard:{step:2,identity:"internal",job:"office"}},
+    story:"許以禾還沒有確定要加入哪個專案，陳以安先略過，再檢查預覽。",
+    steps:["專案可以先不選，按「先略過專案」。","看「可以做／不能做」摘要與小字中的權限組合、預設角色。","按「建立人員並套用」完成示意流程。"],
+    why:"加入專案是可選步驟；權限組合和預設角色可追溯，同時保留白話主流程。"}
+  ]},
+ {id:"contractor",title:"外包顧問：先看能做與不能做",tag:"外部人員・受限預覽",
+  summary:"外部顧問只需要參與指定專案；起手式先限制職務，再清楚說明邊界。",
+  cast:"管理者陳以安、外包顧問王品睿",
+  scenes:[
+   {title:"外部身分只提供外包顧問",setup:{persona:"admin",view:"people",wizard:{step:0,identity:"external",job:"contractor"}},
+    story:"王品睿受聘三個月。陳以安選外部協作人員後，其他職務選項不再提供。",
+    steps:["新增人員的身分選「外部協作人員」。","按「下一步」，確認只能選「外包顧問」。"],
+    why:"身分限制直接收斂選項，避免外部人員被套用管理者或內部職務。"},
+   {title:"預覽限制並選擇專案",setup:{persona:"admin",view:"people",wizard:{step:3,identity:"external",job:"contractor",projects:["東區排水改善工程"]}},
+    story:"陳以安要讓王品睿查看東區工程，不能開新專案、管理成員或碰範本庫。",
+    steps:["選擇「東區排水改善工程」，再看預覽。","確認不能做的事項與小字中的組合、外部可用專案角色。","按「建立人員並套用」。"],
+    why:"外部人員只能拿到符合外部限制的模組權限和專案角色，專案範圍也由管理者明確選擇。"}
+  ]},
+ {id:"diagnostic",title:"看不到任務：查出少了哪一層",tag:"權限檢查・一鍵補足",
+  summary:"同仁能登入系統，卻看不到東區工程的查核任務；先查清楚缺少模組權限還是專案角色。",
+  cast:"內業人員許庭安、管理者陳以安",
+  scenes:[
+   {title:"選人與動作，直接查原因",setup:{persona:"admin",view:"diagnostic",diagnostic:{person:"許庭安",action:"inspection"}},
+    story:"許庭安說自己看不到查核任務。陳以安不必猜測權限名稱，打開檢查工具選人和動作。",
+    steps:["人員選許庭安，動作選「看查核任務」。","按「檢查權限」，查看缺少的層級與補法。"],
+    why:"檢查同時分辨模組使用權與專案角色，避免只補一層仍然無法執行。"},
+   {title:"補上專案角色，確認結果通過",setup:{persona:"admin",view:"diagnostic",diagnostic:{person:"許庭安",action:"inspection"}},
+    story:"結果顯示她有查核模組使用權，但還沒有東區工程的專案角色（例如「現場工程師」）。",
+    steps:["按「補上缺少的一層」。","結果會立即更新；確認狀態顯示「可以執行」。"],
+    why:"補救只新增必要的一層，不會擴大其他模組或專案的權限。"}
+  ]},
+ {id:"delegation",title:"委派同事：把工作交出去但守住邊界",tag:"進階設定・模組委派",
+  summary:"管理者把範本模組權限工作交給同事；委派者只能替別人開通範本模組。",
+  cast:"管理者陳以安、範本負責人林沐青",
+  scenes:[
+   {title:"從進階設定打開模組委派",setup:{persona:"admin",view:"delegations",advancedOpen:true},
+    story:"陳以安希望林沐青協助新人開通範本功能，但不想授予她系統管理或範本編輯能力。",
+    steps:["展開左側「進階設定」，進入「模組委派」。","選林沐青與範本模組，按「指派委派者」。"],
+    why:"委派按模組切分，管理授權的人不會因此取得被管理功能的編輯能力。"},
+   {title:"委派者不能替自己或轉授權",setup:{persona:"templateDelegate",view:"people",user:"林沐青",advancedOpen:true},
+    story:"林沐青替新同事設定範本權限，但不能替自己開通，也不能把委派轉給別人。",
+    steps:["看人員能力摘要與進階模組清冊。","確認只可替他人調整範本模組；不可自授、轉委派或管理範本庫。"],
+    why:"權限只能由適當管理者授予，委派不會讓權力自行擴張。"},
+   {title:"收回委派不移除既有權限",setup:{persona:"admin",view:"delegations",advancedOpen:true},
+    story:"人員調職後，陳以安收回林沐青的範本委派；她先前授出的範本權限仍由管理者決定是否保留。",
+    steps:["在現有委派按「收回」。","讀完行內確認，再決定是否確認。"],
+    why:"委派資格與個人已取得的權限是兩件事，分開處理才能避免意外連鎖撤權。"}
+  ]},
+ {id:"missing-layer",title:"少一層就補一層：不重做整套設定",tag:"人員摘要・逐層補足",
+  summary:"人員調整工作後，管理者需要看到他目前能做什麼，以及缺少哪一個授權層。",
+  cast:"管理者陳以安、內業人員許庭安",
+  scenes:[
+   {title:"用白話摘要看目前能力",setup:{persona:"admin",view:"people",user:"許庭安"},
+    story:"陳以安選取許庭安，在人員頁先讀「目前可以做什麼」，再看提示指出的缺少層級。",
+    steps:["在人員概況選許庭安。","看能力摘要及「缺少：東區排水改善工程的專案角色」。"],
+    why:"先呈現可理解的能力與差距，權限碼保留在收合的進階設定中。"},
+   {title:"一鍵補上缺少的專案角色",setup:{persona:"admin",view:"people",user:"許庭安"},
+    story:"確認工作需要後，陳以安按一鍵補上，系統只為示意專案增加必要角色。",
+    steps:["按「一鍵補上」。","重新看能力摘要，確認專案角色出現。","展開「進階：逐項調整模組權限」，查看細節。"],
+    why:"一鍵補足降低管理成本，但只補提示的那一層，不改其他既有授權。"}
+  ]},
+ {id:"guardrail",title:"進階設定：四道防線各自守住一層",tag:"進階設定・四道防線",
+  summary:"角色和權限組合不直接放在新人主流程；需要時再展開進階設定檢視。",
+  cast:"管理者陳以安、專案工程師周允辰",
+  scenes:[
+   {title:"防線一：建立者角色要能管理專案",setup:{persona:"admin",view:"roles",advancedOpen:true},
+    story:"建立者必須能調整專案、管理成員並查看專案；不合格的角色不能被選成預設。",
+    steps:["展開進階設定的「角色核准」。","檢查建立者角色的必要權限與拒絕預覽。"],
+    why:"新專案建立後要有人能接手管理，建立者角色不能缺少必要能力。"},
+   {title:"防線二：可指派與外部可用分開核准",setup:{persona:"admin",view:"roles",advancedOpen:true},
+    story:"陳以安只核准一般專案管理者可指派的角色，並另外確認哪些角色可給外部人員。",
+    steps:["在進階角色設定分別切換「核准可指派」與「外部可用」。","確認含不允許外部權限的角色無法開放外部使用。"],
+    why:"一般指派資格與外部適用資格是不同限制，必須分開檢查。"},
+   {title:"防線三：專案角色不能自行升級",setup:{persona:"projectManager",view:"projects",tab:"members"},
+    story:"周允辰管理成員，但不能替自己升級角色，也不能移走最後一位管理者。",
+    steps:["開啟成員區，檢查自己的列與角色操作限制。"],
+    why:"專案角色只在專案內生效，自我升權和移除最後管理者都會破壞治理。"},
+   {title:"防線四：組合越權時整組拒絕",setup:{persona:"templateDelegate",view:"bundles",advancedOpen:true},
+    story:"委派者套用的權限組合若包含範本模組以外的權限，系統不會留下部分結果。",
+    steps:["在進階設定打開權限組合。","預覽越權套用拒絕，確認提示指出受拒絕項目且沒有部分寫入。"],
+    why:"原子套用讓權限狀態清楚可查，拒絕不會留下半套授權。"}
+  ]}
+];
+let tourStory=null,tourScene=0;
+const demoBaseline={
+ users:structuredClone(users),
+ permissions:structuredClone(permissionState),
+ state:structuredClone(state)
+};
+function resetDemoState(){
+ Object.keys(users).forEach(function(name){delete users[name]});
+ Object.assign(users,structuredClone(demoBaseline.users));
+ Object.keys(permissionState).forEach(function(name){delete permissionState[name]});
+ Object.assign(permissionState,structuredClone(demoBaseline.permissions));
+ Object.assign(state,structuredClone(demoBaseline.state));
+}
+function applyTourSetup(setup){
+ if(setup.persona&&state.persona!==setup.persona){state.persona=setup.persona;state.projectCreated=false;state.projectName=""}
+ state.view=setup.view||state.view;
+ if(setup.user)state.selectedUser=setup.user;
+ if(setup.tab)state.projectTab=setup.tab;
+ if(setup.wizard)state.wizard=Object.assign({},state.wizard,setup.wizard);
+ if(setup.diagnostic)state.diagnostic=Object.assign({},state.diagnostic,setup.diagnostic);
+ if(setup.advancedOpen!==undefined)state.advancedOpen=setup.advancedOpen;
+ if(setup.pageAdvancedOpen!==undefined)state.pageAdvancedOpen=setup.pageAdvancedOpen;
+ if(setup.inlineAdvancedOpen!==undefined)state.inlineAdvancedOpen=setup.inlineAdvancedOpen;
+ state.pendingRevoke=null;state.pendingDelegation=null;state.pendingBundleDelete=null;
+ state.bundleError="";state.memberError=false;state.notice="";
+ render();window.scrollTo({top:0});
+}
+function renderTour(){
+ const body=document.getElementById("tour-body");
+ const prev=document.getElementById("tour-prev"),next=document.getElementById("tour-next");
+ if(tourStory===null){
+  document.getElementById("tour-step").textContent="情境故事 "+tourStories.length+" 則";
+  body.innerHTML='<h2>選一個故事，看系統怎麼運作</h2><p class="tour-why">每個故事是一個現場情境，會自動切換到對應的身分與頁面。</p><div class="tour-list">'+tourStories.map(function(story,index){return '<button class="tour-pick" type="button" data-story="'+index+'"><span class="tour-pick-tag">'+esc(story.tag)+'</span><strong>'+esc(story.title)+'</strong><span>'+esc(story.summary)+'</span><span class="tour-pick-meta">'+story.scenes.length+' 個場景</span></button>'}).join("")+'</div>';
+  prev.hidden=true;next.hidden=true;return;
+ }
+ const story=tourStories[tourStory],scene=story.scenes[tourScene];
+ document.getElementById("tour-step").textContent=story.title+"｜"+(tourScene+1)+"／"+story.scenes.length;
+ body.innerHTML=(tourScene===0?'<p class="tour-cast"><strong>登場人物：</strong>'+esc(story.cast)+'</p>':"")+'<h2>'+esc(scene.title)+'</h2><h3 class="tour-part-label">現場故事</h3><p class="tour-story">'+esc(scene.story)+'</p><p class="tour-do">請你這樣操作</p><ol class="tour-steps">'+scene.steps.map(function(item){return '<li>'+esc(item)+'</li>'}).join("")+'</ol><p class="tour-why"><strong>為什麼這樣設計：</strong>'+esc(scene.why)+'</p>';
+ prev.hidden=false;next.hidden=false;
+ prev.textContent=tourScene===0?"回故事清單":"上一步";
+ next.textContent=tourScene===story.scenes.length-1?"看下一個故事":"下一步";
+}
+function openScene(storyIndex,sceneIndex){
+ if(storyIndex!==tourStory)resetDemoState();
+ tourStory=storyIndex;tourScene=sceneIndex;
+ if(storyIndex!==null)applyTourSetup(tourStories[storyIndex].scenes[sceneIndex].setup);
+ renderTour();document.getElementById("tour-body").scrollTop=0;
+}
+document.getElementById("tour-body").addEventListener("click",function(event){
+ const pick=event.target.closest("[data-story]");if(pick)openScene(Number(pick.dataset.story),0);
+});
+document.getElementById("tour-prev").addEventListener("click",function(){
+ if(tourStory===null)return;
+ if(tourScene===0)openScene(null,0);else openScene(tourStory,tourScene-1);
+});
+document.getElementById("tour-next").addEventListener("click",function(){
+ if(tourStory===null)return;
+ const story=tourStories[tourStory];
+ if(tourScene<story.scenes.length-1)openScene(tourStory,tourScene+1);
+ else if(tourStory<tourStories.length-1)openScene(tourStory+1,0);
+ else openScene(null,0);
+});
+document.getElementById("tour-toggle").addEventListener("click",function(){
+ const tour=document.getElementById("tour");const collapsed=tour.classList.toggle("collapsed");
+ document.body.classList.toggle("tour-collapsed",collapsed);
+ this.textContent=collapsed?"展開導覽":"收合";this.setAttribute("aria-expanded",String(!collapsed));
+});
+document.addEventListener("toggle",function(event){
+ if(event.target.matches("details.advanced-nav"))state.advancedOpen=event.target.open;
+ if(event.target.matches("details.advanced-panel"))state.pageAdvancedOpen=event.target.open;
+ if(event.target.matches("details.advanced-inline"))state.inlineAdvancedOpen=event.target.open;
+},true);
+document.body.classList.add("has-tour");
+openScene(null,0);
+</script>
