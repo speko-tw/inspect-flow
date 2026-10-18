@@ -1,7 +1,5 @@
-// 非系統管理者的專案清單（#480）：列出「我所在的專案」，只含我有
-// 內業權限的專案，版面沿用管理者專案清單的卡片，但沒有新增、編輯
-// 與搜尋，也不顯示其他系統管理功能。資料來自既有的
-// `GET /me/projects`，由後端的 `has_office_access` 標出內業專案。
+// 非系統管理者的專案清單（ADM-R24）：列出我可讀取的參與專案，唯讀
+// 專案不顯示範本套用等修改入口。資料來自既有的 `GET /me/projects`。
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
@@ -34,7 +32,7 @@ export default function MyProjectsPage() {
         if (active) {
           setState({
             kind: 'ready',
-            projects: items.filter((item) => item.has_office_access),
+            projects: items,
           })
         }
       })
@@ -88,7 +86,7 @@ export default function MyProjectsPage() {
                 >
                   開啟專案
                 </Link>
-                {project.can_apply_templates && (
+                {project.has_office_access && project.can_apply_templates && (
                   <Link className="btn" to={templatePath}>
                     套用範本
                   </Link>

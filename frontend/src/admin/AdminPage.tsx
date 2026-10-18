@@ -468,9 +468,8 @@ function MemberAdminShell({
           <Route
             path="projects"
             element={
-              // 沒有內業權限的人直接開這個網址：導回自己的落點，不顯示
-              // 一份空清單或 403（#489）。
-              user.has_office_access ? (
+              // 專案查閱權限可進入唯讀清單，不改變現場帳號的首頁落點。
+              user.has_office_access || user.has_project_access ? (
                 <MyProjectsPage />
               ) : (
                 <Navigate replace to={indexTarget} />
