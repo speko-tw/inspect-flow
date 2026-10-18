@@ -593,9 +593,7 @@ export default function UsersPage({
               onQueryChange={setQuery}
               onSearch={(event) => {
                 event.preventDefault()
-                void search(query).then(() =>
-                  onQueryApplied?.(query.trim()),
-                )
+                void search(query).then(() => onQueryApplied?.(query.trim()))
               }}
               query={query}
             />

@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 
 import { ACCOUNT_LABEL } from '../../layout/navigationLabels'
-import { UnsavedLeaveBox, useUnsavedNavigationGuard } from '../../ui/navigation'
+import {
+  UnsavedLeaveBox,
+  useUnsavedNavigationGuard,
+} from '../../ui/navigation'
 import UsersPage from '../UsersPage'
 import ModulePermissionsPage from '../module-permissions/ModulePermissionsPage'
 import { useCurrentUser } from '../../auth/useCurrentUser'
