@@ -27,6 +27,7 @@ from app.api.v1._management_errors import (
 )
 from app.auth.access import (
     calculate_effective_access,
+    permission_gaps,
     require_admin,
     require_module_delegation,
 )
@@ -37,6 +38,9 @@ from app.models import (
     PermissionBundle,
     Project,
     ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
     User,
 )
 from app.permission_codes import (
@@ -241,6 +245,70 @@ class ModulePermissionOptionListResponse(BaseModel):
 class UserModulePermissionResponse(BaseModel):
     permission_codes: list[str]
     delegated_modules: list[str]
+
+
+class EffectiveAccessUser(BaseModel):
+    """有效權限查詢的目標帳號狀態。"""
+
+    id: UUID
+    is_active: bool
+    is_admin: bool
+
+
+class EffectiveModulePermission(BaseModel):
+    """一項有效模組權限與授權來源。"""
+
+    code: str
+    module: str
+    source: str
+
+
+class EffectiveProjectRole(BaseModel):
+    """目標在指定專案持有的角色與專案權限代碼。"""
+
+    id: UUID
+    name: str
+    permission_codes: list[str]
+
+
+class EffectiveAccessDiagnostic(BaseModel):
+    """一個固定操作依兩層權限計算後的判定。"""
+
+    action: str
+    module: str
+    required_module_codes: list[str]
+    required_project_codes: list[str]
+    allowed: bool
+    missing_layers: list[str]
+    missing_codes: list[str]
+
+
+class UserEffectiveAccessResponse(BaseModel):
+    """管理端查詢他人於一個專案的有效權限。"""
+
+    user: EffectiveAccessUser
+    module_permissions: list[EffectiveModulePermission]
+    project_roles: list[EffectiveProjectRole] | None = None
+    diagnostics: list[EffectiveAccessDiagnostic]
+
+
+# 四種診斷沿用既有 guard 的代碼與兩層規則，不建立第二套授權資料。
+_EFFECTIVE_ACCESS_ACTIONS = (
+    (
+        "task_list",
+        "inspection",
+        ("inspection.use",),
+        ("inspection_task.read",),
+    ),
+    ("create_project", "project", ("project.create",), ()),
+    ("manage_template_library", "template", ("template.manage",), ()),
+    (
+        "manage_project_members",
+        "project",
+        ("project.use",),
+        ("project_member.manage",),
+    ),
+)
 
 
 class PermissionBundleRequest(BaseModel):
@@ -776,6 +844,140 @@ def get_user_module_permissions(
     return UserModulePermissionResponse(
         permission_codes=permission_codes,
         delegated_modules=delegated_modules,
+    )
+
+
+@module_permission_router.get(
+    "/users/{user_id}/effective-access",
+    response_model=UserEffectiveAccessResponse,
+    response_model_exclude_none=True,
+)
+def get_user_effective_access(
+    user_id: UUID,
+    project_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> UserEffectiveAccessResponse:
+    """依 ADM-R45 回傳目標在指定專案的唯讀有效權限診斷。"""
+    target = _get_user(db, user_id)
+    target_access = calculate_effective_access(
+        db, user_id=target.id, project_id=project_id
+    )
+    if not actor.is_admin and target_access.is_admin:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+
+    membership_id = db.scalar(
+        select(ProjectMember.id).where(
+            ProjectMember.user_id == target.id,
+            ProjectMember.project_id == project_id,
+        )
+    )
+    if membership_id is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+
+    actor_access = calculate_effective_access(db, user_id=actor.id)
+    visible_modules = (
+        MODULES if actor.is_admin else actor_access.delegated_modules
+    )
+    source_names = {
+        "manual": "direct",
+        "bundle": "combination",
+        "implied": "implied",
+        "backfill": "backfill",
+    }
+    source_by_code = {
+        row.permission_code: row.source
+        for row in list_user_module_permissions(db, user_id=target.id)
+    }
+    module_permissions = []
+    for code in sorted(target_access.module_permissions):
+        module = permission_code_module(code)
+        if module not in visible_modules:
+            continue
+        source = (
+            "admin_implicit"
+            if target_access.is_admin
+            else source_names[source_by_code[code]]
+        )
+        module_permissions.append(
+            EffectiveModulePermission(
+                code=code,
+                module=module or "",
+                source=source,
+            )
+        )
+
+    project_roles: list[EffectiveProjectRole] | None = None
+    if actor.is_admin:
+        role_rows = db.execute(
+            select(Role.id, Role.name, RolePermission.code)
+            .select_from(ProjectMemberRole)
+            .join(
+                ProjectMember,
+                ProjectMember.id == ProjectMemberRole.project_member_id,
+            )
+            .join(Role, Role.id == ProjectMemberRole.role_id)
+            .outerjoin(RolePermission, RolePermission.role_id == Role.id)
+            .where(
+                ProjectMember.user_id == target.id,
+                ProjectMember.project_id == project_id,
+            )
+            .order_by(Role.name, Role.id, RolePermission.code)
+        ).all()
+        roles_by_id: dict[UUID, EffectiveProjectRole] = {}
+        for role_id, name, code in role_rows:
+            role = roles_by_id.setdefault(
+                role_id,
+                EffectiveProjectRole(
+                    id=role_id,
+                    name=name,
+                    permission_codes=[],
+                ),
+            )
+            if code is not None:
+                role.permission_codes.append(code)
+        project_roles = list(roles_by_id.values())
+
+    diagnostics = []
+    for (
+        action,
+        module,
+        module_codes,
+        project_codes,
+    ) in _EFFECTIVE_ACCESS_ACTIONS:
+        if module not in visible_modules:
+            continue
+        missing_module, missing_project = permission_gaps(
+            target_access,
+            module_codes=module_codes,
+            project_codes=project_codes,
+        )
+        missing_layers = []
+        if missing_module:
+            missing_layers.append("module")
+        if missing_project:
+            missing_layers.append("project_role")
+        diagnostics.append(
+            EffectiveAccessDiagnostic(
+                action=action,
+                module=module,
+                required_module_codes=list(module_codes),
+                required_project_codes=list(project_codes),
+                allowed=not missing_layers,
+                missing_layers=missing_layers,
+                missing_codes=missing_module + missing_project,
+            )
+        )
+
+    return UserEffectiveAccessResponse(
+        user=EffectiveAccessUser(
+            id=target.id,
+            is_active=target.is_active,
+            is_admin=target_access.is_admin,
+        ),
+        module_permissions=module_permissions,
+        project_roles=project_roles,
+        diagnostics=diagnostics,
     )
 
 
