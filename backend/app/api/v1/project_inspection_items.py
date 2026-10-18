@@ -14,16 +14,14 @@ from app.api.v1.template_library import (
     template_write_call,
 )
 from app.auth.access import (
-    is_admin_or_system_role,
-    require_admin_or_system_role,
     require_login_access,
-    require_project_permission,
+    require_module_and_project_permission,
+    require_module_permission,
 )
 from app.auth.dependencies import get_db
 from app.models import (
     Project,
     ProjectInspectionItem,
-    SystemRoleCode,
     User,
 )
 from app.services.inspection_details import (
@@ -38,7 +36,7 @@ from app.services.project_templates import (
 
 router = APIRouter(prefix="/projects", tags=["project-inspection-items"])
 _TEMPLATE_WRITE = Depends(
-    require_admin_or_system_role(SystemRoleCode.TEMPLATE_ADMIN),
+    require_module_permission("template.manage"),
     scope="function",
 )
 
@@ -82,9 +80,11 @@ class CreateTemplateFromProjectRequest(BaseModel):
     status_code=201,
     dependencies=[
         Depends(
-            require_project_permission("project_inspection_item.edit"),
+            require_module_and_project_permission(
+                "template.use", "project_inspection_item.edit"
+            ),
             scope="function",
-        )
+        ),
     ],
 )
 def apply_template_to_project(
@@ -160,15 +160,17 @@ def list_project_inspection_items(
     db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = Depends(require_login_access, scope="function"),  # noqa
 ) -> dict:
-    """列出專案查核項目；Admin 與範本管理者可讀，其他非成員拒絕。"""
-    if not is_admin_or_system_role(db, user, SystemRoleCode.TEMPLATE_ADMIN):
-        # 使用中央計算結果判斷成員資格，避免專案端點自行查 ProjectMember。
-        access = calculate_effective_access(
-            db, user_id=user.id, project_id=project_id
-        )
-        if project_id not in access.project_memberships:
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-    elif db.get(Project, project_id) is None:
+    """依 TPL-R09 允許專案成員或範本管理者讀取查核項目。"""
+    access = calculate_effective_access(
+        db, user_id=user.id, project_id=project_id
+    )
+    if (
+        not access.is_admin
+        and "template.manage" not in access.module_permissions
+        and project_id not in access.project_memberships
+    ):
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    if db.get(Project, project_id) is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
     return page(

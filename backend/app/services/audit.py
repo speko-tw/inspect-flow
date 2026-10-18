@@ -942,18 +942,6 @@ register_audit_event(
     always_recorded=("company_id", "employee_no", "department", "location"),
     nullable_fields=("company_id", "employee_no", "department", "location"),
 )
-register_audit_event(
-    "system_role_assignment.created",
-    entity_type="system_role_assignment",
-    kind=AuditEventKind.CREATED,
-    fields=("user_id", "role_code"),
-)
-register_audit_event(
-    "system_role_assignment.deleted",
-    entity_type="system_role_assignment",
-    kind=AuditEventKind.DELETED,
-    fields=("user_id", "role_code"),
-)
 # ALG-R24：由專案項目建立範本時，須保留來源專案。
 register_audit_event(
     "template_item.created_from_project",
