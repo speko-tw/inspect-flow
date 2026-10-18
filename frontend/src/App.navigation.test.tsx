@@ -172,6 +172,15 @@ function stubBackend(
       if (url.endsWith('/auth/password') && method === 'POST') {
         return new Response(null, { status: 204 })
       }
+      if (/\/users\/[^/]+\/participating-projects$/.test(url)) {
+        return Response.json({ items: [] })
+      }
+      if (/\/users\/[^/]+\/module-permissions$/.test(url)) {
+        return Response.json({ permission_codes: [], delegated_modules: [] })
+      }
+      if (url.endsWith('/module-permissions')) {
+        return Response.json({ items: [] })
+      }
       if (url.includes('/users?') || url.endsWith('/users')) {
         return Response.json({
           items: [
@@ -613,9 +622,9 @@ describe('出路與 404（#480）', () => {
     // 專案頁有頂端列：帳號名稱、專案；個人選單提供密碼與登出。
     const bar = await screen.findByRole('navigation', { name: '管理功能' })
     expect(await screen.findByText('DEMO-A｜示範工程甲')).toBeVisible()
-    expect(screen.getByText(/登入者：主管/)).toBeVisible()
+    expect(screen.getByRole('button', { name: '主管 ▾' })).toBeVisible()
     expect(within(bar).queryByRole('link', { name: '設定' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /登入者：主管/ }))
+    fireEvent.click(screen.getByRole('button', { name: '主管 ▾' }))
     expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
     // 導覽沒有分區與進度的佔位頁，也沒有管理者專屬項目。
@@ -629,7 +638,7 @@ describe('出路與 404（#480）', () => {
     ).toBeVisible()
 
     // 變更密碼頁可以返回我的專案。
-    fireEvent.click(screen.getByRole('button', { name: /登入者：主管/ }))
+    fireEvent.click(screen.getByRole('button', { name: '主管 ▾' }))
     fireEvent.click(screen.getByRole('link', { name: '設定' }))
     fireEvent.click(await screen.findByRole('link', { name: '返回專案' }))
     expect(
@@ -653,10 +662,17 @@ describe('出路與 404（#480）', () => {
 })
 
 describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
+  async function openOwnAdminAction() {
+    fireEvent.click(await screen.findByRole('button', { name: '主管' }))
+    await screen.findByRole('heading', { name: '主管', level: 1 })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+  }
+
   it('先確認；取消時不送出請求', async () => {
     const backend = stubBackend(ADMIN)
     renderApp('/admin/people')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    await openOwnAdminAction()
 
     const confirmation = screen.getByRole('region', { name: '操作確認' })
     expect(confirmation).toHaveTextContent('boss')
@@ -668,14 +684,14 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       ),
     ).toBe(false)
     expect(
-      screen.getByRole('heading', { name: '帳號', level: 1 }),
+      screen.getByRole('heading', { name: '主管', level: 1 }),
     ).toBeInTheDocument()
   })
 
   it('確認後收回成功：提示並導離管理頁，不顯示權限錯誤', async () => {
     const backend = stubBackend(ADMIN)
     renderApp('/admin/people')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    await openOwnAdminAction()
     fireEvent.click(
       within(screen.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -683,9 +699,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       ),
     )
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      '已收回你的管理者權限',
-    )
+    expect(await screen.findByText('已收回你的管理者權限。')).toBeVisible()
     expect(
       screen.getByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
@@ -720,7 +734,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       return response
     })
     renderApp('/admin/people')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    await openOwnAdminAction()
     fireEvent.click(
       within(screen.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -750,7 +764,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       },
     )
     renderApp('/admin/people')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    await openOwnAdminAction()
     fireEvent.click(
       within(screen.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -762,7 +776,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
     expect(
-      screen.getByRole('heading', { name: '帳號', level: 1 }),
+      screen.getByRole('heading', { name: '主管', level: 1 }),
     ).toBeInTheDocument()
   })
 })
@@ -858,7 +872,13 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
 
   async function logOut() {
     if (!screen.queryByRole('button', { name: '登出' })) {
-      fireEvent.click(screen.getByRole('button', { name: /登入者：/ }))
+      const trigger = screen
+        .getByRole('banner')
+        .querySelector<HTMLButtonElement>(
+          'button[aria-controls="app-header-personal-menu"]',
+        )
+      expect(trigger).not.toBeNull()
+      fireEvent.click(trigger!)
     }
     fireEvent.click(await screen.findByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
@@ -972,7 +992,13 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     const bar = screen.getByRole('navigation', { name: '我的功能' })
     expect(within(bar).queryByRole('link', { name: '專案' })).toBeNull()
     expect(within(bar).queryByRole('link', { name: '設定' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /登入者：/ }))
+    const trigger = screen
+      .getByRole('banner')
+      .querySelector<HTMLButtonElement>(
+        'button[aria-controls="app-header-personal-menu"]',
+      )
+    expect(trigger).not.toBeNull()
+    fireEvent.click(trigger!)
     expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
   })
 

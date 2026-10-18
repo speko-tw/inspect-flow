@@ -121,7 +121,7 @@ describe('今日任務首頁', () => {
       within(banner).getByRole('link', { name: 'InspectFlow 工程查核系統' }),
     ).toHaveAttribute('href', '/admin/projects')
     fireEvent.click(
-      within(banner).getByRole('button', { name: '登入者：示範查核員' }),
+      within(banner).getByRole('button', { name: '示範查核員 ▾' }),
     )
     expect(within(banner).getByRole('button', { name: '登出' })).toBeVisible()
     expect(within(banner).getByRole('link', { name: '任務' })).toHaveAttribute(
@@ -376,7 +376,7 @@ describe('今日任務首頁', () => {
     })
     expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('密碼已更新。')
-    fireEvent.click(screen.getByRole('button', { name: '登入者：inspector' }))
+    fireEvent.click(screen.getByRole('button', { name: 'inspector ▾' }))
     expect(screen.getByRole('link', { name: '設定' })).toHaveAttribute(
       'href',
       '/change-password',

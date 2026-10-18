@@ -15,6 +15,7 @@ import { Link, NavLink, useLocation } from 'react-router'
 import type { CurrentUser } from '../auth/api'
 import { canBrowseTemplates, landingPath } from '../auth/landing'
 import LogoutButton from '../auth/LogoutButton'
+import '../styles/g7-shell.css'
 import { NAV_LABELS } from './navigationLabels'
 
 export const SYSTEM_NAME = 'InspectFlow 工程查核系統'
@@ -208,6 +209,7 @@ export default function AppHeader({
                 <button
                   aria-controls="app-header-personal-menu"
                   aria-expanded={personalMenuOpen}
+                  aria-haspopup="true"
                   className="topbar-user app-header-personal-trigger"
                   onClick={() => setPersonalMenuOpen((open) => !open)}
                   onKeyDown={(event) => {
@@ -219,7 +221,7 @@ export default function AppHeader({
                   ref={personalMenuButtonRef}
                   type="button"
                 >
-                  登入者：{name}
+                  {name} ▾
                 </button>
                 {personalMenuOpen && (
                   <div

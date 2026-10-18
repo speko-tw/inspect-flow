@@ -302,13 +302,14 @@ describe('AppHeader', () => {
   it('登入者按鈕可開啟個人選單，密碼與登出不在導覽列', () => {
     renderHeader(FIELD)
     const account = screen.getByRole('button', {
-      name: '登入者：示範使用者',
+      name: '示範使用者 ▾',
     }).parentElement
     expect(account).toHaveClass('app-header-account')
     const trigger = within(account as HTMLElement).getByRole('button', {
-      name: '登入者：示範使用者',
+      name: '示範使用者 ▾',
     })
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true')
     expect(screen.queryByRole('link', { name: '設定' })).toBeNull()
     expect(screen.queryByRole('button', { name: '登出' })).toBeNull()
     fireEvent.click(trigger)
@@ -317,6 +318,24 @@ describe('AppHeader', () => {
       'href',
       '/change-password',
     )
+    expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
+  })
+
+  it.each([
+    ['系統管理者', ADMIN],
+    ['主管', OFFICE],
+    ['現場人員', FIELD],
+    ['混合權限', MIXED],
+  ])('%s 看得到清楚的個人選單按鈕', (_label, user) => {
+    renderHeader(user)
+    const trigger = screen.getByRole('button', {
+      name: '示範使用者 ▾',
+    })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
   })
 
@@ -335,7 +354,7 @@ describe('AppHeader', () => {
   it('個人選單可用鍵盤開啟，Esc 關閉並把焦點還給登入者按鈕', () => {
     renderHeader(FIELD)
     const trigger = screen.getByRole('button', {
-      name: '登入者：示範使用者',
+      name: '示範使用者 ▾',
     })
     trigger.focus()
     fireEvent.keyDown(trigger, { key: 'ArrowDown' })
@@ -383,7 +402,7 @@ describe('AppHeader', () => {
       vi.fn(async () => new Response(null, { status: 500 })),
     )
     const { container } = renderHeader(FIELD)
-    fireEvent.click(screen.getByRole('button', { name: '登入者：示範使用者' }))
+    fireEvent.click(screen.getByRole('button', { name: '示範使用者 ▾' }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
 
     const alert = await screen.findByRole('alert')
