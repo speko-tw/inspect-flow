@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import ilike_contains, page_by_text_key
+from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.models import (
     InspectionPlan,
     InspectionTask,
     Project,
+    ProjectZone,
     User,
 )
 from app.services.permissions import calculate_effective_access
@@ -347,3 +348,99 @@ def list_dashboard_engineers(
     for item in result["items"]:
         item.update(counts[item["user_id"]])
     return result
+
+
+def _require_all_progress_access(
+    session: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+) -> None:
+    """依 ADM-R06 驗證全部進度權限及專案存在。"""
+    access = calculate_effective_access(
+        session, user_id=user_id, project_id=project_id
+    )
+    if not access.is_active or not (
+        access.is_admin or _ALL_PROGRESS in access.module_permissions
+    ):
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    if session.get(Project, project_id) is None:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+
+
+def _dashboard_task_item(
+    session: Session, task: InspectionTask
+) -> dict[str, object]:
+    """序列化 ADM-AC05 的任務白名單欄位。"""
+    zone = (
+        session.get(ProjectZone, task.zone_id)
+        if task.zone_id is not None
+        else None
+    )
+    if zone is not None and zone.project_id != task.project_id:
+        zone = None
+    assignee = (
+        session.get(User, task.assignee_id)
+        if task.assignee_id is not None
+        else None
+    )
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "location": {
+            "zone_name": zone.name if zone is not None else None,
+            "location_text": task.location_text,
+        },
+        "suggested_assignee": (
+            {
+                "user_id": assignee.id,
+                "name_zh": assignee.name_zh,
+            }
+            if assignee is not None
+            else None
+        ),
+    }
+
+
+def list_dashboard_tasks(
+    session: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    cursor: str | None,
+    limit: int,
+) -> dict[str, object]:
+    """依 ADM-R06 回傳專案任務進度與穩定游標。"""
+    _require_all_progress_access(
+        session, user_id=user_id, project_id=project_id
+    )
+    return page(
+        session,
+        InspectionTask,
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda task: _dashboard_task_item(session, task),
+        filters=(InspectionTask.project_id == project_id,),
+    )
+
+
+def get_dashboard_task(
+    session: Session,
+    *,
+    user_id: UUID,
+    project_id: UUID,
+    task_id: UUID,
+) -> dict[str, object]:
+    """依 ADM-AC05 讀取單一專案任務，並隱藏跨專案 ID。"""
+    _require_all_progress_access(
+        session, user_id=user_id, project_id=project_id
+    )
+    task = session.scalar(
+        select(InspectionTask).where(
+            InspectionTask.id == task_id,
+            InspectionTask.project_id == project_id,
+        )
+    )
+    if task is None:
+        raise APIError(ErrorCode.INSPECTION_TASK_NOT_FOUND, 404)
+    return _dashboard_task_item(session, task)

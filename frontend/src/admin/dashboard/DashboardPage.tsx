@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { useNavigate } from 'react-router'
 
 import type { CurrentUser } from '../../auth/api'
 import {
@@ -34,6 +35,7 @@ function formatPerson(person: DashboardEngineer): string {
 
 /** ADM-R01、ADM-R04、ADM-R05：呈現後端計算的進度與人員工作量。 */
 export default function DashboardPage({ user }: { user: CurrentUser }) {
+  const navigate = useNavigate()
   const globalAccess = hasGlobalDashboardAccess(user)
   const [tab, setTab] = useState<Tab>('projects')
   const [projectsResult, setProjectsResult] = useState<{
@@ -446,7 +448,14 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
           {visibleProjectListState === 'ready' &&
             visibleProjects.length > 0 && (
               <ProjectList
-                onSelect={setSelectedProject}
+                onSelect={(projectId) => {
+                  setSelectedProject(projectId)
+                  navigate(
+                    '/admin/dashboard/projects/' +
+                      encodeURIComponent(projectId) +
+                      '/tasks',
+                  )
+                }}
                 projects={visibleProjects}
                 scopeLabel={scopeLabel}
               />

@@ -45,6 +45,7 @@ const ProjectItemChangePage = lazy(
   () => import('./projectItems/ProjectItemChangePage'),
 )
 const DashboardPage = lazy(() => import('./dashboard/DashboardPage'))
+const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 
 function hasInvalidProjectRoute(pathname: string): boolean {
   const match = pathname.match(/^\/admin\/projects\/([^/]+)(?:\/|$)/)
@@ -383,7 +384,7 @@ function AdminPageContent() {
             <Route path="roles" element={<RolesPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route
-              path="dashboard"
+              path="dashboard/*"
               element={
                 <DashboardRoute
                   access={dashboardAccess}
@@ -477,7 +478,7 @@ function MemberAdminShell({
             }
           />
           <Route
-            path="dashboard"
+            path="dashboard/*"
             element={
               <DashboardRoute
                 access={dashboardAccess}
@@ -569,7 +570,45 @@ function DashboardRoute({
   }
   return (
     <AdminRouteSuspense>
-      <DashboardPage user={user} />
+      <Routes>
+        <Route element={<DashboardPage user={user} />} index />
+        <Route
+          element={
+            hasGlobalDashboardAccess(user) ? (
+              <DashboardTaskPage />
+            ) : (
+              <DashboardTaskDenied />
+            )
+          }
+          path="projects/:projectId/tasks"
+        />
+        <Route
+          element={
+            hasGlobalDashboardAccess(user) ? (
+              <DashboardTaskPage />
+            ) : (
+              <DashboardTaskDenied />
+            )
+          }
+          path="projects/:projectId/tasks/:taskId"
+        />
+        <Route path="*" element={<RouteNotFound />} />
+      </Routes>
     </AdminRouteSuspense>
+  )
+}
+
+const dashboardTaskDeniedMessage = [
+  '查看全部專案任務需要',
+  '「看全部專案進度」權限。',
+].join('')
+
+function DashboardTaskDenied() {
+  return (
+    <section aria-labelledby="dashboard-task-denied">
+      <h1 id="dashboard-task-denied">無權限</h1>
+      <p role="alert">{dashboardTaskDeniedMessage}</p>
+      <Link to="/admin/dashboard">返回專案進度總覽</Link>
+    </section>
   )
 }
