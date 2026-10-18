@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBlocker, useLocation } from 'react-router'
 
 /** 站內導覽被攔下時，頁面用此狀態顯示確認框。 */
@@ -28,12 +28,15 @@ export function useUnsavedNavigationGuard(
   >(null)
   const pendingFocus = useRef<HTMLElement | null>(null)
   const allowNavigation = useRef(false)
+  const activeChanges = useRef(hasUnsavedChanges)
+
   const blocker = useBlocker(
     ({ currentLocation, nextLocation, historyAction }) => {
       if (allowNavigation.current) {
         allowNavigation.current = false
         return false
       }
+      if (!activeChanges.current) return false
       setBlockedAction(historyAction)
       if (
         !pendingFocus.current &&
@@ -41,7 +44,6 @@ export function useUnsavedNavigationGuard(
       ) {
         pendingFocus.current = document.activeElement
       }
-      if (!hasUnsavedChanges) return false
       const hashOnly =
         currentLocation.pathname === nextLocation.pathname &&
         currentLocation.search === nextLocation.search &&
@@ -50,15 +52,17 @@ export function useUnsavedNavigationGuard(
       return !hashOnly
     },
   )
-  const activeChanges = useRef(hasUnsavedChanges)
   const handledPop = useRef<string | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // 同步新草稿狀態，避免舊值攔住頁面更新後的第一個動作。
     activeChanges.current = hasUnsavedChanges
+  }, [hasUnsavedChanges])
 
+  useEffect(() => {
     function captureLink(event: MouseEvent): void {
       if (
-        !hasUnsavedChanges ||
+        !activeChanges.current ||
         event.button !== 0 ||
         event.metaKey ||
         event.ctrlKey ||

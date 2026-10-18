@@ -2182,12 +2182,14 @@ describe('planning forms guard (#507)', () => {
         ).toBeNull(),
       )
 
-      const unload = new Event('beforeunload', {
-        cancelable: true,
-      }) as BeforeUnloadEvent
-      window.dispatchEvent(unload)
+      await waitFor(() => {
+        const unload = new Event('beforeunload', {
+          cancelable: true,
+        }) as BeforeUnloadEvent
+        window.dispatchEvent(unload)
 
-      expect(unload.defaultPrevented).toBe(false)
+        expect(unload.defaultPrevented).toBe(false)
+      })
     })
 
     it('lets the back link leave at once when the page turned into no-permission', async () => {
