@@ -74,6 +74,40 @@ def test_summary_reports_company_role_without_a_detail_call(
         )
 
 
+def test_summary_template_apply_flag_uses_module_and_project_permissions(
+    db_session, make_client
+):
+    world = _planning_world(db_session, make_client)
+    project = world["project"]
+    plain = world["plain"]
+
+    _grant_permission(
+        db_session, world, world["plain_user"], "project_zone.read"
+    )
+    response = plain.get(_summary_path(project.id))
+    assert response.status_code == 200, response.text
+    assert response.json()["can_apply_templates"] is False
+
+    _grant_permission(
+        db_session,
+        world,
+        world["plain_user"],
+        "project_inspection_item.edit",
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=world["plain_user"].id,
+            permission_code="template.use",
+            source="manual",
+        )
+    )
+    db_session.commit()
+
+    response = plain.get(_summary_path(project.id))
+    assert response.status_code == 200, response.text
+    assert response.json()["can_apply_templates"] is True
+
+
 def test_empty_project_reports_first_setup_step(db_session, make_client):
     world = _planning_world(db_session, make_client)
     admin = world["admin_user"]
@@ -258,6 +292,7 @@ def test_summary_excludes_cancelled_or_archived_rechecks(
             for code in PermissionCode
             if permission_code_scope(code.value) == "project"
         ),
+        "can_apply_templates": True,
         "member_count": 6,
         "inspection_item_count": 2,
         "zone_count": 1,

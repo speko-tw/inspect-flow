@@ -91,7 +91,12 @@ function renderAdmin(
   access: Partial<
     Pick<
       CurrentUser,
-      'has_office_access' | 'has_field_access' | 'has_template_access'
+      | 'has_office_access'
+      | 'has_field_access'
+      | 'has_template_access'
+      | 'can_browse_templates'
+      | 'can_manage_template_library'
+      | 'is_external_collaborator'
     >
   > = {},
   strictMode = false,
@@ -908,7 +913,7 @@ describe('admin user and company pages', () => {
     Reflect.deleteProperty(navigator, 'clipboard')
   })
 
-  it('clears the password after leaving the page', async () => {
+  it('clears the password after immediate navigation', async () => {
     managementFetch({
       onCreate: (body) => ({
         ...regularUser,
@@ -931,7 +936,9 @@ describe('admin user and company pages', () => {
     })
     fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
-    expect(await screen.findByText('leave-page-password')).toBeInTheDocument()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'leave-page-password',
+    )
 
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     expect(
@@ -1664,7 +1671,7 @@ describe('admin user and company pages', () => {
       fetchMock.mock.calls.some(([input]) =>
         String(input).endsWith('/workflow-summary'),
       ),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('opens template bypass for a non-member manager', async () => {
@@ -1733,6 +1740,7 @@ describe('admin user and company pages', () => {
         has_office_access: true,
         has_field_access: false,
         has_template_access: false,
+        can_browse_templates: true,
       },
     )
 
@@ -1759,19 +1767,33 @@ describe('admin user and company pages', () => {
     ).toBe(true)
   })
 
-  it('lets non-admin users reach template browsing and displays API 403', async () => {
-    const fetchMock = vi.fn(async () =>
-      Response.json({ error: { code: 'permission.denied' } }, { status: 403 }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    renderAdmin('/admin/templates', false)
+  it('外部歷史持有者僅有 template.use 時可瀏覽且自始唯讀', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin('/admin/templates', false, {
+      has_template_access: false,
+      can_browse_templates: true,
+      can_manage_template_library: false,
+      is_external_collaborator: true,
+    })
 
+    const nav = screen.getByRole('navigation', { name: '管理功能' })
+    expect(
+      within(nav).getByRole('link', { name: '範本管理' }),
+    ).toHaveAttribute('href', '/admin/templates')
     expect(
       await screen.findByRole('heading', { name: '範本管理' }),
     ).toBeInTheDocument()
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你沒有權限瀏覽範本庫。',
-    )
+    expect(
+      await screen.findByRole('button', { name: '土木工程' }),
+    ).toBeVisible()
+    expect(await screen.findByText('唯讀瀏覽')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: '新增工程類別' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重新命名' })).toBeNull()
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
     expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
   })
 
@@ -1820,9 +1842,13 @@ describe('admin user and company pages', () => {
       }
     })
 
-    it('shows templates only with template access', () => {
+    it('shows templates for a template.use-only user', () => {
       managementFetch()
-      renderAdmin('/admin/projects', false, { has_template_access: true })
+      renderAdmin('/admin/projects', false, {
+        has_template_access: false,
+        can_browse_templates: true,
+        can_manage_template_library: false,
+      })
       expect(labels()).toContain('範本管理')
     })
 
@@ -1850,7 +1876,7 @@ describe('admin user and company pages', () => {
       })
 
       expect(screen.getByRole('alert')).toHaveTextContent(
-        '只有系統管理者或範本管理員可以使用範本管理。',
+        '你沒有權限瀏覽範本庫。',
       )
     })
 

@@ -75,6 +75,7 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
     ],
     primary_step: 'dispatch_draft_tasks',
     task_counts_visible: true,
+    can_apply_templates: false,
     draft_tasks_missing_assignee: 2,
     viewer_permission_codes: [
       'project_member.manage',

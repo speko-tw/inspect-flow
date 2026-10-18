@@ -100,6 +100,7 @@ function summary(): WorkflowSummary {
     next_steps: [],
     primary_step: null,
     task_counts_visible: true,
+    can_apply_templates: false,
     draft_tasks_missing_assignee: 0,
     viewer_permission_codes: ['inspection_task.read'],
   }

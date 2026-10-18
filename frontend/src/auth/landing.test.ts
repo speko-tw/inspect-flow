@@ -13,6 +13,11 @@ const ADMIN = { ...NONE, is_admin: true }
 const OFFICE = { ...NONE, has_office_access: true }
 const FIELD = { ...NONE, has_field_access: true }
 const TEMPLATE = { ...NONE, has_template_access: true }
+const TEMPLATE_USE_ONLY = {
+  ...NONE,
+  can_browse_templates: true,
+  can_manage_template_library: false,
+}
 
 describe('canVisit：新帳號看得到的頁面（#489）', () => {
   it.each([
@@ -23,8 +28,10 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [FIELD, '/field'],
     [FIELD, '/field/tasks/t1'],
     [TEMPLATE, '/admin/templates'],
+    [TEMPLATE_USE_ONLY, '/admin/templates'],
     [TEMPLATE, '/admin/projects/p1/templates'],
     [TEMPLATE, '/admin/projects/p1/inspection-items/templates'],
+    [TEMPLATE_USE_ONLY, '/admin/projects/p1/inspection-items/templates'],
     [NONE, '/change-password'],
     [NONE, '/somewhere-else'],
     [FIELD, '/administrator'],
@@ -87,6 +94,14 @@ describe('loginTarget：登入後要去哪（#489）', () => {
     expect(loginTarget(TEMPLATE, '/field', NOBODY_BEFORE)).toBe(
       '/admin/templates',
     )
+  })
+
+  it('template.use-only 可回到範本庫並以範本庫為預設落點', () => {
+    expect(canVisit(TEMPLATE_USE_ONLY, '/admin/templates')).toBe(true)
+    expect(landingPath(TEMPLATE_USE_ONLY)).toBe('/admin/templates')
+    expect(
+      loginTarget(TEMPLATE_USE_ONLY, '/admin/templates', NOBODY_BEFORE),
+    ).toBe('/admin/templates')
   })
 
   it('沒有原頁面或不安全的路徑，去落點', () => {

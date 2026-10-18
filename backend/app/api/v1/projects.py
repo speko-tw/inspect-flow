@@ -125,6 +125,7 @@ class WorkflowProjectIdentity(BaseModel):
 class ProjectWorkflowSummaryResponse(BaseModel):
     project: WorkflowProjectIdentity
     viewer_permission_codes: list[str]
+    can_apply_templates: bool
     member_count: int
     inspection_item_count: int
     zone_count: int
@@ -501,6 +502,7 @@ def get_workflow_summary(
     return ProjectWorkflowSummaryResponse(
         project=WorkflowProjectIdentity(**summary["project"]),
         viewer_permission_codes=summary["viewer_permission_codes"],
+        can_apply_templates=summary["can_apply_templates"],
         member_count=summary["member_count"],
         inspection_item_count=summary["inspection_item_count"],
         zone_count=summary["zone_count"],

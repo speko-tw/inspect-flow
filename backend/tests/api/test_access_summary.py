@@ -112,7 +112,18 @@ def world(db_session: Session, make_client):
     template_role = create_role(
         db_session,
         name="項目編輯",
-        permission_codes=["project_inspection_item.edit"],
+        permission_codes=[
+            "project.read",
+            "project_inspection_item.edit",
+        ],
+    )
+    template_apply_role = create_role(
+        db_session,
+        name="項目檢視與編輯",
+        permission_codes=[
+            "project.read",
+            "project_inspection_item.edit",
+        ],
     )
 
     office = person("office")
@@ -128,6 +139,7 @@ def world(db_session: Session, make_client):
     external = person("external")
     external.is_external_collaborator = True
     member_only = person("memberonly")
+    template_user = person("templateuser")
     add_project_member(
         db_session,
         project_id=project_a.id,
@@ -188,10 +200,23 @@ def world(db_session: Session, make_client):
         user_id=editor.id,
         role_ids=[template_role.id],
     )
+    add_project_member(
+        db_session,
+        project_id=project_a.id,
+        user_id=template_user.id,
+        role_ids=[template_apply_role.id],
+    )
     db_session.add(
         UserModulePermission(
             user_id=template_admin.id,
             permission_code="template.manage",
+            source="manual",
+        )
+    )
+    db_session.add(
+        UserModulePermission(
+            user_id=template_admin.id,
+            permission_code="template.use",
             source="manual",
         )
     )
@@ -218,7 +243,12 @@ def world(db_session: Session, make_client):
         both.id: ("project.use", "inspection.use"),
         split.id: ("project.use", "inspection.use"),
         reader.id: ("project.use", "inspection.use"),
-        editor.id: ("inspection.use",),
+        editor.id: ("project.use", "inspection.use"),
+        template_user.id: (
+            "project.use",
+            "inspection.use",
+            "template.use",
+        ),
     }
     for user_id, codes in module_codes.items():
         db_session.add_all(
@@ -244,6 +274,7 @@ def world(db_session: Session, make_client):
         "reader": client(reader),
         "tpladmin": client(template_admin),
         "editor": client(editor),
+        "template_user": client(template_user),
         "module_only": client(module_only),
         "delegated": client(delegated),
         "external": client(external),
@@ -473,3 +504,31 @@ def test_responses_match_frontend_contract_fixture(world) -> None:
     assert projects
     for item in projects:
         assert sorted(item) == contract["my_project_keys"]
+
+
+def test_template_capabilities_match_effective_permissions(world) -> None:
+    admin = world["admin"].get(ME).json()
+    assert admin["can_browse_templates"] is True
+    assert admin["can_manage_template_library"] is True
+    assert admin["has_template_access"] is True
+
+    manager = world["tpladmin"].get(ME).json()
+    assert manager["can_browse_templates"] is True
+    assert manager["can_manage_template_library"] is True
+    assert manager["has_template_access"] is True
+
+    template_user = world["template_user"]
+    access = template_user.get(ME).json()
+    assert access["can_browse_templates"] is True
+    assert access["can_manage_template_library"] is False
+    assert access["has_template_access"] is False
+    project = template_user.get(ME_PROJECTS).json()[0]
+    assert project["can_apply_templates"] is True
+
+    no_template = world["editor"].get(ME).json()
+    assert no_template["can_browse_templates"] is False
+    assert no_template["can_manage_template_library"] is False
+    assert (
+        world["editor"].get(ME_PROJECTS).json()[0]["can_apply_templates"]
+        is False
+    )

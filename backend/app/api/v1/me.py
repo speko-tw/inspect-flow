@@ -27,6 +27,8 @@ class MyProjectResponse(BaseModel):
     ``has_office_access`` is true when the user holds at least one
     office permission code in the project (#480); the office project
     list shows only those projects.
+    ``can_apply_templates`` follows TPL-R09 and includes both module
+    permissions and the project's edit permission.
     """
 
     id: UUID
@@ -38,6 +40,7 @@ class MyProjectResponse(BaseModel):
     planned_completion_date: date | None
     role_names: list[str]
     has_office_access: bool
+    can_apply_templates: bool
 
 
 @router.get("/projects", response_model=list[MyProjectResponse])
@@ -101,6 +104,14 @@ def list_my_projects(
                     or (
                         "inspection.use" in access.module_permissions
                         and project_codes & INSPECTION_OFFICE_PERMISSION_CODES
+                    )
+                ),
+                can_apply_templates=(
+                    access.is_admin
+                    or (
+                        "template.use" in access.module_permissions
+                        and "inspection.use" in access.module_permissions
+                        and "project_inspection_item.edit" in project_codes
                     )
                 ),
             )

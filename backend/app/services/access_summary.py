@@ -63,6 +63,8 @@ class AccessSummary:
     has_office_access: bool
     has_field_access: bool
     has_template_access: bool
+    can_browse_templates: bool
+    can_manage_template_library: bool
     module_permissions: frozenset[str]
     delegated_modules: frozenset[str]
     can_create_project: bool
@@ -74,13 +76,15 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
     access = calculate_effective_access(session, user_id=user.id)
     if access.is_admin:
         return AccessSummary(
-            True,
-            True,
-            True,
-            access.module_permissions,
-            access.delegated_modules,
-            True,
-            True,
+            has_office_access=True,
+            has_field_access=True,
+            has_template_access=True,
+            can_browse_templates=True,
+            can_manage_template_library=True,
+            module_permissions=access.module_permissions,
+            delegated_modules=access.delegated_modules,
+            can_create_project=True,
+            has_project_access=True,
         )
     module_permissions = access.module_permissions
     project_access_codes = set()
@@ -96,6 +100,7 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         return module is not None and f"{module}.use" in module_permissions
 
     has_template_access = "template.manage" in module_permissions
+    can_browse_templates = "template.use" in module_permissions
     office_access = any(
         code in OFFICE_PERMISSION_CODES and has_module_for_code(code)
         for code in project_access_codes
@@ -108,6 +113,8 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         has_office_access=office_access,
         has_field_access=field_access,
         has_template_access=has_template_access,
+        can_browse_templates=can_browse_templates,
+        can_manage_template_library=has_template_access,
         module_permissions=module_permissions,
         delegated_modules=access.delegated_modules,
         can_create_project="project.create" in module_permissions,

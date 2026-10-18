@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
@@ -697,6 +699,7 @@ def change_creator_role(session: Session, *, actor: User, role: Role) -> bool:
     if locked_role is None:
         raise InvalidModulePermissionError("Role does not exist")
     role = locked_role
+    lock_role_holders(session, role.id)
     codes = frozenset(permission.code for permission in role.permission_codes)
     if not _CREATOR_ROLE_CODES <= codes:
         raise CreatorRolePermissionsError(
@@ -1067,22 +1070,53 @@ def _insert_permission(
     permission_code: str,
     source: str,
 ) -> bool:
-    existing = session.scalar(
-        select(UserModulePermission.id).where(
-            UserModulePermission.user_id == user.id,
-            UserModulePermission.permission_code == permission_code,
-        )
+    values = {
+        "user_id": user.id,
+        "permission_code": permission_code,
+        "source": source,
+    }
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        statement = postgres_insert(UserModulePermission).values(**values)
+    elif dialect == "sqlite":
+        statement = sqlite_insert(UserModulePermission).values(**values)
+    else:
+        raise RuntimeError(f"Unsupported permission database: {dialect}")
+
+    # DOM-R62 要求併發的重複授予也冪等；唯一約束決定真正的勝者。
+    result = session.execute(
+        statement.on_conflict_do_nothing(
+            index_elements=[
+                UserModulePermission.user_id,
+                UserModulePermission.permission_code,
+            ]
+        ).returning(UserModulePermission.id)
     )
-    if existing is not None:
-        return False
-    session.add(
-        UserModulePermission(
-            user_id=user.id,
-            permission_code=permission_code,
-            source=source,
+    return result.scalar_one_or_none() is not None
+
+
+def lock_role_holders(session: Session, role_id: uuid.UUID) -> None:
+    """依 DOM-R72 先鎖定持有角色的人員，並按 UUID 固定順序。"""
+    holder_ids = session.scalars(
+        select(User.id)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
         )
-    )
-    return True
+        .where(ProjectMemberRole.role_id == role_id)
+        .distinct()
+        .order_by(User.id)
+    ).all()
+    if not holder_ids:
+        return
+    session.scalars(
+        select(User)
+        .where(User.id.in_(holder_ids))
+        .order_by(User.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).all()
 
 
 def _delegated_modules(session: Session, user_id: uuid.UUID) -> set[str]:

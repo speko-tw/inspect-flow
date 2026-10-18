@@ -14,6 +14,11 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; projects: MyProject[] }
 
+/** 依 TPL-R23、FUI-R12 組合專案範本套用的正式路徑。 */
+function projectTemplatePath(projectId: string): string {
+  return `/admin/projects/${projectId}/inspection-items/templates`
+}
+
 /**
  * 顯示帳號可進入的專案清單。
  * 入口依 ADM-R23、ADM-R24 判定。
@@ -67,22 +72,30 @@ export default function MyProjectsPage() {
       )}
       {state.kind === 'ready' && state.projects.length > 0 && (
         <div className="project-workspace-grid">
-          {state.projects.map((project) => (
-            <article className="project-workspace-card" key={project.id}>
-              <p className="project-code">{project.project_code}</p>
-              <h2>{project.name}</h2>
-              <p>{project.site_location}</p>
-              {project.role_names.length > 0 && (
-                <p>我的角色：{project.role_names.join('、')}</p>
-              )}
-              <Link
-                className="btn btn-primary"
-                to={`/admin/projects/${project.id}`}
-              >
-                開啟專案
-              </Link>
-            </article>
-          ))}
+          {state.projects.map((project) => {
+            const templatePath = projectTemplatePath(project.id)
+            return (
+              <article className="project-workspace-card" key={project.id}>
+                <p className="project-code">{project.project_code}</p>
+                <h2>{project.name}</h2>
+                <p>{project.site_location}</p>
+                {project.role_names.length > 0 && (
+                  <p>我的角色：{project.role_names.join('、')}</p>
+                )}
+                <Link
+                  className="btn btn-primary"
+                  to={`/admin/projects/${project.id}`}
+                >
+                  開啟專案
+                </Link>
+                {project.can_apply_templates && (
+                  <Link className="btn" to={templatePath}>
+                    套用範本
+                  </Link>
+                )}
+              </article>
+            )
+          })}
         </div>
       )}
     </section>

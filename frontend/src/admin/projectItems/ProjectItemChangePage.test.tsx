@@ -672,7 +672,7 @@ describe('ProjectItemChangePage', () => {
     expect(screen.queryByRole('group')).not.toBeInTheDocument()
   })
 
-  it('leaves after saving without a stale dirty confirmation', async () => {
+  it('follows the breadcrumb on its first saved render', async () => {
     const updatedPreview = structuredClone(preview)
     updatedPreview.item.title = '已儲存的名稱'
     const api = apiWith({
@@ -686,7 +686,9 @@ describe('ProjectItemChangePage', () => {
       target: { value: '已儲存的名稱' },
     })
     await confirm('yes')
-    await screen.findByText('專案查核項目 / 已儲存的名稱')
+    const savedBreadcrumb =
+      await screen.findByText('專案查核項目 / 已儲存的名稱')
+    expect(savedBreadcrumb).toBeVisible()
     fireEvent.click(
       screen.getAllByRole('link', { name: '返回專案查核項目' })[0],
     )

@@ -162,12 +162,9 @@ describe('今日任務首頁', () => {
     expect(
       await screen.findByRole('link', { name: '前往我的專案' }),
     ).toHaveAttribute('href', '/admin/projects')
-    expect(screen.getByRole('link', { name: '前往範本管理' })).toHaveAttribute(
-      'href',
-      '/admin/templates',
-    )
     expect(screen.getByRole('link', { name: '我的專案' })).toBeVisible()
-    expect(screen.getByRole('link', { name: '範本管理' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: '範本管理' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '前往範本管理' })).toBeNull()
   })
 
   it('預設查本人，切換範圍與狀態會傳後端參數', async () => {

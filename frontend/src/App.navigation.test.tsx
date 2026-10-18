@@ -42,31 +42,45 @@ const ADMIN = currentUserFixture({
   has_template_access: true,
 })
 
-const NON_ADMIN = { ...ADMIN, id: 'member-1', is_admin: false }
+const NON_ADMIN = {
+  ...ADMIN,
+  id: 'member-1',
+  is_admin: false,
+  can_browse_templates: false,
+  can_manage_template_library: false,
+}
 // 五種身分的存取摘要（#480）；欄位與形狀由 current-user-contract.json 守住。
 const MEMBER = {
   ...NON_ADMIN,
   has_office_access: false,
   has_field_access: true,
   has_template_access: false,
+  can_browse_templates: false,
+  can_manage_template_library: false,
 }
 const OFFICE = {
   ...NON_ADMIN,
   has_office_access: true,
   has_field_access: false,
   has_template_access: false,
+  can_browse_templates: false,
+  can_manage_template_library: false,
 }
 const BOTH = {
   ...NON_ADMIN,
   has_office_access: true,
   has_field_access: true,
   has_template_access: false,
+  can_browse_templates: false,
+  can_manage_template_library: false,
 }
 const TEMPLATE_ONLY = {
   ...NON_ADMIN,
   has_office_access: false,
   has_field_access: false,
   has_template_access: true,
+  can_browse_templates: true,
+  can_manage_template_library: true,
 }
 const TEMPLATE_FIELD = { ...TEMPLATE_ONLY, has_field_access: true }
 const NOBODY = {
@@ -74,6 +88,8 @@ const NOBODY = {
   has_office_access: false,
   has_field_access: false,
   has_template_access: false,
+  can_browse_templates: false,
+  can_manage_template_library: false,
 }
 
 const MY_PROJECTS = [
@@ -480,25 +496,24 @@ describe('依後端存取摘要決定落點（#480）', () => {
     ])
   })
 
-  it('範本管理員兼現場：現場頁有範本管理入口，點了進得去（#480）', async () => {
+  it('範本管理員兼現場：現場頁不提供範本入口（FUI-R12）', async () => {
     stubBackend(TEMPLATE_FIELD)
     renderApp('/')
 
     await screen.findByRole('heading', { name: '今日任務' })
     expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
-    fireEvent.click(screen.getByRole('link', { name: '範本管理' }))
-    expect(
-      await screen.findByRole('heading', { name: '範本管理' }),
-    ).toBeVisible()
+    expect(screen.queryByRole('link', { name: '範本管理' })).toBeNull()
   })
 
-  it('只有範本管理員的 /field 說明頁有前往範本管理，沒有前往我的專案', async () => {
+  it('只有範本管理員的 /field 說明頁沒有管理或專案入口（FUI-R12）', async () => {
     stubBackend(TEMPLATE_ONLY)
     renderApp('/field')
 
     expect(
-      await screen.findByRole('link', { name: '前往範本管理' }),
-    ).toHaveAttribute('href', '/admin/templates')
+      await screen.findByRole('heading', { name: '目前無法查看現場任務' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('link', { name: '前往範本管理' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '範本管理' })).toBeNull()
     expect(screen.queryByRole('link', { name: '前往我的專案' })).toBeNull()
   })
 
