@@ -4,7 +4,7 @@ check, and counting valid sessions (AUT-AC10~AUT-AC15, AUT-AC26).
 
 import inspect
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -31,9 +31,13 @@ from app.auth.settings import (
 from app.db import clock
 from app.db.base import uuid7
 from app.main import create_app
-from app.models import AuthSession, User
+from app.models import AuditLog, AuthSession, User
 from tests.auth.conftest import DEFAULT_TEST_PASSWORD, make_local_user
-from tests.db.conftest import build_root_user, create_root_user_with_company
+from tests.db.conftest import (
+    build_root_user,
+    create_root_user_with_company,
+    make_system_admin,
+)
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 
@@ -140,6 +144,44 @@ class TestAutAc12ExternalAccountSessionBypassesPassword:
         )
         assert login_resp.status_code == 401
         assert login_resp.json()["error"]["code"] == "auth.invalid_credentials"
+
+
+class TestAutAc14ExternalExpiry:
+    def test_expired_external_session_is_disabled_and_audited(
+        self, client, db_session
+    ):
+        system_user = build_root_user("E140SYS", None)
+        make_system_admin(system_user)
+        db_session.add(system_user)
+        db_session.flush()
+        db_session.commit()
+        user = create_root_user_with_company(db_session, "E140")
+        user.is_external_collaborator = True
+        user.account_expires_on = date(2026, 10, 17)
+        db_session.commit()
+        _row, token = create_session(db_session, user)
+        db_session.commit()
+        clock.set_clock(lambda: datetime(2026, 10, 18, tzinfo=UTC))
+
+        response = client.get(
+            "/api/v1/auth/me", cookies={SESSION_COOKIE_NAME: token}
+        )
+
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "auth.not_authenticated"
+        session_count = (
+            db_session.query(AuthSession).filter_by(user_id=user.id).count()
+        )
+        assert session_count == 0
+        event = (
+            db_session.query(AuditLog)
+            .filter_by(
+                entity_id=user.id,
+                event_type="user.active_changed",
+            )
+            .one()
+        )
+        assert event.after["reason"] == "account_expired"
 
 
 class TestAutAc13TimeoutBoundaries:

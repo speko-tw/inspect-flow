@@ -156,6 +156,18 @@ class ErrorCode(DescribedStrEnum):
         "user.last_admin",
         "The last active administrator cannot be removed.",
     )
+    USER_REACTIVATION_REQUIRED = (
+        "user.reactivation_required",
+        "Use the restore workflow to reactivate this account.",
+    )
+    USER_ACCOUNT_EXPIRY_PASSED = (
+        "user.account_expiry_passed",
+        "Extend or clear the expiry date before reactivation.",
+    )
+    USER_RESTORE_SELECTION_INVALID = (
+        "user.restore_selection_invalid",
+        "One or more restore selections are no longer valid.",
+    )
     USER_EXTERNAL_MANAGED = (
         "user.external_managed",
         "This account's basic fields are managed externally.",
@@ -195,6 +207,18 @@ class ErrorCode(DescribedStrEnum):
     PROJECT_MEMBER_ROLES_REQUIRED = (
         "project.member_roles_required",
         "A project member must have at least one role.",
+    )
+    PROJECT_ROLE_NOT_ASSIGNABLE = (
+        "project.role_not_assignable",
+        "This project role is not available for assignment.",
+    )
+    PROJECT_MEMBER_SELF_ROLE_CHANGE = (
+        "project.member_self_role_change",
+        "Users cannot change their own project roles.",
+    )
+    PROJECT_LAST_MANAGER = (
+        "project.last_manager",
+        "A project must retain one active member manager.",
     )
     INSPECTION_PLAN_NOT_FOUND = (
         "inspection_plan.not_found",

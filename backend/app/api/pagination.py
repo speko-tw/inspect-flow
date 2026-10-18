@@ -121,7 +121,8 @@ def page_by_text_key(
     key_name: str,
     cursor: str | None,
     limit: int,
-    serialize: Callable[[Any], Any],
+    serialize: Callable[[Any], Any] | None = None,
+    serialize_batch: Callable[[Sequence[Any]], list[Any]] | None = None,
     filters: Sequence[Any] = (),
 ) -> dict[str, Any]:
     """Page rows ordered by a required text field and UUID (API-R08)."""
@@ -145,8 +146,15 @@ def page_by_text_key(
         next_cursor = _encode_text_page_cursor(
             getattr(last, key_name), last.id, key_name
         )
+    if (serialize is None) == (serialize_batch is None):
+        raise ValueError("pass exactly one of serialize, serialize_batch")
+    if serialize_batch is not None:
+        rendered = serialize_batch(items)
+    else:
+        assert serialize is not None
+        rendered = [serialize(item) for item in items]
     return {
-        "items": [serialize(item) for item in items],
+        "items": rendered,
         "next_cursor": next_cursor,
     }
 

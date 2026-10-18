@@ -14,9 +14,9 @@ from sqlalchemy.orm import Session
 from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
-    require_admin,
     require_admin_or_system_role,
     require_login_access,
+    require_module_permission,
     require_project_permission,
 )
 from app.auth.dependencies import get_db
@@ -33,7 +33,14 @@ from app.models import (
 from app.services.inspection_planning import PlanningError
 from app.services.module_permissions import (
     ExternalRoleAssignmentError,
+    InactiveProjectMemberError,
+    InvalidCreatorRoleUserError,
+    LastProjectManagerError,
+    RoleNotAssignableError,
+    SelfRoleChangeError,
+    query_people_access,
 )
+from app.services.permissions import calculate_effective_access
 from app.services.project_members import (
     add_project_member,
     list_project_members,
@@ -57,12 +64,14 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 _PROJECT_PLANNING_READ_ACCESS = Depends(
     require_project_permission("project.read"), scope="function"
 )
+_PROJECT_UPDATE_ACCESS = require_project_permission("project.update")
 _PROJECT_MEMBER_ACCESS = Depends(
     require_project_permission(
         "project_member.manage", uuid_path_params=("user_id",)
     ),
     scope="function",
 )
+_PROJECT_CREATE_ACCESS = require_module_permission("project.create")
 
 
 class ProjectWarning(BaseModel):
@@ -144,6 +153,7 @@ class CreateProjectRequest(BaseModel):
     company_role: str | None = DEFAULT_COMPANY_ROLE
     planned_start_date: date | None = None
     planned_completion_date: date | None = None
+    creator_role_user_id: UUID | None = None
 
 
 def _strip_reason(value: object) -> object:
@@ -186,6 +196,13 @@ class ProjectMemberResponse(BaseModel):
     role_ids: list[UUID]
 
 
+class ModuleStatusResponse(BaseModel):
+    """只呈現專案與查核模組的可使用狀態（ADM-R26）。"""
+
+    project_use: bool
+    inspection_use: bool
+
+
 class ProjectMemberDetailResponse(ProjectMemberResponse):
     """A listed member with the user fields the management page shows."""
 
@@ -194,14 +211,18 @@ class ProjectMemberDetailResponse(ProjectMemberResponse):
     company_id: UUID | None
     company_name: str | None
     is_active: bool
+    module_status: ModuleStatusResponse
 
 
 class MemberCandidateResponse(BaseModel):
-    """A user who can be added to the project (display fields only)."""
+    """可加入專案的人員及成員選擇畫面需要的最小欄位。"""
 
     id: UUID
     username: str
     name_zh: str | None
+    company_name: str | None
+    is_external_collaborator: bool
+    module_status: ModuleStatusResponse
 
 
 class MemberCandidateListResponse(BaseModel):
@@ -215,6 +236,7 @@ class AssignableRoleResponse(BaseModel):
     id: UUID
     name: str
     permission_codes: list[str]
+    is_external_allowed: bool
 
 
 class AssignableRoleListResponse(BaseModel):
@@ -297,7 +319,10 @@ def _member_response(
 
 
 def _member_detail_response(
-    member: ProjectMember, user: User, company: Company | None
+    member: ProjectMember,
+    user: User,
+    company: Company | None,
+    module_permissions: frozenset[str],
 ) -> ProjectMemberDetailResponse:
     return ProjectMemberDetailResponse(
         id=member.id,
@@ -311,6 +336,44 @@ def _member_detail_response(
         company_id=user.company_id,
         company_name=company.name if company is not None else None,
         is_active=user.is_active,
+        module_status=_module_status(module_permissions),
+    )
+
+
+def _member_candidate_responses(
+    db: Session, users: Sequence[User]
+) -> list[MemberCandidateResponse]:
+    """批次組裝候選人的顯示欄位，避免逐筆查詢公司與模組權限。"""
+    user_ids = {user.id for user in users}
+    company_ids = {user.company_id for user in users if user.company_id}
+    companies = {
+        company.id: company.name
+        for company in db.scalars(
+            select(Company).where(Company.id.in_(company_ids))
+        )
+    }
+    access_by_user = query_people_access(db, user_ids=user_ids)
+    return [
+        MemberCandidateResponse(
+            id=user.id,
+            username=user.username,
+            name_zh=user.name_zh,
+            company_name=(
+                companies.get(user.company_id) if user.company_id else None
+            ),
+            is_external_collaborator=user.is_external_collaborator,
+            module_status=_module_status(
+                access_by_user[user.id].module_permissions
+            ),
+        )
+        for user in users
+    ]
+
+
+def _module_status(codes: frozenset[str]) -> ModuleStatusResponse:
+    return ModuleStatusResponse(
+        project_use="project.use" in codes,
+        inspection_use="inspection.use" in codes,
     )
 
 
@@ -394,8 +457,15 @@ def get_project(
     db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = _PROJECT_PLANNING_READ_ACCESS,
 ) -> ProjectResponse | ProjectPlanningResponse:
+    """回傳專案基本資料；有有效修改權者可讀完整欄位（DOM-R66）。"""
     project = _get_project(db, project_id)
-    if user.is_admin:
+    access = calculate_effective_access(
+        db, user_id=user.id, project_id=project.id
+    )
+    if user.is_admin or (
+        "project.update" in access.project_permissions
+        and "project.use" in access.module_permissions
+    ):
         return _single_project_response(db, project)
     return ProjectPlanningResponse(
         id=project.id,
@@ -452,14 +522,22 @@ def get_workflow_summary(
     "",
     response_model=ProjectResponse,
     status_code=201,
-    dependencies=[Depends(require_admin, scope="function")],
 )
 def add_project(
     body: CreateProjectRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
+    caller: User = Depends(_PROJECT_CREATE_ACCESS, scope="function"),  # noqa
 ) -> ProjectResponse:
+    if "creator_role_user_id" in body.model_fields_set and not caller.is_admin:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     try:
         project = create_project(db, **body.model_dump())
+    except InvalidCreatorRoleUserError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    except ExternalRoleAssignmentError as exc:
+        raise APIError(
+            ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
+        ) from exc
     except InvalidCompanyRoleError as exc:
         raise _company_role_field_error(exc) from exc
     except InvalidProjectFieldError as exc:
@@ -470,13 +548,14 @@ def add_project(
 @router.patch(
     "/{project_id}",
     response_model=ProjectResponse,
-    dependencies=[Depends(require_admin, scope="function")],
+    dependencies=[Depends(_PROJECT_UPDATE_ACCESS, scope="function")],
 )
 def edit_project(
     project_id: UUID,
     body: UpdateProjectRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
 ) -> ProjectResponse:
+    """修改有有效專案權限的專案並記錄變更（DOM-R66）。"""
     project = _get_project(db, project_id)
     fields = body.model_dump(exclude_unset=True)
     if any(
@@ -525,8 +604,15 @@ def list_members(
     users = {user.id: (user, company) for user, company in user_rows}
     if any(member.user_id not in users for member in members):
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    access_by_user = query_people_access(
+        db, user_ids={member.user_id for member in members}
+    )
     return [
-        _member_detail_response(member, *users[member.user_id])
+        _member_detail_response(
+            member,
+            *users[member.user_id],
+            access_by_user[member.user_id].module_permissions,
+        )
         for member in members
     ]
 
@@ -539,15 +625,11 @@ def list_member_candidates(
     project_id: UUID,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=128),
     db: Session = Depends(get_db, scope="function"),  # noqa
     user: User = _PROJECT_MEMBER_ACCESS,
 ) -> MemberCandidateListResponse:
-    """List users who can still join the project.
-
-    Active, non-system users who are not yet members. A non-Admin
-    caller only sees users of their own company (nobody when the
-    caller has no company); Admin sees every company.
-    """
+    """列出啟用、非系統帳號且尚未加入專案的人員，包含跨公司候選人。"""
     _get_project(db, project_id)
     filters = [
         User.is_active.is_(True),
@@ -557,10 +639,13 @@ def list_member_candidates(
             ProjectMember.user_id == User.id,
         ),
     ]
-    if not user.is_admin:
-        if user.company_id is None:
-            return MemberCandidateListResponse(items=[], next_cursor=None)
-        filters.append(User.company_id == user.company_id)
+    if q:
+        filters.append(
+            or_(
+                ilike_contains(User.username, q),
+                ilike_contains(User.name_zh, q),
+            )
+        )
     result = page_by_text_key(
         db,
         User,
@@ -568,9 +653,7 @@ def list_member_candidates(
         key_name="username",
         cursor=cursor,
         limit=limit,
-        serialize=lambda row: MemberCandidateResponse(
-            id=row.id, username=row.username, name_zh=row.name_zh
-        ),
+        serialize_batch=lambda rows: _member_candidate_responses(db, rows),
         filters=filters,
     )
     return MemberCandidateListResponse(**result)
@@ -606,17 +689,21 @@ def list_assignable_roles(
                 codes[role_id].append(code)
         return [
             AssignableRoleResponse(
-                id=role.id, name=role.name, permission_codes=codes[role.id]
+                id=role.id,
+                name=role.name,
+                permission_codes=codes[role.id],
+                is_external_allowed=role.is_external_allowed,
             )
             for role in roles
         ]
 
+    role_filters = [] if _caller.is_admin else [Role.is_assignable.is_(True)]
     result = page(
         db,
         Role,
         cursor=cursor,
         limit=limit,
-        filters=[],
+        filters=role_filters,
         serialize_batch=render,
     )
     return AssignableRoleListResponse(**result)
@@ -637,13 +724,16 @@ def add_member(
     user = db.get(User, body.user_id)
     if user is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
-    # Same rule as member-candidates: a non-Admin caller can only add
-    # people of their own company (nobody without a company).
-    if not caller.is_admin and (
-        caller.company_id is None or user.company_id != caller.company_id
+    if (
+        db.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user.id,
+            )
+        )
+        is not None
     ):
-        raise APIError(ErrorCode.PROJECT_MEMBER_COMPANY_MISMATCH, 422)
-    _require_roles(body.role_ids)
+        raise APIError(ErrorCode.PROJECT_MEMBER_CONFLICT, 409)
     role_ids = _checked_role_ids(db, body.role_ids)
     try:
         member = add_project_member(
@@ -651,6 +741,7 @@ def add_member(
             project_id=project_id,
             user_id=user.id,
             role_ids=role_ids,
+            actor_user_id=caller.id,
         )
     except IntegrityError as exc:
         if not _member_conflict(exc):
@@ -660,44 +751,64 @@ def add_member(
         raise APIError(
             ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
         ) from exc
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
+    except InactiveProjectMemberError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
+    _require_roles(body.role_ids)
     return _member_response(db, member)
 
 
 @router.put(
     "/{project_id}/members/{user_id}/roles",
     response_model=ProjectMemberResponse,
-    dependencies=[_PROJECT_MEMBER_ACCESS],
 )
 def edit_member_roles(
     project_id: UUID,
     user_id: UUID,
     body: SetProjectMemberRolesRequest,
     db: Session = Depends(get_db, scope="function"),  # noqa
+    caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> ProjectMemberResponse:
     member = _get_member(db, project_id, user_id)
-    _require_roles(body.role_ids)
     role_ids = _checked_role_ids(db, body.role_ids)
     try:
-        set_project_member_roles(db, member, role_ids)
+        set_project_member_roles(db, member, role_ids, actor_user_id=caller.id)
     except ExternalRoleAssignmentError as exc:
         raise APIError(
             ErrorCode.PROJECT_EXTERNAL_ROLE_NOT_ALLOWED, 422
         ) from exc
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
+    except LastProjectManagerError as exc:
+        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
+    _require_roles(body.role_ids)
     return _member_response(db, member)
 
 
 @router.delete(
     "/{project_id}/members/{user_id}",
     status_code=204,
-    dependencies=[_PROJECT_MEMBER_ACCESS],
 )
 def remove_member(
     project_id: UUID,
     user_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
+    caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> None:
     member = _get_member(db, project_id, user_id)
-    remove_project_member(db, member)
+    try:
+        remove_project_member(db, member, actor_user_id=caller.id)
+    except RoleNotAssignableError as exc:
+        raise APIError(ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE, 422) from exc
+    except SelfRoleChangeError as exc:
+        raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
+    except LastProjectManagerError as exc:
+        raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
 
 
 __all__ = ["router"]

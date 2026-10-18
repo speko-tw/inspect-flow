@@ -139,6 +139,15 @@ def validate_and_touch_session(db: Session, token: str) -> User | None:
     timeouts = get_session_timeouts()
     user = db.get(User, row.user_id)
 
+    if user is not None and user.is_active:
+        from app.services.user_lifecycle import (
+            expire_external_account_if_due,
+        )
+
+        if expire_external_account_if_due(db, user.id, today=now.date()):
+            db.commit()
+            return None
+
     if (
         user is None
         or not user.is_active

@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
@@ -22,10 +22,18 @@ import {
   listCompanies,
   listUsersPage,
   managementErrorMessage,
+  getDeactivationCheck,
+  getReactivationPreview,
+  listExternalUsersWithoutProject,
+  listUnmanagedProjects,
+  reactivateUser,
   setUserActive,
   setUserAdmin,
   updateUser,
   type Company,
+  type DeactivationCheck,
+  type RestorePreview,
+  type UnmanagedProject,
   type User,
 } from './api'
 import { useCursorList } from './useCursorList'
@@ -60,6 +68,10 @@ export default function UsersPage({
     loadMore,
   } = userList
   const [companies, setCompanies] = useState<Company[]>([])
+  const [externalNoProject, setExternalNoProject] = useState<User[]>([])
+  const [unmanagedProjects, setUnmanagedProjects] = useState<
+    UnmanagedProject[]
+  >([])
   const [companyListError, setCompanyListError] = useState('')
   // 修改資料與公司連結的存檔錯誤：顯示在那一列的表單裡並聚焦。放在頁頂
   // 的話，列表一長就在視窗外，螢幕閱讀器使用者也不會被帶過去（F-O02）。
@@ -78,6 +90,16 @@ export default function UsersPage({
     null,
   )
   const [actionError, setActionError] = useState('')
+  const [actionPreview, setActionPreview] = useState<
+    DeactivationCheck | RestorePreview | null
+  >(null)
+  const [previewError, setPreviewError] = useState('')
+  const [restoreSelection, setRestoreSelection] = useState({
+    permission_codes: [] as string[],
+    delegated_modules: [] as string[],
+    project_ids: [] as string[],
+    task_ids: [] as string[],
+  })
   const [dirtyForms, setDirtyForms] = useState<Record<string, boolean>>({})
   const confirmationRef = useRef<HTMLDivElement>(null)
   const companyRequestId = useRef(0)
@@ -99,6 +121,41 @@ export default function UsersPage({
     })
   }, [pendingAction])
 
+  useEffect(() => {
+    if (!pendingAction || pendingAction.kind === 'admin') {
+      setActionPreview(null)
+      return
+    }
+    let active = true
+    setPreviewError('')
+    setActionPreview(null)
+    if (pendingAction.kind === 'deactivate') {
+      void getDeactivationCheck(pendingAction.user.id)
+        .then((data) => active && setActionPreview(data))
+        .catch((caught: unknown) => {
+          if (active) setPreviewError(managementErrorMessage(caught))
+        })
+    } else {
+      void getReactivationPreview(pendingAction.user.id)
+        .then((data) => {
+          if (!active) return
+          setActionPreview(data)
+          setRestoreSelection({
+            permission_codes: [],
+            delegated_modules: [],
+            project_ids: [],
+            task_ids: [],
+          })
+        })
+        .catch((caught: unknown) => {
+          if (active) setPreviewError(managementErrorMessage(caught))
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [pendingAction])
+
   const loadCompanies = useCallback(async () => {
     const id = ++companyRequestId.current
     setCompanyListError('')
@@ -111,12 +168,27 @@ export default function UsersPage({
     }
   }, [])
 
+  const loadLifecycleLists = useCallback(async () => {
+    try {
+      const [externalUsers, projects] = await Promise.all([
+        listExternalUsersWithoutProject(),
+        listUnmanagedProjects(),
+      ])
+      setExternalNoProject(externalUsers)
+      setUnmanagedProjects(projects)
+    } catch {
+      setExternalNoProject([])
+      setUnmanagedProjects([])
+    }
+  }, [])
+
   useEffect(() => {
     void loadCompanies()
+    void loadLifecycleLists()
     return () => {
       companyRequestId.current += 1
     }
-  }, [loadCompanies])
+  }, [loadCompanies, loadLifecycleLists])
 
   async function act(
     userId: string,
@@ -175,13 +247,18 @@ export default function UsersPage({
     }
     setBusyUser(user.id)
     try {
-      await (kind === 'admin'
-        ? setUserAdmin(user.id, !user.is_admin)
-        : setUserActive(user.id, kind === 'activate'))
+      if (kind === 'admin') {
+        await setUserAdmin(user.id, !user.is_admin)
+      } else if (kind === 'deactivate') {
+        await setUserActive(user.id, false)
+      } else {
+        await reactivateUser(user.id, restoreSelection)
+      }
       setPendingAction(null)
       setEditingUser(null)
       setEditingCompany(null)
       await reload()
+      await loadLifecycleLists()
     } catch (caught) {
       setActionError(managementErrorMessage(caught))
     } finally {
@@ -244,6 +321,40 @@ export default function UsersPage({
     <section aria-labelledby="users-heading">
       <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="users-heading">使用者管理</h1>
+      <section aria-labelledby="external-unassigned-heading">
+        <h2 id="external-unassigned-heading">沒有專案的外部協作人員</h2>
+        {externalNoProject.length === 0 ? (
+          <p>目前沒有符合條件的人員。</p>
+        ) : (
+          <ul>
+            {externalNoProject.map((user) => (
+              <li key={user.id}>
+                {user.name_zh || user.username}（{user.username}）
+                {user.account_expires_on
+                  ? `，到期日 ${user.account_expires_on}`
+                  : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section aria-labelledby="unmanaged-projects-heading">
+        <h2 id="unmanaged-projects-heading">沒有啟用管理成員的專案</h2>
+        {unmanagedProjects.length === 0 ? (
+          <p>目前沒有符合條件的專案。</p>
+        ) : (
+          <ul>
+            {unmanagedProjects.map((project) => (
+              <li key={project.id}>
+                <Link to={`/admin/projects/${project.id}/members`}>
+                  {project.project_code}／{project.name}（
+                  {project.member_count} 位成員）
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       {loading ? <p>載入中…</p> : null}
       <div>
         <h2>使用者列表</h2>
@@ -295,6 +406,9 @@ export default function UsersPage({
                       <th scope="row">
                         {user.username}
                         {user.is_system ? <span>（系統帳號）</span> : null}
+                        {user.is_external_collaborator ? (
+                          <span>（外部協作）</span>
+                        ) : null}
                       </th>
                       <td>{user.name_zh ?? '—'}</td>
                       <td>{companyLabel(user, companies)}</td>
@@ -357,6 +471,14 @@ export default function UsersPage({
                         <td colSpan={6}>
                           <ConfirmBox
                             busy={busyUser === user.id}
+                            confirmDisabled={
+                              pendingAction.kind !== 'admin' &&
+                              (!actionPreview ||
+                                Boolean(previewError) ||
+                                (pendingAction.kind === 'activate' &&
+                                  'account_expired' in actionPreview &&
+                                  actionPreview.account_expired))
+                            }
                             key={`${user.id}:${pendingAction.kind}`}
                             confirmLabel="確認"
                             label="操作確認"
@@ -367,6 +489,48 @@ export default function UsersPage({
                             variant={confirmVariant(pendingAction)}
                           >
                             <p>{actionMessage(pendingAction)}</p>
+                            {previewError && (
+                              <p role="alert">{previewError}</p>
+                            )}
+                            {pendingAction.kind === 'deactivate' &&
+                              actionPreview &&
+                              'last_manager_projects' in actionPreview &&
+                              actionPreview.last_manager_projects.length >
+                                0 && (
+                                <div>
+                                  <p>
+                                    停用後下列專案將沒有啟用中的管理成員；
+                                    請先安排接手者。
+                                  </p>
+                                  <ul>
+                                    {actionPreview.last_manager_projects.map(
+                                      (project) => (
+                                        <li key={project.id}>
+                                          <Link
+                                            to={[
+                                              '/admin/projects',
+                                              project.id,
+                                              'planning',
+                                            ].join('/')}
+                                          >
+                                            {project.project_code}／
+                                            {project.name}
+                                          </Link>
+                                        </li>
+                                      ),
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            {pendingAction.kind === 'activate' &&
+                              actionPreview &&
+                              'permission_codes' in actionPreview && (
+                                <RestoreChoices
+                                  preview={actionPreview}
+                                  selection={restoreSelection}
+                                  onChange={setRestoreSelection}
+                                />
+                              )}
                             {actionError && <p role="alert">{actionError}</p>}
                           </ConfirmBox>
                         </td>
@@ -463,6 +627,84 @@ function companyLabel(user: User, companies: Company[]): string {
   return user.department ? `${name}／${user.department}` : name
 }
 
+/** 讓 Admin 對預覽中的資料逐項選擇，避免整包復原過期授權。 */
+function RestoreChoices({
+  preview,
+  selection,
+  onChange,
+}: {
+  preview: RestorePreview
+  selection: {
+    permission_codes: string[]
+    delegated_modules: string[]
+    project_ids: string[]
+    task_ids: string[]
+  }
+  onChange: (value: typeof selection) => void
+}) {
+  function toggle<K extends keyof typeof selection>(key: K, value: string) {
+    const current = selection[key]
+    onChange({
+      ...selection,
+      [key]: current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value],
+    })
+  }
+
+  return (
+    <div>
+      {preview.account_expired && (
+        <p role="alert">外部帳號已到期，請先修改到期日後再重新啟用。</p>
+      )}
+      <h4>選擇要恢復的模組權限</h4>
+      {preview.permission_codes.map((code) => (
+        <label key={code}>
+          <input
+            checked={selection.permission_codes.includes(code)}
+            onChange={() => toggle('permission_codes', code)}
+            type="checkbox"
+          />
+          {code}
+        </label>
+      ))}
+      <h4>選擇要恢復的模組委派</h4>
+      {preview.delegated_modules.map((module) => (
+        <label key={module}>
+          <input
+            checked={selection.delegated_modules.includes(module)}
+            onChange={() => toggle('delegated_modules', module)}
+            type="checkbox"
+          />
+          {module}
+        </label>
+      ))}
+      <h4>選擇要恢復的專案成員關係</h4>
+      {preview.project_memberships.map((member) => (
+        <label key={member.project_id}>
+          <input
+            checked={selection.project_ids.includes(member.project_id)}
+            onChange={() => toggle('project_ids', member.project_id)}
+            type="checkbox"
+          />
+          {member.project_code}／{member.project_name}
+        </label>
+      ))}
+      <h4>選擇要保留的未完成任務建議指派</h4>
+      {preview.tasks.map((task) => (
+        <label key={task.task_id}>
+          <input
+            checked={selection.task_ids.includes(task.task_id)}
+            onChange={() => toggle('task_ids', task.task_id)}
+            type="checkbox"
+          />
+          {task.name}（{task.status}）
+        </label>
+      ))}
+    </div>
+  )
+}
+
 function UserDetailsForm({
   user,
   busy,
@@ -484,17 +726,20 @@ function UserDetailsForm({
     email: string
     name_zh: string
     name_en: string | null
+    account_expires_on?: string | null
   }) => Promise<void>
 }) {
   const [username, setUsername] = useState(user.username)
   const [email, setEmail] = useState(user.email ?? '')
   const [nameZh, setNameZh] = useState(user.name_zh ?? '')
   const [nameEn, setNameEn] = useState(user.name_en ?? '')
+  const [expiresOn, setExpiresOn] = useState(user.account_expires_on ?? '')
   const dirty = Boolean(
     username !== user.username ||
     email !== (user.email ?? '') ||
     nameZh !== (user.name_zh ?? '') ||
-    nameEn !== (user.name_en ?? ''),
+    nameEn !== (user.name_en ?? '') ||
+    expiresOn !== (user.account_expires_on ?? ''),
   )
 
   useEffect(() => {
@@ -508,6 +753,9 @@ function UserDetailsForm({
       email,
       name_zh: nameZh,
       name_en: nameEn || null,
+      ...(user.is_external_collaborator
+        ? { account_expires_on: expiresOn || null }
+        : {}),
     })
   }
 
@@ -551,6 +799,16 @@ function UserDetailsForm({
           value={nameEn}
         />
       </label>
+      {user.is_external_collaborator && (
+        <label>
+          外部帳號到期日（留空代表不設定到期日）
+          <input
+            onChange={(event) => setExpiresOn(event.target.value)}
+            type="date"
+            value={expiresOn}
+          />
+        </label>
+      )}
       <button onClick={onCancel} type="button">
         取消
       </button>

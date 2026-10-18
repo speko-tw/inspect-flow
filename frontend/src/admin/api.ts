@@ -28,6 +28,45 @@ export interface User {
   is_active: boolean
   is_admin: boolean
   is_system: boolean
+  is_external_collaborator?: boolean
+  account_expires_on?: string | null
+}
+
+export interface RestorePreview {
+  user_id: string
+  username: string
+  is_external_collaborator: boolean
+  account_expires_on: string | null
+  account_expired: boolean
+  permission_codes: string[]
+  delegated_modules: string[]
+  project_memberships: Array<{
+    project_id: string
+    project_code: string
+    project_name: string
+  }>
+  tasks: Array<{
+    task_id: string
+    project_id: string
+    name: string
+    status: string
+  }>
+}
+
+export interface DeactivationCheck {
+  user_id: string
+  last_manager_projects: Array<{
+    id: string
+    project_code: string
+    name: string
+  }>
+}
+
+export interface UnmanagedProject {
+  id: string
+  project_code: string
+  name: string
+  member_count: number
 }
 
 export interface Company {
@@ -62,6 +101,7 @@ export type UserInput = {
   location?: string | null
   employee_no?: string | null
   is_external_collaborator: boolean
+  account_expires_on?: string | null
   is_admin?: boolean
 }
 
@@ -146,6 +186,37 @@ export function setUserActive(id: string, isActive: boolean): Promise<User> {
   })
 }
 
+export function getDeactivationCheck(id: string): Promise<DeactivationCheck> {
+  return request(`/users/${id}/deactivation-check`)
+}
+
+export function getReactivationPreview(id: string): Promise<RestorePreview> {
+  return request(`/users/${id}/reactivation-preview`)
+}
+
+export function reactivateUser(
+  id: string,
+  restore: {
+    permission_codes: string[]
+    delegated_modules: string[]
+    project_ids: string[]
+    task_ids: string[]
+  },
+): Promise<User> {
+  return request(`/users/${id}:reactivate`, {
+    method: 'POST',
+    body: JSON.stringify({ restore }),
+  })
+}
+
+export function listExternalUsersWithoutProject(): Promise<User[]> {
+  return listAllPages('/admin/users/external-without-project')
+}
+
+export function listUnmanagedProjects(): Promise<UnmanagedProject[]> {
+  return listAllPages('/admin/projects/unmanaged')
+}
+
 export function listCompaniesPage(
   options: ListPageOptions = {},
 ): Promise<Page<Company>> {
@@ -195,6 +266,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   'resource.not_found': '找不到這筆資料，請重新整理後再試。',
   'user.builtin_protected': '內建 admin 帳號不可修改或停用。',
   'user.last_admin': '系統至少要保留一位啟用中的管理者。',
+  'user.account_expiry_passed': '外部帳號已到期，請先延長或清除到期日。',
+  'user.restore_selection_invalid': '恢復項目已變動，請重新載入預覽。',
+  'user.reactivation_required': '請使用恢復預覽選取要重新啟用的項目。',
   'user.external_managed': '此帳號的基本資料由外部來源管理。',
   'user.external_not_qualified': '外部協作人員不可指派系統管理者權限。',
   'company.inactive': '不能把使用者連結到已停用的公司。',

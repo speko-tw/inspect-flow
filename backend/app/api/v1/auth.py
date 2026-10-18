@@ -180,6 +180,12 @@ def login(
         db.commit()
         raise APIError(ErrorCode.AUTH_INVALID_CREDENTIALS, 401)
 
+    from app.services.user_lifecycle import expire_external_account_if_due
+
+    if expire_external_account_if_due(db, user.id):
+        db.commit()
+        raise APIError(ErrorCode.AUTH_INVALID_CREDENTIALS, 401)
+
     _session, token = create_session(db, user)
     set_session_cookie(response, token)
     return _me_response(db, user)

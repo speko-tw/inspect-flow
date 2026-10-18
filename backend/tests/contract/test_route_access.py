@@ -130,10 +130,8 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         for info in iter_route_access(app)
         if info.path.startswith("/api/v1/projects")
     }
-    admin_routes = {
-        ("POST", "/api/v1/projects"),
-        ("PATCH", "/api/v1/projects/{project_id}"),
-    }
+    project_update = ("PATCH", "/api/v1/projects/{project_id}")
+    create_project = ("POST", "/api/v1/projects")
     template_admin_list = ("GET", "/api/v1/projects")
     planning_project_get = ("GET", "/api/v1/projects/{project_id}")
     workflow_summary = (
@@ -186,9 +184,10 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
 
     assert (
         set(routes)
-        == admin_routes
-        | member_routes
+        == member_routes
         | {
+            project_update,
+            create_project,
             template_admin_list,
             planning_project_get,
             workflow_summary,
@@ -198,10 +197,14 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
         }
         | planning_routes
     )
-    for route in admin_routes:
-        declaration = routes[route]
-        assert declaration is not None
-        assert declaration.level is AccessLevel.ADMIN_REQUIRED
+    declaration = routes[project_update]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.PROJECT_PERMISSION
+    assert declaration.permission_code == "project.update"
+    declaration = routes[create_project]
+    assert declaration is not None
+    assert declaration.level is AccessLevel.MODULE_PERMISSION_REQUIRED
+    assert declaration.module_permission_code == "project.create"
     declaration = routes[template_admin_list]
     assert declaration is not None
     assert declaration.level is AccessLevel.ADMIN_OR_SYSTEM_ROLE
