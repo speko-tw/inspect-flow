@@ -1124,7 +1124,7 @@ export default function PlanningPage({
       )}
       {membersDenied && (
         <p className="notice-info" role="status">
-          沒有讀取可指派人員清單的權限；可略過建議指派。
+          沒有讀取可指派帳號清單的權限；可略過建議指派。
         </p>
       )}
       {error && errorContext === 'page' && (

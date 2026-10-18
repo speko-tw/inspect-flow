@@ -1975,7 +1975,7 @@ function addForm(): HTMLElement {
 
 describe('專案成員表單未儲存導覽防護', () => {
   function selectMember() {
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
   }
@@ -2096,12 +2096,12 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    const select = screen.getByLabelText(/使用者/)
+    const select = screen.getByRole('combobox', { name: '成員' })
     const optionNames = within(select)
       .getAllByRole('option')
       .map((option) => option.textContent)
     expect(optionNames).toEqual([
-      '請選擇使用者',
+      '請選擇成員',
       '林鮑伯（bob.lin） · 未連結公司',
     ])
 
@@ -2122,7 +2122,7 @@ describe('admin project members', () => {
       '已加入「林鮑伯（bob.lin）」。',
     )
     expect(screen.getByRole('status')).toHaveClass('notice-success')
-    expect(screen.getByText('沒有可加入的使用者。')).toBeVisible()
+    expect(screen.getByText('沒有可加入的成員。')).toBeVisible()
     // 全部都加完後，角色勾選與加入按鈕一起隱藏，只剩說明（#487）。
     expect(within(addForm()).queryByRole('checkbox')).toBeNull()
     expect(
@@ -2139,7 +2139,7 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members', officeUser)
     await screen.findByText('目前沒有成員。')
 
-    const select = screen.getByLabelText(/使用者/)
+    const select = screen.getByRole('combobox', { name: '成員' })
     fireEvent.change(select, { target: { value: externalCandidate.id } })
     expect(
       within(select).getByRole('option', {
@@ -2184,7 +2184,7 @@ describe('admin project members', () => {
     })
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
     fireEvent.click(screen.getByLabelText('查核員'))
@@ -2196,7 +2196,7 @@ describe('admin project members', () => {
       '你不能指派這個角色，請選擇可指派的角色。',
     )
     expect(addForm().contains(error)).toBe(true)
-    expect(screen.getByLabelText(/使用者/)).toHaveValue(bob.id)
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(bob.id)
     expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(1)
   })
 
@@ -2212,7 +2212,7 @@ describe('admin project members', () => {
     })
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: externalCandidate.id },
     })
     fireEvent.click(screen.getByLabelText('查核員'))
@@ -2224,7 +2224,9 @@ describe('admin project members', () => {
       '外部協作人員只能指派外部可用的角色。',
     )
     expect(addForm().contains(error)).toBe(true)
-    expect(screen.getByLabelText(/使用者/)).toHaveValue(externalCandidate.id)
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(
+      externalCandidate.id,
+    )
     expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(1)
   })
 
@@ -2233,7 +2235,7 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
     })
     fireEvent.click(
@@ -2247,7 +2249,7 @@ describe('admin project members', () => {
       screen.getByRole('group', { name: /專案角色/ }),
     ).toHaveAccessibleDescription('請至少選一個角色。')
     expect(screen.getByLabelText('查核員')).toHaveFocus()
-    expect(screen.getByLabelText(/使用者/)).toHaveValue(anna.id)
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(anna.id)
     expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(0)
 
     // 選了角色，欄旁錯誤立即消失；送出成功。
@@ -2269,9 +2271,9 @@ describe('admin project members', () => {
       within(addForm()).getByRole('button', { name: '加入成員' }),
     )
 
-    expect(screen.getByText('請選擇要加入的使用者。')).toBeVisible()
+    expect(screen.getByText('請選擇要加入的成員。')).toBeVisible()
     expect(screen.getByText('請至少選一個角色。')).toBeVisible()
-    expect(screen.getByLabelText(/使用者/)).toHaveFocus()
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveFocus()
     expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(0)
   })
 
@@ -2289,7 +2291,7 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('查核員'))
@@ -2300,7 +2302,7 @@ describe('admin project members', () => {
     expect(await screen.findByText('請至少選一個角色。')).toBeVisible()
     expect(screen.getByLabelText('查核員')).toHaveFocus()
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByLabelText(/使用者/)).toHaveValue(anna.id)
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(anna.id)
   })
 
   it('edits roles on a separate screen and requires at least one role', async () => {
@@ -2434,7 +2436,7 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('目前沒有成員。')
 
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: anna.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('查核員'))
@@ -2443,7 +2445,7 @@ describe('admin project members', () => {
     )
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('這位使用者已經是此專案的成員。')
+    expect(alert).toHaveTextContent('這個帳號已經是此專案的成員。')
     expect(addForm().contains(alert)).toBe(true)
   })
 
@@ -2452,7 +2454,7 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('查核員'))
@@ -2470,14 +2472,14 @@ describe('admin project members', () => {
     renderAt('/admin/projects/project-1/members')
     await screen.findByText('鄧安娜')
 
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('審核者'))
     fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
 
-    expect(screen.getByLabelText(/使用者/)).toHaveValue(bob.id)
+    expect(screen.getByRole('combobox', { name: '成員' })).toHaveValue(bob.id)
     expect(within(addForm()).getByLabelText('審核者')).toBeChecked()
   })
 
@@ -2585,12 +2587,12 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
     await screen.findByText('鄧安娜')
 
-    const select = screen.getByLabelText(/使用者/)
+    const select = screen.getByRole('combobox', { name: '成員' })
     expect(
       within(select)
         .getAllByRole('option')
         .map((option) => option.textContent),
-    ).toEqual(['請選擇使用者', '林鮑伯（bob.lin） · 未連結公司'])
+    ).toEqual(['請選擇成員', '林鮑伯（bob.lin） · 未連結公司'])
     fireEvent.change(select, { target: { value: bob.id } })
     fireEvent.click(
       within(addForm()).getByRole('button', { name: '加入成員' }),
@@ -2611,7 +2613,7 @@ describe('project members for an office user (not admin, #481)', () => {
       '已加入「林鮑伯（bob.lin）」。',
     )
     // 加入後這個人不再是候選；沒有人可加時改顯示說明。
-    expect(await screen.findByText('沒有可加入的使用者。')).toBeVisible()
+    expect(await screen.findByText('沒有可加入的成員。')).toBeVisible()
   })
 
   it('changes roles on the separate screen by clicking', async () => {
@@ -2662,7 +2664,7 @@ describe('project members for an office user (not admin, #481)', () => {
     renderAt(path, officeUser)
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
-    expect(await screen.findByText(/無法載入可加入的使用者/)).toBeVisible()
+    expect(await screen.findByText(/無法載入可加入的成員/)).toBeVisible()
     expect(
       within(addForm()).getByRole('button', { name: '加入成員' }),
     ).toBeDisabled()
@@ -2692,7 +2694,7 @@ describe('project members for an office user (not admin, #481)', () => {
     expect(
       screen.getByRole('button', { name: /修改「.*」的角色/ }),
     ).toBeDisabled()
-    expect(screen.getByLabelText(/使用者/)).toBeVisible()
+    expect(screen.getByRole('combobox', { name: '成員' })).toBeVisible()
   })
 
   it('retries every failed block with the reload button', async () => {
@@ -2706,12 +2708,12 @@ describe('project members for an office user (not admin, #481)', () => {
       return (inner as NonNullable<typeof inner>)(input, init)
     })
     renderAt(path, officeUser)
-    await screen.findByText(/無法載入可加入的使用者/)
+    await screen.findByText(/無法載入可加入的成員/)
 
     failing = false
     fireEvent.click(screen.getByRole('button', { name: '重新載入' }))
-    expect(await screen.findByLabelText(/使用者/)).toBeVisible()
-    expect(screen.queryByText(/無法載入可加入的使用者/)).toBeNull()
+    expect(await screen.findByRole('combobox', { name: '成員' })).toBeVisible()
+    expect(screen.queryByText(/無法載入可加入的成員/)).toBeNull()
   })
 
   it('shows no member actions without the manage permission', async () => {
@@ -2746,12 +2748,12 @@ describe('project members for an office user (not admin, #481)', () => {
     })
     renderAt(path, officeUser)
 
-    expect(await screen.findByText('沒有可加入的使用者。')).toBeVisible()
+    expect(await screen.findByText('沒有可加入的成員。')).toBeVisible()
     expect(screen.getByText(/需要新增帳號請洽系統管理者/)).toBeVisible()
-    expect(screen.getByText(/可加入尚未參與這個專案的人員/)).toBeVisible()
+    expect(screen.getByText(/可加入尚未參與這個專案的成員/)).toBeVisible()
     expect(screen.queryByText(/只能加入和你同公司/)).toBeNull()
     // 內業沒有系統管理頁，不放連結。
-    expect(screen.queryByRole('link', { name: '使用者' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '帳號' })).toBeNull()
   })
 })
 
@@ -2779,7 +2781,7 @@ function formOf(element: HTMLElement): HTMLFormElement {
 
 describe('project members forms guard (#507)', () => {
   async function fillAdd() {
-    fireEvent.change(screen.getByLabelText(/使用者/), {
+    fireEvent.change(screen.getByRole('combobox', { name: '成員' }), {
       target: { value: bob.id },
     })
     fireEvent.click(within(addForm()).getByLabelText('查核員'))
@@ -2832,7 +2834,7 @@ describe('project members forms guard (#507)', () => {
     await screen.findByText('鄧安娜')
     await fillAdd()
 
-    expectImeEnterIgnored(screen.getByLabelText(/使用者/))
+    expectImeEnterIgnored(screen.getByRole('combobox', { name: '成員' }))
 
     expect(calls(fetchMock, 'POST', /\/members$/)).toHaveLength(0)
   })

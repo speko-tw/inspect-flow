@@ -38,7 +38,7 @@ const MAX_PASSWORD_LENGTH = 128
 const STEP_LABELS = [
   ['首次登入碼'],
   ['設定 admin ', '密碼'],
-  ['新增第一個', '使用者'],
+  ['新增第一個', '帳號'],
 ]
 
 type Step =
@@ -224,7 +224,7 @@ export default function SetupPage() {
           className="notice-success"
           role="status"
         >
-          <h2 id="temporary-password-heading">使用者已新增</h2>
+          <h2 id="temporary-password-heading">帳號已新增</h2>
           <p>
             請將以下臨時密碼交給 {step.user.username}
             。首次登入時必須變更密碼；離開此頁後無法再次查看。
@@ -242,12 +242,12 @@ export default function SetupPage() {
     return (
       <AuthLayout
         title="首次設定"
-        lead="admin 密碼已設定，你已登入。接著新增第一個使用者。"
+        lead="admin 密碼已設定，你已登入。接著新增第一個帳號。"
         progress={<StepIndicator current={3} />}
         wide
       >
         {companiesError && (
-          <p role="alert">無法載入公司清單，使用者將先不連結公司。</p>
+          <p role="alert">無法載入公司清單，帳號將先不連結公司。</p>
         )}
         <UserForm
           companies={companies}

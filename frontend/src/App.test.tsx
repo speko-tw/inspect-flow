@@ -83,7 +83,7 @@ describe('App routing', () => {
     })
 
     expect(
-      await screen.findByRole('heading', { name: '使用者管理' }),
+      await screen.findByRole('heading', { name: '帳號' }),
     ).toBeInTheDocument()
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
@@ -104,7 +104,7 @@ describe('App routing', () => {
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),
     ).toBeInTheDocument()
-    expect(screen.queryByText('使用者管理')).not.toBeInTheDocument()
+    expect(screen.queryByText('帳號')).not.toBeInTheDocument()
   })
 
   it('redirects the legacy Field project URL to the current Admin path', async () => {

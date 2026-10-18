@@ -179,7 +179,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     clearMessages()
     const missingUser = newUserId === ''
     const missingRoles = newRoleIds.length === 0
-    setUserError(missingUser ? '請選擇要加入的使用者。' : '')
+    setUserError(missingUser ? '請選擇要加入的成員。' : '')
     setRolesError(missingRoles ? ROLES_REQUIRED_TEXT : '')
     if (missingUser) {
       userRef.current?.focus()
@@ -449,18 +449,16 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         <h3>加入成員</h3>
         {candidatesState.status === 'failed' ? (
           <div className="member-load-error">
-            <p role="alert">
-              無法載入可加入的使用者：{candidatesState.message}
-            </p>
+            <p role="alert">無法載入可加入的成員：{candidatesState.message}</p>
             <button onClick={reload} type="button">
               重新載入
             </button>
           </div>
         ) : candidatesState.status === 'loading' ? (
-          <p>載入可加入的使用者…</p>
+          <p>載入可加入的成員…</p>
         ) : candidates.length === 0 ? (
           <>
-            <p>沒有可加入的使用者。</p>
+            <p>沒有可加入的成員。</p>
             {isAdmin ? (
               <p className="field-hint">
                 要加入新的人，請先到
@@ -468,7 +466,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
               </p>
             ) : (
               <p className="field-hint">
-                可加入尚未參與這個專案的人員； 需要新增帳號請洽系統管理者。
+                可加入尚未參與這個專案的成員；需要新增帳號請洽系統管理者。
               </p>
             )}
           </>
@@ -476,7 +474,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           <div>
             <label>
               <span>
-                使用者
+                成員
                 <RequiredMark />
               </span>
               <select
@@ -491,7 +489,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 ref={userRef}
                 value={newUserId}
               >
-                <option value="">請選擇使用者</option>
+                <option value="">請選擇成員</option>
                 {candidates.map((user) => (
                   <option key={user.id} value={user.id}>
                     {personLabel(user)} · {user.company_name ?? '未連結公司'}
@@ -592,7 +590,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
         <div className="member-empty">
           <p>目前沒有成員。</p>
           <p className="field-hint">
-            先在上方選一位使用者並指定角色，把他加入專案。
+            先在上方選一個帳號並指定角色，把他加入專案。
           </p>
         </div>
       ) : (

@@ -417,7 +417,7 @@ describe('使用者新增共用表單', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '林本' },
     })
-    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
   }
 
   it('新增 pending 鎖送出，IME 略過，失敗後可重試', async () => {
@@ -434,7 +434,7 @@ describe('使用者新增共用表單', () => {
     renderUsers()
     await screen.findByRole('row', { name: /anna\.deng/ })
     fillUserForm()
-    const button = screen.getByRole('button', { name: '新增使用者' })
+    const button = screen.getByRole('button', { name: '新增帳號' })
     const form = button.closest('form')!
     const input = screen.getByLabelText(/^帳號名稱/)
 
@@ -830,17 +830,15 @@ describe('CompaniesPage 停用公司（#507）', () => {
     )
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: '停用公司' })
-    expect(screen.getByText('停用公司不會自動停用人員帳號。')).toBeVisible()
+    expect(screen.getByText('停用公司不會自動停用帳號。')).toBeVisible()
 
     fireEvent.click(button)
     fireEvent.click(button)
     gate.resolve()
 
-    await screen.findByText('還有 1 位啟用中的人員')
+    await screen.findByText('還有 1 個啟用中的帳號')
     expect(
-      screen.getByText(
-        '只有勾選的人員會一併停用；未選取的人員帳號會維持啟用。',
-      ),
+      screen.getByText('只有勾選的帳號會一併停用；未選取的帳號會維持啟用。'),
     ).toBeVisible()
     expect(backend.count('GET', /active-users$/)).toBe(1)
   })
@@ -866,7 +864,7 @@ describe('CompaniesPage 停用公司（#507）', () => {
     gate.resolve()
 
     await waitFor(() =>
-      expect(screen.queryByText('還有 1 位啟用中的人員')).toBeNull(),
+      expect(screen.queryByText('還有 1 個啟用中的帳號')).toBeNull(),
     )
     expect(backend.count('PUT', '/api/v1/companies/company-1/active')).toBe(1)
   })

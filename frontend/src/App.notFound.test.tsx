@@ -264,7 +264,7 @@ describe('不存在的子路徑', () => {
   })
 
   it.each(['/admin/people', '/admin/people/user-1'])(
-    '非管理者開人員頁仍顯示無權限：%s',
+    '非管理者開帳號頁仍顯示無權限：%s',
     async (path) => {
       stubBackend(OFFICE)
       await renderApp(path)
@@ -282,7 +282,9 @@ describe('不存在的子路徑', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '人員', level: 1 })).toBeNull()
+    expect(
+      screen.queryByRole('heading', { name: '帳號', level: 1 }),
+    ).toBeNull()
   })
 
   it('現場帳號：/field 底下不存在的路徑顯示找不到，回首頁回任務清單', async () => {

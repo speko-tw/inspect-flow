@@ -152,10 +152,10 @@ export default function CompaniesPage() {
           title={`停用「${deactivating.company.name}」`}
           variant="danger"
         >
-          <p>還有 {deactivating.count} 位啟用中的人員</p>
-          <p>只有勾選的人員會一併停用；未選取的人員帳號會維持啟用。</p>
+          <p>還有 {deactivating.count} 個啟用中的帳號</p>
+          <p>只有勾選的帳號會一併停用；未選取的帳號會維持啟用。</p>
           <fieldset>
-            <legend>選擇要一併停用的人員</legend>
+            <legend>選擇要一併停用的帳號</legend>
             {deactivating.users.map((user) => (
               <label key={user.id}>
                 <input
@@ -239,7 +239,7 @@ export default function CompaniesPage() {
                     {company.is_active ? '停用公司' : '啟用公司'}
                   </button>
                   {company.is_active && (
-                    <span>停用公司不會自動停用人員帳號。</span>
+                    <span>停用公司不會自動停用帳號。</span>
                   )}
                 </td>
               </tr>

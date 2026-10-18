@@ -857,7 +857,7 @@ describe('admin user and company pages', () => {
 
   it.each([
     {
-      label: '使用者',
+      label: '帳號',
       path: '/admin/people',
       searchLabel: '搜尋帳號',
       query: 'anna',
@@ -2239,10 +2239,10 @@ describe('admin user and company pages', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
     expect(
-      await screen.findByText('還有 1 位啟用中的人員'),
+      await screen.findByText('還有 1 個啟用中的帳號'),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByText('還有 1 位啟用中的人員')).not.toBeInTheDocument()
+    expect(screen.queryByText('還有 1 個啟用中的帳號')).not.toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(
         ([url, init]) =>
@@ -2253,7 +2253,7 @@ describe('admin user and company pages', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: '停用公司' })[0])
     expect(
-      await screen.findByText('還有 1 位啟用中的人員'),
+      await screen.findByText('還有 1 個啟用中的帳號'),
     ).toBeInTheDocument()
     await waitFor(() => {
       expect(
@@ -2305,7 +2305,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/admin/companies')
     fireEvent.click(await screen.findByRole('button', { name: '停用公司' }))
     expect(
-      await screen.findByText('還有 1 位啟用中的人員'),
+      await screen.findByText('還有 1 個啟用中的帳號'),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '確認停用公司' }))
     await waitFor(() => {
@@ -2336,7 +2336,7 @@ describe('management error messages', () => {
     ['user.builtin_protected', '內建 admin 帳號不可修改或停用。'],
     ['user.last_admin', '系統至少要保留一位啟用中的管理者。'],
     ['user.external_managed', '此帳號的基本資料由外部來源管理。'],
-    ['company.inactive', '不能把使用者連結到已停用的公司。'],
+    ['company.inactive', '不能把帳號連結到已停用的公司。'],
     ['user.username_conflict', '帳號名稱已被使用。'],
     ['user.email_conflict', 'Email 已被使用。'],
     ['user.employee_no_conflict', '這家公司已有相同工號。'],
