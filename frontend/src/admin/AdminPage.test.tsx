@@ -908,7 +908,7 @@ describe('admin user and company pages', () => {
     Reflect.deleteProperty(navigator, 'clipboard')
   })
 
-  it('clears the password after leaving the page', async () => {
+  it('clears the password after immediate navigation', async () => {
     managementFetch({
       onCreate: (body) => ({
         ...regularUser,
@@ -931,7 +931,9 @@ describe('admin user and company pages', () => {
     })
     fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
     fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
-    expect(await screen.findByText('leave-page-password')).toBeInTheDocument()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'leave-page-password',
+    )
 
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
     expect(
