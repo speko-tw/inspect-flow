@@ -305,7 +305,7 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 
 | 方法與路徑 | 行為 | 存取層級 |
 |---|---|---|
-| `GET /api/v1/me/projects` | 回傳 `ProjectMember` 屬於目前使用者且有效權限含 `project.read`、並具專案模組「可使用」的專案陣列（與 `has_project_access` 一致，DOM-R69；成員但缺少任一者的專案不列），不分頁，依 `project_code`、`name`、`id` 排序。每筆含專案 UUID `id`、`project_code`、`name`、`client_name`、`site_location`、選填的 `planned_start_date`、`planned_completion_date`，`has_office_access`（布林，目前使用者在該專案是否有內業權限碼，分類見 AUT-R08；正式行為依 AUT-R19 以有效權限計，內業碼所屬模組的「可使用」也要具備，即專案模組碼需專案模組、查核模組碼需查核模組，規格設計（非負責人裁定）），以及 `role_names`（只含目前使用者在該專案的角色名稱，依名稱排序；沒有角色時為空陣列，DOM-R36）。不含他人的專案與他人的角色；Admin 也只看到自己參與的專案（Admin 的 `has_project_access` 雖恆為 `true`，該旗標只決定入口與落點，不改變此清單的內容，沒有參與專案時為空陣列） | 需登入（AUT-R18）；未登入回 HTTP 401（AUT-R18 的未登入回應） |
+| `GET /api/v1/me/projects` | 回傳 `ProjectMember` 屬於目前使用者且有效權限含 `project.read`、並具專案模組「可使用」的專案陣列（與 `has_project_access` 一致，DOM-R69；成員但缺少任一者的專案不列），不分頁，依 `project_code`、`name`、`id` 排序。每筆含專案 UUID `id`、`project_code`、`name`、`client_name`、`site_location`、選填的 `planned_start_date`、`planned_completion_date`，`has_office_access`（布林，目前使用者在該專案是否有內業權限碼，分類見 AUT-R08；正式行為依 AUT-R19 以有效權限計，內業碼所屬模組的「可使用」也要具備，即專案模組碼需專案模組、查核模組碼需查核模組，規格設計（非負責人裁定）），以及 `role_names`（只含目前使用者在該專案的角色名稱，依名稱排序；沒有角色時為空陣列，DOM-R36），`can_apply_templates`（布林；Admin 為 `true`，否則須同時具範本模組 `template.use`、查核模組 `inspection.use` 與該專案 `project_inspection_item.edit`，依 TPL-R09）；不含他人的專案與他人的角色；Admin 也只看到自己參與的專案（Admin 的 `has_project_access` 雖恆為 `true`，該旗標只決定入口與落點，不改變此清單的內容，沒有參與專案時為空陣列） | 需登入（AUT-R18）；未登入回 HTTP 401（AUT-R18 的未登入回應） |
 
 角色 API 的 `error.code` 契約：重複名稱使用 `role.name_conflict`（409）、角色不存在使用 `role.not_found`（404）、未登記或格式錯誤的權限代碼使用 `role.permission_code_invalid`（422）；空更新與不合法游標使用共用 `request.validation_failed`（422）；刪除或改動建立者角色的限制見 DOM-R64（`role.creator_role_in_use`、`role.creator_role_requires_permissions`，422）。
 ### 管理介面錯誤
@@ -540,6 +540,8 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 對齊 #375 路線圖，將本規格涵蓋的報表 Phase 由 P9 更新為 P8 — [#375](https://github.com/speko-tw/inspect-flow/issues/375)
 
 凍結後的「範圍變更」以上才記；一行寫改了什麼與 issue 連結。
+
+- 規格澄清（#433）：`GET /api/v1/me/projects` 每筆回應新增 `can_apply_templates`，明定依 TPL-R09 檢查 `template.use`、`inspection.use` 與專案 `project_inspection_item.edit`；Admin 為 `true`。
 
 - 新增 Plan／Task、Task 項目關聯及 Task Requirement Snapshot 的凍結資料基線 DOM-R56～DOM-R57、DOM-AC51～DOM-AC52，並逐項比對開工門檻 — #358
 - 範圍變更（負責人指示，#369）：新增 `ProjectZone`、Task 地點欄位、同專案關聯與分區刪除限制 DOM-R58／DOM-AC53，並納入凍結範圍；名稱 trim/casefold 算法標示為規格設計 — [#73 裁定](https://github.com/speko-tw/inspect-flow/issues/73#issuecomment-5976192382)、[#369](https://github.com/speko-tw/inspect-flow/issues/369)
