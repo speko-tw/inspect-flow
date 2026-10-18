@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import {
   createUser,
@@ -13,20 +6,12 @@ import {
   type Company,
   type CreatedUser,
 } from './api'
-import { Form, FormSubmitButton, RequiredMark } from '../ui/Form'
+import { FormErrorSummary, FormField, FormGroup } from '../components'
+import { Form, FormSubmitButton } from '../ui/Form'
 
 const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ -'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
 const ignoreDirtyChange = (): void => undefined
-
-/** 必填欄位的標示；「*」對讀屏無意義，必填已由 `required` 表達。 */
-function Required({ children }: { children: ReactNode }) {
-  return (
-    <span>
-      {children} <RequiredMark />
-    </span>
-  )
-}
 
 export default function UserForm({
   companies,
@@ -53,11 +38,10 @@ export default function UserForm({
   const [accountTypeError, setAccountTypeError] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [errorAttempt, setErrorAttempt] = useState(0)
 
   const fieldsDisabled = companyId === ''
-  const usernameRuleId = useId()
-  const companyHintIds = [useId(), useId(), useId()]
-  const accountTypeErrorId = useId()
   const accountTypeRef = useRef<HTMLInputElement>(null)
   const dirty = Boolean(
     username ||
@@ -76,15 +60,60 @@ export default function UserForm({
     onDirtyChange(dirty)
   }, [dirty, onDirtyChange])
 
+  useEffect(() => {
+    if (!errorAttempt) return
+    const firstError = [
+      'user-account-name',
+      'user-email',
+      'user-name-zh',
+      'user-account-type',
+    ].find(
+      (id) =>
+        document.getElementById(id)?.getAttribute('aria-invalid') === 'true',
+    )
+    document.getElementById(firstError ?? '')?.focus()
+  }, [errorAttempt, fieldErrors, accountTypeError])
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isExternalCollaborator === null) {
-      setAccountTypeError('請選擇帳號類型。')
-      accountTypeRef.current?.focus()
+    setError('')
+    const usernameInput = event.currentTarget.elements.namedItem(
+      'username',
+    ) as HTMLInputElement
+    const emailInput = event.currentTarget.elements.namedItem(
+      'email',
+    ) as HTMLInputElement
+    const nameInput = event.currentTarget.elements.namedItem(
+      'name-zh',
+    ) as HTMLInputElement
+    const nextErrors: Record<string, string> = {}
+    if (
+      !usernameInput.checkValidity() ||
+      username.length < 3 ||
+      username.length > 32
+    ) {
+      nextErrors.username = username.trim()
+        ? '帳號名稱格式不符。請依欄位說明修正後再試一次。'
+        : '帳號名稱尚未填寫。請輸入 3～32 字元的帳號名稱。'
+    }
+    if (!emailInput.checkValidity()) {
+      nextErrors.email = email.trim()
+        ? 'Email 格式不完整。請輸入有效的 Email 地址。'
+        : 'Email 尚未填寫。請輸入可接收通知的 Email 地址。'
+    }
+    if (!nameInput.checkValidity()) {
+      nextErrors.nameZh = '中文姓名尚未填寫。請輸入使用者的姓名。'
+    }
+    setFieldErrors(nextErrors)
+    const nextAccountTypeError =
+      isExternalCollaborator === null
+        ? '帳號類型尚未選擇。請選擇內部人員或外部協作人員。'
+        : ''
+    setAccountTypeError(nextAccountTypeError)
+    if (Object.keys(nextErrors).length || nextAccountTypeError) {
+      setErrorAttempt((attempt) => attempt + 1)
       return
     }
-    setAccountTypeError('')
-    setError('')
     setSaving(true)
     try {
       const user = await createUser({
@@ -96,7 +125,7 @@ export default function UserForm({
         department: companyId ? department || null : null,
         location: companyId ? location || null : null,
         employee_no: companyId ? employeeNo || null : null,
-        is_external_collaborator: isExternalCollaborator,
+        is_external_collaborator: isExternalCollaborator ?? false,
         is_admin: isAdmin,
       })
       setUsername('')
@@ -111,7 +140,8 @@ export default function UserForm({
       setIsExternalCollaborator(null)
       onCreated(user)
     } catch (caught) {
-      setError(managementErrorMessage(caught))
+      const message = managementErrorMessage(caught).replace(/[。.!?]+$/, '')
+      setError(`${message}。請檢查資料後再試一次。`)
     } finally {
       setSaving(false)
     }
@@ -127,157 +157,250 @@ export default function UserForm({
   }
 
   return (
-    <Form error={error} onSubmit={submit}>
+    <Form
+      error={error}
+      onSubmit={submit}
+      noValidate
+      unexpectedErrorMessage="新增使用者失敗。請檢查資料後再試一次，或聯絡系統管理員。"
+    >
       <h2>新增使用者</h2>
-      <div>
-        <label>
-          <Required>帳號名稱</Required>
-          <input
-            aria-describedby={usernameRuleId}
-            autoComplete="username"
-            maxLength={32}
-            minLength={3}
-            onChange={(event) => setUsername(event.target.value)}
-            pattern="[A-Za-z][A-Za-z0-9._-]{2,31}"
-            required
-            value={username}
-          />
-        </label>
-        <small id={usernameRuleId}>{USERNAME_RULE}</small>
-      </div>
-      <label>
-        <Required>Email</Required>
-        <input
-          autoComplete="email"
-          onChange={(event) => setEmail(event.target.value)}
+      <FormErrorSummary
+        errors={[
+          ...Object.entries(fieldErrors).map(([field, message]) => ({
+            fieldId:
+              field === 'username'
+                ? 'user-account-name'
+                : field === 'email'
+                  ? 'user-email'
+                  : 'user-name-zh',
+            fieldLabel:
+              field === 'username'
+                ? '帳號名稱'
+                : field === 'email'
+                  ? 'Email'
+                  : '中文姓名',
+            message,
+          })),
+          ...(accountTypeError
+            ? [
+                {
+                  fieldId: 'user-account-type',
+                  fieldLabel: '帳號類型',
+                  message: accountTypeError,
+                },
+              ]
+            : []),
+        ]}
+        focusRequest={0}
+      />
+      <FormGroup title="帳號資料" description="設定登入與聯絡資訊。">
+        <FormField
+          label="帳號名稱"
+          id="user-account-name"
           required
-          type="email"
-          value={email}
-        />
-      </label>
-      <label>
-        <Required>中文姓名</Required>
-        <input
-          onChange={(event) => setNameZh(event.target.value)}
-          required
-          value={nameZh}
-        />
-      </label>
-      <label>
-        英文姓名
-        <input
-          onChange={(event) => setNameEn(event.target.value)}
-          value={nameEn}
-        />
-      </label>
-      <label>
-        公司
-        <select
-          onChange={(event) => changeCompany(event.target.value)}
-          value={companyId}
+          description={USERNAME_RULE}
+          error={fieldErrors.username}
         >
-          <option value="">未連結公司</option>
-          {companies
-            .filter((company) => company.is_active)
-            .map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-        </select>
-      </label>
-      <fieldset
-        aria-describedby={accountTypeError ? accountTypeErrorId : undefined}
-        aria-invalid={accountTypeError ? 'true' : undefined}
-        aria-required="true"
-        role="radiogroup"
-      >
-        <legend>
-          <Required>帳號類型</Required>
-        </legend>
+          {(control) => (
+            <input
+              {...control}
+              autoComplete="username"
+              maxLength={32}
+              minLength={3}
+              name="username"
+              onChange={(event) => {
+                setUsername(event.target.value)
+                setFieldErrors((current) => {
+                  const next = { ...current }
+                  delete next.username
+                  return next
+                })
+                setError('')
+              }}
+              pattern="[A-Za-z][A-Za-z0-9._-]{2,31}"
+              required
+              value={username}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="Email"
+          id="user-email"
+          required
+          error={fieldErrors.email}
+        >
+          {(control) => (
+            <input
+              {...control}
+              autoComplete="email"
+              name="email"
+              onChange={(event) => {
+                setEmail(event.target.value)
+                setFieldErrors((current) => {
+                  const next = { ...current }
+                  delete next.email
+                  return next
+                })
+                setError('')
+              }}
+              required
+              type="email"
+              value={email}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="中文姓名"
+          id="user-name-zh"
+          required
+          error={fieldErrors.nameZh}
+        >
+          {(control) => (
+            <input
+              {...control}
+              name="name-zh"
+              onChange={(event) => {
+                setNameZh(event.target.value)
+                setFieldErrors((current) => {
+                  const next = { ...current }
+                  delete next.nameZh
+                  return next
+                })
+                setError('')
+              }}
+              required
+              value={nameZh}
+            />
+          )}
+        </FormField>
+        <FormField label="英文姓名">
+          {(control) => (
+            <input
+              {...control}
+              onChange={(event) => setNameEn(event.target.value)}
+              value={nameEn}
+            />
+          )}
+        </FormField>
+      </FormGroup>
+      <FormGroup title="公司與帳號類型">
+        <FormField label="公司">
+          {(control) => (
+            <select
+              {...control}
+              onChange={(event) => changeCompany(event.target.value)}
+              value={companyId}
+            >
+              <option value="">未連結公司</option>
+              {companies
+                .filter((company) => company.is_active)
+                .map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+            </select>
+          )}
+        </FormField>
+        <fieldset
+          aria-invalid={accountTypeError ? 'true' : undefined}
+          aria-describedby={
+            accountTypeError ? 'user-account-type-error' : undefined
+          }
+          aria-required="true"
+          role="radiogroup"
+          className="form-pattern-group-fields"
+        >
+          <legend>
+            帳號類型 <span className="required-mark" aria-hidden="true" />
+            <span className="visually-hidden">（必填）</span>
+          </legend>
+          <label>
+            <input
+              checked={isExternalCollaborator === false}
+              name="account-type"
+              onChange={() => {
+                setIsExternalCollaborator(false)
+                setAccountTypeError('')
+                setError('')
+              }}
+              ref={accountTypeRef}
+              type="radio"
+              id="user-account-type"
+              aria-invalid={Boolean(accountTypeError)}
+            />
+            內部人員
+          </label>
+          <label>
+            <input
+              checked={isExternalCollaborator === true}
+              name="account-type"
+              onChange={() => {
+                setIsExternalCollaborator(true)
+                setIsAdmin(false)
+                setAccountTypeError('')
+                setError('')
+              }}
+              type="radio"
+              aria-invalid={Boolean(accountTypeError)}
+            />
+            外部協作人員
+          </label>
+          {accountTypeError && (
+            <small id="user-account-type-error">{accountTypeError}</small>
+          )}
+        </fieldset>
+        <FormField
+          label="部門"
+          description={fieldsDisabled ? NEEDS_COMPANY_HINT : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              disabled={fieldsDisabled}
+              onChange={(event) => setDepartment(event.target.value)}
+              value={department}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="地點"
+          description={fieldsDisabled ? NEEDS_COMPANY_HINT : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              disabled={fieldsDisabled}
+              onChange={(event) => setLocation(event.target.value)}
+              value={location}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="工號"
+          description={fieldsDisabled ? NEEDS_COMPANY_HINT : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              disabled={fieldsDisabled}
+              onChange={(event) => setEmployeeNo(event.target.value)}
+              value={employeeNo}
+            />
+          )}
+        </FormField>
+      </FormGroup>
+      <FormGroup title="系統權限">
         <label>
           <input
-            checked={isExternalCollaborator === false}
-            name="account-type"
-            onChange={() => {
-              setIsExternalCollaborator(false)
-              setAccountTypeError('')
-            }}
-            ref={accountTypeRef}
-            type="radio"
+            checked={isAdmin}
+            onChange={(event) => setIsAdmin(event.target.checked)}
+            disabled={isExternalCollaborator === true}
+            type="checkbox"
           />
-          內部人員
+          指派系統管理者權限
         </label>
-        <label>
-          <input
-            checked={isExternalCollaborator === true}
-            name="account-type"
-            onChange={() => {
-              setIsExternalCollaborator(true)
-              setIsAdmin(false)
-              setAccountTypeError('')
-            }}
-            type="radio"
-          />
-          外部協作人員
-        </label>
-        {accountTypeError && (
-          <small id={accountTypeErrorId} role="alert">
-            {accountTypeError}
-          </small>
-        )}
-      </fieldset>
-      <div>
-        <label>
-          部門
-          <input
-            aria-describedby={fieldsDisabled ? companyHintIds[0] : undefined}
-            disabled={fieldsDisabled}
-            onChange={(event) => setDepartment(event.target.value)}
-            value={department}
-          />
-        </label>
-        {fieldsDisabled && (
-          <small id={companyHintIds[0]}>{NEEDS_COMPANY_HINT}</small>
-        )}
-      </div>
-      <div>
-        <label>
-          地點
-          <input
-            aria-describedby={fieldsDisabled ? companyHintIds[1] : undefined}
-            disabled={fieldsDisabled}
-            onChange={(event) => setLocation(event.target.value)}
-            value={location}
-          />
-        </label>
-        {fieldsDisabled && (
-          <small id={companyHintIds[1]}>{NEEDS_COMPANY_HINT}</small>
-        )}
-      </div>
-      <div>
-        <label>
-          工號
-          <input
-            aria-describedby={fieldsDisabled ? companyHintIds[2] : undefined}
-            disabled={fieldsDisabled}
-            onChange={(event) => setEmployeeNo(event.target.value)}
-            value={employeeNo}
-          />
-        </label>
-        {fieldsDisabled && (
-          <small id={companyHintIds[2]}>{NEEDS_COMPANY_HINT}</small>
-        )}
-      </div>
-      <label>
-        <input
-          checked={isAdmin}
-          onChange={(event) => setIsAdmin(event.target.checked)}
-          disabled={isExternalCollaborator === true}
-          type="checkbox"
-        />
-        指派系統管理者權限
-      </label>
+      </FormGroup>
       <FormSubmitButton className="btn-primary" disabled={saving}>
         {saving ? '建立中…' : '新增使用者'}
       </FormSubmitButton>

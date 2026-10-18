@@ -909,10 +909,14 @@ tbody tr.row-detail:nth-child(even) {
 }
 
 .row-detail > td {
+  position: sticky;
+  left: 0;
   padding: var(--space-3) var(--space-4);
 }
 
 .row-detail form {
+  box-sizing: border-box;
+  max-width: min(40rem, calc(100vw - 2rem));
   margin: 0;
 }
 

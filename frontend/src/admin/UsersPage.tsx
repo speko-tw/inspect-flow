@@ -9,6 +9,7 @@ import {
 import { Link, useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
+import { FormErrorSummary, FormField, FormGroup } from '../components'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
@@ -40,6 +41,7 @@ import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
+const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
 type PendingAction = {
   user: User
   kind: 'admin' | 'deactivate' | 'activate'
@@ -734,6 +736,8 @@ function UserDetailsForm({
   const [nameZh, setNameZh] = useState(user.name_zh ?? '')
   const [nameEn, setNameEn] = useState(user.name_en ?? '')
   const [expiresOn, setExpiresOn] = useState(user.account_expires_on ?? '')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [errorAttempt, setErrorAttempt] = useState(0)
   const dirty = Boolean(
     username !== user.username ||
     email !== (user.email ?? '') ||
@@ -746,8 +750,49 @@ function UserDetailsForm({
     onDirtyChange(dirty)
   }, [dirty, onDirtyChange])
 
+  useEffect(() => {
+    if (!errorAttempt) return
+    const firstError = [
+      'user-edit-username',
+      'user-edit-email',
+      'user-edit-name-zh',
+    ].find(
+      (id) =>
+        document.getElementById(id)?.getAttribute('aria-invalid') === 'true',
+    )
+    document.getElementById(firstError ?? '')?.focus()
+  }, [errorAttempt, fieldErrors])
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const usernameInput = event.currentTarget.elements.namedItem(
+      'username',
+    ) as HTMLInputElement
+    const emailInput = event.currentTarget.elements.namedItem(
+      'email',
+    ) as HTMLInputElement
+    const nameInput = event.currentTarget.elements.namedItem(
+      'name-zh',
+    ) as HTMLInputElement
+    const nextErrors: Record<string, string> = {}
+    if (!usernameInput.checkValidity()) {
+      nextErrors.username = username.trim()
+        ? '帳號名稱格式不符。請修正帳號名稱後再試一次。'
+        : '帳號名稱尚未填寫。請輸入有效的帳號名稱。'
+    }
+    if (!emailInput.checkValidity()) {
+      nextErrors.email = email.trim()
+        ? 'Email 格式不完整。請輸入有效的 Email 地址。'
+        : 'Email 尚未填寫。請輸入可接收通知的 Email 地址。'
+    }
+    if (!nameInput.checkValidity()) {
+      nextErrors.nameZh = '中文姓名尚未填寫。請輸入使用者的姓名。'
+    }
+    setFieldErrors(nextErrors)
+    if (Object.keys(nextErrors).length) {
+      setErrorAttempt((attempt) => attempt + 1)
+      return
+    }
     return onSave({
       username,
       email,
@@ -761,54 +806,129 @@ function UserDetailsForm({
 
   return (
     <Form
-      error={error}
+      error={
+        error
+          ? `${error.replace(/[。.!?]+$/, '')}。請檢查修改內容後再試一次。`
+          : ''
+      }
       errorFocusRequest={errorFocusRequest}
       errorTabIndex={-1}
       onSubmit={submit}
+      noValidate
+      unexpectedErrorMessage="修改使用者失敗。請檢查資料後再試一次，或聯絡系統管理員。"
     >
       <h3>修改使用者資料</h3>
-      <label>
-        帳號名稱
-        <input
-          onChange={(event) => setUsername(event.target.value)}
+      <FormErrorSummary
+        errors={Object.entries(fieldErrors).map(([field, message]) => ({
+          fieldId:
+            field === 'username'
+              ? 'user-edit-username'
+              : field === 'email'
+                ? 'user-edit-email'
+                : 'user-edit-name-zh',
+          fieldLabel:
+            field === 'username'
+              ? '帳號名稱'
+              : field === 'email'
+                ? 'Email'
+                : '中文姓名',
+          message,
+        }))}
+        focusRequest={0}
+      />
+      <FormGroup title="帳號資料" description="修改使用者的登入與姓名資料。">
+        <FormField
+          label="帳號名稱"
+          id="user-edit-username"
           required
-          value={username}
-        />
-      </label>
-      <label>
-        Email
-        <input
-          onChange={(event) => setEmail(event.target.value)}
+          error={fieldErrors.username}
+        >
+          {(control) => (
+            <input
+              {...control}
+              name="username"
+              onChange={(event) => {
+                setUsername(event.target.value)
+                setFieldErrors((current) => {
+                  const next = { ...current }
+                  delete next.username
+                  return next
+                })
+              }}
+              required
+              value={username}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="Email"
+          id="user-edit-email"
           required
-          type="email"
-          value={email}
-        />
-      </label>
-      <label>
-        中文姓名
-        <input
-          onChange={(event) => setNameZh(event.target.value)}
+          error={fieldErrors.email}
+        >
+          {(control) => (
+            <input
+              {...control}
+              name="email"
+              onChange={(event) => {
+                setEmail(event.target.value)
+                setFieldErrors((current) => {
+                  const next = { ...current }
+                  delete next.email
+                  return next
+                })
+              }}
+              required
+              type="email"
+              value={email}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="中文姓名"
+          id="user-edit-name-zh"
           required
-          value={nameZh}
-        />
-      </label>
-      <label>
-        英文姓名
-        <input
-          onChange={(event) => setNameEn(event.target.value)}
-          value={nameEn}
-        />
-      </label>
-      {user.is_external_collaborator && (
-        <label>
-          外部帳號到期日（留空代表不設定到期日）
-          <input
-            onChange={(event) => setExpiresOn(event.target.value)}
-            type="date"
-            value={expiresOn}
-          />
-        </label>
-      )}
+          error={fieldErrors.nameZh}
+        >
+          {(control) => (
+            <input
+              {...control}
+              name="name-zh"
+              onChange={(event) => {
+                setNameZh(event.target.value)
+                setFieldErrors((current) => {
+                  const next = { ...current }
+                  delete next.nameZh
+                  return next
+                })
+              }}
+              required
+              value={nameZh}
+            />
+          )}
+        </FormField>
+        <FormField label="英文姓名">
+          {(control) => (
+            <input
+              {...control}
+              onChange={(event) => setNameEn(event.target.value)}
+              value={nameEn}
+            />
+          )}
+        </FormField>
+        {user.is_external_collaborator && (
+          <FormField label="外部帳號到期日（留空代表不設定到期日）">
+            {(control) => (
+              <input
+                {...control}
+                onChange={(event) => setExpiresOn(event.target.value)}
+                type="date"
+                value={expiresOn}
+              />
+            )}
+          </FormField>
+        )}
+      </FormGroup>
       <button onClick={onCancel} type="button">
         取消
       </button>
@@ -885,47 +1005,68 @@ function CompanyLinkForm({
       }
     >
       <h3>連結公司</h3>
-      <label>
-        公司
-        <select
-          onChange={(event) => changeCompany(event.target.value)}
-          value={companyId}
+      <FormGroup title="公司資料">
+        <FormField label="公司">
+          {(control) => (
+            <select
+              {...control}
+              onChange={(event) => changeCompany(event.target.value)}
+              value={companyId}
+            >
+              <option value="">未連結公司</option>
+              {companies
+                .filter(
+                  (company) => company.is_active || company.id === companyId,
+                )
+                .map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                    {!company.is_active ? '（已停用）' : ''}
+                  </option>
+                ))}
+            </select>
+          )}
+        </FormField>
+        <FormField
+          label="部門"
+          description={disabled ? NEEDS_COMPANY_HINT : undefined}
         >
-          <option value="">未連結公司</option>
-          {companies
-            .filter((company) => company.is_active || company.id === companyId)
-            .map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-                {!company.is_active ? '（已停用）' : ''}
-              </option>
-            ))}
-        </select>
-      </label>
-      <label>
-        部門
-        <input
-          disabled={disabled}
-          onChange={(event) => setDepartment(event.target.value)}
-          value={department}
-        />
-      </label>
-      <label>
-        地點
-        <input
-          disabled={disabled}
-          onChange={(event) => setLocation(event.target.value)}
-          value={location}
-        />
-      </label>
-      <label>
-        工號
-        <input
-          disabled={disabled}
-          onChange={(event) => setEmployeeNo(event.target.value)}
-          value={employeeNo}
-        />
-      </label>
+          {(control) => (
+            <input
+              {...control}
+              disabled={disabled}
+              onChange={(event) => setDepartment(event.target.value)}
+              value={department}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="地點"
+          description={disabled ? NEEDS_COMPANY_HINT : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              disabled={disabled}
+              onChange={(event) => setLocation(event.target.value)}
+              value={location}
+            />
+          )}
+        </FormField>
+        <FormField
+          label="工號"
+          description={disabled ? NEEDS_COMPANY_HINT : undefined}
+        >
+          {(control) => (
+            <input
+              {...control}
+              disabled={disabled}
+              onChange={(event) => setEmployeeNo(event.target.value)}
+              value={employeeNo}
+            />
+          )}
+        </FormField>
+      </FormGroup>
       <button onClick={onCancel} type="button">
         取消
       </button>
