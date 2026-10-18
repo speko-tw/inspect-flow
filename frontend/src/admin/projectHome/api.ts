@@ -47,6 +47,7 @@ export interface WorkflowSummary {
   task_counts_visible: boolean
   draft_tasks_missing_assignee: number
   viewer_permission_codes: string[]
+  can_apply_templates: boolean
 }
 
 /** 讀取專案流程摘要；非成員或無摘要讀取權限時由後端拒絕。 */

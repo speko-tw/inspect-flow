@@ -75,7 +75,9 @@ export default function FieldPage() {
   return (
     <>
       <AppHeader
-        navItems={memberNavItems(user, { from })}
+        navItems={memberNavItems(user, { from }).filter(
+          (item) => item.to !== '/admin/templates',
+        )}
         navLabel="我的功能"
         user={user}
       />
@@ -283,11 +285,6 @@ function TaskList({
           {user.has_office_access && (
             <Link className="btn" to="/admin/projects">
               前往我的專案
-            </Link>
-          )}
-          {user.has_template_access && (
-            <Link className="btn" to="/admin/templates">
-              前往範本管理
             </Link>
           )}
         </section>

@@ -103,6 +103,9 @@ class MeResponse(CurrentUserResponse):
     has_office_access: bool
     has_field_access: bool
     has_template_access: bool
+    # TPL-R09：明確區分範本瀏覽與管理能力，避免前端自行推導。
+    can_browse_templates: bool
+    can_manage_template_library: bool
     module_permissions: list[str]
     delegated_modules: list[str]
     can_create_project: bool
@@ -143,6 +146,8 @@ def _me_response(db: Session, user: User) -> MeResponse:
         has_office_access=access.has_office_access,
         has_field_access=access.has_field_access,
         has_template_access=access.has_template_access,
+        can_browse_templates=access.can_browse_templates,
+        can_manage_template_library=access.can_manage_template_library,
         module_permissions=sorted(access.module_permissions),
         delegated_modules=sorted(access.delegated_modules),
         can_create_project=access.can_create_project,

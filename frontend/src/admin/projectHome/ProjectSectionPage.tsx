@@ -36,7 +36,9 @@ export default function ProjectSectionPage({
   children,
 }: {
   section: Exclude<ProjectSection, 'home'>
-  children?: ReactNode | ((viewerPermissions: string[]) => ReactNode)
+  children?:
+    | ReactNode
+    | ((viewerPermissions: string[], canApplyTemplates: boolean) => ReactNode)
 }) {
   const { projectId = '' } = useParams()
   const { user } = useCurrentUser()
@@ -46,6 +48,7 @@ export default function ProjectSectionPage({
     projectId: string
     project: { project_code: string; name: string }
     viewerPermissions: string[]
+    canApplyTemplates: boolean
     canViewIndoor: boolean
     error?: string
     denied?: boolean
@@ -61,6 +64,7 @@ export default function ProjectSectionPage({
             projectId,
             canViewIndoor: canViewIndoorSections(summary),
             viewerPermissions: summary.viewer_permission_codes,
+            canApplyTemplates: summary.can_apply_templates,
             project: {
               project_code: summary.project.project_code,
               name: summary.project.name,
@@ -75,6 +79,7 @@ export default function ProjectSectionPage({
             canViewIndoor: false,
             project: { project_code: '', name: '' },
             viewerPermissions: [],
+            canApplyTemplates: false,
             denied: isForbidden(caught),
             notFound: isNotFound(caught),
             error: managementErrorMessage(caught),
@@ -114,7 +119,10 @@ export default function ProjectSectionPage({
 
   const childContent =
     typeof children === 'function'
-      ? children(currentResult.viewerPermissions)
+      ? children(
+          currentResult.viewerPermissions,
+          currentResult.canApplyTemplates,
+        )
       : children
   let content = childContent ?? <p>正在確認專案權限…</p>
   if (!children && currentResult.canViewIndoor) {

@@ -20,6 +20,10 @@ export interface CurrentUser {
   has_office_access: boolean
   has_field_access: boolean
   has_template_access: boolean
+  // Capability flags are computed from the same effective-access registry
+  // as the API guards; older fixtures may omit them during migration.
+  can_browse_templates?: boolean
+  can_manage_template_library?: boolean
   module_permissions: string[]
   delegated_modules: string[]
   can_create_project: boolean

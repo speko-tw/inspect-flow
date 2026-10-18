@@ -309,6 +309,9 @@ function renderPage(
   viewerPermissions = ['project_inspection_item.edit'],
   showProjectSwitcher = false,
   standalone = false,
+  canApplyTemplates = viewerPermissions.includes(
+    'project_inspection_item.edit',
+  ),
 ) {
   return render(
     <MemoryRouter
@@ -320,6 +323,7 @@ function renderPage(
           <Route
             element={
               <ProjectTemplatesPage
+                canApplyTemplates={canApplyTemplates}
                 standalone={standalone}
                 viewerPermissions={viewerPermissions}
               />
@@ -677,6 +681,19 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       screen.getByText('你沒有修改此專案查核項目的權限。'),
     ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '套用至專案' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('缺少套用旗標時不提供套用操作，即使有專案項目編輯權限', async () => {
+    mockApi()
+    renderPage(USER, ['project_inspection_item.edit'], false, false, false)
+    await chooseSystem()
+
+    expect(
+      screen.getByText('需要範本可使用與查核可使用權限，才能套用範本。'),
+    ).toBeVisible()
     expect(
       screen.queryByRole('button', { name: '套用至專案' }),
     ).not.toBeInTheDocument()

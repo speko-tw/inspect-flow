@@ -412,7 +412,7 @@ describe('TemplatesPage', () => {
     }))
     vi.stubGlobal('matchMedia', matchMedia)
     templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
 
     expect(matchMedia).toHaveBeenCalledWith('(max-width: 40rem)')
@@ -431,7 +431,7 @@ describe('TemplatesPage', () => {
 
   it('prefills a first field and follows its title until edited', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.click(screen.getByRole('radio', { name: '數值' }))
@@ -458,7 +458,7 @@ describe('TemplatesPage', () => {
 
   it('prefills only the first manual field', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/項次標題/), {
@@ -482,7 +482,7 @@ describe('TemplatesPage', () => {
     const item = structuredClone(sampleItem)
     item.inspection_points[0].measurement_fields[0].name = '高度'
     templateFetch({ items: [item] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '欄杆尺寸' }))
     fireEvent.click(screen.getByRole('button', { name: '編輯查核項目' }))
@@ -497,7 +497,7 @@ describe('TemplatesPage', () => {
 
   it('focuses new and selected point titles', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.click(screen.getByRole('button', { name: '新增查核項次' }))
@@ -520,7 +520,7 @@ describe('TemplatesPage', () => {
 
   it('opens invalid points and preserves focus while typing in the first', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -555,7 +555,7 @@ describe('TemplatesPage', () => {
 
   it('keeps a non-current invalid point open while typing after save', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -596,7 +596,7 @@ describe('TemplatesPage', () => {
 
   it('keeps the third invalid point open while typing XY', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -627,7 +627,7 @@ describe('TemplatesPage', () => {
 
   it('keeps remaining errors open and closes a corrected point on expansion', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -656,7 +656,7 @@ describe('TemplatesPage', () => {
 
   it('allows manually collapsing an expanded invalid point', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -679,7 +679,7 @@ describe('TemplatesPage', () => {
 
   it('shows empty state and creates a category', async () => {
     templateFetch({ categories: [], systems: [], items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
 
     expect(
       await screen.findAllByRole('heading', {
@@ -717,7 +717,7 @@ describe('TemplatesPage', () => {
       items: [],
       deleteSuccess: true,
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await screen.findByRole('button', { name: '建築工程' })
     const navigation = await screen.findByRole('complementary', {
       name: '範本庫導覽',
@@ -770,7 +770,7 @@ describe('TemplatesPage', () => {
       items: [],
       deleteSuccess: true,
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     const navigation = await screen.findByRole('complementary', {
       name: '範本庫導覽',
     })
@@ -821,7 +821,7 @@ describe('TemplatesPage', () => {
       ],
       items: [],
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     const navigation = await screen.findByRole('complementary', {
       name: '範本庫導覽',
     })
@@ -850,7 +850,7 @@ describe('TemplatesPage', () => {
 
   it('keeps cleared category and system names blank until retyped on Enter', async () => {
     const fetchMock = templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await screen.findByRole('button', { name: '土木工程' })
 
     fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
@@ -914,7 +914,7 @@ describe('TemplatesPage', () => {
 
   it('separates add and rename and preserves draft on duplicate', async () => {
     templateFetch({ categories: [category, otherCategory] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await screen.findByRole('button', { name: '建築工程' })
     fireEvent.click(screen.getByRole('button', { name: '新增工程類別' }))
     expect(
@@ -935,7 +935,7 @@ describe('TemplatesPage', () => {
 
   it('creates numeric items with editable units and posts null', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
 
     await waitFor(() =>
@@ -974,7 +974,7 @@ describe('TemplatesPage', () => {
 
   it('does not present a one-sided editor draft as a saved interval', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -998,7 +998,7 @@ describe('TemplatesPage', () => {
 
   it('preserves units when a new numeric field is not bound', async () => {
     const fetchMock = templateFetch({ items: [], validateWire: true })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -1060,7 +1060,7 @@ describe('TemplatesPage', () => {
       items: [item as unknown as Record<string, unknown>],
       validateWire: true,
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
@@ -1092,7 +1092,7 @@ describe('TemplatesPage', () => {
 
   it('binds the second new numeric field and preserves the first unit', async () => {
     const fetchMock = templateFetch({ items: [], validateWire: true })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/項次標題/), {
       target: { value: wireFixture.inspection_points[6].title },
@@ -1154,7 +1154,7 @@ describe('TemplatesPage', () => {
 
   it('validates units and reversed interval before any request', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -1194,7 +1194,7 @@ describe('TemplatesPage', () => {
 
   it('keeps unresolved errors while revalidating after the first save', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -1229,7 +1229,7 @@ describe('TemplatesPage', () => {
 
   it('blocks empty point lists and blank text standards at their fields', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -1254,7 +1254,7 @@ describe('TemplatesPage', () => {
 
   it('shows all editor sections and inline validation errors', async () => {
     templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
 
@@ -1310,7 +1310,7 @@ describe('TemplatesPage', () => {
 
   it('keeps draft after 403 and switches to read-only', async () => {
     templateFetch({ items: [], writeError: 403 })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -1336,7 +1336,7 @@ describe('TemplatesPage', () => {
 
   it('keeps the draft after a generic 422 without field paths', async () => {
     const fetchMock = templateFetch({ items: [], writeError: 422 })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -1408,7 +1408,7 @@ describe('TemplatesPage', () => {
         { path: '/unrecognized/path', code: 'field.invalid' },
       ],
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -1472,7 +1472,7 @@ describe('TemplatesPage', () => {
         { path: '/inspection_points/0/title', code: 'field.required' },
       ],
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: 'cm' },
@@ -1496,7 +1496,7 @@ describe('TemplatesPage', () => {
 
   it('clears photo count server errors after the count is corrected', async () => {
     templateFetch({ items: [], photoCountError: true })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: 'mm' },
@@ -1538,7 +1538,7 @@ describe('TemplatesPage', () => {
         { path: '/inspection_points/0/title', code: 'field.required' },
       ],
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/單位/), {
       target: { value: 'cm' },
@@ -1560,7 +1560,7 @@ describe('TemplatesPage', () => {
 
   it('rebinds numeric standard without disabling the unit input', async () => {
     const fetchMock = templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
@@ -1611,7 +1611,7 @@ describe('TemplatesPage', () => {
 
   it('replaces a blocked type-change message with the remove message', async () => {
     templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
@@ -1638,7 +1638,7 @@ describe('TemplatesPage', () => {
 
   it('blocks deletion while a system has children', async () => {
     templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '刪除' }))
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -1660,7 +1660,7 @@ describe('TemplatesPage', () => {
       systems: [system, secondSystem],
       items: [sampleItem, secondItem],
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
@@ -1699,7 +1699,7 @@ describe('TemplatesPage', () => {
       ],
       items: [sampleItem, drainageItem],
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     const navigation = screen.getByRole('complementary', {
       name: '範本庫導覽',
@@ -1726,7 +1726,7 @@ describe('TemplatesPage', () => {
 
   it('guards a dirty draft when switching selection', async () => {
     templateFetch({ categories: [category, otherCategory] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -1750,7 +1750,7 @@ describe('TemplatesPage', () => {
 
   it('guards a dirty draft when adding a category from the nav', async () => {
     templateFetch({ categories: [category, otherCategory] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -1779,7 +1779,7 @@ describe('TemplatesPage', () => {
 
   it('does not ask again when adding a category from a clean state', async () => {
     templateFetch({ categories: [category, otherCategory] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await screen.findByRole('button', { name: '建築工程' })
     fireEvent.click(screen.getByRole('button', { name: '新增工程類別' }))
 
@@ -1797,7 +1797,7 @@ describe('TemplatesPage', () => {
       value: 360,
     })
     templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     expect(document.querySelector('.tpl-layout')).toHaveAttribute(
       'data-pane',
@@ -1818,7 +1818,7 @@ describe('TemplatesPage', () => {
       value: 360,
     })
     templateFetch()
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await openSystem()
     fireEvent.click(screen.getByRole('button', { name: '新增查核項目' }))
     fireEvent.change(screen.getByLabelText(/查核項目名稱/), {
@@ -1841,7 +1841,7 @@ describe('TemplatesPage', () => {
 
   it('keeps tolerance validation and previews the selected unit', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await startNewItem()
     fireEvent.change(screen.getByLabelText(/欄位名稱/), {
       target: { value: '坡度' },
@@ -1868,7 +1868,7 @@ describe('TemplatesPage', () => {
 
   it('shows a read-only library after the read API returns 403', async () => {
     templateFetch({ categoryError: 403 })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '你沒有權限瀏覽範本庫。',
     )
@@ -1891,7 +1891,7 @@ describe('template forms guard (#507)', () => {
     )
 
   async function startRename() {
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await screen.findByRole('button', { name: '土木工程' })
     fireEvent.click(screen.getByRole('button', { name: '重新命名' }))
     const input = await screen.findByLabelText(/名稱/)
@@ -1971,7 +1971,7 @@ describe('template forms guard (#507)', () => {
 
   it('saves the item once when Enter is pressed twice quickly', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     const form = await fillNewItem()
     const gate = holdRequests(fetchMock, 'POST', /\/templates$/)
 
@@ -1985,7 +1985,7 @@ describe('template forms guard (#507)', () => {
 
   it('accepts another item save after a failed one', async () => {
     const fetchMock = templateFetch({ items: [], writeConflict: true })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     const form = await fillNewItem()
 
     fireEvent.submit(form)
@@ -2002,7 +2002,7 @@ describe('template forms guard (#507)', () => {
 
   it('ignores IME Enter in the item editor', async () => {
     const fetchMock = templateFetch({ items: [] })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     await fillNewItem()
 
     expectImeEnterIgnored(screen.getByLabelText(/查核項目名稱/))
@@ -2017,7 +2017,7 @@ describe('template forms guard (#507)', () => {
       items: [],
       deleteSuccess: true,
     })
-    render(<TemplatesPage />)
+    render(<TemplatesPage canManage />)
     const navigation = await screen.findByRole('complementary', {
       name: '範本庫導覽',
     })

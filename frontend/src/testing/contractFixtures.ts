@@ -20,6 +20,15 @@ export function currentUserFixture(
     has_office_access: false,
     has_field_access: false,
     has_template_access: false,
+    can_browse_templates:
+      overrides.can_browse_templates ??
+      overrides.can_manage_template_library ??
+      overrides.has_template_access ??
+      false,
+    can_manage_template_library:
+      overrides.can_manage_template_library ??
+      overrides.has_template_access ??
+      false,
     module_permissions: [],
     delegated_modules: [],
     can_create_project: false,
@@ -46,6 +55,7 @@ export function myProjectFixture(
     planned_completion_date: null,
     role_names: [],
     has_office_access: true,
+    can_apply_templates: false,
     ...overrides,
   }
 }
