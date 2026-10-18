@@ -220,6 +220,12 @@ function managementFetch({
           })),
         )
       }
+      if (
+        parsed.pathname === '/api/v1/admin/dashboard/projects' &&
+        method === 'GET'
+      ) {
+        return Response.json({ items: [], next_cursor: null })
+      }
       if (parsed.pathname === '/api/v1/projects' && method === 'GET') {
         return Response.json({
           items: [

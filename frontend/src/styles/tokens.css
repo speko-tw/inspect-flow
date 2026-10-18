@@ -4,6 +4,9 @@
 
   --color-brand-primary: #002060;
   --color-brand-accent: #ffc200;
+  --color-header-nav-hover: rgba(255, 255, 255, 0.11);
+  --color-header-nav-pressed: rgba(255, 255, 255, 0.19);
+  --color-header-nav-current: rgba(255, 255, 255, 0.15);
   --color-bg-page: #f3f6fa;
   --color-bg-surface: #ffffff;
   --color-bg-raised: #ffffff;
