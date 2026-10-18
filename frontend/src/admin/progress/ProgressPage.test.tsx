@@ -6,6 +6,7 @@ import type { InspectionTask } from '../planning/api'
 import type { WorkflowSummary } from '../projectHome/api'
 import { ManagementApiError } from '../api'
 import { markSignedOut, resetSessionMemory } from '../../auth/sessionMemory'
+import { currentUserFixture } from '../../testing/contractFixtures'
 import ProgressPage, { resetProgressListMemory } from './ProgressPage'
 import progressContract from './fixtures/project-progress-contract.json'
 
@@ -23,7 +24,7 @@ vi.mock('../projectHome/api', () => ({
   getWorkflowSummary: mocks.summary,
 }))
 vi.mock('../../auth/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { id: 'viewer' } }),
+  useCurrentUser: () => ({ user: currentUserFixture({ id: 'viewer' }) }),
 }))
 
 const projectId = '11111111-1111-7111-8111-111111111111'

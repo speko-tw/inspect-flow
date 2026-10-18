@@ -731,7 +731,7 @@ describe('project home', () => {
       '你沒有權限執行這項操作。',
     )
     // 有出路：依權限回到落點，不再固定回 /field（#480）。
-    expect(screen.getByRole('link', { name: '返回今日任務' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '返回我的任務' })).toHaveAttribute(
       'href',
       '/field',
     )

@@ -14,19 +14,16 @@ import {
 import App from '../App'
 import { preloadLazyRoutes } from '../testing/preloadRoutes'
 import { resetSessionMemory } from './sessionMemory'
+import { currentUserFixture } from '../testing/contractFixtures'
 
-const ADMIN_USER = {
+const ADMIN_USER = currentUserFixture({
   id: 'u1',
   username: 'admin',
-  email: null,
-  name_en: null,
-  name_zh: null,
   is_admin: true,
-  must_change_password: false,
   has_office_access: true,
   has_field_access: true,
   has_template_access: true,
-}
+})
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -178,7 +175,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     renderApp(['/admin/reports?x=1'])
 
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
 
     const probe = screen.getByTestId('location-probe').textContent ?? ''
     expect(probe).toContain('/change-password')
@@ -195,7 +192,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     renderApp(['/field/tasks'])
 
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
 
     const probe = screen.getByTestId('location-probe').textContent ?? ''
     expect(probe).toContain('/change-password')
@@ -204,7 +201,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
   it.each([
     ['/admin/reports', 'Admin'],
-    ['/field', '今日任務'],
+    ['/field', '我的任務'],
   ])('%s 變更密碼成功後回到原本的路徑', async (path, heading) => {
     let mustChangePassword = true
 
@@ -234,7 +231,7 @@ describe('RequireAuth 導向變更密碼頁並保留原路徑（AUT-AC41）', ()
 
     renderApp([path])
 
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
 
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'old-temp-password' },
@@ -302,7 +299,8 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     stubSession()
     renderApp(['/field'])
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
+    fireEvent.click(screen.getByRole('button', { name: /登入者：/ }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
 
@@ -310,11 +308,12 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     expect(probe).toBe('/login|null')
   })
 
-  it('在 /field 登出後以 admin 登入應進 /admin', async () => {
+  it('在 /field 登出後以 admin 登入應進 /admin/dashboard', async () => {
     stubSession()
     renderApp(['/field'])
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
+    fireEvent.click(screen.getByRole('button', { name: /登入者：/ }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
 
@@ -329,7 +328,7 @@ describe('主動登出不帶 from，換身分登入依身分導向（#289）', (
     await screen.findByRole('heading', { name: 'Admin' })
     await waitFor(() => {
       const probe = screen.getByTestId('location-probe').textContent ?? ''
-      expect(probe.startsWith('/admin')).toBe(true)
+      expect(probe.startsWith('/admin/dashboard|')).toBe(true)
     })
   })
 })

@@ -1319,8 +1319,10 @@ output {
   text-align: right;
 }
 
-.app-header-personal-trigger:hover {
-  color: var(--text);
+@media (hover: hover) {
+  .app-header-personal-trigger:hover {
+    color: var(--text);
+  }
 }
 
 .app-header-personal-menu {
@@ -1350,9 +1352,11 @@ output {
   text-decoration: none;
 }
 
-.app-header-personal-menu a:hover,
-.app-header-personal-menu button:hover {
-  background: var(--surface-alt);
+@media (hover: hover) {
+  .app-header-personal-menu a:hover,
+  .app-header-personal-menu button:hover {
+    background: var(--surface-alt);
+  }
 }
 
 .app-header-management {
@@ -1387,10 +1391,15 @@ output {
   color: var(--text);
   text-decoration: none;
 }
-.app-header-management-menu a:hover,
 .app-header-management-menu a[aria-current='page'] {
   background: var(--surface-alt);
   color: var(--primary);
+}
+@media (hover: hover) {
+  .app-header-management-menu a:hover {
+    background: var(--surface-alt);
+    color: var(--primary);
+  }
 }
 
 /* 導覽分頁永遠是單列：放不下時在這一列內橫向滑動，頁面本身不會出現
