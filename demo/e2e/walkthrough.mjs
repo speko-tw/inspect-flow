@@ -33,7 +33,7 @@ page.on('requestfailed', (request) => {
 async function signIn(key) {
   const [username, password] = accounts[key]
   await page.context().clearCookies()
-  await page.goto(`${base}/login`)
+  await page.goto(base)
   await page.getByLabel('帳號名稱或 Email').fill(username)
   await page.getByLabel('密碼').fill(password)
   await page.getByRole('button', { name: '登入' }).click()
@@ -51,7 +51,7 @@ async function saveScreenshot(name) {
 
 try {
   await signIn('office')
-  await page.goto(`${base}/admin/projects`)
+  await page.getByRole('link', { name: '我的專案' }).click()
   const projectCard = page.locator('article').filter({
     hasText: '示範廠擴建機電工程',
   })
@@ -80,7 +80,7 @@ try {
   await saveScreenshot('03-field-task-started.png')
 
   await signIn('admin')
-  await page.goto(`${base}/admin/dashboard`)
+  await page.getByRole('link', { name: 'Dashboard' }).click()
   await page.getByRole('heading', { name: '專案進度總覽' }).waitFor()
   await assertDashboard(page)
   await saveScreenshot('04-dashboard-progress.png')
