@@ -30,6 +30,9 @@ from app.api.v1.template_library import (
     template_router,
 )
 from app.api.v1.users import (
+    admin_router as admin_users_router,
+)
+from app.api.v1.users import (
     module_delegate_router,
 )
 from app.api.v1.users import (
@@ -84,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(roles_router, prefix="/api/v1")
     app.include_router(setup_router, prefix="/api/v1")
     app.include_router(users_router, prefix="/api/v1")
+    app.include_router(admin_users_router, prefix="/api/v1")
     app.include_router(module_delegate_router, prefix="/api/v1")
     app.include_router(companies_router, prefix="/api/v1")
     app.include_router(category_router, prefix="/api/v1")

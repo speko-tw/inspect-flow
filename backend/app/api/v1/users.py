@@ -1,13 +1,15 @@
 """Admin user management endpoints (DOM-R04, DOM-R45, AUT-R46)."""
 
 import secrets
+from collections.abc import Sequence
 from datetime import date
+from functools import partial
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import or_
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
@@ -18,7 +20,16 @@ from app.api.v1._management_errors import (
 from app.auth.access import require_admin, require_module_delegation
 from app.auth.dependencies import get_db
 from app.auth.password_service import PasswordLengthError, set_password
-from app.models import Company, User
+from app.models import Company, Project, ProjectMember, User
+from app.services.user_lifecycle import (
+    AccountExpiredError,
+    InvalidRestoreSelectionError,
+    deactivation_check,
+    expire_due_external_accounts,
+    reactivate_user,
+    reactivation_preview,
+    unmanaged_project_ids,
+)
 from app.services.users import (
     BuiltInAccountModificationError,
     CompanyNotActiveError,
@@ -37,6 +48,11 @@ from app.services.users import (
 
 router = APIRouter(
     prefix="/users",
+    tags=["users"],
+    dependencies=[Depends(require_admin, scope="function")],
+)
+admin_router = APIRouter(
+    prefix="/admin",
     tags=["users"],
     dependencies=[Depends(require_admin, scope="function")],
 )
@@ -150,6 +166,22 @@ class AdminStatusRequest(BaseModel):
 
 class ActiveStatusRequest(BaseModel):
     is_active: bool
+
+
+class RestoreSelection(BaseModel):
+    permission_codes: list[str] = Field(default_factory=list)
+    delegated_modules: list[str] = Field(default_factory=list)
+    project_ids: list[UUID] = Field(default_factory=list)
+    task_ids: list[UUID] = Field(default_factory=list)
+
+
+class ReactivateRequest(BaseModel):
+    restore: RestoreSelection
+
+
+class LifecycleListResponse(BaseModel):
+    items: list[dict[str, Any]]
+    next_cursor: str | None
 
 
 def _get_user(db: Session, user_id: UUID) -> User:
@@ -420,9 +452,182 @@ def change_active_status(
         return updated_user
 
     try:
+        if not body.is_active and user.is_active:
+            pass
+        elif body.is_active and not user.is_active:
+            raise APIError(ErrorCode.USER_REACTIVATION_REQUIRED, 422)
         return write_call(
             update_active_status,
             error_mapper=management_api_error,
         )
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
+
+
+@router.get("/{user_id}/deactivation-check")
+def get_deactivation_check(
+    user_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> dict[str, Any]:
+    """列出停用此帳號後會失去啟用管理者的專案（DOM-R67）。
+
+    僅 Admin 可呼叫；帳號不存在時回傳 404。停用帳號不會列出警示專案。
+    """
+    user = _get_user(db, user_id)
+    projects = deactivation_check(db, user)
+    return {
+        "user_id": user.id,
+        "last_manager_projects": [
+            {
+                "id": project.id,
+                "project_code": project.project_code,
+                "name": project.name,
+            }
+            for project in projects
+        ],
+    }
+
+
+@router.get("/{user_id}/reactivation-preview")
+def get_reactivation_preview(
+    user_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> dict[str, Any]:
+    """預覽停用帳號現有且可由 Admin 選擇恢復的項目（DOM-R67）。
+
+    僅 Admin 可呼叫；帳號不存在或仍啟用時分別回傳 404、422。
+    """
+    user = _get_user(db, user_id)
+    if user.is_active:
+        raise APIError(ErrorCode.USER_REACTIVATION_REQUIRED, 422)
+    return reactivation_preview(db, user)
+
+
+@router.post("/{user_id}:reactivate", response_model=UserResponse)
+def restore_user(
+    user_id: UUID,
+    body: ReactivateRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> User:
+    """依 Admin 選取的預覽項目重新啟用帳號（DOM-R67）。
+
+    僅 Admin 可呼叫；不存在的帳號回傳 404，到期帳號或無效選項回傳 422。
+    """
+    _get_user(db, user_id)
+    try:
+        return write_call(
+            lambda: reactivate_user(
+                db,
+                user_id=user_id,
+                **body.restore.model_dump(),
+            ),
+            error_mapper=management_api_error,
+        )
+    except AccountExpiredError as exc:
+        raise APIError(ErrorCode.USER_ACCOUNT_EXPIRY_PASSED, 422) from exc
+    except InvalidRestoreSelectionError as exc:
+        raise APIError(
+            ErrorCode.USER_RESTORE_SELECTION_INVALID,
+            422,
+            details=exc.details,
+        ) from exc
+
+
+@admin_router.get("/users/external-without-project")
+def list_external_users_without_project(
+    cursor: str | None = None,
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> LifecycleListResponse:
+    """分頁列出尚未加入專案的啟用外部協作者（DOM-R75）。
+
+    僅 Admin 可呼叫；讀取時先停用已到期帳號，因此過期或已有專案的
+    帳號不會出現在結果中。
+    """
+
+    def list_users_and_expire() -> LifecycleListResponse:
+        expire_due_external_accounts(db)
+        result = page_by_text_key(
+            db,
+            User,
+            sort_key=User.username,
+            key_name="username",
+            cursor=cursor,
+            limit=limit,
+            serialize_batch=partial(_serialize_external_users, db),
+            filters=(
+                User.is_active.is_(True),
+                User.is_external_collaborator.is_(True),
+                ~select(ProjectMember.id)
+                .where(ProjectMember.user_id == User.id)
+                .exists(),
+            ),
+        )
+        return LifecycleListResponse(**result)
+
+    return write_call(
+        list_users_and_expire,
+        error_mapper=management_api_error,
+    )
+
+
+def _serialize_external_users(
+    db: Session, users: Sequence[User]
+) -> list[dict[str, Any]]:
+    company_names = dict(
+        db.execute(
+            select(User.id, Company.name)
+            .outerjoin(Company, Company.id == User.company_id)
+            .where(User.id.in_([user.id for user in users]))
+        ).all()
+    )
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "name_zh": user.name_zh,
+            "company_name": company_names[user.id],
+            "account_expires_on": user.account_expires_on,
+        }
+        for user in users
+    ]
+
+
+@admin_router.get("/projects/unmanaged")
+def list_unmanaged_projects(
+    cursor: str | None = None,
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> LifecycleListResponse:
+    """分頁列出沒有啟用專案管理成員的專案（DOM-R75）。
+
+    僅 Admin 可呼叫；管理者資格依有效的 `project_member.manage` 權限判定。
+    """
+    project_ids = unmanaged_project_ids(db)
+    member_counts = (
+        dict(
+            db.execute(
+                select(ProjectMember.project_id, func.count(ProjectMember.id))
+                .where(ProjectMember.project_id.in_(project_ids))
+                .group_by(ProjectMember.project_id)
+            ).all()
+        )
+        if project_ids
+        else {}
+    )
+    result = page_by_text_key(
+        db,
+        Project,
+        sort_key=Project.name,
+        key_name="name",
+        cursor=cursor,
+        limit=limit,
+        serialize=lambda project: {
+            "id": project.id,
+            "project_code": project.project_code,
+            "name": project.name,
+            "member_count": member_counts.get(project.id, 0),
+        },
+        filters=(Project.id.in_(project_ids),),
+    )
+    return LifecycleListResponse(**result)

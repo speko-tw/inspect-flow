@@ -550,38 +550,77 @@ def set_is_admin(session: Session, user: User, is_admin: bool) -> User:
     return user
 
 
-def set_is_active(session: Session, user: User, is_active: bool) -> User:
-    """Modify ``user.is_active``, filling ``updated_by`` from the
-    current operator (DOM-R14). Never writes an audit event --
-    DOM-R22 excludes ``is_active`` from its event scope.
+def set_is_active(
+    session: Session,
+    user: User,
+    is_active: bool,
+    *,
+    reason: str | None = None,
+    system_event: bool = False,
+) -> User:
+    """變更帳號狀態並依 DOM-R67 同交易撤銷登入與寫入稽核。
 
     Raises:
         BuiltInAccountModificationError: ``is_active`` is ``False``
             and ``user.is_system`` is ``True`` (DOM-R06).
         LastActiveAdminRemovalError: ``is_active`` is ``False`` and
             this would leave no active Admin at all (DOM-R07).
+        ValueError: 啟用停用帳號須改走帶恢復選項的流程（DOM-R67）。
     """
-    if not is_active:
-        if user.is_system:
-            raise BuiltInAccountModificationError(
-                f"User {user.id} is a built-in account; it cannot be "
-                "disabled (DOM-R06)"
-            )
-        if _would_remove_last_active_admin(
-            session,
-            user,
-            is_admin_after=user.is_admin,
-            is_active_after=False,
-        ):
-            raise LastActiveAdminRemovalError(
-                f"User {user.id}: disabling this account would leave "
-                "no active Admin (DOM-R07)"
-            )
+    locked_user = session.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_user is None:
+        raise ValueError(f"User {user.id} does not exist")
+    user = locked_user
+    if user.is_active == is_active:
+        return user
+    if is_active:
+        raise ValueError("Reactivation requires DOM-R67 restore choices")
+    if not user.is_active:
+        return user
+    if user.is_system:
+        raise BuiltInAccountModificationError(
+            f"User {user.id} is a built-in account; it cannot be "
+            "disabled (DOM-R06)"
+        )
+    if _would_remove_last_active_admin(
+        session,
+        user,
+        is_admin_after=user.is_admin,
+        is_active_after=False,
+    ):
+        raise LastActiveAdminRemovalError(
+            f"User {user.id}: disabling this account would leave "
+            "no active Admin (DOM-R07)"
+        )
 
-    operator = get_current_operator(session)
+    if system_event:
+        from app.services.operator import get_system_operator
+
+        operator = get_system_operator(session)
+    else:
+        operator = get_current_operator(session)
+    from app.auth.sessions import delete_all_sessions_for_user
+
     user.is_active = is_active
     user.updated_by = operator.id
+    delete_all_sessions_for_user(session, user.id)
     session.flush()
+    after: dict[str, bool | str] = {"is_active": False}
+    if reason is not None:
+        after["reason"] = reason
+    record_audit_event(
+        session,
+        "user.active_changed",
+        entity_id=user.id,
+        before={"is_active": True},
+        after=after,
+        system_event=system_event,
+    )
     return user
 
 

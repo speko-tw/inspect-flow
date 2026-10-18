@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models import (
     AuditLog,
+    AuthSession,
     Project,
     ProjectMember,
     ProjectMemberRole,
@@ -584,26 +585,62 @@ class TestSetIsAdminUnchangedRejected:
         assert _audit_rows_for(session, user.id) == []
 
 
-class TestSetIsActiveWritesNoAuditEvent:
-    """DOM-R22: ``is_active`` changes are outside the audited event
-    scope, unlike ``is_admin``.
-    """
+class TestSetIsActiveIsAtomic:
+    """DOM-R67: disablement, session deletion, and audit are atomic."""
 
-    def test_is_active_change_has_no_audit_event(self, session, operator):
+    def test_disable_deletes_sessions_and_audits(self, session, operator):
         company = create_company(session, **_company_kwargs("C-ACTU"))
         session.flush()
         user = create_user(session, **_user_kwargs("U-ACTU", company.id))
+        session.add(
+            AuthSession(
+                user_id=user.id,
+                token_hash="a" * 64,
+                created_at=operator.created_at,
+                last_seen_at=operator.created_at,
+                expires_at=operator.created_at,
+                created_by=user.id,
+                updated_by=user.id,
+            )
+        )
         session.commit()
+
+        set_is_active(session, user, False)
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuthSession)
+                .where(AuthSession.user_id == user.id)
+            )
+            == 0
+        )
+        events = [row.event_type for row in _audit_rows_for(session, user.id)]
+        assert events == ["user.active_changed"]
+        session.rollback()
+        assert session.get(User, user.id).is_active is True
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuthSession)
+                .where(AuthSession.user_id == user.id)
+            )
+            == 1
+        )
 
         set_is_active(session, user, False)
         session.commit()
         assert user.is_active is False
-
-        set_is_active(session, user, True)
-        session.commit()
-        assert user.is_active is True
-
-        assert _audit_rows_for(session, user.id) == []
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuthSession)
+                .where(AuthSession.user_id == user.id)
+            )
+            == 0
+        )
+        with pytest.raises(ValueError, match="restore choices"):
+            set_is_active(session, user, True)
+        assert len(_audit_rows_for(session, user.id)) == 1
 
 
 def test_external_flag_change_lists_unqualified_role(

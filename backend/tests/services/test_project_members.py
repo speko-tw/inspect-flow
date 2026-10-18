@@ -20,10 +20,14 @@ from app.models import (
     Role,
     RolePermission,
     User,
+    UserModulePermission,
 )
 from app.services import module_permissions
 from app.services.audit import record_audit_event_in_independent_transaction
-from app.services.module_permissions import ExternalRoleAssignmentError
+from app.services.module_permissions import (
+    ExternalRoleAssignmentError,
+    LastProjectManagerError,
+)
 from app.services.project_members import (
     add_project_member,
     remove_project_member,
@@ -260,6 +264,50 @@ class TestSetProjectMemberRoles:
         set_project_member_roles(session, member, [])
         session.commit()
         assert len(_audit_rows_for(session, member.id)) == 2
+
+
+def test_non_admin_cannot_remove_last_effective_project_manager(
+    session, operator
+):
+    project = _new_project(operator, "P-LAST-MANAGER")
+    manager = create_root_user_with_company(session, "U-LAST-MANAGER")
+    manager.is_admin = False
+    actor = create_root_user_with_company(session, "U-MEMBER-ACTOR")
+    actor.is_admin = False
+    role = _new_role(operator, "最後管理角色")
+    role.is_assignable = True
+    role.permission_codes.append(RolePermission(code="project_member.manage"))
+    session.add_all(
+        [
+            project,
+            role,
+            UserModulePermission(
+                user_id=manager.id,
+                permission_code="project.use",
+                source="manual",
+            ),
+        ]
+    )
+    session.flush()
+    member = add_project_member(
+        session,
+        project_id=project.id,
+        user_id=manager.id,
+        role_ids=[role.id],
+    )
+    session.commit()
+
+    with pytest.raises(LastProjectManagerError):
+        set_project_member_roles(session, member, [], actor_user_id=actor.id)
+
+    session.rollback()
+    stored = session.get(ProjectMember, member.id)
+    assert stored is not None
+    assert {item.role_id for item in stored.role_assignments} == {role.id}
+    assert not any(
+        row.event_type == "project_member.assignment_denied"
+        for row in _audit_rows_for(session, member.id)
+    )
 
 
 @pytest.mark.parametrize("write", ["add", "replace"])

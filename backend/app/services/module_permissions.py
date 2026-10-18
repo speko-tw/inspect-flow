@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 # Keep these audit reasons aligned with the corresponding API error codes.
 _EXTERNAL_ROLE_NOT_ALLOWED_REASON = "project.external_role_not_allowed"
+_ROLE_NOT_ASSIGNABLE_REASON = "project.role_not_assignable"
+_SELF_ROLE_CHANGE_REASON = "project.member_self_role_change"
 
 
 class ModulePermissionError(ValueError):
@@ -68,6 +70,26 @@ class PermissionBundleScopeError(ModulePermissionDeniedError):
 
 class ExternalRoleAssignmentError(ModulePermissionError):
     """A role is not permitted for an external collaborator."""
+
+
+class RoleNotAssignableError(ModulePermissionError):
+    """非 Admin 對專案指派了未核准的角色。"""
+
+
+class SelfRoleChangeError(ModulePermissionError):
+    """非 Admin 嘗試變更自己的專案成員角色。"""
+
+
+class LastProjectManagerError(ModulePermissionError):
+    """非 Admin 嘗試移除專案最後一位有效管理者。"""
+
+
+class InactiveProjectMemberError(ModulePermissionError):
+    """停用帳號不可被加入專案或指派角色。"""
+
+
+class InvalidCreatorRoleUserError(ModulePermissionError):
+    """指定的建立者角色人選不符合 DOM-R65。"""
 
 
 class InvalidExternalRoleError(ModulePermissionError):
@@ -205,32 +227,117 @@ def validate_role_assignment(
     project_id: uuid.UUID,
     project_member_id: uuid.UUID,
     role_ids: Iterable[uuid.UUID],
+    actor_user_id: uuid.UUID | None = None,
+    previous_role_ids: Iterable[uuid.UUID] = (),
+    allow_self_assignment: bool = False,
+    check_last_manager: bool = False,
+    require_creator_user: bool = False,
+    require_active: bool = True,
 ) -> None:
-    """依 DOM-R72 鎖定資料並驗證角色指派限制。"""
+    """依 DOM-R70、DOM-R72 鎖定資料並驗證角色指派限制。
+
+    先依角色 UUID 鎖定完整的新舊集合，再鎖人員 UUID；此順序也讓
+    白名單檢查與角色、外部身分修改共用同一個序列化邊界。
+    """
     desired_role_ids = set(role_ids)
+    previous_ids = set(previous_role_ids)
+    locked_role_ids = desired_role_ids | previous_ids
     roles = list(
         session.scalars(
             select(Role)
             .options(selectinload(Role.permission_codes))
-            .where(Role.id.in_(desired_role_ids))
+            .where(Role.id.in_(locked_role_ids))
             .order_by(Role.id)
             .with_for_update(read=True)
             .execution_options(populate_existing=True)
         )
     )
-    if len(roles) != len(desired_role_ids):
+    roles_by_id = {role.id: role for role in roles}
+    if len(roles) != len(locked_role_ids):
         raise InvalidModulePermissionError("Role does not exist")
-    # 所有寫入都先鎖 Role 再鎖 User，避免使用過期的外部協作標記。
-    locked_user = session.scalar(
-        select(User)
-        .where(User.id == user.id)
-        .with_for_update(read=True)
-        .execution_options(populate_existing=True)
+    user_ids = {user.id}
+    if actor_user_id is not None:
+        user_ids.add(actor_user_id)
+    # DOM-R72：先鎖角色，再依 UUID 鎖操作者與對象，重讀外部標記。
+    locked_users = list(
+        session.scalars(
+            select(User)
+            .where(User.id.in_(user_ids))
+            .order_by(User.id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
     )
+    users_by_id = {item.id: item for item in locked_users}
+    locked_user = users_by_id.get(user.id)
     if locked_user is None:
         raise InvalidModulePermissionError("User does not exist")
     user = locked_user
+    if require_active and not user.is_active:
+        raise InactiveProjectMemberError("Inactive users cannot join projects")
+    if require_creator_user and (
+        not user.is_active or user.is_system or user.is_external_collaborator
+    ):
+        raise InvalidCreatorRoleUserError(
+            "Creator-role user must be active, non-system, and internal"
+        )
+
+    actor = users_by_id.get(actor_user_id) if actor_user_id else None
+    if actor_user_id is not None and actor is None:
+        raise InvalidModulePermissionError("Operator does not exist")
+    if actor is not None and not actor.is_admin:
+        if actor.id == user.id and not allow_self_assignment:
+            _record_denied_role_assignment(
+                session,
+                project_id=project_id,
+                project_member_id=project_member_id,
+                user=user,
+                role_ids=desired_role_ids | previous_ids,
+                reason=_SELF_ROLE_CHANGE_REASON,
+            )
+            raise SelfRoleChangeError("Users cannot change their own roles")
+        creator_role_id = (
+            session.scalar(
+                select(CreatorRoleSetting.role_id).where(
+                    CreatorRoleSetting.setting_key == "creator_role"
+                )
+            )
+            if allow_self_assignment
+            else None
+        )
+        disallowed_role_ids = {
+            role_id
+            for role_id in locked_role_ids
+            if not roles_by_id[role_id].is_assignable
+            and not (
+                allow_self_assignment
+                and role_id == creator_role_id
+                and role_id in desired_role_ids
+                and role_id not in previous_ids
+            )
+        }
+        if disallowed_role_ids:
+            _record_denied_role_assignment(
+                session,
+                project_id=project_id,
+                project_member_id=project_member_id,
+                user=user,
+                role_ids=desired_role_ids | previous_ids,
+                reason=_ROLE_NOT_ASSIGNABLE_REASON,
+            )
+            raise RoleNotAssignableError("Role is not assignable")
+        if check_last_manager:
+            _check_last_project_manager(
+                session,
+                actor_is_admin=False,
+                user=user,
+                project_id=project_id,
+                desired_roles=[roles_by_id[item] for item in desired_role_ids],
+            )
+
     for role in roles:
+        if role.id not in desired_role_ids:
+            continue
         if user.is_external_collaborator and not role.is_external_allowed:
             _record_denied_role_assignment(
                 session,
@@ -258,6 +365,57 @@ def validate_role_assignment(
             raise ExternalRoleAssignmentError(
                 "Role contains a permission unavailable to external users"
             )
+
+
+def _check_last_project_manager(
+    session: Session,
+    *,
+    actor_is_admin: bool,
+    user: User,
+    project_id: uuid.UUID,
+    desired_roles: list[Role],
+) -> None:
+    """依 DOM-R70 序列化檢查是否會移除專案最後一位有效管理者。"""
+    if actor_is_admin:
+        return
+    # 不同專案的角色異動可能同時發生；鎖專案列後再重算管理者集合，
+    # 讓同一專案的最後管理者檢查依序完成。
+    from app.models import Project
+
+    project_exists = session.scalar(
+        select(Project.id).where(Project.id == project_id).with_for_update()
+    )
+    if project_exists is None:
+        raise InvalidModulePermissionError("Project does not exist")
+    from app.services.permissions import project_member_ids_with_permission
+
+    current_managers = project_member_ids_with_permission(
+        session,
+        project_id=project_id,
+        permission_code="project_member.manage",
+        active_only=True,
+        module_permission_code="project.use",
+    )
+    was_manager = user.id in current_managers
+    remains_manager = (
+        user.is_active
+        and not user.is_admin
+        and any(
+            item.code == "project_member.manage"
+            for role in desired_roles
+            for item in role.permission_codes
+        )
+    )
+    person = query_person_access(session, user_id=user.id)
+    remains_manager = (
+        remains_manager
+        and person is not None
+        and ("project.use" in person.module_permissions)
+    )
+    if was_manager and not remains_manager and current_managers <= {user.id}:
+        raise LastProjectManagerError(
+            "A project must retain one active member manager"
+        )
 
 
 def _record_denied_role_assignment(
