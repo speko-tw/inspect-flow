@@ -2173,21 +2173,46 @@ describe('planning forms guard (#507)', () => {
       fireEvent.change(within(article).getByLabelText('補充地點'), {
         target: { value: '東側' },
       })
-      fireEvent.click(
-        within(article).getByRole('button', { name: '儲存地點' }),
-      )
-      await waitFor(() =>
-        expect(
-          within(article).queryByRole('button', { name: '儲存地點' }),
-        ).toBeNull(),
-      )
-
-      const unload = new Event('beforeunload', {
+      const dirtyUnload = new Event('beforeunload', {
         cancelable: true,
       }) as BeforeUnloadEvent
-      window.dispatchEvent(unload)
+      window.dispatchEvent(dirtyUnload)
+      expect(dirtyUnload.defaultPrevented).toBe(true)
 
-      expect(unload.defaultPrevented).toBe(false)
+      let disconnectUnloadObserver = () => {}
+      const unloadAfterHide = new Promise<boolean>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (
+            within(article).queryByRole('button', { name: '儲存地點' }) !==
+            null
+          ) {
+            return
+          }
+          observer.disconnect()
+          const unload = new Event('beforeunload', {
+            cancelable: true,
+          }) as BeforeUnloadEvent
+          window.dispatchEvent(unload)
+          resolve(unload.defaultPrevented)
+        })
+        disconnectUnloadObserver = () => observer.disconnect()
+        observer.observe(article, { childList: true, subtree: true })
+      })
+
+      try {
+        fireEvent.click(
+          within(article).getByRole('button', { name: '儲存地點' }),
+        )
+        await waitFor(() =>
+          expect(
+            within(article).queryByRole('button', { name: '儲存地點' }),
+          ).toBeNull(),
+        )
+
+        expect(await unloadAfterHide).toBe(false)
+      } finally {
+        disconnectUnloadObserver()
+      }
     })
 
     it('lets the back link leave at once when the page turned into no-permission', async () => {
