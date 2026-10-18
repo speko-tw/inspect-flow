@@ -1,5 +1,5 @@
 {
-  "company": "示範廠機電工程",
+  "company": "示範公司",
   "admin": {
     "username": "admin",
     "password": "DemoAdmin2026"
@@ -17,6 +17,16 @@
         "inspection.use",
         "template.use"
       ],
+      "delegated_modules": []
+    },
+    {
+      "key": "manager",
+      "username": "demo-manager",
+      "name": "許庭安",
+      "email": "demo-manager@example.com",
+      "password": "DemoManager2026",
+      "external": false,
+      "permissions": ["all_project_progress.read"],
       "delegated_modules": []
     },
     {
@@ -70,6 +80,26 @@
       "delegated_modules": [
         "template"
       ]
+    },
+    {
+      "key": "template_manager",
+      "username": "demo-template-manager",
+      "name": "鄭亦凡",
+      "email": "demo-template-manager@example.com",
+      "password": "DemoTemplate2026",
+      "external": false,
+      "permissions": ["template.manage"],
+      "delegated_modules": []
+    },
+    {
+      "key": "no_access",
+      "username": "demo-no-access",
+      "name": "周子由",
+      "email": "demo-no-access@example.com",
+      "password": "DemoNoAccess2026",
+      "external": false,
+      "permissions": [],
+      "delegated_modules": []
     }
   ],
   "roles": {
@@ -82,7 +112,7 @@
       "key": "A",
       "code": "DEMO-A",
       "name": "示範大樓機電工程",
-      "client": "示範業主甲",
+      "client": "示範公司",
       "location": "示範市和平路一段 100 號",
       "members": [
         [
@@ -110,7 +140,7 @@
       "key": "B",
       "code": "DEMO-B",
       "name": "示範廠擴建機電工程",
-      "client": "示範業主乙",
+      "client": "示範廠機電工程",
       "location": "示範市工業一路 20 號",
       "members": [
         [
