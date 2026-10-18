@@ -200,8 +200,12 @@ describe('開始查核：成功', () => {
       start: () => Response.json(START_RESPONSE),
     })
     await confirm()
-    expect(await screen.findByText('查核進行中')).toBeInTheDocument()
-    const ok = screen.getByRole('status', { name: '' })
+    const heading = await screen.findByRole('heading', {
+      name: '查核進行中',
+    })
+    const ok = heading.closest('[role="status"]') as HTMLElement | null
+    if (!ok) throw new Error('進行中標題應位於狀態容器內')
+    expect(within(ok).getByText('查核進行中')).toBeInTheDocument()
     expect(
       within(ok).getByText('實際開始者：示範查核員（你）'),
     ).toBeInTheDocument()
