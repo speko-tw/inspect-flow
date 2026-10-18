@@ -220,6 +220,38 @@ class ErrorCode(DescribedStrEnum):
         "project.last_manager",
         "A project must retain one active member manager.",
     )
+    MODULE_PERMISSION_EXTERNAL_NOT_ALLOWED = (
+        "module_permission.external_not_allowed",
+        "This permission cannot be granted to external collaborators.",
+    )
+    MODULE_PERMISSION_REQUIRED_BY_OTHER = (
+        "module_permission.required_by_other",
+        "This permission is required by another granted permission.",
+    )
+    MODULE_PERMISSION_CODE_INVALID = (
+        "module_permission.code_invalid",
+        "The module permission code is invalid.",
+    )
+    MODULE_DELEGATION_MODULE_INVALID = (
+        "module_delegation.module_invalid",
+        "The module identifier is invalid.",
+    )
+    PERMISSION_BUNDLE_NAME_CONFLICT = (
+        "permission_bundle.name_conflict",
+        "A permission bundle with this name already exists.",
+    )
+    PERMISSION_BUNDLE_NOT_FOUND = (
+        "permission_bundle.not_found",
+        "The permission bundle was not found.",
+    )
+    PERMISSION_BUNDLE_CODE_INVALID = (
+        "permission_bundle.code_invalid",
+        "The bundle contains an invalid module permission code.",
+    )
+    CREATOR_ROLE_INVALID = (
+        "creator_role.invalid",
+        "The creator role is invalid.",
+    )
     INSPECTION_PLAN_NOT_FOUND = (
         "inspection_plan.not_found",
         "The inspection plan was not found.",

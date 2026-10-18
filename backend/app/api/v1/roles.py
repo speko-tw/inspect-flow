@@ -15,8 +15,8 @@ from app.api.pagination import (
 )
 from app.api.time_format import format_utc
 from app.auth.access import require_admin
-from app.auth.dependencies import get_db
-from app.models import Role
+from app.auth.dependencies import get_db, require_login
+from app.models import CreatorRoleSetting, Role, User
 from app.models.role import PermissionCodeValidationError
 from app.permission_codes import (
     permission_code_descriptions,
@@ -27,7 +27,10 @@ from app.services.module_permissions import (
     CreatorRolePermissionsError,
     ExternalRoleInUseError,
     InvalidExternalRoleError,
+    InvalidModulePermissionError,
     ModulePermissionDeniedError,
+    change_creator_role,
+    get_creator_role_setting,
 )
 from app.services.roles import (
     RoleUnchangedError,
@@ -94,6 +97,18 @@ class PermissionCodeListResponse(BaseModel):
     items: list[PermissionCodeResponse]
 
 
+class CreatorRoleUpdateRequest(BaseModel):
+    """指定建立專案時自動加入成員所取得的角色。"""
+
+    role_id: UUID
+
+
+class CreatorRoleResponse(BaseModel):
+    """回傳目前設定的建立者角色 ID。"""
+
+    role_id: UUID
+
+
 def _role_response(role: Role, usage: RoleUsage) -> RoleResponse:
     return RoleResponse(
         id=role.id,
@@ -121,6 +136,13 @@ def _get_role(db: Session, role_id: UUID) -> Role:
     if role is None:
         raise APIError(ErrorCode.ROLE_NOT_FOUND, 404)
     return role
+
+
+def _get_creator_setting(db: Session) -> CreatorRoleSetting:
+    setting = get_creator_role_setting(db)
+    if setting is None:
+        raise APIError(ErrorCode.SERVER_INTERNAL_ERROR, 500)
+    return setting
 
 
 def _translate_integrity_error(exc: IntegrityError) -> APIError | None:
@@ -185,6 +207,47 @@ def list_permission_codes() -> PermissionCodeListResponse:
             if permission_code_scope(code) == "project"
         ]
     )
+
+
+@router.get("/creator-role", response_model=CreatorRoleResponse)
+def get_creator_role(
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> CreatorRoleResponse:
+    """依 DOM-R64 讀取目前設定的建立者角色。"""
+    setting = _get_creator_setting(db)
+    return CreatorRoleResponse(role_id=setting.role_id)
+
+
+@router.patch("/creator-role", response_model=CreatorRoleResponse)
+def update_creator_role(
+    body: CreatorRoleUpdateRequest,
+    actor: User = Depends(require_login, scope="function"),  # noqa
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> CreatorRoleResponse:
+    """依 DOM-R64 驗證並更新建立者角色，並由 Service 寫入稽核。"""
+    _get_creator_setting(db)
+    role = db.scalar(
+        select(Role)
+        .options(selectinload(Role.permission_codes))
+        .where(Role.id == body.role_id)
+    )
+    if role is None:
+        raise APIError(ErrorCode.CREATOR_ROLE_INVALID, 422)
+    try:
+        change_creator_role(db, actor=actor, role=role)
+    except CreatorRolePermissionsError as exc:
+        raise APIError(
+            ErrorCode.ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS,
+            422,
+            details=[str(exc)],
+        ) from exc
+    except InvalidExternalRoleError as exc:
+        raise APIError(ErrorCode.ROLE_EXTERNAL_ALLOWED_INVALID, 422) from exc
+    except InvalidModulePermissionError as exc:
+        raise APIError(ErrorCode.CREATOR_ROLE_INVALID, 422) from exc
+    except ModulePermissionDeniedError as exc:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403) from exc
+    return CreatorRoleResponse(role_id=body.role_id)
 
 
 @router.get("/{role_id}", response_model=RoleResponse)
