@@ -663,7 +663,9 @@ describe('出路與 404（#480）', () => {
 
 describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
   async function openOwnAdminAction() {
-    fireEvent.click(await screen.findByRole('button', { name: '主管' }))
+    const accountLink = await screen.findByRole('link', { name: '主管' })
+    expect(accountLink).toHaveAttribute('href', '/admin/people/admin-1')
+    fireEvent.click(accountLink)
     await screen.findByRole('heading', { name: '主管', level: 1 })
     fireEvent.click(screen.getByText('更多'))
     fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))

@@ -138,9 +138,6 @@ export function PeoplePage({
           selectedUserId={personId ?? undefined}
         />
       )}
-      {user.is_admin && personId && (
-        <ParticipatingProjects userId={personId} />
-      )}
     </main>
   )
 }
@@ -306,93 +303,6 @@ function DelegatedPeopleList({
           載入更多
         </button>
       )}
-    </section>
-  )
-}
-
-function ParticipatingProjects({ userId }: { userId: string }) {
-  const [reloadRequest, setReloadRequest] = useState(0)
-  const requestKey = `${userId}:${reloadRequest}`
-  const [result, setResult] = useState<{
-    key: string
-    projects: Array<{
-      id: string
-      project_code: string
-      name: string
-      roles: Array<{ id: string; name: string }>
-    }>
-    error: string
-  }>({ key: '', projects: [], error: '' })
-  const loading = result.key !== requestKey
-  const projects = result.key === requestKey ? result.projects : []
-  const error = result.key === requestKey ? result.error : ''
-
-  useEffect(() => {
-    let active = true
-    const key = `${userId}:${reloadRequest}`
-    void request<{
-      items: Array<{
-        id: string
-        project_code: string
-        name: string
-        roles: Array<{ id: string; name: string }>
-      }>
-    }>(`/users/${encodeURIComponent(userId)}/participating-projects`)
-      .then((response) => {
-        if (active) {
-          setResult({ key, projects: response.items, error: '' })
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setResult({
-            key,
-            projects: [],
-            error: '目前無法載入參與專案。',
-          })
-        }
-      })
-    return () => {
-      active = false
-    }
-  }, [reloadRequest, userId])
-
-  return (
-    <section aria-labelledby="participating-projects-heading">
-      <h2 id="participating-projects-heading">參與專案</h2>
-      {loading && <p role="status">載入中…</p>}
-      {error && <p role="alert">{error}</p>}
-      {error && !loading && (
-        <button
-          onClick={() => setReloadRequest((request) => request + 1)}
-          type="button"
-        >
-          重新載入參與專案
-        </button>
-      )}
-      {!loading && !error && projects.length === 0 && (
-        <p>目前沒有參與專案。</p>
-      )}
-      <ul>
-        {projects.map((project) => (
-          <li key={project.id}>
-            <Link to={`/admin/projects/${project.id}/members`}>
-              {project.project_code}／{project.name}
-            </Link>
-            {project.roles.length > 0 ? (
-              <span>
-                ；角色：{project.roles.map((role) => role.name).join('、')}
-              </span>
-            ) : (
-              <span>
-                ；尚未指派角色（
-                <Link to={`/admin/projects/${project.id}/members`}>補上</Link>
-                ）
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
     </section>
   )
 }

@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { FormErrorSummary, FormField, FormGroup } from '../components'
@@ -95,6 +95,7 @@ export default function UsersPage({
   onSelectUser?: (id: string) => void
 }) {
   const { user: currentUser } = useCurrentUser()
+  const location = useLocation()
   const navigate = useNavigate()
   const userList = useCursorList(listUsersPage, managementErrorMessage)
   const {
@@ -662,12 +663,12 @@ export default function UsersPage({
                         <tr>
                           <th scope="row">
                             {onSelectUser ? (
-                              <button
-                                onClick={() => onSelectUser(user.id)}
-                                type="button"
+                              <Link
+                                className="users-account-name-link"
+                                to={`/admin/people/${encodeURIComponent(user.id)}${location.search}`}
                               >
                                 {user.name_zh || user.username}
-                              </button>
+                              </Link>
                             ) : (
                               user.name_zh || user.username
                             )}

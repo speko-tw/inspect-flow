@@ -178,55 +178,19 @@ describe('PeoplePage', () => {
     )
   })
 
-  it('shows participating projects with links to member management', async () => {
-    peopleApiMock.request.mockResolvedValue({
-      items: [
-        {
-          id: 'project-1',
-          project_code: 'PR-1',
-          name: '示範工程',
-          roles: [{ id: 'role-1', name: '現場工程師' }],
-        },
-        {
-          id: 'project-2',
-          project_code: 'PR-2',
-          name: '待補角色工程',
-          roles: [],
-        },
-      ],
-    })
+  it('does not render a second participating-project section', async () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
       <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
 
-    expect(
-      await screen.findByRole('link', { name: /PR-1／示範工程/ }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/members')
-    expect(screen.getByText(/角色：現場工程師/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '補上' })).toHaveAttribute(
-      'href',
-      '/admin/projects/project-2/members',
-    )
-    expect(peopleApiMock.request).toHaveBeenCalledTimes(1)
-    expect(peopleApiMock.request).toHaveBeenCalledWith(
+    expect(await screen.findByText('模組授權')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '參與專案' })).toBeNull()
+    expect(peopleApiMock.request).not.toHaveBeenCalledWith(
       '/users/person-1/participating-projects',
     )
-  })
-
-  it('labels a partial project summary incomplete instead of showing an empty state', async () => {
-    peopleApiMock.request.mockRejectedValue(new Error('Forbidden'))
-    render(
-      <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
-        <PeoplePage onTemporaryPassword={vi.fn()} />
-      </DataMemoryRouter>,
-    )
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前無法載入參與專案',
-    )
-    expect(screen.queryByText('目前沒有參與專案。')).toBeNull()
   })
 
   it('keeps list search in the route when opening a person', () => {

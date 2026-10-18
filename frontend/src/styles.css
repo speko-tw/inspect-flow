@@ -862,6 +862,14 @@ table {
   min-width: 58rem;
 }
 
+.users-account-name-link {
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+}
+
 @media (max-width: 600px) {
   .users-table-scroll:has(.users-account-table) {
     overflow: visible;

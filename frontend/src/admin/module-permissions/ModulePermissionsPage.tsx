@@ -87,7 +87,7 @@ const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
     {
       id: 'manager',
       label: '主管',
-      summary: '套用公司主管權限組合，查看全公司專案進度',
+      summary: '查看全公司專案進度',
     },
     {
       id: 'office',
@@ -102,7 +102,7 @@ const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
     {
       id: 'external',
       label: '外部協作',
-      summary: '只取得核准的外部可用功能',
+      summary: '只看被加入的專案',
     },
   ]
 
@@ -163,6 +163,11 @@ const PROFILE_ROLE_CODES: Partial<Record<Profile, string[]>> = {
   field: [...PROJECT_READ_ROLE_CODES, 'inspection_task.inspect'],
   external: PROJECT_READ_ROLE_CODES,
 }
+
+const JOB_REAPPLY_EXPLANATION = [
+  '依職務補上功能；職務含專案角色且選了專案時',
+  '會加入該角色，不移除既有功能或角色。',
+].join('')
 
 function samePermissionCodes(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false
@@ -276,16 +281,21 @@ function ModulePermissionsPageContent({
   const [projects, setProjects] = useState<Project[]>([])
   const [participationResult, setParticipationResult] = useState<{
     userId: string
+    reloadRequest: number
     projects: ParticipatingProject[]
     error: string
   } | null>(null)
+  const [participationReload, setParticipationReload] = useState(0)
   const [candidateRoles, setCandidateRoles] = useState<Role[]>([])
   const [selectedCandidateRole, setSelectedCandidateRole] = useState('')
   const [safeCandidateRole, setSafeCandidateRole] = useState('')
   const [selectedUserState, setSelectedUserState] = useState('')
   const selectedUser = selectedUserId ?? selectedUserState
   const participationForSelectedUser =
-    participationResult?.userId === selectedUser ? participationResult : null
+    participationResult?.userId === selectedUser &&
+    participationResult.reloadRequest === participationReload
+      ? participationResult
+      : null
   const [userAccess, setUserAccess] = useState<string[]>([])
   const [accessDraft, setAccessDraft] = useState<string[]>([])
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
@@ -461,11 +471,13 @@ function ModulePermissionsPageContent({
   useEffect(() => {
     if (!selectedUser || !currentUser.is_admin) return
     let active = true
+    const reloadRequest = participationReload
     void getUserParticipatingProjects(selectedUser)
       .then((rows) => {
         if (active) {
           setParticipationResult({
             userId: selectedUser,
+            reloadRequest,
             projects: rows,
             error: '',
           })
@@ -475,6 +487,7 @@ function ModulePermissionsPageContent({
         if (active) {
           setParticipationResult({
             userId: selectedUser,
+            reloadRequest,
             projects: [],
             error: '目前無法載入參與專案。',
           })
@@ -483,7 +496,7 @@ function ModulePermissionsPageContent({
     return () => {
       active = false
     }
-  }, [currentUser.is_admin, selectedUser])
+  }, [currentUser.is_admin, participationReload, selectedUser])
 
   async function refreshEffectiveAccess() {
     if (!selectedUser) return
@@ -956,7 +969,10 @@ function ModulePermissionsPageContent({
           {embedded &&
             currentUser.is_admin &&
             !users.find((user) => user.id === selectedUser)?.is_admin && (
-              <Button onClick={startExistingJob}>套用職務</Button>
+              <div>
+                <Button onClick={startExistingJob}>重新套用職務</Button>
+                <p>{JOB_REAPPLY_EXPLANATION}</p>
+              </div>
             )}
           <div aria-label="帳號能力摘要" role="region">
             <p role="status">
@@ -972,6 +988,15 @@ function ModulePermissionsPageContent({
             {participationForSelectedUser?.error && (
               <p role="alert">{participationForSelectedUser.error}</p>
             )}
+            {participationForSelectedUser?.error && (
+              <Button
+                onClick={() =>
+                  setParticipationReload((request) => request + 1)
+                }
+              >
+                重新載入參與專案
+              </Button>
+            )}
             {!participationForSelectedUser && (
               <p role="status">載入參與專案…</p>
             )}
@@ -982,7 +1007,10 @@ function ModulePermissionsPageContent({
             <ul>
               {participationForSelectedUser?.projects.map((project) => (
                 <li key={project.id}>
-                  {project.project_code}／{project.name}：
+                  <Link to={`/admin/projects/${project.id}/members`}>
+                    {project.project_code}／{project.name}
+                  </Link>
+                  ：
                   {project.roles.length > 0 ? (
                     project.roles.map((role) => role.name).join('、')
                   ) : (
@@ -998,6 +1026,7 @@ function ModulePermissionsPageContent({
               ))}
             </ul>
             {notice && <p role="status">{notice}</p>}
+            <h3>為什麼他不能做這件事？</h3>
             <label>
               要檢查的操作
               <select
@@ -1196,9 +1225,13 @@ function ModulePermissionsPageContent({
           ) : (
             <>
               <h2 ref={wizardHeadingRef} tabIndex={-1}>
-                {existingAccount ? '重新套用職務' : '新增帳號'}
+                {existingAccount
+                  ? '重新套用職務'
+                  : embedded
+                    ? '設定帳號'
+                    : '新增帳號'}
               </h2>
-              <p>建立後可再調整；系統管理者不套用一般權限組合。</p>
+              <p>建立後可以再調整。</p>
               <p role="status">
                 步驟 {step + 1}／4：
                 {['帳號資料', '職務', '專案', '確認'][step]}
@@ -1400,13 +1433,8 @@ function ModulePermissionsPageContent({
                     </ul>
                   </section>
                   <small>
-                    進階參考：
-                    {PROFILE_BUNDLES[profile]
-                      ? `權限組合「${PROFILE_BUNDLES[profile]}」`
-                      : '系統管理者權限來自系統身分'}
-                    {`；預設專案角色「${profileRoleLabel(roles, profile, creatorRoleId)}」。`}
-                    {profile === 'external' &&
-                      ' 外部協作帳號只會取得外部可用權限與角色。'}
+                    預設專案角色「
+                    {profileRoleLabel(roles, profile, creatorRoleId)}」。
                   </small>
                   {!createdId ? (
                     <Button
@@ -1445,7 +1473,7 @@ function ModulePermissionsPageContent({
                   )}
                 </div>
               )}
-              {step < 3 && (
+              {step <= 3 && (
                 <div>
                   {step > 0 && (
                     <Button
@@ -1455,12 +1483,14 @@ function ModulePermissionsPageContent({
                       上一步
                     </Button>
                   )}
-                  <Button
-                    disabled={Boolean(createdId)}
-                    onClick={() => goToStep(step + 1)}
-                  >
-                    下一步
-                  </Button>
+                  {step < 3 && (
+                    <Button
+                      disabled={Boolean(createdId)}
+                      onClick={() => goToStep(step + 1)}
+                    >
+                      下一步
+                    </Button>
+                  )}
                 </div>
               )}
               {partial && step !== 3 && <p role="status">{partial}</p>}

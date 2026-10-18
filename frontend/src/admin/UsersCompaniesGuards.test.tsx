@@ -251,6 +251,20 @@ describe('UsersPage 帳號詳情', () => {
   })
 })
 
+describe('UsersPage 帳號清單導覽', () => {
+  it('renders the account name as an unbordered detail link', async () => {
+    stubBackend()
+    renderUsers({ onSelectUser: vi.fn() })
+
+    const accountLink = await screen.findByRole('link', { name: '鄧安娜' })
+    expect(accountLink).toHaveAttribute('href', '/admin/people/user-1')
+    expect(accountLink).toHaveClass('users-account-name-link')
+    expect(
+      screen.queryByRole('button', { name: '鄧安娜' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
 const userFormCases = [
   {
     name: '使用者資料編輯',

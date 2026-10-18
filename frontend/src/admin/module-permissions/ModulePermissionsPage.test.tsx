@@ -423,12 +423,19 @@ function permissionPage(options: FixtureOptions = {}) {
             { status: 422 },
           )
         }
-        permissionCodes.splice(
-          0,
-          permissionCodes.length,
-          'project.use',
-          'inspection.use',
-        )
+        const bundleCodes = path.includes('manager-bundle')
+          ? ['project.use', 'all_project_progress.read']
+          : path.includes('office-bundle')
+            ? [
+                'project.use',
+                'project.create',
+                'inspection.use',
+                'template.use',
+              ]
+            : ['project.use', 'inspection.use']
+        for (const code of bundleCodes) {
+          if (!permissionCodes.includes(code)) permissionCodes.push(code)
+        }
         return Response.json({
           user_id: path.split('/')[2],
           granted_codes: permissionCodes,
@@ -508,6 +515,7 @@ function permissionPage(options: FixtureOptions = {}) {
   return {
     calls,
     fetchMock,
+    getPermissionCodes: () => [...permissionCodes],
     rerender: view.rerender,
     rerenderSelectedUser: (userId: string) =>
       view.rerender(renderPage(userId)),
@@ -582,7 +590,7 @@ describe('ModulePermissionsPage', () => {
     expect(screen.queryByRole('heading', { name: '新增帳號' })).toBeNull()
 
     rerender(page(1))
-    await screen.findByRole('heading', { name: '新增帳號' })
+    await screen.findByRole('heading', { name: '設定帳號' })
     fireEvent.change(screen.getByLabelText('帳號名稱'), {
       target: { value: 'first.draft' },
     })
@@ -712,14 +720,24 @@ describe('ModulePermissionsPage', () => {
   })
 
   it('applies a job to an existing person without creating an account', async () => {
-    const { calls } = permissionPage({
+    const { calls, getPermissionCodes } = permissionPage({
       openWizard: false,
       embedded: true,
       selectedUserId: 'person',
+      permissionCodes: ['template.manage'],
       memberRoleIds: ['viewer-role'],
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: '套用職務' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重新套用職務' }),
+    )
+    expect(screen.getByText(/依職務補上功能/)).toBeVisible()
+    expect(screen.getByText(/依職務補上功能/)).toHaveTextContent(
+      '職務含專案角色',
+    )
+    expect(screen.getByText(/依職務補上功能/)).toHaveTextContent(
+      '不移除既有功能或角色',
+    )
     fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
@@ -742,6 +760,22 @@ describe('ModulePermissionsPage', () => {
     )
     expect(membershipUpdate?.body).toContain('viewer-role')
     expect(membershipUpdate?.body).toContain('office-role')
+    expect(getPermissionCodes()).toEqual(
+      expect.arrayContaining([
+        'template.manage',
+        'project.use',
+        'project.create',
+        'inspection.use',
+        'template.use',
+      ]),
+    )
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'DELETE' &&
+          call.path.includes('/module-permissions/'),
+      ),
+    ).toBe(false)
   })
 
   it('rejects an external job for an internal account before any writes', async () => {
@@ -751,7 +785,9 @@ describe('ModulePermissionsPage', () => {
       selectedUserId: 'person',
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: '套用職務' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重新套用職務' }),
+    )
     fireEvent.click(screen.getByRole('radio', { name: /外部協作/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
@@ -773,7 +809,9 @@ describe('ModulePermissionsPage', () => {
       externalAccount: true,
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: '套用職務' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重新套用職務' }),
+    )
     fireEvent.click(screen.getByRole('radio', { name: /外部協作/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
@@ -792,6 +830,173 @@ describe('ModulePermissionsPage', () => {
         call.path.endsWith('/permission-bundles/field-bundle:apply'),
       ),
     ).toBe(true)
+  })
+
+  it('links participation in the account ability summary', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      memberRoleIds: ['viewer-role'],
+    })
+
+    const summary = await screen.findByRole('region', {
+      name: '帳號能力摘要',
+    })
+    expect(
+      within(summary).getByRole('heading', { name: '參與專案與角色' }),
+    ).toBeVisible()
+    expect(
+      within(summary).queryByRole('heading', { name: '參與專案' }),
+    ).toBeNull()
+    expect(
+      await within(summary).findByRole('link', {
+        name: 'PR-1／示範工程',
+      }),
+    ).toHaveAttribute('href', '/admin/projects/project-1/members')
+  })
+
+  it('can retry loading projects in the ability summary', async () => {
+    let attempts = 0
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      participationResponse: async () => {
+        attempts += 1
+        return attempts === 1
+          ? Response.json({ error: { code: 'forbidden' } }, { status: 403 })
+          : Response.json({
+              items: [
+                {
+                  id: 'project-1',
+                  project_code: 'PR-1',
+                  name: '示範工程',
+                  roles: [],
+                },
+              ],
+            })
+      },
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '目前無法載入參與專案。',
+    )
+    const retryButton = screen.getByRole('button', {
+      name: '重新載入參與專案',
+    })
+    fireEvent.click(retryButton)
+    expect(
+      await screen.findByRole('link', { name: 'PR-1／示範工程' }),
+    ).toBeVisible()
+    expect(attempts).toBe(2)
+  })
+
+  it.each([
+    ['task-list', true],
+    ['create-project', false],
+    ['template', false],
+    ['members', true],
+  ])(
+    'shows a project selector for %s only when the check needs a project',
+    async (action, needsProject) => {
+      permissionPage({
+        openWizard: false,
+        embedded: true,
+        selectedUserId: 'person',
+      })
+      const summary = await screen.findByRole('region', {
+        name: '帳號能力摘要',
+      })
+      const heading = within(summary).getByRole('heading', {
+        name: '為什麼他不能做這件事？',
+      })
+      const actionSelect = within(summary).getByLabelText('要檢查的操作')
+      fireEvent.change(actionSelect, { target: { value: action } })
+
+      expect(
+        Boolean(
+          heading.compareDocumentPosition(actionSelect) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      ).toBe(true)
+      if (needsProject) {
+        expect(within(summary).getByLabelText('專案')).toBeVisible()
+      } else {
+        expect(within(summary).queryByLabelText('專案')).toBeNull()
+      }
+      const checkButton = within(summary).getByRole('button', {
+        name: '檢查',
+      })
+      expect(
+        Boolean(
+          heading.compareDocumentPosition(checkButton) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      ).toBe(true)
+    },
+  )
+
+  it('uses plain manager and external job descriptions', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+
+    const managerOption = screen
+      .getByRole('radio', { name: /主管/ })
+      .closest('label')
+    const externalOption = screen
+      .getByRole('radio', { name: /外部協作/ })
+      .closest('label')
+    expect(managerOption).toHaveTextContent('查看全公司專案進度')
+    expect(managerOption).not.toHaveTextContent('權限組合')
+    expect(managerOption).not.toHaveTextContent('外部可用功能')
+    expect(externalOption).toHaveTextContent('只看被加入的專案')
+    expect(externalOption).not.toHaveTextContent('權限組合')
+    expect(externalOption).not.toHaveTextContent('外部可用功能')
+    expect(screen.queryByText(/系統管理者不套用/)).toBeNull()
+  })
+
+  it('avoids repeating the account title in the embedded wizard', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      openWizardRequest: 1,
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: '設定帳號' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '新增帳號' })).toBeNull()
+  })
+
+  it('allows previous navigation on steps two through four', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByText('步驟 2／4：職務')).toBeVisible()
+    const stepTwoPrevious = screen.getByRole('button', { name: '上一步' })
+    expect(stepTwoPrevious).toBeEnabled()
+    fireEvent.click(stepTwoPrevious)
+    expect(screen.getByText('步驟 1／4：帳號資料')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByText('步驟 3／4：專案')).toBeVisible()
+    const stepThreePrevious = screen.getByRole('button', { name: '上一步' })
+    expect(stepThreePrevious).toBeEnabled()
+    fireEvent.click(stepThreePrevious)
+    expect(screen.getByText('步驟 2／4：職務')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByText('步驟 4／4：確認')).toBeVisible()
+    const stepFourPrevious = screen.getByRole('button', { name: '上一步' })
+    expect(stepFourPrevious).toBeEnabled()
+    fireEvent.click(stepFourPrevious)
+    expect(screen.getByText('步驟 3／4：專案')).toBeVisible()
   })
 
   it.each([

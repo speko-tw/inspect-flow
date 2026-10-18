@@ -500,7 +500,7 @@ async function createAccountThroughWizard(
   name = '李柏',
 ) {
   fireEvent.click(await screen.findByRole('button', { name: '新增帳號' }))
-  await screen.findByRole('heading', { name: '新增帳號', level: 2 })
+  await screen.findByRole('heading', { name: '設定帳號', level: 2 })
   fireEvent.change(screen.getByLabelText('帳號名稱'), {
     target: { value: username },
   })
@@ -521,7 +521,7 @@ async function openAccountDetails(username: string, displayName: string) {
   const row = await screen.findByRole('row', {
     name: new RegExp(username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
   })
-  fireEvent.click(within(row).getByRole('button', { name: displayName }))
+  fireEvent.click(within(row).getByRole('link', { name: displayName }))
   await screen.findByRole('heading', { name: displayName, level: 1 })
   return row
 }
@@ -564,7 +564,7 @@ describe('管理表單未儲存導覽防護', () => {
     })
     if (item.label === '帳號') {
       fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
-      await screen.findByRole('heading', { name: '新增帳號', level: 2 })
+      await screen.findByRole('heading', { name: '設定帳號', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
       target: { value: item.value },
@@ -601,7 +601,7 @@ describe('管理表單未儲存導覽防護', () => {
     })
     if (item.label === '帳號') {
       fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
-      await screen.findByRole('heading', { name: '新增帳號', level: 2 })
+      await screen.findByRole('heading', { name: '設定帳號', level: 2 })
     }
     fireEvent.change(screen.getByLabelText(item.input), {
       target: { value: item.value },
@@ -645,7 +645,7 @@ describe('admin user and company pages', () => {
     )
     expect(within(nav).queryByRole('link', { name: '設定' })).toBeNull()
 
-    fireEvent.click(await screen.findByRole('button', { name: '鄧安娜' }))
+    fireEvent.click(await screen.findByRole('link', { name: '鄧安娜' }))
     expect(
       await screen.findByRole('heading', { name: '鄧安娜', level: 1 }),
     ).toBeVisible()
@@ -772,13 +772,11 @@ describe('admin user and company pages', () => {
     const adminRow = await screen.findByRole('row', {
       name: /admin.*可管理所有帳號與權限/,
     })
-    expect(
-      within(adminRow).getByRole('button', { name: 'admin' }),
-    ).toBeVisible()
+    expect(within(adminRow).getByRole('link', { name: 'admin' })).toBeVisible()
     expect(
       within(adminRow).queryByRole('button', { name: '修改資料' }),
     ).toBeNull()
-    fireEvent.click(within(adminRow).getByRole('button', { name: 'admin' }))
+    fireEvent.click(within(adminRow).getByRole('link', { name: 'admin' }))
     await screen.findByRole('heading', { name: 'admin', level: 1 })
     expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
     openAccountMoreActions()
