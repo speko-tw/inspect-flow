@@ -55,6 +55,7 @@ from app.services.audit import record_audit_event
 from app.services.module_permissions import (
     CreatorRoleInUseError,
     ModulePermissionDeniedError,
+    lock_role_holders,
     validate_role_external_configuration,
 )
 from app.services.operator import get_current_operator
@@ -319,10 +320,23 @@ def delete_role(session: Session, role: Role) -> None:
     :func:`update_role` already give their own operator lookups.
     """
     get_current_operator(session)
-    creator_role_id = session.scalar(
-        select(CreatorRoleSetting.role_id).limit(1)
+    locked_role = session.scalar(
+        select(Role)
+        .options(selectinload(Role.permission_codes))
+        .where(Role.id == role.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if creator_role_id == role.id:
+    if locked_role is None:
+        raise ValueError(f"Role {role.id} does not exist")
+    role = locked_role
+    lock_role_holders(session, role.id)
+    creator_setting = session.scalar(
+        select(CreatorRoleSetting)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if creator_setting is not None and creator_setting.role_id == role.id:
         raise CreatorRoleInUseError("The creator role cannot be deleted")
     member_ids = session.scalars(
         select(ProjectMemberRole.project_member_id)
