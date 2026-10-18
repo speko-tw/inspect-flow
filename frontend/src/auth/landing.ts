@@ -15,14 +15,29 @@ import type { PreviousSession } from './sessionMemory'
 
 type AccessSummary = Pick<
   CurrentUser,
-  'is_admin' | 'has_office_access' | 'has_field_access' | 'has_template_access'
+  | 'is_admin'
+  | 'has_office_access'
+  | 'has_field_access'
+  | 'has_template_access'
+  | 'can_browse_templates'
+  | 'can_manage_template_library'
 >
+
+/** 依 TPL-R09 判斷是否具範本庫管理權，支援舊摘要欄位過渡。 */
+export function canManageTemplateLibrary(user: AccessSummary): boolean {
+  return user.can_manage_template_library ?? user.has_template_access
+}
+
+/** 依 TPL-R09 判斷是否可讀取範本庫，支援舊摘要欄位過渡。 */
+export function canBrowseTemplates(user: AccessSummary): boolean {
+  return user.can_browse_templates ?? canManageTemplateLibrary(user)
+}
 
 export function landingPath(user: AccessSummary): string {
   if (user.is_admin) return '/admin'
   if (user.has_office_access) return '/admin/projects'
   if (user.has_field_access) return '/field'
-  return user.has_template_access ? '/admin/templates' : '/field'
+  return canManageTemplateLibrary(user) ? '/admin/templates' : '/field'
 }
 
 /** 落點的白話名稱，用在「返回…」連結上。 */
@@ -51,7 +66,7 @@ export function canVisit(user: AccessSummary, path: string): boolean {
   if (!underPrefix(pathname, '/admin')) return true
   if (user.is_admin) return true
   if (underPrefix(pathname, '/admin/templates')) {
-    return user.has_template_access
+    return canManageTemplateLibrary(user)
   }
   if (underPrefix(pathname, '/admin/projects')) {
     // 專案的範本頁也開給範本管理員；其餘專案頁屬內業。
@@ -60,7 +75,7 @@ export function canVisit(user: AccessSummary, path: string): boolean {
     )
     return (
       user.has_office_access ||
-      (user.has_template_access && templatePagePattern.test(pathname))
+      (canBrowseTemplates(user) && templatePagePattern.test(pathname))
     )
   }
   return false

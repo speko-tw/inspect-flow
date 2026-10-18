@@ -102,8 +102,11 @@ function pointEvidenceText(
 export default function ProjectTemplatesPage({
   viewerPermissions = [],
   standalone = false,
+  canApplyTemplates = false,
 }: {
   viewerPermissions?: string[]
+  /** 由 workflow-summary 依 TPL-R09 的完整套用權限計算。 */
+  canApplyTemplates?: boolean
   /**
    * 非成員範本管理員旁路瀏覽時設為 true，
    * 顯示獨立頁標題並隱藏區段外殼。
@@ -199,7 +202,8 @@ export default function ProjectTemplatesPage({
       // TPL-R09: only Admin or a template manager may save as a template.
       // The server computes it (`has_template_access`); the page never
       // guesses, and `GET /projects` is 403 for everyone else.
-      const canManage = user.has_template_access === true
+      const canManage =
+        user.can_manage_template_library ?? user.has_template_access === true
       setSaveAllowed(canManage)
       try {
         // Members read their own projects instead of falling back after
@@ -229,7 +233,7 @@ export default function ProjectTemplatesPage({
     return () => {
       active = false
     }
-  }, [projectId, user.has_template_access])
+  }, [projectId, user.can_manage_template_library, user.has_template_access])
 
   useEffect(() => {
     let active = true
@@ -406,7 +410,7 @@ export default function ProjectTemplatesPage({
       currentItemsLoadError ||
       itemsDenied ||
       readOnly ||
-      !canEditProjectItems
+      !canApplyTemplates
     ) {
       return
     }
@@ -1003,9 +1007,11 @@ export default function ProjectTemplatesPage({
                       ) : null}
                     </div>
                   )}
-                  {!canEditProjectItems ? (
+                  {!canApplyTemplates ? (
                     <p className="tpl-hint muted-text">
-                      你沒有修改此專案查核項目的權限。
+                      {canEditProjectItems
+                        ? '需要範本可使用與查核可使用權限，才能套用範本。'
+                        : '你沒有修改此專案查核項目的權限。'}
                     </p>
                   ) : applyConfirm ? (
                     <ConfirmBox

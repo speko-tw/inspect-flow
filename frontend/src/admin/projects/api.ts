@@ -210,6 +210,7 @@ export interface MyProject {
   role_names: string[]
   /** 我在這個專案有內業權限碼；內業專案清單只列 true 的專案。 */
   has_office_access: boolean
+  can_apply_templates: boolean
 }
 
 export function listMyProjects(): Promise<MyProject[]> {

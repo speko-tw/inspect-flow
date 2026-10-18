@@ -56,6 +56,7 @@ class WorkflowProjectIdentity(TypedDict):
 class ProjectWorkflowSummary(TypedDict):
     project: WorkflowProjectIdentity
     viewer_permission_codes: list[str]
+    can_apply_templates: bool
     member_count: int
     inspection_item_count: int
     zone_count: int
@@ -266,6 +267,16 @@ def get_project_workflow_summary(
             "company_role": project.company_role,
         },
         "viewer_permission_codes": sorted(permissions),
+        # TPL-R09：與套用端點共用有效模組及專案權限來源。
+        "can_apply_templates": (
+            access.is_admin
+            or (
+                "template.use" in access.module_permissions
+                and "inspection.use" in access.module_permissions
+                and "project_inspection_item.edit"
+                in access.project_permissions
+            )
+        ),
         "member_count": member_count,
         "inspection_item_count": item_count,
         "zone_count": zone_count,

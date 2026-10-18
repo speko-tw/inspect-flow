@@ -33,6 +33,7 @@ type HeaderUser = Pick<
   | 'has_office_access'
   | 'has_field_access'
   | 'has_template_access'
+  | 'can_manage_template_library'
 >
 
 /**
@@ -47,7 +48,7 @@ export function memberNavItems(
   if (user.has_office_access) {
     items.push({ to: '/admin/projects', label: '我的專案' })
   }
-  if (user.has_template_access) {
+  if (user.can_manage_template_library ?? user.has_template_access) {
     items.push({ to: '/admin/templates', label: '範本管理' })
   }
   if (user.has_field_access) items.push({ to: '/field', label: '今日任務' })

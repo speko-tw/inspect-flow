@@ -188,6 +188,7 @@ def test_my_projects_lists_only_own_projects_with_own_roles(seed):
             "planned_completion_date": "2027-04-01",
             "role_names": ["審核員", "查核員"],
             "has_office_access": True,
+            "can_apply_templates": False,
         },
     ]
 
@@ -244,6 +245,7 @@ def test_my_projects_role_name_query_count_does_not_grow(
             "planned_completion_date",
             "role_names",
             "has_office_access",
+            "can_apply_templates",
         }
         for project in body
     )
