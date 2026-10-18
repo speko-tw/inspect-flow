@@ -28,7 +28,7 @@ const PROJECT: MyProject = {
   planned_start_date: null,
   planned_completion_date: null,
   role_names: ['現場工程師'],
-  has_office_access: false,
+  has_office_access: true,
   can_apply_templates: true,
 }
 
@@ -289,5 +289,25 @@ describe('我的專案頁', () => {
     expect(
       await screen.findByRole('heading', { name: '新建工程' }),
     ).toBeVisible()
+  })
+
+  it('列出唯讀專案，但不提供範本套用入口', async () => {
+    vi.mocked(listMyProjects).mockResolvedValue([
+      { ...PROJECT, has_office_access: false, can_apply_templates: true },
+    ])
+    render(
+      <MemoryRouter>
+        <MyProjectsPage />
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: '示範工程甲' }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-1',
+    )
+    expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })
 })

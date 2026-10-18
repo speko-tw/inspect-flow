@@ -36,6 +36,11 @@ const TEMP_PASSWORD_USER = {
   module_permissions: [],
   delegated_modules: [],
 }
+const NO_FEATURE_USER = {
+  ...TEMP_PASSWORD_USER,
+  must_change_password: false,
+  has_field_access: false,
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -97,6 +102,35 @@ async function renderReadyPage() {
 }
 
 describe('全無權限帳號的設定落點（role-tasks.md）', () => {
+  it('變更密碼後留在設定頁並隱藏返回自身的連結', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = requestUrl(input)
+      if (url.endsWith('/api/v1/auth/me')) return jsonResponse(NO_FEATURE_USER)
+      if (url.endsWith('/api/v1/auth/password')) {
+        return new Response(null, { status: 204 })
+      }
+      throw new Error(`unexpected fetch: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+
+    await screen.findByRole('heading', { name: '個人設定' })
+    expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
+    fireEvent.change(screen.getByLabelText('目前密碼'), {
+      target: { value: 'old-password' },
+    })
+    fireEvent.change(screen.getByLabelText('新密碼'), {
+      target: { value: 'new-password-123' },
+    })
+    fireEvent.change(screen.getByLabelText('再輸入一次新密碼'), {
+      target: { value: 'new-password-123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
+
+    expect(await screen.findByText('密碼已變更。')).toBeVisible()
+    expect(screen.getByRole('heading', { name: '個人設定' })).toBeVisible()
+  })
+
   it('顯示尚未開通功能的說明並保留變更密碼表單', async () => {
     vi.stubGlobal(
       'fetch',
@@ -543,6 +577,20 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
         }
         if (url.includes('/field/inspection-tasks?')) {
           return jsonResponse({ items: [], next_cursor: null })
+        }
+        if (url.includes('/admin/dashboard/projects?')) {
+          return jsonResponse({ items: [], next_cursor: null })
+        }
+        if (url.includes('/admin/dashboard/engineers?')) {
+          return jsonResponse({ items: [], next_cursor: null })
+        }
+        if (url.includes('/admin/dashboard/summary')) {
+          return jsonResponse({
+            pending_count: 0,
+            in_progress_count: 0,
+            completed_count: 0,
+            completion_rate: 0,
+          })
         }
         return jsonResponse([])
       }),

@@ -16,6 +16,9 @@ vi.mock('./dashboard/api', () => mocks)
 vi.mock('./dashboard/DashboardPage', () => ({
   default: () => <h1>Dashboard 測試頁</h1>,
 }))
+vi.mock('./dashboard/DashboardTaskPage', () => ({
+  default: () => <h1>任務明細測試頁</h1>,
+}))
 
 function renderAdmin(
   path: string,
@@ -48,6 +51,11 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals())
 
+const singleProjectDeniedCase = [
+  '單一專案進度權限可進 Dashboard，',
+  '但不能直開全部任務明細',
+].join('')
+
 describe('Dashboard 導覽與路由權限', () => {
   it('允許有專案範圍權限者進入且導覽依探針結果顯示', async () => {
     mocks.canOpenDashboard.mockResolvedValue(true)
@@ -60,7 +68,7 @@ describe('Dashboard 導覽與路由權限', () => {
     expect(
       await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '總覽' })).toHaveAttribute(
       'href',
       '/admin/dashboard',
     )
@@ -94,7 +102,36 @@ describe('Dashboard 導覽與路由權限', () => {
       await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
     ).toBeInTheDocument()
     expect(mocks.canOpenDashboard).not.toHaveBeenCalled()
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '總覽' })).toBeInTheDocument()
+  })
+
+  it(singleProjectDeniedCase, async () => {
+    mocks.canOpenDashboard.mockResolvedValue(true)
+    const user = currentUserFixture({
+      has_office_access: false,
+      module_permissions: ['inspection.use'],
+    })
+    renderAdmin('/admin/dashboard/projects/project-1/tasks/task-1', user)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '查看全部專案任務需要「看全部專案進度」權限。',
+    )
+    expect(
+      screen.queryByRole('heading', { name: '任務明細測試頁' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('全部專案進度權限可直接開啟任務明細路由', async () => {
+    mocks.hasGlobalDashboardAccess.mockReturnValue(true)
+    const user = currentUserFixture({
+      has_office_access: false,
+      module_permissions: ['all_project_progress.read'],
+    })
+    renderAdmin('/admin/dashboard/projects/project-1/tasks/task-1', user)
+
+    expect(
+      await screen.findByRole('heading', { name: '任務明細測試頁' }),
+    ).toBeInTheDocument()
   })
 
   it('403 探針不顯示入口且直達路由顯示無權限', async () => {
@@ -111,7 +148,7 @@ describe('Dashboard 導覽與路由權限', () => {
       '你目前沒有可查看的專案進度。',
     )
     expect(
-      screen.queryByRole('link', { name: 'Dashboard' }),
+      screen.queryByRole('link', { name: '總覽' }),
     ).not.toBeInTheDocument()
   })
 
@@ -145,10 +182,10 @@ describe('Dashboard 導覽與路由權限', () => {
     renderAdmin('/admin/dashboard', user)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前無法確認 Dashboard 權限，請重試。',
+      '目前無法確認總覽權限，請重試。',
     )
     expect(
-      screen.queryByRole('link', { name: 'Dashboard' }),
+      screen.queryByRole('link', { name: '總覽' }),
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: '重新確認' }),

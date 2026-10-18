@@ -8,14 +8,17 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth.access import (
+    require_login_access,
     require_module_or_any_project_permission,
 )
 from app.auth.dependencies import get_db
 from app.models import User
 from app.services.admin_dashboard import (
     get_dashboard_summary,
+    get_dashboard_task,
     list_dashboard_engineers,
     list_dashboard_projects,
+    list_dashboard_tasks,
 )
 
 router = APIRouter(
@@ -27,6 +30,7 @@ _DASHBOARD_ACCESS = require_module_or_any_project_permission(
 )
 _DB_DEPENDENCY = Depends(get_db, scope="function")
 _ACCESS_DEPENDENCY = Depends(_DASHBOARD_ACCESS, scope="function")
+_LOGIN_DEPENDENCY = Depends(require_login_access, scope="function")
 
 
 class SummaryResponse(BaseModel):
@@ -73,6 +77,36 @@ class DashboardEngineerList(BaseModel):
     """ADM-R05：提供具穩定游標的工程師工作量清單。"""
 
     items: list[DashboardEngineerItem]
+    next_cursor: str | None
+
+
+class DashboardTaskLocation(BaseModel):
+    """ADM-AC05：任務所在的專案分區與補充地點。"""
+
+    zone_name: str | None
+    location_text: str | None
+
+
+class DashboardTaskAssignee(BaseModel):
+    """ADM-AC05：任務的建議指派人最小識別欄位。"""
+
+    user_id: UUID
+    name_zh: str | None
+
+
+class DashboardTaskItem(BaseModel):
+    """ADM-AC05：只回傳全部進度檢視允許的任務欄位。"""
+
+    task_id: UUID
+    status: str
+    location: DashboardTaskLocation
+    suggested_assignee: DashboardTaskAssignee | None
+
+
+class DashboardTaskList(BaseModel):
+    """提供依建立時間與 ID 穩定分頁的唯讀任務清單。"""
+
+    items: list[DashboardTaskItem]
     next_cursor: str | None
 
 
@@ -125,3 +159,42 @@ def dashboard_engineers(
         query=q,
     )
     return DashboardEngineerList.model_validate(result)
+
+
+@router.get("/projects/{project_id}/tasks", response_model=DashboardTaskList)
+def dashboard_tasks(
+    project_id: UUID,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    db: Session = _DB_DEPENDENCY,
+    user: User = _LOGIN_DEPENDENCY,
+) -> DashboardTaskList:
+    """依 ADM-R06 列出專案的四項白名單任務進度。"""
+    result = list_dashboard_tasks(
+        db,
+        user_id=user.id,
+        project_id=project_id,
+        cursor=cursor,
+        limit=limit,
+    )
+    return DashboardTaskList.model_validate(result)
+
+
+@router.get(
+    "/projects/{project_id}/tasks/{task_id}",
+    response_model=DashboardTaskItem,
+)
+def dashboard_task(
+    project_id: UUID,
+    task_id: UUID,
+    db: Session = _DB_DEPENDENCY,
+    user: User = _LOGIN_DEPENDENCY,
+) -> DashboardTaskItem:
+    """依 ADM-AC05 回傳單一任務的四項白名單欄位。"""
+    result = get_dashboard_task(
+        db,
+        user_id=user.id,
+        project_id=project_id,
+        task_id=task_id,
+    )
+    return DashboardTaskItem.model_validate(result)

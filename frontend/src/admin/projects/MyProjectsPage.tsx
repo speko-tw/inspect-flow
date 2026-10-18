@@ -1,4 +1,5 @@
-// 非系統管理者的專案清單（ADM-R24）：唯讀成員也能看專案首頁。
+// 非系統管理者的專案清單（ADM-R24）：列出我可讀取的參與專案，唯讀
+// 專案不顯示範本套用等修改入口。資料來自既有的 `GET /me/projects`。
 
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
@@ -39,7 +40,10 @@ export default function MyProjectsPage({
     listMyProjects()
       .then((items) => {
         if (active) {
-          setState({ kind: 'ready', projects: items })
+          setState({
+            kind: 'ready',
+            projects: items,
+          })
         }
       })
       .catch((caught: unknown) => {
@@ -145,7 +149,7 @@ export default function MyProjectsPage({
                 >
                   開啟專案
                 </Link>
-                {project.can_apply_templates && (
+                {project.has_office_access && project.can_apply_templates && (
                   <Link className="btn" to={templatePath}>
                     套用範本
                   </Link>

@@ -20,6 +20,8 @@ type AccessSummary = Pick<
   | 'is_admin'
   | 'has_office_access'
   | 'has_field_access'
+  | 'can_create_project'
+  | 'has_project_access'
   | 'has_template_access'
   | 'can_browse_templates'
   | 'can_manage_template_library'
@@ -45,9 +47,11 @@ export function landingPath(user: AccessSummary): string {
     return '/admin/dashboard'
   }
   if (user.delegated_modules.length > 0) return '/admin/people'
-  if (user.has_office_access) return '/admin/projects'
-  if (user.has_project_access) return '/admin/projects'
+  if (user.has_office_access || user.can_create_project) {
+    return '/admin/projects'
+  }
   if (user.has_field_access) return '/field'
+  if (user.has_project_access) return '/admin/projects'
   return canBrowseTemplates(user) ? '/admin/templates' : '/change-password'
 }
 
@@ -93,6 +97,7 @@ export function canVisit(user: AccessSummary, path: string): boolean {
     )
     return (
       user.has_office_access ||
+      user.has_project_access ||
       (canBrowseTemplates(user) && templatePagePattern.test(pathname))
     )
   }

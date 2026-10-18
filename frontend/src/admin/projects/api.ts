@@ -211,7 +211,7 @@ export interface MyProject {
   planned_start_date: string | null
   planned_completion_date: string | null
   role_names: string[]
-  /** 我在這個專案有內業權限碼；內業專案清單只列 true 的專案。 */
+  /** 我在這個專案有內業權限碼；唯讀專案此值為 false。 */
   has_office_access: boolean
   can_apply_templates: boolean
 }

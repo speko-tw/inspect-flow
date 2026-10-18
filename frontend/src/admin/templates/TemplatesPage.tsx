@@ -10,6 +10,7 @@ import {
 
 import { HttpError, isForbidden } from '../../http'
 import { BackButton } from '../../layout/BackLink'
+import { PAGE_TITLES } from '../../layout/navigationLabels'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { UnsavedLeaveBox } from '../../ui/navigation'
 import * as navigationGuard from '../../ui/navigation'
@@ -1284,7 +1285,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
     <section aria-labelledby="templates-heading" className="tpl-page">
       <UnsavedLeaveBox guard={leaveGuard} />
       <header className="tpl-page-heading">
-        <h1 id="templates-heading">範本管理</h1>
+        <h1 id="templates-heading">{PAGE_TITLES.templates}</h1>
         {readOnly && <span className="tpl-readonly">唯讀瀏覽</span>}
       </header>
       {loading ? (

@@ -84,6 +84,7 @@ export default function ChangePasswordPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [errorField, setErrorField] = useState<
     'current' | 'new' | 'confirmation' | 'form' | null
   >(null)
@@ -105,6 +106,7 @@ export default function ChangePasswordPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setSuccess(null)
     setErrorField(null)
 
     if (currentPassword === '') {
@@ -135,6 +137,14 @@ export default function ChangePasswordPage() {
 
     try {
       await changePassword(currentPassword, newPassword)
+
+      if (!hasFeatureAccess) {
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+        setSuccess(SUCCESS_NOTICE)
+        return
+      }
 
       const state = location.state as RedirectState | null
       const from = state?.from
@@ -167,7 +177,7 @@ export default function ChangePasswordPage() {
   return (
     <AuthLayout
       back={
-        user.must_change_password ? undefined : (
+        user.must_change_password || !hasFeatureAccess ? undefined : (
           <BackLink to={target}>返回{landingLabel(target)}</BackLink>
         )
       }
@@ -177,6 +187,7 @@ export default function ChangePasswordPage() {
       {!hasFeatureAccess && (
         <p role="status">尚未開通任何功能，請洽系統管理者</p>
       )}
+      {success && <p role="status">{success}</p>}
       <UnsavedLeaveBox guard={leaveGuard} />
       <Form
         onSubmit={handleSubmit}

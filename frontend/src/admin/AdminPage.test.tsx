@@ -574,7 +574,7 @@ describe('管理表單未儲存導覽防護', () => {
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
     const nextHeading =
-      item.entries[2] === '/admin/companies' ? '公司管理' : '角色管理'
+      item.entries[2] === '/admin/companies' ? '公司管理' : '專案角色'
     expect(
       await screen.findByRole('heading', { name: nextHeading }),
     ).toBeInTheDocument()
@@ -1755,9 +1755,9 @@ describe('admin user and company pages', () => {
       is_admin: false,
       has_office_access: false,
       has_field_access: true,
-      has_template_access: false,
-      has_project_access: false,
       can_create_project: false,
+      has_project_access: false,
+      has_template_access: false,
     }
     render(
       <DataMemoryRouter
@@ -1812,9 +1812,9 @@ describe('admin user and company pages', () => {
       is_admin: false,
       has_office_access: false,
       has_field_access: true,
-      has_template_access: true,
-      has_project_access: false,
       can_create_project: false,
+      has_project_access: false,
+      has_template_access: true,
     }
     render(
       <DataMemoryRouter
@@ -1897,7 +1897,7 @@ describe('admin user and company pages', () => {
       '/admin/templates',
     )
     expect(
-      await screen.findByRole('heading', { name: '範本管理' }),
+      await screen.findByRole('heading', { name: '查核範本' }),
     ).toBeInTheDocument()
     expect(
       await screen.findByRole('button', { name: '土木工程' }),

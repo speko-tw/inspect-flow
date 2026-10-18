@@ -10,6 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import DashboardPage from './DashboardPage'
 
+vi.mock('react-router', async (importOriginal) => {
+  const router = await importOriginal<typeof import('react-router')>()
+  return { ...router, useNavigate: () => vi.fn() }
+})
+
 const api = vi.hoisted(() => ({
   getDashboardSummary: vi.fn(),
   hasGlobalDashboardAccess: vi.fn(
