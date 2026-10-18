@@ -87,6 +87,14 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
         "next_cursor": None,
     }
 
+    exact_account_match = client_for(delegate).get(
+        "/api/v1/module-delegate/users?q=candidate"
+    )
+    assert exact_account_match.status_code == 200
+    assert [
+        item["username"] for item in exact_account_match.json()["items"]
+    ] == ["candidate"]
+
     assert (
         client_for(candidate).get("/api/v1/module-delegate/users").status_code
         == 403
@@ -94,5 +102,77 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
     assert client_for(delegate).get("/api/v1/users").status_code == 403
     assert (
         client_for(admin).get("/api/v1/module-delegate/users").status_code
+        == 200
+    )
+
+
+def test_module_delegate_can_read_target_heading_but_not_admin_identity(
+    db_session, make_client
+):
+    admin = create_root_user_with_company(db_session, "DELEGATE-ADMIN")
+    admin.username = "admin"
+    admin.company_id = None
+    admin.employee_no = None
+    admin.department = None
+    admin.location = None
+    admin.name_en = None
+    admin.name_zh = None
+    admin.email = None
+    admin.is_admin = True
+    admin.is_system = True
+    delegate = create_user(
+        db_session,
+        username="detail-delegate",
+        email="detail-delegate@demo.example",
+        name_zh="委派者",
+        is_external_collaborator=False,
+    )
+    target = create_user(
+        db_session,
+        username="detail-target",
+        email="detail-target@demo.example",
+        name_zh="目標姓名",
+        is_external_collaborator=False,
+    )
+    admin_target = create_user(
+        db_session,
+        username="detail-admin-target",
+        email="detail-admin-target@demo.example",
+        name_zh="管理者",
+        is_external_collaborator=False,
+    )
+    admin_target.is_admin = True
+    db_session.add(
+        UserModuleDelegation(user_id=delegate.id, module="template")
+    )
+    db_session.commit()
+
+    def client_for(user):
+        _, token = create_session(db_session, user)
+        db_session.commit()
+        client = make_client()
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        return client
+
+    delegate_client = client_for(delegate)
+    response = delegate_client.get(
+        f"/api/v1/module-delegate/users/{target.id}"
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": str(target.id),
+        "username": target.username,
+        "name_zh": target.name_zh,
+    }
+    denied = delegate_client.get(
+        f"/api/v1/module-delegate/users/{admin_target.id}"
+    )
+    assert denied.status_code == 403
+    assert "is_admin" not in denied.text
+    assert "email" not in denied.text
+    assert (
+        client_for(admin)
+        .get(f"/api/v1/module-delegate/users/{admin_target.id}")
+        .status_code
         == 200
     )

@@ -196,6 +196,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     stubBackend('role.name_conflict')
     renderPage(<RolesPage />)
     await screen.findByRole('row', { name: /示範內業/ })
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
     const input = screen.getByLabelText('角色名稱')
     fireEvent.change(input, { target: { value: '新角色' } })
     const form = input.closest('form') as HTMLFormElement

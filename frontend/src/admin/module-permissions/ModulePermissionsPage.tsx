@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Link } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
@@ -46,6 +53,7 @@ import {
   getRevokeImpact,
   getUserEffectiveAccess,
   getUserModulePermissions,
+  getUserParticipatingProjects,
   grantModulePermission,
   listModulePermissions,
   listPermissionBundles,
@@ -53,9 +61,9 @@ import {
   setModuleDelegation,
   updatePermissionBundle,
   type ModulePermission,
-  type EffectiveAccess,
   type PermissionBundle,
   type RevokeImpact,
+  type ParticipatingProject,
 } from './api'
 
 type Profile = 'system' | 'manager' | 'office' | 'field' | 'external'
@@ -237,6 +245,8 @@ type ModulePermissionsPageProps = {
   onTemporaryPassword?: (username: string, password: string) => void
   externalNavigationGuard?: boolean
   onDirtyChange?: (dirty: boolean) => void
+  onWizardBackToList?: () => void
+  onWizardViewUser?: (id: string) => void
 }
 
 export default function ModulePermissionsPage(
@@ -254,6 +264,8 @@ function ModulePermissionsPageContent({
   onTemporaryPassword,
   externalNavigationGuard = false,
   onDirtyChange,
+  onWizardBackToList,
+  onWizardViewUser,
 }: ModulePermissionsPageProps) {
   const { user: currentUser } = useCurrentUser()
   const [users, setUsers] = useState<User[]>([])
@@ -262,21 +274,20 @@ function ModulePermissionsPageContent({
   const [bundles, setBundles] = useState<PermissionBundle[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [projects, setProjects] = useState<Project[]>([])
-  const [memberRoles, setMemberRoles] = useState<
-    NonNullable<EffectiveAccess['project_roles']>
-  >([])
-  const [effectiveAccess, setEffectiveAccess] =
-    useState<EffectiveAccess | null>(null)
-  const [effectiveAccessContext, setEffectiveAccessContext] = useState<{
+  const [participationResult, setParticipationResult] = useState<{
     userId: string
-    projectId: string
+    projects: ParticipatingProject[]
+    error: string
   } | null>(null)
   const [candidateRoles, setCandidateRoles] = useState<Role[]>([])
   const [selectedCandidateRole, setSelectedCandidateRole] = useState('')
   const [safeCandidateRole, setSafeCandidateRole] = useState('')
   const [selectedUserState, setSelectedUserState] = useState('')
   const selectedUser = selectedUserId ?? selectedUserState
+  const participationForSelectedUser =
+    participationResult?.userId === selectedUser ? participationResult : null
   const [userAccess, setUserAccess] = useState<string[]>([])
+  const [accessDraft, setAccessDraft] = useState<string[]>([])
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -332,11 +343,16 @@ function ModulePermissionsPageContent({
       busy ||
       partial),
   )
-  useEffect(() => {
+  useLayoutEffect(() => {
     onDirtyChange?.(wizardHasDraft)
   }, [onDirtyChange, wizardHasDraft])
   const revokeTrigger = useRef<HTMLInputElement>(null)
   const bundleDeleteTrigger = useRef<HTMLButtonElement>(null)
+  const wizardHeadingRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    if (wizardOpen) wizardHeadingRef.current?.focus()
+  }, [wizardOpen])
 
   function goToStep(nextStep: number) {
     if (nextStep >= 3 && profile === null) {
@@ -426,6 +442,7 @@ function ModulePermissionsPageContent({
       .then((access) => {
         if (active) {
           setUserAccess(access.permission_codes)
+          setAccessDraft(access.permission_codes)
           setDelegatedModules(access.delegated_modules)
           setAccessLoadedFor(selectedUser)
         }
@@ -441,18 +458,39 @@ function ModulePermissionsPageContent({
     }
   }, [selectedUser])
 
+  useEffect(() => {
+    if (!selectedUser || !currentUser.is_admin) return
+    let active = true
+    void getUserParticipatingProjects(selectedUser)
+      .then((rows) => {
+        if (active) {
+          setParticipationResult({
+            userId: selectedUser,
+            projects: rows,
+            error: '',
+          })
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setParticipationResult({
+            userId: selectedUser,
+            projects: [],
+            error: '目前無法載入參與專案。',
+          })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [currentUser.is_admin, selectedUser])
+
   async function refreshEffectiveAccess() {
-    if (!selectedUser || !diagnosticProject) return
+    if (!selectedUser) return
     const access = await getUserEffectiveAccess(
       selectedUser,
-      diagnosticProject,
+      diagnosticProject || undefined,
     )
-    setEffectiveAccess(access)
-    setEffectiveAccessContext({
-      userId: selectedUser,
-      projectId: diagnosticProject,
-    })
-    setMemberRoles(access.project_roles ?? [])
     return access
   }
 
@@ -465,22 +503,46 @@ function ModulePermissionsPageContent({
     )
   }, [query, users])
 
-  async function togglePermission(code: string, enabled: boolean) {
+  async function submitAccessDraft() {
     if (!selectedUser) return
+    const granted = accessDraft.filter((code) => !userAccess.includes(code))
+    const revoked = userAccess.filter((code) => !accessDraft.includes(code))
+    if (revoked.length > 0) {
+      setBusy(true)
+      setError('')
+      try {
+        const impact = await getRevokeImpact(selectedUser, revoked[0])
+        setRevoke({ code: revoked[0], impact })
+      } catch (caught) {
+        setError(message(caught))
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+    if (granted.length === 0) return
     setBusy(true)
     setError('')
     try {
-      if (enabled) await grantModulePermission(selectedUser, code)
-      else {
-        const impact = await getRevokeImpact(selectedUser, code)
-        setRevoke({ code, impact })
-        return
+      for (const code of granted) {
+        await grantModulePermission(selectedUser, code)
       }
       const access = await getUserModulePermissions(selectedUser)
       setUserAccess(access.permission_codes)
-      await diagnose()
+      setAccessDraft(access.permission_codes)
+      const targetName =
+        users.find((user) => user.id === selectedUser)?.name_zh ||
+        users.find((user) => user.id === selectedUser)?.username ||
+        '此帳號'
+      const grantedNames = permissions
+        .filter((item) => granted.includes(item.code))
+        .map((item) => item.description.replace('模組', '功能'))
+      setNotice(`已為${targetName}開通${grantedNames.join('、')}。`)
     } catch (caught) {
       setError(message(caught))
+      const access = await getUserModulePermissions(selectedUser)
+      setUserAccess(access.permission_codes)
+      setAccessDraft(access.permission_codes)
     } finally {
       setBusy(false)
     }
@@ -492,6 +554,9 @@ function ModulePermissionsPageContent({
     try {
       await revokeModulePermission(selectedUser, revoke.code)
       setUserAccess((current) =>
+        current.filter((code) => code !== revoke.code),
+      )
+      setAccessDraft((current) =>
         current.filter((code) => code !== revoke.code),
       )
       setRevoke(null)
@@ -712,12 +777,12 @@ function ModulePermissionsPageContent({
   }
 
   async function diagnose() {
-    setMemberRoles([])
     setCandidateRoles([])
     setSelectedCandidateRole('')
     setSafeCandidateRole('')
     if (!selectedUser) return
-    if (!diagnosticProject) {
+    const needsProject = ['task-list', 'members'].includes(diagnosticAction)
+    if (needsProject && !diagnosticProject) {
       setNotice('請選擇專案，才能檢查有效權限。')
       return
     }
@@ -778,10 +843,10 @@ function ModulePermissionsPageContent({
       }
       const missingModule = diagnostic.missing_layers.includes('module')
       const actionMessages: Record<string, string> = {
-        create_project: '缺少建立專案的模組使用權。',
-        manage_template_library: '缺少管理範本庫的模組使用權。',
-        manage_project_members: '缺少專案管理功能的模組使用權。',
-        task_list: '缺少查核功能的模組使用權。',
+        create_project: '缺少建立專案的權限。',
+        manage_template_library: '缺少管理範本庫的權限。',
+        manage_project_members: '缺少專案管理功能的權限。',
+        task_list: '缺少查核功能的權限。',
       }
       setNotice(
         missingModule
@@ -831,26 +896,19 @@ function ModulePermissionsPageContent({
 
   const canRepairProjectRole =
     candidateRoles.length > 0 && Boolean(diagnosticProject)
-  const hasCurrentEffectiveAccess =
-    effectiveAccessContext?.userId === selectedUser &&
-    effectiveAccessContext.projectId === diagnosticProject
-  const currentEffectiveAccess = hasCurrentEffectiveAccess
-    ? effectiveAccess
-    : null
-
   return (
     <div className="admin-page permission-management">
       {!externalNavigationGuard && (
         <ModulePermissionsNavigationGuard hasUnsavedChanges={wizardHasDraft} />
       )}
-      {!embedded && (
+      {!embedded && !wizardOpen && (
         <SectionHeader
           title="帳號權限"
           description="先選職務，再確認帳號實際可使用的功能。"
         />
       )}
       {error && <p role="alert">{error}</p>}
-      {!embedded && (
+      {!embedded && !wizardOpen && (
         <Card>
           <h2>帳號清單</h2>
           <p>選取帳號查看目前能力，或新增帳號並依職務完成設定。</p>
@@ -886,7 +944,7 @@ function ModulePermissionsPageContent({
                   ? '系統管理'
                   : user.is_external_collaborator
                     ? '外部協作'
-                    : '依模組權限與專案角色'}
+                    : '依權限與專案角色'}
               </li>
             ))}
           </ul>
@@ -902,25 +960,43 @@ function ModulePermissionsPageContent({
             )}
           <div aria-label="帳號能力摘要" role="region">
             <p role="status">
-              能力摘要：
-              {currentEffectiveAccess
-                ? currentEffectiveAccess.user.is_admin
-                  ? '系統管理者可使用全部系統功能。'
-                  : permissions
-                      .filter((item) =>
-                        currentEffectiveAccess.module_permissions.some(
-                          (permission) => permission.code === item.code,
-                        ),
-                      )
-                      .map((item) => item.description)
-                      .join('、') || '尚無模組使用權。'
-                : '請選擇帳號所屬專案並檢查有效權限。'}
-              {hasCurrentEffectiveAccess &&
-                memberRoles.length > 0 &&
-                `；目前專案角色：${memberRoles
-                  .map((role) => role.name)
-                  .join('、')}`}
+              能使用：
+              {users.find((user) => user.id === selectedUser)?.is_admin
+                ? '系統管理者可使用全部功能。'
+                : permissions
+                    .filter((item) => userAccess.includes(item.code))
+                    .map((item) => item.description.replace('模組', '功能'))
+                    .join('、') || '尚未開通功能。'}
             </p>
+            <h3>參與專案與角色</h3>
+            {participationForSelectedUser?.error && (
+              <p role="alert">{participationForSelectedUser.error}</p>
+            )}
+            {!participationForSelectedUser && (
+              <p role="status">載入參與專案…</p>
+            )}
+            {!participationForSelectedUser?.error &&
+              participationForSelectedUser?.projects.length === 0 && (
+                <p>目前沒有參與專案。</p>
+              )}
+            <ul>
+              {participationForSelectedUser?.projects.map((project) => (
+                <li key={project.id}>
+                  {project.project_code}／{project.name}：
+                  {project.roles.length > 0 ? (
+                    project.roles.map((role) => role.name).join('、')
+                  ) : (
+                    <>
+                      尚未指派角色（
+                      <Link to={`/admin/projects/${project.id}/members`}>
+                        補上
+                      </Link>
+                      ）
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
             {notice && <p role="status">{notice}</p>}
             <label>
               要檢查的操作
@@ -928,6 +1004,9 @@ function ModulePermissionsPageContent({
                 value={diagnosticAction}
                 onChange={(event) => {
                   setDiagnosticAction(event.target.value)
+                  if (!['task-list', 'members'].includes(event.target.value)) {
+                    setDiagnosticProject('')
+                  }
                   setNotice('')
                   setCandidateRoles([])
                 }}
@@ -938,32 +1017,35 @@ function ModulePermissionsPageContent({
                 <option value="members">管理專案成員</option>
               </select>
             </label>
-            <label>
-              專案
-              <select
-                value={diagnosticProject}
-                onChange={(event) => {
-                  setDiagnosticProject(event.target.value)
-                  setEffectiveAccess(null)
-                  setEffectiveAccessContext(null)
-                  setMemberRoles([])
-                  setNotice('')
-                  setCandidateRoles([])
-                }}
-              >
-                <option value="">選擇專案</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {['task-list', 'members'].includes(diagnosticAction) && (
+              <label>
+                專案
+                <select
+                  value={diagnosticProject}
+                  onChange={(event) => {
+                    setDiagnosticProject(event.target.value)
+                    setNotice('')
+                    setCandidateRoles([])
+                  }}
+                >
+                  <option value="">選擇專案</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <Button
-              disabled={accessLoadedFor !== selectedUser || !diagnosticProject}
+              disabled={
+                accessLoadedFor !== selectedUser ||
+                (['task-list', 'members'].includes(diagnosticAction) &&
+                  !diagnosticProject)
+              }
               onClick={() => void diagnose()}
             >
-              檢查有效權限
+              檢查
             </Button>
             {canRepairProjectRole && (
               <section aria-label="可選專案角色">
@@ -1003,7 +1085,7 @@ function ModulePermissionsPageContent({
                 </Link>
               </section>
             )}
-            {notice.includes('缺少') && notice.includes('模組使用權') && (
+            {notice.includes('缺少') && notice.includes('權限') && (
               <Button
                 onClick={() => {
                   const code =
@@ -1014,10 +1096,18 @@ function ModulePermissionsPageContent({
                         : diagnosticAction === 'members'
                           ? 'project.use'
                           : 'inspection.use'
-                  void togglePermission(code, true)
+                  setAccessDraft((current) =>
+                    current.includes(code) ? current : [...current, code],
+                  )
                 }}
               >
-                補上缺少的模組權限
+                選取要開通的權限
+              </Button>
+            )}
+            {JSON.stringify([...accessDraft].sort()) !==
+              JSON.stringify([...userAccess].sort()) && (
+              <Button disabled={busy} onClick={() => void submitAccessDraft()}>
+                開通
               </Button>
             )}
           </div>
@@ -1025,25 +1115,36 @@ function ModulePermissionsPageContent({
       )}
       {embedded && !currentUser.is_admin && selectedUser && (
         <Card>
-          <h2>模組授權</h2>
-          <p>只能授予你受委派模組內的權限，不能替自己授權或轉委派。</p>
+          <h2>權限</h2>
+          <p>只能開通受委派範圍內的權限，不能替自己開通或轉交委派。</p>
+          {notice && <p role="status">{notice}</p>}
           <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
             {permissions.map((item) => (
               <label key={item.code}>
                 <input
-                  checked={userAccess.includes(item.code)}
+                  checked={accessDraft.includes(item.code)}
                   type="checkbox"
                   onChange={(event) => {
                     if (!event.target.checked) {
                       revokeTrigger.current = event.currentTarget
                     }
-                    void togglePermission(item.code, event.target.checked)
+                    setAccessDraft((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, item.code])]
+                        : current.filter((code) => code !== item.code),
+                    )
                   }}
                 />{' '}
-                {item.description}
+                {item.description.replace('模組', '功能')}
               </label>
             ))}
           </fieldset>
+          {JSON.stringify([...accessDraft].sort()) !==
+            JSON.stringify([...userAccess].sort()) && (
+            <Button disabled={busy} onClick={() => void submitAccessDraft()}>
+              開通
+            </Button>
+          )}
         </Card>
       )}
       {wizardOpen && currentUser.is_admin && (
@@ -1073,10 +1174,20 @@ function ModulePermissionsPageContent({
                 <Button onClick={startAnotherStaff}>新增另一個帳號</Button>
               )}
               <Button
+                onClick={() =>
+                  onWizardBackToList
+                    ? onWizardBackToList()
+                    : setWizardOpen(false)
+                }
+              >
+                回清單
+              </Button>
+              <Button
                 onClick={() => {
                   setWizardOpen(false)
                   setTemporaryPassword('')
                   setSelectedUserState(createdId)
+                  onWizardViewUser?.(createdId)
                 }}
               >
                 查看這個帳號的能力
@@ -1084,43 +1195,14 @@ function ModulePermissionsPageContent({
             </section>
           ) : (
             <>
-              <h2>職務起手式</h2>
+              <h2 ref={wizardHeadingRef} tabIndex={-1}>
+                {existingAccount ? '重新套用職務' : '新增帳號'}
+              </h2>
               <p>建立後可再調整；系統管理者不套用一般權限組合。</p>
-              <nav aria-label="帳號設定步驟">
-                <ol className="layout-setup-steps module-permission-wizard-steps">
-                  {['帳號資料', '職務', '專案', '確認'].map((label, index) => {
-                    const stateClass =
-                      index < step
-                        ? 'layout-step-complete'
-                        : index === step
-                          ? 'layout-step-current'
-                          : ''
-                    const stateLabel =
-                      index < step
-                        ? '已完成'
-                        : index === step
-                          ? '目前步驟'
-                          : '尚未開始'
-                    return (
-                      <li className={`layout-step ${stateClass}`} key={label}>
-                        <Button
-                          aria-current={index === step ? 'step' : undefined}
-                          className="layout-step-copy module-permission-wizard-step-copy"
-                          onClick={() => goToStep(index)}
-                        >
-                          <span className="layout-step-marker">
-                            {index + 1}
-                          </span>
-                          <span className="layout-step-label">{label}</span>
-                          <span className="layout-step-status">
-                            {stateLabel}
-                          </span>
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ol>
-              </nav>
+              <p role="status">
+                步驟 {step + 1}／4：
+                {['帳號資料', '職務', '專案', '確認'][step]}
+              </p>
               {step === 0 && !existingAccount && (
                 <FormGroup
                   title="帳號資料"
@@ -1136,7 +1218,7 @@ function ModulePermissionsPageContent({
                       />
                     )}
                   </FormField>
-                  <FormField label="中文姓名" required>
+                  <FormField label="姓名" required>
                     {(control) => (
                       <Input
                         {...control}
@@ -1146,16 +1228,53 @@ function ModulePermissionsPageContent({
                       />
                     )}
                   </FormField>
-                  <FormField label="英文姓名">
-                    {(control) => (
-                      <Input
-                        {...control}
-                        value={nameEn}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setNameEn(event.target.value)}
-                      />
-                    )}
-                  </FormField>
+                  <details>
+                    <summary>更多資料（選填）</summary>
+                    <FormField label="英文姓名">
+                      {(control) => (
+                        <Input
+                          {...control}
+                          value={nameEn}
+                          disabled={Boolean(createdId)}
+                          onChange={(event) => setNameEn(event.target.value)}
+                        />
+                      )}
+                    </FormField>
+                    <FormField label="部門">
+                      {(control) => (
+                        <Input
+                          {...control}
+                          value={department}
+                          disabled={Boolean(createdId)}
+                          onChange={(event) =>
+                            setDepartment(event.target.value)
+                          }
+                        />
+                      )}
+                    </FormField>
+                    <FormField label="地點">
+                      {(control) => (
+                        <Input
+                          {...control}
+                          value={location}
+                          disabled={Boolean(createdId)}
+                          onChange={(event) => setLocation(event.target.value)}
+                        />
+                      )}
+                    </FormField>
+                    <FormField label="工號">
+                      {(control) => (
+                        <Input
+                          {...control}
+                          value={employeeNo}
+                          disabled={Boolean(createdId)}
+                          onChange={(event) =>
+                            setEmployeeNo(event.target.value)
+                          }
+                        />
+                      )}
+                    </FormField>
+                  </details>
                   <FormField label="電子郵件" required>
                     {(control) => (
                       <Input
@@ -1182,36 +1301,6 @@ function ModulePermissionsPageContent({
                           </option>
                         ))}
                       </select>
-                    )}
-                  </FormField>
-                  <FormField label="部門">
-                    {(control) => (
-                      <Input
-                        {...control}
-                        value={department}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setDepartment(event.target.value)}
-                      />
-                    )}
-                  </FormField>
-                  <FormField label="地點">
-                    {(control) => (
-                      <Input
-                        {...control}
-                        value={location}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setLocation(event.target.value)}
-                      />
-                    )}
-                  </FormField>
-                  <FormField label="工號">
-                    {(control) => (
-                      <Input
-                        {...control}
-                        value={employeeNo}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setEmployeeNo(event.target.value)}
-                      />
                     )}
                   </FormField>
                 </FormGroup>
@@ -1331,34 +1420,41 @@ function ModulePermissionsPageContent({
                     </Button>
                   ) : (
                     <>
-                      <p role="status">
-                        {partial}{' '}
-                        請確認已建立的帳號資料，並完成尚未成功的步驟。
-                      </p>
-                      {temporaryPassword && (
+                      {busy ? (
+                        <p role="status">正在完成…</p>
+                      ) : (
                         <>
-                          <p>臨時密碼只會顯示這一次；離開後無法再查看。</p>
-                          <TemporaryPassword password={temporaryPassword} />
+                          <p role="status">
+                            {partial}{' '}
+                            請確認已建立的帳號資料，並完成尚未成功的步驟。
+                          </p>
+                          {temporaryPassword && (
+                            <>
+                              <p>臨時密碼只會顯示這一次；離開後無法再查看。</p>
+                              <TemporaryPassword
+                                password={temporaryPassword}
+                              />
+                            </>
+                          )}
+                          <Button onClick={() => void retryProvisioning()}>
+                            重試未完成的步驟
+                          </Button>
                         </>
                       )}
-                      <Button
-                        disabled={busy}
-                        onClick={() => void retryProvisioning()}
-                      >
-                        重試未完成的步驟
-                      </Button>
                     </>
                   )}
                 </div>
               )}
               {step < 3 && (
                 <div>
-                  <Button
-                    disabled={step === 0 || Boolean(createdId)}
-                    onClick={() => goToStep(step - 1)}
-                  >
-                    上一步
-                  </Button>
+                  {step > 0 && (
+                    <Button
+                      disabled={Boolean(createdId)}
+                      onClick={() => goToStep(step - 1)}
+                    >
+                      上一步
+                    </Button>
+                  )}
                   <Button
                     disabled={Boolean(createdId)}
                     onClick={() => goToStep(step + 1)}
@@ -1374,35 +1470,48 @@ function ModulePermissionsPageContent({
       )}
       {(!embedded || currentUser.is_admin) && (
         <details>
-          <summary>進階設定：委派、權限組合與逐項授權</summary>
+          <summary>進階設定</summary>
           <Card>
-            <h2>已設定的模組權限</h2>
-            <p>
-              這裡顯示帳號已設定的模組授權；特定專案中的有效能力請使用上方檢查。
-            </p>
+            <h2>已設定的權限</h2>
+            <p>這裡顯示帳號已開通的權限；專案內能力請查看上方的專案角色。</p>
             {selectedUser && (
-              <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
-                <legend>
-                  {'模組授權（已選取 '}
-                  {userAccess.length}
-                  {' 項）'}
-                </legend>
-                {permissions.map((item) => (
-                  <label key={item.code}>
-                    <input
-                      checked={userAccess.includes(item.code)}
-                      type="checkbox"
-                      onChange={(event) => {
-                        if (!event.target.checked) {
-                          revokeTrigger.current = event.currentTarget
-                        }
-                        void togglePermission(item.code, event.target.checked)
-                      }}
-                    />{' '}
-                    {item.description} <code>{item.code}</code>
-                  </label>
-                ))}
-              </fieldset>
+              <>
+                <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
+                  <legend>
+                    {'權限（已選取 '}
+                    {userAccess.length}
+                    {' 項）'}
+                  </legend>
+                  {permissions.map((item) => (
+                    <label key={item.code}>
+                      <input
+                        checked={accessDraft.includes(item.code)}
+                        type="checkbox"
+                        onChange={(event) => {
+                          if (!event.target.checked) {
+                            revokeTrigger.current = event.currentTarget
+                          }
+                          setAccessDraft((current) =>
+                            event.target.checked
+                              ? [...new Set([...current, item.code])]
+                              : current.filter((code) => code !== item.code),
+                          )
+                        }}
+                      />{' '}
+                      {item.description.replace('模組', '功能')}
+                    </label>
+                  ))}
+                </fieldset>
+                {JSON.stringify([...accessDraft].sort()) !==
+                  JSON.stringify([...userAccess].sort()) && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void submitAccessDraft()}
+                  >
+                    開通
+                  </Button>
+                )}
+              </>
             )}
           </Card>
           {currentUser.is_admin && (
@@ -1431,7 +1540,11 @@ function ModulePermissionsPageContent({
                           )
                       }}
                     />
-                    可管理 {module} 模組授權
+                    可管理
+                    {{ project: '專案', inspection: '查核', template: '範本' }[
+                      module
+                    ] ?? module}
+                    權限
                   </label>
                 ))}
             </Card>
@@ -1452,6 +1565,7 @@ function ModulePermissionsPageContent({
                             const access =
                               await getUserModulePermissions(selectedUser)
                             setUserAccess(access.permission_codes)
+                            setAccessDraft(access.permission_codes)
                             await diagnose()
                             setNotice('權限組合已套用。')
                           })
@@ -1507,6 +1621,7 @@ function ModulePermissionsPageContent({
                               const access =
                                 await getUserModulePermissions(selectedUser)
                               setUserAccess(access.permission_codes)
+                              setAccessDraft(access.permission_codes)
                               await diagnose()
                               setNotice('權限組合已完整套用。')
                             })
@@ -1565,11 +1680,8 @@ function ModulePermissionsPageContent({
           {!embedded && (
             <Card>
               <h2>快速診斷</h2>
-              <p>
-                建立專案需 project.create；管理成員需 project.use 與
-                project_member.manage；範本管理需 template.manage。
-              </p>
-              <p>收回模組權限前會先重新讀取影響範圍；取消不送出收回請求。</p>
+              <p>建立專案、管理成員與管理範本庫，分別需要對應的權限。</p>
+              <p>收回權限前會先重新讀取影響範圍；取消不會送出收回請求。</p>
             </Card>
           )}
           {!embedded && currentUser.is_admin && (
@@ -1663,7 +1775,7 @@ function ModulePermissionsPageContent({
       {revoke && (
         <ConfirmationPanel
           tone="danger"
-          title="確認收回模組權限"
+          title="確認收回權限"
           subject={
             permissions.find((item) => item.code === revoke.code)
               ?.description ?? revoke.code

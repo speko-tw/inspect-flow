@@ -862,6 +862,53 @@ table {
   min-width: 58rem;
 }
 
+@media (max-width: 600px) {
+  .users-table-scroll:has(.users-account-table) {
+    overflow: visible;
+  }
+
+  .users-table-scroll .users-account-table,
+  .users-table-scroll .users-account-table tbody,
+  .users-table-scroll .users-account-table tr,
+  .users-table-scroll .users-account-table th,
+  .users-table-scroll .users-account-table td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .users-table-scroll .users-account-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .users-table-scroll .users-account-table tbody tr {
+    margin-block-end: var(--space-3);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .users-table-scroll .users-account-table tbody td {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 0.4fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding-inline: 0;
+    border: 0;
+  }
+
+  .users-table-scroll .users-account-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+}
+
 th,
 td {
   padding: var(--space-2) var(--space-3);

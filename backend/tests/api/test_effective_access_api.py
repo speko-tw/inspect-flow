@@ -91,6 +91,61 @@ def test_effective_access_route_uses_delegate_declaration() -> None:
     )
 
 
+def test_participating_projects_is_admin_only_and_batches_roles(
+    db_session, make_client
+):
+    admin = _admin(db_session)
+    target = _user(db_session, "participating-target")
+    delegate = _user(db_session, "participating-delegate")
+    db_session.add(UserModuleDelegation(user_id=delegate.id, module="project"))
+    first = _project(db_session)
+    second = create_project(
+        db_session,
+        project_code="ACCESS-703-B",
+        name="無角色工程",
+        client_name="測試業主",
+        site_location="測試地點",
+    )
+    role = create_role(db_session, name="專案查閱人員", permission_codes=[])
+    _member(db_session, first, target, [role.id], admin)
+    _member(db_session, second, target, [], admin)
+    db_session.commit()
+
+    response = _client_for(admin, db_session, make_client).get(
+        f"/api/v1/users/{target.id}/participating-projects"
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "id": str(first.id),
+                "project_code": first.project_code,
+                "name": first.name,
+                "roles": [{"id": str(role.id), "name": role.name}],
+            },
+            {
+                "id": str(second.id),
+                "project_code": second.project_code,
+                "name": second.name,
+                "roles": [],
+            },
+        ]
+    }
+
+    assert (
+        _client_for(delegate, db_session, make_client)
+        .get(f"/api/v1/users/{target.id}/participating-projects")
+        .status_code
+        == 403
+    )
+    assert (
+        _client_for(target, db_session, make_client)
+        .get(f"/api/v1/users/{target.id}/participating-projects")
+        .status_code
+        == 403
+    )
+
+
 def test_admin_sources_diagnostics_revocation_and_implicit_access(
     db_session, make_client
 ):
@@ -231,6 +286,38 @@ def test_admin_sources_diagnostics_revocation_and_implicit_access(
     }
 
 
+def test_non_project_diagnostics_do_not_require_project(
+    db_session, make_client
+):
+    admin = _admin(db_session)
+    target = _user(db_session, "non-project-diagnostic")
+    grant_module_permission(
+        db_session,
+        actor=admin,
+        user=target,
+        permission_code="project.create",
+    )
+    grant_module_permission(
+        db_session,
+        actor=admin,
+        user=target,
+        permission_code="template.manage",
+    )
+    db_session.commit()
+
+    response = _client_for(admin, db_session, make_client).get(
+        f"/api/v1/users/{target.id}/effective-access"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "project_roles" not in body
+    assert {item["action"] for item in body["diagnostics"]} == {
+        "create_project",
+        "manage_template_library",
+    }
+    assert all(item["allowed"] for item in body["diagnostics"])
+
+
 def test_delegate_scope_and_resource_errors(db_session, make_client):
     admin = _admin(db_session)
     project_delegate = _user(db_session, "project-delegate")
@@ -333,6 +420,11 @@ def test_delegate_scope_and_resource_errors(db_session, make_client):
     assert denied_admin_target.status_code == 403
     assert denied_admin_target.json() == denied.json()
     assert "is_admin" not in denied_admin_target.text
+    denied_admin_without_project = project_client.get(
+        f"/api/v1/users/{admin_target.id}/effective-access"
+    )
+    assert denied_admin_without_project.status_code == 403
+    assert denied_admin_without_project.json() == denied.json()
     unlisted_admin = _user(db_session, "unlisted-admin-target")
     unlisted_admin.is_admin = True
     db_session.commit()

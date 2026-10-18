@@ -8,6 +8,7 @@ import { UnsavedLeaveBox } from '../../ui/navigation'
 import * as navigationGuard from '../../ui/navigation'
 import { PAGE_TITLES } from '../../layout/navigationLabels'
 import RolePermissionSummary from '../projects/RolePermissionSummary'
+import '../../styles/g7-shell.css'
 import {
   createRole,
   deleteRole,
@@ -41,6 +42,8 @@ export default function RolesPage() {
   const [isExternalAllowed, setIsExternalAllowed] = useState(false)
   const [creatorRoleId, setCreatorRoleId] = useState('')
   const [creatorRoleSaved, setCreatorRoleSaved] = useState(false)
+  const [creatorRoleOpen, setCreatorRoleOpen] = useState(false)
+  const [roleFormOpen, setRoleFormOpen] = useState(false)
   // 待確認的刪除與修改；數字是按下按鈕當下向後端重新取得的。
   const [deleting, setDeleting] = useState<Role | null>(null)
   const [pending, setPending] = useState<{
@@ -160,6 +163,7 @@ export default function RolesPage() {
     setDeleting(null)
     setPending(null)
     setEditingId(role.id)
+    setRoleFormOpen(true)
     setName(role.name)
     setSelected(role.permission_codes)
     setIsAssignable(Boolean(role.is_assignable))
@@ -315,39 +319,10 @@ export default function RolesPage() {
   }
 
   return (
-    <section aria-labelledby="roles-heading">
+    <section aria-labelledby="roles-heading" className="roles-page">
       <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="roles-heading">{PAGE_TITLES.projectRoles}</h1>
       <FormError>{error}</FormError>
-      <section aria-labelledby="creator-role-heading">
-        <h2 id="creator-role-heading">新專案預設角色</h2>
-        <p>新專案會把這個角色指派給負責建立專案的人。</p>
-        <label>
-          新專案預設角色
-          <select
-            disabled={loading || saving}
-            onChange={(event) => {
-              setCreatorRoleId(event.target.value)
-              setCreatorRoleSaved(false)
-            }}
-            value={creatorRoleId}
-          >
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          disabled={loading || saving || !creatorRoleId}
-          onClick={() => void saveCreatorRole()}
-          type="button"
-        >
-          儲存預設角色
-        </button>
-        {creatorRoleSaved && <p role="status">新專案預設角色已更新。</p>}
-      </section>
       {deleting && (
         <ConfirmBox
           busy={saving}
@@ -394,8 +369,8 @@ export default function RolesPage() {
             {roles.map((role) => (
               <tr key={role.id}>
                 <th scope="row">{role.name}</th>
-                <td>{role.user_count} 個帳號持有此角色</td>
-                <td>
+                <td data-label="持有人數">{role.user_count} 個帳號</td>
+                <td data-label="權限">
                   <RolePermissionSummary
                     codes={role.permission_codes}
                     descriptions={descriptions}
@@ -403,7 +378,7 @@ export default function RolesPage() {
                     name={role.name}
                   />
                 </td>
-                <td>
+                <td data-label="操作">
                   <button
                     aria-label={`修改角色 ${role.name}`}
                     disabled={saving}
@@ -426,96 +401,151 @@ export default function RolesPage() {
           </tbody>
         </table>
       )}
-      <Form
-        error={formError?.message}
-        errorFocusRequest={formError?.request}
-        errorTabIndex={-1}
-        guard={guard}
-        onSubmit={save}
-      >
-        <h2>{editing ? `修改角色「${editing.name}」` : '新增角色'}</h2>
-        <label>
-          角色名稱
-          <input
-            disabled={locked}
-            maxLength={64}
-            onChange={(event) => setName(event.target.value)}
-            required
-            value={name}
-          />
-        </label>
-        <fieldset>
-          <legend>權限</legend>
-          {permissions.length === 0 && unregistered.length === 0 ? (
-            <p>{loading ? '載入中…' : NO_PERMISSIONS_TEXT}</p>
-          ) : (
-            <>
-              {permissions.map((item) => (
-                <label key={item.code}>
-                  <input
-                    checked={selected.includes(item.code)}
-                    disabled={locked}
-                    onChange={(event) =>
-                      toggleCode(item.code, event.target.checked)
-                    }
-                    type="checkbox"
-                    value={item.code}
-                  />
-                  {item.description}
-                </label>
-              ))}
-              {unregistered.map((code) => (
-                <label key={code}>
-                  <input
-                    checked={selected.includes(code)}
-                    disabled={locked}
-                    onChange={(event) =>
-                      toggleCode(code, event.target.checked)
-                    }
-                    type="checkbox"
-                    value={code}
-                  />
-                  {code}（已不在可設定清單）
-                </label>
-              ))}
-            </>
-          )}
-        </fieldset>
-        {editing && (
-          <fieldset disabled={locked}>
-            <legend>指派範圍</legend>
-            <label>
-              <input
-                checked={isAssignable}
-                onChange={(event) => setIsAssignable(event.target.checked)}
-                type="checkbox"
-              />
-              非管理者可指派
-            </label>
-            <label>
-              <input
-                checked={isExternalAllowed}
-                onChange={(event) =>
-                  setIsExternalAllowed(event.target.checked)
-                }
-                type="checkbox"
-              />
-              外部協作帳號可用
-            </label>
-          </fieldset>
-        )}
-        {editing && (
-          <button disabled={saving} onClick={resetForm} type="button">
-            取消
-          </button>
-        )}
-        <FormSubmitButton
-          className="btn-primary"
-          disabled={saving || loading || locked}
+      <div className="roles-page-tools">
+        <button
+          aria-controls="creator-role-panel"
+          aria-expanded={creatorRoleOpen}
+          onClick={() => setCreatorRoleOpen((open) => !open)}
+          type="button"
         >
-          {editing ? '儲存角色' : '新增角色'}
-        </FormSubmitButton>
-      </Form>
+          {creatorRoleOpen ? '收合新專案預設角色' : '設定新專案預設角色'}
+        </button>
+        <section
+          aria-labelledby="creator-role-heading"
+          hidden={!creatorRoleOpen}
+          id="creator-role-panel"
+        >
+          <h2 id="creator-role-heading">新專案預設角色</h2>
+          <p>新專案會把這個角色指派給負責建立專案的人。</p>
+          <label>
+            新專案預設角色
+            <select
+              disabled={loading || saving}
+              onChange={(event) => {
+                setCreatorRoleId(event.target.value)
+                setCreatorRoleSaved(false)
+              }}
+              value={creatorRoleId}
+            >
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={loading || saving || !creatorRoleId}
+            onClick={() => void saveCreatorRole()}
+            type="button"
+          >
+            儲存預設角色
+          </button>
+          {creatorRoleSaved && <p role="status">新專案預設角色已更新。</p>}
+        </section>
+        <button
+          aria-controls="role-editor-panel"
+          aria-expanded={roleFormOpen}
+          onClick={() => setRoleFormOpen((open) => !open)}
+          type="button"
+        >
+          {roleFormOpen ? '收合新增角色' : '新增角色'}
+        </button>
+      </div>
+      {roleFormOpen && (
+        <div className="roles-page-editor" id="role-editor-panel">
+          <Form
+            error={formError?.message}
+            errorFocusRequest={formError?.request}
+            errorTabIndex={-1}
+            guard={guard}
+            onSubmit={save}
+          >
+            <h2>{editing ? `修改角色「${editing.name}」` : '新增角色'}</h2>
+            <label>
+              角色名稱
+              <input
+                disabled={locked}
+                maxLength={64}
+                onChange={(event) => setName(event.target.value)}
+                required
+                value={name}
+              />
+            </label>
+            <fieldset>
+              <legend>權限</legend>
+              {permissions.length === 0 && unregistered.length === 0 ? (
+                <p>{loading ? '載入中…' : NO_PERMISSIONS_TEXT}</p>
+              ) : (
+                <>
+                  {permissions.map((item) => (
+                    <label key={item.code}>
+                      <input
+                        checked={selected.includes(item.code)}
+                        disabled={locked}
+                        onChange={(event) =>
+                          toggleCode(item.code, event.target.checked)
+                        }
+                        type="checkbox"
+                        value={item.code}
+                      />
+                      {item.description}
+                    </label>
+                  ))}
+                  {unregistered.map((code) => (
+                    <label key={code}>
+                      <input
+                        checked={selected.includes(code)}
+                        disabled={locked}
+                        onChange={(event) =>
+                          toggleCode(code, event.target.checked)
+                        }
+                        type="checkbox"
+                        value={code}
+                      />
+                      {code}（已不在可設定清單）
+                    </label>
+                  ))}
+                </>
+              )}
+            </fieldset>
+            {editing && (
+              <fieldset disabled={locked}>
+                <legend>指派範圍</legend>
+                <label>
+                  <input
+                    checked={isAssignable}
+                    onChange={(event) => setIsAssignable(event.target.checked)}
+                    type="checkbox"
+                  />
+                  非管理者可指派
+                </label>
+                <label>
+                  <input
+                    checked={isExternalAllowed}
+                    onChange={(event) =>
+                      setIsExternalAllowed(event.target.checked)
+                    }
+                    type="checkbox"
+                  />
+                  外部協作帳號可用
+                </label>
+              </fieldset>
+            )}
+            {editing && (
+              <button disabled={saving} onClick={resetForm} type="button">
+                取消
+              </button>
+            )}
+            <FormSubmitButton
+              className="btn-primary"
+              disabled={saving || loading || locked}
+            >
+              {editing ? '儲存角色' : '新增角色'}
+            </FormSubmitButton>
+          </Form>
+        </div>
+      )}
     </section>
   )
 }

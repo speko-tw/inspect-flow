@@ -79,7 +79,7 @@ function stubBackend(
     preview?: Partial<RestorePreview>
   } = {},
 ) {
-  const users = options.users ?? [regularUser]
+  const users = (options.users ?? [regularUser]).map((user) => ({ ...user }))
   const calls: Call[] = []
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -198,9 +198,9 @@ describe('UsersPage 帳號詳情', () => {
     renderUsers({ detailUserId: 'user-1' })
 
     expect(
-      await screen.findByRole('heading', { name: '基本資料' }),
+      await screen.findByRole('heading', { name: '鄧安娜' }),
     ).toBeVisible()
-    expect(screen.getByText('鄧安娜（anna.deng）')).toBeVisible()
+    expect(screen.getByText('帳號：anna.deng')).toBeVisible()
     expect(screen.queryByRole('table')).toBeNull()
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
   })
@@ -213,12 +213,41 @@ describe('UsersPage 帳號詳情', () => {
     }
     stubBackend({ users: [protectedAccount] })
     renderUsers({ detailUserId: 'user-1' })
-    await screen.findByRole('heading', { name: '基本資料' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
 
     expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '公司連結' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
+  })
+
+  it('requires in-page confirmation before deactivating from account detail', async () => {
+    const backend = stubBackend({ users: [{ ...regularUser }] })
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+
+    const panel = await screen.findByRole('region', { name: '操作確認' })
+    expect(panel).toHaveClass('confirm-box-danger')
+    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
+    fireEvent.click(within(panel).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull()
+    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
+
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+    const confirmed = await screen.findByRole('region', { name: '操作確認' })
+    await waitFor(() =>
+      expect(
+        within(confirmed).getByRole('button', { name: '確認' }),
+      ).toBeEnabled(),
+    )
+    fireEvent.click(within(confirmed).getByRole('button', { name: '確認' }))
+    await waitFor(() =>
+      expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(1),
+    )
   })
 })
 

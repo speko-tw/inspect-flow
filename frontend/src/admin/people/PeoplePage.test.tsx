@@ -1,23 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 import PeoplePage from './PeoplePage'
 
 const peopleApiMock = vi.hoisted(() => ({
-  listAllPages: vi.fn(),
-  listProjectMembers: vi.fn(),
   request: vi.fn(),
   isAdmin: true,
 }))
 
 vi.mock('../api', () => ({
-  listAllPages: peopleApiMock.listAllPages,
   request: peopleApiMock.request,
-}))
-
-vi.mock('../projects/api', () => ({
-  listProjectMembers: peopleApiMock.listProjectMembers,
 }))
 
 vi.mock('../../auth/useCurrentUser', () => ({
@@ -59,11 +53,24 @@ describe('PeoplePage', () => {
 
   it('keeps delegate access to its API-provided account and module panel only', async () => {
     peopleApiMock.isAdmin = false
-    peopleApiMock.request.mockResolvedValue({
-      items: [
-        { id: 'delegate-person', username: 'field.member', name_zh: '林沐青' },
-      ],
-      next_cursor: null,
+    peopleApiMock.request.mockImplementation((path: string) => {
+      if (path.startsWith('/module-delegate/users?')) {
+        return Promise.resolve({
+          items: [
+            {
+              id: 'delegate-person',
+              username: 'field.member',
+              name_zh: '林沐青',
+            },
+          ],
+          next_cursor: null,
+        })
+      }
+      return Promise.resolve({
+        id: 'delegate-person',
+        username: 'field.member',
+        name_zh: '林沐青',
+      })
     })
     render(
       <DataMemoryRouter initialEntries={['/admin/people']}>
@@ -75,6 +82,8 @@ describe('PeoplePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
 
     expect(await screen.findByText('模組授權')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '林沐青' })).toBeInTheDocument()
+    expect(screen.getByText('帳號：field.member')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
     expect(screen.queryByRole('heading', { name: '基本資料' })).toBeNull()
     expect(screen.queryByRole('button', { name: '修改資料' })).toBeNull()
@@ -87,13 +96,105 @@ describe('PeoplePage', () => {
     )
   })
 
+  it('shows loading for a new account and ignores an older detail response', async () => {
+    peopleApiMock.isAdmin = false
+    const first = deferred<{
+      id: string
+      username: string
+      name_zh: string
+    }>()
+    const second = deferred<{
+      id: string
+      username: string
+      name_zh: string
+    }>()
+    peopleApiMock.request.mockImplementation((path: string) =>
+      path.endsWith('/person-1') ? first.promise : second.promise,
+    )
+
+    function AccountSwitcher() {
+      const navigate = useNavigate()
+      return (
+        <button
+          onClick={() => navigate('/admin/people/person-2')}
+          type="button"
+        >
+          切換帳號
+        </button>
+      )
+    }
+
+    render(
+      <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
+        <>
+          <PeoplePage onTemporaryPassword={vi.fn()} />
+          <AccountSwitcher />
+        </>
+      </DataMemoryRouter>,
+    )
+
+    expect(await screen.findByText('載入帳號…')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '切換帳號' }))
+    expect(await screen.findByText('載入帳號…')).toBeVisible()
+
+    second.resolve({
+      id: 'person-2',
+      username: 'field.two',
+      name_zh: '第二位人員',
+    })
+    expect(
+      await screen.findByRole('heading', { name: '第二位人員' }),
+    ).toBeVisible()
+    first.resolve({
+      id: 'person-1',
+      username: 'field.one',
+      name_zh: '第一位人員',
+    })
+    expect(screen.queryByRole('heading', { name: '第一位人員' })).toBeNull()
+    expect(screen.getByText('帳號：field.two')).toBeInTheDocument()
+  })
+
+  it('applies a full account name as the delegate search query', async () => {
+    peopleApiMock.isAdmin = false
+    peopleApiMock.request.mockResolvedValue({
+      items: [
+        { id: 'delegate-person', username: 'field.member', name_zh: '林沐青' },
+      ],
+      next_cursor: null,
+    })
+    render(
+      <DataMemoryRouter initialEntries={['/admin/people']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    const input = await screen.findByRole('textbox', { name: '搜尋帳號' })
+    fireEvent.change(input, { target: { value: 'field.member' } })
+    fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
+
+    expect(await screen.findByRole('button', { name: '林沐青' })).toBeVisible()
+    expect(peopleApiMock.request).toHaveBeenCalledWith(
+      '/module-delegate/users?limit=50&q=field.member',
+    )
+  })
+
   it('shows participating projects with links to member management', async () => {
-    peopleApiMock.listAllPages.mockResolvedValue([
-      { id: 'project-1', project_code: 'PR-1', name: '示範工程' },
-    ])
-    peopleApiMock.listProjectMembers.mockResolvedValue([
-      { user_id: 'person-1' },
-    ])
+    peopleApiMock.request.mockResolvedValue({
+      items: [
+        {
+          id: 'project-1',
+          project_code: 'PR-1',
+          name: '示範工程',
+          roles: [{ id: 'role-1', name: '現場工程師' }],
+        },
+        {
+          id: 'project-2',
+          project_code: 'PR-2',
+          name: '待補角色工程',
+          roles: [],
+        },
+      ],
+    })
     render(
       <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
@@ -103,29 +204,33 @@ describe('PeoplePage', () => {
     expect(
       await screen.findByRole('link', { name: /PR-1／示範工程/ }),
     ).toHaveAttribute('href', '/admin/projects/project-1/members')
+    expect(screen.getByText(/角色：現場工程師/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '補上' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-2/members',
+    )
+    expect(peopleApiMock.request).toHaveBeenCalledTimes(1)
+    expect(peopleApiMock.request).toHaveBeenCalledWith(
+      '/users/person-1/participating-projects',
+    )
   })
 
   it('labels a partial project summary incomplete instead of showing an empty state', async () => {
-    peopleApiMock.listAllPages.mockResolvedValue([
-      { id: 'project-1', project_code: 'PR-1', name: '示範工程' },
-      { id: 'project-2', project_code: 'PR-2', name: '另一工程' },
-    ])
-    peopleApiMock.listProjectMembers.mockImplementation((projectId: string) =>
-      projectId === 'project-1'
-        ? Promise.resolve([])
-        : Promise.reject(new Error('Forbidden')),
-    )
+    peopleApiMock.request.mockRejectedValue(new Error('Forbidden'))
     render(
       <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('摘要不完整')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '目前無法載入參與專案',
+    )
     expect(screen.queryByText('目前沒有參與專案。')).toBeNull()
   })
 
   it('keeps list search in the route when opening a person', () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
       <DataMemoryRouter initialEntries={['/admin/people?q=林沐']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
@@ -144,3 +249,11 @@ describe('PeoplePage', () => {
     expect(screen.getByText('搜尋：林沐')).toBeInTheDocument()
   })
 })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((complete) => {
+    resolve = complete
+  })
+  return { promise, resolve }
+}

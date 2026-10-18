@@ -43,11 +43,25 @@ export interface EffectiveAccess {
   }>
 }
 
-export function getUserEffectiveAccess(userId: string, projectId: string) {
-  const query = new URLSearchParams({ project_id: projectId })
+export interface ParticipatingProject {
+  id: string
+  project_code: string
+  name: string
+  roles: Array<{ id: string; name: string }>
+}
+
+export function getUserEffectiveAccess(userId: string, projectId?: string) {
+  const query = new URLSearchParams()
+  if (projectId) query.set('project_id', projectId)
   return request<EffectiveAccess>(
-    `/users/${userId}/effective-access?${query.toString()}`,
+    `/users/${userId}/effective-access${query.size ? `?${query}` : ''}`,
   )
+}
+
+export function getUserParticipatingProjects(userId: string) {
+  return request<{ items: ParticipatingProject[] }>(
+    `/users/${userId}/participating-projects`,
+  ).then((body) => body.items)
 }
 
 export function listModulePermissions(): Promise<ModulePermission[]> {

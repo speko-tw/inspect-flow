@@ -10,8 +10,6 @@ import UsersPage from '../UsersPage'
 import ModulePermissionsPage from '../module-permissions/ModulePermissionsPage'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { request } from '../api'
-import { listAllPages } from '../api'
-import { listProjectMembers } from '../projects/api'
 
 interface DelegatePerson {
   id: string
@@ -40,6 +38,7 @@ export function PeoplePage({
   const pageGuard = useUnsavedNavigationGuard(wizardDirty || userFormsDirty)
   const detailMatch = location.pathname.match(/^\/admin\/people\/([^/]+)$/)
   const personId = detailMatch ? decodeURIComponent(detailMatch[1]) : null
+  const createWizardOpen = user.is_admin && wizardRequest > 0
   const query = searchParams.get('q') ?? ''
 
   function updateQuery(nextQuery: string) {
@@ -50,9 +49,22 @@ export function PeoplePage({
   }
 
   return (
-    <main aria-labelledby="people-heading" className="admin-page">
+    <main
+      aria-labelledby={
+        personId
+          ? user.is_admin
+            ? 'person-basic-heading'
+            : 'delegated-person-heading'
+          : 'people-heading'
+      }
+      className="admin-page"
+    >
       <UnsavedLeaveBox guard={pageGuard} />
-      <h1 id="people-heading">{ACCOUNT_LABEL}</h1>
+      {!personId && (
+        <h1 id="people-heading">
+          {createWizardOpen ? '新增帳號' : ACCOUNT_LABEL}
+        </h1>
+      )}
       {personId ? (
         <p>
           <Link
@@ -64,6 +76,10 @@ export function PeoplePage({
             返回{ACCOUNT_LABEL}清單
           </Link>
         </p>
+      ) : createWizardOpen ? (
+        <button onClick={() => setWizardRequest(0)} type="button">
+          取消
+        </button>
       ) : (
         user.is_admin && (
           <button onClick={() => setWizardRequest((value) => value + 1)}>
@@ -71,7 +87,10 @@ export function PeoplePage({
           </button>
         )
       )}
-      {user.is_admin ? (
+      {!user.is_admin && personId && (
+        <DelegatedPersonHeading userId={personId} />
+      )}
+      {user.is_admin && !createWizardOpen ? (
         <UsersPage
           detailUserId={personId}
           hideCreateForm
@@ -89,7 +108,7 @@ export function PeoplePage({
           }}
           onTemporaryPassword={onTemporaryPassword}
         />
-      ) : (
+      ) : !user.is_admin ? (
         !personId && (
           <DelegatedPeopleList
             key={query}
@@ -104,21 +123,64 @@ export function PeoplePage({
             visible
           />
         )
-      )}
-      {(personId || (user.is_admin && wizardRequest > 0)) && (
+      ) : null}
+      {(personId || createWizardOpen) && (
         <ModulePermissionsPage
           embedded
           externalNavigationGuard
           openWizardRequest={wizardRequest}
           onDirtyChange={setWizardDirty}
+          onWizardBackToList={() => setWizardRequest(0)}
+          onWizardViewUser={(id) => {
+            setWizardRequest(0)
+            navigate(`/admin/people/${encodeURIComponent(id)}`)
+          }}
           selectedUserId={personId ?? undefined}
-          onTemporaryPassword={onTemporaryPassword}
         />
       )}
       {user.is_admin && personId && (
         <ParticipatingProjects userId={personId} />
       )}
     </main>
+  )
+}
+
+function DelegatedPersonHeading({ userId }: { userId: string }) {
+  const [result, setResult] = useState<{
+    userId: string
+    person: DelegatePerson | null
+    error: string
+  } | null>(null)
+  const currentResult = result?.userId === userId ? result : null
+
+  useEffect(() => {
+    let active = true
+    void request<DelegatePerson>(
+      `/module-delegate/users/${encodeURIComponent(userId)}`,
+    )
+      .then((person) => active && setResult({ userId, person, error: '' }))
+      .catch(() => {
+        if (active) {
+          setResult({ userId, person: null, error: '目前無法查看此帳號。' })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [userId])
+
+  if (currentResult?.error) {
+    return <p role="alert">{currentResult.error}</p>
+  }
+  if (!currentResult?.person) return <p role="status">載入帳號…</p>
+  const person = currentResult.person
+  return (
+    <header>
+      <h1 id="delegated-person-heading">
+        {person.name_zh || person.username}
+      </h1>
+      <p>帳號：{person.username}</p>
+    </header>
   )
 }
 
@@ -253,53 +315,32 @@ function ParticipatingProjects({ userId }: { userId: string }) {
   const requestKey = `${userId}:${reloadRequest}`
   const [result, setResult] = useState<{
     key: string
-    projects: Array<{ id: string; project_code: string; name: string }>
+    projects: Array<{
+      id: string
+      project_code: string
+      name: string
+      roles: Array<{ id: string; name: string }>
+    }>
     error: string
-    failedProjectCount: number
-  }>({ key: '', projects: [], error: '', failedProjectCount: 0 })
+  }>({ key: '', projects: [], error: '' })
   const loading = result.key !== requestKey
   const projects = result.key === requestKey ? result.projects : []
   const error = result.key === requestKey ? result.error : ''
-  const failedProjectCount =
-    result.key === requestKey ? result.failedProjectCount : 0
 
   useEffect(() => {
     let active = true
     const key = `${userId}:${reloadRequest}`
-    void listAllPages<{ id: string; project_code: string; name: string }>(
-      '/projects',
-    )
-      .then(async (allProjects) => {
-        const memberships = await mapWithConcurrency(
-          allProjects,
-          4,
-          async (project) => ({
-            project,
-            isMember: (await listProjectMembers(project.id)).some(
-              (member) => member.user_id === userId,
-            ),
-          }),
-        )
+    void request<{
+      items: Array<{
+        id: string
+        project_code: string
+        name: string
+        roles: Array<{ id: string; name: string }>
+      }>
+    }>(`/users/${encodeURIComponent(userId)}/participating-projects`)
+      .then((response) => {
         if (active) {
-          setResult({
-            key,
-            projects: memberships
-              .filter(
-                (
-                  result,
-                ): result is PromiseFulfilledResult<{
-                  project: { id: string; project_code: string; name: string }
-                  isMember: boolean
-                }> => result.status === 'fulfilled' && result.value.isMember,
-              )
-              .map(({ value }) => value.project),
-            failedProjectCount: memberships.filter(
-              (result) => result.status === 'rejected',
-            ).length,
-            error: memberships.some((result) => result.status === 'rejected')
-              ? '部分專案的成員資料無法讀取，摘要不完整。'
-              : '',
-          })
+          setResult({ key, projects: response.items, error: '' })
         }
       })
       .catch(() => {
@@ -308,7 +349,6 @@ function ParticipatingProjects({ userId }: { userId: string }) {
             key,
             projects: [],
             error: '目前無法載入參與專案。',
-            failedProjectCount: 0,
           })
         }
       })
@@ -333,45 +373,28 @@ function ParticipatingProjects({ userId }: { userId: string }) {
       {!loading && !error && projects.length === 0 && (
         <p>目前沒有參與專案。</p>
       )}
-      {failedProjectCount > 0 && (
-        <p>有 {failedProjectCount} 個專案的成員資料尚未確認。</p>
-      )}
       <ul>
         {projects.map((project) => (
           <li key={project.id}>
             <Link to={`/admin/projects/${project.id}/members`}>
               {project.project_code}／{project.name}
             </Link>
+            {project.roles.length > 0 ? (
+              <span>
+                ；角色：{project.roles.map((role) => role.name).join('、')}
+              </span>
+            ) : (
+              <span>
+                ；尚未指派角色（
+                <Link to={`/admin/projects/${project.id}/members`}>補上</Link>
+                ）
+              </span>
+            )}
           </li>
         ))}
       </ul>
     </section>
   )
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length)
-  let nextIndex = 0
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex++
-        try {
-          results[index] = {
-            status: 'fulfilled',
-            value: await mapper(items[index]),
-          }
-        } catch (reason) {
-          results[index] = { status: 'rejected', reason }
-        }
-      }
-    }),
-  )
-  return results
 }
 
 export default PeoplePage

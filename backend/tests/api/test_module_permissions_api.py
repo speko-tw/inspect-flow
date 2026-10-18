@@ -63,6 +63,10 @@ def test_module_permission_route_contract() -> None:
         assert route.declaration is not None
         routes[(route.method, route.path)] = route.declaration.level
     assert {
+        (
+            "GET",
+            "/api/v1/users/{user_id}/participating-projects",
+        ): AccessLevel.ADMIN_REQUIRED,
         ("GET", "/api/v1/module-permissions"): (
             AccessLevel.MODULE_DELEGATE_REQUIRED
         ),

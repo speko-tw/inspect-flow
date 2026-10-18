@@ -76,8 +76,9 @@ function RoleNavigation() {
 function renderRoles(
   path = '/admin/roles',
   history?: { entries: string[]; index: number },
+  expandPanels = true,
 ) {
-  return render(
+  const view = render(
     <DataMemoryRouter
       initialEntries={history?.entries ?? [path]}
       initialIndex={history?.index}
@@ -95,6 +96,11 @@ function renderRoles(
       </Routes>
     </DataMemoryRouter>,
   )
+  if (expandPanels && path === '/admin/roles') {
+    fireEvent.click(screen.getByRole('button', { name: '設定新專案預設角色' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+  }
+  return view
 }
 
 interface FakeOptions {
@@ -266,6 +272,29 @@ describe('角色表單未儲存導覽防護', () => {
 })
 
 describe('admin role management page', () => {
+  it('先顯示角色與持有人數，設定與新增區預設收合', async () => {
+    rolesFetch({
+      roles: [
+        makeRole('r1', '專案工程師', [], {
+          user_count: 4,
+          project_count: 2,
+        }),
+      ],
+    })
+    renderRoles('/admin/roles', undefined, false)
+
+    const row = await screen.findByRole('row', { name: /專案工程師/ })
+    expect(row).toHaveTextContent('4 個帳號')
+    expect(
+      screen.getByRole('button', { name: '設定新專案預設角色' }),
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: '新增角色' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.queryByLabelText('角色名稱')).not.toBeInTheDocument()
+  })
+
   it('管理→角色→現場工程師持有人數只需兩次點擊', async () => {
     rolesFetch({
       roles: [
@@ -286,7 +315,7 @@ describe('admin role management page', () => {
     })
     expect(coordinator).toHaveTextContent('管理專案成員與其角色')
     const fieldRole = screen.getByRole('row', { name: /現場工程師/ })
-    expect(fieldRole).toHaveTextContent('3 個帳號持有此角色')
+    expect(fieldRole).toHaveTextContent('3 個帳號')
     expect(within(fieldRole).queryByRole('link')).toBeNull()
     expect(screen.queryByText(/權限組合/)).toBeNull()
   })

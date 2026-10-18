@@ -33,6 +33,7 @@
 | T20 | 將 #451 分區正式區段、規劃／任務表單錯誤、離頁確認與派出阻擋互動同步至規格及 AC；維持既有 API 契約 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/planning/PlanningPage.tsx`、`PlanningPage.test.tsx`、`ProjectZonesPage.tsx`、`ProjectZonesPage.test.tsx`、`useUnsavedNavigationGuard.ts`、`useUnsavedNavigationGuard.test.tsx`、`UnsavedLeaveBox.tsx`、`frontend/src/admin/planning/fixtures/name-too-long-422.json`、`frontend/src/admin/planning/fixtures/task-assignee-validation-422.json`、`frontend/src/admin/planning/fixtures/task-cancel-validation-422.json`、`frontend/src/admin/planning/fixtures/task-create-validation-422.json`、`frontend/src/admin/planning/fixtures/task-location-validation-422.json`、`frontend/src/admin/projectHome/ProjectSectionPage.tsx`、`ProjectSectionShell.tsx`、`ProjectSectionShell.test.tsx`、`ProjectHomePage.test.tsx`、`frontend/src/styles.css`、`frontend/src/ui/fieldErrors.ts`、`frontend/src/ui/fieldErrors.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`backend/tests/api/test_planning_field_error_contract.py`、`backend/tests/contract/test_error_envelope.py` | T10 專案區段殼；#601 共用欄位錯誤處理已合併；既有 inspection-planning T1～T4 API；維持既有 API 契約，不新增或放寬後端端點 | ADM-AC42 | #451 |
 | T21 | 專案進度區段前端：區段導覽的「進度」（`inspection_task.read`）、七個篩選與數字、網址 `?status=`、卡片清單與載入更多、全頁唯讀詳情、返回保留篩選／已載入頁數／捲動位置；首頁關鍵數字可點、「追蹤進度」與待重查步驟改連進度區段；任務名稱在 [#497](https://github.com/speko-tw/inspect-flow/issues/497) 合併前用項目摘要；先以 mock 接版型，`inspection-planning` T13 合併後接真 client 並以真後端走查；補元件測試與契約 fixture | 依當時程式碼盤點，預計 `frontend/src/admin/progress/`（新增）、`frontend/src/admin/projectHome/`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/styles.css`、相關測試 | T10、T20；`inspection-planning` T13（IP-R18、IP-R19）；任務名稱依 #497 另行調整 | ADM-AC15、ADM-AC16、ADM-AC25、ADM-AC42～ADM-AC44 | [#452](https://github.com/speko-tw/inspect-flow/issues/452) |
 | T22 | 管理者查詢他人有效權限的唯讀 API：集中使用 `calculate_effective_access`、保留模組權限來源與指定專案角色代碼，回傳四項固定診斷；Admin 全量、委派者依 ADM-R45 嚴格切片；委派者查 Admin 一律 403、查自己允許；補 SQLite 與 PostgreSQL API 測試 | `docs/specs/admin-dashboard/spec.md`、本檔、 `backend/app/api/v1/users.py`、相關 API 測試 | #582／#576 兩層權限 規則、ADM-R45 | ADM-AC46 | #702 |
+| T23 | G7 易用性修正：個人選單、帳號清單／新增精靈／詳情、權限明確開通、白話有效權限與診斷、批次參與專案角色摘要、唯讀入口、任務標題與專案角色頁；補前後端行為測試及八身分真瀏覽器驗收 | `docs/intents/07-permission-model.md`、`docs/specs/admin-dashboard/spec.md`、本檔、`backend/app/api/v1/users.py`、`backend/tests/api/`、`frontend/src/admin/`、`frontend/src/layout/`、`frontend/src/styles/` 及相關測試 | #702 有效權限查詢；G6 導覽與帳號／權限模型（#582／#583／#584／#704）；G7 定案修正清單 | ADM-AC49 | #582、#583、#584、#704 |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
@@ -55,6 +56,7 @@
 ## 風險
 
 - ADM-R45 的委派者查詢不得沿用 Admin 完整回應：不回`project_roles`，模組碼與診斷都按被委派模組過濾；新增測試需斷言欄位缺席與其他模組資訊不洩漏。
+- 有效權限診斷省略 `project_id` 時只提供專案外動作；專案內診斷必須綁定目標成員所在的指定專案。Admin 的參與專案摘要使用單次查詢，含無角色成員；委派者帳號詳情端點僅回標題所需欄位並拒絕 Admin 目標。
 
 - 模組權限與委派模型依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)；T4、T15 必須等待 `domain-model` 任務 L／N／O 與 `authentication` 任務 P 把資料、Service 介面與存取層級合併。發現衝突先同步文件，不以本計畫推論覆蓋。
 - PR-18 確認需在寫入前取得最新對象與後果；測試收回模組權限、收回委派、刪除權限組合的確認與取消，以及被委派者不能越過自己被委派的模組。
@@ -92,4 +94,5 @@
 
 | ADM-AC46 | API 測試覆蓋 Admin 完整回應、Admin 隱含權限、外部協作者、組合來源、撤權後即時一致、停用目標、403／404、委派模組切片與無角色欄位洩漏；SQLite 定向驗證，專用 PostgreSQL 驗證同一路由契約 |
 | ADM-AC47 | SQLite 與 PostgreSQL API 測試：委派者查專案內與專案外 Admin 均回與無權限相同的 403 body，且不含目標欄位；委派者查自己回 200；Admin 查 Admin 維持成功 |
+| ADM-AC49 | `UsersPage`、`PeoplePage`、`ModulePermissionsPage`、`RolesPage`、`AppHeader`、Dashboard 與專案首頁的前端測試：開通前不寫入、成功文案、精確搜尋、個人選單 aria／鍵盤、清單提醒與卡片、精靈焦點／stepper／欄位、停用確認、角色卡片、有效權限診斷、參與專案角色與空狀態、唯讀入口和任務標題；API 測試驗證 Admin 專用批次端點、無角色結果、委派者最小詳情及 Admin 目標 403、可省略專案 ID 的診斷及專案內查詢必要範圍；依 G7 work order 完成八身分 1280px／360px 淺／深真瀏覽器走查與點擊數比較 |
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。
