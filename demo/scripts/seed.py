@@ -158,19 +158,25 @@ def create_accounts(
 
 
 def create_templates(admin: Api, templates: list[dict]) -> dict[str, str]:
-    """建立範本庫資料，供各示範專案套用。"""
+    """依系統建立範本，保留一組供專案任務種子使用。"""
     category = admin.call("POST", "/template-categories", {
         "name": "建築工程",
     })
-    system = admin.call(
-        "POST",
-        f"/template-categories/{category['id']}/systems",
-        {"name": "給排水"},
-    )
+    systems = {}
+    sequences = {}
     template_ids = {}
-    for sequence, template in enumerate(templates, start=1):
+    for template in templates:
+        system_name = template.get("system", "給排水")
+        if system_name not in systems:
+            systems[system_name] = admin.call(
+                "POST",
+                f"/template-categories/{category['id']}/systems",
+                {"name": system_name},
+            )
+        sequence = sequences.get(system_name, 0) + 1
+        sequences[system_name] = sequence
         created = admin.call("POST", "/templates", {
-            "system_id": system["id"],
+            "system_id": systems[system_name]["id"],
             "sequence": sequence,
             "title": template["title"],
             "instruction": template["instruction"],
@@ -179,7 +185,7 @@ def create_templates(admin: Api, templates: list[dict]) -> dict[str, str]:
             ),
         })
         template_ids[template["title"]] = created["id"]
-    template_ids["system_id"] = system["id"]
+    template_ids["system_id"] = systems["給排水"]["id"]
     return template_ids
 
 

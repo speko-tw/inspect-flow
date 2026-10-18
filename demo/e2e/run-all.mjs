@@ -6,6 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const tests = [
   'walkthrough.mjs',
   'field-acceptance.mjs',
+  'template-acceptance.mjs',
 ]
 
 for (const test of tests) {

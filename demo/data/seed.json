@@ -54,7 +54,8 @@
       "external": true,
       "permissions": [
         "project.use",
-        "inspection.use"
+        "inspection.use",
+        "template.use"
       ],
       "delegated_modules": []
     },
@@ -266,6 +267,47 @@
           "title": "閥件標示與開關方向",
           "instruction": "檢視標示牌與閥件開關方向。",
           "text_standard": "標示清楚、開關方向與標示一致",
+          "photos": 1
+        }
+      ]
+    },
+    {
+      "system": "電氣設備",
+      "title": "配電盤外觀檢查",
+      "instruction": "確認配電盤外觀與銘牌完整。",
+      "points": [
+        {
+          "title": "盤體與銘牌",
+          "instruction": "檢視盤體及銘牌內容。",
+          "fields": [
+            { "name": "配電盤編號", "type": "text" }
+          ],
+          "text_standard": "盤體完整，銘牌清晰可辨",
+          "photos": 1
+        }
+      ]
+    },
+    {
+      "system": "電氣設備",
+      "title": "接地電阻量測",
+      "instruction": "確認設備接地電阻符合設計要求。",
+      "points": [
+        {
+          "title": "接地電阻",
+          "instruction": "使用校驗有效的接地電阻計量測。",
+          "fields": [
+            {
+              "name": "接地電阻值",
+              "type": "number",
+              "unit": "Ω",
+              "standard": {
+                "condition": "range",
+                "range_form": "interval",
+                "lower_bound": "0",
+                "upper_bound": "10"
+              }
+            }
+          ],
           "photos": 1
         }
       ]
