@@ -70,7 +70,8 @@ describe('Dashboard 任務唯讀頁', () => {
     expect(screen.getAllByText('進行中').length).toBeGreaterThan(0)
     expect(screen.getByText('A 棟・二樓機房')).toBeInTheDocument()
     expect(screen.getAllByText('陳建宏').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('唯讀').length).toBeGreaterThan(0)
+    expect(screen.getByText('全部進度・唯讀')).toBeInTheDocument()
+    expect(screen.getAllByText('唯讀')).toHaveLength(1)
     expect(screen.getAllByText(/照片與查核結果/)).toHaveLength(2)
     expect(api.listDashboardTasks).toHaveBeenCalledWith('project-1', {
       limit: 50,

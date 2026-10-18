@@ -32,6 +32,10 @@
   line-height: 1.25;
 }
 
+.dashboard-task-scope {
+  white-space: nowrap;
+}
+
 .dashboard-task-heading p:last-child {
   margin: var(--space-2) 0 0;
   color: var(--color-text-secondary);
@@ -165,8 +169,12 @@
 
 .dashboard-task-facts {
   display: grid;
-  gap: var(--space-3);
+  gap: 0;
   padding: var(--space-4) 0;
+}
+
+.dashboard-task-facts > dl {
+  margin: 0;
 }
 
 .dashboard-task-detail-footer {
@@ -188,6 +196,8 @@
 
   .dashboard-task-heading {
     align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
   }
 
   .dashboard-task-panel-heading {

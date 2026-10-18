@@ -205,7 +205,7 @@ export default function DashboardTaskPage() {
           <h1>{projectName}</h1>
           <p>以下是此專案目前可查看的任務進度。</p>
         </div>
-        <Tag>唯讀</Tag>
+        <Tag className="dashboard-task-scope">全部進度・唯讀</Tag>
       </header>
       <p className="dashboard-task-notice">
         {'顯示任務、狀態、地點與建議指派。 ' +
