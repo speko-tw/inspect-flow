@@ -3,7 +3,7 @@
 from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from alembic.config import Config
@@ -145,11 +145,6 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
             external_id = external.id
             admin_id = admin.id
             admin_without_role_id = admin_without_role.id
-            expected_legacy_rows = {
-                (str(internal.id), "template_admin"),
-                (str(external.id), "template_admin"),
-                (str(admin.id), "template_admin"),
-            }
     finally:
         old_engine.dispose()
 
@@ -235,69 +230,105 @@ def test_template_admin_conversion_preserves_internal_and_external_read(
     finally:
         engine.dispose()
 
-    command.downgrade(_cfg(), _CONVERSION_PARENT)
-    downgraded_engine = create_engine_from_settings(db_url)
+
+def _assert_downgrade_rejected_without_changes(
+    db_url: str,
+    user_id,
+    expected_permission: tuple[str, str],
+) -> None:
+    engine = create_engine_from_settings(db_url)
     try:
-        with downgraded_engine.connect() as connection:
-            restored_rows = {
-                (str(UUID(str(user_id))), role_code)
-                for user_id, role_code in connection.execute(
-                    text(
-                        "SELECT user_id, role_code "
-                        "FROM system_role_assignments"
+        with Session(engine) as session:
+            before = session.execute(
+                select(
+                    UserModulePermission.permission_code,
+                    UserModulePermission.source,
+                )
+                .where(UserModulePermission.user_id == user_id)
+                .where(
+                    UserModulePermission.permission_code.in_(
+                        {"template.manage", "template.use"}
                     )
                 )
-            }
-        assert restored_rows == {
-            row
-            for row in expected_legacy_rows
-            if row[0] in {str(internal_id), str(admin_id)}
-        }
+                .order_by(UserModulePermission.permission_code)
+            ).all()
     finally:
-        downgraded_engine.dispose()
+        engine.dispose()
 
-
-def test_downgrade_rejects_all_ambiguous_manual_template_managers(db_url):
-    command.upgrade(_cfg(), _PARENT_REVISION)
-    old_engine = create_engine_from_settings(db_url)
-    try:
-        with Session(old_engine) as session:
-            managers = [
-                create_root_user_with_company(session, "M579M"),
-                create_root_user_with_company(session, "M579A"),
-            ]
-            managers[1].is_admin = True
-            for manager in managers:
-                session.add(
-                    UserModulePermission(
-                        user_id=manager.id,
-                        permission_code="template.manage",
-                        source="manual",
-                    )
-                )
-            session.commit()
-            manager_ids = [str(manager.id) for manager in managers]
-    finally:
-        old_engine.dispose()
-
-    command.upgrade(_cfg(), "head")
     with pytest.raises(RuntimeError) as error:
         command.downgrade(_cfg(), _CONVERSION_PARENT)
-    for manager_id in manager_ids:
-        assert manager_id in str(error.value)
-    assert "2 人" in str(error.value)
-    assert "PR-13" in str(error.value)
+    message = str(error.value)
+    assert str(user_id) in message
+    assert "1 人" in message
+    assert "不支援含範本權限資料的降版" in message
+    assert "升級前的資料庫備份還原（PR-13）" in message
+
     engine = create_engine_from_settings(db_url)
     try:
         assert (
             "system_role_assignments" not in inspect(engine).get_table_names()
         )
+        with Session(engine) as session:
+            after = session.execute(
+                select(
+                    UserModulePermission.permission_code,
+                    UserModulePermission.source,
+                )
+                .where(UserModulePermission.user_id == user_id)
+                .where(
+                    UserModulePermission.permission_code.in_(
+                        {"template.manage", "template.use"}
+                    )
+                )
+                .order_by(UserModulePermission.permission_code)
+            ).all()
     finally:
         engine.dispose()
+    assert after == before
+    assert expected_permission in after
     assert _current_revision(db_url) == "b72e4c19f6a3"
 
 
-def test_downgrade_rejects_external_reader_without_legacy_read_path(db_url):
+def test_empty_template_permissions_allow_empty_legacy_table(db_url):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    command.upgrade(_cfg(), "head")
+    command.downgrade(_cfg(), _CONVERSION_PARENT)
+
+    engine = create_engine_from_settings(db_url)
+    try:
+        inspector = inspect(engine)
+        assert "system_role_assignments" in inspector.get_table_names()
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT COUNT(*) FROM system_role_assignments")
+                ).scalar_one()
+                == 0
+            )
+    finally:
+        engine.dispose()
+    assert _current_revision(db_url) == _CONVERSION_PARENT
+
+
+def test_downgrade_rejects_internal_backfill_without_changes(db_url):
+    command.upgrade(_cfg(), _PARENT_REVISION)
+    old_engine = create_engine_from_settings(db_url)
+    try:
+        with Session(old_engine) as session:
+            manager = create_root_user_with_company(session, "M579M")
+            _insert_legacy_assignment(session, manager)
+            session.commit()
+            manager_id = manager.id
+    finally:
+        old_engine.dispose()
+
+    command.upgrade(_cfg(), "head")
+    _assert_downgrade_rejected_without_changes(
+        db_url, manager_id, ("template.manage", "backfill")
+    )
+
+
+def test_downgrade_rejects_external_manual_use_without_changes(db_url):
     command.upgrade(_cfg(), _PARENT_REVISION)
     old_engine = create_engine_from_settings(db_url)
     try:
@@ -305,22 +336,19 @@ def test_downgrade_rejects_external_reader_without_legacy_read_path(db_url):
             external = create_root_user_with_company(session, "M579E")
             external.is_external_collaborator = True
             _insert_legacy_assignment(session, external)
+            session.add(
+                UserModulePermission(
+                    user_id=external.id,
+                    permission_code="template.use",
+                    source="manual",
+                )
+            )
             session.commit()
-            external_id = str(external.id)
+            external_id = external.id
     finally:
         old_engine.dispose()
 
     command.upgrade(_cfg(), "head")
-    with pytest.raises(RuntimeError) as error:
-        command.downgrade(_cfg(), _CONVERSION_PARENT)
-    assert external_id in str(error.value)
-    assert "外部唯讀權限會失效" in str(error.value)
-    assert "PR-13" in str(error.value)
-    engine = create_engine_from_settings(db_url)
-    try:
-        assert (
-            "system_role_assignments" not in inspect(engine).get_table_names()
-        )
-    finally:
-        engine.dispose()
-    assert _current_revision(db_url) == "b72e4c19f6a3"
+    _assert_downgrade_rejected_without_changes(
+        db_url, external_id, ("template.use", "manual")
+    )

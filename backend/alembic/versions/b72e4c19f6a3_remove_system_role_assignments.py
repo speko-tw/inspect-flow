@@ -110,103 +110,35 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """僅在權限可忠實還原時重建舊範本管理者指派。
+    """僅當沒有範本權限資料時重建空的舊指派表。
 
-    #575 回填非 Admin 舊管理者；此處為 Admin 舊角色加標記。
-    外部使用者只有在仍有舊制專案讀取權限時才可降版；否則拒絕，
-    因舊制範本讀取不認得 template.use。其他來源可能是手動授權，
-    無法判斷是否曾有舊角色，也拒絕猜測。外部指派依 #612 不還原。
-    拒絕時先提供受影響 ID 與 PR-13 備份還原或調整授權的指引。
+    依 database-foundation 規格 §165，migration 不保證能降版；PR-13
+    以資料庫備份作為主要回滾方式。升級會移除舊指派列，無法完整
+    保留 ID 與稽核 metadata，也無法從兩種模組權限推回原角色與來源。
+    因此只要還有任一範本權限列，就拒絕降版。
     """
     connection = op.get_bind()
-    users = sa.table(
-        "users",
-        sa.column("id", sa.Uuid()),
-        sa.column("is_admin", sa.Boolean()),
-        sa.column("is_external_collaborator", sa.Boolean()),
-    )
     permissions = sa.table(
         "user_module_permissions",
         sa.column("user_id", sa.Uuid()),
         sa.column("permission_code", sa.String(64)),
-        sa.column("source", sa.String(16)),
     )
-    project_members = sa.table(
-        "project_members",
-        sa.column("id", sa.Uuid()),
-        sa.column("user_id", sa.Uuid()),
-    )
-    project_member_roles = sa.table(
-        "project_member_roles",
-        sa.column("project_member_id", sa.Uuid()),
-        sa.column("role_id", sa.Uuid()),
-    )
-    roles = sa.table("roles", sa.column("id", sa.Uuid()))
-    role_permissions = sa.table(
-        "role_permissions",
-        sa.column("role_id", sa.Uuid()),
-        sa.column("code", sa.String(64)),
-    )
-    external_readers = (
-        sa.select(users.c.id)
-        .join(permissions, permissions.c.user_id == users.c.id)
-        .where(users.c.is_external_collaborator.is_(True))
-        .where(permissions.c.permission_code == "template.use")
-        .where(permissions.c.source == "backfill")
-        .where(
-            ~sa.exists(
-                sa.select(1)
-                .select_from(
-                    project_members.join(
-                        project_member_roles,
-                        project_member_roles.c.project_member_id
-                        == project_members.c.id,
-                    )
-                    .join(
-                        roles,
-                        roles.c.id == project_member_roles.c.role_id,
-                    )
-                    .join(
-                        role_permissions,
-                        role_permissions.c.role_id == roles.c.id,
-                    )
-                )
-                .where(project_members.c.user_id == users.c.id)
-                .where(
-                    role_permissions.c.code == "project_inspection_item.edit"
-                )
-            )
-        )
-        .distinct()
-    )
-    external_ids = list(connection.execute(external_readers).scalars().all())
-    ambiguous_ids = list(
+    affected_ids = list(
         connection.execute(
             sa.select(permissions.c.user_id)
-            .join(users, users.c.id == permissions.c.user_id)
-            .where(permissions.c.permission_code == "template.manage")
-            .where(permissions.c.source != "backfill")
-            .where(users.c.is_external_collaborator.is_(False))
+            .where(
+                permissions.c.permission_code.in_(
+                    {"template.manage", "template.use"}
+                )
+            )
             .distinct()
+            .order_by(permissions.c.user_id)
         )
         .scalars()
         .all()
     )
-    if external_ids or ambiguous_ids:
-        raise RuntimeError(
-            _downgrade_block_message(external_ids, ambiguous_ids)
-        )
-
-    legacy_assignments = sa.table(
-        "system_role_assignments",
-        sa.column("id", sa.Uuid()),
-        sa.column("created_at", sa.DateTime(timezone=True)),
-        sa.column("updated_at", sa.DateTime(timezone=True)),
-        sa.column("created_by", sa.Uuid()),
-        sa.column("updated_by", sa.Uuid()),
-        sa.column("user_id", sa.Uuid()),
-        sa.column("role_code", sa.String(64)),
-    )
+    if affected_ids:
+        raise RuntimeError(_downgrade_block_message(affected_ids))
 
     op.create_table(
         "system_role_assignments",
@@ -235,49 +167,16 @@ def downgrade() -> None:
             name="system_role_code_is_fixed",
         ),
     )
-    internal_manager_ids = (
-        connection.execute(
-            sa.select(permissions.c.user_id)
-            .join(users, users.c.id == permissions.c.user_id)
-            .where(permissions.c.permission_code == "template.manage")
-            .where(permissions.c.source == "backfill")
-            .where(users.c.is_external_collaborator.is_(False))
-            .distinct()
-        )
-        .scalars()
-        .all()
-    )
-    now = datetime.now(UTC)
-    for user_id in internal_manager_ids:
-        connection.execute(
-            legacy_assignments.insert().values(
-                id=uuid4(),
-                created_at=now,
-                updated_at=now,
-                created_by=user_id,
-                updated_by=user_id,
-                user_id=user_id,
-                role_code="template_admin",
-            )
-        )
+    # 不重建指派列，避免製造無法還原的 ID 與稽核 metadata。
 
 
 def _downgrade_block_message(
-    external_ids: list[object], ambiguous_ids: list[object]
+    affected_ids: list[object],
 ) -> str:
-    """提供無法安全降版的資料分類、帳號 ID 與處置方式。"""
-    details: list[str] = []
-    for label, user_ids in (
-        ("外部唯讀權限會失效", external_ids),
-        ("內部非 backfill 管理權限", ambiguous_ids),
-    ):
-        if not user_ids:
-            continue
-        shown = ", ".join(str(user_id) for user_id in user_ids[:20])
-        details.append(f"{label}：{shown}；共 {len(user_ids)} 人")
+    """提供不支援降版的原因、帳號清單與備份處置方式。"""
+    shown = ", ".join(str(user_id) for user_id in affected_ids[:20])
     return (
-        "無法安全降版；"
-        + "；".join(details)
-        + "。請以升級前的資料庫備份還原（PR-13），或先移除／調整"
-        "上述授權後再降版。"
+        "此 migration 不支援含範本權限資料的降版；受影響使用者："
+        f"{shown}；共 {len(affected_ids)} 人。"
+        "請以升級前的資料庫備份還原（PR-13）。"
     )
