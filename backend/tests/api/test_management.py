@@ -103,6 +103,53 @@ def test_deactivate_commits_before_response(admin_client, db_session):
     assert user.is_active is False
 
 
+def test_reactivation_preview_and_choice_api(admin_client, db_session):
+    client, _admin = admin_client
+    user = create_root_user_with_company(db_session, "R578RESTORE")
+    user.is_active = False
+    db_session.commit()
+
+    preview = client.get(f"/api/v1/users/{user.id}/reactivation-preview")
+    assert preview.status_code == 200
+    assert preview.json()["permission_codes"] == []
+    assert preview.json()["project_memberships"] == []
+    assert user.is_active is False
+
+    direct_enable = client.put(
+        f"/api/v1/users/{user.id}/active",
+        json={"is_active": True},
+    )
+    assert direct_enable.status_code == 422
+    assert (
+        direct_enable.json()["error"]["code"] == "user.reactivation_required"
+    )
+
+    restored = client.post(
+        f"/api/v1/users/{user.id}:reactivate",
+        json={
+            "restore": {
+                "permission_codes": [],
+                "delegated_modules": [],
+                "project_ids": [],
+                "task_ids": [],
+            }
+        },
+    )
+    assert restored.status_code == 200
+    db_session.refresh(user)
+    assert user.is_active is True
+
+
+def test_external_and_unmanaged_admin_lists(admin_client):
+    client, _admin = admin_client
+    external = client.get("/api/v1/admin/users/external-without-project")
+    unmanaged = client.get("/api/v1/admin/projects/unmanaged")
+    assert external.status_code == 200
+    assert external.json()["next_cursor"] is None
+    assert unmanaged.status_code == 200
+    assert unmanaged.json()["next_cursor"] is None
+
+
 def test_admin_status_commits_before_response_start(admin_client, db_session):
     """管理員身分變更須在 ASGI 開始回應前提交。"""
     original_client, _admin = admin_client

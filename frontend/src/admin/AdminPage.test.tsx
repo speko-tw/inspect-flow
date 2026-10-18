@@ -378,6 +378,30 @@ function managementFetch({
         }
         return Response.json(row)
       }
+      if (url.endsWith('/users/user-1/deactivation-check')) {
+        return Response.json({ user_id: 'user-1', last_manager_projects: [] })
+      }
+      if (url.endsWith('/users/user-1/reactivation-preview')) {
+        return Response.json({
+          user_id: 'user-1',
+          username: 'anna.deng',
+          is_external_collaborator: false,
+          account_expires_on: null,
+          account_expired: false,
+          permission_codes: [],
+          delegated_modules: [],
+          project_memberships: [],
+          tasks: [],
+        })
+      }
+      if (
+        url.endsWith('/users/user-1:reactivate') &&
+        init?.method === 'POST'
+      ) {
+        const row = rows.find((user) => user.id === 'user-1')
+        if (row) row.is_active = true
+        return Response.json(row)
+      }
       if (url.endsWith('/users/user-1') && init?.method === 'PATCH') {
         const row = rows.find((user) => user.id === 'user-1')
         if (row) {
@@ -1294,16 +1318,40 @@ describe('admin user and company pages', () => {
         { name: '停用' },
       ),
     )
+    const disableConfirmation = screen.getByRole('region', {
+      name: '操作確認',
+    })
+    await waitFor(() =>
+      expect(
+        within(disableConfirmation).getByRole('button', { name: '確認' }),
+      ).toBeEnabled(),
+    )
     fireEvent.click(
-      within(screen.getByRole('region', { name: '操作確認' })).getByRole(
-        'button',
-        { name: '確認' },
-      ),
+      within(disableConfirmation).getByRole('button', { name: '確認' }),
     )
     await waitFor(() => {
-      expect(screen.getByRole('row', { name: /anna\.new/ })).toHaveTextContent(
-        '停用',
-      )
+      expect(
+        within(screen.getByRole('row', { name: /anna\.new/ })).getAllByRole(
+          'cell',
+        )[3],
+      ).toHaveTextContent('停用')
+    })
+
+    userRow = screen.getByRole('row', { name: /anna\.new/ })
+    fireEvent.click(within(userRow).getByRole('button', { name: '啟用' }))
+    const activation = screen.getByRole('region', { name: '操作確認' })
+    await waitFor(() =>
+      expect(
+        within(activation).getByRole('button', { name: '確認' }),
+      ).toBeEnabled(),
+    )
+    fireEvent.click(within(activation).getByRole('button', { name: '確認' }))
+    await waitFor(() => {
+      expect(
+        within(screen.getByRole('row', { name: /anna\.new/ })).getAllByRole(
+          'cell',
+        )[3],
+      ).toHaveTextContent('啟用')
     })
 
     expect(
@@ -1320,12 +1368,25 @@ describe('admin user and company pages', () => {
       ),
     ).toBe(true)
     expect(
-      fetchMock.mock.calls.some(
+      fetchMock.mock.calls.filter(
         ([url, init]) =>
           String(url).endsWith('/users/user-1/active') &&
           init?.method === 'PUT',
       ),
-    ).toBe(true)
+    ).toHaveLength(1)
+    const restoreRequest = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith('/users/user-1:reactivate') &&
+        init?.method === 'POST',
+    )
+    expect(JSON.parse(String(restoreRequest?.[1]?.body))).toEqual({
+      restore: {
+        permission_codes: [],
+        delegated_modules: [],
+        project_ids: [],
+        task_ids: [],
+      },
+    })
   })
 
   it('enables and clears fields for linked companies', async () => {
