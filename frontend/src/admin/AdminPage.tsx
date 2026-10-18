@@ -279,15 +279,13 @@ function AdminPageContent() {
     if (temporaryPassword) resultHeadingRef.current?.focus()
   }, [temporaryPassword])
 
-  useEffect(() => {
-    if (
-      temporaryPassword &&
-      (location.pathname !== '/admin/people' ||
-        location.key !== temporaryPassword.locationKey)
-    ) {
-      setTemporaryPassword(null)
-    }
-  }, [location.key, location.pathname, temporaryPassword])
+  if (
+    temporaryPassword &&
+    (location.pathname !== '/admin/people' ||
+      location.key !== temporaryPassword.locationKey)
+  ) {
+    setTemporaryPassword(null)
+  }
 
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice

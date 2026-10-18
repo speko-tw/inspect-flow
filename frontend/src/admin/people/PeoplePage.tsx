@@ -88,17 +88,20 @@ export function PeoplePage({
           onTemporaryPassword={onTemporaryPassword}
         />
       ) : (
-        <DelegatedPeopleList
-          onSelect={(id) =>
-            navigate({
-              pathname: `/admin/people/${encodeURIComponent(id)}`,
-              search: query ? `?q=${encodeURIComponent(query)}` : '',
-            })
-          }
-          query={query}
-          updateQuery={updateQuery}
-          visible={!personId}
-        />
+        !personId && (
+          <DelegatedPeopleList
+            key={query}
+            onSelect={(id) =>
+              navigate({
+                pathname: `/admin/people/${encodeURIComponent(id)}`,
+                search: query ? `?q=${encodeURIComponent(query)}` : '',
+              })
+            }
+            query={query}
+            updateQuery={updateQuery}
+            visible
+          />
+        )
       )}
       {(personId || (user.is_admin && wizardRequest > 0)) && (
         <ModulePermissionsPage
@@ -129,18 +132,23 @@ function DelegatedPeopleList({
   visible: boolean
 }) {
   const [input, setInput] = useState(query)
-  const [items, setItems] = useState<DelegatePerson[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => setInput(query), [query])
+  const requestKey = `${visible}:${query}`
+  const [result, setResult] = useState<{
+    key: string
+    items: DelegatePerson[]
+    cursor: string | null
+    error: string
+  }>({ key: '', items: [], cursor: null, error: '' })
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loading = (visible && result.key !== requestKey) || loadingMore
+  const items = result.key === requestKey ? result.items : []
+  const cursor = result.key === requestKey ? result.cursor : null
+  const error = result.key === requestKey ? result.error : ''
 
   useEffect(() => {
     if (!visible) return
     let active = true
-    setLoading(true)
-    setError('')
+    const key = `${visible}:${query}`
     const params = new URLSearchParams({ limit: '50' })
     if (query.trim()) params.set('q', query.trim())
     void request<DelegatePersonPage>(
@@ -148,11 +156,23 @@ function DelegatedPeopleList({
     )
       .then((page) => {
         if (!active) return
-        setItems(page.items)
-        setCursor(page.next_cursor)
+        setResult({
+          key,
+          items: page.items,
+          cursor: page.next_cursor,
+          error: '',
+        })
       })
-      .catch(() => active && setError('目前無法載入帳號清單，請重試。'))
-      .finally(() => active && setLoading(false))
+      .catch(
+        () =>
+          active &&
+          setResult({
+            key,
+            items: [],
+            cursor: null,
+            error: '目前無法載入帳號清單，請重試。',
+          }),
+      )
     return () => {
       active = false
     }
@@ -160,20 +180,26 @@ function DelegatedPeopleList({
 
   async function loadMore() {
     if (!cursor || loading) return
-    setLoading(true)
-    setError('')
+    setLoadingMore(true)
+    setResult((current) => ({ ...current, error: '' }))
     try {
       const params = new URLSearchParams({ limit: '50', cursor })
       if (query.trim()) params.set('q', query.trim())
       const page = await request<DelegatePersonPage>(
         `/module-delegate/users?${params.toString()}`,
       )
-      setItems((current) => [...current, ...page.items])
-      setCursor(page.next_cursor)
+      setResult((current) => ({
+        ...current,
+        items: [...current.items, ...page.items],
+        cursor: page.next_cursor,
+      }))
     } catch {
-      setError('目前無法載入更多帳號，請重試。')
+      setResult((current) => ({
+        ...current,
+        error: '目前無法載入更多帳號，請重試。',
+      }))
     } finally {
-      setLoading(false)
+      setLoadingMore(false)
     }
   }
 
@@ -221,20 +247,23 @@ function DelegatedPeopleList({
 }
 
 function ParticipatingProjects({ userId }: { userId: string }) {
-  const [projects, setProjects] = useState<
-    Array<{ id: string; project_code: string; name: string }>
-  >([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [failedProjectCount, setFailedProjectCount] = useState(0)
   const [reloadRequest, setReloadRequest] = useState(0)
+  const requestKey = `${userId}:${reloadRequest}`
+  const [result, setResult] = useState<{
+    key: string
+    projects: Array<{ id: string; project_code: string; name: string }>
+    error: string
+    failedProjectCount: number
+  }>({ key: '', projects: [], error: '', failedProjectCount: 0 })
+  const loading = result.key !== requestKey
+  const projects = result.key === requestKey ? result.projects : []
+  const error = result.key === requestKey ? result.error : ''
+  const failedProjectCount =
+    result.key === requestKey ? result.failedProjectCount : 0
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    setError('')
-    setFailedProjectCount(0)
-    setProjects([])
+    const key = `${userId}:${reloadRequest}`
     void listAllPages<{ id: string; project_code: string; name: string }>(
       '/projects',
     )
@@ -250,8 +279,9 @@ function ParticipatingProjects({ userId }: { userId: string }) {
           }),
         )
         if (active) {
-          setProjects(
-            memberships
+          setResult({
+            key,
+            projects: memberships
               .filter(
                 (
                   result,
@@ -261,20 +291,25 @@ function ParticipatingProjects({ userId }: { userId: string }) {
                 }> => result.status === 'fulfilled' && result.value.isMember,
               )
               .map(({ value }) => value.project),
-          )
-          setFailedProjectCount(
-            memberships.filter((result) => result.status === 'rejected')
-              .length,
-          )
-          if (memberships.some((result) => result.status === 'rejected')) {
-            setError('部分專案的成員資料無法讀取，摘要不完整。')
-          }
+            failedProjectCount: memberships.filter(
+              (result) => result.status === 'rejected',
+            ).length,
+            error: memberships.some((result) => result.status === 'rejected')
+              ? '部分專案的成員資料無法讀取，摘要不完整。'
+              : '',
+          })
         }
       })
       .catch(() => {
-        if (active) setError('目前無法載入參與專案。')
+        if (active) {
+          setResult({
+            key,
+            projects: [],
+            error: '目前無法載入參與專案。',
+            failedProjectCount: 0,
+          })
+        }
       })
-      .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
