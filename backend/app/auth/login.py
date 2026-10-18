@@ -142,6 +142,12 @@ def authenticate(db: Session, login: str, password: str) -> User | None:
     if not clear_after_successful_check(db, user_id):
         _log_failed(str(user_id), "locked")
         return None
+    from app.services.user_lifecycle import expire_external_account_if_due
+
+    if user.is_active and expire_external_account_if_due(db, user.id):
+        db.commit()
+        _log_failed(str(user.id), "account_disabled")
+        return None
     if not user.is_active:
         _log_failed(str(user.id), "account_disabled")
         return None

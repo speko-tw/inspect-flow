@@ -19,7 +19,7 @@ import {
 } from '../testing/submitGuard'
 import CompaniesPage from './CompaniesPage'
 import UsersPage from './UsersPage'
-import type { Company, User } from './api'
+import type { Company, RestorePreview, User } from './api'
 
 const company: Company = { id: 'company-1', name: '示範公司', is_active: true }
 
@@ -63,7 +63,7 @@ const currentUser: CurrentUser = {
   is_external_collaborator: false,
 }
 
-type Call = { method: string; path: string }
+type Call = { method: string; path: string; body: string }
 
 /**
  * 列表請求立刻回應；`hold` 回傳 Deferred 時，該請求等到它完成才回應
@@ -74,6 +74,7 @@ function stubBackend(
     hold?: (call: Call) => Deferred<void> | undefined
     fail?: (call: Call) => boolean
     users?: User[]
+    preview?: Partial<RestorePreview>
   } = {},
 ) {
   const users = options.users ?? [regularUser]
@@ -81,7 +82,11 @@ function stubBackend(
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), 'http://testserver')
-      const call = { method: init?.method ?? 'GET', path: url.pathname }
+      const call = {
+        method: init?.method ?? 'GET',
+        path: url.pathname,
+        body: String(init?.body ?? ''),
+      }
       calls.push(call)
       const gate = options.hold?.(call)
       if (gate) await gate.promise
@@ -94,6 +99,32 @@ function stubBackend(
         }
         if (call.path === '/api/v1/companies') {
           return Response.json({ items: [company], next_cursor: null })
+        }
+        if (call.path.endsWith('/deactivation-check')) {
+          return Response.json({
+            user_id: 'user-1',
+            last_manager_projects: [],
+          })
+        }
+        if (call.path.endsWith('/reactivation-preview')) {
+          return Response.json({
+            user_id: 'user-1',
+            username: 'anna.deng',
+            is_external_collaborator: false,
+            account_expires_on: null,
+            account_expired: false,
+            permission_codes: [],
+            delegated_modules: [],
+            project_memberships: [],
+            tasks: [],
+            ...options.preview,
+          })
+        }
+        if (call.path.includes('/external-without-project')) {
+          return Response.json({ items: [], next_cursor: null })
+        }
+        if (call.path.includes('/projects/unmanaged')) {
+          return Response.json({ items: [], next_cursor: null })
         }
         if (call.path.endsWith('/active-users')) {
           return Response.json({
@@ -112,6 +143,13 @@ function stubBackend(
           target.is_active = (
             JSON.parse(String(init?.body)) as { is_active: boolean }
           ).is_active
+        }
+        if (
+          target &&
+          call.method === 'POST' &&
+          call.path.endsWith(':reactivate')
+        ) {
+          target.is_active = true
         }
         return Response.json(target ?? regularUser)
       }
@@ -533,12 +571,82 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     expect(box).toHaveTextContent('可以再次登入')
     expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
 
+    await waitFor(() => expect(confirmButton(box)).toBeEnabled())
     fireEvent.click(confirmButton(box))
 
+    const restoreRequestCount = () =>
+      backend.count('POST', '/api/v1/users/user-1:reactivate')
+    await waitFor(() => expect(restoreRequestCount()).toBe(1))
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull(),
     )
-    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(1)
+  })
+
+  it('啟用只送出 Admin 勾選的預覽項目', async () => {
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+      preview: {
+        permission_codes: ['project.use'],
+        delegated_modules: ['inspection'],
+        project_memberships: [
+          {
+            project_id: 'project-1',
+            project_code: 'P-1',
+            project_name: '測試專案',
+          },
+        ],
+        tasks: [
+          {
+            task_id: 'task-1',
+            project_id: 'project-1',
+            name: '未完成任務',
+            status: 'PENDING',
+          },
+        ],
+      },
+    })
+    renderUsers()
+    const box = await openFor(/anna\.deng/, '啟用')
+    const permission = await within(box).findByLabelText('project.use')
+    const membership = within(box).getByLabelText(/P-1／測試專案/)
+    fireEvent.click(permission)
+    fireEvent.click(membership)
+    await waitFor(() => expect(confirmButton(box)).toBeEnabled())
+    fireEvent.click(confirmButton(box))
+
+    await waitFor(() =>
+      expect(
+        backend.calls.find((call) => call.path.endsWith(':reactivate'))?.body,
+      ).toBe(
+        JSON.stringify({
+          restore: {
+            permission_codes: ['project.use'],
+            delegated_modules: [],
+            project_ids: ['project-1'],
+            task_ids: [],
+          },
+        }),
+      ),
+    )
+  })
+
+  it('到期的外部帳號顯示提示並阻止確認', async () => {
+    stubBackend({
+      users: [
+        {
+          ...regularUser,
+          is_active: false,
+          is_external_collaborator: true,
+        },
+      ],
+      preview: { account_expired: true },
+    })
+    renderUsers()
+    const box = await openFor(/anna\.deng/, '啟用')
+    expect(await within(box).findByRole('alert')).toHaveTextContent(
+      '外部帳號已到期',
+    )
+    expect(confirmButton(box)).toBeDisabled()
   })
 
   it('指派管理者是一般主色', async () => {
@@ -565,6 +673,7 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
     const deactivation = await openFor(/amy\.admin/, '停用')
     expect(deactivation).toHaveClass('confirm-box-danger')
 
+    await waitFor(() => expect(confirmButton(deactivation)).toBeEnabled())
     fireEvent.click(confirmButton(deactivation))
     await waitFor(() =>
       expect(backend.count('PUT', '/api/v1/users/user-9/active')).toBe(1),

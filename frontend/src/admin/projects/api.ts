@@ -52,6 +52,13 @@ export type ProjectUpdateInput = Partial<ProjectInput> & {
   company_role_change_reason?: string
 }
 
+/** ADM-R26：成員跨專案使用權限的摘要。 */
+export interface ModuleStatus {
+  project_use: boolean
+  inspection_use: boolean
+}
+
+/** ADM-R26：專案成員清單回傳的顯示與權限狀態。 */
 export interface ProjectMember {
   id: string
   user_id: string
@@ -62,19 +69,25 @@ export interface ProjectMember {
   company_id: string | null
   company_name: string | null
   is_active: boolean
+  module_status: ModuleStatus
 }
 
+/** ADM-R34：可指派角色及外部協作者可用狀態。 */
 export interface Role {
   id: string
   name: string
   permission_codes: string[]
+  is_external_allowed: boolean
 }
 
-/** 可加入此專案的使用者；只含畫面需要的欄位（不含 email、公司）。 */
+/** ADM-R26：可加入專案的人員與畫面顯示所需的公司、模組狀態。 */
 export interface MemberCandidate {
   id: string
   username: string
   name_zh: string | null
+  company_name: string | null
+  is_external_collaborator: boolean
+  module_status: ModuleStatus
 }
 
 export const DUPLICATE_CODE_WARNING = 'project_code.duplicate'

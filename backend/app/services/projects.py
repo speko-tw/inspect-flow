@@ -1,5 +1,6 @@
 """專案的寫入與查詢入口（DOM-R14、DOM-R40-R44、DOM-R76）。"""
 
+import uuid
 from collections.abc import Sequence
 from datetime import date
 
@@ -7,10 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.company_roles import DEFAULT_COMPANY_ROLE, is_company_role_registered
-from app.models import Project
+from app.models import CreatorRoleSetting, Project
 from app.services import UNSET, _Unset
 from app.services.audit import record_audit_event
+from app.services.module_permissions import (
+    InvalidCreatorRoleUserError,
+    query_person_access,
+)
 from app.services.operator import get_current_operator
+from app.services.project_members import add_project_member
 
 # DOM-R76：改本公司角色的原因，去除前後空白後 1～256 字元。
 COMPANY_ROLE_REASON_MAX_LENGTH = 256
@@ -58,13 +64,15 @@ def create_project(
     company_role: str | None = DEFAULT_COMPANY_ROLE,
     planned_start_date: date | None = None,
     planned_completion_date: date | None = None,
+    creator_role_user_id: uuid.UUID | None = None,
 ) -> Project:
-    """建立專案並填入稽核操作者欄位（DOM-R14）。
+    """建立專案並依 DOM-R65 在同一交易指派建立者角色。
 
     ``company_role`` 省略時為承攬施工方（DOM-R76）；帶 ``None`` 或
     未登記的值會被拒絕，未登記時丟 ``InvalidCompanyRoleError``。
     ``project.created`` 與專案同一交易寫入，兩者要嘛一起成功、要嘛
-    一起回滾（DOM-R65、ALG-R28）。
+    一起回滾（DOM-R65、ALG-R28）。非 Admin 自動成員，Admin 可指定
+    一位符合資格的人選；Admin 本人不自動成為成員。
     """
     _require_registered_role(company_role)
     fields: dict[str, object] = {
@@ -75,6 +83,14 @@ def create_project(
         "company_role": company_role,
     }
     operator = get_current_operator(session)
+    actor_access = query_person_access(session, user_id=operator.id)
+    if actor_access is None:
+        raise InvalidProjectFieldError("Project creator does not exist")
+    is_admin = actor_access.is_admin
+    if creator_role_user_id is not None and not is_admin:
+        raise InvalidCreatorRoleUserError(
+            "Only Admin may select a creator-role user"
+        )
     try:
         project = Project(
             **fields,
@@ -99,6 +115,28 @@ def create_project(
         },
         project_id=project.id,
     )
+    member_user_id = creator_role_user_id if is_admin else operator.id
+    if member_user_id is not None:
+        creator_role_id = session.scalar(
+            select(CreatorRoleSetting.role_id).where(
+                CreatorRoleSetting.setting_key == "creator_role"
+            )
+        )
+        if creator_role_id is None:
+            raise InvalidProjectFieldError(
+                "Creator role setting has not been initialized"
+            )
+        try:
+            add_project_member(
+                session,
+                project_id=project.id,
+                user_id=member_user_id,
+                role_ids=[creator_role_id],
+                allow_self_assignment=not is_admin,
+                require_creator_user=is_admin,
+            )
+        except InvalidCreatorRoleUserError:
+            raise
     return project
 
 
