@@ -95,14 +95,14 @@ export function FormField({
 /** 讓使用者先掌握錯誤，再直接跳到對應欄位修正。 */
 export function FormErrorSummary({
   errors,
-  focusRequest,
+  focusRequest = 0,
 }: {
   errors: Array<{
     fieldId: string
     fieldLabel: string
     message: string
   }>
-  focusRequest: number
+  focusRequest?: number
 }) {
   const summaryRef = useRef<HTMLElement>(null)
   const titleId = useId()

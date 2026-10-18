@@ -9,6 +9,8 @@ import {
 import { Button } from '../Button'
 import '../../styles/layout-patterns.css'
 
+export { FormErrorSummary } from '../forms/FormPatterns'
+
 /**
  * 桌機並列顯示清單與詳情，窄螢幕逐層瀏覽並可返回清單。
  */
@@ -270,60 +272,6 @@ export function ConfirmationPanel({
           {confirmLabel}
         </Button>
       </div>
-    </section>
-  )
-}
-
-/**
- * 提供可聚焦欄位的錯誤連結，並保留原因與修正說明。
- */
-export function FormErrorSummary({
-  errors,
-}: {
-  errors: Array<{
-    fieldId: string
-    fieldLabel: string
-    message: string
-  }>
-}) {
-  if (errors.length === 0) return null
-  return <FormErrorSummaryContent errors={errors} />
-}
-
-function FormErrorSummaryContent({
-  errors,
-}: {
-  errors: Array<{
-    fieldId: string
-    fieldLabel: string
-    message: string
-  }>
-}) {
-  const titleId = useId()
-
-  return (
-    <section
-      className="layout-form-error-summary"
-      role="alert"
-      aria-labelledby={titleId}
-    >
-      <h2 id={titleId}>請修正以下問題</h2>
-      <ul>
-        {errors.map((error) => (
-          <li key={error.fieldId}>
-            <a
-              href={`#${error.fieldId}`}
-              onClick={(event) => {
-                event.preventDefault()
-                document.getElementById(error.fieldId)?.focus()
-              }}
-            >
-              <strong>{error.fieldLabel}：</strong>
-              {error.message}
-            </a>
-          </li>
-        ))}
-      </ul>
     </section>
   )
 }
