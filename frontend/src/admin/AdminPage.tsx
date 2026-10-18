@@ -25,10 +25,10 @@ import { isResourceId } from '../resourceId'
 import { canOpenDashboard, hasGlobalDashboardAccess } from './dashboard/api'
 import CompaniesPage from './CompaniesPage'
 import RolesPage from './roles/RolesPage'
+import ModulePermissionsPage from './module-permissions/ModulePermissionsPage'
 import ProjectHomePage from './projectHome/ProjectHomePage'
 import ProjectSectionPage from './projectHome/ProjectSectionPage'
 import { WorkflowSummaryProvider } from './projectHome/WorkflowSummaryProvider'
-import MyProjectsPage from './projects/MyProjectsPage'
 import ProjectsPage from './projects/ProjectsPage'
 import { projectItemApi } from './projectItems/api'
 import { listMyProjects } from './projects/api'
@@ -212,6 +212,7 @@ const NAV_ITEMS = [
   { to: '/admin/users', label: '使用者' },
   { to: '/admin/companies', label: '公司' },
   { to: '/admin/roles', label: '角色' },
+  { to: '/admin/permissions', label: '人員權限' },
   { to: '/admin/projects', label: '專案' },
   DASHBOARD_NAV_ITEM,
   { to: '/admin/audit-logs', label: '稽核紀錄' },
@@ -381,6 +382,7 @@ function AdminPageContent() {
             />
             <Route path="companies" element={<CompaniesPage />} />
             <Route path="roles" element={<RolesPage />} />
+            <Route path="permissions" element={<ModulePermissionsPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route
               path="dashboard"
@@ -434,7 +436,7 @@ function MemberAdminShell({
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
   const restrictedPage =
-    /^\/admin\/(?:users|companies|roles|audit-logs)(?:\/|$)/.test(
+    /^\/admin\/(?:users|companies|roles|permissions|audit-logs)(?:\/|$)/.test(
       location.pathname,
     ) ||
     (!canBrowseTemplates(user) &&
@@ -470,8 +472,10 @@ function MemberAdminShell({
             element={
               // 沒有內業權限的人直接開這個網址：導回自己的落點，不顯示
               // 一份空清單或 403（#489）。
-              user.has_office_access ? (
-                <MyProjectsPage />
+              user.has_office_access ||
+              user.has_project_access ||
+              user.can_create_project ? (
+                <ProjectsPage />
               ) : (
                 <Navigate replace to={indexTarget} />
               )
@@ -532,6 +536,14 @@ function memberNavigationItems(
   access: DashboardAccessState,
 ) {
   const items = memberNavItems(user)
+  if (
+    (user.has_office_access ||
+      user.has_project_access ||
+      user.can_create_project) &&
+    !items.some((item) => item.to === '/admin/projects')
+  ) {
+    items.unshift({ to: '/admin/projects', label: '我的專案' })
+  }
   if (access.kind !== 'allowed') return items
   items.splice(Math.max(0, items.length - 1), 0, DASHBOARD_NAV_ITEM)
   return items

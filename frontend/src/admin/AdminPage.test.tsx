@@ -97,6 +97,8 @@ function renderAdmin(
       | 'can_browse_templates'
       | 'can_manage_template_library'
       | 'is_external_collaborator'
+      | 'has_project_access'
+      | 'can_create_project'
     >
   > = {},
   strictMode = false,
@@ -1810,6 +1812,24 @@ describe('admin user and company pages', () => {
         has_office_access: true,
         has_field_access: false,
         has_template_access: false,
+      })
+
+      expect(labels()).toEqual(['我的專案', '變更密碼'])
+      expect(
+        await screen.findByRole('heading', { name: '我的專案' }),
+      ).toBeInTheDocument()
+    })
+
+    it.each([
+      ['project reader', { has_project_access: true }],
+      ['project creator', { can_create_project: true }],
+    ])('shows the projects entry to a %s', async (_label, access) => {
+      managementFetch()
+      renderAdmin('/admin/projects', false, {
+        has_office_access: false,
+        has_field_access: false,
+        has_template_access: false,
+        ...access,
       })
 
       expect(labels()).toEqual(['我的專案', '變更密碼'])
