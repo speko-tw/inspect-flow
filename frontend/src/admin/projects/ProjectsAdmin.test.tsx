@@ -2068,6 +2068,15 @@ describe('admin project members', () => {
     expect(within(card).getByText('（已停用）')).toBeVisible()
   })
 
+  it('links an Admin from project members to that person detail', async () => {
+    projectFetch({ members: [memberAnna] })
+    renderAt('/admin/projects/project-1/members')
+
+    expect(
+      await screen.findByRole('link', { name: '鄧安娜' }),
+    ).toHaveAttribute('href', '/admin/people/user-1')
+  })
+
   it('explains each role in plain language without showing codes', async () => {
     projectFetch()
     renderAt('/admin/projects/project-1/members')

@@ -15,6 +15,7 @@ import * as navigationGuard from '../../ui/navigation'
 import { blockImeEnter, useSubmitGuard } from '../../ui/submitGuard'
 import { ManagementApiError, managementErrorMessage } from '../api'
 import { RequiredMark } from '../../ui/Form'
+import { ACCOUNT_LABEL } from '../../layout/navigationLabels'
 import MemberRoleFields from './MemberRoleFields'
 import {
   addProjectMember,
@@ -463,7 +464,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
             {isAdmin ? (
               <p className="field-hint">
                 要加入新的人，請先到
-                <Link to="/admin/users">使用者</Link>建立帳號。
+                <Link to="/admin/people">{ACCOUNT_LABEL}</Link>建立帳號。
               </p>
             ) : (
               <p className="field-hint">
@@ -600,7 +601,15 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
             <li className="member-card" key={member.id}>
               <div className="member-card-main">
                 <p className="member-card-name">
-                  {member.name_zh ?? member.username}
+                  {isAdmin ? (
+                    <Link
+                      to={`/admin/people/${encodeURIComponent(member.user_id)}`}
+                    >
+                      {member.name_zh ?? member.username}
+                    </Link>
+                  ) : (
+                    (member.name_zh ?? member.username)
+                  )}
                   {member.is_active ? null : <span>（已停用）</span>}
                 </p>
                 <p className="field-hint">
