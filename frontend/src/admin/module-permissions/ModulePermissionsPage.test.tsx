@@ -23,6 +23,7 @@ interface FixtureOptions {
   missingBundle?: boolean
   missingRole?: boolean
   openWizard?: boolean
+  openWizardRequest?: number
   customOvergrantRole?: boolean
   extraFieldRead?: boolean
   renamedDefaults?: boolean
@@ -273,6 +274,76 @@ function permissionPage(options: FixtureOptions = {}) {
           delegated_modules: [],
         })
       }
+      if (
+        method === 'GET' &&
+        /^\/users\/[^/]+\/effective-access$/.test(path)
+      ) {
+        const projectRoles = roles.filter((role) =>
+          memberRoleIds.includes(role.id),
+        )
+        const roleCodes = projectRoles.flatMap((role) => role.permission_codes)
+        const rules = [
+          {
+            action: 'task_list',
+            module: 'inspection',
+            required_module_codes: ['inspection.use'],
+            required_project_codes: ['inspection_task.read'],
+          },
+          {
+            action: 'create_project',
+            module: 'project',
+            required_module_codes: ['project.create'],
+            required_project_codes: [],
+          },
+          {
+            action: 'manage_template_library',
+            module: 'template',
+            required_module_codes: ['template.manage'],
+            required_project_codes: [],
+          },
+          {
+            action: 'manage_project_members',
+            module: 'project',
+            required_module_codes: ['project.use'],
+            required_project_codes: ['project_member.manage'],
+          },
+        ]
+        return Response.json({
+          user: { id: 'person', is_active: true, is_admin: false },
+          module_permissions: permissionCodes.map((code) => ({
+            code,
+            module: code.startsWith('inspection')
+              ? 'inspection'
+              : code.startsWith('template')
+                ? 'template'
+                : 'project',
+            source: 'manual',
+          })),
+          project_roles: projectRoles.map((role) => ({
+            id: role.id,
+            name: role.name,
+            permission_codes: role.permission_codes,
+          })),
+          diagnostics: rules.map((rule) => {
+            const missingModule = rule.required_module_codes.filter(
+              (code) => !permissionCodes.includes(code),
+            )
+            const missingProject = rule.required_project_codes.filter(
+              (code) => !roleCodes.includes(code),
+            )
+            const missingLayers = [
+              ...(missingModule.length ? ['module'] : []),
+              ...(missingProject.length ? ['project_role'] : []),
+            ]
+            return {
+              ...rule,
+              allowed: missingLayers.length === 0,
+              missing_layers: missingLayers,
+              missing_codes: [...missingModule, ...missingProject],
+            }
+          }),
+        })
+      }
       if (method === 'GET' && path === '/projects/project-1/members') {
         return Response.json([
           ...(memberRoleIds.length || options.memberRoleIds
@@ -391,11 +462,12 @@ function permissionPage(options: FixtureOptions = {}) {
     },
   )
   vi.stubGlobal('fetch', fetchMock)
-  render(
+  const view = render(
     <DataMemoryRouter>
       <>
         <ModulePermissionsPage
           embedded={options.embedded}
+          openWizardRequest={options.openWizardRequest}
           selectedUserId={options.selectedUserId}
           onTemporaryPassword={options.onTemporaryPassword}
         />
@@ -406,7 +478,7 @@ function permissionPage(options: FixtureOptions = {}) {
   if (options.openWizard !== false) {
     fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
   }
-  return { calls, fetchMock }
+  return { calls, fetchMock, rerender: view.rerender }
 }
 
 async function chooseProfile(profile: string) {
@@ -449,6 +521,29 @@ function assignCandidateRole(roleName: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
+  it('resets and opens the wizard for each external add-account request', async () => {
+    const page = (request: number) => (
+      <DataMemoryRouter>
+        <ModulePermissionsPage embedded openWizardRequest={request} />
+      </DataMemoryRouter>
+    )
+    const { rerender } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      openWizardRequest: 0,
+    })
+    expect(screen.queryByRole('heading', { name: '職務起手式' })).toBeNull()
+
+    rerender(page(1))
+    await screen.findByRole('heading', { name: '職務起手式' })
+    fireEvent.change(screen.getByLabelText('帳號名稱'), {
+      target: { value: 'first.draft' },
+    })
+
+    rerender(page(2))
+    expect(await screen.findByLabelText('帳號名稱')).toHaveValue('')
+  })
+
   it('shows the localized account conflict after a rejected create request', async () => {
     permissionPage({ failCreate: true })
     await screen.findByRole('heading', { name: '職務起手式' })
@@ -930,7 +1025,7 @@ describe('ModulePermissionsPage', () => {
     const { calls } = permissionPage({ permissionCodes: ['project.use'] })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    const summaryText = ['能力摘要：', '使用專案模組'].join('')
+    const summaryText = '能力摘要：請選擇帳號所屬專案並檢查有效權限。'
     const capabilitySummary = await screen.findByText(summaryText)
     expect(capabilitySummary).toBeVisible()
     const advancedSummary =
@@ -982,7 +1077,9 @@ describe('ModulePermissionsPage', () => {
     const { calls } = permissionPage()
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    expect(await screen.findByText(/尚無模組使用權/)).toBeVisible()
+    expect(
+      await screen.findByText('能力摘要：請選擇帳號所屬專案並檢查有效權限。'),
+    ).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -1011,6 +1108,9 @@ describe('ModulePermissionsPage', () => {
     ).toHaveAttribute('href', '/admin/projects/project-1/members')
     assignCandidateRole('現場工程師')
     expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
+    expect(
+      calls.filter((call) => call.path.endsWith('/effective-access')),
+    ).toHaveLength(4)
     const memberWrite = calls.find(
       (call) => call.path.endsWith('/members') && call.method === 'POST',
     )
@@ -1029,7 +1129,9 @@ describe('ModulePermissionsPage', () => {
     })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    expect(
+      await screen.findByText('能力摘要：請選擇帳號所屬專案並檢查有效權限。'),
+    ).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -1038,6 +1140,9 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByText(/沒有可以查看或執行任務的角色/),
     ).toBeVisible()
+    expect(
+      screen.getByRole('region', { name: '帳號能力摘要' }),
+    ).toHaveTextContent('能力摘要：使用查核模組')
     const candidateChooser = screen.getByRole('region', {
       name: '可選專案角色',
     })
@@ -1082,7 +1187,9 @@ describe('ModulePermissionsPage', () => {
     })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    expect(
+      await screen.findByText('能力摘要：請選擇帳號所屬專案並檢查有效權限。'),
+    ).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -1091,6 +1198,9 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('button', { name: '補上「現場工程師」角色' }),
     ).toBeVisible()
+    expect(
+      screen.getByRole('region', { name: '帳號能力摘要' }),
+    ).toHaveTextContent('能力摘要：使用查核模組')
     expect(screen.queryByRole('button', { name: '指派所選角色' })).toBeNull()
   })
 
@@ -1170,7 +1280,9 @@ describe('ModulePermissionsPage', () => {
     })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    expect(
+      await screen.findByText('能力摘要：請選擇帳號所屬專案並檢查有效權限。'),
+    ).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -1198,7 +1310,9 @@ describe('ModulePermissionsPage', () => {
     })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    expect(
+      await screen.findByText('能力摘要：請選擇帳號所屬專案並檢查有效權限。'),
+    ).toBeVisible()
     fireEvent.change(screen.getByLabelText('專案'), {
       target: { value: 'project-1' },
     })
@@ -1223,7 +1337,9 @@ describe('ModulePermissionsPage', () => {
     const { calls } = permissionPage({ permissionCodes: ['inspection.use'] })
     await screen.findByRole('heading', { name: '職務起手式' })
     fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
-    expect(await screen.findByText('能力摘要：使用查核模組')).toBeVisible()
+    expect(
+      await screen.findByText('能力摘要：請選擇帳號所屬專案並檢查有效權限。'),
+    ).toBeVisible()
     fireEvent.click(screen.getByText('進階設定：委派、權限組合與逐項授權'))
     const delegation = screen.getByLabelText('可管理 project 模組授權')
     fireEvent.click(delegation)

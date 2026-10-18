@@ -476,6 +476,7 @@ def list_module_delegate_users(
     filters: list[Any] = [
         User.is_active.is_(True),
         User.is_system.is_(False),
+        User.is_admin.is_(False),
     ]
     query = (q or "").strip()
     if query:

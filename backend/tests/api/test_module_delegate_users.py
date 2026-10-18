@@ -43,6 +43,14 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
         is_external_collaborator=False,
     )
     inactive.is_active = False
+    non_system_admin = create_user(
+        db_session,
+        username="admin-target",
+        email="admin-target@demo.example",
+        name_zh="管理員",
+        is_external_collaborator=False,
+    )
+    non_system_admin.is_admin = True
     db_session.add(
         UserModuleDelegation(user_id=delegate.id, module="template")
     )
@@ -59,6 +67,10 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
         "/api/v1/module-delegate/users"
     )
     assert delegated_response.status_code == 200
+    assert all(
+        item["username"] != non_system_admin.username
+        for item in delegated_response.json()["items"]
+    )
     assert delegated_response.json() == {
         "items": [
             {

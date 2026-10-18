@@ -20,6 +20,36 @@ export interface RevokeImpact {
   projects_becoming_unmanaged: Array<{ id: string; name: string }>
 }
 
+export interface EffectiveAccess {
+  user: { id: string; is_active: boolean; is_admin: boolean }
+  module_permissions: Array<{
+    code: string
+    module: string
+    source: string
+  }>
+  project_roles?: Array<{
+    id: string
+    name: string
+    permission_codes: string[]
+  }>
+  diagnostics: Array<{
+    action: string
+    module: string
+    required_module_codes: string[]
+    required_project_codes: string[]
+    allowed: boolean
+    missing_layers: string[]
+    missing_codes: string[]
+  }>
+}
+
+export function getUserEffectiveAccess(userId: string, projectId: string) {
+  const query = new URLSearchParams({ project_id: projectId })
+  return request<EffectiveAccess>(
+    `/users/${userId}/effective-access?${query.toString()}`,
+  )
+}
+
 export function listModulePermissions(): Promise<ModulePermission[]> {
   return request<{ items: ModulePermission[] }>('/module-permissions').then(
     (body) => body.items,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
@@ -44,6 +44,7 @@ import {
   createPermissionBundle,
   deletePermissionBundle,
   getRevokeImpact,
+  getUserEffectiveAccess,
   getUserModulePermissions,
   grantModulePermission,
   listModulePermissions,
@@ -52,6 +53,7 @@ import {
   setModuleDelegation,
   updatePermissionBundle,
   type ModulePermission,
+  type EffectiveAccess,
   type PermissionBundle,
   type RevokeImpact,
 } from './api'
@@ -228,21 +230,31 @@ function ModulePermissionsNavigationGuard({
   return <UnsavedLeaveBox guard={guard} />
 }
 
-export default function ModulePermissionsPage({
-  embedded = false,
-  openWizardRequest = 0,
-  selectedUserId,
-  onTemporaryPassword,
-  externalNavigationGuard = false,
-  onDirtyChange,
-}: {
+type ModulePermissionsPageProps = {
   embedded?: boolean
   openWizardRequest?: number
   selectedUserId?: string
   onTemporaryPassword?: (username: string, password: string) => void
   externalNavigationGuard?: boolean
   onDirtyChange?: (dirty: boolean) => void
-} = {}) {
+}
+
+export default function ModulePermissionsPage(
+  props: ModulePermissionsPageProps = {},
+) {
+  const remountKey =
+    props.selectedUserId ?? `wizard:${props.openWizardRequest ?? 0}`
+  return <ModulePermissionsPageContent key={remountKey} {...props} />
+}
+
+function ModulePermissionsPageContent({
+  embedded = false,
+  openWizardRequest = 0,
+  selectedUserId,
+  onTemporaryPassword,
+  externalNavigationGuard = false,
+  onDirtyChange,
+}: ModulePermissionsPageProps) {
   const { user: currentUser } = useCurrentUser()
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
@@ -250,17 +262,28 @@ export default function ModulePermissionsPage({
   const [bundles, setBundles] = useState<PermissionBundle[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [projects, setProjects] = useState<Project[]>([])
-  const [memberRoles, setMemberRoles] = useState<Role[]>([])
+  const [memberRoles, setMemberRoles] = useState<
+    NonNullable<EffectiveAccess['project_roles']>
+  >([])
+  const [effectiveAccess, setEffectiveAccess] =
+    useState<EffectiveAccess | null>(null)
+  const [effectiveAccessContext, setEffectiveAccessContext] = useState<{
+    userId: string
+    projectId: string
+  } | null>(null)
   const [candidateRoles, setCandidateRoles] = useState<Role[]>([])
   const [selectedCandidateRole, setSelectedCandidateRole] = useState('')
   const [safeCandidateRole, setSafeCandidateRole] = useState('')
-  const [selectedUser, setSelectedUser] = useState('')
+  const [selectedUserState, setSelectedUserState] = useState('')
+  const selectedUser = selectedUserId ?? selectedUserState
   const [userAccess, setUserAccess] = useState<string[]>([])
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [step, setStep] = useState(0)
-  const [wizardOpen, setWizardOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(
+    () => openWizardRequest > 0 && selectedUserId === undefined,
+  )
   const [existingAccount, setExistingAccount] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -295,9 +318,19 @@ export default function ModulePermissionsPage({
   const [creatorRoleId, setCreatorRoleId] = useState('')
   const wizardHasDraft = Boolean(
     wizardOpen &&
-      step !== 4 &&
-      (username || email || name || nameEn || department || location ||
-        employeeNo || companyId || projectId || profile || busy || partial),
+    step !== 4 &&
+    (username ||
+      email ||
+      name ||
+      nameEn ||
+      department ||
+      location ||
+      employeeNo ||
+      companyId ||
+      projectId ||
+      profile ||
+      busy ||
+      partial),
   )
   useEffect(() => {
     onDirtyChange?.(wizardHasDraft)
@@ -346,7 +379,7 @@ export default function ModulePermissionsPage({
     setWizardOpen(true)
   }
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const userPath = currentUser.is_admin ? '/users' : '/module-delegate/users'
     const [userRows, permissionRows, bundleRows] = await Promise.all([
       listAllPages<User>(userPath),
@@ -369,7 +402,7 @@ export default function ModulePermissionsPage({
     setRoles(roleRows)
     setProjects(projectRows)
     setCreatorRoleId(creatorRole.role_id)
-  }
+  }, [currentUser.is_admin])
 
   useEffect(() => {
     let active = true
@@ -384,18 +417,7 @@ export default function ModulePermissionsPage({
     return () => {
       active = false
     }
-  }, [currentUser.is_admin])
-
-  useEffect(() => {
-    if (selectedUserId !== undefined) setSelectedUser(selectedUserId)
-  }, [selectedUserId])
-
-  useEffect(() => {
-    if (!openWizardRequest) return
-    setExistingAccount(false)
-    resetWizard()
-    setWizardOpen(true)
-  }, [openWizardRequest])
+  }, [refresh])
 
   useEffect(() => {
     if (!selectedUser) return
@@ -419,6 +441,21 @@ export default function ModulePermissionsPage({
     }
   }, [selectedUser])
 
+  async function refreshEffectiveAccess() {
+    if (!selectedUser || !diagnosticProject) return
+    const access = await getUserEffectiveAccess(
+      selectedUser,
+      diagnosticProject,
+    )
+    setEffectiveAccess(access)
+    setEffectiveAccessContext({
+      userId: selectedUser,
+      projectId: diagnosticProject,
+    })
+    setMemberRoles(access.project_roles ?? [])
+    return access
+  }
+
   const visibleUsers = useMemo(() => {
     const term = query.trim().toLocaleLowerCase()
     return users.filter((user) =>
@@ -441,6 +478,7 @@ export default function ModulePermissionsPage({
       }
       const access = await getUserModulePermissions(selectedUser)
       setUserAccess(access.permission_codes)
+      await diagnose()
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -458,6 +496,7 @@ export default function ModulePermissionsPage({
       )
       setRevoke(null)
       setNotice('權限已收回。')
+      await diagnose()
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -549,7 +588,7 @@ export default function ModulePermissionsPage({
           ...current.filter((row) => row.id !== created.id),
         ])
       }
-      setSelectedUser(target.id)
+      setSelectedUserState(target.id)
       const nextProvisioning: Provisioning = {
         userId: target.id,
         bundleId: matchingBundle?.id ?? null,
@@ -563,10 +602,7 @@ export default function ModulePermissionsPage({
       if (created) setCreatedUsername(created.username)
       const completed = await finishProvisioning(nextProvisioning, created)
       if (created && completed) {
-        onTemporaryPassword?.(
-          created.username,
-          created.temporary_password,
-        )
+        onTemporaryPassword?.(created.username, created.temporary_password)
       }
     } catch (caught) {
       const errorMessage = managementErrorMessage(caught).replace(
@@ -681,94 +717,82 @@ export default function ModulePermissionsPage({
     setSelectedCandidateRole('')
     setSafeCandidateRole('')
     if (!selectedUser) return
-    const selected = users.find((user) => user.id === selectedUser)
-    const hasPermission = (code: string) =>
-      selected?.is_admin === true || userAccess.includes(code)
-    if (diagnosticAction === 'create-project') {
-      setNotice(
-        hasPermission('project.create') &&
-          selected?.is_external_collaborator !== true
-          ? '可以建立專案。'
-          : '缺少建立專案的模組使用權。',
-      )
-      return
-    }
-    if (diagnosticAction === 'template') {
-      setNotice(
-        hasPermission('template.manage')
-          ? '可以管理範本庫。'
-          : '缺少管理範本庫的模組使用權。',
-      )
-      return
-    }
-    const moduleCode =
-      diagnosticAction === 'members' ? 'project.use' : 'inspection.use'
-    const requiredRole =
-      diagnosticAction === 'members' ? 'project_member.manage' : null
-    if (!hasPermission(moduleCode)) {
-      setNotice(
-        diagnosticAction === 'members'
-          ? '缺少專案管理功能的模組使用權。'
-          : '缺少查核功能的模組使用權。',
-      )
-      return
-    }
     if (!diagnosticProject) {
-      setNotice('請選擇專案，才能確認專案角色權限。')
+      setNotice('請選擇專案，才能檢查有效權限。')
       return
     }
-    if (selected?.is_admin) {
-      setNotice('系統管理者依 Admin 身分可使用此操作。')
-      return
-    }
-    const members = await listProjectMembers(diagnosticProject)
-    const member = members.find((item) => item.user_id === selectedUser)
-    const codes = roles
-      .filter((role) => member?.role_ids.includes(role.id))
-      .flatMap((role) => role.permission_codes)
-    setMemberRoles(roles.filter((role) => member?.role_ids.includes(role.id)))
-    const allowed = requiredRole
-      ? codes.includes(requiredRole)
-      : codes.includes('inspection_task.read') ||
-        codes.includes('inspection_task.inspect')
-    if (allowed) {
-      setNotice('這個人具備此操作所需的有效權限。')
-      return
-    }
-    const candidates = roles.filter((role) => {
-      const canPerform = requiredRole
-        ? role.permission_codes.includes(requiredRole)
-        : role.permission_codes.some((code) =>
-            ['inspection_task.read', 'inspection_task.inspect'].includes(code),
-          )
-      return (
-        canPerform &&
-        (!selected?.is_external_collaborator || role.is_external_allowed)
+    setError('')
+    try {
+      const access = await refreshEffectiveAccess()
+      if (!access) return
+      const actionBySelection: Record<string, string> = {
+        'task-list': 'task_list',
+        'create-project': 'create_project',
+        template: 'manage_template_library',
+        members: 'manage_project_members',
+      }
+      const diagnostic = access.diagnostics.find(
+        (item) => item.action === actionBySelection[diagnosticAction],
       )
-    })
-    setCandidateRoles(candidates)
-    const minimumFieldRoleCodes = PROFILE_ROLE_CODES.field ?? []
-    const minimalCandidates = candidates.filter(
-      (role) =>
-        role.name === '現場工程師' &&
-        role.is_assignable === true &&
-        role.is_external_allowed === false &&
-        samePermissionCodes(role.permission_codes, minimumFieldRoleCodes),
-    )
-    if (
-      diagnosticAction === 'task-list' &&
-      minimalCandidates.length === 1 &&
-      minimalCandidates[0].name === '現場工程師' &&
-      minimalCandidates[0].permission_codes.includes('inspection_task.inspect')
-    ) {
-      setSafeCandidateRole(minimalCandidates[0].id)
-      setSelectedCandidateRole(minimalCandidates[0].id)
+      if (!diagnostic) {
+        setNotice('目前無法檢查這項操作的有效權限。')
+        return
+      }
+      if (diagnostic.allowed) {
+        setCandidateRoles([])
+        setNotice('這個人具備此操作所需的有效權限。')
+        return
+      }
+      const roleMissing = diagnostic.missing_layers.includes('project_role')
+      const candidates = roleMissing
+        ? roles.filter(
+            (role) =>
+              diagnostic.required_project_codes.some((code) =>
+                role.permission_codes.includes(code),
+              ) &&
+              (!users.find((user) => user.id === selectedUser)
+                ?.is_external_collaborator ||
+                role.is_external_allowed),
+          )
+        : []
+      setCandidateRoles(candidates)
+      const selected = users.find((user) => user.id === selectedUser)
+      const minimumFieldRoleCodes = PROFILE_ROLE_CODES.field ?? []
+      const minimalCandidates = candidates.filter(
+        (role) =>
+          role.name === '現場工程師' &&
+          role.is_assignable === true &&
+          role.is_external_allowed === false &&
+          samePermissionCodes(role.permission_codes, minimumFieldRoleCodes),
+      )
+      if (
+        diagnostic.action === 'task_list' &&
+        !selected?.is_external_collaborator &&
+        minimalCandidates.length === 1 &&
+        minimalCandidates[0].permission_codes.includes(
+          'inspection_task.inspect',
+        )
+      ) {
+        setSafeCandidateRole(minimalCandidates[0].id)
+        setSelectedCandidateRole(minimalCandidates[0].id)
+      }
+      const missingModule = diagnostic.missing_layers.includes('module')
+      const actionMessages: Record<string, string> = {
+        create_project: '缺少建立專案的模組使用權。',
+        manage_template_library: '缺少管理範本庫的模組使用權。',
+        manage_project_members: '缺少專案管理功能的模組使用權。',
+        task_list: '缺少查核功能的模組使用權。',
+      }
+      setNotice(
+        missingModule
+          ? actionMessages[diagnostic.action]
+          : diagnostic.action === 'manage_project_members'
+            ? '這個專案裡沒有可以管理成員的角色。'
+            : '這個專案裡沒有可以查看或執行任務的角色。',
+      )
+    } catch (caught) {
+      setError(message(caught))
     }
-    setNotice(
-      requiredRole
-        ? '這個專案裡沒有可以管理成員的角色。'
-        : '這個專案裡沒有可以查看或執行任務的角色。',
-    )
   }
 
   async function repairDiagnosticRole() {
@@ -807,6 +831,12 @@ export default function ModulePermissionsPage({
 
   const canRepairProjectRole =
     candidateRoles.length > 0 && Boolean(diagnosticProject)
+  const hasCurrentEffectiveAccess =
+    effectiveAccessContext?.userId === selectedUser &&
+    effectiveAccessContext.projectId === diagnosticProject
+  const currentEffectiveAccess = hasCurrentEffectiveAccess
+    ? effectiveAccess
+    : null
 
   return (
     <div className="admin-page permission-management">
@@ -837,7 +867,7 @@ export default function ModulePermissionsPage({
                 <Button
                   variant="tertiary"
                   onClick={() => {
-                    setSelectedUser(user.id)
+                    setSelectedUserState(user.id)
                     setWizardOpen(false)
                     setTemporaryPassword('')
                     if (step === 4) resetWizard()
@@ -873,13 +903,20 @@ export default function ModulePermissionsPage({
           <div aria-label="帳號能力摘要" role="region">
             <p role="status">
               能力摘要：
-              {users.find((user) => user.id === selectedUser)?.is_admin
-                ? '系統管理者可使用全部系統功能。'
-                : permissions
-                    .filter((item) => userAccess.includes(item.code))
-                    .map((item) => item.description)
-                    .join('、') || '尚無模組使用權。'}
-              {memberRoles.length > 0 &&
+              {currentEffectiveAccess
+                ? currentEffectiveAccess.user.is_admin
+                  ? '系統管理者可使用全部系統功能。'
+                  : permissions
+                      .filter((item) =>
+                        currentEffectiveAccess.module_permissions.some(
+                          (permission) => permission.code === item.code,
+                        ),
+                      )
+                      .map((item) => item.description)
+                      .join('、') || '尚無模組使用權。'
+                : '請選擇帳號所屬專案並檢查有效權限。'}
+              {hasCurrentEffectiveAccess &&
+                memberRoles.length > 0 &&
                 `；目前專案角色：${memberRoles
                   .map((role) => role.name)
                   .join('、')}`}
@@ -901,28 +938,29 @@ export default function ModulePermissionsPage({
                 <option value="members">管理專案成員</option>
               </select>
             </label>
-            {['task-list', 'members'].includes(diagnosticAction) && (
-              <label>
-                專案
-                <select
-                  value={diagnosticProject}
-                  onChange={(event) => {
-                    setDiagnosticProject(event.target.value)
-                    setNotice('')
-                    setCandidateRoles([])
-                  }}
-                >
-                  <option value="">選擇專案</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <label>
+              專案
+              <select
+                value={diagnosticProject}
+                onChange={(event) => {
+                  setDiagnosticProject(event.target.value)
+                  setEffectiveAccess(null)
+                  setEffectiveAccessContext(null)
+                  setMemberRoles([])
+                  setNotice('')
+                  setCandidateRoles([])
+                }}
+              >
+                <option value="">選擇專案</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Button
-              disabled={accessLoadedFor !== selectedUser}
+              disabled={accessLoadedFor !== selectedUser || !diagnosticProject}
               onClick={() => void diagnose()}
             >
               檢查有效權限
@@ -1038,7 +1076,7 @@ export default function ModulePermissionsPage({
                 onClick={() => {
                   setWizardOpen(false)
                   setTemporaryPassword('')
-                  setSelectedUser(createdId)
+                  setSelectedUserState(createdId)
                 }}
               >
                 查看這個帳號的能力
@@ -1338,7 +1376,10 @@ export default function ModulePermissionsPage({
         <details>
           <summary>進階設定：委派、權限組合與逐項授權</summary>
           <Card>
-            <h2>逐項模組授權</h2>
+            <h2>已設定的模組權限</h2>
+            <p>
+              這裡顯示帳號已設定的模組授權；特定專案中的有效能力請使用上方檢查。
+            </p>
             {selectedUser && (
               <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
                 <legend>
@@ -1411,6 +1452,7 @@ export default function ModulePermissionsPage({
                             const access =
                               await getUserModulePermissions(selectedUser)
                             setUserAccess(access.permission_codes)
+                            await diagnose()
                             setNotice('權限組合已套用。')
                           })
                           .catch((caught: unknown) =>
@@ -1465,6 +1507,7 @@ export default function ModulePermissionsPage({
                               const access =
                                 await getUserModulePermissions(selectedUser)
                               setUserAccess(access.permission_codes)
+                              await diagnose()
                               setNotice('權限組合已完整套用。')
                             })
                             .catch((caught: unknown) =>
