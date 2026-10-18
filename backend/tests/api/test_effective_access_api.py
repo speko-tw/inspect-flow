@@ -238,6 +238,8 @@ def test_delegate_scope_and_resource_errors(db_session, make_client):
     template_delegate = _user(db_session, "template-delegate")
     ordinary = _user(db_session, "ordinary-user")
     target = _user(db_session, "scope-target")
+    admin_target = _user(db_session, "scope-admin-target")
+    admin_target.is_admin = True
     nonmember = _user(db_session, "nonmember-target")
     project = _project(db_session)
     role = create_role(
@@ -246,6 +248,8 @@ def test_delegate_scope_and_resource_errors(db_session, make_client):
         permission_codes=["project_member.manage"],
     )
     _member(db_session, project, target, [role.id], admin)
+    _member(db_session, project, project_delegate, [], admin)
+    _member(db_session, project, admin_target, [], admin)
     db_session.add_all(
         [
             UserModuleDelegation(
@@ -319,6 +323,25 @@ def test_delegate_scope_and_resource_errors(db_session, make_client):
     )
     assert denied.status_code == 403
     admin_client = _client_for(admin, db_session, make_client)
+    admin_target_response = admin_client.get(_url(admin_target.id, project.id))
+    assert admin_target_response.status_code == 200
+    assert admin_target_response.json()["user"]["is_admin"] is True
+    self_response = project_client.get(_url(project_delegate.id, project.id))
+    assert self_response.status_code == 200
+    assert self_response.json()["user"]["is_admin"] is False
+    denied_admin_target = project_client.get(_url(admin_target.id, project.id))
+    assert denied_admin_target.status_code == 403
+    assert denied_admin_target.json() == denied.json()
+    assert "is_admin" not in denied_admin_target.text
+    unlisted_admin = _user(db_session, "unlisted-admin-target")
+    unlisted_admin.is_admin = True
+    db_session.commit()
+    denied_unlisted_admin = project_client.get(
+        _url(unlisted_admin.id, project.id)
+    )
+    assert denied_unlisted_admin.status_code == 403
+    assert denied_unlisted_admin.json() == denied.json()
+    assert "is_admin" not in denied_unlisted_admin.text
     assert admin_client.get(_url(nonmember.id, project.id)).status_code == 404
     assert admin_client.get(_url(UUID(int=0), project.id)).status_code == 404
     assert admin_client.get(_url(target.id, uuid4())).status_code == 404

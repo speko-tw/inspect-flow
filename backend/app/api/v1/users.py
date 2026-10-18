@@ -860,6 +860,12 @@ def get_user_effective_access(
 ) -> UserEffectiveAccessResponse:
     """依 ADM-R45 回傳目標在指定專案的唯讀有效權限診斷。"""
     target = _get_user(db, user_id)
+    target_access = calculate_effective_access(
+        db, user_id=target.id, project_id=project_id
+    )
+    if not actor.is_admin and target_access.is_admin:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+
     membership_id = db.scalar(
         select(ProjectMember.id).where(
             ProjectMember.user_id == target.id,
@@ -870,9 +876,6 @@ def get_user_effective_access(
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
     actor_access = calculate_effective_access(db, user_id=actor.id)
-    target_access = calculate_effective_access(
-        db, user_id=target.id, project_id=project_id
-    )
     visible_modules = (
         MODULES if actor.is_admin else actor_access.delegated_modules
     )

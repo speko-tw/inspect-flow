@@ -73,7 +73,12 @@ def test_effective_access_admin_and_delegate_on_database(
 ) -> None:
     admin = _admin(db_session)
     delegate = _user(db_session, "pg-project-delegate")
+    ordinary = _user(db_session, "pg-ordinary-user")
     target = _user(db_session, "pg-access-target")
+    admin_target = _user(db_session, "pg-access-admin-target")
+    admin_target.is_admin = True
+    unlisted_admin = _user(db_session, "pg-unlisted-admin-target")
+    unlisted_admin.is_admin = True
     project = _project(db_session)
     role = create_role(
         db_session,
@@ -87,6 +92,14 @@ def test_effective_access_admin_and_delegate_on_database(
         role_ids=[role.id],
         actor_user_id=admin.id,
     )
+    for member in (delegate, admin_target):
+        add_project_member(
+            db_session,
+            project_id=project.id,
+            user_id=member.id,
+            role_ids=[],
+            actor_user_id=admin.id,
+        )
     db_session.add(UserModuleDelegation(user_id=delegate.id, module="project"))
     db_session.add_all(
         [
@@ -102,6 +115,7 @@ def test_effective_access_admin_and_delegate_on_database(
 
     admin_client = _client_for(admin, db_session, make_client)
     delegate_client = _client_for(delegate, db_session, make_client)
+    ordinary_client = _client_for(ordinary, db_session, make_client)
     endpoint = _url(target.id, project.id)
     admin_body = admin_client.get(endpoint).json()
     assert admin_body["project_roles"][0]["permission_codes"] == [
@@ -110,6 +124,13 @@ def test_effective_access_admin_and_delegate_on_database(
     assert {
         item["action"]: item["allowed"] for item in admin_body["diagnostics"]
     }["manage_project_members"] is True
+    admin_target_response = admin_client.get(_url(admin_target.id, project.id))
+    assert admin_target_response.status_code == 200
+    assert admin_target_response.json()["user"]["is_admin"] is True
+
+    self_response = delegate_client.get(_url(delegate.id, project.id))
+    assert self_response.status_code == 200
+    assert self_response.json()["user"]["is_admin"] is False
 
     delegate_body = delegate_client.get(endpoint).json()
     assert "project_roles" not in delegate_body
@@ -121,6 +142,14 @@ def test_effective_access_admin_and_delegate_on_database(
         "create_project",
         "manage_project_members",
     }
+
+    denied = ordinary_client.get(endpoint)
+    assert denied.status_code == 403
+    for admin_user in (admin_target, unlisted_admin):
+        denied_admin = delegate_client.get(_url(admin_user.id, project.id))
+        assert denied_admin.status_code == 403
+        assert denied_admin.json() == denied.json()
+        assert "is_admin" not in denied_admin.text
 
     revoke_module_permission(
         db_session,
