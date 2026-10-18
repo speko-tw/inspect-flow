@@ -309,14 +309,23 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
     // 第一次：兩次新密碼不一致，不呼叫變更密碼 API。
     fillAndSubmit('current-pw', 'new-password-1', 'new-password-2')
     let alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('兩次輸入的新密碼不一致，請重新輸入。')
+    expect(alert.textContent).toContain(
+      '新密碼與確認密碼不一致。請重新輸入新密碼。',
+    )
     const confirmation = screen.getByLabelText('再輸入一次新密碼')
-    expect(alert).toHaveClass('field-error')
-    expect(confirmation).toHaveAttribute('aria-describedby', alert.id)
+    expect(alert).toHaveClass('form-pattern-error-summary')
+    expect(
+      document.getElementById('change-password-confirm-error'),
+    ).toHaveClass('form-pattern-field-error')
+    expect(confirmation).toHaveAttribute(
+      'aria-describedby',
+      'change-password-confirm-error',
+    )
     expect(confirmation).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(confirmation).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     const focus = vi.fn()
+    screen.getByLabelText('目前密碼').focus()
     confirmation.addEventListener('focus', focus)
     fireEvent.submit(confirmation.closest('form')!)
     await waitFor(() => expect(focus).toHaveBeenCalledOnce())
@@ -332,9 +341,14 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'same-new-password',
     )
     alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('目前密碼錯誤，請再試一次。')
+    expect(alert.textContent).toContain(
+      '目前密碼錯誤。請確認目前密碼後再試一次。',
+    )
     const currentPassword = screen.getByLabelText('目前密碼')
-    expect(currentPassword).toHaveAttribute('aria-describedby', alert.id)
+    expect(currentPassword).toHaveAttribute(
+      'aria-describedby',
+      'change-password-current-error',
+    )
     await waitFor(() => expect(currentPassword).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(1)
@@ -347,11 +361,13 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'same-new-password',
     )
     alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe(
-      '新密碼長度需為 8～128 個字元，請重新輸入。',
+    expect(alert.textContent).toContain(
+      '新密碼長度不符合規定。請設定 8～128 個字元後再試一次。',
     )
     const newPassword = screen.getByLabelText('新密碼')
-    expect(newPassword.getAttribute('aria-describedby')).toContain(alert.id)
+    expect(newPassword.getAttribute('aria-describedby')).toContain(
+      'change-password-new-error',
+    )
     await waitFor(() => expect(newPassword).toHaveFocus())
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(2)
@@ -364,7 +380,9 @@ describe('變更密碼頁：不一致、三種錯誤碼、欄位型別（AUT-AC4
       'same-new-password',
     )
     alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('新密碼不能與目前密碼相同，請重新輸入。')
+    expect(alert.textContent).toContain(
+      '新密碼與目前密碼相同。請改用不同的新密碼。',
+    )
     expect(screen.getAllByRole('alert')).toHaveLength(1)
     expect(postCallCount).toBe(3)
     messages.push(alert.textContent)
@@ -398,7 +416,9 @@ describe('變更密碼頁：外部帳號與未知錯誤（補充，非 AUT-AC42 
     fillAndSubmit('current-pw', 'new-password', 'new-password')
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('此帳號無法變更密碼，請洽系統管理員。')
+    expect(alert.textContent).toBe(
+      '此帳號沒有變更密碼的權限。請洽系統管理員。',
+    )
   })
 
   it('未知錯誤碼顯示通用訊息', async () => {
@@ -417,7 +437,9 @@ describe('變更密碼頁：外部帳號與未知錯誤（補充，非 AUT-AC42 
     fillAndSubmit('current-pw', 'new-password', 'new-password')
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('變更密碼失敗，請稍後再試。')
+    expect(alert.textContent).toBe(
+      '變更密碼失敗。請稍後再試，或聯絡系統管理員。',
+    )
   })
 })
 
@@ -536,8 +558,8 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
     await submitChange()
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      '目前密碼錯誤，請再試一次。',
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      '目前密碼錯誤。請確認目前密碼後再試一次。',
     )
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })

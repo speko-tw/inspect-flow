@@ -8,3 +8,9 @@ export { Input, type InputProps } from './Input'
 export { SectionHeader } from './SectionHeader'
 export { StatCard } from './StatCard'
 export { Tag } from './Tag'
+export {
+  FormErrorSummary,
+  FormField,
+  FormGroup,
+  type FormFieldControlProps,
+} from './forms/FormPatterns'
