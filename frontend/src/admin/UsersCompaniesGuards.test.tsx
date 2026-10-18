@@ -67,12 +67,14 @@ type Call = { method: string; path: string; body: string }
 
 /**
  * 列表請求立刻回應；`hold` 回傳 Deferred 時，該請求等到它完成才回應
- * （模擬「請求還沒回來」）。`fail` 回傳 true 時回 500。
+ * （模擬「請求還沒回來」）。`fail` 預設回 500，也可指定 API 錯誤。
  */
 function stubBackend(
   options: {
     hold?: (call: Call) => Deferred<void> | undefined
     fail?: (call: Call) => boolean
+    failureCode?: string
+    failureStatus?: number
     users?: User[]
     preview?: Partial<RestorePreview>
   } = {},
@@ -91,7 +93,10 @@ function stubBackend(
       const gate = options.hold?.(call)
       if (gate) await gate.promise
       if (options.fail?.(call)) {
-        return Response.json({ error: { code: 'x' } }, { status: 500 })
+        return Response.json(
+          { error: { code: options.failureCode ?? 'x' } },
+          { status: options.failureStatus ?? 500 },
+        )
       }
       if (call.method === 'GET') {
         if (call.path === '/api/v1/users') {
@@ -278,6 +283,43 @@ describe.each(userFormCases)('$name 共用表單', (formCase) => {
     await waitFor(() =>
       expect(backend.count(formCase.method, formCase.path)).toBe(2),
     )
+  })
+})
+
+describe('使用者公司連結錯誤', () => {
+  it('工號衝突時說明如何修正後重試', async () => {
+    const unlinkedUser = {
+      ...regularUser,
+      company_id: null,
+      department: null,
+      employee_no: null,
+      location: null,
+    }
+    const backend = stubBackend({
+      users: [unlinkedUser],
+      fail: (call) =>
+        call.method === 'PUT' && call.path === '/api/v1/users/user-1/company',
+      failureCode: 'user.employee_no_conflict',
+      failureStatus: 409,
+    })
+    renderUsers()
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+    const form = within(
+      screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
+    )
+    fireEvent.change(form.getByLabelText('公司'), {
+      target: { value: company.id },
+    })
+    fireEvent.change(form.getByLabelText('工號'), {
+      target: { value: 'A001' },
+    })
+    fireEvent.click(form.getByRole('button', { name: '儲存公司連結' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '這家公司已有相同工號。請修改工號，讓它在該公司內唯一後再試一次。',
+    )
+    expect(backend.count('PUT', '/api/v1/users/user-1/company')).toBe(1)
   })
 })
 

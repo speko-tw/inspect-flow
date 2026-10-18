@@ -19,6 +19,7 @@ import { UnsavedLeaveBox } from '../ui/navigation'
 import * as navigationGuard from '../ui/navigation'
 import { CursorListSearch } from './CursorListSearch'
 import {
+  ManagementApiError,
   linkUserCompany,
   listCompanies,
   listUsersPage,
@@ -42,6 +43,31 @@ import UserForm from './UserForm'
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
+
+/** 工號衝突由 API 判斷，錯誤需提供可執行的修正方向。 */
+function companyLinkErrorMessage(error: unknown): string {
+  const message = managementErrorMessage(error).replace(/[。.!?]+$/, '')
+  if (
+    error instanceof ManagementApiError &&
+    error.code === 'user.employee_no_conflict'
+  ) {
+    return `${message}。請修改工號，讓它在該公司內唯一後再試一次。`
+  }
+  if (
+    error instanceof ManagementApiError &&
+    error.code === 'company.inactive'
+  ) {
+    return `${message}。請選擇啟用中的公司後再試一次。`
+  }
+  if (
+    error instanceof ManagementApiError &&
+    error.code === 'permission.denied'
+  ) {
+    return `${message}。請洽系統管理員確認公司連結權限。`
+  }
+  return `${message}。請檢查公司與人員資料；若無法修正，請洽系統管理員。`
+}
+
 type PendingAction = {
   user: User
   kind: 'admin' | 'deactivate' | 'activate'
@@ -210,7 +236,10 @@ export default function UsersPage({
       setSaveError((previous) => ({
         userId,
         form,
-        message: managementErrorMessage(caught),
+        message:
+          form === 'company'
+            ? companyLinkErrorMessage(caught)
+            : managementErrorMessage(caught),
         request: (previous?.request ?? 0) + 1,
       }))
     } finally {
