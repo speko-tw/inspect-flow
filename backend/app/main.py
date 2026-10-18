@@ -24,9 +24,6 @@ from app.api.v1.project_inspection_items import (
 from app.api.v1.projects import router as projects_router
 from app.api.v1.roles import router as roles_router
 from app.api.v1.setup import router as setup_router
-from app.api.v1.system_role_assignments import (
-    router as system_role_assignments_router,
-)
 from app.api.v1.template_library import (
     category_router,
     system_router,
@@ -93,7 +90,6 @@ def create_app() -> FastAPI:
     app.include_router(admin_users_router, prefix="/api/v1")
     app.include_router(module_delegate_router, prefix="/api/v1")
     app.include_router(companies_router, prefix="/api/v1")
-    app.include_router(system_role_assignments_router, prefix="/api/v1")
     app.include_router(category_router, prefix="/api/v1")
     app.include_router(system_router, prefix="/api/v1")
     app.include_router(template_router, prefix="/api/v1")

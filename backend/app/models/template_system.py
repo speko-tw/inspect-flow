@@ -1,8 +1,7 @@
-"""Template library and system role models (template-system T1)."""
+"""範本庫及專案查核項目資料模型（template-system T1）。"""
 
 import uuid
 from datetime import datetime
-from enum import StrEnum
 
 from sqlalchemy import (
     CheckConstraint,
@@ -39,30 +38,6 @@ def _compile_trim_for_index(element, compiler, **kwargs):
 def _compile_postgres_trim_for_index(element, compiler, **kwargs):
     argument = compiler.process(list(element.clauses)[0], **kwargs)
     return f"trim(BOTH FROM {argument})"
-
-
-class SystemRoleCode(StrEnum):
-    """Fixed MVP-wide roles; intentionally not a persisted role table."""
-
-    TEMPLATE_ADMIN = "template_admin"
-
-
-class SystemRoleAssignment(AuditMixin, TimestampedBase):
-    """A fixed system role assigned to a user."""
-
-    __tablename__ = "system_role_assignments"
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    role_code: Mapped[str] = mapped_column(String(64), nullable=False)
-    __table_args__ = (
-        UniqueConstraint("user_id", "role_code"),
-        CheckConstraint(
-            "role_code IN ('template_admin')",
-            name="system_role_code_is_fixed",
-        ),
-    )
 
 
 class TemplateCategory(AuditMixin, TimestampedBase):

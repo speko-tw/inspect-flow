@@ -73,10 +73,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
 from app.auth.dependencies import bind_request_scope, get_db, require_login
-from app.models import (
-    SystemRoleCode,
-    User,
-)
+from app.models import User
 from app.permission_codes import (
     MODULES,
     is_permission_code_registered,
@@ -89,19 +86,18 @@ from app.services.permissions import (
 
 
 class AccessLevel(Enum):
-    """Access levels used by routes under AUT-R18."""
+    """AUT-R18 路由可宣告的存取層級。"""
 
     PUBLIC = auto()
     LOGIN_REQUIRED = auto()
     ADMIN_REQUIRED = auto()
     PROJECT_PERMISSION = auto()
     SELF_OR_ADMIN = auto()
-    SYSTEM_ROLE_REQUIRED = auto()
-    ADMIN_OR_SYSTEM_ROLE = auto()
-    SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION = auto()
     MODULE_PERMISSION_REQUIRED = auto()
     MODULE_DELEGATE_REQUIRED = auto()
     MODULE_PERMISSION_OR_ANY_PROJECT_PERMISSION = auto()
+    ADMIN_OR_ANY_PROJECT_PERMISSION = auto()
+    MODULE_AND_PROJECT_PERMISSION = auto()
 
 
 @dataclass(frozen=True)
@@ -113,7 +109,6 @@ class RouteAccessDeclaration:
     level: AccessLevel
     permission_code: str | None = None
     param_name: str | None = None
-    system_role_code: str | None = None
     module: str | None = None
     module_permission_code: str | None = None
     project_permission_code: str | None = None
@@ -154,20 +149,6 @@ def _parse_uuid(raw: object) -> uuid.UUID | None:
         return uuid.UUID(raw)
     except ValueError:
         return None
-
-
-def _has_system_role(
-    db: Session, user: User, role_code: SystemRoleCode
-) -> bool:
-    access = calculate_effective_access(db, user_id=user.id)
-    return role_code.value in access.system_roles
-
-
-def is_admin_or_system_role(
-    db: Session, user: User, role_code: SystemRoleCode
-) -> bool:
-    """Return whether the user is Admin or has the selected system role."""
-    return user.is_admin or _has_system_role(db, user, role_code)
 
 
 # -- 公開 (AUT-R18) -----------------------------------------------
@@ -246,81 +227,6 @@ def require_admin(
 _mark(require_admin, RouteAccessDeclaration(level=AccessLevel.ADMIN_REQUIRED))
 
 
-def require_system_role(
-    role_code: SystemRoleCode,
-) -> Callable[..., User]:
-    """Build a login-gated dependency for one fixed system role."""
-
-    def _check(
-        user: User = Depends(require_login, scope="function"),  # noqa
-        db: Session = Depends(get_db, scope="function"),  # noqa
-    ) -> User:
-        if not _has_system_role(db, user, role_code):
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-        return user
-
-    return _mark(
-        _check,
-        RouteAccessDeclaration(
-            level=AccessLevel.SYSTEM_ROLE_REQUIRED,
-            permission_code=role_code.value,
-        ),
-    )
-
-
-def require_admin_or_system_role(
-    role_code: SystemRoleCode,
-) -> Callable[..., User]:
-    """Allow Admins and users assigned the selected fixed system role."""
-
-    def _check(
-        user: User = Depends(require_login, scope="function"),  # noqa
-        db: Session = Depends(get_db, scope="function"),  # noqa
-    ) -> User:
-        if not is_admin_or_system_role(db, user, role_code):
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-        return user
-
-    return _mark(
-        _check,
-        RouteAccessDeclaration(
-            level=AccessLevel.ADMIN_OR_SYSTEM_ROLE,
-            permission_code=role_code.value,
-        ),
-    )
-
-
-def require_system_role_or_any_project_permission(
-    role_code: SystemRoleCode, permission_code: str
-) -> Callable[..., User]:
-    """Allow Admin, the fixed role, or permission in any project."""
-    if not is_permission_code_registered(permission_code):
-        raise ValueError(f"unregistered permission code: {permission_code}")
-
-    def _check(
-        user: User = Depends(require_login, scope="function"),  # noqa
-        db: Session = Depends(get_db, scope="function"),  # noqa
-    ) -> User:
-        if user.is_admin or _has_system_role(db, user, role_code):
-            return user
-        access = calculate_effective_access(db, user_id=user.id)
-        if not any(
-            permission_code in codes
-            for codes in access.project_permissions_by_project.values()
-        ):
-            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
-        return user
-
-    return _mark(
-        _check,
-        RouteAccessDeclaration(
-            level=AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION,
-            permission_code=permission_code,
-            system_role_code=role_code.value,
-        ),
-    )
-
-
 def require_admin_or_any_project_permission(
     permission_code: str,
 ) -> Callable[..., User]:
@@ -349,9 +255,8 @@ def require_admin_or_any_project_permission(
     return _mark(
         _check,
         RouteAccessDeclaration(
-            level=AccessLevel.SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION,
+            level=AccessLevel.ADMIN_OR_ANY_PROJECT_PERMISSION,
             permission_code=permission_code,
-            system_role_code="admin",
         ),
     )
 
@@ -461,6 +366,61 @@ def require_module_or_any_project_permission(
         _check,
         RouteAccessDeclaration(
             level=AccessLevel.MODULE_PERMISSION_OR_ANY_PROJECT_PERMISSION,
+            module=permission_code_module(module_permission_code),
+            module_permission_code=module_permission_code,
+            project_permission_code=project_permission_code,
+        ),
+    )
+
+
+def require_module_and_project_permission(
+    module_permission_code: str,
+    project_permission_code: str,
+    *,
+    param_name: str = "project_id",
+) -> Callable[..., User]:
+    """宣告同時具備模組權限與指定專案權限的存取層級。"""
+    if (
+        not is_permission_code_registered(module_permission_code)
+        or permission_code_scope(module_permission_code) != "module"
+    ):
+        raise ValueError(
+            f"unregistered module permission: {module_permission_code}"
+        )
+    if (
+        not is_permission_code_registered(project_permission_code)
+        or permission_code_scope(project_permission_code) != "project"
+    ):
+        raise ValueError(
+            f"unregistered project permission: {project_permission_code}"
+        )
+
+    def _check(
+        request: Request,
+        user: User = Depends(require_login, scope="function"),  # noqa
+        db: Session = Depends(get_db, scope="function"),  # noqa
+    ) -> User:
+        project_id = _parse_uuid(request.path_params.get(param_name))
+        if project_id is None:
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        access = calculate_effective_access(
+            db, user_id=user.id, project_id=project_id
+        )
+        module = permission_code_module(project_permission_code)
+        required_module = f"{module}.use" if module else None
+        if not access.is_admin and (
+            module_permission_code not in access.module_permissions
+            or project_permission_code not in access.project_permissions
+            or required_module not in access.module_permissions
+        ):
+            raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+        return user
+
+    return _mark(
+        _check,
+        RouteAccessDeclaration(
+            level=AccessLevel.MODULE_AND_PROJECT_PERMISSION,
+            param_name=param_name,
             module=permission_code_module(module_permission_code),
             module_permission_code=module_permission_code,
             project_permission_code=project_permission_code,
