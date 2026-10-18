@@ -4,6 +4,11 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync('src/styles.css', 'utf8')
+const tokens = readFileSync('src/styles/tokens.css', 'utf8')
+const dashboardCss = readFileSync(
+  'src/admin/dashboard/DashboardPage.css',
+  'utf8',
+)
 
 // 取出頂層規則（行首的選擇器）的宣告，轉成 屬性 -> 值；比對值而不是原始
 // 字串，格式或宣告順序調整時測試不會誤報。
@@ -269,6 +274,36 @@ describe('app header navigation', () => {
     expect(
       Object.keys(declarationsIn(css.slice(start, css.indexOf('}', start)))),
     ).toContain('mask-image')
+  })
+})
+
+describe('Dashboard header interaction tokens', () => {
+  it('shares the approved neutral values across light and dark themes', () => {
+    const root = tokens.slice(0, tokens.indexOf("\n:root[data-theme='dark']"))
+    expect(root).toContain(
+      '--color-header-nav-hover: rgba(255, 255, 255, 0.11);',
+    )
+    expect(root).toContain(
+      '--color-header-nav-pressed: rgba(255, 255, 255, 0.19);',
+    )
+    expect(root).toContain(
+      '--color-header-nav-current: rgba(255, 255, 255, 0.15);',
+    )
+    expect(
+      tokens.slice(tokens.indexOf("\n:root[data-theme='dark']")),
+    ).not.toMatch(/--color-header-nav-(?:hover|pressed|current):/)
+  })
+
+  it('uses tokens for hover, pressed and current header states', () => {
+    expect(dashboardCss).toContain(
+      'background: var(--color-header-nav-hover);',
+    )
+    expect(dashboardCss).toContain(
+      'background: var(--color-header-nav-pressed);',
+    )
+    expect(dashboardCss).toContain(
+      'background: var(--color-header-nav-current);',
+    )
   })
 })
 
