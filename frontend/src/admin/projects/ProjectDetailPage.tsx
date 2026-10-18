@@ -312,6 +312,9 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const addableRoles = selectedCandidate?.is_external_collaborator
     ? roles.filter((role) => role.is_external_allowed)
     : roles
+  const editableRoles = editing?.member.is_external_collaborator
+    ? roles.filter((role) => role.is_external_allowed)
+    : roles
   const roleName = (id: string) =>
     roles.find((role) => role.id === id)?.name ??
     (rolesState.status === 'ready' ? '（未知角色）' : '（角色名稱無法顯示）')
@@ -381,7 +384,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 current ? { ...current, roleIds: next, error: '' } : current,
               )
             }
-            roles={roles}
+            roles={editableRoles}
             selected={editing.roleIds}
           />
           {alertFor('edit')}

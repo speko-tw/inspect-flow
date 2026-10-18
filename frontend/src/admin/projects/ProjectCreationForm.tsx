@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import type { User } from '../api'
 import { listAllPages, managementErrorMessage } from '../api'
-import { FormErrorSummary } from '../../components/layout/LayoutPatterns'
-import { Field } from '../../components/Field'
+import { FormErrorSummary, FormField, FormGroup } from '../../components'
 import { Input } from '../../components/Input'
 import { HttpError } from '../../http'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
@@ -195,114 +194,142 @@ export function ProjectCreationForm({
         )}
       />
       {error && <p role="alert">{error}</p>}
-      <label>
-        <span>本公司在這個案子的角色（必填）</span>
-        <select
-          aria-invalid={Boolean(fieldErrors.company_role)}
+      <FormGroup title="專案資料">
+        <FormField
+          id="company-role"
+          label="本公司在這個案子的角色"
           required
-          value={draft.company_role}
-          onChange={(event) => change('company_role', event.target.value)}
+          description="會決定報表種類。同工地的另一種角色請另開專案。"
+          error={fieldErrors.company_role}
         >
-          {roles.map((role) => (
-            <option key={role.value} value={role.value}>
-              {role.label}
-            </option>
-          ))}
-        </select>
-        <span className="field-hint">
-          會決定報表種類。同工地的另一種角色請另開專案。
-        </span>
-        {fieldErrors.company_role && (
-          <span className="field-error" role="alert">
-            {fieldErrors.company_role}
-          </span>
-        )}
-      </label>
-      <Field
-        id="project-code"
-        label="專案代號"
-        required
-        error={fieldErrors.project_code}
-      >
-        <Input
-          maxLength={32}
-          value={draft.project_code}
-          onChange={(event) => change('project_code', event.target.value)}
-        />
-      </Field>
-      <Field
-        id="project-name"
-        label="工程名稱"
-        required
-        error={fieldErrors.name}
-      >
-        <Input
-          maxLength={128}
-          value={draft.name}
-          onChange={(event) => change('name', event.target.value)}
-        />
-      </Field>
-      <Field
-        id="client-name"
-        label="業主／委託單位"
-        required
-        error={fieldErrors.client_name}
-      >
-        <Input
-          maxLength={128}
-          value={draft.client_name}
-          onChange={(event) => change('client_name', event.target.value)}
-        />
-      </Field>
-      <Field
-        id="site-location"
-        label="整體工程地點"
-        required
-        error={fieldErrors.site_location}
-      >
-        <Input
-          maxLength={256}
-          value={draft.site_location}
-          onChange={(event) => change('site_location', event.target.value)}
-        />
-      </Field>
-      <Field id="planned-start-date" label="預定開工日">
-        <Input
-          type="date"
-          value={draft.planned_start_date}
-          onChange={(event) =>
-            change('planned_start_date', event.target.value)
-          }
-        />
-      </Field>
-      <Field id="planned-completion-date" label="預定完工日">
-        <Input
-          type="date"
-          value={draft.planned_completion_date}
-          onChange={(event) =>
-            change('planned_completion_date', event.target.value)
-          }
-        />
-      </Field>
-      {isAdmin && (
-        <label>
-          <span>建立者角色人選（選填）</span>
-          <select
-            value={draft.creator_role_user_id}
-            onChange={(event) =>
-              change('creator_role_user_id', event.target.value)
-            }
+          {(control) => (
+            <select
+              {...control}
+              required
+              value={draft.company_role}
+              onChange={(event) => change('company_role', event.target.value)}
+            >
+              {roles.map((role) => (
+                <option key={role.value} value={role.value}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </FormField>
+        <FormField
+          id="project-code"
+          label="專案代號"
+          required
+          error={fieldErrors.project_code}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              maxLength={32}
+              required
+              value={draft.project_code}
+              onChange={(event) => change('project_code', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          id="project-name"
+          label="工程名稱"
+          required
+          error={fieldErrors.name}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              maxLength={128}
+              required
+              value={draft.name}
+              onChange={(event) => change('name', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          id="client-name"
+          label="業主／委託單位"
+          required
+          error={fieldErrors.client_name}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              maxLength={128}
+              required
+              value={draft.client_name}
+              onChange={(event) => change('client_name', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField
+          id="site-location"
+          label="整體工程地點"
+          required
+          error={fieldErrors.site_location}
+        >
+          {(control) => (
+            <Input
+              {...control}
+              maxLength={256}
+              required
+              value={draft.site_location}
+              onChange={(event) => change('site_location', event.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField id="planned-start-date" label="預定開工日">
+          {(control) => (
+            <Input
+              {...control}
+              type="date"
+              value={draft.planned_start_date}
+              onChange={(event) =>
+                change('planned_start_date', event.target.value)
+              }
+            />
+          )}
+        </FormField>
+        <FormField id="planned-completion-date" label="預定完工日">
+          {(control) => (
+            <Input
+              {...control}
+              type="date"
+              value={draft.planned_completion_date}
+              onChange={(event) =>
+                change('planned_completion_date', event.target.value)
+              }
+            />
+          )}
+        </FormField>
+        {isAdmin && (
+          <FormField
+            id="creator-role-user"
+            label="建立者角色人選"
+            description="不選則不指定建立者角色人選。"
           >
-            <option value="">不指定</option>
-            {people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name_zh || person.username}（{person.username}）
-              </option>
-            ))}
-          </select>
-          <span className="field-hint">不選則不指定建立者角色人選。</span>
-        </label>
-      )}
+            {(control) => (
+              <select
+                {...control}
+                value={draft.creator_role_user_id}
+                onChange={(event) =>
+                  change('creator_role_user_id', event.target.value)
+                }
+              >
+                <option value="">不指定</option>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name_zh || person.username}（{person.username}）
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+        )}
+      </FormGroup>
       <div className="card-actions">
         {onCancel && (
           <button onClick={cancel} type="button">

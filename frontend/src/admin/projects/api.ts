@@ -71,6 +71,7 @@ export interface ProjectMember {
   company_id: string | null
   company_name: string | null
   is_active: boolean
+  is_external_collaborator: boolean
   module_status: ModuleStatus
 }
 

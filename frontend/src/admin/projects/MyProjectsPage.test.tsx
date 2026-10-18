@@ -179,4 +179,115 @@ describe('我的專案頁', () => {
       }),
     )
   })
+
+  it('舊建立請求不導向或覆蓋新草稿，完成項目仍回到清單', async () => {
+    vi.mocked(listMyProjects)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { ...PROJECT, id: CREATED_PROJECT.id, name: CREATED_PROJECT.name },
+      ])
+    vi.mocked(listCompanyRoles).mockResolvedValue([
+      {
+        value: 'contractor',
+        label: '承攬施工方',
+        inspection_level: 'self_inspection',
+      },
+    ])
+    let finishCreate!: (project: Project) => void
+    vi.mocked(createProject).mockReturnValue(
+      new Promise((resolve) => {
+        finishCreate = resolve
+      }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/admin/projects']}>
+        <MyProjectsPage canCreateProject />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '新增專案' }))
+    await screen.findByRole('heading', { name: '新增專案' })
+    fireEvent.change(screen.getByLabelText(/專案代號/), {
+      target: { value: 'DEMO-002' },
+    })
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '新建工程' },
+    })
+    fireEvent.change(screen.getByLabelText(/業主／委託單位/), {
+      target: { value: '示範業主' },
+    })
+    fireEvent.change(screen.getByLabelText(/整體工程地點/), {
+      target: { value: '新建工地' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(await screen.findByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄' }))
+    fireEvent.click(await screen.findByRole('button', { name: '新增專案' }))
+    fireEvent.change(await screen.findByLabelText(/專案代號/), {
+      target: { value: 'DRAFT-NEW' },
+    })
+
+    finishCreate(CREATED_PROJECT)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/專案代號/)).toHaveValue('DRAFT-NEW'),
+    )
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/projects')
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄' }))
+    expect(
+      await screen.findByRole('heading', { name: '新建工程' }),
+    ).toBeVisible()
+  })
+
+  it('捨棄表單後舊請求完成只更新清單', async () => {
+    vi.mocked(listMyProjects)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { ...PROJECT, id: CREATED_PROJECT.id, name: CREATED_PROJECT.name },
+      ])
+    vi.mocked(listCompanyRoles).mockResolvedValue([
+      {
+        value: 'contractor',
+        label: '承攬施工方',
+        inspection_level: 'self_inspection',
+      },
+    ])
+    let finishCreate!: (project: Project) => void
+    vi.mocked(createProject).mockReturnValue(
+      new Promise((resolve) => {
+        finishCreate = resolve
+      }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/admin/projects']}>
+        <MyProjectsPage canCreateProject />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: '新增專案' }))
+    await screen.findByRole('heading', { name: '新增專案' })
+    fireEvent.change(screen.getByLabelText(/專案代號/), {
+      target: { value: 'DEMO-002' },
+    })
+    fireEvent.change(screen.getByLabelText(/工程名稱/), {
+      target: { value: '新建工程' },
+    })
+    fireEvent.change(screen.getByLabelText(/業主／委託單位/), {
+      target: { value: '示範業主' },
+    })
+    fireEvent.change(screen.getByLabelText(/整體工程地點/), {
+      target: { value: '新建工地' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+    fireEvent.click(await screen.findByRole('button', { name: '取消' }))
+    fireEvent.click(screen.getByRole('button', { name: '捨棄' }))
+
+    finishCreate(CREATED_PROJECT)
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/projects')
+    expect(
+      await screen.findByRole('heading', { name: '新建工程' }),
+    ).toBeVisible()
+  })
 })

@@ -358,6 +358,7 @@ function projectFetch({
           company_id: null,
           company_name: null,
           is_active: true,
+          is_external_collaborator: user?.is_external_collaborator ?? false,
           module_status: { project_use: true, inspection_use: true },
         }
         memberRows.push(added)
@@ -949,7 +950,32 @@ describe('admin projects page', () => {
     })
   })
 
-  it('lets Admin hand off the creator role to an eligible person', async () => {
+  it('associates project field errors with labels and summary links', async () => {
+    projectFetch({
+      failWith: {
+        match: /\/projects$/,
+        method: 'POST',
+        code: 'request.invalid',
+        status: 422,
+        fields: [{ path: '/project_code', code: 'field.required' }],
+      },
+    })
+    renderAt('/admin/projects')
+    await screen.findAllByText('示範工程')
+    fillProjectForm()
+    await waitForNewProjectSubmit()
+    fireEvent.click(screen.getByRole('button', { name: '新增專案' }))
+
+    const codeField = await screen.findByLabelText(/專案代號/)
+    expect(codeField).toHaveAttribute('aria-invalid', 'true')
+    expect(codeField).toHaveAttribute('aria-describedby', 'project-code-error')
+    expect(screen.getByText('請填寫此欄位。', { selector: 'p' })).toBeVisible()
+    expect(
+      screen.getByRole('link', { name: /專案代號：請填寫此欄位/ }),
+    ).toHaveAttribute('href', '#project-code')
+  })
+
+  it('lets Admin choose an eligible project creator', async () => {
     const fetchMock = projectFetch()
     renderAt('/admin/projects')
     await screen.findAllByText('示範工程')
@@ -1938,6 +1964,7 @@ const memberAnna: ProjectMember = {
   company_id: 'company-1',
   company_name: '示範公司',
   is_active: true,
+  is_external_collaborator: false,
   module_status: { project_use: true, inspection_use: true },
 }
 
@@ -2094,7 +2121,7 @@ describe('admin project members', () => {
     ).toBeNull()
   })
 
-  it('labels external candidates and filters their assignable roles', async () => {
+  it('filters assignable roles for external candidates', async () => {
     projectFetch({
       office: true,
       candidates: [externalCandidate],
@@ -2111,6 +2138,28 @@ describe('admin project members', () => {
       }),
     ).toBeVisible()
     expect(await screen.findByText(/尚未開通專案模組/)).toBeVisible()
+    expect(screen.getByLabelText('查核員')).toBeVisible()
+    expect(screen.queryByLabelText('內部角色')).toBeNull()
+  })
+
+  it('filters edit roles for existing external members', async () => {
+    const externalMember = {
+      ...memberAnna,
+      user_id: externalCandidate.id,
+      username: externalCandidate.username,
+      name_zh: externalCandidate.name_zh,
+      company_name: externalCandidate.company_name,
+      is_external_collaborator: true,
+    }
+    projectFetch({
+      members: [externalMember],
+      rolePages: [[roleA, roleInternalOnly]],
+    })
+    renderAt('/admin/projects/project-1/members')
+    await screen.findByText('外部協作者')
+
+    fireEvent.click(screen.getByRole('button', { name: /修改「.*」的角色/ }))
+
     expect(screen.getByLabelText('查核員')).toBeVisible()
     expect(screen.queryByLabelText('內部角色')).toBeNull()
   })

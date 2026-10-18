@@ -1,6 +1,6 @@
 // 非系統管理者的專案清單（ADM-R24）：唯讀成員也能看專案首頁。
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { useNavigate } from 'react-router'
 
@@ -31,6 +31,8 @@ export default function MyProjectsPage({
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [reloadKey, setReloadKey] = useState(0)
   const [creating, setCreating] = useState(false)
+  const [formSession, setFormSession] = useState(0)
+  const formSessionRef = useRef(0)
 
   useEffect(() => {
     let active = true
@@ -50,12 +52,30 @@ export default function MyProjectsPage({
     }
   }, [reloadKey])
 
+  function cancelCreation() {
+    formSessionRef.current += 1
+    setFormSession(formSessionRef.current)
+    setCreating(false)
+  }
+
   if (creating) {
     return (
       <ProjectCreationForm
         isAdmin={false}
-        onCancel={() => setCreating(false)}
-        onCreated={(project) =>
+        formSession={formSession}
+        onCancel={cancelCreation}
+        onCreated={(project, submittedSession) => {
+          if (submittedSession !== formSessionRef.current) {
+            listMyProjects().then(
+              (projects) => setState({ kind: 'ready', projects }),
+              (caught: unknown) =>
+                setState({
+                  kind: 'error',
+                  message: managementErrorMessage(caught),
+                }),
+            )
+            return
+          }
           navigate(`/admin/projects/${project.id}`, {
             state: project.warnings.some(
               (warning) => warning.code === 'project_code.duplicate',
@@ -63,7 +83,7 @@ export default function MyProjectsPage({
               ? { duplicateProjectCode: project.project_code }
               : null,
           })
-        }
+        }}
       />
     )
   }
@@ -75,7 +95,11 @@ export default function MyProjectsPage({
       {canCreateProject && (
         <button
           className="btn-primary"
-          onClick={() => setCreating(true)}
+          onClick={() => {
+            formSessionRef.current += 1
+            setFormSession(formSessionRef.current)
+            setCreating(true)
+          }}
           type="button"
         >
           新增專案
