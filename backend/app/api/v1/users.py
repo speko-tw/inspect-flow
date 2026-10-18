@@ -10,17 +10,60 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.errors import APIError, ErrorCode
-from app.api.pagination import ilike_contains, page_by_text_key, write_call
+from app.api.pagination import (
+    encode_page_cursor,
+    ilike_contains,
+    page_by_text_key,
+    page_cursor_key,
+    write_call,
+)
+from app.api.time_format import format_utc
 from app.api.v1._management_errors import (
     management_api_error,
 )
-from app.auth.access import require_admin, require_module_delegation
+from app.auth.access import (
+    calculate_effective_access,
+    require_admin,
+    require_module_delegation,
+)
 from app.auth.dependencies import get_db
 from app.auth.password_service import PasswordLengthError, set_password
-from app.models import Company, Project, ProjectMember, User
+from app.models import (
+    Company,
+    PermissionBundle,
+    Project,
+    ProjectMember,
+    User,
+)
+from app.permission_codes import (
+    MODULES,
+    permission_code_descriptions,
+    permission_code_module,
+    permission_code_scope,
+)
+from app.services.module_permissions import (
+    CreatorRolePermissionsError,
+    ExternalCollaboratorPermissionError,
+    ImpliedPermissionError,
+    InvalidModulePermissionError,
+    ModulePermissionDeniedError,
+    apply_permission_bundle,
+    create_permission_bundle,
+    delete_permission_bundle,
+    grant_module_delegation,
+    grant_module_permission,
+    list_permission_bundles,
+    list_user_module_delegations,
+    list_user_module_permissions,
+    permission_revoke_impact,
+    revoke_module_delegation,
+    revoke_module_permission,
+    update_permission_bundle,
+)
 from app.services.user_lifecycle import (
     AccountExpiredError,
     InvalidRestoreSelectionError,
@@ -60,6 +103,7 @@ module_delegate_router = APIRouter(
     prefix="/module-delegate/users",
     tags=["users"],
 )
+module_permission_router = APIRouter(tags=["module permissions"])
 _module_delegate_access = require_module_delegation()
 
 _DEFAULT_PAGE_SIZE = 50
@@ -184,11 +228,99 @@ class LifecycleListResponse(BaseModel):
     next_cursor: str | None
 
 
+class ModulePermissionOption(BaseModel):
+    code: str
+    module: str
+    description: str
+
+
+class ModulePermissionOptionListResponse(BaseModel):
+    items: list[ModulePermissionOption]
+
+
+class UserModulePermissionResponse(BaseModel):
+    permission_codes: list[str]
+    delegated_modules: list[str]
+
+
+class PermissionBundleRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    permission_codes: list[str] = Field(default_factory=list)
+
+
+class PermissionBundlePatchRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    permission_codes: list[str] | None = None
+
+
+class PermissionBundleResponse(BaseModel):
+    id: UUID
+    name: str
+    permission_codes: list[str]
+    created_at: str
+    updated_at: str
+
+
+class PermissionBundleListResponse(BaseModel):
+    items: list[PermissionBundleResponse]
+    next_cursor: str | None
+
+
+class PermissionBundleApplyResponse(BaseModel):
+    user_id: UUID
+    granted_codes: list[str]
+
+
+class RevokeImpactResponse(BaseModel):
+    membership_count: int
+    projects: list[dict[str, UUID | str]]
+    projects_becoming_unmanaged: list[dict[str, UUID | str]]
+
+
 def _get_user(db: Session, user_id: UUID) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return user
+
+
+def _module_error(exc: ValueError, *, bundle: bool = False) -> APIError:
+    if isinstance(exc, ModulePermissionDeniedError):
+        return APIError(
+            ErrorCode.PERMISSION_DENIED,
+            403,
+            details=getattr(exc, "details", None),
+        )
+    if isinstance(exc, ExternalCollaboratorPermissionError):
+        return APIError(
+            ErrorCode.MODULE_PERMISSION_EXTERNAL_NOT_ALLOWED,
+            422,
+            details=getattr(exc, "details", None),
+        )
+    if isinstance(exc, ImpliedPermissionError):
+        return APIError(ErrorCode.MODULE_PERMISSION_REQUIRED_BY_OTHER, 422)
+    if isinstance(exc, InvalidModulePermissionError):
+        code = (
+            ErrorCode.PERMISSION_BUNDLE_CODE_INVALID
+            if bundle
+            else ErrorCode.MODULE_PERMISSION_CODE_INVALID
+        )
+        return APIError(code, 422, details=getattr(exc, "details", None))
+    if isinstance(exc, CreatorRolePermissionsError):
+        return APIError(ErrorCode.ROLE_CREATOR_ROLE_REQUIRES_PERMISSIONS, 422)
+    return APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+
+def _bundle_response(bundle: PermissionBundle) -> PermissionBundleResponse:
+    return PermissionBundleResponse(
+        id=bundle.id,
+        name=bundle.name,
+        permission_codes=sorted(
+            item.permission_code for item in bundle.permission_codes
+        ),
+        created_at=format_utc(bundle.created_at),
+        updated_at=format_utc(bundle.updated_at),
+    )
 
 
 def _user_error(exc: ValueError) -> APIError:
@@ -591,6 +723,352 @@ def _serialize_external_users(
         }
         for user in users
     ]
+
+
+@module_permission_router.get(
+    "/module-permissions", response_model=ModulePermissionOptionListResponse
+)
+def list_module_permission_options(
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> ModulePermissionOptionListResponse:
+    """依 DOM-R35 回傳呼叫者可管理的模組權限目錄。"""
+    descriptions = permission_code_descriptions()
+    access = calculate_effective_access(db, user_id=actor.id)
+    allowed_modules = MODULES if actor.is_admin else access.delegated_modules
+    items = [
+        ModulePermissionOption(
+            code=code,
+            module=permission_code_module(code) or "",
+            description=description,
+        )
+        for code, description in descriptions.items()
+        if permission_code_scope(code) == "module"
+        and permission_code_module(code) in allowed_modules
+    ]
+    items.sort(key=lambda item: (item.module, item.code))
+    return ModulePermissionOptionListResponse(items=items)
+
+
+@module_permission_router.get(
+    "/users/{user_id}/module-permissions",
+    response_model=UserModulePermissionResponse,
+)
+def get_user_module_permissions(
+    user_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> UserModulePermissionResponse:
+    """讀取人員的模組授權，委派者只能看到受委派模組。"""
+    target = _get_user(db, user_id)
+    access = calculate_effective_access(db, user_id=actor.id)
+    allowed_modules = MODULES if actor.is_admin else access.delegated_modules
+    permission_codes = sorted(
+        row.permission_code
+        for row in list_user_module_permissions(db, user_id=target.id)
+        if permission_code_module(row.permission_code) in allowed_modules
+    )
+    delegated_modules = sorted(
+        row.module
+        for row in list_user_module_delegations(db, user_id=target.id)
+        if row.module in allowed_modules
+    )
+    return UserModulePermissionResponse(
+        permission_codes=permission_codes,
+        delegated_modules=delegated_modules,
+    )
+
+
+@module_permission_router.put(
+    "/users/{user_id}/module-permissions/{code}", status_code=204
+)
+def grant_user_module_permission(
+    user_id: UUID,
+    code: str,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> Response:
+    """授予單一模組權限；拒絕事件由 Service 獨立交易保留。
+
+    DOM-R62 要求安全事件不隨 API 主交易回滾。
+    """
+    target = _get_user(db, user_id)
+    try:
+        grant_module_permission(
+            db, actor=actor, user=target, permission_code=code
+        )
+    except ValueError as exc:
+        raise _module_error(exc) from exc
+    response.status_code = 204
+    return response
+
+
+@module_permission_router.delete(
+    "/users/{user_id}/module-permissions/{code}", status_code=204
+)
+def revoke_user_module_permission(
+    user_id: UUID,
+    code: str,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> Response:
+    """冪等收回單一模組權限。"""
+    target = _get_user(db, user_id)
+    try:
+        revoke_module_permission(
+            db, actor=actor, user=target, permission_code=code
+        )
+    except ValueError as exc:
+        raise _module_error(exc) from exc
+    response.status_code = 204
+    return response
+
+
+@module_permission_router.get(
+    "/users/{user_id}/module-permissions/{code}/revoke-impact",
+    response_model=RevokeImpactResponse,
+)
+def get_module_permission_revoke_impact(
+    user_id: UUID,
+    code: str,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> RevokeImpactResponse:
+    """回傳撤回可使用權限可能失去管理權的專案。
+
+    此預覽依 ADM-R10 僅讀取資料，不改變任何授權或專案狀態。
+    """
+    target = _get_user(db, user_id)
+    if permission_code_scope(code) != "module":
+        raise APIError(ErrorCode.MODULE_PERMISSION_CODE_INVALID, 422)
+    access = calculate_effective_access(db, user_id=actor.id)
+    module = permission_code_module(code)
+    if not actor.is_admin and module not in access.delegated_modules:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    impact = permission_revoke_impact(
+        db, user_id=target.id, permission_code=code
+    )
+    project_ids = set(impact.project_ids)
+    projects = (
+        list(db.scalars(select(Project).where(Project.id.in_(project_ids))))
+        if project_ids
+        else []
+    )
+    by_id = {project.id: project for project in projects}
+    return RevokeImpactResponse(
+        membership_count=impact.member_count,
+        projects=[
+            {"id": project_id, "name": by_id[project_id].name}
+            for project_id in impact.project_ids
+            if project_id in by_id
+        ],
+        projects_becoming_unmanaged=[
+            {"id": project_id, "name": by_id[project_id].name}
+            for project_id in impact.projects_without_manager
+            if project_id in by_id
+        ],
+    )
+
+
+@module_permission_router.put(
+    "/users/{user_id}/module-delegations/{module}", status_code=204
+)
+def grant_user_module_delegation(
+    user_id: UUID,
+    module: str,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(require_admin, scope="function"),  # noqa
+) -> Response:
+    """只有 Admin 能指派模組委派者（DOM-R61）。"""
+    target = _get_user(db, user_id)
+    try:
+        grant_module_delegation(db, actor=actor, user=target, module=module)
+    except ValueError as exc:
+        if isinstance(exc, InvalidModulePermissionError):
+            raise APIError(
+                ErrorCode.MODULE_DELEGATION_MODULE_INVALID, 422
+            ) from exc
+        raise _module_error(exc) from exc
+    response.status_code = 204
+    return response
+
+
+@module_permission_router.delete(
+    "/users/{user_id}/module-delegations/{module}", status_code=204
+)
+def revoke_user_module_delegation(
+    user_id: UUID,
+    module: str,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(require_admin, scope="function"),  # noqa
+) -> Response:
+    """只有 Admin 能收回模組委派者（DOM-R61）。"""
+    target = _get_user(db, user_id)
+    if module not in MODULES:
+        raise APIError(ErrorCode.MODULE_DELEGATION_MODULE_INVALID, 422)
+    revoke_module_delegation(db, actor=actor, user=target, module=module)
+    response.status_code = 204
+    return response
+
+
+@module_permission_router.get(
+    "/permission-bundles", response_model=PermissionBundleListResponse
+)
+def list_permission_bundle_options(
+    cursor: str | None = None,
+    limit: int = Query(default=_DEFAULT_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> PermissionBundleListResponse:
+    """列出呼叫者可完整套用的權限組合。"""
+    cursor_key = page_cursor_key(cursor)
+    bundles = sorted(
+        list_permission_bundles(db, actor=actor),
+        key=lambda bundle: (bundle.created_at, bundle.id),
+    )
+    if cursor_key is not None:
+        bundles = [
+            bundle
+            for bundle in bundles
+            if (bundle.created_at, bundle.id) > cursor_key
+        ]
+    page = bundles[: limit + 1]
+    has_more = len(page) > limit
+    page = page[:limit]
+    next_cursor = None
+    if has_more and page:
+        last = page[-1]
+        next_cursor = encode_page_cursor(last.created_at, last.id)
+    return PermissionBundleListResponse(
+        items=[_bundle_response(bundle) for bundle in page],
+        next_cursor=next_cursor,
+    )
+
+
+@module_permission_router.post(
+    "/permission-bundles",
+    response_model=PermissionBundleResponse,
+    status_code=201,
+)
+def add_permission_bundle(
+    body: PermissionBundleRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(require_admin, scope="function"),  # noqa
+) -> PermissionBundleResponse:
+    """建立權限組合；名稱衝突轉為穩定的 409 契約。"""
+    try:
+        bundle = create_permission_bundle(
+            db,
+            actor=actor,
+            name=body.name,
+            permission_codes=body.permission_codes,
+        )
+    except IntegrityError as exc:
+        raise APIError(ErrorCode.PERMISSION_BUNDLE_NAME_CONFLICT, 409) from exc
+    except ValueError as exc:
+        raise _module_error(exc, bundle=True) from exc
+    return _bundle_response(bundle)
+
+
+@module_permission_router.patch(
+    "/permission-bundles/{bundle_id}",
+    response_model=PermissionBundleResponse,
+)
+def edit_permission_bundle(
+    bundle_id: UUID,
+    body: PermissionBundlePatchRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(require_admin, scope="function"),  # noqa
+) -> PermissionBundleResponse:
+    """完整替換權限組合欄位，不回頭改動已套用的人員。"""
+    fields = body.model_dump(exclude_unset=True)
+    if not fields or any(value is None for value in fields.values()):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    bundle = db.scalar(
+        select(PermissionBundle)
+        .options(selectinload(PermissionBundle.permission_codes))
+        .where(PermissionBundle.id == bundle_id)
+    )
+    if bundle is None:
+        raise APIError(ErrorCode.PERMISSION_BUNDLE_NOT_FOUND, 404)
+    try:
+        update_permission_bundle(
+            db,
+            actor=actor,
+            bundle=bundle,
+            name=fields.get("name", bundle.name),
+            permission_codes=fields.get(
+                "permission_codes",
+                [item.permission_code for item in bundle.permission_codes],
+            ),
+        )
+    except IntegrityError as exc:
+        raise APIError(ErrorCode.PERMISSION_BUNDLE_NAME_CONFLICT, 409) from exc
+    except ValueError as exc:
+        raise _module_error(exc, bundle=True) from exc
+    return _bundle_response(bundle)
+
+
+@module_permission_router.delete(
+    "/permission-bundles/{bundle_id}", status_code=204
+)
+def remove_permission_bundle(
+    bundle_id: UUID,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(require_admin, scope="function"),  # noqa
+) -> Response:
+    """刪除組合定義但保留既有使用者權限。"""
+    bundle = db.scalar(
+        select(PermissionBundle)
+        .options(selectinload(PermissionBundle.permission_codes))
+        .where(PermissionBundle.id == bundle_id)
+    )
+    if bundle is None:
+        raise APIError(ErrorCode.PERMISSION_BUNDLE_NOT_FOUND, 404)
+    delete_permission_bundle(db, actor=actor, bundle=bundle)
+    response.status_code = 204
+    return response
+
+
+@module_permission_router.post(
+    "/users/{user_id}/permission-bundles/{bundle_id}:apply",
+    response_model=PermissionBundleApplyResponse,
+)
+def apply_user_permission_bundle(
+    user_id: UUID,
+    bundle_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> PermissionBundleApplyResponse:
+    """完整檢查授權範圍後套用組合，避免部分寫入。"""
+    target = _get_user(db, user_id)
+    bundle = db.scalar(
+        select(PermissionBundle)
+        .options(selectinload(PermissionBundle.permission_codes))
+        .where(PermissionBundle.id == bundle_id)
+    )
+    if bundle is None:
+        raise APIError(ErrorCode.PERMISSION_BUNDLE_NOT_FOUND, 404)
+    before = {
+        item.permission_code
+        for item in list_user_module_permissions(db, user_id=target.id)
+    }
+    try:
+        apply_permission_bundle(db, actor=actor, user=target, bundle=bundle)
+    except ValueError as exc:
+        raise _module_error(exc, bundle=True) from exc
+    after = {
+        item.permission_code
+        for item in list_user_module_permissions(db, user_id=target.id)
+    }
+    return PermissionBundleApplyResponse(
+        user_id=target.id, granted_codes=sorted(after - before)
+    )
 
 
 @admin_router.get("/projects/unmanaged")
