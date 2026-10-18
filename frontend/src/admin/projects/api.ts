@@ -45,6 +45,8 @@ export type ProjectInput = {
   company_role: string
   planned_start_date: string | null
   planned_completion_date: string | null
+  /** ADM-R32：Admin 選填；建立時同交易指派建立者角色。 */
+  creator_role_user_id?: string
 }
 
 /** 修改專案；改本公司角色時必須同時帶原因（DOM-R76、ADM-R42）。 */

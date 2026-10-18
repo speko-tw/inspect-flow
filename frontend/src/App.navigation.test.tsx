@@ -459,7 +459,7 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(await screen.findByRole('heading', { name: heading })).toBeVisible()
   })
 
-  it('純內業的專案清單只列有內業權限的專案，沒有新增專案', async () => {
+  it('純內業可檢視所有已授權專案，但沒有新增專案', async () => {
     const backend = stubBackend(OFFICE)
     const original = backend.fetchMock.getMockImplementation()!
     backend.fetchMock.mockImplementation(async (input, init) =>
@@ -487,12 +487,13 @@ describe('依後端存取摘要決定落點（#480）', () => {
     await screen.findByRole('heading', { name: '我的專案' })
     expect(await screen.findByText('示範工程甲')).toBeVisible()
     expect(screen.getByText('示範工程乙')).toBeVisible()
-    expect(screen.queryByText('只有現場的工程')).toBeNull()
+    expect(screen.getByText('只有現場的工程')).toBeVisible()
     expect(screen.queryByText('新增專案')).toBeNull()
     const links = screen.getAllByRole('link', { name: '開啟專案' })
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/admin/projects/project-a',
       '/admin/projects/project-b',
+      '/admin/projects/project-c',
     ])
   })
 

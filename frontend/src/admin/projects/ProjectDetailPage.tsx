@@ -34,8 +34,6 @@ import './ProjectMembers.css'
 
 const ROLES_REQUIRED_CODE = 'project.member_roles_required'
 const ROLES_REQUIRED_TEXT = '請至少選一個角色。'
-const COMPANY_MISMATCH_CODE = 'project.member_company_mismatch'
-const COMPANY_MISMATCH_TEXT = '只能加入和你同公司的使用者，請重新選擇。'
 
 // 訊息只顯示在發生的地方，並在下一次操作前清掉，不殘留舊訊息。
 type Scope = 'add' | 'edit' | 'remove'
@@ -72,11 +70,18 @@ function dataOf<T>(state: Loaded<T[]>): T[] {
   return state.status === 'ready' ? state.data : []
 }
 
-function isCompanyMismatch(caught: unknown): boolean {
-  return (
-    caught instanceof ManagementApiError &&
-    caught.code === COMPANY_MISMATCH_CODE
-  )
+function assignmentError(caught: unknown): string | null {
+  if (!(caught instanceof ManagementApiError)) return null
+  if (caught.code === 'project.role_not_assignable') {
+    return '你不能指派這個角色，請選擇可指派的角色。'
+  }
+  if (caught.code === 'project.external_role_not_allowed') {
+    return '外部協作人員只能指派外部可用的角色。'
+  }
+  if (caught.code === 'project.member_self_role_change') {
+    return '不能修改自己的專案角色。'
+  }
+  return null
 }
 
 function sameSet(a: string[], b: string[]): boolean {
@@ -196,10 +201,15 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       if (isRolesRequired(caught)) {
         setRolesError(ROLES_REQUIRED_TEXT)
         addRolesRef.current?.focus()
-      } else if (isCompanyMismatch(caught)) {
-        // 伺服器端的同公司檢查：錯誤顯示在使用者欄，已選的角色保留。
-        setUserError(COMPANY_MISMATCH_TEXT)
+      } else if (
+        caught instanceof ManagementApiError &&
+        caught.code === 'project.member_self_role_change'
+      ) {
+        setUserError('不能把自己加入專案。')
         userRef.current?.focus()
+      } else if (assignmentError(caught)) {
+        setRolesError(assignmentError(caught) ?? '')
+        addRolesRef.current?.focus()
       } else {
         setMessage({ scope: 'add', text: managementErrorMessage(caught) })
       }
@@ -232,6 +242,9 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     } catch (caught) {
       if (isRolesRequired(caught)) {
         setEditing({ ...editing, error: ROLES_REQUIRED_TEXT })
+        editRolesRef.current?.focus()
+      } else if (assignmentError(caught)) {
+        setEditing({ ...editing, error: assignmentError(caught) ?? '' })
         editRolesRef.current?.focus()
       } else {
         setMessage({ scope: 'edit', text: managementErrorMessage(caught) })
@@ -293,6 +306,12 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const members = dataOf(membersState)
   const candidates = dataOf(candidatesState)
   const roles = dataOf(rolesState)
+  const selectedCandidate = candidates.find(
+    (candidate) => candidate.id === newUserId,
+  )
+  const addableRoles = selectedCandidate?.is_external_collaborator
+    ? roles.filter((role) => role.is_external_allowed)
+    : roles
   const roleName = (id: string) =>
     roles.find((role) => role.id === id)?.name ??
     (rolesState.status === 'ready' ? '（未知角色）' : '（角色名稱無法顯示）')
@@ -462,7 +481,9 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 aria-invalid={userError ? true : undefined}
                 onChange={(event) => {
                   setNewUserId(event.target.value)
+                  setNewRoleIds([])
                   setUserError('')
+                  setRolesError('')
                 }}
                 ref={userRef}
                 value={newUserId}
@@ -470,11 +491,28 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 <option value="">請選擇使用者</option>
                 {candidates.map((user) => (
                   <option key={user.id} value={user.id}>
-                    {personLabel(user)}
+                    {personLabel(user)} · {user.company_name ?? '未連結公司'}
+                    {user.is_external_collaborator ? ' · 外部協作人員' : ''}
                   </option>
                 ))}
               </select>
             </label>
+            {selectedCandidate &&
+              (!selectedCandidate.module_status.project_use ||
+                !selectedCandidate.module_status.inspection_use) && (
+                <p className="field-hint">
+                  {[
+                    selectedCandidate.module_status.project_use
+                      ? null
+                      : '尚未開通專案模組，請系統管理者或被委派者開通',
+                    selectedCandidate.module_status.inspection_use
+                      ? null
+                      : '尚未開通查核模組，請系統管理者或被委派者開通',
+                  ]
+                    .filter(Boolean)
+                    .join('；')}
+                </p>
+              )}
             {userError && (
               <p className="field-error" id="member-user-error">
                 {userError}
@@ -515,7 +553,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   setNewRoleIds(next)
                   setRolesError('')
                 }}
-                roles={roles}
+                roles={addableRoles}
                 selected={newRoleIds}
               />
             )}
