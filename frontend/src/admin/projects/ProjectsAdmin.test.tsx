@@ -1715,6 +1715,7 @@ describe('admin projects page', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: '儲存專案' }))
     await screen.findAllByText('手機更新工程')
+    expect(await screen.findByRole('status')).toHaveTextContent('已儲存')
     const [, init] = calls(fetchMock, 'PATCH', /\/projects\/project-1$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       name: '手機更新工程',
@@ -2112,7 +2113,7 @@ describe('admin project members', () => {
       within(addForm()).getByRole('button', { name: '加入成員' }),
     )
 
-    expect(await screen.findByText('林鮑伯', { selector: 'p' })).toBeVisible()
+    expect(await screen.findByRole('link', { name: '林鮑伯' })).toBeVisible()
     const [, init] = calls(fetchMock, 'POST', /\/members$/)[0]
     expect(JSON.parse(String(init?.body))).toEqual({
       user_id: bob.id,
@@ -2332,9 +2333,9 @@ describe('admin project members', () => {
     fireEvent.click(screen.getByRole('button', { name: '儲存角色' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent('已更新')
-    const card = (
-      await screen.findByText('鄧安娜', { selector: 'p' })
-    ).closest('li') as HTMLElement
+    const card = (await screen.findByRole('link', { name: '鄧安娜' })).closest(
+      'li',
+    ) as HTMLElement
     await waitFor(() => expect(card).toHaveTextContent('審核者'))
     expect(card).not.toHaveTextContent('查核員')
     expect(

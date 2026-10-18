@@ -99,7 +99,7 @@ describe('App routing', () => {
     )
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
     expect(
       await screen.findByText(`InspectFlow v${__INSPECTFLOW_VERSION__}`),

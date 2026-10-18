@@ -130,7 +130,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('專案網址的 id 無效或不存在', () => {
   it.each([
-    ['系統管理者', ADMIN, '/admin'],
+    ['系統管理者', ADMIN, '/admin/dashboard'],
     ['內業', OFFICE, '/admin/projects'],
   ] as const)(
     '%s：專案首頁 id 格式不對（422）顯示找不到並可回首頁',
@@ -193,7 +193,7 @@ describe('專案網址的 id 無效或不存在', () => {
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/admin',
+      '/admin/dashboard',
     )
   })
 
@@ -226,7 +226,7 @@ describe('專案網址的 id 無效或不存在', () => {
 
 describe('不存在的子路徑', () => {
   it.each([
-    ['系統管理者', ADMIN, '/admin'],
+    ['系統管理者', ADMIN, '/admin/dashboard'],
     ['內業', OFFICE, '/admin/projects'],
   ] as const)(
     '%s：專案底下不存在的子路徑顯示找不到並可回首頁',
