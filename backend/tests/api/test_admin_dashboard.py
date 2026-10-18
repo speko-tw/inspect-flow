@@ -2,17 +2,20 @@
 
 from sqlalchemy import delete, select
 
+from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.models import (
     InspectionPlan,
     InspectionTask,
     Project,
     ProjectMember,
     ProjectMemberRole,
+    ProjectZone,
     Role,
     RolePermission,
     UserModulePermission,
 )
 from tests.api.test_inspection_planning_api import _planning_world
+from tests.db.conftest import create_root_user_with_company
 
 
 def _dashboard_fixture(db_session, make_client):
@@ -313,4 +316,135 @@ def test_dashboard_cursor_search_and_validation(db_session, make_client):
             params={"project_id": str(world["project"].id), "q": "field"},
         ).status_code
         == 200
+    )
+
+
+def test_dashboard_tasks_require_global_permission_and_revoke_immediately(
+    db_session, make_client
+):
+    world = _dashboard_fixture(db_session, make_client)
+    user = world["plain_user"]
+    task = db_session.scalar(
+        select(InspectionTask).where(
+            InspectionTask.project_id == world["project"].id,
+            InspectionTask.status == "PENDING",
+        )
+    )
+    zone = ProjectZone(
+        project_id=world["project"].id,
+        name="A 棟 2 樓",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    db_session.add(zone)
+    db_session.flush()
+    task.zone_id = zone.id
+    task.location_text = "機房"
+    db_session.add(
+        UserModulePermission(
+            user_id=user.id,
+            permission_code="all_project_progress.read",
+            source="manual",
+        )
+    )
+    db_session.execute(
+        delete(UserModulePermission).where(
+            UserModulePermission.user_id == user.id,
+            UserModulePermission.permission_code == "inspection.use",
+        )
+    )
+    db_session.commit()
+
+    base = f"/api/v1/admin/dashboard/projects/{world['project'].id}/tasks"
+    listed = world["plain"].get(base)
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["next_cursor"] is None
+    row = next(
+        item
+        for item in listed.json()["items"]
+        if item["task_id"] == str(task.id)
+    )
+    assert set(row) == {
+        "task_id",
+        "status",
+        "location",
+        "suggested_assignee",
+    }
+    assert row["location"] == {
+        "zone_name": "A 棟 2 樓",
+        "location_text": "機房",
+    }
+    assert row["suggested_assignee"] == {
+        "user_id": str(world["field_user"].id),
+        "name_zh": world["field_user"].name_zh,
+    }
+    detail = world["plain"].get(f"{base}/{task.id}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json() == row
+
+    db_session.execute(
+        delete(UserModulePermission).where(
+            UserModulePermission.user_id == user.id,
+            UserModulePermission.permission_code
+            == "all_project_progress.read",
+        )
+    )
+    db_session.commit()
+    assert world["plain"].get(base).status_code == 403
+    assert world["plain"].get(f"{base}/{task.id}").status_code == 403
+
+
+def test_dashboard_tasks_allow_admin_and_deny_unentitled_members(
+    db_session, make_client
+):
+    world = _dashboard_fixture(db_session, make_client)
+    base = f"/api/v1/admin/dashboard/projects/{world['project'].id}/tasks"
+    assert world["admin"].get(base).status_code == 200
+    assert world["plain"].get(base).status_code == 403
+    task_id = "00000000-0000-0000-0000-000000000001"
+    assert world["plain"].get(f"{base}/{task_id}").status_code == 403
+
+    external = create_root_user_with_company(db_session, "DASHBOARD-EXT")
+    external.is_external_collaborator = True
+    db_session.commit()
+    external_token = create_session(db_session, external)[1]
+    db_session.commit()
+    external_client = make_client()
+    external_client.cookies.set(SESSION_COOKIE_NAME, external_token)
+    assert external_client.get(base).status_code == 403
+    assert external_client.get(f"{base}/{task_id}").status_code == 403
+
+
+def test_dashboard_task_hides_cross_project_and_missing_ids(
+    db_session, make_client
+):
+    world = _dashboard_fixture(db_session, make_client)
+    other = Project(
+        project_code="DASHBOARD-TASK-OTHER",
+        name="其他任務專案",
+        client_name="業主",
+        site_location="工地",
+        created_by=world["admin_user"].id,
+        updated_by=world["admin_user"].id,
+    )
+    task = db_session.scalar(select(InspectionTask))
+    db_session.add(other)
+    db_session.commit()
+    base = f"/api/v1/admin/dashboard/projects/{other.id}/tasks"
+    assert world["admin"].get(f"{base}/{task.id}").status_code == 404
+    assert (
+        world["admin"]
+        .get(
+            f"/api/v1/admin/dashboard/projects/{world['project'].id}/tasks/"
+            "00000000-0000-0000-0000-000000000001"
+        )
+        .status_code
+        == 404
+    )
+    missing_project = "00000000-0000-0000-0000-000000000002"
+    assert (
+        world["admin"]
+        .get(f"/api/v1/admin/dashboard/projects/{missing_project}/tasks")
+        .status_code
+        == 403
     )

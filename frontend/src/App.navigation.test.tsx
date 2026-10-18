@@ -58,6 +58,10 @@ const MEMBER = {
   can_browse_templates: false,
   can_manage_template_library: false,
 }
+const FIELD_PROJECT_READ = {
+  ...MEMBER,
+  has_project_access: true,
+}
 const OFFICE = {
   ...NON_ADMIN,
   has_office_access: true,
@@ -212,7 +216,14 @@ function stubBackend(
         return Response.json(WORKFLOW_SUMMARY)
       }
       if (url.endsWith('/me/projects')) {
-        return Response.json(MY_PROJECTS)
+        const projects =
+          backend.me?.has_project_access && !backend.me.has_office_access
+            ? MY_PROJECTS.map((project) => ({
+                ...project,
+                has_office_access: false,
+              }))
+            : MY_PROJECTS
+        return Response.json(projects)
       }
       if (url.endsWith('/project-company-roles')) {
         return Response.json({
@@ -459,7 +470,7 @@ describe('依後端存取摘要決定落點（#480）', () => {
     expect(await screen.findByRole('heading', { name: heading })).toBeVisible()
   })
 
-  it('純內業的專案清單只列有內業權限的專案，沒有新增專案', async () => {
+  it('純內業的專案清單只顯示 API 回傳的專案，沒有新增專案', async () => {
     const backend = stubBackend(OFFICE)
     const original = backend.fetchMock.getMockImplementation()!
     backend.fetchMock.mockImplementation(async (input, init) =>
@@ -472,13 +483,6 @@ describe('依後端存取摘要決定落點（#480）', () => {
               project_code: 'DEMO-B',
               name: '示範工程乙',
             },
-            {
-              ...MY_PROJECTS[0],
-              id: 'project-c',
-              project_code: 'DEMO-C',
-              name: '只有現場的工程',
-              has_office_access: false,
-            },
           ])
         : original(input, init),
     )
@@ -487,7 +491,6 @@ describe('依後端存取摘要決定落點（#480）', () => {
     await screen.findByRole('heading', { name: '我的專案' })
     expect(await screen.findByText('示範工程甲')).toBeVisible()
     expect(screen.getByText('示範工程乙')).toBeVisible()
-    expect(screen.queryByText('只有現場的工程')).toBeNull()
     expect(screen.queryByText('新增專案')).toBeNull()
     const links = screen.getAllByRole('link', { name: '開啟專案' })
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
@@ -931,7 +934,7 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   })
 })
 
-describe('我的專案入口只給有內業權限的人（#489）', () => {
+describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）', () => {
   it('現場帳號從登入開始只靠點擊：現場頁頂端沒有我的專案', async () => {
     stubBackend(null, MEMBER)
     renderApp('/login')
@@ -952,6 +955,30 @@ describe('我的專案入口只給有內業權限的人（#489）', () => {
     ).toBeVisible()
     expect(screen.queryByRole('heading', { name: '我的專案' })).toBeNull()
     expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
+  })
+
+  it('現場加 project.read 保留今日任務落點並可開啟唯讀專案', async () => {
+    stubBackend(FIELD_PROJECT_READ)
+    renderApp('/')
+
+    expect(
+      await screen.findByRole('heading', { name: '今日任務' }),
+    ).toBeVisible()
+    const nav = screen.getByRole('navigation', { name: '我的功能' })
+    fireEvent.click(within(nav).getByRole('link', { name: '我的專案' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '示範工程甲' }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
+      'href',
+      '/admin/projects/project-a',
+    )
+    fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
+    expect(
+      await screen.findByRole('heading', { name: /DEMO-A｜示範工程甲/ }),
+    ).toBeVisible()
+    expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })
 
   it('範本管理員直接開 /admin/projects：導回範本管理', async () => {

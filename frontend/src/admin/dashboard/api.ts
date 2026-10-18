@@ -49,6 +49,23 @@ export interface DashboardProject {
 /** ADM-R04：可依游標續讀的專案進度清單。 */
 export type DashboardProjectPage = Page<DashboardProject>
 
+/** ADM-R06：全部進度權限可讀的任務欄位白名單。 */
+export interface DashboardTask {
+  task_id: string
+  status: string
+  location: {
+    zone_name: string | null
+    location_text: string | null
+  }
+  suggested_assignee: {
+    user_id: string
+    name_zh: string | null
+  } | null
+}
+
+/** 可依游標續讀的專案任務清單。 */
+export type DashboardTaskPage = Page<DashboardTask>
+
 /** 專案進度清單支援的搜尋及游標參數。 */
 export interface DashboardProjectListOptions {
   q?: string
@@ -104,6 +121,38 @@ export function listDashboardProjects(
 export function listAllDashboardProjects(): Promise<DashboardProject[]> {
   return collectPages((cursor) =>
     listDashboardProjects({ cursor, limit: 100 }),
+  )
+}
+
+/** 讀取全部進度權限可見的單一專案任務清單。 */
+export function listDashboardTasks(
+  projectId: string,
+  options: { cursor?: string | null; limit?: number } = {},
+): Promise<DashboardTaskPage> {
+  const query = new URLSearchParams({
+    limit: String(options.limit ?? 50),
+  })
+  if (options.cursor) query.set('cursor', options.cursor)
+  return request(
+    '/admin/dashboard/projects/' +
+      encodeURIComponent(projectId) +
+      '/tasks?' +
+      query.toString(),
+  )
+}
+
+/** 讀取單一任務的四項白名單資料，
+ * 不讀取照片或查核結果。
+ */
+export function getDashboardTask(
+  projectId: string,
+  taskId: string,
+): Promise<DashboardTask> {
+  return request(
+    '/admin/dashboard/projects/' +
+      encodeURIComponent(projectId) +
+      '/tasks/' +
+      encodeURIComponent(taskId),
   )
 }
 

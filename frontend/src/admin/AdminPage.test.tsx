@@ -1644,6 +1644,8 @@ describe('admin user and company pages', () => {
       is_admin: false,
       has_office_access: false,
       has_field_access: true,
+      can_create_project: false,
+      has_project_access: false,
       has_template_access: false,
     }
     render(
@@ -1699,6 +1701,8 @@ describe('admin user and company pages', () => {
       is_admin: false,
       has_office_access: false,
       has_field_access: true,
+      can_create_project: false,
+      has_project_access: false,
       has_template_access: true,
     }
     render(

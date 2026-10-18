@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   canOpenDashboard,
   getDashboardSummary,
+  getDashboardTask,
   hasGlobalDashboardAccess,
   listAllDashboardProjects,
   listDashboardEngineers,
   listDashboardProjects,
+  listDashboardTasks,
 } from './api'
 
 describe('dashboard API client', () => {
@@ -83,6 +85,61 @@ describe('dashboard API client', () => {
     expect(query.get('q')).toBe('東區')
     expect(query.get('cursor')).toBe('cursor / 2')
     expect(query.get('limit')).toBe('7')
+  })
+
+  it('reads the task allowlist with cursor pagination', async () => {
+    const page = {
+      items: [
+        {
+          task_id: 'task-1',
+          status: 'IN_PROGRESS',
+          location: { zone_name: 'A 區', location_text: '二樓' },
+          suggested_assignee: {
+            user_id: 'user-1',
+            name_zh: '陳工程師',
+          },
+        },
+      ],
+      next_cursor: 'next',
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      void input
+      return Response.json(page)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      listDashboardTasks('project-1', { cursor: 'next / 1', limit: 7 }),
+    ).resolves.toEqual(page)
+
+    const [url] = fetchMock.mock.calls[0]
+    const parsed = new URL(String(url), 'http://localhost')
+    expect(parsed.pathname).toBe(
+      '/api/v1/admin/dashboard/projects/project-1/tasks',
+    )
+    expect(parsed.searchParams.get('cursor')).toBe('next / 1')
+    expect(parsed.searchParams.get('limit')).toBe('7')
+  })
+
+  it('reads task detail from the scoped dashboard endpoint', async () => {
+    const task = {
+      task_id: 'task-1',
+      status: 'PENDING',
+      location: { zone_name: null, location_text: '屋頂' },
+      suggested_assignee: null,
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      void input
+      return Response.json(task)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getDashboardTask('project-1', 'task-1')).resolves.toEqual(
+      task,
+    )
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      '/api/v1/admin/dashboard/projects/project-1/tasks/task-1',
+    )
   })
 
   it('uses the API page size when no options are supplied', async () => {
