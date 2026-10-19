@@ -201,6 +201,9 @@ try {
     `${base}/projects/${result.projects.B}/inspection-items/templates`,
   )
   await page.getByRole('heading', { name: '套用範本到專案' }).waitFor()
+  // 外部協作只能唯讀瀏覽：先選到系統，再確認沒有套用入口並說明原因。
+  await selectElectricalSystem()
+  await page.getByText('你沒有修改此專案查核項目的權限。').waitFor()
   assert.equal(
     await page.getByRole('button', { name: '套用至專案' }).count(),
     0,
@@ -224,7 +227,7 @@ try {
   process.stdout.write(JSON.stringify({
     result: 'PASS',
     browser: 'Google Chrome via Playwright',
-    wholeSystem: 'two items applied from the Admin project route',
+    wholeSystem: 'two items applied from the demo-office project route',
     singleItem: 'bound numeric field and unit applied from the UI',
     duplicate: 'real API returned 409 without partial writes',
     saveConflict: 'real API conflict visible in the Admin UI',
