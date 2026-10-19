@@ -63,6 +63,18 @@ const ENTITY_LABELS: Record<string, string> = {
 
 export const UNKNOWN_EVENT_LABEL = '其他操作'
 
+/**
+ * 「事件類型」篩選的下拉選項：顯示白話、值仍是事件碼（API 契約不變）。
+ * 停用與啟用共用一個事件碼，下拉只能選碼，所以用合併後的說法。
+ */
+export const EVENT_TYPE_OPTIONS: ReadonlyArray<{
+  value: string
+  label: string
+}> = Object.entries(EVENT_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
+
 function payloadOf(entry: AuditLogEntry): Record<string, unknown> {
   const value = entry.after ?? entry.before
   return typeof value === 'object' && value !== null

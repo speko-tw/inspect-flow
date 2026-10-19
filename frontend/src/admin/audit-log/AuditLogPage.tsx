@@ -9,7 +9,8 @@ import {
   type AuditLogFilters,
   type AuditLogPage,
 } from './api'
-import { entityLabel, eventLabel } from './auditLabels'
+import { PAGE_TITLES } from '../../terms'
+import { entityLabel, EVENT_TYPE_OPTIONS, eventLabel } from './auditLabels'
 import './AuditLogPage.css'
 
 const emptyFilters: AuditLogFilters = {
@@ -20,13 +21,11 @@ const emptyFilters: AuditLogFilters = {
   event_type: '',
 }
 
-const eventTypePattern = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/
 const reversedRangeError = '起始時間不得晚於結束時間。'
 
 interface FilterErrors {
   from?: string
   to?: string
-  eventType?: string
 }
 
 function displayJson(value: unknown): string {
@@ -45,7 +44,6 @@ export default function AuditLogPage() {
   const [filterErrors, setFilterErrors] = useState<FilterErrors>({})
   const fromRef = useRef<HTMLInputElement>(null)
   const toRef = useRef<HTMLInputElement>(null)
-  const eventTypeRef = useRef<HTMLInputElement>(null)
   const [filters, setFilters] = useState<AuditLogFilters>(emptyFilters)
   const [cursor, setCursor] = useState<string | null>(null)
   const [history, setHistory] = useState<Array<string | null>>([])
@@ -109,16 +107,11 @@ export default function AuditLogPage() {
     } else if (fromDate && toDate && fromDate > toDate) {
       nextErrors.to = reversedRangeError
     }
-    const normalizedEventType = eventType.trim()
-    if (normalizedEventType && !eventTypePattern.test(normalizedEventType)) {
-      nextErrors.eventType = '事件類型格式應為資料類型.動作。'
-    }
     setFilterErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       setError('')
       if (nextErrors.from) fromRef.current?.focus()
-      else if (nextErrors.to) toRef.current?.focus()
-      else eventTypeRef.current?.focus()
+      else toRef.current?.focus()
       return
     }
     setLoading(true)
@@ -130,7 +123,7 @@ export default function AuditLogPage() {
       actor_id: actorId,
       from: fromDate?.toISOString() ?? '',
       to: toDate?.toISOString() ?? '',
-      event_type: normalizedEventType,
+      event_type: eventType,
     })
   }
 
@@ -222,7 +215,7 @@ export default function AuditLogPage() {
 
   return (
     <section className="audit-page" aria-labelledby="audit-page-title">
-      <h1 id="audit-page-title">稽核紀錄</h1>
+      <h1 id="audit-page-title">{PAGE_TITLES.records}</h1>
       <p>查詢系統操作紀錄。這個頁面只提供檢視，不會修改紀錄。</p>
       {optionsError && <p role="alert">篩選選項載入失敗：{optionsError}</p>}
       <form className="audit-filters" onSubmit={search}>
@@ -311,33 +304,18 @@ export default function AuditLogPage() {
           )}
         </label>
         <label>
-          <span id="audit-event-type-label">事件類型</span>
-          <input
-            aria-describedby={
-              filterErrors.eventType ? 'audit-event-type-error' : undefined
-            }
-            aria-invalid={Boolean(filterErrors.eventType)}
-            aria-labelledby="audit-event-type-label"
-            onChange={(event) => {
-              setEventType(event.target.value)
-              setFilterErrors((previous) => ({
-                ...previous,
-                eventType: undefined,
-              }))
-            }}
-            placeholder="例如 project_zone.created"
-            ref={eventTypeRef}
+          事件類型
+          <select
+            onChange={(event) => setEventType(event.target.value)}
             value={eventType}
-          />
-          {filterErrors.eventType && (
-            <span
-              className="audit-filter-error"
-              id="audit-event-type-error"
-              role="alert"
-            >
-              {filterErrors.eventType}
-            </span>
-          )}
+          >
+            <option value="">全部</option>
+            {EVENT_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
         {projectId && (
           <p className="audit-project-hint" id="audit-project-hint">

@@ -1188,7 +1188,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/logs')
 
     expect(
-      await screen.findByRole('heading', { name: '稽核紀錄' }),
+      await screen.findByRole('heading', { name: '操作紀錄' }),
     ).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: '管理功能' })
     expect(within(nav).getByRole('button', { name: /管理/ })).toHaveAttribute(

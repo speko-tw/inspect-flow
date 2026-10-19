@@ -115,7 +115,19 @@ export default function ProjectHomePage() {
   const canActOnPrimary =
     requiredCode === undefined ||
     (summary?.viewer_permission_codes.includes(requiredCode) ?? false)
-  const progressFallback = canViewProgress ? '/progress' : '/planning'
+  // 草稿只給內業看：沒有規劃相關權限的人（例如外部協作的專案查閱
+  // 人員）不顯示草稿數、未指派數與待重查數，也不給對應連結。
+  const canSeePlanningNumbers =
+    summary?.viewer_permission_codes.some(
+      (code) =>
+        code === 'inspection_plan.create' ||
+        code === 'inspection_task.dispatch',
+    ) ?? false
+  // 沒有可執行的下一步就整張卡不顯示，不放「沒有你可執行」的空卡。
+  const showNextStep =
+    primary !== null &&
+    canActOnPrimary &&
+    (primary !== 'complete_reinspection' || canViewProgress || canViewPlanning)
   const duplicateWarning = (
     location.state as { duplicateProjectCode?: string } | null
   )?.duplicateProjectCode
@@ -168,46 +180,25 @@ export default function ProjectHomePage() {
                     )?.label ?? summary.project.company_role)}
               </strong>
             </p>
-            <section
-              aria-labelledby="project-next-step-heading"
-              className="project-next-step"
-            >
-              <h3 id="project-next-step-heading">下一步</h3>
-              {primary ? (
-                <>
-                  <p>
-                    {canActOnPrimary
-                      ? STEP_CONTENT[primary].label
-                      : '目前沒有你可執行的下一步。'}
-                  </p>
-                  {(primary !== 'complete_reinspection' ||
-                    canViewProgress ||
-                    canViewPlanning) &&
-                    canActOnPrimary && (
-                      <Link
-                        className="btn btn-primary"
-                        to={`${base}${
-                          primary === 'complete_reinspection' &&
-                          !canViewProgress
-                            ? '/planning'
-                            : STEP_CONTENT[primary].suffix
-                        }`}
-                      >
-                        {STEP_CONTENT[primary].action}
-                      </Link>
-                    )}
-                </>
-              ) : (
-                <>
-                  <p>目前沒有待處理的下一步。</p>
-                  {(canViewProgress || canViewPlanning) && (
-                    <Link className="btn" to={`${base}${progressFallback}`}>
-                      追蹤進度
-                    </Link>
-                  )}
-                </>
-              )}
-            </section>
+            {showNextStep && (
+              <section
+                aria-labelledby="project-next-step-heading"
+                className="project-next-step"
+              >
+                <h3 id="project-next-step-heading">下一步</h3>
+                <p>{STEP_CONTENT[primary].label}</p>
+                <Link
+                  className="btn btn-primary"
+                  to={`${base}${
+                    primary === 'complete_reinspection' && !canViewProgress
+                      ? '/planning'
+                      : STEP_CONTENT[primary].suffix
+                  }`}
+                >
+                  {STEP_CONTENT[primary].action}
+                </Link>
+              </section>
+            )}
             <dl aria-label="專案關鍵數字" className="project-key-numbers">
               <div>
                 <dt className="muted-text">成員</dt>
@@ -224,21 +215,23 @@ export default function ProjectHomePage() {
                 </div>
               ) : (
                 <>
-                  <div>
-                    <dt className="muted-text">草稿任務</dt>
-                    <dd>
-                      {canViewProgress ? (
-                        <Link to={`${base}/progress?status=DRAFT`}>
-                          {summary.task_counts.DRAFT} 件
-                        </Link>
-                      ) : (
-                        <>{summary.task_counts.DRAFT} 件</>
-                      )}
-                      <span className="project-key-number-detail muted-text">
-                        未指派 {summary.draft_tasks_missing_assignee} 件
-                      </span>
-                    </dd>
-                  </div>
+                  {canSeePlanningNumbers && (
+                    <div>
+                      <dt className="muted-text">草稿任務</dt>
+                      <dd>
+                        {canViewProgress ? (
+                          <Link to={`${base}/progress?status=DRAFT`}>
+                            {summary.task_counts.DRAFT} 件
+                          </Link>
+                        ) : (
+                          <>{summary.task_counts.DRAFT} 件</>
+                        )}
+                        <span className="project-key-number-detail muted-text">
+                          未指派 {summary.draft_tasks_missing_assignee} 件
+                        </span>
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="muted-text">已派出未完成</dt>
                     <dd>
@@ -264,18 +257,20 @@ export default function ProjectHomePage() {
                       </span>
                     </dd>
                   </div>
-                  <div>
-                    <dt className="muted-text">待重查</dt>
-                    <dd>
-                      {canViewProgress ? (
-                        <Link to={`${base}/progress?status=reinspection`}>
-                          {summary.pending_reinspection_task_count} 件
-                        </Link>
-                      ) : (
-                        <>{summary.pending_reinspection_task_count} 件</>
-                      )}
-                    </dd>
-                  </div>
+                  {canSeePlanningNumbers && (
+                    <div>
+                      <dt className="muted-text">待重查</dt>
+                      <dd>
+                        {canViewProgress ? (
+                          <Link to={`${base}/progress?status=reinspection`}>
+                            {summary.pending_reinspection_task_count} 件
+                          </Link>
+                        ) : (
+                          <>{summary.pending_reinspection_task_count} 件</>
+                        )}
+                      </dd>
+                    </div>
+                  )}
                 </>
               )}
             </dl>

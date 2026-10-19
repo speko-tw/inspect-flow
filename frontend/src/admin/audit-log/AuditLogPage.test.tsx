@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -64,7 +70,9 @@ describe('稽核查詢頁', () => {
   it('套用四類篩選、翻頁與返回，僅送 GET 查詢', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    expect(await screen.findByText('建立分區')).toBeInTheDocument()
+    expect(
+      await screen.findByText('建立分區', { selector: 'h2' }),
+    ).toBeInTheDocument()
     expect(
       await screen.findByRole('option', { name: '班 (ben)' }),
     ).toBeInTheDocument()
@@ -178,8 +186,8 @@ describe('稽核查詢頁', () => {
     render(<AuditLogPage />)
 
     expect(await screen.findByText('停用帳號')).toBeVisible()
-    expect(screen.getByText('開通權限')).toBeVisible()
-    expect(screen.getByText('建立角色')).toBeVisible()
+    expect(screen.getByText('開通權限', { selector: 'h2' })).toBeVisible()
+    expect(screen.getByText('建立角色', { selector: 'h2' })).toBeVisible()
     expect(screen.getByText('其他操作')).toBeVisible()
     await waitFor(() =>
       expect(screen.getAllByText('帳號：安娜 (anna)')).toHaveLength(2),
@@ -199,7 +207,7 @@ describe('稽核查詢頁', () => {
   it('拒絕反向時間範圍且不送出查詢', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    await screen.findByText('建立分區')
+    await screen.findByText('建立分區', { selector: 'h2' })
     const before = fetcher.mock.calls.length
     fireEvent.change(screen.getByLabelText('起始時間（含）'), {
       target: { value: '2026-10-11T08:00' },
@@ -216,7 +224,9 @@ describe('稽核查詢頁', () => {
     expect(toInput).toHaveAttribute('aria-invalid', 'true')
     expect(toInput).toHaveAttribute('aria-describedby', 'audit-to-error')
     expect(fetcher.mock.calls).toHaveLength(before)
-    expect(screen.getByText('建立分區')).toBeInTheDocument()
+    expect(
+      screen.getByText('建立分區', { selector: 'h2' }),
+    ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('起始時間（含）'), {
       target: { value: '2026-10-09T08:00' },
@@ -227,29 +237,68 @@ describe('稽核查詢頁', () => {
     expect(fetcher.mock.calls).toHaveLength(before)
   })
 
-  it('在事件類型格式錯誤時聚焦欄位並保留原結果', async () => {
+  it('頁面標題是「操作紀錄」，不再叫稽核紀錄', async () => {
+    mockFetch()
+    render(<AuditLogPage />)
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '操作紀錄' }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('heading', { name: '稽核紀錄' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('事件類型是白話下拉，含「全部」，送出時仍傳事件碼', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    await screen.findByText('建立分區')
-    const before = fetcher.mock.calls.length
-    const input = screen.getByLabelText('事件類型')
-    fireEvent.change(input, { target: { value: 'Project Zone' } })
-    fireEvent.click(screen.getByRole('button', { name: '查詢' }))
-
-    expect(input).toHaveFocus()
-    expect(input).toHaveAttribute('aria-invalid', 'true')
-    expect(input).toHaveAttribute('aria-describedby', 'audit-event-type-error')
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '事件類型格式應為資料類型.動作。',
+    await screen.findByText('建立分區', { selector: 'h2' })
+    const select = screen.getByRole('combobox', { name: '事件類型' })
+    expect(select).toHaveValue('')
+    const options = within(select).getAllByRole('option')
+    expect(options[0]).toHaveTextContent('全部')
+    expect(
+      within(select).getByRole('option', { name: '建立分區' }),
+    ).toHaveValue('project_zone.created')
+    expect(
+      within(select).getByRole('option', { name: '停用或啟用帳號' }),
+    ).toHaveValue('user.active_changed')
+    // 選項文字不得露出事件碼。
+    options.forEach((option) =>
+      expect(option.textContent).not.toMatch(/[a-z_]+\.[a-z_]+/),
     )
-    expect(fetcher.mock.calls).toHaveLength(before)
-    expect(screen.getByText('建立分區')).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/project_zone/)).toBeNull()
+
+    fireEvent.change(select, { target: { value: 'project_zone.updated' } })
+    fireEvent.click(screen.getByRole('button', { name: '查詢' }))
+    await waitFor(() => {
+      const auditRequests = fetcher.mock.calls.filter(([input]) =>
+        String(input).includes('/audit-logs?'),
+      )
+      const params = new URL(
+        String(auditRequests.at(-1)?.[0]),
+        'http://localhost',
+      ).searchParams
+      expect(params.get('event_type')).toBe('project_zone.updated')
+    })
+
+    fireEvent.change(select, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '查詢' }))
+    await waitFor(() => {
+      const auditRequests = fetcher.mock.calls.filter(([input]) =>
+        String(input).includes('/audit-logs?'),
+      )
+      const params = new URL(
+        String(auditRequests.at(-1)?.[0]),
+        'http://localhost',
+      ).searchParams
+      expect(params.has('event_type')).toBe(false)
+    })
   })
 
   it('在第二頁更改篩選後重新查第一頁', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    await screen.findByText('建立分區')
+    await screen.findByText('建立分區', { selector: 'h2' })
     fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
     await screen.findByText('第 2 頁')
     fireEvent.change(screen.getByLabelText('事件類型'), {
@@ -282,7 +331,7 @@ describe('稽核查詢頁', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.queryByText('載入稽核紀錄中…')).toBeNull()
-    expect(screen.queryByText('建立分區')).toBeNull()
+    expect(screen.queryByText('建立分區', { selector: 'h2' })).toBeNull()
   })
 
   it('顯示空結果狀態', async () => {

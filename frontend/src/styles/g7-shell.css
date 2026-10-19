@@ -13,20 +13,8 @@
   outline-offset: 2px;
 }
 
-.dashboard-task-number {
-  color: var(--text-muted);
-  font-size: var(--font-size-small);
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
-
 .dashboard-task-detail-heading > div {
   min-width: 0;
-}
-
-.dashboard-task-detail-heading .dashboard-task-number {
-  display: block;
-  margin-top: var(--space-1);
 }
 
 .roles-page-tools {

@@ -191,6 +191,15 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+/** 沒有可執行的下一步時，整張「下一步」卡（含標題與說明）都不存在。 */
+function expectNoNextStepCard() {
+  expect(
+    screen.queryByRole('heading', { name: '下一步' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText(/下一步/)).not.toBeInTheDocument()
+  expect(screen.queryByText('追蹤進度')).not.toBeInTheDocument()
+}
+
 describe('project home', () => {
   // ADM-AC40：首頁顯示本公司角色標籤，資料取自流程摘要，不另呼叫專案詳情。
   it.each([
@@ -232,7 +241,8 @@ describe('project home', () => {
       has_field_access: true,
     })
 
-    expect(await screen.findByText('目前沒有你可執行的下一步。')).toBeVisible()
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
     expect(screen.queryByText('新增查核項目')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: '前往新增查核項目' }),
@@ -266,7 +276,8 @@ describe('project home', () => {
       has_field_access: false,
     })
 
-    expect(await screen.findByText('目前沒有你可執行的下一步。')).toBeVisible()
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
     expect(screen.queryByText(label)).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: `前往${label}` }),
@@ -632,6 +643,7 @@ describe('project home', () => {
         viewer_permission_codes: [
           'project_member.manage',
           'inspection_task.inspect',
+          'inspection_task.dispatch',
         ],
       }),
     )
@@ -693,11 +705,8 @@ describe('project home', () => {
 
     renderAt()
 
-    expect(await screen.findByText('目前沒有待處理的下一步。')).toBeVisible()
-    expect(screen.getByRole('link', { name: '追蹤進度' })).toHaveAttribute(
-      'href',
-      '/projects/project-1/progress',
-    )
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
   })
 
   it('routes field-only permission sets to Field and skips project detail reads', async () => {
@@ -736,6 +745,72 @@ describe('project home', () => {
     expect(screen.getByText('無權查看任務')).toBeVisible()
     expect(screen.queryByText('Field 工作台')).not.toBeInTheDocument()
   })
+
+  // #713：草稿只給內業看；外部協作的專案查閱人員即使後端回了草稿數，
+  // 畫面也不能出現草稿數、未指派數或待重查的數字與連結。
+  it('外部協作看不到草稿任務與待重查，只看到已派出數字', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'dispatch_draft_tasks',
+        viewer_permission_codes: [
+          'project.read',
+          'project_inspection_item.read',
+          'project_zone.read',
+          'inspection_plan.read',
+          'inspection_task.read',
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
+    const numbers = within(screen.getByLabelText('專案關鍵數字'))
+    expect(numbers.getByText('已派出未完成')).toBeVisible()
+    expect(numbers.queryByText('草稿任務')).not.toBeInTheDocument()
+    expect(numbers.queryByText('待重查')).not.toBeInTheDocument()
+    expect(numbers.queryByText(/未指派/)).not.toBeInTheDocument()
+    expect(screen.queryByText('4 件')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '4 件' }),
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector('a[href*="status=DRAFT"]'),
+    ).not.toBeInTheDocument()
+    expect(
+      document.querySelector('a[href*="status=reinspection"]'),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([['inspection_plan.create'], ['inspection_task.dispatch']])(
+    '有 %s 的人看得到草稿任務與待重查',
+    async (code) => {
+      mocks.getProject.mockResolvedValue(project)
+      mocks.getWorkflowSummary.mockResolvedValue(
+        summary({
+          viewer_permission_codes: [
+            'project.read',
+            'inspection_plan.read',
+            'inspection_task.read',
+            code,
+          ],
+        }),
+      )
+
+      renderAt('/projects/project-1', {
+        has_office_access: true,
+        has_field_access: false,
+      })
+
+      expect(await screen.findByText('草稿任務')).toBeVisible()
+      expect(screen.getByText('待重查')).toBeVisible()
+    },
+  )
 
   it('complete_reinspection step opens the reinspection filter', async () => {
     mocks.getProject.mockResolvedValue(project)
