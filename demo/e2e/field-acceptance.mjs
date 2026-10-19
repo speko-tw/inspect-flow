@@ -3,8 +3,9 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { demoBaseUrl } from './base-url.mjs'
 
-const base = process.env.DEMO_BASE_URL ?? 'http://localhost:18311'
+const base = demoBaseUrl()
 const here = path.dirname(fileURLToPath(import.meta.url))
 const demo = path.resolve(here, '..')
 const browser = await chromium.launch({

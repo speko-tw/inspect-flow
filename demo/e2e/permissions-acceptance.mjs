@@ -3,10 +3,11 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { demoBaseUrl } from './base-url.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const demo = path.resolve(here, '..')
-const base = process.env.DEMO_BASE_URL ?? 'http://localhost:18311'
+const base = demoBaseUrl()
 const work = process.env.DEMO_WORK_DIR ?? '/private/tmp/inspectflow-demo-e2e'
 const result = JSON.parse(
   await readFile(path.join(work, 'seed-result.json'), 'utf8'),
