@@ -8,7 +8,7 @@
 |---|---|---|
 | UDS-AC01 | PASS | [規格](spec.md#驗收條件)連至負責人核可的第 2 版原型，引用 KD-70；重大畫面依 RG-M21 原型關卡。核對 `spec.md`、`plan.md` 及 #686 issue 討論。 |
 | UDS-AC09 | PASS | `frontend/src/styles/tokens.test.ts` 驗證淺／深色語意文字對背景 ≥4.5:1，狀態及控制組合有對比斷言；`components.module.css` 定義 focus-visible；九個示範帳號登入頁的淺／深色鍵盤 Tab 首焦點均實測為 3px outline。完整測試結果以本紀錄末的 `make check` 為準。獨立 axe 執行 `NOT_RUN`；以 token 對比測試及真瀏覽器鍵盤走查作等效證據。 |
-| UDS-AC10 | PASS，附偏差 | 九個登入入口在 1280/360 CSS px、淺／深色共 36 組檢查；深層頁面另做 8 路徑 × 4 組。水平溢位為 0。主要表單、行動和導覽可於窄版操作；管理帳號清單的人名連結為 44×21px、帳號選單為 78×32px，低於 44px 高度建議，視覺列距仍可辨識。此偏差列為可用性建議，未改 UI。 |
+| UDS-AC10 | PASS，附偏差 | 九個登入入口在 1280/360 CSS px、淺／深色共 36 組檢查；深層頁面另做 8 路徑 × 4 組。水平溢位為 0。主要表單、行動和導覽可於窄版操作；管理帳號清單的人名連結為 46×21px、帳號選單為 78×32px，低於 44px 高度建議，視覺列距仍可辨識。此偏差列為可用性建議，未改 UI。 |
 | UDS-AC11 | PASS | 360px 實際新增帳號精靈截圖 `docs/user-guide/images/account-create-step-1-360-light.png`；畫面在 360 CSS px 無水平溢位，短中文標籤未於詞中斷行，長欄位說明正常換行，步驟標示保留文字。功能頁圖片與所有示範登入入口一併檢視。 |
 | UDS-AC12 | 延後到 #286 | **維護者補充裁定（2026-10-19）**：#286 member_count 排在 v0.5.0 之後 PATCH 包；本包不定義欄位或口徑。`ProjectsPage` 不以 UI 推算數字。此 AC 不阻擋本包，也不算實測通過。 |
 | UDS-AC13 | PASS | 隔離 demo 真後端以 `GET /api/v1/projects?limit=1` 取得第一頁（HTTP 200、含 `next_cursor`），再用 cursor 取得第二頁（HTTP 200）；UI 搜尋不存在名稱顯示空結果。瀏覽器暫時離線時出現「無法連線到伺服器，請稍後再試。」；恢復後重按「搜尋」取得空結果。51 筆載入更多按鈕流程由 `ProjectsAdmin.test.tsx` 覆蓋；示範資料只有兩個專案，故實頁沒有顯示「載入更多」按鈕。
