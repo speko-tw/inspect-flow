@@ -37,7 +37,12 @@ async function signIn(key) {
   await page.getByLabel('帳號名稱或 Email').fill(username)
   await page.getByLabel('密碼').fill(password)
   await page.getByRole('button', { name: '登入' }).click()
-  await page.waitForURL((url) => !url.pathname.endsWith('/login'))
+  const landing = {
+    office: '/projects',
+    field: '/tasks',
+    admin: '/overview',
+  }[key]
+  await page.waitForURL((url) => url.pathname === landing)
 }
 
 async function saveScreenshot(name) {
@@ -51,7 +56,7 @@ async function saveScreenshot(name) {
 
 try {
   await signIn('office')
-  await page.getByRole('link', { name: '我的專案' }).click()
+  await page.getByRole('link', { name: '專案', exact: true }).click()
   const projectCard = page.locator('article').filter({
     hasText: '示範廠擴建機電工程',
   })
@@ -80,7 +85,7 @@ try {
   await saveScreenshot('03-field-task-started.png')
 
   await signIn('admin')
-  await page.getByRole('link', { name: 'Dashboard' }).click()
+  await page.getByRole('link', { name: '總覽', exact: true }).click()
   await page.getByRole('heading', { name: '專案進度總覽' }).waitFor()
   await assertDashboard(page)
   await saveScreenshot('04-dashboard-progress.png')
