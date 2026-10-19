@@ -19,6 +19,8 @@ export interface Role {
   project_count: number
   created_at: string
   updated_at: string
+  is_assignable?: boolean
+  is_external_allowed?: boolean
 }
 
 export interface PermissionCode {
@@ -29,6 +31,21 @@ export interface PermissionCode {
 export interface RoleInput {
   name?: string
   permission_codes?: string[]
+  is_assignable?: boolean
+  is_external_allowed?: boolean
+}
+
+/** DOM-R64：讀取單一建立者角色設定。 */
+export function getCreatorRole(): Promise<{ role_id: string }> {
+  return request('/roles/creator-role')
+}
+
+/** DOM-R64：更新建立者角色；後端會驗證角色資格並記錄稽核。 */
+export function setCreatorRole(roleId: string): Promise<{ role_id: string }> {
+  return request('/roles/creator-role', {
+    method: 'PATCH',
+    body: JSON.stringify({ role_id: roleId }),
+  })
 }
 
 /** 依序取回所有分頁，頁面本身不做分頁（分頁屬 #107）。 */

@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { Link, useNavigate } from 'react-router'
 
+import { useCurrentUser } from '../../auth/useCurrentUser'
 import { RequiredMark } from '../../ui/Form'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { UnsavedLeaveBox } from '../../ui/navigation'
@@ -28,6 +29,8 @@ import {
   type Project,
   type ProjectInput,
 } from './api'
+import MyProjectsPage from './MyProjectsPage'
+import { ProjectCreationForm } from './ProjectCreationForm'
 
 // DOM-R76、ADM-R42：改本公司角色的原因，去除前後空白後 1～256 字元。
 const REASON_MAX_LENGTH = 256
@@ -111,8 +114,18 @@ function roleOptions(
   return options
 }
 
-/** 呈現專案清單與新增／編輯表單，並守住 ADM-R15 的草稿轉場。 */
+/** 依 ADM-R23、ADM-R24 顯示可用的專案清單。 */
 export default function ProjectsPage() {
+  const { user } = useCurrentUser()
+  return user.is_admin ? (
+    <AdminProjectsPage />
+  ) : (
+    <MyProjectsPage canCreateProject={user.can_create_project} />
+  )
+}
+
+/** Admin 專案清單與編輯畫面（ADM-R23、ADM-R32）。 */
+function AdminProjectsPage() {
   const navigate = useNavigate()
   const projectList = useCursorList(listProjectsPage, managementErrorMessage)
   const {
@@ -137,9 +150,11 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false)
   const [formMode, setFormMode] = useState<FormMode>(null)
   const [newDraft, setNewDraft] = useState<FormState>(EMPTY_FORM)
+  const [creationDirty, setCreationDirty] = useState(false)
   const [editDrafts, setEditDrafts] = useState<Record<string, FormState>>({})
   const [editFocusRequest, setEditFocusRequest] = useState(0)
   const [transition, setTransition] = useState<Transition | null>(null)
+  const [formSession, setFormSession] = useState(0)
   const [roles, setRoles] = useState<CompanyRole[]>([])
   const [rolesStatus, setRolesStatus] = useState<
     'loading' | 'ready' | 'error'
@@ -164,6 +179,13 @@ export default function ProjectsPage() {
   const formSessionRef = useRef(0)
   const previousFormModeRef = useRef<FormMode>(null)
   const focusAfterCloseRef = useRef<FormMode>(null)
+
+  function advanceFormSession() {
+    const nextSession = formSessionRef.current + 1
+    formSessionRef.current = nextSession
+    setFormSession(nextSession)
+  }
+
   const newProjectButtonRef = useRef<HTMLButtonElement>(null)
   const editing = formMode?.kind === 'edit' ? formMode.project : null
   const form =
@@ -176,13 +198,16 @@ export default function ProjectsPage() {
   const roleChanged = Boolean(
     editing && form && form.company_role !== editing.company_role,
   )
-  const hasUnsavedChanges = Boolean(
-    form &&
-    Object.keys(EMPTY_FORM).some(
-      (key) =>
-        form[key as keyof FormState] !== originalForm[key as keyof FormState],
-    ),
-  )
+  const hasUnsavedChanges =
+    creationDirty ||
+    Boolean(
+      form &&
+      Object.keys(EMPTY_FORM).some(
+        (key) =>
+          form[key as keyof FormState] !==
+          originalForm[key as keyof FormState],
+      ),
+    )
   const leaveGuard =
     navigationGuard.useUnsavedNavigationGuard(hasUnsavedChanges)
 
@@ -303,7 +328,7 @@ export default function ProjectsPage() {
   }
 
   function applyTransition(next: Transition) {
-    formSessionRef.current += 1
+    advanceFormSession()
     setTransition(null)
     resetRoleConfirm()
     discardActiveDraft()
@@ -330,6 +355,7 @@ export default function ProjectsPage() {
   function discardActiveDraft() {
     if (formMode?.kind === 'new') {
       setNewDraft(EMPTY_FORM)
+      setCreationDirty(false)
     } else if (formMode?.kind === 'edit') {
       dropDraft(formMode.project.id)
     }
@@ -438,10 +464,10 @@ export default function ProjectsPage() {
       resetRoleConfirm()
       if (creating) {
         setNewDraft(EMPTY_FORM)
-        formSessionRef.current += 1
+        advanceFormSession()
         setFormMode(null)
         leaveGuard.allowNavigation(() =>
-          navigate(`/admin/projects/${saved.id}`, {
+          navigate(`/projects/${saved.id}`, {
             state: hasDuplicateCodeWarning(saved)
               ? { duplicateProjectCode: saved.project_code }
               : null,
@@ -450,7 +476,7 @@ export default function ProjectsPage() {
         return
       }
       if (savingProjectId) dropDraft(savingProjectId)
-      formSessionRef.current += 1
+      advanceFormSession()
       // ADM-R15：A 的回應晚於表單切換時，只關 A，不捨棄 B 的草稿。
       setFormMode((current) =>
         current?.kind === 'edit' && current.project.id === savingProjectId
@@ -513,12 +539,9 @@ export default function ProjectsPage() {
               {/* ADM-R15：舊 POST 回應的連結仍須確認，避免丟失未存草稿。 */}
               <Link
                 onClick={(event) =>
-                  guardProjectLink(
-                    event,
-                    `/admin/projects/${createdProjectLink}`,
-                  )
+                  guardProjectLink(event, `/projects/${createdProjectLink}`)
                 }
-                to={`/admin/projects/${createdProjectLink}`}
+                to={`/projects/${createdProjectLink}`}
               >
                 開啟專案
               </Link>
@@ -557,7 +580,35 @@ export default function ProjectsPage() {
           新增專案
         </button>
       )}
-      {form && (
+      {formMode?.kind === 'new' && (
+        <ProjectCreationForm
+          isAdmin
+          cancelWithParentGuard
+          formSession={formSession}
+          onDirtyChange={setCreationDirty}
+          onCancel={() => requestTransition({ kind: 'list' })}
+          onCreated={(saved, submittedSession) => {
+            if (formSessionRef.current !== submittedSession) {
+              void reload()
+              setNotice(`已建立專案「${saved.name}」`)
+              setCreatedProjectLink(saved.id)
+              return
+            }
+            setCreationDirty(false)
+            setNewDraft(EMPTY_FORM)
+            advanceFormSession()
+            setFormMode(null)
+            leaveGuard.allowNavigation(() =>
+              navigate(`/projects/${saved.id}`, {
+                state: hasDuplicateCodeWarning(saved)
+                  ? { duplicateProjectCode: saved.project_code }
+                  : null,
+              }),
+            )
+          }}
+        />
+      )}
+      {formMode?.kind !== 'new' && form && (
         <Form
           onFocusCapture={(event) => {
             if (event.target instanceof HTMLElement) {
@@ -764,7 +815,7 @@ export default function ProjectsPage() {
                   // TPL-R23：導覽與未儲存變更守衛共用
                   // 正式套用路徑，避免守衛後前往舊網址。
                   const applyTemplatesPath = [
-                    '/admin/projects',
+                    '/projects',
                     project.id,
                     'inspection-items',
                     'templates',
@@ -811,12 +862,9 @@ export default function ProjectsPage() {
                         <Link
                           className="btn"
                           onClick={(event) =>
-                            guardProjectLink(
-                              event,
-                              `/admin/projects/${project.id}`,
-                            )
+                            guardProjectLink(event, `/projects/${project.id}`)
                           }
-                          to={`/admin/projects/${project.id}`}
+                          to={`/projects/${project.id}`}
                         >
                           開啟專案
                         </Link>
@@ -825,10 +873,10 @@ export default function ProjectsPage() {
                           onClick={(event) =>
                             guardProjectLink(
                               event,
-                              `/admin/projects/${project.id}/members`,
+                              `/projects/${project.id}/members`,
                             )
                           }
-                          to={`/admin/projects/${project.id}/members`}
+                          to={`/projects/${project.id}/members`}
                         >
                           成員
                         </Link>

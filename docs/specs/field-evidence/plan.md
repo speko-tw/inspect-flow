@@ -6,6 +6,8 @@
 
 規格由「撰寫規格」的 PR 合併後才算已凍結；本計畫隨同一個 PR 提交，供負責人審查拆法。原六項待負責人裁定（spec 的 FEV-Q1、Q6、Q12～Q15）已於 2026-10-10 裁定並寫入規格。仍待定的只有工程標示的欄位內容（[#588](https://github.com/speko-tw/inspect-flow/issues/588)，T2 先以「預設不加標示」的規則機制實作）。T5 依賴 `inspection-planning` 的 IP-R04、IP-R07、IP-R13、IP-R14 與 `has_result` 定義已合併（隨 `completion-validation` 規格一起合併）。task issue 在規格合併後依本表逐一開立，「Issue」欄先填 `#?`。
 
+目前現場照片入口在 `/tasks/:taskId`，UI 路徑依規格 ADM-R50；本計畫與規格中的 `/api/v1/...` 端點不變。
+
 ## 任務
 
 先做後端資料與契約，再做兩個畫面。畫面屬重大新畫面，依[原型關卡](../README.md#ui-prototype-gate)，T6 的原型與試用腳本經負責人親手操作核可後，T7、T8 才開工。

@@ -4,6 +4,8 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
+目前 UI 路由、導覽及落點依規格 ADM-R50；現場任務落點的專案管理能力依 authentication AUT-R08／AUT-R54 的 `can_manage_project_planning_or_members` 摘要判斷。本計畫較早任務中的 `/admin/...` 字樣只保留為當時背景，不代表現行 UI 路徑。API 路徑不隨 UI 路由調整。
+
 ## 任務
 
 | ID | 內容 | 改動的檔案 | 依賴 | 對應 AC | Issue |
@@ -29,9 +31,11 @@
 | T16 | 將 Admin 的大型範本庫、專案範本及專案項目修改頁改為路由層 lazy chunk，並將專案範本頁及其專用 API／測試移至 `admin/projects/`；量測修改前後的 Admin chunk | `frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`frontend/src/admin/projects/projectTemplatesApi.ts`、相關測試與 `frontend/src/testing/preloadRoutes.ts`、`frontend/src/field/api.ts` | #469；維持 `/admin/*` 與 `/field/*` 單一 app 的路由拆分；不改 UI 路徑、權限或 API 契約 | SKL-AC03、FUI-AC10；另以 build chunk 尺寸及 Admin 路由測試驗收 | #469 |
 | T17 | 同步 v0.3.1 已實作的 UI 共通規則（危險操作顏色、確認框、狀態標籤顏色、啟用使用者確認）到規格與計畫，並把 skeleton 規格的版本範例改為 `<VERSION>`；對應程式已於 #510、#511、#530 完成，本任務只更新文件，不改程式 | `docs/specs/admin-dashboard/`、`docs/specs/field-ui/`、`docs/specs/template-system/plan.md`、`docs/specs/skeleton/spec.md` | 無 | ADM-AC14、ADM-AC36～38；`field-ui` FUI-AC14 | [#533](https://github.com/speko-tw/inspect-flow/issues/533) |
 | T18 | 本公司角色的畫面：新增專案表單最上面的角色欄（預設承攬施工方、註明與提示、明確送出值）、專案首頁顯示角色（資料取自 workflow summary）、專案設定的改角色確認框與原因欄（依 ADM-R37、ADM-R38）；補元件測試與真後端走查 | `frontend/src/admin/projects/`、`frontend/src/admin/ProjectsAdmin` 相關測試（依當時程式碼盤點） | `domain-model` 任務 L（`project.update` 登記）與任務 R；`inspection-planning` T11；T17（確認框規則，#533） | ADM-AC39～41 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
-| T19 | 專案查核項目連結依編輯權限顯示修改或檢視；範本套用頁支援範本管理員跨專案檢視，並依專案成員權限決定能否套用；補齊套用狀態、無障礙關聯與舊路徑導向 | `docs/specs/admin-dashboard/plan.md`、`docs/specs/admin-dashboard/spec.md`、`docs/specs/template-system/spec.md`、`docs/specs/field-ui/spec.md`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/admin/projectItems/ProjectItemLinks.tsx`、`.test.tsx`、`.css`、`frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`.test.tsx`、`frontend/src/admin/templates/TemplateLibraryNav.tsx`、`.test.tsx`、`frontend/src/auth/landing.ts`、`.test.ts`、`frontend/src/App.test.tsx`、`frontend/src/admin/projectHome/ProjectSectionPage.tsx`、`frontend/src/admin/projectHome/ProjectSectionShell.tsx`、`frontend/src/admin/projectHome/ProjectSectionShell.test.tsx`、`frontend/src/admin/projectHome/ProjectHomePage.test.tsx`、`frontend/src/admin/projects/ProjectTemplatesPage.css` | T16（新路徑與 lazy chunk）；套用權限依 TPL-R09 與後端 `project_inspection_item.edit` | ADM-AC17、27；TPL-AC21、23；FUI-AC13 | #450 |
+| T19 | 專案查核項目連結依編輯權限顯示修改或檢視；範本套用頁支援範本管理員跨專案檢視，並依專案成員權限決定能否套用；補齊套用狀態、無障礙關聯與舊 UI 路徑 404（不轉址） | `docs/specs/admin-dashboard/plan.md`、`docs/specs/admin-dashboard/spec.md`、`docs/specs/template-system/spec.md`、`docs/specs/field-ui/spec.md`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/admin/AdminPage.test.tsx`、`frontend/src/admin/projectItems/ProjectItemLinks.tsx`、`.test.tsx`、`.css`、`frontend/src/admin/projects/ProjectTemplatesPage.tsx`、`.test.tsx`、`frontend/src/admin/templates/TemplateLibraryNav.tsx`、`.test.tsx`、`frontend/src/auth/landing.ts`、`.test.ts`、`frontend/src/App.test.tsx`、`frontend/src/admin/projectHome/ProjectSectionPage.tsx`、`frontend/src/admin/projectHome/ProjectSectionShell.tsx`、`frontend/src/admin/projectHome/ProjectSectionShell.test.tsx`、`frontend/src/admin/projectHome/ProjectHomePage.test.tsx`、`frontend/src/admin/projects/ProjectTemplatesPage.css` | T16（新路徑與 lazy chunk）；套用權限依 TPL-R09 與後端 `project_inspection_item.edit` | ADM-AC17、27；TPL-AC21、23；FUI-AC13 | #450 |
 | T20 | 將 #451 分區正式區段、規劃／任務表單錯誤、離頁確認與派出阻擋互動同步至規格及 AC；維持既有 API 契約 | `docs/specs/admin-dashboard/spec.md`、`docs/specs/admin-dashboard/plan.md`、`frontend/src/admin/planning/PlanningPage.tsx`、`PlanningPage.test.tsx`、`ProjectZonesPage.tsx`、`ProjectZonesPage.test.tsx`、`useUnsavedNavigationGuard.ts`、`useUnsavedNavigationGuard.test.tsx`、`UnsavedLeaveBox.tsx`、`frontend/src/admin/planning/fixtures/name-too-long-422.json`、`frontend/src/admin/planning/fixtures/task-assignee-validation-422.json`、`frontend/src/admin/planning/fixtures/task-cancel-validation-422.json`、`frontend/src/admin/planning/fixtures/task-create-validation-422.json`、`frontend/src/admin/planning/fixtures/task-location-validation-422.json`、`frontend/src/admin/projectHome/ProjectSectionPage.tsx`、`ProjectSectionShell.tsx`、`ProjectSectionShell.test.tsx`、`ProjectHomePage.test.tsx`、`frontend/src/styles.css`、`frontend/src/ui/fieldErrors.ts`、`frontend/src/ui/fieldErrors.test.ts`、`frontend/src/admin/templates/TemplatesPage.tsx`、`backend/tests/api/test_planning_field_error_contract.py`、`backend/tests/contract/test_error_envelope.py` | T10 專案區段殼；#601 共用欄位錯誤處理已合併；既有 inspection-planning T1～T4 API；維持既有 API 契約，不新增或放寬後端端點 | ADM-AC42 | #451 |
 | T21 | 專案進度區段前端：區段導覽的「進度」（`inspection_task.read`）、七個篩選與數字、網址 `?status=`、卡片清單與載入更多、全頁唯讀詳情、返回保留篩選／已載入頁數／捲動位置；首頁關鍵數字可點、「追蹤進度」與待重查步驟改連進度區段；任務名稱在 [#497](https://github.com/speko-tw/inspect-flow/issues/497) 合併前用項目摘要；先以 mock 接版型，`inspection-planning` T13 合併後接真 client 並以真後端走查；補元件測試與契約 fixture | 依當時程式碼盤點，預計 `frontend/src/admin/progress/`（新增）、`frontend/src/admin/projectHome/`、`frontend/src/admin/AdminPage.tsx`、`frontend/src/styles.css`、相關測試 | T10、T20；`inspection-planning` T13（IP-R18、IP-R19）；任務名稱依 #497 另行調整 | ADM-AC15、ADM-AC16、ADM-AC25、ADM-AC42～ADM-AC44 | [#452](https://github.com/speko-tw/inspect-flow/issues/452) |
+| T22 | 管理者查詢他人有效權限的唯讀 API：集中使用 `calculate_effective_access`、保留模組權限來源與指定專案角色代碼，回傳四項固定診斷；Admin 全量、委派者依 ADM-R45 嚴格切片；委派者查 Admin 一律 403、查自己允許；補 SQLite 與 PostgreSQL API 測試 | `docs/specs/admin-dashboard/spec.md`、本檔、 `backend/app/api/v1/users.py`、相關 API 測試 | #582／#576 兩層權限 規則、ADM-R45 | ADM-AC46 | #702 |
+| T23 | G7 易用性修正：個人選單、帳號清單／新增精靈／詳情、權限明確開通、白話有效權限與診斷、批次參與專案角色摘要、唯讀入口、任務標題與專案角色頁；補前後端行為測試及八身分真瀏覽器驗收 | `docs/intents/07-permission-model.md`、`docs/specs/admin-dashboard/spec.md`、本檔、`backend/app/api/v1/users.py`、`backend/tests/api/`、`frontend/src/admin/`、`frontend/src/layout/`、`frontend/src/styles/` 及相關測試 | #702 有效權限查詢；G6 導覽與帳號／權限模型（#582／#583／#584／#704）；G7 定案修正清單 | ADM-AC49 | #582、#583、#584、#704 |
 
 - 每個 task 一個 PR 即可單獨驗收；每個 AC 至少由一個 task 涵蓋。
 - T5a 是已裁定選項 C 的 audit-log 契約同步，T5b 是依同步契約進行實作；兩者不得合併成同一 PR。決議已完成，T5b 只等待 T5a 合併。
@@ -52,6 +56,9 @@
 - #104 Field UI 僅在路由、共用 API client 或共用元件有重疊時錯開；其餘可平行。
 
 ## 風險
+
+- ADM-R45 的委派者查詢不得沿用 Admin 完整回應：不回`project_roles`，模組碼與診斷都按被委派模組過濾；新增測試需斷言欄位缺席與其他模組資訊不洩漏。
+- 有效權限診斷省略 `project_id` 時只提供專案外動作；專案內診斷必須綁定目標成員所在的指定專案。Admin 的參與專案摘要使用單次查詢，含無角色成員；委派者帳號詳情端點僅回標題所需欄位並拒絕 Admin 目標。
 
 - 模組權限與委派模型依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)；T4、T15 必須等待 `domain-model` 任務 L／N／O 與 `authentication` 任務 P 把資料、Service 介面與存取層級合併。發現衝突先同步文件，不以本計畫推論覆蓋。
 - PR-18 確認需在寫入前取得最新對象與後果；測試收回模組權限、收回委派、刪除權限組合的確認與取消，以及被委派者不能越過自己被委派的模組。
@@ -75,7 +82,7 @@
 | ADM-AC12 | demo seed／API fixture 建立已完成、進行中及取消 Task；走通派出、現場開始、Dashboard 查看，並驗證沒有完成資料時指標為 0 |
 | ADM-AC15、16 | 前端摘要 mock 驗證五種 `primary_step`、全完成狀態、各數字、未指派草稿數與 `task_counts_visible=false`；#454 合併後再用真後端確認；首頁連結的目標（進度區段、`?status=reinspection`、無權限時退回「計畫與任務」）與數字可點條件見 ADM-AC43 |
 | ADM-AC17 | Testing Library 驗證每個區段恰一個目前頁、缺少各區段權限時導覽隱藏、頁面單一 `<h1>` 與唯一「返回專案清單」連結、手機選單展開及 Escape 關閉；真實 Vite 與無頭瀏覽器分別走查 1280px、360px，截圖附在 PR |
-| ADM-AC18 | 前端測試以 `viewer_permission_codes` 只含 `inspection_task.inspect`／`inspection_task.read` 的帳號驗證導向 Field，並以任一內業權限驗證留在專案；真後端登入測試帳號走查權限結果 |
+| ADM-AC18 | 前端測試以 `viewer_permission_codes` 只含 `inspection_task.inspect`／`inspection_task.read` 的帳號驗證導向 `/tasks`，並以任一內業權限驗證留在專案；真後端登入測試帳號走查權限結果 |
 | ADM-AC19 | 專案清單測試建立成功導向新首頁、重複代號仍已儲存警告顯示且可關閉、每列「開啟專案」及「成員」各自連至正確區段 |
 | ADM-AC20 | `backend/tests/api/test_projects.py`：零角色加入／取代回 422 且資料不變、帶角色成功、無權限先 403；同檔契約測試讀取 `frontend/src/admin/projects/fixtures/member-roles-contract.json`，驗證真 API 的欄位集合與錯誤碼和前端 mock 一致（RG-M22） |
 | ADM-AC21 | `ProjectsAdmin.test.tsx`、`roleDescriptions.test.ts`、`RolePermissionSummary.test.tsx`：未選角色擋下＋欄旁錯誤＋聚焦、伺服器 422 對應、後端 registry 完整覆蓋、依 registry 順序摘要與清單、合併後項目計數一致、混合已知／未知碼及雙未知碼回退、兩個角色各自展開、零權限無按鈕、固定可及名稱；SQLite 真後端、Vite 與無頭瀏覽器走查 360px／1280px，記錄 HTTP 狀態與截圖 |
@@ -87,4 +94,7 @@
 | ADM-AC39～41 | 前端元件測試：新增專案表單的欄位位置、預設值、提示與明確送出的請求本體；專案首頁顯示角色與資料來源；改角色確認框的按鈕、取消不送出、缺原因擋下、無權限者唯讀；SQLite 真後端、Vite 與無頭瀏覽器走查 1280px 與 360px，截圖附在 PR |
 | ADM-AC43、44 | 前端元件測試：七個篩選與數字取自摘要、「全部」為合計、網址 `status` 的保留與不認得值、首頁連結（含「待開始」「進行中」並列）與不可點條件、卡片欄位與標記、載入更多、失敗重新載入、詳情欄位、返回保留篩選／頁數／捲動、找不到與無權限；契約 fixture 與 `inspection-planning` T13 一致；SQLite 真後端、Vite 與無頭瀏覽器走查 1280px 與 360px，截圖附在 PR |
 
+| ADM-AC46 | API 測試覆蓋 Admin 完整回應、Admin 隱含權限、外部協作者、組合來源、撤權後即時一致、停用目標、403／404、委派模組切片與無角色欄位洩漏；SQLite 定向驗證，專用 PostgreSQL 驗證同一路由契約 |
+| ADM-AC47 | SQLite 與 PostgreSQL API 測試：委派者查專案內與專案外 Admin 均回與無權限相同的 403 body，且不含目標欄位；委派者查自己回 200；Admin 查 Admin 維持成功 |
+| ADM-AC49 | `UsersPage`、`PeoplePage`、`ModulePermissionsPage`、`RolesPage`、`AppHeader`、Dashboard 與專案首頁的前端測試：開通前不寫入、成功文案、精確搜尋、個人選單 aria／鍵盤、清單提醒與卡片、精靈焦點／stepper／欄位、停用確認、角色卡片、有效權限診斷、參與專案角色與空狀態、唯讀入口和任務標題；API 測試驗證 Admin 專用批次端點、無角色結果、委派者最小詳情及 Admin 目標 403、可省略專案 ID 的診斷及專案內查詢必要範圍；依 G7 work order 完成八身分 1280px／360px 淺／深真瀏覽器走查與點擊數比較 |
 純文件規格 PR 不跑 `make setup`／`make check`。產品實作 task 依範圍執行必要檢查及資料庫驗收；PostgreSQL 未設定時記為 SKIPPED，不能當成 PASS。

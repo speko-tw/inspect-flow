@@ -246,7 +246,7 @@ describe('planning management page', () => {
     )
     expect(screen.getByRole('link', { name: '返回專案清單' })).toHaveAttribute(
       'href',
-      '/admin/projects',
+      '/projects',
     )
   })
 
@@ -947,7 +947,7 @@ describe('planning management page', () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
       renderWithoutRouter(
         <DataMemoryRouter
-          initialEntries={['/admin/projects/project-demo-1/planning']}
+          initialEntries={['/projects/project-demo-1/planning']}
         >
           <Routes>
             <Route
@@ -960,7 +960,7 @@ describe('planning management page', () => {
                   <Link to="/outside">切換頁面</Link>
                 </>
               }
-              path="/admin/projects/:projectId/planning"
+              path="/projects/:projectId/planning"
             />
             <Route element={<p>已離開計畫頁</p>} path="/outside" />
           </Routes>
@@ -1952,9 +1952,8 @@ describe('planning forms guard (#507)', () => {
       await screen.findByRole('heading', {
         name: /混凝土外觀\s+（草稿）/,
       })
-      expect(
-        within(article).getByText('查核項目：混凝土外觀、鋼筋保護層'),
-      ).toBeVisible()
+      const selectedItems = '查核項目：混凝土外觀、鋼筋保護層'
+      expect(await within(article).findByText(selectedItems)).toBeVisible()
       expect(updateItems).toHaveBeenCalledWith(expect.any(String), {
         item_ids: ['item-demo-1', 'item-demo-2'],
       })
@@ -2223,7 +2222,7 @@ describe('planning forms guard (#507)', () => {
         .mockRejectedValue(new ManagementApiError(403, 'permission.denied'))
       renderWithoutRouter(
         <DataMemoryRouter
-          initialEntries={['/admin/projects/project-demo-1/planning']}
+          initialEntries={['/projects/project-demo-1/planning']}
         >
           <Routes>
             <Route
@@ -2233,9 +2232,9 @@ describe('planning forms guard (#507)', () => {
                   initialProjectId="project-demo-1"
                 />
               }
-              path="/admin/projects/:projectId/planning"
+              path="/projects/:projectId/planning"
             />
-            <Route element={<p>專案清單頁</p>} path="/admin/projects" />
+            <Route element={<p>專案清單頁</p>} path="/projects" />
           </Routes>
         </DataMemoryRouter>,
       )

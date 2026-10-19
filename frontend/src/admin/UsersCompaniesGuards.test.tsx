@@ -54,7 +54,9 @@ const currentUser: CurrentUser = {
   is_admin: true,
   must_change_password: false,
   has_office_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
   module_permissions: [],
   delegated_modules: [],
@@ -79,7 +81,7 @@ function stubBackend(
     preview?: Partial<RestorePreview>
   } = {},
 ) {
-  const users = options.users ?? [regularUser]
+  const users = (options.users ?? [regularUser]).map((user) => ({ ...user }))
   const calls: Call[] = []
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -171,11 +173,18 @@ function stubBackend(
   return { calls, count }
 }
 
-function renderUsers() {
+function renderUsers(
+  pageProps: {
+    detailUserId?: string | null
+    initialQuery?: string
+    onQueryApplied?: (query: string) => void
+    onSelectUser?: (id: string) => void
+  } = {},
+) {
   render(
     <DataMemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
-        <UsersPage onTemporaryPassword={vi.fn()} />
+        <UsersPage onTemporaryPassword={vi.fn()} {...pageProps} />
       </CurrentUserProvider>
     </DataMemoryRouter>,
   )
@@ -183,6 +192,79 @@ function renderUsers() {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+describe('UsersPage 帳號詳情', () => {
+  it('shows basic account data without the list or create form', async () => {
+    stubBackend()
+    renderUsers({ detailUserId: 'user-1' })
+
+    expect(
+      await screen.findByRole('heading', { name: '鄧安娜' }),
+    ).toBeVisible()
+    expect(screen.getByText('帳號：anna.deng')).toBeVisible()
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
+  })
+
+  it('keeps system and non-local account edit guards in detail', async () => {
+    const protectedAccount = {
+      ...regularUser,
+      is_system: true,
+      auth_source: 'external',
+    }
+    stubBackend({ users: [protectedAccount] })
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+
+    expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
+  })
+
+  it('requires in-page confirmation before deactivating from account detail', async () => {
+    const backend = stubBackend({ users: [{ ...regularUser }] })
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+
+    const panel = await screen.findByRole('region', { name: '操作確認' })
+    expect(panel).toHaveClass('confirm-box-danger')
+    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
+    fireEvent.click(within(panel).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull()
+    expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
+
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+    const confirmed = await screen.findByRole('region', { name: '操作確認' })
+    await waitFor(() =>
+      expect(
+        within(confirmed).getByRole('button', { name: '確認' }),
+      ).toBeEnabled(),
+    )
+    fireEvent.click(within(confirmed).getByRole('button', { name: '確認' }))
+    await waitFor(() =>
+      expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(1),
+    )
+  })
+})
+
+describe('UsersPage 帳號清單導覽', () => {
+  it('renders the account name as an unbordered detail link', async () => {
+    stubBackend()
+    renderUsers({ onSelectUser: vi.fn() })
+
+    const accountLink = await screen.findByRole('link', { name: '鄧安娜' })
+    expect(accountLink).toHaveAttribute('href', '/accounts/user-1')
+    expect(accountLink).toHaveClass('users-account-name-link')
+    expect(
+      screen.queryByRole('button', { name: '鄧安娜' }),
+    ).not.toBeInTheDocument()
+  })
 })
 
 const userFormCases = [
@@ -338,7 +420,7 @@ describe('使用者管理搜尋共用表單', () => {
     })
     renderUsers()
     await screen.findByRole('row', { name: /anna\.deng/ })
-    const input = screen.getByLabelText('搜尋使用者')
+    const input = screen.getByLabelText('搜尋帳號')
     const button = screen.getByRole('button', { name: '搜尋' })
     const form = button.closest('form')!
 
@@ -380,7 +462,7 @@ describe('使用者新增共用表單', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '林本' },
     })
-    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
   }
 
   it('新增 pending 鎖送出，IME 略過，失敗後可重試', async () => {
@@ -397,7 +479,7 @@ describe('使用者新增共用表單', () => {
     renderUsers()
     await screen.findByRole('row', { name: /anna\.deng/ })
     fillUserForm()
-    const button = screen.getByRole('button', { name: '新增使用者' })
+    const button = screen.getByRole('button', { name: '新增帳號' })
     const form = button.closest('form')!
     const input = screen.getByLabelText(/^帳號名稱/)
 
@@ -793,17 +875,15 @@ describe('CompaniesPage 停用公司（#507）', () => {
     )
     await screen.findByText('示範公司')
     const button = screen.getByRole('button', { name: '停用公司' })
-    expect(screen.getByText('停用公司不會自動停用人員帳號。')).toBeVisible()
+    expect(screen.getByText('停用公司不會自動停用帳號。')).toBeVisible()
 
     fireEvent.click(button)
     fireEvent.click(button)
     gate.resolve()
 
-    await screen.findByText('還有 1 位啟用中的人員')
+    await screen.findByText('還有 1 個啟用中的帳號')
     expect(
-      screen.getByText(
-        '只有勾選的人員會一併停用；未選取的人員帳號會維持啟用。',
-      ),
+      screen.getByText('只有勾選的帳號會一併停用；未選取的帳號會維持啟用。'),
     ).toBeVisible()
     expect(backend.count('GET', /active-users$/)).toBe(1)
   })
@@ -829,7 +909,7 @@ describe('CompaniesPage 停用公司（#507）', () => {
     gate.resolve()
 
     await waitFor(() =>
-      expect(screen.queryByText('還有 1 位啟用中的人員')).toBeNull(),
+      expect(screen.queryByText('還有 1 個啟用中的帳號')).toBeNull(),
     )
     expect(backend.count('PUT', '/api/v1/companies/company-1/active')).toBe(1)
   })

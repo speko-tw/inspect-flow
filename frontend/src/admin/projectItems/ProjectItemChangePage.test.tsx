@@ -159,22 +159,22 @@ function apiWith(overrides: Partial<ProjectItemApi> = {}): ProjectItemApi {
 
 function renderPage(api: ProjectItemApi) {
   return render(
-    <DataMemoryRouter initialEntries={['/admin/projects/p/items/item-1']}>
+    <DataMemoryRouter initialEntries={['/projects/p/items/item-1']}>
       <CurrentUserProvider
         value={{
           user: currentUserFixture({ is_admin: true }),
           clear: vi.fn(),
         }}
       >
-        <Link to="/admin/projects/p/inspection-items">外殼導覽</Link>
+        <Link to="/projects/p/inspection-items">外殼導覽</Link>
         <Routes>
           <Route
             element={<ProjectItemChangePage api={api} />}
-            path="/admin/projects/:projectId/items/:itemId"
+            path="/projects/:projectId/items/:itemId"
           />
           <Route
             element={<div>專案查核項目列表</div>}
-            path="/admin/projects/:projectId/inspection-items"
+            path="/projects/:projectId/inspection-items"
           />
         </Routes>
       </CurrentUserProvider>

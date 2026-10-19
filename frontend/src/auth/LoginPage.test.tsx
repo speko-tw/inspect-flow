@@ -6,6 +6,7 @@ import LoginPage from './LoginPage'
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
 import { resetSessionMemory } from './sessionMemory'
+import { ROUTES } from '../routes'
 import { deferred, expectImeEnterIgnored } from '../testing/submitGuard'
 
 const CURRENT_USER = {
@@ -18,6 +19,7 @@ const CURRENT_USER = {
   must_change_password: false,
   has_office_access: false,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: false,
 }
 
@@ -58,7 +60,7 @@ function TestApp() {
       <Route path="/" element={<h1>首頁</h1>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
-        path="/protected"
+        path={ROUTES.fieldTasks.path}
         element={
           <RequireAuth>
             <ProtectedPage />
@@ -467,7 +469,10 @@ describe('登入不碰 token／storage，登出會清狀態並導向 /login（AU
     render(
       <MemoryRouter
         initialEntries={[
-          { pathname: '/login', state: { from: '/protected' } },
+          {
+            pathname: '/login',
+            state: { from: ROUTES.fieldTasks.path },
+          },
         ]}
       >
         <TestApp />

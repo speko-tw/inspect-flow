@@ -8,6 +8,7 @@ import { SectionHeader } from '../components/SectionHeader'
 import { ResourceState } from '../components/layout/LayoutPatterns'
 import { isNotFound } from '../http'
 import { BackLink } from '../layout/BackLink'
+import { ROUTES } from '../routes'
 import { StatusBadge } from '../ui/Badge'
 import { formatInspectionStandard } from '../ui/inspectionStandard'
 import {
@@ -38,7 +39,7 @@ function fieldLabel(field: { name: string; unit: string | null }) {
  */
 export default function TaskDetail({
   taskId,
-  homePath = '/field',
+  homePath = ROUTES.fieldTasks.path,
   onListChange,
 }: {
   taskId: string
@@ -53,7 +54,7 @@ export default function TaskDetail({
     null,
   )
   const [retry, setRetry] = useState(0)
-  const back = `/field/${location.search}`
+  const back = `${ROUTES.fieldTasks.path}/${location.search}`
   const heading = task?.name ?? ''
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function TaskDetail({
       .catch((cause: unknown) => {
         if (!active) return
         if (cause instanceof FieldApiError && cause.status === 401) {
-          navigate('/login', {
+          navigate(ROUTES.login.path, {
             state: { from: location.pathname + location.search },
           })
           return
@@ -249,7 +250,7 @@ export default function TaskDetail({
                 onTask={setTask}
                 onListChange={onListChange}
                 onUnauthorized={() =>
-                  navigate('/login', {
+                  navigate(ROUTES.login.path, {
                     state: { from: location.pathname + location.search },
                   })
                 }

@@ -2,7 +2,7 @@
   "name": "InspectFlow Field",
   "short_name": "InspectFlow",
   "description": "InspectFlow 現場查核介面",
-  "start_url": "/field/",
+  "start_url": "/tasks/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",

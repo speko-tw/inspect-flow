@@ -81,6 +81,7 @@ from app.permission_codes import (
     permission_code_scope,
 )
 from app.services.permissions import (
+    EffectiveAccess,
     calculate_effective_access,
 )
 
@@ -149,6 +150,37 @@ def _parse_uuid(raw: object) -> uuid.UUID | None:
         return uuid.UUID(raw)
     except ValueError:
         return None
+
+
+def permission_gaps(
+    access: EffectiveAccess,
+    *,
+    module_codes: tuple[str, ...] = (),
+    project_codes: tuple[str, ...] = (),
+) -> tuple[list[str], list[str]]:
+    """回傳既有模組與專案 guard 規則下缺少的權限代碼。"""
+    if access.is_admin:
+        return [], []
+    missing_module = [
+        code for code in module_codes if code not in access.module_permissions
+    ]
+    required_module_codes = list(module_codes)
+    for code in project_codes:
+        module = permission_code_module(code)
+        module_use = f"{module}.use" if module else None
+        if module_use and module_use not in required_module_codes:
+            required_module_codes.append(module_use)
+    missing_module.extend(
+        code
+        for code in required_module_codes
+        if code not in access.module_permissions and code not in missing_module
+    )
+    missing_project = [
+        code
+        for code in project_codes
+        if code not in access.project_permissions
+    ]
+    return missing_module, missing_project
 
 
 # -- 公開 (AUT-R18) -----------------------------------------------
@@ -277,7 +309,10 @@ def require_module_permission(permission_code: str) -> Callable[..., User]:
         db: Session = Depends(get_db, scope="function"),  # noqa
     ) -> User:
         access = calculate_effective_access(db, user_id=user.id)
-        if permission_code not in access.module_permissions:
+        missing_module, missing_project = permission_gaps(
+            access, module_codes=(permission_code,)
+        )
+        if missing_module or missing_project:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -406,13 +441,12 @@ def require_module_and_project_permission(
         access = calculate_effective_access(
             db, user_id=user.id, project_id=project_id
         )
-        module = permission_code_module(project_permission_code)
-        required_module = f"{module}.use" if module else None
-        if not access.is_admin and (
-            module_permission_code not in access.module_permissions
-            or project_permission_code not in access.project_permissions
-            or required_module not in access.module_permissions
-        ):
+        missing_module, missing_project = permission_gaps(
+            access,
+            module_codes=(module_permission_code,),
+            project_codes=(project_permission_code,),
+        )
+        if missing_module or missing_project:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 
@@ -463,17 +497,13 @@ def require_project_permission(
         project_id = _parse_uuid(request.path_params.get(param_name))
         if project_id is None:
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-        if user.is_admin:
-            return user
         access = calculate_effective_access(
             db, user_id=user.id, project_id=project_id
         )
-        module = permission_code_module(code)
-        required_module = f"{module}.use" if module else None
-        if (
-            code not in access.project_permissions
-            or required_module not in access.module_permissions
-        ):
+        missing_module, missing_project = permission_gaps(
+            access, project_codes=(code,)
+        )
+        if missing_module or missing_project:
             raise APIError(ErrorCode.PERMISSION_DENIED, 403)
         return user
 

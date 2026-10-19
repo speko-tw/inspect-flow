@@ -39,6 +39,7 @@ const ADMIN = currentUserFixture({
   is_admin: true,
   has_office_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
 })
 
@@ -54,6 +55,7 @@ const MEMBER = {
   ...NON_ADMIN,
   has_office_access: false,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: false,
   can_browse_templates: false,
   can_manage_template_library: false,
@@ -65,7 +67,9 @@ const FIELD_PROJECT_READ = {
 const OFFICE = {
   ...NON_ADMIN,
   has_office_access: true,
+  has_project_access: true,
   has_field_access: false,
+  can_inspect_tasks: false,
   has_template_access: false,
   can_browse_templates: false,
   can_manage_template_library: false,
@@ -73,7 +77,10 @@ const OFFICE = {
 const BOTH = {
   ...NON_ADMIN,
   has_office_access: true,
+  has_project_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: false,
   can_browse_templates: false,
   can_manage_template_library: false,
@@ -82,15 +89,28 @@ const TEMPLATE_ONLY = {
   ...NON_ADMIN,
   has_office_access: false,
   has_field_access: false,
+  can_inspect_tasks: false,
   has_template_access: true,
   can_browse_templates: true,
   can_manage_template_library: true,
+  module_permissions: ['template.manage'],
 }
-const TEMPLATE_FIELD = { ...TEMPLATE_ONLY, has_field_access: true }
+const TEMPLATE_FIELD = {
+  ...TEMPLATE_ONLY,
+  has_field_access: true,
+  can_inspect_tasks: true,
+}
+const TEMPLATE_ONLY_LANDING_CASE = [
+  '只有範本管理員',
+  TEMPLATE_ONLY,
+  '返回查核範本',
+  '/templates',
+] as const
 const NOBODY = {
   ...NON_ADMIN,
   has_office_access: false,
   has_field_access: false,
+  can_inspect_tasks: false,
   has_template_access: false,
   can_browse_templates: false,
   can_manage_template_library: false,
@@ -172,6 +192,15 @@ function stubBackend(
       if (url.endsWith('/auth/password') && method === 'POST') {
         return new Response(null, { status: 204 })
       }
+      if (/\/users\/[^/]+\/participating-projects$/.test(url)) {
+        return Response.json({ items: [] })
+      }
+      if (/\/users\/[^/]+\/module-permissions$/.test(url)) {
+        return Response.json({ permission_codes: [], delegated_modules: [] })
+      }
+      if (url.endsWith('/module-permissions')) {
+        return Response.json({ items: [] })
+      }
       if (url.includes('/users?') || url.endsWith('/users')) {
         return Response.json({
           items: [
@@ -234,6 +263,20 @@ function stubBackend(
               inspection_level: 'self_inspection',
             },
           ],
+        })
+      }
+      if (url.includes('/overview/projects?')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
+      if (url.includes('/overview/engineers?')) {
+        return Response.json({ items: [], next_cursor: null })
+      }
+      if (url.includes('/overview/summary')) {
+        return Response.json({
+          pending_count: 0,
+          in_progress_count: 0,
+          completed_count: 0,
+          completion_rate: 0,
         })
       }
       return Response.json([])
@@ -300,7 +343,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '使用者管理' }),
+      await screen.findByRole('heading', { name: '專案進度總覽', level: 1 }),
     ).toBeInTheDocument()
   })
 
@@ -310,17 +353,17 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
   })
 
   it('安全的 from 優先於身分預設落點', async () => {
     stubBackend(null, ADMIN)
-    renderApp('/login', { from: '/field' })
+    renderApp('/login', { from: '/tasks' })
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
   })
 
@@ -330,14 +373,14 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '使用者管理' }),
+      await screen.findByRole('heading', { name: '專案進度總覽', level: 1 }),
     ).toBeInTheDocument()
   })
 
   it('變更密碼完成後（沒有 from）依身分導向：admin 進管理頁', async () => {
     stubBackend(ADMIN)
-    renderApp('/change-password')
-    await screen.findByRole('heading', { name: '變更密碼' })
+    renderApp('/settings')
+    await screen.findByRole('heading', { name: '個人設定' })
 
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'old-password' },
@@ -351,14 +394,14 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 
     expect(
-      await screen.findByRole('heading', { name: '使用者管理' }),
+      await screen.findByRole('heading', { name: '專案進度總覽', level: 1 }),
     ).toBeInTheDocument()
   })
 
   it('變更密碼完成後（沒有 from）依身分導向：一般使用者進現場頁', async () => {
     stubBackend(MEMBER)
-    renderApp('/change-password')
-    await screen.findByRole('heading', { name: '變更密碼' })
+    renderApp('/settings')
+    await screen.findByRole('heading', { name: '個人設定' })
 
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'old-password' },
@@ -372,7 +415,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     fireEvent.click(screen.getByRole('button', { name: '變更密碼' }))
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
   })
 
@@ -381,7 +424,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     renderApp('/')
 
     expect(
-      await screen.findByRole('heading', { name: '使用者管理' }),
+      await screen.findByRole('heading', { name: '專案進度總覽', level: 1 }),
     ).toBeInTheDocument()
   })
 
@@ -390,7 +433,7 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
     renderApp('/')
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
   })
 
@@ -424,17 +467,17 @@ describe('登入後依身分導向（#284 第 1 項）', () => {
 describe('依後端存取摘要決定落點（#480）', () => {
   // 五種身分 × 三個入口（登入、變更密碼、開 /）。
   const identities = [
-    ['系統管理者', ADMIN, '使用者管理'],
+    ['系統管理者', ADMIN, '專案進度總覽'],
     ['純內業', OFFICE, '我的專案'],
-    ['純現場', MEMBER, '今日任務'],
-    ['兩者皆有', BOTH, '我的專案'],
-    ['兩者皆無', NOBODY, '今日任務'],
-    ['只有範本管理員', TEMPLATE_ONLY, '範本管理'],
-    ['範本管理員兼現場', TEMPLATE_FIELD, '今日任務'],
+    ['純現場', MEMBER, '我的任務'],
+    ['具專案管理與現場權限', BOTH, '我的專案'],
+    ['兩者皆無', NOBODY, '個人設定'],
+    ['只有範本管理員', TEMPLATE_ONLY, '查核範本'],
+    ['範本管理員兼現場', TEMPLATE_FIELD, '我的任務'],
   ] as const
 
   async function changePassword() {
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'old-password' },
     })
@@ -457,7 +500,7 @@ describe('依後端存取摘要決定落點（#480）', () => {
 
   it.each(identities)('變更密碼後：%s', async (_name, user, heading) => {
     stubBackend(user)
-    renderApp('/change-password')
+    renderApp('/settings')
     await changePassword()
 
     expect(await screen.findByRole('heading', { name: heading })).toBeVisible()
@@ -483,6 +526,14 @@ describe('依後端存取摘要決定落點（#480）', () => {
               project_code: 'DEMO-B',
               name: '示範工程乙',
             },
+            {
+              ...MY_PROJECTS[0],
+              id: 'project-c',
+              project_code: 'DEMO-C',
+              name: '只有現場的工程',
+              has_office_access: false,
+              can_apply_templates: false,
+            },
           ])
         : original(input, init),
     )
@@ -491,57 +542,71 @@ describe('依後端存取摘要決定落點（#480）', () => {
     await screen.findByRole('heading', { name: '我的專案' })
     expect(await screen.findByText('示範工程甲')).toBeVisible()
     expect(screen.getByText('示範工程乙')).toBeVisible()
+    expect(screen.getByText('只有現場的工程')).toBeVisible()
     expect(screen.queryByText('新增專案')).toBeNull()
     const links = screen.getAllByRole('link', { name: '開啟專案' })
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/admin/projects/project-a',
-      '/admin/projects/project-b',
+      '/projects/project-a',
+      '/projects/project-b',
+      '/projects/project-c',
     ])
   })
 
-  it('範本管理員兼現場：現場頁不提供範本入口（FUI-R12）', async () => {
+  it('範本管理員兼現場：任務頁可開範本', async () => {
     stubBackend(TEMPLATE_FIELD)
     renderApp('/')
 
-    await screen.findByRole('heading', { name: '今日任務' })
-    expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
-    expect(screen.queryByRole('link', { name: '範本管理' })).toBeNull()
+    await screen.findByRole('heading', { name: '我的任務' })
+    expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
+    expect(screen.getByRole('link', { name: '範本' })).toHaveAttribute(
+      'href',
+      '/templates',
+    )
   })
 
-  it('只有範本管理員的 /field 說明頁沒有管理或專案入口（FUI-R12）', async () => {
+  it('只有範本管理員可從任務頁返回範本', async () => {
     stubBackend(TEMPLATE_ONLY)
-    renderApp('/field')
+    renderApp('/tasks')
 
-    expect(
-      await screen.findByRole('heading', { name: '目前無法查看現場任務' }),
-    ).toBeVisible()
-    expect(screen.queryByRole('link', { name: '前往範本管理' })).toBeNull()
-    expect(screen.queryByRole('link', { name: '範本管理' })).toBeNull()
-    expect(screen.queryByRole('link', { name: '前往我的專案' })).toBeNull()
+    const taskAccessHeading = await screen.findByRole('heading', {
+      name: '目前無法查看現場任務',
+    })
+    expect(taskAccessHeading).toBeVisible()
+    const templatesLink = screen.getByRole('link', {
+      name: '前往查核範本',
+    })
+    expect(templatesLink).toHaveAttribute('href', '/templates')
+    expect(screen.getByRole('link', { name: '範本' })).toBeVisible()
+    const projectsLink = screen.queryByRole('link', {
+      name: '前往我的專案',
+    })
+    expect(projectsLink).toBeNull()
   })
 
-  it('兩者皆無的帳號在 /field 看到權限說明，沒有前往我的專案', async () => {
+  it('全無權限開任務頁顯示說明並可前往設定', async () => {
     stubBackend(NOBODY)
-    renderApp('/')
+    renderApp('/tasks')
 
     expect(
       await screen.findByRole('heading', { name: '目前無法查看現場任務' }),
     ).toBeVisible()
-    expect(screen.queryByRole('link', { name: '前往我的專案' })).toBeNull()
+    const settingsLink = screen.getByRole('link', {
+      name: '前往個人設定',
+    })
+    expect(settingsLink).toHaveAttribute('href', '/settings')
   })
 })
 
 describe('出路與 404（#480）', () => {
   it.each([
-    ['系統管理者', ADMIN, '返回管理頁', '/admin'],
-    ['純內業', OFFICE, '返回我的專案', '/admin/projects'],
-    ['純現場', MEMBER, '返回今日任務', '/field'],
-    ['兩者皆有', BOTH, '返回我的專案', '/admin/projects'],
-    ['兩者皆無', NOBODY, '返回今日任務', '/field'],
-    ['只有範本管理員', TEMPLATE_ONLY, '返回範本管理', '/admin/templates'],
+    ['系統管理者', ADMIN, '返回總覽', '/overview'],
+    ['純內業', OFFICE, '返回專案', '/projects'],
+    ['純現場', MEMBER, '返回我的任務', '/tasks'],
+    ['具專案管理與現場權限', BOTH, '返回專案', '/projects'],
+    TEMPLATE_ONLY_LANDING_CASE,
   ] as const)('變更密碼頁的返回連結：%s', async (_n, user, name, href) => {
     stubBackend(user)
-    renderApp('/change-password')
+    renderApp('/settings')
 
     expect(await screen.findByRole('link', { name })).toHaveAttribute(
       'href',
@@ -549,17 +614,44 @@ describe('出路與 404（#480）', () => {
     )
   })
 
+  it('全無權限帳號在設定頁看到開通說明，沒有未授權頁面的返回連結', async () => {
+    stubBackend(NOBODY)
+    renderApp('/settings')
+
+    await screen.findByRole('heading', { name: '個人設定' })
+    expect(screen.getByText('尚未開通任何功能，請洽系統管理者')).toBeVisible()
+    expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
+  })
+
   it('必須先變更臨時密碼時不提供返回連結', async () => {
     stubBackend({ ...MEMBER, must_change_password: true })
-    renderApp('/change-password')
+    renderApp('/settings')
 
-    await screen.findByRole('heading', { name: '變更密碼' })
+    await screen.findByRole('heading', { name: '個人設定' })
     expect(screen.queryByRole('link', { name: /^返回/ })).toBeNull()
   })
 
   it('不存在的路徑顯示 404 與回首頁連結', async () => {
     stubBackend(OFFICE)
     renderApp('/no-such-page')
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
+      'href',
+      '/projects',
+    )
+  })
+
+  it.each([
+    '/field',
+    '/field/projects/project-a',
+    '/admin/projects/project-a/templates',
+    '/change-password',
+  ])('舊 UI 路徑 %s 回 404', async (path) => {
+    stubBackend(OFFICE)
+    renderApp(path)
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
@@ -578,37 +670,28 @@ describe('出路與 404（#480）', () => {
     await screen.findByRole('heading', { name: '我的專案' })
     fireEvent.click(await screen.findByRole('link', { name: '開啟專案' }))
 
-    // 專案頁有頂端列：帳號名稱、專案、變更密碼、登出。
+    // 專案頁有頂端列：帳號名稱、專案；個人選單提供密碼與登出。
     const bar = await screen.findByRole('navigation', { name: '管理功能' })
     expect(await screen.findByText('DEMO-A｜示範工程甲')).toBeVisible()
-    expect(screen.getByText(/登入者：主管/)).toBeVisible()
-    expect(within(bar).getByRole('link', { name: '變更密碼' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '主管 ▾' })).toBeVisible()
+    expect(within(bar).queryByRole('link', { name: '設定' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '主管 ▾' }))
+    expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
     // 導覽沒有分區與進度的佔位頁，也沒有管理者專屬項目。
-    for (const name of [
-      '分區',
-      '進度',
-      '使用者',
-      '公司',
-      '角色',
-      '範本管理',
-    ]) {
+    for (const name of ['分區', '進度', '管理', '公司', '角色', '範本']) {
       expect(screen.queryByRole('link', { name })).toBeNull()
     }
 
-    fireEvent.click(within(bar).getByRole('link', { name: '我的專案' }))
+    fireEvent.click(within(bar).getByRole('link', { name: '專案' }))
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
 
-    // 變更密碼頁可以返回我的專案（管理頁每次導覽都重掛，重新取得導覽列）。
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: '管理功能' })).getByRole(
-        'link',
-        { name: '變更密碼' },
-      ),
-    )
-    fireEvent.click(await screen.findByRole('link', { name: '返回我的專案' }))
+    // 變更密碼頁可以返回我的專案。
+    fireEvent.click(screen.getByRole('button', { name: '主管 ▾' }))
+    fireEvent.click(screen.getByRole('link', { name: '設定' }))
+    fireEvent.click(await screen.findByRole('link', { name: '返回專案' }))
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
@@ -616,13 +699,13 @@ describe('出路與 404（#480）', () => {
 
   it('非範本管理員直接開 /admin/templates 看到有出路的無權限頁', async () => {
     stubBackend(OFFICE)
-    renderApp('/admin/templates')
+    renderApp('/templates')
 
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
     expect(screen.queryByRole('button', { name: /新增/ })).toBeNull()
-    fireEvent.click(screen.getByRole('link', { name: '返回我的專案' }))
+    fireEvent.click(screen.getByRole('link', { name: '返回專案' }))
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
@@ -630,10 +713,19 @@ describe('出路與 404（#480）', () => {
 })
 
 describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
+  async function openOwnAdminAction() {
+    const accountLink = await screen.findByRole('link', { name: '主管' })
+    expect(accountLink).toHaveAttribute('href', '/accounts/admin-1')
+    fireEvent.click(accountLink)
+    await screen.findByRole('heading', { name: '主管', level: 1 })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+  }
+
   it('先確認；取消時不送出請求', async () => {
     const backend = stubBackend(ADMIN)
-    renderApp('/admin/users')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    renderApp('/accounts')
+    await openOwnAdminAction()
 
     const confirmation = screen.getByRole('region', { name: '操作確認' })
     expect(confirmation).toHaveTextContent('boss')
@@ -645,14 +737,14 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       ),
     ).toBe(false)
     expect(
-      screen.getByRole('heading', { name: '使用者管理' }),
+      screen.getByRole('heading', { name: '主管', level: 1 }),
     ).toBeInTheDocument()
   })
 
   it('確認後收回成功：提示並導離管理頁，不顯示權限錯誤', async () => {
     const backend = stubBackend(ADMIN)
-    renderApp('/admin/users')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    renderApp('/accounts')
+    await openOwnAdminAction()
     fireEvent.click(
       within(screen.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -660,14 +752,14 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       ),
     )
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      '已收回你的管理者權限',
-    )
+    expect(await screen.findByText('已收回你的管理者權限。')).toBeVisible()
     expect(
-      screen.getByRole('heading', { name: '今日任務' }),
+      screen.getByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('你沒有權限執行這項操作')).toBeNull()
-    expect(screen.queryByRole('heading', { name: '使用者管理' })).toBeNull()
+    expect(
+      screen.queryByRole('heading', { name: '帳號', level: 1 }),
+    ).toBeNull()
 
     // 導離後有重新取得目前使用者，且收回後沒有再呼叫列表 API。
     const calls = backend.fetchMock.mock.calls.map(([url]) => String(url))
@@ -694,8 +786,8 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       }
       return response
     })
-    renderApp('/admin/users')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    renderApp('/accounts')
+    await openOwnAdminAction()
     fireEvent.click(
       within(screen.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -707,7 +799,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
     expect(screen.getByText('已收回你的管理者權限。')).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '今日任務' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
   })
 
   it('收回自己失敗時留在管理頁並顯示錯誤', async () => {
@@ -724,8 +816,8 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
         return original(input, init)
       },
     )
-    renderApp('/admin/users')
-    fireEvent.click(await screen.findByRole('button', { name: '收回管理者' }))
+    renderApp('/accounts')
+    await openOwnAdminAction()
     fireEvent.click(
       within(screen.getByRole('region', { name: '操作確認' })).getByRole(
         'button',
@@ -737,7 +829,7 @@ describe('收回自己的管理者權限（#284 第 2、3 項）', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
     expect(
-      screen.getByRole('heading', { name: '使用者管理' }),
+      screen.getByRole('heading', { name: '主管', level: 1 }),
     ).toBeInTheDocument()
   })
 })
@@ -753,7 +845,7 @@ describe('登入逾時與未儲存頁面（#623）', () => {
       }
       return original(input, init)
     })
-    renderApp('/admin/projects')
+    renderApp('/projects')
     await screen.findByRole('heading', { name: '專案' })
     const createProjectButton = await screen.findByRole('button', {
       name: '新增專案',
@@ -832,14 +924,23 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   }
 
   async function logOut() {
+    if (!screen.queryByRole('button', { name: '登出' })) {
+      const trigger = screen
+        .getByRole('banner')
+        .querySelector<HTMLButtonElement>(
+          'button[aria-controls="app-header-personal-menu"]',
+        )
+      expect(trigger).not.toBeNull()
+      fireEvent.click(trigger!)
+    }
     fireEvent.click(await screen.findByRole('button', { name: '登出' }))
     await screen.findByRole('heading', { name: '登入' })
   }
 
   it('現場帳號登出後換內業帳號登入，落在我的專案', async () => {
     stubWithLogout(MEMBER, OFFICE)
-    renderApp('/field')
-    await screen.findByRole('heading', { name: '今日任務' })
+    renderApp('/tasks')
+    await screen.findByRole('heading', { name: '我的任務' })
 
     await logOut()
     await signIn()
@@ -847,19 +948,19 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),
     ).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '今日任務' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '我的任務' })).toBeNull()
   })
 
   it('內業帳號登出後換現場帳號登入，落在今日任務', async () => {
     stubWithLogout(OFFICE, MEMBER)
-    renderApp('/admin/projects')
+    renderApp('/projects')
     await screen.findByRole('heading', { name: '我的專案' })
 
     await logOut()
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeVisible()
     expect(screen.queryByRole('heading', { name: '我的專案' })).toBeNull()
   })
@@ -872,19 +973,19 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     // 兩人都看得到 `from`，所以只有換人判斷能把他擋下。
     rememberUser(OTHER_FIELD.id)
     stubBackend(null, MEMBER)
-    renderApp('/login', { from: '/field?scope=all' })
+    renderApp('/login', { from: '/tasks?scope=all' })
     await signIn()
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
     expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('沒有任何記錄時（直接開深層連結），登入後回到原頁面', async () => {
     stubBackend(null, MEMBER)
-    renderAppWithHistory(['/field?scope=all'])
+    renderAppWithHistory(['/tasks?scope=all'])
     await signIn()
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
     expect(scopeAll()).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -894,8 +995,8 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   ])('登出後按上一頁，再由%s登入，落在落點', async (_name, next) => {
     // 歷史：「全部」任務 → 今日任務（登出時被取代成 /login）。
     stubWithLogout(MEMBER, next)
-    renderAppWithHistory(['/field?scope=all', '/field'])
-    await screen.findByRole('heading', { name: '今日任務' })
+    renderAppWithHistory(['/tasks?scope=all', '/tasks'])
+    await screen.findByRole('heading', { name: '我的任務' })
 
     await logOut()
     fireEvent.click(screen.getByRole('button', { name: '測試用上一頁' }))
@@ -903,18 +1004,18 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
     await screen.findByRole('heading', { name: '登入' })
     await signIn()
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
     expect(scopeAll()).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('逾時後同一個人重新登入，回到原本的頁面', async () => {
     rememberUser(BOTH.id)
     stubBackend(null, BOTH)
-    renderApp('/login', { from: '/field?scope=all' })
+    renderApp('/login', { from: '/tasks?scope=all' })
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeVisible()
     expect(screen.getByRole('button', { name: '全部' })).toHaveAttribute(
       'aria-pressed',
@@ -925,11 +1026,11 @@ describe('換帳號登入一律落在新帳號的首頁（#489）', () => {
   it('同一個人但原頁面已無權限時，改去落點', async () => {
     rememberUser(MEMBER.id)
     stubBackend(null, MEMBER)
-    renderApp('/login', { from: '/admin/projects' })
+    renderApp('/login', { from: '/projects' })
     await signIn()
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeVisible()
   })
 })
@@ -940,39 +1041,54 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     renderApp('/login')
     await signIn()
 
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
     const bar = screen.getByRole('navigation', { name: '我的功能' })
-    expect(within(bar).queryByRole('link', { name: '我的專案' })).toBeNull()
-    expect(within(bar).getByRole('link', { name: '變更密碼' })).toBeVisible()
+    expect(within(bar).queryByRole('link', { name: '專案' })).toBeNull()
+    expect(within(bar).queryByRole('link', { name: '設定' })).toBeNull()
+    const trigger = screen
+      .getByRole('banner')
+      .querySelector<HTMLButtonElement>(
+        'button[aria-controls="app-header-personal-menu"]',
+      )
+    expect(trigger).not.toBeNull()
+    fireEvent.click(trigger!)
+    expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
   })
 
-  it('現場帳號直接開 /admin/projects：導回今日任務，沒有我的專案', async () => {
+  it('現場開專案清單導回任務，不顯示我的專案', async () => {
     stubBackend(MEMBER)
-    renderApp('/admin/projects')
+    renderApp('/projects')
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeVisible()
-    expect(screen.queryByRole('heading', { name: '我的專案' })).toBeNull()
-    expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
+    const projectsHeading = screen.queryByRole('heading', {
+      name: '我的專案',
+    })
+    expect(projectsHeading).toBeNull()
+    expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
   })
 
-  it('現場加 project.read 保留今日任務落點並可開啟唯讀專案', async () => {
+  it('現場唯讀專案仍落任務，且可手動開啟專案清單', async () => {
     stubBackend(FIELD_PROJECT_READ)
     renderApp('/')
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeVisible()
     const nav = screen.getByRole('navigation', { name: '我的功能' })
-    fireEvent.click(within(nav).getByRole('link', { name: '我的專案' }))
+    fireEvent.click(within(nav).getByRole('link', { name: '專案' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '我的專案' }),
+    ).toBeVisible()
 
     expect(
       await screen.findByRole('heading', { name: '示範工程甲' }),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-a',
+      '/projects/project-a',
     )
     fireEvent.click(screen.getByRole('link', { name: '開啟專案' }))
     expect(
@@ -981,32 +1097,32 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })
 
-  it('範本管理員直接開 /admin/projects：導回範本管理', async () => {
+  it('範本管理員直接開專案清單：導回範本管理', async () => {
     stubBackend(TEMPLATE_ONLY)
-    renderApp('/admin/projects')
+    renderApp('/projects')
 
     expect(
-      await screen.findByRole('heading', { name: '範本管理' }),
+      await screen.findByRole('heading', { name: '查核範本' }),
     ).toBeVisible()
-    expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
   })
 
   it('範本管理員兼現場進管理頁：頂端沒有我的專案', async () => {
     stubBackend(TEMPLATE_FIELD)
-    renderApp('/admin/templates')
+    renderApp('/templates')
 
-    await screen.findByRole('heading', { name: '範本管理' })
+    await screen.findByRole('heading', { name: '查核範本' })
     const bar = screen.getByRole('navigation', { name: '管理功能' })
-    expect(within(bar).queryByRole('link', { name: '我的專案' })).toBeNull()
-    expect(within(bar).getByRole('link', { name: '今日任務' })).toBeVisible()
+    expect(within(bar).queryByRole('link', { name: '專案' })).toBeNull()
+    expect(within(bar).getByRole('link', { name: '任務' })).toBeVisible()
   })
 
   it('有內業權限的人仍看得到入口', async () => {
     stubBackend(BOTH)
-    renderApp('/admin/templates')
+    renderApp('/templates')
 
     await screen.findByRole('heading', { name: '無權限' })
     const bar = screen.getByRole('navigation', { name: '管理功能' })
-    expect(within(bar).getByRole('link', { name: '我的專案' })).toBeVisible()
+    expect(within(bar).getByRole('link', { name: '專案' })).toBeVisible()
   })
 })

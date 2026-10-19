@@ -17,13 +17,14 @@ import { useWorkflowSummary } from './WorkflowSummaryProvider'
 import { canViewIndoorSections } from './permissions'
 import ProjectDeniedPage from './ProjectDeniedPage'
 import ProgressPage from '../progress/ProgressPage'
+import { PAGE_TITLES } from '../../terms'
 
-const TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
-  members: '成員',
-  'inspection-items': '查核項目',
-  zones: '分區',
-  planning: '計畫與任務',
-  progress: '進度',
+const SECTION_TITLES: Record<Exclude<ProjectSection, 'home'>, string> = {
+  members: PAGE_TITLES.projectMembers,
+  'inspection-items': PAGE_TITLES.projectItems,
+  zones: PAGE_TITLES.projectZones,
+  planning: PAGE_TITLES.projectPlanning,
+  progress: PAGE_TITLES.projectProgress,
 }
 
 /**
@@ -149,7 +150,7 @@ export default function ProjectSectionPage({
     } else {
       content = (
         <section aria-labelledby="project-section-heading">
-          <h2 id="project-section-heading">{TITLES[section]}</h2>
+          <h2 id="project-section-heading">{SECTION_TITLES[section]}</h2>
           <p>此區段內容會在後續任務提供。</p>
         </section>
       )

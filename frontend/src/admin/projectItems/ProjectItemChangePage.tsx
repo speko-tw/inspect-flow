@@ -858,7 +858,7 @@ export default function ProjectItemChangePage({
                 ])
               }
               cancelLabel="返回專案查核項目"
-              cancelHref={`/admin/projects/${projectId}/inspection-items`}
+              cancelHref={`/projects/${projectId}/inspection-items`}
               stablePointErrorKeys
               clearPointServerErrors={(index) => {
                 const point = inspectionPoints[index]

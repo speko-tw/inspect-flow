@@ -155,7 +155,7 @@ function ProgressList({
   const state = listEntry?.key === key ? listEntry.value : null
   const error = errorEntry?.key === key ? errorEntry.value : null
   const loading = loadedKey !== key || loadingMore
-  const base = `/admin/projects/${projectId}`
+  const base = `/projects/${projectId}`
 
   useEffect(() => {
     let active = true
@@ -389,7 +389,7 @@ function ProgressDetail({
     null,
   )
   const [retry, setRetry] = useState(0)
-  const base = `/admin/projects/${projectId}`
+  const base = `/projects/${projectId}`
   const back = `${base}/progress${filter === 'all' ? '' : `?status=${filter}`}`
   const { user } = useCurrentUser()
   const key = `${user.id}:${projectId}:${filter}`

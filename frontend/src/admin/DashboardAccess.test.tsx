@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { currentUserFixture } from '../testing/contractFixtures'
 import { DataMemoryRouter } from '../testing/DataMemoryRouter'
@@ -8,7 +8,6 @@ import { CurrentUserProvider } from '../auth/useCurrentUser'
 import AdminPage from './AdminPage'
 
 const mocks = vi.hoisted(() => ({
-  canOpenDashboard: vi.fn(),
   hasGlobalDashboardAccess: vi.fn(),
 }))
 
@@ -33,7 +32,7 @@ function renderAdmin(
               <AdminPage />
             </CurrentUserProvider>
           }
-          path="/admin/*"
+          path="/*"
         />
       </Routes>
     </DataMemoryRouter>,
@@ -49,35 +48,25 @@ beforeEach(() => {
   )
 })
 
-afterEach(() => vi.unstubAllGlobals())
-
-const singleProjectDeniedCase = [
-  '單一專案進度權限可進 Dashboard，',
-  '但不能直開全部任務明細',
-].join('')
-
 describe('Dashboard 導覽與路由權限', () => {
-  it('允許有專案範圍權限者進入且導覽依探針結果顯示', async () => {
-    mocks.canOpenDashboard.mockResolvedValue(true)
+  it('專案範圍權限不能開啟總覽或顯示總覽導覽', async () => {
     const user = currentUserFixture({
       has_office_access: false,
       module_permissions: ['inspection.use'],
     })
-    renderAdmin('/admin/dashboard', user)
+    renderAdmin('/overview', user)
 
-    expect(
-      await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
-      'href',
-      '/admin/dashboard',
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '你目前沒有可查看的專案進度。',
     )
-    expect(mocks.canOpenDashboard).toHaveBeenCalledWith(user)
+    expect(
+      screen.queryByRole('link', { name: '總覽' }),
+    ).not.toBeInTheDocument()
   })
 
-  it('無效專案網址先由 route guard 擋下且不啟動 Dashboard 探針', async () => {
+  it('無效專案網址由 route guard 擋下', async () => {
     renderAdmin(
-      '/admin/projects/..%2Fcompanies%3F/planning',
+      '/projects/..%2Fcompanies%3F/planning',
       currentUserFixture({
         has_office_access: false,
         module_permissions: ['inspection.use'],
@@ -87,34 +76,31 @@ describe('Dashboard 導覽與路由權限', () => {
     expect(
       await screen.findByRole('heading', { name: '找不到這個專案' }),
     ).toBeInTheDocument()
-    expect(mocks.canOpenDashboard).not.toHaveBeenCalled()
   })
 
-  it('全域讀取權限不需 inspection.use 或探針即顯示入口', async () => {
+  it('全域讀取權限不需 inspection.use 即顯示入口', async () => {
     mocks.hasGlobalDashboardAccess.mockReturnValue(true)
     const user = currentUserFixture({
       has_office_access: false,
       module_permissions: ['all_project_progress.read'],
     })
-    renderAdmin('/admin/dashboard', user)
+    renderAdmin('/overview', user)
 
     expect(
       await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
     ).toBeInTheDocument()
-    expect(mocks.canOpenDashboard).not.toHaveBeenCalled()
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '總覽' })).toBeInTheDocument()
   })
 
-  it(singleProjectDeniedCase, async () => {
-    mocks.canOpenDashboard.mockResolvedValue(true)
+  it('專案範圍權限不能直開全部任務明細', async () => {
     const user = currentUserFixture({
       has_office_access: false,
       module_permissions: ['inspection.use'],
     })
-    renderAdmin('/admin/dashboard/projects/project-1/tasks/task-1', user)
+    renderAdmin('/overview/projects/project-1/tasks/task-1', user)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '查看全部專案任務需要「看全部專案進度」權限。',
+      '你目前沒有可查看的專案進度。',
     )
     expect(
       screen.queryByRole('heading', { name: '任務明細測試頁' }),
@@ -127,68 +113,10 @@ describe('Dashboard 導覽與路由權限', () => {
       has_office_access: false,
       module_permissions: ['all_project_progress.read'],
     })
-    renderAdmin('/admin/dashboard/projects/project-1/tasks/task-1', user)
+    renderAdmin('/overview/projects/project-1/tasks/task-1', user)
 
     expect(
       await screen.findByRole('heading', { name: '任務明細測試頁' }),
-    ).toBeInTheDocument()
-  })
-
-  it('403 探針不顯示入口且直達路由顯示無權限', async () => {
-    mocks.canOpenDashboard.mockResolvedValue(false)
-    renderAdmin(
-      '/admin/dashboard',
-      currentUserFixture({
-        has_office_access: false,
-        module_permissions: ['inspection.use'],
-      }),
-    )
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你目前沒有可查看的專案進度。',
-    )
-    expect(
-      screen.queryByRole('link', { name: 'Dashboard' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('權限探針暫時失敗時可重試，不把錯誤當成拒絕', async () => {
-    mocks.canOpenDashboard
-      .mockRejectedValueOnce(new Error('network'))
-      .mockResolvedValueOnce(true)
-    renderAdmin(
-      '/admin/dashboard',
-      currentUserFixture({
-        has_office_access: false,
-        module_permissions: ['inspection.use'],
-      }),
-    )
-
-    fireEvent.click(await screen.findByRole('button', { name: '重新確認' }))
-    await waitFor(() =>
-      expect(mocks.canOpenDashboard).toHaveBeenCalledTimes(2),
-    )
-    expect(
-      await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
-    ).toBeInTheDocument()
-  })
-
-  it('無權使用者遇到 5xx 時隱藏入口並保留直達路由重試', async () => {
-    mocks.canOpenDashboard.mockRejectedValueOnce(new Error('HTTP 503'))
-    const user = currentUserFixture({
-      has_office_access: false,
-      module_permissions: ['inspection.use'],
-    })
-    renderAdmin('/admin/dashboard', user)
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前無法確認 Dashboard 權限，請重試。',
-    )
-    expect(
-      screen.queryByRole('link', { name: 'Dashboard' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: '重新確認' }),
     ).toBeInTheDocument()
   })
 })

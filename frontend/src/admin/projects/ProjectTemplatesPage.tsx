@@ -428,7 +428,7 @@ export default function ProjectTemplatesPage({
         setApplyError('這個系統沒有查核項目。')
         return
       }
-      navigate(`/admin/projects/${projectId}/inspection-items`, {
+      navigate(`/projects/${projectId}/inspection-items`, {
         state: {
           notice: `已新增 ${result.length} 個項目到「${project?.name ?? '專案'}」。`,
           highlightedItemIds: result.map((item) => item.id),
@@ -576,9 +576,7 @@ export default function ProjectTemplatesPage({
     <section className="tpl-page">
       <BackLink
         to={
-          standalone
-            ? '/admin/templates'
-            : `/admin/projects/${projectId}/inspection-items`
+          standalone ? '/templates' : `/projects/${projectId}/inspection-items`
         }
       >
         {standalone ? '返回範本管理' : '返回查核項目'}
@@ -997,10 +995,7 @@ export default function ProjectTemplatesPage({
                             改選其他範本
                           </button>
                           {/* TPL-R23：衝突出口回專案首頁，和頁首返回項目入口分開。 */}
-                          <Link
-                            className="btn"
-                            to={`/admin/projects/${projectId}`}
-                          >
+                          <Link className="btn" to={`/projects/${projectId}`}>
                             返回專案
                           </Link>
                         </div>

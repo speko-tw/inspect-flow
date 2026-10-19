@@ -56,12 +56,30 @@ INSPECTION_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
     for code in OFFICE_PERMISSION_CODES
     if permission_code_module(code) == "inspection"
 )
+PROJECT_PLANNING_OR_MEMBERS_PERMISSION_CODES: frozenset[str] = frozenset(
+    {
+        "project_member.manage",
+        "inspection_plan.create",
+        "inspection_plan.manage",
+        "inspection_plan.archive",
+        "inspection_plan.unarchive",
+        "inspection_task.manage",
+        "inspection_task.create",
+        "inspection_task.dispatch",
+        "inspection_task.assign",
+        "inspection_task.delete_draft",
+        "inspection_task.cancel",
+    }
+)
 
 
 @dataclass(frozen=True)
 class AccessSummary:
     has_office_access: bool
     has_field_access: bool
+    # 現場入口須同時符合查核模組與專案任務權限。
+    can_inspect_tasks: bool
+    can_manage_project_planning_or_members: bool
     has_template_access: bool
     can_browse_templates: bool
     can_manage_template_library: bool
@@ -78,6 +96,8 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         return AccessSummary(
             has_office_access=True,
             has_field_access=True,
+            can_inspect_tasks=True,
+            can_manage_project_planning_or_members=True,
             has_template_access=True,
             can_browse_templates=True,
             can_manage_template_library=True,
@@ -109,9 +129,22 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         "inspection_task.inspect" in project_access_codes
         and "inspection.use" in module_permissions
     )
+    can_inspect_tasks = (
+        "inspection_task.inspect" in project_access_codes
+        and "inspection.use" in module_permissions
+    )
+    can_manage_project_planning_or_members = any(
+        code in PROJECT_PLANNING_OR_MEMBERS_PERMISSION_CODES
+        and has_module_for_code(code)
+        for code in project_access_codes
+    )
     return AccessSummary(
         has_office_access=office_access,
         has_field_access=field_access,
+        can_inspect_tasks=can_inspect_tasks,
+        can_manage_project_planning_or_members=(
+            can_manage_project_planning_or_members
+        ),
         has_template_access=has_template_access,
         can_browse_templates=can_browse_templates,
         can_manage_template_library=has_template_access,

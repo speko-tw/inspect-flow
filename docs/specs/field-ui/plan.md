@@ -24,6 +24,10 @@
 
 ## 跨規格依賴
 
+### 路由基準（#705）
+
+目前 UI 路由依 `spec.md` FUI-R14 與 `admin-dashboard` ADM-R50；本計畫早期 `/field/...`、`/admin/...` 字樣只描述當時任務背景，不作為現行路由或轉址契約。Field 任務入口為 `/tasks` 與 `/tasks/:id`，舊 UI 網址回 404；API 路徑保持原樣。現場有 `can_inspect_tasks` 且沒有建立專案、專案成員管理或計畫管理權限時，登入落點為 `/tasks`，即使同時有唯讀專案入口；總覽只對 Admin 或 `all_project_progress.read` 開放，專案層進度由「專案 → 進度」提供。
+
 - `#361`：inspection-planning T3，提供 Plan、Task 與專案項目 API（含 Task 詳情、開始及 Field 所需查詢）。依 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)，Field 使用專案範圍的現場查核權限；`inspection_task.inspect` 是本規格所選的代碼名稱（依 [權限表](../../intents/07-permission-model.md#permission-table)，代碼命名由規格決定）。API/RBAC 契約若不符，先更新來源規格與 issue，不以 UI mock 代替。派送時間契約已由 #416 維護者裁定並納入本次實作。
 - [KD-69](../../intents/03-decisions-and-stack.md#kd-69)：兩層權限（人員模組權限加專案角色）的改造排入 0.5.x。Field 的專案權限須由 `authentication`／`inspection-planning` 契約及 seed 提供；角色管理 UI 屬 Admin 任務，不作為 Field 畫面的依賴。
 - `#363`：inspection-planning T4，內業 Plan／Task 管理 UI，不是 Field 前端基礎；它可能同時修改共用路由或 API client。由責任方先協調共用檔案及接合順序，Field 任務不將 #363 寫成基礎設施前置。
