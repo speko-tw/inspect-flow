@@ -15,6 +15,8 @@
 
 ![系統管理者查看帳號清單](images/account-list-admin.png)
 
+![360px 帳號清單的姓名連結與帳號選單可點區](images/account-list-admin-360.png)
+
 ![專案成員與專案角色](images/project-members.png)
 
 ## 2. 主管看進度：從總覽開啟任務清單

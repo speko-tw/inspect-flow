@@ -338,6 +338,7 @@ describe('AppHeader', () => {
     const trigger = within(account as HTMLElement).getByRole('button', {
       name: '示範使用者 ▾',
     })
+    expect(trigger).toHaveClass('app-header-personal-trigger')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     expect(trigger).toHaveAttribute('aria-haspopup', 'true')
     expect(screen.queryByRole('link', { name: '設定' })).toBeNull()
