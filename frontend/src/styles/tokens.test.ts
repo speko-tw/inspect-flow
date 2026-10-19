@@ -178,9 +178,13 @@ describe('semantic design tokens', () => {
 
   it('retains the reduced-motion override', () => {
     expect(tokensCss).toContain('@media (prefers-reduced-motion: reduce)')
-    const reduced = matchedVariables(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?:root\s*\{([^}]*)\}/,
-    )
+    const reducedRule =
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*([^{}]+)\s*\{([^}]*)\}/.exec(
+        tokensCss,
+      )
+    expect(reducedRule?.[1]).toContain(":root[data-theme='light']")
+    expect(reducedRule?.[1]).toContain(":root[data-theme='dark']")
+    const reduced = variablesIn(reducedRule?.[2] ?? '')
     expect(reduced).toMatchObject({
       '--motion-fast': '0ms',
       '--motion-medium': '0ms',

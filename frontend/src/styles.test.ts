@@ -141,6 +141,16 @@ describe('touch target rules', () => {
     expect(declaration).toBeGreaterThan(0)
   })
 
+  it('gives account name links a 44px target on narrow screens', () => {
+    const mobile = section.slice(section.indexOf('@media (max-width: 40rem)'))
+    const rule = /\.users-account-name-link \{[^}]*\}/.exec(mobile)
+    expect(declarationsIn(rule?.[0] ?? '')).toMatchObject({
+      display: 'inline-flex',
+      'align-items': 'center',
+      'min-height': 'var(--touch-target)',
+    })
+  })
+
   it.each([
     'button,',
     'select,',
