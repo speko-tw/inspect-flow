@@ -68,7 +68,7 @@ describe('Dashboard 導覽與路由權限', () => {
     expect(
       await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '總覽' })).toHaveAttribute(
       'href',
       '/admin/dashboard',
     )
@@ -102,7 +102,7 @@ describe('Dashboard 導覽與路由權限', () => {
       await screen.findByRole('heading', { name: 'Dashboard 測試頁' }),
     ).toBeInTheDocument()
     expect(mocks.canOpenDashboard).not.toHaveBeenCalled()
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '總覽' })).toBeInTheDocument()
   })
 
   it(singleProjectDeniedCase, async () => {
@@ -148,7 +148,7 @@ describe('Dashboard 導覽與路由權限', () => {
       '你目前沒有可查看的專案進度。',
     )
     expect(
-      screen.queryByRole('link', { name: 'Dashboard' }),
+      screen.queryByRole('link', { name: '總覽' }),
     ).not.toBeInTheDocument()
   })
 
@@ -182,10 +182,10 @@ describe('Dashboard 導覽與路由權限', () => {
     renderAdmin('/admin/dashboard', user)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '目前無法確認 Dashboard 權限，請重試。',
+      '目前無法確認總覽權限，請重試。',
     )
     expect(
-      screen.queryByRole('link', { name: 'Dashboard' }),
+      screen.queryByRole('link', { name: '總覽' }),
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: '重新確認' }),

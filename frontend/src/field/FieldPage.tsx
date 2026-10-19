@@ -7,6 +7,7 @@ import { Button } from '../components/Button'
 import { ResourceState } from '../components/layout/LayoutPatterns'
 import { isForbidden } from '../http'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
+import { PAGE_TITLES } from '../layout/navigationLabels'
 import RouteNotFound from '../RouteNotFound'
 import { StatusBadge } from '../ui/Badge'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
@@ -73,12 +74,11 @@ export default function FieldPage() {
   const detailId = location.pathname.match(/^\/field\/tasks\/([^/]+)\/?$/)?.[1]
   // `/field` 以外、也不是任務詳情的網址（例如 `/field/abc123`）：找不到。
   const unknownPath = !detailId && !/^\/field\/?$/.test(location.pathname)
-  const from = `${location.pathname}${location.search}${location.hash}`
   const notice = (location.state as { notice?: unknown } | null)?.notice
   return (
     <>
       <AppHeader
-        navItems={memberNavItems(user, { from }).filter(
+        navItems={memberNavItems(user).filter(
           (item) => item.to !== '/admin/templates',
         )}
         navLabel="我的功能"
@@ -244,7 +244,7 @@ function TaskList({
 
   return (
     <>
-      <h1 className="field-heading">今日任務</h1>
+      <h1 className="field-heading">{PAGE_TITLES.tasks}</h1>
       <p className="field-intro">已派出的未完成任務，依派送時間排列。</p>
       {error !== 'forbidden' && (
         <>

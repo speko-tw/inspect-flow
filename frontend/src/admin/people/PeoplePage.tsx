@@ -1,0 +1,310 @@
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
+
+import { ACCOUNT_LABEL } from '../../layout/navigationLabels'
+import {
+  UnsavedLeaveBox,
+  useUnsavedNavigationGuard,
+} from '../../ui/navigation'
+import UsersPage from '../UsersPage'
+import ModulePermissionsPage from '../module-permissions/ModulePermissionsPage'
+import { useCurrentUser } from '../../auth/useCurrentUser'
+import { request } from '../api'
+
+interface DelegatePerson {
+  id: string
+  username: string
+  name_zh: string | null
+}
+
+interface DelegatePersonPage {
+  items: DelegatePerson[]
+  next_cursor: string | null
+}
+
+/** Admin 人員入口；保留清單與授權精靈狀態供清單、詳情路由共用。 */
+export function PeoplePage({
+  onTemporaryPassword,
+}: {
+  onTemporaryPassword: (username: string, password: string) => void
+}) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { user } = useCurrentUser()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [wizardRequest, setWizardRequest] = useState(0)
+  const [wizardDirty, setWizardDirty] = useState(false)
+  const [userFormsDirty, setUserFormsDirty] = useState(false)
+  const pageGuard = useUnsavedNavigationGuard(wizardDirty || userFormsDirty)
+  const detailMatch = location.pathname.match(/^\/admin\/people\/([^/]+)$/)
+  const personId = detailMatch ? decodeURIComponent(detailMatch[1]) : null
+  const createWizardOpen = user.is_admin && wizardRequest > 0
+  const query = searchParams.get('q') ?? ''
+
+  function updateQuery(nextQuery: string) {
+    const next = new URLSearchParams(searchParams)
+    if (nextQuery.trim()) next.set('q', nextQuery.trim())
+    else next.delete('q')
+    setSearchParams(next, { replace: true })
+  }
+
+  return (
+    <main
+      aria-labelledby={
+        personId
+          ? user.is_admin
+            ? 'person-basic-heading'
+            : 'delegated-person-heading'
+          : 'people-heading'
+      }
+      className="admin-page"
+    >
+      <UnsavedLeaveBox guard={pageGuard} />
+      {!personId && (
+        <h1 id="people-heading">
+          {createWizardOpen ? '新增帳號' : ACCOUNT_LABEL}
+        </h1>
+      )}
+      {personId ? (
+        <p>
+          <Link
+            to={{
+              pathname: '/admin/people',
+              search: query ? `?q=${encodeURIComponent(query)}` : '',
+            }}
+          >
+            返回{ACCOUNT_LABEL}清單
+          </Link>
+        </p>
+      ) : createWizardOpen ? (
+        <button onClick={() => setWizardRequest(0)} type="button">
+          取消
+        </button>
+      ) : (
+        user.is_admin && (
+          <button onClick={() => setWizardRequest((value) => value + 1)}>
+            新增帳號
+          </button>
+        )
+      )}
+      {!user.is_admin && personId && (
+        <DelegatedPersonHeading userId={personId} />
+      )}
+      {user.is_admin && !createWizardOpen ? (
+        <UsersPage
+          detailUserId={personId}
+          hideCreateForm
+          initialQuery={query}
+          externalNavigationGuard
+          onDirtyChange={setUserFormsDirty}
+          onQueryApplied={updateQuery}
+          onSelectUser={(id) => {
+            const next = new URLSearchParams(searchParams)
+            if (query) next.set('q', query)
+            navigate({
+              pathname: `/admin/people/${encodeURIComponent(id)}`,
+              search: next.toString(),
+            })
+          }}
+          onTemporaryPassword={onTemporaryPassword}
+        />
+      ) : !user.is_admin ? (
+        !personId && (
+          <DelegatedPeopleList
+            key={query}
+            onSelect={(id) =>
+              navigate({
+                pathname: `/admin/people/${encodeURIComponent(id)}`,
+                search: query ? `?q=${encodeURIComponent(query)}` : '',
+              })
+            }
+            query={query}
+            updateQuery={updateQuery}
+            visible
+          />
+        )
+      ) : null}
+      {(personId || createWizardOpen) && (
+        <ModulePermissionsPage
+          embedded
+          externalNavigationGuard
+          openWizardRequest={wizardRequest}
+          onDirtyChange={setWizardDirty}
+          onWizardBackToList={() => setWizardRequest(0)}
+          onWizardViewUser={(id) => {
+            setWizardRequest(0)
+            navigate(`/admin/people/${encodeURIComponent(id)}`)
+          }}
+          selectedUserId={personId ?? undefined}
+        />
+      )}
+    </main>
+  )
+}
+
+function DelegatedPersonHeading({ userId }: { userId: string }) {
+  const [result, setResult] = useState<{
+    userId: string
+    person: DelegatePerson | null
+    error: string
+  } | null>(null)
+  const currentResult = result?.userId === userId ? result : null
+
+  useEffect(() => {
+    let active = true
+    void request<DelegatePerson>(
+      `/module-delegate/users/${encodeURIComponent(userId)}`,
+    )
+      .then((person) => active && setResult({ userId, person, error: '' }))
+      .catch(() => {
+        if (active) {
+          setResult({ userId, person: null, error: '目前無法查看此帳號。' })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [userId])
+
+  if (currentResult?.error) {
+    return <p role="alert">{currentResult.error}</p>
+  }
+  if (!currentResult?.person) return <p role="status">載入帳號…</p>
+  const person = currentResult.person
+  return (
+    <header>
+      <h1 id="delegated-person-heading">
+        {person.name_zh || person.username}
+      </h1>
+      <p>帳號：{person.username}</p>
+    </header>
+  )
+}
+
+function DelegatedPeopleList({
+  onSelect,
+  query,
+  updateQuery,
+  visible,
+}: {
+  onSelect: (id: string) => void
+  query: string
+  updateQuery: (query: string) => void
+  visible: boolean
+}) {
+  const [input, setInput] = useState(query)
+  const requestKey = `${visible}:${query}`
+  const [result, setResult] = useState<{
+    key: string
+    items: DelegatePerson[]
+    cursor: string | null
+    error: string
+  }>({ key: '', items: [], cursor: null, error: '' })
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loading = (visible && result.key !== requestKey) || loadingMore
+  const items = result.key === requestKey ? result.items : []
+  const cursor = result.key === requestKey ? result.cursor : null
+  const error = result.key === requestKey ? result.error : ''
+
+  useEffect(() => {
+    if (!visible) return
+    let active = true
+    const key = `${visible}:${query}`
+    const params = new URLSearchParams({ limit: '50' })
+    if (query.trim()) params.set('q', query.trim())
+    void request<DelegatePersonPage>(
+      `/module-delegate/users?${params.toString()}`,
+    )
+      .then((page) => {
+        if (!active) return
+        setResult({
+          key,
+          items: page.items,
+          cursor: page.next_cursor,
+          error: '',
+        })
+      })
+      .catch(
+        () =>
+          active &&
+          setResult({
+            key,
+            items: [],
+            cursor: null,
+            error: '目前無法載入帳號清單，請重試。',
+          }),
+      )
+    return () => {
+      active = false
+    }
+  }, [query, visible])
+
+  async function loadMore() {
+    if (!cursor || loading) return
+    setLoadingMore(true)
+    setResult((current) => ({ ...current, error: '' }))
+    try {
+      const params = new URLSearchParams({ limit: '50', cursor })
+      if (query.trim()) params.set('q', query.trim())
+      const page = await request<DelegatePersonPage>(
+        `/module-delegate/users?${params.toString()}`,
+      )
+      setResult((current) => ({
+        ...current,
+        items: [...current.items, ...page.items],
+        cursor: page.next_cursor,
+      }))
+    } catch {
+      setResult((current) => ({
+        ...current,
+        error: '目前無法載入更多帳號，請重試。',
+      }))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  if (!visible) return null
+
+  return (
+    <section aria-label="可管理權限的帳號">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          updateQuery(input.trim())
+        }}
+      >
+        <label>
+          搜尋帳號
+          <input
+            onChange={(event) => setInput(event.target.value)}
+            value={input}
+          />
+        </label>
+        <button type="submit">搜尋</button>
+      </form>
+      {error && <p role="alert">{error}</p>}
+      {loading && <p role="status">載入中…</p>}
+      <ul aria-label="帳號清單">
+        {items.map((person) => (
+          <li key={person.id}>
+            <button onClick={() => onSelect(person.id)} type="button">
+              {person.name_zh || person.username}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {cursor && (
+        <button
+          disabled={loading}
+          onClick={() => void loadMore()}
+          type="button"
+        >
+          載入更多
+        </button>
+      )}
+    </section>
+  )
+}
+
+export default PeoplePage

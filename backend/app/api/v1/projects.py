@@ -210,6 +210,7 @@ class ProjectMemberDetailResponse(ProjectMemberResponse):
     company_id: UUID | None
     company_name: str | None
     is_active: bool
+    is_external_collaborator: bool
     module_status: ModuleStatusResponse
 
 
@@ -335,6 +336,7 @@ def _member_detail_response(
         company_id=user.company_id,
         company_name=company.name if company is not None else None,
         is_active=user.is_active,
+        is_external_collaborator=user.is_external_collaborator,
         module_status=_module_status(module_permissions),
     )
 

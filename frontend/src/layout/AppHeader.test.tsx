@@ -10,6 +10,7 @@ import type { CurrentUser } from '../auth/api'
 import { CurrentUserProvider } from '../auth/useCurrentUser'
 import { currentUserFixture } from '../testing/contractFixtures'
 import AppHeader, { memberNavItems } from './AppHeader'
+import { NAV_LABELS } from './navigationLabels'
 
 const ADMIN = currentUserFixture({
   is_admin: true,
@@ -31,6 +32,7 @@ const TEMPLATE_USE_ONLY = currentUserFixture({
   can_browse_templates: true,
   can_manage_template_library: false,
 })
+const ORIGINAL_INNER_WIDTH = window.innerWidth
 
 function renderHeader(
   user: CurrentUser,
@@ -51,12 +53,19 @@ function renderHeader(
   )
 }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: ORIGINAL_INNER_WIDTH,
+  })
+})
 
 describe('範本瀏覽導覽（TPL-R09）', () => {
   it('template.use-only 使用者可從頁首進入範本庫', () => {
     renderHeader(TEMPLATE_USE_ONLY)
-    expect(screen.getByRole('link', { name: '範本管理' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '範本' })).toHaveAttribute(
       'href',
       '/admin/templates',
     )
@@ -76,12 +85,13 @@ describe('AppHeader 窄螢幕導覽（#500）', () => {
       .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
       .mockReturnValue(328)
     try {
-      renderHeader(ADMIN, {}, '/change-password')
+      renderHeader(ADMIN, {}, '/admin/projects')
       const nav = screen.getByRole('navigation', { name: '管理功能' })
       expect(nav).toHaveClass('app-header-nav')
-      expect(
-        within(nav).getByRole('link', { name: '變更密碼' }),
-      ).toHaveAttribute('aria-current', 'page')
+      expect(within(nav).getByRole('link', { name: '專案' })).toHaveAttribute(
+        'aria-current',
+        'page',
+      )
       // 目前分頁右緣 580，可視寬度 328：往右捲到右緣對齊再留 8px。
       expect(nav.scrollLeft).toBe(580 - 328 + 8)
     } finally {
@@ -151,8 +161,134 @@ describe('AppHeader 導覽的「還有更多」提示（#500）', () => {
 })
 
 describe('AppHeader', () => {
+  it('管理下拉僅有可見子項，支援鍵盤、Esc、目前頁狀態與空清單隱藏', () => {
+    renderHeader(
+      OFFICE,
+      {
+        navItems: [
+          { to: '/field', label: NAV_LABELS.tasks },
+          { to: '/admin/projects', label: NAV_LABELS.projects },
+          { to: '/admin/dashboard', label: NAV_LABELS.overview },
+          { to: '/admin/templates', label: NAV_LABELS.templates },
+        ],
+        managementItems: [
+          { to: '/admin/companies', label: NAV_LABELS.company },
+          { to: '/admin/roles', label: NAV_LABELS.roles },
+          { to: '/admin/audit-logs', label: NAV_LABELS.records },
+        ],
+      },
+      '/admin/roles',
+    )
+    const trigger = screen.getByRole('button', { name: /管理/ })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('link', { name: '公司' })).toBeNull()
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: '公司' })).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('委派者只可見帳號時直接顯示帳號連結，不顯示管理下拉', () => {
+    renderHeader(OFFICE, {
+      managementItems: [{ to: '/admin/people', label: NAV_LABELS.account }],
+    })
+    expect(screen.getByRole('link', { name: '帳號' })).toHaveAttribute(
+      'href',
+      '/admin/people',
+    )
+    expect(screen.queryByRole('button', { name: /管理/ })).toBeNull()
+  })
+
+  it('窄螢幕下拉固定在視窗內，不受可捲動導覽列裁切', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 360,
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 320,
+      y: 24,
+      top: 24,
+      right: 360,
+      bottom: 68,
+      left: 320,
+      width: 40,
+      height: 44,
+      toJSON: () => ({}),
+    })
+    renderHeader(ADMIN, {
+      managementItems: [
+        { to: '/admin/people', label: NAV_LABELS.account },
+        { to: '/admin/companies', label: NAV_LABELS.company },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: /管理/ }))
+    const menu = screen.getByRole('group', { name: '管理' })
+    expect(menu.getAttribute('style')).toBe(
+      'top: 68px; left: 200px; position: fixed;',
+    )
+  })
+
+  it('360px 下管理者可開啟全部管理項目且選單留在視窗內', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 360,
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 320,
+      y: 24,
+      top: 24,
+      right: 360,
+      bottom: 68,
+      left: 320,
+      width: 40,
+      height: 44,
+      toJSON: () => ({}),
+    })
+    renderHeader(ADMIN, {
+      managementItems: [
+        { to: '/admin/people', label: NAV_LABELS.account },
+        { to: '/admin/companies', label: NAV_LABELS.company },
+        { to: '/admin/roles', label: NAV_LABELS.roles },
+        { to: '/admin/audit-logs', label: NAV_LABELS.records },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: /管理/ }))
+
+    const menu = screen.getByRole('group', { name: '管理' })
+    const { left, right } = menu.getBoundingClientRect()
+    expect(left).toBeGreaterThanOrEqual(0)
+    expect(right).toBeLessThanOrEqual(window.innerWidth)
+    expect(
+      within(menu)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['帳號', '公司', '角色', '紀錄'])
+  })
+
+  it('管理項目為空時不顯示管理入口，主導覽依固定順序呈現', () => {
+    renderHeader(ADMIN, {
+      navItems: [
+        { to: '/admin/templates', label: NAV_LABELS.templates },
+        { to: '/admin/dashboard', label: NAV_LABELS.overview },
+        { to: '/field', label: NAV_LABELS.tasks },
+        { to: '/admin/projects', label: NAV_LABELS.projects },
+      ],
+      managementItems: [],
+    })
+    expect(screen.queryByRole('button', { name: '管理' })).toBeNull()
+    expect(
+      within(screen.getByRole('navigation'))
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['總覽', '任務', '專案', '範本'])
+  })
+
   it.each([
-    ['系統管理者', ADMIN, '/admin'],
+    ['系統管理者', ADMIN, '/admin/dashboard'],
     ['內業', OFFICE, '/admin/projects'],
     ['現場', FIELD, '/field'],
     ['內業加現場', MIXED, '/admin/projects'],
@@ -163,50 +299,92 @@ describe('AppHeader', () => {
     ).toHaveAttribute('href', target)
   })
 
-  it('帳號區：登入者與登出鈕在同一組', () => {
+  it('登入者按鈕可開啟個人選單，密碼與登出不在導覽列', () => {
     renderHeader(FIELD)
-    const account = screen.getByText(/登入者：示範使用者/).parentElement
+    const account = screen.getByRole('button', {
+      name: '示範使用者 ▾',
+    }).parentElement
     expect(account).toHaveClass('app-header-account')
-    expect(
-      within(account as HTMLElement).getByRole('button', { name: '登出' }),
-    ).toBeVisible()
+    const trigger = within(account as HTMLElement).getByRole('button', {
+      name: '示範使用者 ▾',
+    })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true')
+    expect(screen.queryByRole('link', { name: '設定' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '登出' })).toBeNull()
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: '設定' })).toHaveAttribute(
+      'href',
+      '/change-password',
+    )
+    expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
   })
 
-  it('混合帳號的導覽同時有內業與現場，現場帳號只有今日任務與變更密碼', () => {
+  it.each([
+    ['系統管理者', ADMIN],
+    ['主管', OFFICE],
+    ['現場人員', FIELD],
+    ['混合權限', MIXED],
+  ])('%s 看得到清楚的個人選單按鈕', (_label, user) => {
+    renderHeader(user)
+    const trigger = screen.getByRole('button', {
+      name: '示範使用者 ▾',
+    })
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: '設定' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
+  })
+
+  it('混合帳號的導覽同時有內業與現場，現場帳號只有任務', () => {
     const view = renderHeader(MIXED)
     const names = (container: HTMLElement) =>
       within(container)
         .getAllByRole('link')
         .map((link) => link.textContent)
-    expect(names(screen.getByRole('navigation'))).toEqual([
-      '我的專案',
-      '今日任務',
-      '變更密碼',
-    ])
+    expect(names(screen.getByRole('navigation'))).toEqual(['任務', '專案'])
     view.unmount()
     renderHeader(FIELD)
-    expect(names(screen.getByRole('navigation'))).toEqual([
-      '今日任務',
-      '變更密碼',
-    ])
+    expect(names(screen.getByRole('navigation'))).toEqual(['任務'])
   })
 
-  it('現場加唯讀專案權限可由頁首進入我的專案', () => {
+  it('個人選單可用鍵盤開啟，Esc 關閉並把焦點還給登入者按鈕', () => {
+    renderHeader(FIELD)
+    const trigger = screen.getByRole('button', {
+      name: '示範使用者 ▾',
+    })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+
+    const passwordLink = screen.getByRole('link', { name: '設定' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(passwordLink).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('link', { name: '設定' })).toBeNull()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('現場加唯讀專案權限可由頁首進入專案清單', () => {
     renderHeader(FIELD_PROJECT)
     const nav = screen.getByRole('navigation', { name: '管理功能' })
-    expect(
-      within(nav).getByRole('link', { name: '我的專案' }),
-    ).toHaveAttribute('href', '/admin/projects')
-    expect(within(nav).getByRole('link', { name: '今日任務' })).toBeVisible()
+    expect(within(nav).getByRole('link', { name: '專案' })).toHaveAttribute(
+      'href',
+      '/admin/projects',
+    )
+    expect(within(nav).getByRole('link', { name: '任務' })).toBeVisible()
   })
 
   it('目前所在的頁面用 aria-current 標示，其他不標', () => {
     renderHeader(MIXED, {}, '/admin/projects/p1/members')
-    expect(screen.getByRole('link', { name: '我的專案' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '專案' })).toHaveAttribute(
       'aria-current',
       'page',
     )
-    expect(screen.getByRole('link', { name: '今日任務' })).not.toHaveAttribute(
+    expect(screen.getByRole('link', { name: '任務' })).not.toHaveAttribute(
       'aria-current',
     )
   })
@@ -224,6 +402,7 @@ describe('AppHeader', () => {
       vi.fn(async () => new Response(null, { status: 500 })),
     )
     const { container } = renderHeader(FIELD)
+    fireEvent.click(screen.getByRole('button', { name: '示範使用者 ▾' }))
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
 
     const alert = await screen.findByRole('alert')
@@ -246,8 +425,6 @@ describe('AppHeader', () => {
     expect(screen.getByText(/登入者：示範使用者/)).toBeVisible()
     expect(screen.getByText('請先抄下臨時密碼')).toBeVisible()
     // 灰字的導覽項目只是外觀，不進無障礙樹。
-    expect(screen.getByText('我的專案').closest('[aria-hidden]')).not.toBe(
-      null,
-    )
+    expect(screen.getByText('專案').closest('[aria-hidden]')).not.toBe(null)
   })
 })

@@ -36,7 +36,7 @@ describe('UserForm 必填標示（#284 第 4 項）', () => {
     expect(
       screen.getByRole('radiogroup', { name: /帳號類型/ }),
     ).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByRole('radio', { name: '內部人員' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: '內部帳號' })).not.toBeChecked()
     expect(
       screen.getByRole('radio', { name: '外部協作人員' }),
     ).not.toBeChecked()
@@ -110,13 +110,29 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '林本' },
     })
-    const submit = screen.getByRole('button', { name: '新增使用者' })
+    const submit = screen.getByRole('button', { name: '新增帳號' })
     fireEvent.submit(submit.closest('form')!)
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      '帳號類型尚未選擇。請選擇內部人員或外部協作人員。',
+      '帳號類型尚未選擇。請選擇內部帳號或外部協作人員。',
     )
-    expect(screen.getByRole('radio', { name: '內部人員' })).toHaveFocus()
+    expect(screen.getByRole('radio', { name: '內部帳號' })).toHaveFocus()
+  })
+
+  it('中文姓名錯誤以帳號用語說明欄位需求', () => {
+    renderForm()
+    fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
+      target: { value: 'ben.lin' },
+    })
+    fireEvent.change(screen.getByLabelText(/^Email/), {
+      target: { value: 'ben@example.com' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '中文姓名尚未填寫。請輸入帳號持有人的姓名。',
+    )
   })
 
   it('外部協作人員不可為 Admin，切回內部後可重新指派', () => {
@@ -131,7 +147,7 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     expect(adminCheckbox).not.toBeChecked()
     expect(adminCheckbox).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
     expect(adminCheckbox).toBeEnabled()
     expect(adminCheckbox).not.toBeChecked()
     fireEvent.click(adminCheckbox)
@@ -139,7 +155,7 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
   })
 
   it.each([
-    ['內部人員', false],
+    ['內部帳號', false],
     ['外部協作人員', true],
   ])('送出 %s 時傳送外部協作人員標記 %s', async (label, expected) => {
     const fetchMock = vi.fn(
@@ -165,7 +181,7 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
       target: { value: '林本' },
     })
     fireEvent.click(screen.getByRole('radio', { name: label }))
-    const submit = screen.getByRole('button', { name: '新增使用者' })
+    const submit = screen.getByRole('button', { name: '新增帳號' })
     fireEvent.submit(submit.closest('form')!)
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
@@ -180,7 +196,7 @@ describe('UserForm 帳號類型（DOM-R71）', () => {
     renderForm()
     const username = screen.getByLabelText(/^帳號名稱/)
     fireEvent.change(username, { target: { value: 'ab' } })
-    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(
       '帳號名稱格式不符。請依欄位說明修正後再試一次。',

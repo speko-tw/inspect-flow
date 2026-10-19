@@ -862,6 +862,61 @@ table {
   min-width: 58rem;
 }
 
+.users-account-name-link {
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .users-table-scroll:has(.users-account-table) {
+    overflow: visible;
+  }
+
+  .users-table-scroll .users-account-table,
+  .users-table-scroll .users-account-table tbody,
+  .users-table-scroll .users-account-table tr,
+  .users-table-scroll .users-account-table th,
+  .users-table-scroll .users-account-table td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .users-table-scroll .users-account-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .users-table-scroll .users-account-table tbody tr {
+    margin-block-end: var(--space-3);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .users-table-scroll .users-account-table tbody td {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 0.4fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding-inline: 0;
+    border: 0;
+  }
+
+  .users-table-scroll .users-account-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+}
+
 th,
 td {
   padding: var(--space-2) var(--space-3);
@@ -1288,6 +1343,7 @@ output {
 
 /* 帳號區：名字與登出鈕是一組，窄螢幕換行時整組一起移動。 */
 .app-header-account {
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   align-items: center;
@@ -1310,6 +1366,95 @@ output {
   min-height: 2rem;
   padding: var(--space-1) var(--space-3);
   font-size: 0.875rem;
+}
+
+.app-header-personal-trigger {
+  border: 0;
+  background: transparent;
+  text-align: right;
+}
+
+@media (hover: hover) {
+  .app-header-personal-trigger:hover {
+    color: var(--text);
+  }
+}
+
+.app-header-personal-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  display: grid;
+  min-width: 12rem;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.app-header-personal-menu a,
+.app-header-personal-menu button {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .app-header-personal-menu a:hover,
+  .app-header-personal-menu button:hover {
+    background: var(--surface-alt);
+  }
+}
+
+.app-header-management {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+}
+.app-header-management-trigger {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.app-header-management-trigger[aria-current='page'] {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+.app-header-management-menu {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  min-width: 9rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.app-header-management-menu a {
+  display: block;
+  padding: 0.65rem 0.8rem;
+  color: var(--text);
+  text-decoration: none;
+}
+.app-header-management-menu a[aria-current='page'] {
+  background: var(--surface-alt);
+  color: var(--primary);
+}
+@media (hover: hover) {
+  .app-header-management-menu a:hover {
+    background: var(--surface-alt);
+    color: var(--primary);
+  }
 }
 
 /* 導覽分頁永遠是單列：放不下時在這一列內橫向滑動，頁面本身不會出現

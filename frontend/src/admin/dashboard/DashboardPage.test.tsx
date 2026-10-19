@@ -109,6 +109,7 @@ describe('Dashboard 頁面', () => {
     expect(
       screen.getByRole('heading', { name: '專案進度總覽' }),
     ).toBeInTheDocument()
+    expect(screen.queryByText('管理後台')).not.toBeInTheDocument()
     expect(
       screen.getByText('只顯示進度，不含照片與查核結果。'),
     ).toBeInTheDocument()

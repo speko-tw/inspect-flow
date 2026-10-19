@@ -100,10 +100,11 @@ describe('今日任務首頁', () => {
     renderPage()
 
     expect(
-      await screen.findByRole('heading', { name: '今日任務' }),
+      await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '變更密碼' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '登出' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '變更密碼' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByText('我的資料')).toBeInTheDocument()
     expect(screen.queryByText(/範本/)).not.toBeInTheDocument()
   })
@@ -114,16 +115,19 @@ describe('今日任務首頁', () => {
       vi.fn(async () => Response.json({ items: [], next_cursor: null })),
     )
     renderPage({ user: { has_office_access: true } })
-    await screen.findByRole('heading', { name: '今日任務' })
+    await screen.findByRole('heading', { name: '我的任務' })
     const banner = screen.getByRole('banner')
     expect(
       within(banner).getByRole('link', { name: 'InspectFlow 工程查核系統' }),
     ).toHaveAttribute('href', '/admin/projects')
-    expect(within(banner).getByText(/登入者：示範查核員/)).toBeVisible()
+    fireEvent.click(
+      within(banner).getByRole('button', { name: '示範查核員 ▾' }),
+    )
     expect(within(banner).getByRole('button', { name: '登出' })).toBeVisible()
-    expect(
-      within(banner).getByRole('link', { name: '今日任務' }),
-    ).toHaveAttribute('aria-current', 'page')
+    expect(within(banner).getByRole('link', { name: '任務' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 
   it('兩種權限都有的帳號可從現場頁回我的專案；純現場沒有（#480）', async () => {
@@ -132,13 +136,14 @@ describe('今日任務首頁', () => {
       vi.fn(async () => Response.json({ items: [], next_cursor: null })),
     )
     const mixed = renderPage({ user: { has_office_access: true } })
-    expect(
-      await screen.findByRole('link', { name: '我的專案' }),
-    ).toHaveAttribute('href', '/admin/projects')
+    expect(await screen.findByRole('link', { name: '專案' })).toHaveAttribute(
+      'href',
+      '/admin/projects',
+    )
     mixed.unmount()
     renderPage()
-    await screen.findByRole('heading', { name: '今日任務' })
-    expect(screen.queryByRole('link', { name: '我的專案' })).toBeNull()
+    await screen.findByRole('heading', { name: '我的任務' })
+    expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
   })
 
   it('範本管理權限在頂端列與無權限區塊各有入口，兩種權限都有就都顯示（#480）', async () => {
@@ -162,8 +167,8 @@ describe('今日任務首頁', () => {
     expect(
       await screen.findByRole('link', { name: '前往我的專案' }),
     ).toHaveAttribute('href', '/admin/projects')
-    expect(screen.getByRole('link', { name: '我的專案' })).toBeVisible()
-    expect(screen.queryByRole('link', { name: '範本管理' })).toBeNull()
+    expect(screen.getByRole('link', { name: '專案' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
     expect(screen.queryByRole('link', { name: '前往範本管理' })).toBeNull()
   })
 
@@ -371,7 +376,8 @@ describe('今日任務首頁', () => {
     })
     expect(await screen.findByText('目前沒有符合的任務')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('密碼已更新。')
-    expect(screen.getByRole('link', { name: '變更密碼' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('button', { name: 'inspector ▾' }))
+    expect(screen.getByRole('link', { name: '設定' })).toHaveAttribute(
       'href',
       '/change-password',
     )
@@ -382,7 +388,7 @@ describe('今日任務首頁', () => {
     expect(within(profile!).getByText('Email：—')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await waitFor(() => expect(clear).toHaveBeenCalledOnce())
-    fireEvent.click(screen.getByRole('link', { name: '變更密碼' }))
+    fireEvent.click(screen.getByRole('link', { name: '設定' }))
     expect(screen.getByTestId('location')).toHaveTextContent(
       '"from":"/field/"',
     )

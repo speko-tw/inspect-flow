@@ -27,6 +27,7 @@ from app.api.v1._management_errors import (
 )
 from app.auth.access import (
     calculate_effective_access,
+    permission_gaps,
     require_admin,
     require_module_delegation,
 )
@@ -37,6 +38,9 @@ from app.models import (
     PermissionBundle,
     Project,
     ProjectMember,
+    ProjectMemberRole,
+    Role,
+    RolePermission,
     User,
 )
 from app.permission_codes import (
@@ -93,6 +97,10 @@ router = APIRouter(
     prefix="/users",
     tags=["users"],
     dependencies=[Depends(require_admin, scope="function")],
+)
+participating_projects_router = APIRouter(
+    prefix="/users",
+    tags=["users"],
 )
 admin_router = APIRouter(
     prefix="/admin",
@@ -243,6 +251,92 @@ class UserModulePermissionResponse(BaseModel):
     delegated_modules: list[str]
 
 
+class EffectiveAccessUser(BaseModel):
+    """有效權限查詢的目標帳號狀態。"""
+
+    id: UUID
+    is_active: bool
+    is_admin: bool
+
+
+class EffectiveModulePermission(BaseModel):
+    """一項有效模組權限與授權來源。"""
+
+    code: str
+    module: str
+    source: str
+
+
+class EffectiveProjectRole(BaseModel):
+    """目標在指定專案持有的角色與專案權限代碼。"""
+
+    id: UUID
+    name: str
+    permission_codes: list[str]
+
+
+class EffectiveAccessDiagnostic(BaseModel):
+    """一個固定操作依兩層權限計算後的判定。"""
+
+    action: str
+    module: str
+    required_module_codes: list[str]
+    required_project_codes: list[str]
+    allowed: bool
+    missing_layers: list[str]
+    missing_codes: list[str]
+
+
+class UserEffectiveAccessResponse(BaseModel):
+    """管理端查詢他人於一個專案的有效權限。"""
+
+    user: EffectiveAccessUser
+    module_permissions: list[EffectiveModulePermission]
+    project_roles: list[EffectiveProjectRole] | None = None
+    diagnostics: list[EffectiveAccessDiagnostic]
+
+
+class ParticipatingProjectRole(BaseModel):
+    """帳號在一個專案持有的角色。"""
+
+    id: UUID
+    name: str
+
+
+class ParticipatingProject(BaseModel):
+    """帳號參與的專案與角色摘要。"""
+
+    id: UUID
+    project_code: str
+    name: str
+    roles: list[ParticipatingProjectRole]
+
+
+class UserParticipatingProjectsResponse(BaseModel):
+    """一次回傳帳號參與專案，避免逐專案查成員。"""
+
+    items: list[ParticipatingProject]
+
+
+# 四種診斷沿用既有 guard 的代碼與兩層規則，不建立第二套授權資料。
+_EFFECTIVE_ACCESS_ACTIONS = (
+    (
+        "task_list",
+        "inspection",
+        ("inspection.use",),
+        ("inspection_task.read",),
+    ),
+    ("create_project", "project", ("project.create",), ()),
+    ("manage_template_library", "template", ("template.manage",), ()),
+    (
+        "manage_project_members",
+        "project",
+        ("project.use",),
+        ("project_member.manage",),
+    ),
+)
+
+
 class PermissionBundleRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     permission_codes: list[str] = Field(default_factory=list)
@@ -282,6 +376,16 @@ def _get_user(db: Session, user_id: UUID) -> User:
     if user is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     return user
+
+
+def _get_module_permission_target(
+    db: Session, user_id: UUID, actor: User
+) -> User:
+    """拒絕委派者讀取或修改 Admin 帳號的模組權限。"""
+    target = _get_user(db, user_id)
+    if not actor.is_admin and target.is_admin:
+        raise APIError(ErrorCode.PERMISSION_DENIED, 403)
+    return target
 
 
 def _module_error(exc: ValueError, *, bundle: bool = False) -> APIError:
@@ -408,6 +512,7 @@ def list_module_delegate_users(
     filters: list[Any] = [
         User.is_active.is_(True),
         User.is_system.is_(False),
+        User.is_admin.is_(False),
     ]
     query = (q or "").strip()
     if query:
@@ -432,6 +537,23 @@ def list_module_delegate_users(
         filters=filters,
     )
     return ModuleDelegateUserListResponse(**result)
+
+
+@module_delegate_router.get(
+    "/{user_id}", response_model=ModuleDelegateUserResponse
+)
+def get_module_delegate_user(
+    user_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> ModuleDelegateUserResponse:
+    """回傳委派者帳號詳情標題所需欄位，並拒絕 Admin 對象。"""
+    target = _get_module_permission_target(db, user_id, actor)
+    return ModuleDelegateUserResponse(
+        id=target.id,
+        username=target.username,
+        name_zh=target.name_zh,
+    )
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -760,7 +882,7 @@ def get_user_module_permissions(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> UserModulePermissionResponse:
     """讀取人員的模組授權，委派者只能看到受委派模組。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     access = calculate_effective_access(db, user_id=actor.id)
     allowed_modules = MODULES if actor.is_admin else access.delegated_modules
     permission_codes = sorted(
@@ -779,6 +901,190 @@ def get_user_module_permissions(
     )
 
 
+@module_permission_router.get(
+    "/users/{user_id}/effective-access",
+    response_model=UserEffectiveAccessResponse,
+    response_model_exclude_none=True,
+)
+def get_user_effective_access(
+    user_id: UUID,
+    project_id: UUID | None = None,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
+) -> UserEffectiveAccessResponse:
+    """依 ADM-R45 回傳目標在指定專案的唯讀有效權限診斷。"""
+    target = _get_module_permission_target(db, user_id, actor)
+    target_access = calculate_effective_access(
+        db, user_id=target.id, project_id=project_id
+    )
+    if project_id is not None:
+        membership_id = db.scalar(
+            select(ProjectMember.id).where(
+                ProjectMember.user_id == target.id,
+                ProjectMember.project_id == project_id,
+            )
+        )
+        if membership_id is None:
+            raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+
+    actor_access = calculate_effective_access(db, user_id=actor.id)
+    visible_modules = (
+        MODULES if actor.is_admin else actor_access.delegated_modules
+    )
+    source_names = {
+        "manual": "direct",
+        "bundle": "combination",
+        "implied": "implied",
+        "backfill": "backfill",
+    }
+    source_by_code = {
+        row.permission_code: row.source
+        for row in list_user_module_permissions(db, user_id=target.id)
+    }
+    module_permissions = []
+    for code in sorted(target_access.module_permissions):
+        module = permission_code_module(code)
+        if module not in visible_modules:
+            continue
+        source = (
+            "admin_implicit"
+            if target_access.is_admin
+            else source_names[source_by_code[code]]
+        )
+        module_permissions.append(
+            EffectiveModulePermission(
+                code=code,
+                module=module or "",
+                source=source,
+            )
+        )
+
+    project_roles: list[EffectiveProjectRole] | None = None
+    if actor.is_admin and project_id is not None:
+        role_rows = db.execute(
+            select(Role.id, Role.name, RolePermission.code)
+            .select_from(ProjectMemberRole)
+            .join(
+                ProjectMember,
+                ProjectMember.id == ProjectMemberRole.project_member_id,
+            )
+            .join(Role, Role.id == ProjectMemberRole.role_id)
+            .outerjoin(RolePermission, RolePermission.role_id == Role.id)
+            .where(
+                ProjectMember.user_id == target.id,
+                ProjectMember.project_id == project_id,
+            )
+            .order_by(Role.name, Role.id, RolePermission.code)
+        ).all()
+        roles_by_id: dict[UUID, EffectiveProjectRole] = {}
+        for role_id, name, code in role_rows:
+            role = roles_by_id.setdefault(
+                role_id,
+                EffectiveProjectRole(
+                    id=role_id,
+                    name=name,
+                    permission_codes=[],
+                ),
+            )
+            if code is not None:
+                role.permission_codes.append(code)
+        project_roles = list(roles_by_id.values())
+
+    diagnostics = []
+    for (
+        action,
+        module,
+        module_codes,
+        project_codes,
+    ) in _EFFECTIVE_ACCESS_ACTIONS:
+        if module not in visible_modules:
+            continue
+        if project_codes and project_id is None:
+            continue
+        missing_module, missing_project = permission_gaps(
+            target_access,
+            module_codes=module_codes,
+            project_codes=project_codes,
+        )
+        missing_layers = []
+        if missing_module:
+            missing_layers.append("module")
+        if missing_project:
+            missing_layers.append("project_role")
+        diagnostics.append(
+            EffectiveAccessDiagnostic(
+                action=action,
+                module=module,
+                required_module_codes=list(module_codes),
+                required_project_codes=list(project_codes),
+                allowed=not missing_layers,
+                missing_layers=missing_layers,
+                missing_codes=missing_module + missing_project,
+            )
+        )
+
+    return UserEffectiveAccessResponse(
+        user=EffectiveAccessUser(
+            id=target.id,
+            is_active=target.is_active,
+            is_admin=target_access.is_admin,
+        ),
+        module_permissions=module_permissions,
+        project_roles=project_roles,
+        diagnostics=diagnostics,
+    )
+
+
+@participating_projects_router.get(
+    "/{user_id}/participating-projects",
+    response_model=UserParticipatingProjectsResponse,
+)
+def list_user_participating_projects(
+    user_id: UUID,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+    _actor: User = Depends(require_admin, scope="function"),  # noqa
+) -> UserParticipatingProjectsResponse:
+    """Admin 以單一查詢讀取帳號參與專案與角色。"""
+    target = db.get(User, user_id)
+    if target is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+
+    rows = db.execute(
+        select(
+            Project.id,
+            Project.project_code,
+            Project.name,
+            Role.id,
+            Role.name,
+        )
+        .select_from(ProjectMember)
+        .join(Project, Project.id == ProjectMember.project_id)
+        .outerjoin(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
+        )
+        .outerjoin(Role, Role.id == ProjectMemberRole.role_id)
+        .where(ProjectMember.user_id == target.id)
+        .order_by(Project.project_code, Project.id, Role.name, Role.id)
+    ).all()
+    projects: dict[UUID, ParticipatingProject] = {}
+    for project_id, code, name, role_id, role_name in rows:
+        project = projects.setdefault(
+            project_id,
+            ParticipatingProject(
+                id=project_id,
+                project_code=code,
+                name=name,
+                roles=[],
+            ),
+        )
+        if role_id is not None:
+            project.roles.append(
+                ParticipatingProjectRole(id=role_id, name=role_name)
+            )
+    return UserParticipatingProjectsResponse(items=list(projects.values()))
+
+
 @module_permission_router.put(
     "/users/{user_id}/module-permissions/{code}", status_code=204
 )
@@ -793,7 +1099,7 @@ def grant_user_module_permission(
 
     DOM-R62 要求安全事件不隨 API 主交易回滾。
     """
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     try:
         grant_module_permission(
             db, actor=actor, user=target, permission_code=code
@@ -815,7 +1121,7 @@ def revoke_user_module_permission(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> Response:
     """冪等收回單一模組權限。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     try:
         revoke_module_permission(
             db, actor=actor, user=target, permission_code=code
@@ -840,7 +1146,7 @@ def get_module_permission_revoke_impact(
 
     此預覽依 ADM-R10 僅讀取資料，不改變任何授權或專案狀態。
     """
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     if permission_code_scope(code) != "module":
         raise APIError(ErrorCode.MODULE_PERMISSION_CODE_INVALID, 422)
     access = calculate_effective_access(db, user_id=actor.id)
@@ -1046,7 +1352,7 @@ def apply_user_permission_bundle(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> PermissionBundleApplyResponse:
     """完整檢查授權範圍後套用組合，避免部分寫入。"""
-    target = _get_user(db, user_id)
+    target = _get_module_permission_target(db, user_id, actor)
     bundle = db.scalar(
         select(PermissionBundle)
         .options(selectinload(PermissionBundle.permission_codes))

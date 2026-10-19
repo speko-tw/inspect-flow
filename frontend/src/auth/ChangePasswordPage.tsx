@@ -22,9 +22,10 @@ import { useLocation, useNavigate } from 'react-router'
 import { BackLink } from '../layout/BackLink'
 import { ApiError, changePassword } from './api'
 import AuthLayout from './AuthLayout'
+import { PAGE_TITLES } from '../layout/navigationLabels'
 import { UnsavedLeaveBox } from '../ui/navigation'
 import * as navigationGuard from '../ui/navigation'
-import { landingLabel, landingPath } from './landing'
+import { canBrowseTemplates, landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 import { useCurrentUser } from './useCurrentUser'
@@ -69,10 +70,21 @@ export default function ChangePasswordPage() {
   const navigate = useNavigate()
   const { user } = useCurrentUser()
   const target = landingPath(user)
+  const hasFeatureAccess = Boolean(
+    user.is_admin ||
+    user.has_office_access ||
+    user.has_field_access ||
+    user.has_project_access ||
+    user.can_create_project ||
+    canBrowseTemplates(user) ||
+    user.delegated_modules.length > 0 ||
+    user.module_permissions.length > 0,
+  )
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [errorField, setErrorField] = useState<
     'current' | 'new' | 'confirmation' | 'form' | null
   >(null)
@@ -94,6 +106,7 @@ export default function ChangePasswordPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setSuccess(null)
     setErrorField(null)
 
     if (currentPassword === '') {
@@ -124,6 +137,14 @@ export default function ChangePasswordPage() {
 
     try {
       await changePassword(currentPassword, newPassword)
+
+      if (!hasFeatureAccess) {
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+        setSuccess(SUCCESS_NOTICE)
+        return
+      }
 
       const state = location.state as RedirectState | null
       const from = state?.from
@@ -156,13 +177,17 @@ export default function ChangePasswordPage() {
   return (
     <AuthLayout
       back={
-        user.must_change_password ? undefined : (
+        user.must_change_password || !hasFeatureAccess ? undefined : (
           <BackLink to={target}>返回{landingLabel(target)}</BackLink>
         )
       }
-      title="變更密碼"
+      title={PAGE_TITLES.personalSettings}
       lead="請輸入目前密碼，並設定新的密碼。"
     >
+      {!hasFeatureAccess && (
+        <p role="status">尚未開通任何功能，請洽系統管理者</p>
+      )}
+      {success && <p role="status">{success}</p>}
       <UnsavedLeaveBox guard={leaveGuard} />
       <Form
         onSubmit={handleSubmit}

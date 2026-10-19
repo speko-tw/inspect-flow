@@ -1,0 +1,114 @@
+.app-header-personal-trigger {
+  min-height: 2.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 650;
+  text-align: center;
+}
+
+.app-header-personal-trigger:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dashboard-task-number {
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-task-detail-heading > div {
+  min-width: 0;
+}
+
+.dashboard-task-detail-heading .dashboard-task-number {
+  display: block;
+  margin-top: var(--space-1);
+}
+
+.roles-page-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.roles-page-tools > section {
+  flex-basis: 100%;
+}
+
+.roles-page-tools > button,
+.roles-page-editor button {
+  min-height: 2.75rem;
+}
+
+.roles-page-editor {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .roles-page .roles-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 var(--space-3);
+  }
+
+  .roles-page .roles-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .roles-page .roles-table tbody tr {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .roles-page .roles-table tbody th,
+  .roles-page .roles-table tbody td {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: var(--space-2);
+    width: auto;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .roles-page .roles-table tbody th {
+    display: block;
+    font-size: 1.05rem;
+  }
+
+  .roles-page .roles-table tbody td::before {
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: var(--font-size-small);
+  }
+
+  .roles-page .roles-table tbody td[data-label='操作'] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+
+  .roles-page .roles-table tbody td[data-label='操作']::before {
+    flex-basis: 100%;
+  }
+}

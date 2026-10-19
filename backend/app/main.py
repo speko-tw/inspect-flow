@@ -35,6 +35,7 @@ from app.api.v1.users import (
 from app.api.v1.users import (
     module_delegate_router,
     module_permission_router,
+    participating_projects_router,
 )
 from app.api.v1.users import (
     router as users_router,
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(roles_router, prefix="/api/v1")
     app.include_router(setup_router, prefix="/api/v1")
     app.include_router(users_router, prefix="/api/v1")
+    app.include_router(participating_projects_router, prefix="/api/v1")
     app.include_router(admin_users_router, prefix="/api/v1")
     app.include_router(module_delegate_router, prefix="/api/v1")
     app.include_router(module_permission_router, prefix="/api/v1")

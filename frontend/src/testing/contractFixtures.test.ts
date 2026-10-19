@@ -35,7 +35,7 @@ describe('contract fixtures (RG-M22)', () => {
 
 describe('landingPath (#480)', () => {
   it.each([
-    ['system admin', { is_admin: true }, '/admin'],
+    ['system admin', { is_admin: true }, '/admin/dashboard'],
     [
       'office only',
       { has_office_access: true, has_field_access: false },
@@ -54,7 +54,7 @@ describe('landingPath (#480)', () => {
     [
       'neither',
       { has_office_access: false, has_field_access: false },
-      '/field',
+      '/change-password',
     ],
     [
       'template admin only',
@@ -82,7 +82,7 @@ describe('landingPath (#480)', () => {
     [
       'admin who also has office access',
       { is_admin: true, has_office_access: true },
-      '/admin',
+      '/admin/dashboard',
     ],
   ])('%s', (_name, overrides, expected) => {
     expect(landingPath(currentUserFixture(overrides))).toBe(expected)

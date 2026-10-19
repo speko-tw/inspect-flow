@@ -102,12 +102,12 @@ export default function UserForm({
         : 'Email 尚未填寫。請輸入可接收通知的 Email 地址。'
     }
     if (!nameInput.checkValidity()) {
-      nextErrors.nameZh = '中文姓名尚未填寫。請輸入使用者的姓名。'
+      nextErrors.nameZh = '中文姓名尚未填寫。請輸入帳號持有人的姓名。'
     }
     setFieldErrors(nextErrors)
     const nextAccountTypeError =
       isExternalCollaborator === null
-        ? '帳號類型尚未選擇。請選擇內部人員或外部協作人員。'
+        ? '帳號類型尚未選擇。請選擇內部帳號或外部協作人員。'
         : ''
     setAccountTypeError(nextAccountTypeError)
     if (Object.keys(nextErrors).length || nextAccountTypeError) {
@@ -161,9 +161,9 @@ export default function UserForm({
       error={error}
       onSubmit={submit}
       noValidate
-      unexpectedErrorMessage="新增使用者失敗。請檢查資料後再試一次，或聯絡系統管理員。"
+      unexpectedErrorMessage="新增帳號失敗。請檢查資料後再試一次，或聯絡系統管理員。"
     >
-      <h2>新增使用者</h2>
+      <h2>新增帳號</h2>
       <FormErrorSummary
         errors={[
           ...Object.entries(fieldErrors).map(([field, message]) => ({
@@ -329,7 +329,7 @@ export default function UserForm({
               id="user-account-type"
               aria-invalid={Boolean(accountTypeError)}
             />
-            內部人員
+            內部帳號
           </label>
           <label>
             <input
@@ -402,7 +402,7 @@ export default function UserForm({
         </label>
       </FormGroup>
       <FormSubmitButton className="btn-primary" disabled={saving}>
-        {saving ? '建立中…' : '新增使用者'}
+        {saving ? '建立中…' : '新增帳號'}
       </FormSubmitButton>
     </Form>
   )
