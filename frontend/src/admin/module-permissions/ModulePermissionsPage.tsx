@@ -14,6 +14,7 @@ import {
   Button,
   Card,
   Field,
+  FormErrorSummary,
   FormField,
   FormGroup,
   Input,
@@ -66,6 +67,16 @@ import {
   type RevokeImpact,
   type ParticipatingProject,
 } from './api'
+
+type IdentityField = 'username' | 'name' | 'email'
+type IdentityErrors = Partial<Record<IdentityField, string>>
+
+// 第一步三個必填欄位的標籤與欄位 id；id 固定，錯誤摘要才能跳到欄位。
+const IDENTITY_FIELDS: Record<IdentityField, { label: string; id: string }> = {
+  username: { label: '帳號名稱', id: 'wizard-username' },
+  name: { label: '姓名', id: 'wizard-name' },
+  email: { label: '電子郵件', id: 'wizard-email' },
+}
 
 type Profile = 'system' | 'manager' | 'office' | 'field' | 'external'
 type Provisioning = {
@@ -318,6 +329,8 @@ function ModulePermissionsPageContent({
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [step, setStep] = useState(0)
+  const [identityErrors, setIdentityErrors] = useState<IdentityErrors>({})
+  const [identityFocusRequest, setIdentityFocusRequest] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(
     () => openWizardRequest > 0 && selectedUserId === undefined,
   )
@@ -380,7 +393,58 @@ function ModulePermissionsPageContent({
     if (wizardOpen) wizardHeadingRef.current?.focus()
   }, [wizardOpen])
 
+  function missingIdentityFields(): IdentityField[] {
+    const values: Record<IdentityField, string> = { username, name, email }
+    return (Object.keys(values) as IdentityField[]).filter(
+      (field) => !values[field].trim(),
+    )
+  }
+
+  function updateIdentity(
+    field: IdentityField,
+    value: string,
+    set: (value: string) => void,
+  ) {
+    set(value)
+    // 一改動就收掉該欄的錯誤，避免已補齊的欄位還掛著紅字。
+    if (identityErrors[field]) {
+      setIdentityErrors((current) => {
+        const next = { ...current }
+        delete next[field]
+        return next
+      })
+    }
+  }
+
+  // 最後一步的按鈕不能按時，一定要在旁邊說原因，不能只是變灰。
+  const missingForCreate = existingAccount
+    ? []
+    : missingIdentityFields().map((field) => IDENTITY_FIELDS[field].label)
+  const createBlockReason = busy
+    ? existingAccount
+      ? '正在套用職務，請稍候。'
+      : '正在建立帳號，請稍候。'
+    : missingForCreate.length > 0
+      ? `還缺${missingForCreate.join('、')}，請回到第一步補上。`
+      : ''
+
   function goToStep(nextStep: number) {
+    // 第一步先擋缺漏，不然要到最後一步才發現建立不了。
+    if (step === 0 && nextStep > 0 && !existingAccount) {
+      const missing = missingIdentityFields()
+      if (missing.length > 0) {
+        setIdentityErrors(
+          Object.fromEntries(
+            missing.map((field) => [
+              field,
+              `請填寫${IDENTITY_FIELDS[field].label}。`,
+            ]),
+          ),
+        )
+        setIdentityFocusRequest((value) => value + 1)
+        return
+      }
+    }
     if (nextStep >= 3 && profile === null) {
       setError('請先選擇職務，再繼續設定。')
       return
@@ -401,6 +465,7 @@ function ModulePermissionsPageContent({
     setProjectId('')
     setProfile(null)
     setStep(0)
+    setIdentityErrors({})
     setExistingAccount(false)
     setCreatedId('')
     setCreatedUsername('')
@@ -474,10 +539,9 @@ function ModulePermissionsPageContent({
         }
       })
       .catch((caught: unknown) => {
-        if (active) {
-          setError(message(caught))
-          setAccessLoadedFor(selectedUser)
-        }
+        // 載入失敗時不標成已載入：否則開通控制項會以空的權限
+        // 草稿啟用，使用者可能在不知道現況下送出覆寫（#711）。
+        if (active) setError(message(caught))
       })
     return () => {
       active = false
@@ -982,7 +1046,8 @@ function ModulePermissionsPageContent({
           </ul>
         </Card>
       )}
-      {selectedUser && currentUser.is_admin && (
+      {/* 完成頁只放臨時密碼與下一步；剛建好的帳號沒有可看的能力。 */}
+      {selectedUser && currentUser.is_admin && !(wizardOpen && step === 4) && (
         <Card>
           <h2>{embedded ? '能做什麼' : '帳號能力與快速檢查'}</h2>
           {embedded &&
@@ -1042,7 +1107,6 @@ function ModulePermissionsPageContent({
                 </li>
               ))}
             </ul>
-            {notice && <p role="status">{notice}</p>}
             <h3>為什麼他不能做這件事？</h3>
             <label>
               要檢查的操作
@@ -1093,6 +1157,8 @@ function ModulePermissionsPageContent({
             >
               檢查
             </Button>
+            {/* 結果訊息跟在觸發它的「檢查」按鈕後面，才讀得出因果。 */}
+            {notice && <p role="status">{notice}</p>}
             {canRepairProjectRole && (
               <section aria-label="可選專案角色">
                 <h3>可補上的專案角色</h3>
@@ -1198,11 +1264,7 @@ function ModulePermissionsPageContent({
           {step === 4 ? (
             <section aria-label="建立完成">
               <h2>{existingAccount ? '職務已套用' : '帳號已建立'}</h2>
-              <p>
-                {existingAccount
-                  ? `${createdName} 的職務與授權設定已完成。`
-                  : `${createdName} 的帳號與授權設定已完成。`}
-              </p>
+              {/* 臨時密碼離開就看不到，所以放在標題正下方最先看到。 */}
               {!existingAccount && (
                 <>
                   <p>
@@ -1211,6 +1273,11 @@ function ModulePermissionsPageContent({
                   <TemporaryPassword password={temporaryPassword} />
                 </>
               )}
+              <p>
+                {existingAccount
+                  ? `${createdName} 的職務與授權設定已完成。`
+                  : `${createdName} 的帳號與授權設定已完成。`}
+              </p>
               <p>
                 {existingAccount
                   ? '下一步可以查看此人的能力摘要。'
@@ -1254,106 +1321,151 @@ function ModulePermissionsPageContent({
                 {['帳號資料', '職務', '專案', '確認'][step]}
               </p>
               {step === 0 && !existingAccount && (
-                <FormGroup
-                  title="帳號資料"
-                  description="設定登入帳號與基本資料。"
-                >
-                  <FormField label="帳號名稱" required>
-                    {(control) => (
-                      <Input
-                        {...control}
-                        value={username}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setUsername(event.target.value)}
-                      />
-                    )}
-                  </FormField>
-                  <FormField label="姓名" required>
-                    {(control) => (
-                      <Input
-                        {...control}
-                        value={name}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setName(event.target.value)}
-                      />
-                    )}
-                  </FormField>
-                  <details>
-                    <summary>更多資料（選填）</summary>
-                    <FormField label="英文姓名">
+                <>
+                  <FormErrorSummary
+                    errors={(Object.keys(IDENTITY_FIELDS) as IdentityField[])
+                      .filter((field) => identityErrors[field])
+                      .map((field) => ({
+                        fieldId: IDENTITY_FIELDS[field].id,
+                        fieldLabel: IDENTITY_FIELDS[field].label,
+                        message: identityErrors[field] ?? '',
+                      }))}
+                    focusRequest={identityFocusRequest}
+                  />
+                  <FormGroup
+                    title="帳號資料"
+                    description="設定登入帳號與基本資料。"
+                  >
+                    <FormField
+                      error={identityErrors.username}
+                      id={IDENTITY_FIELDS.username.id}
+                      label="帳號名稱"
+                      required
+                    >
                       {(control) => (
                         <Input
                           {...control}
-                          value={nameEn}
-                          disabled={Boolean(createdId)}
-                          onChange={(event) => setNameEn(event.target.value)}
-                        />
-                      )}
-                    </FormField>
-                    <FormField label="部門">
-                      {(control) => (
-                        <Input
-                          {...control}
-                          value={department}
+                          value={username}
                           disabled={Boolean(createdId)}
                           onChange={(event) =>
-                            setDepartment(event.target.value)
+                            updateIdentity(
+                              'username',
+                              event.target.value,
+                              setUsername,
+                            )
                           }
                         />
                       )}
                     </FormField>
-                    <FormField label="地點">
+                    <FormField
+                      error={identityErrors.name}
+                      id={IDENTITY_FIELDS.name.id}
+                      label="姓名"
+                      required
+                    >
                       {(control) => (
                         <Input
                           {...control}
-                          value={location}
-                          disabled={Boolean(createdId)}
-                          onChange={(event) => setLocation(event.target.value)}
-                        />
-                      )}
-                    </FormField>
-                    <FormField label="工號">
-                      {(control) => (
-                        <Input
-                          {...control}
-                          value={employeeNo}
+                          value={name}
                           disabled={Boolean(createdId)}
                           onChange={(event) =>
-                            setEmployeeNo(event.target.value)
+                            updateIdentity('name', event.target.value, setName)
                           }
                         />
                       )}
                     </FormField>
-                  </details>
-                  <FormField label="電子郵件" required>
-                    {(control) => (
-                      <Input
-                        {...control}
-                        type="email"
-                        value={email}
-                        disabled={Boolean(createdId)}
-                        onChange={(event) => setEmail(event.target.value)}
-                      />
-                    )}
-                  </FormField>
-                  <FormField label="公司">
-                    {(control) => (
-                      <select
-                        {...control}
-                        disabled={Boolean(createdId)}
-                        value={companyId}
-                        onChange={(event) => setCompanyId(event.target.value)}
-                      >
-                        <option value="">未連結公司</option>
-                        {companies.map((company) => (
-                          <option key={company.id} value={company.id}>
-                            {company.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </FormField>
-                </FormGroup>
+                    <FormField
+                      error={identityErrors.email}
+                      id={IDENTITY_FIELDS.email.id}
+                      label="電子郵件"
+                      required
+                    >
+                      {(control) => (
+                        <Input
+                          {...control}
+                          type="email"
+                          value={email}
+                          disabled={Boolean(createdId)}
+                          onChange={(event) =>
+                            updateIdentity(
+                              'email',
+                              event.target.value,
+                              setEmail,
+                            )
+                          }
+                        />
+                      )}
+                    </FormField>
+                    <details>
+                      <summary>更多資料（選填）</summary>
+                      <FormField label="英文姓名">
+                        {(control) => (
+                          <Input
+                            {...control}
+                            value={nameEn}
+                            disabled={Boolean(createdId)}
+                            onChange={(event) => setNameEn(event.target.value)}
+                          />
+                        )}
+                      </FormField>
+                      <FormField label="部門">
+                        {(control) => (
+                          <Input
+                            {...control}
+                            value={department}
+                            disabled={Boolean(createdId)}
+                            onChange={(event) =>
+                              setDepartment(event.target.value)
+                            }
+                          />
+                        )}
+                      </FormField>
+                      <FormField label="地點">
+                        {(control) => (
+                          <Input
+                            {...control}
+                            value={location}
+                            disabled={Boolean(createdId)}
+                            onChange={(event) =>
+                              setLocation(event.target.value)
+                            }
+                          />
+                        )}
+                      </FormField>
+                      <FormField label="工號">
+                        {(control) => (
+                          <Input
+                            {...control}
+                            value={employeeNo}
+                            disabled={Boolean(createdId)}
+                            onChange={(event) =>
+                              setEmployeeNo(event.target.value)
+                            }
+                          />
+                        )}
+                      </FormField>
+                    </details>
+                    <FormField label="公司">
+                      {(control) => (
+                        <select
+                          {...control}
+                          disabled={Boolean(createdId)}
+                          value={companyId}
+                          onChange={(event) =>
+                            setCompanyId(event.target.value)
+                          }
+                        >
+                          <option value="">未連結公司</option>
+                          {companies.map((company) => (
+                            <option key={company.id} value={company.id}>
+                              {company.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </FormField>
+                  </FormGroup>
+                </>
               )}
               {step === 1 && (
                 <fieldset>
@@ -1449,20 +1561,33 @@ function ModulePermissionsPageContent({
                       ))}
                     </ul>
                   </section>
+                  {!projectId &&
+                    (profile === 'field' || profile === 'external') && (
+                      <p role="note">加入專案前看不到任何任務。</p>
+                    )}
                   <small>
                     預設專案角色「
                     {profileRoleLabel(roles, profile, creatorRoleId)}」。
                   </small>
                   {!createdId ? (
-                    <Button
-                      disabled={
-                        busy ||
-                        (!existingAccount && (!username || !name || !email))
-                      }
-                      onClick={() => void createStaff()}
-                    >
-                      {existingAccount ? '套用職務' : '建立帳號'}
-                    </Button>
+                    <>
+                      <Button
+                        aria-describedby={
+                          createBlockReason
+                            ? 'wizard-create-block-reason'
+                            : undefined
+                        }
+                        disabled={Boolean(createBlockReason)}
+                        onClick={() => void createStaff()}
+                      >
+                        {existingAccount ? '套用職務' : '建立帳號'}
+                      </Button>
+                      {createBlockReason && (
+                        <p id="wizard-create-block-reason" role="status">
+                          {createBlockReason}
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <>
                       {busy ? (

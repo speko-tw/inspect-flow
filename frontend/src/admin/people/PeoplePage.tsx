@@ -10,6 +10,8 @@ import UsersPage from '../UsersPage'
 import ModulePermissionsPage from '../module-permissions/ModulePermissionsPage'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { request } from '../api'
+import { isResourceId } from '../../resourceId'
+import RouteNotFound from '../../RouteNotFound'
 import { routePath, ROUTES } from '../../routes'
 
 interface DelegatePerson {
@@ -21,6 +23,19 @@ interface DelegatePerson {
 interface DelegatePersonPage {
   items: DelegatePerson[]
   next_cursor: string | null
+}
+
+/**
+ * 網址中的帳號編號解碼；壞掉的百分比編碼（如 `%E0%A4%A`）會讓
+ * decodeURIComponent 丟例外，改回傳原字串，後續 isResourceId 會
+ * 擋下並顯示「找不到這個帳號」，不讓整頁崩潰（ADM-R25，#713）。
+ */
+function decodePersonId(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
 }
 
 /** Admin 人員入口；保留清單與授權精靈狀態供清單、詳情路由共用。 */
@@ -37,12 +52,19 @@ export function PeoplePage({
   const [wizardDirty, setWizardDirty] = useState(false)
   const [userFormsDirty, setUserFormsDirty] = useState(false)
   const pageGuard = useUnsavedNavigationGuard(wizardDirty || userFormsDirty)
+  // 完成頁點導覽的「帳號」會連到同一個網址，路徑沒變、只有
+  // location.key 換新；此時精靈要收起，回到清單（#713）。
+  const [seenLocationKey, setSeenLocationKey] = useState(location.key)
+  if (seenLocationKey !== location.key) {
+    setSeenLocationKey(location.key)
+    setWizardRequest(0)
+  }
   const detailMatch = location.pathname.match(
     new RegExp(
       `^${ROUTES.adminPeople.path.replace('/:personId?', '')}/([^/]+)$`,
     ),
   )
-  const personId = detailMatch ? decodeURIComponent(detailMatch[1]) : null
+  const personId = detailMatch ? decodePersonId(detailMatch[1]) : null
   const createWizardOpen = user.is_admin && wizardRequest > 0
   const query = searchParams.get('q') ?? ''
 
@@ -51,6 +73,19 @@ export function PeoplePage({
     if (nextQuery.trim()) next.set('q', nextQuery.trim())
     else next.delete('q')
     setSearchParams(next, { replace: true })
+  }
+
+  // 帳號編號會原樣拼進 API 路徑；特製網址（含 `/`、`?`）解碼後不得
+  // 送出請求，直接顯示找不到（ADM-R25，#711）。
+  if (personId && !isResourceId(personId)) {
+    return (
+      <main className="admin-page">
+        <RouteNotFound
+          message="網址可能輸入錯誤，或這個帳號已不存在。"
+          title="找不到這個帳號"
+        />
+      </main>
+    )
   }
 
   return (

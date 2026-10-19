@@ -22,6 +22,16 @@ type LoadState = 'loading' | 'ready' | 'error' | 'denied'
 
 const PAGE_SIZE = 50
 
+// 專案名稱取不到（載入中或不在清單內）時的通用文字；任何情況都不把
+// 專案或任務的 UUID 當畫面文字（ADM-R49、#713）。
+const FALLBACK_PROJECT_NAME = '這個專案'
+
+/** 建議指派的顯示名；姓名為空時不退回 user_id，改顯示「未指派」。 */
+function assigneeLabel(task: DashboardTask): string {
+  if (!task.suggested_assignee) return '未提供建議指派'
+  return task.suggested_assignee.name_zh?.trim() || '未指派'
+}
+
 function taskStatus(status: string) {
   const known = STATUS_BADGES[status as keyof typeof STATUS_BADGES]
   return {
@@ -48,7 +58,7 @@ export default function DashboardTaskPage() {
     ':projectId',
     encodeURIComponent(projectId),
   )
-  const [projectName, setProjectName] = useState(projectId)
+  const [projectName, setProjectName] = useState(FALLBACK_PROJECT_NAME)
   const [listResult, setListResult] = useState<{
     requestKey: string
     tasks: DashboardTask[]
@@ -298,10 +308,7 @@ function TaskList({
         <ul className="dashboard-task-list">
           {items.map((task) => {
             const status = taskStatus(task.status)
-            const assignee =
-              task.suggested_assignee?.name_zh ??
-              task.suggested_assignee?.user_id ??
-              '未提供建議指派'
+            const assignee = assigneeLabel(task)
             return (
               <li key={task.task_id}>
                 <Link
@@ -317,9 +324,6 @@ function TaskList({
                     <Badge variant={status.variant}>{status.label}</Badge>
                   </span>
                   <span className="dashboard-task-row-meta">
-                    <small className="dashboard-task-number">
-                      任務編號：{task.task_id}
-                    </small>
                     <span>建議指派：{assignee}</span>
                   </span>
                 </Link>
@@ -373,18 +377,12 @@ function TaskDetail({
     )
   }
   const status = taskStatus(detail.status)
-  const assignee =
-    detail.suggested_assignee?.name_zh ??
-    detail.suggested_assignee?.user_id ??
-    '未提供建議指派'
+  const assignee = assigneeLabel(detail)
   return (
     <article className="dashboard-task-detail">
       <header className="dashboard-task-detail-heading">
         <div>
           <h2>{taskLocation(detail)}</h2>
-          <small className="dashboard-task-number">
-            任務編號：{detail.task_id}
-          </small>
           <p>{projectName}</p>
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>

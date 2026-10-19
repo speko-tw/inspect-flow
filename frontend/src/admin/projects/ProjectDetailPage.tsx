@@ -316,9 +316,6 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   const editableRoles = editing?.member.is_external_collaborator
     ? roles.filter((role) => role.is_external_allowed)
     : roles
-  const roleName = (id: string) =>
-    roles.find((role) => role.id === id)?.name ??
-    (rolesState.status === 'ready' ? '（未知角色）' : '（角色名稱無法顯示）')
   const reload = () => setReloadKey((key) => key + 1)
   // 沒有可加入的人時，只顯示說明；角色勾選與加入按鈕都沒有意義。
   const noCandidates =
@@ -625,7 +622,8 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                       尚未指派角色，請修改角色
                     </span>
                   ) : (
-                    member.role_ids.map(roleName).join('、')
+                    // 名稱由後端附上，建立者角色等不可指派的角色也能顯示。
+                    member.role_names.join('、')
                   )}
                 </p>
               </div>

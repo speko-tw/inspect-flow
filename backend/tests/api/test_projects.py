@@ -1576,6 +1576,37 @@ def test_member_api_matches_frontend_contract_fixture(
     assert refused.json()["error"]["code"] == expected["code"]
 
 
+def test_member_list_names_roles_even_when_not_assignable(
+    project_api, db_session: Session
+):
+    """#713: 建立者角色不可指派，成員頁仍要顯示它的名稱。"""
+    _same_company(db_session, project_api)
+    client = project_api["actor_client"]
+    project = project_api["project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+    members_url = f"/api/v1/projects/{project.id}/members"
+    created = client.post(
+        members_url,
+        json={"user_id": str(target.id), "role_ids": [str(role.id)]},
+    )
+    assert created.status_code == 201
+    role.is_assignable = False
+    db_session.commit()
+
+    listed = client.get(members_url)
+
+    assert listed.status_code == 200
+    row = next(
+        item for item in listed.json() if item["user_id"] == str(target.id)
+    )
+    assert row["role_ids"] == [str(role.id)]
+    assert row["role_names"] == [role.name]
+
+
 def test_member_missing_resources_and_duplicate_roles(
     project_api, db_session: Session
 ):

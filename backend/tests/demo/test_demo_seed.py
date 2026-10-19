@@ -305,3 +305,87 @@ def test_external_accounts_hold_only_external_allowed_permissions():
     for account in external:
         assert set(account["permissions"]) <= allowed, account["username"]
         assert account["delegated_modules"] == []
+
+
+def test_seed_rejects_non_loopback_base():
+    """#711：seed 只接受本機位址，避免把示範帳號寫進別人的環境。"""
+    import pytest
+
+    seed = load_seed_module()
+    for ok in (
+        "http://127.0.0.1:8300",
+        "http://localhost:8300",
+        "http://[::1]:8300",
+    ):
+        assert seed.require_loopback_base(ok) == ok
+    for bad in (
+        "http://192.168.1.20:8300",
+        "https://staging.example.test",
+        "http://localhost.example.test",
+        "http://0.0.0.0:8300",
+    ):
+        with pytest.raises(ValueError, match="loopback"):
+            seed.require_loopback_base(bad)
+        with pytest.raises(ValueError, match="loopback"):
+            seed.Api(bad)
+
+
+def test_start_script_binds_loopback_unless_https():
+    """#711：預設 `--host 127.0.0.1`，只有 --https 才綁區網 IP。"""
+    script = (REPO / "demo" / "scripts" / "start.sh").read_text()
+    assert "0.0.0.0" not in script
+    assert "HOST_ARGS=(--host 127.0.0.1)" in script
+    https_block = script.split('if [ "$HTTPS" = 1 ]; then', 1)[1]
+    assert 'INSPECTFLOW_DEV_HOST="$LAN_IP"' in https_block
+    assert "HOST_ARGS=()" in https_block
+
+
+def test_e2e_scripts_reject_non_loopback_base_url():
+    """#711：e2e 的 DEMO_BASE_URL 非本機位址一律拒絕。"""
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    module = REPO / "demo" / "e2e" / "base-url.mjs"
+    program = (
+        "import(process.argv[1]).then(({demoBaseUrl}) => {"
+        "for (const url of process.argv.slice(2)) {"
+        "try { demoBaseUrl(url); console.log('ok') }"
+        "catch { console.log('rejected') } } })"
+    )
+    result = subprocess.run(
+        [
+            node,
+            "-e",
+            program,
+            module.as_uri(),
+            "http://127.0.0.1:1",
+            "http://localhost:1",
+            "http://[::1]:1",
+            "http://192.168.1.20:1",
+            "https://staging.example.test",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.split() == [
+        "ok",
+        "ok",
+        "ok",
+        "rejected",
+        "rejected",
+    ]
+    for name in (
+        "walkthrough",
+        "field-acceptance",
+        "template-acceptance",
+        "permissions-acceptance",
+    ):
+        text = (REPO / "demo" / "e2e" / f"{name}.mjs").read_text()
+        assert "process.env.DEMO_BASE_URL" not in text
+        assert "demoBaseUrl()" in text

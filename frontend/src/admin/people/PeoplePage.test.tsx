@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
@@ -175,6 +175,29 @@ describe('PeoplePage', () => {
     )
   })
 
+  it('shows not-found for a malformed account id without any request', () => {
+    render(
+      <DataMemoryRouter initialEntries={['/accounts/..%2Fcompanies%3Fx']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    expect(screen.getByText('找不到這個帳號')).toBeVisible()
+    expect(peopleApiMock.request).not.toHaveBeenCalled()
+    expect(screen.queryByText('模組授權')).toBeNull()
+  })
+
+  it('shows not-found instead of crashing on a broken percent encoding', () => {
+    render(
+      <DataMemoryRouter initialEntries={['/accounts/%E0%A4%A']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    expect(screen.getByText('找不到這個帳號')).toBeVisible()
+    expect(peopleApiMock.request).not.toHaveBeenCalled()
+  })
+
   it('does not render a second participating-project section', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
@@ -188,6 +211,26 @@ describe('PeoplePage', () => {
     expect(peopleApiMock.request).not.toHaveBeenCalledWith(
       '/users/person-1/participating-projects',
     )
+  })
+
+  it('returns to the list when the account nav link is clicked in the wizard', () => {
+    peopleApiMock.request.mockResolvedValue({ items: [] })
+    render(
+      <DataMemoryRouter initialEntries={['/accounts']}>
+        <Link to="/accounts">帳號導覽</Link>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
+    expect(screen.getByRole('heading', { name: '新增帳號' })).toBeVisible()
+    expect(screen.getByText('能力設定')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('link', { name: '帳號導覽' }))
+
+    expect(screen.getByRole('heading', { name: '帳號' })).toBeVisible()
+    expect(screen.queryByText('能力設定')).toBeNull()
+    expect(screen.getByRole('button', { name: '新增帳號' })).toBeVisible()
   })
 
   it('keeps list search in the route when opening a person', () => {

@@ -7,17 +7,36 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+from urllib.parse import urlsplit
 from pathlib import Path
 
 DATA_FILE = Path(__file__).parents[1] / "data" / "seed.json"
 COOKIE_NAME = "__Host-inspectflow_session"
 
 
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def require_loopback_base(base: str) -> str:
+    """只接受本機後端位址。
+
+    為什麼：seed 會用 README 公開的示範密碼登入並建立帳號；指到非本機
+    位址（誤打正式或測試環境）會把示範帳號寫進別人的系統。
+    """
+    host = urlsplit(base).hostname
+    if host not in LOOPBACK_HOSTS:
+        raise ValueError(
+            f"--base {base!r} is not a loopback address; demo seed only "
+            "talks to 127.0.0.1, localhost or ::1"
+        )
+    return base
+
+
 class Api:
     """管理單一登入工作階段，資料操作都走正式 API。"""
 
     def __init__(self, base: str) -> None:
-        self.base = base.rstrip("/") + "/api/v1"
+        self.base = require_loopback_base(base).rstrip("/") + "/api/v1"
         self.cookie: str | None = None
 
     def call(
@@ -334,8 +353,14 @@ def main() -> None:
     parser.add_argument("--out")
     args = parser.parse_args()
     try:
+        require_loopback_base(args.base)
         result = seed(args.base, args.code)
-    except (OSError, RuntimeError, urllib.error.URLError) as error:
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        urllib.error.URLError,
+    ) as error:
         sys.exit(f"demo seed failed: {error}")
     if args.out:
         Path(args.out).write_text(

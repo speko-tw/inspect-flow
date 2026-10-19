@@ -448,3 +448,55 @@ def test_dashboard_task_hides_cross_project_and_missing_ids(
         .status_code
         == 403
     )
+
+
+def test_dashboard_engineer_search_matches_visible_fields_only(
+    db_session, make_client
+):
+    """ADM-R51：q 不得用 email、工號、英文姓名探測看不到的欄位。"""
+    world = _dashboard_fixture(db_session, make_client)
+    user = world["field_user"]
+    user.email = "hidden.probe711@example.test"
+    user.employee_no = "EMP-711-HIDDEN"
+    user.name_en = "Hidden English Probe"
+    db_session.commit()
+    path = "/api/v1/admin/dashboard/engineers"
+    params = {"project_id": str(world["project"].id)}
+
+    def found(term):
+        response = world["admin"].get(path, params={**params, "q": term})
+        assert response.status_code == 200, response.text
+        return {row["user_id"] for row in response.json()["items"]}
+
+    for hidden in ("probe711", "EMP-711", "English Probe"):
+        assert str(user.id) not in found(hidden)
+    assert str(user.id) in found(user.username[:4])
+    assert str(user.id) in found(user.name_zh)
+
+
+def test_dashboard_tasks_exclude_draft(db_session, make_client):
+    """ADM-R51：總覽任務清單與單筆都不含 DRAFT；CANCELLED 照舊。"""
+    world = _dashboard_fixture(db_session, make_client)
+    admin = world["admin_user"]
+    plan = db_session.scalar(
+        select(InspectionPlan).where(InspectionPlan.name == "使用中")
+    )
+    draft = InspectionTask(
+        plan_id=plan.id,
+        project_id=world["project"].id,
+        name="草稿",
+        status="DRAFT",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(draft)
+    db_session.commit()
+    base = f"/api/v1/admin/dashboard/projects/{world['project'].id}/tasks"
+
+    listed = world["admin"].get(base, params={"limit": 100})
+    assert listed.status_code == 200, listed.text
+    items = listed.json()["items"]
+    assert str(draft.id) not in {item["task_id"] for item in items}
+    assert "DRAFT" not in {item["status"] for item in items}
+    assert "CANCELLED" in {item["status"] for item in items}
+    assert world["admin"].get(f"{base}/{draft.id}").status_code == 404

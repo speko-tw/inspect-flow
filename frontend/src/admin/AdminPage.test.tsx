@@ -772,9 +772,18 @@ describe('admin user and company pages', () => {
     expect(
       screen.getByRole('region', { name: '帳號清單，可水平捲動' }),
     ).toBeInTheDocument()
-    const adminRow = await screen.findByRole('row', {
-      name: /admin.*可管理所有帳號與權限/,
-    })
+    // #713：頁面標題只有一個「帳號」，清單沒有重複標題與「能力摘要」欄。
+    expect(
+      screen.getAllByRole('heading', { level: 1, name: '帳號' }),
+    ).toHaveLength(1)
+    expect(
+      screen.queryByRole('heading', { name: '帳號清單' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: '能力摘要' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('能力摘要')).not.toBeInTheDocument()
+    const adminRow = await screen.findByRole('row', { name: /admin/ })
     expect(within(adminRow).getByRole('link', { name: 'admin' })).toBeVisible()
     expect(
       within(adminRow).queryByRole('button', { name: '修改資料' }),
@@ -1179,7 +1188,7 @@ describe('admin user and company pages', () => {
     renderAdmin('/logs')
 
     expect(
-      await screen.findByRole('heading', { name: '稽核紀錄' }),
+      await screen.findByRole('heading', { name: '操作紀錄' }),
     ).toBeInTheDocument()
     const nav = screen.getByRole('navigation', { name: '管理功能' })
     expect(within(nav).getByRole('button', { name: /管理/ })).toHaveAttribute(

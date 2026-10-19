@@ -954,21 +954,8 @@ def apply_permission_bundle(
             "Bundle contains invalid module permissions",
             details=invalid_codes,
         )
-    external_codes = [
-        code for code in codes if not permission_code_external_allowed(code)
-    ]
-    if user.is_external_collaborator and external_codes:
-        _record_denied_grant(
-            session,
-            user=user,
-            permission_codes=external_codes,
-            bundle_id=bundle.id,
-            reason="external_not_allowed",
-        )
-        raise ExternalCollaboratorPermissionError(
-            "External collaborators cannot receive this permission",
-            details=external_codes,
-        )
+    # 先驗操作者授權、再驗外部協作限制（#711），與 _authorize_mutation
+    # 一致：越權者一律 403，不洩漏目標是否為外部帳號。
     delegated_modules = _delegated_modules(session, actor.id)
     denied_codes = [
         code
@@ -994,6 +981,21 @@ def apply_permission_bundle(
         raise PermissionBundleScopeError(
             "Actor cannot manage every permission in the bundle",
             details=denied_codes,
+        )
+    external_codes = [
+        code for code in codes if not permission_code_external_allowed(code)
+    ]
+    if user.is_external_collaborator and external_codes:
+        _record_denied_grant(
+            session,
+            user=user,
+            permission_codes=external_codes,
+            bundle_id=bundle.id,
+            reason="external_not_allowed",
+        )
+        raise ExternalCollaboratorPermissionError(
+            "External collaborators cannot receive this permission",
+            details=external_codes,
         )
     changed_codes: set[str] = set()
     for code in codes:
@@ -1146,23 +1148,8 @@ def _authorize_mutation(
         raise ModulePermissionDeniedError(
             "Admin module access is implicit and cannot be stored"
         )
-    if (
-        operation == "grant"
-        and user.is_external_collaborator
-        and any(
-            not permission_code_external_allowed(code)
-            for code in permission_codes
-        )
-    ):
-        _reject_external_mutation(
-            session,
-            user=user,
-            permission_codes=permission_codes,
-            module=module,
-            reason="external_not_allowed",
-            bundle_id=bundle_id,
-            record_denial=record_denial,
-        )
+    # 先驗操作者授權、再驗外部協作限制：越權者一律 403 並記越權原因，
+    # 不能從 422 與稽核原因推知目標是不是外部帳號（#711）。
     allowed = actor.is_admin
     delegated = module in _delegated_modules(session, actor.id)
     if not allowed:
@@ -1182,6 +1169,24 @@ def _authorize_mutation(
             )
         raise ModulePermissionDeniedError(
             "Actor cannot manage this module permission"
+        )
+
+    if (
+        operation == "grant"
+        and user.is_external_collaborator
+        and any(
+            not permission_code_external_allowed(code)
+            for code in permission_codes
+        )
+    ):
+        _reject_external_mutation(
+            session,
+            user=user,
+            permission_codes=permission_codes,
+            module=module,
+            reason="external_not_allowed",
+            bundle_id=bundle_id,
+            record_denial=record_denial,
         )
 
 

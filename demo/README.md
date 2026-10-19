@@ -23,6 +23,11 @@ demo/scripts/start.sh
 重建這個示範資料庫，確保帳號、任務與「總覽」數字一致。預設資料目錄是
 `/private/tmp/inspectflow-demo`，不會使用 `backend/data/inspectflow.db`。
 
+後端與前端預設都只綁定 `127.0.0.1`，同網段的其他裝置連不到；只有下方
+HTTPS 手機走查模式會讓前端綁定區網 IP。`seed.py` 的 `--base` 與 e2e 的
+`DEMO_BASE_URL` 只接受 `127.0.0.1`、`localhost`、`::1`，指到其他位址會
+直接拒絕，避免把示範帳號寫進別人的環境。
+
 工作目錄和連接埠可以分別設定；埠被其他程序使用時，腳本會停止並保留該
 程序：
 

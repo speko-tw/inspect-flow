@@ -72,7 +72,9 @@ curl -fsS "http://127.0.0.1:$BACKEND_PORT/api/v1/version" \
 
 SCHEME=http
 WEB_HOST=localhost
-HOST_ARGS=(--host 0.0.0.0)
+# 預設只綁本機：示範帳號密碼寫在 README，綁全部介面等於讓同網段的
+# 人都能登入。只有 --https 手機走查才改綁區網 IP（見下方）。
+HOST_ARGS=(--host 127.0.0.1)
 CURL_OPTS=()
 LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || true)"
 if [ "$HTTPS" = 1 ]; then

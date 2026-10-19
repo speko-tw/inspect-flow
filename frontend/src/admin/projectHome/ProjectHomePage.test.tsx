@@ -84,7 +84,9 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
       'project_inspection_item.edit',
       'project_zone.read',
       'inspection_plan.read',
+      'inspection_plan.create',
       'inspection_task.read',
+      'inspection_task.dispatch',
     ],
     ...overrides,
   }
@@ -189,6 +191,15 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+/** 沒有可執行的下一步時，整張「下一步」卡（含標題與說明）都不存在。 */
+function expectNoNextStepCard() {
+  expect(
+    screen.queryByRole('heading', { name: '下一步' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText(/下一步/)).not.toBeInTheDocument()
+  expect(screen.queryByText('追蹤進度')).not.toBeInTheDocument()
+}
+
 describe('project home', () => {
   // ADM-AC40：首頁顯示本公司角色標籤，資料取自流程摘要，不另呼叫專案詳情。
   it.each([
@@ -230,17 +241,85 @@ describe('project home', () => {
       has_field_access: true,
     })
 
-    expect(await screen.findByText('目前沒有你可執行的下一步。')).toBeVisible()
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
     expect(screen.queryByText('新增查核項目')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: '前往新增查核項目' }),
     ).not.toBeInTheDocument()
   })
 
+  // #713：外部協作（專案查閱人員）只有唯讀權限，不論下一步是哪一項，
+  // 都不能出現會被後端擋下的寫入入口。
+  it.each([
+    ['add_members', '加入專案成員'],
+    ['add_inspection_items', '新增查核項目'],
+    ['create_plan', '建立第一個計畫'],
+    ['dispatch_draft_tasks', '完成草稿任務並派出'],
+  ] as const)('外部協作看不到「%s」的寫入入口', async (step, label) => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: step,
+        viewer_permission_codes: [
+          'project.read',
+          'project_inspection_item.read',
+          'project_zone.read',
+          'inspection_plan.read',
+          'inspection_task.read',
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
+    expect(screen.queryByText(label)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: `前往${label}` }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '成員' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['add_members', 'project_member.manage', '/members'],
+    ['create_plan', 'inspection_plan.create', '/planning'],
+    ['dispatch_draft_tasks', 'inspection_task.dispatch', '/planning'],
+  ] as const)('「%s」只在有 %s 時顯示入口', async (step, code, suffix) => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: step,
+        viewer_permission_codes: [
+          'project.read',
+          'inspection_plan.read',
+          code,
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    const link = await screen.findByRole('link', { name: /^前往/ })
+    expect(link).toHaveAttribute('href', `/projects/project-1${suffix}`)
+  })
+
   it('可編輯查核項目的成員會看到新增文案與入口', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(
-      summary({ primary_step: 'add_inspection_items' }),
+      summary({
+        primary_step: 'add_inspection_items',
+        can_apply_templates: true,
+      }),
     )
 
     renderAt('/projects/project-1', {
@@ -252,6 +331,29 @@ describe('project home', () => {
     expect(
       screen.getByRole('link', { name: '前往新增查核項目' }),
     ).toHaveAttribute('href', '/projects/project-1/inspection-items')
+  })
+
+  // 查核項目頁只有「從範本新增」；有專案編輯權但不能套用範本
+  // （缺範本或查核模組）的人點進去沒有可用入口，所以不顯示。
+  it('有專案編輯權但不能套用範本時不顯示新增查核項目入口', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'add_inspection_items',
+        can_apply_templates: false,
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: true,
+    })
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
+    expect(
+      screen.queryByRole('link', { name: '前往新增查核項目' }),
+    ).not.toBeInTheDocument()
   })
 
   it('leaves the role blank while the label list is loading', async () => {
@@ -540,7 +642,9 @@ describe('project home', () => {
     ['complete_reinspection', '追蹤任務進度', '前往追蹤任務進度'],
   ] as const)('uses primary step %s', async (code, label, action) => {
     mocks.getProject.mockResolvedValue(project)
-    mocks.getWorkflowSummary.mockResolvedValue(summary({ primary_step: code }))
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ primary_step: code, can_apply_templates: true }),
+    )
 
     renderAt()
 
@@ -567,6 +671,7 @@ describe('project home', () => {
         viewer_permission_codes: [
           'project_member.manage',
           'inspection_task.inspect',
+          'inspection_task.dispatch',
         ],
       }),
     )
@@ -635,6 +740,44 @@ describe('project home', () => {
     )
   })
 
+  // ADM-R16：全部完成但沒有任何進度相關讀取權限時，不放空卡。
+  it('全部完成且沒有進度或計畫讀取權限時不顯示下一步卡', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: null,
+        viewer_permission_codes: ['project.read'],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
+  })
+
+  it('全部完成但只有計畫讀取權限時追蹤進度改連計畫與任務', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: null,
+        viewer_permission_codes: ['project.read', 'inspection_plan.read'],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    expect(
+      await screen.findByRole('link', { name: '追蹤進度' }),
+    ).toHaveAttribute('href', '/projects/project-1/planning')
+  })
+
   it('routes field-only permission sets to Field and skips project detail reads', async () => {
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({
@@ -670,6 +813,65 @@ describe('project home', () => {
     ).toBeVisible()
     expect(screen.getByText('無權查看任務')).toBeVisible()
     expect(screen.queryByText('Field 工作台')).not.toBeInTheDocument()
+  })
+
+  // ADM-R16、ADM-R49：外部協作的專案查閱人員看得到草稿、未指派、
+  // 待重查的數字（後端以 inspection_task.read 決定），但沒有任何
+  // 寫入入口（沒有下一步卡、也沒有前往規劃頁的連結）。
+  it('外部協作看得到任務數字但沒有可點的寫入入口', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'dispatch_draft_tasks',
+        viewer_permission_codes: [
+          'project.read',
+          'project_inspection_item.read',
+          'project_zone.read',
+          'inspection_plan.read',
+          'inspection_task.read',
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
+    const numbers = within(screen.getByLabelText('專案關鍵數字'))
+    expect(numbers.getByText('已派出未完成')).toBeVisible()
+    expect(numbers.getByText('草稿任務')).toBeVisible()
+    expect(numbers.getByText(/未指派/)).toBeVisible()
+    expect(numbers.getByText('待重查')).toBeVisible()
+    for (const link of numbers.queryAllByRole('link')) {
+      expect(link.getAttribute('href')).not.toMatch(/planning|members/)
+    }
+    expect(
+      screen.queryByRole('link', { name: /^前往/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('有 inspection_task.read 的人看得到草稿任務與待重查', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: [
+          'project.read',
+          'inspection_plan.read',
+          'inspection_task.read',
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    expect(await screen.findByText('草稿任務')).toBeVisible()
+    expect(screen.getByText('待重查')).toBeVisible()
   })
 
   it('complete_reinspection step opens the reinspection filter', async () => {

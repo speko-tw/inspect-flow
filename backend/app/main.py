@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 
 from app.api.errors import register_error_handlers
+from app.api.no_store import NoStoreMiddleware
 from app.api.v1.admin_dashboard import router as admin_dashboard_router
 from app.api.v1.audit_logs import router as audit_logs_router
 from app.api.v1.auth import router as auth_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
         dependencies=[Depends(bind_request_scope)], lifespan=lifespan
     )
     register_error_handlers(app)
+    app.add_middleware(NoStoreMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")

@@ -304,6 +304,15 @@ describe('Dashboard header interaction tokens', () => {
     ).not.toMatch(/--color-header-nav-(?:hover|pressed|current):/)
   })
 
+  it('styles only the personal menu trigger, never its items (#713)', () => {
+    // 選單項目畫在淺色面板上，若吃到白字會變成白底白字。
+    expect(dashboardCss).not.toMatch(/\.app-header-account button/)
+    expect(dashboardCss).toContain(
+      '.dashboard-shell .app-header-personal-trigger {',
+    )
+    expect(dashboardCss).not.toMatch(/app-header-personal-menu/)
+  })
+
   it('uses tokens for hover, pressed and current header states', () => {
     expect(dashboardCss).toContain(
       'background: var(--color-header-nav-hover);',

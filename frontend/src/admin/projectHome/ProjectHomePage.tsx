@@ -46,6 +46,21 @@ const STEP_CONTENT: Record<
 }
 
 /**
+ * 各步驟的入口對應後端實際 guard 的專案權限碼；沒有該權限的人
+ * 點進去只會被擋，所以一律不顯示（ADM-R49、#713）。
+ * add_inspection_items 不在此表：查核項目頁目前只有「從範本新增」
+ * 一種新增方式，能否套用範本須同時具範本模組、查核模組與專案編輯
+ * 權（TPL-R09），改用摘要的 can_apply_templates 判斷。
+ * complete_reinspection 只是進去看進度，由 canViewProgress／
+ * canViewPlanning 另外把關。
+ */
+const STEP_PERMISSION: Partial<Record<WorkflowStepCode, string>> = {
+  add_members: 'project_member.manage',
+  create_plan: 'inspection_plan.create',
+  dispatch_draft_tasks: 'inspection_task.dispatch',
+}
+
+/**
  * 依 ADM-R16、IP-R11（流程摘要）呈現下一步與可見的關鍵數字。
  * 純現場權限者導向自身落點，拒絕或不存在的專案不顯示空首頁。
  */
@@ -97,12 +112,24 @@ export default function ProjectHomePage() {
   const base = routePath(ROUTES.projectHome, { projectId })
   const canViewProgress =
     summary?.viewer_permission_codes.includes('inspection_task.read') ?? false
-  const canEditInspectionItems =
-    summary?.viewer_permission_codes.includes(
-      'project_inspection_item.edit',
-    ) ?? false
   const canViewPlanning =
     summary?.viewer_permission_codes.includes('inspection_plan.read') ?? false
+  const requiredCode = primary ? STEP_PERMISSION[primary] : undefined
+  const canActOnPrimary =
+    primary === 'add_inspection_items'
+      ? (summary?.can_apply_templates ?? false)
+      : requiredCode === undefined ||
+        (summary?.viewer_permission_codes.includes(requiredCode) ?? false)
+  // 有下一步時，只有能執行才顯示；全部完成（primary 為 null）時依
+  // ADM-R16、ADM-AC15 顯示「追蹤進度」，只有沒有任何可讀進度權限才
+  // 不顯示整張卡，不放「沒有你可執行」的空卡。
+  const showNextStep =
+    primary === null
+      ? canViewProgress || canViewPlanning
+      : canActOnPrimary &&
+        (primary !== 'complete_reinspection' ||
+          canViewProgress ||
+          canViewPlanning)
   const progressFallback = canViewProgress ? '/progress' : '/planning'
   const duplicateWarning = (
     location.state as { duplicateProjectCode?: string } | null
@@ -156,48 +183,39 @@ export default function ProjectHomePage() {
                     )?.label ?? summary.project.company_role)}
               </strong>
             </p>
-            <section
-              aria-labelledby="project-next-step-heading"
-              className="project-next-step"
-            >
-              <h3 id="project-next-step-heading">下一步</h3>
-              {primary ? (
-                <>
-                  <p>
-                    {primary === 'add_inspection_items' &&
-                    !canEditInspectionItems
-                      ? '目前沒有你可執行的下一步。'
-                      : STEP_CONTENT[primary].label}
-                  </p>
-                  {(primary !== 'complete_reinspection' ||
-                    canViewProgress ||
-                    canViewPlanning) &&
-                    (primary !== 'add_inspection_items' ||
-                      canEditInspectionItems) && (
-                      <Link
-                        className="btn btn-primary"
-                        to={`${base}${
-                          primary === 'complete_reinspection' &&
-                          !canViewProgress
-                            ? '/planning'
-                            : STEP_CONTENT[primary].suffix
-                        }`}
-                      >
-                        {STEP_CONTENT[primary].action}
-                      </Link>
-                    )}
-                </>
-              ) : (
-                <>
-                  <p>目前沒有待處理的下一步。</p>
-                  {(canViewProgress || canViewPlanning) && (
+            {showNextStep && (
+              <section
+                aria-labelledby="project-next-step-heading"
+                className="project-next-step"
+              >
+                <h3 id="project-next-step-heading">下一步</h3>
+                {primary ? (
+                  <>
+                    <p>{STEP_CONTENT[primary].label}</p>
+                    <Link
+                      className="btn btn-primary"
+                      to={`${base}${
+                        primary === 'complete_reinspection' && !canViewProgress
+                          ? '/planning'
+                          : STEP_CONTENT[primary].suffix
+                      }`}
+                    >
+                      {STEP_CONTENT[primary].action}
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p>目前沒有待處理的下一步。</p>
                     <Link className="btn" to={`${base}${progressFallback}`}>
                       追蹤進度
                     </Link>
-                  )}
-                </>
-              )}
-            </section>
+                  </>
+                )}
+              </section>
+            )}
+            {/* 草稿、未指派與待重查的數字依 ADM-R16 對能讀任務者都顯示
+                （後端以 inspection_task.read 決定可見性，IP-R11）；
+                寫入入口與規劃頁連結由 canActOnPrimary 把關（ADM-R49）。 */}
             <dl aria-label="專案關鍵數字" className="project-key-numbers">
               <div>
                 <dt className="muted-text">成員</dt>

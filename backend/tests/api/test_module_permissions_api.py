@@ -846,3 +846,77 @@ def test_invalid_codes_missing_users_and_self_grant_are_rejected(
         )
     )
     assert len(denied_events) == 1
+
+
+def test_out_of_scope_delegate_gets_403_before_external_rule(
+    db_session, make_client
+):
+    """越權者對外部帳號授 template.manage：先 403，稽核記越權。
+
+    順序反過來會讓越權者靠 422 與稽核原因探測目標是不是外部帳號。
+    """
+    admin = _admin(db_session, "EXT-ORDER-ADM")
+    project_delegate = _user(db_session, "ext-order-project-delegate")
+    template_delegate = _user(db_session, "ext-order-template-delegate")
+    external = _user(db_session, "ext-order-external", external=True)
+    db_session.add_all(
+        [
+            UserModuleDelegation(
+                user_id=project_delegate.id, module="project"
+            ),
+            UserModuleDelegation(
+                user_id=template_delegate.id, module="template"
+            ),
+        ]
+    )
+    db_session.commit()
+    admin_client = _client_for(admin, db_session, make_client)
+    out_of_scope = _client_for(project_delegate, db_session, make_client)
+    in_scope = _client_for(template_delegate, db_session, make_client)
+    url = f"/api/v1/users/{external.id}/module-permissions/template.manage"
+
+    denied = out_of_scope.put(url)
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "permission.denied"
+    db_session.expire_all()
+    reasons = [
+        row.after["reason"]
+        for row in db_session.scalars(
+            select(AuditLog).where(
+                AuditLog.event_type == "module_permission.grant_denied",
+                AuditLog.entity_id == external.id,
+            )
+        )
+    ]
+    assert reasons == ["outside_delegation_scope"]
+
+    # 組合套用走另一條路徑，順序同樣是先越權（403）。
+    bundle = admin_client.post(
+        "/api/v1/permission-bundles",
+        json={
+            "name": "Ext order bundle",
+            "permission_codes": ["template.manage"],
+        },
+    )
+    assert bundle.status_code == 201, bundle.text
+    applied = out_of_scope.post(
+        f"/api/v1/users/{external.id}/permission-bundles/"
+        f"{bundle.json()['id']}:apply"
+    )
+    assert applied.status_code == 403
+    assert applied.json()["error"]["details"] == ["template.manage"]
+
+    # 有權的委派者仍受外部協作限制：維持 422，既有行為不放寬。
+    rejected = in_scope.put(url)
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == (
+        "module_permission.external_not_allowed"
+    )
+    assert (
+        db_session.scalar(
+            select(UserModulePermission.id).where(
+                UserModulePermission.user_id == external.id
+            )
+        )
+        is None
+    )
