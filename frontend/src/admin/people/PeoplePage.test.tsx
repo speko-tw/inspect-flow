@@ -175,6 +175,18 @@ describe('PeoplePage', () => {
     )
   })
 
+  it('shows not-found for a malformed account id without any request', () => {
+    render(
+      <DataMemoryRouter initialEntries={['/accounts/..%2Fcompanies%3Fx']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    expect(screen.getByText('找不到這個帳號')).toBeVisible()
+    expect(peopleApiMock.request).not.toHaveBeenCalled()
+    expect(screen.queryByText('模組授權')).toBeNull()
+  })
+
   it('does not render a second participating-project section', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(

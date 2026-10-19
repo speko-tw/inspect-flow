@@ -45,6 +45,7 @@ interface FixtureOptions {
   testNavigation?: boolean
   onTemporaryPassword?: (username: string, password: string) => void
   failCreate?: boolean
+  failUserAccess?: boolean
   participationResponse?: (path: string) => Promise<Response>
   bundleApplyResponse?: (path: string) => Promise<Response>
 }
@@ -300,6 +301,9 @@ function permissionPage(options: FixtureOptions = {}) {
         method === 'GET' &&
         /^\/users\/[^/]+\/module-permissions$/.test(path)
       ) {
+        if (options.failUserAccess) {
+          return Response.json({ detail: 'boom' }, { status: 500 })
+        }
         return Response.json({
           permission_codes: permissionCodes,
           delegated_modules: [],
@@ -764,6 +768,24 @@ describe('ModulePermissionsPage', () => {
           call.path === '/users/person/module-permissions',
       ),
     ).toHaveLength(2)
+  })
+
+  it('keeps delegate grant controls disabled when access fails to load', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      delegateMode: true,
+      failUserAccess: true,
+    })
+    await screen.findByRole('heading', { name: '權限' })
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('alert').length).toBeGreaterThan(0),
+    )
+    expect(screen.getByLabelText('使用專案功能')).toBeDisabled()
+    // 沒有可改的草稿，「開通」按鈕不會出現。
+    expect(screen.queryByRole('button', { name: '開通' })).toBeNull()
   })
 
   it('applies a job to an existing person without creating an account', async () => {

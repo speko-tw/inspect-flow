@@ -10,6 +10,8 @@ import UsersPage from '../UsersPage'
 import ModulePermissionsPage from '../module-permissions/ModulePermissionsPage'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { request } from '../api'
+import { isResourceId } from '../../resourceId'
+import RouteNotFound from '../../RouteNotFound'
 import { routePath, ROUTES } from '../../routes'
 
 interface DelegatePerson {
@@ -51,6 +53,19 @@ export function PeoplePage({
     if (nextQuery.trim()) next.set('q', nextQuery.trim())
     else next.delete('q')
     setSearchParams(next, { replace: true })
+  }
+
+  // 帳號編號會原樣拼進 API 路徑；特製網址（含 `/`、`?`）解碼後不得
+  // 送出請求，直接顯示找不到（ADM-R25，#711）。
+  if (personId && !isResourceId(personId)) {
+    return (
+      <main className="admin-page">
+        <RouteNotFound
+          message="網址可能輸入錯誤，或這個帳號已不存在。"
+          title="找不到這個帳號"
+        />
+      </main>
+    )
   }
 
   return (

@@ -50,17 +50,21 @@ export interface ParticipatingProject {
   roles: Array<{ id: string; name: string }>
 }
 
+// 路徑中的 id 與模組代碼一律先編碼，避免含 `/`、`?` 的值改變請求目標
+// （#711）。
+const enc = encodeURIComponent
+
 export function getUserEffectiveAccess(userId: string, projectId?: string) {
   const query = new URLSearchParams()
   if (projectId) query.set('project_id', projectId)
   return request<EffectiveAccess>(
-    `/users/${userId}/effective-access${query.size ? `?${query}` : ''}`,
+    `/users/${enc(userId)}/effective-access${query.size ? `?${query}` : ''}`,
   )
 }
 
 export function getUserParticipatingProjects(userId: string) {
   return request<{ items: ParticipatingProject[] }>(
-    `/users/${userId}/participating-projects`,
+    `/users/${enc(userId)}/participating-projects`,
   ).then((body) => body.items)
 }
 
@@ -72,25 +76,31 @@ export function listModulePermissions(): Promise<ModulePermission[]> {
 
 export function getUserModulePermissions(userId: string) {
   return request<{ permission_codes: string[]; delegated_modules: string[] }>(
-    `/users/${userId}/module-permissions`,
+    `/users/${enc(userId)}/module-permissions`,
   )
 }
 
 export function grantModulePermission(userId: string, code: string) {
-  return request<void>(`/users/${userId}/module-permissions/${code}`, {
-    method: 'PUT',
-  })
+  return request<void>(
+    `/users/${enc(userId)}/module-permissions/${enc(code)}`,
+    {
+      method: 'PUT',
+    },
+  )
 }
 
 export function revokeModulePermission(userId: string, code: string) {
-  return request<void>(`/users/${userId}/module-permissions/${code}`, {
-    method: 'DELETE',
-  })
+  return request<void>(
+    `/users/${enc(userId)}/module-permissions/${enc(code)}`,
+    {
+      method: 'DELETE',
+    },
+  )
 }
 
 export function getRevokeImpact(userId: string, code: string) {
   return request<RevokeImpact>(
-    `/users/${userId}/module-permissions/${code}/revoke-impact`,
+    `/users/${enc(userId)}/module-permissions/${enc(code)}/revoke-impact`,
   )
 }
 
@@ -99,9 +109,12 @@ export function setModuleDelegation(
   module: string,
   granted: boolean,
 ) {
-  return request<void>(`/users/${userId}/module-delegations/${module}`, {
-    method: granted ? 'PUT' : 'DELETE',
-  })
+  return request<void>(
+    `/users/${enc(userId)}/module-delegations/${enc(module)}`,
+    {
+      method: granted ? 'PUT' : 'DELETE',
+    },
+  )
 }
 
 export function listPermissionBundles() {
@@ -122,19 +135,19 @@ export function updatePermissionBundle(
   id: string,
   input: { name: string; permission_codes: string[] },
 ) {
-  return request<PermissionBundle>(`/permission-bundles/${id}`, {
+  return request<PermissionBundle>(`/permission-bundles/${enc(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   })
 }
 
 export function deletePermissionBundle(id: string) {
-  return request<void>(`/permission-bundles/${id}`, { method: 'DELETE' })
+  return request<void>(`/permission-bundles/${enc(id)}`, { method: 'DELETE' })
 }
 
 export function applyPermissionBundle(userId: string, bundleId: string) {
   return request<{ user_id: string; granted_codes: string[] }>(
-    `/users/${userId}/permission-bundles/${bundleId}:apply`,
+    `/users/${enc(userId)}/permission-bundles/${enc(bundleId)}:apply`,
     { method: 'POST' },
   )
 }

@@ -474,10 +474,9 @@ function ModulePermissionsPageContent({
         }
       })
       .catch((caught: unknown) => {
-        if (active) {
-          setError(message(caught))
-          setAccessLoadedFor(selectedUser)
-        }
+        // 載入失敗時不標成已載入：否則開通控制項會以空的權限
+        // 草稿啟用，使用者可能在不知道現況下送出覆寫（#711）。
+        if (active) setError(message(caught))
       })
     return () => {
       active = false
