@@ -88,11 +88,9 @@ describe('Dashboard 任務唯讀頁', () => {
       }),
     ).toBeInTheDocument()
     expect(screen.queryByText('管理後台')).not.toBeInTheDocument()
-    expect(
-      screen
-        .getAllByText('任務編號：task-2048')
-        .every((node) => node.matches('small')),
-    ).toBe(true)
+    // #713：任務編號是內部識別，清單與明細都不顯示。
+    expect(screen.queryByText(/任務編號/)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('task-2048')
     expect(
       screen.queryByRole('heading', { name: 'task-2048' }),
     ).not.toBeInTheDocument()
@@ -151,7 +149,8 @@ describe('Dashboard 任務唯讀頁', () => {
     const retryOptions = { name: '重新載入' }
     const retryButton = await screen.findByRole('button', retryOptions)
     fireEvent.click(retryButton)
-    expect(await screen.findByText('任務編號：task-2048')).toBeInTheDocument()
+    expect(await screen.findByText('A 棟・二樓機房')).toBeInTheDocument()
+    expect(screen.queryByText(/任務編號/)).not.toBeInTheDocument()
     expect(api.listDashboardTasks).toHaveBeenCalledTimes(2)
   })
 

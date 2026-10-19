@@ -205,6 +205,9 @@ class ModuleStatusResponse(BaseModel):
 class ProjectMemberDetailResponse(ProjectMemberResponse):
     """A listed member with the user fields the management page shows."""
 
+    # 與 role_ids 同序。建立者角色等不可指派的角色不在可指派清單，
+    # 前端無法自行對名；由後端直接附上，成員頁才不會顯示未知角色。
+    role_names: list[str]
     name_zh: str | None
     email: str | None
     company_id: UUID | None
@@ -324,13 +327,15 @@ def _member_detail_response(
     company: Company | None,
     module_permissions: frozenset[str],
 ) -> ProjectMemberDetailResponse:
+    ordered_assignments = sorted(
+        member.role_assignments, key=lambda assignment: assignment.role_id
+    )
     return ProjectMemberDetailResponse(
         id=member.id,
         user_id=user.id,
         username=user.username,
-        role_ids=sorted(
-            assignment.role_id for assignment in member.role_assignments
-        ),
+        role_ids=[a.role_id for a in ordered_assignments],
+        role_names=[a.role.name for a in ordered_assignments],
         name_zh=user.name_zh,
         email=user.email,
         company_id=user.company_id,

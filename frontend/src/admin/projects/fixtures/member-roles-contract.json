@@ -12,6 +12,7 @@
     "module_status",
     "name_zh",
     "role_ids",
+    "role_names",
     "user_id",
     "username"
   ],

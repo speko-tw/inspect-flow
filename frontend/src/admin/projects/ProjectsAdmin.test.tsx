@@ -123,6 +123,13 @@ const roleInternalOnly: Role = {
   permission_codes: ['project.update'],
   is_external_allowed: false,
 }
+
+// 與後端相同：成員回應附角色名稱，與 role_ids 同序。
+function namesOf(ids: string[]): string[] {
+  return ids.map(
+    (id) => [roleA, roleB].find((role) => role.id === id)?.name ?? '',
+  )
+}
 const externalCandidate: MemberCandidate = {
   id: 'external-1',
   username: 'partner.user',
@@ -357,6 +364,7 @@ function projectFetch({
           user_id: String(body.user_id),
           username: user?.username ?? '',
           role_ids: body.role_ids as string[],
+          role_names: namesOf(body.role_ids as string[]),
           name_zh: user?.name_zh ?? null,
           email: user?.email ?? null,
           company_id: null,
@@ -387,6 +395,7 @@ function projectFetch({
         const row = memberRows.find((item) => item.user_id === rolesMatch[1])
         if (row) {
           row.role_ids = body.role_ids as string[]
+          row.role_names = namesOf(row.role_ids)
         }
         return Response.json(row)
       }
@@ -1961,6 +1970,7 @@ const memberAnna: ProjectMember = {
   user_id: anna.id,
   username: anna.username,
   role_ids: [roleA.id],
+  role_names: [roleA.name],
   name_zh: anna.name_zh,
   email: anna.email,
   company_id: 'company-1',
@@ -2039,6 +2049,7 @@ describe('admin project members', () => {
           company_id: null,
           company_name: null,
           role_ids: [],
+          role_names: [],
         },
       ],
     })
@@ -2673,6 +2684,24 @@ describe('project members for an office user (not admin, #481)', () => {
     ).toBeEnabled()
   })
 
+  // #713：專案建立者角色不可指派，不在可指派清單，名稱仍要正確。
+  it('shows the creator role name instead of an unknown role', async () => {
+    projectFetch({
+      office: true,
+      members: [
+        {
+          ...memberAnna,
+          role_ids: ['role-creator'],
+          role_names: ['專案建立者'],
+        },
+      ],
+    })
+    renderAt(path, officeUser)
+
+    expect(await screen.findByText('專案建立者')).toBeVisible()
+    expect(screen.queryByText('（未知角色）')).toBeNull()
+  })
+
   it('keeps the member list when the role list fails', async () => {
     projectFetch({
       office: true,
@@ -2688,7 +2717,9 @@ describe('project members for an office user (not admin, #481)', () => {
 
     expect(await screen.findByText('鄧安娜')).toBeVisible()
     expect(await screen.findByText(/無法載入角色/)).toBeVisible()
-    expect(screen.getByText('（角色名稱無法顯示）')).toBeVisible()
+    // 名稱由成員清單直接帶來，角色清單失敗也不影響顯示。
+    expect(screen.getByText('查核員')).toBeVisible()
+    expect(screen.queryByText('（角色名稱無法顯示）')).toBeNull()
     expect(
       screen.getByRole('button', { name: /修改「.*」的角色/ }),
     ).toBeDisabled()

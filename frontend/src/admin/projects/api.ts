@@ -66,6 +66,8 @@ export interface ProjectMember {
   user_id: string
   username: string
   role_ids: string[]
+  /** 與 role_ids 同序；含不可指派的角色（例如專案建立者角色）。 */
+  role_names: string[]
   name_zh: string | null
   email: string | null
   company_id: string | null

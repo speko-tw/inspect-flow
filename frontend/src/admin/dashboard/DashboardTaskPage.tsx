@@ -317,9 +317,6 @@ function TaskList({
                     <Badge variant={status.variant}>{status.label}</Badge>
                   </span>
                   <span className="dashboard-task-row-meta">
-                    <small className="dashboard-task-number">
-                      任務編號：{task.task_id}
-                    </small>
                     <span>建議指派：{assignee}</span>
                   </span>
                 </Link>
@@ -382,9 +379,6 @@ function TaskDetail({
       <header className="dashboard-task-detail-heading">
         <div>
           <h2>{taskLocation(detail)}</h2>
-          <small className="dashboard-task-number">
-            任務編號：{detail.task_id}
-          </small>
           <p>{projectName}</p>
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>

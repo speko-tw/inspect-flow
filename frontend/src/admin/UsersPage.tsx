@@ -417,11 +417,23 @@ export default function UsersPage({
 
   const detail = detailUserId ? detailUser : null
 
-  const listColumnCount = onSelectUser ? 5 : 6
+  // 在「帳號」頁（有 onSelectUser）裡，頁面標題已是「帳號」，清單不再
+  // 重複標題；連結到詳情的列也沒有操作欄，只有四欄（#713）。
+  const embeddedList = Boolean(onSelectUser)
+  const listColumnCount = embeddedList ? 4 : 6
 
   return (
     <section
-      aria-labelledby={detailUserId ? 'person-basic-heading' : 'users-heading'}
+      aria-label={
+        !detailUserId && embeddedList ? `${ACCOUNT_LABEL}清單` : undefined
+      }
+      aria-labelledby={
+        detailUserId
+          ? 'person-basic-heading'
+          : embeddedList
+            ? undefined
+            : 'users-heading'
+      }
     >
       {!externalNavigationGuard && (
         <UsersNavigationGuard hasUnsavedChanges={hasDirtyForms} />
@@ -602,7 +614,7 @@ export default function UsersPage({
           )}
           {loading ? <p>載入中…</p> : null}
           <div>
-            <h1 id="users-heading">{ACCOUNT_LABEL}清單</h1>
+            {!embeddedList && <h1 id="users-heading">{ACCOUNT_LABEL}清單</h1>}
             <CursorListSearch
               disabled={loading}
               label={`搜尋${ACCOUNT_LABEL}`}
@@ -647,9 +659,7 @@ export default function UsersPage({
                       <th scope="col">帳號</th>
                       <th scope="col">公司</th>
                       <th scope="col">狀態</th>
-                      {onSelectUser ? (
-                        <th scope="col">能力摘要</th>
-                      ) : (
+                      {!embeddedList && (
                         <>
                           <th scope="col">系統管理者</th>
                           <th scope="col">操作</th>
@@ -686,15 +696,7 @@ export default function UsersPage({
                               status={activeStatus(user.is_active)}
                             />
                           </td>
-                          {onSelectUser ? (
-                            <td data-label="能力摘要">
-                              {user.is_admin
-                                ? '可管理所有帳號與權限'
-                                : user.is_external_collaborator
-                                  ? '依參與專案與角色查看'
-                                  : '依已開通權限與專案角色使用'}
-                            </td>
-                          ) : (
+                          {!embeddedList && (
                             <td>
                               <button
                                 disabled={

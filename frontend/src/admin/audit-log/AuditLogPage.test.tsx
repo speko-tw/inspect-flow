@@ -64,7 +64,7 @@ describe('稽核查詢頁', () => {
   it('套用四類篩選、翻頁與返回，僅送 GET 查詢', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    expect(await screen.findByText('project_zone.created')).toBeInTheDocument()
+    expect(await screen.findByText('建立分區')).toBeInTheDocument()
     expect(
       await screen.findByRole('option', { name: '班 (ben)' }),
     ).toBeInTheDocument()
@@ -131,10 +131,75 @@ describe('稽核查詢頁', () => {
     expect(fetcher.mock.calls.every(([, init]) => !init?.method)).toBe(true)
   })
 
+  it('事件與對象顯示白話，不露出事件碼與內部編號（#713）', async () => {
+    const entityId = '00000000-0000-0000-0000-0000000000aa'
+    mockFetch(() =>
+      Response.json(
+        auditLogPageFixture({
+          items: [
+            auditLogEntryFixture({
+              id: 'a',
+              event_type: 'user.active_changed',
+              entity_type: 'user',
+              entity_id: actorId,
+              before: { is_active: true },
+              after: { is_active: false },
+            }),
+            auditLogEntryFixture({
+              id: 'b',
+              event_type: 'module_permission.granted',
+              entity_type: 'module_permission',
+              entity_id: entityId,
+              after: {
+                user_id: actorId,
+                permission_code: 'project.create',
+                module: 'project',
+                source: 'direct',
+              },
+            }),
+            auditLogEntryFixture({
+              id: 'c',
+              event_type: 'role.created',
+              entity_type: 'role',
+              entity_id: entityId,
+              after: { name: '現場工程師', permission_codes: [] },
+            }),
+            auditLogEntryFixture({
+              id: 'd',
+              event_type: 'future.unmapped_event',
+              entity_type: 'future_thing',
+              entity_id: entityId,
+              after: null,
+            }),
+          ],
+        }),
+      ),
+    )
+    render(<AuditLogPage />)
+
+    expect(await screen.findByText('停用帳號')).toBeVisible()
+    expect(screen.getByText('開通權限')).toBeVisible()
+    expect(screen.getByText('建立角色')).toBeVisible()
+    expect(screen.getByText('其他操作')).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getAllByText('帳號：安娜 (anna)')).toHaveLength(2),
+    )
+    expect(screen.getByText('角色：現場工程師')).toBeVisible()
+    expect(screen.getByText('對象', { selector: 'dd' })).toBeVisible()
+    // 收合的「改前與改後內容」是給稽核者看的原始資料，不在白話範圍。
+    const page = document.body.cloneNode(true) as HTMLElement
+    page.querySelectorAll('details').forEach((node) => node.remove())
+    const visible = page.textContent ?? ''
+    expect(visible).not.toContain(entityId)
+    expect(visible).not.toContain(actorId)
+    expect(visible).not.toContain('user.active_changed')
+    expect(visible).not.toContain('future_thing')
+  })
+
   it('拒絕反向時間範圍且不送出查詢', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    await screen.findByText('project_zone.created')
+    await screen.findByText('建立分區')
     const before = fetcher.mock.calls.length
     fireEvent.change(screen.getByLabelText('起始時間（含）'), {
       target: { value: '2026-10-11T08:00' },
@@ -151,7 +216,7 @@ describe('稽核查詢頁', () => {
     expect(toInput).toHaveAttribute('aria-invalid', 'true')
     expect(toInput).toHaveAttribute('aria-describedby', 'audit-to-error')
     expect(fetcher.mock.calls).toHaveLength(before)
-    expect(screen.getByText('project_zone.created')).toBeInTheDocument()
+    expect(screen.getByText('建立分區')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('起始時間（含）'), {
       target: { value: '2026-10-09T08:00' },
@@ -165,7 +230,7 @@ describe('稽核查詢頁', () => {
   it('在事件類型格式錯誤時聚焦欄位並保留原結果', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    await screen.findByText('project_zone.created')
+    await screen.findByText('建立分區')
     const before = fetcher.mock.calls.length
     const input = screen.getByLabelText('事件類型')
     fireEvent.change(input, { target: { value: 'Project Zone' } })
@@ -178,13 +243,13 @@ describe('稽核查詢頁', () => {
       '事件類型格式應為資料類型.動作。',
     )
     expect(fetcher.mock.calls).toHaveLength(before)
-    expect(screen.getByText('project_zone.created')).toBeInTheDocument()
+    expect(screen.getByText('建立分區')).toBeInTheDocument()
   })
 
   it('在第二頁更改篩選後重新查第一頁', async () => {
     const fetcher = mockFetch()
     render(<AuditLogPage />)
-    await screen.findByText('project_zone.created')
+    await screen.findByText('建立分區')
     fireEvent.click(screen.getByRole('button', { name: '下一頁' }))
     await screen.findByText('第 2 頁')
     fireEvent.change(screen.getByLabelText('事件類型'), {
@@ -217,7 +282,7 @@ describe('稽核查詢頁', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.queryByText('載入稽核紀錄中…')).toBeNull()
-    expect(screen.queryByText('project_zone.created')).toBeNull()
+    expect(screen.queryByText('建立分區')).toBeNull()
   })
 
   it('顯示空結果狀態', async () => {

@@ -9,6 +9,7 @@ import {
   type AuditLogFilters,
   type AuditLogPage,
 } from './api'
+import { entityLabel, eventLabel } from './auditLabels'
 import './AuditLogPage.css'
 
 const emptyFilters: AuditLogFilters = {
@@ -150,14 +151,19 @@ export default function AuditLogPage() {
   }
 
   function actorName(id: string): string {
+    return userName(id) ?? '未知帳號'
+  }
+
+  // 內部編號不給人看：查不到名稱就回 null，由呼叫端決定怎麼說。
+  function userName(id: string): string | null {
     const user = users.find((candidate) => candidate.id === id)
-    return user ? `${user.name_zh || user.username} (${user.username})` : id
+    return user ? `${user.name_zh || user.username} (${user.username})` : null
   }
 
   function projectName(id: string | null): string {
     if (!id) return '無專案'
     const project = projects.find((candidate) => candidate.id === id)
-    return project ? `${project.name} (${project.project_code})` : id
+    return project ? `${project.name} (${project.project_code})` : '未知專案'
   }
 
   function entryCard(entry: AuditLogEntry) {
@@ -165,7 +171,7 @@ export default function AuditLogPage() {
       <li className="audit-entry" key={entry.id}>
         <article>
           <div className="audit-entry-heading">
-            <h2>{entry.event_type}</h2>
+            <h2>{eventLabel(entry)}</h2>
             <time dateTime={entry.created_at}>
               {new Date(entry.created_at).toLocaleString('zh-TW')}
             </time>
@@ -182,7 +188,17 @@ export default function AuditLogPage() {
             <div>
               <dt>對象</dt>
               <dd>
-                {entry.entity_type} · {entry.entity_id}
+                {entityLabel(entry, {
+                  userName,
+                  projectName: (id) => {
+                    const project = projects.find(
+                      (candidate) => candidate.id === id,
+                    )
+                    return project
+                      ? `${project.name} (${project.project_code})`
+                      : null
+                  },
+                })}
               </dd>
             </div>
           </dl>
