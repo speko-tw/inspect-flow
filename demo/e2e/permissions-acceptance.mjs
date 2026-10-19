@@ -286,6 +286,10 @@ try {
   await page.getByRole('button', { name: '管理 ▾' }).click()
   await page.getByRole('link', { name: '帳號', exact: true }).click()
   await page.getByRole('button', { name: '新增帳號' }).click()
+  // #713：第一步缺欄位時停在原地並在欄位旁說明。
+  await page.getByRole('button', { name: '下一步' }).click()
+  await page.getByText('請填寫帳號名稱。').first().waitFor()
+  assert.ok(await page.getByText('步驟 1／4：帳號資料').isVisible())
   await page.getByLabel('帳號名稱', { exact: true }).fill(
     'demo-role-check',
   )
@@ -302,6 +306,11 @@ try {
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByRole('button', { name: '建立帳號' }).click()
   await page.getByRole('heading', { name: '帳號已建立' }).waitFor()
+  // #713：完成頁只放臨時密碼與下一步，不出現「能做什麼」。
+  assert.equal(
+    await page.getByRole('heading', { name: '能做什麼' }).count(),
+    0,
+  )
   const temporaryPassword = await page.getByLabel('臨時密碼').innerText()
   assert.ok(temporaryPassword.length >= 12)
   const restrictedRole = await api('/roles', 'POST', {

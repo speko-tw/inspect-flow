@@ -39,6 +39,13 @@ export function PeoplePage({
   const [wizardDirty, setWizardDirty] = useState(false)
   const [userFormsDirty, setUserFormsDirty] = useState(false)
   const pageGuard = useUnsavedNavigationGuard(wizardDirty || userFormsDirty)
+  // 完成頁點導覽的「帳號」會連到同一個網址，路徑沒變、只有
+  // location.key 換新；此時精靈要收起，回到清單（#713）。
+  const [seenLocationKey, setSeenLocationKey] = useState(location.key)
+  if (seenLocationKey !== location.key) {
+    setSeenLocationKey(location.key)
+    setWizardRequest(0)
+  }
   const detailMatch = location.pathname.match(
     new RegExp(
       `^${ROUTES.adminPeople.path.replace('/:personId?', '')}/([^/]+)$`,

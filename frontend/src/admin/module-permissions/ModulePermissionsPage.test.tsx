@@ -45,6 +45,7 @@ interface FixtureOptions {
   testNavigation?: boolean
   onTemporaryPassword?: (username: string, password: string) => void
   failCreate?: boolean
+  createUserResponse?: Promise<Response>
   failUserAccess?: boolean
   participationResponse?: (path: string) => Promise<Response>
   bundleApplyResponse?: (path: string) => Promise<Response>
@@ -406,6 +407,7 @@ function permissionPage(options: FixtureOptions = {}) {
         })
       }
       if (method === 'POST' && path === '/users') {
+        if (options.createUserResponse) return options.createUserResponse
         if (options.failCreate) {
           return Response.json(
             { error: { code: 'user.email_conflict' } },
@@ -1009,6 +1011,7 @@ describe('ModulePermissionsPage', () => {
   it('uses plain manager and external job descriptions', async () => {
     permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('plain.jobs')
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
 
     const managerOption = screen
@@ -1042,6 +1045,7 @@ describe('ModulePermissionsPage', () => {
   it('allows previous navigation on steps two through four', async () => {
     permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('previous.nav')
 
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
     expect(screen.getByText('步驟 2／4：職務')).toBeVisible()
@@ -1306,6 +1310,122 @@ describe('ModulePermissionsPage', () => {
     ).toHaveLength(0)
   })
 
+  // #713：第一步缺欄位就按「下一步」，要停在第一步並在欄位旁說明。
+  it('stops on step one and marks each missing required field', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+
+    expect(screen.getByText('步驟 1／4：帳號資料')).toBeVisible()
+    const summary = screen.getByRole('alert', { name: '請修正以下問題' })
+    for (const label of ['帳號名稱', '姓名', '電子郵件']) {
+      expect(
+        within(summary).getByRole('link', { name: new RegExp(label) }),
+      ).toBeVisible()
+      const field = screen.getByLabelText(label)
+      expect(field).toBeInvalid()
+      expect(field).toHaveAccessibleDescription(`請填寫${label}。`)
+    }
+    expect(summary).toHaveFocus()
+
+    fireEvent.change(screen.getByLabelText('姓名'), {
+      target: { value: '林沐青' },
+    })
+    expect(screen.getByLabelText('姓名')).toBeValid()
+    // 補好的欄位要從錯誤摘要消失。
+    expect(within(screen.getByRole('alert')).queryByText(/姓名/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.getByText('步驟 1／4：帳號資料')).toBeVisible()
+    expect(screen.getByLabelText('姓名')).toBeValid()
+    expect(screen.getByLabelText('帳號名稱')).toBeInvalid()
+  })
+
+  it('treats whitespace-only required fields as missing', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('blank.email')
+    fireEvent.change(screen.getByLabelText('電子郵件'), {
+      target: { value: '   ' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+
+    expect(screen.getByText('步驟 1／4：帳號資料')).toBeVisible()
+    expect(screen.getByLabelText('電子郵件')).toBeInvalid()
+    expect(screen.getByLabelText('帳號名稱')).toBeValid()
+  })
+
+  it('places the email field above the optional details', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+
+    const email = screen.getByLabelText('電子郵件')
+    const details = screen.getByText('更多資料（選填）')
+    expect(
+      email.compareDocumentPosition(details) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('explains beside the create button why it cannot be pressed', async () => {
+    const pending = deferred<Response>()
+    const { calls } = permissionPage({ createUserResponse: pending.promise })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('busy.create')
+    await chooseProfile('內業規劃')
+
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+
+    const button = await screen.findByRole('button', { name: '建立帳號' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription('正在建立帳號，請稍候。')
+    expect(screen.getByText('正在建立帳號，請稍候。')).toBeVisible()
+    expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1)
+  })
+
+  it('shows the temporary password first and no ability card on completion', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('done.page')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+
+    const password = await screen.findByLabelText('臨時密碼')
+    const done = screen.getByRole('region', { name: '建立完成' })
+    expect(
+      screen.queryByRole('heading', { name: '能做什麼' }),
+    ).not.toBeInTheDocument()
+    const doneText = done.textContent ?? ''
+    expect(doneText.indexOf('臨時密碼')).toBeLessThan(
+      doneText.indexOf('的帳號與授權設定已完成'),
+    )
+    expect(done).toContainElement(password)
+  })
+
+  it.each(['現場查核', '外部協作'])(
+    'warns on the confirm step when %s has no project yet',
+    async (job) => {
+      permissionPage()
+      await screen.findByRole('heading', { name: '新增帳號' })
+      await fillIdentity('no.project')
+      await chooseProfile(job)
+
+      expect(screen.getByText('加入專案前看不到任何任務。')).toBeVisible()
+    },
+  )
+
+  it('omits the no-project warning once a project is chosen or for office jobs', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('with.project')
+    await chooseProfile('現場查核', 'project-1')
+
+    expect(
+      screen.queryByText('加入專案前看不到任何任務。'),
+    ).not.toBeInTheDocument()
+  })
+
   it('shows the temporary password on the completion screen', async () => {
     permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
@@ -1530,6 +1650,30 @@ describe('ModulePermissionsPage', () => {
     })
   })
 
+  it('shows the diagnosis result after the check button', async () => {
+    permissionPage({ openWizard: false })
+    await screen.findByRole('heading', { name: '帳號權限' })
+    fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
+    expect(await screen.findByText(/能使用：/)).toBeVisible()
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+
+    const result = await screen.findByText(/缺少查核功能的權限/)
+    const heading = screen.getByRole('heading', {
+      name: '為什麼他不能做這件事？',
+    })
+    const check = screen.getByRole('button', { name: '檢查' })
+    const follows = (earlier: Element, later: Element) =>
+      Boolean(
+        earlier.compareDocumentPosition(later) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+    expect(follows(heading, check)).toBe(true)
+    expect(follows(check, result)).toBe(true)
+  })
+
   it('never auto-selects a custom role that adds member management', async () => {
     const { calls } = permissionPage({
       openWizard: false,
@@ -1614,6 +1758,7 @@ describe('ModulePermissionsPage', () => {
   it('offers all five jobs without a separate identity step', async () => {
     const { calls } = permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('five.jobs')
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
 
     for (const job of [
