@@ -163,7 +163,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root:not([data-theme]),
+  :root[data-theme='system'],
+  :root[data-theme='light'],
+  :root[data-theme='dark'] {
     --motion-fast: 0ms;
     --motion-medium: 0ms;
   }
