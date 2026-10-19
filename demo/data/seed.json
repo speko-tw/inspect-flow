@@ -1,0 +1,346 @@
+{
+  "company": "示範公司",
+  "admin": {
+    "username": "admin",
+    "password": "DemoAdmin2026"
+  },
+  "accounts": [
+    {
+      "key": "office",
+      "username": "demo-office",
+      "name": "林承安",
+      "email": "demo-office@example.com",
+      "password": "DemoOffice2026",
+      "external": false,
+      "permissions": [
+        "project.create",
+        "inspection.use",
+        "template.use"
+      ],
+      "delegated_modules": []
+    },
+    {
+      "key": "manager",
+      "username": "demo-manager",
+      "name": "許庭安",
+      "email": "demo-manager@example.com",
+      "password": "DemoManager2026",
+      "external": false,
+      "permissions": ["all_project_progress.read"],
+      "delegated_modules": []
+    },
+    {
+      "key": "field_a",
+      "username": "demo-field-a",
+      "name": "吳怡君",
+      "email": "demo-field-a@example.com",
+      "password": "DemoFieldA2026",
+      "external": false,
+      "permissions": [
+        "project.use",
+        "inspection.use"
+      ],
+      "delegated_modules": []
+    },
+    {
+      "key": "field_b",
+      "username": "demo-field-b",
+      "name": "陳柏勳",
+      "email": "demo-field-b@example.com",
+      "password": "DemoFieldB2026",
+      "external": false,
+      "permissions": [
+        "project.use",
+        "inspection.use"
+      ],
+      "delegated_modules": []
+    },
+    {
+      "key": "consultant",
+      "username": "demo-consultant",
+      "name": "黃子晴",
+      "email": "demo-consultant@example.com",
+      "password": "DemoConsultant2026",
+      "external": true,
+      "permissions": [
+        "project.use",
+        "inspection.use",
+        "template.use"
+      ],
+      "delegated_modules": []
+    },
+    {
+      "key": "template_delegate",
+      "username": "demo-template-delegate",
+      "name": "張立衡",
+      "email": "demo-template-delegate@example.com",
+      "password": "DemoDelegate2026",
+      "external": false,
+      "permissions": [],
+      "delegated_modules": [
+        "template"
+      ]
+    },
+    {
+      "key": "template_manager",
+      "username": "demo-template-manager",
+      "name": "鄭亦凡",
+      "email": "demo-template-manager@example.com",
+      "password": "DemoTemplate2026",
+      "external": false,
+      "permissions": ["template.manage"],
+      "delegated_modules": []
+    },
+    {
+      "key": "no_access",
+      "username": "demo-no-access",
+      "name": "周子由",
+      "email": "demo-no-access@example.com",
+      "password": "DemoNoAccess2026",
+      "external": false,
+      "permissions": [],
+      "delegated_modules": []
+    }
+  ],
+  "roles": {
+    "office": "專案工程師",
+    "field": "現場工程師",
+    "reader": "專案查閱人員"
+  },
+  "projects": [
+    {
+      "key": "A",
+      "code": "DEMO-A",
+      "name": "示範大樓機電工程",
+      "client": "示範公司",
+      "location": "示範市和平路一段 100 號",
+      "members": [
+        [
+          "field_a",
+          "field"
+        ],
+        [
+          "field_b",
+          "field"
+        ]
+      ],
+      "tasks": [
+        {
+          "key": "a_pending",
+          "item": "排水管坡度檢查",
+          "zone": "一樓",
+          "location": "A 棟機房",
+          "assignee": "field_a",
+          "status": "PENDING",
+          "name": "大樓機房排水檢查"
+        }
+      ]
+    },
+    {
+      "key": "B",
+      "code": "DEMO-B",
+      "name": "示範廠擴建機電工程",
+      "client": "示範廠機電工程",
+      "location": "示範市工業一路 20 號",
+      "members": [
+        [
+          "field_a",
+          "field"
+        ],
+        [
+          "field_b",
+          "field"
+        ],
+        [
+          "consultant",
+          "reader"
+        ]
+      ],
+      "tasks": [
+        {
+          "key": "walkthrough",
+          "item": "排水管坡度檢查",
+          "zone": "一樓",
+          "location": "示範廠 A 棟機房（請開始查核）",
+          "assignee": "field_a",
+          "status": "DRAFT",
+          "name": "擴建廠機房派工示範"
+        },
+        {
+          "key": "pending_b",
+          "item": "給水管試壓檢查",
+          "zone": "二樓",
+          "location": "示範廠 B 棟茶水間",
+          "assignee": "field_b",
+          "status": "PENDING",
+          "name": "茶水間給水試壓"
+        },
+        {
+          "key": "in_progress",
+          "item": "止水閥標示檢查",
+          "zone": "一樓",
+          "location": "示範廠 C 棟泵房（已開始）",
+          "assignee": "field_a",
+          "status": "IN_PROGRESS",
+          "name": "泵房止水閥標示"
+        },
+        {
+          "key": "completed",
+          "item": "給水管試壓檢查",
+          "zone": "二樓",
+          "location": "示範廠 D 棟設備間（示範完成紀錄）",
+          "assignee": "field_b",
+          "status": "COMPLETED",
+          "name": "設備間試壓紀錄"
+        },
+        {
+          "key": "cancelled",
+          "item": "排水管坡度檢查",
+          "zone": "二樓",
+          "location": "示範廠 E 棟管道間（示範取消紀錄）",
+          "assignee": "field_a",
+          "status": "CANCELLED",
+          "name": "管道間排水坡度"
+        },
+        {
+          "key": "draft",
+          "item": "止水閥標示檢查",
+          "zone": "一樓",
+          "location": "示範廠 F 棟草稿任務",
+          "assignee": "field_a",
+          "status": "DRAFT",
+          "name": "草稿止水閥標示"
+        }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "title": "排水管坡度檢查",
+      "instruction": "確認排水橫管坡度與固定間距符合圖說。",
+      "points": [
+        {
+          "title": "排水橫管坡度",
+          "instruction": "沿管線量測坡度，並記錄管線編號。",
+          "fields": [
+            {
+              "name": "管線編號",
+              "type": "text"
+            },
+            {
+              "name": "實測坡度",
+              "type": "number",
+              "unit": "%",
+              "standard": {
+                "condition": "range",
+                "range_form": "interval",
+                "lower_bound": "1.0",
+                "upper_bound": "2.0"
+              }
+            }
+          ],
+          "photos": 1
+        },
+        {
+          "title": "支撐吊架間距",
+          "instruction": "量測相鄰兩組吊架的間距。",
+          "fields": [
+            {
+              "name": "吊架間距",
+              "type": "number",
+              "unit": "m",
+              "standard": {
+                "condition": "range",
+                "range_form": "tolerance",
+                "value": "1.5",
+                "tolerance": "0.2"
+              }
+            }
+          ],
+          "photos": 2
+        }
+      ]
+    },
+    {
+      "title": "給水管試壓檢查",
+      "instruction": "確認給水管完成試壓、保壓且接頭無滲漏。",
+      "points": [
+        {
+          "title": "試壓保壓壓力",
+          "instruction": "保壓 30 分鐘後讀取壓力表。",
+          "fields": [
+            {
+              "name": "保壓壓力",
+              "type": "number",
+              "unit": "MPa",
+              "standard": {
+                "condition": ">=",
+                "value": "1.0"
+              }
+            }
+          ],
+          "photos": 1
+        },
+        {
+          "title": "接頭外觀",
+          "instruction": "逐一檢視接頭是否滲水或變形。",
+          "text_standard": "接頭無滲漏、無變形",
+          "photos": 1
+        }
+      ]
+    },
+    {
+      "title": "止水閥標示檢查",
+      "instruction": "確認閥件標示清楚、開關方向正確。",
+      "points": [
+        {
+          "title": "閥件標示與開關方向",
+          "instruction": "檢視標示牌與閥件開關方向。",
+          "text_standard": "標示清楚、開關方向與標示一致",
+          "photos": 1
+        }
+      ]
+    },
+    {
+      "system": "電氣設備",
+      "title": "配電盤外觀檢查",
+      "instruction": "確認配電盤外觀與銘牌完整。",
+      "points": [
+        {
+          "title": "盤體與銘牌",
+          "instruction": "檢視盤體及銘牌內容。",
+          "fields": [
+            { "name": "配電盤編號", "type": "text" }
+          ],
+          "text_standard": "盤體完整，銘牌清晰可辨",
+          "photos": 1
+        }
+      ]
+    },
+    {
+      "system": "電氣設備",
+      "title": "接地電阻量測",
+      "instruction": "確認設備接地電阻符合設計要求。",
+      "points": [
+        {
+          "title": "接地電阻",
+          "instruction": "使用校驗有效的接地電阻計量測。",
+          "fields": [
+            {
+              "name": "接地電阻值",
+              "type": "number",
+              "unit": "Ω",
+              "standard": {
+                "condition": "range",
+                "range_form": "interval",
+                "lower_bound": "0",
+                "upper_bound": "10"
+              }
+            }
+          ],
+          "photos": 1
+        }
+      ]
+    }
+  ]
+}

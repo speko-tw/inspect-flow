@@ -915,6 +915,9 @@ function ModulePermissionsPageContent({
       } else {
         await addProjectMember(diagnosticProject, selectedUser, [candidate.id])
       }
+      // 補上角色後，「參與專案與角色」清單要跟著更新，
+      // 否則畫面會一直顯示補上前的角色（#708）。
+      setParticipationReload((request) => request + 1)
       await diagnose()
     } catch (caught) {
       setError(message(caught))
