@@ -94,18 +94,16 @@ def test_demo_accounts_cover_two_layer_access_identities():
             False,
         ),
     }
-    for key, (username, permissions, delegated, external) in (
-        expected.items()
-    ):
+    for key, (username, permissions, delegated, external) in expected.items():
         account = accounts[key]
         assert account["username"] == username
         assert set(account["permissions"]) == permissions
         assert account["delegated_modules"] == delegated
         assert account["external"] is external
 
-    assert "template.manage" not in accounts["template_delegate"][
-        "permissions"
-    ]
+    assert (
+        "template.manage" not in accounts["template_delegate"]["permissions"]
+    )
     assert accounts["no_access"]["permissions"] == []
     assert accounts["no_access"]["delegated_modules"] == []
 

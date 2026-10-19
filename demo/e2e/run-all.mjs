@@ -7,6 +7,7 @@ const tests = [
   'walkthrough.mjs',
   'field-acceptance.mjs',
   'template-acceptance.mjs',
+  'permissions-acceptance.mjs',
 ]
 
 for (const test of tests) {
