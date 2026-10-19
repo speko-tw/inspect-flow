@@ -1676,6 +1676,60 @@ describe('ModulePermissionsPage', () => {
     })
   })
 
+  it('reloads participation after adding a missing role to a member', async () => {
+    permissionPage({
+      openWizard: false,
+      memberRoleIds: ['office-role'],
+      permissionCodes: ['inspection.use'],
+    })
+    await screen.findByRole('heading', { name: '帳號權限' })
+    fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
+    const link = await screen.findByRole('link', { name: 'PR-1／示範工程' })
+    expect(link.closest('li')).toHaveTextContent('：專案工程師')
+    expect(link.closest('li')).not.toHaveTextContent('現場工程師')
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+    expect(
+      await screen.findByText(/沒有可以查看或執行任務的角色/),
+    ).toBeVisible()
+    assignCandidateRole('現場工程師')
+    expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
+
+    await waitFor(() => {
+      const refreshed = screen.getByRole('link', { name: 'PR-1／示範工程' })
+      expect(refreshed.closest('li')).toHaveTextContent(
+        '：專案工程師、現場工程師',
+      )
+    })
+  })
+
+  it('reloads participation after a first role creates the membership', async () => {
+    permissionPage({
+      openWizard: false,
+      permissionCodes: ['inspection.use'],
+    })
+    await screen.findByRole('heading', { name: '帳號權限' })
+    fireEvent.click(screen.getByRole('button', { name: '林沐青' }))
+    expect(await screen.findByText('目前沒有參與專案。')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+    expect(
+      await screen.findByText(/沒有可以查看或執行任務的角色/),
+    ).toBeVisible()
+    assignCandidateRole('現場工程師')
+    expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
+
+    const refreshed = await screen.findByRole('link', {
+      name: 'PR-1／示範工程',
+    })
+    expect(refreshed.closest('li')).toHaveTextContent('：現場工程師')
+    expect(screen.queryByText('目前沒有參與專案。')).toBeNull()
+  })
+
   it('keeps membership when role assignment fails', async () => {
     const { calls } = permissionPage({
       openWizard: false,
