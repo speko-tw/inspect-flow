@@ -50,7 +50,7 @@ async function api(pathname, method = 'GET', body) {
 }
 
 async function openApply(projectName) {
-  await page.getByRole('link', { name: '我的專案' }).click()
+  await page.getByRole('link', { name: '專案', exact: true }).click()
   const project = page.locator('article').filter({ hasText: projectName })
   await project.getByRole('link', { name: '套用範本' }).click()
   await page.getByRole('heading', { name: '套用範本到專案' }).waitFor()
@@ -128,7 +128,7 @@ try {
     beforeDuplicate.data.items.length,
   )
 
-  await page.getByRole('link', { name: '我的專案' }).click()
+  await page.getByRole('link', { name: '專案', exact: true }).click()
   const projectA = page.locator('article').filter({
     hasText: '示範大樓機電工程',
   })
@@ -159,7 +159,7 @@ try {
   assert.equal(copiedPoint.measurement_fields[0].unit, 'Ω')
 
   await signIn('admin', 'DemoAdmin2026')
-  await page.getByRole('link', { name: '專案' }).click()
+  await page.getByRole('link', { name: '專案', exact: true }).click()
   const projectB = page.locator('article').filter({
     hasText: '示範廠擴建機電工程',
   })
@@ -181,12 +181,31 @@ try {
   })
 
   await signIn('demo-consultant', 'DemoConsultant2026')
-  await page.getByRole('link', { name: '範本管理' }).click()
-  await page.getByRole('heading', { name: '範本管理' }).waitFor()
-  await page.getByRole('button', { name: '建築工程' }).waitFor()
-  await page.getByRole('button', { name: '新增工程類別' }).waitFor({
+  const externalProjectCards = page.locator('article')
+  await page.getByRole('link', { name: '專案', exact: true }).click()
+  const externalProject = externalProjectCards.filter({
+    hasText: '示範廠擴建機電工程',
+  })
+  await externalProject.getByRole('link', { name: '開啟專案' }).waitFor()
+  await externalProject.getByRole('link', { name: '套用範本' }).waitFor({
     state: 'detached',
   })
+  assert.equal(
+    await page.getByRole('link', { name: '範本', exact: true }).count(),
+    0,
+  )
+  await page.goto(`${base}/templates`)
+  await page.getByRole('heading', { name: '無權限' }).waitFor()
+  await page.getByText('你沒有權限瀏覽範本庫。').waitFor()
+  await page.goto(
+    `${base}/projects/${result.projects.B}/inspection-items/templates`,
+  )
+  await page.getByRole('heading', { name: '套用範本到專案' }).waitFor()
+  assert.equal(
+    await page.getByRole('button', { name: '套用至專案' }).count(),
+    0,
+  )
+  assert.equal(await api('/template-categories').then((r) => r.status), 200)
   const deniedWrite = await api('/template-categories', 'POST', {
     name: '不應建立的外部範本類別',
   })
