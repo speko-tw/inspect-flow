@@ -328,6 +328,95 @@ def test_me_reports_access_summary(world, who, expected) -> None:
     assert _access(resp.json()) == expected
 
 
+@pytest.mark.parametrize(
+    ("who", "expected"),
+    [
+        ("admin", True),
+        ("field", True),
+        ("both", True),
+        ("split", True),
+        ("office", False),
+        ("reader", False),
+        ("nobody", False),
+        ("module_only", False),
+    ],
+)
+def test_me_reports_task_inspection_capability(
+    world, who: str, expected: bool
+) -> None:
+    response = world[who].get(ME)
+
+    assert response.status_code == 200
+    assert response.json()["can_inspect_tasks"] is expected
+
+
+def test_me_task_inspection_capability_updates_after_module_revocation(
+    world,
+) -> None:
+    user = world["db"].query(User).filter_by(username="field").one()
+    permission = (
+        world["db"]
+        .query(UserModulePermission)
+        .filter_by(user_id=user.id, permission_code="inspection.use")
+        .one()
+    )
+    world["db"].delete(permission)
+    world["db"].commit()
+
+    response = world["field"].get(ME)
+
+    assert response.status_code == 200
+    assert response.json()["can_inspect_tasks"] is False
+
+
+@pytest.mark.parametrize(
+    ("who", "expected"),
+    [
+        ("admin", True),
+        ("office", True),
+        ("reader", False),
+        ("field", False),
+    ],
+)
+def test_me_reports_project_planning_or_member_management(
+    world, who: str, expected: bool
+) -> None:
+    response = world[who].get(ME)
+
+    assert response.status_code == 200
+    assert (
+        response.json()["can_manage_project_planning_or_members"] is expected
+    )
+
+
+def test_project_planning_permission_requires_its_module_use(world) -> None:
+    db = world["db"]
+    user = create_user(
+        db,
+        username="planmanager-no-module",
+        email="planmanager-no-module@demo.example",
+        name_zh="無模組權限的計畫管理者",
+        is_external_collaborator=False,
+    )
+    plan_manager_role = create_role(
+        db,
+        name="計畫管理者",
+        permission_codes=["inspection_plan.create"],
+    )
+    add_project_member(
+        db,
+        project_id=world["project_a"].id,
+        user_id=user.id,
+        role_ids=[plan_manager_role.id],
+    )
+    db.commit()
+
+    response = _client_for(db, world["make_client"], user).get(ME)
+
+    assert response.status_code == 200
+    assert response.json()["can_manage_project_planning_or_members"] is False
+
+
 def test_me_reports_new_project_and_delegation_flags(world) -> None:
     admin = world["admin"].get(ME).json()
     assert admin["can_create_project"] is True

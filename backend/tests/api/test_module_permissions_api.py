@@ -63,6 +63,10 @@ def test_module_permission_route_contract() -> None:
         assert route.declaration is not None
         routes[(route.method, route.path)] = route.declaration.level
     assert {
+        (
+            "GET",
+            "/api/v1/users/{user_id}/participating-projects",
+        ): AccessLevel.ADMIN_REQUIRED,
         ("GET", "/api/v1/module-permissions"): (
             AccessLevel.MODULE_DELEGATE_REQUIRED
         ),
@@ -353,6 +357,122 @@ def test_delegate_scope_denial_is_audited_and_bundle_is_atomic(
         "items": [],
         "next_cursor": None,
     }
+
+
+def test_delegate_cannot_query_or_change_admin_module_permissions(
+    db_session, make_client
+):
+    admin = _admin(db_session, "ADM-TGT-SYS")
+    non_system_admin = _user(db_session, "admin-target-non-system")
+    non_system_admin.is_admin = True
+    delegate = _user(db_session, "admin-target-delegate")
+    db_session.add(
+        UserModuleDelegation(user_id=delegate.id, module="template")
+    )
+    db_session.commit()
+    admin_client = _client_for(admin, db_session, make_client)
+    delegate_client = _client_for(delegate, db_session, make_client)
+
+    bundle_response = admin_client.post(
+        "/api/v1/permission-bundles",
+        json={"name": "Template access", "permission_codes": ["template.use"]},
+    )
+    assert bundle_response.status_code == 201, bundle_response.text
+    bundle_id = bundle_response.json()["id"]
+
+    visible_users = delegate_client.get("/api/v1/module-delegate/users")
+    assert visible_users.status_code == 200
+    visible_ids = {item["id"] for item in visible_users.json()["items"]}
+    assert str(admin.id) not in visible_ids
+    assert str(non_system_admin.id) not in visible_ids
+
+    for target in (admin, non_system_admin):
+        baseline = delegate_client.get(
+            f"/api/v1/users/{target.id}/effective-access"
+            f"?project_id={UUID(int=0)}"
+        )
+        assert baseline.status_code == 403
+
+        before_permissions = list(
+            db_session.scalars(
+                select(UserModulePermission).where(
+                    UserModulePermission.user_id == target.id
+                )
+            )
+        )
+        before_delegations = list(
+            db_session.scalars(
+                select(UserModuleDelegation).where(
+                    UserModuleDelegation.user_id == target.id
+                )
+            )
+        )
+        before_audit = list(
+            db_session.scalars(
+                select(AuditLog).where(AuditLog.entity_id == target.id)
+            )
+        )
+
+        denied_responses = [
+            delegate_client.get(
+                f"/api/v1/users/{target.id}/module-permissions"
+            ),
+            delegate_client.get(
+                f"/api/v1/users/{target.id}/module-permissions/"
+                "template.use/revoke-impact"
+            ),
+            delegate_client.put(
+                f"/api/v1/users/{target.id}/module-permissions/template.use"
+            ),
+            delegate_client.delete(
+                f"/api/v1/users/{target.id}/module-permissions/template.use"
+            ),
+            delegate_client.post(
+                f"/api/v1/users/{target.id}/permission-bundles/"
+                f"{bundle_id}:apply"
+            ),
+        ]
+
+        for response in denied_responses:
+            assert response.status_code == 403
+            assert response.json() == baseline.json()
+
+        db_session.expire_all()
+        assert (
+            list(
+                db_session.scalars(
+                    select(UserModulePermission).where(
+                        UserModulePermission.user_id == target.id
+                    )
+                )
+            )
+            == before_permissions
+        )
+        assert (
+            list(
+                db_session.scalars(
+                    select(UserModuleDelegation).where(
+                        UserModuleDelegation.user_id == target.id
+                    )
+                )
+            )
+            == before_delegations
+        )
+        assert (
+            list(
+                db_session.scalars(
+                    select(AuditLog).where(AuditLog.entity_id == target.id)
+                )
+            )
+            == before_audit
+        )
+
+    assert (
+        admin_client.get(
+            f"/api/v1/users/{admin.id}/module-permissions"
+        ).status_code
+        == 200
+    )
 
 
 def test_module_delegation_and_bundle_crud_are_admin_only(

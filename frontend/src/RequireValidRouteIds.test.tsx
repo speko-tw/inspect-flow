@@ -28,6 +28,7 @@ const ADMIN = currentUserFixture({
   is_admin: true,
   has_office_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
 })
 const OFFICE = { ...ADMIN, is_admin: false, has_template_access: false }
@@ -117,7 +118,7 @@ describe('特製網址的路由參數', () => {
         '/planning',
       ]) {
         stubBackend(user)
-        await renderApp(`/admin/projects/${EVIL}${section}`)
+        await renderApp(`/projects/${EVIL}${section}`)
 
         expect(
           await screen.findByRole('heading', { name: '找不到這個專案' }),
@@ -130,10 +131,10 @@ describe('特製網址的路由參數', () => {
 
   it('專案範本頁的轉址也不帶特製 id', async () => {
     stubBackend(ADMIN)
-    await renderApp(`/admin/projects/${EVIL}/templates`)
+    await renderApp(`/projects/${EVIL}/templates`)
 
     expect(
-      await screen.findByRole('heading', { name: '找不到這個專案' }),
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
     expect(dataRequests()).toEqual([])
   })
@@ -143,14 +144,14 @@ describe('特製網址的路由參數', () => {
     await renderApp(`/field/projects/${EVIL}`)
 
     expect(
-      await screen.findByRole('heading', { name: '找不到這個專案' }),
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
     expect(dataRequests()).toEqual([])
   })
 
   it('查核項目 id 格式不符：顯示找不到，不發出 API 請求', async () => {
     stubBackend(ADMIN)
-    await renderApp(`/admin/projects/project-a/inspection-items/${EVIL}`)
+    await renderApp(`/projects/project-a/inspection-items/${EVIL}`)
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個查核項目' }),

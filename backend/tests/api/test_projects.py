@@ -1751,6 +1751,33 @@ def test_list_members_includes_company_and_inactive_user(
     assert row["is_active"] is False
 
 
+def test_list_members_marks_external_collaborators(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    assert isinstance(project, Project)
+    company_user = create_root_user_with_company(db_session, "EXT278")
+    assert company_user.company_id is not None
+    external = create_user(
+        db_session,
+        username="external.member",
+        email="external.member@demo.example",
+        name_zh="外部成員",
+        is_external_collaborator=True,
+    )
+    external.company_id = company_user.company_id
+    add_project_member(db_session, project_id=project.id, user_id=external.id)
+    db_session.commit()
+
+    response = project_api["admin_client"].get(
+        f"/api/v1/projects/{project.id}/members"
+    )
+
+    assert response.status_code == 200
+    row = next(r for r in response.json() if r["user_id"] == str(external.id))
+    assert row["is_external_collaborator"] is True
+
+
 def test_member_list_query_count_does_not_grow(
     project_api, db_session: Session
 ):

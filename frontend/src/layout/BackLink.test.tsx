@@ -8,11 +8,11 @@ describe('BackLink', () => {
   it('is a router link named 返回X with a hidden chevron', () => {
     render(
       <MemoryRouter>
-        <BackLink to="/admin/projects">返回專案清單</BackLink>
+        <BackLink to="/projects">返回專案清單</BackLink>
       </MemoryRouter>,
     )
     const link = screen.getByRole('link', { name: '返回專案清單' })
-    expect(link).toHaveAttribute('href', '/admin/projects')
+    expect(link).toHaveAttribute('href', '/projects')
     expect(link).toHaveClass('back-link')
     expect(link.querySelector('[aria-hidden="true"]')).toHaveTextContent('‹')
   })

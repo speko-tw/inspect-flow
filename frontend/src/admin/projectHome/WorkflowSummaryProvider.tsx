@@ -6,9 +6,10 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { useLocation } from 'react-router'
+import { matchPath, useLocation } from 'react-router'
 
 import { getWorkflowSummary, type WorkflowSummary } from './api'
+import { ROUTES } from '../../routes'
 
 // Project home and its first destination share one response during the short
 // route transition. A summary must not become a long-lived permission cache.
@@ -29,8 +30,10 @@ const WorkflowSummaryContext =
   createContext<WorkflowSummaryContextValue | null>(null)
 
 function routeProjectId(pathname: string): string | null {
-  const match = pathname.match(/^\/admin\/projects\/([^/]+)/)
-  return match?.[1] ?? null
+  return (
+    matchPath({ path: ROUTES.projectHome.path, end: false }, pathname)?.params
+      .projectId ?? null
+  )
 }
 
 /**

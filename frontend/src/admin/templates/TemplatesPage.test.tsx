@@ -398,6 +398,15 @@ async function startNewItem(): Promise<void> {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('TemplatesPage', () => {
+  it('uses the shared full page title', async () => {
+    templateFetch()
+    render(<TemplatesPage canManage />)
+
+    expect(
+      await screen.findByRole('heading', { name: '查核範本' }),
+    ).toBeVisible()
+  })
+
   it('updates the mobile detail cue when the media query changes', async () => {
     let matches = false
     const listeners = new Set<() => void>()

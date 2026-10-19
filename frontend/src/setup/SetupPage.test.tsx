@@ -141,7 +141,7 @@ function renderApp(path: string) {
           }
         />
         <Route path="/setup" element={<SetupPage />} />
-        <Route path="/admin" element={<h1>管理頁</h1>} />
+        <Route path="/accounts" element={<h1>管理頁</h1>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -373,7 +373,7 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe(INVALID_CODE_MESSAGE)
     })
-    expect(screen.queryByRole('heading', { name: '新增使用者' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '新增帳號' })).toBeNull()
   })
 
   it('步驟 1 沒有輸入碼時不進入步驟 2', async () => {
@@ -406,7 +406,7 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
     const steps = screen.getByRole('list', { name: '設定步驟' })
     expect(steps).toHaveTextContent('首次登入碼')
     expect(steps).toHaveTextContent('設定 admin 密碼')
-    expect(steps).toHaveTextContent('新增第一個使用者')
+    expect(steps).toHaveTextContent('新增第一個帳號')
     expect(stepItem(steps, '首次登入碼')).toHaveAttribute(
       'aria-current',
       'step',
@@ -470,7 +470,7 @@ describe('首次設定：碼與密碼（AUT-R29、AUT-R44）', () => {
 
     fillPassword('code-123', '一二三四五六七八')
 
-    await screen.findByRole('heading', { name: '新增使用者' })
+    await screen.findByRole('heading', { name: '新增帳號' })
     expect(
       backend.calls.some((call) => call.url.endsWith('/admin-password')),
     ).toBe(true)
@@ -562,7 +562,7 @@ describe('首次設定第 3 步完成畫面的臨時密碼（#284 第 7 項）',
     renderApp('/setup')
     await screen.findByLabelText('首次登入碼')
     fillPassword('code-123', VALID_PASSWORD)
-    await screen.findByRole('heading', { name: '新增使用者' })
+    await screen.findByRole('heading', { name: '新增帳號' })
     fireEvent.change(screen.getByLabelText(/^帳號名稱/), {
       target: { value: 'anna.deng' },
     })
@@ -572,8 +572,8 @@ describe('首次設定第 3 步完成畫面的臨時密碼（#284 第 7 項）',
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
-    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
-    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
 
     await screen.findByLabelText('臨時密碼')
     expect(screen.getByRole('button', { name: '複製' })).toBeInTheDocument()
@@ -589,7 +589,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     fillPassword(' code-123 ', VALID_PASSWORD)
 
     // 設定成功後狀態變 false，流程不可被導走。
-    await screen.findByRole('heading', { name: '新增使用者' })
+    await screen.findByRole('heading', { name: '新增帳號' })
     const passwordCall = backend.calls.find((call) =>
       call.url.endsWith('/admin-password'),
     )
@@ -608,8 +608,8 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
-    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
-    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
 
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'Tmp-PassW0rd-123',
@@ -634,7 +634,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     await screen.findByLabelText('首次登入碼')
 
     fillPassword('code-123', VALID_PASSWORD)
-    await screen.findByRole('heading', { name: '新增使用者' })
+    await screen.findByRole('heading', { name: '新增帳號' })
 
     fireEvent.click(screen.getByRole('link', { name: '略過，進入管理頁' }))
     expect(
@@ -647,7 +647,7 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     renderApp('/setup')
     await screen.findByLabelText('首次登入碼')
     fillPassword('code-123', VALID_PASSWORD)
-    await screen.findByRole('heading', { name: '新增使用者' })
+    await screen.findByRole('heading', { name: '新增帳號' })
 
     const original = globalThis.fetch
     vi.stubGlobal(
@@ -675,8 +675,8 @@ describe('首次設定：設定密碼後新增第一個使用者（AUT-AC65）',
     fireEvent.change(screen.getByLabelText(/^中文姓名/), {
       target: { value: '鄧安娜' },
     })
-    fireEvent.click(screen.getByRole('radio', { name: '內部人員' }))
-    fireEvent.click(screen.getByRole('button', { name: '新增使用者' }))
+    fireEvent.click(screen.getByRole('radio', { name: '內部帳號' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增帳號' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '帳號名稱已被使用。',

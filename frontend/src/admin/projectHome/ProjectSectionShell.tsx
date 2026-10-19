@@ -2,18 +2,36 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router'
 
 import { BackLink } from '../../layout/BackLink'
+import { ROUTES } from '../../routes'
+import { PAGE_TITLES } from '../../terms'
 
 const SECTIONS = [
-  { id: 'home', label: '專案首頁', suffix: '' },
-  { id: 'members', label: '成員', suffix: '/members' },
+  { id: 'home', label: PAGE_TITLES.projectHome, route: ROUTES.projectHome },
+  {
+    id: 'members',
+    label: PAGE_TITLES.projectMembers,
+    route: ROUTES.projectMembers,
+  },
   {
     id: 'inspection-items',
-    label: '查核項目',
-    suffix: '/inspection-items',
+    label: PAGE_TITLES.projectItems,
+    route: ROUTES.projectItems,
   },
-  { id: 'zones', label: '分區', suffix: '/zones' },
-  { id: 'planning', label: '計畫與任務', suffix: '/planning' },
-  { id: 'progress', label: '進度', suffix: '/progress' },
+  {
+    id: 'zones',
+    label: PAGE_TITLES.projectZones,
+    route: ROUTES.projectZones,
+  },
+  {
+    id: 'planning',
+    label: PAGE_TITLES.projectPlanning,
+    route: ROUTES.projectPlanning,
+  },
+  {
+    id: 'progress',
+    label: PAGE_TITLES.projectProgress,
+    route: ROUTES.projectProgress,
+  },
 ]
 
 const SECTION_PERMISSIONS: Record<ProjectSection, string[]> = {
@@ -53,7 +71,6 @@ export default function ProjectSectionShell({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const location = useLocation()
-  const base = `/admin/projects/${projectId}`
   const routeState = location.state as { highlightedItemIds?: unknown } | null
   const highlightedItemIds = Array.isArray(routeState?.highlightedItemIds)
     ? routeState.highlightedItemIds.filter(
@@ -88,7 +105,7 @@ export default function ProjectSectionShell({
               ? { highlightedItemIds }
               : undefined
           }
-          to={`${base}${section.suffix}`}
+          to={section.route.path.replace(':projectId', projectId)}
         >
           {section.label}
         </NavLink>
@@ -99,7 +116,7 @@ export default function ProjectSectionShell({
   return (
     <div className="project-home-layout">
       <header className="project-home-header">
-        <BackLink to="/admin/projects">返回專案清單</BackLink>
+        <BackLink to={ROUTES.adminProjects.path}>返回專案清單</BackLink>
         <h1>
           {project ? `${project.project_code}｜${project.name}` : '專案'}
         </h1>

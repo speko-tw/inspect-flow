@@ -19,6 +19,12 @@
   color: var(--color-text-inverse);
 }
 
+.dashboard-shell .app-header-management-trigger {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+}
+
 .dashboard-shell .topbar-badge {
   border-color: var(--color-brand-accent);
   color: var(--color-brand-accent);

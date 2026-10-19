@@ -6,6 +6,7 @@ import type { InspectionTask } from '../planning/api'
 import type { WorkflowSummary } from '../projectHome/api'
 import { ManagementApiError } from '../api'
 import { markSignedOut, resetSessionMemory } from '../../auth/sessionMemory'
+import { currentUserFixture } from '../../testing/contractFixtures'
 import ProgressPage, { resetProgressListMemory } from './ProgressPage'
 import progressContract from './fixtures/project-progress-contract.json'
 
@@ -23,7 +24,7 @@ vi.mock('../projectHome/api', () => ({
   getWorkflowSummary: mocks.summary,
 }))
 vi.mock('../../auth/useCurrentUser', () => ({
-  useCurrentUser: () => ({ user: { id: 'viewer' } }),
+  useCurrentUser: () => ({ user: currentUserFixture({ id: 'viewer' }) }),
 }))
 
 const projectId = '11111111-1111-7111-8111-111111111111'
@@ -120,22 +121,20 @@ function page(initial: string) {
             <>
               <p>其他頁面</p>
               <BrowserBack />
-              <Link
-                to={`/admin/projects/${projectId}/progress?status=PENDING`}
-              >
+              <Link to={`/projects/${projectId}/progress?status=PENDING`}>
                 返回進度
               </Link>
             </>
           }
         />
         <Route
-          path="/admin/projects/:projectId/progress"
+          path="/projects/:projectId/progress"
           element={
             <ProgressPage viewerPermissions={['inspection_task.read']} />
           }
         />
         <Route
-          path="/admin/projects/:projectId/progress/tasks/:taskId"
+          path="/projects/:projectId/progress/tasks/:taskId"
           element={
             <ProgressPage viewerPermissions={['inspection_task.read']} />
           }
@@ -163,7 +162,7 @@ beforeEach(() => {
 })
 
 it('keeps filter focus and reloads when returning to the list directly', async () => {
-  page(`/admin/projects/${projectId}/progress`)
+  page(`/projects/${projectId}/progress`)
   const pending = await screen.findByRole('link', { name: '待開始 1' })
   pending.focus()
   fireEvent.click(pending)
@@ -182,7 +181,7 @@ it('keeps filter focus and reloads when returning to the list directly', async (
 })
 
 it('refetches when browser Back revisits a consumed detail return entry', async () => {
-  page(`/admin/projects/${projectId}/progress`)
+  page(`/projects/${projectId}/progress`)
   fireEvent.click(await screen.findByRole('link', { name: /表面檢查等 2 項/ }))
   await screen.findByRole('heading', { name: '任務詳情' })
   fireEvent.click(screen.getByRole('link', { name: '返回進度' }))
@@ -198,7 +197,7 @@ it('refetches when browser Back revisits a consumed detail return entry', async 
 })
 
 it('refetches after leaving detail through the header', async () => {
-  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  page(`/projects/${projectId}/progress?status=PENDING`)
   fireEvent.click(
     await screen.findByRole('link', {
       name: /表面檢查等 2 項/,
@@ -211,7 +210,7 @@ it('refetches after leaving detail through the header', async () => {
 })
 
 it('does not mark a modified card click as a detail return', async () => {
-  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  page(`/projects/${projectId}/progress?status=PENDING`)
   const card = await screen.findByRole('link', {
     name: /表面檢查等 2 項/,
   })
@@ -226,7 +225,7 @@ it('uses the saved task name before the item summary', async () => {
   const renamed = { ...task(), name: '自訂巡檢任務' }
   mocks.list.mockResolvedValueOnce({ items: [renamed], next_cursor: null })
   mocks.detail.mockResolvedValueOnce(renamed)
-  page(`/admin/projects/${projectId}/progress`)
+  page(`/projects/${projectId}/progress`)
   const card = await screen.findByRole('link', { name: /自訂巡檢任務/ })
   expect(card).not.toHaveTextContent('表面檢查等 2 項')
   fireEvent.click(card)
@@ -238,7 +237,7 @@ it('uses the saved task name before the item summary', async () => {
 })
 
 it('shows seven server filtered links and a single keyboard reachable card', async () => {
-  page(`/admin/projects/${projectId}/progress?status=reinspection`)
+  page(`/projects/${projectId}/progress?status=reinspection`)
   const current = await screen.findByRole('link', {
     name: '待重查 1',
   })
@@ -255,8 +254,7 @@ it('shows seven server filtered links and a single keyboard reachable card', asy
   expect(card.querySelector('.badge')?.parentElement).toBe(card)
   expect(card).toHaveAttribute(
     'href',
-    `/admin/projects/${projectId}/progress/tasks/${taskId}` +
-      '?status=reinspection',
+    `/projects/${projectId}/progress/tasks/${taskId}` + '?status=reinspection',
   )
   expect(card).toHaveTextContent('未填地點')
   expect(card).toHaveTextContent('未指派')
@@ -264,7 +262,7 @@ it('shows seven server filtered links and a single keyboard reachable card', asy
 })
 
 it('treats an unknown URL filter as all without hiding the list', async () => {
-  page(`/admin/projects/${projectId}/progress?status=BOGUS`)
+  page(`/projects/${projectId}/progress?status=BOGUS`)
   expect(await screen.findByRole('link', { name: '全部 1' })).toHaveAttribute(
     'aria-current',
     'true',
@@ -279,7 +277,7 @@ it('treats an unknown URL filter as all without hiding the list', async () => {
 
 it('keeps cards visible when summary counts fail', async () => {
   mocks.summary.mockRejectedValueOnce(new Error('network'))
-  page(`/admin/projects/${projectId}/progress?status=CANCELLED`)
+  page(`/projects/${projectId}/progress?status=CANCELLED`)
   expect(
     await screen.findByRole('link', {
       name: /表面檢查等 2 項/,
@@ -296,7 +294,7 @@ it('marks archived plans without presenting an archived recheck as pending', asy
     items: [archived],
     next_cursor: null,
   })
-  page(`/admin/projects/${projectId}/progress?status=IN_PROGRESS`)
+  page(`/projects/${projectId}/progress?status=IN_PROGRESS`)
   const card = await screen.findByRole('link', {
     name: /表面檢查等 2 項/,
   })
@@ -309,7 +307,7 @@ it('does not render a task from a different project', async () => {
     ...task(),
     project_id: 'another-project',
   })
-  page(`/admin/projects/${projectId}/progress/tasks/${taskId}`)
+  page(`/projects/${projectId}/progress/tasks/${taskId}`)
   expect(
     await screen.findByRole('heading', {
       name: '找不到這筆任務',
@@ -324,7 +322,7 @@ it.each([404, 422])(
     mocks.detail.mockRejectedValueOnce(
       new ManagementApiError(status, 'resource.not_found'),
     )
-    page(`/admin/projects/${projectId}/progress/tasks/${taskId}`)
+    page(`/projects/${projectId}/progress/tasks/${taskId}`)
     expect(
       await screen.findByRole('heading', { name: '找不到這筆任務' }),
     ).toHaveProperty('tagName', 'H2')
@@ -336,7 +334,7 @@ it('renders a forbidden task with a section heading', async () => {
   mocks.detail.mockRejectedValueOnce(
     new ManagementApiError(403, 'permission.denied'),
   )
-  page(`/admin/projects/${projectId}/progress/tasks/${taskId}`)
+  page(`/projects/${projectId}/progress/tasks/${taskId}`)
   expect(
     await screen.findByRole('heading', { name: '無權限' }),
   ).toHaveProperty('tagName', 'H2')
@@ -345,7 +343,7 @@ it('renders a forbidden task with a section heading', async () => {
 
 it('shows an empty-state message when the selected filter has no tasks', async () => {
   mocks.list.mockResolvedValueOnce({ items: [], next_cursor: null })
-  page(`/admin/projects/${projectId}/progress?status=CANCELLED`)
+  page(`/projects/${projectId}/progress?status=CANCELLED`)
   expect(await screen.findByText('這個狀態目前沒有任務。')).toBeVisible()
 })
 
@@ -359,7 +357,7 @@ it('restores multiple loaded pages and the scroll position after task detail', a
   mocks.list
     .mockResolvedValueOnce({ items: [task()], next_cursor: 'next-page' })
     .mockResolvedValueOnce({ items: [second], next_cursor: null })
-  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  page(`/projects/${projectId}/progress?status=PENDING`)
   fireEvent.click(await screen.findByRole('button', { name: '載入更多' }))
   expect(await screen.findByRole('link', { name: /鋼筋檢查/ })).toBeVisible()
 
@@ -377,7 +375,7 @@ it('restores multiple loaded pages and the scroll position after task detail', a
 })
 
 it('clears saved progress pages when the user signs out', async () => {
-  page(`/admin/projects/${projectId}/progress`)
+  page(`/projects/${projectId}/progress`)
   fireEvent.click(await screen.findByRole('link', { name: /表面檢查等 2 項/ }))
   await screen.findByRole('heading', { name: '任務詳情' })
   markSignedOut()
@@ -395,7 +393,7 @@ it('preserves loaded cards after a load more error and retries the cursor', asyn
     })
     .mockRejectedValueOnce(new Error('network'))
     .mockResolvedValueOnce({ items: [], next_cursor: null })
-  page(`/admin/projects/${projectId}/progress?status=COMPLETED`)
+  page(`/projects/${projectId}/progress?status=COMPLETED`)
   fireEvent.click(
     await screen.findByRole('button', {
       name: '載入更多',
@@ -417,7 +415,7 @@ it('preserves loaded cards after a load more error and retries the cursor', asyn
 })
 
 it('returns to the saved filter and cards after opening read only detail', async () => {
-  page(`/admin/projects/${projectId}/progress?status=PENDING`)
+  page(`/projects/${projectId}/progress?status=PENDING`)
   fireEvent.click(
     await screen.findByRole('link', {
       name: /表面檢查等 2 項/,

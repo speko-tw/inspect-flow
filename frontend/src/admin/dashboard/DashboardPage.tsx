@@ -300,7 +300,6 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
     <section aria-labelledby="dashboard-heading" className="dashboard-page">
       <div className="dashboard-heading">
         <div>
-          <p className="dashboard-eyebrow">管理後台</p>
           <h1 id="dashboard-heading">
             {tab === 'projects' ? '專案進度總覽' : '工程師工作量'}
           </h1>
@@ -360,7 +359,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
         </select>
         <span className="dashboard-scope-hint">
           {globalAccess
-            ? '範圍依你的模組權限決定。'
+            ? '範圍依你擁有的權限決定。'
             : '只會列出你具備進度查看權限的專案。'}
         </span>
       </div>
@@ -451,7 +450,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
                 onSelect={(projectId) => {
                   setSelectedProject(projectId)
                   navigate(
-                    '/admin/dashboard/projects/' +
+                    '/overview/projects/' +
                       encodeURIComponent(projectId) +
                       '/tasks',
                   )

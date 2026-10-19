@@ -9,6 +9,7 @@ import { useState } from 'react'
 
 import { logout } from './api'
 import { useCurrentUser } from './useCurrentUser'
+import { NAV_LABELS } from '../layout/navigationLabels'
 
 const ERROR_MESSAGE = '登出失敗，請再試一次。'
 
@@ -42,7 +43,7 @@ export default function LogoutButton({
   return (
     <>
       <button type="button" onClick={handleClick} disabled={loggingOut}>
-        登出
+        {NAV_LABELS.logout}
       </button>
       {error && !onErrorChange && <p role="alert">{ERROR_MESSAGE}</p>}
     </>

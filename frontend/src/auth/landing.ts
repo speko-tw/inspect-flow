@@ -1,101 +1,107 @@
-// 登入、變更密碼後沒有指定回到哪裡時的預設落點，只依後端 `/auth/me`
-// 的存取摘要（#480）決定，前端不自行猜測：
-//
-// - 系統管理者 → `/admin`
-// - 有內業權限（含兩種權限都有）→ `/admin/projects`（我的專案清單）
-// - 只有現場權限（含現場加範本）→ `/field`
-// - 只有範本管理權限 → `/admin/templates`
-// - 都沒有 → `/field`，由該頁顯示沒有權限的說明
-//
-// 只決定 UI 導向；各頁能不能看由後端權限與 `RequireAuth` 把關。
-
 import type { CurrentUser } from './api'
 import { isSafeRedirectPath } from './safeRedirect'
 import type { PreviousSession } from './sessionMemory'
+import { canAccessRoute, routeForPath, ROUTES } from '../routes'
+import type { LandingLabelKey } from '../terms'
+import { landingLabel as getLandingLabel } from '../terms'
 
 type AccessSummary = Pick<
   CurrentUser,
   | 'is_admin'
-  | 'has_office_access'
-  | 'has_field_access'
+  | 'can_inspect_tasks'
   | 'can_create_project'
+  | 'can_manage_project_planning_or_members'
   | 'has_project_access'
-  | 'has_template_access'
-  | 'can_browse_templates'
-  | 'can_manage_template_library'
->
+  | 'delegated_modules'
+> &
+  Partial<
+    Pick<
+      CurrentUser,
+      | 'can_browse_templates'
+      | 'can_manage_template_library'
+      | 'module_permissions'
+    >
+  > &
+  Partial<Pick<CurrentUser, 'id'>>
 
-/** 依 TPL-R09 判斷是否具範本庫管理權，支援舊摘要欄位過渡。 */
-export function canManageTemplateLibrary(user: AccessSummary): boolean {
-  return user.can_manage_template_library ?? user.has_template_access
+/** 保留範本頁面既有讀取與管理判斷，供頁面內分流使用。 */
+export function canManageTemplateLibrary(user: {
+  is_admin: boolean
+  can_manage_template_library?: boolean
+  module_permissions?: string[]
+}): boolean {
+  return Boolean(
+    user.is_admin ||
+    user.can_manage_template_library ||
+    user.module_permissions?.includes('template.manage'),
+  )
 }
 
-/** 依 TPL-R09 判斷是否可讀取範本庫，支援舊摘要欄位過渡。 */
-export function canBrowseTemplates(user: AccessSummary): boolean {
-  return user.can_browse_templates ?? canManageTemplateLibrary(user)
+/** 判斷範本庫是否可讀取；僅供直接路由守衛與頁面呈現。 */
+export function canBrowseTemplates(user: {
+  is_admin: boolean
+  has_template_access?: boolean
+  can_browse_templates?: boolean
+  can_manage_template_library?: boolean
+  module_permissions?: string[]
+}): boolean {
+  return Boolean(
+    user.can_browse_templates ||
+    canManageTemplateLibrary(user) ||
+    user.module_permissions?.includes('template.use'),
+  )
 }
 
+/** 依權限摘要選擇固定的登入落點順序。 */
 export function landingPath(user: AccessSummary): string {
-  if (user.is_admin) return '/admin'
-  if (user.has_office_access || user.can_create_project) {
-    return '/admin/projects'
+  // ADM-R23：唯讀專案入口不取代現場人員的任務首頁。
+  if (
+    !user.is_admin &&
+    user.can_inspect_tasks &&
+    !user.can_create_project &&
+    !user.can_manage_project_planning_or_members
+  ) {
+    return ROUTES.fieldTasks.path
   }
-  if (user.has_field_access) return '/field'
-  if (user.has_project_access) return '/admin/projects'
-  return canBrowseTemplates(user) ? '/admin/templates' : '/field'
+  const candidates = [
+    ROUTES.dashboardIndex,
+    ROUTES.adminProjects,
+    ROUTES.fieldTasks,
+    ROUTES.adminTemplates,
+    ROUTES.adminIndex,
+  ]
+  const destination = candidates.find((route) => canAccessRoute(user, route))
+  if (destination) {
+    return destination === ROUTES.adminIndex
+      ? ROUTES.adminIndex.path
+      : destination.path
+  }
+  return ROUTES.settings.path
 }
 
 /** 落點的白話名稱，用在「返回…」連結上。 */
 export function landingLabel(path: string): string {
-  if (path === '/admin') return '管理頁'
-  if (path === '/admin/projects') return '我的專案'
-  if (path === '/admin/templates') return '範本管理'
-  return '今日任務'
+  const labels: Array<[string, LandingLabelKey]> = [
+    [ROUTES.adminPeople.path.replace('/:personId?', ''), 'account'],
+    [ROUTES.adminProjects.path, 'projects'],
+    [ROUTES.dashboardIndex.path, 'overview'],
+    [ROUTES.adminTemplates.path, 'templates'],
+    [ROUTES.settings.path, 'settings'],
+    [ROUTES.fieldTasks.path, 'tasks'],
+  ]
+  const match = labels.find(([target]) => target === path)
+  return getLandingLabel(match?.[1] ?? 'tasks')
 }
 
-function underPrefix(path: string, prefix: string): boolean {
-  return path === prefix || path.startsWith(`${prefix}/`)
-}
-
-/**
- * 這個帳號看得到這個站內路徑嗎（只決定 UI 導向，後端另有把關）。
- * 用在「登入後要不要回到原本的頁面」：`/admin`、`/field` 底下看不到的
- * 頁面不帶過去；其他路徑沒有權限差異（不存在的會由 404 頁處理）。
- */
+/** 判斷登入後能否返回原頁；API 仍負責真正授權。 */
 export function canVisit(user: AccessSummary, path: string): boolean {
   const pathname = path.split(/[?#]/)[0]
-  if (underPrefix(pathname, '/change-password')) return true
-  if (underPrefix(pathname, '/field')) {
-    return user.is_admin || user.has_field_access
-  }
-  if (!underPrefix(pathname, '/admin')) return true
-  if (user.is_admin) return true
-  if (underPrefix(pathname, '/admin/templates')) {
-    return canBrowseTemplates(user)
-  }
-  if (underPrefix(pathname, '/admin/projects')) {
-    // 專案的範本頁也開給範本管理員；其餘專案頁屬內業。
-    const templatePagePattern = new RegExp(
-      '^/admin/projects/[^/]+/(?:inspection-items/templates|templates)/?$',
-    )
-    return (
-      user.has_office_access ||
-      user.has_project_access ||
-      (canBrowseTemplates(user) && templatePagePattern.test(pathname))
-    )
-  }
-  return false
+  if (!pathname) return false
+  const route = routeForPath(pathname)
+  return route ? canAccessRoute(user, route) : false
 }
 
-/**
- * 登入成功後要去哪裡（#489）：
- *
- * - 剛主動登出：一律去落點，登出後按上一頁也不例外；
- * - 有上一位使用者：是同一人（例如逾時重新登入）才可回原頁，換人去落點；
- * - 沒有任何記錄（深層連結、重新整理後）：照 AUT-R29 回原頁。
- *
- * 回原頁一律還要原頁面是新帳號看得到的，否則去落點。
- */
+/** 驗證安全的原頁與前次登入身分後，決定登入成功目的地。 */
 export function loginTarget(
   user: AccessSummary & Pick<CurrentUser, 'id'>,
   from: unknown,

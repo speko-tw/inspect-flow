@@ -29,9 +29,7 @@ function validationError(fixture: {
 function renderPage(viewerPermissions: string[]) {
   const client = createMockPlanningClient()
   render(
-    <DataMemoryRouter
-      initialEntries={['/admin/projects/project-demo-1/zones']}
-    >
+    <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
       <Routes>
         <Route
           element={
@@ -40,7 +38,7 @@ function renderPage(viewerPermissions: string[]) {
               viewerPermissions={viewerPermissions}
             />
           }
-          path="/admin/projects/:projectId/zones"
+          path="/projects/:projectId/zones"
         />
       </Routes>
     </DataMemoryRouter>,
@@ -82,9 +80,7 @@ describe('project zones section', () => {
     const client = createMockPlanningClient()
     await client.createZone('project-demo-1', '北區')
     render(
-      <DataMemoryRouter
-        initialEntries={['/admin/projects/project-demo-1/zones']}
-      >
+      <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
         <Routes>
           <Route
             element={
@@ -93,7 +89,7 @@ describe('project zones section', () => {
                 viewerPermissions={['project_zone.read']}
               />
             }
-            path="/admin/projects/:projectId/zones"
+            path="/projects/:projectId/zones"
           />
         </Routes>
       </DataMemoryRouter>,
@@ -122,9 +118,7 @@ describe('project zones section', () => {
     const client = createMockPlanningClient()
     await client.createZone('project-demo-1', '北區')
     render(
-      <DataMemoryRouter
-        initialEntries={['/admin/projects/project-demo-1/zones']}
-      >
+      <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
         <Routes>
           <Route
             element={
@@ -136,7 +130,7 @@ describe('project zones section', () => {
                 ]}
               />
             }
-            path="/admin/projects/:projectId/zones"
+            path="/projects/:projectId/zones"
           />
         </Routes>
       </DataMemoryRouter>,
@@ -175,9 +169,7 @@ describe('project zones section', () => {
     const client = createMockPlanningClient()
     await client.createZone('project-demo-1', '北區')
     render(
-      <DataMemoryRouter
-        initialEntries={['/admin/projects/project-demo-1/zones']}
-      >
+      <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
         <Routes>
           <Route
             element={
@@ -189,7 +181,7 @@ describe('project zones section', () => {
                 ]}
               />
             }
-            path="/admin/projects/:projectId/zones"
+            path="/projects/:projectId/zones"
           />
         </Routes>
       </DataMemoryRouter>,
@@ -235,9 +227,7 @@ describe('project zones section', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
     render(
-      <DataMemoryRouter
-        initialEntries={['/admin/projects/project-demo-1/zones']}
-      >
+      <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
         <Routes>
           <Route
             element={
@@ -248,7 +238,7 @@ describe('project zones section', () => {
                 ]}
               />
             }
-            path="/admin/projects/:projectId/zones"
+            path="/projects/:projectId/zones"
           />
         </Routes>
       </DataMemoryRouter>,
@@ -273,9 +263,7 @@ describe('project zones section', () => {
     await client.createZone('project-demo-1', '南區')
     client.renameZone = vi.fn().mockRejectedValue(validationError(nameTooLong))
     render(
-      <DataMemoryRouter
-        initialEntries={['/admin/projects/project-demo-1/zones']}
-      >
+      <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
         <Routes>
           <Route
             element={
@@ -287,7 +275,7 @@ describe('project zones section', () => {
                 ]}
               />
             }
-            path="/admin/projects/:projectId/zones"
+            path="/projects/:projectId/zones"
           />
         </Routes>
       </DataMemoryRouter>,
@@ -325,9 +313,7 @@ describe('project zones section', () => {
     const client = createMockPlanningClient()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(
-      <DataMemoryRouter
-        initialEntries={['/admin/projects/project-demo-1/zones']}
-      >
+      <DataMemoryRouter initialEntries={['/projects/project-demo-1/zones']}>
         <Routes>
           <Route
             element={
@@ -336,7 +322,7 @@ describe('project zones section', () => {
                 <Link to="/outside">切換頁面</Link>
               </>
             }
-            path="/admin/projects/:projectId/zones"
+            path="/projects/:projectId/zones"
           />
           <Route element={<p>已離開分區頁</p>} path="/outside" />
         </Routes>
@@ -393,7 +379,7 @@ function hold(client: PlanningClient, method: 'createZone' | 'renameZone') {
 
 function mount(client: PlanningClient, permissions = MANAGE) {
   render(
-    <DataMemoryRouter initialEntries={[`/admin/projects/${PROJECT}/zones`]}>
+    <DataMemoryRouter initialEntries={[`/projects/${PROJECT}/zones`]}>
       <Routes>
         <Route
           element={
@@ -402,7 +388,7 @@ function mount(client: PlanningClient, permissions = MANAGE) {
               viewerPermissions={permissions}
             />
           }
-          path="/admin/projects/:projectId/zones"
+          path="/projects/:projectId/zones"
         />
       </Routes>
     </DataMemoryRouter>,

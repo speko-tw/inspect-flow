@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import LogoutButton from './LogoutButton'
 import RequireAuth from './RequireAuth'
+import { NAV_LABELS } from '../layout/navigationLabels'
 
 const CURRENT_USER = {
   id: 'u1',
@@ -18,6 +19,7 @@ const CURRENT_USER = {
   must_change_password: false,
   has_office_access: false,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: false,
 }
 
@@ -96,7 +98,7 @@ describe('登出失敗時保留登入狀態（PR #164 review）', () => {
 
     await screen.findByRole('heading', { name: '受保護頁面' })
 
-    const button = screen.getByRole('button', { name: '登出' })
+    const button = screen.getByRole('button', { name: NAV_LABELS.logout })
     fireEvent.click(button)
 
     const alert = await screen.findByRole('alert')
@@ -138,7 +140,7 @@ describe('登出失敗時保留登入狀態（PR #164 review）', () => {
 
     await screen.findByRole('heading', { name: '受保護頁面' })
 
-    const button = screen.getByRole('button', { name: '登出' })
+    const button = screen.getByRole('button', { name: NAV_LABELS.logout })
     fireEvent.click(button)
 
     const alert = await screen.findByRole('alert')

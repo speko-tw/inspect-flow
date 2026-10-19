@@ -19,6 +19,9 @@ export function currentUserFixture(
     must_change_password: false,
     has_office_access: false,
     has_field_access: false,
+    can_inspect_tasks:
+      overrides.can_inspect_tasks ?? overrides.has_field_access ?? false,
+    can_manage_project_planning_or_members: false,
     has_template_access: false,
     can_browse_templates:
       overrides.can_browse_templates ??
