@@ -248,3 +248,60 @@ def test_seed_retains_default_system_id_for_project_task_templates():
     assert result["排水管坡度檢查"] == "排水管坡度檢查"
     assert result["接地電阻量測"] == "接地電阻量測"
     assert result["system_id"] == "給排水"
+
+
+README_PATH = REPO / "demo" / "README.md"
+PERMISSION_CODES_PATH = REPO / "backend" / "app" / "permission_codes.json"
+
+
+def test_readme_account_table_matches_seed_accounts():
+    """README 帳號表的帳號、密碼與登入落點必須與 seed 一致。"""
+    data = load_seed_data()
+    expected = {
+        data["admin"]["username"]: (data["admin"]["password"], "總覽"),
+    }
+    landings = {
+        "office": "專案",
+        "manager": "總覽",
+        "field_a": "任務",
+        "field_b": "任務",
+        "consultant": "專案",
+        "template_delegate": "帳號",
+        "template_manager": "範本",
+        "no_access": "設定",
+    }
+    for account in data["accounts"]:
+        expected[account["username"]] = (
+            account["password"],
+            landings[account["key"]],
+        )
+
+    rows = {}
+    for line in README_PATH.read_text().splitlines():
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) == 3 and cells[0].startswith("`demo-"):
+            rows[cells[0].strip("`")] = cells
+        elif len(cells) == 3 and cells[0] == "`admin`":
+            rows["admin"] = cells
+
+    assert set(rows) == set(expected)
+    for username, (password, landing) in expected.items():
+        cells = rows[username]
+        assert cells[1] == f"`{password}`"
+        assert f"登入落在「{landing}」" in cells[2]
+
+
+def test_external_accounts_hold_only_external_allowed_permissions():
+    """外部協作帳號不得直接持有登記表標為「外部不可用」的權限。"""
+    registry = json.loads(PERMISSION_CODES_PATH.read_text())["codes"]
+    allowed = {item["code"] for item in registry if item["external_allowed"]}
+    external = [
+        account
+        for account in load_seed_data()["accounts"]
+        if account["external"]
+    ]
+
+    assert external
+    for account in external:
+        assert set(account["permissions"]) <= allowed, account["username"]
+        assert account["delegated_modules"] == []

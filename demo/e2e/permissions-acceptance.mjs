@@ -22,6 +22,22 @@ const accounts = [
   ['demo-consultant', 'DemoConsultant2026', '/projects'],
   ['demo-no-access', 'DemoNoAccess2026', '/settings'],
 ]
+// 逐身分的導覽預期：依 frontend/src/routes.ts 與 seed 實際權限推得，
+// 由真實畫面核對「連結集合」與「管理 ▾」是否與角色相符。
+const expectedNavigation = {
+  admin: {
+    links: ['總覽', '任務', '專案', '範本'],
+    management: ['帳號', '公司', '角色', '紀錄'],
+  },
+  'demo-manager': { links: ['總覽'] },
+  'demo-office': { links: ['專案'] },
+  'demo-field-a': { links: ['任務', '專案'] },
+  'demo-field-b': { links: ['任務', '專案'] },
+  'demo-template-manager': { links: ['範本'] },
+  'demo-template-delegate': { links: ['帳號'] },
+  'demo-consultant': { links: ['專案'] },
+  'demo-no-access': { links: [] },
+}
 const browser = await chromium.launch({
   channel: 'chrome',
   headless: true,
@@ -59,11 +75,69 @@ async function assertDenied(pathname, heading = '無權限') {
   await page.getByRole('heading', { name: heading }).waitFor()
 }
 
+async function assertAllDenied(pathnames) {
+  for (const pathname of pathnames) await assertDenied(pathname)
+}
+
+async function assertApiStatus(pathname, expected, method = 'GET', body) {
+  const response = await api(pathname, method, body)
+  assert.equal(
+    response.status,
+    expected,
+    `${method} ${pathname} 應回 ${expected}，實際 ${response.status}`,
+  )
+}
+
+// 以管理者身分的使用者清單查帳號 id；找不到時回傳 undefined。
+async function userIdOf(username) {
+  const users = await api('/users?limit=100')
+  assert.equal(users.status, 200)
+  return users.data.items.find((user) => user.username === username)?.id
+}
+
+async function readNavigation() {
+  const nav = page.locator('nav.app-header-nav')
+  await nav.waitFor({ state: 'attached' })
+  const links = await nav.locator(':scope > a').allInnerTexts()
+  return {
+    links: links.map((text) => text.trim()),
+    hasManagement:
+      (await nav.locator('.app-header-management-trigger').count()) > 0,
+  }
+}
+
+// 導覽可能在存取摘要載入後才補齊，因此輪詢到集合穩定或逾時。
+async function assertNavigation(username) {
+  const expected = expectedNavigation[username]
+  const wantsMenu = expected.management !== undefined
+  const deadline = Date.now() + 10000
+  let actual = await readNavigation()
+  while (
+    Date.now() < deadline &&
+    (JSON.stringify(actual.links) !== JSON.stringify(expected.links) ||
+      actual.hasManagement !== wantsMenu)
+  ) {
+    await page.waitForTimeout(200)
+    actual = await readNavigation()
+  }
+  assert.deepEqual(actual.links, expected.links, `${username} 導覽連結`)
+  assert.equal(actual.hasManagement, wantsMenu, `${username} 管理 ▾`)
+  if (!wantsMenu) return
+  await page.getByRole('button', { name: '管理 ▾' }).click()
+  assert.deepEqual(
+    await page.locator('#app-header-management-menu a').allInnerTexts(),
+    expected.management,
+    `${username} 管理選單項目`,
+  )
+  await page.keyboard.press('Escape')
+}
+
 try {
   for (const [username, password, landing] of accounts) {
     await signIn(username, password, landing)
     assert.equal(new URL(page.url()).pathname, landing)
     await page.locator('.app-header-account').waitFor()
+    await assertNavigation(username)
   }
 
   await signIn('demo-manager', 'DemoManager2026', '/overview')
@@ -83,8 +157,9 @@ try {
   await page.getByRole('heading', {
     name: '示範廠 D 棟設備間',
   }).waitFor()
-  await assertDenied('/accounts')
-  assert.equal((await api('/users')).status, 403)
+  await assertAllDenied(['/accounts', '/companies', '/roles', '/logs'])
+  await assertApiStatus('/users', 403)
+  await assertApiStatus('/audit-logs', 403)
 
   await signIn('demo-office', 'DemoOffice2026', '/projects')
   await page.getByRole('link', { name: '專案', exact: true }).click()
@@ -93,6 +168,10 @@ try {
   })
   await officeProject.getByRole('link', { name: '開啟專案' }).waitFor()
   await officeProject.getByRole('link', { name: '套用範本' }).waitFor()
+  await assertAllDenied(['/accounts', '/companies', '/roles', '/logs'])
+  for (const pathname of ['/users', '/companies', '/roles', '/audit-logs']) {
+    await assertApiStatus(pathname, 403)
+  }
 
   await signIn('demo-field-a', 'DemoFieldA2026', '/tasks')
   await page.getByRole('heading', { name: '我的任務' }).waitFor()
@@ -100,6 +179,8 @@ try {
   await page.goto(`${base}/templates`)
   await page.getByRole('heading', { name: '無權限' }).waitFor()
   assert.equal((await api('/template-categories')).status, 403)
+  await assertDenied('/accounts')
+  await assertApiStatus('/users', 403)
 
   await signIn('demo-field-b', 'DemoFieldB2026', '/tasks')
   await page.getByText('茶水間給水試壓').waitFor()
@@ -114,14 +195,59 @@ try {
   assert.equal((await api('/users')).status, 403)
 
   await signIn('demo-template-delegate', 'DemoDelegate2026', '/accounts')
+  await page.getByRole('button', { name: '新增帳號' }).waitFor({
+    state: 'detached',
+  })
   await page.getByRole('button', { name: '張立衡', exact: true }).click()
   await page.getByText('只能開通受委派範圍內的權限').waitFor()
   assert.equal(
     await page.getByRole('link', { name: '範本', exact: true }).count(),
     0,
   )
+  assert.equal(await page.getByRole('button', { name: '新增帳號' }).count(), 0)
   await assertDenied('/templates')
+  await assertAllDenied(['/companies', '/roles', '/logs'])
   assert.equal((await api('/template-categories')).status, 403)
+  await assertApiStatus('/users', 403, 'POST', {
+    username: 'demo-denied-by-delegate',
+    email: 'demo-denied-by-delegate@example.test',
+    name_zh: '不應建立',
+  })
+
+  // 外部帳號不能被開通管理範本庫：畫面只列外部可用的功能。
+  await page.goto(`${base}/accounts`)
+  await page.getByRole('button', { name: '黃子晴', exact: true }).click()
+  await page.getByText('只能開通受委派範圍內的權限').waitFor()
+  await page.getByLabel('使用範本功能').waitFor()
+  assert.equal(await page.getByText('管理範本庫').count(), 0)
+  assert.equal(await page.getByLabel('管理範本庫').count(), 0)
+
+  // 內部帳號：委派者按「開通」，成功通知與 API 回讀都要看到 template.use。
+  await page.goto(`${base}/accounts`)
+  await page.getByRole('button', { name: '陳柏勳', exact: true }).click()
+  await page.getByLabel('管理範本庫').waitFor()
+  await page.getByLabel('使用範本功能').check()
+  const grantResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      response.url().endsWith('/module-permissions/template.use'),
+  )
+  await page.getByRole('button', { name: '開通' }).click()
+  assert.ok([200, 204].includes((await grantResponse).status()))
+  await page.getByText('已為陳柏勳開通使用範本功能。').waitFor()
+  await signIn('admin', 'DemoAdmin2026', '/overview')
+  const fieldBId = await userIdOf('demo-field-b')
+  try {
+    const granted = await api(`/users/${fieldBId}/module-permissions`)
+    assert.equal(granted.status, 200)
+    assert.ok(granted.data.permission_codes.includes('template.use'))
+  } finally {
+    // 還原：撤銷剛開通的權限，避免影響之後的帳號狀態。
+    await api(`/users/${fieldBId}/module-permissions/template.use`, 'DELETE')
+  }
+  const restored = await api(`/users/${fieldBId}/module-permissions`)
+  assert.ok(!restored.data.permission_codes.includes('template.use'))
+  assert.equal(await userIdOf('demo-denied-by-delegate'), undefined)
 
   await signIn('demo-consultant', 'DemoConsultant2026', '/projects')
   await page.getByRole('link', { name: '專案', exact: true }).click()
@@ -132,6 +258,13 @@ try {
   await consultantProject.getByRole('link', { name: '套用範本' }).waitFor({
     state: 'detached',
   })
+  assert.equal(
+    await page.locator('article').filter({
+      hasText: /DEMO-A|示範大樓機電工程/,
+    }).count(),
+    0,
+  )
+  await assertAllDenied(['/accounts', '/overview'])
   assert.equal(
     (await api(
       `/projects/${result.projects.B}/inspection-items:apply-template`,
@@ -146,21 +279,21 @@ try {
     '尚未開通任何功能，請洽系統管理者',
   ).waitFor()
   assert.equal((await api('/admin/dashboard/summary')).status, 403)
-  await assertDenied('/overview')
+  await assertAllDenied(['/overview', '/accounts'])
 
   await signIn('admin', 'DemoAdmin2026', '/overview')
   await page.getByRole('button', { name: '管理 ▾' }).click()
   await page.getByRole('link', { name: '帳號', exact: true }).click()
   await page.getByRole('button', { name: '新增帳號' }).click()
   await page.getByLabel('帳號名稱', { exact: true }).fill(
-    'demo-k3-role-check',
+    'demo-role-check',
   )
   await page.getByLabel('姓名', { exact: true }).fill('林以安')
   await page.getByLabel('電子郵件', { exact: true }).fill(
-    'demo-k3-role-check@example.test',
+    'demo-role-check@example.test',
   )
   await page.getByRole('button', { name: '下一步' }).click()
-  await page.getByRole('radio', { name: /內業規劃/ }).check()
+  await page.getByRole('radio', { name: /現場查核/ }).check()
   await page.getByRole('button', { name: '下一步' }).click()
   await page.getByLabel('加入專案（可略過）').selectOption({
     label: '示範廠擴建機電工程',
@@ -171,15 +304,29 @@ try {
   const temporaryPassword = await page.getByLabel('臨時密碼').innerText()
   assert.ok(temporaryPassword.length >= 12)
   const restrictedRole = await api('/roles', 'POST', {
-    name: 'K3 查核權限不足',
+    name: '示範僅查閱專案角色',
     permission_codes: ['project.read'],
   })
   assert.equal(restrictedRole.status, 201)
   const createdUsers = await api('/users')
   const createdUser = createdUsers.data.items.find(
-    (user) => user.username === 'demo-k3-role-check',
+    (user) => user.username === 'demo-role-check',
   )
   assert.ok(createdUser)
+  // 精靈選「現場查核」並加入專案，建立時就該拿到可查看任務的角色。
+  const created = await api(
+    `/users/${createdUser.id}/effective-access` +
+      `?project_id=${result.projects.B}`,
+  )
+  assert.equal(created.status, 200)
+  assert.equal(
+    created.data.diagnostics.find((item) => item.action === 'task_list')
+      .allowed,
+    true,
+  )
+  assert.ok(
+    created.data.project_roles.some((role) => role.name === '現場工程師'),
+  )
   const restrictedMembership = await api(
     `/projects/${result.projects.B}/members/${createdUser.id}/roles`,
     'PUT',
@@ -192,6 +339,10 @@ try {
   await page.getByRole('heading', {
     name: '能做什麼',
   }).waitFor()
+  // 臨時密碼只在完成畫面顯示一次：離開後頁面不再出現。
+  assert.ok(
+    !(await page.locator('body').innerText()).includes(temporaryPassword),
+  )
   await page.getByRole('combobox').nth(0).selectOption('task-list')
   await page.getByRole('combobox').nth(1).selectOption({
     label: '示範廠擴建機電工程',
@@ -204,6 +355,14 @@ try {
   assert.equal(
     diagnostic.diagnostics.find((item) => item.action === 'task_list').allowed,
     false,
+  )
+  const participation = page.locator('li').filter({
+    hasText: '示範廠擴建機電工程',
+  })
+  await participation.filter({ hasText: '示範僅查閱專案角色' }).waitFor()
+  assert.equal(
+    await participation.filter({ hasText: '現場工程師' }).count(),
+    0,
   )
   const roleRepairResponse = page.waitForResponse(
     (response) =>
@@ -229,11 +388,8 @@ try {
       (role) => role.name === '現場工程師',
     ),
   )
-  assert.ok(
-    createdUsers.data.items.some(
-      (user) => user.username === 'demo-k3-role-check',
-    ),
-  )
+  // #708：補上角色後，「參與專案與角色」清單要立即顯示新角色。
+  await participation.filter({ hasText: '現場工程師' }).waitFor()
 
   await page.screenshot({
     path: path.join(demo, 'screenshots/09-admin-role-diagnostic.png'),
@@ -243,7 +399,11 @@ try {
     result: 'PASS',
     browser: 'Google Chrome via Playwright',
     accounts: accounts.map(([username, , landing]) => ({ username, landing })),
-    roleRepair: 'admin created an account and repaired a missing project role',
+    navigation: 'link sets and the management menu verified per account',
+    denied: 'direct URLs show the denied page; management APIs return 403',
+    delegate: 'external account hides library management; grant verified',
+    roleRepair: 'admin created a field account and repaired its role',
+    temporaryPassword: 'shown once, gone after leaving the screen',
     runtimeUrls: [
       '/tasks', '/projects', '/overview', '/templates', '/accounts',
       '/settings',
