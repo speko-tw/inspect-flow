@@ -279,13 +279,12 @@ def list_dashboard_engineers(
         User.id.in_(select(people.c.user_id))
     ]
     if query:
+        # ADM-R51：只比對回應看得到的欄位，避免用 q 反推 email、工號等
+        # 沒有顯示的個資。
         filters.append(
             or_(
                 ilike_contains(User.username, query),
                 ilike_contains(User.name_zh, query),
-                ilike_contains(User.name_en, query),
-                ilike_contains(User.email, query),
-                ilike_contains(User.employee_no, query),
             )
         )
     result = page_by_text_key(
@@ -420,7 +419,11 @@ def list_dashboard_tasks(
         cursor=cursor,
         limit=limit,
         serialize=lambda task: _dashboard_task_item(session, task),
-        filters=(InspectionTask.project_id == project_id,),
+        filters=(
+            InspectionTask.project_id == project_id,
+            # ADM-R51：草稿只給內業，總覽與摘要計數一致不列入。
+            InspectionTask.status != "DRAFT",
+        ),
     )
 
 
@@ -439,6 +442,8 @@ def get_dashboard_task(
         select(InspectionTask).where(
             InspectionTask.id == task_id,
             InspectionTask.project_id == project_id,
+            # ADM-R51：草稿任務視同不存在（404）。
+            InspectionTask.status != "DRAFT",
         )
     )
     if task is None:
