@@ -35,6 +35,13 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
         name_zh="候選人",
         is_external_collaborator=False,
     )
+    external_candidate = create_user(
+        db_session,
+        username="external-candidate",
+        email="external-candidate@demo.example",
+        name_zh="外部候選人",
+        is_external_collaborator=True,
+    )
     inactive = create_user(
         db_session,
         username="inactive",
@@ -77,11 +84,19 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
                 "id": str(candidate.id),
                 "username": "candidate",
                 "name_zh": "候選人",
+                "is_external_collaborator": False,
             },
             {
                 "id": str(delegate.id),
                 "username": "delegate",
                 "name_zh": "委派者",
+                "is_external_collaborator": False,
+            },
+            {
+                "id": str(external_candidate.id),
+                "username": "external-candidate",
+                "name_zh": "外部候選人",
+                "is_external_collaborator": True,
             },
         ],
         "next_cursor": None,
@@ -93,7 +108,23 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
     assert exact_account_match.status_code == 200
     assert [
         item["username"] for item in exact_account_match.json()["items"]
-    ] == ["candidate"]
+    ] == ["candidate", "external-candidate"]
+    assert [
+        item["is_external_collaborator"]
+        for item in exact_account_match.json()["items"]
+    ] == [False, True]
+    external_match = client_for(delegate).get(
+        "/api/v1/module-delegate/users?q=external-candidate"
+    )
+    assert external_match.status_code == 200
+    assert external_match.json()["items"] == [
+        {
+            "id": str(external_candidate.id),
+            "username": "external-candidate",
+            "name_zh": "外部候選人",
+            "is_external_collaborator": True,
+        }
+    ]
 
     assert (
         client_for(candidate).get("/api/v1/module-delegate/users").status_code
@@ -134,6 +165,13 @@ def test_module_delegate_can_read_target_heading_but_not_admin_identity(
         name_zh="目標姓名",
         is_external_collaborator=False,
     )
+    external_target = create_user(
+        db_session,
+        username="detail-external-target",
+        email="detail-external-target@demo.example",
+        name_zh="外部目標姓名",
+        is_external_collaborator=True,
+    )
     admin_target = create_user(
         db_session,
         username="detail-admin-target",
@@ -163,6 +201,17 @@ def test_module_delegate_can_read_target_heading_but_not_admin_identity(
         "id": str(target.id),
         "username": target.username,
         "name_zh": target.name_zh,
+        "is_external_collaborator": False,
+    }
+    external_response = delegate_client.get(
+        f"/api/v1/module-delegate/users/{external_target.id}"
+    )
+    assert external_response.status_code == 200
+    assert external_response.json() == {
+        "id": str(external_target.id),
+        "username": external_target.username,
+        "name_zh": external_target.name_zh,
+        "is_external_collaborator": True,
     }
     denied = delegate_client.get(
         f"/api/v1/module-delegate/users/{admin_target.id}"

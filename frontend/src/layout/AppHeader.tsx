@@ -35,6 +35,7 @@ type HeaderUser = Pick<
   | 'is_admin'
   | 'can_inspect_tasks'
   | 'can_create_project'
+  | 'can_manage_project_planning_or_members'
   | 'has_project_access'
   | 'module_permissions'
   | 'can_manage_template_library'

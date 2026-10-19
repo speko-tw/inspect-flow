@@ -104,6 +104,7 @@ class MeResponse(CurrentUserResponse):
     has_field_access: bool
     # 現場任務入口採用此兩層權限摘要，不由前端推導。
     can_inspect_tasks: bool
+    can_manage_project_planning_or_members: bool
     has_template_access: bool
     # TPL-R09：明確區分範本瀏覽與管理能力，避免前端自行推導。
     can_browse_templates: bool
@@ -148,6 +149,9 @@ def _me_response(db: Session, user: User) -> MeResponse:
         has_office_access=access.has_office_access,
         has_field_access=access.has_field_access,
         can_inspect_tasks=access.can_inspect_tasks,
+        can_manage_project_planning_or_members=(
+            access.can_manage_project_planning_or_members
+        ),
         has_template_access=access.has_template_access,
         can_browse_templates=access.can_browse_templates,
         can_manage_template_library=access.can_manage_template_library,

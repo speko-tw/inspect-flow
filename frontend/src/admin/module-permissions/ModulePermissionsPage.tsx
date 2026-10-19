@@ -9,6 +9,7 @@ import {
 import { Link } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
+import permissionCodeContract from '../../permissionCodeContract'
 import {
   Button,
   Card,
@@ -105,6 +106,13 @@ const PROFILE_OPTIONS: Array<{ id: Profile; label: string; summary: string }> =
       summary: '只看被加入的專案',
     },
   ]
+
+// DOM-R35、DOM-R72：委派選項沿用權限登記表的外部可用標記。
+const EXTERNAL_ALLOWED_PERMISSION_CODES = new Set(
+  permissionCodeContract.codes
+    .filter((item) => item.external_allowed)
+    .map((item) => item.code),
+)
 
 const PROFILE_ACCESS: Record<
   Profile,
@@ -291,6 +299,14 @@ function ModulePermissionsPageContent({
   const [safeCandidateRole, setSafeCandidateRole] = useState('')
   const [selectedUserState, setSelectedUserState] = useState('')
   const selectedUser = selectedUserId ?? selectedUserState
+  const selectedUserIsExternal = Boolean(
+    users.find((user) => user.id === selectedUser)?.is_external_collaborator,
+  )
+  const visiblePermissions = selectedUserIsExternal
+    ? permissions.filter((item) =>
+        EXTERNAL_ALLOWED_PERMISSION_CODES.has(item.code),
+      )
+    : permissions
   const participationForSelectedUser =
     participationResult?.userId === selectedUser &&
     participationResult.reloadRequest === participationReload
@@ -1146,7 +1162,7 @@ function ModulePermissionsPageContent({
           <p>只能開通受委派範圍內的權限，不能替自己開通或轉交委派。</p>
           {notice && <p role="status">{notice}</p>}
           <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
-            {permissions.map((item) => (
+            {visiblePermissions.map((item) => (
               <label key={item.code}>
                 <input
                   checked={accessDraft.includes(item.code)}
@@ -1510,7 +1526,7 @@ function ModulePermissionsPageContent({
                     {userAccess.length}
                     {' 項）'}
                   </legend>
-                  {permissions.map((item) => (
+                  {visiblePermissions.map((item) => (
                     <label key={item.code}>
                       <input
                         checked={accessDraft.includes(item.code)}
@@ -1680,7 +1696,7 @@ function ModulePermissionsPageContent({
               </Field>
               <fieldset>
                 <legend>包含權限</legend>
-                {permissions.map((item) => (
+                {visiblePermissions.map((item) => (
                   <label key={item.code}>
                     <input
                       checked={bundleCodes.includes(item.code)}

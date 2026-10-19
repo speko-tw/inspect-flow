@@ -1,13 +1,172 @@
+import { readFileSync } from 'node:fs'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 import { canAccessRoute, routeForPath, ROUTES } from './routes'
 import { canVisit } from './auth/landing'
+
+type RouteRegistrations = {
+  names: Set<string>
+  indexNames: Set<string>
+  literalPaths: Set<string>
+}
+
+function registeredRoutes(sourcePaths: string[]): RouteRegistrations {
+  const registrations: RouteRegistrations = {
+    names: new Set(),
+    indexNames: new Set(),
+    literalPaths: new Set(),
+  }
+  for (const path of sourcePaths) {
+    mergeRegistrations(
+      registrations,
+      routeRegistrationsFromSource(readFileSync(path, 'utf8'), path),
+    )
+  }
+  return registrations
+}
+
+function routeRegistrationsFromSource(
+  sourceText: string,
+  fileName = 'routes-counterexample.tsx',
+): RouteRegistrations {
+  const registrations: RouteRegistrations = {
+    names: new Set(),
+    indexNames: new Set(),
+    literalPaths: new Set(),
+  }
+  const source = ts.createSourceFile(
+    fileName,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  )
+  const readRouteNames = (node: ts.Node) => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'ROUTES'
+    ) {
+      registrations.names.add(node.name.text)
+    }
+    ts.forEachChild(node, readRouteNames)
+  }
+
+  const visit = (node: ts.Node) => {
+    if (!ts.isJsxOpeningElement(node) && !ts.isJsxSelfClosingElement(node)) {
+      ts.forEachChild(node, visit)
+      return
+    }
+    if (!ts.isIdentifier(node.tagName) || node.tagName.text !== 'Route') {
+      ts.forEachChild(node, visit)
+      return
+    }
+
+    const indexProp = node.attributes.properties.find(
+      (property) =>
+        ts.isJsxAttribute(property) &&
+        ts.isIdentifier(property.name) &&
+        property.name.text === 'index',
+    )
+    if (indexProp) {
+      let parent: ts.Node | undefined = node.parent
+      while (parent && !ts.isFunctionDeclaration(parent)) {
+        parent = parent.parent
+      }
+      const owner =
+        parent && ts.isFunctionDeclaration(parent) ? parent.name?.text : ''
+      registrations.indexNames.add(
+        owner === 'DashboardRoute' ? 'dashboardIndex' : 'adminIndex',
+      )
+    }
+
+    const pathProp = node.attributes.properties.find(
+      (property): property is ts.JsxAttribute =>
+        ts.isJsxAttribute(property) &&
+        ts.isIdentifier(property.name) &&
+        property.name.text === 'path',
+    )
+    if (!pathProp?.initializer) return
+    if (ts.isStringLiteral(pathProp.initializer)) {
+      registrations.literalPaths.add(pathProp.initializer.text)
+      return
+    }
+    if (!ts.isJsxExpression(pathProp.initializer)) return
+
+    const expression = pathProp.initializer.expression
+    if (!expression) return
+    if (
+      ts.isCallExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      expression.expression.text === 'nestedRoutePath'
+    ) {
+      if (expression.arguments[0]) {
+        readRouteNames(expression.arguments[0])
+      }
+      return
+    }
+    readRouteNames(expression)
+  }
+  visit(source)
+
+  return registrations
+}
+
+function mergeRegistrations(
+  target: RouteRegistrations,
+  source: RouteRegistrations,
+) {
+  for (const name of source.names) target.names.add(name)
+  for (const name of source.indexNames) target.indexNames.add(name)
+  for (const path of source.literalPaths) target.literalPaths.add(path)
+}
+
+function assertRoutesAreDeclared(
+  registrations: RouteRegistrations,
+  declarations: Record<string, ProductRouteLike>,
+) {
+  const names = new Set(registrations.names)
+  const ignoredPaths = new Set([
+    '*',
+    '/admin/*',
+    '/field/*',
+    '/change-password/*',
+  ])
+  const missing = [...names].filter((name) => !(name in declarations))
+  const pathsWithoutDeclarations = [...registrations.literalPaths].filter(
+    (path) =>
+      !ignoredPaths.has(path) &&
+      !Object.values(declarations).some(
+        (route) =>
+          route.path === path || route.path === path.replace(/\/\*$/, ''),
+      ),
+  )
+  const paths = pathsWithoutDeclarations.join(', ')
+  if (missing.length || pathsWithoutDeclarations.length) {
+    throw new Error(
+      [
+        missing.length
+          ? `Registered routes lack permissions: ${missing.join(', ')}`
+          : '',
+        pathsWithoutDeclarations.length
+          ? `Registered paths lack permissions: ${paths}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
+  }
+}
+
+type ProductRouteLike = { path: string }
 
 describe('product route metadata', () => {
   const noAccess = {
     is_admin: false,
     can_inspect_tasks: false,
     can_create_project: false,
+    can_manage_project_planning_or_members: false,
     has_project_access: false,
     delegated_modules: [],
     module_permissions: [],
@@ -19,6 +178,40 @@ describe('product route metadata', () => {
       expect(route.title, name).toBeTruthy()
       expect(route.permission, name).toBeTruthy()
     }
+  })
+
+  it('keeps actual registered pages covered by route permissions', () => {
+    const registrations = registeredRoutes([
+      'src/App.tsx',
+      'src/admin/AdminPage.tsx',
+    ])
+    // FieldPage 依 pathname 手動分流，兩個頁面不使用 React Router Route。
+    registrations.names.add('fieldTasks')
+    registrations.names.add('fieldTask')
+    for (const name of registrations.indexNames) {
+      registrations.names.add(name)
+    }
+    assertRoutesAreDeclared(registrations, ROUTES)
+
+    const wrappers = new Set(['adminShell', 'fieldShell'])
+    const registeredPages = new Set(
+      [...registrations.names].filter((name) => !wrappers.has(name)),
+    )
+    const declaredPages = new Set(
+      Object.keys(ROUTES).filter((name) => !wrappers.has(name)),
+    )
+
+    expect(registeredPages).toEqual(declaredPages)
+  })
+
+  it('finds a real JSX route path without a permission declaration', () => {
+    const unregisteredProduct = routeRegistrationsFromSource(
+      '<Routes><Route path="/unlisted" element={<UnlistedPage />} /></Routes>',
+    )
+
+    expect(() => assertRoutesAreDeclared(unregisteredProduct, ROUTES)).toThrow(
+      'Registered paths lack permissions: /unlisted',
+    )
   })
 
   it('resolves active pages to their declared permission metadata', () => {
@@ -57,7 +250,7 @@ describe('product route metadata', () => {
       const matchedRoute = routeForPath(path)
       expect(matchedRoute?.permission, path).toBe(declaredRoute.permission)
       expect(canVisit(noAccess, path), path).toBe(
-        matchedRoute ? canAccessRoute(noAccess, matchedRoute) : true,
+        matchedRoute ? canAccessRoute(noAccess, matchedRoute) : false,
       )
     }
   })

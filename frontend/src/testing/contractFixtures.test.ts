@@ -62,6 +62,7 @@ describe('landingPath (#480)', () => {
         has_project_access: true,
         has_field_access: true,
         can_inspect_tasks: true,
+        can_manage_project_planning_or_members: true,
       },
       '/projects',
     ],

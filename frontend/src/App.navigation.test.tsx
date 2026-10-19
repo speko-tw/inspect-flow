@@ -78,6 +78,7 @@ const BOTH = {
   ...NON_ADMIN,
   has_office_access: true,
   has_project_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: true,
   can_inspect_tasks: true,
   has_template_access: false,
@@ -469,7 +470,7 @@ describe('依後端存取摘要決定落點（#480）', () => {
     ['系統管理者', ADMIN, '專案進度總覽'],
     ['純內業', OFFICE, '我的專案'],
     ['純現場', MEMBER, '我的任務'],
-    ['兩者皆有', BOTH, '我的專案'],
+    ['具專案管理與現場權限', BOTH, '我的專案'],
     ['兩者皆無', NOBODY, '個人設定'],
     ['只有範本管理員', TEMPLATE_ONLY, '查核範本'],
     ['範本管理員兼現場', TEMPLATE_FIELD, '我的任務'],
@@ -601,7 +602,7 @@ describe('出路與 404（#480）', () => {
     ['系統管理者', ADMIN, '返回總覽', '/overview'],
     ['純內業', OFFICE, '返回專案', '/projects'],
     ['純現場', MEMBER, '返回我的任務', '/tasks'],
-    ['兩者皆有', BOTH, '返回專案', '/projects'],
+    ['具專案管理與現場權限', BOTH, '返回專案', '/projects'],
     TEMPLATE_ONLY_LANDING_CASE,
   ] as const)('變更密碼頁的返回連結：%s', async (_n, user, name, href) => {
     stubBackend(user)
@@ -1068,18 +1069,15 @@ describe('我的專案入口依專案存取權限顯示（ADM-R23、ADM-R24）',
     expect(screen.queryByRole('link', { name: '專案' })).toBeNull()
   })
 
-  it('現場加 project.read 後落在專案並可開任務', async () => {
+  it('現場唯讀專案仍落任務，且可手動開啟專案清單', async () => {
     stubBackend(FIELD_PROJECT_READ)
     renderApp('/')
 
     expect(
-      await screen.findByRole('heading', { name: '我的專案' }),
-    ).toBeVisible()
-    fireEvent.click(screen.getByRole('link', { name: '任務' }))
-    expect(
       await screen.findByRole('heading', { name: '我的任務' }),
     ).toBeVisible()
-    fireEvent.click(screen.getByRole('link', { name: '專案' }))
+    const nav = screen.getByRole('navigation', { name: '我的功能' })
+    fireEvent.click(within(nav).getByRole('link', { name: '專案' }))
 
     expect(
       await screen.findByRole('heading', { name: '我的專案' }),

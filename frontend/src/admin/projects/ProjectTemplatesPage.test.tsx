@@ -28,6 +28,7 @@ const USER: CurrentUser = {
   is_admin: false,
   must_change_password: false,
   has_office_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: false,
   can_inspect_tasks: false,
   has_template_access: false,

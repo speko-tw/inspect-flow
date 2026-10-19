@@ -155,6 +155,7 @@ class ModuleDelegateUserResponse(BaseModel):
     id: UUID
     username: str
     name_zh: str | None
+    is_external_collaborator: bool
 
 
 class ModuleDelegateUserListResponse(BaseModel):
@@ -533,6 +534,7 @@ def list_module_delegate_users(
             id=user.id,
             username=user.username,
             name_zh=user.name_zh,
+            is_external_collaborator=user.is_external_collaborator,
         ),
         filters=filters,
     )
@@ -553,6 +555,7 @@ def get_module_delegate_user(
         id=target.id,
         username=target.username,
         name_zh=target.name_zh,
+        is_external_collaborator=target.is_external_collaborator,
     )
 
 

@@ -96,6 +96,7 @@ function renderAt(
     has_office_access: boolean
     has_field_access: boolean
     has_project_access?: boolean
+    can_manage_project_planning_or_members?: boolean
   } = {
     has_office_access: false,
     has_field_access: true,
@@ -687,7 +688,7 @@ describe('project home', () => {
     )
   })
 
-  it('sends an office user with field-only rights in this project to the project list', async () => {
+  it('office access alone keeps field users on task home', async () => {
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
     )
@@ -696,9 +697,10 @@ describe('project home', () => {
       has_office_access: true,
       has_field_access: true,
       has_project_access: true,
+      can_manage_project_planning_or_members: false,
     })
 
-    expect(await screen.findByText('我的專案清單')).toBeVisible()
+    expect(await screen.findByText('Field 工作台')).toBeVisible()
   })
 
   it('opens the mobile section menu with keyboard-accessible links', async () => {

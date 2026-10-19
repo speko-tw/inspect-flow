@@ -3,6 +3,7 @@
     "can_browse_templates",
     "can_create_project",
     "can_inspect_tasks",
+    "can_manage_project_planning_or_members",
     "can_manage_template_library",
     "company",
     "delegated_modules",

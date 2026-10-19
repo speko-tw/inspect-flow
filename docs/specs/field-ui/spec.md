@@ -51,7 +51,7 @@
 | FUI-R09 | 現場 Web **必須**提供最小 Web App Manifest，含應用名稱、圖示、`display: standalone`、`start_url: /tasks/` 及主題色，並提供 iOS 主畫面捷徑所需圖示與 meta。MVP **不得**註冊快取型 Service Worker；採 Online-first，不宣稱離線查核、同步或背景上傳。 | 必須／不得 | [PWA 技術棧卡片](../../intents/03-decisions-and-stack.md#stack-pwa)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)、FUI-R14；最小 manifest 與 iOS meta 為規格設計 |
 | FUI-R10 | 設定 `INSPECTFLOW_DEV_HOST` 開放區網時，開發伺服器**必須**限制連入至明確指定的網段或介面，實際方式依 Vite 能力定案；**必須**提供 iPhone 安裝並明確信任 mkcert 根憑證的逐步指引，以及 iPhone 實測登入、Session 維持、登出流程。保留 Secure Cookie 所需 HTTPS；根憑證私鑰不得傳至裝置或提交 repository，後端仍只綁 localhost、由 HTTPS 前端代理 API。開發流程不得被描述為正式部署設定。 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[#231](https://github.com/speko-tw/inspect-flow/issues/231)、[README iPhone 測試流程](../../../README.zh-TW.md)；網段限制技術方式為規格設計 |
 | FUI-R11 | 現場首頁**必須**呈現今日任務；範本瀏覽與專案套用範本為內業功能，依 `admin-dashboard` ADM-R50 提供。舊 UI 網址不轉址，依 FUI-R14 回 404。Field 保留個人資料、密碼變更與登出入口；公司資訊、專案清單及專案管理細節不得留在現場工作台，相關管理入口由 `admin-dashboard` 負責。任務本身所需的專案名稱及地點仍顯示於任務清單與詳情。 | 必須 | [PR-10](../../intents/02-principles.md#pr-10)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)；路由依 FUI-R14；管理頁整合依賴 `admin-dashboard` |
-| FUI-R12 | 現場首頁**不得**提供範本瀏覽、套用或存為範本入口；範本及專案套用入口與權限依 `admin-dashboard` ADM-R50。舊 UI 網址不轉址並回 404，API 路徑不變。 | 不得／必須 | 負責人直接指示（#429，原型核可 2026-10-05）；入口依 ADM-R50；舊網址行為依 #705、FUI-R14。 |
+| FUI-R12 | 現場任務頁內容**不得**提供範本瀏覽、套用或存為範本入口；全域導覽的「範本」項目依 `admin-dashboard` ADM-R50，只對 Admin 或具 `template.manage` 者顯示。舊 UI 網址不轉址並回 404，API 路徑不變。 | 不得／必須 | 負責人直接指示（#429，原型核可 2026-10-05）；任務頁內容與全域導覽的範本權限依 ADM-R50；舊網址行為依 #705、FUI-R14。 |
 | FUI-R13 | Field 沿用 `admin-dashboard` 的 UI 共通規則（ADM-R37～ADM-R39），不另寫一份：開始查核的確認為一般主色（一般確認）、按鈕為［取消］［確認］、開啟時焦點在「取消」、Esc 等同取消、在原地展開（不使用蓋住整頁的 modal）；Field 清單與詳情的狀態標籤（待開始黃、進行中藍、已完成綠、已取消灰）與管理頁使用同一份對照，同一個狀態詞在兩邊同色 | 必須 | v0.3.1 修正（[#510](https://github.com/speko-tw/inspect-flow/pull/510)、[#511](https://github.com/speko-tw/inspect-flow/pull/511)）已實作並定案的畫面規則，規格同步（[#533](https://github.com/speko-tw/inspect-flow/issues/533)）；規則內容見 ADM-R37～ADM-R39；套用方式為規格設計（非負責人裁定） |
 | FUI-R14 | 本需求**取代** FUI-R01、FUI-R09、FUI-R11、FUI-R12 中與 UI 路徑、PWA 起始網址及舊路徑轉址有關的部分。現場任務路由為 `/tasks` 與 `/tasks/:id`，管理介面路由依 `admin-dashboard` ADM-R50；單一 React application 依路由群組拆包，Field 任務路由不得載入管理模組。Manifest `start_url` 為 `/tasks/`。舊 `/field/...`、`/admin/...` 與 `/change-password` UI 網址一律回 404，不轉址；API 路徑不變。 | 必須 | #705 路由規則；路由群組拆包依待確認的意圖變更 [KD-12](../../intents/03-decisions-and-stack.md#kd-12)；PWA 其餘規則依 FUI-R09 |
 
@@ -102,7 +102,7 @@
 | FUI-AC13 | （已撤回，保留編號）原驗收要求 Field 專案路徑轉址；#705 刪除舊 UI 相容轉址，改由 FUI-AC16 覆蓋。 | 撤回 | 不再驗收舊 `/field/projects/{project_id}` 轉址行為。 | #705；FUI-R14 |
 | FUI-AC14 | Field 清單與詳情有待開始、進行中、已完成、已取消的任務；有權限者開始查核 | 檢視狀態標籤；開啟開始查核確認，按 Tab 與 Esc | 狀態標籤顏色與管理頁同一份對照（待開始黃、進行中藍、已完成綠、已取消灰）；確認為一般主色、順序［取消］［確認］、焦點在「取消」、Esc 不送出並關閉、在原地展開 | FUI-R13、ADM-R37～R39 |
 | FUI-AC15 | Field 清單有單項與多項目任務，其中一筆的名稱已被內業改成與項目名稱不同的文字 | 開啟今日任務清單與該任務詳情 | 卡片與詳情標題都是任務名稱；卡片以次要文字顯示「首項名稱等 N 項」（單項只顯示項目名稱）；詳情仍逐項列出需求 | FUI-R03 |
-| FUI-AC16 | Field 身分（八種身分中的現場工程師、混合權限者）；範本套用所需專案各一；舊 `/field/...` 與 `/admin/...` UI 路徑樣本 | 檢查 build 產物、manifest 與 iOS meta；從 `/tasks` 點開任務及有權限入口；另直接輸入新路由、舊路由及未知路徑 | manifest 含名稱、圖示、`display: standalone`、`start_url: /tasks/`、主題色；iOS 圖示及 meta 可用，未註冊快取型 Service Worker；Field 路由群組不載入管理 chunk；任務清單與詳情使用 `/tasks`、`/tasks/:id`；入口依 ADM-R50 權限守門，範本頁僅 Admin 或 `template.manage` 可見，單有 `template.use` 不顯示；舊 UI 路徑不轉址並回 404；`/api/v1/...` 路徑不變 | FUI-R01、R09、R11、R12、R14、ADM-R50 |
+| FUI-AC16 | Field 身分（八種身分中的現場工程師、混合權限者）；範本套用所需專案各一；舊 `/field/...` 與 `/admin/...` UI 路徑樣本 | 檢查 build 產物、manifest 與 iOS meta；從 `/tasks` 點開任務及有權限入口；另直接輸入新路由、舊路由及未知路徑 | manifest 含名稱、圖示、`display: standalone`、`start_url: /tasks/`、主題色；iOS 圖示及 meta 可用，未註冊快取型 Service Worker；Field 路由群組不載入管理 chunk；任務清單與詳情使用 `/tasks`、`/tasks/:id`；任務頁內容沒有範本操作入口；全域導覽的範本項目與範本頁僅 Admin 或 `template.manage` 可見，單有 `template.use` 不顯示；舊 UI 路徑不轉址並回 404；`/api/v1/...` 路徑不變 | FUI-R01、R09、R11、R12、R14、ADM-R50 |
 
 ## 待釐清
 
@@ -114,6 +114,7 @@
 ## 變更紀錄
 
 - 規格澄清（#705）：FUI-R14 更新 Field 路徑、Manifest `start_url` 及舊 UI 網址 404；撤回 FUI-AC10、AC12、AC13 並保留編號，新增 FUI-AC16。API 路徑不變。
+- 規格澄清（#705）：FUI-R12 明定範本操作不屬於現場任務頁內容；全域導覽的範本項目只對 Admin 或具 `template.manage` 者顯示，單有 `template.use` 不足。
 
 - 規格設計（非負責人裁定，#419）：Field 安全詳情增列 `suggested_assignee.is_me`、`started_by`（顯示名稱與是否本人）與 `cancellation_reason`（僅已取消任務），讓開始查核後顯示實際開始者、非建議指派者的提示及取消競態的原因；開始被拒絕的說明文案依後端錯誤碼對應，屬規格設計。
 - 規格設計（非負責人裁定，#417）：Field 列表增列目前查核項目摘要及資料庫層 `status` 篩選；卡片多項目文案為「第一項等 N 項」，返回清單時以 URL 保留範圍與狀態、Field 頁面記憶保留已載入頁數及捲動位置；離開 Field 頁面後清除記憶。

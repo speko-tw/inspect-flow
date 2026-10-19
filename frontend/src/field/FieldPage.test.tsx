@@ -58,6 +58,7 @@ function renderPage(
     is_admin: false,
     must_change_password: false,
     has_office_access: false,
+    can_manage_project_planning_or_members: false,
     has_field_access: true,
     can_inspect_tasks: true,
     has_template_access: false,
@@ -120,7 +121,7 @@ describe('今日任務首頁', () => {
     const banner = screen.getByRole('banner')
     expect(
       within(banner).getByRole('link', { name: 'InspectFlow 工程查核系統' }),
-    ).toHaveAttribute('href', '/projects')
+    ).toHaveAttribute('href', '/tasks')
     fireEvent.click(
       within(banner).getByRole('button', { name: '示範查核員 ▾' }),
     )

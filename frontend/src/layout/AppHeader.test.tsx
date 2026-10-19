@@ -31,6 +31,7 @@ const FIELD_PROJECT = currentUserFixture({
 })
 const MIXED = currentUserFixture({
   has_project_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: true,
   can_inspect_tasks: true,
 })
@@ -320,7 +321,7 @@ describe('AppHeader', () => {
     ['系統管理者', ADMIN, '/overview'],
     ['內業', OFFICE, '/projects'],
     ['現場', FIELD, '/tasks'],
-    ['內業加現場', MIXED, '/projects'],
+    ['有專案管理與現場權限', MIXED, '/projects'],
   ])('%s：點系統名稱回到自己的落點', (_label, user, target) => {
     renderHeader(user)
     expect(

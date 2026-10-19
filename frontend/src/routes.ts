@@ -169,6 +169,7 @@ export type RouteAccessUser = {
   is_admin: boolean
   can_inspect_tasks?: boolean
   can_create_project?: boolean
+  can_manage_project_planning_or_members?: boolean
   has_project_access?: boolean
   can_browse_templates?: boolean
   can_manage_template_library?: boolean

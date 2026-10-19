@@ -14,7 +14,6 @@ import {
 import type { CurrentUser } from '../auth/api'
 import {
   canBrowseTemplates,
-  canVisit,
   canManageTemplateLibrary,
   landingLabel,
   landingPath,
@@ -23,11 +22,15 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import ChangePasswordPage from '../auth/ChangePasswordPage'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { NAV_LABELS, PAGE_TITLES } from '../layout/navigationLabels'
-import { canAccessRoute, nestedRoutePath, ROUTES } from '../routes'
+import {
+  canAccessRoute,
+  nestedRoutePath,
+  routeForPath,
+  ROUTES,
+} from '../routes'
 import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
-import { isResourceId } from '../resourceId'
-import { canOpenDashboard, hasGlobalDashboardAccess } from './dashboard/api'
+import { hasGlobalDashboardAccess } from './dashboard/api'
 import CompaniesPage from './CompaniesPage'
 import PeoplePage from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
@@ -52,14 +55,6 @@ const ProjectItemChangePage = lazy(
 const DashboardPage = lazy(() => import('./dashboard/DashboardPage'))
 const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 
-function hasInvalidProjectRoute(pathname: string): boolean {
-  const prefix = `${ROUTES.adminProjects.path}/`
-  if (!pathname.startsWith(prefix)) return false
-  const projectId = pathname.slice(prefix.length).split('/')[0]
-  if (!projectId) return false
-  return !isResourceId(projectId)
-}
-
 const PROJECT_PAGE_ROUTES = [
   ROUTES.projectHome,
   ROUTES.projectMembers,
@@ -72,11 +67,7 @@ const PROJECT_PAGE_ROUTES = [
   ROUTES.projectItemChange,
 ]
 
-type DashboardAccessState =
-  | { kind: 'checking' }
-  | { kind: 'allowed' }
-  | { kind: 'denied' }
-  | { kind: 'error' }
+type DashboardAccessState = { kind: 'allowed' } | { kind: 'denied' }
 
 function AdminRouteSuspense({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
@@ -247,7 +238,6 @@ function AdminPageContent() {
   const { user } = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
-  const invalidProjectRoute = hasInvalidProjectRoute(location.pathname)
   const [temporaryPassword, setTemporaryPassword] = useState<{
     username: string
     password: string
@@ -255,42 +245,9 @@ function AdminPageContent() {
   } | null>(null)
   const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const hasGlobalAccess = hasGlobalDashboardAccess(user)
-  const [dashboardAccessResult, setDashboardAccessResult] = useState<{
-    key: string
-    state: DashboardAccessState
-  }>({ key: '', state: { kind: 'checking' } })
-  const [dashboardRetry, setDashboardRetry] = useState(0)
-  const dashboardAccessKey = `${user.id}:${dashboardRetry}`
-  const dashboardAccess = hasGlobalAccess
-    ? { kind: 'allowed' as const }
-    : dashboardAccessResult.key === dashboardAccessKey
-      ? dashboardAccessResult.state
-      : { kind: 'checking' as const }
-
-  useEffect(() => {
-    if (hasGlobalAccess || invalidProjectRoute) return
-    let active = true
-    canOpenDashboard(user)
-      .then((allowed) => {
-        if (active) {
-          setDashboardAccessResult({
-            key: dashboardAccessKey,
-            state: { kind: allowed ? 'allowed' : 'denied' },
-          })
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setDashboardAccessResult({
-            key: dashboardAccessKey,
-            state: { kind: 'error' },
-          })
-        }
-      })
-    return () => {
-      active = false
-    }
-  }, [dashboardAccessKey, hasGlobalAccess, invalidProjectRoute, user])
+  const dashboardAccess: DashboardAccessState = {
+    kind: hasGlobalAccess ? 'allowed' : 'denied',
+  }
 
   useEffect(() => {
     if (temporaryPassword) resultHeadingRef.current?.focus()
@@ -313,13 +270,7 @@ function AdminPageContent() {
   )
 
   if (!user.is_admin) {
-    return (
-      <MemberAdminShell
-        dashboardAccess={dashboardAccess}
-        onRetryDashboard={() => setDashboardRetry((key) => key + 1)}
-        user={user}
-      />
-    )
+    return <MemberAdminShell dashboardAccess={dashboardAccess} user={user} />
   }
 
   return (
@@ -427,13 +378,7 @@ function AdminPageContent() {
             />
             <Route
               path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
-              element={
-                <DashboardRoute
-                  access={dashboardAccess}
-                  onRetry={() => setDashboardRetry((key) => key + 1)}
-                  user={user}
-                />
-              }
+              element={<DashboardRoute access={dashboardAccess} user={user} />}
             />
             <Route
               path={nestedRoutePath(ROUTES.adminAuditLogs, ROUTES.adminShell)}
@@ -465,11 +410,9 @@ function AdminPageContent() {
 // 只屬系統管理者，這裡一律不列。
 function MemberAdminShell({
   dashboardAccess,
-  onRetryDashboard,
   user,
 }: {
   dashboardAccess: DashboardAccessState
-  onRetryDashboard: () => void
   user: CurrentUser
 }) {
   const location = useLocation()
@@ -477,7 +420,10 @@ function MemberAdminShell({
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
   const canManageAccounts = canAccessRoute(user, ROUTES.adminIndex)
-  const restrictedPage = !canVisit(user, location.pathname)
+  const registeredRoute = routeForPath(location.pathname)
+  const restrictedPage = Boolean(
+    registeredRoute && !canAccessRoute(user, registeredRoute),
+  )
   return (
     <div
       className={
@@ -537,13 +483,7 @@ function MemberAdminShell({
           )}
           <Route
             path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
-            element={
-              <DashboardRoute
-                access={dashboardAccess}
-                onRetry={onRetryDashboard}
-                user={user}
-              />
-            }
+            element={<DashboardRoute access={dashboardAccess} user={user} />}
           />
           {PROJECT_ROUTES}
           {canAccessRoute(user, ROUTES.adminTemplates) && (
@@ -629,32 +569,16 @@ function adminNavigationItems(
 
 function DashboardRoute({
   access,
-  onRetry,
   user,
 }: {
   access: DashboardAccessState
-  onRetry: () => void
   user: CurrentUser
 }) {
-  if (access.kind === 'checking') {
-    return <p role="status">正在確認總覽權限…</p>
-  }
   if (access.kind === 'denied') {
     return (
       <section aria-labelledby="dashboard-denied-heading">
         <h1 id="dashboard-denied-heading">無權限</h1>
         <p role="alert">你目前沒有可查看的專案進度。</p>
-      </section>
-    )
-  }
-  if (access.kind === 'error') {
-    return (
-      <section aria-labelledby="dashboard-access-error-heading">
-        <h1 id="dashboard-access-error-heading">{PAGE_TITLES.overview}</h1>
-        <p role="alert">目前無法確認總覽權限，請重試。</p>
-        <button className="btn" onClick={onRetry} type="button">
-          重新確認
-        </button>
       </section>
     )
   }

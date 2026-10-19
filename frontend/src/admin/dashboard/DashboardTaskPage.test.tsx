@@ -64,6 +64,20 @@ beforeEach(() => {
 })
 
 describe('Dashboard 任務唯讀頁', () => {
+  it('主管可從任務清單點進唯讀明細', async () => {
+    renderAt('/overview/projects/project-1/tasks')
+
+    fireEvent.click(await screen.findByRole('link', { name: /二樓機房/ }))
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'A 棟・二樓機房',
+      }),
+    ).toBeInTheDocument()
+    expect(api.getDashboardTask).toHaveBeenCalledWith('project-1', 'task-2048')
+  })
+
   it('依 API 顯示任務清單與四項白名單明細', async () => {
     renderAt('/overview/projects/project-1/tasks/task-2048')
 

@@ -10,6 +10,7 @@ type AccessSummary = Pick<
   | 'is_admin'
   | 'can_inspect_tasks'
   | 'can_create_project'
+  | 'can_manage_project_planning_or_members'
   | 'has_project_access'
   | 'delegated_modules'
 > &
@@ -53,6 +54,15 @@ export function canBrowseTemplates(user: {
 
 /** 依權限摘要選擇固定的登入落點順序。 */
 export function landingPath(user: AccessSummary): string {
+  // ADM-R23：唯讀專案入口不取代現場人員的任務首頁。
+  if (
+    !user.is_admin &&
+    user.can_inspect_tasks &&
+    !user.can_create_project &&
+    !user.can_manage_project_planning_or_members
+  ) {
+    return ROUTES.fieldTasks.path
+  }
   const candidates = [
     ROUTES.dashboardIndex,
     ROUTES.adminProjects,
@@ -88,7 +98,7 @@ export function canVisit(user: AccessSummary, path: string): boolean {
   const pathname = path.split(/[?#]/)[0]
   if (!pathname) return false
   const route = routeForPath(pathname)
-  return route ? canAccessRoute(user, route) : true
+  return route ? canAccessRoute(user, route) : false
 }
 
 /** 驗證安全的原頁與前次登入身分後，決定登入成功目的地。 */

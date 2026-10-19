@@ -20,6 +20,7 @@ export interface CurrentUser {
   has_office_access: boolean
   has_field_access: boolean
   can_inspect_tasks: boolean
+  can_manage_project_planning_or_members: boolean
   has_template_access: boolean
   // Capability flags are computed from the same effective-access registry
   // as the API guards; older fixtures may omit them during migration.

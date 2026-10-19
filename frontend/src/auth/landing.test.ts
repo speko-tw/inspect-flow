@@ -6,6 +6,7 @@ const NONE = {
   id: 'u1',
   is_admin: false,
   has_office_access: false,
+  can_manage_project_planning_or_members: false,
   has_field_access: false,
   can_inspect_tasks: false,
   has_template_access: false,
@@ -19,7 +20,16 @@ const OFFICE = { ...NONE, has_project_access: true }
 const FIELD = { ...NONE, has_field_access: true, can_inspect_tasks: true }
 const FIELD_PROJECT = {
   ...FIELD,
+  can_manage_project_planning_or_members: true,
   has_project_access: true,
+}
+const FIELD_READ_ONLY_PROJECT = {
+  ...FIELD,
+  has_project_access: true,
+}
+const FIELD_PLANNING = {
+  ...FIELD_READ_ONLY_PROJECT,
+  can_manage_project_planning_or_members: true,
 }
 const TEMPLATE = {
   ...NONE,
@@ -62,9 +72,6 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [TEMPLATE, '/projects/p1/inspection-items/templates'],
     [TEMPLATE_USE_ONLY, '/projects/p1/inspection-items/templates'],
     [NONE, '/settings'],
-    [NONE, '/somewhere-else'],
-    [FIELD, '/administrator'],
-    [OFFICE, '/fieldwork'],
   ])('可以：%j → %s', (user, path) => {
     expect(canVisit(user, path)).toBe(true)
   })
@@ -86,6 +93,9 @@ describe('canVisit：新帳號看得到的頁面（#489）', () => {
     [TEMPLATE, '/projects/p1/members'],
     [TEMPLATE, '/projects/p1/inspection-items'],
     [NONE, '/projects'],
+    [NONE, '/somewhere-else'],
+    [FIELD, '/administrator'],
+    [OFFICE, '/fieldwork'],
   ])('不可以：%j → %s', (user, path) => {
     expect(canVisit(user, path)).toBe(false)
   })
@@ -159,6 +169,14 @@ describe('loginTarget：登入後要去哪（#489）', () => {
     expect(loginTarget(FIELD_PROJECT, undefined, NOBODY_BEFORE)).toBe(
       '/projects',
     )
+  })
+
+  it('現場查核者只有唯讀專案權限時仍落在任務', () => {
+    expect(landingPath(FIELD_READ_ONLY_PROJECT)).toBe('/tasks')
+  })
+
+  it('現場查核者有規劃或成員管理權限時依一般落點順序', () => {
+    expect(landingPath(FIELD_PLANNING)).toBe('/projects')
   })
 
   it('沒有原頁面或不安全的路徑，去落點', () => {
