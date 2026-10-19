@@ -2310,6 +2310,12 @@ a.app-header-tab[aria-current='page'] {
     align-content: center;
   }
 
+  .users-account-name-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--touch-target);
+  }
+
   /* 核取方塊與選項按鈕本身很小，點擊區是整個 label。 */
   label:has(> input[type='checkbox']),
   label:has(> input[type='radio']),
