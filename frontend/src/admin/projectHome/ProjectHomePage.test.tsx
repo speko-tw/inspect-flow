@@ -84,7 +84,9 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
       'project_inspection_item.edit',
       'project_zone.read',
       'inspection_plan.read',
+      'inspection_plan.create',
       'inspection_task.read',
+      'inspection_task.dispatch',
     ],
     ...overrides,
   }
@@ -235,6 +237,69 @@ describe('project home', () => {
     expect(
       screen.queryByRole('link', { name: '前往新增查核項目' }),
     ).not.toBeInTheDocument()
+  })
+
+  // #713：外部協作（專案查閱人員）只有唯讀權限，不論下一步是哪一項，
+  // 都不能出現會被後端擋下的寫入入口。
+  it.each([
+    ['add_members', '加入專案成員'],
+    ['add_inspection_items', '新增查核項目'],
+    ['create_plan', '建立第一個計畫'],
+    ['dispatch_draft_tasks', '完成草稿任務並派出'],
+  ] as const)('外部協作看不到「%s」的寫入入口', async (step, label) => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: step,
+        viewer_permission_codes: [
+          'project.read',
+          'project_inspection_item.read',
+          'project_zone.read',
+          'inspection_plan.read',
+          'inspection_task.read',
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    expect(await screen.findByText('目前沒有你可執行的下一步。')).toBeVisible()
+    expect(screen.queryByText(label)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: `前往${label}` }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: '成員' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['add_members', 'project_member.manage', '/members'],
+    ['create_plan', 'inspection_plan.create', '/planning'],
+    ['dispatch_draft_tasks', 'inspection_task.dispatch', '/planning'],
+  ] as const)('「%s」只在有 %s 時顯示入口', async (step, code, suffix) => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: step,
+        viewer_permission_codes: [
+          'project.read',
+          'inspection_plan.read',
+          code,
+        ],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    const link = await screen.findByRole('link', { name: /^前往/ })
+    expect(link).toHaveAttribute('href', `/projects/project-1${suffix}`)
   })
 
   it('可編輯查核項目的成員會看到新增文案與入口', async () => {

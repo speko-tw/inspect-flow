@@ -352,6 +352,22 @@ describe('AppHeader', () => {
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
   })
 
+  // #713：總覽頁頁首樣式只套在 .app-header-personal-trigger；選單項目
+  // 若也帶這個 class（或落進 .app-header-account button），會變成白字白底。
+  it('選單項目不帶觸發按鈕的 class，不會吃到深色頁首的白字樣式', () => {
+    renderHeader(OFFICE)
+    fireEvent.click(screen.getByRole('button', { name: '示範使用者 ▾' }))
+
+    const menu = screen.getByRole('group', { name: '個人選單' })
+    for (const item of [
+      within(menu).getByRole('link', { name: '設定' }),
+      within(menu).getByRole('button', { name: '登出' }),
+    ]) {
+      expect(item).not.toHaveClass('app-header-personal-trigger')
+      expect(item.closest('.app-header-personal-menu')).not.toBeNull()
+    }
+  })
+
   it.each([
     ['系統管理者', ADMIN],
     ['主管', OFFICE],

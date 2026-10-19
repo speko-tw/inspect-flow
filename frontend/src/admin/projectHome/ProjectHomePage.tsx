@@ -46,6 +46,18 @@ const STEP_CONTENT: Record<
 }
 
 /**
+ * 各步驟的入口對應後端實際 guard 的專案權限碼；沒有該權限的人
+ * 點進去只會被擋，所以一律不顯示（#713）。complete_reinspection
+ * 只是進去看進度，由 canViewProgress／canViewPlanning 另外把關。
+ */
+const STEP_PERMISSION: Partial<Record<WorkflowStepCode, string>> = {
+  add_members: 'project_member.manage',
+  add_inspection_items: 'project_inspection_item.edit',
+  create_plan: 'inspection_plan.create',
+  dispatch_draft_tasks: 'inspection_task.dispatch',
+}
+
+/**
  * 依 ADM-R16、IP-R11（流程摘要）呈現下一步與可見的關鍵數字。
  * 純現場權限者導向自身落點，拒絕或不存在的專案不顯示空首頁。
  */
@@ -97,12 +109,12 @@ export default function ProjectHomePage() {
   const base = routePath(ROUTES.projectHome, { projectId })
   const canViewProgress =
     summary?.viewer_permission_codes.includes('inspection_task.read') ?? false
-  const canEditInspectionItems =
-    summary?.viewer_permission_codes.includes(
-      'project_inspection_item.edit',
-    ) ?? false
   const canViewPlanning =
     summary?.viewer_permission_codes.includes('inspection_plan.read') ?? false
+  const requiredCode = primary ? STEP_PERMISSION[primary] : undefined
+  const canActOnPrimary =
+    requiredCode === undefined ||
+    (summary?.viewer_permission_codes.includes(requiredCode) ?? false)
   const progressFallback = canViewProgress ? '/progress' : '/planning'
   const duplicateWarning = (
     location.state as { duplicateProjectCode?: string } | null
@@ -164,16 +176,14 @@ export default function ProjectHomePage() {
               {primary ? (
                 <>
                   <p>
-                    {primary === 'add_inspection_items' &&
-                    !canEditInspectionItems
-                      ? '目前沒有你可執行的下一步。'
-                      : STEP_CONTENT[primary].label}
+                    {canActOnPrimary
+                      ? STEP_CONTENT[primary].label
+                      : '目前沒有你可執行的下一步。'}
                   </p>
                   {(primary !== 'complete_reinspection' ||
                     canViewProgress ||
                     canViewPlanning) &&
-                    (primary !== 'add_inspection_items' ||
-                      canEditInspectionItems) && (
+                    canActOnPrimary && (
                       <Link
                         className="btn btn-primary"
                         to={`${base}${

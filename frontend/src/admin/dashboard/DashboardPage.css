@@ -30,7 +30,8 @@
   color: var(--color-brand-accent);
 }
 
-.dashboard-shell .app-header-account button {
+/* 只套在選單觸發鈕：選單項目在淺色面板上，不能跟著變白字。 */
+.dashboard-shell .app-header-personal-trigger {
   border-color: var(--color-brand-accent);
   background: transparent;
   color: var(--color-text-inverse);
@@ -43,13 +44,13 @@
 }
 
 .dashboard-shell .app-header-tab:hover,
-.dashboard-shell .app-header-account button:hover {
+.dashboard-shell .app-header-personal-trigger:hover {
   background: var(--color-header-nav-hover);
   color: var(--color-text-inverse);
 }
 
 .dashboard-shell .app-header-tab:active,
-.dashboard-shell .app-header-account button:active {
+.dashboard-shell .app-header-personal-trigger:active {
   background: var(--color-header-nav-pressed);
 }
 
