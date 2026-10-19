@@ -8,6 +8,7 @@ import {
   ResourceState,
 } from '../../components/layout/LayoutPatterns'
 import { STATUS_BADGES } from '../../ui/statusBadge'
+import { ROUTES } from '../../routes'
 import {
   getDashboardTask,
   listDashboardProjects,
@@ -43,8 +44,10 @@ function taskLocation(task: DashboardTask): string {
 export default function DashboardTaskPage() {
   const { projectId = '', taskId } = useParams()
   const navigate = useNavigate()
-  const basePath =
-    '/admin/dashboard/projects/' + encodeURIComponent(projectId) + '/tasks'
+  const basePath = ROUTES.dashboardTasks.path.replace(
+    ':projectId',
+    encodeURIComponent(projectId),
+  )
   const [projectName, setProjectName] = useState(projectId)
   const [listResult, setListResult] = useState<{
     requestKey: string
@@ -186,7 +189,7 @@ export default function DashboardTaskPage() {
       <section className="dashboard-task-page" aria-labelledby="task-denied">
         <h1 id="task-denied">目前無法查看專案進度</h1>
         <p role="alert">你目前沒有查看此專案任務的權限。</p>
-        <Link className="dashboard-task-back" to="/admin/dashboard">
+        <Link className="dashboard-task-back" to={ROUTES.dashboardIndex.path}>
           返回專案進度總覽
         </Link>
       </section>
@@ -196,7 +199,7 @@ export default function DashboardTaskPage() {
   return (
     <main className="dashboard-task-page">
       <nav aria-label="頁面路徑" className="dashboard-task-crumb">
-        <Link to="/admin/dashboard">全部專案進度</Link>
+        <Link to={ROUTES.dashboardIndex.path}>全部專案進度</Link>
         <span aria-hidden="true">／</span>
         <span>{projectName}</span>
       </nav>

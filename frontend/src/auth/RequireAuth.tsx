@@ -9,6 +9,7 @@ import { Navigate, useLocation } from 'react-router'
 import { fetchCurrentUser, type CurrentUser } from './api'
 import { markSignedOut, rememberUser } from './sessionMemory'
 import { CurrentUserProvider } from './useCurrentUser'
+import { ROUTES } from '../routes'
 
 /**
  * 變更密碼頁的路徑。`must_change_password = true` 時導向這裡
@@ -16,7 +17,7 @@ import { CurrentUserProvider } from './useCurrentUser'
  * 本身也用 `RequireAuth` 包住（仍要求登入），但守衛不應該把它導向
  * 自己。
  */
-const CHANGE_PASSWORD_PATH = '/change-password'
+const CHANGE_PASSWORD_PATH = ROUTES.changePassword.path
 
 type Status =
   | { kind: 'loading' }

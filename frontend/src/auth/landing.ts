@@ -13,7 +13,8 @@
 import type { CurrentUser } from './api'
 import { isSafeRedirectPath } from './safeRedirect'
 import type { PreviousSession } from './sessionMemory'
-import { PAGE_TITLES } from '../layout/navigationLabels'
+import { ROUTES } from '../routes'
+import { landingLabel as getLandingLabel } from '../terms'
 
 type AccessSummary = Pick<
   CurrentUser,
@@ -44,27 +45,42 @@ export function landingPath(user: AccessSummary): string {
     user.is_admin ||
     user.module_permissions?.includes('all_project_progress.read')
   ) {
-    return '/admin/dashboard'
+    return ROUTES.dashboardIndex.path
   }
-  if (user.delegated_modules.length > 0) return '/admin/people'
+  if (user.delegated_modules.length > 0) {
+    return ROUTES.adminPeople.path.replace('/:personId?', '')
+  }
   if (user.has_office_access || user.can_create_project) {
-    return '/admin/projects'
+    return ROUTES.adminProjects.path
   }
-  if (user.has_field_access) return '/field'
-  if (user.has_project_access) return '/admin/projects'
-  return canBrowseTemplates(user) ? '/admin/templates' : '/change-password'
+  if (user.has_field_access) return ROUTES.fieldTasks.path
+  if (user.has_project_access) return ROUTES.adminProjects.path
+  return canBrowseTemplates(user)
+    ? ROUTES.adminTemplates.path
+    : ROUTES.changePassword.path
 }
 
 /** 落點的白話名稱，用在「返回…」連結上。 */
 export function landingLabel(path: string): string {
-  if (path === '/admin' || path === '/admin/people') {
-    return PAGE_TITLES.account
+  if (
+    path === ROUTES.adminIndex.path ||
+    path === ROUTES.adminPeople.path.replace('/:personId?', '')
+  ) {
+    return getLandingLabel('account')
   }
-  if (path === '/admin/projects') return PAGE_TITLES.projects
-  if (path === '/admin/dashboard') return PAGE_TITLES.overview
-  if (path === '/admin/templates') return PAGE_TITLES.templates
-  if (path === '/change-password') return PAGE_TITLES.personalSettings
-  return PAGE_TITLES.tasks
+  if (path === ROUTES.adminProjects.path) {
+    return getLandingLabel('projects')
+  }
+  if (path === ROUTES.dashboardIndex.path) {
+    return getLandingLabel('overview')
+  }
+  if (path === ROUTES.adminTemplates.path) {
+    return getLandingLabel('templates')
+  }
+  if (path === ROUTES.changePassword.path) {
+    return getLandingLabel('settings')
+  }
+  return getLandingLabel('tasks')
 }
 
 function underPrefix(path: string, prefix: string): boolean {
@@ -78,22 +94,32 @@ function underPrefix(path: string, prefix: string): boolean {
  */
 export function canVisit(user: AccessSummary, path: string): boolean {
   const pathname = path.split(/[?#]/)[0]
-  if (underPrefix(pathname, '/change-password')) return true
-  if (underPrefix(pathname, '/field')) {
+  const fieldPrefix = ROUTES.fieldShell.path.replace(/\/\*$/, '')
+  const adminPrefix = ROUTES.adminShell.path.replace(/\/\*$/, '')
+  if (underPrefix(pathname, ROUTES.changePassword.path)) return true
+  if (underPrefix(pathname, fieldPrefix)) {
     return user.is_admin || user.has_field_access
   }
-  if (underPrefix(pathname, '/admin/people')) {
+  if (
+    underPrefix(pathname, ROUTES.adminPeople.path.replace('/:personId?', ''))
+  ) {
     return user.is_admin || user.delegated_modules.length > 0
   }
-  if (!underPrefix(pathname, '/admin')) return true
+  if (!underPrefix(pathname, adminPrefix)) return true
   if (user.is_admin) return true
-  if (underPrefix(pathname, '/admin/templates')) {
+  if (underPrefix(pathname, ROUTES.adminTemplates.path)) {
     return canBrowseTemplates(user)
   }
-  if (underPrefix(pathname, '/admin/projects')) {
+  if (underPrefix(pathname, ROUTES.adminProjects.path)) {
     // 專案的範本頁也開給範本管理員；其餘專案頁屬內業。
     const templatePagePattern = new RegExp(
-      '^/admin/projects/[^/]+/(?:inspection-items/templates|templates)/?$',
+      `^${ROUTES.projectInspectionTemplates.path.replace(
+        ':projectId',
+        '[^/]+',
+      )}/?$|^${ROUTES.projectTemplatesAlias.path.replace(
+        ':projectId',
+        '[^/]+',
+      )}/?$`,
     )
     return (
       user.has_office_access ||

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
+import {
+  Link,
+  matchPath,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router'
 
 import { landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -8,6 +14,7 @@ import { ResourceState } from '../components/layout/LayoutPatterns'
 import { isForbidden } from '../http'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { PAGE_TITLES } from '../layout/navigationLabels'
+import { ROUTES } from '../routes'
 import RouteNotFound from '../RouteNotFound'
 import { StatusBadge } from '../ui/Badge'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
@@ -71,15 +78,20 @@ export default function FieldPage() {
   const [listMemory] = useState(() => new Map<string, ListState>())
   const [returnKeys] = useState(() => new Set<string>())
   const location = useLocation()
-  const detailId = location.pathname.match(/^\/field\/tasks\/([^/]+)\/?$/)?.[1]
+  const detailPattern = new RegExp(
+    `^${ROUTES.fieldTask.path.replace(':id', '([^/]+)')}/?$`,
+  )
+  const detailId = location.pathname.match(detailPattern)?.[1]
   // `/field` 以外、也不是任務詳情的網址（例如 `/field/abc123`）：找不到。
-  const unknownPath = !detailId && !/^\/field\/?$/.test(location.pathname)
+  const unknownPath =
+    !detailId &&
+    !matchPath({ path: ROUTES.fieldTasks.path, end: true }, location.pathname)
   const notice = (location.state as { notice?: unknown } | null)?.notice
   return (
     <>
       <AppHeader
         navItems={memberNavItems(user).filter(
-          (item) => item.to !== '/admin/templates',
+          (item) => item.to !== ROUTES.adminTemplates.path,
         )}
         navLabel="我的功能"
         user={user}
@@ -183,7 +195,7 @@ function TaskList({
       .catch((cause: unknown) => {
         if (!active) return
         if (cause instanceof FieldApiError && cause.status === 401) {
-          navigate('/login', {
+          navigate(ROUTES.login.path, {
             state: { from: location.pathname + location.search },
           })
         } else {
@@ -296,7 +308,7 @@ function TaskList({
           <h2>目前無法查看現場任務</h2>
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
           {user.has_office_access && (
-            <Link className="btn" to="/admin/projects">
+            <Link className="btn" to={ROUTES.adminProjects.path}>
               前往我的專案
             </Link>
           )}
@@ -347,7 +359,10 @@ function TaskList({
                 <Link
                   className={`field-task-card ${task.status === 'IN_PROGRESS' ? 'progress' : ''}`}
                   key={task.id}
-                  to={`/field/tasks/${task.id}${location.search}`}
+                  to={`${ROUTES.fieldTask.path.replace(
+                    ':id',
+                    task.id,
+                  )}${location.search}`}
                   onClick={() => {
                     returnKeys.add(key)
                     const saved = memory.get(key)

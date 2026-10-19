@@ -20,6 +20,7 @@ import RouteLoadErrorBoundary, {
 import SetupGate from './setup/SetupGate'
 import VersionFooter from './VersionFooter'
 import { SESSION_EXPIRED_EVENT } from './http'
+import { ROUTES } from './routes'
 
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
@@ -32,7 +33,10 @@ function LegacyProjectTemplateRedirect() {
   return (
     <Navigate
       replace
-      to={`/admin/projects/${projectId}/inspection-items/templates`}
+      to={ROUTES.projectInspectionTemplates.path.replace(
+        ':projectId',
+        projectId,
+      )}
     />
   )
 }
@@ -96,7 +100,7 @@ export default function App() {
         <Suspense fallback={null}>
           <Routes>
             <Route
-              path="/"
+              path={ROUTES.home.path}
               element={
                 <SetupGate>
                   <HomeRedirect />
@@ -104,7 +108,7 @@ export default function App() {
               }
             />
             <Route
-              path="/login"
+              path={ROUTES.login.path}
               element={
                 <SetupGate>
                   <LoginPage />
@@ -112,7 +116,7 @@ export default function App() {
               }
             />
             <Route
-              path="/setup"
+              path={ROUTES.setup.path}
               element={
                 <RouteLoadErrorBoundary>
                   <SetupPage />
@@ -120,7 +124,7 @@ export default function App() {
               }
             />
             <Route
-              path="/change-password"
+              path={ROUTES.changePassword.path}
               element={
                 // key：見下方 /admin、/field 的說明。
                 <RequireAuth key="change-password">
@@ -129,7 +133,7 @@ export default function App() {
               }
             />
             <Route
-              path="/admin/*"
+              path={ROUTES.adminShell.path}
               element={
                 // 三個 RequireAuth 各給不同的 key：react-router 在同一
                 // 個 <Routes> 位置切換相符的 Route 時，若前後兩個
@@ -150,7 +154,7 @@ export default function App() {
               }
             />
             <Route
-              path="/field/*"
+              path={ROUTES.fieldShell.path}
               element={
                 <RequireAuth key="field">
                   <RouteLoadErrorBoundary>
@@ -160,7 +164,7 @@ export default function App() {
               }
             />
             <Route
-              path="/field/projects/:projectId"
+              path={ROUTES.legacyFieldProject.path}
               element={
                 <RequireAuth key="project-templates">
                   <RequireValidRouteIds>

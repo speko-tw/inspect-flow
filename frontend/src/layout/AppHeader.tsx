@@ -16,7 +16,8 @@ import type { CurrentUser } from '../auth/api'
 import { canBrowseTemplates, landingPath } from '../auth/landing'
 import LogoutButton from '../auth/LogoutButton'
 import '../styles/g7-shell.css'
-import { NAV_LABELS } from './navigationLabels'
+import { ROUTES } from '../routes'
+import { NAV_LABELS } from '../terms'
 
 export const SYSTEM_NAME = 'InspectFlow 工程查核系統'
 
@@ -53,13 +54,13 @@ export function memberNavItems(user: HeaderUser): HeaderNavItem[] {
     user.has_project_access ||
     user.can_create_project
   ) {
-    items.push({ to: '/admin/projects', label: NAV_LABELS.projects })
+    items.push({ to: ROUTES.adminProjects.path, label: NAV_LABELS.projects })
   }
   if (canBrowseTemplates(user)) {
-    items.push({ to: '/admin/templates', label: NAV_LABELS.templates })
+    items.push({ to: ROUTES.adminTemplates.path, label: NAV_LABELS.templates })
   }
   if (user.has_field_access) {
-    items.push({ to: '/field', label: NAV_LABELS.tasks })
+    items.push({ to: ROUTES.fieldTasks.path, label: NAV_LABELS.tasks })
   }
   return items
 }
@@ -236,7 +237,7 @@ export default function AppHeader({
                       state={{
                         from: `${location.pathname}${location.search}${location.hash}`,
                       }}
-                      to="/change-password"
+                      to={ROUTES.changePassword.path}
                     >
                       {NAV_LABELS.settings}
                     </Link>
