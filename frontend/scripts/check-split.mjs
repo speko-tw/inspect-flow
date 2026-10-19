@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// 拆包檢查（SKL-AC03）。定義「造訪 /field 會載入的 chunk」：
+// 拆包檢查（SKL-AC03）。定義「造訪 /tasks 會載入的 chunk」：
 // 所有 HTML 入口 chunk（isEntry）加上 Field chunk，一律沿
 // imports 走。動態依賴以模組為單位：查每個模組在
 // dynamicImportsByModule 的紀錄，importer 是路由分割點
@@ -275,7 +275,7 @@ async function main() {
   }
 
   if (violations.length > 0) {
-    console.error('造訪 /field 會載入的 chunk 含有 Admin 模組：')
+    console.error('造訪 /tasks 會載入的 chunk 含有 Admin 模組：')
     for (const violation of violations) {
       console.error(`  - ${violation.chunk} <- ${violation.moduleId}`)
     }

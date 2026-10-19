@@ -45,6 +45,8 @@ const project: Project = {
   planned_completion_date: null,
   warnings: [],
 }
+const otherProjectLabel = '測試導覽至另一專案'
+const projectHomeLabel = '測試返回專案首頁'
 
 function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
   return {
@@ -89,8 +91,12 @@ function summary(overrides: Partial<WorkflowSummary> = {}): WorkflowSummary {
 }
 
 function renderAt(
-  path = '/admin/projects/project-1',
-  access: { has_office_access: boolean; has_field_access: boolean } = {
+  path = '/projects/project-1',
+  access: {
+    has_office_access: boolean
+    has_field_access: boolean
+    has_project_access?: boolean
+  } = {
     has_office_access: false,
     has_field_access: true,
   },
@@ -102,54 +108,51 @@ function renderAt(
       >
         <WorkflowSummaryProvider>
           <main>
-            <Link
-              aria-label="測試導覽至另一專案"
-              to="/admin/projects/project-2"
-            >
+            <Link aria-label={otherProjectLabel} to="/projects/project-2">
               切換專案
             </Link>
             <Link
               aria-label="測試導覽至計畫區段"
-              to="/admin/projects/project-1/planning"
+              to="/projects/project-1/planning"
             >
               開啟計畫區段
             </Link>
             <Link
               aria-label="測試導覽至成員區段"
-              to="/admin/projects/project-1/members"
+              to="/projects/project-1/members"
             >
               開啟成員區段
             </Link>
-            <Link aria-label="測試離開專案" to="/admin/projects">
+            <Link aria-label="測試離開專案" to="/projects">
               離開專案
             </Link>
-            <Link aria-label="測試返回專案首頁" to="/admin/projects/project-1">
+            <Link aria-label={projectHomeLabel} to="/projects/project-1">
               返回專案首頁
             </Link>
             <Routes>
               <Route
                 element={<ProjectHomePage />}
-                path="/admin/projects/:projectId"
+                path="/projects/:projectId"
               />
               <Route
                 element={<ProjectSectionPage section="members" />}
-                path="/admin/projects/:projectId/members"
+                path="/projects/:projectId/members"
               />
               <Route
                 element={<ProjectSectionPage section="inspection-items" />}
-                path="/admin/projects/:projectId/inspection-items"
+                path="/projects/:projectId/inspection-items"
               />
               <Route
                 element={<ProjectSectionPage section="zones" />}
-                path="/admin/projects/:projectId/zones"
+                path="/projects/:projectId/zones"
               />
               <Route
                 element={<ProjectSectionPage section="planning" />}
-                path="/admin/projects/:projectId/planning"
+                path="/projects/:projectId/planning"
               />
               <Route
                 element={<ProjectSectionPage section="progress" />}
-                path="/admin/projects/:projectId/progress"
+                path="/projects/:projectId/progress"
               />
               <Route
                 element={
@@ -157,10 +160,10 @@ function renderAt(
                     <p>查核項目細節</p>
                   </ProjectSectionPage>
                 }
-                path="/admin/projects/:projectId/inspection-items/:itemId"
+                path="/projects/:projectId/inspection-items/:itemId"
               />
-              <Route element={<p>Field 工作台</p>} path="/field" />
-              <Route element={<p>我的專案清單</p>} path="/admin/projects" />
+              <Route element={<p>Field 工作台</p>} path="/tasks" />
+              <Route element={<p>我的專案清單</p>} path="/projects" />
             </Routes>
           </main>
         </WorkflowSummaryProvider>
@@ -221,7 +224,7 @@ describe('project home', () => {
       }),
     )
 
-    renderAt('/admin/projects/project-1', {
+    renderAt('/projects/project-1', {
       has_office_access: true,
       has_field_access: true,
     })
@@ -239,7 +242,7 @@ describe('project home', () => {
       summary({ primary_step: 'add_inspection_items' }),
     )
 
-    renderAt('/admin/projects/project-1', {
+    renderAt('/projects/project-1', {
       has_office_access: true,
       has_field_access: true,
     })
@@ -247,7 +250,7 @@ describe('project home', () => {
     expect(await screen.findByText('新增查核項目')).toBeVisible()
     expect(
       screen.getByRole('link', { name: '前往新增查核項目' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/inspection-items')
+    ).toHaveAttribute('href', '/projects/project-1/inspection-items')
   })
 
   it('leaves the role blank while the label list is loading', async () => {
@@ -450,7 +453,7 @@ describe('project home', () => {
       screen.getByRole('link', {
         name: '前往完成草稿任務並派出',
       }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+    ).toHaveAttribute('href', '/projects/project-1/planning')
     expect(screen.getByText('2 人')).toBeVisible()
     expect(screen.getByText('3 項')).toBeVisible()
     expect(screen.getByText('4 件')).toBeVisible()
@@ -460,10 +463,10 @@ describe('project home', () => {
   })
 
   it.each([
-    ['/admin/projects/project-1', '專案首頁'],
-    ['/admin/projects/project-1/members', '成員'],
-    ['/admin/projects/project-1/inspection-items', '查核項目'],
-    ['/admin/projects/project-1/planning', '計畫與任務'],
+    ['/projects/project-1', '專案首頁'],
+    ['/projects/project-1/members', '成員'],
+    ['/projects/project-1/inspection-items', '查核項目'],
+    ['/projects/project-1/planning', '計畫與任務'],
   ])('marks only %s as the current project section', async (path, label) => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(summary())
@@ -507,7 +510,7 @@ describe('project home', () => {
     expect(screen.getByRole('link', { name: '分區' })).toBeVisible()
     expect(screen.getByRole('link', { name: '進度' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/progress',
+      '/projects/project-1/progress',
     )
     expect(screen.getByRole('link', { name: '計畫與任務' })).toBeVisible()
   })
@@ -567,7 +570,7 @@ describe('project home', () => {
       }),
     )
 
-    renderAt('/admin/projects/project-1', {
+    renderAt('/projects/project-1', {
       has_office_access: true,
       has_field_access: false,
     })
@@ -588,21 +591,18 @@ describe('project home', () => {
 
     expect(
       await screen.findByRole('link', { name: '待開始 2' }),
-    ).toHaveAttribute(
-      'href',
-      '/admin/projects/project-1/progress?status=PENDING',
-    )
+    ).toHaveAttribute('href', '/projects/project-1/progress?status=PENDING')
     expect(screen.getByRole('link', { name: '進行中 1' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/progress?status=IN_PROGRESS',
+      '/projects/project-1/progress?status=IN_PROGRESS',
     )
     expect(screen.getByRole('link', { name: '4 件' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/progress?status=DRAFT',
+      '/projects/project-1/progress?status=DRAFT',
     )
     expect(screen.getByRole('link', { name: '1 件' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/progress?status=reinspection',
+      '/projects/project-1/progress?status=reinspection',
     )
   })
 
@@ -618,7 +618,7 @@ describe('project home', () => {
       await screen.findByRole('link', {
         name: '前往追蹤任務進度',
       }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/planning')
+    ).toHaveAttribute('href', '/projects/project-1/planning')
   })
 
   it('sends all-complete projects to progress', async () => {
@@ -630,7 +630,7 @@ describe('project home', () => {
     expect(await screen.findByText('目前沒有待處理的下一步。')).toBeVisible()
     expect(screen.getByRole('link', { name: '追蹤進度' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/progress',
+      '/projects/project-1/progress',
     )
   })
 
@@ -659,7 +659,7 @@ describe('project home', () => {
       }),
     )
 
-    renderAt('/admin/projects/project-1', {
+    renderAt('/projects/project-1', {
       has_office_access: false,
       has_field_access: true,
     })
@@ -683,7 +683,7 @@ describe('project home', () => {
       await screen.findByRole('link', { name: '前往追蹤任務進度' }),
     ).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/progress?status=reinspection',
+      '/projects/project-1/progress?status=reinspection',
     )
   })
 
@@ -692,9 +692,10 @@ describe('project home', () => {
       summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
     )
 
-    renderAt('/admin/projects/project-1', {
+    renderAt('/projects/project-1', {
       has_office_access: true,
       has_field_access: true,
+      has_project_access: true,
     })
 
     expect(await screen.findByText('我的專案清單')).toBeVisible()
@@ -714,7 +715,7 @@ describe('project home', () => {
         .getAllByRole('link', { name: '計畫與任務' })
         .some(
           (link) =>
-            link.getAttribute('href') === '/admin/projects/project-1/planning',
+            link.getAttribute('href') === '/projects/project-1/planning',
         ),
     ).toBe(true)
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -728,7 +729,7 @@ describe('project home', () => {
       summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
     )
 
-    renderAt('/admin/projects/project-1/members')
+    renderAt('/projects/project-1/members')
 
     expect(await screen.findByText('Field 工作台')).toBeVisible()
     expect(mocks.getProject).not.toHaveBeenCalled()
@@ -739,7 +740,7 @@ describe('project home', () => {
       summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
     )
 
-    renderAt('/admin/projects/project-1/zones')
+    renderAt('/projects/project-1/zones')
 
     expect(await screen.findByText('Field 工作台')).toBeVisible()
     expect(
@@ -752,7 +753,7 @@ describe('project home', () => {
       summary({ viewer_permission_codes: ['inspection_task.inspect'] }),
     )
 
-    renderAt('/admin/projects/project-1/inspection-items/item-1')
+    renderAt('/projects/project-1/inspection-items/item-1')
 
     expect(await screen.findByText('Field 工作台')).toBeVisible()
     expect(screen.queryByText('查核項目細節')).not.toBeInTheDocument()
@@ -774,7 +775,7 @@ describe('project home', () => {
     // 有出路：依權限回到落點，不再固定回 /field（#480）。
     expect(screen.getByRole('link', { name: '返回我的任務' })).toHaveAttribute(
       'href',
-      '/field',
+      '/tasks',
     )
   })
 
@@ -783,7 +784,7 @@ describe('project home', () => {
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce(summary())
 
-    renderAt('/admin/projects/project-1/progress')
+    renderAt('/projects/project-1/progress')
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('無法連線到伺服器')

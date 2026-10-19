@@ -853,7 +853,7 @@ describe('ModulePermissionsPage', () => {
       await within(summary).findByRole('link', {
         name: 'PR-1／示範工程',
       }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/members')
+    ).toHaveAttribute('href', '/projects/project-1/members')
   })
 
   it('can retry loading projects in the ability summary', async () => {
@@ -1445,7 +1445,7 @@ describe('ModulePermissionsPage', () => {
     ).toBeVisible()
     expect(
       screen.getByRole('link', { name: '前往專案成員設定' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/members')
+    ).toHaveAttribute('href', '/projects/project-1/members')
     assignCandidateRole('現場工程師')
     expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
     expect(

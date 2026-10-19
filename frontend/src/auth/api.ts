@@ -19,6 +19,7 @@ export interface CurrentUser {
   // 只讀這三個值，前端不自行猜測；系統管理者三者皆為 true。
   has_office_access: boolean
   has_field_access: boolean
+  can_inspect_tasks: boolean
   has_template_access: boolean
   // Capability flags are computed from the same effective-access registry
   // as the API guards; older fixtures may omit them during migration.

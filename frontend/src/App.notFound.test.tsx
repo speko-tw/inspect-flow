@@ -26,6 +26,7 @@ const BASE = currentUserFixture({
   is_admin: false,
   has_office_access: false,
   has_field_access: false,
+  can_inspect_tasks: false,
   has_template_access: false,
 })
 const ADMIN = {
@@ -33,11 +34,22 @@ const ADMIN = {
   is_admin: true,
   has_office_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
 }
-const OFFICE = { ...BASE, has_office_access: true }
-const FIELD = { ...BASE, has_field_access: true }
-const BOTH = { ...BASE, has_office_access: true, has_field_access: true }
+const OFFICE = {
+  ...BASE,
+  has_office_access: true,
+  has_project_access: true,
+}
+const FIELD = { ...BASE, has_field_access: true, can_inspect_tasks: true }
+const BOTH = {
+  ...BASE,
+  has_office_access: true,
+  has_project_access: true,
+  has_field_access: true,
+  can_inspect_tasks: true,
+}
 
 const SUMMARY = {
   project: {
@@ -74,15 +86,21 @@ const NOT_FOUND = { error: { code: 'resource.not_found' } }
 const DENIED = { error: { code: 'permission.denied' } }
 
 /** 依 id 決定專案與任務的回應：bad＝格式不對、gone＝不存在、nope＝無權限。 */
-function stubBackend(me: typeof BASE) {
+let requests: string[] = []
+
+function stubBackend(me: typeof BASE | null) {
+  requests = []
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const { pathname } = new URL(String(input), 'http://testserver')
+      requests.push(pathname)
       if (pathname.endsWith('/setup/status')) {
         return Response.json({ setup_required: false })
       }
-      if (pathname.endsWith('/auth/me')) return Response.json(me)
+      if (pathname.endsWith('/auth/me')) {
+        return me ? Response.json(me) : new Response(null, { status: 401 })
+      }
       const project = pathname.match(/\/projects\/([^/]+)\//)?.[1]
       if (project === 'bad') {
         return Response.json(VALIDATION_FAILED, { status: 422 })
@@ -130,13 +148,13 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('專案網址的 id 無效或不存在', () => {
   it.each([
-    ['系統管理者', ADMIN, '/admin/dashboard'],
-    ['內業', OFFICE, '/admin/projects'],
+    ['系統管理者', ADMIN, '/overview'],
+    ['內業', OFFICE, '/projects'],
   ] as const)(
     '%s：專案首頁 id 格式不對（422）顯示找不到並可回首頁',
     async (_name, user, home) => {
       stubBackend(user)
-      await renderApp('/admin/projects/bad')
+      await renderApp('/projects/bad')
 
       expect(
         await screen.findByRole('heading', { name: '找不到這個專案' }),
@@ -154,14 +172,14 @@ describe('專案網址的 id 無效或不存在', () => {
 
   it('專案首頁 id 不存在（404）顯示找不到並可回首頁', async () => {
     stubBackend(OFFICE)
-    await renderApp('/admin/projects/gone')
+    await renderApp('/projects/gone')
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個專案' }),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/admin/projects',
+      '/projects',
     )
   })
 
@@ -169,14 +187,14 @@ describe('專案網址的 id 無效或不存在', () => {
     '專案的 %s 頁：id 無效或不存在時顯示找不到',
     async (section) => {
       stubBackend(OFFICE)
-      const first = await renderApp(`/admin/projects/bad/${section}`)
+      const first = await renderApp(`/projects/bad/${section}`)
       expect(
         await screen.findByRole('heading', { name: '找不到這個專案' }),
       ).toBeVisible()
       expectNoLegacyMessage()
       first.unmount()
 
-      await renderApp(`/admin/projects/gone/${section}`)
+      await renderApp(`/projects/gone/${section}`)
       expect(
         await screen.findByRole('heading', { name: '找不到這個專案' }),
       ).toBeVisible()
@@ -186,27 +204,27 @@ describe('專案網址的 id 無效或不存在', () => {
 
   it('套用範本頁：專案 id 無效時顯示找不到', async () => {
     stubBackend(ADMIN)
-    await renderApp('/admin/projects/bad/templates')
+    await renderApp('/projects/bad/inspection-items/templates')
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個專案' }),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/admin/dashboard',
+      '/overview',
     )
   })
 
   it('查核項目 id 不存在時顯示找不到，專案頁框仍在', async () => {
     stubBackend(OFFICE)
-    await renderApp('/admin/projects/project-a/inspection-items/abc123')
+    await renderApp('/projects/project-a/inspection-items/abc123')
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個查核項目' }),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/admin/projects',
+      '/projects',
     )
     expect(
       screen.getByRole('heading', { name: 'DEMO-A｜示範工程甲' }),
@@ -215,7 +233,7 @@ describe('專案網址的 id 無效或不存在', () => {
 
   it('無權限（403）仍顯示無權限頁，不改成找不到', async () => {
     stubBackend(OFFICE)
-    await renderApp('/admin/projects/nope')
+    await renderApp('/projects/nope')
 
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
@@ -226,13 +244,13 @@ describe('專案網址的 id 無效或不存在', () => {
 
 describe('不存在的子路徑', () => {
   it.each([
-    ['系統管理者', ADMIN, '/admin/dashboard'],
-    ['內業', OFFICE, '/admin/projects'],
+    ['系統管理者', ADMIN, '/overview'],
+    ['內業', OFFICE, '/projects'],
   ] as const)(
     '%s：專案底下不存在的子路徑顯示找不到並可回首頁',
     async (_name, user, home) => {
       stubBackend(user)
-      await renderApp('/admin/projects/project-a/abc123')
+      await renderApp('/projects/project-a/abc123')
 
       expect(
         await screen.findByRole('heading', { name: '找不到這個頁面' }),
@@ -246,7 +264,7 @@ describe('不存在的子路徑', () => {
 
   it('專案已有的區段再往下接亂碼也顯示找不到', async () => {
     stubBackend(OFFICE)
-    await renderApp('/admin/projects/project-a/members/abc123')
+    await renderApp('/projects/project-a/members/abc123')
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
@@ -263,7 +281,7 @@ describe('不存在的子路徑', () => {
     expect(screen.getByRole('link', { name: '回首頁' })).toBeVisible()
   })
 
-  it.each(['/admin/people', '/admin/people/user-1'])(
+  it.each(['/accounts', '/accounts/user-1'])(
     '非管理者開帳號頁仍顯示無權限：%s',
     async (path) => {
       stubBackend(OFFICE)
@@ -287,17 +305,13 @@ describe('不存在的子路徑', () => {
     ).toBeNull()
   })
 
-  it('現場帳號：/field 底下不存在的路徑顯示找不到，回首頁回任務清單', async () => {
+  it('舊的 /field 底下路徑顯示找不到', async () => {
     stubBackend(FIELD)
     await renderApp('/field/abc123')
 
     expect(
       await screen.findByRole('heading', { name: '找不到這個頁面' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
-      'href',
-      '/field',
-    )
   })
 })
 
@@ -307,27 +321,69 @@ describe('任務 id 無效或不存在', () => {
     ['不存在（404）', 'gone'],
   ])('現場帳號：任務 id %s 顯示找不到，可回首頁', async (_n, id) => {
     stubBackend(FIELD)
-    await renderApp(`/field/tasks/${id}`)
+    await renderApp(`/tasks/${id}`)
 
     expect(
       await screen.findByRole('heading', { name: '找不到這筆任務' }),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/field',
+      '/tasks',
     )
   })
 
   it('同時有內業權限的帳號：找不到任務時回首頁連到落點', async () => {
     stubBackend(BOTH)
-    await renderApp('/field/tasks/bad')
+    await renderApp('/tasks/bad')
 
     expect(
       await screen.findByRole('heading', { name: '找不到這筆任務' }),
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '回首頁' })).toHaveAttribute(
       'href',
-      '/admin/projects',
+      '/projects',
     )
+  })
+})
+
+describe('舊產品網址不再轉址', () => {
+  it.each([
+    '/admin',
+    '/admin/projects',
+    '/admin/projects/project-1/templates',
+    '/field',
+    '/field/tasks',
+    '/field/projects/project-1',
+    '/change-password',
+    '/change-password/reset',
+  ])('%s 顯示找不到頁面', async (path) => {
+    stubBackend(ADMIN)
+    await renderApp(path)
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
+    ).toBeVisible()
+  })
+
+  it.each([
+    '/admin',
+    '/admin/projects',
+    '/field',
+    '/field/tasks',
+    '/change-password',
+  ])('未登入：%s 回 404，不呼叫資料 API', async (path) => {
+    stubBackend(null)
+    await renderApp(path)
+
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '登入' })).toBeNull()
+    expect(
+      requests.filter(
+        (request) =>
+          !request.endsWith('/setup/status') && !request.endsWith('/auth/me'),
+      ),
+    ).toEqual([])
   })
 })

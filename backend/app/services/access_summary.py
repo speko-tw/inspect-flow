@@ -62,6 +62,8 @@ INSPECTION_OFFICE_PERMISSION_CODES: frozenset[str] = frozenset(
 class AccessSummary:
     has_office_access: bool
     has_field_access: bool
+    # 現場入口須同時符合查核模組與專案任務權限。
+    can_inspect_tasks: bool
     has_template_access: bool
     can_browse_templates: bool
     can_manage_template_library: bool
@@ -78,6 +80,7 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         return AccessSummary(
             has_office_access=True,
             has_field_access=True,
+            can_inspect_tasks=True,
             has_template_access=True,
             can_browse_templates=True,
             can_manage_template_library=True,
@@ -109,9 +112,14 @@ def summarize_access(session: Session, user: User) -> AccessSummary:
         "inspection_task.inspect" in project_access_codes
         and "inspection.use" in module_permissions
     )
+    can_inspect_tasks = (
+        "inspection_task.inspect" in project_access_codes
+        and "inspection.use" in module_permissions
+    )
     return AccessSummary(
         has_office_access=office_access,
         has_field_access=field_access,
+        can_inspect_tasks=can_inspect_tasks,
         has_template_access=has_template_access,
         can_browse_templates=can_browse_templates,
         can_manage_template_library=has_template_access,

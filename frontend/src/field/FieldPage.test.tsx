@@ -59,6 +59,7 @@ function renderPage(
     must_change_password: false,
     has_office_access: false,
     has_field_access: true,
+    can_inspect_tasks: true,
     has_template_access: false,
     module_permissions: [],
     delegated_modules: [],
@@ -70,13 +71,13 @@ function renderPage(
   const currentUser = { ...user, ...options.user }
   const view = render(
     <MemoryRouter
-      initialEntries={[{ pathname: '/field/', state: options.state }]}
+      initialEntries={[{ pathname: '/tasks/', state: options.state }]}
     >
       <CurrentUserProvider value={{ user: currentUser, clear }}>
         <LocationProbe />
         <Routes>
-          <Route path="/field/*" element={<FieldPage />} />
-          <Route path="/change-password" element={<p>密碼頁</p>} />
+          <Route path="/tasks/*" element={<FieldPage />} />
+          <Route path="/settings" element={<p>密碼頁</p>} />
         </Routes>
       </CurrentUserProvider>
     </MemoryRouter>,
@@ -114,12 +115,12 @@ describe('今日任務首頁', () => {
       'fetch',
       vi.fn(async () => Response.json({ items: [], next_cursor: null })),
     )
-    renderPage({ user: { has_office_access: true } })
+    renderPage({ user: { has_project_access: true } })
     await screen.findByRole('heading', { name: '我的任務' })
     const banner = screen.getByRole('banner')
     expect(
       within(banner).getByRole('link', { name: 'InspectFlow 工程查核系統' }),
-    ).toHaveAttribute('href', '/admin/projects')
+    ).toHaveAttribute('href', '/projects')
     fireEvent.click(
       within(banner).getByRole('button', { name: '示範查核員 ▾' }),
     )
@@ -135,10 +136,10 @@ describe('今日任務首頁', () => {
       'fetch',
       vi.fn(async () => Response.json({ items: [], next_cursor: null })),
     )
-    const mixed = renderPage({ user: { has_office_access: true } })
+    const mixed = renderPage({ user: { has_project_access: true } })
     expect(await screen.findByRole('link', { name: '專案' })).toHaveAttribute(
       'href',
-      '/admin/projects',
+      '/projects',
     )
     mixed.unmount()
     renderPage()
@@ -159,16 +160,27 @@ describe('今日任務首頁', () => {
     renderPage({
       user: {
         has_field_access: false,
+        can_inspect_tasks: false,
         has_office_access: true,
+        has_project_access: true,
         has_template_access: true,
+        can_manage_template_library: true,
+        module_permissions: ['template.manage'],
       },
     })
 
     expect(
       await screen.findByRole('link', { name: '前往我的專案' }),
-    ).toHaveAttribute('href', '/admin/projects')
-    expect(screen.getByRole('link', { name: '專案' })).toBeVisible()
-    expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
+    ).toHaveAttribute('href', '/projects')
+    expect(screen.getByRole('link', { name: '專案' })).toHaveAttribute(
+      'href',
+      '/projects',
+    )
+    expect(screen.getByRole('link', { name: '範本' })).toHaveAttribute(
+      'href',
+      '/templates',
+    )
+    expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
     expect(screen.queryByRole('link', { name: '前往範本管理' })).toBeNull()
   })
 
@@ -379,7 +391,7 @@ describe('今日任務首頁', () => {
     fireEvent.click(screen.getByRole('button', { name: 'inspector ▾' }))
     expect(screen.getByRole('link', { name: '設定' })).toHaveAttribute(
       'href',
-      '/change-password',
+      '/settings',
     )
     const profile = screen.getByText('我的資料').closest('details')
     expect(profile).not.toBeNull()
@@ -390,7 +402,7 @@ describe('今日任務首頁', () => {
     await waitFor(() => expect(clear).toHaveBeenCalledOnce())
     fireEvent.click(screen.getByRole('link', { name: '設定' }))
     expect(screen.getByTestId('location')).toHaveTextContent(
-      '"from":"/field/"',
+      '"from":"/tasks/"',
     )
     expect(screen.getByText('密碼頁')).toBeInTheDocument()
   })
@@ -412,41 +424,40 @@ describe('今日任務首頁', () => {
     ).toBeInTheDocument()
   })
 
-  it('沒有現場權限但有內業權限時，提供前往我的專案（#480）', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        Response.json(
-          { error: { code: 'permission.denied' } },
-          { status: 403 },
-        ),
-      ),
-    )
+  it('沒有查核權限但有專案權限時，不呼叫任務 API 並提供專案入口', () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
     renderPage({
-      user: { has_office_access: true, has_field_access: false },
+      user: {
+        has_project_access: true,
+        has_office_access: true,
+        has_field_access: false,
+        can_inspect_tasks: false,
+      },
     })
 
-    const link = await screen.findByRole('link', { name: '前往我的專案' })
-    expect(link).toHaveAttribute('href', '/admin/projects')
+    expect(
+      screen.getByRole('heading', { name: '目前無法查看現場任務' }),
+    ).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: '前往我的專案' })
+    expect(link).toHaveAttribute('href', '/projects')
     expect(link).toHaveClass('btn')
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
-  it('沒有現場權限也沒有內業權限時，只有說明沒有入口（#480）', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        Response.json(
-          { error: { code: 'permission.denied' } },
-          { status: 403 },
-        ),
-      ),
-    )
-    renderPage({ user: { has_field_access: false } })
+  it('沒有任務權限時顯示有出路的拒絕頁，且不呼叫任務 API', () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    renderPage({ user: { has_field_access: false, can_inspect_tasks: false } })
 
-    expect(await screen.findByText('目前無法查看現場任務')).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: '前往我的專案' }),
-    ).not.toBeInTheDocument()
+      screen.getByRole('heading', { name: '目前無法查看現場任務' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '前往個人設定' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
+    expect(fetcher).not.toHaveBeenCalled()
   })
 
   it('403 與一般錯誤分開顯示', async () => {

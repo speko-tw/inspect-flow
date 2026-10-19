@@ -4,6 +4,8 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
+目前登入落點及密碼頁路徑依規格 AUT-R52～R53 與 `admin-dashboard` ADM-R50；本計畫較早任務中的登入或變更密碼 UI 路徑只記錄當時背景。
+
 本計畫涵蓋 AUT-AC01～AUT-AC53，以及本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 AUT-AC54～AUT-AC66；已被取代的 AUT-AC23、AUT-AC32 除外。T1～T12 是本次變更之前完成或已排定的任務，內容保持當時的樣子；本次變更對登入、初始化與密碼流程的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～I 接手。跨規格的依賴：`database-foundation` T4（[#59](https://github.com/speko-tw/inspect-flow/issues/59)，`User`、`Project` 資料表），以及 `domain-model` 計畫的 T2（`User` 業務欄位）、T4（目前操作者與 Service 層）、T5（有效權限計算）、T6（初始化指令）；後者開 task issue 前還沒有編號，下表以「DOM T<n>」表示，開 issue 時換成 issue 編號。
 
 ## 任務

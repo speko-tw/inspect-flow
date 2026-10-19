@@ -10,6 +10,7 @@ import UsersPage from '../UsersPage'
 import ModulePermissionsPage from '../module-permissions/ModulePermissionsPage'
 import { useCurrentUser } from '../../auth/useCurrentUser'
 import { request } from '../api'
+import { routePath, ROUTES } from '../../routes'
 
 interface DelegatePerson {
   id: string
@@ -36,7 +37,11 @@ export function PeoplePage({
   const [wizardDirty, setWizardDirty] = useState(false)
   const [userFormsDirty, setUserFormsDirty] = useState(false)
   const pageGuard = useUnsavedNavigationGuard(wizardDirty || userFormsDirty)
-  const detailMatch = location.pathname.match(/^\/admin\/people\/([^/]+)$/)
+  const detailMatch = location.pathname.match(
+    new RegExp(
+      `^${ROUTES.adminPeople.path.replace('/:personId?', '')}/([^/]+)$`,
+    ),
+  )
   const personId = detailMatch ? decodeURIComponent(detailMatch[1]) : null
   const createWizardOpen = user.is_admin && wizardRequest > 0
   const query = searchParams.get('q') ?? ''
@@ -69,7 +74,7 @@ export function PeoplePage({
         <p>
           <Link
             to={{
-              pathname: '/admin/people',
+              pathname: '/accounts',
               search: query ? `?q=${encodeURIComponent(query)}` : '',
             }}
           >
@@ -102,7 +107,7 @@ export function PeoplePage({
             const next = new URLSearchParams(searchParams)
             if (query) next.set('q', query)
             navigate({
-              pathname: `/admin/people/${encodeURIComponent(id)}`,
+              pathname: routePath(ROUTES.adminPeople, { personId: id }),
               search: next.toString(),
             })
           }}
@@ -114,7 +119,7 @@ export function PeoplePage({
             key={query}
             onSelect={(id) =>
               navigate({
-                pathname: `/admin/people/${encodeURIComponent(id)}`,
+                pathname: routePath(ROUTES.adminPeople, { personId: id }),
                 search: query ? `?q=${encodeURIComponent(query)}` : '',
               })
             }
@@ -133,7 +138,7 @@ export function PeoplePage({
           onWizardBackToList={() => setWizardRequest(0)}
           onWizardViewUser={(id) => {
             setWizardRequest(0)
-            navigate(`/admin/people/${encodeURIComponent(id)}`)
+            navigate(routePath(ROUTES.adminPeople, { personId: id }))
           }}
           selectedUserId={personId ?? undefined}
         />

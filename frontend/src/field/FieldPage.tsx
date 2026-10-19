@@ -7,14 +7,14 @@ import {
   useSearchParams,
 } from 'react-router'
 
-import { landingPath } from '../auth/landing'
+import { landingLabel, landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { Button } from '../components/Button'
 import { ResourceState } from '../components/layout/LayoutPatterns'
 import { isForbidden } from '../http'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { PAGE_TITLES } from '../layout/navigationLabels'
-import { ROUTES } from '../routes'
+import { canAccessRoute, ROUTES } from '../routes'
 import RouteNotFound from '../RouteNotFound'
 import { StatusBadge } from '../ui/Badge'
 import { fetchFieldTasks, FieldApiError, type FieldTask } from './api'
@@ -82,17 +82,17 @@ export default function FieldPage() {
     `^${ROUTES.fieldTask.path.replace(':id', '([^/]+)')}/?$`,
   )
   const detailId = location.pathname.match(detailPattern)?.[1]
-  // `/field` 以外、也不是任務詳情的網址（例如 `/field/abc123`）：找不到。
+  // `/tasks` 以外、也不是任務詳情的網址會顯示找不到頁面。
   const unknownPath =
     !detailId &&
     !matchPath({ path: ROUTES.fieldTasks.path, end: true }, location.pathname)
   const notice = (location.state as { notice?: unknown } | null)?.notice
+  const taskAccessDenied =
+    !unknownPath && !canAccessRoute(user, ROUTES.fieldTasks)
   return (
     <>
       <AppHeader
-        navItems={memberNavItems(user).filter(
-          (item) => item.to !== ROUTES.adminTemplates.path,
-        )}
+        navItems={memberNavItems(user)}
         navLabel="我的功能"
         user={user}
       />
@@ -103,7 +103,23 @@ export default function FieldPage() {
               {notice}
             </p>
           )}
-          {detailId ? (
+          {taskAccessDenied ? (
+            <section
+              aria-labelledby="field-access-denied-heading"
+              className="field-notice field-notice-error"
+              role="alert"
+            >
+              <h2 id="field-access-denied-heading">目前無法查看現場任務</h2>
+              <p>
+                你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。
+              </p>
+              <Link className="btn" to={landingPath(user)}>
+                {landingPath(user) === ROUTES.adminProjects.path
+                  ? '前往我的專案'
+                  : `前往${landingLabel(landingPath(user))}`}
+              </Link>
+            </section>
+          ) : detailId ? (
             <TaskDetail
               key={detailId}
               taskId={detailId}
@@ -307,7 +323,7 @@ function TaskList({
         <section className="field-notice field-notice-error" role="alert">
           <h2>目前無法查看現場任務</h2>
           <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
-          {user.has_office_access && (
+          {(user.has_project_access || user.can_create_project) && (
             <Link className="btn" to={ROUTES.adminProjects.path}>
               前往我的專案
             </Link>

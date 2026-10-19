@@ -13,10 +13,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 
 import type { CurrentUser } from '../auth/api'
-import { canBrowseTemplates, landingPath } from '../auth/landing'
+import { landingPath } from '../auth/landing'
 import LogoutButton from '../auth/LogoutButton'
 import '../styles/g7-shell.css'
-import { ROUTES } from '../routes'
+import { canAccessRoute, ROUTES } from '../routes'
 import { NAV_LABELS } from '../terms'
 
 export const SYSTEM_NAME = 'InspectFlow 工程查核系統'
@@ -33,12 +33,10 @@ type HeaderUser = Pick<
   | 'name_zh'
   | 'username'
   | 'is_admin'
-  | 'has_office_access'
-  | 'has_field_access'
+  | 'can_inspect_tasks'
   | 'can_create_project'
   | 'has_project_access'
-  | 'has_template_access'
-  | 'can_browse_templates'
+  | 'module_permissions'
   | 'can_manage_template_library'
   | 'delegated_modules'
 >
@@ -49,18 +47,17 @@ type HeaderUser = Pick<
  */
 export function memberNavItems(user: HeaderUser): HeaderNavItem[] {
   const items: HeaderNavItem[] = []
-  if (
-    user.has_office_access ||
-    user.has_project_access ||
-    user.can_create_project
-  ) {
+  if (canAccessRoute(user, ROUTES.dashboardIndex)) {
+    items.push({ to: ROUTES.dashboardIndex.path, label: NAV_LABELS.overview })
+  }
+  if (canAccessRoute(user, ROUTES.fieldTasks)) {
+    items.push({ to: ROUTES.fieldTasks.path, label: NAV_LABELS.tasks })
+  }
+  if (canAccessRoute(user, ROUTES.adminProjects)) {
     items.push({ to: ROUTES.adminProjects.path, label: NAV_LABELS.projects })
   }
-  if (canBrowseTemplates(user)) {
+  if (canAccessRoute(user, ROUTES.adminTemplates)) {
     items.push({ to: ROUTES.adminTemplates.path, label: NAV_LABELS.templates })
-  }
-  if (user.has_field_access) {
-    items.push({ to: ROUTES.fieldTasks.path, label: NAV_LABELS.tasks })
   }
   return items
 }
@@ -237,7 +234,7 @@ export default function AppHeader({
                       state={{
                         from: `${location.pathname}${location.search}${location.hash}`,
                       }}
-                      to={ROUTES.changePassword.path}
+                      to={ROUTES.settings.path}
                     >
                       {NAV_LABELS.settings}
                     </Link>

@@ -16,28 +16,47 @@ const ADMIN = currentUserFixture({
   is_admin: true,
   has_office_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
 })
-const OFFICE = currentUserFixture({ has_office_access: true })
-const FIELD = currentUserFixture({ has_field_access: true })
+const OFFICE = currentUserFixture({ has_project_access: true })
+const FIELD = currentUserFixture({
+  has_field_access: true,
+  can_inspect_tasks: true,
+})
 const FIELD_PROJECT = currentUserFixture({
   has_field_access: true,
+  can_inspect_tasks: true,
   has_project_access: true,
 })
 const MIXED = currentUserFixture({
-  has_office_access: true,
+  has_project_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
 })
 const TEMPLATE_USE_ONLY = currentUserFixture({
   can_browse_templates: true,
   can_manage_template_library: false,
+})
+const TEMPLATE_MANAGER = currentUserFixture({
+  can_manage_template_library: true,
+  module_permissions: ['template.manage'],
+})
+const SUPERVISOR = currentUserFixture({
+  has_project_access: true,
+  module_permissions: ['all_project_progress.read'],
+})
+const DELEGATE = currentUserFixture({ delegated_modules: ['account.manage'] })
+const EXTERNAL = currentUserFixture({
+  has_project_access: true,
+  is_external_collaborator: true,
 })
 const ORIGINAL_INNER_WIDTH = window.innerWidth
 
 function renderHeader(
   user: CurrentUser,
   props: Partial<React.ComponentProps<typeof AppHeader>> = {},
-  path = '/admin',
+  path = '/accounts',
 ) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -63,12 +82,9 @@ afterEach(() => {
 })
 
 describe('範本瀏覽導覽（TPL-R09）', () => {
-  it('template.use-only 使用者可從頁首進入範本庫', () => {
+  it('template.use-only 使用者不會看到範本管理導覽', () => {
     renderHeader(TEMPLATE_USE_ONLY)
-    expect(screen.getByRole('link', { name: '範本' })).toHaveAttribute(
-      'href',
-      '/admin/templates',
-    )
+    expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
   })
 })
 
@@ -85,7 +101,7 @@ describe('AppHeader 窄螢幕導覽（#500）', () => {
       .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
       .mockReturnValue(328)
     try {
-      renderHeader(ADMIN, {}, '/admin/projects')
+      renderHeader(ADMIN, {}, '/projects')
       const nav = screen.getByRole('navigation', { name: '管理功能' })
       expect(nav).toHaveClass('app-header-nav')
       expect(within(nav).getByRole('link', { name: '專案' })).toHaveAttribute(
@@ -123,7 +139,7 @@ describe('AppHeader 導覽的「還有更多」提示（#500）', () => {
   it('放不下且在最左：只有右緣提示；捲到底後只剩左緣提示', () => {
     const restore = withLayout(700, 328)
     try {
-      renderHeader(ADMIN, {}, '/admin/projects')
+      renderHeader(ADMIN, {}, '/projects')
       const nav = screen.getByRole('navigation', { name: '管理功能' })
       expect(nav).toHaveAttribute('data-more-end')
       expect(nav).not.toHaveAttribute('data-more-start')
@@ -161,23 +177,36 @@ describe('AppHeader 導覽的「還有更多」提示（#500）', () => {
 })
 
 describe('AppHeader', () => {
+  it.each([
+    ['Admin', ADMIN, ['總覽', '任務', '專案', '範本']],
+    ['全專案進度主管', SUPERVISOR, ['總覽', '專案']],
+    ['內業工程師', OFFICE, ['專案']],
+    ['現場工程師', FIELD, ['任務']],
+    ['範本管理者', TEMPLATE_MANAGER, ['範本']],
+    ['委派者', DELEGATE, []],
+    ['外部協作', EXTERNAL, ['專案']],
+    ['全無權限', currentUserFixture(), []],
+  ])('%s 只看到符合權限的固定順序導覽', (_role, user, labels) => {
+    expect(memberNavItems(user).map((item) => item.label)).toEqual(labels)
+  })
+
   it('管理下拉僅有可見子項，支援鍵盤、Esc、目前頁狀態與空清單隱藏', () => {
     renderHeader(
       OFFICE,
       {
         navItems: [
-          { to: '/field', label: NAV_LABELS.tasks },
-          { to: '/admin/projects', label: NAV_LABELS.projects },
-          { to: '/admin/dashboard', label: NAV_LABELS.overview },
-          { to: '/admin/templates', label: NAV_LABELS.templates },
+          { to: '/tasks', label: NAV_LABELS.tasks },
+          { to: '/projects', label: NAV_LABELS.projects },
+          { to: '/overview', label: NAV_LABELS.overview },
+          { to: '/templates', label: NAV_LABELS.templates },
         ],
         managementItems: [
-          { to: '/admin/companies', label: NAV_LABELS.company },
-          { to: '/admin/roles', label: NAV_LABELS.roles },
-          { to: '/admin/audit-logs', label: NAV_LABELS.records },
+          { to: '/companies', label: NAV_LABELS.company },
+          { to: '/roles', label: NAV_LABELS.roles },
+          { to: '/logs', label: NAV_LABELS.records },
         ],
       },
-      '/admin/roles',
+      '/roles',
     )
     const trigger = screen.getByRole('button', { name: /管理/ })
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
@@ -194,11 +223,11 @@ describe('AppHeader', () => {
 
   it('委派者只可見帳號時直接顯示帳號連結，不顯示管理下拉', () => {
     renderHeader(OFFICE, {
-      managementItems: [{ to: '/admin/people', label: NAV_LABELS.account }],
+      managementItems: [{ to: '/accounts', label: NAV_LABELS.account }],
     })
     expect(screen.getByRole('link', { name: '帳號' })).toHaveAttribute(
       'href',
-      '/admin/people',
+      '/accounts',
     )
     expect(screen.queryByRole('button', { name: /管理/ })).toBeNull()
   })
@@ -221,8 +250,8 @@ describe('AppHeader', () => {
     })
     renderHeader(ADMIN, {
       managementItems: [
-        { to: '/admin/people', label: NAV_LABELS.account },
-        { to: '/admin/companies', label: NAV_LABELS.company },
+        { to: '/accounts', label: NAV_LABELS.account },
+        { to: '/companies', label: NAV_LABELS.company },
       ],
     })
     fireEvent.click(screen.getByRole('button', { name: /管理/ }))
@@ -250,10 +279,10 @@ describe('AppHeader', () => {
     })
     renderHeader(ADMIN, {
       managementItems: [
-        { to: '/admin/people', label: NAV_LABELS.account },
-        { to: '/admin/companies', label: NAV_LABELS.company },
-        { to: '/admin/roles', label: NAV_LABELS.roles },
-        { to: '/admin/audit-logs', label: NAV_LABELS.records },
+        { to: '/accounts', label: NAV_LABELS.account },
+        { to: '/companies', label: NAV_LABELS.company },
+        { to: '/roles', label: NAV_LABELS.roles },
+        { to: '/logs', label: NAV_LABELS.records },
       ],
     })
     fireEvent.click(screen.getByRole('button', { name: /管理/ }))
@@ -272,10 +301,10 @@ describe('AppHeader', () => {
   it('管理項目為空時不顯示管理入口，主導覽依固定順序呈現', () => {
     renderHeader(ADMIN, {
       navItems: [
-        { to: '/admin/templates', label: NAV_LABELS.templates },
-        { to: '/admin/dashboard', label: NAV_LABELS.overview },
-        { to: '/field', label: NAV_LABELS.tasks },
-        { to: '/admin/projects', label: NAV_LABELS.projects },
+        { to: '/templates', label: NAV_LABELS.templates },
+        { to: '/overview', label: NAV_LABELS.overview },
+        { to: '/tasks', label: NAV_LABELS.tasks },
+        { to: '/projects', label: NAV_LABELS.projects },
       ],
       managementItems: [],
     })
@@ -288,10 +317,10 @@ describe('AppHeader', () => {
   })
 
   it.each([
-    ['系統管理者', ADMIN, '/admin/dashboard'],
-    ['內業', OFFICE, '/admin/projects'],
-    ['現場', FIELD, '/field'],
-    ['內業加現場', MIXED, '/admin/projects'],
+    ['系統管理者', ADMIN, '/overview'],
+    ['內業', OFFICE, '/projects'],
+    ['現場', FIELD, '/tasks'],
+    ['內業加現場', MIXED, '/projects'],
   ])('%s：點系統名稱回到自己的落點', (_label, user, target) => {
     renderHeader(user)
     expect(
@@ -316,7 +345,7 @@ describe('AppHeader', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('link', { name: '設定' })).toHaveAttribute(
       'href',
-      '/change-password',
+      '/settings',
     )
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
   })
@@ -339,7 +368,7 @@ describe('AppHeader', () => {
     expect(screen.getByRole('button', { name: '登出' })).toBeVisible()
   })
 
-  it('混合帳號的導覽同時有內業與現場，現場帳號只有任務', () => {
+  it('混合帳號的導覽同時有專案與現場，現場帳號只有任務', () => {
     const view = renderHeader(MIXED)
     const names = (container: HTMLElement) =>
       within(container)
@@ -373,13 +402,13 @@ describe('AppHeader', () => {
     const nav = screen.getByRole('navigation', { name: '管理功能' })
     expect(within(nav).getByRole('link', { name: '專案' })).toHaveAttribute(
       'href',
-      '/admin/projects',
+      '/projects',
     )
     expect(within(nav).getByRole('link', { name: '任務' })).toBeVisible()
   })
 
   it('目前所在的頁面用 aria-current 標示，其他不標', () => {
-    renderHeader(MIXED, {}, '/admin/projects/p1/members')
+    renderHeader(MIXED, {}, '/projects/p1/members')
     expect(screen.getByRole('link', { name: '專案' })).toHaveAttribute(
       'aria-current',
       'page',

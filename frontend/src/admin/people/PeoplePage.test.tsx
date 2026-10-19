@@ -73,7 +73,7 @@ describe('PeoplePage', () => {
       })
     })
     render(
-      <DataMemoryRouter initialEntries={['/admin/people']}>
+      <DataMemoryRouter initialEntries={['/accounts']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
@@ -115,17 +115,14 @@ describe('PeoplePage', () => {
     function AccountSwitcher() {
       const navigate = useNavigate()
       return (
-        <button
-          onClick={() => navigate('/admin/people/person-2')}
-          type="button"
-        >
+        <button onClick={() => navigate('/accounts/person-2')} type="button">
           切換帳號
         </button>
       )
     }
 
     render(
-      <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
+      <DataMemoryRouter initialEntries={['/accounts/person-1']}>
         <>
           <PeoplePage onTemporaryPassword={vi.fn()} />
           <AccountSwitcher />
@@ -163,7 +160,7 @@ describe('PeoplePage', () => {
       next_cursor: null,
     })
     render(
-      <DataMemoryRouter initialEntries={['/admin/people']}>
+      <DataMemoryRouter initialEntries={['/accounts']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
@@ -181,7 +178,7 @@ describe('PeoplePage', () => {
   it('does not render a second participating-project section', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
-      <DataMemoryRouter initialEntries={['/admin/people/person-1']}>
+      <DataMemoryRouter initialEntries={['/accounts/person-1']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
@@ -196,7 +193,7 @@ describe('PeoplePage', () => {
   it('keeps list search in the route when opening a person', () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(
-      <DataMemoryRouter initialEntries={['/admin/people?q=林沐']}>
+      <DataMemoryRouter initialEntries={['/accounts?q=林沐']}>
         <PeoplePage onTemporaryPassword={vi.fn()} />
       </DataMemoryRouter>,
     )
@@ -207,7 +204,7 @@ describe('PeoplePage', () => {
 
     expect(screen.getByRole('link', { name: '返回帳號清單' })).toHaveAttribute(
       'href',
-      '/admin/people?q=%E6%9E%97%E6%B2%90',
+      '/accounts?q=%E6%9E%97%E6%B2%90',
     )
     expect(screen.getByText('詳情：person-1')).toBeInTheDocument()
     expect(screen.getByText('搜尋：林沐')).toBeInTheDocument()

@@ -55,6 +55,7 @@ const currentUser: CurrentUser = {
   must_change_password: false,
   has_office_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
   module_permissions: [],
   delegated_modules: [],
@@ -257,7 +258,7 @@ describe('UsersPage 帳號清單導覽', () => {
     renderUsers({ onSelectUser: vi.fn() })
 
     const accountLink = await screen.findByRole('link', { name: '鄧安娜' })
-    expect(accountLink).toHaveAttribute('href', '/admin/people/user-1')
+    expect(accountLink).toHaveAttribute('href', '/accounts/user-1')
     expect(accountLink).toHaveClass('users-account-name-link')
     expect(
       screen.queryByRole('button', { name: '鄧安娜' }),

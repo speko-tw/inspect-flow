@@ -1007,7 +1007,7 @@ function ModulePermissionsPageContent({
             <ul>
               {participationForSelectedUser?.projects.map((project) => (
                 <li key={project.id}>
-                  <Link to={`/admin/projects/${project.id}/members`}>
+                  <Link to={`/projects/${project.id}/members`}>
                     {project.project_code}／{project.name}
                   </Link>
                   ：
@@ -1016,9 +1016,7 @@ function ModulePermissionsPageContent({
                   ) : (
                     <>
                       尚未指派角色（
-                      <Link to={`/admin/projects/${project.id}/members`}>
-                        補上
-                      </Link>
+                      <Link to={`/projects/${project.id}/members`}>補上</Link>
                       ）
                     </>
                   )}
@@ -1109,7 +1107,7 @@ function ModulePermissionsPageContent({
                     </Button>
                   </>
                 )}
-                <Link to={`/admin/projects/${diagnosticProject}/members`}>
+                <Link to={`/projects/${diagnosticProject}/members`}>
                   前往專案成員設定
                 </Link>
               </section>

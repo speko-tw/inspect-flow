@@ -132,7 +132,7 @@ export function ProjectCreationForm({
       const project = await createProject(input)
       if (onCreated) onCreated(project, submittedSession)
       else
-        navigate(`/admin/projects/${project.id}`, {
+        navigate(`/projects/${project.id}`, {
           state: hasDuplicateCodeWarning(project)
             ? { duplicateProjectCode: project.project_code }
             : null,

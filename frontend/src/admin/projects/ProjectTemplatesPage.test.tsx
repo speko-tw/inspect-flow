@@ -29,6 +29,7 @@ const USER: CurrentUser = {
   must_change_password: false,
   has_office_access: true,
   has_field_access: false,
+  can_inspect_tasks: false,
   has_template_access: false,
   module_permissions: [],
   delegated_modules: [],
@@ -295,7 +296,7 @@ function ProjectSwitcher() {
   return (
     <button
       onClick={() =>
-        navigate('/admin/projects/project-2/inspection-items/templates')
+        navigate('/projects/project-2/inspection-items/templates')
       }
       type="button"
     >
@@ -315,7 +316,7 @@ function renderPage(
 ) {
   return render(
     <MemoryRouter
-      initialEntries={['/admin/projects/project-1/inspection-items/templates']}
+      initialEntries={['/projects/project-1/inspection-items/templates']}
     >
       <CurrentUserProvider value={{ user, clear: vi.fn() }}>
         {showProjectSwitcher && <ProjectSwitcher />}
@@ -328,16 +329,13 @@ function renderPage(
                 viewerPermissions={viewerPermissions}
               />
             }
-            path="/admin/projects/:projectId/inspection-items/templates"
+            path="/projects/:projectId/inspection-items/templates"
           />
           <Route
             element={<p>PROJECT_DETAIL</p>}
-            path="/admin/projects/:projectId/inspection-items"
+            path="/projects/:projectId/inspection-items"
           />
-          <Route
-            element={<p>PROJECT_DETAIL</p>}
-            path="/admin/projects/:projectId"
-          />
+          <Route element={<p>PROJECT_DETAIL</p>} path="/projects/:projectId" />
         </Routes>
       </CurrentUserProvider>
     </MemoryRouter>,
@@ -920,7 +918,7 @@ describe('專案範本套用與存為範本（#429）', () => {
       within(screen.getByRole('alert')).getByRole('link', {
         name: '返回專案',
       }),
-    ).toHaveAttribute('href', '/admin/projects/project-1')
+    ).toHaveAttribute('href', '/projects/project-1')
     fireEvent.click(
       within(screen.getByRole('alert')).getByRole('link', {
         name: '返回專案',
@@ -1177,6 +1175,7 @@ describe('專案範本套用與存為範本（#429）', () => {
         is_admin: true,
         has_office_access: true,
         has_field_access: true,
+        can_inspect_tasks: true,
         has_template_access: true,
       })
       expect(

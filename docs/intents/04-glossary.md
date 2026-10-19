@@ -58,8 +58,6 @@ GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件�
 | Report View Model | `Report View Model` | Report Service 從資料庫組裝出的渲染資料模型，介於原始資料與 DOCX／HTML 輸出之間（依據：架構基準 §20.2、§20.21）。 | 分別供 DOCX Template Engine 與 HTML Preview 使用；與 `Data Snapshot` 的邊界待 [G-07](05-open-questions.md#g-07) 決定。 |
 | 文件編號 | `document_no` | 正式文件的對外編號（例如 `IF-P001-MEP-INS-00023`），命名規則抽象為「Document Number Policy」，具體規則待定（依據：架構基準 §20.8）。 | 與 `revision` 搭配識別同一份文件的不同版次；具體編碼規則見 [OQ-07](05-open-questions.md#oq-07)。 |
 | 版次 | `revision` | 同一份 `document_no` 底下的版次序號（REV.0、REV.1……），新版次因資料變動而產生，不覆蓋舊版次（依據：架構基準 §20.7–20.8）。 | 與 [PR-06](02-principles.md#pr-06)「報告即不可覆蓋快照」原則直接對應。 |
-| 現場端 UI | `Field UI` | 現場工程師使用的介面，聚焦「今日任務 → 拍照 → 說明 → 完成」，刻意隱藏後台概念（依據：架構基準 §6.1）。 | 與 `Admin UI` 共用同一個 React 專案，見 [KD-12](03-decisions-and-stack.md#kd-12)。 |
-| 後台 UI | `Admin UI` | 管理者／協調者使用的介面，負責人員、專案、範本、計畫、進度與報告等複雜功能（依據：架構基準 §6.2）。 | 與 `Field UI` 共用同一個 React 專案，見 [KD-12](03-decisions-and-stack.md#kd-12)。 |
 | 稽核紀錄 | `audit_logs`（概念，非必然的既有資料表） | 記錄「誰、何時、對哪個 entity、做了什麼、修改前後內容」的完整事件記錄，MVP 不強制要求完整事件溯源，但重要資料至少要有 `created_at`／`created_by` 等欄位（依據：架構基準 §19）。 | 與 [PR-08](02-principles.md#pr-08)（最低限度稽核）對應；是 §35 列出「延後但不排除」的完整能力之一。 |
 | 公司 | `Company` | 人員可選擇連結的組織，目前只有名稱與啟用狀態；名稱不能重複（去前後空白、不分大小寫，含已停用的公司）。不再有代碼、統一編號、公司類型與母公司（依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），取代 #63（2026-09-26）的欄位決定；見 [KD-23](03-decisions-and-stack.md#kd-23)）。 | 一個 `User` 最多連結一個 `Company`，也可以不連結；本系統帳號可隨時修改，外部帳號以外部來源為準、不能在系統內修改；有獨立營業登記的分公司、子公司都算獨立的 `Company`，彼此沒有階層。 |
 | 帳號名稱 | `User.username` | 使用者登入用的名稱，3～32 字元、英文字母開頭、只能用英文字母、數字與 `.`、`_`、`-`；不分大小寫、存成小寫；保留字為 `admin`、`system`、`root`（依據：負責人裁定（[#259](https://github.com/speko-tw/inspect-flow/issues/259)，2026-09-29），見 [KD-45](03-decisions-and-stack.md#kd-45)）。欄位名稱是建議的識別字，以 `domain-model` 規格為準。 | 與 email 都能登入，輸入含 `@` 視為 email、否則視為帳號名稱；只有具 Admin 權限的人能修改，外部帳號以外部來源為準。 |
@@ -78,6 +76,15 @@ GitHub Issue 上使用的非正式用語 **work order**，在架構基準文件�
 | 外部可用角色 | `Role.is_external_allowed`（建議欄位名） | Admin 標記的、可指派給外部協作人員的專案角色；預設只有「專案查閱人員」；角色內只能含「外部可用」的權限代碼，建立者角色不得標記（依據：負責人裁定（[#538](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-10），見 [KD-69](03-decisions-and-stack.md#kd-69)）。 | 角色必須外部可用；非管理者指派時另須在可指派白名單內，Admin 不受白名單限制。 |
 | 檢查層級（一級自主檢查、二級抽查（驗）） | 專案的「本公司角色」（必填，預設承攬施工方）決定；任務建立時固定當時的層級；具體欄位由規格制定（[#559](https://github.com/speko-tw/inspect-flow/issues/559)） | 一級：承攬施工方的本公司人員做的自主檢查，報表是自主檢查表；二級：監造方的本公司人員做的抽查（驗），報表統稱抽查（驗）紀錄表，主體包含主辦機關、PCM 與監造單位。系統不綁定某一級，一個專案只有一種角色；對方人員以外部協作人員加入，其任務的層級由派工時指定；報表另有「表單類別」（施工、材料設備、設備運轉測試），預設依查核項目帶入（依據：負責人裁定（[#551](https://github.com/speko-tw/inspect-flow/issues/551)、[#559](https://github.com/speko-tw/inspect-flow/issues/559)，2026-10-10），見 [KD-51](03-decisions-and-stack.md#kd-51)）。 | 試營運先做自主檢查表，抽查（驗）紀錄表之後補；檢查時機與停留點 MVP 不做；缺失改善追蹤屬 #76（0.7.x）、簽認屬 #77（0.8.x）。 |
 | 外部身分來源 | `User.auth_source`（`local`／`external`）、`external_source`、`external_id`、`external_synced_at` | 人員帳號是本系統建立還是由外部身分來源（例如 ldap、ad、entra、erp）匯入的標記欄位與同步比對鍵；外部來源怎麼串接屬另開的規格，現階段由開發人員手動建立帳號（依據：負責人決定（#63，2026-09-26）；架構基準無對應章節，見 [KD-20](03-decisions-and-stack.md#kd-20)）。 | 同步時先用「來源＋`external_id`」比對，找不到再用 email 比對本系統建立的帳號並轉換身分來源，保留原本 UUID；外部值覆蓋基本欄位時寫稽核紀錄。 |
+
+## 畫面用語表
+
+| 畫面詞 | 禁用同義詞 | 實體或欄位 | 適用範圍 |
+|---|---|---|---|
+| Field UI（現場介面） | 現場端 UI、現場後台 | `Inspection Task`、`Task Requirement Snapshot` | 現場任務、查核與佐證流程；不得用網址前綴判定介面或程式包。 |
+| Admin UI（管理介面） | 後台 UI、管理後台（對非 Admin 使用者） | `User`、`Project`、`Inspection Plan`、`Inspection Task` 等依權限可用資料 | 專案、總覽、範本及管理功能；入口依實際權限呈現。 |
+
+上述介面共用同一個 React application，並依路由群組拆包；路由不以 `/admin/*` 或 `/field/*` 前綴區分（見 [KD-12](03-decisions-and-stack.md#kd-12)）。
 
 ## 相關文件
 

@@ -103,6 +103,13 @@ describe('Dashboard 頁面', () => {
   it('顯示 API 摘要並切換至單一專案範圍', async () => {
     setup()
 
+    await act(async () => {
+      await api.listAllDashboardProjects.mock.results[0]?.value
+    })
+    await act(async () => {
+      await api.getDashboardSummary.mock.results[0]?.value
+    })
+
     expect(await screen.findByText('45%')).toBeInTheDocument()
     expect(api.getDashboardSummary).toHaveBeenCalledWith(undefined)
 

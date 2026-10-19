@@ -33,7 +33,7 @@ describe('ProjectItemLinks', () => {
       <MemoryRouter
         initialEntries={[
           {
-            pathname: '/admin/projects/project-1',
+            pathname: '/projects/project-1',
             state: { highlightedItemIds: ['copy-1'] },
           },
         ]}
@@ -46,7 +46,7 @@ describe('ProjectItemLinks', () => {
                 viewerPermissions={['project_inspection_item.edit']}
               />
             }
-            path="/admin/projects/:projectId"
+            path="/projects/:projectId"
           />
         </Routes>
       </MemoryRouter>,
@@ -63,15 +63,12 @@ describe('ProjectItemLinks', () => {
     expect(editLink).toHaveTextContent('修改')
     expect(editLink).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/inspection-items/copy-1',
+      '/projects/project-1/inspection-items/copy-1',
     )
     expect(screen.getByText('0 個查核項次')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '從範本新增查核項目' }),
-    ).toHaveAttribute(
-      'href',
-      '/admin/projects/project-1/inspection-items/templates',
-    )
+    ).toHaveAttribute('href', '/projects/project-1/inspection-items/templates')
   })
 
   it('keeps project items read-only without edit permission', async () => {
@@ -95,9 +92,7 @@ describe('ProjectItemLinks', () => {
     )
 
     render(
-      <MemoryRouter
-        initialEntries={['/admin/projects/project-1/inspection-items']}
-      >
+      <MemoryRouter initialEntries={['/projects/project-1/inspection-items']}>
         <Routes>
           <Route
             element={
@@ -106,7 +101,7 @@ describe('ProjectItemLinks', () => {
                 viewerPermissions={['inspection_plan.read']}
               />
             }
-            path="/admin/projects/:projectId/inspection-items"
+            path="/projects/:projectId/inspection-items"
           />
         </Routes>
       </MemoryRouter>,
@@ -118,7 +113,7 @@ describe('ProjectItemLinks', () => {
     expect(viewLink).toHaveTextContent('檢視')
     expect(viewLink).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/inspection-items/copy-1',
+      '/projects/project-1/inspection-items/copy-1',
     )
     expect(
       screen.queryByRole('link', { name: '從範本新增查核項目' }),

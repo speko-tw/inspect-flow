@@ -15,6 +15,7 @@ import { Link, Navigate } from 'react-router'
 import { listCompanies, type Company, type CreatedUser } from '../admin/api'
 import TemporaryPassword from '../admin/TemporaryPassword'
 import UserForm from '../admin/UserForm'
+import { ROUTES } from '../routes'
 import { ApiError } from '../auth/api'
 import AuthLayout from '../auth/AuthLayout'
 import { RequiredMark } from '../ui/Form'
@@ -231,7 +232,10 @@ export default function SetupPage() {
           </p>
           <TemporaryPassword password={step.user.temporary_password} />
         </section>
-        <Link className="btn btn-primary" to="/admin">
+        <Link
+          className="btn btn-primary"
+          to={ROUTES.adminPeople.path.replace('/:personId?', '')}
+        >
           已抄下，進入管理頁
         </Link>
       </AuthLayout>
@@ -253,7 +257,10 @@ export default function SetupPage() {
           companies={companies}
           onCreated={(user) => setStep({ kind: 'created', user })}
         />
-        <Link className="btn" to="/admin">
+        <Link
+          className="btn"
+          to={ROUTES.adminPeople.path.replace('/:personId?', '')}
+        >
           略過，進入管理頁
         </Link>
       </AuthLayout>

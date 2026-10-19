@@ -64,6 +64,7 @@ const currentUser: CurrentUser = {
   must_change_password: false,
   has_office_access: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
   module_permissions: [],
   delegated_modules: [],

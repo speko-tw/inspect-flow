@@ -18,7 +18,7 @@ assert.ok(iconLink, 'built HTML must link an Apple touch icon')
 
 const manifestPath = path.join(dist, manifestLink[1].replace(/^\//, ''))
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-assert.equal(manifest.start_url, '/field/')
+assert.equal(manifest.start_url, '/tasks/')
 assert.equal(manifest.display, 'standalone')
 assert.ok(manifest.name)
 assert.ok(manifest.theme_color)

@@ -1,19 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import {
-  Link,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-  useParams,
-} from 'react-router'
+import { Link, Route, Routes, useLocation } from 'react-router'
 
-import ChangePasswordPage from './auth/ChangePasswordPage'
 import HomeRedirect from './auth/HomeRedirect'
 import LoginPage from './auth/LoginPage'
 import RequireAuth from './auth/RequireAuth'
 import NotFoundPage from './NotFoundPage'
-import RequireValidRouteIds from './RequireValidRouteIds'
 import RouteLoadErrorBoundary, {
   PageLoadError,
 } from './ui/RouteLoadErrorBoundary'
@@ -25,21 +16,6 @@ import { ROUTES } from './routes'
 const AdminPage = lazy(() => import('./admin/AdminPage'))
 const FieldPage = lazy(() => import('./field/FieldPage'))
 const SetupPage = lazy(() => import('./setup/SetupPage'))
-
-function LegacyProjectTemplateRedirect() {
-  const { projectId = '' } = useParams()
-  // FUI-R12、FUI-AC13：舊 Field 專案網址直接轉到正式
-  // 套用範本路徑。
-  return (
-    <Navigate
-      replace
-      to={ROUTES.projectInspectionTemplates.path.replace(
-        ':projectId',
-        projectId,
-      )}
-    />
-  )
-}
 
 /** 管理登入、路由錯誤邊界與逾時提示，並呈現應用程式路由。 */
 export default function App() {
@@ -99,6 +75,9 @@ export default function App() {
         ) : null}
         <Suspense fallback={null}>
           <Routes>
+            <Route path="/admin/*" element={<NotFoundPage />} />
+            <Route path="/field/*" element={<NotFoundPage />} />
+            <Route path="/change-password/*" element={<NotFoundPage />} />
             <Route
               path={ROUTES.home.path}
               element={
@@ -124,29 +103,19 @@ export default function App() {
               }
             />
             <Route
-              path={ROUTES.changePassword.path}
+              path={`${ROUTES.settings.path}/*`}
               element={
-                // key：見下方 /admin、/field 的說明。
-                <RequireAuth key="change-password">
-                  <ChangePasswordPage />
+                <RequireAuth key="settings" route={ROUTES.settings}>
+                  <RouteLoadErrorBoundary>
+                    <AdminPage />
+                  </RouteLoadErrorBoundary>
                 </RequireAuth>
               }
             />
             <Route
               path={ROUTES.adminShell.path}
               element={
-                // 三個 RequireAuth 各給不同的 key：react-router 在同一
-                // 個 <Routes> 位置切換相符的 Route 時，若前後兩個
-                // element 是同一個元件型別（這裡都是 RequireAuth），
-                // React 會沿用同一個 fiber、不會重新掛載，
-                // useEffect（只在掛載時查一次目前使用者）就不會重
-                // 跑，導致從 /change-password 導回 /admin 或 /field 時
-                // 讀到的還是變更密碼前、`must_change_password` 仍為
-                // true 的舊狀態，被誤判又導回 /change-password（在有
-                // /change-password 這個目的地之前，三個守衛互不切換，
-                // 這個問題不會出現）。給不同的 key 強制切換時視為不同
-                // 元件，一律重新掛載並重新查詢。
-                <RequireAuth key="admin">
+                <RequireAuth key="product-pages" route={ROUTES.adminShell}>
                   <RouteLoadErrorBoundary>
                     <AdminPage />
                   </RouteLoadErrorBoundary>
@@ -156,20 +125,10 @@ export default function App() {
             <Route
               path={ROUTES.fieldShell.path}
               element={
-                <RequireAuth key="field">
+                <RequireAuth key="field" route={ROUTES.fieldShell}>
                   <RouteLoadErrorBoundary>
                     <FieldPage />
                   </RouteLoadErrorBoundary>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path={ROUTES.legacyFieldProject.path}
-              element={
-                <RequireAuth key="project-templates">
-                  <RequireValidRouteIds>
-                    <LegacyProjectTemplateRedirect />
-                  </RequireValidRouteIds>
                 </RequireAuth>
               }
             />

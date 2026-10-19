@@ -14,14 +14,16 @@ import {
 import type { CurrentUser } from '../auth/api'
 import {
   canBrowseTemplates,
+  canVisit,
   canManageTemplateLibrary,
   landingLabel,
   landingPath,
 } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
+import ChangePasswordPage from '../auth/ChangePasswordPage'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { NAV_LABELS, PAGE_TITLES } from '../layout/navigationLabels'
-import { nestedRoutePath, ROUTES } from '../routes'
+import { canAccessRoute, nestedRoutePath, ROUTES } from '../routes'
 import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
 import { isResourceId } from '../resourceId'
@@ -64,7 +66,6 @@ const PROJECT_PAGE_ROUTES = [
   ROUTES.projectItems,
   ROUTES.projectZones,
   ROUTES.projectInspectionTemplates,
-  ROUTES.projectTemplatesAlias,
   ROUTES.projectPlanning,
   ROUTES.projectProgress,
   ROUTES.projectProgressTask,
@@ -87,19 +88,6 @@ function ProjectPlanningRoute() {
     <Suspense fallback={<p>載入中…</p>}>
       <PlanningPage key={projectId} initialProjectId={projectId} />
     </Suspense>
-  )
-}
-
-function ProjectTemplatesRedirect() {
-  const { projectId = '' } = useParams()
-  return (
-    <Navigate
-      replace
-      to={ROUTES.projectInspectionTemplates.path.replace(
-        ':projectId',
-        projectId,
-      )}
-    />
   )
 }
 
@@ -138,7 +126,10 @@ function ProjectTemplatesRoute() {
 
   // ADM-R17、TPL-R23：非成員範本管理員直接瀏覽獨立頁，
   // 不載入 workflow-summary；成員仍由 ProjectSectionPage 依 ADM-R25 分流。
-  if (!user.is_admin && !canBrowseTemplateLibrary) {
+  if (
+    !canAccessRoute(user, ROUTES.projectInspectionTemplates) ||
+    (!user.is_admin && !canBrowseTemplateLibrary)
+  ) {
     return <Navigate replace to={landingPath(user)} />
   }
 
@@ -198,10 +189,6 @@ const PROJECT_ROUTES = (
         ROUTES.projectInspectionTemplates,
         ROUTES.adminShell,
       )}
-    />
-    <Route
-      element={<ProjectTemplatesRedirect />}
-      path={nestedRoutePath(ROUTES.projectTemplatesAlias, ROUTES.adminShell)}
     />
     <Route
       element={
@@ -401,11 +388,15 @@ function AdminPageContent() {
             <Route
               index
               element={
-                <Navigate
-                  replace
-                  state={location.state}
-                  to={ROUTES.adminPeople.path.replace('/:personId?', '')}
-                />
+                location.pathname === ROUTES.settings.path ? (
+                  <ChangePasswordPage />
+                ) : (
+                  <Navigate
+                    replace
+                    state={location.state}
+                    to={ROUTES.adminPeople.path.replace('/:personId?', '')}
+                  />
+                )
               }
             />
             <Route
@@ -485,26 +476,8 @@ function MemberAdminShell({
   // 從別頁導來時帶的提示（例如套用範本成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
-  const canManageAccounts = user.delegated_modules.length > 0
-  const isAdminOnlyPage = [
-    ROUTES.adminCompanies,
-    ROUTES.adminRoles,
-    ROUTES.adminAuditLogs,
-  ].some((route) =>
-    matchPath({ path: route.path, end: false }, location.pathname),
-  )
-  const restrictedPage =
-    (matchPath(
-      { path: ROUTES.adminPeople.path, end: false },
-      location.pathname,
-    ) &&
-      !canManageAccounts) ||
-    isAdminOnlyPage ||
-    (!canBrowseTemplates(user) &&
-      matchPath(
-        { path: ROUTES.adminTemplates.path, end: false },
-        location.pathname,
-      ))
+  const canManageAccounts = canAccessRoute(user, ROUTES.adminIndex)
+  const restrictedPage = !canVisit(user, location.pathname)
   return (
     <div
       className={
@@ -538,16 +511,18 @@ function MemberAdminShell({
           <Route
             index
             element={
-              <Navigate replace state={location.state} to={indexTarget} />
+              location.pathname === ROUTES.settings.path ? (
+                <ChangePasswordPage />
+              ) : (
+                <Navigate replace state={location.state} to={indexTarget} />
+              )
             }
           />
           <Route
             path={nestedRoutePath(ROUTES.adminProjects, ROUTES.adminShell)}
             element={
               // 專案查閱權限可進入唯讀清單，不改變現場帳號的首頁落點。
-              user.has_office_access ||
-              user.has_project_access ||
-              user.can_create_project ? (
+              canAccessRoute(user, ROUTES.adminProjects) ? (
                 <MyProjectsPage canCreateProject={user.can_create_project} />
               ) : (
                 <Navigate replace to={indexTarget} />
@@ -571,7 +546,7 @@ function MemberAdminShell({
             }
           />
           {PROJECT_ROUTES}
-          {canBrowseTemplates(user) && (
+          {canAccessRoute(user, ROUTES.adminTemplates) && (
             <Route
               path={nestedRoutePath(ROUTES.adminTemplates, ROUTES.adminShell)}
               element={
@@ -585,7 +560,7 @@ function MemberAdminShell({
             path="*"
             element={
               // 使用者、公司、角色是管理者專用頁，其下任何路徑（例如
-              // /admin/users/abc）沿用無權限頁；其他不存在的網址一律
+              // /accounts/users/abc）沿用無權限頁；其他不存在的網址一律
               // 顯示找不到（#493）。
               restrictedPage ? (
                 <>
@@ -616,17 +591,20 @@ function memberNavigationItems(
 ) {
   const items = memberNavItems(user)
   if (
-    (user.has_office_access ||
-      user.has_project_access ||
-      user.can_create_project) &&
-    !items.some((item) => item.to === '/admin/projects')
+    canAccessRoute(user, ROUTES.adminProjects) &&
+    !items.some((item) => item.to === ROUTES.adminProjects.path)
   ) {
     items.unshift({
       to: ROUTES.adminProjects.path,
       label: NAV_LABELS.projects,
     })
   }
-  if (access.kind === 'allowed') items.push(DASHBOARD_NAV_ITEM)
+  if (
+    access.kind === 'allowed' &&
+    !items.some((item) => item.to === DASHBOARD_NAV_ITEM.to)
+  ) {
+    items.push(DASHBOARD_NAV_ITEM)
+  }
   return items
 }
 
@@ -635,8 +613,8 @@ function adminNavigationItems(
   access: DashboardAccessState,
 ) {
   const items = memberNavItems(user)
-  if (user.is_admin || user.has_office_access) {
-    if (!items.some((item) => item.to === '/admin/projects')) {
+  if (canAccessRoute(user, ROUTES.adminProjects)) {
+    if (!items.some((item) => item.to === ROUTES.adminProjects.path)) {
       items.push({ to: ROUTES.adminProjects.path, label: NAV_LABELS.projects })
     }
   }

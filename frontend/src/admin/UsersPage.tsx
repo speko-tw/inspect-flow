@@ -323,7 +323,7 @@ export default function UsersPage({
         await setUserAdmin(user.id, false)
         setPendingAction(null)
         // 落點交給 HomeRedirect 依存取摘要決定（F-O04）：這個人收回後
-        // 不一定有現場權限，直接寫死 /field 會落到無權限頁。
+        // 不一定有現場權限，導回首頁由權限落點決定。
         navigate('/', {
           replace: true,
           state: { notice: SELF_REVOKED_NOTICE },
@@ -589,7 +589,7 @@ export default function UsersPage({
                   <ul>
                     {unmanagedProjects.map((project) => (
                       <li key={project.id}>
-                        <Link to={`/admin/projects/${project.id}/members`}>
+                        <Link to={`/projects/${project.id}/members`}>
                           {project.project_code}／{project.name}（
                           {project.member_count} 位成員）
                         </Link>
@@ -665,7 +665,11 @@ export default function UsersPage({
                             {onSelectUser ? (
                               <Link
                                 className="users-account-name-link"
-                                to={`/admin/people/${encodeURIComponent(user.id)}${location.search}`}
+                                to={
+                                  '/accounts/' +
+                                  encodeURIComponent(user.id) +
+                                  location.search
+                                }
                               >
                                 {user.name_zh || user.username}
                               </Link>
@@ -789,7 +793,7 @@ export default function UsersPage({
                                               <li key={project.id}>
                                                 <Link
                                                   to={[
-                                                    '/admin/projects',
+                                                    '/projects',
                                                     project.id,
                                                     'planning',
                                                   ].join('/')}

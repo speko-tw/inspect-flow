@@ -450,7 +450,7 @@ export default function DashboardPage({ user }: { user: CurrentUser }) {
                 onSelect={(projectId) => {
                   setSelectedProject(projectId)
                   navigate(
-                    '/admin/dashboard/projects/' +
+                    '/overview/projects/' +
                       encodeURIComponent(projectId) +
                       '/tasks',
                   )
