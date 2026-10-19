@@ -113,6 +113,36 @@ describe('Dashboard 任務唯讀頁', () => {
     expect(api.getDashboardTask).toHaveBeenCalledWith('project-1', 'task-2048')
   })
 
+  // #713：指派人姓名為空時不得退回顯示 user_id；專案名稱取不到時
+  // 不得顯示專案 UUID。
+  it('指派人沒有姓名時顯示未指派，專案名稱取不到時顯示通用文字', async () => {
+    const projectUuid = '3f2b8a9e-1c4d-4e6f-9a7b-0d5c2e1f8a63'
+    const userUuid = '7c1d9e2a-5b3f-4a8c-8d6e-1f0a2b3c4d5e'
+    const unnamed = {
+      ...task,
+      suggested_assignee: { user_id: userUuid, name_zh: null },
+    }
+    api.listDashboardProjects.mockResolvedValue({ items: [] })
+    api.listDashboardTasks.mockResolvedValue({
+      items: [unnamed],
+      next_cursor: null,
+    })
+    api.getDashboardTask.mockResolvedValue(unnamed)
+    renderAt(`/overview/projects/${projectUuid}/tasks/task-2048`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'A 棟・二樓機房' }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(api.listDashboardProjects).toHaveBeenCalled())
+    expect(screen.getAllByText('未指派').length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('heading', { level: 1, name: '這個專案' }),
+    ).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain(projectUuid)
+    expect(document.body.textContent).not.toContain(userUuid)
+    expect(document.body.textContent).not.toContain('task-2048')
+  })
+
   it('提供手機逐層詳情與返回清單操作', async () => {
     const { container } = renderAt(
       '/overview/projects/project-1/tasks/task-2048',

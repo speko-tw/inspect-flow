@@ -316,7 +316,10 @@ describe('project home', () => {
   it('可編輯查核項目的成員會看到新增文案與入口', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(
-      summary({ primary_step: 'add_inspection_items' }),
+      summary({
+        primary_step: 'add_inspection_items',
+        can_apply_templates: true,
+      }),
     )
 
     renderAt('/projects/project-1', {
@@ -328,6 +331,29 @@ describe('project home', () => {
     expect(
       screen.getByRole('link', { name: '前往新增查核項目' }),
     ).toHaveAttribute('href', '/projects/project-1/inspection-items')
+  })
+
+  // 查核項目頁只有「從範本新增」；有專案編輯權但不能套用範本
+  // （缺範本或查核模組）的人點進去沒有可用入口，所以不顯示。
+  it('有專案編輯權但不能套用範本時不顯示新增查核項目入口', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: 'add_inspection_items',
+        can_apply_templates: false,
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: true,
+    })
+
+    await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
+    expectNoNextStepCard()
+    expect(
+      screen.queryByRole('link', { name: '前往新增查核項目' }),
+    ).not.toBeInTheDocument()
   })
 
   it('leaves the role blank while the label list is loading', async () => {
@@ -616,7 +642,9 @@ describe('project home', () => {
     ['complete_reinspection', '追蹤任務進度', '前往追蹤任務進度'],
   ] as const)('uses primary step %s', async (code, label, action) => {
     mocks.getProject.mockResolvedValue(project)
-    mocks.getWorkflowSummary.mockResolvedValue(summary({ primary_step: code }))
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({ primary_step: code, can_apply_templates: true }),
+    )
 
     renderAt()
 
@@ -705,8 +733,49 @@ describe('project home', () => {
 
     renderAt()
 
+    expect(await screen.findByText('目前沒有待處理的下一步。')).toBeVisible()
+    expect(screen.getByRole('link', { name: '追蹤進度' })).toHaveAttribute(
+      'href',
+      '/projects/project-1/progress',
+    )
+  })
+
+  // ADM-R16：全部完成但沒有任何進度相關讀取權限時，不放空卡。
+  it('全部完成且沒有進度或計畫讀取權限時不顯示下一步卡', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: null,
+        viewer_permission_codes: ['project.read'],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
     await screen.findByRole('heading', { name: 'DEMO-001｜示範工程' })
     expectNoNextStepCard()
+  })
+
+  it('全部完成但只有計畫讀取權限時追蹤進度改連計畫與任務', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        primary_step: null,
+        viewer_permission_codes: ['project.read', 'inspection_plan.read'],
+      }),
+    )
+
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
+
+    expect(
+      await screen.findByRole('link', { name: '追蹤進度' }),
+    ).toHaveAttribute('href', '/projects/project-1/planning')
   })
 
   it('routes field-only permission sets to Field and skips project detail reads', async () => {
@@ -746,9 +815,10 @@ describe('project home', () => {
     expect(screen.queryByText('Field 工作台')).not.toBeInTheDocument()
   })
 
-  // #713：草稿只給內業看；外部協作的專案查閱人員即使後端回了草稿數，
-  // 畫面也不能出現草稿數、未指派數或待重查的數字與連結。
-  it('外部協作看不到草稿任務與待重查，只看到已派出數字', async () => {
+  // ADM-R16、ADM-R49：外部協作的專案查閱人員看得到草稿、未指派、
+  // 待重查的數字（後端以 inspection_task.read 決定），但沒有任何
+  // 寫入入口（沒有下一步卡、也沒有前往規劃頁的連結）。
+  it('外部協作看得到任務數字但沒有可點的寫入入口', async () => {
     mocks.getProject.mockResolvedValue(project)
     mocks.getWorkflowSummary.mockResolvedValue(
       summary({
@@ -772,45 +842,37 @@ describe('project home', () => {
     expectNoNextStepCard()
     const numbers = within(screen.getByLabelText('專案關鍵數字'))
     expect(numbers.getByText('已派出未完成')).toBeVisible()
-    expect(numbers.queryByText('草稿任務')).not.toBeInTheDocument()
-    expect(numbers.queryByText('待重查')).not.toBeInTheDocument()
-    expect(numbers.queryByText(/未指派/)).not.toBeInTheDocument()
-    expect(screen.queryByText('4 件')).not.toBeInTheDocument()
+    expect(numbers.getByText('草稿任務')).toBeVisible()
+    expect(numbers.getByText(/未指派/)).toBeVisible()
+    expect(numbers.getByText('待重查')).toBeVisible()
+    for (const link of numbers.queryAllByRole('link')) {
+      expect(link.getAttribute('href')).not.toMatch(/planning|members/)
+    }
     expect(
-      screen.queryByRole('link', { name: '4 件' }),
-    ).not.toBeInTheDocument()
-    expect(
-      document.querySelector('a[href*="status=DRAFT"]'),
-    ).not.toBeInTheDocument()
-    expect(
-      document.querySelector('a[href*="status=reinspection"]'),
+      screen.queryByRole('link', { name: /^前往/ }),
     ).not.toBeInTheDocument()
   })
 
-  it.each([['inspection_plan.create'], ['inspection_task.dispatch']])(
-    '有 %s 的人看得到草稿任務與待重查',
-    async (code) => {
-      mocks.getProject.mockResolvedValue(project)
-      mocks.getWorkflowSummary.mockResolvedValue(
-        summary({
-          viewer_permission_codes: [
-            'project.read',
-            'inspection_plan.read',
-            'inspection_task.read',
-            code,
-          ],
-        }),
-      )
+  it('有 inspection_task.read 的人看得到草稿任務與待重查', async () => {
+    mocks.getProject.mockResolvedValue(project)
+    mocks.getWorkflowSummary.mockResolvedValue(
+      summary({
+        viewer_permission_codes: [
+          'project.read',
+          'inspection_plan.read',
+          'inspection_task.read',
+        ],
+      }),
+    )
 
-      renderAt('/projects/project-1', {
-        has_office_access: true,
-        has_field_access: false,
-      })
+    renderAt('/projects/project-1', {
+      has_office_access: true,
+      has_field_access: false,
+    })
 
-      expect(await screen.findByText('草稿任務')).toBeVisible()
-      expect(screen.getByText('待重查')).toBeVisible()
-    },
-  )
+    expect(await screen.findByText('草稿任務')).toBeVisible()
+    expect(screen.getByText('待重查')).toBeVisible()
+  })
 
   it('complete_reinspection step opens the reinspection filter', async () => {
     mocks.getProject.mockResolvedValue(project)

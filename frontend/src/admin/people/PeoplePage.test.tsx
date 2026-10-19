@@ -187,6 +187,17 @@ describe('PeoplePage', () => {
     expect(screen.queryByText('模組授權')).toBeNull()
   })
 
+  it('shows not-found instead of crashing on a broken percent encoding', () => {
+    render(
+      <DataMemoryRouter initialEntries={['/accounts/%E0%A4%A']}>
+        <PeoplePage onTemporaryPassword={vi.fn()} />
+      </DataMemoryRouter>,
+    )
+
+    expect(screen.getByText('找不到這個帳號')).toBeVisible()
+    expect(peopleApiMock.request).not.toHaveBeenCalled()
+  })
+
   it('does not render a second participating-project section', async () => {
     peopleApiMock.request.mockResolvedValue({ items: [] })
     render(

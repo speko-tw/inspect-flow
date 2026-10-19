@@ -25,6 +25,19 @@ interface DelegatePersonPage {
   next_cursor: string | null
 }
 
+/**
+ * 網址中的帳號編號解碼；壞掉的百分比編碼（如 `%E0%A4%A`）會讓
+ * decodeURIComponent 丟例外，改回傳原字串，後續 isResourceId 會
+ * 擋下並顯示「找不到這個帳號」，不讓整頁崩潰（ADM-R25，#713）。
+ */
+function decodePersonId(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+
 /** Admin 人員入口；保留清單與授權精靈狀態供清單、詳情路由共用。 */
 export function PeoplePage({
   onTemporaryPassword,
@@ -51,7 +64,7 @@ export function PeoplePage({
       `^${ROUTES.adminPeople.path.replace('/:personId?', '')}/([^/]+)$`,
     ),
   )
-  const personId = detailMatch ? decodeURIComponent(detailMatch[1]) : null
+  const personId = detailMatch ? decodePersonId(detailMatch[1]) : null
   const createWizardOpen = user.is_admin && wizardRequest > 0
   const query = searchParams.get('q') ?? ''
 
