@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   Link,
+  matchPath,
   Navigate,
   Route,
   Routes,
@@ -18,12 +19,18 @@ import {
   landingPath,
 } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
+import ChangePasswordPage from '../auth/ChangePasswordPage'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { NAV_LABELS, PAGE_TITLES } from '../layout/navigationLabels'
+import {
+  canAccessRoute,
+  nestedRoutePath,
+  routeForPath,
+  ROUTES,
+} from '../routes'
 import RequireValidRouteIds from '../RequireValidRouteIds'
 import RouteNotFound from '../RouteNotFound'
-import { isResourceId } from '../resourceId'
-import { canOpenDashboard, hasGlobalDashboardAccess } from './dashboard/api'
+import { hasGlobalDashboardAccess } from './dashboard/api'
 import CompaniesPage from './CompaniesPage'
 import PeoplePage from './people/PeoplePage'
 import RolesPage from './roles/RolesPage'
@@ -48,16 +55,19 @@ const ProjectItemChangePage = lazy(
 const DashboardPage = lazy(() => import('./dashboard/DashboardPage'))
 const DashboardTaskPage = lazy(() => import('./dashboard/DashboardTaskPage'))
 
-function hasInvalidProjectRoute(pathname: string): boolean {
-  const match = pathname.match(/^\/admin\/projects\/([^/]+)(?:\/|$)/)
-  return match !== null && !isResourceId(match[1])
-}
+const PROJECT_PAGE_ROUTES = [
+  ROUTES.projectHome,
+  ROUTES.projectMembers,
+  ROUTES.projectItems,
+  ROUTES.projectZones,
+  ROUTES.projectInspectionTemplates,
+  ROUTES.projectPlanning,
+  ROUTES.projectProgress,
+  ROUTES.projectProgressTask,
+  ROUTES.projectItemChange,
+]
 
-type DashboardAccessState =
-  | { kind: 'checking' }
-  | { kind: 'allowed' }
-  | { kind: 'denied' }
-  | { kind: 'error' }
+type DashboardAccessState = { kind: 'allowed' } | { kind: 'denied' }
 
 function AdminRouteSuspense({ children }: { children: ReactNode }) {
   return <Suspense fallback={<p>載入中…</p>}>{children}</Suspense>
@@ -69,16 +79,6 @@ function ProjectPlanningRoute() {
     <Suspense fallback={<p>載入中…</p>}>
       <PlanningPage key={projectId} initialProjectId={projectId} />
     </Suspense>
-  )
-}
-
-function ProjectTemplatesRedirect() {
-  const { projectId = '' } = useParams()
-  return (
-    <Navigate
-      replace
-      to={`/admin/projects/${projectId}/inspection-items/templates`}
-    />
   )
 }
 
@@ -117,7 +117,10 @@ function ProjectTemplatesRoute() {
 
   // ADM-R17、TPL-R23：非成員範本管理員直接瀏覽獨立頁，
   // 不載入 workflow-summary；成員仍由 ProjectSectionPage 依 ADM-R25 分流。
-  if (!user.is_admin && !canBrowseTemplateLibrary) {
+  if (
+    !canAccessRoute(user, ROUTES.projectInspectionTemplates) ||
+    (!user.is_admin && !canBrowseTemplateLibrary)
+  ) {
     return <Navigate replace to={landingPath(user)} />
   }
 
@@ -155,26 +158,28 @@ function ProjectTemplatesRoute() {
 // 保護，特製網址會直接打到別的 API 端點。
 const PROJECT_ROUTES = (
   <Route element={<RequireValidRouteIds />}>
-    <Route element={<ProjectHomePage />} path="projects/:projectId" />
+    <Route
+      element={<ProjectHomePage />}
+      path={nestedRoutePath(ROUTES.projectHome, ROUTES.adminShell)}
+    />
     <Route
       element={<ProjectSectionPage section="members" />}
-      path="projects/:projectId/members"
+      path={nestedRoutePath(ROUTES.projectMembers, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="inspection-items" />}
-      path="projects/:projectId/inspection-items"
+      path={nestedRoutePath(ROUTES.projectItems, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="zones" />}
-      path="projects/:projectId/zones"
+      path={nestedRoutePath(ROUTES.projectZones, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectTemplatesRoute />}
-      path="projects/:projectId/inspection-items/templates"
-    />
-    <Route
-      element={<ProjectTemplatesRedirect />}
-      path="projects/:projectId/templates"
+      path={nestedRoutePath(
+        ROUTES.projectInspectionTemplates,
+        ROUTES.adminShell,
+      )}
     />
     <Route
       element={
@@ -182,15 +187,15 @@ const PROJECT_ROUTES = (
           <ProjectPlanningRoute />
         </ProjectSectionPage>
       }
-      path="projects/:projectId/planning"
+      path={nestedRoutePath(ROUTES.projectPlanning, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="progress" />}
-      path="projects/:projectId/progress"
+      path={nestedRoutePath(ROUTES.projectProgress, ROUTES.adminShell)}
     />
     <Route
       element={<ProjectSectionPage section="progress" />}
-      path="projects/:projectId/progress/tasks/:taskId"
+      path={nestedRoutePath(ROUTES.projectProgressTask, ROUTES.adminShell)}
     />
     <Route
       element={
@@ -200,21 +205,24 @@ const PROJECT_ROUTES = (
           </AdminRouteSuspense>
         </ProjectSectionPage>
       }
-      path="projects/:projectId/inspection-items/:itemId"
+      path={nestedRoutePath(ROUTES.projectItemChange, ROUTES.adminShell)}
     />
   </Route>
 )
 
 const DASHBOARD_NAV_ITEM = {
-  to: '/admin/dashboard',
+  to: ROUTES.dashboardIndex.path,
   label: NAV_LABELS.overview,
 }
 
 const MANAGEMENT_ITEMS = [
-  { to: '/admin/people', label: PAGE_TITLES.account },
-  { to: '/admin/companies', label: PAGE_TITLES.company },
-  { to: '/admin/roles', label: NAV_LABELS.roles },
-  { to: '/admin/audit-logs', label: NAV_LABELS.records },
+  {
+    to: ROUTES.adminPeople.path.replace('/:personId?', ''),
+    label: PAGE_TITLES.account,
+  },
+  { to: ROUTES.adminCompanies.path, label: PAGE_TITLES.company },
+  { to: ROUTES.adminRoles.path, label: NAV_LABELS.roles },
+  { to: ROUTES.adminAuditLogs.path, label: NAV_LABELS.records },
 ]
 
 export default function AdminPage() {
@@ -230,7 +238,6 @@ function AdminPageContent() {
   const { user } = useCurrentUser()
   const location = useLocation()
   const navigate = useNavigate()
-  const invalidProjectRoute = hasInvalidProjectRoute(location.pathname)
   const [temporaryPassword, setTemporaryPassword] = useState<{
     username: string
     password: string
@@ -238,42 +245,9 @@ function AdminPageContent() {
   } | null>(null)
   const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const hasGlobalAccess = hasGlobalDashboardAccess(user)
-  const [dashboardAccessResult, setDashboardAccessResult] = useState<{
-    key: string
-    state: DashboardAccessState
-  }>({ key: '', state: { kind: 'checking' } })
-  const [dashboardRetry, setDashboardRetry] = useState(0)
-  const dashboardAccessKey = `${user.id}:${dashboardRetry}`
-  const dashboardAccess = hasGlobalAccess
-    ? { kind: 'allowed' as const }
-    : dashboardAccessResult.key === dashboardAccessKey
-      ? dashboardAccessResult.state
-      : { kind: 'checking' as const }
-
-  useEffect(() => {
-    if (hasGlobalAccess || invalidProjectRoute) return
-    let active = true
-    canOpenDashboard(user)
-      .then((allowed) => {
-        if (active) {
-          setDashboardAccessResult({
-            key: dashboardAccessKey,
-            state: { kind: allowed ? 'allowed' : 'denied' },
-          })
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setDashboardAccessResult({
-            key: dashboardAccessKey,
-            state: { kind: 'error' },
-          })
-        }
-      })
-    return () => {
-      active = false
-    }
-  }, [dashboardAccessKey, hasGlobalAccess, invalidProjectRoute, user])
+  const dashboardAccess: DashboardAccessState = {
+    kind: hasGlobalAccess ? 'allowed' : 'denied',
+  }
 
   useEffect(() => {
     if (temporaryPassword) resultHeadingRef.current?.focus()
@@ -281,7 +255,8 @@ function AdminPageContent() {
 
   if (
     temporaryPassword &&
-    (location.pathname !== '/admin/people' ||
+    (location.pathname !==
+      ROUTES.adminPeople.path.replace('/:personId?', '') ||
       location.key !== temporaryPassword.locationKey)
   ) {
     setTemporaryPassword(null)
@@ -290,25 +265,18 @@ function AdminPageContent() {
   // 從別頁導來時可帶一則提示（例如變更密碼成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
 
-  const isProjectSectionRoute =
-    /^\/admin\/projects\/[^/]+(?:\/(?:templates|members|inspection-items(?:\/(?:templates|[^/]+))?|zones|planning|progress(?:\/tasks\/[^/]+)?))?\/?$/.test(
-      location.pathname,
-    )
+  const isProjectSectionRoute = PROJECT_PAGE_ROUTES.some((route) =>
+    matchPath({ path: route.path, end: true }, location.pathname),
+  )
 
   if (!user.is_admin) {
-    return (
-      <MemberAdminShell
-        dashboardAccess={dashboardAccess}
-        onRetryDashboard={() => setDashboardRetry((key) => key + 1)}
-        user={user}
-      />
-    )
+    return <MemberAdminShell dashboardAccess={dashboardAccess} user={user} />
   }
 
   return (
     <div
       className={
-        location.pathname.startsWith('/admin/dashboard')
+        location.pathname.startsWith(ROUTES.dashboard.path.replace('/*', ''))
           ? 'app-shell dashboard-shell'
           : 'app-shell'
       }
@@ -336,7 +304,8 @@ function AdminPageContent() {
           </p>
         )}
         {temporaryPassword &&
-        location.pathname === '/admin/people' &&
+        location.pathname ===
+          ROUTES.adminPeople.path.replace('/:personId?', '') &&
         location.key === temporaryPassword.locationKey ? (
           <section
             aria-labelledby="temporary-password-heading"
@@ -356,7 +325,9 @@ function AdminPageContent() {
             <button
               onClick={() => {
                 setTemporaryPassword(null)
-                navigate('/admin/people', { replace: true })
+                navigate(ROUTES.adminPeople.path.replace('/:personId?', ''), {
+                  replace: true,
+                })
               }}
               type="button"
             >
@@ -368,11 +339,19 @@ function AdminPageContent() {
             <Route
               index
               element={
-                <Navigate replace state={location.state} to="/admin/people" />
+                location.pathname === ROUTES.settings.path ? (
+                  <ChangePasswordPage />
+                ) : (
+                  <Navigate
+                    replace
+                    state={location.state}
+                    to={ROUTES.adminPeople.path.replace('/:personId?', '')}
+                  />
+                )
               }
             />
             <Route
-              path="people/:personId?"
+              path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
               element={
                 <PeoplePage
                   onTemporaryPassword={(username, password) =>
@@ -385,21 +364,24 @@ function AdminPageContent() {
                 />
               }
             />
-            <Route path="companies" element={<CompaniesPage />} />
-            <Route path="roles" element={<RolesPage />} />
-            <Route path="projects" element={<ProjectsPage />} />
             <Route
-              path="dashboard/*"
-              element={
-                <DashboardRoute
-                  access={dashboardAccess}
-                  onRetry={() => setDashboardRetry((key) => key + 1)}
-                  user={user}
-                />
-              }
+              path={nestedRoutePath(ROUTES.adminCompanies, ROUTES.adminShell)}
+              element={<CompaniesPage />}
             />
             <Route
-              path="audit-logs"
+              path={nestedRoutePath(ROUTES.adminRoles, ROUTES.adminShell)}
+              element={<RolesPage />}
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminProjects, ROUTES.adminShell)}
+              element={<ProjectsPage />}
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
+              element={<DashboardRoute access={dashboardAccess} user={user} />}
+            />
+            <Route
+              path={nestedRoutePath(ROUTES.adminAuditLogs, ROUTES.adminShell)}
               element={
                 <AdminRouteSuspense>
                   <AuditLogPage />
@@ -408,7 +390,7 @@ function AdminPageContent() {
             />
             {PROJECT_ROUTES}
             <Route
-              path="templates"
+              path={nestedRoutePath(ROUTES.adminTemplates, ROUTES.adminShell)}
               element={
                 <AdminRouteSuspense>
                   <TemplatesPage canManage />
@@ -428,30 +410,24 @@ function AdminPageContent() {
 // 只屬系統管理者，這裡一律不列。
 function MemberAdminShell({
   dashboardAccess,
-  onRetryDashboard,
   user,
 }: {
   dashboardAccess: DashboardAccessState
-  onRetryDashboard: () => void
   user: CurrentUser
 }) {
   const location = useLocation()
   // 從別頁導來時帶的提示（例如套用範本成功後）。
   const notice = (location.state as { notice?: unknown } | null)?.notice
   const indexTarget = landingPath(user)
-  const canManageAccounts = user.delegated_modules.length > 0
-  const restrictedPage =
-    (/^\/admin\/people(?:\/|$)/.test(location.pathname) &&
-      !canManageAccounts) ||
-    /^\/admin\/(?:companies|roles|audit-logs)(?:\/|$)/.test(
-      location.pathname,
-    ) ||
-    (!canBrowseTemplates(user) &&
-      /^\/admin\/templates(?:\/|$)/.test(location.pathname))
+  const canManageAccounts = canAccessRoute(user, ROUTES.adminIndex)
+  const registeredRoute = routeForPath(location.pathname)
+  const restrictedPage = Boolean(
+    registeredRoute && !canAccessRoute(user, registeredRoute),
+  )
   return (
     <div
       className={
-        location.pathname.startsWith('/admin/dashboard')
+        location.pathname.startsWith(ROUTES.dashboard.path.replace('/*', ''))
           ? 'app-shell dashboard-shell'
           : 'app-shell'
       }
@@ -460,7 +436,12 @@ function MemberAdminShell({
         navItems={memberNavigationItems(user, dashboardAccess)}
         managementItems={
           canManageAccounts
-            ? [{ to: '/admin/people', label: PAGE_TITLES.account }]
+            ? [
+                {
+                  to: ROUTES.adminPeople.path.replace('/:personId?', ''),
+                  label: PAGE_TITLES.account,
+                },
+              ]
             : []
         }
         navLabel="管理功能"
@@ -476,16 +457,18 @@ function MemberAdminShell({
           <Route
             index
             element={
-              <Navigate replace state={location.state} to={indexTarget} />
+              location.pathname === ROUTES.settings.path ? (
+                <ChangePasswordPage />
+              ) : (
+                <Navigate replace state={location.state} to={indexTarget} />
+              )
             }
           />
           <Route
-            path="projects"
+            path={nestedRoutePath(ROUTES.adminProjects, ROUTES.adminShell)}
             element={
               // 專案查閱權限可進入唯讀清單，不改變現場帳號的首頁落點。
-              user.has_office_access ||
-              user.has_project_access ||
-              user.can_create_project ? (
+              canAccessRoute(user, ROUTES.adminProjects) ? (
                 <MyProjectsPage canCreateProject={user.can_create_project} />
               ) : (
                 <Navigate replace to={indexTarget} />
@@ -494,24 +477,18 @@ function MemberAdminShell({
           />
           {canManageAccounts && (
             <Route
-              path="people/:personId?"
+              path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
               element={<PeoplePage onTemporaryPassword={() => undefined} />}
             />
           )}
           <Route
-            path="dashboard/*"
-            element={
-              <DashboardRoute
-                access={dashboardAccess}
-                onRetry={onRetryDashboard}
-                user={user}
-              />
-            }
+            path={nestedRoutePath(ROUTES.dashboard, ROUTES.adminShell)}
+            element={<DashboardRoute access={dashboardAccess} user={user} />}
           />
           {PROJECT_ROUTES}
-          {canBrowseTemplates(user) && (
+          {canAccessRoute(user, ROUTES.adminTemplates) && (
             <Route
-              path="templates"
+              path={nestedRoutePath(ROUTES.adminTemplates, ROUTES.adminShell)}
               element={
                 <AdminRouteSuspense>
                   <TemplatesPage canManage={canManageTemplateLibrary(user)} />
@@ -523,13 +500,13 @@ function MemberAdminShell({
             path="*"
             element={
               // 使用者、公司、角色是管理者專用頁，其下任何路徑（例如
-              // /admin/users/abc）沿用無權限頁；其他不存在的網址一律
+              // /accounts/users/abc）沿用無權限頁；其他不存在的網址一律
               // 顯示找不到（#493）。
               restrictedPage ? (
                 <>
                   <h1>無權限</h1>
                   <p role="alert">
-                    {location.pathname.startsWith('/admin/templates')
+                    {location.pathname.startsWith(ROUTES.adminTemplates.path)
                       ? '你沒有權限瀏覽範本庫。'
                       : '只有系統管理者可以使用這個管理頁面。'}
                   </p>
@@ -554,14 +531,20 @@ function memberNavigationItems(
 ) {
   const items = memberNavItems(user)
   if (
-    (user.has_office_access ||
-      user.has_project_access ||
-      user.can_create_project) &&
-    !items.some((item) => item.to === '/admin/projects')
+    canAccessRoute(user, ROUTES.adminProjects) &&
+    !items.some((item) => item.to === ROUTES.adminProjects.path)
   ) {
-    items.unshift({ to: '/admin/projects', label: NAV_LABELS.projects })
+    items.unshift({
+      to: ROUTES.adminProjects.path,
+      label: NAV_LABELS.projects,
+    })
   }
-  if (access.kind === 'allowed') items.push(DASHBOARD_NAV_ITEM)
+  if (
+    access.kind === 'allowed' &&
+    !items.some((item) => item.to === DASHBOARD_NAV_ITEM.to)
+  ) {
+    items.push(DASHBOARD_NAV_ITEM)
+  }
   return items
 }
 
@@ -570,9 +553,9 @@ function adminNavigationItems(
   access: DashboardAccessState,
 ) {
   const items = memberNavItems(user)
-  if (user.is_admin || user.has_office_access) {
-    if (!items.some((item) => item.to === '/admin/projects')) {
-      items.push({ to: '/admin/projects', label: NAV_LABELS.projects })
+  if (canAccessRoute(user, ROUTES.adminProjects)) {
+    if (!items.some((item) => item.to === ROUTES.adminProjects.path)) {
+      items.push({ to: ROUTES.adminProjects.path, label: NAV_LABELS.projects })
     }
   }
   if (
@@ -586,32 +569,16 @@ function adminNavigationItems(
 
 function DashboardRoute({
   access,
-  onRetry,
   user,
 }: {
   access: DashboardAccessState
-  onRetry: () => void
   user: CurrentUser
 }) {
-  if (access.kind === 'checking') {
-    return <p role="status">正在確認總覽權限…</p>
-  }
   if (access.kind === 'denied') {
     return (
       <section aria-labelledby="dashboard-denied-heading">
         <h1 id="dashboard-denied-heading">無權限</h1>
         <p role="alert">你目前沒有可查看的專案進度。</p>
-      </section>
-    )
-  }
-  if (access.kind === 'error') {
-    return (
-      <section aria-labelledby="dashboard-access-error-heading">
-        <h1 id="dashboard-access-error-heading">{PAGE_TITLES.overview}</h1>
-        <p role="alert">目前無法確認總覽權限，請重試。</p>
-        <button className="btn" onClick={onRetry} type="button">
-          重新確認
-        </button>
       </section>
     )
   }
@@ -627,7 +594,7 @@ function DashboardRoute({
               <DashboardTaskDenied />
             )
           }
-          path="projects/:projectId/tasks"
+          path={nestedRoutePath(ROUTES.dashboardTasks, ROUTES.dashboard)}
         />
         <Route
           element={
@@ -637,7 +604,7 @@ function DashboardRoute({
               <DashboardTaskDenied />
             )
           }
-          path="projects/:projectId/tasks/:taskId"
+          path={nestedRoutePath(ROUTES.dashboardTask, ROUTES.dashboard)}
         />
         <Route path="*" element={<RouteNotFound />} />
       </Routes>
@@ -655,7 +622,7 @@ function DashboardTaskDenied() {
     <section aria-labelledby="dashboard-task-denied">
       <h1 id="dashboard-task-denied">無權限</h1>
       <p role="alert">{dashboardTaskDeniedMessage}</p>
-      <Link to="/admin/dashboard">返回專案進度總覽</Link>
+      <Link to={ROUTES.dashboardIndex.path}>返回專案進度總覽</Link>
     </section>
   )
 }

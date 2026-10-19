@@ -25,7 +25,7 @@ import AuthLayout from './AuthLayout'
 import { PAGE_TITLES } from '../layout/navigationLabels'
 import { UnsavedLeaveBox } from '../ui/navigation'
 import * as navigationGuard from '../ui/navigation'
-import { canBrowseTemplates, landingLabel, landingPath } from './landing'
+import { landingLabel, landingPath } from './landing'
 import LogoutButton from './LogoutButton'
 import { isSafeRedirectPath } from './safeRedirect'
 import { useCurrentUser } from './useCurrentUser'
@@ -70,16 +70,7 @@ export default function ChangePasswordPage() {
   const navigate = useNavigate()
   const { user } = useCurrentUser()
   const target = landingPath(user)
-  const hasFeatureAccess = Boolean(
-    user.is_admin ||
-    user.has_office_access ||
-    user.has_field_access ||
-    user.has_project_access ||
-    user.can_create_project ||
-    canBrowseTemplates(user) ||
-    user.delegated_modules.length > 0 ||
-    user.module_permissions.length > 0,
-  )
+  const hasFeatureAccess = target !== '/settings'
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')

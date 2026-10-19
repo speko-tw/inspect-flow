@@ -37,6 +37,11 @@ interface FixtureOptions {
   selectedUserId?: string
   delegateMode?: boolean
   externalAccount?: boolean
+  permissionOptions?: Array<{
+    code: string
+    module: string
+    description: string
+  }>
   testNavigation?: boolean
   onTemporaryPassword?: (username: string, password: string) => void
   failCreate?: boolean
@@ -203,6 +208,7 @@ function permissionPage(options: FixtureOptions = {}) {
               id: member.id,
               username: member.username,
               name_zh: member.name_zh,
+              is_external_collaborator: member.is_external_collaborator,
             },
           ],
           next_cursor: null,
@@ -213,36 +219,38 @@ function permissionPage(options: FixtureOptions = {}) {
       }
       if (method === 'GET' && path === '/module-permissions') {
         return Response.json({
-          items: options.delegateMode
-            ? [
-                {
-                  code: 'project.use',
-                  module: 'project',
-                  description: '使用專案功能',
-                },
-              ]
-            : [
-                {
-                  code: 'project.use',
-                  module: 'project',
-                  description: '使用專案功能',
-                },
-                {
-                  code: 'inspection.use',
-                  module: 'inspection',
-                  description: '使用查核功能',
-                },
-                {
-                  code: 'project.create',
-                  module: 'project',
-                  description: '建立專案',
-                },
-                {
-                  code: 'template.manage',
-                  module: 'template',
-                  description: '管理範本庫',
-                },
-              ],
+          items:
+            options.permissionOptions ??
+            (options.delegateMode
+              ? [
+                  {
+                    code: 'project.use',
+                    module: 'project',
+                    description: '使用專案功能',
+                  },
+                ]
+              : [
+                  {
+                    code: 'project.use',
+                    module: 'project',
+                    description: '使用專案功能',
+                  },
+                  {
+                    code: 'inspection.use',
+                    module: 'inspection',
+                    description: '使用查核功能',
+                  },
+                  {
+                    code: 'project.create',
+                    module: 'project',
+                    description: '建立專案',
+                  },
+                  {
+                    code: 'template.manage',
+                    module: 'template',
+                    description: '管理範本庫',
+                  },
+                ]),
         })
       }
       if (method === 'GET' && path === '/permission-bundles') {
@@ -679,6 +687,45 @@ describe('ModulePermissionsPage', () => {
     expect(screen.queryByText('操作紀錄')).toBeNull()
   })
 
+  it('hides module permissions disallowed for external accounts', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      delegateMode: true,
+      externalAccount: true,
+      permissionOptions: [
+        {
+          code: 'project.use',
+          module: 'project',
+          description: '使用專案功能',
+        },
+        {
+          code: 'project.create',
+          module: 'project',
+          description: '建立專案',
+        },
+        {
+          code: 'template.use',
+          module: 'template',
+          description: '使用範本功能',
+        },
+        {
+          code: 'template.manage',
+          module: 'template',
+          description: '管理範本庫',
+        },
+      ],
+    })
+
+    await screen.findByRole('heading', { name: '權限' })
+
+    expect(screen.getByLabelText('使用專案功能')).toBeInTheDocument()
+    expect(screen.getByLabelText('使用範本功能')).toBeInTheDocument()
+    expect(screen.queryByLabelText('建立專案')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('管理範本庫')).not.toBeInTheDocument()
+  })
+
   it('shows the named success notice after a delegate explicitly opens access', async () => {
     const { calls } = permissionPage({
       openWizard: false,
@@ -853,7 +900,7 @@ describe('ModulePermissionsPage', () => {
       await within(summary).findByRole('link', {
         name: 'PR-1／示範工程',
       }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/members')
+    ).toHaveAttribute('href', '/projects/project-1/members')
   })
 
   it('can retry loading projects in the ability summary', async () => {
@@ -1445,7 +1492,7 @@ describe('ModulePermissionsPage', () => {
     ).toBeVisible()
     expect(
       screen.getByRole('link', { name: '前往專案成員設定' }),
-    ).toHaveAttribute('href', '/admin/projects/project-1/members')
+    ).toHaveAttribute('href', '/projects/project-1/members')
     assignCandidateRole('現場工程師')
     expect(await screen.findByText(/具備此操作所需的有效權限/)).toBeVisible()
     expect(

@@ -76,7 +76,9 @@ const currentUser: CurrentUser = {
   is_admin: true,
   must_change_password: false,
   has_office_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
   module_permissions: [],
   delegated_modules: [],
@@ -86,13 +88,14 @@ const currentUser: CurrentUser = {
 }
 
 function renderAdmin(
-  path: string | { pathname: string; state: unknown } = '/admin/people',
+  path: string | { pathname: string; state: unknown } = '/accounts',
   isAdmin = true,
   access: Partial<
     Pick<
       CurrentUser,
       | 'has_office_access'
       | 'has_field_access'
+      | 'can_inspect_tasks'
       | 'has_template_access'
       | 'can_browse_templates'
       | 'can_manage_template_library'
@@ -124,7 +127,7 @@ function renderAdmin(
               <TestNavigation />
             </>
           }
-          path="/admin/*"
+          path="/*"
         />
       </Routes>
     </DataMemoryRouter>
@@ -138,8 +141,8 @@ function TestNavigation() {
   return (
     <>
       <output data-testid="pathname">{location.pathname}</output>
-      <Link to="/admin/companies">測試 SPA 管理頁導覽</Link>
-      <Link to="/admin/roles">測試 SPA 離開管理頁</Link>
+      <Link to="/companies">測試 SPA 管理頁導覽</Link>
+      <Link to="/roles">測試 SPA 離開管理頁</Link>
       <button onClick={() => navigate(-1)} type="button">
         測試瀏覽器上一頁
       </button>
@@ -538,15 +541,15 @@ describe('管理表單未儲存導覽防護', () => {
   const cases = [
     {
       label: '帳號',
-      path: '/admin/people',
-      entries: ['/admin/roles', '/admin/people', '/admin/companies'],
+      path: '/accounts',
+      entries: ['/roles', '/accounts', '/companies'],
       input: /^帳號名稱/,
       value: 'unsaved-user',
     },
     {
       label: '公司',
-      path: '/admin/companies',
-      entries: ['/admin/people', '/admin/companies', '/admin/roles'],
+      path: '/companies',
+      entries: ['/accounts', '/companies', '/roles'],
       input: '公司名稱',
       value: '未儲存公司',
     },
@@ -587,7 +590,7 @@ describe('管理表單未儲存導覽防護', () => {
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器下一頁' }))
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2))
     const nextHeading =
-      item.entries[2] === '/admin/companies' ? '公司管理' : '專案角色'
+      item.entries[2] === '/companies' ? '公司管理' : '專案角色'
     expect(
       await screen.findByRole('heading', { name: nextHeading }),
     ).toBeInTheDocument()
@@ -617,12 +620,12 @@ describe('管理表單未儲存導覽防護', () => {
 describe('admin user and company pages', () => {
   it('uses the PeoplePage route and shared navigation label for list and detail', async () => {
     managementFetch()
-    renderAdmin('/admin/people?q=anna')
+    renderAdmin('/accounts?q=anna')
 
     expect(
       await screen.findByRole('heading', { name: '帳號', level: 1 }),
     ).toBeVisible()
-    expect(screen.getByTestId('pathname')).toHaveTextContent('/admin/people')
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/accounts')
     const nav = screen.getByRole('navigation', { name: '管理功能' })
     expect(
       within(nav)
@@ -637,11 +640,11 @@ describe('admin user and company pages', () => {
     ).toEqual(['總覽', '任務', '專案', '範本', '帳號', '公司', '角色', '紀錄'])
     expect(within(nav).getByRole('link', { name: '帳號' })).toHaveAttribute(
       'href',
-      '/admin/people',
+      '/accounts',
     )
     expect(within(nav).getByRole('link', { name: '角色' })).toHaveAttribute(
       'href',
-      '/admin/roles',
+      '/roles',
     )
     expect(within(nav).queryByRole('link', { name: '設定' })).toBeNull()
 
@@ -650,7 +653,7 @@ describe('admin user and company pages', () => {
       await screen.findByRole('heading', { name: '鄧安娜', level: 1 }),
     ).toBeVisible()
     expect(screen.getByTestId('pathname')).toHaveTextContent(
-      '/admin/people/user-1',
+      '/accounts/user-1',
     )
   })
 
@@ -668,7 +671,7 @@ describe('admin user and company pages', () => {
 
   it('guards edited user details after actual input', async () => {
     managementFetch()
-    renderAdmin('/admin/people')
+    renderAdmin('/accounts')
     await openAccountDetails('anna.deng', '鄧安娜')
     fireEvent.click(screen.getByRole('button', { name: '修改資料' }))
     const form = screen
@@ -686,7 +689,7 @@ describe('admin user and company pages', () => {
 
   it('guards edited company names after actual input', async () => {
     managementFetch()
-    renderAdmin('/admin/companies')
+    renderAdmin('/companies')
     const companyRow = await screen.findByRole('row', { name: /示範公司/ })
     fireEvent.click(within(companyRow).getByRole('button', { name: '改名稱' }))
     fireEvent.change(screen.getByLabelText('公司名稱'), {
@@ -701,7 +704,7 @@ describe('admin user and company pages', () => {
 
   it('starts one user list request when StrictMode replays the mount', async () => {
     const fetchMock = managementFetch()
-    renderAdmin('/admin/people', true, {}, true)
+    renderAdmin('/accounts', true, {}, true)
 
     expect(await screen.findByText('anna.deng')).toBeInTheDocument()
     expect(
@@ -718,7 +721,7 @@ describe('admin user and company pages', () => {
 
   it('cancels the queued list request when StrictMode mounts are cleaned up', async () => {
     const fetchMock = managementFetch()
-    const rendered = renderAdmin('/admin/people', true, {}, true)
+    const rendered = renderAdmin('/accounts', true, {}, true)
     rendered.unmount()
     await new Promise<void>((resolve) => queueMicrotask(resolve))
 
@@ -734,7 +737,7 @@ describe('admin user and company pages', () => {
 
   it('lets Admin edit templates from the management page', async () => {
     managementFetch()
-    renderAdmin('/admin/templates')
+    renderAdmin('/templates')
 
     expect(
       await screen.findByRole('button', { name: '新增工程類別' }),
@@ -847,7 +850,7 @@ describe('admin user and company pages', () => {
       is_active: true,
     }))
     managementFetch({ companyRows: rows })
-    renderAdmin('/admin/companies')
+    renderAdmin('/companies')
 
     expect(await screen.findByText('目標公司0')).toBeInTheDocument()
     expect(screen.queryByText('目標公司50')).not.toBeInTheDocument()
@@ -870,7 +873,7 @@ describe('admin user and company pages', () => {
   it.each([
     {
       label: '帳號',
-      path: '/admin/people',
+      path: '/accounts',
       searchLabel: '搜尋帳號',
       query: 'anna',
       result: 'anna.deng',
@@ -878,7 +881,7 @@ describe('admin user and company pages', () => {
     },
     {
       label: '公司',
-      path: '/admin/companies',
+      path: '/companies',
       searchLabel: '搜尋公司',
       query: '示範',
       result: '示範公司',
@@ -886,7 +889,7 @@ describe('admin user and company pages', () => {
     },
     {
       label: '專案',
-      path: '/admin/projects',
+      path: '/projects',
       searchLabel: '搜尋專案',
       query: '示範工程',
       result: '示範工程',
@@ -1157,7 +1160,7 @@ describe('admin user and company pages', () => {
 
   it('marks the current page in the navigation', async () => {
     managementFetch()
-    renderAdmin('/admin/companies')
+    renderAdmin('/companies')
     const nav = await screen.findByRole('navigation', { name: '管理功能' })
     const management = within(nav).getByRole('button', { name: /管理/ })
     expect(management).toHaveAttribute('aria-current', 'page')
@@ -1173,7 +1176,7 @@ describe('admin user and company pages', () => {
 
   it('opens the audit log page from the Admin navigation', async () => {
     const fetchMock = managementFetch()
-    renderAdmin('/admin/audit-logs')
+    renderAdmin('/logs')
 
     expect(
       await screen.findByRole('heading', { name: '稽核紀錄' }),
@@ -1541,22 +1544,21 @@ describe('admin user and company pages', () => {
 
   it('shows a clear no-permission page to non-admin users', () => {
     managementFetch()
-    renderAdmin('/admin/people', false)
+    renderAdmin('/accounts', false)
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
   })
 
-  it.each([
-    '/admin/people',
-    '/admin/people/user-1',
-    '/admin/companies',
-    '/admin/roles',
-    '/admin/audit-logs',
-  ])('denies non-admin access to protected route %s', (path) => {
-    managementFetch()
-    renderAdmin(path, false)
-    expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '紀錄' })).toBeNull()
-  })
+  it.each(['/accounts', '/accounts/user-1', '/companies', '/roles', '/logs'])(
+    'denies non-admin access to protected route %s',
+    (path) => {
+      managementFetch()
+      renderAdmin(path, false)
+      expect(
+        screen.getByRole('heading', { name: '無權限' }),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: '紀錄' })).toBeNull()
+    },
+  )
 
   it('guards dirty planning forms from sidebar and top nav', async () => {
     const fetchMock = managementFetch()
@@ -1577,7 +1579,7 @@ describe('admin user and company pages', () => {
       }
       return original(input, init)
     })
-    renderAdmin('/admin/projects/project-demo-1/planning')
+    renderAdmin('/projects/project-demo-1/planning')
 
     await screen.findByRole('heading', { name: '計畫與任務' })
     const planName = await screen.findByLabelText(/計畫名稱/)
@@ -1624,7 +1626,7 @@ describe('admin user and company pages', () => {
 
   it('allows non-admin users to open project planning routes', async () => {
     managementFetch()
-    renderAdmin('/admin/projects/project-demo-1/planning', false)
+    renderAdmin('/projects/project-demo-1/planning', false)
 
     expect(
       await screen.findByRole('heading', { name: '計畫與任務' }),
@@ -1639,59 +1641,24 @@ describe('admin user and company pages', () => {
     expect(screen.queryByRole('link', { name: '帳號' })).toBeNull()
   })
 
-  it.each([true, false])(
-    'redirects the old project template path in the admin shell (%s)',
-    async (isAdmin) => {
-      const fetchMock = managementFetch({
-        memberProjectIds: ['project-demo-1'],
-      })
-      renderAdmin('/admin/projects/project-demo-1/templates', isAdmin)
+  it('returns 404 for the retired project template shortcut', () => {
+    managementFetch({ memberProjectIds: ['project-demo-1'] })
+    renderAdmin('/projects/project-demo-1/templates')
 
-      await waitFor(() =>
-        expect(screen.getByTestId('pathname')).toHaveTextContent(
-          '/admin/projects/project-demo-1/inspection-items/templates',
-        ),
-      )
-      expect(
-        await screen.findByRole('region', { name: '範本操作' }),
-      ).toBeInTheDocument()
-      const navigation = screen.getByRole('complementary', {
-        name: '範本庫導覽',
-      })
-      fireEvent.click(
-        await within(navigation).findByRole('button', { name: '土木工程' }),
-      )
-      fireEvent.click(
-        await within(navigation).findByRole('button', { name: '護欄' }),
-      )
-      await within(navigation).findByRole('button', { name: '欄杆尺寸' })
-      expect(
-        screen.getByRole('link', { name: '返回查核項目' }),
-      ).toHaveAttribute(
-        'href',
-        '/admin/projects/project-demo-1/inspection-items',
-      )
-      expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
-      if (isAdmin) {
-        fireEvent.click(screen.getByRole('button', { name: /管理/ }))
-        expect(screen.getByRole('link', { name: '帳號' })).toBeInTheDocument()
-      } else {
-        expect(screen.queryByRole('button', { name: /管理/ })).toBeNull()
-      }
-      expect(
-        fetchMock.mock.calls.some(([input]) =>
-          String(input).endsWith('/workflow-summary'),
-        ),
-      ).toBe(true)
-    },
-  )
+    expect(
+      screen.getByRole('heading', { name: '找不到這個頁面' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('pathname')).toHaveTextContent(
+      '/projects/project-demo-1/templates',
+    )
+  })
 
   it('allows a non-member template manager to browse without workflow summary', async () => {
     const fetchMock = managementFetch()
-    renderAdmin(
-      '/admin/projects/project-demo-1/inspection-items/templates',
-      false,
-    )
+    renderAdmin('/projects/project-demo-1/inspection-items/templates', false, {
+      can_manage_template_library: true,
+      module_permissions: ['template.manage'],
+    })
 
     expect(
       await screen.findByRole('region', { name: '範本操作' }),
@@ -1699,7 +1666,7 @@ describe('admin user and company pages', () => {
     expect(await screen.findByText('DEMO-001｜示範工程')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '返回範本管理' })).toHaveAttribute(
       'href',
-      '/admin/templates',
+      '/templates',
     )
     expect(
       screen.queryByRole('link', {
@@ -1744,6 +1711,7 @@ describe('admin user and company pages', () => {
       is_admin: false,
       has_office_access: false,
       has_field_access: true,
+      can_inspect_tasks: true,
       can_create_project: false,
       has_project_access: false,
       has_template_access: false,
@@ -1751,12 +1719,12 @@ describe('admin user and company pages', () => {
     render(
       <DataMemoryRouter
         initialEntries={[
-          '/admin/projects/project-demo-1/inspection-items/templates',
+          '/projects/project-demo-1/inspection-items/templates',
         ]}
       >
         <CurrentUserProvider value={{ user: signedInUser, clear: vi.fn() }}>
           <Routes>
-            <Route element={<AdminPage />} path="/admin/*" />
+            <Route element={<AdminPage />} path="/*" />
           </Routes>
           <TestNavigation />
         </CurrentUserProvider>
@@ -1764,7 +1732,7 @@ describe('admin user and company pages', () => {
     )
 
     await waitFor(() =>
-      expect(screen.getByTestId('pathname')).toHaveTextContent('/field'),
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/tasks'),
     )
     expect(
       screen.queryByRole('region', { name: '範本操作' }),
@@ -1778,16 +1746,19 @@ describe('admin user and company pages', () => {
 
   it('opens template bypass for a non-member manager', async () => {
     managementFetch()
-    renderAdmin(
-      '/admin/projects/project-demo-1/inspection-items/templates',
-      false,
-      { has_office_access: false, has_field_access: false },
-    )
+    renderAdmin('/projects/project-demo-1/inspection-items/templates', false, {
+      has_office_access: false,
+      has_field_access: false,
+      can_inspect_tasks: false,
+      can_manage_template_library: true,
+      can_browse_templates: true,
+      module_permissions: ['template.manage'],
+    })
 
     expect(await screen.findByText('DEMO-001｜示範工程')).toBeVisible()
     expect(screen.getByRole('link', { name: '返回範本管理' })).toHaveAttribute(
       'href',
-      '/admin/templates',
+      '/templates',
     )
   })
 
@@ -1801,19 +1772,23 @@ describe('admin user and company pages', () => {
       is_admin: false,
       has_office_access: false,
       has_field_access: true,
+      can_inspect_tasks: true,
       can_create_project: false,
       has_project_access: false,
       has_template_access: true,
+      can_browse_templates: true,
+      can_manage_template_library: true,
+      module_permissions: ['template.manage'],
     }
     render(
       <DataMemoryRouter
         initialEntries={[
-          '/admin/projects/project-demo-1/inspection-items/templates',
+          '/projects/project-demo-1/inspection-items/templates',
         ]}
       >
         <CurrentUserProvider value={{ user: signedInUser, clear: vi.fn() }}>
           <Routes>
-            <Route element={<AdminPage />} path="/admin/*" />
+            <Route element={<AdminPage />} path="/*" />
           </Routes>
           <TestNavigation />
         </CurrentUserProvider>
@@ -1821,7 +1796,7 @@ describe('admin user and company pages', () => {
     )
 
     await waitFor(() =>
-      expect(screen.getByTestId('pathname')).toHaveTextContent('/field'),
+      expect(screen.getByTestId('pathname')).toHaveTextContent('/tasks'),
     )
     expect(
       screen.queryByRole('region', { name: '範本操作' }),
@@ -1833,20 +1808,18 @@ describe('admin user and company pages', () => {
     ).toBe(true)
   })
 
-  it('opens template apply route for an office member', async () => {
+  it('opens the template apply route for template.use members', async () => {
     const fetchMock = managementFetch({
       memberProjectIds: ['project-demo-1'],
     })
-    renderAdmin(
-      '/admin/projects/project-demo-1/inspection-items/templates',
-      false,
-      {
-        has_office_access: true,
-        has_field_access: false,
-        has_template_access: false,
-        can_browse_templates: true,
-      },
-    )
+    renderAdmin('/projects/project-demo-1/inspection-items/templates', false, {
+      has_office_access: true,
+      has_project_access: true,
+      has_field_access: false,
+      can_inspect_tasks: false,
+      has_template_access: false,
+      can_browse_templates: true,
+    })
 
     expect(
       await screen.findByRole('region', { name: '範本操作' }),
@@ -1871,35 +1844,25 @@ describe('admin user and company pages', () => {
     ).toBe(true)
   })
 
-  it('外部歷史持有者僅有 template.use 時可瀏覽且自始唯讀', async () => {
+  it('template.use-only 使用者不能進入範本管理頁', () => {
     const fetchMock = managementFetch()
-    renderAdmin('/admin/templates', false, {
+    renderAdmin('/templates', false, {
       has_template_access: false,
       can_browse_templates: true,
       can_manage_template_library: false,
       is_external_collaborator: true,
     })
 
-    const nav = screen.getByRole('navigation', { name: '管理功能' })
-    expect(within(nav).getByRole('link', { name: '範本' })).toHaveAttribute(
-      'href',
-      '/admin/templates',
+    expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '你沒有權限瀏覽範本庫。',
     )
+    expect(screen.queryByRole('link', { name: '範本' })).toBeNull()
     expect(
-      await screen.findByRole('heading', { name: '查核範本' }),
-    ).toBeInTheDocument()
-    expect(
-      await screen.findByRole('button', { name: '土木工程' }),
-    ).toBeVisible()
-    expect(await screen.findByText('唯讀瀏覽')).toBeVisible()
-    expect(
-      screen.queryByRole('button', { name: '新增工程類別' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '重新命名' })).toBeNull()
-    expect(
-      fetchMock.mock.calls.some(([, init]) => init?.method === 'POST'),
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes('/api/v1/template-categories'),
+      ),
     ).toBe(false)
-    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
   })
 
   describe('non-admin navigation (#480)', () => {
@@ -1910,11 +1873,16 @@ describe('admin user and company pages', () => {
         .map((link) => link.textContent)
 
     it.each([
-      ['內業工程師', '/admin/people', { has_office_access: true }, ['專案']],
-      ['現場工程師', '/admin/people', { has_field_access: true }, ['任務']],
+      ['內業工程師', '/projects', { has_project_access: true }, ['專案']],
+      [
+        '現場工程師',
+        '/projects',
+        { has_field_access: true, can_inspect_tasks: true },
+        ['任務'],
+      ],
       [
         '範本管理者',
-        '/admin/templates',
+        '/templates',
         {
           can_browse_templates: true,
           can_manage_template_library: true,
@@ -1923,11 +1891,11 @@ describe('admin user and company pages', () => {
       ],
       [
         '外部協作',
-        '/admin/projects',
+        '/projects',
         { has_project_access: true, is_external_collaborator: true },
         ['專案'],
       ],
-      ['全無權限', '/admin/people', {}, []],
+      ['全無權限', '/settings', {}, []],
     ] as const)(
       '%s 只顯示授權導覽，不出現管理入口',
       async (_role, path, access, expected) => {
@@ -1935,6 +1903,7 @@ describe('admin user and company pages', () => {
         renderAdmin(path, false, {
           has_office_access: false,
           has_field_access: false,
+          can_inspect_tasks: false,
           has_template_access: false,
           has_project_access: false,
           can_create_project: false,
@@ -1953,9 +1922,10 @@ describe('admin user and company pages', () => {
 
     it('全專案進度主管只看到總覽與專案', async () => {
       managementFetch()
-      renderAdmin('/admin/projects', false, {
+      renderAdmin('/projects', false, {
         has_office_access: false,
         has_field_access: false,
+        can_inspect_tasks: false,
         has_template_access: false,
         can_browse_templates: false,
         can_manage_template_library: false,
@@ -1972,13 +1942,14 @@ describe('admin user and company pages', () => {
       }
     })
 
-    it('office-only accounts see the authorized project entry', async () => {
+    it('project readers see the authorized project entry', async () => {
       managementFetch()
-      renderAdmin('/admin/projects', false, {
-        has_office_access: true,
+      renderAdmin('/projects', false, {
+        has_office_access: false,
         has_field_access: false,
+        can_inspect_tasks: false,
         has_template_access: false,
-        has_project_access: false,
+        has_project_access: true,
         can_create_project: false,
       })
 
@@ -1995,9 +1966,10 @@ describe('admin user and company pages', () => {
       ['project creator', { can_create_project: true }],
     ])('shows the projects entry to a %s', async (_label, access) => {
       managementFetch()
-      renderAdmin('/admin/projects', false, {
+      renderAdmin('/projects', false, {
         has_office_access: false,
         has_field_access: false,
+        can_inspect_tasks: false,
         has_template_access: false,
         ...access,
       })
@@ -2012,11 +1984,15 @@ describe('admin user and company pages', () => {
       managementFetch()
       renderAdmin(
         {
-          pathname: '/admin/projects',
+          pathname: '/projects',
           state: { notice: '已新增 3 個項目到「示範工程」。' },
         },
         false,
-        { has_office_access: true, has_field_access: false },
+        {
+          has_office_access: true,
+          has_field_access: false,
+          can_inspect_tasks: false,
+        },
       )
 
       const notice = await screen.findByText('已新增 3 個項目到「示範工程」。')
@@ -2025,20 +2001,20 @@ describe('admin user and company pages', () => {
 
     it('never lists admin-only entries for any non-admin', () => {
       managementFetch()
-      renderAdmin('/admin/projects', false)
+      renderAdmin('/projects', false)
 
       expect(within(nav()).queryByRole('button', { name: /管理/ })).toBeNull()
     })
 
     it('shows a direct account link to a delegated account', async () => {
       managementFetch()
-      renderAdmin('/admin/people', false, {
+      renderAdmin('/accounts', false, {
         delegated_modules: ['template.manage'],
       })
       const navElement = nav()
       expect(
         within(navElement).getByRole('link', { name: '帳號' }),
-      ).toHaveAttribute('href', '/admin/people')
+      ).toHaveAttribute('href', '/accounts')
       expect(
         within(navElement).queryByRole('button', { name: /管理/ }),
       ).toBeNull()
@@ -2086,7 +2062,7 @@ describe('admin user and company pages', () => {
         }
         return original(input, init)
       })
-      renderAdmin('/admin/people', false, {
+      renderAdmin('/accounts', false, {
         delegated_modules: ['template.manage'],
       })
 
@@ -2105,7 +2081,7 @@ describe('admin user and company pages', () => {
       ).toBeVisible()
       expect(screen.getByRole('heading', { name: '權限' })).toBeVisible()
       expect(screen.getByTestId('pathname')).toHaveTextContent(
-        '/admin/people/user-1',
+        '/accounts/user-1',
       )
       expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
       expect(screen.queryByRole('button', { name: '修改資料' })).toBeNull()
@@ -2119,36 +2095,40 @@ describe('admin user and company pages', () => {
       ).toBe(false)
     })
 
-    it('shows templates for a template.use-only user', () => {
+    it('does not show templates for a template.use-only user', () => {
       managementFetch()
-      renderAdmin('/admin/projects', false, {
+      renderAdmin('/projects', false, {
         has_template_access: false,
         can_browse_templates: true,
         can_manage_template_library: false,
       })
-      expect(labels()).toContain('範本')
+      expect(labels()).not.toContain('範本')
     })
 
-    it('shows the field link only with field access', () => {
+    it('shows task and project links only with their granted access', () => {
       managementFetch()
-      renderAdmin('/admin/projects', false, {
+      renderAdmin('/projects', false, {
         has_office_access: true,
+        has_project_access: true,
         has_field_access: true,
+        can_inspect_tasks: true,
         has_template_access: false,
       })
 
       expect(labels()).toEqual(['任務', '專案'])
       expect(screen.getByRole('link', { name: '任務' })).toHaveAttribute(
         'href',
-        '/field',
+        '/tasks',
       )
     })
 
-    it('explains template management access on /admin/templates', () => {
+    it('explains template management access on /templates', () => {
       managementFetch()
-      renderAdmin('/admin/templates', false, {
+      renderAdmin('/templates', false, {
         has_office_access: true,
+        has_project_access: true,
         has_field_access: false,
+        can_inspect_tasks: false,
         has_template_access: false,
       })
 
@@ -2159,9 +2139,11 @@ describe('admin user and company pages', () => {
 
     it('does not route to template management without access', () => {
       managementFetch()
-      renderAdmin('/admin/templates', false, {
+      renderAdmin('/templates', false, {
         has_office_access: true,
+        has_project_access: true,
         has_field_access: false,
+        can_inspect_tasks: false,
         has_template_access: false,
       })
 
@@ -2222,7 +2204,7 @@ describe('admin user and company pages', () => {
       })
     })
     vi.stubGlobal('fetch', fetchMock)
-    renderAdmin('/admin/projects/project-1/inspection-items', false)
+    renderAdmin('/projects/project-1/inspection-items', false)
     fireEvent.click(
       await screen.findByRole('link', {
         name: '檢視「混凝土表面」',
@@ -2276,7 +2258,7 @@ describe('admin user and company pages', () => {
       },
     )
     vi.stubGlobal('fetch', fetchMock)
-    renderAdmin('/admin/companies')
+    renderAdmin('/companies')
 
     expect(await screen.findByText('示範公司')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('公司名稱'), {
@@ -2357,7 +2339,7 @@ describe('admin user and company pages', () => {
         return Response.json({}, { status: 204 })
       }),
     )
-    renderAdmin('/admin/companies')
+    renderAdmin('/companies')
     fireEvent.click(await screen.findByRole('button', { name: '停用公司' }))
     expect(
       await screen.findByText('還有 1 個啟用中的帳號'),

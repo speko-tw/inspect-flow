@@ -141,7 +141,7 @@ function renderApp(path: string) {
           }
         />
         <Route path="/setup" element={<SetupPage />} />
-        <Route path="/admin" element={<h1>管理頁</h1>} />
+        <Route path="/accounts" element={<h1>管理頁</h1>} />
       </Routes>
     </MemoryRouter>,
   )

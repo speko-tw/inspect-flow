@@ -118,15 +118,16 @@
 - **依據**：架構基準 §6.1–6.2、§31、§37 ADR-008。
 
 <a id="kd-12"></a>
-## KD-12：Admin／Field 共用單一前端程式庫
+## KD-12：共用單一前端程式庫並依路由群組拆包
 
-- **決策**：Admin UI 與 Field UI **必須**放在同一個 React application，以 `/admin/*`、`/field/*` 路由與權限區分；**必須**依路由拆分程式碼，Field 的程式包不得載入 Admin 的模組。
-- **狀態**：已決定（團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 裁定，採來源 §5.1 的建議）。
+- **決策**：管理介面與現場介面**必須**放在同一個 React application；路由由頁面能力及權限界定，不以 `/admin/*`、`/field/*` 網址前綴區分。**必須**依路由群組拆分程式碼，使現場路由載入時不載入管理模組。
+- **路由契約（待確認）**：使用 `/tasks(/:id)`、`/projects/...`、`/overview(/projects/:id(/tasks/:taskId))`、`/templates`、`/accounts(/:id)`、`/companies`、`/roles`、`/logs`、`/settings`；`/login`、`/setup`、`/` 維持不變。舊管理／現場 UI 網址回 404，不設相容轉址；API 路徑不變。
+- **狀態**：意圖變更待負責人確認（#705）；確認前保留原裁定來源。原裁定為團隊於 [#5](https://github.com/speko-tw/inspect-flow/issues/5) 採來源 §5.1 的建議。
 - **考慮過但沒選**：同一 repo 內分成兩個 app 加共用套件。
 - **為什麼選這個**：一套 build、一條 CI、一次部署；API client、登入與元件共用；符合模組化單體方向（[KD-10](#kd-10)）。
-- **代價**：沒有依路由拆分時，Field 會載入 Admin 的程式；日後要拆開需要搬遷。
+- **代價**：若路由群組未拆分，現場介面會載入不需要的管理程式；共用路由表須明確宣告每條路由的權限。
 - **什麼情況要重新討論**：Field PWA 需要獨立發布週期，或兩者差異大到共用成本高於分開維護時，評估拆分。
-- **依據**：架構基準 §5.1；團隊裁定（[#5](https://github.com/speko-tw/inspect-flow/issues/5)）。
+- **依據**：架構基準 §5.1；原團隊裁定（[#5](https://github.com/speko-tw/inspect-flow/issues/5)）；路由群組拆包及不以 URL 前綴區分為待確認的意圖變更（#705）。
 
 <a id="kd-13"></a>
 ## KD-13：清單端點採 cursor-based 分頁

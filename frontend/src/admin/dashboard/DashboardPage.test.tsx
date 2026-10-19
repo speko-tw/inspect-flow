@@ -10,9 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentUserFixture } from '../../testing/contractFixtures'
 import DashboardPage from './DashboardPage'
 
+const navigateMock = vi.hoisted(() => vi.fn())
+
 vi.mock('react-router', async (importOriginal) => {
   const router = await importOriginal<typeof import('react-router')>()
-  return { ...router, useNavigate: () => vi.fn() }
+  return { ...router, useNavigate: () => navigateMock }
 })
 
 const api = vi.hoisted(() => ({
@@ -100,8 +102,25 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('Dashboard 頁面', () => {
+  it('全專案進度主管可從專案清單開啟任務清單', async () => {
+    setup()
+
+    fireEvent.click(await screen.findByRole('button', { name: '東區工程' }))
+
+    expect(navigateMock).toHaveBeenCalledWith(
+      '/overview/projects/project-1/tasks',
+    )
+  })
+
   it('顯示 API 摘要並切換至單一專案範圍', async () => {
     setup()
+
+    await act(async () => {
+      await api.listAllDashboardProjects.mock.results[0]?.value
+    })
+    await act(async () => {
+      await api.getDashboardSummary.mock.results[0]?.value
+    })
 
     expect(await screen.findByText('45%')).toBeInTheDocument()
     expect(api.getDashboardSummary).toHaveBeenCalledWith(undefined)

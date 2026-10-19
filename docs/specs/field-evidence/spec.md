@@ -113,6 +113,8 @@
 
 路徑、欄位與錯誤碼為**規格設計（非負責人裁定）**，遵守 [api-conventions](../api-conventions/spec.md)：`/api/v1` 前綴、UUID、檔案上傳用 multipart、其餘用 JSON、cursor 分頁、時間為 UTC ISO 8601、共用錯誤格式。
 
+現場照片清單與詳情屬於 `/tasks/:taskId` 任務詳情；內業照片入口依專案任務頁的權限導覽提供。UI 路徑依 `admin-dashboard` ADM-R50；本節列出的 `/api/v1/...` API 路徑不變。
+
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
 | POST | `/api/v1/inspection-tasks/{task_id}/photos` | 上傳現場版並同時產生初版內業版；新建回 201，冪等重放回 200 | `inspection_task.inspect`；Task `IN_PROGRESS` |
@@ -184,7 +186,7 @@
 
 **畫面**（重大新畫面，實作前須先過[原型關卡](../README.md#ui-prototype-gate)；以下為規格設計）：
 
-- 現場：在 `/field/tasks/{task_id}` 詳情內，每個查核項次顯示「已有 n／需要 m 張」與「拍照」，查核項目另有「拍總覽照（選拍）」。拍照用裝置相機（網頁檔案選擇的相機擷取），進入全螢幕編修畫面：縮放與平移預覽、旋轉（每次 90°）、裁切框與常用比例、亮度、重設；「確認」後選擇這張照片佐證的項次（預選從哪個項次進入，只列同一查核項目的項次）、是否為總覽、註記；上傳狀態清單顯示上傳中、已上傳、失敗並提供重送與放棄。已上傳照片有獨立的「修改說明與項次」與「刪除」入口。
+- 現場：在 `/tasks/{task_id}` 詳情內，每個查核項次顯示「已有 n／需要 m 張」與「拍照」，查核項目另有「拍總覽照（選拍）」。拍照用裝置相機（網頁檔案選擇的相機擷取），進入全螢幕編修畫面：縮放與平移預覽、旋轉（每次 90°）、裁切框與常用比例、亮度、重設；「確認」後選擇這張照片佐證的項次（預選從哪個項次進入，只列同一查核項目的項次）、是否為總覽、註記；上傳狀態清單顯示上傳中、已上傳、失敗並提供重送與放棄。已上傳照片有獨立的「修改說明與項次」與「刪除」入口。
 - 前端壓縮：長邊不超過 2560 px、JPEG 品質 0.85，常數集中、可於試用後調整。
 - 工程標示的版面（疊在照片上，或延伸畫布另加標示區，暫定底部延伸、不蓋住照片內容）是規格設計，內容待 [#588](https://github.com/speko-tw/inspect-flow/issues/588)；原型時做出兩種版面給負責人看，核可後定案（FEV-R22）。
 - 內業：任務頁的照片頁籤，依查核項目分組；每張可開啟詳情比較現場版與內業版（桌面並排、手機切換；內業版帶工程標示），編修面板含旋轉、裁切、亮度、重設與預覽。
@@ -305,6 +307,8 @@
 - **FEV-Q11**：`domain-model` 的 `Evidence`、`Evidence Variant` 草稿條目，與 `audit-log`、`inspection-planning`、`field-ui` 的同步，同步方式：`domain-model`、`field-ui` 已在本規格的 PR 同步（負責人直接指示，[#105](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)）；`inspection-planning` 隨 `completion-validation` 規格同步；`audit-log` 事件目錄依計畫 T5。
 
 ## 變更紀錄
+
+- 規格澄清（#705）：現場照片入口更新為 `/tasks/:taskId`；本規格 API 路徑不變，計畫同步記錄路由基準。
 
 - 建立規格草稿：現場版與內業版、覆蓋規則、上傳契約、刪除與作廢、權限與 UI 驗收；並納入 v0.3.1 走查補充 — [#105](https://github.com/speko-tw/inspect-flow/issues/105)
 - 第 1 輪審查後修訂（規格澄清與待裁定標註，行為與範圍的定案仍待負責人）：統一錯誤檢查順序並拿掉 `evidence.photo_locked` 的「已完成」；AC01 改為回應不含儲存鍵且 schema 無 BLOB；冪等納入請求指紋；新增上傳與作廢並行的鎖定與重驗（FEV-R21）；現場端 `item_id`、`point_ids` 宣告為延伸；FEV-R19 縮為現場詳情與內業計畫頁；補已取消 Task 情境；稽核標註 ALG-R16／R24；補 API 缺口；列出六項待負責人裁定（FEV-Q1、Q6、Q12～Q15）— [#105](https://github.com/speko-tw/inspect-flow/issues/105)

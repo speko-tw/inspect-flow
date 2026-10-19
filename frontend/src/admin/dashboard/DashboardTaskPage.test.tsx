@@ -42,11 +42,11 @@ function renderAt(path: string) {
       <Routes>
         <Route
           element={<DashboardTaskPage />}
-          path="/admin/dashboard/projects/:projectId/tasks"
+          path="/overview/projects/:projectId/tasks"
         />
         <Route
           element={<DashboardTaskPage />}
-          path="/admin/dashboard/projects/:projectId/tasks/:taskId"
+          path="/overview/projects/:projectId/tasks/:taskId"
         />
       </Routes>
     </MemoryRouter>,
@@ -64,8 +64,22 @@ beforeEach(() => {
 })
 
 describe('Dashboard 任務唯讀頁', () => {
+  it('主管可從任務清單點進唯讀明細', async () => {
+    renderAt('/overview/projects/project-1/tasks')
+
+    fireEvent.click(await screen.findByRole('link', { name: /二樓機房/ }))
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: 'A 棟・二樓機房',
+      }),
+    ).toBeInTheDocument()
+    expect(api.getDashboardTask).toHaveBeenCalledWith('project-1', 'task-2048')
+  })
+
   it('依 API 顯示任務清單與四項白名單明細', async () => {
-    renderAt('/admin/dashboard/projects/project-1/tasks/task-2048')
+    renderAt('/overview/projects/project-1/tasks/task-2048')
 
     expect(
       await screen.findByRole('heading', {
@@ -103,7 +117,7 @@ describe('Dashboard 任務唯讀頁', () => {
 
   it('提供手機逐層詳情與返回清單操作', async () => {
     const { container } = renderAt(
-      '/admin/dashboard/projects/project-1/tasks/task-2048',
+      '/overview/projects/project-1/tasks/task-2048',
     )
 
     await screen.findByRole('heading', { name: 'A 棟・二樓機房' })
@@ -120,7 +134,7 @@ describe('Dashboard 任務唯讀頁', () => {
 
   it('呈現空清單狀態', async () => {
     api.listDashboardTasks.mockResolvedValue({ items: [], next_cursor: null })
-    renderAt('/admin/dashboard/projects/project-1/tasks')
+    renderAt('/overview/projects/project-1/tasks')
 
     expect(
       await screen.findByText('此專案目前沒有可查看的任務。'),
@@ -132,7 +146,7 @@ describe('Dashboard 任務唯讀頁', () => {
     api.listDashboardTasks
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce({ items: [task], next_cursor: null })
-    renderAt('/admin/dashboard/projects/project-1/tasks')
+    renderAt('/overview/projects/project-1/tasks')
 
     const retryOptions = { name: '重新載入' }
     const retryButton = await screen.findByRole('button', retryOptions)
@@ -143,7 +157,7 @@ describe('Dashboard 任務唯讀頁', () => {
 
   it('權限撤回後直接開啟明細會顯示無權限', async () => {
     api.getDashboardTask.mockRejectedValue(new HttpError(403))
-    renderAt('/admin/dashboard/projects/project-1/tasks/task-2048')
+    renderAt('/overview/projects/project-1/tasks/task-2048')
 
     const deniedHeading = await screen.findByRole('heading', {
       name: '目前無法查看專案進度',

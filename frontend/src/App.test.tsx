@@ -1,6 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
-import { useEffect } from 'react'
-import { useLocation } from 'react-router'
+import { act, render, screen } from '@testing-library/react'
 import { DataMemoryRouter } from './testing/DataMemoryRouter'
 import {
   afterEach,
@@ -35,6 +33,7 @@ function stubAuthenticatedFetch() {
           must_change_password: false,
           has_office_access: true,
           has_field_access: true,
+          can_inspect_tasks: true,
           has_template_access: true,
         })
       }
@@ -47,18 +46,6 @@ function stubAuthenticatedFetch() {
       return Response.json([])
     }),
   )
-}
-
-function LocationProbe({
-  onPathname,
-}: {
-  onPathname?: (path: string) => void
-}) {
-  const location = useLocation()
-  useEffect(() => {
-    onPathname?.(location.pathname)
-  }, [location.pathname, onPathname])
-  return <output data-testid="pathname">{location.pathname}</output>
 }
 
 // 拆包模組的首次載入成本放在 hook，不佔各測試斷言的 1 秒（#295）。
@@ -76,7 +63,7 @@ describe('App routing', () => {
   it('renders the admin user management page on /admin', async () => {
     await act(async () => {
       render(
-        <DataMemoryRouter initialEntries={['/admin']}>
+        <DataMemoryRouter initialEntries={['/accounts']}>
           <App />
         </DataMemoryRouter>,
       )
@@ -93,7 +80,7 @@ describe('App routing', () => {
 
   it('renders Field tasks on /field', async () => {
     render(
-      <DataMemoryRouter initialEntries={['/field']}>
+      <DataMemoryRouter initialEntries={['/tasks']}>
         <App />
       </DataMemoryRouter>,
     )
@@ -107,22 +94,16 @@ describe('App routing', () => {
     expect(screen.queryByText('帳號')).not.toBeInTheDocument()
   })
 
-  it('redirects the legacy Field project URL to the current Admin path', async () => {
-    const visitedPaths: string[] = []
-    const recordPath = (path: string) => visitedPaths.push(path)
+  it('returns not found for the removed Field project URL', async () => {
     render(
       <DataMemoryRouter initialEntries={['/field/projects/project-1']}>
-        <LocationProbe onPathname={recordPath} />
         <App />
       </DataMemoryRouter>,
     )
 
-    await waitFor(() =>
-      expect(screen.getByTestId('pathname')).toHaveTextContent(
-        '/admin/projects/project-1/inspection-items/templates',
-      ),
-    )
-    expect(visitedPaths).not.toContain('/admin/projects/project-1/templates')
+    expect(
+      await screen.findByRole('heading', { name: '找不到這個頁面' }),
+    ).toBeVisible()
   })
 
   it('shows the release version on the login page', async () => {

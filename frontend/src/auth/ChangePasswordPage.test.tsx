@@ -27,6 +27,7 @@ const TEMP_PASSWORD_USER = {
   must_change_password: true,
   has_office_access: false,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: false,
   can_browse_templates: false,
   can_manage_template_library: false,
@@ -40,6 +41,7 @@ const NO_FEATURE_USER = {
   ...TEMP_PASSWORD_USER,
   must_change_password: false,
   has_field_access: false,
+  can_inspect_tasks: false,
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -59,7 +61,7 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url
 }
 
-function renderPage(entries = ['/change-password'], initialIndex?: number) {
+function renderPage(entries = ['/settings'], initialIndex?: number) {
   return render(
     <DataMemoryRouter initialEntries={entries} initialIndex={initialIndex}>
       <Routes>
@@ -67,7 +69,7 @@ function renderPage(entries = ['/change-password'], initialIndex?: number) {
         <Route path="/login" element={<h1>登入</h1>} />
         <Route path="/other" element={<h1>其他頁</h1>} />
         <Route
-          path="/change-password"
+          path="/settings"
           element={
             <RequireAuth>
               <ChangePasswordPage />
@@ -138,6 +140,7 @@ describe('全無權限帳號的設定落點（role-tasks.md）', () => {
         jsonResponse({
           ...TEMP_PASSWORD_USER,
           has_field_access: false,
+          can_inspect_tasks: false,
           has_office_access: false,
           has_template_access: false,
           can_browse_templates: false,
@@ -181,7 +184,7 @@ describe('變更密碼草稿導覽防護', () => {
   it('實際輸入後攔截站內導覽與 Back/Forward', async () => {
     mockAuth()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    renderPage(['/other', '/change-password', '/other'], 1)
+    renderPage(['/other', '/settings', '/other'], 1)
     await screen.findByRole('heading', { name: '個人設定' })
     fireEvent.change(screen.getByLabelText('目前密碼'), {
       target: { value: 'private-current-password' },
@@ -578,13 +581,13 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
         if (url.includes('/field/inspection-tasks?')) {
           return jsonResponse({ items: [], next_cursor: null })
         }
-        if (url.includes('/admin/dashboard/projects?')) {
+        if (url.includes('/overview/projects?')) {
           return jsonResponse({ items: [], next_cursor: null })
         }
-        if (url.includes('/admin/dashboard/engineers?')) {
+        if (url.includes('/overview/engineers?')) {
           return jsonResponse({ items: [], next_cursor: null })
         }
-        if (url.includes('/admin/dashboard/summary')) {
+        if (url.includes('/overview/summary')) {
           return jsonResponse({
             pending_count: 0,
             in_progress_count: 0,
@@ -612,7 +615,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
   it('一般使用者直接進變更密碼頁：落在工作台並顯示提示', async () => {
     stubFetch(TEMP_PASSWORD_USER)
-    renderAt({ pathname: '/change-password' })
+    renderAt({ pathname: '/settings' })
 
     await submitChange()
 
@@ -624,7 +627,7 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
 
   it('管理者直接進變更密碼頁：落在管理頁並顯示提示', async () => {
     stubFetch({ ...TEMP_PASSWORD_USER, is_admin: true })
-    renderAt({ pathname: '/change-password' })
+    renderAt({ pathname: '/settings' })
 
     await submitChange()
 
@@ -634,22 +637,22 @@ describe('變更密碼成功後帶提示到落點頁（#289）', () => {
     )
   })
 
-  it('導回帶來的原路徑（管理頁深層路徑）時也顯示提示', async () => {
+  it('導回新管理路徑時也顯示提示', async () => {
     stubFetch({ ...TEMP_PASSWORD_USER, is_admin: true })
     renderAt({
-      pathname: '/change-password',
-      state: { from: '/admin/reports' },
+      pathname: '/settings',
+      state: { from: '/accounts' },
     })
 
     await submitChange()
 
-    await screen.findByRole('heading', { name: '找不到這個頁面' })
+    await screen.findByRole('heading', { name: '帳號', level: 1 })
     expect(screen.getByRole('status').textContent).toBe('密碼已變更。')
   })
 
   it('變更失敗時維持錯誤訊息，不顯示成功提示', async () => {
     stubFetch(TEMP_PASSWORD_USER, 403)
-    renderAt({ pathname: '/change-password' })
+    renderAt({ pathname: '/settings' })
 
     await submitChange()
 

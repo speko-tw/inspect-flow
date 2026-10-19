@@ -1090,7 +1090,7 @@ export default function PlanningPage({
       <section>
         <h2>無權限</h2>
         <p role="alert">你沒有這個專案的查核計畫讀取權限。</p>
-        <Link className="btn" to="/admin/projects">
+        <Link className="btn" to="/projects">
           返回專案清單
         </Link>
       </section>
@@ -1102,7 +1102,7 @@ export default function PlanningPage({
       <section>
         <h2>找不到專案</h2>
         <p role="alert">網址中的專案不存在或已刪除。</p>
-        <Link className="btn" to="/admin/projects">
+        <Link className="btn" to="/projects">
           返回專案清單
         </Link>
       </section>

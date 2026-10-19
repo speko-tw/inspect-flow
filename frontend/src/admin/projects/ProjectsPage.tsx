@@ -467,7 +467,7 @@ function AdminProjectsPage() {
         advanceFormSession()
         setFormMode(null)
         leaveGuard.allowNavigation(() =>
-          navigate(`/admin/projects/${saved.id}`, {
+          navigate(`/projects/${saved.id}`, {
             state: hasDuplicateCodeWarning(saved)
               ? { duplicateProjectCode: saved.project_code }
               : null,
@@ -539,12 +539,9 @@ function AdminProjectsPage() {
               {/* ADM-R15：舊 POST 回應的連結仍須確認，避免丟失未存草稿。 */}
               <Link
                 onClick={(event) =>
-                  guardProjectLink(
-                    event,
-                    `/admin/projects/${createdProjectLink}`,
-                  )
+                  guardProjectLink(event, `/projects/${createdProjectLink}`)
                 }
-                to={`/admin/projects/${createdProjectLink}`}
+                to={`/projects/${createdProjectLink}`}
               >
                 開啟專案
               </Link>
@@ -602,7 +599,7 @@ function AdminProjectsPage() {
             advanceFormSession()
             setFormMode(null)
             leaveGuard.allowNavigation(() =>
-              navigate(`/admin/projects/${saved.id}`, {
+              navigate(`/projects/${saved.id}`, {
                 state: hasDuplicateCodeWarning(saved)
                   ? { duplicateProjectCode: saved.project_code }
                   : null,
@@ -818,7 +815,7 @@ function AdminProjectsPage() {
                   // TPL-R23：導覽與未儲存變更守衛共用
                   // 正式套用路徑，避免守衛後前往舊網址。
                   const applyTemplatesPath = [
-                    '/admin/projects',
+                    '/projects',
                     project.id,
                     'inspection-items',
                     'templates',
@@ -865,12 +862,9 @@ function AdminProjectsPage() {
                         <Link
                           className="btn"
                           onClick={(event) =>
-                            guardProjectLink(
-                              event,
-                              `/admin/projects/${project.id}`,
-                            )
+                            guardProjectLink(event, `/projects/${project.id}`)
                           }
-                          to={`/admin/projects/${project.id}`}
+                          to={`/projects/${project.id}`}
                         >
                           開啟專案
                         </Link>
@@ -879,10 +873,10 @@ function AdminProjectsPage() {
                           onClick={(event) =>
                             guardProjectLink(
                               event,
-                              `/admin/projects/${project.id}/members`,
+                              `/projects/${project.id}/members`,
                             )
                           }
-                          to={`/admin/projects/${project.id}/members`}
+                          to={`/projects/${project.id}/members`}
                         >
                           成員
                         </Link>

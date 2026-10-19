@@ -462,7 +462,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
             {isAdmin ? (
               <p className="field-hint">
                 要加入新的人，請先到
-                <Link to="/admin/people">{ACCOUNT_LABEL}</Link>建立帳號。
+                <Link to="/accounts">{ACCOUNT_LABEL}</Link>建立帳號。
               </p>
             ) : (
               <p className="field-hint">
@@ -538,7 +538,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 <p className="field-hint">
                   {isAdmin ? (
                     <>
-                      請先到<Link to="/admin/roles">角色</Link>
+                      請先到<Link to="/roles">角色</Link>
                       建立角色，才能把人加入專案。
                     </>
                   ) : (
@@ -601,7 +601,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 <p className="member-card-name">
                   {isAdmin ? (
                     <Link
-                      to={`/admin/people/${encodeURIComponent(member.user_id)}`}
+                      to={`/accounts/${encodeURIComponent(member.user_id)}`}
                     >
                       {member.name_zh ?? member.username}
                     </Link>

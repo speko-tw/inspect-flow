@@ -49,7 +49,9 @@ const currentUser: CurrentUser = {
   is_admin: true,
   must_change_password: false,
   has_office_access: true,
+  can_manage_project_planning_or_members: true,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: true,
   module_permissions: [],
   delegated_modules: [],
@@ -62,7 +64,7 @@ function RoleNavigation() {
   const navigate = useNavigate()
   return (
     <>
-      <Link to="/admin/people">返回帳號</Link>
+      <Link to="/accounts">返回帳號</Link>
       <button onClick={() => navigate(-1)} type="button">
         上一頁
       </button>
@@ -74,7 +76,7 @@ function RoleNavigation() {
 }
 
 function renderRoles(
-  path = '/admin/roles',
+  path = '/roles',
   history?: { entries: string[]; index: number },
   expandPanels = true,
 ) {
@@ -91,12 +93,12 @@ function renderRoles(
               <RoleNavigation />
             </CurrentUserProvider>
           }
-          path="/admin/*"
+          path="/*"
         />
       </Routes>
     </DataMemoryRouter>,
   )
-  if (expandPanels && path === '/admin/roles') {
+  if (expandPanels && path === '/roles') {
     fireEvent.click(screen.getByRole('button', { name: '設定新專案預設角色' }))
     fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
   }
@@ -215,8 +217,8 @@ describe('角色表單未儲存導覽防護', () => {
   it('實際輸入後攔截站內導覽與 Back/Forward', async () => {
     rolesFetch()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    renderRoles('/admin/roles', {
-      entries: ['/admin/people', '/admin/roles', '/admin/companies'],
+    renderRoles('/roles', {
+      entries: ['/accounts', '/roles', '/companies'],
       index: 1,
     })
     await screen.findByRole('heading', { name: '專案角色' })
@@ -260,7 +262,7 @@ describe('角色表單未儲存導覽防護', () => {
 
   it('實際輸入後攔截 beforeunload', async () => {
     rolesFetch()
-    renderRoles('/admin/roles')
+    renderRoles('/roles')
     await screen.findByRole('heading', { name: '專案角色' })
     fillName()
     const event = new Event('beforeunload', { cancelable: true })
@@ -281,7 +283,7 @@ describe('admin role management page', () => {
         }),
       ],
     })
-    renderRoles('/admin/roles', undefined, false)
+    renderRoles('/roles', undefined, false)
 
     const row = await screen.findByRole('row', { name: /專案工程師/ })
     expect(row).toHaveTextContent('4 個帳號')
@@ -302,7 +304,7 @@ describe('admin role management page', () => {
         makeRole('r2', 'Coordinator', [MANAGE.code]),
       ],
     })
-    renderRoles('/admin/people')
+    renderRoles('/accounts')
 
     fireEvent.click(screen.getByRole('button', { name: /管理/ }))
     fireEvent.click(screen.getByRole('link', { name: '角色' }))

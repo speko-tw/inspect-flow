@@ -76,13 +76,10 @@ const detail = {
 
 function renderDetail() {
   return render(
-    <MemoryRouter initialEntries={['/field/tasks/task-1?scope=all']}>
+    <MemoryRouter initialEntries={['/tasks/task-1?scope=all']}>
       <Routes>
-        <Route
-          path="/field/tasks/:id"
-          element={<TaskDetail taskId="task-1" />}
-        />
-        <Route path="/field/" element={<p>任務清單</p>} />
+        <Route path="/tasks/:id" element={<TaskDetail taskId="task-1" />} />
+        <Route path="/tasks/" element={<p>任務清單</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -216,7 +213,7 @@ describe('現場任務詳情', () => {
       ).toBeInTheDocument()
       const home = screen.getByRole('link', { name: '回首頁' })
       expect(home).toHaveClass('btn')
-      expect(home).toHaveAttribute('href', '/field')
+      expect(home).toHaveAttribute('href', '/tasks')
     },
   )
 

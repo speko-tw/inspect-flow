@@ -35,54 +35,82 @@ describe('contract fixtures (RG-M22)', () => {
 
 describe('landingPath (#480)', () => {
   it.each([
-    ['system admin', { is_admin: true }, '/admin/dashboard'],
+    ['system admin', { is_admin: true }, '/overview'],
     [
       'office only',
-      { has_office_access: true, has_field_access: false },
-      '/admin/projects',
+      {
+        has_office_access: true,
+        has_project_access: true,
+        has_field_access: false,
+        can_inspect_tasks: false,
+      },
+      '/projects',
     ],
     [
       'field only',
-      { has_office_access: false, has_field_access: true },
-      '/field',
+      {
+        has_office_access: false,
+        has_field_access: true,
+        can_inspect_tasks: true,
+      },
+      '/tasks',
     ],
     [
       'both office and field',
-      { has_office_access: true, has_field_access: true },
-      '/admin/projects',
+      {
+        has_office_access: true,
+        has_project_access: true,
+        has_field_access: true,
+        can_inspect_tasks: true,
+        can_manage_project_planning_or_members: true,
+      },
+      '/projects',
     ],
     [
       'neither',
-      { has_office_access: false, has_field_access: false },
-      '/change-password',
+      {
+        has_office_access: false,
+        has_field_access: false,
+        can_inspect_tasks: false,
+      },
+      '/settings',
     ],
     [
       'template admin only',
       {
         has_office_access: false,
         has_field_access: false,
+        can_inspect_tasks: false,
         has_template_access: true,
+        can_manage_template_library: true,
       },
-      '/admin/templates',
+      '/templates',
     ],
     [
       'template admin who also has field access',
       {
         has_office_access: false,
         has_field_access: true,
+        can_inspect_tasks: true,
         has_template_access: true,
+        can_manage_template_library: true,
       },
-      '/field',
+      '/tasks',
     ],
     [
       'template admin who also has office access',
-      { has_office_access: true, has_template_access: true },
-      '/admin/projects',
+      {
+        has_office_access: true,
+        has_project_access: true,
+        has_template_access: true,
+        can_manage_template_library: true,
+      },
+      '/projects',
     ],
     [
       'admin who also has office access',
       { is_admin: true, has_office_access: true },
-      '/admin/dashboard',
+      '/overview',
     ],
   ])('%s', (_name, overrides, expected) => {
     expect(landingPath(currentUserFixture(overrides))).toBe(expected)

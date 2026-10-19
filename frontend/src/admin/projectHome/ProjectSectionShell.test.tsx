@@ -20,7 +20,7 @@ function renderShell(
     <MemoryRouter
       initialEntries={[
         {
-          pathname: '/admin/projects/project-1',
+          pathname: '/projects/project-1',
           state: {
             notice: '已新增項目',
             highlightedItemIds: ['item-1'],
@@ -40,7 +40,7 @@ function renderShell(
               <p>專案首頁</p>
             </ProjectSectionShell>
           }
-          path="/admin/projects/:projectId"
+          path="/projects/:projectId"
         />
         <Route element={<LocationState />} path={target} />
       </Routes>
@@ -50,7 +50,7 @@ function renderShell(
 
 describe('project section navigation state', () => {
   it('passes applied item highlights to the inspection items section only', () => {
-    renderShell('/admin/projects/:projectId/inspection-items')
+    renderShell('/projects/:projectId/inspection-items')
 
     fireEvent.click(screen.getByRole('link', { name: '查核項目' }))
 
@@ -58,7 +58,7 @@ describe('project section navigation state', () => {
   })
 
   it('does not pass applied item highlights to other sections', () => {
-    renderShell('/admin/projects/:projectId/members')
+    renderShell('/projects/:projectId/members')
 
     fireEvent.click(screen.getByRole('link', { name: '成員' }))
 
@@ -66,7 +66,7 @@ describe('project section navigation state', () => {
   })
 
   it('shows the inspection items section to a read-only project member', () => {
-    renderShell('/admin/projects/:projectId/inspection-items', [
+    renderShell('/projects/:projectId/inspection-items', [
       'inspection_plan.read',
     ])
 
@@ -74,7 +74,7 @@ describe('project section navigation state', () => {
   })
 
   it('shows member and planning sections to viewers with read access', () => {
-    renderShell('/admin/projects/:projectId/planning', [
+    renderShell('/projects/:projectId/planning', [
       'project_member.manage',
       'inspection_plan.read',
     ])
@@ -86,7 +86,7 @@ describe('project section navigation state', () => {
   })
 
   it('hides sections without their permissions', () => {
-    renderShell('/admin/projects/:projectId/planning', [])
+    renderShell('/projects/:projectId/planning', [])
 
     expect(screen.queryByRole('link', { name: '成員' })).toBeNull()
     expect(screen.queryByRole('link', { name: '計畫與任務' })).toBeNull()
@@ -95,7 +95,7 @@ describe('project section navigation state', () => {
   it('hides the zones section from a member who can only manage zones', () => {
     // 該 API 只讓 project_zone.read 讀列表，只有 manage 的人看到入口
     // 會得到 403，所以導覽不顯示（ADM-R17）。
-    renderShell('/admin/projects/:projectId/zones', ['project_zone.manage'])
+    renderShell('/projects/:projectId/zones', ['project_zone.manage'])
 
     expect(
       screen.queryByRole('link', { name: '分區' }),
@@ -103,7 +103,7 @@ describe('project section navigation state', () => {
   })
 
   it('shows the zones section to a member with zone read access', () => {
-    renderShell('/admin/projects/:projectId/zones', ['project_zone.read'])
+    renderShell('/projects/:projectId/zones', ['project_zone.read'])
 
     expect(screen.getByRole('link', { name: '分區' })).toBeInTheDocument()
   })

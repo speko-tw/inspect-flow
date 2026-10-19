@@ -1,6 +1,5 @@
-// 未登入時導向登入頁、臨時密碼未變更時導向變更密碼頁的守衛
-// （AUT-R29、AUT-R38）。包住 `/admin/*`、`/field/*`、
-// `/change-password` 的路由元素；只擋 UI，後端的權限檢查
+// 未登入時導向登入頁、臨時密碼未變更時導向設定頁的守衛
+// （AUT-R29、AUT-R38）。只擋 UI，後端的權限檢查
 // （AUT-R18～AUT-R22、AUT-R33）才是真正的防線（AUT-R31）。
 
 import { useEffect, useState, type ReactNode } from 'react'
@@ -9,14 +8,15 @@ import { Navigate, useLocation } from 'react-router'
 import { fetchCurrentUser, type CurrentUser } from './api'
 import { markSignedOut, rememberUser } from './sessionMemory'
 import { CurrentUserProvider } from './useCurrentUser'
+import type { ProductRoute } from '../routes'
+import { ROUTES } from '../routes'
 
 /**
- * 變更密碼頁的路徑。`must_change_password = true` 時導向這裡
- * （AUT-R38）；已經在這個路徑時不再導向，避免迴圈——`/change-password`
- * 本身也用 `RequireAuth` 包住（仍要求登入），但守衛不應該把它導向
+ * 設定頁的路徑。`must_change_password = true` 時導向這裡
+ * （AUT-R38）；已經在這個路徑時不再導向，避免迴圈。
  * 自己。
  */
-const CHANGE_PASSWORD_PATH = '/change-password'
+const CHANGE_PASSWORD_PATH = ROUTES.settings.path
 
 type Status =
   | { kind: 'loading' }
@@ -25,7 +25,13 @@ type Status =
   | { kind: 'error' }
   | { kind: 'authenticated'; user: CurrentUser }
 
-export default function RequireAuth({ children }: { children: ReactNode }) {
+export default function RequireAuth({
+  children,
+  route = ROUTES.adminShell,
+}: {
+  children: ReactNode
+  route?: ProductRoute
+}) {
   const location = useLocation()
   const [status, setStatus] = useState<Status>({ kind: 'loading' })
 
@@ -73,14 +79,15 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
   }
 
   if (status.kind === 'unauthenticated') {
+    if (route.permission === 'public') return children
     const from = `${location.pathname}${location.search}${location.hash}`
-    return <Navigate to="/login" replace state={{ from }} />
+    return <Navigate to={ROUTES.login.path} replace state={{ from }} />
   }
 
   if (status.kind === 'loggedOut') {
     // 主動登出：不帶 `from`。`from` 只留給「未登入直接開深層連結被
     // 擋」的情況，否則換別的身分登入時會被帶回上一個人的頁面。
-    return <Navigate to="/login" replace />
+    return <Navigate to={ROUTES.login.path} replace />
   }
 
   if (

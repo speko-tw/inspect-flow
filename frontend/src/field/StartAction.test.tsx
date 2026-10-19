@@ -84,13 +84,13 @@ function setup(routes: StartRoutes) {
   vi.stubGlobal('fetch', fetcher)
   const onListChange = vi.fn()
   render(
-    <MemoryRouter initialEntries={['/field/tasks/task-1?scope=all']}>
+    <MemoryRouter initialEntries={['/tasks/task-1?scope=all']}>
       <Routes>
         <Route
-          path="/field/tasks/:id"
+          path="/tasks/:id"
           element={<TaskDetail taskId="task-1" onListChange={onListChange} />}
         />
-        <Route path="/field/" element={<p>任務清單</p>} />
+        <Route path="/tasks/" element={<p>任務清單</p>} />
         <Route path="/login" element={<p>登入頁</p>} />
       </Routes>
     </MemoryRouter>,

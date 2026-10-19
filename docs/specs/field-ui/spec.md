@@ -13,18 +13,18 @@
 
 **包含**：
 
-- 單一 React application 的 `/field/*` 路由與依路由拆分程式碼；Field 不載入 Admin 程式（[KD-12](../../intents/03-decisions-and-stack.md#kd-12)）。
+- 單一 React application 的現場任務路由與依路由群組拆分程式碼；現場路由不載入管理程式（[KD-12](../../intents/03-decisions-and-stack.md#kd-12)、FUI-R14）。
 - 今日任務入口、任務清單、任務詳情、唯讀需求快照及開始查核操作。
 - 新增跨專案現場任務列表 API，遵守登入、專案權限、cursor 分頁及共用 API 錯誤契約；另需安全地讀取 Field 可見任務詳情。
 - 手機／平板操作、Online-first 的 PWA-ready 基礎，以及區網 HTTPS 開發與 iPhone 實機驗收說明。
-- 將現有 `/field/*` 個人工作台轉為現場首頁；範本瀏覽及套用範本移至 `/admin/...` 內業路由。
+- 將現有個人工作台轉為現場首頁；範本瀏覽及套用範本依 ADM-R50 提供於 `/templates` 與 `/projects/...`。
 
 **不包含**：
 
 - 拍照、Evidence 建立與上傳、影像編輯及上傳佇列：移至 `field-evidence`（0.6.x）。
 - 查核結果、實測值填寫及任務完成操作：移至 `completion-validation`（0.7.x）；本階段只允許開始查核。
 - Plan、Task、Snapshot 的資料欄位與狀態轉換：由 `domain-model`、`inspection-planning`、`state-machines` 負責，本規格只消費其契約。
-- Admin 功能內容（管理者範本庫、專案設定等）：由 `admin-dashboard` 負責；本規格僅要求將現有範本頁面移入其 `/admin/...` 路由範圍。
+- Admin 功能內容（管理者範本庫、專案設定等）：由 `admin-dashboard` 負責；本規格不定義其 UI 路徑。
 - 離線編輯、離線同步及背景上傳：PWA 卡片明定 MVP 為 Online-first，未來依試用資料再評估。
 
 ## 使用情境
@@ -40,7 +40,7 @@
 
 | 編號 | 需求 | 強度 | 依據 |
 |---|---|---|---|
-| FUI-R01 | Field **必須**在同一 React application 中提供 `/field/*` 路由，並依路由拆分程式碼，使 Field 路由不載入 Admin 程式。 | 必須 | [KD-12](../../intents/03-decisions-and-stack.md#kd-12)；路由組織為規格設計 |
+| FUI-R01 | Field **必須**在同一 React application 中提供現場任務路由，並依路由群組拆分程式碼，使現場路由不載入管理程式（路徑及拆包依 FUI-R14）。 | 必須 | [KD-12](../../intents/03-decisions-and-stack.md#kd-12)；路由組織為規格設計 |
 | FUI-R02 | 今日任務頁**必須**預設列出登入者在其具 `inspection_task.inspect` 權限的專案中、建議指派給本人的未完成已派 Task（`PENDING`、`IN_PROGRESS`）。「今日」不按日期欄位篩選。頁面**必須**可切換到所有有權限專案的未完成已派 Task。未派出的 `DRAFT` 不得出現在 Field 清單或詳情。建議指派只作預設篩選，不限制同專案其他具 `inspection_task.inspect` 權限成員開始任務。 | 必須 | 今日任務與後續日期檢視：[今日任務裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977711401)、[日期需求檢視裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977713303)；範圍切換及排序為規格設計；[IP-R05](../inspection-planning/spec.md#需求)、[IP-R09](../inspection-planning/spec.md#需求)、[STM-R11](../state-machines/spec.md#需求) |
 | FUI-R03 | 任務詳情**必須**以 Task 名稱（`name`，IP-R17）為標題，並呈現 Task 狀態、專案、任務地點及 Task Requirement Snapshot；今日任務清單的卡片同樣以任務名稱為標題，並以次要文字顯示查核項目摘要（`item_summary`），讓使用者在名稱被改過之後仍看得出任務含哪些項目。需求清單逐項顯示內容與必要照片／量測要求；唯讀呈現不得建立 Evidence 或 Result。Snapshot 預設為建立 Task 時的需求；符合 [KD-55](../../intents/03-decisions-and-stack.md#kd-55) 的更正例外時，Field 顯示 Task API 回傳的最新內容。`DRAFT` Task 對 Field 清單及詳情 API 必須由後端隱藏，詳情統一回 404。草稿、取消及封存不得呈現為可操作狀態。 | 必須 | [不開放完成裁定](https://github.com/speko-tw/inspect-flow/issues/104#issuecomment-5977723428)、[PR-04](../../intents/02-principles.md#pr-04)、[KD-55](../../intents/03-decisions-and-stack.md#kd-55)、[KD-58](../../intents/03-decisions-and-stack.md#kd-58)、[DOM-R57](../domain-model/spec.md)、[STM-R09](../state-machines/spec.md#需求)；Field 專用詳情端點與呈現方式為規格設計，後端依賴 #361、#416；任務名稱為標題、項目摘要為次要文字依 [IP-R17](../inspection-planning/spec.md#需求)，呈現方式為規格設計（非負責人裁定） |
 | FUI-R04 | 對 `PENDING` Task，Field **必須**提供「開始查核」操作；只有登入者具該專案 `inspection_task.inspect` 權限且 Plan 未封存時可操作。操作呼叫既有開始端點，由伺服器覆核狀態與權限；成功後顯示最新狀態與實際開始者。`IN_PROGRESS` 顯示進行中且不得重複開始，其他狀態不提供開始操作。 | 必須 | [IP-R05](../inspection-planning/spec.md#需求)、[IP-R09](../inspection-planning/spec.md#需求)、[STM-R01](../state-machines/spec.md#需求)、[STM-R11](../state-machines/spec.md#需求)；按鈕與回應呈現為規格設計 |
@@ -48,11 +48,12 @@
 | FUI-R06 | Field 清單與詳情都**必須**以 `inspection_task.inspect` 作為專案權限。跨專案列表逐筆只回傳有權限專案資料；無權限的其他專案不影響列表。Field 詳情對不存在、`DRAFT` 或無該 Task 權限者統一回 404；不得讓只具 `inspection_task.read` 的唯讀成員看見現場任務。管理者依現有 Admin 規則放行。依兩層權限模型，現場查核另需查核模組「可使用」（`authentication` AUT-R19）；程式改造完成前維持現行行為（只看專案角色）。 | 必須 | [KD-69](../../intents/03-decisions-and-stack.md#kd-69)、[AUT-R18](../authentication/spec.md#權限檢查)、[AUT-R19](../authentication/spec.md#權限檢查)、[IP-R09](../inspection-planning/spec.md#需求)；現場查核權限的專案範圍與查核模組「可使用」依 KD-69；API 錯誤碼及 Field 隱藏草稿詳情契約為規格設計，後端依賴 #361、#416 |
 | FUI-R07 | 登入狀態**必須**沿用 `authentication` 的伺服器端 Session 與 HttpOnly、Secure Cookie。未登入進入 Field 頁面時導向既有登入流程，登入成功後返回原請求路徑；Session 失效時依 `authentication` 的 401 契約重新登入。403 不得偽裝成空清單或登出。Field 頁面**必須**提供登出操作。 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[AUT-R14](../authentication/spec.md#需求)、[AUT-R18](../authentication/spec.md#權限檢查)、[PR-01](../../intents/02-principles.md#pr-01)；返回路徑處理為規格設計 |
 | FUI-R08 | Field **必須**提供適配手機與平板的觸控介面，基準寬度為 360px、390px、768px，主要觸控目標至少 44×44 CSS px；主要內容不得需要水平捲動即可閱讀。`viewport` meta **必須**允許使用者縮放。不得顯示範本庫設定、資料庫 ID、Requirement Schema、Project Configuration、Storage Key、metadata 或資料庫管理功能；唯一例外是 Field 量測欄位與其數值標準間關聯所需的 `measurement_fields[].id`、`numeric_standard.measurement_field_id`，供表單正確對應欄位，不得用於其他資料操作。另一個例外限於 [`field-evidence`](../field-evidence/spec.md) 的現場照片端點：回傳 `item_id`、`point_ids` 供前端對應查核項目與項次，畫面不顯示（FEV-R13）。 | 必須／不得 | [PR-10](../../intents/02-principles.md#pr-10)；尺寸及觸控基準與量測欄位關聯回應為規格設計（#416） |
-| FUI-R09 | 現場 Web **必須**提供最小 Web App Manifest，含應用名稱、圖示、`display: standalone`、`start_url: /field/` 及主題色，並提供 iOS 主畫面捷徑所需圖示與 meta。MVP **不得**註冊快取型 Service Worker；採 Online-first，不宣稱離線查核、同步或背景上傳。 | 必須／不得 | [PWA 技術棧卡片](../../intents/03-decisions-and-stack.md#stack-pwa)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)；最小 manifest 與 iOS meta 為規格設計 |
+| FUI-R09 | 現場 Web **必須**提供最小 Web App Manifest，含應用名稱、圖示、`display: standalone`、`start_url: /tasks/` 及主題色，並提供 iOS 主畫面捷徑所需圖示與 meta。MVP **不得**註冊快取型 Service Worker；採 Online-first，不宣稱離線查核、同步或背景上傳。 | 必須／不得 | [PWA 技術棧卡片](../../intents/03-decisions-and-stack.md#stack-pwa)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)、FUI-R14；最小 manifest 與 iOS meta 為規格設計 |
 | FUI-R10 | 設定 `INSPECTFLOW_DEV_HOST` 開放區網時，開發伺服器**必須**限制連入至明確指定的網段或介面，實際方式依 Vite 能力定案；**必須**提供 iPhone 安裝並明確信任 mkcert 根憑證的逐步指引，以及 iPhone 實測登入、Session 維持、登出流程。保留 Secure Cookie 所需 HTTPS；根憑證私鑰不得傳至裝置或提交 repository，後端仍只綁 localhost、由 HTTPS 前端代理 API。開發流程不得被描述為正式部署設定。 | 必須 | [KD-21](../../intents/03-decisions-and-stack.md#kd-21)、[#231](https://github.com/speko-tw/inspect-flow/issues/231)、[README iPhone 測試流程](../../../README.zh-TW.md)；網段限制技術方式為規格設計 |
-| FUI-R11 | 現有 `/field/*` 個人工作台**必須**轉為今日任務現場首頁；範本瀏覽與專案套用範本為內業功能，**必須**移至 `/admin/...`，舊現場路徑轉址至新內業路徑。Field 保留個人資料、密碼變更與登出入口；公司資訊、專案清單及專案管理細節不得留在 Field 工作台，相關管理入口由 `admin-dashboard` 負責。任務本身所需的專案名稱及地點仍顯示於 Field 任務清單與詳情。 | 必須 | [PR-10](../../intents/02-principles.md#pr-10)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)；現有 route 調整為規格設計；管理頁整合依賴 `admin-dashboard` |
-| FUI-R12 | Field 首頁**不得**提供範本瀏覽、套用或存為範本入口；內業使用者由 `/admin/projects` 專案工作台卡片進入 `/admin/projects/{project_id}/inspection-items/templates`。舊 `/admin/projects/{project_id}/templates` 與 `/field/projects/{project_id}` 網址**必須**轉址至對應正式套用路徑。 | 不得／必須 | 負責人直接指示（#429，原型核可 2026-10-05）；入口與轉址細節為規格設計。 |
+| FUI-R11 | 現場首頁**必須**呈現今日任務；範本瀏覽與專案套用範本為內業功能，依 `admin-dashboard` ADM-R50 提供。舊 UI 網址不轉址，依 FUI-R14 回 404。Field 保留個人資料、密碼變更與登出入口；公司資訊、專案清單及專案管理細節不得留在現場工作台，相關管理入口由 `admin-dashboard` 負責。任務本身所需的專案名稱及地點仍顯示於任務清單與詳情。 | 必須 | [PR-10](../../intents/02-principles.md#pr-10)、[KD-12](../../intents/03-decisions-and-stack.md#kd-12)；路由依 FUI-R14；管理頁整合依賴 `admin-dashboard` |
+| FUI-R12 | 現場任務頁內容**不得**提供範本瀏覽、套用或存為範本入口；全域導覽的「範本」項目依 `admin-dashboard` ADM-R50，只對 Admin 或具 `template.manage` 者顯示。舊 UI 網址不轉址並回 404，API 路徑不變。 | 不得／必須 | 負責人直接指示（#429，原型核可 2026-10-05）；任務頁內容與全域導覽的範本權限依 ADM-R50；舊網址行為依 #705、FUI-R14。 |
 | FUI-R13 | Field 沿用 `admin-dashboard` 的 UI 共通規則（ADM-R37～ADM-R39），不另寫一份：開始查核的確認為一般主色（一般確認）、按鈕為［取消］［確認］、開啟時焦點在「取消」、Esc 等同取消、在原地展開（不使用蓋住整頁的 modal）；Field 清單與詳情的狀態標籤（待開始黃、進行中藍、已完成綠、已取消灰）與管理頁使用同一份對照，同一個狀態詞在兩邊同色 | 必須 | v0.3.1 修正（[#510](https://github.com/speko-tw/inspect-flow/pull/510)、[#511](https://github.com/speko-tw/inspect-flow/pull/511)）已實作並定案的畫面規則，規格同步（[#533](https://github.com/speko-tw/inspect-flow/issues/533)）；規則內容見 ADM-R37～ADM-R39；套用方式為規格設計（非負責人裁定） |
+| FUI-R14 | 本需求**取代** FUI-R01、FUI-R09、FUI-R11、FUI-R12 中與 UI 路徑、PWA 起始網址及舊路徑轉址有關的部分。現場任務路由為 `/tasks` 與 `/tasks/:id`，管理介面路由依 `admin-dashboard` ADM-R50；單一 React application 依路由群組拆包，Field 任務路由不得載入管理模組。Manifest `start_url` 為 `/tasks/`。舊 `/field/...`、`/admin/...` 與 `/change-password` UI 網址一律回 404，不轉址；API 路徑不變。 | 必須 | #705 路由規則；路由群組拆包依待確認的意圖變更 [KD-12](../../intents/03-decisions-and-stack.md#kd-12)；PWA 其餘規則依 FUI-R09 |
 
 ## 資料
 
@@ -62,12 +63,12 @@
 
 ## 介面
 
-畫面路由及新增 API 的精確形式為**規格設計（非負責人裁定）**。清單與詳情均使用 `inspection_task.inspect`；跨專案列表為逐筆篩選，指定單一專案時依該專案權限拒絕存取。Field 詳情須使用能將 `DRAFT` 與無權限資源隱藏的端點；通用 Task 讀取端點的 `inspection_task.read` 契約不等同 Field 可見性。
+畫面路由及新增 API 的精確形式為**規格設計（非負責人裁定）**。下表前兩列的 `GET` 表示頁面載入路徑，不是後端端點；其餘 `/api/v1/...` 列為後端 API 契約，API 路徑維持不變。清單與詳情均使用 `inspection_task.inspect`；跨專案列表為逐筆篩選，指定單一專案時依該專案權限拒絕存取。Field 詳情須使用能將 `DRAFT` 與無權限資源隱藏的 API 端點；通用 Task 讀取端點的 `inspection_task.read` 契約不等同 Field 可見性。
 
 | 方法 | 路徑 | 用途 | 權限 |
 |---|---|---|---|
-| GET | `/field/tasks` | 今日任務及跨專案已派任務清單；預設本人建議指派，可切換全部可查核任務；`limit`／`cursor` 分頁 | 前端需登入；後端逐筆套用 `inspection_task.inspect` |
-| GET | `/field/tasks/{task_id}` | 現場任務詳情與需求快照 | 前端需登入；後端 `inspection_task.inspect`；不存在、`DRAFT` 或無權限一律 404 |
+| GET | `/tasks` | 頁面載入路徑：今日任務及跨專案已派任務清單；預設本人建議指派，可切換全部可查核任務；資料由下方 API 取得並以 `limit`／`cursor` 分頁 | 前端需登入；後端逐筆套用 `inspection_task.inspect` |
+| GET | `/tasks/:id` | 頁面載入路徑：現場任務詳情與需求快照；資料由下方任務詳情 API 取得 | 前端需登入；後端 `inspection_task.inspect`；不存在、`DRAFT` 或無權限一律 404 |
 | GET | `/api/v1/field/inspection-tasks` | 跨專案列出 `PENDING`、`IN_PROGRESS` 已派任務；`assigned_to_me=true` 預設，`false` 列出所有可查核專案任務；可選 `project_id`、`status=PENDING\|IN_PROGRESS\|COMPLETED`（省略為全部未完成狀態，不含 `COMPLETED`）、`completed_within_days`（只在 `status=COMPLETED` 時有效，預設 14，範圍 1–90）、`limit`（預設 50、範圍 1–100）、`cursor`。狀態在資料庫查詢層篩選，與 cursor 分頁共用相同排序。回 `{items,next_cursor}`；每筆含 `id`、`project_id`、`project_name`、`name`、`status`、`dispatched_at`、`location: {zone_name,location_text}`、`completed_at`（只有 `COMPLETED` 非空）、`suggested_assignee: {name_zh}\|null`、`item_summary: {first_title: string\|null, item_count: number}`。摘要採第一個 Task 查核項目之目前需求快照標題與項目總數；無目前快照時標題為 null；卡片標題用 `name`，摘要只作次要文字，標題為 null 時不顯示。全部檢視中的建議執行人姓名可見，以便同專案協作 | `SYSTEM_ROLE_OR_ANY_PROJECT_PERMISSION`；逐筆檢查 `inspection_task.inspect`；Admin 即使無專案或指定不存在的 `project_id` 仍回 200 空頁；非 Admin 無任何專案權限或指定專案無權限回 403；有權限無符合資料為空頁 |
 | GET | `/api/v1/field/inspection-tasks/{task_id}` | 現場安全詳情，含任務名稱 `name`、分區名稱、補充位置、建議執行人及目前需求快照；另含 `suggested_assignee.is_me`（登入者是否為建議執行人）、`started_by: {name_zh,is_me}\|null`（實際開始者顯示名稱，未開始為 null）、`cancellation_reason: string\|null`（僅 `CANCELLED` 回原因，其餘為 null）；只給顯示名稱與是否為本人，不給使用者 ID 或帳號。不回傳 Plan ID、其他人帳號、歷史 Snapshot 或內業專用欄位。量測欄位回 `id`、`name`、`field_type`、`unit`；數值標準回 `measurement_field_id` 以關聯量測欄位 | `inspection_task.inspect`；`DRAFT`／不存在／無權限統一回 404；只具 `inspection_task.read` 回 404 |
 | POST | `/api/v1/inspection-tasks/{task_id}:start` | 開始查核；既有端點，本規格定義 Field 呼叫行為與被拒絕時的說明（見表後說明） | `inspection_task.inspect`，後端覆核 Task 與 Plan 狀態 |
@@ -78,7 +79,7 @@
 
 ## 現況與銜接
 
-現有 `/field/*` 的個人工作台含個人資料、公司、專案、範本瀏覽、變更密碼、登出及 Admin 入口；`/field/projects/:projectId` 用於專案範本套用。Field UI 交付時，工作台內容改為今日任務首頁；範本瀏覽及專案套用頁搬至 `/admin/...`，舊網址轉址至對應新路由。個人資料、變更密碼與登出仍可由 Field 存取；公司資訊、專案清單及專案管理細節由 `admin-dashboard` 負責，Field 任務只顯示完成查核所需的專案名稱與地點。若 Admin 未提供目標路由，列為整合依賴，不把範本或專案管理功能留在 Field。
+原 Field 工作台含個人資料、公司、專案、範本瀏覽、變更密碼、登出及管理入口。現行 UI 路徑與舊網址行為依 FUI-R14、ADM-R50：現場任務使用 `/tasks` 與 `/tasks/:id`，舊 UI 網址回 404；API 路徑不變。現場首頁呈現今日任務；範本及專案管理入口由 `admin-dashboard` 負責。個人資料、變更密碼與登出仍可由現場存取；公司資訊、專案清單及專案管理細節由 `admin-dashboard` 負責，現場任務只顯示完成查核所需的專案名稱與地點。
 
 ## 驗收條件
 
@@ -95,12 +96,13 @@
 | FUI-AC07 | 真實 API 有超過一頁且具相同派送時間的資料 | 使用預設與全部任務篩選，以 `limit`／cursor 取完資料並開始其中一筆 | `limit` 預設 50、拒絕或限制至上限 100；依 `dispatched_at DESC` 再 Task UUID 穩定排序，無重複遺漏；開始查核不改變排序；cursor 不透明且本人條件由 Session 決定 | FUI-R02、R05 |
 | FUI-AC08 | 使用者未登入、Session 失效、只具 read 權限，或沒有 inspect 權限；含 403 與 401 情境 | 開啟 Field 路由或呼叫列表／詳情 API | 未登入依登入流程成功後返回原路徑；Session 失效依 401 重新登入；403／404 不偽裝成空清單或登出；read-only 使用者不可見現場任務 | FUI-R06、R07 |
 | FUI-AC09 | 以真實前端及後端在 360px、390px、768px viewport 檢視列表、詳情、操作區 | 使用觸控閱讀需求及操作允許的 Task，檢查頁面 meta | 主要觸控目標至少 44×44 CSS px；內容無水平捲動；viewport 可縮放；無 PR-10 禁止內容 | FUI-R08 |
-| FUI-AC10 | 前端建置產物包含 Field 路由，且開啟 `/field/` | 檢查 manifest、iOS 主畫面捷徑與 Service Worker | manifest 含名稱、圖示、`display: standalone`、`start_url: /field/`、主題色；iOS 圖示及 meta 可用；未註冊快取型 Service Worker；Field 不載入 Admin chunk，資料由線上 API 提供 | FUI-R01、R09 |
+| FUI-AC10 | （已撤回，保留編號）原驗收要求 `/field/` 為 PWA 起始網址；#705 改用 `/tasks/`，由 FUI-AC16 驗收。 | 撤回 | 不再驗收舊 manifest 起始網址與以 Field URL 判斷程式碼拆包的行為。 | #705；FUI-R14 |
 | FUI-AC11 | `INSPECTFLOW_DEV_HOST` 啟用區網 HTTPS 開發伺服器，並有 iPhone 與開發機同網段 | 從允許網段／非允許來源連線；在 iPhone 安裝並信任 mkcert 根憑證，登入、重新載入、登出 | 僅指定網段或介面可連入；指引可依序完成根憑證安裝與完整信任；Safari 可登入、維持 Session 並登出；Secure Cookie 與 HTTPS API proxy 可用；不傳送 CA 私鑰 | FUI-R07、R10 |
-| FUI-AC12 | 現有 `/field/*` 工作台及 `/field/projects/:projectId` 範本頁仍可由瀏覽器直接開啟 | 導入 Field 首頁與管理路由 | Field 首頁為今日任務；範本瀏覽與專案套用移至 `/admin/...`，舊路徑轉址；Field 保留個人資料、密碼變更及登出，不保留公司資訊、專案清單或專案管理細節；任務所需的專案名稱與地點仍可見 | FUI-R07、R11 |
-| FUI-AC13 | Field 首頁、內業專案工作台及既有 `/field/projects/{project_id}` 網址 | 導入 #429 專案套用入口 | Field 首頁沒有範本瀏覽、套用或存為範本連結；專案卡片提供套用範本主要動作並連至內業套用頁；舊網址直接轉址至同一專案的內業套用頁，不顯示 UUID | FUI-R11、R12 |
+| FUI-AC12 | （已撤回，保留編號）原驗收要求舊 Field 路徑轉址；#705 改為舊 UI 網址 404，改由 FUI-AC16 覆蓋。 | 撤回 | 不再驗收舊 `/field/...` 路徑轉址。 | #705；FUI-R14 |
+| FUI-AC13 | （已撤回，保留編號）原驗收要求 Field 專案路徑轉址；#705 刪除舊 UI 相容轉址，改由 FUI-AC16 覆蓋。 | 撤回 | 不再驗收舊 `/field/projects/{project_id}` 轉址行為。 | #705；FUI-R14 |
 | FUI-AC14 | Field 清單與詳情有待開始、進行中、已完成、已取消的任務；有權限者開始查核 | 檢視狀態標籤；開啟開始查核確認，按 Tab 與 Esc | 狀態標籤顏色與管理頁同一份對照（待開始黃、進行中藍、已完成綠、已取消灰）；確認為一般主色、順序［取消］［確認］、焦點在「取消」、Esc 不送出並關閉、在原地展開 | FUI-R13、ADM-R37～R39 |
 | FUI-AC15 | Field 清單有單項與多項目任務，其中一筆的名稱已被內業改成與項目名稱不同的文字 | 開啟今日任務清單與該任務詳情 | 卡片與詳情標題都是任務名稱；卡片以次要文字顯示「首項名稱等 N 項」（單項只顯示項目名稱）；詳情仍逐項列出需求 | FUI-R03 |
+| FUI-AC16 | Field 身分（八種身分中的現場工程師、混合權限者）；範本套用所需專案各一；舊 `/field/...` 與 `/admin/...` UI 路徑樣本 | 檢查 build 產物、manifest 與 iOS meta；從 `/tasks` 點開任務及有權限入口；另直接輸入新路由、舊路由及未知路徑 | manifest 含名稱、圖示、`display: standalone`、`start_url: /tasks/`、主題色；iOS 圖示及 meta 可用，未註冊快取型 Service Worker；Field 路由群組不載入管理 chunk；任務清單與詳情使用 `/tasks`、`/tasks/:id`；任務頁內容沒有範本操作入口；全域導覽的範本項目與範本頁僅 Admin 或 `template.manage` 可見，單有 `template.use` 不顯示；舊 UI 路徑不轉址並回 404；`/api/v1/...` 路徑不變 | FUI-R01、R09、R11、R12、R14、ADM-R50 |
 
 ## 待釐清
 
@@ -110,6 +112,9 @@
 - 範本頁遷移需要 `admin-dashboard` 提供目標路由；若時程交錯，維持此項為明確整合依賴，不得保留在 Field。
 
 ## 變更紀錄
+
+- 規格澄清（#705）：FUI-R14 更新 Field 路徑、Manifest `start_url` 及舊 UI 網址 404；撤回 FUI-AC10、AC12、AC13 並保留編號，新增 FUI-AC16。API 路徑不變。
+- 規格澄清（#705）：FUI-R12 明定範本操作不屬於現場任務頁內容；全域導覽的範本項目只對 Admin 或具 `template.manage` 者顯示，單有 `template.use` 不足。
 
 - 規格設計（非負責人裁定，#419）：Field 安全詳情增列 `suggested_assignee.is_me`、`started_by`（顯示名稱與是否本人）與 `cancellation_reason`（僅已取消任務），讓開始查核後顯示實際開始者、非建議指派者的提示及取消競態的原因；開始被拒絕的說明文案依後端錯誤碼對應，屬規格設計。
 - 規格設計（非負責人裁定，#417）：Field 列表增列目前查核項目摘要及資料庫層 `status` 篩選；卡片多項目文案為「第一項等 N 項」，返回清單時以 URL 保留範圍與狀態、Field 頁面記憶保留已載入頁數及捲動位置；離開 Field 頁面後清除記憶。

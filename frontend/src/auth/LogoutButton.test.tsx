@@ -19,6 +19,7 @@ const CURRENT_USER = {
   must_change_password: false,
   has_office_access: false,
   has_field_access: true,
+  can_inspect_tasks: true,
   has_template_access: false,
 }
 

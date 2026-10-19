@@ -16,7 +16,7 @@ type State =
 
 /** 依 TPL-R23、FUI-R12 組合專案範本套用的正式路徑。 */
 function projectTemplatePath(projectId: string): string {
-  return `/admin/projects/${projectId}/inspection-items/templates`
+  return `/projects/${projectId}/inspection-items/templates`
 }
 
 /**
@@ -80,7 +80,7 @@ export default function MyProjectsPage({
             )
             return
           }
-          navigate(`/admin/projects/${project.id}`, {
+          navigate(`/projects/${project.id}`, {
             state: project.warnings.some(
               (warning) => warning.code === 'project_code.duplicate',
             )
@@ -145,7 +145,7 @@ export default function MyProjectsPage({
                 )}
                 <Link
                   className="btn btn-primary"
-                  to={`/admin/projects/${project.id}`}
+                  to={`/projects/${project.id}`}
                 >
                   開啟專案
                 </Link>

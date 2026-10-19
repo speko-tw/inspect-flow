@@ -58,7 +58,7 @@ export default function ProjectItemLinks({
       {canEdit && (
         <Link
           className="btn btn-primary"
-          to={`/admin/projects/${projectId}/inspection-items/templates`}
+          to={`/projects/${projectId}/inspection-items/templates`}
         >
           從範本新增查核項目
         </Link>
@@ -87,7 +87,7 @@ export default function ProjectItemLinks({
               <Link
                 aria-label={`${canEdit ? '修改' : '檢視'}「${item.title}」`}
                 className="btn"
-                to={`/admin/projects/${projectId}/inspection-items/${item.id}`}
+                to={`/projects/${projectId}/inspection-items/${item.id}`}
               >
                 {canEdit ? '修改' : '檢視'}
               </Link>

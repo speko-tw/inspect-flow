@@ -4,6 +4,8 @@
 
 計畫記錄「為什麼這樣拆」。實作中發現更好的拆法就直接更新本檔（屬於「計畫調整」）；進度看 issue，不在這裡打勾。
 
+目前登入落點及密碼頁路徑依規格 AUT-R52～R53 與 `admin-dashboard` ADM-R50；本計畫較早任務中的登入或變更密碼 UI 路徑只記錄當時背景。
+
 本計畫涵蓋 AUT-AC01～AUT-AC53，以及本次變更（[#259](https://github.com/speko-tw/inspect-flow/issues/259)）新增的 AUT-AC54～AUT-AC66；已被取代的 AUT-AC23、AUT-AC32 除外。T1～T12 是本次變更之前完成或已排定的任務，內容保持當時的樣子；本次變更對登入、初始化與密碼流程的改寫，由[本次變更後續實作](#本次變更後續實作)的 B～I 接手。跨規格的依賴：`database-foundation` T4（[#59](https://github.com/speko-tw/inspect-flow/issues/59)，`User`、`Project` 資料表），以及 `domain-model` 計畫的 T2（`User` 業務欄位）、T4（目前操作者與 Service 層）、T5（有效權限計算）、T6（初始化指令）；後者開 task issue 前還沒有編號，下表以「DOM T<n>」表示，開 issue 時換成 issue 編號。
 
 ## 任務
@@ -72,7 +74,7 @@
 
 | 任務 | 內容 | 依賴 | 對應 AC | Issue |
 |---|---|---|---|---|
-| P | 存取層級：新增「需模組權限」「需模組委派」「模組權限或任一專案權限」宣告與檢查（AUT-R48、AUT-R49）、專案內檢查加模組「可使用」（AUT-R19）、經單一權限計算入口（AUT-R51）、被委派者用的最小欄位人員查詢、指派專案角色的限制（AUT-R22）、`me` 加 `can_create_project`、`has_project_access`、`is_external_collaborator`、`module_permissions`、`delegated_modules`，存取摘要的權限碼分類加「唯讀碼」（AUT-R08）；路由宣告檢查納入新層級；`workflow-summary` 讀取碼加 `project.read`（IP-R11）、可指派成員端點依查核模組「可使用」過濾（IP-R12） | `domain-model` 任務 L（資料、Service 介面與單一入口）與任務 M（回填與轉換 migration）；兩層檢查不得早於 M 生效 | AUT-AC71～AUT-AC73、AUT-AC75～AUT-AC77；`inspection-planning` IP-AC12（`project.read` 分支）、IP-AC13；既有 AUT-AC18、AUT-AC19、AUT-AC44、AUT-AC70 補測試資料 | #576 |
+| P | 存取層級：新增「需模組權限」「需模組委派」「模組權限或任一專案權限」宣告與檢查（AUT-R48、AUT-R49）、專案內檢查加模組「可使用」（AUT-R19）、經單一權限計算入口（AUT-R51）、被委派者用的最小欄位人員查詢僅回 `id`、`username`、`name_zh`、安全布林 `is_external_collaborator`；前端依旗標隱藏外部目標不可獲授的模組權限選項，後端不允許的授權仍回 422；指派專案角色的限制（AUT-R22）、`me` 加 `can_create_project`、`has_project_access`、`is_external_collaborator`、`can_manage_project_planning_or_members`（依 AUT-R54）、`module_permissions`、`delegated_modules`，存取摘要的權限碼分類加「唯讀碼」（AUT-R08）；路由宣告檢查納入新層級；`workflow-summary` 讀取碼加 `project.read`（IP-R11）、可指派成員端點依查核模組「可使用」過濾（IP-R12） | `domain-model` 任務 L（資料、Service 介面與單一入口）與任務 M（回填與轉換 migration）；兩層檢查不得早於 M 生效 | AUT-AC71～AUT-AC73、AUT-AC75～AUT-AC77；`inspection-planning` IP-AC12（`project.read` 分支）、IP-AC13；既有 AUT-AC18、AUT-AC19、AUT-AC44、AUT-AC70 補測試資料 | #576 |
 | Q | 模組權限端點的存取層級（AUT-R49）與過渡行為驗收：`template_admin` 轉換後前後逐人比對有效權限；舊系統角色層級在轉換完成後移除 | P、`domain-model` 任務 M、`template-system` 對應任務 | AUT-AC73、AUT-AC74 | #579 |
 
 ## 並行分組

@@ -69,7 +69,7 @@ describe('我的專案頁', () => {
     expect(screen.getByRole('heading', { name: '示範工程甲' })).toBeVisible()
     expect(screen.getByRole('link', { name: '套用範本' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1/inspection-items/templates',
+      '/projects/project-1/inspection-items/templates',
     )
   })
 
@@ -143,7 +143,7 @@ describe('我的專案頁', () => {
     ])
     vi.mocked(createProject).mockResolvedValue(CREATED_PROJECT)
     render(
-      <MemoryRouter initialEntries={['/admin/projects']}>
+      <MemoryRouter initialEntries={['/projects']}>
         <MyProjectsPage canCreateProject />
         <LocationProbe />
       </MemoryRouter>,
@@ -169,7 +169,7 @@ describe('我的專案頁', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/admin/projects/project-2',
+        '/projects/project-2',
       ),
     )
     expect(createProject).toHaveBeenCalledWith(
@@ -200,7 +200,7 @@ describe('我的專案頁', () => {
       }),
     )
     render(
-      <MemoryRouter initialEntries={['/admin/projects']}>
+      <MemoryRouter initialEntries={['/projects']}>
         <MyProjectsPage canCreateProject />
         <LocationProbe />
       </MemoryRouter>,
@@ -232,7 +232,7 @@ describe('我的專案頁', () => {
     await waitFor(() =>
       expect(screen.getByLabelText(/專案代號/)).toHaveValue('DRAFT-NEW'),
     )
-    expect(screen.getByTestId('location')).toHaveTextContent('/admin/projects')
+    expect(screen.getByTestId('location')).toHaveTextContent('/projects')
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     fireEvent.click(screen.getByRole('button', { name: '捨棄' }))
     expect(
@@ -260,7 +260,7 @@ describe('我的專案頁', () => {
       }),
     )
     render(
-      <MemoryRouter initialEntries={['/admin/projects']}>
+      <MemoryRouter initialEntries={['/projects']}>
         <MyProjectsPage canCreateProject />
         <LocationProbe />
       </MemoryRouter>,
@@ -285,7 +285,7 @@ describe('我的專案頁', () => {
 
     finishCreate(CREATED_PROJECT)
 
-    expect(screen.getByTestId('location')).toHaveTextContent('/admin/projects')
+    expect(screen.getByTestId('location')).toHaveTextContent('/projects')
     expect(
       await screen.findByRole('heading', { name: '新建工程' }),
     ).toBeVisible()
@@ -306,7 +306,7 @@ describe('我的專案頁', () => {
     ).toBeVisible()
     expect(screen.getByRole('link', { name: '開啟專案' })).toHaveAttribute(
       'href',
-      '/admin/projects/project-1',
+      '/projects/project-1',
     )
     expect(screen.queryByRole('link', { name: '套用範本' })).toBeNull()
   })

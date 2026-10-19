@@ -12,6 +12,7 @@ import { type WorkflowStepCode, type WorkflowSummary } from './api'
 import { ProjectNotFound } from '../../RouteNotFound'
 import { canViewIndoorSections } from './permissions'
 import { useCompanyRoles } from '../projects/useCompanyRoles'
+import { routePath, ROUTES } from '../../routes'
 
 const STEP_CONTENT: Record<
   WorkflowStepCode,
@@ -93,7 +94,7 @@ export default function ProjectHomePage() {
   const denied = currentResult?.denied ?? false
   const loading = currentResult === null
   const primary: WorkflowStepCode | null = summary?.primary_step ?? null
-  const base = `/admin/projects/${projectId}`
+  const base = routePath(ROUTES.projectHome, { projectId })
   const canViewProgress =
     summary?.viewer_permission_codes.includes('inspection_task.read') ?? false
   const canEditInspectionItems =
