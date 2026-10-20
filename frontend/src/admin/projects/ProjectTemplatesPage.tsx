@@ -539,9 +539,7 @@ export default function ProjectTemplatesPage({
       )
       const categoryName = category?.name ?? '範本庫'
       const systemName = destination?.name ?? '目標系統'
-      setNotice(
-        `已將「${name}」存入「${categoryName} / ${systemName}」。`,
-      )
+      setNotice(`已將「${name}」存入「${categoryName} / ${systemName}」。`)
       setSaveSource(null)
       setSelected(null)
     } catch (caught) {
@@ -774,10 +772,7 @@ export default function ProjectTemplatesPage({
                   <button
                     className="btn-primary"
                     disabled={
-                      !saveAllowed ||
-                      saveDenied ||
-                      busy ||
-                      !saveName.trim()
+                      !saveAllowed || saveDenied || busy || !saveName.trim()
                     }
                     onClick={() => void submitSave()}
                     type="button"
@@ -788,7 +783,9 @@ export default function ProjectTemplatesPage({
               )}
               {saveError && (
                 <div className="notice-error" role="alert">
-                  <p id={saveConflict ? 'save-template-name-error' : undefined}>
+                  <p
+                    id={saveConflict ? 'save-template-name-error' : undefined}
+                  >
                     {saveError}
                   </p>
                   <button
