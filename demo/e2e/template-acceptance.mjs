@@ -197,7 +197,7 @@ try {
   )
   await page.goto(`${base}/templates`)
   await page.getByRole('heading', { name: '無權限' }).waitFor()
-  await page.getByText('你沒有權限瀏覽範本庫。').waitFor()
+  await page.getByText('你沒有使用這個頁面的權限。').waitFor()
   await page.goto(
     `${base}/projects/${result.projects.B}/inspection-items/templates`,
   )

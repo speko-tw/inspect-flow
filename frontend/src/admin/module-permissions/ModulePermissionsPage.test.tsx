@@ -819,7 +819,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(applyButtons[applyButtons.length - 1])
 
     expect(
-      await screen.findByText('林沐青 的職務與授權設定已完成。'),
+      await screen.findByText('林沐青 的職務與權限設定已完成。'),
     ).toBeInTheDocument()
     expect(
       calls.some((call) => call.method === 'POST' && call.path === '/users'),
@@ -891,7 +891,7 @@ describe('ModulePermissionsPage', () => {
     )
 
     expect(
-      await screen.findByText('林沐青 的職務與授權設定已完成。'),
+      await screen.findByText('林沐青 的職務與權限設定已完成。'),
     ).toBeInTheDocument()
     expect(
       calls.some((call) => call.method === 'POST' && call.path === '/users'),
@@ -1384,7 +1384,7 @@ describe('ModulePermissionsPage', () => {
     expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1)
   })
 
-  it('shows the temporary password first and no ability card on completion', async () => {
+  it('shows the temporary password first and only completion actions', async () => {
     permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
     await fillIdentity('done.page')
@@ -1398,9 +1398,22 @@ describe('ModulePermissionsPage', () => {
     ).not.toBeInTheDocument()
     const doneText = done.textContent ?? ''
     expect(doneText.indexOf('臨時密碼')).toBeLessThan(
-      doneText.indexOf('的帳號與授權設定已完成'),
+      doneText.indexOf('的帳號與權限設定已完成'),
     )
     expect(done).toContainElement(password)
+    expect(doneText).not.toContain('授權')
+    expect(screen.queryByText('進階設定')).not.toBeInTheDocument()
+  })
+
+  it('hides advanced settings on the account completion page', async () => {
+    permissionPage()
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('done.advanced')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+
+    await screen.findByRole('region', { name: '建立完成' })
+    expect(screen.queryByText('進階設定')).not.toBeInTheDocument()
   })
 
   it.each(['現場查核', '外部協作'])(

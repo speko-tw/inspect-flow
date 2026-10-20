@@ -505,10 +505,8 @@ function MemberAdminShell({
               restrictedPage ? (
                 <>
                   <h1>無權限</h1>
-                  <p role="alert">
-                    {location.pathname.startsWith(ROUTES.adminTemplates.path)
-                      ? '你沒有權限瀏覽範本庫。'
-                      : '只有系統管理者可以使用這個管理頁面。'}
+                  <p className="notice-info" role="status">
+                    你沒有使用這個頁面的權限。
                   </p>
                   <Link className="btn" to={indexTarget}>
                     返回{landingLabel(indexTarget)}

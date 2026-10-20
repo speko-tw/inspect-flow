@@ -1275,8 +1275,8 @@ function ModulePermissionsPageContent({
               )}
               <p>
                 {existingAccount
-                  ? `${createdName} 的職務與授權設定已完成。`
-                  : `${createdName} 的帳號與授權設定已完成。`}
+                  ? `${createdName} 的職務與權限設定已完成。`
+                  : `${createdName} 的帳號與權限設定已完成。`}
               </p>
               <p>
                 {existingAccount
@@ -1640,7 +1640,7 @@ function ModulePermissionsPageContent({
           )}
         </Card>
       )}
-      {(!embedded || currentUser.is_admin) && (
+      {(!embedded || currentUser.is_admin) && !(wizardOpen && step === 4) && (
         <details>
           <summary>進階設定</summary>
           <Card>
