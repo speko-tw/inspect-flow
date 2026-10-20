@@ -222,7 +222,7 @@ def apply_template(
         if template is None:
             return None
         _reject_duplicate_names(db, project_id, [template])
-        return [
+        copies = [
             _copy_template_item(
                 db,
                 project_id=project_id,
@@ -232,6 +232,20 @@ def apply_template(
                 operator_id=operator.id,
             )
         ]
+        record_audit_event(
+            db,
+            "project.template_applied",
+            entity_id=project_id,
+            project_id=project_id,
+            before=None,
+            after={
+                "source_type": "item",
+                "source_id": template.id,
+                "source_name": template.title,
+                "item_count": len(copies),
+            },
+        )
+        return copies
 
     system = db.get(TemplateSystem, system_id)
     if system is None:
@@ -242,7 +256,7 @@ def apply_template(
         .order_by(TemplateItem.sequence, TemplateItem.id)
     ).all()
     _reject_duplicate_names(db, project_id, templates)
-    return [
+    copies = [
         _copy_template_item(
             db,
             project_id=project_id,
@@ -253,6 +267,21 @@ def apply_template(
         )
         for template in templates
     ]
+    if copies:
+        record_audit_event(
+            db,
+            "project.template_applied",
+            entity_id=project_id,
+            project_id=project_id,
+            before=None,
+            after={
+                "source_type": "system",
+                "source_id": system.id,
+                "source_name": system.name,
+                "item_count": len(copies),
+            },
+        )
+    return copies
 
 
 def create_template_from_project_item(
@@ -359,6 +388,7 @@ def create_template_from_project_item(
             "instruction": source.instruction,
             "inspection_points": points_data,
         },
+        audit_created=False,
     )
     record_audit_event(
         db,

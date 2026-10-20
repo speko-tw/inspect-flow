@@ -65,6 +65,14 @@
 |---|---|---|---|---|
 | T8 | 事件目錄補 `project.created` 的 `company_role`，以及 `project.updated` 的 `company_role`、`company_role_change_reason` 欄位；端到端驗收由 `domain-model` 任務 R 承接 | T6 | ALG-AC28 | [#559](https://github.com/speko-tw/inspect-flow/issues/559) |
 
+## 範本庫寫入與套用（#382）
+
+依據：負責人指示補齊發版前檢查 #377 的 S1、S2、Q3；分類、系統、範本寫入與套用事件契約依 ALG-R31。模組權限授予與收回由 #538／ALG-R26 負責，本任務不重複登記。
+
+| 任務 | 內容 | 主要檔案 | 驗收 | Issue |
+|---|---|---|---|---|
+| 範本稽核 | 登記事件目錄並由範本庫與套用 Service 在同一交易寫入；整系統套用一筆帶實際項目數的事件；補 auditLabels 白話標籤。整系統覆蓋由逐項事件呈現，無差異與空系統不留事件 | `backend/app/services/audit.py`、`template_library.py`、`project_templates.py`、範本與套用 API 測試、`frontend/src/admin/audit-log/auditLabels.ts` 及測試、兩份規格 | ALG-AC30、TPL-AC28 | [#382](https://github.com/speko-tw/inspect-flow/issues/382) |
+
 ## 並行分組
 
 - 第 1 波：T1。

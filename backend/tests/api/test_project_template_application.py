@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, func, inspect, select, text
 
 from alembic import command
 from app.api.errors import ErrorCode
@@ -1249,3 +1249,115 @@ def test_save_as_template_rejects_a_source_with_two_photo_requirements(
     )
     assert listed.status_code == 200, listed.text
     assert listed.json()["items"] == []
+
+
+def test_apply_records_one_audit_event_with_item_count(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    system_id, template_ids = _create_templates(world["admin"])
+    url = (
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template"
+    )
+
+    single = world["editor"].post(url, json={"template_id": template_ids[0]})
+    assert single.status_code == 201, single.text
+    other_url = (
+        f"/api/v1/projects/{world['other_project'].id}"
+        "/inspection-items:apply-template"
+    )
+    system = world["admin"].post(other_url, json={"system_id": system_id})
+    assert system.status_code == 201, system.text
+
+    events = db_session.scalars(
+        select(AuditLog).where(
+            AuditLog.event_type == "project.template_applied"
+        )
+    ).all()
+    assert len(events) == 2
+    assert {
+        (
+            event.entity_id,
+            event.project_id,
+            event.after["source_type"],
+            event.after["item_count"],
+        )
+        for event in events
+    } == {
+        (world["project"].id, world["project"].id, "item", 1),
+        (world["other_project"].id, world["other_project"].id, "system", 2),
+    }
+    assert {event.after["source_id"] for event in events} == {
+        template_ids[0],
+        system_id,
+    }
+
+
+def test_empty_system_apply_does_not_write_audit_event(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Empty category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Empty system"},
+    )
+    before = db_session.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(AuditLog.event_type == "project.template_applied")
+    )
+
+    response = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": system.json()["id"]},
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.event_type == "project.template_applied")
+        )
+        == before
+    )
+
+
+def test_failed_apply_audit_rolls_back_project_item_copies(
+    db_session, make_client, monkeypatch
+):
+    world = _world(db_session, make_client)
+    system_id, _ = _create_templates(world["admin"])
+    before_audit_count = db_session.scalar(
+        select(func.count()).select_from(AuditLog)
+    )
+
+    def reject_event(*args, **kwargs):
+        raise RuntimeError("injected apply audit failure")
+
+    monkeypatch.setattr(project_templates, "record_audit_event", reject_event)
+    with pytest.raises(RuntimeError, match="injected apply audit failure"):
+        world["editor"].post(
+            f"/api/v1/projects/{world['project'].id}"
+            "/inspection-items:apply-template",
+            json={"system_id": system_id},
+        )
+
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(ProjectInspectionItem).where(
+                ProjectInspectionItem.project_id == world["project"].id
+            )
+        )
+        is None
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(AuditLog))
+        == before_audit_count
+    )

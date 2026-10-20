@@ -281,6 +281,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
     expected = {
         "project.created",
         "project.updated",
+        "project.template_applied",
         "project_member.roles_changed",
         "project_member.removed",
         "project_member.assignment_denied",

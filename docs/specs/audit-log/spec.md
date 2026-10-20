@@ -99,6 +99,7 @@
 | ALG-R28 | 專案事件（[專案事件](#專案事件)）：新增專案**必須**在同一交易寫 `project.created`，修改專案基本欄位**必須**在同一交易寫 `project.updated`；指派被 DOM-R70 或 DOM-R72 擋下、授權被 DOM-R62 或 DOM-R63 拒絕時，後端**必須**分別寫 `project_member.assignment_denied`、`module_permission.grant_denied`，且在獨立交易寫入，使請求失敗後仍保留，這是 ALG-R14「被拒絕不留紀錄」的唯一例外 | 必須 | 負責人裁定（[#538 第 18 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-09）（後端擋下違規並寫稽核）；`project.created`、`project.updated`、獨立交易的做法與授權拒絕事件是規格設計（非負責人裁定）（兩位專家審查建議） | ALG-AC23、ALG-AC24 |
 | ALG-R29 | **操作者身分快照**：每筆稽核紀錄**必須**保存寫入當下的操作者身分快照（欄位 `actor_snapshot`，文字，由寫入入口依操作者當下的姓名、外部協作人員標記與單位組成）：有 `name_zh` 的外部協作人員為「姓名．外部協作人員．單位」，沒有單位時為「外部協作人員（未填單位）」；有 `name_zh` 的內部人員為「姓名．單位」（沒有單位時只有姓名）；沒有 `name_zh` 時以 `username` 作為快照姓名，有單位仍依身分組成，有單位以外的缺項則省略（例如無姓名、無單位的外部帳號只保存 `username`）；日後人員資料變更不影響已寫入的快照；這是 ALG-R05 的欄位補充，新增一支 migration 加不可空值欄位（既有紀錄以當時 `created_by` 的現值回填一次），事件目錄不變 | 必須 | 負責人裁定（[#538 第 25 點](https://github.com/speko-tw/inspect-flow/issues/538)，2026-10-10）第 6 點：每筆紀錄保存寫入當下的身分快照；欄位名稱、組成方式與既有紀錄的回填是規格設計（非負責人裁定）；沒有姓名時以 `username` 作快照姓名並省略不存在的單位，依維護者決定（#580，2026-10-16） | ALG-AC25 |
 | ALG-R30 | 稽核查詢以 `created_at DESC, id DESC` 穩定分頁；為操作者與事件類型篩選，資料庫**必須**分別建立 `(created_by, created_at, id)` 與 `(event_type, created_at, id)` 複合索引。索引依實際查詢條件及排序設計；只新增或移除索引的 migration 不得重建 `audit_logs` | 必須 | 維護者決定（#624，2026-10-16）：依 `query_audit_events` 的篩選欄位與分頁排序新增複合索引 | ALG-AC29 |
+| ALG-R31 | 範本庫分類、系統與查核項目的成功新增、修改及刪除，**必須**依[範本庫事件](#範本庫事件)在相同交易寫入恰好一筆紀錄；整系統覆蓋依其實際新增、修改、刪除的項目各寫一筆，無變更不寫。套用範本時單項與整系統各以一筆 `project.template_applied` 記錄目標專案、來源種類／ID／名稱與實際副本數；空系統不寫。稽核寫入失敗時業務變更與事件一起回滾 | 必須 | 範圍依負責人指示（[#382](https://github.com/speko-tw/inspect-flow/issues/382)）；事件代碼、欄位及套用每次一筆為規格設計，依 ALG-R06、ALG-R09、ALG-R14 的同交易與單筆事件原則 | ALG-AC30 |
 
 ## Issue #580 維護者決定（2026-10-16）
 
@@ -142,6 +143,26 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | `system_role_assignment.created` | 指派固定的 `template_admin` 角色 | `system_role_assignment` | 空值 | `user_id`、`role_code` |
 | `system_role_assignment.deleted` | 收回固定的 `template_admin` 角色 | `system_role_assignment` | `user_id`、`role_code` | 空值 |
 | `template_item.created_from_project` | 範本管理員將專案查核項目存成範本 | `template_item` | 空值 | `project_id`、`project_inspection_item_id`、`system_id` |
+
+<a id="範本庫事件"></a>
+### 範本庫寫入與套用（#382）
+
+範本庫的分類、系統與查核項目有效寫入均在變更所在交易寫稽核事件。整系統覆蓋沿用逐項新增、修改、刪除事件；沒有實際差異的更新不留紀錄。單項或非空整系統套用各只寫一筆專案事件，`item_count` 是同次實際建立的專案查核項目數；空系統不寫事件。稽核寫入失敗時範本或專案副本與紀錄一併回滾。此範圍不包含範本模組權限的授予／收回（ALG-R26）。
+
+| 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
+|---|---|---|---|---|
+| `template_category.created` | 新增工程類別 | `template_category` | 空值 | `name` |
+| `template_category.updated` | 改名工程類別 | `template_category` | 變更前的 `name` | 變更後的 `name` |
+| `template_category.deleted` | 刪除空工程類別 | `template_category` | `name` | 空值 |
+| `template_system.created` | 新增系統 | `template_system` | 空值 | `category_id`、`name` |
+| `template_system.updated` | 改名系統 | `template_system` | 變更前的 `name` | 變更後的 `name` |
+| `template_system.deleted` | 刪除空系統 | `template_system` | `category_id`、`name` | 空值 |
+| `template_item.created` | 新增範本項目 | `template_item` | 空值 | `system_id`、`sequence`、`title`、`instruction`、`inspection_points` |
+| `template_item.updated` | 覆蓋範本項目 | `template_item` | 僅包含變更欄位 | 僅包含變更欄位 |
+| `template_item.deleted` | 刪除範本項目 | `template_item` | `system_id`、`sequence`、`title`、`instruction`、`inspection_points` | 空值 |
+| `project.template_applied` | 單項或整系統套用至專案；每次非空套用恰一筆 | `project` | 空值 | `source_type`（`item`／`system`）、`source_id`、`source_name`、`item_count` |
+
+`template_item.inspection_points` 以順序保存各查核項次、檢查標準、實測欄位與照片需求；不含資料庫主鍵或稽核欄位。`project.template_applied` 的 `entity_id` 與 `project_id` 都是目標專案 UUID。
 
 <a id="模組權限事件"></a>
 ## 模組權限事件
@@ -305,6 +326,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | ALG-AC27 | 外部協作人員 L（持合格資料）與內部人員 X（合格轉外部）；角色 R | 把 L 由外部改內部；把 X 由內部改外部；修改 R 的 `is_external_allowed`；重新啟用時未勾選的模組權限、模組委派與成員身分 | 兩個方向的標記變更各寫一筆 `user.external_flag_changed`；`role.updated` 記下 `is_external_allowed` 的前後值；未勾選而被收回與移除的項目各寫 `module_permission.revoked`、`module_delegation.revoked`、`project_member.removed` | ALG-R25、ALG-R14 |
 | ALG-AC28 | 專案 P；具專案權限 `project.update` 的成員 M（程式改造完成後的行為） | M 把 `company_role` 由 `contractor` 改為 `supervisor` 並帶原因；再只改專案名稱；再以相同的 `company_role` 重送 | 改角色一筆 `project.updated`：前後值含 `company_role`，後值另含 `company_role_change_reason`；只改名稱的 `project.updated` 不含原因欄；沒有變動不寫 | ALG-R28、DOM-R76 |
 | ALG-AC29 | 已有多筆稽核紀錄的資料庫 | 執行新增複合索引 migration，檢視查詢及 downgrade | `created_by, created_at, id` 與 `event_type, created_at, id` 索引存在且順序正確；既有資料不變；downgrade 移除兩索引且不重建資料表 | ALG-R30 |
+| ALG-AC30 | 管理範本者、具專案編輯權限者；可新增／修改／刪除的分類、系統與查核項目；有項目的系統及空系統 | 執行各項成功寫入、無變更覆蓋、單項套用、整系統套用及空系統套用；注入稽核寫入失敗 | 事件碼、對象、前後內容及套用筆數符合範本庫事件表；整系統套用一次只寫一筆；無變更與空套用不寫；稽核失敗時範本／專案資料與稽核事件均不留變更 | ALG-R06、ALG-R31；TPL-AC28 |
 
 ## 待釐清
 

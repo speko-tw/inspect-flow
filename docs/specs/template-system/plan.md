@@ -33,6 +33,7 @@
 - #538（負責人裁定，意圖見 [KD-69](../../intents/03-decisions-and-stack.md#kd-69)）：範本庫管理改為範本模組權限（`template.manage`、`template.use`；委派不附帶編輯能力，TPL-R09、TPL-AC25）；`template_admin` 與 `SystemRoleAssignment`（T1、T2）僅過渡期保留，改造時逐人轉換、不得失去權限，由 [`domain-model` 後續任務 M](../domain-model/plan.md#兩層權限模型後續實作) 與 `authentication` 任務 Q 接手；本計畫 T1～T10 已完成的內容不改寫。規格合併到程式完成前，T2 的行為維持不變。
 - #429 原型核可後，TPL-AC21～TPL-AC22 覆蓋套用、存為範本及內業專案工作台；互動與文案依原型，技術細節標為規格設計。正式套用網址為 `/projects/{id}/inspection-items/templates`；舊 `/admin/projects/{id}/inspection-items/templates` 與 `/admin/projects/{id}/templates` 回 404、不轉址（#705）。
 - #482（v0.3.0 走查缺陷修正）：套用頁依登入本體的 `has_template_access`（#484）顯示「存為範本」，並新增 TPL-AC23～TPL-AC24；#486 將 TPL-AC24 的格式化函式共用至範本編輯器與現場詳情。驗證由 `inspectionStandard.test.ts`、`TemplatesPage.test.tsx`、`ProjectTemplatesPage.test.tsx`、`ProjectItemChangePage.test.tsx`、`TaskDetail.test.tsx` 負責。
+- #382（發版前稽核缺漏）：依 TPL-R25／TPL-AC28，在範本庫服務寫入分類、系統及查核項目事件，在專案套用服務以一筆 `project.template_applied` 記錄來源與實際項目數；整系統覆蓋沿用逐項事件。事件目錄、事件欄位與白話標籤同步見 `audit-log` ALG-R31／ALG-AC30；不含範本模組權限授予／收回（#538）。
 
 ## 並行分組
 
@@ -76,6 +77,7 @@
 | TPL-AC24（#486） | 共用格式化單元測試及範本編輯器、專案查核項目修改、套用預覽、現場任務詳情前端測試：區間、公差、單側、文字回退與未設定顯示一致；編輯器草稿的單側區間顯示未設定；桌面與 360px 登入後點擊走查，截圖附在 PR。 |
 | TPL-AC26（#432） | 後端 API 測試：各結構違規（含綁定欄位帶單位）與模型驗證的 422 回 `error.fields`（路徑含整系統覆蓋的 `/items/{k}`、重複者各一筆）；資料庫約束的 422 沒有 `fields`；sentinel 測試回應不含請求值；既有 409、403 不變。 |
 | TPL-AC27（#432） | 前端測試：帶 `fields` 時錯誤顯示在欄位旁、有錯誤項次展開並聚焦第一個錯誤；沒有 `fields` 或形狀錯誤時一般提示並保留草稿；路徑對不到欄位併入一般提示；對真實後端走查，桌面與 360px 截圖附在 PR。 |
+| TPL-AC28（#382） | `backend/tests/api/test_template_library.py`、`backend/tests/api/test_project_template_application.py`、`frontend/src/admin/audit-log/auditLabels.test.ts`：驗證分類／系統／項目 CRUD 與整系統覆蓋、單筆套用事件與項目數、空系統及冪等操作不寫、稽核失敗回滾與新事件白話對照。 |
 
 ## 考慮過但沒採用的做法
 

@@ -1134,3 +1134,76 @@ register_audit_event(
     fields=("user_id", "permission_codes", "bundle_id", "reason"),
     optional_fields=("bundle_id",),
 )
+
+# #382：範本庫寫入與套用的事件由 template-system 登記；
+# 大量套用以一筆專案事件記錄來源與實際項目數。
+for _event_type, _entity_type, _kind, _fields in (
+    (
+        "template_category.created",
+        "template_category",
+        AuditEventKind.CREATED,
+        ("name",),
+    ),
+    (
+        "template_category.updated",
+        "template_category",
+        AuditEventKind.UPDATED,
+        ("name",),
+    ),
+    (
+        "template_category.deleted",
+        "template_category",
+        AuditEventKind.DELETED,
+        ("name",),
+    ),
+    (
+        "template_system.created",
+        "template_system",
+        AuditEventKind.CREATED,
+        ("category_id", "name"),
+    ),
+    (
+        "template_system.updated",
+        "template_system",
+        AuditEventKind.UPDATED,
+        ("name",),
+    ),
+    (
+        "template_system.deleted",
+        "template_system",
+        AuditEventKind.DELETED,
+        ("category_id", "name"),
+    ),
+    (
+        "template_item.created",
+        "template_item",
+        AuditEventKind.CREATED,
+        ("system_id", "sequence", "title", "instruction", "inspection_points"),
+    ),
+    (
+        "template_item.updated",
+        "template_item",
+        AuditEventKind.UPDATED,
+        ("system_id", "sequence", "title", "instruction", "inspection_points"),
+    ),
+    (
+        "template_item.deleted",
+        "template_item",
+        AuditEventKind.DELETED,
+        ("system_id", "sequence", "title", "instruction", "inspection_points"),
+    ),
+):
+    register_audit_event(
+        _event_type,
+        entity_type=_entity_type,
+        kind=_kind,
+        fields=_fields,
+    )
+
+register_audit_event(
+    "project.template_applied",
+    entity_type="project",
+    kind=AuditEventKind.CREATED,
+    fields=("source_type", "source_id", "source_name", "item_count"),
+    project_scoped=True,
+)

@@ -19,6 +19,7 @@ from app.models import (
     TemplateSystem,
     TemplateTextStandard,
 )
+from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
 
 
@@ -216,11 +217,16 @@ def validate_system_structures(items: Iterable[dict]) -> None:
         raise InvalidTemplateError(violations)
 
 
-def park_template_names(db: Session, items: Iterable[TemplateItem]) -> None:
-    """Free all old names so a single transaction can swap titles."""
-    for item in items:
+def park_template_names(
+    db: Session, items: Iterable[TemplateItem]
+) -> dict[UUID, dict]:
+    """Free names for replacement while retaining their audit snapshots."""
+    rows = list(items)
+    snapshots = {item.id: _template_audit_snapshot(db, item) for item in rows}
+    for item in rows:
         item.title = f"__template_replacement_{uuid7()}"
     db.flush()
+    return snapshots
 
 
 def create_category(db: Session, name: str) -> TemplateCategory:
@@ -232,19 +238,43 @@ def create_category(db: Session, name: str) -> TemplateCategory:
     )
     db.add(category)
     db.flush()
+    record_audit_event(
+        db,
+        "template_category.created",
+        entity_id=category.id,
+        before=None,
+        after={"name": category.name},
+    )
     return category
 
 
 def rename_category(
     db: Session, category: TemplateCategory, name: str
 ) -> TemplateCategory:
+    before = category.name
+    if before == name:
+        return category
     category.name = name
     category.updated_by = get_current_operator(db).id
     db.flush()
+    record_audit_event(
+        db,
+        "template_category.updated",
+        entity_id=category.id,
+        before={"name": before},
+        after={"name": category.name},
+    )
     return category
 
 
 def delete_category(db: Session, category: TemplateCategory) -> None:
+    record_audit_event(
+        db,
+        "template_category.deleted",
+        entity_id=category.id,
+        before={"name": category.name},
+        after=None,
+    )
     db.delete(category)
     db.flush()
 
@@ -261,19 +291,43 @@ def create_system(
     )
     db.add(system)
     db.flush()
+    record_audit_event(
+        db,
+        "template_system.created",
+        entity_id=system.id,
+        before=None,
+        after={"category_id": system.category_id, "name": system.name},
+    )
     return system
 
 
 def rename_system(
     db: Session, system: TemplateSystem, name: str
 ) -> TemplateSystem:
+    before = system.name
+    if before == name:
+        return system
     system.name = name
     system.updated_by = get_current_operator(db).id
     db.flush()
+    record_audit_event(
+        db,
+        "template_system.updated",
+        entity_id=system.id,
+        before={"name": before},
+        after={"name": system.name},
+    )
     return system
 
 
 def delete_system(db: Session, system: TemplateSystem) -> None:
+    record_audit_event(
+        db,
+        "template_system.deleted",
+        entity_id=system.id,
+        before={"category_id": system.category_id, "name": system.name},
+        after=None,
+    )
     db.delete(system)
     db.flush()
 
@@ -378,7 +432,112 @@ def _add_points(
         db.flush()
 
 
-def create_template(db: Session, data: dict) -> TemplateItem:
+def _template_audit_snapshot(db: Session, item: TemplateItem) -> dict:
+    """Serialize template structure for TPL-R25 audit events."""
+    points = db.scalars(
+        select(TemplateInspectionPoint)
+        .where(TemplateInspectionPoint.template_item_id == item.id)
+        .order_by(TemplateInspectionPoint.sequence, TemplateInspectionPoint.id)
+    ).all()
+    point_snapshots = []
+    for point in points:
+        fields = db.scalars(
+            select(TemplateMeasurementField)
+            .where(TemplateMeasurementField.inspection_point_id == point.id)
+            .order_by(
+                TemplateMeasurementField.sort_order,
+                TemplateMeasurementField.id,
+            )
+        ).all()
+        text = db.scalar(
+            select(TemplateTextStandard).where(
+                TemplateTextStandard.inspection_point_id == point.id
+            )
+        )
+        numeric = db.scalar(
+            select(TemplateNumericStandard).where(
+                TemplateNumericStandard.inspection_point_id == point.id
+            )
+        )
+        evidence = db.scalars(
+            select(TemplateEvidenceRequirement)
+            .where(TemplateEvidenceRequirement.inspection_point_id == point.id)
+            .order_by(
+                TemplateEvidenceRequirement.created_at,
+                TemplateEvidenceRequirement.id,
+            )
+        ).all()
+        snapshot = {
+            "sequence": point.sequence,
+            "title": point.title,
+            "instruction": point.instruction,
+            "measurement_fields": [
+                {
+                    "name": field.name,
+                    "field_type": field.field_type,
+                    "unit": field.unit,
+                    "sort_order": field.sort_order,
+                }
+                for field in fields
+            ],
+            "evidence_requirements": [
+                {
+                    "evidence_type": row.evidence_type,
+                    "required": row.required,
+                    "min_count": row.min_count,
+                    "max_count": row.max_count,
+                }
+                for row in evidence
+            ],
+        }
+        if text is not None:
+            snapshot["text_standard"] = {"text": text.text}
+        if numeric is not None:
+            bound_field = db.get(
+                TemplateMeasurementField, numeric.measurement_field_id
+            )
+            snapshot["numeric_standard"] = {
+                "value": numeric.value,
+                "condition": numeric.condition,
+                "unit": numeric.unit,
+                "tolerance": numeric.tolerance,
+                "range_form": numeric.range_form,
+                "lower_bound": numeric.lower_bound,
+                "upper_bound": numeric.upper_bound,
+                "measurement_field": bound_field.name,
+            }
+        point_snapshots.append(snapshot)
+    return {
+        "system_id": item.system_id,
+        "sequence": item.sequence,
+        "title": item.title,
+        "instruction": item.instruction,
+        # Audit normalization sorts top-level lists as set-like payloads;
+        # wrap this sequence to preserve the user-defined inspection order.
+        "inspection_points": {"items": point_snapshots},
+    }
+
+
+def _record_template_update(
+    db: Session,
+    item: TemplateItem,
+    before: dict,
+    after: dict,
+) -> None:
+    changed = [key for key in before if before[key] != after[key]]
+    if changed:
+        record_audit_event(
+            db,
+            "template_item.updated",
+            entity_id=item.id,
+            before={key: before[key] for key in changed},
+            after={key: after[key] for key in changed},
+        )
+
+
+def create_template(
+    db: Session, data: dict, *, audit_created: bool = True
+) -> TemplateItem:
     validate_template_structure(data)
     operator_id = get_current_operator(db).id
     item = TemplateItem(
@@ -392,14 +551,26 @@ def create_template(db: Session, data: dict) -> TemplateItem:
     db.add(item)
     db.flush()
     _add_points(db, item, data["inspection_points"], operator_id)
+    if audit_created:
+        record_audit_event(
+            db,
+            "template_item.created",
+            entity_id=item.id,
+            before=None,
+            after=_template_audit_snapshot(db, item),
+        )
     return item
 
 
 def replace_template(
-    db: Session, item: TemplateItem, data: dict
+    db: Session,
+    item: TemplateItem,
+    data: dict,
+    audit_before: dict | None = None,
 ) -> TemplateItem:
     validate_template_structure(data)
     operator_id = get_current_operator(db).id
+    before = audit_before or _template_audit_snapshot(db, item)
     old_points = db.scalars(
         select(TemplateInspectionPoint).where(
             TemplateInspectionPoint.template_item_id == item.id
@@ -415,9 +586,21 @@ def replace_template(
     item.updated_by = operator_id
     db.flush()
     _add_points(db, item, data["inspection_points"], operator_id)
+    _record_template_update(
+        db, item, before, _template_audit_snapshot(db, item)
+    )
     return item
 
 
-def delete_template(db: Session, item: TemplateItem) -> None:
+def delete_template(
+    db: Session, item: TemplateItem, *, audit_before: dict | None = None
+) -> None:
+    record_audit_event(
+        db,
+        "template_item.deleted",
+        entity_id=item.id,
+        before=audit_before or _template_audit_snapshot(db, item),
+        after=None,
+    )
     db.delete(item)
     db.flush()
