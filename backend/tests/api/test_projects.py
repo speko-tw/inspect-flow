@@ -1344,6 +1344,185 @@ def test_non_admin_cannot_change_own_project_roles(
     assert denied is not None
 
 
+def test_batch_member_role_replacement_is_atomic_and_checks_self_and_whitelist(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    target = project_api["target"]
+    actor = project_api["actor"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    assert isinstance(actor, User)
+    second = create_user(
+        db_session,
+        is_external_collaborator=False,
+        username="batch.project.member",
+        email="batch.project.member@example.test",
+        name_zh="批次成員",
+    )
+    assignable = create_role(
+        db_session,
+        name="批次可指派角色",
+        permission_codes=["project.read"],
+    )
+    assignable.is_assignable = True
+    forbidden = create_role(
+        db_session,
+        name="批次不可指派角色",
+        permission_codes=["project.read"],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[project_api["role"].id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=second.id,
+        role_ids=[project_api["role"].id],
+    )
+    db_session.commit()
+    path = f"/api/v1/projects/{project.id}/members:batch-roles"
+
+    restricted = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(assignable.id)]},
+                {"user_id": str(second.id), "role_ids": [str(forbidden.id)]},
+            ]
+        },
+    )
+    assert restricted.status_code == 422
+    assert restricted.json()["error"]["code"] == (
+        ErrorCode.PROJECT_ROLE_NOT_ASSIGNABLE.value
+    )
+    db_session.expire_all()
+    for user_id in (target.id, second.id):
+        member = db_session.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project.id,
+                ProjectMember.user_id == user_id,
+            )
+        )
+        assert member is not None
+        assert {item.role_id for item in member.role_assignments} == {
+            project_api["role"].id
+        }
+
+    self_change = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(assignable.id)]},
+                {"user_id": str(actor.id), "role_ids": [str(assignable.id)]},
+            ]
+        },
+    )
+    assert self_change.status_code == 422
+    assert self_change.json()["error"]["code"] == (
+        ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE.value
+    )
+    db_session.expire_all()
+    target_member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert target_member is not None
+    assert {item.role_id for item in target_member.role_assignments} == {
+        project_api["role"].id
+    }
+
+    changed = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(assignable.id)]},
+                {"user_id": str(second.id), "role_ids": [str(assignable.id)]},
+            ]
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert {item["user_id"] for item in changed.json()["items"]} == {
+        str(target.id),
+        str(second.id),
+    }
+
+
+def test_batch_member_roles_can_revoke_some_roles_but_not_all(
+    project_api, db_session: Session
+):
+    project = project_api["project"]
+    target = project_api["target"]
+    assert isinstance(project, Project)
+    assert isinstance(target, User)
+    retained = create_role(
+        db_session,
+        name="批次保留角色",
+        permission_codes=["project.read"],
+    )
+    removed = create_role(
+        db_session,
+        name="批次撤銷角色",
+        permission_codes=["project.read"],
+    )
+    retained.is_assignable = True
+    removed.is_assignable = True
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[retained.id, removed.id],
+    )
+    db_session.commit()
+    path = f"/api/v1/projects/{project.id}/members:batch-roles"
+
+    rejected = project_api["actor_client"].post(
+        path,
+        json={"items": [{"user_id": str(target.id), "role_ids": []}]},
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == (
+        ErrorCode.PROJECT_MEMBER_ROLES_REQUIRED.value
+    )
+    db_session.expire_all()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert member is not None
+    assert {item.role_id for item in member.role_assignments} == {
+        retained.id,
+        removed.id,
+    }
+
+    changed = project_api["actor_client"].post(
+        path,
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(retained.id)]}
+            ]
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["items"][0]["role_ids"] == [str(retained.id)]
+    db_session.expire_all()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == target.id,
+        )
+    )
+    assert member is not None
+    assert {item.role_id for item in member.role_assignments} == {retained.id}
+
+
 def test_member_nested_malformed_user_ids_return_validation_error(project_api):
     project = project_api["project"]
     assert isinstance(project, Project)

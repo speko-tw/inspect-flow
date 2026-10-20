@@ -15,6 +15,7 @@ export interface User {
   name_zh: string | null
   name_en: string | null
   company_id: string | null
+  company_name?: string | null
   department: string | null
   location: string | null
   employee_no: string | null
@@ -75,6 +76,12 @@ export interface Company {
   is_active: boolean
 }
 
+export interface BatchCompanyStatusItem {
+  company_id: string
+  is_active: boolean
+  disable_user_ids: string[]
+}
+
 export interface Page<T> {
   items: T[]
   next_cursor: string | null
@@ -107,6 +114,31 @@ export type UserInput = {
 
 export interface CreatedUser extends User {
   temporary_password: string
+}
+
+export interface TemporaryPasswordReset {
+  user_id: string
+  username: string
+  temporary_password: string
+  must_change_password: true
+}
+
+export interface UserRestoreSelection {
+  permission_codes: string[]
+  delegated_modules: string[]
+  project_ids: string[]
+  task_ids: string[]
+}
+
+export interface BatchUserStatusItem {
+  user_id: string
+  restore: UserRestoreSelection
+}
+
+export interface BatchUserStatusInput {
+  user_ids: string[]
+  is_active: boolean
+  restore?: BatchUserStatusItem[]
 }
 
 /** API 管理錯誤的 code 是錯誤 envelope 內的 `error.code`。 */
@@ -186,6 +218,23 @@ export function setUserActive(id: string, isActive: boolean): Promise<User> {
   })
 }
 
+/** ADM-R13：原子批次更新帳號狀態；啟用時需附每個帳號的恢復選擇。 */
+export function setUsersActiveStatus(
+  input: BatchUserStatusInput,
+): Promise<{ items: User[] }> {
+  return request('/users:batch-active-status', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+/** ADM-R13：Admin 重設既有帳號的臨時密碼，只回傳一次。 */
+export function resetUserTemporaryPassword(
+  id: string,
+): Promise<TemporaryPasswordReset> {
+  return request(`/users/${id}/temporary-password`, { method: 'POST' })
+}
+
 export function getDeactivationCheck(id: string): Promise<DeactivationCheck> {
   return request(`/users/${id}/deactivation-check`)
 }
@@ -252,6 +301,16 @@ export function setCompanyActive(
       is_active: isActive,
       disable_user_ids: disableUserIds,
     }),
+  })
+}
+
+/** ADM-R13：原子批次更新公司狀態與明確選取的帳號。 */
+export function setCompaniesStatus(
+  items: BatchCompanyStatusItem[],
+): Promise<{ items: Company[] }> {
+  return request('/companies:batch-status', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
   })
 }
 

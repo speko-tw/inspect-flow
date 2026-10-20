@@ -37,6 +37,7 @@ const regularUser: User = {
   name_zh: '鄧安娜',
   name_en: 'Anna Deng',
   company_id: company.id,
+  company_name: company.name,
   department: '工程部',
   location: '台北',
   employee_no: 'E001',
@@ -352,6 +353,10 @@ function managementFetch({
             start + limit < filtered.length ? String(start + limit) : null,
         })
       }
+      const userPath = /^\/api\/v1\/users\/([^/]+)$/.exec(parsed.pathname)
+      if (userPath && method === 'GET') {
+        return Response.json(rows.find((user) => user.id === userPath[1]))
+      }
       if (parsed.pathname === '/api/v1/companies' && method === 'GET') {
         const query = parsed.searchParams.get('q')?.toLowerCase() ?? ''
         const filtered = companies.filter((row) =>
@@ -397,6 +402,17 @@ function managementFetch({
           { error: { code: 'user.email_conflict' } },
           { status: 409 },
         )
+      }
+      if (
+        parsed.pathname === '/api/v1/users/user-1/temporary-password' &&
+        method === 'POST'
+      ) {
+        return Response.json({
+          user_id: 'user-1',
+          username: 'anna.deng',
+          temporary_password: 'reset-once-123',
+          must_change_password: true,
+        })
       }
       if (
         /^\/api\/v1\/users\/[^/]+\/permission-bundles\/[^/]+:apply$/.test(
@@ -931,7 +947,7 @@ describe('admin user and company pages', () => {
     },
   )
 
-  it('does not reload company choices when the user list is searched', async () => {
+  it('搜尋帳號時不會載入全公司清單', async () => {
     const fetchMock = managementFetch()
     renderAdmin()
     expect(await screen.findByText('anna.deng')).toBeInTheDocument()
@@ -941,13 +957,13 @@ describe('admin user and company pages', () => {
         const url = new URL(String(input), 'http://testserver')
         return url.pathname === '/api/v1/companies'
       }).length
-    expect(companyRequests()).toBe(1)
+    expect(companyRequests()).toBe(0)
 
     fireEvent.change(screen.getByLabelText('搜尋帳號'), {
       target: { value: 'anna' },
     })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
-    await waitFor(() => expect(companyRequests()).toBe(1))
+    await waitFor(() => expect(companyRequests()).toBe(0))
   })
 
   it('shows and clears a temporary password', async () => {
@@ -970,13 +986,11 @@ describe('admin user and company pages', () => {
       name: '帳號已建立',
       level: 2,
     })
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.filter(([input]) =>
-          String(input).includes('/api/v1/companies'),
-        ),
-      ).toHaveLength(2)
-    })
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes('/api/v1/companies'),
+      ),
+    ).toHaveLength(1)
     expect(passwordHeading).toBeVisible()
     expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
     expect(screen.getByRole('button', { name: '回清單' })).toBeVisible()
@@ -1002,9 +1016,43 @@ describe('admin user and company pages', () => {
     expect(screen.queryByRole('heading', { name: '帳號已新增' })).toBeNull()
     expectNoPasswordPersistence(password)
     fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    expect(
+      await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
+    fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(password)
+
+    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
     expect(await screen.findByRole('heading', { name: '帳號' })).toBeVisible()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
     expect(screen.queryByText(password)).not.toBeInTheDocument()
+  })
+
+  it('帳號詳情重設後顯示一次性密碼並可返回清單', async () => {
+    const fetchMock = managementFetch()
+    renderAdmin('/accounts/user-1')
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '臨時密碼已重設' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+      'reset-once-123',
+    )
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith('/api/v1/users/user-1/temporary-password'),
+      ),
+    ).toHaveLength(1)
+    fireEvent.click(
+      screen.getByRole('button', { name: '已抄下，回到帳號清單' }),
+    )
+    expect(await screen.findByRole('heading', { name: '帳號' })).toBeVisible()
+    expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
   })
 
   it('shows 複製 again for the second temporary password', async () => {
@@ -1045,6 +1093,11 @@ describe('admin user and company pages', () => {
     ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    expect(
+      await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(passwords[0])
+    fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
     await createUser('second.user')
     await waitFor(() => {
       expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(passwords[1])
@@ -1084,8 +1137,20 @@ describe('admin user and company pages', () => {
     expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
       'leave-page-password',
     )
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立', level: 2 }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    expect(
+      await screen.findByRole('heading', { name: '臨時密碼抄下了嗎？' }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+      'leave-page-password',
+    )
 
     fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
     expect(
       await screen.findByRole('heading', { name: '公司管理' }),
     ).toBeInTheDocument()
@@ -1108,19 +1173,24 @@ describe('admin user and company pages', () => {
         temporary_password: 'back-navigation-password',
       }),
     })
-    renderAdmin()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAdmin('/accounts', true, {}, false, {
+      entries: ['/companies', '/accounts'],
+      index: 1,
+    })
     await createAccountThroughWizard('bob.lee')
     expect(
       await screen.findByText('back-navigation-password'),
     ).toBeInTheDocument()
-    await screen.findByRole('heading', { name: '帳號已建立', level: 2 })
-    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
-    expect(
-      await screen.findByRole('heading', { name: '公司管理' }),
-    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
+    )
+    expect(screen.getByText('back-navigation-password')).toBeInTheDocument()
+    confirm.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
     expect(
-      await screen.findByRole('heading', { name: '帳號' }),
+      await screen.findByRole('heading', { name: '公司管理' }),
     ).toBeInTheDocument()
     expect(
       screen.queryByText('back-navigation-password'),
@@ -1146,6 +1216,7 @@ describe('admin user and company pages', () => {
     const companyForm = screen
       .getByRole('heading', { name: '連結公司' })
       .closest('form')!
+    await within(companyForm).findByRole('option', { name: '示範公司' })
     expect(within(companyForm).getByLabelText('公司')).toHaveValue('company-1')
   })
 
@@ -1221,6 +1292,7 @@ describe('admin user and company pages', () => {
     const form = within(
       screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
     )
+    await form.findByRole('option', { name: '第二家公司' })
     expect(form.getByLabelText('部門')).toHaveValue('工程部')
     fireEvent.change(form.getByLabelText('公司'), {
       target: { value: 'company-2' },

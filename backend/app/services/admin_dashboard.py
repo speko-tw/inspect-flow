@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -304,48 +304,105 @@ def list_dashboard_engineers(
     ids = {item["user_id"] for item in result["items"]}
     if not ids:
         return result
-    aggregates = session.execute(
+    assigned_counts = (
         select(
-            InspectionTask.assignee_id,
-            InspectionTask.started_by,
-            InspectionTask.completed_by,
-            InspectionTask.status,
-            InspectionPlan.is_archived,
+            InspectionTask.assignee_id.label("user_id"),
+            func.sum(
+                case((InspectionTask.status == "PENDING", 1), else_=0)
+            ).label("assigned_pending_count"),
+            func.sum(
+                case(
+                    (InspectionTask.status == "IN_PROGRESS", 1),
+                    else_=0,
+                )
+            ).label("assigned_in_progress_count"),
+            literal(0).label("completed_by_count"),
+            literal(0).label("started_in_progress_count"),
         )
         .join(
             InspectionPlan,
             InspectionPlan.id == InspectionTask.plan_id,
         )
         .where(
-            or_(
-                InspectionTask.assignee_id.in_(ids),
-                InspectionTask.started_by.in_(ids),
-                InspectionTask.completed_by.in_(ids),
-            ),
+            InspectionTask.assignee_id.in_(ids),
+            InspectionTask.status.in_(("PENDING", "IN_PROGRESS")),
+            InspectionPlan.is_archived.is_(False),
             *project_filter,
         )
+        .group_by(InspectionTask.assignee_id)
+    )
+    started_counts = (
+        select(
+            InspectionTask.started_by.label("user_id"),
+            literal(0).label("assigned_pending_count"),
+            literal(0).label("assigned_in_progress_count"),
+            literal(0).label("completed_by_count"),
+            func.count().label("started_in_progress_count"),
+        )
+        .join(
+            InspectionPlan,
+            InspectionPlan.id == InspectionTask.plan_id,
+        )
+        .where(
+            InspectionTask.started_by.in_(ids),
+            InspectionTask.status == "IN_PROGRESS",
+            InspectionPlan.is_archived.is_(False),
+            *project_filter,
+        )
+        .group_by(InspectionTask.started_by)
+    )
+    completed_counts = (
+        select(
+            InspectionTask.completed_by.label("user_id"),
+            literal(0).label("assigned_pending_count"),
+            literal(0).label("assigned_in_progress_count"),
+            func.count().label("completed_by_count"),
+            literal(0).label("started_in_progress_count"),
+        )
+        .join(
+            InspectionPlan,
+            InspectionPlan.id == InspectionTask.plan_id,
+        )
+        .where(
+            InspectionTask.completed_by.in_(ids),
+            InspectionTask.status == "COMPLETED",
+            *project_filter,
+        )
+        .group_by(InspectionTask.completed_by)
+    )
+    workload_rows = union_all(
+        assigned_counts, started_counts, completed_counts
+    ).subquery()
+    workload = session.execute(
+        select(
+            workload_rows.c.user_id,
+            func.sum(workload_rows.c.assigned_pending_count),
+            func.sum(workload_rows.c.assigned_in_progress_count),
+            func.sum(workload_rows.c.completed_by_count),
+            func.sum(workload_rows.c.started_in_progress_count),
+        ).group_by(workload_rows.c.user_id)
     ).all()
     counts = {
-        identifier: {
-            "assigned_pending_count": 0,
-            "assigned_in_progress_count": 0,
-            "completed_by_count": 0,
-            "started_in_progress_count": 0,
+        user_id: {
+            "assigned_pending_count": pending,
+            "assigned_in_progress_count": in_progress,
+            "completed_by_count": completed,
+            "started_in_progress_count": started,
         }
-        for identifier in ids
+        for user_id, pending, in_progress, completed, started in workload
     }
-    for assignee, starter, completer, status, archived in aggregates:
-        if assignee in counts and not archived:
-            if status == "PENDING":
-                counts[assignee]["assigned_pending_count"] += 1
-            elif status == "IN_PROGRESS":
-                counts[assignee]["assigned_in_progress_count"] += 1
-        if starter in counts and status == "IN_PROGRESS" and not archived:
-            counts[starter]["started_in_progress_count"] += 1
-        if completer in counts and status == "COMPLETED":
-            counts[completer]["completed_by_count"] += 1
     for item in result["items"]:
-        item.update(counts[item["user_id"]])
+        item.update(
+            counts.get(
+                item["user_id"],
+                {
+                    "assigned_pending_count": 0,
+                    "assigned_in_progress_count": 0,
+                    "completed_by_count": 0,
+                    "started_in_progress_count": 0,
+                },
+            )
+        )
     return result
 
 
@@ -368,21 +425,14 @@ def _require_all_progress_access(
 
 
 def _dashboard_task_item(
-    session: Session, task: InspectionTask
+    task: InspectionTask,
+    *,
+    zone: ProjectZone | None,
+    assignee: User | None,
 ) -> dict[str, object]:
     """序列化 ADM-AC05 的任務白名單欄位。"""
-    zone = (
-        session.get(ProjectZone, task.zone_id)
-        if task.zone_id is not None
-        else None
-    )
     if zone is not None and zone.project_id != task.project_id:
         zone = None
-    assignee = (
-        session.get(User, task.assignee_id)
-        if task.assignee_id is not None
-        else None
-    )
     return {
         "task_id": task.id,
         "status": task.status,
@@ -413,18 +463,56 @@ def list_dashboard_tasks(
     _require_all_progress_access(
         session, user_id=user_id, project_id=project_id
     )
-    return page(
+    result = page(
         session,
         InspectionTask,
         cursor=cursor,
         limit=limit,
-        serialize=lambda task: _dashboard_task_item(session, task),
+        serialize=lambda task: task,
         filters=(
             InspectionTask.project_id == project_id,
             # ADM-R51：草稿只給內業，總覽與摘要計數一致不列入。
             InspectionTask.status != "DRAFT",
         ),
     )
+    tasks = result["items"]
+    task_rows = tasks
+    zone_ids = {task.zone_id for task in task_rows if task.zone_id is not None}
+    assignee_ids = {
+        task.assignee_id for task in task_rows if task.assignee_id is not None
+    }
+    zones = (
+        {
+            zone.id: zone
+            for zone in session.scalars(
+                select(ProjectZone).where(
+                    ProjectZone.project_id == project_id,
+                    ProjectZone.id.in_(zone_ids),
+                )
+            ).all()
+        }
+        if zone_ids
+        else {}
+    )
+    assignees = (
+        {
+            user.id: user
+            for user in session.scalars(
+                select(User).where(User.id.in_(assignee_ids))
+            ).all()
+        }
+        if assignee_ids
+        else {}
+    )
+    result["items"] = [
+        _dashboard_task_item(
+            task,
+            zone=zones.get(task.zone_id),
+            assignee=assignees.get(task.assignee_id),
+        )
+        for task in task_rows
+    ]
+    return result
 
 
 def get_dashboard_task(
@@ -448,4 +536,14 @@ def get_dashboard_task(
     )
     if task is None:
         raise APIError(ErrorCode.INSPECTION_TASK_NOT_FOUND, 404)
-    return _dashboard_task_item(session, task)
+    zone = (
+        session.get(ProjectZone, task.zone_id)
+        if task.zone_id is not None
+        else None
+    )
+    assignee = (
+        session.get(User, task.assignee_id)
+        if task.assignee_id is not None
+        else None
+    )
+    return _dashboard_task_item(task, zone=zone, assignee=assignee)

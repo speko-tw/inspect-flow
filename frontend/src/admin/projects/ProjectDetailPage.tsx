@@ -26,6 +26,7 @@ import {
   personLabel,
   removeProjectMember,
   setProjectMemberRoles,
+  setProjectMemberRolesBatch,
   type MemberCandidate,
   type Project,
   type ProjectMember,
@@ -112,6 +113,10 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
     text: string
   } | null>(null)
   const [notice, setNotice] = useState('')
+  const [batchRoleError, setBatchRoleError] = useState('')
+  const [batchRoleNotice, setBatchRoleNotice] = useState('')
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
+  const [batchRoleId, setBatchRoleId] = useState('')
 
   // 加入表單（草稿留在這裡，進出修改畫面都不會掉）。
   const [newUserId, setNewUserId] = useState('')
@@ -172,6 +177,48 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   function clearMessages() {
     setMessage(null)
     setNotice('')
+    setBatchRoleError('')
+    setBatchRoleNotice('')
+  }
+
+  async function submitBatchRole(action: 'assign' | 'revoke') {
+    if (selectedMemberIds.length === 0 || !batchRoleId || !guard.enter())
+      return
+    clearMessages()
+    setBusy(true)
+    const selected = members.filter((member) =>
+      selectedMemberIds.includes(member.user_id),
+    )
+    const items = selected.map((member) => ({
+      user_id: member.user_id,
+      role_ids:
+        action === 'assign'
+          ? [...new Set([...member.role_ids, batchRoleId])]
+          : member.role_ids.filter((id) => id !== batchRoleId),
+    }))
+    if (items.some((item) => item.role_ids.length === 0)) {
+      setBatchRoleError('每位成員都必須至少保留一個角色。')
+      guard.leave()
+      setBusy(false)
+      return
+    }
+    try {
+      await setProjectMemberRolesBatch(projectId, items)
+      const role = roles.find((item) => item.id === batchRoleId)
+      setBatchRoleNotice(
+        action === 'assign'
+          ? `已為 ${items.length} 位成員指派角色「${role?.name ?? ''}」。`
+          : `已為 ${items.length} 位成員收回角色「${role?.name ?? ''}」。`,
+      )
+      setSelectedMemberIds([])
+      setBatchRoleId('')
+      setReloadKey((key) => key + 1)
+    } catch (caught) {
+      setBatchRoleError(managementErrorMessage(caught))
+    } finally {
+      guard.leave()
+      setBusy(false)
+    }
   }
 
   async function submitAdd(event: FormEvent<HTMLFormElement>) {
@@ -574,6 +621,42 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       </form>
 
       <h3>成員列表</h3>
+      {membersState.status === 'ready' && members.length > 0 && rolesReady && (
+        <section aria-label="批次角色操作" className="member-batch-roles">
+          <p>已選取 {selectedMemberIds.length} 位成員。</p>
+          <label>
+            批次角色
+            <select
+              disabled={busy}
+              onChange={(event) => setBatchRoleId(event.target.value)}
+              value={batchRoleId}
+            >
+              <option value="">選擇角色</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            disabled={busy || !batchRoleId || selectedMemberIds.length === 0}
+            onClick={() => void submitBatchRole('assign')}
+            type="button"
+          >
+            {busy ? '正在更新角色…' : '批次指派角色'}
+          </button>
+          <button
+            disabled={busy || !batchRoleId || selectedMemberIds.length === 0}
+            onClick={() => void submitBatchRole('revoke')}
+            type="button"
+          >
+            {busy ? '正在更新角色…' : '批次收回角色'}
+          </button>
+          {batchRoleError && <p role="alert">{batchRoleError}</p>}
+          {batchRoleNotice && <p role="status">{batchRoleNotice}</p>}
+        </section>
+      )}
       {membersState.status === 'failed' ? (
         <div className="member-load-error">
           <p role="alert">無法載入成員列表：{membersState.message}</p>
@@ -595,6 +678,22 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           {members.map((member) => (
             <li className="member-card" key={member.id}>
               <div className="member-card-main">
+                <label className="member-batch-select">
+                  <input
+                    checked={selectedMemberIds.includes(member.user_id)}
+                    disabled={busy || member.user_id === currentUser.id}
+                    onChange={(event) =>
+                      setSelectedMemberIds((current) =>
+                        event.target.checked
+                          ? [...current, member.user_id]
+                          : current.filter((id) => id !== member.user_id),
+                      )
+                    }
+                    type="checkbox"
+                    value={member.user_id}
+                  />
+                  選取 {personLabel(member)} 的角色
+                </label>
                 <p className="member-card-name">
                   {isAdmin ? (
                     <Link

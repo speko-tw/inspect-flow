@@ -90,6 +90,9 @@ _NOT_IN_REQUEST = _NotInRequest()
 _request_user: contextvars.ContextVar[User | None | _NotInRequest] = (
     contextvars.ContextVar("request_user", default=_NOT_IN_REQUEST)
 )
+_request_effective_access_cache: contextvars.ContextVar[
+    dict[tuple[Any, ...], Any] | None
+] = contextvars.ContextVar("request_effective_access_cache", default=None)
 
 
 def get_request_user() -> User | None:
@@ -108,6 +111,11 @@ def in_request_scope() -> bool:
     point, for instance).
     """
     return not isinstance(_request_user.get(), _NotInRequest)
+
+
+def get_request_effective_access_cache() -> dict[tuple[Any, ...], Any] | None:
+    """取得目前 HTTP 請求的有效權限快取。"""
+    return _request_effective_access_cache.get()
 
 
 async def bind_request_scope() -> AsyncGenerator[None, None]:
@@ -130,9 +138,11 @@ async def bind_request_scope() -> AsyncGenerator[None, None]:
     anonymous request.
     """
     token = _request_user.set(None)
+    cache_token = _request_effective_access_cache.set({})
     try:
         yield
     finally:
+        _request_effective_access_cache.reset(cache_token)
         _request_user.reset(token)
 
 

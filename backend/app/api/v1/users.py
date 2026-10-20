@@ -49,6 +49,7 @@ from app.permission_codes import (
     permission_code_module,
     permission_code_scope,
 )
+from app.services.audit import record_audit_event
 from app.services.module_permissions import (
     CreatorRolePermissionsError,
     ExternalCollaboratorPermissionError,
@@ -144,8 +145,14 @@ class UserResponse(BaseModel):
     account_expires_on: date | None
 
 
+class UserListItemResponse(UserResponse):
+    """Paged account row including company display data for ADM-R13."""
+
+    company_name: str | None
+
+
 class UserListResponse(BaseModel):
-    items: list[UserResponse]
+    items: list[UserListItemResponse]
     next_cursor: str | None
 
 
@@ -185,6 +192,13 @@ class CreateUserRequest(BaseModel):
 
 class CreatedUserResponse(UserResponse):
     temporary_password: str
+
+
+class TemporaryPasswordResetResponse(BaseModel):
+    user_id: UUID
+    username: str
+    temporary_password: str
+    must_change_password: bool
 
 
 class UpdateUserRequest(BaseModel):
@@ -230,6 +244,21 @@ class RestoreSelection(BaseModel):
 
 class ReactivateRequest(BaseModel):
     restore: RestoreSelection
+
+
+class BatchUserRestoreItem(BaseModel):
+    user_id: UUID
+    restore: RestoreSelection
+
+
+class BatchActiveStatusRequest(BaseModel):
+    user_ids: list[UUID]
+    is_active: bool
+    restore: list[BatchUserRestoreItem] = Field(default_factory=list)
+
+
+class BatchUserStatusResponse(BaseModel):
+    items: list[UserResponse]
 
 
 class LifecycleListResponse(BaseModel):
@@ -469,6 +498,35 @@ def _check_company_exists(db: Session, company_id: UUID | None) -> None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
 
 
+def _serialize_user_page(
+    db: Session, users: Sequence[User]
+) -> list[UserListItemResponse]:
+    """Load page company labels in one query so list size adds no queries."""
+    company_ids = {user.company_id for user in users if user.company_id}
+    company_names = (
+        dict(
+            db.execute(
+                select(Company.id, Company.name).where(
+                    Company.id.in_(company_ids)
+                )
+            ).all()
+        )
+        if company_ids
+        else {}
+    )
+    return [
+        UserListItemResponse(
+            **UserResponse.model_validate(user).model_dump(),
+            company_name=(
+                company_names.get(user.company_id)
+                if user.company_id is not None
+                else None
+            ),
+        )
+        for user in users
+    ]
+
+
 @router.get("", response_model=UserListResponse)
 def list_users(
     q: str | None = Query(default=None, max_length=256),
@@ -495,7 +553,7 @@ def list_users(
         key_name="username",
         cursor=cursor,
         limit=limit,
-        serialize=lambda user: UserResponse.model_validate(user),
+        serialize_batch=partial(_serialize_user_page, db),
         filters=filters,
     )
     return UserListResponse(**result)
@@ -577,6 +635,20 @@ def add_user(
 
     def create_user_and_password() -> tuple[User, str]:
         user = create_user(db, **body.model_dump(exclude={"is_admin"}))
+        # ALG-R31：與帳號、角色及臨時密碼同交易寫入，且不含密碼資料。
+        record_audit_event(
+            db,
+            "user.created",
+            entity_id=user.id,
+            before=None,
+            after={
+                "username": user.username,
+                "name_zh": user.name_zh,
+                "email": user.email,
+                "is_external_collaborator": user.is_external_collaborator,
+                "auth_source": user.auth_source,
+            },
+        )
         if body.is_admin:
             set_is_admin(db, user, True)
         password = secrets.token_urlsafe(24)
@@ -594,6 +666,33 @@ def add_user(
     return CreatedUserResponse(
         **UserResponse.model_validate(user).model_dump(),
         temporary_password=password,
+    )
+
+
+@router.post(
+    "/{user_id}/temporary-password",
+    response_model=TemporaryPasswordResetResponse,
+)
+def reset_temporary_password(
+    user_id: UUID,
+    response: Response,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> TemporaryPasswordResetResponse:
+    """Reset one local account password through AUT-R36 exactly once."""
+    user = _get_user(db, user_id)
+    if user.is_system or user.auth_source != "local":
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    password = secrets.token_urlsafe(24)
+    write_call(
+        lambda: set_password(db, user, password, is_temporary=True),
+        error_mapper=management_api_error,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return TemporaryPasswordResetResponse(
+        user_id=user.id,
+        username=user.username,
+        temporary_password=password,
+        must_change_password=True,
     )
 
 
@@ -719,6 +818,65 @@ def change_active_status(
         )
     except _USER_BUSINESS_ERRORS as exc:
         raise _user_error(exc) from exc
+
+
+@router.post(":batch-active-status", response_model=BatchUserStatusResponse)
+def batch_change_active_status(
+    body: BatchActiveStatusRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> BatchUserStatusResponse:
+    """Apply one account status to a batch in one transaction (ADM-R13)."""
+    ids = body.user_ids
+    if not ids or len(set(ids)) != len(ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    if not body.is_active and body.restore:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    targets = list(
+        db.scalars(
+            select(User)
+            .where(User.id.in_(ids))
+            .order_by(User.id)
+            .with_for_update()
+        )
+    )
+    if {user.id for user in targets} != set(ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    restore_by_user = {item.user_id: item.restore for item in body.restore}
+    if body.is_active and (
+        len(restore_by_user) != len(body.restore)
+        or set(restore_by_user) != set(ids)
+        or any(user.is_active for user in targets)
+    ):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    try:
+        if body.is_active:
+            changed = [
+                reactivate_user(
+                    db,
+                    user_id=user.id,
+                    **restore_by_user[user.id].model_dump(),
+                )
+                for user in targets
+            ]
+        else:
+            changed = [set_is_active(db, user, False) for user in targets]
+        return BatchUserStatusResponse(
+            items=[UserResponse.model_validate(user) for user in changed]
+        )
+    except BuiltInAccountModificationError as exc:
+        raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
+    except LastActiveAdminRemovalError as exc:
+        raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
+    except AccountExpiredError as exc:
+        raise APIError(ErrorCode.USER_ACCOUNT_EXPIRY_PASSED, 422) from exc
+    except InvalidRestoreSelectionError as exc:
+        raise APIError(
+            ErrorCode.USER_RESTORE_SELECTION_INVALID,
+            422,
+            details=exc.details,
+        ) from exc
 
 
 @router.get("/{user_id}/deactivation-check")

@@ -404,6 +404,8 @@ def update_user_manual(
         )
     old_username = user.username
     old_company_id = user.company_id
+    old_email = user.email
+    old_account_expires_on = user.account_expires_on
     old_company_fields = {
         field: getattr(user, field)
         for field in ("employee_no", "department", "location")
@@ -443,6 +445,23 @@ def update_user_manual(
             entity_id=user.id,
             before={"username": old_username},
             after={"username": user.username},
+        )
+    # ALG-R31：只記錄確實改變的聯絡 email 與帳號到期日。
+    if user.email != old_email:
+        record_audit_event(
+            session,
+            "user.email_changed",
+            entity_id=user.id,
+            before={"email": old_email},
+            after={"email": user.email},
+        )
+    if user.account_expires_on != old_account_expires_on:
+        record_audit_event(
+            session,
+            "user.account_expiry_changed",
+            entity_id=user.id,
+            before={"account_expires_on": old_account_expires_on},
+            after={"account_expires_on": user.account_expires_on},
         )
     if company_changed:
         before_company = {"company_id": old_company_id} | old_company_fields

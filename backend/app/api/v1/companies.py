@@ -3,7 +3,8 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
@@ -59,7 +60,21 @@ class RenameCompanyRequest(BaseModel):
 
 class CompanyStatusRequest(BaseModel):
     is_active: bool
-    disable_user_ids: list[UUID] = []
+    disable_user_ids: list[UUID] = Field(default_factory=list)
+
+
+class BatchCompanyStatusItem(BaseModel):
+    company_id: UUID
+    is_active: bool
+    disable_user_ids: list[UUID] = Field(default_factory=list)
+
+
+class BatchCompanyStatusRequest(BaseModel):
+    items: list[BatchCompanyStatusItem]
+
+
+class BatchCompanyStatusResponse(BaseModel):
+    items: list[CompanyResponse]
 
 
 class ActiveCompanyUserResponse(BaseModel):
@@ -194,3 +209,82 @@ def change_company_status(
         raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
     except LastActiveAdminRemovalError as exc:
         raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
+
+
+@router.post(":batch-status", response_model=BatchCompanyStatusResponse)
+def batch_change_company_status(
+    body: BatchCompanyStatusRequest,
+    db: Session = Depends(get_db, scope="function"),  # noqa
+) -> BatchCompanyStatusResponse:
+    """Apply selected company statuses atomically (ADM-R13)."""
+    items = body.items
+    company_ids = [item.company_id for item in items]
+    if not items or len(set(company_ids)) != len(company_ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    if any(item.is_active and item.disable_user_ids for item in items):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    companies = list(
+        db.scalars(
+            select(Company)
+            .where(Company.id.in_(company_ids))
+            .order_by(Company.id)
+            .with_for_update()
+        )
+    )
+    if {company.id for company in companies} != set(company_ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    selected_user_ids = [
+        user_id for item in items for user_id in item.disable_user_ids
+    ]
+    if len(set(selected_user_ids)) != len(selected_user_ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    selected_users = (
+        list(
+            db.scalars(
+                select(User)
+                .where(
+                    User.id.in_(selected_user_ids),
+                    User.is_active.is_(True),
+                )
+                .order_by(User.id)
+                .with_for_update()
+            )
+        )
+        if selected_user_ids
+        else []
+    )
+    users_by_id = {user.id: user for user in selected_users}
+    if set(users_by_id) != set(selected_user_ids):
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+    companies_by_id = {company.id: company for company in companies}
+    for item in items:
+        if any(
+            users_by_id[user_id].company_id != item.company_id
+            for user_id in item.disable_user_ids
+        ):
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+
+    def update_statuses() -> list[Company]:
+        for item in items:
+            for user_id in item.disable_user_ids:
+                set_is_active(db, users_by_id[user_id], False)
+            update_company(
+                db,
+                companies_by_id[item.company_id],
+                is_active=item.is_active,
+            )
+        return [companies_by_id[company_id] for company_id in company_ids]
+
+    try:
+        changed = write_call(
+            update_statuses,
+            error_mapper=management_api_error,
+        )
+    except BuiltInAccountModificationError as exc:
+        raise APIError(ErrorCode.USER_BUILTIN_PROTECTED, 422) from exc
+    except LastActiveAdminRemovalError as exc:
+        raise APIError(ErrorCode.USER_LAST_ADMIN, 422) from exc
+    return BatchCompanyStatusResponse(
+        items=[CompanyResponse.model_validate(company) for company in changed]
+    )

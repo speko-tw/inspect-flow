@@ -242,6 +242,8 @@ function AdminPageContent() {
     username: string
     password: string
     locationKey: string
+    path: string
+    source: 'created' | 'reset'
   } | null>(null)
   const resultHeadingRef = useRef<HTMLHeadingElement>(null)
   const hasGlobalAccess = hasGlobalDashboardAccess(user)
@@ -255,8 +257,7 @@ function AdminPageContent() {
 
   if (
     temporaryPassword &&
-    (location.pathname !==
-      ROUTES.adminPeople.path.replace('/:personId?', '') ||
+    (location.pathname !== temporaryPassword.path ||
       location.key !== temporaryPassword.locationKey)
   ) {
     setTemporaryPassword(null)
@@ -304,8 +305,7 @@ function AdminPageContent() {
           </p>
         )}
         {temporaryPassword &&
-        location.pathname ===
-          ROUTES.adminPeople.path.replace('/:personId?', '') &&
+        location.pathname === temporaryPassword.path &&
         location.key === temporaryPassword.locationKey ? (
           <section
             aria-labelledby="temporary-password-heading"
@@ -317,7 +317,9 @@ function AdminPageContent() {
               ref={resultHeadingRef}
               tabIndex={-1}
             >
-              帳號已新增
+              {temporaryPassword.source === 'created'
+                ? '帳號已新增'
+                : '臨時密碼已重設'}
             </h2>
             <p>帳號：{temporaryPassword.username}</p>
             <p>離開此頁後無法再次查看，首次登入必須變更密碼。</p>
@@ -331,7 +333,7 @@ function AdminPageContent() {
               }}
               type="button"
             >
-              已抄下，回到帳號列表
+              已抄下，回到帳號清單
             </button>
           </section>
         ) : (
@@ -354,11 +356,13 @@ function AdminPageContent() {
               path={nestedRoutePath(ROUTES.adminPeople, ROUTES.adminShell)}
               element={
                 <PeoplePage
-                  onTemporaryPassword={(username, password) =>
+                  onTemporaryPassword={(username, password, source) =>
                     setTemporaryPassword({
                       username,
                       password,
                       locationKey: location.key,
+                      path: location.pathname,
+                      source: source ?? 'created',
                     })
                   }
                 />

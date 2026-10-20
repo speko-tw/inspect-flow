@@ -15,6 +15,9 @@ describe('稽核事件白話對照', () => {
     ['permission_bundle.applied', null, '套用權限組合'],
     ['project_member.roles_changed', null, '調整成員角色'],
     ['user.locked', null, '登入失敗過多，帳號被鎖定'],
+    ['user.created', null, '建立帳號'],
+    ['user.email_changed', null, '修改帳號電子郵件'],
+    ['user.account_expiry_changed', null, '修改帳號到期日'],
   ])('把 %s 顯示成「%s」', (eventType, after, label) => {
     expect(
       eventLabel(auditLogEntryFixture({ event_type: eventType, after })),
@@ -81,6 +84,9 @@ describe('稽核事件白話對照', () => {
     'user.admin_changed',
     'user.company_changed',
     'user.external_flag_changed',
+    'user.email_changed',
+    'user.account_expiry_changed',
+    'user.created',
     'user.locked',
     'user.password_set',
     'user.username_changed',

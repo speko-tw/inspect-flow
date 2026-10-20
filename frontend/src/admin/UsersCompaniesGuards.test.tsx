@@ -30,6 +30,7 @@ const regularUser: User = {
   name_zh: '鄧安娜',
   name_en: null,
   company_id: company.id,
+  company_name: company.name,
   department: '工程部',
   location: null,
   employee_no: null,
@@ -78,10 +79,19 @@ function stubBackend(
     failureCode?: string
     failureStatus?: number
     users?: User[]
+    companies?: Company[]
+    activeCompanyUsers?: Record<
+      string,
+      Array<{ id: string; username: string; name_zh: string | null }>
+    >
     preview?: Partial<RestorePreview>
+    temporaryPassword?: string
   } = {},
 ) {
   const users = (options.users ?? [regularUser]).map((user) => ({ ...user }))
+  const companies = (options.companies ?? [company]).map((item) => ({
+    ...item,
+  }))
   const calls: Call[] = []
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -105,7 +115,7 @@ function stubBackend(
           return Response.json({ items: users, next_cursor: null })
         }
         if (call.path === '/api/v1/companies') {
-          return Response.json({ items: [company], next_cursor: null })
+          return Response.json({ items: companies, next_cursor: null })
         }
         if (call.path.endsWith('/deactivation-check')) {
           return Response.json({
@@ -114,9 +124,11 @@ function stubBackend(
           })
         }
         if (call.path.endsWith('/reactivation-preview')) {
+          const userId = call.path.split('/')[4]
+          const previewUser = users.find((user) => user.id === userId)
           return Response.json({
-            user_id: 'user-1',
-            username: 'anna.deng',
+            user_id: userId,
+            username: previewUser?.username ?? 'anna.deng',
             is_external_collaborator: false,
             account_expires_on: null,
             account_expired: false,
@@ -134,17 +146,61 @@ function stubBackend(
           return Response.json({ items: [], next_cursor: null })
         }
         if (call.path.endsWith('/active-users')) {
+          const companyId = call.path.split('/')[4]
+          const companyUsers = options.activeCompanyUsers?.[companyId] ?? [
+            { id: 'user-1', username: 'anna.deng', name_zh: '鄧安娜' },
+          ]
           return Response.json({
-            count: 1,
-            users: [
-              { id: 'user-1', username: 'anna.deng', name_zh: '鄧安娜' },
-            ],
+            count: companyUsers.length,
+            users: companyUsers,
           })
         }
+      }
+      if (
+        call.method === 'POST' &&
+        call.path === '/api/v1/companies:batch-status'
+      ) {
+        const body = JSON.parse(call.body) as {
+          items: Array<{ company_id: string; is_active: boolean }>
+        }
+        const updated = body.items.map((item) => {
+          const target = companies.find(
+            (entry) => entry.id === item.company_id,
+          )
+          if (target) target.is_active = item.is_active
+          return target
+        })
+        return Response.json({ items: updated })
+      }
+      if (
+        call.method === 'POST' &&
+        call.path === '/api/v1/users:batch-active-status'
+      ) {
+        const body = JSON.parse(call.body) as {
+          user_ids: string[]
+          is_active: boolean
+        }
+        for (const user of users) {
+          if (body.user_ids.includes(user.id)) user.is_active = body.is_active
+        }
+        return Response.json({
+          items: users.filter((user) => body.user_ids.includes(user.id)),
+        })
       }
       if (call.path.startsWith('/api/v1/users/')) {
         const id = call.path.split('/')[4]
         const target = users.find((user) => user.id === id)
+        if (
+          call.method === 'POST' &&
+          call.path.endsWith('/temporary-password')
+        ) {
+          return Response.json({
+            user_id: id,
+            username: target?.username ?? regularUser.username,
+            temporary_password: options.temporaryPassword ?? 'Temp-Pass-123',
+            must_change_password: true,
+          })
+        }
         if (target && call.method === 'PUT' && call.path.endsWith('/active')) {
           // 讓列表重新載入後反映新狀態（#527：停用後再啟用）。
           target.is_active = (
@@ -179,12 +235,18 @@ function renderUsers(
     initialQuery?: string
     onQueryApplied?: (query: string) => void
     onSelectUser?: (id: string) => void
+    onTemporaryPassword?: (
+      username: string,
+      password: string,
+      source?: 'created' | 'reset',
+    ) => void
   } = {},
 ) {
+  const onTemporaryPassword = pageProps.onTemporaryPassword ?? vi.fn()
   render(
     <DataMemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
-        <UsersPage onTemporaryPassword={vi.fn()} {...pageProps} />
+        <UsersPage onTemporaryPassword={onTemporaryPassword} {...pageProps} />
       </CurrentUserProvider>
     </DataMemoryRouter>,
   )
@@ -195,6 +257,55 @@ afterEach(() => {
 })
 
 describe('UsersPage 帳號詳情', () => {
+  it('列表使用 User.company_name 且不載入全公司清單', async () => {
+    const backend = stubBackend()
+    renderUsers({
+      initialQuery: '',
+    })
+
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    expect(within(row).getByText('示範公司／工程部')).toBeVisible()
+    expect(backend.count('GET', '/api/v1/companies')).toBe(0)
+  })
+
+  it('開啟公司連結表單時才載入公司選項', async () => {
+    const backend = stubBackend()
+    renderUsers()
+
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    expect(backend.count('GET', '/api/v1/companies')).toBe(0)
+    fireEvent.click(within(row).getByRole('button', { name: '公司連結' }))
+
+    await waitFor(() => {
+      expect(backend.count('GET', '/api/v1/companies')).toBe(1)
+    })
+    expect(
+      await within(
+        screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
+      ).findByRole('option', { name: '示範公司' }),
+    ).toBeVisible()
+  })
+
+  it('延後載入外部帳號與無管理者專案提醒，展開時才送出請求', async () => {
+    const backend = stubBackend()
+    renderUsers()
+
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    expect(
+      backend.count('GET', /\/admin\/users\/external-without-project/),
+    ).toBe(0)
+    expect(backend.count('GET', /\/admin\/projects\/unmanaged/)).toBe(0)
+
+    fireEvent.click(screen.getByRole('button', { name: '檢查帳號與專案提醒' }))
+
+    await waitFor(() => {
+      expect(
+        backend.count('GET', /\/admin\/users\/external-without-project/),
+      ).toBe(1)
+      expect(backend.count('GET', /\/admin\/projects\/unmanaged/)).toBe(1)
+    })
+  })
+
   it('shows basic account data without the list or create form', async () => {
     stubBackend()
     renderUsers({ detailUserId: 'user-1' })
@@ -222,6 +333,44 @@ describe('UsersPage 帳號詳情', () => {
     expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '停用帳號' })).toBeDisabled()
+  })
+
+  it('由帳號詳情重設臨時密碼並只回報這次結果', async () => {
+    const onTemporaryPassword = vi.fn()
+    const backend = stubBackend({ temporaryPassword: 'One-Time-123' })
+    renderUsers({ detailUserId: 'user-1', onTemporaryPassword })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+
+    await waitFor(() => {
+      expect(
+        backend.count('POST', '/api/v1/users/user-1/temporary-password'),
+      ).toBe(1)
+      expect(onTemporaryPassword).toHaveBeenCalledWith(
+        'anna.deng',
+        'One-Time-123',
+        'reset',
+      )
+    })
+  })
+
+  it('重設臨時密碼失敗時顯示錯誤且不送第二次或清除帳號', async () => {
+    const onTemporaryPassword = vi.fn()
+    const backend = stubBackend({
+      fail: (call) => call.path.endsWith('/temporary-password'),
+    })
+    renderUsers({ detailUserId: 'user-1', onTemporaryPassword })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+
+    expect(await screen.findByRole('alert')).toBeVisible()
+    expect(screen.getByRole('heading', { name: '鄧安娜' })).toBeVisible()
+    expect(onTemporaryPassword).not.toHaveBeenCalled()
+    expect(
+      backend.count('POST', '/api/v1/users/user-1/temporary-password'),
+    ).toBe(1)
   })
 
   it('requires in-page confirmation before deactivating from account detail', async () => {
@@ -264,6 +413,233 @@ describe('UsersPage 帳號清單導覽', () => {
     expect(
       screen.queryByRole('button', { name: '鄧安娜' }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('UsersPage 批次停用帳號（#414）', () => {
+  it('只送出已選帳號並在請求完成前顯示停用中狀態', async () => {
+    const secondUser = { ...regularUser, id: 'user-2', username: 'bob.lin' }
+    const gate = deferred()
+    const backend = stubBackend({
+      users: [regularUser, secondUser],
+      hold: (call) =>
+        call.path.endsWith(':batch-active-status') ? gate : undefined,
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認停用帳號' }),
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: '正在停用帳號…' }),
+      ).toBeDisabled()
+    })
+    expect(
+      backend.calls.find((call) => call.path.endsWith(':batch-active-status')),
+    ).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ user_ids: ['user-1'], is_active: false }),
+    })
+    gate.resolve()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已停用 1 個帳號',
+    )
+  })
+
+  it('整批失敗時保留原狀態與勾選，並顯示可讀錯誤', async () => {
+    const backend = stubBackend({
+      fail: (call) => call.path.endsWith(':batch-active-status'),
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
+    fireEvent.click(screen.getByRole('button', { name: '批次停用帳號' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認停用帳號' }),
+    )
+
+    expect(await screen.findByRole('alert')).toBeVisible()
+    expect(within(row).getByText('啟用')).toBeVisible()
+    expect(
+      screen.getByRole('checkbox', { name: '選取 anna.deng' }),
+    ).toBeChecked()
+    expect(backend.count('POST', /:batch-active-status$/)).toBe(1)
+  })
+
+  it('批次啟用逐帳號顯示恢復項目，依勾選提交 restore bundle', async () => {
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+      preview: {
+        permission_codes: ['project.use'],
+        delegated_modules: ['inspection'],
+        project_memberships: [
+          {
+            project_id: 'project-1',
+            project_code: 'P-1',
+            project_name: '測試專案',
+          },
+        ],
+        tasks: [
+          {
+            task_id: 'task-1',
+            project_id: 'project-1',
+            name: '未完成任務',
+            status: 'PENDING',
+          },
+        ],
+      },
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+
+    const box = await screen.findByRole('region', { name: '批次啟用確認' })
+    expect(within(box).getByText('project.use')).toBeVisible()
+    expect(within(box).getByText('inspection')).toBeVisible()
+    expect(within(box).getByText(/P-1／測試專案/)).toBeVisible()
+    expect(within(box).getByText('未完成任務')).toBeVisible()
+    fireEvent.click(within(box).getByLabelText('project.use'))
+    fireEvent.click(within(box).getByLabelText('inspection'))
+    fireEvent.click(within(box).getByLabelText(/P-1／測試專案/))
+    fireEvent.click(within(box).getByLabelText(/未完成任務/))
+    fireEvent.click(within(box).getByRole('button', { name: '確認啟用帳號' }))
+
+    await waitFor(() => {
+      expect(
+        backend.calls.find((call) =>
+          call.path.endsWith(':batch-active-status'),
+        )?.body,
+      ).toBe(
+        JSON.stringify({
+          user_ids: ['user-1'],
+          is_active: true,
+          restore: [
+            {
+              user_id: 'user-1',
+              restore: {
+                permission_codes: ['project.use'],
+                delegated_modules: ['inspection'],
+                project_ids: ['project-1'],
+                task_ids: ['task-1'],
+              },
+            },
+          ],
+        }),
+      )
+    })
+  })
+
+  it('批次啟用整批失敗時保留原狀態與選取', async () => {
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+      fail: (call) => call.path.endsWith(':batch-active-status'),
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    const row = await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次啟用確認' })
+    fireEvent.click(within(box).getByRole('button', { name: '確認啟用帳號' }))
+
+    expect(await screen.findByRole('alert')).toBeVisible()
+    expect(within(row).getByText('停用')).toBeVisible()
+    expect(
+      screen.getByRole('checkbox', { name: '選取 anna.deng' }),
+    ).toBeChecked()
+    expect(backend.count('POST', /:batch-active-status$/)).toBe(1)
+  })
+
+  it('批次啟用各帳號保留獨立的恢復勾選', async () => {
+    const bob = {
+      ...regularUser,
+      id: 'user-2',
+      username: 'bob.lin',
+      is_active: false,
+    }
+    const backend = stubBackend({
+      users: [{ ...regularUser, is_active: false }, bob],
+      preview: {
+        permission_codes: ['project.use'],
+        project_memberships: [
+          {
+            project_id: 'project-1',
+            project_code: 'P-1',
+            project_name: '測試專案',
+          },
+        ],
+      },
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 bob.lin' }))
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+
+    const box = await screen.findByRole('region', { name: '批次啟用確認' })
+    const anna = within(box).getByRole('group', { name: 'anna.deng' })
+    const bobGroup = within(box).getByRole('group', { name: 'bob.lin' })
+    fireEvent.click(within(anna).getByLabelText('project.use'))
+    fireEvent.click(within(bobGroup).getByLabelText(/P-1／測試專案/))
+    fireEvent.click(within(box).getByRole('button', { name: '確認啟用帳號' }))
+
+    await waitFor(() => {
+      const call = backend.calls.find((item) =>
+        item.path.endsWith(':batch-active-status'),
+      )
+      expect(call && JSON.parse(call.body)).toEqual({
+        user_ids: ['user-1', 'user-2'],
+        is_active: true,
+        restore: [
+          {
+            user_id: 'user-1',
+            restore: {
+              permission_codes: ['project.use'],
+              delegated_modules: [],
+              project_ids: [],
+              task_ids: [],
+            },
+          },
+          {
+            user_id: 'user-2',
+            restore: {
+              permission_codes: [],
+              delegated_modules: [],
+              project_ids: ['project-1'],
+              task_ids: [],
+            },
+          },
+        ],
+      })
+    })
+  })
+
+  it('到期外部帳號不能透過批次啟用確認', async () => {
+    const backend = stubBackend({
+      users: [
+        {
+          ...regularUser,
+          is_active: false,
+          is_external_collaborator: true,
+        },
+      ],
+      preview: { account_expired: true },
+    })
+    renderUsers({ onSelectUser: vi.fn() })
+    await screen.findByRole('row', { name: /anna\.deng/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: '選取 anna.deng' }))
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次啟用確認' })
+
+    expect(within(box).getByRole('alert')).toHaveTextContent('外部帳號已到期')
+    expect(
+      within(box).getByRole('button', { name: '確認啟用帳號' }),
+    ).toBeDisabled()
+    expect(backend.count('POST', /:batch-active-status$/)).toBe(0)
   })
 })
 
@@ -390,6 +766,7 @@ describe('使用者公司連結錯誤', () => {
     const form = within(
       screen.getByRole('heading', { name: '連結公司' }).closest('form')!,
     )
+    await form.findByRole('option', { name: '示範公司' })
     fireEvent.change(form.getByLabelText('公司'), {
       target: { value: company.id },
     })
@@ -912,5 +1289,81 @@ describe('CompaniesPage 停用公司（#507）', () => {
       expect(screen.queryByText('還有 1 個啟用中的帳號')).toBeNull(),
     )
     expect(backend.count('PUT', '/api/v1/companies/company-1/active')).toBe(1)
+  })
+})
+
+describe('CompaniesPage 批次狀態（#414）', () => {
+  it('停用前逐公司確認並送出原子批次本體', async () => {
+    const gate = deferred()
+    const backend = stubBackend({
+      hold: (call) => (call.path.endsWith(':batch-status') ? gate : undefined),
+    })
+    render(
+      <DataMemoryRouter>
+        <CompaniesPage />
+      </DataMemoryRouter>,
+    )
+    await screen.findByText('示範公司')
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: '選取公司 示範公司' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用公司' }))
+
+    const confirm = await screen.findByRole('button', {
+      name: '確認批次停用公司',
+    })
+    expect(await screen.findByText('選擇要一併停用的帳號')).toBeVisible()
+    fireEvent.click(screen.getByRole('checkbox', { name: /鄧安娜/ }))
+    fireEvent.click(confirm)
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: '正在停用公司…' }),
+      ).toBeDisabled(),
+    )
+    expect(backend.count('POST', '/api/v1/companies:batch-status')).toBe(1)
+    expect(
+      backend.calls.find((call) => call.path.endsWith(':batch-status'))?.body,
+    ).toBe(
+      JSON.stringify({
+        items: [
+          {
+            company_id: 'company-1',
+            is_active: false,
+            disable_user_ids: ['user-1'],
+          },
+        ],
+      }),
+    )
+    gate.resolve()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已停用 1 間公司',
+    )
+  })
+
+  it('批次失敗時保留公司狀態與勾選，顯示錯誤', async () => {
+    const backend = stubBackend({
+      fail: (call) => call.path.endsWith(':batch-status'),
+    })
+    render(
+      <DataMemoryRouter>
+        <CompaniesPage />
+      </DataMemoryRouter>,
+    )
+    const row = await screen.findByRole('row', { name: /示範公司/ })
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: '選取公司 示範公司' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用公司' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: '確認批次停用公司' }),
+    )
+
+    expect(await screen.findByRole('alert')).toBeVisible()
+    expect(within(row).getByText('啟用')).toBeVisible()
+    expect(
+      screen.getByRole('checkbox', { name: '選取公司 示範公司' }),
+    ).toBeChecked()
+    expect(backend.count('POST', '/api/v1/companies:batch-status')).toBe(1)
   })
 })

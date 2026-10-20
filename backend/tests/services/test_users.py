@@ -95,6 +95,62 @@ def test_dom_ac35_username_change_requires_admin_and_local_account(
     assert len(_audit_rows_for(session, local.id)) == 1
 
 
+def test_email_and_account_expiry_changes_are_audited_once(session, operator):
+    company = create_company(session, name="到期日驗收公司")
+    user = create_user(
+        session,
+        **_user_kwargs(
+            "AUDITMAIL",
+            company.id,
+            is_external_collaborator=True,
+            account_expires_on=date(2027, 1, 1),
+        ),
+    )
+    session.commit()
+
+    update_user_manual(
+        session,
+        user,
+        email="changed@example.test",
+        account_expires_on=date(2027, 6, 30),
+    )
+    events = _audit_rows_for(session, user.id)
+    assert [
+        (event.event_type, event.before, event.after) for event in events
+    ] == [
+        (
+            "user.email_changed",
+            {"email": "auditmail@example.com"},
+            {"email": "changed@example.test"},
+        ),
+        (
+            "user.account_expiry_changed",
+            {"account_expires_on": "2027-01-01"},
+            {"account_expires_on": "2027-06-30"},
+        ),
+    ]
+    assert all(event.created_by == operator.id for event in events)
+
+    update_user_manual(session, user, account_expires_on=None)
+    cleared_expiry = next(
+        event
+        for event in _audit_rows_for(session, user.id)
+        if event.event_type == "user.account_expiry_changed"
+        and event.after == {"account_expires_on": None}
+    )
+    assert cleared_expiry.event_type == "user.account_expiry_changed"
+    assert cleared_expiry.before == {"account_expires_on": "2027-06-30"}
+    assert cleared_expiry.after == {"account_expires_on": None}
+
+    update_user_manual(
+        session,
+        user,
+        email="changed@example.test",
+        account_expires_on=None,
+    )
+    assert len(_audit_rows_for(session, user.id)) == 3
+
+
 def test_dom_ac38_company_change_clears_old_fields_and_audits(
     session, operator
 ):

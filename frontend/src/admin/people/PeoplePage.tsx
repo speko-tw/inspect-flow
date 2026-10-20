@@ -13,6 +13,7 @@ import { request } from '../api'
 import { isResourceId } from '../../resourceId'
 import RouteNotFound from '../../RouteNotFound'
 import { routePath, ROUTES } from '../../routes'
+import { ConfirmBox } from '../../ui/ConfirmBox'
 
 interface DelegatePerson {
   id: string
@@ -42,7 +43,11 @@ function decodePersonId(segment: string): string {
 export function PeoplePage({
   onTemporaryPassword,
 }: {
-  onTemporaryPassword: (username: string, password: string) => void
+  onTemporaryPassword: (
+    username: string,
+    password: string,
+    source?: 'created' | 'reset',
+  ) => void
 }) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -50,8 +55,18 @@ export function PeoplePage({
   const [searchParams, setSearchParams] = useSearchParams()
   const [wizardRequest, setWizardRequest] = useState(0)
   const [wizardDirty, setWizardDirty] = useState(false)
+  const [wizardHasTemporaryPassword, setWizardHasTemporaryPassword] =
+    useState(false)
+  const [pendingPasswordLeave, setPendingPasswordLeave] = useState<
+    (() => void) | null
+  >(null)
   const [userFormsDirty, setUserFormsDirty] = useState(false)
-  const pageGuard = useUnsavedNavigationGuard(wizardDirty || userFormsDirty)
+  const pageGuard = useUnsavedNavigationGuard(
+    wizardDirty || userFormsDirty || wizardHasTemporaryPassword,
+    wizardHasTemporaryPassword
+      ? '臨時密碼抄下了嗎？'
+      : '有尚未儲存的變更。確定要離開嗎？',
+  )
   // 完成頁點導覽的「帳號」會連到同一個網址，路徑沒變、只有
   // location.key 換新；此時精靈要收起，回到清單（#713）。
   const [seenLocationKey, setSeenLocationKey] = useState(location.key)
@@ -73,6 +88,20 @@ export function PeoplePage({
     if (nextQuery.trim()) next.set('q', nextQuery.trim())
     else next.delete('q')
     setSearchParams(next, { replace: true })
+  }
+
+  function requestPasswordLeave(action: () => void) {
+    if (wizardHasTemporaryPassword) {
+      setPendingPasswordLeave(() => action)
+      return
+    }
+    action()
+  }
+
+  function confirmPasswordLeave() {
+    const action = pendingPasswordLeave
+    setPendingPasswordLeave(null)
+    if (action) pageGuard.allowNavigation(action)
   }
 
   // 帳號編號會原樣拼進 API 路徑；特製網址（含 `/`、`?`）解碼後不得
@@ -99,7 +128,29 @@ export function PeoplePage({
       }
       className="admin-page"
     >
-      <UnsavedLeaveBox guard={pageGuard} />
+      {pendingPasswordLeave ? (
+        <ConfirmBox
+          cancelLabel="留在此頁"
+          confirmLabel="離開此頁"
+          onCancel={() => setPendingPasswordLeave(null)}
+          onConfirm={confirmPasswordLeave}
+          title="臨時密碼抄下了嗎？"
+        >
+          <p>離開後就無法再次查看臨時密碼。</p>
+        </ConfirmBox>
+      ) : wizardHasTemporaryPassword && pageGuard.pending ? (
+        <ConfirmBox
+          cancelLabel="留在此頁"
+          confirmLabel="離開此頁"
+          onCancel={pageGuard.stay}
+          onConfirm={pageGuard.leave}
+          title="臨時密碼抄下了嗎？"
+        >
+          <p>離開後就無法再次查看臨時密碼。</p>
+        </ConfirmBox>
+      ) : (
+        <UnsavedLeaveBox guard={pageGuard} />
+      )}
       {!personId && (
         <h1 id="people-heading">
           {createWizardOpen ? '新增帳號' : ACCOUNT_LABEL}
@@ -117,7 +168,10 @@ export function PeoplePage({
           </Link>
         </p>
       ) : createWizardOpen ? (
-        <button onClick={() => setWizardRequest(0)} type="button">
+        <button
+          onClick={() => requestPasswordLeave(() => setWizardRequest(0))}
+          type="button"
+        >
           取消
         </button>
       ) : (
@@ -170,6 +224,8 @@ export function PeoplePage({
           externalNavigationGuard
           openWizardRequest={wizardRequest}
           onDirtyChange={setWizardDirty}
+          onTemporaryPasswordVisible={setWizardHasTemporaryPassword}
+          onRequestTemporaryPasswordLeave={requestPasswordLeave}
           onWizardBackToList={() => setWizardRequest(0)}
           onWizardViewUser={(id) => {
             setWizardRequest(0)

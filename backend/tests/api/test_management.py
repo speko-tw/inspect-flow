@@ -1,5 +1,6 @@
 """Admin management API checks, including first-user attribution."""
 
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -15,9 +16,24 @@ from app.auth.passwords import (
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.main import create_app
-from app.models import AuditLog, User, UserModulePermission, UserPassword
+from app.models import (
+    AuditLog,
+    AuthSession,
+    Company,
+    InspectionPlan,
+    InspectionTask,
+    LoginCounter,
+    LoginFailure,
+    Project,
+    ProjectMember,
+    User,
+    UserModuleDelegation,
+    UserModulePermission,
+    UserPassword,
+)
 from app.services.audit import InvalidAuditEventShapeError
 from app.services.users import create_user
+from tests.api.query_count import select_count
 from tests.db.conftest import create_root_user_with_company
 from tests.response_order import observed_client
 
@@ -78,9 +94,23 @@ def test_dom_ac46_first_user_and_temporary_password(admin_client, db_session):
         )
     )
     assert {event.event_type for event in events} == {
+        "user.created",
         "user.admin_changed",
         "user.password_set",
     }
+    created = next(
+        event for event in events if event.event_type == "user.created"
+    )
+    assert created.created_by == admin.id
+    assert created.before is None
+    assert created.after == {
+        "username": "first.user",
+        "name_zh": "示範使用者",
+        "email": "first@demo.example",
+        "is_external_collaborator": False,
+        "auth_source": "local",
+    }
+    assert password not in str(created.after)
 
 
 def test_deactivate_commits_before_response(admin_client, db_session):
@@ -101,6 +131,462 @@ def test_deactivate_commits_before_response(admin_client, db_session):
     assert events.index("commit") < events.index("response_started")
     db_session.expire(user)
     assert user.is_active is False
+
+
+def test_admin_temporary_password_reset_is_one_time_and_revokes_sessions(
+    admin_client, db_session, make_client
+):
+    client, _admin = admin_client
+    created = client.post(
+        "/api/v1/users",
+        json={
+            "is_external_collaborator": False,
+            "username": "reset.target",
+            "email": "reset.target@example.test",
+            "name_zh": "重設對象",
+        },
+    )
+    assert created.status_code == 201
+    user_id = UUID(created.json()["id"])
+    target = db_session.get(User, user_id)
+    assert target is not None
+    target.is_active = True
+    tokens = [create_session(db_session, target)[1] for _ in range(2)]
+    now = datetime.now(UTC)
+    counter = db_session.scalar(
+        select(LoginCounter).where(LoginCounter.user_id == user_id)
+    )
+    assert counter is not None
+    counter.failure_count = 10
+    counter.locked_until = now + timedelta(minutes=10)
+    db_session.add(LoginFailure(user_id=user_id, failed_at=now))
+    db_session.commit()
+    events_before = db_session.scalar(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.event_type == "user.password_set",
+            AuditLog.entity_id == user_id,
+        )
+    )
+
+    reset = client.post(f"/api/v1/users/{user_id}/temporary-password", json={})
+    assert reset.status_code == 200, reset.text
+    body = reset.json()
+    password = body.pop("temporary_password")
+    assert body == {
+        "user_id": str(user_id),
+        "username": "reset.target",
+        "must_change_password": True,
+    }
+    assert reset.headers["cache-control"] == "no-store"
+    assert password not in client.get("/api/v1/users").text
+    assert password not in client.get(f"/api/v1/users/{user_id}").text
+    stored = db_session.scalar(
+        select(UserPassword).where(UserPassword.user_id == user_id)
+    )
+    assert stored is not None and stored.must_change_password is True
+    assert verify_password(stored.password_hash, password)
+    assert (
+        db_session.scalar(
+            select(func.count(AuthSession.id)).where(
+                AuthSession.user_id == user_id
+            )
+        )
+        == 0
+    )
+    counter = db_session.scalar(
+        select(LoginCounter).where(LoginCounter.user_id == user_id)
+    )
+    assert counter is not None
+    assert counter.failure_count == 0
+    assert counter.locked_until is None
+    assert (
+        db_session.scalar(
+            select(func.count(LoginFailure.id)).where(
+                LoginFailure.user_id == user_id
+            )
+        )
+        == 0
+    )
+    assert (
+        db_session.scalar(
+            select(func.count(AuditLog.id)).where(
+                AuditLog.event_type == "user.password_set",
+                AuditLog.entity_id == user_id,
+            )
+        )
+        == events_before + 1
+    )
+    for token in tokens:
+        old_client = make_client()
+        old_client.cookies.set(SESSION_COOKIE_NAME, token)
+        assert old_client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_temporary_password_reset_rejects_protected_accounts_without_changes(
+    admin_client, db_session
+):
+    client, admin = admin_client
+    external = create_user(
+        db_session,
+        is_external_collaborator=False,
+        username="reset.external",
+        email="reset.external@example.test",
+        name_zh="外部帳號",
+        auth_source="external",
+        external_source="ldap",
+        external_id="reset-external",
+    )
+    db_session.commit()
+    protected_ids = (admin.id, external.id)
+    audit_count = db_session.scalar(select(func.count(AuditLog.id)))
+
+    for user_id in protected_ids:
+        response = client.post(
+            f"/api/v1/users/{user_id}/temporary-password", json={}
+        )
+        assert response.status_code == 422
+
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count(AuditLog.id))) == audit_count
+    assert (
+        db_session.scalar(
+            select(func.count(UserPassword.id)).where(
+                UserPassword.user_id.in_(protected_ids)
+            )
+        )
+        == 0
+    )
+
+
+def test_batch_user_deactivation_is_atomic_and_revokes_all_sessions(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    users = []
+    tokens: dict[UUID, list[str]] = {}
+    for suffix in ("one", "two"):
+        created = client.post(
+            "/api/v1/users",
+            json={
+                "is_external_collaborator": False,
+                "username": f"batch.{suffix}",
+                "email": f"batch.{suffix}@example.test",
+                "name_zh": f"批次{suffix}",
+            },
+        )
+        assert created.status_code == 201
+        user_id = UUID(created.json()["id"])
+        user = db_session.get(User, user_id)
+        assert user is not None
+        users.append(user_id)
+        tokens[user_id] = [create_session(db_session, user)[1]]
+        db_session.commit()
+    db_session.commit()
+    unknown_id = UUID("00000000-0000-7000-8000-000000000001")
+
+    rejected = client.post(
+        "/api/v1/users:batch-active-status",
+        json={
+            "user_ids": [str(users[0]), str(unknown_id)],
+            "is_active": False,
+        },
+    )
+    assert rejected.status_code == 422
+    db_session.expire_all()
+    assert all(db_session.get(User, user_id).is_active for user_id in users)
+    assert all(
+        db_session.scalar(
+            select(func.count(AuthSession.id)).where(
+                AuthSession.user_id == user_id
+            )
+        )
+        == 1
+        for user_id in users
+    )
+
+    changed = client.post(
+        "/api/v1/users:batch-active-status",
+        json={
+            "user_ids": [str(user_id) for user_id in users],
+            "is_active": False,
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    assert {item["id"] for item in changed.json()["items"]} == {
+        str(user_id) for user_id in users
+    }
+    db_session.expire_all()
+    assert all(
+        not db_session.get(User, user_id).is_active for user_id in users
+    )
+    assert all(
+        db_session.scalar(
+            select(func.count(AuthSession.id)).where(
+                AuthSession.user_id == user_id
+            )
+        )
+        == 0
+        for user_id in users
+    )
+
+
+def test_batch_reactivation_keeps_each_accounts_restore_choices_atomic(
+    admin_client, db_session
+):
+    client, admin = admin_client
+    user_ids = []
+    task_ids = []
+    permission_codes = ("project.use", "template.use")
+    project = Project(
+        project_code="BATCH-RESTORE",
+        name="批次恢復專案",
+        client_name="業主",
+        site_location="工地",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(project)
+    db_session.flush()
+    plan = InspectionPlan(
+        project_id=project.id,
+        name="批次恢復計畫",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(plan)
+    db_session.flush()
+    db_session.commit()
+    for suffix, permission_code in zip(
+        ("one", "two"), permission_codes, strict=True
+    ):
+        created = client.post(
+            "/api/v1/users",
+            json={
+                "is_external_collaborator": False,
+                "username": f"restore.{suffix}",
+                "email": f"restore.{suffix}@example.test",
+                "name_zh": f"重新啟用{suffix}",
+            },
+        )
+        assert created.status_code == 201
+        user_id = UUID(created.json()["id"])
+        user_ids.append(user_id)
+        db_session.add_all(
+            [
+                UserModuleDelegation(user_id=user_id, module="template"),
+                ProjectMember(
+                    project_id=project.id,
+                    user_id=user_id,
+                    created_by=admin.id,
+                    updated_by=admin.id,
+                ),
+            ]
+        )
+        task = InspectionTask(
+            plan_id=plan.id,
+            project_id=project.id,
+            name=f"批次恢復任務{suffix}",
+            status="PENDING",
+            dispatched_at=datetime.now(UTC),
+            assignee_id=user_id,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+        db_session.add(task)
+        db_session.flush()
+        task_ids.append(task.id)
+        db_session.commit()
+        granted = client.put(
+            f"/api/v1/users/{user_id}/module-permissions/{permission_code}"
+        )
+        assert granted.status_code == 204
+        disabled = client.put(
+            f"/api/v1/users/{user_id}/active",
+            json={"is_active": False},
+        )
+        assert disabled.status_code == 200
+
+    invalid_restore = client.post(
+        "/api/v1/users:batch-active-status",
+        json={
+            "user_ids": [str(user_id) for user_id in user_ids],
+            "is_active": True,
+            "restore": [
+                {
+                    "user_id": str(user_ids[0]),
+                    "restore": {
+                        "permission_codes": ["project.use"],
+                        "delegated_modules": ["template"],
+                        "project_ids": [str(project.id)],
+                        "task_ids": [str(task_ids[0])],
+                    },
+                },
+                {
+                    "user_id": str(user_ids[1]),
+                    "restore": {
+                        "permission_codes": ["project.manage"],
+                        "delegated_modules": [],
+                        "project_ids": [],
+                        "task_ids": [],
+                    },
+                },
+            ],
+        },
+    )
+    assert invalid_restore.status_code == 422
+    db_session.expire_all()
+    assert all(
+        not db_session.get(User, user_id).is_active for user_id in user_ids
+    )
+    assert {
+        (row.user_id, row.permission_code)
+        for row in db_session.scalars(select(UserModulePermission))
+        if row.user_id in user_ids
+    } == set(zip(user_ids, permission_codes, strict=True))
+    assert {
+        row.user_id
+        for row in db_session.scalars(select(UserModuleDelegation))
+        if row.user_id in user_ids
+    } == set(user_ids)
+    assert {
+        row.user_id
+        for row in db_session.scalars(select(ProjectMember))
+        if row.project_id == project.id and row.user_id in user_ids
+    } == set(user_ids)
+    assert {
+        row.id
+        for row in db_session.scalars(select(InspectionTask))
+        if row.id in task_ids and row.assignee_id in user_ids
+    } == set(task_ids)
+
+    restored = client.post(
+        "/api/v1/users:batch-active-status",
+        json={
+            "user_ids": [str(user_id) for user_id in user_ids],
+            "is_active": True,
+            "restore": [
+                {
+                    "user_id": str(user_ids[0]),
+                    "restore": {
+                        "permission_codes": ["project.use"],
+                        "delegated_modules": ["template"],
+                        "project_ids": [str(project.id)],
+                        "task_ids": [str(task_ids[0])],
+                    },
+                },
+                {
+                    "user_id": str(user_ids[1]),
+                    "restore": {
+                        "permission_codes": [],
+                        "delegated_modules": [],
+                        "project_ids": [],
+                        "task_ids": [],
+                    },
+                },
+            ],
+        },
+    )
+    assert restored.status_code == 200, restored.text
+    db_session.expire_all()
+    assert all(db_session.get(User, user_id).is_active for user_id in user_ids)
+    assert {
+        (row.user_id, row.permission_code)
+        for row in db_session.scalars(select(UserModulePermission))
+        if row.user_id in user_ids
+    } == {(user_ids[0], "project.use")}
+    assert {
+        row.user_id
+        for row in db_session.scalars(select(UserModuleDelegation))
+        if row.user_id in user_ids
+    } == {user_ids[0]}
+    assert {
+        row.user_id
+        for row in db_session.scalars(select(ProjectMember))
+        if row.project_id == project.id and row.user_id in user_ids
+    } == {user_ids[0]}
+    assert {
+        row.id
+        for row in db_session.scalars(select(InspectionTask))
+        if row.id in task_ids and row.assignee_id in user_ids
+    } == {task_ids[0]}
+
+
+def test_batch_company_status_is_atomic_across_companies(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    company_ids = []
+    user_ids = []
+    for suffix in ("one", "two"):
+        company = client.post(
+            "/api/v1/companies", json={"name": f"批次公司{suffix}"}
+        )
+        assert company.status_code == 201
+        company_ids.append(UUID(company.json()["id"]))
+        user = create_user(
+            db_session,
+            username=f"batch.company.{suffix}",
+            email=f"batch.company.{suffix}@example.test",
+            name_zh=f"公司帳號{suffix}",
+            company_id=company_ids[-1],
+            is_external_collaborator=False,
+        )
+        user_ids.append(user.id)
+        db_session.commit()
+    db_session.commit()
+
+    rejected = client.post(
+        "/api/v1/companies:batch-status",
+        json={
+            "items": [
+                {
+                    "company_id": str(company_ids[0]),
+                    "is_active": False,
+                    "disable_user_ids": [str(user_ids[0])],
+                },
+                {
+                    "company_id": str(company_ids[1]),
+                    "is_active": False,
+                    "disable_user_ids": [
+                        "00000000-0000-7000-8000-000000000002"
+                    ],
+                },
+            ]
+        },
+    )
+    assert rejected.status_code == 422
+    db_session.expire_all()
+    assert all(
+        db_session.get(Company, company_id).is_active
+        for company_id in company_ids
+    )
+    assert all(db_session.get(User, user_id).is_active for user_id in user_ids)
+
+    changed = client.post(
+        "/api/v1/companies:batch-status",
+        json={
+            "items": [
+                {
+                    "company_id": str(company_ids[0]),
+                    "is_active": False,
+                    "disable_user_ids": [str(user_ids[0])],
+                },
+                {
+                    "company_id": str(company_ids[1]),
+                    "is_active": False,
+                    "disable_user_ids": [],
+                },
+            ]
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    db_session.expire_all()
+    assert all(
+        not db_session.get(Company, company_id).is_active
+        for company_id in company_ids
+    )
+    assert not db_session.get(User, user_ids[0]).is_active
+    assert db_session.get(User, user_ids[1]).is_active
 
 
 def test_reactivation_preview_and_choice_api(admin_client, db_session):
@@ -393,7 +879,10 @@ def test_aut_ac61_default_user_password_and_change_gate(
             select(AuditLog).where(AuditLog.entity_id == user_id)
         )
     )
-    assert [event.event_type for event in events] == ["user.password_set"]
+    assert {event.event_type for event in events} == {
+        "user.created",
+        "user.password_set",
+    }
 
     temporary_client = make_client()
     login = temporary_client.post(
@@ -626,6 +1115,55 @@ def test_user_company_lists_search_cursor_and_validation(
         invalid_cursor = client.get(path, params={"cursor": "invalid!"})
         assert invalid_cursor.status_code == 422
         assert client.get(path, params={"q": "x" * 257}).status_code == 422
+
+
+def test_user_list_includes_company_name_without_query_growth(
+    admin_client, db_session
+):
+    client, _admin = admin_client
+    company = client.post("/api/v1/companies", json={"name": "公司名稱"})
+    assert company.status_code == 201
+    company_id = UUID(company.json()["id"])
+    for index in range(6):
+        create_user(
+            db_session,
+            username=f"company.name.{index}",
+            email=f"company.name.{index}@example.test",
+            name_zh=f"公司人員 {index}",
+            company_id=company_id,
+            is_external_collaborator=False,
+        )
+    create_user(
+        db_session,
+        username="without.company",
+        email="without.company@example.test",
+        name_zh="無公司人員",
+        is_external_collaborator=False,
+    )
+    db_session.commit()
+
+    one_count, one_items = select_count(
+        client, "/api/v1/users", q="company.name", limit=1
+    )
+    many_count, many_items = select_count(
+        client, "/api/v1/users", q="company.name", limit=6
+    )
+    response = client.get(
+        "/api/v1/users", params={"q": "company.name", "limit": 6}
+    )
+    assert response.status_code == 200
+    assert one_items == 1
+    assert many_items == 6
+    assert many_count == one_count
+    assert {item["company_name"] for item in response.json()["items"]} == {
+        "公司名稱"
+    }
+
+    without_company = client.get(
+        "/api/v1/users", params={"q": "without.company"}
+    )
+    assert without_company.status_code == 200
+    assert without_company.json()["items"][0]["company_name"] is None
 
 
 def test_non_admin_cannot_manage(admin_client, db_session, make_client):

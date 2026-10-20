@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.db import clock
@@ -12,6 +12,8 @@ from app.models import (
     InspectionTask,
     Project,
     ProjectMember,
+    ProjectMemberRole,
+    RolePermission,
     User,
     UserModuleDelegation,
     UserModulePermission,
@@ -161,17 +163,43 @@ def deactivation_check(session: Session, user: User) -> list[Project]:
 
 def unmanaged_project_ids(session: Session) -> frozenset[uuid.UUID]:
     """DOM-R75：以共用權限入口找出沒有啟用管理成員的專案。"""
-    project_ids = list(session.scalars(select(Project.id)))
-    return frozenset(
-        project_id
-        for project_id in project_ids
-        if not project_member_ids_with_permission(
-            session,
-            project_id=project_id,
-            permission_code="project_member.manage",
-            active_only=True,
-            module_permission_code="project.use",
+    effective_managers = (
+        select(
+            ProjectMember.id.label("member_id"),
+            ProjectMember.project_id.label("project_id"),
         )
+        .join(
+            ProjectMemberRole,
+            ProjectMemberRole.project_member_id == ProjectMember.id,
+        )
+        .join(
+            RolePermission,
+            and_(
+                RolePermission.role_id == ProjectMemberRole.role_id,
+                RolePermission.code == "project_member.manage",
+            ),
+        )
+        .join(User, User.id == ProjectMember.user_id)
+        .join(
+            UserModulePermission,
+            and_(
+                UserModulePermission.user_id == User.id,
+                UserModulePermission.permission_code == "project.use",
+            ),
+        )
+        .where(User.is_active.is_(True), User.is_admin.is_(False))
+        .subquery()
+    )
+    return frozenset(
+        session.scalars(
+            select(Project.id)
+            .outerjoin(
+                effective_managers,
+                effective_managers.c.project_id == Project.id,
+            )
+            .group_by(Project.id)
+            .having(func.count(effective_managers.c.member_id) == 0)
+        ).all()
     )
 
 

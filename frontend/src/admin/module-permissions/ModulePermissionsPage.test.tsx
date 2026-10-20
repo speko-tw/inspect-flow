@@ -44,6 +44,10 @@ interface FixtureOptions {
   }>
   testNavigation?: boolean
   onTemporaryPassword?: (username: string, password: string) => void
+  onTemporaryPasswordVisible?: (visible: boolean) => void
+  onRequestTemporaryPasswordLeave?: (action: () => void) => void
+  onWizardBackToList?: () => void
+  onWizardViewUser?: (id: string) => void
   failCreate?: boolean
   createUserResponse?: Promise<Response>
   failUserAccess?: boolean
@@ -202,6 +206,9 @@ function permissionPage(options: FixtureOptions = {}) {
       calls.push({ path, method, body })
       if (method === 'GET' && path === '/users') {
         return Response.json({ items: [member], next_cursor: null })
+      }
+      if (method === 'GET' && path === `/users/${member.id}`) {
+        return Response.json(member)
       }
       if (method === 'GET' && path === '/module-delegate/users') {
         return Response.json({
@@ -517,6 +524,12 @@ function permissionPage(options: FixtureOptions = {}) {
           openWizardRequest={options.openWizardRequest}
           selectedUserId={selectedUserId}
           onTemporaryPassword={options.onTemporaryPassword}
+          onTemporaryPasswordVisible={options.onTemporaryPasswordVisible}
+          onRequestTemporaryPasswordLeave={
+            options.onRequestTemporaryPasswordLeave
+          }
+          onWizardBackToList={options.onWizardBackToList}
+          onWizardViewUser={options.onWizardViewUser}
         />
         {options.testNavigation && <Link to="/other">離開精靈</Link>}
       </>
@@ -549,7 +562,9 @@ async function chooseProfile(profile: string, projectId?: string) {
   fireEvent.click(screen.getByRole('radio', { name: new RegExp(profile) }))
   fireEvent.click(screen.getByRole('button', { name: '下一步' }))
   if (projectId) {
-    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+    const projectSelect = screen.getByLabelText('加入專案（可略過）')
+    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    fireEvent.change(projectSelect, {
       target: { value: projectId },
     })
   }
@@ -590,6 +605,60 @@ function assignCandidateRole(roleName: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
+  it('帳號能力頁只載入該帳號，診斷選項按需載入', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+    })
+    await screen.findByRole('heading', { name: '能做什麼' })
+
+    expect(calls.some((call) => call.path === '/users/person')).toBe(true)
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+    expect(calls.some((call) => call.path === '/companies')).toBe(false)
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+    expect(calls.some((call) => call.path === '/projects')).toBe(false)
+  })
+
+  it('新增精靈依步驟載入公司、專案與職務選項', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      openWizardRequest: 1,
+    })
+    await screen.findByRole('heading', { name: '設定帳號' })
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/companies')).toBe(true),
+    )
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+    expect(calls.some((call) => call.path === '/projects')).toBe(false)
+    expect(calls.some((call) => call.path === '/permission-bundles')).toBe(
+      false,
+    )
+
+    await fillIdentity('lazy.options')
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/projects')).toBe(true),
+    )
+    expect(calls.some((call) => call.path === '/roles')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/roles')).toBe(true),
+    )
+    expect(calls.some((call) => call.path === '/roles/creator-role')).toBe(
+      true,
+    )
+    expect(calls.some((call) => call.path === '/permission-bundles')).toBe(
+      true,
+    )
+    expect(calls.some((call) => call.path === '/users')).toBe(false)
+  })
+
   it('resets and opens the wizard for each external add-account request', async () => {
     const page = (request: number) => (
       <DataMemoryRouter>
@@ -811,7 +880,9 @@ describe('ModulePermissionsPage', () => {
     )
     fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
-    fireEvent.change(screen.getByLabelText('加入專案（可略過）'), {
+    const projectSelect = screen.getByLabelText('加入專案（可略過）')
+    await within(projectSelect).findByRole('option', { name: '示範工程' })
+    fireEvent.change(projectSelect, {
       target: { value: 'project-1' },
     })
     fireEvent.click(screen.getByRole('button', { name: '下一步' }))
@@ -1168,7 +1239,11 @@ describe('ModulePermissionsPage', () => {
   })
 
   it('retries only unfinished setup steps after account creation', async () => {
-    const { calls } = permissionPage({ failBundleOnce: true })
+    const onTemporaryPasswordVisible = vi.fn()
+    const { calls } = permissionPage({
+      failBundleOnce: true,
+      onTemporaryPasswordVisible,
+    })
     await screen.findByRole('heading', { name: '新增帳號' })
     await fillIdentity('retry.only')
     await chooseProfile('內業規劃')
@@ -1177,6 +1252,10 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('button', { name: '重試未完成的步驟' }),
     ).toBeVisible()
+    expect(onTemporaryPasswordVisible).toHaveBeenLastCalledWith(true)
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
     expect(
       calls.filter((call) => call.path === '/users' && call.method === 'POST'),
     ).toHaveLength(1)
@@ -1192,6 +1271,93 @@ describe('ModulePermissionsPage', () => {
     expect(calls.filter((call) => call.path.includes(':apply'))).toHaveLength(
       2,
     )
+  })
+
+  it('新增另一個帳號要先確認，取消保留密碼，確認後才重設精靈', async () => {
+    let confirmedAction: (() => void) | undefined
+    const requestLeave = vi.fn((action: () => void) => {
+      confirmedAction = action
+    })
+    permissionPage({ onRequestTemporaryPasswordLeave: requestLeave })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('another.staff')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增另一個帳號' }))
+    expect(requestLeave).toHaveBeenCalledOnce()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+    expect(screen.getByRole('heading', { name: '帳號已建立' })).toBeVisible()
+
+    confirmedAction?.()
+    expect(
+      await screen.findByRole('heading', { name: '新增帳號' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('臨時密碼')).toBeNull()
+  })
+
+  it('回清單要先確認，取消保留密碼，確認後才離開精靈', async () => {
+    let confirmedAction: (() => void) | undefined
+    const requestLeave = vi.fn((action: () => void) => {
+      confirmedAction = action
+    })
+    const onWizardBackToList = vi.fn()
+    permissionPage({
+      onRequestTemporaryPasswordLeave: requestLeave,
+      onWizardBackToList,
+    })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('back.to.list')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '回清單' }))
+    expect(requestLeave).toHaveBeenCalledOnce()
+    expect(onWizardBackToList).not.toHaveBeenCalled()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+
+    confirmedAction?.()
+    expect(onWizardBackToList).toHaveBeenCalledOnce()
+  })
+
+  it('查看能力要先確認，取消保留密碼，確認後才導向帳號能力', async () => {
+    let confirmedAction: (() => void) | undefined
+    const requestLeave = vi.fn((action: () => void) => {
+      confirmedAction = action
+    })
+    const onWizardViewUser = vi.fn()
+    permissionPage({
+      onRequestTemporaryPasswordLeave: requestLeave,
+      onWizardViewUser,
+    })
+    await screen.findByRole('heading', { name: '新增帳號' })
+    await fillIdentity('view.account')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    expect(
+      await screen.findByRole('heading', { name: '帳號已建立' }),
+    ).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看這個帳號的能力' }))
+    expect(requestLeave).toHaveBeenCalledOnce()
+    expect(onWizardViewUser).not.toHaveBeenCalled()
+    expect(await screen.findByLabelText('臨時密碼')).toHaveTextContent(
+      'temporary-secret',
+    )
+
+    confirmedAction?.()
+    expect(onWizardViewUser).toHaveBeenCalledOnce()
+    expect(onWizardViewUser).toHaveBeenCalledWith('created-person')
   })
 
   it('reconciles a member conflict after the add response is lost', async () => {

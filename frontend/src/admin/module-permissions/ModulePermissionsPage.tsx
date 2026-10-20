@@ -25,7 +25,7 @@ import {
   UnsavedLeaveBox,
   useUnsavedNavigationGuard,
 } from '../../ui/navigation'
-import { ManagementApiError } from '../api'
+import { ManagementApiError, request } from '../api'
 import TemporaryPassword from '../TemporaryPassword'
 import {
   createUser,
@@ -266,7 +266,13 @@ type ModulePermissionsPageProps = {
   embedded?: boolean
   openWizardRequest?: number
   selectedUserId?: string
-  onTemporaryPassword?: (username: string, password: string) => void
+  onTemporaryPassword?: (
+    username: string,
+    password: string,
+    source?: 'created' | 'reset',
+  ) => void
+  onTemporaryPasswordVisible?: (visible: boolean) => void
+  onRequestTemporaryPasswordLeave?: (action: () => void) => void
   externalNavigationGuard?: boolean
   onDirtyChange?: (dirty: boolean) => void
   onWizardBackToList?: () => void
@@ -286,6 +292,8 @@ function ModulePermissionsPageContent({
   openWizardRequest = 0,
   selectedUserId,
   onTemporaryPassword,
+  onTemporaryPasswordVisible,
+  onRequestTemporaryPasswordLeave,
   externalNavigationGuard = false,
   onDirtyChange,
   onWizardBackToList,
@@ -294,6 +302,21 @@ function ModulePermissionsPageContent({
   const { user: currentUser } = useCurrentUser()
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
+  const wizardOptionsLoaded = useRef({
+    companies: false,
+    projects: false,
+    roles: false,
+  })
+  const wizardOptionsRequests = useRef<{
+    companies: Promise<void> | null
+    projects: Promise<void> | null
+    roles: Promise<void> | null
+  }>({ companies: null, projects: null, roles: null })
+  const wizardRoleData = useRef<{
+    roles: Role[]
+    bundles: PermissionBundle[]
+    creatorRoleId: string
+  }>({ roles: [], bundles: [], creatorRoleId: '' })
   const [permissions, setPermissions] = useState<ModulePermission[]>([])
   const [bundles, setBundles] = useState<PermissionBundle[]>([])
   const [roles, setRoles] = useState<Role[]>([])
@@ -385,6 +408,10 @@ function ModulePermissionsPageContent({
   useLayoutEffect(() => {
     onDirtyChange?.(wizardHasDraft)
   }, [onDirtyChange, wizardHasDraft])
+  useEffect(() => {
+    onTemporaryPasswordVisible?.(Boolean(temporaryPassword))
+    return () => onTemporaryPasswordVisible?.(false)
+  }, [onTemporaryPasswordVisible, temporaryPassword])
   const revokeTrigger = useRef<HTMLInputElement>(null)
   const bundleDeleteTrigger = useRef<HTMLButtonElement>(null)
   const wizardHeadingRef = useRef<HTMLHeadingElement>(null)
@@ -428,6 +455,62 @@ function ModulePermissionsPageContent({
       ? `還缺${missingForCreate.join('、')}，請回到第一步補上。`
       : ''
 
+  const loadWizardOptions = useCallback(
+    async (nextStep: number) => {
+      if (!embedded || !currentUser.is_admin || !wizardOpen) return
+      const loadOnce = async (
+        key: 'companies' | 'projects' | 'roles',
+        load: () => Promise<void>,
+      ) => {
+        if (wizardOptionsLoaded.current[key]) return
+        if (wizardOptionsRequests.current[key]) {
+          await wizardOptionsRequests.current[key]
+          return
+        }
+        const pending = load()
+        wizardOptionsRequests.current[key] = pending
+        try {
+          await pending
+        } finally {
+          if (wizardOptionsRequests.current[key] === pending)
+            wizardOptionsRequests.current[key] = null
+        }
+      }
+
+      if (nextStep === 0 && !existingAccount) {
+        await loadOnce('companies', async () => {
+          setCompanies(await listCompanies())
+          wizardOptionsLoaded.current.companies = true
+        })
+      }
+      if (nextStep >= 2) {
+        await loadOnce('projects', async () => {
+          setProjects(await listAllPages<Project>('/projects'))
+          wizardOptionsLoaded.current.projects = true
+        })
+      }
+      if (nextStep >= 3) {
+        await loadOnce('roles', async () => {
+          const [roleRows, bundleRows, creatorRole] = await Promise.all([
+            listRoles(),
+            listPermissionBundles(),
+            getCreatorRole(),
+          ])
+          setRoles(roleRows)
+          setBundles(bundleRows)
+          setCreatorRoleId(creatorRole.role_id)
+          wizardRoleData.current = {
+            roles: roleRows,
+            bundles: bundleRows,
+            creatorRoleId: creatorRole.role_id,
+          }
+          wizardOptionsLoaded.current.roles = true
+        })
+      }
+    },
+    [currentUser.is_admin, embedded, existingAccount, wizardOpen],
+  )
+
   function goToStep(nextStep: number) {
     // 第一步先擋缺漏，不然要到最後一步才發現建立不了。
     if (step === 0 && nextStep > 0 && !existingAccount) {
@@ -451,6 +534,9 @@ function ModulePermissionsPageContent({
     }
     setError('')
     setStep(nextStep)
+    void loadWizardOptions(nextStep).catch((caught: unknown) =>
+      setError(message(caught)),
+    )
   }
 
   function resetWizard() {
@@ -474,6 +560,14 @@ function ModulePermissionsPageContent({
     setProvisioning(null)
     setPartial('')
     setError('')
+  }
+
+  function leaveTemporaryPasswordPage(action: () => void) {
+    if (onRequestTemporaryPasswordLeave) {
+      onRequestTemporaryPasswordLeave(action)
+    } else {
+      action()
+    }
   }
 
   function startExistingJob() {
@@ -515,6 +609,21 @@ function ModulePermissionsPageContent({
     let active = true
     async function load() {
       try {
+        if (embedded && currentUser.is_admin && wizardOpen) {
+          await loadWizardOptions(step)
+          return
+        }
+        if (embedded && currentUser.is_admin && selectedUserId) {
+          const [user, permissionRows] = await Promise.all([
+            request<User>(`/users/${encodeURIComponent(selectedUserId)}`),
+            listModulePermissions(),
+          ])
+          if (active) {
+            setUsers([user])
+            setPermissions(permissionRows)
+          }
+          return
+        }
         await refresh()
       } catch (caught) {
         if (active) setError(message(caught))
@@ -524,7 +633,16 @@ function ModulePermissionsPageContent({
     return () => {
       active = false
     }
-  }, [refresh])
+  }, [
+    currentUser.is_admin,
+    embedded,
+    existingAccount,
+    loadWizardOptions,
+    refresh,
+    selectedUserId,
+    step,
+    wizardOpen,
+  ])
 
   useEffect(() => {
     if (!selectedUser) return
@@ -686,9 +804,26 @@ function ModulePermissionsPageContent({
       setError('請先選擇職務，再繼續設定。')
       return
     }
+    try {
+      await loadWizardOptions(3)
+    } catch (caught) {
+      setError(message(caught))
+      return
+    }
     const bundleName = PROFILE_BUNDLES[profile]
-    const matchingBundle = profileDefaultBundle(bundles, profile)
-    const role = profileDefaultRole(roles, profile, creatorRoleId)
+    const matchingBundle = profileDefaultBundle(
+      wizardRoleData.current.bundles.length
+        ? wizardRoleData.current.bundles
+        : bundles,
+      profile,
+    )
+    const role = profileDefaultRole(
+      wizardRoleData.current.roles.length
+        ? wizardRoleData.current.roles
+        : roles,
+      profile,
+      wizardRoleData.current.creatorRoleId || creatorRoleId,
+    )
     if (bundleName && !matchingBundle) {
       setError(`無法建立帳號：找不到唯一的預設權限組合「${bundleName}」。`)
       return
@@ -865,8 +1000,10 @@ function ModulePermissionsPageContent({
   }
 
   function startAnotherStaff() {
-    resetWizard()
-    setWizardOpen(true)
+    leaveTemporaryPasswordPage(() => {
+      resetWizard()
+      setWizardOpen(true)
+    })
   }
 
   async function diagnose() {
@@ -902,8 +1039,10 @@ function ModulePermissionsPageContent({
         return
       }
       const roleMissing = diagnostic.missing_layers.includes('project_role')
+      const availableRoles = roleMissing ? await listRoles() : roles
+      if (roleMissing) setRoles(availableRoles)
       const candidates = roleMissing
-        ? roles.filter(
+        ? availableRoles.filter(
             (role) =>
               diagnostic.required_project_codes.some((code) =>
                 role.permission_codes.includes(code),
@@ -1132,6 +1271,15 @@ function ModulePermissionsPageContent({
                 專案
                 <select
                   value={diagnosticProject}
+                  onFocus={() => {
+                    if (wizardOptionsLoaded.current.projects) return
+                    void listAllPages<Project>('/projects')
+                      .then((rows) => {
+                        setProjects(rows)
+                        wizardOptionsLoaded.current.projects = true
+                      })
+                      .catch((caught: unknown) => setError(message(caught)))
+                  }}
                   onChange={(event) => {
                     setDiagnosticProject(event.target.value)
                     setNotice('')
@@ -1288,19 +1436,23 @@ function ModulePermissionsPageContent({
               )}
               <Button
                 onClick={() =>
-                  onWizardBackToList
-                    ? onWizardBackToList()
-                    : setWizardOpen(false)
+                  leaveTemporaryPasswordPage(() =>
+                    onWizardBackToList
+                      ? onWizardBackToList()
+                      : setWizardOpen(false),
+                  )
                 }
               >
                 回清單
               </Button>
               <Button
                 onClick={() => {
-                  setWizardOpen(false)
-                  setTemporaryPassword('')
-                  setSelectedUserState(createdId)
-                  onWizardViewUser?.(createdId)
+                  leaveTemporaryPasswordPage(() => {
+                    setWizardOpen(false)
+                    setTemporaryPassword('')
+                    setSelectedUserState(createdId)
+                    onWizardViewUser?.(createdId)
+                  })
                 }}
               >
                 查看這個帳號的能力
