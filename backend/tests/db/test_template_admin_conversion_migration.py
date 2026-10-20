@@ -286,7 +286,9 @@ def _assert_downgrade_rejected_without_changes(
         engine.dispose()
     assert after == before
     assert expected_permission in after
-    assert _current_revision(db_url) == "b72e4c19f6a3"
+    # PostgreSQL rolls back the child snapshot migration together with the
+    # rejected parent downgrade, preserving the current head revision.
+    assert _current_revision(db_url) == "c489a760d1e3"
 
 
 def test_empty_template_permissions_allow_empty_legacy_table(db_url):
