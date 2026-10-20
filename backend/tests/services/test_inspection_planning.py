@@ -26,6 +26,7 @@ from app.models import (
     TaskSnapshotTextStandard,
     UserModulePermission,
 )
+from app.services import inspection_planning as planning_service
 from app.services.inspection_planning import (
     PlanningError,
     archive_inspection_plan,
@@ -1385,7 +1386,9 @@ def test_archived_plan_rejects_item_change_without_audit_or_snapshot_write(
     }
 
 
-def test_item_change_refreshes_every_plan_using_item_only(session, operator):
+def test_item_change_refreshes_every_plan_using_item_only(
+    session, operator, monkeypatch
+):
     project = _project(session, operator, "MULTIPLAN")
     _grant(session, operator, project, *_planning_codes())
     first_plan = create_inspection_plan(
@@ -1459,11 +1462,25 @@ def test_item_change_refreshes_every_plan_using_item_only(session, operator):
 
     shared.instruction = "跨計畫更新後的標準"
     shared.standard_revision = 2
+    refreshed_plan_ids = []
+    refresh_plan_status = planning_service._refresh_plan_status
+
+    def count_plan_refreshes(session, plan):
+        refreshed_plan_ids.append(plan.id)
+        return refresh_plan_status(session, plan)
+
+    monkeypatch.setattr(
+        planning_service, "_refresh_plan_status", count_plan_refreshes
+    )
     update_project_item_usage(
         session,
         item_id=shared.id,
         before_data={"instruction": "檢查內容 A"},
         reinspection_required=True,
+    )
+
+    assert sorted(refreshed_plan_ids) == sorted(
+        [first_plan.id, second_plan.id]
     )
 
     refreshed = session.scalars(
