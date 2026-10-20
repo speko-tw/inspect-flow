@@ -496,6 +496,7 @@ def _template_audit_snapshot(db: Session, item: TemplateItem) -> dict:
             bound_field = db.get(
                 TemplateMeasurementField, numeric.measurement_field_id
             )
+            assert bound_field is not None  # numeric standard FK must resolve
             snapshot["numeric_standard"] = {
                 "value": numeric.value,
                 "condition": numeric.condition,
