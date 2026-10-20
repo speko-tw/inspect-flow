@@ -947,7 +947,7 @@ register_audit_event(
     "template_item.created_from_project",
     entity_type="template_item",
     kind=AuditEventKind.CREATED,
-    fields=("project_id", "project_inspection_item_id", "system_id"),
+    fields=("project_id", "project_inspection_item_id", "system_id", "title"),
     project_scoped=True,
 )
 

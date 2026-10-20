@@ -309,6 +309,7 @@ def create_template_from_project_item(
     project_id: UUID,
     project_inspection_item_id: UUID,
     system_id: UUID,
+    name: str | None = None,
 ) -> TemplateItem | None:
     """Copy one project-owned inspection item into a template system.
 
@@ -404,7 +405,7 @@ def create_template_from_project_item(
         {
             "system_id": system_id,
             "sequence": source.sequence,
-            "title": source.title,
+            "title": source.title if name is None else name,
             "instruction": source.instruction,
             "inspection_points": points_data,
         },
@@ -420,6 +421,7 @@ def create_template_from_project_item(
             "project_id": project_id,
             "project_inspection_item_id": project_inspection_item_id,
             "system_id": system_id,
+            "title": template.title,
         },
     )
     return template

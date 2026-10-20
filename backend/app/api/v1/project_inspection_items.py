@@ -3,10 +3,11 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.errors import APIError, ErrorCode
+from app.api.limits import TITLE_MAX
 from app.api.pagination import page
 from app.api.time_format import format_utc
 from app.api.v1.template_library import (
@@ -68,12 +69,24 @@ class AppliedItemResponse(BaseModel):
 
 
 class CreateTemplateFromProjectRequest(BaseModel):
-    """指定欲存為範本的專案項目及目標系統。"""
+    """指定欲存為範本的專案項目、目標系統及可選名稱。"""
 
     model_config = ConfigDict(extra="forbid")
 
     project_inspection_item_id: UUID
     system_id: UUID
+    name: str | None = Field(default=None, max_length=TITLE_MAX)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, name: str | None) -> str | None:
+        """保留既有欄位規則，並拒絕裁剪後的空白名稱。"""
+        if name is None:
+            return None
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("name cannot be blank")
+        return normalized
 
 
 @router.post(
@@ -148,6 +161,7 @@ def save_project_item_as_template(
         project_id,
         body.project_inspection_item_id,
         body.system_id,
+        body.name,
     )
     if item is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)

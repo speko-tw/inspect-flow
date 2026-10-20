@@ -56,13 +56,16 @@ export function saveProjectItemAsTemplate(
   projectId: string,
   projectInspectionItemId: string,
   systemId: string,
+  name?: string,
 ): Promise<TemplateItem> {
+  const body = {
+    project_inspection_item_id: projectInspectionItemId,
+    system_id: systemId,
+    ...(name === undefined ? {} : { name }),
+  }
   return request(`/projects/${projectId}/templates`, {
     method: 'POST',
-    body: JSON.stringify({
-      project_inspection_item_id: projectInspectionItemId,
-      system_id: systemId,
-    }),
+    body: JSON.stringify(body),
   })
 }
 
@@ -87,7 +90,7 @@ export function templateErrorMessage(
     if (error.status === 409) {
       if (error.code === 'template.name_conflict') {
         return conflictingTemplateName
-          ? `這個系統已有「${conflictingTemplateName}」，沒有存入範本。請改選其他系統。`
+          ? `這個系統已有「${conflictingTemplateName}」，沒有存入範本。請改名後重試，或改選其他系統。`
           : '該系統已有同名範本。'
       }
       return '範本內容有衝突，請重新整理後再試。'

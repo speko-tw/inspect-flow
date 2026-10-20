@@ -954,7 +954,7 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(screen.getByText('選擇範本')).toBeInTheDocument()
   })
 
-  it('存為範本同名時保留來源與目的地，改選其他系統可完成', async () => {
+  it('存為範本名稱預填來源且衝突後改名可重試', async () => {
     const calls = mockApi({
       canSave: true,
       projectItems: [PROJECT_ITEM],
@@ -980,11 +980,18 @@ describe('專案範本套用與存為範本（#429）', () => {
     )
     fireEvent.click(await within(nav).findByRole('button', { name: '電氣' }))
     expect(screen.getByText(/範本庫 \/ 建築工程 \/ 電氣/)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/名稱/)).not.toBeInTheDocument()
+    const nameInput = screen.getByRole('textbox', { name: '範本名稱' })
+    expect(nameInput).toHaveValue('管線查核')
+    fireEvent.change(nameInput, { target: { value: '第一次命名' } })
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
     const conflict = await screen.findByRole('alert')
     expect(conflict).toHaveTextContent(
-      '這個系統已有「管線查核」，沒有存入範本。請改選其他系統。',
+      '這個系統已有「第一次命名」，沒有存入範本。請改名後重試，或改選其他系統。',
+    )
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(nameInput).toHaveAttribute(
+      'aria-describedby',
+      'save-template-name-error',
     )
     // 聚焦在 useEffect 裡；alert 插入 DOM 後才聚焦，所以要等。
     await waitFor(() =>
@@ -995,12 +1002,10 @@ describe('專案範本套用與存為範本（#429）', () => {
     expect(
       within(nav).getByRole('button', { name: '電氣' }),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '改選系統' }))
-    fireEvent.click(within(nav).getByRole('button', { name: '土木工程' }))
-    fireEvent.click(await within(nav).findByRole('button', { name: '基礎' }))
+    fireEvent.change(nameInput, { target: { value: '改名後的查核' } })
     fireEvent.click(screen.getByRole('button', { name: '存入這個系統' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
-      '已將「管線查核」存入「土木工程 / 基礎」。',
+      '已將「改名後的查核」存入「建築工程 / 電氣」。',
     )
     // 成功後只留頁首的返回連結，不再多一個同名按鈕（#516）。
     expect(screen.getAllByRole('link', { name: '返回查核項目' })).toHaveLength(
@@ -1012,7 +1017,8 @@ describe('專案範本套用與存為範本（#429）', () => {
         method: 'POST',
         body: JSON.stringify({
           project_inspection_item_id: 'copy-1',
-          system_id: 'system-3',
+          system_id: 'system-2',
+          name: '改名後的查核',
         }),
       }),
     )

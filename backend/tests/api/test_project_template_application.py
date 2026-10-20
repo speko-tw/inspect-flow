@@ -1038,12 +1038,14 @@ def test_project_item_can_be_saved_as_template_and_audited(
         "project_id": str(world["project"].id),
         "project_inspection_item_id": project_item_id,
         "system_id": target_system.json()["id"],
+        "title": "First item",
     }
 
-    conflict = world["template_admin"].post(url, json=body)
+    conflict = world["template_admin"].post(
+        url, json={**body, "name": "  fIrSt ItEm  "}
+    )
     assert conflict.status_code == 409
     assert conflict.json() == {"error": {"code": "template.name_conflict"}}
-
     normalized_system = world["template_admin"].post(
         f"/api/v1/template-categories/{target_category.json()['id']}/systems",
         json={"name": "Normalized conflict system"},
@@ -1115,6 +1117,77 @@ def test_project_item_can_be_saved_as_template_and_audited(
     )
     assert project_text is not None
     assert project_text.text == "As approved"
+
+
+def test_save_as_template_uses_optional_trimmed_name_and_audits_it(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    source_system_id, _ = _create_templates(world["admin"])
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": source_system_id},
+    )
+    assert applied.status_code == 201, applied.text
+
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Save as category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Save as system"},
+    )
+    response = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": applied.json()[0]["id"],
+            "system_id": system.json()["id"],
+            "name": "  Renamed template  ",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["title"] == "Renamed template"
+
+    event = db_session.scalar(
+        select(AuditLog).where(
+            AuditLog.event_type == "template_item.created_from_project",
+            AuditLog.entity_id == UUID(response.json()["id"]),
+        )
+    )
+    assert event is not None
+    assert event.after["title"] == "Renamed template"
+
+
+@pytest.mark.parametrize("name", ["   ", "x" * 257])
+def test_save_as_template_rejects_blank_or_overlong_name(
+    db_session, make_client, name
+):
+    world = _world(db_session, make_client)
+    source_system_id, _ = _create_templates(world["admin"])
+    applied = world["editor"].post(
+        f"/api/v1/projects/{world['project'].id}"
+        "/inspection-items:apply-template",
+        json={"system_id": source_system_id},
+    )
+    assert applied.status_code == 201, applied.text
+    category = world["admin"].post(
+        "/api/v1/template-categories", json={"name": "Invalid name category"}
+    )
+    system = world["admin"].post(
+        f"/api/v1/template-categories/{category.json()['id']}/systems",
+        json={"name": "Invalid name system"},
+    )
+    response = world["admin"].post(
+        f"/api/v1/projects/{world['project'].id}/templates",
+        json={
+            "project_inspection_item_id": applied.json()[0]["id"],
+            "system_id": system.json()["id"],
+            "name": name,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "request.validation_failed"
 
 
 def test_project_item_list_authorization_and_cursor_pagination(
