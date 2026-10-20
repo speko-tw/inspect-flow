@@ -78,6 +78,12 @@ export default function ProjectItemLinks({
               <strong>{item.title}</strong>
               <p>{item.inspection_points.length} 個查核項次</p>
               <p>來源範本：{item.source_template_name}</p>
+              <p>
+                來源分類／系統：{' '}
+                {item.source_category_name && item.source_system_name
+                  ? `${item.source_category_name} / ${item.source_system_name}`
+                  : '未記錄'}
+              </p>
               <time
                 className="project-item-applied-time"
                 dateTime={item.applied_at}

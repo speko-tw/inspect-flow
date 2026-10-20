@@ -16,6 +16,7 @@ from app.models import (
     ProjectMeasurementField,
     ProjectNumericStandard,
     ProjectTextStandard,
+    TemplateCategory,
     TemplateEvidenceRequirement,
     TemplateInspectionPoint,
     TemplateItem,
@@ -69,6 +70,8 @@ def _copy_template_item(
     project_id: UUID,
     template: TemplateItem,
     source_name: str,
+    source_category_name: str,
+    source_system_name: str,
     applied_at: datetime,
     operator_id: UUID,
 ) -> ProjectInspectionItem:
@@ -78,6 +81,8 @@ def _copy_template_item(
         title=template.title,
         instruction=template.instruction,
         source_template_name=source_name,
+        source_category_name=source_category_name,
+        source_system_name=source_system_name,
         applied_at=applied_at,
         created_by=operator_id,
         updated_by=operator_id,
@@ -221,6 +226,14 @@ def apply_template(
         template = db.get(TemplateItem, template_id)
         if template is None:
             return None
+        system = db.get(TemplateSystem, template.system_id)
+        category = (
+            db.get(TemplateCategory, system.category_id)
+            if system is not None
+            else None
+        )
+        if system is None or category is None:
+            return None
         _reject_duplicate_names(db, project_id, [template])
         copies = [
             _copy_template_item(
@@ -228,6 +241,8 @@ def apply_template(
                 project_id=project_id,
                 template=template,
                 source_name=template.title,
+                source_category_name=category.name,
+                source_system_name=system.name,
                 applied_at=applied_at,
                 operator_id=operator.id,
             )
@@ -250,6 +265,9 @@ def apply_template(
     system = db.get(TemplateSystem, system_id)
     if system is None:
         return None
+    category = db.get(TemplateCategory, system.category_id)
+    if category is None:
+        return None
     templates = db.scalars(
         select(TemplateItem)
         .where(TemplateItem.system_id == system_id)
@@ -262,6 +280,8 @@ def apply_template(
             project_id=project_id,
             template=template,
             source_name=system.name,
+            source_category_name=category.name,
+            source_system_name=system.name,
             applied_at=applied_at,
             operator_id=operator.id,
         )

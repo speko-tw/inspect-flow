@@ -47,6 +47,12 @@
 - 專案項目 PATCH 相同內容回 200，不新增修訂、變更列或 audit；實作與 `backend/tests/api/test_inspection_planning_api.py` 驗收。
 - 依據：維護者決定（#624，2026-10-16）。
 
+## Issue #667 來源路徑快照
+
+- `ProjectInspectionItem` 增加可空的來源工程類別／系統名稱快照，單項與整系統套用時保存當下值；舊資料不回填，避免從可能不唯一的 `source_template_name` 猜測。
+- 專案項目 API 回傳這兩欄，畫面顯示類別／系統；歷史路徑未知時明示未記錄。來源日後改名或刪除不改寫既有快照。
+- migration 可升級與降級；以 API、DB migration 和前端測試驗收。
+
 ## 風險
 
 - **KD-55 與項目級補充的文字需一併理解**：依負責人補充裁定 5970063986，只作廢受影響項目的舊 Snapshot、結果與照片，保留同 Task 其他項目；符合條件的 `COMPLETED` Task 回到 `IN_PROGRESS`、`PENDING`／`IN_PROGRESS` Task 保持原狀，來源為 `DRAFT` 時原位更新。#346 的 PR #347 與 state-machines PR #349 均已合併；實作依已凍結規則。

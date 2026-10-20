@@ -119,6 +119,44 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
     assert _stamped_version(db_url) == expected_head
 
 
+def test_project_item_source_path_migration_is_nullable_and_reversible(db_url):
+    cfg = _alembic_config()
+    previous_revision = "b72e4c19f6a3"
+    command.upgrade(cfg, previous_revision)
+    engine = create_engine(db_url)
+    try:
+        old_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns(
+                "project_inspection_items"
+            )
+        }
+        assert "source_category_name" not in old_columns
+        assert "source_system_name" not in old_columns
+
+        command.upgrade(cfg, "head")
+        new_columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns(
+                "project_inspection_items"
+            )
+        }
+        assert new_columns["source_category_name"]["nullable"] is True
+        assert new_columns["source_system_name"]["nullable"] is True
+
+        command.downgrade(cfg, previous_revision)
+        downgraded_columns = {
+            column["name"]
+            for column in inspect(engine).get_columns(
+                "project_inspection_items"
+            )
+        }
+        assert "source_category_name" not in downgraded_columns
+        assert "source_system_name" not in downgraded_columns
+    finally:
+        engine.dispose()
+
+
 def test_task_dispatch_time_migration_backfills_only_dispatched_tasks(db_url):
     from datetime import UTC, datetime
     from uuid import UUID, uuid4

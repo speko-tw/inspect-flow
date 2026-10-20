@@ -544,6 +544,10 @@ def test_apply_system_copies_nested_data_and_detaches_source(
     assert {item["source_template_name"] for item in applied} == {
         "Apply system"
     }
+    assert {
+        (item["source_category_name"], item["source_system_name"])
+        for item in applied
+    } == {("Apply category", "Apply system")}
     assert len({item["applied_at"] for item in applied}) == 1
     copies = db_session.scalars(
         select(ProjectInspectionItem)
@@ -648,6 +652,10 @@ def test_apply_system_copies_nested_data_and_detaches_source(
         ("First item", "Apply system"),
         ("Second item", "Apply system"),
     ]
+    assert {
+        (item.source_category_name, item.source_system_name)
+        for item in retained
+    } == {("Apply category", "Apply system")}
     assert (
         db_session.scalar(
             select(ProjectNumericStandard).where(
@@ -682,6 +690,8 @@ def test_apply_single_uses_title_and_requires_exactly_one_source(
     applied = world["editor"].post(url, json={"template_id": template_ids[0]})
     assert applied.status_code == 201, applied.text
     assert applied.json()[0]["source_template_name"] == "First item"
+    assert applied.json()[0]["source_category_name"] == "Apply category"
+    assert applied.json()[0]["source_system_name"] == "Apply system"
     existing_ids = set(
         db_session.scalars(
             select(ProjectInspectionItem.id).where(
@@ -733,6 +743,34 @@ def test_apply_single_uses_title_and_requires_exactly_one_source(
         )
         == existing_ids
     )
+
+
+def test_historic_project_item_without_source_path_is_returned_as_unknown(
+    db_session, make_client
+):
+    world = _world(db_session, make_client)
+    project = db_session.get(Project, world["project"].id)
+    assert project is not None
+    item = ProjectInspectionItem(
+        project_id=project.id,
+        sequence=1,
+        title="Legacy item",
+        instruction="Legacy instruction",
+        source_template_name="Repeated source name",
+        applied_at=project.created_at,
+        created_by=project.created_by,
+        updated_by=project.updated_by,
+    )
+    db_session.add(item)
+    db_session.commit()
+    response = world["editor"].get(
+        f"/api/v1/projects/{world['project'].id}/inspection-items"
+    )
+    assert response.status_code == 200, response.text
+    stored = response.json()["items"][0]
+    assert stored["source_template_name"] == "Repeated source name"
+    assert stored["source_category_name"] is None
+    assert stored["source_system_name"] is None
 
 
 def test_apply_empty_system_returns_successful_empty_list(

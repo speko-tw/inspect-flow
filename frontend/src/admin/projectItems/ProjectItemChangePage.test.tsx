@@ -72,6 +72,8 @@ const preview: ProjectItemPreview = {
     title: '混凝土表面檢查',
     instruction: '檢查混凝土表面狀況',
     source_template_name: '混凝土施工',
+    source_category_name: '土建工程',
+    source_system_name: '混凝土系統',
     applied_at: '2026-10-05T01:00:00Z',
     inspection_points: [point],
   },

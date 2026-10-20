@@ -15,6 +15,8 @@ export interface ProjectItemData {
   title: string
   instruction: string
   source_template_name: string
+  source_category_name?: string | null
+  source_system_name?: string | null
   applied_at: string
   inspection_points: InspectionPoint[]
 }

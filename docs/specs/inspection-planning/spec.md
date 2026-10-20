@@ -92,7 +92,7 @@ KD-55 原 SM-Q03 技術提案是整筆 Task 作廢並建立新 Task；本規格�
 
 Plan 的有效狀態為 `DRAFT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；另有 `ARCHIVED` 封存狀態。依 KD-56，任何狀態皆可封存；封存中的 Plan 及所屬 Task 均唯讀。取消封存後依當前 Task 狀態重算 Plan 狀態，不保存或還原 `archived_from_status`（**規格設計（非負責人裁定）**）。已合併的 `state-machines` SM-Q03 已反映 KD-55 項目級規則。至少一筆 Task 且全部取消時 Plan 為 `CANCELLED`；至少一筆完成且其餘均取消時為 `COMPLETED`；零 Task 維持 `DRAFT`。Task 狀態為 `DRAFT`、`PENDING`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；`DRAFT` 可硬刪除、不可取消，派出後為 `PENDING`，`PENDING`／`IN_PROGRESS` 得取消並可恢復至取消前狀態，完成 Task 不可取消。`有缺失` 為旗標而非狀態（**規格設計（非負責人裁定）**）。含 `DRAFT` Task 的 Plan 不得為 `COMPLETED`。任何 Task 仍有待重查項目時不得完成；KD-55 觸發的項目重查只讓原 `COMPLETED` Task 轉為 `IN_PROGRESS`，`PENDING`／`IN_PROGRESS` Task 維持原狀。項目層級狀態／待重查表示為規格設計（非負責人裁定）。
 
-`ProjectInspectionItem` 的來源名稱、套用時間與既有結構沿用 `template-system` TPL-R08；本規格增補足以支援後續任務建立、修改影響追蹤及 KD-55 作廢／更正紀錄的欄位。任何歷史任務資料不得因來源項目變動而無聲改寫。
+`ProjectInspectionItem` 的來源範本名稱、套用時間、套用當下工程類別／系統名稱快照與既有結構沿用 `template-system` TPL-R08。舊資料若沒有來源路徑，欄位保持空值，不得依可能重複的來源名稱推測；前端需清楚呈現此資訊未知。其他欄位由本規格增補，以支援後續任務建立、修改影響追蹤及 KD-55 作廢／更正紀錄。任何歷史任務資料不得因來源項目變動而無聲改寫。
 
 `project_inspection_item.updated` 是 KD-55 項目修改及重新查核選擇的 AuditLog 事件；事件目錄的 `before`／`after` 登記項目修改欄位與所選重新查核旗標。DRAFT Task 硬刪除另以 `inspection_task.deleted` 記錄 Task 識別碼、操作者、時間及內容摘要；刪除事件與硬刪除在同一交易寫入。Task 名稱修改以 `inspection_task.renamed` 記錄修改前後名稱（IP-R17）；Task 取消以 `inspection_task.cancelled` 記錄原因、操作者、時間及狀態；恢復以 `inspection_task.restored` 記錄操作者、時間及恢復前後狀態，不記恢復原因。Task 地點修改以 `inspection_task.location_updated` 記錄 Task 識別碼、操作者、時間及修改前後的 `zone_id`／`location_text`，與地點更新在同一交易寫入。草稿 Task 查核項目替換以 `inspection_task.items_updated` 記錄 Task 識別碼、操作者、時間及修改前後的項目 ID 與名稱（`{項目 ID: 名稱}` 對照），與項目重建在同一交易寫入，集合未變時不寫入（IP-R20）。上述新增事件的代碼與欄位為**規格設計（非負責人裁定）**，由 T2 登記。Task 的 `started_by`、`completed_by` 是領域資料欄位，與上述 AuditLog 事件用途不同。
 

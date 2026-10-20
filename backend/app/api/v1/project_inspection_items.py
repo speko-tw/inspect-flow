@@ -62,6 +62,8 @@ class AppliedItemResponse(BaseModel):
     id: UUID
     project_id: UUID
     source_template_name: str
+    source_category_name: str | None
+    source_system_name: str | None
     applied_at: str
 
 
@@ -119,6 +121,8 @@ def apply_template_to_project(
             "id": item.id,
             "project_id": item.project_id,
             "source_template_name": item.source_template_name,
+            "source_category_name": item.source_category_name,
+            "source_system_name": item.source_system_name,
             "applied_at": format_utc(item.applied_at),
         }
         for item in result

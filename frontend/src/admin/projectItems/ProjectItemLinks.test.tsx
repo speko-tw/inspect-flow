@@ -20,6 +20,8 @@ describe('ProjectItemLinks', () => {
               title: '管線查核',
               instruction: '確認管線安裝',
               source_template_name: '給排水',
+              source_category_name: '建築設備',
+              source_system_name: '給排水系統',
               applied_at: '2026-10-05T01:00:00Z',
               inspection_points: [],
             },
@@ -53,6 +55,9 @@ describe('ProjectItemLinks', () => {
     )
 
     expect(await screen.findByText('來源範本：給排水')).toBeInTheDocument()
+    expect(
+      screen.getByText('來源分類／系統： 建築設備 / 給排水系統'),
+    ).toBeInTheDocument()
     expect(screen.getByText('剛套用')).toBeInTheDocument()
     expect(screen.getByText(/套用時間：/).closest('time')).toHaveAttribute(
       'datetime',
@@ -83,6 +88,10 @@ describe('ProjectItemLinks', () => {
               sequence: 1,
               title: '管線查核',
               instruction: '確認管線安裝',
+              source_template_name: '舊來源名稱',
+              source_category_name: null,
+              source_system_name: null,
+              applied_at: '2026-10-05T01:00:00Z',
               inspection_points: [],
             },
           ],
@@ -108,6 +117,8 @@ describe('ProjectItemLinks', () => {
     )
 
     expect(await screen.findByText('管線查核')).toBeInTheDocument()
+    expect(screen.getByText('來源範本：舊來源名稱')).toBeInTheDocument()
+    expect(screen.getByText('來源分類／系統： 未記錄')).toBeInTheDocument()
     const viewLinkName = '檢視「管線查核」'
     const viewLink = screen.getByRole('link', { name: viewLinkName })
     expect(viewLink).toHaveTextContent('檢視')
