@@ -236,6 +236,9 @@ def _assert_downgrade_rejected_without_changes(
     user_id,
     expected_permission: tuple[str, str],
 ) -> None:
+    command.downgrade(_cfg(), "b72e4c19f6a3")
+    assert _current_revision(db_url) == "b72e4c19f6a3"
+
     engine = create_engine_from_settings(db_url)
     try:
         with Session(engine) as session:
@@ -286,9 +289,9 @@ def _assert_downgrade_rejected_without_changes(
         engine.dispose()
     assert after == before
     assert expected_permission in after
-    # PostgreSQL rolls back the child snapshot migration together with the
-    # rejected parent downgrade, preserving the current head revision.
-    assert _current_revision(db_url) == "c489a760d1e3"
+    # Start at the conversion revision so the guard is isolated from a later
+    # child migration on both SQLite and PostgreSQL.
+    assert _current_revision(db_url) == "b72e4c19f6a3"
 
 
 def test_empty_template_permissions_allow_empty_legacy_table(db_url):
