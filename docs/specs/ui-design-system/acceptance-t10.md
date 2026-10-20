@@ -16,6 +16,16 @@
 | UDS-AC15 | PASS | 初次真瀏覽器走查發現明確淺色主題 selector 特異性蓋過 reduced-motion media rule；本分支以淺/深/系統/未設定 selector 修正，並在 `tokens.test.ts` 增 regression assertion。修正後八個深層頁面在淺/深主題、1280/360 共 32 組均讀回 `--motion-fast: 0ms`；reduced-motion regression test 7 項通過。 |
 | UDS-AC16 | PASS | 本分支新增[元件規範與使用指引](component-guidelines.md)，列出元件狀態矩陣及功能頁套用範圍。七項回饋及外部交付來源見 #686 issue 討論：`HANDOFF.md` 與 `OpsWorkbench.dc.html` 已交付外部專案，`/design-sync` 尚待進行；外部 repo 不在本分支改動範圍，也不宣稱已同步其實作。 |
 
+## 2026-10-20 #413／#286 後續驗收（UDS-AC12）
+
+- 本工單暫採「目前啟用中的專案成員」口徑；`domain-model` 的 `member_count` 契約尚未先凍結。本節記錄實測，不代表 UDS-AC12 全部 PASS，也不代表 #286 契約已完成；保留上表 2026-10-19 延後裁定原文。
+- 真 demo 的 `GET /api/v1/projects?limit=50` 回 HTTP 200：`DEMO-A=3`、`DEMO-B=4`；各自 `/members` API 的啟用列數同為 3、4，畫面顯示「成員數：3／4」。
+- Admin 真 Chromium 搜尋 `DEMO-B` 唯一命中；不存在名稱顯示空結果與清除搜尋。1280px、360px 均無水平溢位（`scrollWidth === innerWidth`）；截圖見 `design/413/1280-light-projects.png`、`design/413/360-light-projects.png`。
+- `test_project_list_counts_only_active_members` 驗證停用成員不計入（計數 2）及零成員專案回 0；`test_project_list_query_count_does_not_grow`、`test_project_list_search_cursor_and_validation` 覆蓋查詢數、搜尋與 API cursor。
+- `ProjectsAdmin.test.tsx` 的 `searches projects and loads the next cursor page` 與 `renders the API member count, including zero, after cursor paging` 使用 51 筆資料；第 1 筆顯示 0、第 51 筆顯示 API 值 7，載入請求帶 `cursor=50`。
+- 定向結果：`backend/tests/api/test_projects.py` 63 passed、`backend/tests/services/test_projects.py` 4 passed、`ProjectsAdmin.test.tsx` 88 passed，均 exit 0。完整 `make check` exit 0：backend 1390 passed／22 skipped、PostgreSQL 595 passed／5 skipped、frontend 72 files／1478 passed；Prettier、ESLint、TypeScript、build、PWA 與拆包檢查均通過。
+- NOT_RUN：真 demo 僅兩個專案，未以真瀏覽器驗證 50 筆以上的續載；此情境由上述 51 筆 UI 測試覆蓋。
+
 ## 實際走查範圍
 
 - 九個登入身分：`admin`、`demo-manager`、`demo-office`、`demo-field-a`、`demo-field-b`、`demo-template-manager`、`demo-template-delegate`、`demo-consultant`、`demo-no-access`。每個身分均實際登入；首頁與可見導覽已依畫面記錄於 #700 指南。

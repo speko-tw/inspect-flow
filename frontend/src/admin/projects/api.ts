@@ -31,8 +31,13 @@ export interface Project {
   warnings: ProjectWarning[]
 }
 
+/** ADM-R12：專案清單以 API 提供的啟用成員數呈現，不由前端推算。 */
+export interface ProjectListItem extends Project {
+  member_count: number
+}
+
 export interface ProjectPage {
-  items: Project[]
+  items: ProjectListItem[]
   next_cursor: string | null
 }
 

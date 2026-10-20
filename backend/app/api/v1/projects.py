@@ -53,6 +53,7 @@ from app.services.projects import (
     InvalidCompanyRoleError,
     InvalidProjectFieldError,
     ProjectUnchangedError,
+    count_active_project_members,
     create_project,
     find_projects_by_code,
     update_project,
@@ -89,6 +90,12 @@ class ProjectResponse(BaseModel):
     planned_start_date: date | None
     planned_completion_date: date | None
     warnings: list[ProjectWarning] = Field(default_factory=list)
+
+
+class ProjectListItemResponse(ProjectResponse):
+    """ADM-AC09 專案清單列出的欄位與啟用成員數。"""
+
+    member_count: int
 
 
 class ProjectPlanningResponse(BaseModel):
@@ -139,7 +146,7 @@ class ProjectWorkflowSummaryResponse(BaseModel):
 
 
 class ProjectListResponse(BaseModel):
-    items: list[ProjectResponse]
+    items: list[ProjectListItemResponse]
     next_cursor: str | None
 
 
@@ -300,6 +307,25 @@ def _project_response(project: Project, is_duplicate: bool) -> ProjectResponse:
     )
 
 
+def _project_list_responses(
+    db: Session,
+    projects: Sequence[Project],
+    duplicate_codes: set[str],
+) -> list[ProjectListItemResponse]:
+    counts = count_active_project_members(
+        db, {project.id for project in projects}
+    )
+    return [
+        ProjectListItemResponse(
+            **_project_response(
+                project, project.project_code in duplicate_codes
+            ).model_dump(),
+            member_count=counts[project.id],
+        )
+        for project in projects
+    ]
+
+
 def _single_project_response(db: Session, project: Project) -> ProjectResponse:
     duplicates = find_projects_by_code(db, project.project_code)
     return _project_response(project, len(duplicates) > 1)
@@ -449,8 +475,8 @@ def list_projects(
         key_name="name",
         cursor=cursor,
         limit=limit,
-        serialize=lambda project: _project_response(
-            project, project.project_code in duplicate_codes
+        serialize_batch=lambda projects: _project_list_responses(
+            db, projects, duplicate_codes
         ),
         filters=filters,
     )

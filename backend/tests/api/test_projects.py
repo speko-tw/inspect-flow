@@ -547,6 +547,46 @@ def test_project_list_query_count_does_not_grow(
     assert sum(bool(row["warnings"]) for row in rows["items"]) == 2
     assert baseline
     assert len(expanded) == len(baseline)
+    assert all("member_count" in row for row in rows["items"])
+
+
+def test_project_list_counts_only_active_members(project_api, db_session):
+    project = project_api["project"]
+    other_project = project_api["other_project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    assert isinstance(target, User)
+    assert isinstance(role, Role)
+
+    inactive = create_user(
+        db_session,
+        is_external_collaborator=False,
+        username="inactive.project.member",
+        email="inactive.project.member@demo.example",
+        name_zh="停用專案成員",
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[role.id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=inactive.id,
+        role_ids=[role.id],
+    )
+    inactive.is_active = False
+    db_session.commit()
+
+    response = project_api["admin_client"].get("/api/v1/projects")
+    assert response.status_code == 200
+    counts = {
+        row["id"]: row["member_count"] for row in response.json()["items"]
+    }
+    assert counts[str(project.id)] == 2
+    assert counts[str(other_project.id)] == 0
 
 
 def test_project_list_search_cursor_and_validation(project_api):

@@ -859,6 +859,37 @@ describe('admin projects page', () => {
     expect(screen.queryByText('示範工程0')).not.toBeInTheDocument()
   })
 
+  it('renders the API member count, including zero, after cursor paging', async () => {
+    const projects = Array.from({ length: 51 }, (_, index) => ({
+      ...makeProject({
+        id: `count-project-${index}`,
+        project_code: `COUNT-${String(index).padStart(3, '0')}`,
+        name: index === 50 ? '第二頁工程' : `計數工程${index}`,
+      }),
+      member_count: index === 0 ? 0 : index === 50 ? 7 : 2,
+    }))
+    const fetchMock = projectFetch({ projects })
+    renderAt('/projects')
+
+    await screen.findByRole('heading', { name: /計數工程0/ })
+    const firstCard = screen
+      .getByRole('heading', { name: /計數工程0/ })
+      .closest('article')
+    expect(firstCard).not.toBeNull()
+    expect(within(firstCard!).getByText('成員數：0')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
+    const secondPageHeading = await screen.findByRole('heading', {
+      name: /第二頁工程/,
+    })
+    const secondPageCard = secondPageHeading.closest('article')
+    expect(secondPageCard).not.toBeNull()
+    expect(within(secondPageCard!).getByText('成員數：7')).toBeVisible()
+    expect(calls(fetchMock, 'GET', /\/projects\?[^ ]*cursor=50/)).toHaveLength(
+      1,
+    )
+  })
+
   it('shows planned completion on the card and hides empty lines', async () => {
     projectFetch({
       projects: [

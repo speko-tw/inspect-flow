@@ -843,6 +843,7 @@ function AdminProjectsPage() {
                       <p>
                         本公司角色：{roleLabel(roles, project.company_role)}
                       </p>
+                      <p>成員數：{project.member_count}</p>
                       {project.planned_start_date ? (
                         <p>{`預定開工：${project.planned_start_date}`}</p>
                       ) : null}
