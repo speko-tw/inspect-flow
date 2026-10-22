@@ -20,6 +20,42 @@ const MANAGE: PermissionCode = {
   code: 'project_member.manage',
   description: '管理專案成員與其角色',
 }
+const ALL_PROJECT_PERMISSION_CODES = [
+  'project_member.manage',
+  'project.update',
+  'project.read',
+  'project_inspection_item.edit',
+  'project_inspection_item.read',
+  'project_zone.read',
+  'project_zone.manage',
+  'inspection_plan.read',
+  'inspection_plan.create',
+  'inspection_plan.manage',
+  'inspection_plan.archive',
+  'inspection_plan.unarchive',
+  'inspection_task.read',
+  'inspection_task.manage',
+  'inspection_task.create',
+  'inspection_task.dispatch',
+  'inspection_task.assign',
+  'inspection_task.inspect',
+  'inspection_task.delete_draft',
+  'inspection_task.cancel',
+]
+const GROUPED_PERMISSIONS: PermissionCode[] = ALL_PROJECT_PERMISSION_CODES.map(
+  (code) => ({
+    code,
+    description: `權限 ${code}`,
+  }),
+)
+const PERMISSION_GROUP_TITLES = [
+  '查核計畫',
+  '查核任務',
+  '專案',
+  '專案查核項目',
+  '成員',
+  '分區',
+]
 
 function makeRole(
   id: string,
@@ -423,6 +459,57 @@ describe('admin role management page', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 
+  it('groups permissions in six project categories', async () => {
+    rolesFetch({ permissions: GROUPED_PERMISSIONS })
+    renderRoles()
+
+    for (const title of PERMISSION_GROUP_TITLES) {
+      expect(await screen.findByRole('group', { name: title })).toBeVisible()
+    }
+    const groupedCodes = PERMISSION_GROUP_TITLES.flatMap((title) =>
+      within(screen.getByRole('group', { name: title }))
+        .getAllByRole('checkbox')
+        .map((input) => (input as HTMLInputElement).value),
+    )
+    expect(groupedCodes.sort()).toEqual(
+      [...ALL_PROJECT_PERMISSION_CODES].sort(),
+    )
+  })
+
+  it('keeps unclassified permissions in an other group', async () => {
+    rolesFetch({
+      permissions: [
+        { code: 'legacy_report.read', description: '讀取舊式報告' },
+      ],
+    })
+    renderRoles()
+
+    expect(
+      within(await screen.findByRole('group', { name: '其他' })).getByRole(
+        'checkbox',
+        { name: '讀取舊式報告' },
+      ),
+    ).toBeVisible()
+  })
+
+  it('lets the user cancel a new role form without saving', async () => {
+    const fetchMock = rolesFetch()
+    renderRoles()
+
+    fireEvent.change(await screen.findByLabelText('角色名稱'), {
+      target: { value: '未儲存角色' },
+    })
+    expect(screen.getByRole('button', { name: '新增角色' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(screen.queryByLabelText('角色名稱')).not.toBeInTheDocument()
+    expect(calls(fetchMock, 'POST')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: '新增角色' })).toBeVisible()
+  })
+
   it('creates a role with the checked permissions', async () => {
     const fetchMock = rolesFetch()
     renderRoles()
@@ -433,7 +520,7 @@ describe('admin role management page', () => {
     fireEvent.click(
       await screen.findByRole('checkbox', { name: '管理專案成員與其角色' }),
     )
-    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立角色' }))
 
     expect(
       await screen.findByRole('row', { name: /Site Lead/ }),
@@ -626,7 +713,7 @@ describe('admin role management page', () => {
     fireEvent.change(await screen.findByLabelText('角色名稱'), {
       target: { value: 'viewer' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+    fireEvent.click(screen.getByRole('button', { name: '建立角色' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '角色名稱已被使用（不分大小寫）。',
@@ -751,7 +838,7 @@ describe('admin role management page', () => {
   })
 })
 
-describe.each([['角色管理新增／編輯', '新增角色']])(
+describe.each([['角色管理新增／編輯', '建立角色']])(
   '%s 共用表單',
   (_name, submitLabel) => {
     function fillForm() {

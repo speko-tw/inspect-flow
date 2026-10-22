@@ -179,7 +179,7 @@
           "key": "in_progress",
           "item": "止水閥標示檢查",
           "zone": "一樓",
-          "location": "示範廠 C 棟泵房（已開始）",
+          "location": "示範廠 C 棟泵房",
           "assignee": "field_a",
           "status": "IN_PROGRESS",
           "name": "泵房止水閥標示"

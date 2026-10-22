@@ -137,15 +137,6 @@ export default function FieldPage() {
             />
           )}
         </main>
-        {!detailId && !unknownPath && (
-          <details className="field-profile">
-            <summary>我的資料</summary>
-            <p>帳號名稱：{user.username}</p>
-            <p>中文姓名：{user.name_zh ?? '—'}</p>
-            <p>英文姓名：{user.name_en ?? '—'}</p>
-            <p>Email：{user.email ?? '—'}</p>
-          </details>
-        )}
       </div>
     </>
   )

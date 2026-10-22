@@ -181,7 +181,7 @@ function renderUsers(
     onSelectUser?: (id: string) => void
   } = {},
 ) {
-  render(
+  return render(
     <DataMemoryRouter>
       <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
         <UsersPage onTemporaryPassword={vi.fn()} {...pageProps} />
@@ -207,6 +207,86 @@ describe('UsersPage 帳號詳情', () => {
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
   })
 
+  it('details show four actions; deactivation is dangerous', async () => {
+    stubBackend()
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+
+    expect(screen.queryByText('更多')).not.toBeInTheDocument()
+    const actions = screen.getByRole('button', {
+      name: '修改資料',
+    }).parentElement!
+    const labels = within(actions)
+      .getAllByRole('button')
+      .map((button) => button.textContent)
+    expect(labels).toEqual([
+      '修改資料',
+      '修改公司連結',
+      '指派管理者',
+      '停用帳號',
+    ])
+    expect(
+      within(actions).getByRole('button', { name: '停用帳號' }),
+    ).toHaveClass('btn-danger')
+  })
+
+  it('deactivation uses the name and shows a success notice', async () => {
+    const backend = stubBackend()
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+
+    const box = await screen.findByRole('region', { name: '操作確認' })
+    expect(box).toHaveTextContent(
+      '停用鄧安娜（anna.deng）後，他將無法登入；過去的查核紀錄與專案資料都會保留。',
+    )
+    const confirm = within(box).getByRole('button', { name: '確認' })
+    await waitFor(() => expect(confirm).toBeEnabled())
+    fireEvent.click(confirm)
+    await waitFor(() =>
+      expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(1),
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '鄧安娜 已停用。',
+    )
+  })
+
+  it('keeps success notices with the changed account', async () => {
+    const secondUser = {
+      ...regularUser,
+      id: 'user-2',
+      username: 'lin.chen',
+      name_zh: '林陳美',
+    }
+    const backend = stubBackend({ users: [regularUser, secondUser] })
+    const view = renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
+    const box = await screen.findByRole('region', { name: '操作確認' })
+    const confirm = within(box).getByRole('button', { name: '確認' })
+    await waitFor(() => expect(confirm).toBeEnabled())
+    fireEvent.click(confirm)
+    await waitFor(() =>
+      expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(1),
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '鄧安娜 已停用。',
+    )
+
+    view.rerender(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <UsersPage detailUserId="user-2" onTemporaryPassword={vi.fn()} />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: '林陳美' }),
+    ).toBeVisible()
+    expect(screen.queryByText('鄧安娜 已停用。')).toBeNull()
+  })
+
   it('keeps system and non-local account edit guards in detail', async () => {
     const protectedAccount = {
       ...regularUser,
@@ -216,8 +296,6 @@ describe('UsersPage 帳號詳情', () => {
     stubBackend({ users: [protectedAccount] })
     renderUsers({ detailUserId: 'user-1' })
     await screen.findByRole('heading', { name: '鄧安娜' })
-    fireEvent.click(screen.getByText('更多'))
-
     expect(screen.getByRole('button', { name: '修改資料' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '修改公司連結' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '指派管理者' })).toBeDisabled()
@@ -228,7 +306,6 @@ describe('UsersPage 帳號詳情', () => {
     const backend = stubBackend({ users: [{ ...regularUser }] })
     renderUsers({ detailUserId: 'user-1' })
     await screen.findByRole('heading', { name: '鄧安娜' })
-    fireEvent.click(screen.getByText('更多'))
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
 
     const panel = await screen.findByRole('region', { name: '操作確認' })
@@ -238,7 +315,6 @@ describe('UsersPage 帳號詳情', () => {
     expect(screen.queryByRole('region', { name: '操作確認' })).toBeNull()
     expect(backend.count('PUT', '/api/v1/users/user-1/active')).toBe(0)
 
-    fireEvent.click(screen.getByText('更多'))
     fireEvent.click(screen.getByRole('button', { name: '停用帳號' }))
     const confirmed = await screen.findByRole('region', { name: '操作確認' })
     await waitFor(() =>
@@ -752,6 +828,43 @@ describe('UsersPage 確認框顏色依動作效果（#527）', () => {
         }),
       ),
     )
+  })
+
+  it('沒有任何恢復項目時以一句話說明，不顯示空標題', async () => {
+    stubBackend({ users: [{ ...regularUser, is_active: false }] })
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByRole('button', { name: '啟用帳號' }))
+    const box = await screen.findByRole('region', { name: '操作確認' })
+
+    expect(
+      within(box).getByText('這個帳號沒有需要恢復的權限或專案。'),
+    ).toBeInTheDocument()
+    expect(within(box).queryByText('選擇要恢復的權限')).toBeNull()
+    expect(within(box).queryByText('選擇要恢復的委派範圍')).toBeNull()
+    expect(within(box).queryByText('選擇要恢復的專案成員關係')).toBeNull()
+    expect(
+      within(box).queryByText('選擇要保留的未完成任務建議指派'),
+    ).toBeNull()
+  })
+
+  it('部分內容只顯示有項目的恢復區塊', async () => {
+    stubBackend({
+      users: [{ ...regularUser, is_active: false }],
+      preview: { permission_codes: ['project.use'] },
+    })
+    renderUsers({ detailUserId: 'user-1' })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByRole('button', { name: '啟用帳號' }))
+    const box = await screen.findByRole('region', { name: '操作確認' })
+
+    expect(await within(box).findByLabelText('project.use')).toBeVisible()
+    expect(within(box).getByText('選擇要恢復的權限')).toBeInTheDocument()
+    expect(within(box).queryByText('選擇要恢復的委派範圍')).toBeNull()
+    expect(within(box).queryByText('選擇要恢復的專案成員關係')).toBeNull()
+    expect(
+      within(box).queryByText('選擇要保留的未完成任務建議指派'),
+    ).toBeNull()
   })
 
   it('到期的外部帳號顯示提示並阻止確認', async () => {

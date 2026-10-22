@@ -87,12 +87,6 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
                 "is_external_collaborator": False,
             },
             {
-                "id": str(delegate.id),
-                "username": "delegate",
-                "name_zh": "委派者",
-                "is_external_collaborator": False,
-            },
-            {
                 "id": str(external_candidate.id),
                 "username": "external-candidate",
                 "name_zh": "外部候選人",

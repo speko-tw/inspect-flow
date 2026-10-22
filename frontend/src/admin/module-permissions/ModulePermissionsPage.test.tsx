@@ -36,6 +36,7 @@ interface FixtureOptions {
   embedded?: boolean
   selectedUserId?: string
   delegateMode?: boolean
+  candidateRoleComparison?: boolean
   externalAccount?: boolean
   permissionOptions?: Array<{
     code: string
@@ -53,7 +54,7 @@ interface FixtureOptions {
 
 function permissionPage(options: FixtureOptions = {}) {
   currentUserMock.mockReturnValue({
-    user: { is_admin: !options.delegateMode },
+    user: { id: 'person', is_admin: !options.delegateMode },
     clear: vi.fn(),
   })
   const permissionCodes = [...(options.permissionCodes ?? [])]
@@ -87,6 +88,17 @@ function permissionPage(options: FixtureOptions = {}) {
   }
   if (options.externalAccount) member.is_external_collaborator = true
   const roles = [
+    {
+      id: 'current-role',
+      name: '目前角色',
+      permission_codes: ['project.read', 'project_member.manage'],
+      user_count: 0,
+      project_count: 0,
+      created_at: '',
+      updated_at: '',
+      is_assignable: true,
+      is_external_allowed: false,
+    },
     {
       id: 'office-role',
       name: '專案工程師',
@@ -134,6 +146,10 @@ function permissionPage(options: FixtureOptions = {}) {
       is_external_allowed: true,
     },
   ]
+  if (options.candidateRoleComparison) {
+    roles[0].permission_codes = ['project.read']
+    roles[2].permission_codes.push('project_member.manage')
+  }
   if (options.customOvergrantRole) {
     roles.push({
       id: 'custom-overgrant',
@@ -212,6 +228,16 @@ function permissionPage(options: FixtureOptions = {}) {
               name_zh: member.name_zh,
               is_external_collaborator: member.is_external_collaborator,
             },
+            ...(options.delegateMode
+              ? [
+                  {
+                    id: 'candidate',
+                    username: 'candidate',
+                    name_zh: '候選人',
+                    is_external_collaborator: false,
+                  },
+                ]
+              : []),
           ],
           next_cursor: null,
         })
@@ -1526,6 +1552,25 @@ describe('ModulePermissionsPage', () => {
     expect(screen.queryByText('尚未開始')).toBeNull()
   })
 
+  it('orders advanced permission groups before delegation', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+    })
+    fireEvent.click(await screen.findByText('進階設定'))
+    const bundle = await screen.findByRole('heading', {
+      name: '套用權限組合',
+    })
+    const delegation = screen.getByRole('heading', { name: '委派管理' })
+    expect(
+      Boolean(
+        bundle.compareDocumentPosition(delegation) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true)
+  })
+
   it('keeps summary visible and grants advanced', async () => {
     const { calls } = permissionPage({
       openWizard: false,
@@ -1541,6 +1586,9 @@ describe('ModulePermissionsPage', () => {
     const permissionsPanel = screen.getByRole('heading', {
       name: '已設定的權限',
     }).parentElement!
+    expect(permissionsPanel).toHaveTextContent(
+      '專案內能力請查看「參與專案與角色」。',
+    )
     expect(permissionsPanel.closest('details')).not.toHaveAttribute('open')
 
     fireEvent.click(advancedSummary)
@@ -1714,7 +1762,9 @@ describe('ModulePermissionsPage', () => {
     expect(
       within(candidateChooser).getByRole('radio', { name: /現場工程師/ }),
     ).toBeVisible()
-    expect(within(candidateChooser).getByText(/管理專案成員/)).toBeVisible()
+    expect(
+      within(candidateChooser).getAllByText(/管理專案成員/).length,
+    ).toBeGreaterThan(0)
     expect(
       within(candidateChooser).queryByRole('button', {
         name: '補上「現場工程師」角色',
@@ -2040,5 +2090,77 @@ describe('ModulePermissionsPage', () => {
     ).toBeVisible()
     expect(screen.queryByText('帳號清單')).toBeNull()
     expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+  })
+
+  it('compares candidate and current project permissions', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      permissionCodes: ['inspection.use'],
+      memberRoleIds: ['current-role'],
+      candidateRoleComparison: true,
+    })
+    fireEvent.change(screen.getByLabelText('要檢查的操作'), {
+      target: { value: 'members' },
+    })
+    fireEvent.change(await screen.findByLabelText('專案'), {
+      target: { value: 'project-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '檢查' }))
+
+    const chooser = await screen.findByRole('region', {
+      name: '可選專案角色',
+    })
+    const candidate = within(chooser)
+      .getByRole('radio', { name: /現場工程師/ })
+      .closest('.role-candidate')! as HTMLElement
+    expect(candidate).toHaveTextContent('角色可用權限（7 項）')
+    expect(
+      within(candidate).getByRole('button', {
+        name: '「現場工程師」完整權限',
+      }),
+    ).toBeVisible()
+    const summaries = candidate.querySelectorAll('.role-permission-summary')
+    expect(summaries).toHaveLength(2)
+    expect(summaries[1]).not.toHaveTextContent('檢視專案基本資料')
+  })
+
+  it('orders advanced settings before the capability summary', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+    })
+
+    await screen.findByRole('region', { name: '帳號能力摘要' })
+    const root = document.querySelector('.permission-management')!
+    const advanced = root.querySelector('.permission-advanced-settings')
+    const capabilities = root.querySelector('.permission-capabilities')
+    expect(advanced).not.toBeNull()
+    expect(capabilities).not.toBeNull()
+    expect(advanced!.compareDocumentPosition(capabilities!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
+
+  it('aligns each permission-bundle apply button in a list row', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+    })
+    await screen.findByRole('heading', { name: '套用權限組合' })
+
+    const bundleButton = screen.getAllByRole('button', { name: '套用' })[0]
+    expect(bundleButton.closest('li')).toHaveClass('permission-bundle-row')
+  })
+
+  it('hides the delegate from their own account list', async () => {
+    permissionPage({ delegateMode: true, openWizard: false })
+
+    await screen.findByRole('heading', { name: '帳號權限' })
+    expect(screen.queryByRole('button', { name: '林沐青' })).toBeNull()
+    expect(screen.getByRole('button', { name: '候選人' })).toBeVisible()
   })
 })

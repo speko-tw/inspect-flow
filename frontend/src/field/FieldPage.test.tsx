@@ -89,7 +89,7 @@ function renderPage(
 afterEach(() => vi.unstubAllGlobals())
 
 describe('今日任務首頁', () => {
-  it('顯示任務入口與個人資料，且沒有範本入口', async () => {
+  it('顯示任務入口，個人資料改由設定頁管理', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -107,7 +107,7 @@ describe('今日任務首頁', () => {
     expect(
       screen.queryByRole('link', { name: '變更密碼' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByText('我的資料')).toBeInTheDocument()
+    expect(screen.queryByText('我的資料')).not.toBeInTheDocument()
     expect(screen.queryByText(/範本/)).not.toBeInTheDocument()
   })
 
@@ -376,7 +376,7 @@ describe('今日任務首頁', () => {
     expect(screen.queryByText('單一查核項目 等 1 項')).not.toBeInTheDocument()
   })
 
-  it('保留密碼入口、來源 state 提示、登出與個人資料空值', async () => {
+  it('保留密碼入口、來源 state 提示與登出', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) =>
       String(input).endsWith('/auth/logout')
         ? Response.json({})
@@ -394,11 +394,7 @@ describe('今日任務首頁', () => {
       'href',
       '/settings',
     )
-    const profile = screen.getByText('我的資料').closest('details')
-    expect(profile).not.toBeNull()
-    expect(within(profile!).getByText('中文姓名：—')).toBeInTheDocument()
-    expect(within(profile!).getByText('英文姓名：—')).toBeInTheDocument()
-    expect(within(profile!).getByText('Email：—')).toBeInTheDocument()
+    expect(screen.queryByText('我的資料')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '登出' }))
     await waitFor(() => expect(clear).toHaveBeenCalledOnce())
     fireEvent.click(screen.getByRole('link', { name: '設定' }))
@@ -521,6 +517,25 @@ describe('狀態標籤', () => {
     await screen.findByRole('button', { name: '開始查核' })
     const inDetail = screen.getByText('待開始')
     expect(inDetail.className).toBe(inList.className)
+  })
+
+  it('任務卡的地點文字也能開啟任務明細', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/field/inspection-tasks/task-1')
+          ? Response.json(DETAIL)
+          : Response.json({ items: [TASK], next_cursor: null }),
+      ),
+    )
+    renderPage()
+    const card = await screen.findByRole('link', { name: /查看任務/ })
+
+    expect(within(card).getByText('示範工程甲')).toBeInTheDocument()
+    fireEvent.click(within(card).getByText('示範工程甲'))
+    expect(
+      await screen.findByRole('button', { name: '開始查核' }),
+    ).toBeInTheDocument()
   })
 })
 

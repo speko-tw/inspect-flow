@@ -34,7 +34,8 @@ import {
   managementErrorMessage,
 } from '../api'
 import type { Company, CreatedUser, User } from '../api'
-import { describeRole } from '../projects/roleDescriptions'
+import RolePermissionSummary from '../projects/RolePermissionSummary'
+import './ModulePermissionsPage.css'
 import {
   addProjectMember,
   listProjectMembers,
@@ -325,6 +326,9 @@ function ModulePermissionsPageContent({
       : null
   const [userAccess, setUserAccess] = useState<string[]>([])
   const [accessDraft, setAccessDraft] = useState<string[]>([])
+  const [currentProjectRoleCodes, setCurrentProjectRoleCodes] = useState<
+    string[]
+  >([])
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -589,12 +593,14 @@ function ModulePermissionsPageContent({
 
   const visibleUsers = useMemo(() => {
     const term = query.trim().toLocaleLowerCase()
-    return users.filter((user) =>
-      `${user.name_zh ?? ''} ${user.username}`
-        .toLocaleLowerCase()
-        .includes(term),
+    return users.filter(
+      (user) =>
+        (currentUser?.is_admin || user.id !== currentUser?.id) &&
+        `${user.name_zh ?? ''} ${user.username}`
+          .toLocaleLowerCase()
+          .includes(term),
     )
-  }, [query, users])
+  }, [currentUser?.id, currentUser?.is_admin, query, users])
 
   async function submitAccessDraft() {
     if (!selectedUser) return
@@ -883,6 +889,9 @@ function ModulePermissionsPageContent({
     try {
       const access = await refreshEffectiveAccess()
       if (!access) return
+      setCurrentProjectRoleCodes(
+        (access.project_roles ?? []).flatMap((role) => role.permission_codes),
+      )
       const actionBySelection: Record<string, string> = {
         'task-list': 'task_list',
         'create-project': 'create_project',
@@ -1044,185 +1053,6 @@ function ModulePermissionsPageContent({
               </li>
             ))}
           </ul>
-        </Card>
-      )}
-      {/* 完成頁只放臨時密碼與下一步；剛建好的帳號沒有可看的能力。 */}
-      {selectedUser && currentUser.is_admin && !(wizardOpen && step === 4) && (
-        <Card>
-          <h2>{embedded ? '能做什麼' : '帳號能力與快速檢查'}</h2>
-          {embedded &&
-            currentUser.is_admin &&
-            !users.find((user) => user.id === selectedUser)?.is_admin && (
-              <div>
-                <Button onClick={startExistingJob}>重新套用職務</Button>
-                <p>{JOB_REAPPLY_EXPLANATION}</p>
-              </div>
-            )}
-          <div aria-label="帳號能力摘要" role="region">
-            <p role="status">
-              能使用：
-              {users.find((user) => user.id === selectedUser)?.is_admin
-                ? '系統管理者可使用全部功能。'
-                : permissions
-                    .filter((item) => userAccess.includes(item.code))
-                    .map((item) => item.description.replace('模組', '功能'))
-                    .join('、') || '尚未開通功能。'}
-            </p>
-            <h3>參與專案與角色</h3>
-            {participationForSelectedUser?.error && (
-              <p role="alert">{participationForSelectedUser.error}</p>
-            )}
-            {participationForSelectedUser?.error && (
-              <Button
-                onClick={() =>
-                  setParticipationReload((request) => request + 1)
-                }
-              >
-                重新載入參與專案
-              </Button>
-            )}
-            {!participationForSelectedUser && (
-              <p role="status">載入參與專案…</p>
-            )}
-            {!participationForSelectedUser?.error &&
-              participationForSelectedUser?.projects.length === 0 && (
-                <p>目前沒有參與專案。</p>
-              )}
-            <ul>
-              {participationForSelectedUser?.projects.map((project) => (
-                <li key={project.id}>
-                  <Link to={`/projects/${project.id}/members`}>
-                    {project.project_code}／{project.name}
-                  </Link>
-                  ：
-                  {project.roles.length > 0 ? (
-                    project.roles.map((role) => role.name).join('、')
-                  ) : (
-                    <>
-                      尚未指派角色（
-                      <Link to={`/projects/${project.id}/members`}>補上</Link>
-                      ）
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <h3>為什麼他不能做這件事？</h3>
-            <label>
-              要檢查的操作
-              <select
-                value={diagnosticAction}
-                onChange={(event) => {
-                  setDiagnosticAction(event.target.value)
-                  if (!['task-list', 'members'].includes(event.target.value)) {
-                    setDiagnosticProject('')
-                  }
-                  setNotice('')
-                  setCandidateRoles([])
-                }}
-              >
-                <option value="task-list">查看任務清單</option>
-                <option value="create-project">建立專案</option>
-                <option value="template">管理範本庫</option>
-                <option value="members">管理專案成員</option>
-              </select>
-            </label>
-            {['task-list', 'members'].includes(diagnosticAction) && (
-              <label>
-                專案
-                <select
-                  value={diagnosticProject}
-                  onChange={(event) => {
-                    setDiagnosticProject(event.target.value)
-                    setNotice('')
-                    setCandidateRoles([])
-                  }}
-                >
-                  <option value="">選擇專案</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <Button
-              disabled={
-                accessLoadedFor !== selectedUser ||
-                (['task-list', 'members'].includes(diagnosticAction) &&
-                  !diagnosticProject)
-              }
-              onClick={() => void diagnose()}
-            >
-              檢查
-            </Button>
-            {/* 結果訊息跟在觸發它的「檢查」按鈕後面，才讀得出因果。 */}
-            {notice && <p role="status">{notice}</p>}
-            {canRepairProjectRole && (
-              <section aria-label="可選專案角色">
-                <h3>可補上的專案角色</h3>
-                {safeCandidateRole ? (
-                  <Button
-                    disabled={busy}
-                    onClick={() => void repairDiagnosticRole()}
-                  >
-                    補上「現場工程師」角色
-                  </Button>
-                ) : (
-                  <>
-                    <p>請先比較角色能做的事，再選擇符合需求的角色。</p>
-                    {candidateRoles.map((role) => (
-                      <label key={role.id}>
-                        <input
-                          checked={selectedCandidateRole === role.id}
-                          name="diagnostic-role"
-                          type="radio"
-                          onChange={() => setSelectedCandidateRole(role.id)}
-                        />
-                        <strong>{role.name}</strong>
-                        <span>{describeRole(role.permission_codes)}</span>
-                      </label>
-                    ))}
-                    <Button
-                      disabled={busy || !selectedCandidateRole}
-                      onClick={() => void repairDiagnosticRole()}
-                    >
-                      指派所選角色
-                    </Button>
-                  </>
-                )}
-                <Link to={`/projects/${diagnosticProject}/members`}>
-                  前往專案成員設定
-                </Link>
-              </section>
-            )}
-            {notice.includes('缺少') && notice.includes('權限') && (
-              <Button
-                onClick={() => {
-                  const code =
-                    diagnosticAction === 'create-project'
-                      ? 'project.create'
-                      : diagnosticAction === 'template'
-                        ? 'template.manage'
-                        : diagnosticAction === 'members'
-                          ? 'project.use'
-                          : 'inspection.use'
-                  setAccessDraft((current) =>
-                    current.includes(code) ? current : [...current, code],
-                  )
-                }}
-              >
-                選取要開通的權限
-              </Button>
-            )}
-            {JSON.stringify([...accessDraft].sort()) !==
-              JSON.stringify([...userAccess].sort()) && (
-              <Button disabled={busy} onClick={() => void submitAccessDraft()}>
-                開通
-              </Button>
-            )}
-          </div>
         </Card>
       )}
       {embedded && !currentUser.is_admin && selectedUser && (
@@ -1641,11 +1471,13 @@ function ModulePermissionsPageContent({
         </Card>
       )}
       {(!embedded || currentUser.is_admin) && !(wizardOpen && step === 4) && (
-        <details>
+        <details className="permission-advanced-settings">
           <summary>進階設定</summary>
           <Card>
             <h2>已設定的權限</h2>
-            <p>這裡顯示帳號已開通的權限；專案內能力請查看上方的專案角色。</p>
+            <p>
+              這裡顯示帳號已開通的權限；專案內能力請查看「參與專案與角色」。
+            </p>
             {selectedUser && (
               <>
                 <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
@@ -1686,6 +1518,38 @@ function ModulePermissionsPageContent({
               </>
             )}
           </Card>
+          {embedded && currentUser.is_admin && (
+            <Card>
+              <h2>套用權限組合</h2>
+              <ul>
+                {bundles.map((bundle) => (
+                  <li className="permission-bundle-row" key={bundle.id}>
+                    <span>{bundle.name}</span>{' '}
+                    <Button
+                      disabled={!selectedUser || busy}
+                      onClick={() =>
+                        selectedUser &&
+                        applyPermissionBundle(selectedUser, bundle.id)
+                          .then(async () => {
+                            const access =
+                              await getUserModulePermissions(selectedUser)
+                            setUserAccess(access.permission_codes)
+                            setAccessDraft(access.permission_codes)
+                            await diagnose()
+                            setNotice('權限組合已套用。')
+                          })
+                          .catch((caught: unknown) =>
+                            setError(message(caught)),
+                          )
+                      }
+                    >
+                      套用
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           {currentUser.is_admin && (
             <Card>
               <h2>委派管理</h2>
@@ -1719,38 +1583,6 @@ function ModulePermissionsPageContent({
                     權限
                   </label>
                 ))}
-            </Card>
-          )}
-          {embedded && currentUser.is_admin && (
-            <Card>
-              <h2>套用權限組合</h2>
-              <ul>
-                {bundles.map((bundle) => (
-                  <li key={bundle.id}>
-                    <span>{bundle.name}</span>{' '}
-                    <Button
-                      disabled={!selectedUser || busy}
-                      onClick={() =>
-                        selectedUser &&
-                        applyPermissionBundle(selectedUser, bundle.id)
-                          .then(async () => {
-                            const access =
-                              await getUserModulePermissions(selectedUser)
-                            setUserAccess(access.permission_codes)
-                            setAccessDraft(access.permission_codes)
-                            await diagnose()
-                            setNotice('權限組合已套用。')
-                          })
-                          .catch((caught: unknown) =>
-                            setError(message(caught)),
-                          )
-                      }
-                    >
-                      套用
-                    </Button>
-                  </li>
-                ))}
-              </ul>
             </Card>
           )}
           {!embedded && (
@@ -1943,6 +1775,201 @@ function ModulePermissionsPageContent({
             </Card>
           )}
         </details>
+      )}
+      {/* 完成頁只放臨時密碼與下一步；剛建好的帳號沒有可看的能力。 */}
+      {selectedUser && currentUser.is_admin && !(wizardOpen && step === 4) && (
+        <Card className="permission-capabilities">
+          <h2>{embedded ? '能做什麼' : '帳號能力與快速檢查'}</h2>
+          {embedded &&
+            currentUser.is_admin &&
+            !users.find((user) => user.id === selectedUser)?.is_admin && (
+              <div>
+                <Button onClick={startExistingJob}>重新套用職務</Button>
+                <p>{JOB_REAPPLY_EXPLANATION}</p>
+              </div>
+            )}
+          <div aria-label="帳號能力摘要" role="region">
+            <p role="status">
+              能使用：
+              {users.find((user) => user.id === selectedUser)?.is_admin
+                ? '系統管理者可使用全部功能。'
+                : permissions
+                    .filter((item) => userAccess.includes(item.code))
+                    .map((item) => item.description.replace('模組', '功能'))
+                    .join('、') || '尚未開通功能。'}
+            </p>
+            <h3>參與專案與角色</h3>
+            {participationForSelectedUser?.error && (
+              <p role="alert">{participationForSelectedUser.error}</p>
+            )}
+            {participationForSelectedUser?.error && (
+              <Button
+                onClick={() =>
+                  setParticipationReload((request) => request + 1)
+                }
+              >
+                重新載入參與專案
+              </Button>
+            )}
+            {!participationForSelectedUser && (
+              <p role="status">載入參與專案…</p>
+            )}
+            {!participationForSelectedUser?.error &&
+              participationForSelectedUser?.projects.length === 0 && (
+                <p>目前沒有參與專案。</p>
+              )}
+            <ul>
+              {participationForSelectedUser?.projects.map((project) => (
+                <li key={project.id}>
+                  <Link to={`/projects/${project.id}/members`}>
+                    {project.project_code}／{project.name}
+                  </Link>
+                  ：
+                  {project.roles.length > 0 ? (
+                    project.roles.map((role) => role.name).join('、')
+                  ) : (
+                    <>
+                      尚未指派角色（
+                      <Link to={`/projects/${project.id}/members`}>補上</Link>
+                      ）
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <h3>為什麼他不能做這件事？</h3>
+            <label>
+              要檢查的操作
+              <select
+                value={diagnosticAction}
+                onChange={(event) => {
+                  setDiagnosticAction(event.target.value)
+                  if (!['task-list', 'members'].includes(event.target.value)) {
+                    setDiagnosticProject('')
+                  }
+                  setNotice('')
+                  setCandidateRoles([])
+                }}
+              >
+                <option value="task-list">查看任務清單</option>
+                <option value="create-project">建立專案</option>
+                <option value="template">管理範本庫</option>
+                <option value="members">管理專案成員</option>
+              </select>
+            </label>
+            {['task-list', 'members'].includes(diagnosticAction) && (
+              <label>
+                專案
+                <select
+                  value={diagnosticProject}
+                  onChange={(event) => {
+                    setDiagnosticProject(event.target.value)
+                    setNotice('')
+                    setCandidateRoles([])
+                  }}
+                >
+                  <option value="">選擇專案</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <Button
+              disabled={
+                accessLoadedFor !== selectedUser ||
+                (['task-list', 'members'].includes(diagnosticAction) &&
+                  !diagnosticProject)
+              }
+              onClick={() => void diagnose()}
+            >
+              檢查
+            </Button>
+            {/* 結果訊息跟在觸發它的「檢查」按鈕後面，才讀得出因果。 */}
+            {notice && <p role="status">{notice}</p>}
+            {canRepairProjectRole && (
+              <section aria-label="可選專案角色">
+                <h3>可補上的專案角色</h3>
+                {safeCandidateRole ? (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void repairDiagnosticRole()}
+                  >
+                    補上「現場工程師」角色
+                  </Button>
+                ) : (
+                  <>
+                    <p>請先比較角色能做的事，再選擇符合需求的角色。</p>
+                    {candidateRoles.map((role) => (
+                      <div className="role-candidate" key={role.id}>
+                        <label>
+                          <input
+                            checked={selectedCandidateRole === role.id}
+                            name="diagnostic-role"
+                            type="radio"
+                            onChange={() => setSelectedCandidateRole(role.id)}
+                          />
+                          <strong>{role.name}</strong>
+                        </label>
+                        <p>
+                          角色可用權限（{role.permission_codes.length} 項）
+                        </p>
+                        <RolePermissionSummary
+                          codes={role.permission_codes}
+                          name={role.name}
+                        />
+                        <p>比目前多給的能力</p>
+                        <RolePermissionSummary
+                          codes={role.permission_codes.filter(
+                            (code) => !currentProjectRoleCodes.includes(code),
+                          )}
+                          emptyText="不會增加新的能力"
+                          name={`${role.name}比目前多給的能力`}
+                        />
+                      </div>
+                    ))}
+                    <Button
+                      disabled={busy || !selectedCandidateRole}
+                      onClick={() => void repairDiagnosticRole()}
+                    >
+                      指派所選角色
+                    </Button>
+                  </>
+                )}
+                <Link to={`/projects/${diagnosticProject}/members`}>
+                  前往專案成員設定
+                </Link>
+              </section>
+            )}
+            {notice.includes('缺少') && notice.includes('權限') && (
+              <Button
+                onClick={() => {
+                  const code =
+                    diagnosticAction === 'create-project'
+                      ? 'project.create'
+                      : diagnosticAction === 'template'
+                        ? 'template.manage'
+                        : diagnosticAction === 'members'
+                          ? 'project.use'
+                          : 'inspection.use'
+                  setAccessDraft((current) =>
+                    current.includes(code) ? current : [...current, code],
+                  )
+                }}
+              >
+                選取要開通的權限
+              </Button>
+            )}
+            {JSON.stringify([...accessDraft].sort()) !==
+              JSON.stringify([...userAccess].sort()) && (
+              <Button disabled={busy} onClick={() => void submitAccessDraft()}>
+                開通
+              </Button>
+            )}
+          </div>
+        </Card>
       )}
       {revoke && (
         <ConfirmationPanel

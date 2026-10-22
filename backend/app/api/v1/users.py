@@ -514,6 +514,7 @@ def list_module_delegate_users(
         User.is_active.is_(True),
         User.is_system.is_(False),
         User.is_admin.is_(False),
+        User.id != _caller.id,
     ]
     query = (q or "").strip()
     if query:
