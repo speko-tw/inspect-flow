@@ -49,6 +49,7 @@ from app.permission_codes import (
     permission_code_module,
     permission_code_scope,
 )
+from app.services.account_status import effectively_active_user_clause
 from app.services.audit import record_audit_event
 from app.services.module_permissions import (
     CreatorRolePermissionsError,
@@ -1553,7 +1554,11 @@ def list_unmanaged_projects(
         dict(
             db.execute(
                 select(ProjectMember.project_id, func.count(ProjectMember.id))
-                .where(ProjectMember.project_id.in_(project_ids))
+                .join(User, User.id == ProjectMember.user_id)
+                .where(
+                    ProjectMember.project_id.in_(project_ids),
+                    effectively_active_user_clause(),
+                )
                 .group_by(ProjectMember.project_id)
             ).all()
         )

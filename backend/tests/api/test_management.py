@@ -15,6 +15,7 @@ from app.auth.passwords import (
     verify_password,
 )
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import clock
 from app.main import create_app
 from app.models import (
     AuditLog,
@@ -634,6 +635,71 @@ def test_external_and_unmanaged_admin_lists(admin_client):
     assert external.json()["next_cursor"] is None
     assert unmanaged.status_code == 200
     assert unmanaged.json()["next_cursor"] is None
+
+
+@pytest.mark.parametrize(
+    ("active", "external", "expiry_days", "expected_count"),
+    [
+        (False, False, None, 0),
+        (False, True, None, 0),
+        (True, True, -1, 0),
+        (True, True, 0, 1),
+        (True, True, 1, 1),
+        (True, True, None, 1),
+        (True, False, None, 1),
+    ],
+)
+def test_unmanaged_list_counts_only_effectively_active_members(
+    admin_client,
+    db_session,
+    monkeypatch,
+    active,
+    external,
+    expiry_days,
+    expected_count,
+):
+    """ADM-R36、#286：啟用成員含無角色者，排除停用及到期外部帳號。"""
+    now = clock.utc_now()
+    monkeypatch.setattr(clock, "utc_now", lambda: now)
+    client, admin = admin_client
+    member = create_root_user_with_company(db_session, "COUNT286")
+    member.is_active = active
+    member.is_external_collaborator = external
+    member.account_expires_on = (
+        now.date() + timedelta(days=expiry_days)
+        if expiry_days is not None
+        else None
+    )
+    project = Project(
+        project_code="COUNT286",
+        name="啟用成員數測試",
+        client_name="業主",
+        site_location="工地",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(project)
+    db_session.flush()
+    db_session.add(
+        ProjectMember(
+            project_id=project.id,
+            user_id=member.id,
+            created_by=admin.id,
+            updated_by=admin.id,
+        )
+    )
+    db_session.commit()
+    project_id = str(project.id)
+
+    response = client.get("/api/v1/admin/projects/unmanaged")
+
+    assert response.status_code == 200
+    item = next(
+        item for item in response.json()["items"] if item["id"] == project_id
+    )
+    assert item["member_count"] == expected_count
+    db_session.refresh(member)
+    assert member.is_active is active
 
 
 def test_admin_status_commits_before_response_start(admin_client, db_session):

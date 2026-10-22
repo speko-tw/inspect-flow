@@ -1,9 +1,11 @@
 """DOM-AC62、DOM-AC72：帳號到期與重新啟用生命週期。"""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
+import pytest
 from sqlalchemy import event, select
 
+from app.db import clock
 from app.models import (
     AuditLog,
     Project,
@@ -107,6 +109,73 @@ def test_unmanaged_project_query_count_does_not_grow_with_projects(
         f"SELECT count grew from {small_query_count} to "
         f"{large_query_count} for {len(expected_unmanaged)} projects"
     )
+
+
+@pytest.mark.parametrize(
+    ("active", "external", "expires_on", "expected_unmanaged"),
+    [
+        (False, False, None, True),
+        (True, True, date(2026, 10, 21), True),
+        (True, True, date(2026, 10, 22), False),
+        (True, True, date(2026, 10, 23), False),
+        (True, True, None, False),
+        (True, False, None, False),
+    ],
+)
+def test_unmanaged_projects_exclude_ineffective_accounts(
+    session,
+    operator,
+    monkeypatch,
+    active,
+    external,
+    expires_on,
+    expected_unmanaged,
+):
+    """DOM-R75、#286：殘留管理角色不能讓停用或到期帳號算管理者。"""
+    monkeypatch.setattr(
+        clock, "utc_now", lambda: datetime(2026, 10, 22, 12, tzinfo=UTC)
+    )
+    manager = create_root_user_with_company(session, "UNM286")
+    manager.is_active = active
+    manager.is_external_collaborator = external
+    manager.account_expires_on = expires_on
+    role = Role(
+        name="殘留管理角色",
+        created_by=operator.id,
+        updated_by=operator.id,
+        permission_codes=[RolePermission(code="project_member.manage")],
+    )
+    project = Project(
+        project_code="UNM286",
+        name="帳號狀態測試",
+        client_name="業主",
+        site_location="工地",
+        created_by=operator.id,
+        updated_by=operator.id,
+    )
+    session.add_all([role, project])
+    session.flush()
+    session.add_all(
+        [
+            UserModulePermission(
+                user_id=manager.id,
+                permission_code="project.use",
+                source="manual",
+            ),
+            ProjectMember(
+                project_id=project.id,
+                user_id=manager.id,
+                created_by=operator.id,
+                updated_by=operator.id,
+                role_assignments=[ProjectMemberRole(role_id=role.id)],
+            ),
+        ]
+    )
+    session.commit()
+
+    assert (project.id in unmanaged_project_ids(session)) == expected_unmanaged
+    session.refresh(manager)
+    assert manager.is_active is active
 
 
 def test_external_expiry_is_end_of_day_and_idempotent(session, operator):

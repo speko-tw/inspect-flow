@@ -18,6 +18,7 @@ from app.models import (
     UserModuleDelegation,
     UserModulePermission,
 )
+from app.services.account_status import effectively_active_user_clause
 from app.services.audit import record_audit_event
 from app.services.operator import get_current_operator
 from app.services.permissions import (
@@ -187,7 +188,7 @@ def unmanaged_project_ids(session: Session) -> frozenset[uuid.UUID]:
                 UserModulePermission.permission_code == "project.use",
             ),
         )
-        .where(User.is_active.is_(True), User.is_admin.is_(False))
+        .where(effectively_active_user_clause(), User.is_admin.is_(False))
         .subquery()
     )
     return frozenset(
