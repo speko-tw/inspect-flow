@@ -11,6 +11,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.batch import require_batch_size
 from app.api.errors import APIError, ErrorCode, FieldErrorCode
 from app.api.pagination import ilike_contains, page, page_by_text_key
 from app.auth.access import (
@@ -806,6 +807,8 @@ def edit_member_roles(
         raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
     except LastProjectManagerError as exc:
         raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
+    except InactiveProjectMemberError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
     _require_roles(body.role_ids)
     return _member_response(db, member)
 
@@ -821,6 +824,7 @@ def batch_edit_member_roles(
     caller: User = _PROJECT_MEMBER_ACCESS,
 ) -> BatchProjectMemberRolesResponse:
     """Replace selected member role sets atomically (ADM-R13)."""
+    require_batch_size(len(body.items))
     _get_project(db, project_id)
     user_ids = [item.user_id for item in body.items]
     if not body.items or len(set(user_ids)) != len(user_ids):
@@ -870,6 +874,8 @@ def batch_edit_member_roles(
         raise APIError(ErrorCode.PROJECT_MEMBER_SELF_ROLE_CHANGE, 422) from exc
     except LastProjectManagerError as exc:
         raise APIError(ErrorCode.PROJECT_LAST_MANAGER, 422) from exc
+    except InactiveProjectMemberError as exc:
+        raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422) from exc
 
     updated_members = list(
         db.scalars(

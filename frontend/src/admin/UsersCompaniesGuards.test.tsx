@@ -416,6 +416,28 @@ describe('UsersPage 帳號清單導覽', () => {
   })
 })
 
+describe('自己的帳號保護（#414）', () => {
+  const self = { ...regularUser, id: currentUser.id, username: 'me.admin' }
+  it('不可勾選自己，並顯示原因', async () => {
+    stubBackend({ users: [self] })
+    renderUsers()
+    expect(
+      await screen.findByRole('checkbox', {
+        name: '選取 me.admin',
+      }),
+    ).toBeDisabled()
+    expect(screen.getByText('不能批次停用自己的帳號。')).toBeVisible()
+  })
+  it('詳情不可重設自己的臨時密碼，並顯示原因', async () => {
+    stubBackend({ users: [self] })
+    renderUsers({ detailUserId: self.id })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    expect(screen.getByRole('button', { name: '重設臨時密碼' })).toBeDisabled()
+    expect(screen.getByText('請到設定變更自己的密碼。')).toBeVisible()
+  })
+})
+
 describe('UsersPage 批次停用帳號（#414）', () => {
   it('只送出已選帳號並在請求完成前顯示停用中狀態', async () => {
     const secondUser = { ...regularUser, id: 'user-2', username: 'bob.lin' }
@@ -911,7 +933,9 @@ describe.each(companyFormCases)('$name 共用表單', (formCase) => {
     })
     render(
       <DataMemoryRouter>
-        <CompaniesPage />
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
       </DataMemoryRouter>,
     )
     await screen.findByText('示範公司')
@@ -1247,7 +1271,9 @@ describe('CompaniesPage 停用公司（#507）', () => {
     })
     render(
       <DataMemoryRouter>
-        <CompaniesPage />
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
       </DataMemoryRouter>,
     )
     await screen.findByText('示範公司')
@@ -1272,7 +1298,9 @@ describe('CompaniesPage 停用公司（#507）', () => {
     })
     render(
       <DataMemoryRouter>
-        <CompaniesPage />
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
       </DataMemoryRouter>,
     )
     await screen.findByText('示範公司')
@@ -1293,6 +1321,32 @@ describe('CompaniesPage 停用公司（#507）', () => {
 })
 
 describe('CompaniesPage 批次狀態（#414）', () => {
+  it('一併停用帳號時不能選自己，並說明原因', async () => {
+    stubBackend({
+      activeCompanyUsers: {
+        'company-1': [
+          { id: currentUser.id, username: 'me.admin', name_zh: '我' },
+        ],
+      },
+    })
+    render(
+      <DataMemoryRouter>
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
+      </DataMemoryRouter>,
+    )
+    await screen.findByText('示範公司')
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: '選取公司 示範公司' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次停用公司' }))
+    expect(
+      await screen.findByRole('checkbox', { name: /我（me.admin）/ }),
+    ).toBeDisabled()
+    expect(screen.getByText('不能批次停用自己的帳號。')).toBeVisible()
+  })
+
   it('停用前逐公司確認並送出原子批次本體', async () => {
     const gate = deferred()
     const backend = stubBackend({
@@ -1300,7 +1354,9 @@ describe('CompaniesPage 批次狀態（#414）', () => {
     })
     render(
       <DataMemoryRouter>
-        <CompaniesPage />
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
       </DataMemoryRouter>,
     )
     await screen.findByText('示範公司')
@@ -1347,7 +1403,9 @@ describe('CompaniesPage 批次狀態（#414）', () => {
     })
     render(
       <DataMemoryRouter>
-        <CompaniesPage />
+        <CurrentUserProvider value={{ user: currentUser, clear: vi.fn() }}>
+          <CompaniesPage />
+        </CurrentUserProvider>
       </DataMemoryRouter>,
     )
     const row = await screen.findByRole('row', { name: /示範公司/ })

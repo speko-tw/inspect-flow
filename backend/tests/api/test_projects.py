@@ -2392,3 +2392,56 @@ def test_admin_can_add_users_of_any_company(project_api, db_session: Session):
         },
     )
     assert added.status_code == 201
+
+
+def test_batch_roles_reject_inactive_member_atomically(
+    project_api, db_session
+):
+    """ADM-R13、#414：停用成員錯誤回 422，整批角色維持原狀。"""
+    project = project_api["project"]
+    target = project_api["target"]
+    role = project_api["role"]
+    member = add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=target.id,
+        role_ids=[role.id],
+    )
+    replacement = create_role(
+        db_session, name="新角色", permission_codes=["project.read"]
+    )
+    target.is_active = False
+    db_session.commit()
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members:batch-roles",
+        json={
+            "items": [
+                {"user_id": str(target.id), "role_ids": [str(replacement.id)]}
+            ]
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "request.validation_failed"
+    db_session.expire_all()
+    assert {item.role_id for item in member.role_assignments} == {role.id}
+
+
+def test_batch_roles_reject_more_than_200_items(project_api):
+    """ADM-R13、#414：角色批次與帳號、公司採相同數量限制。"""
+    from uuid import uuid4
+
+    project = project_api["project"]
+    role = project_api["role"]
+    response = project_api["admin_client"].post(
+        f"/api/v1/projects/{project.id}/members:batch-roles",
+        json={
+            "items": [
+                {"user_id": str(uuid4()), "role_ids": [str(role.id)]}
+                for _ in range(201)
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        "一次最多選取 200 筆，請減少數量後再試。"
+    ]

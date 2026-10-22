@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.batch import require_batch_size
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import ilike_contains, page_by_text_key, write_call
 from app.api.v1._management_errors import (
@@ -21,6 +22,7 @@ from app.services.companies import (
     list_active_users,
     update_company,
 )
+from app.services.operator import get_current_operator
 from app.services.users import (
     BuiltInAccountModificationError,
     LastActiveAdminRemovalError,
@@ -218,6 +220,7 @@ def batch_change_company_status(
 ) -> BatchCompanyStatusResponse:
     """Apply selected company statuses atomically (ADM-R13)."""
     items = body.items
+    require_batch_size(len(items))
     company_ids = [item.company_id for item in items]
     if not items or len(set(company_ids)) != len(company_ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
@@ -237,6 +240,13 @@ def batch_change_company_status(
     selected_user_ids = [
         user_id for item in items for user_id in item.disable_user_ids
     ]
+    # ADM-R13、#414：公司入口也不能繞過批次帳號的自我保護。
+    if get_current_operator(db).id in selected_user_ids:
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            details=["不能批次停用自己的帳號。"],
+        )
     if len(set(selected_user_ids)) != len(selected_user_ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     selected_users = (

@@ -372,7 +372,7 @@ export default function UsersPage({
   }
 
   async function resetTemporaryPassword(user: User) {
-    if (busyUser !== null) return
+    if (busyUser !== null || user.id === currentUser.id) return
     setPasswordResetError('')
     setBusyUser(user.id)
     try {
@@ -386,8 +386,9 @@ export default function UsersPage({
   }
 
   async function prepareBatchDeactivation() {
-    const selected = users.filter((user) =>
-      selectedBatchUserIds.includes(user.id),
+    const selected = users.filter(
+      (user) =>
+        selectedBatchUserIds.includes(user.id) && user.id !== currentUser.id,
     )
     if (selected.length === 0 || batchDeactivationLoading) return
     setBatchDeactivationError('')
@@ -848,6 +849,7 @@ export default function UsersPage({
                   <button
                     disabled={
                       detail.is_system ||
+                      detail.id === currentUser.id ||
                       detail.auth_source !== 'local' ||
                       busyUser !== null
                     }
@@ -858,6 +860,9 @@ export default function UsersPage({
                       ? '正在重設臨時密碼…'
                       : '重設臨時密碼'}
                   </button>
+                  {detail.id === currentUser.id && (
+                    <p className="field-hint">請到設定變更自己的密碼。</p>
+                  )}
                   <button
                     disabled={detail.is_system || busyUser !== null}
                     onClick={() => toggleAdmin(detail)}
@@ -1098,6 +1103,7 @@ export default function UsersPage({
                               checked={selectedBatchUserIds.includes(user.id)}
                               disabled={
                                 user.is_system ||
+                                user.id === currentUser.id ||
                                 batchDeactivationBusy ||
                                 batchActivationBusy
                               }
@@ -1110,7 +1116,20 @@ export default function UsersPage({
                               }
                               type="checkbox"
                               value={user.id}
+                              aria-describedby={
+                                user.id === currentUser.id
+                                  ? `self-batch-${user.id}`
+                                  : undefined
+                              }
                             />
+                            {user.id === currentUser.id && (
+                              <p
+                                className="field-hint"
+                                id={`self-batch-${user.id}`}
+                              >
+                                不能批次停用自己的帳號。
+                              </p>
+                            )}
                           </td>
                           <th scope="row">
                             {onSelectUser ? (

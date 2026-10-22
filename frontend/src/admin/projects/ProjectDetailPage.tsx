@@ -681,7 +681,16 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                 <label className="member-batch-select">
                   <input
                     checked={selectedMemberIds.includes(member.user_id)}
-                    disabled={busy || member.user_id === currentUser.id}
+                    disabled={
+                      busy ||
+                      !member.is_active ||
+                      member.user_id === currentUser.id
+                    }
+                    aria-describedby={
+                      !member.is_active
+                        ? `inactive-member-${member.id}`
+                        : undefined
+                    }
                     onChange={(event) =>
                       setSelectedMemberIds((current) =>
                         event.target.checked
@@ -694,6 +703,14 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   />
                   選取 {personLabel(member)} 的角色
                 </label>
+                {!member.is_active && (
+                  <p
+                    className="field-hint"
+                    id={`inactive-member-${member.id}`}
+                  >
+                    此帳號已停用，不能批次修改角色。
+                  </p>
+                )}
                 <p className="member-card-name">
                   {isAdmin ? (
                     <Link

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 
+import { useCurrentUser } from '../auth/useCurrentUser'
 import { StatusBadge } from '../ui/Badge'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { Form, FormError, FormSubmitButton } from '../ui/Form'
@@ -22,6 +23,7 @@ import { CursorListSearch } from './CursorListSearch'
 import { useCursorList } from './useCursorList'
 
 export default function CompaniesPage() {
+  const { user: currentUser } = useCurrentUser()
   const companyList = useCursorList(listCompaniesPage, managementErrorMessage)
   const {
     items: companies,
@@ -296,7 +298,7 @@ export default function CompaniesPage() {
                       checked={batchPreview.selectedUsers[item.id].includes(
                         user.id,
                       )}
-                      disabled={batchBusy}
+                      disabled={batchBusy || user.id === currentUser.id}
                       onChange={(event) =>
                         toggleBatchUser(item.id, user.id, event.target.checked)
                       }
@@ -306,6 +308,11 @@ export default function CompaniesPage() {
                     {user.name_zh
                       ? `${user.name_zh}（${user.username}）`
                       : user.username}
+                    {user.id === currentUser.id && (
+                      <span className="field-hint">
+                        不能批次停用自己的帳號。
+                      </span>
+                    )}
                   </label>
                 ))
               )}

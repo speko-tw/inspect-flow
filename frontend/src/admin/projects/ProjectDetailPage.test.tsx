@@ -60,11 +60,16 @@ function createMember(id: string, username: string, roleIds: string[]) {
   }
 }
 
-function renderMembers(failBatch = false, bobRoleIds = ['role-a']) {
+function renderMembers(
+  failBatch = false,
+  bobRoleIds = ['role-a'],
+  active = true,
+) {
   const members = [
     createMember('user-1', 'anna.deng', ['role-a']),
     createMember('user-2', 'bob.lin', bobRoleIds),
   ]
+  members[1].is_active = active
   const calls: Array<{ method: string; path: string; body: string }> = []
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -114,6 +119,16 @@ afterEach(() => {
 })
 
 describe('專案成員批次角色（#414）', () => {
+  it('不能勾選停用成員的角色，並說明原因', async () => {
+    renderMembers(false, ['role-a'], false)
+    expect(
+      await screen.findByRole('checkbox', {
+        name: /選取 林鮑伯/,
+      }),
+    ).toBeDisabled()
+    expect(screen.getByText('此帳號已停用，不能批次修改角色。')).toBeVisible()
+  })
+
   it('不能選取自己的角色，其他成員可批次指派白名單角色', async () => {
     const { calls } = renderMembers()
     await screen.findByText('林鮑伯')

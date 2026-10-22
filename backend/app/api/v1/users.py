@@ -13,6 +13,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.batch import require_batch_size
 from app.api.errors import APIError, ErrorCode
 from app.api.pagination import (
     encode_page_cursor,
@@ -70,6 +71,7 @@ from app.services.module_permissions import (
     revoke_module_permission,
     update_permission_bundle,
 )
+from app.services.operator import get_current_operator
 from app.services.user_lifecycle import (
     AccountExpiredError,
     InvalidRestoreSelectionError,
@@ -681,6 +683,13 @@ def reset_temporary_password(
 ) -> TemporaryPasswordResetResponse:
     """Reset one local account password through AUT-R36 exactly once."""
     user = _get_user(db, user_id)
+    # ADM-R13、#414：沿用 router 已驗證的操作者，避免重複授權宣告。
+    if user.id == get_current_operator(db).id:
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            details=["請到設定變更自己的密碼。"],
+        )
     if user.is_system or user.auth_source != "local":
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     password = secrets.token_urlsafe(24)
@@ -828,6 +837,14 @@ def batch_change_active_status(
 ) -> BatchUserStatusResponse:
     """Apply one account status to a batch in one transaction (ADM-R13)."""
     ids = body.user_ids
+    require_batch_size(len(ids))
+    # ADM-R13、#414：整批預檢，不能先停用其他人再發現選到了自己。
+    if not body.is_active and get_current_operator(db).id in ids:
+        raise APIError(
+            ErrorCode.REQUEST_VALIDATION_FAILED,
+            422,
+            details=["不能批次停用自己的帳號。"],
+        )
     if not ids or len(set(ids)) != len(ids):
         raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
     if not body.is_active and body.restore:

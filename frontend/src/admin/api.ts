@@ -341,5 +341,15 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 export function managementErrorMessage(error: unknown): string {
+  const batchLimitMessage = '一次最多選取 200 筆，請減少數量後再試。'
+  // ADM-R13、#414：只轉達已知的批次提示，不顯示其他原始錯誤細節。
+  if (
+    error instanceof ManagementApiError &&
+    error.code === 'request.validation_failed' &&
+    Array.isArray(error.details) &&
+    error.details.includes(batchLimitMessage)
+  ) {
+    return batchLimitMessage
+  }
   return httpErrorMessage(error, { codes: ERROR_MESSAGES })
 }

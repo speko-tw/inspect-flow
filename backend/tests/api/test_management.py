@@ -1,7 +1,7 @@
 """Admin management API checks, including first-user attribution."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1540,3 +1540,71 @@ def test_program_errors_remain_server_errors(
     failed = error_client.post("/api/v1/companies", json={"name": "示範公司"})
     assert failed.status_code == 500
     assert failed.json()["error"]["code"] == "server.internal_error"
+
+
+@pytest.mark.parametrize("operation", ["deactivate", "reset", "company"])
+def test_batch_and_password_reset_reject_self_without_changes(
+    admin_client, db_session, operation
+):
+    """ADM-R13、#414：一般管理者也不能藉批次停用或重設自己的密碼。"""
+    client, _ = admin_client
+    actor = create_root_user_with_company(db_session, "SELF414")
+    actor.is_admin = True
+    other = create_root_user_with_company(db_session, "OTHER414")
+    _, token = create_session(db_session, actor)
+    db_session.commit()
+    client.cookies.set(SESSION_COOKIE_NAME, token)
+    before = db_session.scalar(select(func.count()).select_from(AuditLog))
+    if operation == "deactivate":
+        response = client.post(
+            "/api/v1/users:batch-active-status",
+            json={
+                "user_ids": [str(other.id), str(actor.id)],
+                "is_active": False,
+            },
+        )
+    elif operation == "company":
+        response = client.post(
+            "/api/v1/companies:batch-status",
+            json={
+                "items": [
+                    {
+                        "company_id": str(actor.company_id),
+                        "is_active": False,
+                        "disable_user_ids": [str(actor.id)],
+                    }
+                ]
+            },
+        )
+    else:
+        response = client.post(
+            f"/api/v1/users/{actor.id}/temporary-password", json={}
+        )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "request.validation_failed"
+    db_session.expire_all()
+    assert actor.is_active and other.is_active
+    assert db_session.scalar(select(func.count()).select_from(AuditLog)) == (
+        before
+    )
+    assert client.get("/api/v1/users").status_code == 200
+
+
+@pytest.mark.parametrize("resource", ["users", "companies"])
+def test_batch_status_rejects_more_than_200_items(admin_client, resource):
+    """ADM-R13、#414：批次數量超限須在查資料前回白話錯誤。"""
+    client, _ = admin_client
+    ids = [str(uuid4()) for _ in range(201)]
+    body = (
+        {"user_ids": ids, "is_active": False}
+        if resource == "users"
+        else {
+            "items": [{"company_id": id_, "is_active": False} for id_ in ids]
+        }
+    )
+    suffix = "batch-active-status" if resource == "users" else "batch-status"
+    response = client.post(f"/api/v1/{resource}:{suffix}", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == [
+        "一次最多選取 200 筆，請減少數量後再試。"
+    ]
