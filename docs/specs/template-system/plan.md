@@ -94,7 +94,16 @@
 
 - 依負責人 2026-10-22 裁定，在既有 #622 worktree 接續；不建立停用或恢復功能。
 - 專案項目 DELETE 依編輯權限覆核，鎖來源項目後查所有 Task 明細（含草稿、取消），沒有引用才清除子結構與變更紀錄，並於同交易新增 `project_inspection_item.deleted`。回應帶任務數，操作紀錄加白話標籤。
-- PATCH 改名與套用範本共用名稱檢查鎖，trim／casefold、排除自身；409 保留 UI 編輯內容並提示換名。已有引用每次改名詢問，預設不要且仍須確認儲存；草稿改名也適用，Snapshot 仍原位更新。
+- PATCH 改名與套用範本共用名稱檢查鎖，trim／casefold、排除自身；409 保留 UI 編輯內容並提示換名。含非草稿引用時，只有純改名預設不要且保留確認；其他修改須明確選擇。只有草稿（含改名）不詢問、送 true，Snapshot 原位更新。
 - 實作範圍：`backend/app/services/inspection_planning.py`、`project_templates.py`、`backend/app/api/v1/inspection_planning.py`、`backend/app/api/errors.py`、前端 `projectItems/` 與 `audit-log/auditLabels.ts`；不需 migration。
 - 驗收：`tests/api/test_project_item_removal.py`、`tests/db/test_project_item_removal.py`（SQLite／PostgreSQL）、`tests/db/test_project_item_edit_concurrency.py`、`tests/services/test_audit.py`、`ProjectItemLinks.test.tsx`、`ProjectItemChangePage.test.tsx` 與 `auditLabels.test.ts`。
 - TPL-AC30：先取得新增測試紅燈，再執行 `make check`（專用 `inspectflow_test_622`、4 個前端 worker）、demo E2E 與 1280／390 真畫面截圖；報告保留命令、退出碼、需求與 commit 對照。
+
+
+### W-P1c 審查修正（#435）
+
+- IP-R22／TPL-R27 與 ADM-R28／AC27 一致：純改名才有隱含預設；其他內容改變時未選不可存；草稿不詢問。
+- 刪除提示明確說明保留紀錄與草稿刪除的解除方式，取消不解除引用。
+- 舊資料已有同名時，正規化標題未變的編輯仍可成功；新增 API 與 PostgreSQL 重用驗收。
+- 存為範本持來源 `FOR SHARE` 到複製及稽核完成；PostgreSQL 以固定交錯及 `pg_stat_activity` 驗證兩種先後均互斥：先存完整複製、先刪回 404。
+- 先紅後綠，補主線的未選阻擋測試；完整 `make check` 使用 `inspectflow_test_622` 與 4 個前端 worker。

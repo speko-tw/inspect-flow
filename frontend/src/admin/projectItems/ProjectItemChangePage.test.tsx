@@ -1178,16 +1178,32 @@ describe('ProjectItemChangePage double submit and IME Enter (#507)', () => {
 })
 
 describe('ProjectItemChangePage review round 2', () => {
-  it('已有任務時每次改名預設不要重查且保留確認', async () => {
+  it('blocks saving until a choice is made when Tasks are dispatched', async () => {
+    const api = apiWith()
+    renderPage(api)
+    fireEvent.click(await screen.findByRole('button', { name: '儲存變更' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '請先選擇這次修改要不要重新查核',
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('button', { name: '確認儲存' })).toBeNull()
+    expect(
+      screen.getByRole('radio', { name: reinspectChoice }),
+    ).not.toBeChecked()
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('純改名時預設不要重查且每輪保留確認', async () => {
     const api = apiWith()
     renderPage(api)
     const no = await screen.findByRole('radio', {
       name: noReinspectChoice,
     })
-    expect(no).toBeChecked()
+    expect(no).not.toBeChecked()
     fireEvent.change(screen.getByLabelText('查核項目名稱'), {
       target: { value: '新名稱' },
     })
+    expect(no).toBeChecked()
     fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
     expect(screen.getByRole('dialog')).toHaveTextContent(
       '你選擇「不要」重新查核',
@@ -1204,11 +1220,16 @@ describe('ProjectItemChangePage review round 2', () => {
         }),
       ),
     )
-    expect(
-      screen.getByRole('radio', {
-        name: noReinspectChoice,
-      }),
-    ).toBeChecked()
+    await waitFor(() =>
+      expect(screen.getByLabelText('查核項目名稱')).toHaveValue(
+        preview.item.title,
+      ),
+    )
+    expect(no).not.toBeChecked()
+    fireEvent.change(screen.getByLabelText('查核項目名稱'), {
+      target: { value: '第二次改名' },
+    })
+    expect(no).toBeChecked()
   })
 
   it('lists only the no-reinspect outcome when choosing not to', async () => {
@@ -1354,4 +1375,129 @@ it('改名同名被拒時保留名稱並顯示白話訊息', async () => {
     '這個專案已有同名查核項目，請換個名稱。',
   )
   expect(screen.getByLabelText('查核項目名稱')).toHaveValue('已存在名稱')
+})
+
+describe('W-P1c 修改內容與重查選擇', () => {
+  it.each([
+    ['項目說明', '不同說明'],
+    ['項次標題', '不同點位'],
+    ['標準文字', '不同標準'],
+    ['照片至少幾張', '2'],
+  ])('純改名再修改 %s 時取消隱含預設', async (label, value) => {
+    const api = apiWith()
+    renderPage(api)
+    const title = await screen.findByLabelText('查核項目名稱')
+    fireEvent.change(title, { target: { value: '純改名' } })
+    expect(
+      screen.getByRole('radio', {
+        name: noReinspectChoice,
+      }),
+    ).toBeChecked()
+    // 照片需求屬結構；先改項目說明退出純改名，避免結構鎖擋住輸入。
+    if (label === '照片至少幾張') {
+      fireEvent.change(screen.getByLabelText('項目說明'), {
+        target: { value: '不同說明' },
+      })
+    }
+    fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    expect(
+      screen.getByRole('radio', {
+        name: noReinspectChoice,
+      }),
+    ).not.toBeChecked()
+    expect(
+      screen.getByRole('radio', {
+        name: reinspectChoice,
+      }),
+    ).not.toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '請先選擇這次修改要不要重新查核',
+    )
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
+  it('純改名的預設可改選要，混合修改仍保留明確選擇', async () => {
+    const api = apiWith()
+    renderPage(api)
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
+      target: { value: '選擇重查的新名稱' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: reinspectChoice }))
+    fireEvent.change(screen.getByLabelText('標準文字'), {
+      target: { value: '重新查核的新標準' },
+    })
+    await confirm()
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        'p',
+        'item-1',
+        expect.objectContaining({ reinspect: true }),
+      ),
+    )
+  })
+
+  it('只有草稿任務時改名不詢問並送出 true', async () => {
+    const drafts = structuredClone(preview)
+    drafts.affectedTasks = [drafts.affectedTasks[0]]
+    const api = apiWith({
+      loadPreview: vi.fn(async () => structuredClone(drafts)),
+    })
+    renderPage(api)
+    fireEvent.change(await screen.findByLabelText('查核項目名稱'), {
+      target: { value: '草稿的新名稱' },
+    })
+    expect(
+      screen.queryByRole('radio', {
+        name: reinspectChoice,
+      }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('radio', {
+        name: noReinspectChoice,
+      }),
+    ).toBeNull()
+    await confirm()
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        'p',
+        'item-1',
+        expect.objectContaining({
+          title: '草稿的新名稱',
+          reinspect: true,
+        }),
+      ),
+    )
+  })
+})
+
+it.each([false, true])('標準值變更須明確選擇，含改名=%s', async (rename) => {
+  const numeric = structuredClone(preview)
+  numeric.item.inspection_points = [structuredClone(numericPoint)]
+  const api = apiWith({
+    loadPreview: vi.fn(async () => structuredClone(numeric)),
+  })
+  renderPage(api)
+  const title = await screen.findByLabelText('查核項目名稱')
+  if (rename) {
+    fireEvent.change(title, { target: { value: '改名與數值' } })
+    expect(
+      screen.getByRole('radio', {
+        name: noReinspectChoice,
+      }),
+    ).toBeChecked()
+  }
+  fireEvent.change(screen.getByLabelText('標準值'), {
+    target: { value: '2.0' },
+  })
+  expect(
+    screen.getByRole('radio', {
+      name: noReinspectChoice,
+    }),
+  ).not.toBeChecked()
+  fireEvent.click(screen.getByRole('button', { name: '儲存變更' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '請先選擇這次修改要不要重新查核',
+  )
+  expect(api.update).not.toHaveBeenCalled()
 })

@@ -70,12 +70,14 @@ def test_delete_used_item_rejects_every_task_status(
         json={"name": "刪除限制"},
     )
     assert plan.status_code == 201, plan.text
+    task_ids = []
     for number in (1, 2):
         task = admin.post(
             f"/api/v1/inspection-plans/{plan.json()['id']}/tasks",
             json={"name": f"引用任務 {number}", "item_ids": [str(item.id)]},
         )
         assert task.status_code == 201, task.text
+        task_ids.append(task.json()["id"])
         if status != "DRAFT":
             from app.models import InspectionTask
 
@@ -102,6 +104,13 @@ def test_delete_used_item_rejects_every_task_status(
     )
     db_session.expire_all()
     assert db_session.get(ProjectInspectionItem, item.id) is not None
+
+    if status == "DRAFT":
+        # 最新提示指向真正能解除引用的操作：刪除草稿，而非取消。
+        for task_id in task_ids:
+            response = admin.delete(f"/api/v1/inspection-tasks/{task_id}")
+            assert response.status_code == 204, response.text
+        assert admin.delete(path).status_code == 204
 
 
 def test_delete_item_requires_edit_permission_and_project_boundary(
@@ -190,3 +199,33 @@ def test_delete_item_audit_failure_rolls_back_all_changes(
         )
         == 1
     )
+
+
+@pytest.mark.parametrize(
+    ("current", "title"),
+    [
+        ("表面檢查", None),
+        ("表面檢查", " 表面檢查 "),
+        ("表面檢查", "表面檢查"),
+        ("Pump A", " pUmP a "),
+    ],
+)
+def test_legacy_duplicate_allows_edits_without_normalized_rename(
+    db_session, make_client, current, title
+):
+    """#435：舊資料同名不能阻擋與名稱無關的修改。"""
+    world = _planning_world(db_session, make_client)
+    world["item"].title = current
+    world["item_two"].title = f" {current} "
+    db_session.commit()
+    path = (
+        f"/api/v1/projects/{world['project'].id}/inspection-items/"
+        f"{world['item'].id}"
+    )
+    body = {"instruction": "更正既有同名項目的說明"}
+    if title is not None:
+        body["title"] = title
+    response = world["admin"].patch(path, json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["instruction"] == body["instruction"]
+    assert response.json()["title"] == (title or current).strip()

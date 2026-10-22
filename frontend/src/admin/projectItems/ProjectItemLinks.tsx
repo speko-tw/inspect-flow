@@ -93,7 +93,10 @@ export default function ProjectItemLinks({
           typeof count === 'string' && /^\d+$/.test(count)
             ? `已有 ${count} 個任務使用這個項目`
             : '已有任務使用這個項目'
-        setDeleteError(`${prefix}，不能刪除。請先取消這些任務。`)
+        setDeleteError(
+          `${prefix}，為保留查核紀錄不能刪除。` +
+            '若都是草稿任務，刪除草稿後即可移除。',
+        )
       } else {
         setDeleteError(
           httpErrorMessage(caught, {
@@ -186,8 +189,7 @@ export default function ProjectItemLinks({
                 >
                   <p>確定刪除「{item.title}」？刪除後無法復原。</p>
                   <p>
-                    只有從未被任務使用的項目可以刪除，
-                    草稿與已取消任務也算使用過。
+                    只有沒有任務引用的項目可以刪除， 草稿與已取消任務也算引用。
                   </p>
                   {deleteError && <p role="alert">{deleteError}</p>}
                 </ConfirmBox>

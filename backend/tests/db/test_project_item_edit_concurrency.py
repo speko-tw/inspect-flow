@@ -23,6 +23,7 @@ from app.db.engine import (
 from app.main import create_app
 from app.models import (
     AuditLog,
+    ProjectEvidenceRequirement,
     ProjectInspectionItem,
     ProjectInspectionItemChange,
     ProjectInspectionPoint,
@@ -991,3 +992,104 @@ def test_concurrent_item_name_writes_reject_duplicate(
     assert (
         sum(title.strip().casefold() == "target name" for title in titles) == 1
     )
+
+
+@pytest.mark.parametrize("first_action", ["save", "delete"])
+def test_save_template_and_item_deletion_serialize_source(
+    engine, db_session, make_client, first_action
+):
+    """#435：完整複製先於刪除；刪除先到則存為範本回 404。"""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("requires PostgreSQL source row locks")
+    world = _planning_world(db_session, make_client)
+    project_id = world["project"].id
+    item_id = world["item"].id
+    operator_id = world["admin_user"].id
+    point = db_session.scalar(
+        select(ProjectInspectionPoint).where(
+            ProjectInspectionPoint.project_inspection_item_id == item_id
+        )
+    )
+    assert point is not None
+    source_point_title = point.title
+    db_session.add(
+        ProjectEvidenceRequirement(
+            project_inspection_item_id=item_id,
+            inspection_point_id=point.id,
+            min_count=1,
+            created_by=operator_id,
+            updated_by=operator_id,
+        )
+    )
+    category = TemplateCategory(
+        name="來源讀取鎖",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(category)
+    db_session.flush()
+    system = TemplateSystem(
+        category_id=category.id,
+        name="存為範本與刪除",
+        created_by=operator_id,
+        updated_by=operator_id,
+    )
+    db_session.add(system)
+    db_session.commit()
+    system_id = system.id
+    clients = _two_admin_clients(db_session, world, make_client)
+
+    def call(action, client):
+        if action == "delete":
+            return client.delete(
+                f"/api/v1/projects/{project_id}/inspection-items/{item_id}"
+            )
+        return client.post(
+            f"/api/v1/projects/{project_id}/templates",
+            json={
+                "project_inspection_item_id": str(item_id),
+                "system_id": str(system_id),
+                "name": "競態存成範本",
+            },
+        )
+
+    def matches(statement):
+        return "from project_inspection_items" in statement and (
+            "for update" in statement or "for share" in statement
+        )
+
+    other = "delete" if first_action == "save" else "save"
+    with _LockGate(get_engine(), matches) as gate:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(call, first_action, clients[0])
+            try:
+                assert gate.acquired.wait(timeout=10)
+                second = executor.submit(call, other, clients[1])
+                gate.wait_until_waiter_blocked()
+            finally:
+                gate.release.set()
+            responses = [first.result(timeout=15), second.result(timeout=15)]
+    expected = [201, 204] if first_action == "save" else [204, 404]
+    assert [r.status_code for r in responses] == expected, [
+        r.text for r in responses
+    ]
+    db_session.expire_all()
+    assert db_session.get(ProjectInspectionItem, item_id) is None
+    templates = db_session.scalars(
+        select(TemplateItem).where(TemplateItem.system_id == system_id)
+    ).all()
+    if first_action == "save":
+        assert len(templates) == 1
+        saved = responses[0].json()
+        assert saved["instruction"] == "確認表面狀況"
+        assert len(saved["inspection_points"]) == 1
+        assert saved["inspection_points"][0]["title"] == source_point_title
+        assert (
+            saved["inspection_points"][0]["evidence_requirements"][0][
+                "min_count"
+            ]
+            == 1
+        )
+    else:
+        assert templates == []
+        assert responses[1].json()["error"]["code"] == "resource.not_found"

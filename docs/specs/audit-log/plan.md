@@ -143,3 +143,10 @@ SQLite 得以 batch migration 設 NOT NULL 或移除欄位。交易失敗即
 | `entity_id` 設外鍵 | 被記錄的資料刪除時會被擋下或連帶刪掉紀錄（ALG-R03） |
 | 刪除角色時替每位成員各寫一筆 | 一次刪除可能寫出大量紀錄；`role.deleted` 的 `project_member_ids` 已能還原 |
 | 事件代碼存成資料表 | 事件由程式寫入，放程式裡的目錄就能在測試中檢查；存資料表還要多一支 migration 與管理入口 |
+
+
+## W-P1c 事件目錄對齊（#435）
+
+- spec 事件目錄補 `project_inspection_item.deleted`，保留刪除前 `project_id`、`title`，`after` 為空；與項目及變更紀錄刪除同交易。
+- `template_item.created_from_project` 的 `after` 補最終保存名稱 `title`，與 #434 實作及 TPL-R26 一致。
+- 依既有 `test_delete_unused_item_clears_changes_and_records_audit`、`test_save_as_template_uses_optional_trimmed_name_and_audits_it` 與完整 `make check` 驗收；不新增事件碼或 migration。

@@ -377,7 +377,7 @@ export default function ProjectItemChangePage({
   const [inspectionPoints, setInspectionPoints] = useState<InspectionPoint[]>(
     [],
   )
-  const [reinspect, setReinspect] = useState<boolean | null>(false)
+  const [reinspect, setReinspect] = useState<boolean | null>(null)
   const [result, setResult] = useState<ProjectItemChangeResult | null>(null)
   const [resultTasks, setResultTasks] = useState(
     [] as ProjectItemPreview['affectedTasks'],
@@ -421,11 +421,18 @@ export default function ProjectItemChangePage({
     ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
     : false
   const needsChoice = preview
-    ? preview.affectedTasks.some((task) => task.status !== 'DRAFT') ||
-      (preview.affectedTasks.length > 0 &&
-        title.trim() !== preview.item.title.trim())
+    ? preview.affectedTasks.some((task) => task.status !== 'DRAFT')
     : false
-  const structureLocked = needsChoice && reinspect === false
+  // #435：隱含的不要只適用純改名；混入其他內容後回到未選狀態。
+  // 明確勾選的選擇另存於 reinspect，不會因編輯內容而被覆蓋。
+  const original =
+    baseline === null ? null : (JSON.parse(baseline) as { title: string })
+  const renameOnly =
+    original !== null &&
+    title.trim() !== original.title.trim() &&
+    JSON.stringify({ ...editorValues, title: original.title }) === baseline
+  const reinspectionChoice = reinspect ?? (renameOnly ? false : null)
+  const structureLocked = needsChoice && reinspectionChoice === false
   const photoRequirementChanged = Boolean(
     preview?.item.inspection_points.some(
       (point, index) =>
@@ -536,8 +543,8 @@ export default function ProjectItemChangePage({
     setInstruction(localized.item.instruction)
     setInspectionPoints(localized.item.inspection_points)
     setPhotoDraft(photos)
-    // #435：每次載入新一輪修改都預設不要重查，仍須確認後才送出。
-    setReinspect(false)
+    // 新一輪修改須重新選擇；純改名由編輯內容推導預設值（#435）。
+    setReinspect(null)
     setBaseline(
       JSON.stringify({
         title: localized.item.title,
@@ -752,7 +759,7 @@ export default function ProjectItemChangePage({
       })
       return Promise.resolve(invalidPoints)
     }
-    if (needsChoice && reinspect === null) {
+    if (needsChoice && reinspectionChoice === null) {
       setError('請先選擇這次修改要不要重新查核。')
       return Promise.resolve(null)
     }
@@ -830,7 +837,7 @@ export default function ProjectItemChangePage({
               <label className="tpl-radio-option">
                 <input
                   aria-describedby="reinspect-yes-hint"
-                  checked={reinspect === true}
+                  checked={reinspectionChoice === true}
                   onChange={() => setReinspect(true)}
                   name="reinspect"
                   type="radio"
@@ -843,7 +850,7 @@ export default function ProjectItemChangePage({
               <label className="tpl-radio-option">
                 <input
                   aria-describedby="reinspect-no-hint"
-                  checked={reinspect === false}
+                  checked={reinspectionChoice === false}
                   onChange={() => setReinspect(false)}
                   name="reinspect"
                   type="radio"
@@ -968,7 +975,9 @@ export default function ProjectItemChangePage({
           {confirming && (
             <ConfirmBox
               busy={busy}
-              confirmDisabled={readOnly || (needsChoice && reinspect === null)}
+              confirmDisabled={
+                readOnly || (needsChoice && reinspectionChoice === null)
+              }
               confirmLabel="確認儲存"
               headingRef={dialogHeadingRef}
               rootRef={confirmBoxRef}
@@ -976,8 +985,8 @@ export default function ProjectItemChangePage({
               onCancel={() => setConfirming(false)}
               onConfirm={() =>
                 draftOnly
-                  ? save(needsChoice ? (reinspect ?? undefined) : true, true)
-                  : save(reinspect ?? undefined)
+                  ? save(true, true)
+                  : save(reinspectionChoice ?? undefined)
               }
               role="dialog"
               title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
@@ -986,14 +995,14 @@ export default function ProjectItemChangePage({
               {needsChoice && (
                 <>
                   <p>
-                    {!draftOnly && '有任務已經派出。'}
+                    {'有任務已經派出。'}
                     {hasDraft && '草稿任務不受選擇影響，會直接更新為新內容；'}
                     {'已核發的報告也不受影響。'}
                   </p>
                   <p>
-                    {reinspect === true &&
+                    {reinspectionChoice === true &&
                       '你選擇「要」重新查核，各任務會有以下狀態變化。'}
-                    {reinspect === false &&
+                    {reinspectionChoice === false &&
                       '你選擇「不要」重新查核，各任務狀態維持不變。'}
                   </p>
                 </>
@@ -1031,7 +1040,13 @@ export default function ProjectItemChangePage({
                       {task.name}（{task.planName}；{taskLocation(task)}；
                       <StatusBadge status={task.status} />）
                       {needsChoice && (
-                        <>：{taskConsequenceText(task.status, reinspect)}</>
+                        <>
+                          ：
+                          {taskConsequenceText(
+                            task.status,
+                            reinspectionChoice,
+                          )}
+                        </>
                       )}
                     </li>
                   ))}

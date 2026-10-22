@@ -5,6 +5,7 @@ from tests.api.test_project_item_removal import (
     test_delete_item_requires_edit_permission_and_project_boundary,
     test_delete_unused_item_clears_changes_and_records_audit,
     test_delete_used_item_rejects_every_task_status,
+    test_legacy_duplicate_allows_edits_without_normalized_rename,
     test_rename_item_rejects_normalized_duplicate_without_mutation,
 )
 from tests.db.test_planning_api_postgresql import (
@@ -26,4 +27,5 @@ __all__ = [
     "test_delete_unused_item_clears_changes_and_records_audit",
     "test_delete_used_item_rejects_every_task_status",
     "test_rename_item_rejects_normalized_duplicate_without_mutation",
+    "test_legacy_duplicate_allows_edits_without_normalized_rename",
 ]

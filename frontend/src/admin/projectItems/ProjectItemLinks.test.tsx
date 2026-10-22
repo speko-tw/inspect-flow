@@ -216,7 +216,7 @@ describe('#435 刪除專案查核項目', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '已有 2 個任務使用這個項目，不能刪除。請先取消這些任務。',
+      '已有 2 個任務使用這個項目，為保留查核紀錄不能刪除。若都是草稿任務，刪除草稿後即可移除。',
     )
     expect(screen.getByText('未使用項目')).toBeInTheDocument()
   })

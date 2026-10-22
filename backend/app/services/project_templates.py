@@ -332,11 +332,16 @@ def create_template_from_project_item(
     A source outside ``project_id`` is indistinguishable from a missing
     source, so callers cannot use this operation to copy across projects.
     """
+    # #435：持有來源共享鎖直到複製與稽核完成，避免刪除先清掉子結構，
+    # 造成存出不完整範本；與 Task 快照的來源讀取使用相同鎖語意。
     source = db.scalar(
-        select(ProjectInspectionItem).where(
+        select(ProjectInspectionItem)
+        .where(
             ProjectInspectionItem.id == project_inspection_item_id,
             ProjectInspectionItem.project_id == project_id,
         )
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
     )
     system = db.get(TemplateSystem, system_id)
     if source is None or system is None:

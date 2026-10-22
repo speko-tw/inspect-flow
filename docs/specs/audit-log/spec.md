@@ -136,13 +136,13 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 
 依 [TPL-R09](../template-system/spec.md#需求) 登記全系統範本管理員角色指派與收回事件；事件須和角色指派變更在同一個交易內寫入（ALG-R06、ALG-R14）。這兩種事件只在過渡期（`template_admin` 改造完成前）使用，改造後範本管理權限改用[模組權限事件](#模組權限事件)。
 
-範本管理員將專案查核項目存成範本時，另寫 `template_item.created_from_project`；事件與範本建立在同一個交易內完成，並記錄來源專案、副本及目標系統的 ID。
+範本管理員將專案查核項目存成範本時，另寫 `template_item.created_from_project`；事件與範本建立在同一個交易內完成，並記錄來源專案、副本及目標系統的 ID，以及最後保存的範本名稱 `title`。
 
 | 事件代碼 | 什麼時候寫 | `entity_type` | `before` | `after` |
 |---|---|---|---|---|
 | `system_role_assignment.created` | 指派固定的 `template_admin` 角色 | `system_role_assignment` | 空值 | `user_id`、`role_code` |
 | `system_role_assignment.deleted` | 收回固定的 `template_admin` 角色 | `system_role_assignment` | `user_id`、`role_code` | 空值 |
-| `template_item.created_from_project` | 範本管理員將專案查核項目存成範本 | `template_item` | 空值 | `project_id`、`project_inspection_item_id`、`system_id` |
+| `template_item.created_from_project` | 範本管理員將專案查核項目存成範本 | `template_item` | 空值 | `project_id`、`project_inspection_item_id`、`system_id`、`title` |
 
 <a id="範本庫事件"></a>
 ### 範本庫寫入與套用（#382）
@@ -217,8 +217,9 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 | `inspection_task.renamed` | 修改 Task 名稱且新舊名稱不同（名稱未變不寫） | `inspection_task` | 修改前的 `name` | 修改後的 `name` |
 | `inspection_task.items_updated` | 替換 DRAFT Task 的查核項目集合（新集合與目前相同時不寫） | `inspection_task` | 修改前的項目，格式為 `items`：`{項目 ID: 名稱}` 對照 | 修改後的項目，格式同左 |
 | `project_inspection_item.updated` | 修改專案查核項目並選擇是否重新查核 | `project_inspection_item` | 有變動的 `title`／`instruction`，以及重新查核選擇 | 修改後欄位與重新查核選擇 |
+| `project_inspection_item.deleted` | 刪除未被任何 Task 明細引用的專案查核項目（IP-R21）；含草稿與已取消的引用一律拒絕 | `project_inspection_item` | `project_id`、`title` | 空值 |
 
-`inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。`inspection_task.items_updated` 的 `items` 用 `{項目 ID: 名稱}` 對照而非陣列，因為 ALG-R10 會把陣列排序，元素為物件時無法比較；對照表同時保留 ID 與名稱且不依賴順序。Task 刪除、取消、恢復、地點修改、名稱修改、草稿 Task 查核項目替換及專案查核項目修改事件，均須與對應資料變更在同一交易內寫入；草稿 Task 查核項目替換失敗或回滾時不留事件。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
+`inspection_task.location_updated` 的 `zone_id` 與 `location_text` 可為空值，以表達移除分區或補充文字。`inspection_task.items_updated` 的 `items` 用 `{項目 ID: 名稱}` 對照而非陣列，因為 ALG-R10 會把陣列排序，元素為物件時無法比較；對照表同時保留 ID 與名稱且不依賴順序。Task 刪除、取消、恢復、地點修改、名稱修改、草稿 Task 查核項目替換及專案查核項目修改與刪除事件，均須與對應資料變更在同一交易內寫入；草稿 Task 查核項目替換失敗或回滾時不留事件。`project_inspection_item.updated` 每次都記錄重新查核選擇；未改變的標準文字欄位不重複記錄。
 
 <a id="authentication-事件"></a>
 ## `authentication` 事件
@@ -373,3 +374,5 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
 - 範圍變更（負責人指示，[#615](https://github.com/speko-tw/inspect-flow/issues/615)，依 [`docs/specs/README.md`](../README.md#change) 的例外在同一 PR 落地）：`inspection-planning` 新增 IP-R20，事件目錄新增 `inspection_task.items_updated`（草稿 Task 查核項目替換，記修改前後項目 ID 與名稱） — [負責人裁定（2026-10-12）](https://github.com/speko-tw/inspect-flow/issues/615#issuecomment-6127145609)
 - 範圍變更（負責人指示，[#497](https://github.com/speko-tw/inspect-flow/issues/497)，依 [`docs/specs/README.md`](../README.md#change) 的例外在同一 PR 落地）：`inspection-planning` 事件新增 `inspection_task.renamed`（IP-R17）；事件代碼與欄位為規格設計（非負責人裁定） — [負責人裁定（2026-10-10）](https://github.com/speko-tw/inspect-flow/issues/497#issuecomment-6092949322)
+
+- 規格澄清（#435，W-P1c）：事件目錄補齊 `project_inspection_item.deleted`（`before.project_id`、`before.title`，`after=null`），以及 `template_item.created_from_project` 的 `after.title`；與既有事件登記及實作對齊，不改變事件行為。來源：[協調者更正與補充（#435，2026-10-22）](https://github.com/speko-tw/inspect-flow/issues/435)。

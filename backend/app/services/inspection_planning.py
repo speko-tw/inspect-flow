@@ -1397,21 +1397,24 @@ def edit_project_inspection_item(
         title = body.title.strip()
         if not title:
             raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
-        existing_names = db.scalars(
-            select(ProjectInspectionItem.title).where(
-                ProjectInspectionItem.project_id == project_id,
-                ProjectInspectionItem.id != item.id,
+        # #435：舊資料可能已有同名；沒有改變正規化名稱時，
+        # 不讓既有重複名稱阻擋說明、標準或點位的更正。
+        if title.casefold() != item.title.strip().casefold():
+            existing_names = db.scalars(
+                select(ProjectInspectionItem.title).where(
+                    ProjectInspectionItem.project_id == project_id,
+                    ProjectInspectionItem.id != item.id,
+                )
             )
-        )
-        if any(
-            name.strip().casefold() == title.casefold()
-            for name in existing_names
-        ):
-            raise APIError(
-                ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
-                409,
-                details=[title],
-            )
+            if any(
+                name.strip().casefold() == title.casefold()
+                for name in existing_names
+            ):
+                raise APIError(
+                    ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
+                    409,
+                    details=[title],
+                )
     associations = db.scalars(
         select(TaskInspectionItem).where(
             TaskInspectionItem.project_inspection_item_id == item.id

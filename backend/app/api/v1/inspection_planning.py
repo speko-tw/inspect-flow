@@ -1580,7 +1580,7 @@ def delete_project_item(
     project_inspection_item_id: UUID,
     db: Session = _db_dependency,
 ) -> None:
-    """#435：刪除從未被任務引用的專案查核項目。"""
+    """#435：刪除沒有任務明細引用的專案查核項目。"""
     _call(
         delete_project_inspection_item,
         db,
