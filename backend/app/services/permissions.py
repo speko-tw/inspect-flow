@@ -55,6 +55,14 @@ def _clear_request_access_cache_after_flush(
         cache.clear()
 
 
+@event.listens_for(Session, "after_rollback")
+def _clear_request_access_cache_after_rollback(session: Session) -> None:
+    """DOM-R69、#712：回滾後不可保留未提交交易中計算的權限。"""
+    cache = get_request_effective_access_cache()
+    if cache is not None:
+        cache.clear()
+
+
 def calculate_effective_access(
     session: Session,
     *,

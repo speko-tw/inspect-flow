@@ -706,3 +706,54 @@ def test_dashboard_tasks_exclude_draft(db_session, make_client):
     assert "DRAFT" not in {item["status"] for item in items}
     assert "CANCELLED" in {item["status"] for item in items}
     assert world["admin"].get(f"{base}/{draft.id}").status_code == 404
+
+
+def test_effective_access_cache_reads_writes_and_rollback_in_one_request(
+    db_session, make_client
+):
+    """DOM-R69、#712：真實請求中的 flush 與 rollback 都不能沿用舊權限。"""
+    from fastapi import Depends
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import Session
+
+    from app.auth.dependencies import get_db
+    from app.main import create_app
+
+    user = create_root_user_with_company(db_session, "CACHEHTTP712")
+    db_session.commit()
+    user_id = user.id
+    app = create_app()
+
+    @app.post("/test/request-cache")
+    def read_after_write_and_rollback(
+        db: Session = Depends(get_db, scope="function"),  # noqa
+    ):
+        before = permission_service.calculate_effective_access(
+            db, user_id=user_id
+        )
+        db.add(
+            UserModulePermission(
+                user_id=user_id, permission_code="project.use", source="manual"
+            )
+        )
+        db.flush()
+        changed = permission_service.calculate_effective_access(
+            db, user_id=user_id
+        )
+        db.rollback()
+        restored = permission_service.calculate_effective_access(
+            db, user_id=user_id
+        )
+        return {
+            "before": "project.use" in before.module_permissions,
+            "changed": "project.use" in changed.module_permissions,
+            "restored": "project.use" in restored.module_permissions,
+        }
+
+    response = TestClient(app).post("/test/request-cache")
+    assert response.status_code == 200
+    assert response.json() == {
+        "before": False,
+        "changed": True,
+        "restored": False,
+    }

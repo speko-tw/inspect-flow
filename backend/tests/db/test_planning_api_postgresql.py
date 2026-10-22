@@ -657,3 +657,120 @@ def test_task_inspection_level_flow_on_database(
     # IP-AC16：建立時帶入、改專案角色不回改既有任務，在 PostgreSQL 上
     # 也要成立（含建立時對專案列的共享鎖）。
     assert_inspection_level_flow(db_session, make_client)
+
+
+def test_dashboard_workload_union_all_on_database(db_session, make_client):
+    """ADM-AC05、#712：在實際資料庫驗證工作量 UNION ALL 的各種計數。"""
+    from sqlalchemy import event
+
+    from tests.api.test_admin_dashboard import _dashboard_fixture
+
+    world = _dashboard_fixture(db_session, make_client)
+    statements = []
+
+    def capture(_conn, _cursor, statement, _params, _ctx, _many):
+        statements.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        response = world["admin"].get(
+            "/api/v1/admin/dashboard/engineers",
+            params={"project_id": str(world["project"].id)},
+        )
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+    assert response.status_code == 200, response.text
+    assert any("UNION ALL" in sql.upper() for sql in statements)
+    rows = {row["user_id"]: row for row in response.json()["items"]}
+    field = rows[str(world["field_user"].id)]
+    assert field["assigned_pending_count"] == 1
+    assert field["assigned_in_progress_count"] == 1
+    second = rows[str(world["field_user_two"].id)]
+    assert second["started_in_progress_count"] == 1
+    assert second["completed_by_count"] == 1
+    assert rows[str(world["field_reader_user"].id)]["completed_by_count"] == 1
+
+
+def test_batch_status_and_role_lock_paths_on_database(db_session, make_client):
+    """ADM-R13、#712：三個批次入口在 PostgreSQL 實際鎖列且提交整批。"""
+    from sqlalchemy import event
+
+    from tests.db.conftest import create_root_user_with_company
+
+    world = _planning_world(db_session, make_client)
+    admin = world["admin_user"]
+    project = world["project"]
+    users = [
+        create_root_user_with_company(db_session, f"BATCHPG{index}")
+        for index in range(2)
+    ]
+    role = Role(
+        name="資料庫批次角色",
+        created_by=admin.id,
+        updated_by=admin.id,
+        permission_codes=[RolePermission(code="project.read")],
+    )
+    db_session.add(role)
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProjectMember(
+                project_id=project.id,
+                user_id=user.id,
+                created_by=admin.id,
+                updated_by=admin.id,
+                role_assignments=[ProjectMemberRole(role_id=role.id)],
+            )
+            for user in users
+        ]
+    )
+    db_session.commit()
+    user_ids = [str(user.id) for user in users]
+    company_ids = [str(user.company_id) for user in users]
+    project_id, role_id = str(project.id), str(role.id)
+    statements = []
+
+    def capture(_conn, _cursor, statement, _params, _ctx, _many):
+        statements.append(statement.lower())
+
+    engine = db_session.get_bind()
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        roles = world["admin"].post(
+            f"/api/v1/projects/{project_id}/members:batch-roles",
+            json={
+                "items": [
+                    {"user_id": user_id, "role_ids": [role_id]}
+                    for user_id in user_ids
+                ]
+            },
+        )
+        assert roles.status_code == 200, roles.text
+        accounts = world["admin"].post(
+            "/api/v1/users:batch-active-status",
+            json={"user_ids": user_ids, "is_active": False},
+        )
+        assert accounts.status_code == 200, accounts.text
+        companies = world["admin"].post(
+            "/api/v1/companies:batch-status",
+            json={
+                "items": [
+                    {"company_id": company_id, "is_active": False}
+                    for company_id in company_ids
+                ]
+            },
+        )
+        assert companies.status_code == 200, companies.text
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+    assert len(roles.json()["items"]) == 2
+    assert all(not row["is_active"] for row in accounts.json()["items"])
+    assert all(not row["is_active"] for row in companies.json()["items"])
+    if engine.dialect.name == "postgresql":
+        for table in ("users", "companies", "project_members"):
+            assert any(
+                f"from {table}" in sql and "for update" in sql
+                for sql in statements
+            ), table
+    db_session.expire_all()
+    assert all(not user.is_active for user in users)

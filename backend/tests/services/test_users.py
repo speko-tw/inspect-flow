@@ -906,9 +906,18 @@ def test_returning_external_collaborator_to_internal_clears_expiry(
 
     assert user.is_external_collaborator is False
     assert user.account_expires_on is None
-    assert [row.event_type for row in _audit_rows_for(session, user.id)] == [
-        "user.external_flag_changed"
-    ]
+    rows = _audit_rows_for(session, user.id)
+    assert {row.event_type for row in rows} == {
+        "user.external_flag_changed",
+        "user.account_expiry_changed",
+    }
+    expiry = next(
+        row for row in rows if row.event_type == "user.account_expiry_changed"
+    )
+    assert expiry.before == {"account_expires_on": "2027-01-01"}
+    assert expiry.after == {"account_expires_on": None}
+    assert not set_external_collaborator(session, user, False, confirmed=True)
+    assert len(_audit_rows_for(session, user.id)) == len(rows)
 
 
 def test_returning_external_collaborator_requires_confirmation(

@@ -312,6 +312,7 @@ def set_external_collaborator(
             details=["Confirm the external-collaborator status change."],
         )
     previous = user.is_external_collaborator
+    previous_expiry = user.account_expires_on
     user.is_external_collaborator = is_external_collaborator
     if not is_external_collaborator:
         user.account_expires_on = None
@@ -324,6 +325,15 @@ def set_external_collaborator(
         before={"is_external_collaborator": previous},
         after={"is_external_collaborator": is_external_collaborator},
     )
+    # DOM-R22、#712：身分轉換連帶清除到期日，也必須留下該欄位的歷程。
+    if previous_expiry != user.account_expires_on:
+        record_audit_event(
+            session,
+            "user.account_expiry_changed",
+            entity_id=user.id,
+            before={"account_expires_on": previous_expiry},
+            after={"account_expires_on": user.account_expires_on},
+        )
     return True
 
 
