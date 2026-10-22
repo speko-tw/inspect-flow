@@ -25,6 +25,7 @@ const EVENT_LABELS: Record<string, string> = {
   'permission_bundle.updated': '修改權限組合',
   'project.created': '建立專案',
   'project.updated': '修改專案',
+  'project_inspection_item.deleted': '刪除查核項目',
   'project_inspection_item.updated': '修改查核項目',
   'project_member.assignment_denied': '指派成員角色被拒絕',
   'project_member.removed': '移除成員',

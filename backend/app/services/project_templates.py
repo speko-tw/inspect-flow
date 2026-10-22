@@ -1,10 +1,11 @@
 """Copy template structures into project-owned inspection items."""
 
+import hashlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.base import uuid7
@@ -38,9 +39,24 @@ class DuplicateProjectItemError(ValueError):
         super().__init__(", ".join(names))
 
 
+def lock_project_item_names(db: Session, project_id: UUID) -> None:
+    """#435：序列化套用與改名的名稱檢查，避免兩個請求同時通過。
+
+    不能先鎖專案列再鎖來源項目：Task 建立的鎖序為項目、Plan、專案。
+    PostgreSQL 以獨立的交易 advisory lock 協調名稱，SQLite 沿用寫交易鎖。
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        digest = hashlib.sha256(
+            f"project-item-names:{project_id}".encode()
+        ).digest()
+        key = int.from_bytes(digest[:8], "big", signed=True)
+        db.execute(select(func.pg_advisory_xact_lock(key)))
+
+
 def _reject_duplicate_names(
     db: Session, project_id: UUID, templates: Sequence[TemplateItem]
 ) -> None:
+    lock_project_item_names(db, project_id)
     # Every path creating ProjectInspectionItem must take this same
     # project-row lock before checking names and writing copies.
     # PostgreSQL serializes applies here; SQLite does not row-lock.

@@ -95,6 +95,8 @@ function errorMessage(error: unknown): string {
   return httpErrorMessage(error, {
     codes: {
       'inspection_plan.archived': ARCHIVED_PLAN_ERROR,
+      'project_inspection_item.duplicate_name':
+        '這個專案已有同名查核項目，請換個名稱。',
       'project_inspection_item.structure_locked': [
         '此項目已有任務使用；若要修改照片需求，或增減項次、實測欄位，',
         '變更欄位類型、單位、數值綁定或標準種類，請選擇「要」重新查核。',
@@ -375,7 +377,7 @@ export default function ProjectItemChangePage({
   const [inspectionPoints, setInspectionPoints] = useState<InspectionPoint[]>(
     [],
   )
-  const [reinspect, setReinspect] = useState<boolean | null>(null)
+  const [reinspect, setReinspect] = useState<boolean | null>(false)
   const [result, setResult] = useState<ProjectItemChangeResult | null>(null)
   const [resultTasks, setResultTasks] = useState(
     [] as ProjectItemPreview['affectedTasks'],
@@ -419,7 +421,9 @@ export default function ProjectItemChangePage({
     ? preview.affectedTasks.some((task) => task.status === 'DRAFT')
     : false
   const needsChoice = preview
-    ? preview.affectedTasks.some((task) => task.status !== 'DRAFT')
+    ? preview.affectedTasks.some((task) => task.status !== 'DRAFT') ||
+      (preview.affectedTasks.length > 0 &&
+        title.trim() !== preview.item.title.trim())
     : false
   const structureLocked = needsChoice && reinspect === false
   const photoRequirementChanged = Boolean(
@@ -532,7 +536,8 @@ export default function ProjectItemChangePage({
     setInstruction(localized.item.instruction)
     setInspectionPoints(localized.item.inspection_points)
     setPhotoDraft(photos)
-    setReinspect(null)
+    // #435：每次載入新一輪修改都預設不要重查，仍須確認後才送出。
+    setReinspect(false)
     setBaseline(
       JSON.stringify({
         title: localized.item.title,
@@ -583,7 +588,8 @@ export default function ProjectItemChangePage({
           ],
         })),
       ),
-      ...(selectedReinspect === undefined
+      ...(selectedReinspect === undefined ||
+      preview?.affectedTasks.length === 0
         ? {}
         : { reinspect: selectedReinspect }),
     }
@@ -969,7 +975,9 @@ export default function ProjectItemChangePage({
               initialFocus="none"
               onCancel={() => setConfirming(false)}
               onConfirm={() =>
-                draftOnly ? save(true, true) : save(reinspect ?? undefined)
+                draftOnly
+                  ? save(needsChoice ? (reinspect ?? undefined) : true, true)
+                  : save(reinspect ?? undefined)
               }
               role="dialog"
               title={needsChoice ? '儲存前確認是否重新查核' : '儲存前確認'}
@@ -978,7 +986,7 @@ export default function ProjectItemChangePage({
               {needsChoice && (
                 <>
                   <p>
-                    {'有任務已經派出。'}
+                    {!draftOnly && '有任務已經派出。'}
                     {hasDraft && '草稿任務不受選擇影響，會直接更新為新內容；'}
                     {'已核發的報告也不受影響。'}
                   </p>

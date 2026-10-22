@@ -180,6 +180,11 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             "/api/v1/projects/{project_id}/inspection-items/"
             "{project_inspection_item_id}",
         ),
+        (
+            "DELETE",
+            "/api/v1/projects/{project_id}/inspection-items/"
+            "{project_inspection_item_id}",
+        ),
     }
 
     assert (
@@ -253,7 +258,9 @@ def test_issue_275_routes_declare_the_specified_access_levels() -> None:
             assert (
                 declaration.permission_code == "project_inspection_item.edit"
             )
-        elif route[0] == "PATCH" and "/inspection-items/" in route[1]:
+        elif route[0] in {"PATCH", "DELETE"} and (
+            "/inspection-items/" in route[1]
+        ):
             assert declaration.level is AccessLevel.PROJECT_PERMISSION
             assert (
                 declaration.permission_code == "project_inspection_item.edit"

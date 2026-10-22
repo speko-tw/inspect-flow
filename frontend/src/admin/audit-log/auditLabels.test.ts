@@ -19,6 +19,7 @@ describe('稽核事件白話對照', () => {
     ['template_system.updated', null, '修改範本系統'],
     ['template_item.deleted', null, '刪除範本項目'],
     ['project.template_applied', null, '套用範本'],
+    ['project_inspection_item.deleted', null, '刪除查核項目'],
   ])('把 %s 顯示成「%s」', (eventType, after, label) => {
     expect(
       eventLabel(auditLogEntryFixture({ event_type: eventType, after })),
@@ -71,6 +72,7 @@ describe('稽核事件白話對照', () => {
     'project.created',
     'project.updated',
     'project_inspection_item.updated',
+    'project_inspection_item.deleted',
     'project_member.assignment_denied',
     'project_member.removed',
     'project_member.roles_changed',

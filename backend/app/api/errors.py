@@ -328,6 +328,10 @@ class ErrorCode(DescribedStrEnum):
         "inspection_task.reason_required",
         "A cancellation reason is required.",
     )
+    PROJECT_INSPECTION_ITEM_IN_USE = (
+        "project_inspection_item.in_use",
+        "The inspection item is referenced by a task.",
+    )
     PROJECT_ITEM_REINSPECTION_CHOICE_REQUIRED = (
         "project_inspection_item.reinspection_choice_required",
         "Choose whether affected tasks must be reinspected.",

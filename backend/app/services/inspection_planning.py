@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -39,6 +39,7 @@ from app.services.operator import get_current_operator
 from app.services.permissions import (
     calculate_effective_access,
 )
+from app.services.project_templates import lock_project_item_names
 from app.services.template_library import (
     InvalidTemplateError,
     validate_template_structure,
@@ -109,6 +110,12 @@ for _event, _entity, _kind, _fields in (
         "inspection_task",
         AuditEventKind.UPDATED,
         ("items",),
+    ),
+    (
+        "project_inspection_item.deleted",
+        "project_inspection_item",
+        AuditEventKind.DELETED,
+        ("project_id", "title"),
     ),
     (
         "project_inspection_item.updated",
@@ -1371,6 +1378,8 @@ def edit_project_inspection_item(
     body: Any,
 ):
     """依 KD-55 修改專案項目；無變更時不建立新修訂或稽核。"""
+    if body.title is not None:
+        lock_project_item_names(db, project_id)
     # 依 IP-R03（#555），先鎖來源項目，再由服務層鎖 Plan／Task；
     # 建立 Task 也遵守此順序，快照不會跨越標準修訂邊界。
     item = db.scalar(
@@ -1384,6 +1393,25 @@ def edit_project_inspection_item(
     )
     if item is None:
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    if body.title is not None:
+        title = body.title.strip()
+        if not title:
+            raise APIError(ErrorCode.REQUEST_VALIDATION_FAILED, 422)
+        existing_names = db.scalars(
+            select(ProjectInspectionItem.title).where(
+                ProjectInspectionItem.project_id == project_id,
+                ProjectInspectionItem.id != item.id,
+            )
+        )
+        if any(
+            name.strip().casefold() == title.casefold()
+            for name in existing_names
+        ):
+            raise APIError(
+                ErrorCode.PROJECT_INSPECTION_ITEM_DUPLICATE_NAME,
+                409,
+                details=[title],
+            )
     associations = db.scalars(
         select(TaskInspectionItem).where(
             TaskInspectionItem.project_inspection_item_id == item.id
@@ -1962,3 +1990,57 @@ def _replace_project_points(
         if point.id not in retained_point_ids:
             db.delete(point)
     db.flush()
+
+
+def delete_project_inspection_item(
+    db: Session,
+    *,
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+) -> None:
+    """#435：僅刪除未被任何 Task 引用的項目，並原子保存操作紀錄。"""
+    _require_permission(db, project_id, "project_inspection_item.edit")
+    # FOR UPDATE 與建立／取代 Task 明細的來源共享鎖互斥；持鎖後才查引用，
+    # 避免檢查通過與刪除之間被新增 Task。取消、草稿與舊快照都不得繞過。
+    item = db.scalar(
+        select(ProjectInspectionItem)
+        .where(
+            ProjectInspectionItem.id == project_inspection_item_id,
+            ProjectInspectionItem.project_id == project_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if item is None:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
+    count = (
+        db.scalar(
+            select(
+                func.count(func.distinct(TaskInspectionItem.task_id))
+            ).where(TaskInspectionItem.project_inspection_item_id == item.id)
+        )
+        or 0
+    )
+    if count:
+        raise APIError(
+            ErrorCode.PROJECT_INSPECTION_ITEM_IN_USE,
+            409,
+            details=[str(count)],
+        )
+    before = {"project_id": str(project_id), "title": item.title}
+    # 這些修訂只服務取消 Task 恢復；沒有引用才可同交易清除（#435）。
+    db.execute(
+        delete(ProjectInspectionItemChange).where(
+            ProjectInspectionItemChange.project_inspection_item_id == item.id
+        )
+    )
+    db.delete(item)
+    db.flush()
+    record_audit_event(
+        db,
+        "project_inspection_item.deleted",
+        entity_id=project_inspection_item_id,
+        project_id=project_id,
+        before=before,
+        after=None,
+    )

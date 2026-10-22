@@ -295,6 +295,7 @@ def test_project_scoped_catalog_covers_all_project_event_families():
         "inspection_task.renamed",
         "inspection_task.items_updated",
         "project_inspection_item.updated",
+        "project_inspection_item.deleted",
         "template_item.created_from_project",
     }
     project_entities = {

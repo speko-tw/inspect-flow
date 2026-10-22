@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 
-import { isForbidden } from '../../http'
-import { listProjectItems, type ProjectItemData } from './api'
+import { httpErrorMessage, isForbidden } from '../../http'
+import { ConfirmBox } from '../../ui/ConfirmBox'
+import { ManagementApiError } from '../api'
+import {
+  deleteProjectItem,
+  listProjectItems,
+  type ProjectItemData,
+} from './api'
 import './ProjectItemLinks.css'
 
 /**
@@ -20,6 +26,12 @@ export default function ProjectItemLinks({
   const [items, setItems] = useState<ProjectItemData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [deleting, setDeleting] = useState<ProjectItemData | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null)
+  const heading = useRef<HTMLHeadingElement | null>(null)
   const routeState = location.state as { highlightedItemIds?: unknown } | null
   const highlightedItemIds = new Set(
     Array.isArray(routeState?.highlightedItemIds)
@@ -52,9 +64,57 @@ export default function ProjectItemLinks({
     }
   }, [projectId])
 
+  function cancelDelete() {
+    setDeleting(null)
+    setDeleteError('')
+    deleteTrigger.current?.focus()
+  }
+
+  async function removeItem() {
+    if (!deleting || busy) return
+    setBusy(true)
+    setDeleteError('')
+    try {
+      await deleteProjectItem(projectId, deleting.id)
+      setItems((current) => current.filter((item) => item.id !== deleting.id))
+      setNotice(`已刪除「${deleting.title}」。`)
+      setDeleting(null)
+      heading.current?.focus()
+    } catch (caught) {
+      // #435：任務數由後端持鎖後計算，不能信任列表載入時的引用狀況。
+      if (
+        caught instanceof ManagementApiError &&
+        caught.code === 'project_inspection_item.in_use'
+      ) {
+        const count: unknown = Array.isArray(caught.details)
+          ? caught.details[0]
+          : undefined
+        const prefix =
+          typeof count === 'string' && /^\d+$/.test(count)
+            ? `已有 ${count} 個任務使用這個項目`
+            : '已有任務使用這個項目'
+        setDeleteError(`${prefix}，不能刪除。請先取消這些任務。`)
+      } else {
+        setDeleteError(
+          httpErrorMessage(caught, {
+            codes: {
+              'authorization.forbidden': '你沒有權限刪除此查核項目。',
+              'resource.not_found': '找不到此查核項目，請重新載入清單。',
+            },
+            fallback: '刪除失敗，請稍後再試。',
+          }),
+        )
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <section aria-labelledby="project-items-heading">
-      <h2 id="project-items-heading">專案查核項目</h2>
+      <h2 id="project-items-heading" ref={heading} tabIndex={-1}>
+        專案查核項目
+      </h2>
       {canEdit && (
         <Link
           className="btn btn-primary"
@@ -63,6 +123,7 @@ export default function ProjectItemLinks({
           從範本新增查核項目
         </Link>
       )}
+      {notice && <p role="status">{notice}</p>}
       {loading && <p>載入中…</p>}
       {error && <p role="alert">{error}</p>}
       {!loading && !error && items.length === 0 && <p>目前沒有查核項目。</p>}
@@ -97,6 +158,40 @@ export default function ProjectItemLinks({
               >
                 {canEdit ? '修改' : '檢視'}
               </Link>
+              {canEdit && (
+                <button
+                  aria-label={`刪除「${item.title}」`}
+                  className="btn btn-danger"
+                  disabled={busy}
+                  onClick={(event) => {
+                    deleteTrigger.current = event.currentTarget
+                    setDeleting(item)
+                    setDeleteError('')
+                    setNotice('')
+                  }}
+                  type="button"
+                >
+                  刪除
+                </button>
+              )}
+              {deleting?.id === item.id && (
+                <ConfirmBox
+                  busy={busy}
+                  confirmLabel="確認刪除"
+                  headingLevel={3}
+                  onCancel={cancelDelete}
+                  onConfirm={removeItem}
+                  title="刪除查核項目"
+                  variant="danger"
+                >
+                  <p>確定刪除「{item.title}」？刪除後無法復原。</p>
+                  <p>
+                    只有從未被任務使用的項目可以刪除，
+                    草稿與已取消任務也算使用過。
+                  </p>
+                  {deleteError && <p role="alert">{deleteError}</p>}
+                </ConfirmBox>
+              )}
             </li>
           ))}
         </ul>

@@ -68,6 +68,7 @@ from app.services.inspection_planning import (
     create_inspection_task,
     create_project_zone,
     delete_draft_inspection_task,
+    delete_project_inspection_item,
     delete_project_zone,
     dispatch_inspection_task,
     edit_project_inspection_item,
@@ -1557,4 +1558,32 @@ def patch_project_item(
         project_id=project_id,
         project_inspection_item_id=project_inspection_item_id,
         body=body,
+    )
+
+
+@router.delete(
+    "/projects/{project_id}/inspection-items/{project_inspection_item_id}",
+    status_code=204,
+    dependencies=[
+        Depends(
+            require_project_permission(
+                "project_inspection_item.edit",
+                param_name="project_id",
+                uuid_path_params=("project_inspection_item_id",),
+            ),
+            scope="function",
+        )
+    ],
+)
+def delete_project_item(
+    project_id: UUID,
+    project_inspection_item_id: UUID,
+    db: Session = _db_dependency,
+) -> None:
+    """#435：刪除從未被任務引用的專案查核項目。"""
+    _call(
+        delete_project_inspection_item,
+        db,
+        project_id=project_id,
+        project_inspection_item_id=project_inspection_item_id,
     )

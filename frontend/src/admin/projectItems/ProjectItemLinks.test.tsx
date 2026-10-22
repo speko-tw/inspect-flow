@@ -1,4 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -119,6 +125,7 @@ describe('ProjectItemLinks', () => {
     expect(await screen.findByText('管線查核')).toBeInTheDocument()
     expect(screen.getByText('來源範本：舊來源名稱')).toBeInTheDocument()
     expect(screen.getByText('來源分類／系統： 未記錄')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /刪除/ })).toBeNull()
     const viewLinkName = '檢視「管線查核」'
     const viewLink = screen.getByRole('link', { name: viewLinkName })
     expect(viewLink).toHaveTextContent('檢視')
@@ -129,5 +136,101 @@ describe('ProjectItemLinks', () => {
     expect(
       screen.queryByRole('link', { name: '從範本新增查核項目' }),
     ).toBeNull()
+  })
+})
+
+describe('#435 刪除專案查核項目', () => {
+  function renderItems(fetchMock: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <MemoryRouter>
+        <ProjectItemLinks
+          projectId="p1"
+          viewerPermissions={['project_inspection_item.edit']}
+        />
+      </MemoryRouter>,
+    )
+  }
+
+  function itemList() {
+    return Response.json({
+      items: [
+        {
+          id: 'i1',
+          title: '未使用項目',
+          inspection_points: [],
+          source_template_name: '示範',
+          applied_at: '2026-10-22T00:00:00Z',
+        },
+      ],
+      next_cursor: null,
+    })
+  }
+
+  it('確認後刪除未使用項目並更新清單', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(itemList())
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    renderItems(fetchMock)
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '刪除「未使用項目」',
+      }),
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const box = screen.getByRole('group', { name: '刪除查核項目' })
+    expect(box).toHaveTextContent('刪除後無法復原')
+    fireEvent.click(within(box).getByRole('button', { name: '確認刪除' }))
+    await waitFor(() => expect(screen.queryByText('未使用項目')).toBeNull())
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/projects/p1/inspection-items/i1',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '已刪除「未使用項目」',
+    )
+  })
+
+  it('已使用項目被拒時保留項目並提示任務數', async () => {
+    renderItems(
+      vi
+        .fn()
+        .mockResolvedValueOnce(itemList())
+        .mockResolvedValueOnce(
+          Response.json(
+            {
+              error: {
+                code: 'project_inspection_item.in_use',
+                details: ['2'],
+              },
+            },
+            { status: 409 },
+          ),
+        ),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '刪除「未使用項目」',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '已有 2 個任務使用這個項目，不能刪除。請先取消這些任務。',
+    )
+    expect(screen.getByText('未使用項目')).toBeInTheDocument()
+  })
+
+  it('取消刪除不送出請求', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(itemList())
+    renderItems(fetchMock)
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: '刪除「未使用項目」',
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('group')).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

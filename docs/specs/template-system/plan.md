@@ -88,3 +88,13 @@
 - **把專案副本與任務需求快照合併**：KD-55 已把作廢／重查／更正流程交給 P4；本規格仍定義 0.3.x 最小 `ProjectInspectionItem`，避免範本覆蓋語意改寫任務既有需求。
 - **替查核範本保留版本表**：與 KD-03、PR-04 的現行裁定相反；專案套用副本承接快照，任務快照仍在建立任務時產生。
 - #432 新增 `error.fields`：T11、T12 與 TPL-AC26、TPL-AC27 只涵蓋範本 API 與範本編輯器；其他 API 與畫面之後逐步採用，不在本計畫。
+
+
+## Issue #435：專案查核項目移除與改名
+
+- 依負責人 2026-10-22 裁定，在既有 #622 worktree 接續；不建立停用或恢復功能。
+- 專案項目 DELETE 依編輯權限覆核，鎖來源項目後查所有 Task 明細（含草稿、取消），沒有引用才清除子結構與變更紀錄，並於同交易新增 `project_inspection_item.deleted`。回應帶任務數，操作紀錄加白話標籤。
+- PATCH 改名與套用範本共用名稱檢查鎖，trim／casefold、排除自身；409 保留 UI 編輯內容並提示換名。已有引用每次改名詢問，預設不要且仍須確認儲存；草稿改名也適用，Snapshot 仍原位更新。
+- 實作範圍：`backend/app/services/inspection_planning.py`、`project_templates.py`、`backend/app/api/v1/inspection_planning.py`、`backend/app/api/errors.py`、前端 `projectItems/` 與 `audit-log/auditLabels.ts`；不需 migration。
+- 驗收：`tests/api/test_project_item_removal.py`、`tests/db/test_project_item_removal.py`（SQLite／PostgreSQL）、`tests/db/test_project_item_edit_concurrency.py`、`tests/services/test_audit.py`、`ProjectItemLinks.test.tsx`、`ProjectItemChangePage.test.tsx` 與 `auditLabels.test.ts`。
+- TPL-AC30：先取得新增測試紅燈，再執行 `make check`（專用 `inspectflow_test_622`、4 個前端 worker）、demo E2E 與 1280／390 真畫面截圖；報告保留命令、退出碼、需求與 commit 對照。

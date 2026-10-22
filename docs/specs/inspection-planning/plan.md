@@ -100,3 +100,13 @@ Issue #406 補齊以下測試對應，不變更產品行為：
 - **以目前專案／範本資料即時組裝舊任務內容**：違反 PR-04 的任務需求快照；每個 Task 必須保有建立當時的 Snapshot。
 - **直接覆寫已建立任務的 Snapshot**：KD-55 只允許「不要重新查核」時更正任務文字，並保留結果、照片與狀態；此例外需留下操作者、時間與內容紀錄。
 - **已完成 Task 重新開啟**：KD-56 不允許重新開啟已完成 Task。KD-55 標準變更是明確的系統例外：受影響的已完成 Task 自動回到 `IN_PROGRESS`，只使相關項目的結果／照片作廢以重新查核；不提供一般人工重開 Task 的端點。此規則依負責人補充裁定 5970063986，並已反映於合併的 `state-machines` SM-Q03。
+
+
+## Issue #435：專案查核項目移除與改名
+
+- 依負責人 2026-10-22 裁定，在既有 #622 worktree 接續；不建立停用或恢復功能。
+- 專案項目 DELETE 依編輯權限覆核，鎖來源項目後查所有 Task 明細（含草稿、取消），沒有引用才清除子結構與變更紀錄，並於同交易新增 `project_inspection_item.deleted`。回應帶任務數，操作紀錄加白話標籤。
+- PATCH 改名與套用範本共用名稱檢查鎖，trim／casefold、排除自身；409 保留 UI 編輯內容並提示換名。已有引用每次改名詢問，預設不要且仍須確認儲存；草稿改名也適用，Snapshot 仍原位更新。
+- 實作範圍：`backend/app/services/inspection_planning.py`、`project_templates.py`、`backend/app/api/v1/inspection_planning.py`、`backend/app/api/errors.py`、前端 `projectItems/` 與 `audit-log/auditLabels.ts`；不需 migration。
+- 驗收：`tests/api/test_project_item_removal.py`、`tests/db/test_project_item_removal.py`（SQLite／PostgreSQL）、`tests/db/test_project_item_edit_concurrency.py`、`tests/services/test_audit.py`、`ProjectItemLinks.test.tsx`、`ProjectItemChangePage.test.tsx` 與 `auditLabels.test.ts`。
+- IP-AC21～IP-AC22：先取得新增測試紅燈，再執行 `make check`（專用 `inspectflow_test_622`、4 個前端 worker）、demo E2E 與 1280／390 真畫面截圖；報告保留命令、退出碼、需求與 commit 對照。
