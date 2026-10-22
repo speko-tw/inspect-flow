@@ -593,7 +593,14 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
       ) : (
         <ul className="member-list">
           {members.map((member) => (
-            <li className="member-card" key={member.id}>
+            <li
+              className={
+                member.is_active
+                  ? 'member-card'
+                  : 'member-card member-card-inactive'
+              }
+              key={member.id}
+            >
               <div className="member-card-main">
                 <p className="member-card-name">
                   {isAdmin ? (

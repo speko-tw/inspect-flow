@@ -876,7 +876,7 @@ describe('admin projects page', () => {
       .getByRole('heading', { name: /計數工程0/ })
       .closest('article')
     expect(firstCard).not.toBeNull()
-    expect(within(firstCard!).getByText('成員數：0')).toBeVisible()
+    expect(within(firstCard!).getByText('啟用成員 0 人')).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: '載入更多' }))
     const secondPageHeading = await screen.findByRole('heading', {
@@ -884,7 +884,7 @@ describe('admin projects page', () => {
     })
     const secondPageCard = secondPageHeading.closest('article')
     expect(secondPageCard).not.toBeNull()
-    expect(within(secondPageCard!).getByText('成員數：7')).toBeVisible()
+    expect(within(secondPageCard!).getByText('啟用成員 7 人')).toBeVisible()
     expect(calls(fetchMock, 'GET', /\/projects\?[^ ]*cursor=50/)).toHaveLength(
       1,
     )
@@ -2106,6 +2106,7 @@ describe('admin project members', () => {
 
     const card = await screen.findByRole('listitem')
     expect(within(card).getByText('（已停用）')).toBeVisible()
+    expect(card).toHaveClass('member-card-inactive')
   })
 
   it('links an Admin from project members to that person detail', async () => {

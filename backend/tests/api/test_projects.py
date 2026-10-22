@@ -3,6 +3,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import ErrorCode
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
+from app.db import clock
 from app.db.engine import get_engine
 from app.models import (
     AuditLog,
@@ -560,10 +562,34 @@ def test_project_list_counts_only_active_members(project_api, db_session):
 
     inactive = create_user(
         db_session,
-        is_external_collaborator=False,
+        is_external_collaborator=True,
+        account_expires_on=date(2099, 12, 31),
         username="inactive.project.member",
         email="inactive.project.member@demo.example",
         name_zh="停用專案成員",
+    )
+    external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        username="active.external.member",
+        email="active.external.member@demo.example",
+        name_zh="啟用外部成員",
+    )
+    expires_today = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=clock.utc_now().date(),
+        username="today.external.member",
+        email="today.external.member@demo.example",
+        name_zh="到期日外部成員",
+    )
+    expired_external = create_user(
+        db_session,
+        is_external_collaborator=True,
+        account_expires_on=date(2000, 1, 1),
+        username="expired.external.member",
+        email="expired.external.member@demo.example",
+        name_zh="到期外部成員",
     )
     add_project_member(
         db_session,
@@ -575,7 +601,21 @@ def test_project_list_counts_only_active_members(project_api, db_session):
         db_session,
         project_id=project.id,
         user_id=inactive.id,
-        role_ids=[role.id],
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=external.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=expires_today.id,
+    )
+    add_project_member(
+        db_session,
+        project_id=project.id,
+        user_id=expired_external.id,
     )
     inactive.is_active = False
     db_session.commit()
@@ -585,7 +625,7 @@ def test_project_list_counts_only_active_members(project_api, db_session):
     counts = {
         row["id"]: row["member_count"] for row in response.json()["items"]
     }
-    assert counts[str(project.id)] == 2
+    assert counts[str(project.id)] == 4
     assert counts[str(other_project.id)] == 0
 
 

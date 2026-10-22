@@ -5,11 +5,11 @@ from collections.abc import Sequence
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.company_roles import DEFAULT_COMPANY_ROLE, is_company_role_registered
-from app.models import CreatorRoleSetting, Project, ProjectMember, User
+from app.models import CreatorRoleSetting, Project
 from app.services import UNSET, _Unset
 from app.services.audit import record_audit_event
 from app.services.module_permissions import (
@@ -17,6 +17,9 @@ from app.services.module_permissions import (
     query_person_access,
 )
 from app.services.operator import get_current_operator
+from app.services.project_member_counts import (
+    count_active_project_members as _count_active_project_members,
+)
 from app.services.project_members import add_project_member
 
 # DOM-R76：改本公司角色的原因，去除前後空白後 1～256 字元。
@@ -283,25 +286,8 @@ def find_projects_by_code(
 def count_active_project_members(
     session: Session, project_ids: set[UUID]
 ) -> dict[UUID, int]:
-    """依 ADM-AC09 批次計算頁面中每個專案的啟用成員數。
-
-    #286 的停用口徑仍待負責人確認；目前排除已停用帳號。
-    """
-    if not project_ids:
-        return {}
-    rows = session.execute(
-        select(ProjectMember.project_id, func.count(ProjectMember.id))
-        .join(User, User.id == ProjectMember.user_id)
-        .where(
-            ProjectMember.project_id.in_(project_ids),
-            User.is_active.is_(True),
-        )
-        .group_by(ProjectMember.project_id)
-    )
-    counts = {project_id: count for project_id, count in rows}
-    return {
-        project_id: counts.get(project_id, 0) for project_id in project_ids
-    }
+    """委派 DOM-R77 的共用有效啟用成員計算。"""
+    return _count_active_project_members(session, project_ids)
 
 
 __all__ = [

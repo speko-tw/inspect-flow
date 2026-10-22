@@ -16,15 +16,28 @@
 | UDS-AC15 | PASS | 初次真瀏覽器走查發現明確淺色主題 selector 特異性蓋過 reduced-motion media rule；本分支以淺/深/系統/未設定 selector 修正，並在 `tokens.test.ts` 增 regression assertion。修正後八個深層頁面在淺/深主題、1280/360 共 32 組均讀回 `--motion-fast: 0ms`；reduced-motion regression test 7 項通過。 |
 | UDS-AC16 | PASS | 本分支新增[元件規範與使用指引](component-guidelines.md)，列出元件狀態矩陣及功能頁套用範圍。七項回饋及外部交付來源見 #686 issue 討論：`HANDOFF.md` 與 `OpsWorkbench.dc.html` 已交付外部專案，`/design-sync` 尚待進行；外部 repo 不在本分支改動範圍，也不宣稱已同步其實作。 |
 
-## 2026-10-20 #413／#286 後續驗收（UDS-AC12）
+## 2026-10-20 #413／#286 後續驗收（歷史紀錄）
 
-- 本工單暫採「目前啟用中的專案成員」口徑；`domain-model` 的 `member_count` 契約尚未先凍結。本節記錄實測，不代表 UDS-AC12 全部 PASS，也不代表 #286 契約已完成；保留上表 2026-10-19 延後裁定原文。
+- 當時暫採「目前啟用中的專案成員」口徑；`domain-model` 的 `member_count` 契約尚未凍結。本節是歷史實測，不代表 UDS-AC12 全部 PASS；2026-10-22 的正式契約與新驗收見下節。
 - 真 demo 的 `GET /api/v1/projects?limit=50` 回 HTTP 200：`DEMO-A=3`、`DEMO-B=4`；各自 `/members` API 的啟用列數同為 3、4，畫面顯示「成員數：3／4」。
+
 - Admin 真 Chromium 搜尋 `DEMO-B` 唯一命中；不存在名稱顯示空結果與清除搜尋。1280px、360px 均無水平溢位（`scrollWidth === innerWidth`）；截圖見 `design/413/1280-light-projects.png`、`design/413/360-light-projects.png`。
 - `test_project_list_counts_only_active_members` 驗證停用成員不計入（計數 2）及零成員專案回 0；`test_project_list_query_count_does_not_grow`、`test_project_list_search_cursor_and_validation` 覆蓋查詢數、搜尋與 API cursor。
 - `ProjectsAdmin.test.tsx` 的 `searches projects and loads the next cursor page` 與 `renders the API member count, including zero, after cursor paging` 使用 51 筆資料；第 1 筆顯示 0、第 51 筆顯示 API 值 7，載入請求帶 `cursor=50`。
 - 定向結果：`backend/tests/api/test_projects.py` 63 passed、`backend/tests/services/test_projects.py` 4 passed、`ProjectsAdmin.test.tsx` 88 passed，均 exit 0。完整 `make check` exit 0：backend 1390 passed／22 skipped、PostgreSQL 595 passed／5 skipped、frontend 72 files／1478 passed；Prettier、ESLint、TypeScript、build、PWA 與拆包檢查均通過。
-- NOT_RUN：真 demo 僅兩個專案，未以真瀏覽器驗證 50 筆以上的續載；此情境由上述 51 筆 UI 測試覆蓋。
+- NOT_RUN：當時真 demo 僅兩個專案，未以真瀏覽器驗證 50 筆以上的續載；此情境由上述 51 筆 UI 測試覆蓋。
+
+
+## 2026-10-22 #286 裁定後驗收（UDS-AC12）
+
+- 負責人裁定：成員數計算有效啟用的專案成員，含外部協作與無角色成員；停用及到期外部帳號不計。清單與專案首頁摘要顯示「啟用成員 N 人」；成員頁停用者以灰色標示「已停用」。契約凍結於 `domain-model` DOM-R77／DOM-AC76。
+- 紅燈：`PYTEST_ADDOPTS='-p no:cacheprovider' backend/.venv/bin/pytest backend/tests/api/test_projects.py::test_project_list_counts_only_active_members backend/tests/api/test_project_workflow_summary.py::test_summary_counts_active_external_member_but_not_expired_account -q`，實作前 2 failed；到期但仍標記啟用的外部帳號被兩處錯誤計入。
+- 綠燈：同一命令實作後 2 passed；涵蓋停用帳號、到期外部帳號、到期日當天仍有效、啟用外部成員無角色仍計入，並驗證清單與首頁摘要的計數。
+- Vitest 定向：`VITEST_MAX_WORKERS=4 npm test -- --run src/admin/projects/ProjectsAdmin.test.tsx src/admin/projectHome/ProjectHomePage.test.tsx`，142 passed；最終完整前端驗收為 72 files／1478 passed。
+- 最新共用 `account_status.py` clause 的定向 API tests：2 passed；完整 E2E 四個 Playwright suites 均 PASS，runner exit 0。
+- 完整 `make check` 使用專用 PostgreSQL URL `inspectflow_test_413`、`VITEST_MAX_WORKERS=4`，exit 0：default backend 1391 passed／22 skipped、PostgreSQL 595 passed／5 skipped、frontend 72 files／1478 passed；format、Ruff、Pyright、Prettier、ESLint、TypeScript、Vite build、PWA 與 split checks 均通過。
+- 真 demo 截圖：`/Users/kavy/.local/state/inspect-flow-handoff/design/286/` 下 `projects-1280.png`（1280×900）、`projects-390.png`（390×1126）、`project-home-1280.png`（1280×900）、`project-home-390.png`（390×949）、`members-1280.png`（1280×1586）、`members-390.png`（390×2051）。Playwright 用真 Chrome 登入隔離 demo，停用 `demo-field-b` 的 API 回 HTTP 200；清單與首頁顯示 DEMO-B 啟用 3 人，兩尺寸成員頁均讀到「陳柏勳（已停用）」；停用卡片與連結 computed color 均為 `rgb(83, 97, 116)`（淺色 token `#536174`）。父層另視覺複核 desktop list、mobile homepage、mobile members 三張。
+- 截圖時的共享計數函式與最新 `account_status.py` clause 條件逐項相同；最新來源定向 API tests 與 E2E 均通過。截圖保留，不重截。
 
 ## 實際走查範圍
 

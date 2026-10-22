@@ -11,7 +11,6 @@ from app.models import (
     InspectionTask,
     Project,
     ProjectInspectionItem,
-    ProjectMember,
     ProjectZone,
     TaskInspectionItem,
 )
@@ -26,6 +25,7 @@ from app.services.inspection_planning import (
 )
 from app.services.operator import get_current_operator
 from app.services.permissions import calculate_effective_access
+from app.services.project_member_counts import count_active_project_members
 
 TaskStatus = Literal[
     "DRAFT", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"
@@ -120,14 +120,9 @@ def get_project_workflow_summary(
     if project is None:
         raise PlanningError("resource.not_found")
 
-    member_count = (
-        session.scalar(
-            select(func.count(ProjectMember.id)).where(
-                ProjectMember.project_id == project_id
-            )
-        )
-        or 0
-    )
+    member_count = count_active_project_members(session, {project_id})[
+        project_id
+    ]
     item_count = (
         session.scalar(
             select(func.count(ProjectInspectionItem.id)).where(
