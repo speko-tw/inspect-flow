@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -1053,6 +1054,65 @@ describe('admin user and company pages', () => {
     )
     expect(await screen.findByRole('heading', { name: '帳號' })).toBeVisible()
     expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
+  })
+
+  it('重設結果的站內導覽須確認，留頁保留密碼、離頁清除', async () => {
+    managementFetch()
+    renderAdmin('/accounts/user-1')
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    // #499：等待非同步重設完成與結果頁的導覽 guard 掛載。
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+    })
+    await screen.findByRole('heading', { name: '臨時密碼已重設' })
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    expect(
+      await screen.findByRole('heading', {
+        name: '臨時密碼抄下了嗎？',
+      }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '留在此頁' }))
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+      'reset-once-123',
+    )
+    fireEvent.click(screen.getByRole('link', { name: '測試 SPA 管理頁導覽' }))
+    fireEvent.click(screen.getByRole('button', { name: '離開此頁' }))
+    expect(
+      await screen.findByRole('heading', { name: '公司管理' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
+    expectNoPasswordPersistence('reset-once-123')
+  })
+
+  it('重設結果上一頁須確認，取消保留密碼、確認後清除', async () => {
+    managementFetch()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAdmin('/accounts/user-1', true, {}, false, {
+      entries: ['/companies', '/accounts/user-1'],
+      index: 1,
+    })
+    await screen.findByRole('heading', { name: '鄧安娜' })
+    fireEvent.click(screen.getByText('更多'))
+    // #499：等待非同步重設完成與結果頁的導覽 guard 掛載。
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '重設臨時密碼' }))
+    })
+    await screen.findByRole('heading', { name: '臨時密碼已重設' })
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith('臨時密碼抄下了嗎？'),
+    )
+    expect(screen.getByLabelText('臨時密碼')).toHaveTextContent(
+      'reset-once-123',
+    )
+    confirm.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: '測試瀏覽器上一頁' }))
+    expect(
+      await screen.findByRole('heading', { name: '公司管理' }),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('臨時密碼')).not.toBeInTheDocument()
+    expectNoPasswordPersistence('reset-once-123')
   })
 
   it('shows 複製 again for the second temporary password', async () => {
