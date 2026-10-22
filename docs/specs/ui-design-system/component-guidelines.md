@@ -46,7 +46,7 @@
 | 功能區 | 主要入口／檔案 | 共用規範採用情形 |
 |---|---|---|
 | 帳號、公司、角色 | `admin/people/PeoplePage.tsx`、`admin/roles/RolesPage.tsx`、`admin/companies/` | 清單、詳情、表單、按鈕與狀態語彙 |
-| 專案與成員 | `admin/projects/` | 專案清單、詳情、成員角色表單；`member_count` 待 #286 凍結，不自行推算 |
+| 專案與成員 | `admin/projects/` | 專案清單與首頁摘要使用 DOM-R77 API 的 `member_count`；成員詳情區分已停用與已到期帳號，兩者採灰階樣式 |
 | 權限與委派 | `admin/module-permissions/ModulePermissionsPage.tsx` | 欄位、診斷回饋、選擇控制項及確認流程 |
 | 總覽與唯讀任務 | `admin/dashboard/` | 進度清單、狀態、唯讀任務明細與窄螢幕資訊層級 |
 | 現場任務 | `field/` | 任務清單、任務詳情、逐步操作與狀態辨識 |

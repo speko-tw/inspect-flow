@@ -277,7 +277,7 @@
 | `POST /api/v1/projects` | 新增專案；非管理者呼叫時，同一交易為操作者建立 `ProjectMember` 並指派建立者角色（DOM-R65）；Admin 呼叫時不自動成為成員，得選填 `creator_role_user_id`（建立者角色人選：一位啟用、非系統帳號、非外部協作人員，以建立者角色加入）；非管理者帶 `creator_role_user_id` 回 422；可帶 `company_role`，省略為 `contractor`（DOM-R76）；寫 `project.created` | **過渡期**需 Admin（AUT-R20），不自動加入任何成員；**正式行為**需模組權限 `project.create`，Admin 放行（AUT-R18 的「需模組權限」層級） |
 | `PATCH /api/v1/projects/{project_id}` | 修改專案；可帶 `company_role` 與 `company_role_change_reason`，改角色時缺原因或原因為空白回 422 專用錯誤碼 `project.company_role_reason_required`，原因超過上限回共用驗證錯誤（DOM-R76） | **過渡期**需 Admin（AUT-R20）；**正式行為**需專案權限 `project.update`（DOM-R66），Admin 依 AUT-R19 放行；`project.create` 與 `all_project_progress.read` 都不放行；成功寫 `project.updated` |
 | `GET /api/v1/project-company-roles` | 回 `{items: [{value, label, inspection_level}]}`：登記表中的本公司角色，依登記順序（`contractor` 承攬施工方、`supervisor` 監造方），`label` 為中文標籤、`inspection_level` 為 `self_inspection` 或 `spot_check`；唯讀、不分頁，供開案與設定畫面取得選項（DOM-R76、`admin-dashboard` ADM-R40）。端點路徑與回應形狀為規格設計（非負責人裁定） | 需登入（AUT-R18）；未登入回 401 |
-| `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
+| `GET /api/v1/projects/{project_id}/members` | 列出專案成員，依加入時間排序，不分頁；回傳原始 `is_active` 與依 DOM-R77 計算的唯讀 `is_effectively_active`，不因到期寫回停用狀態；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
 | `GET /api/v1/projects/{project_id}/member-candidates?cursor=&limit=` | `{items: [{id, username, name_zh, company_name, is_external_collaborator, module_status}], next_cursor}`，`company_name`（沒有公司時為空值）與 `is_external_collaborator` 供搜尋結果顯示所屬公司與「外部協作人員」標籤，`module_status` 為 `{project_use, inspection_use}` 兩個布林（該人是否具專案模組、查核模組的「可使用」，供加入成員時提示，ADM-R31；只回傳這兩個布林，不回傳其他權限）；可加入該專案的使用者：啟用、非系統帳號、尚未是成員；不限公司（外部協作人員可加入，受 DOM-R72 限制）；可選 `q` 依帳號名稱或姓名篩選；依 `(username,id)` 升冪 cursor 分頁，預設 `limit=50`、範圍 1–100；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/users` |
 | `GET /api/v1/projects/{project_id}/assignable-roles?cursor=&limit=` | `{items: [{id, name, permission_codes, is_external_allowed}], next_cursor}`；非 Admin 呼叫者只列 `is_assignable = true` 的角色（DOM-R70），Admin 列全部角色（角色是全系統共用，DOM-R19）；`permission_codes` 依字母排序；依 `(created_at,id)` 升冪 cursor 分頁，分頁參數同上；專案不存在回 404 | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行）；不放寬全域 `GET /api/v1/roles` |
 | `POST /api/v1/projects/{project_id}/members` | 將人員加入專案，**必須**同時指定至少一個角色；零個角色回 422 與專用錯誤碼（見下方「管理介面錯誤」，ADM-R20）；所有呼叫者受 DOM-R72 限制（外部協作人員只能被指派外部可用的角色，非 Admin 另限可指派的角色），非 Admin 另受 DOM-R70 限制（只能指派可指派角色、不能改自己），違反回 422 與專用錯誤碼並寫 `project_member.assignment_denied`（資源不存在的 404 先於這些檢查，這些檢查先於零角色檢查；Admin 不受 DOM-R70 限制，但仍受 DOM-R72 外部可用限制） | 需專案權限 `project_member.manage`（AUT-R22；Admin 依 AUT-R19 放行） |
@@ -289,7 +289,7 @@
 不屬於錯誤碼。專案回應包含 UUID、業務欄位與選填日期。
 ProjectMember 回應包含成員 UUID、`user_id`、`username` 與完整的
 `role_ids` 集合。成員列表的每一筆另含 `name_zh`、`email`、`company_id`、
-`company_name`（沒有公司時為空值）、`is_active` 與 `module_status`（同候選端點的兩個布林），供管理頁顯示。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
+`company_name`（沒有公司時為空值）、原始 `is_active`、唯讀 `is_effectively_active` 與 `module_status`（同候選端點的兩個布林），供管理頁區分停用與到期帳號。有效狀態依 DOM-R77；到期日當天仍有效，讀取時不得改寫 `is_active`。加入成功回 HTTP 201，角色集合更新回 HTTP 200，移出成功
 回 HTTP 204。重複加入同一人回 HTTP 409、`project.member_conflict`；缺少
 專案、人員或角色回 HTTP 404、`resource.not_found`；加入或取代時沒有任何角色回 HTTP
 422、`project.member_roles_required`（權限與資源是否存在先於此檢查）；其餘無效輸入回 HTTP

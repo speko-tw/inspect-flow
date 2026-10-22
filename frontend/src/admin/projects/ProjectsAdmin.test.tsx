@@ -370,6 +370,7 @@ function projectFetch({
           company_id: null,
           company_name: null,
           is_active: true,
+          is_effectively_active: true,
           is_external_collaborator: user?.is_external_collaborator ?? false,
           module_status: { project_use: true, inspection_use: true },
         }
@@ -2007,6 +2008,7 @@ const memberAnna: ProjectMember = {
   company_id: 'company-1',
   company_name: '示範公司',
   is_active: true,
+  is_effectively_active: true,
   is_external_collaborator: false,
   module_status: { project_use: true, inspection_use: true },
 }
@@ -2101,12 +2103,50 @@ describe('admin project members', () => {
   })
 
   it('labels an inactive project member', async () => {
-    projectFetch({ members: [{ ...memberAnna, is_active: false }] })
+    projectFetch({
+      members: [
+        { ...memberAnna, is_active: false, is_effectively_active: false },
+      ],
+    })
     renderAt('/projects/project-1/members')
 
     const card = await screen.findByRole('listitem')
     expect(within(card).getByText('（已停用）')).toBeVisible()
     expect(card).toHaveClass('member-card-inactive')
+  })
+
+  it('labels an expired external member without changing its active flag', async () => {
+    projectFetch({
+      members: [
+        {
+          ...memberAnna,
+          is_external_collaborator: true,
+          is_effectively_active: false,
+        },
+      ],
+    })
+    renderAt('/projects/project-1/members')
+
+    const card = await screen.findByRole('listitem')
+    expect(within(card).getByText('（已到期）')).toBeVisible()
+    expect(card).toHaveClass('member-card-inactive')
+  })
+
+  it('keeps an external member whose expiry is today active', async () => {
+    projectFetch({
+      members: [
+        {
+          ...memberAnna,
+          is_external_collaborator: true,
+          is_effectively_active: true,
+        },
+      ],
+    })
+    renderAt('/projects/project-1/members')
+
+    const card = await screen.findByRole('listitem')
+    expect(within(card).queryByText('（已到期）')).not.toBeInTheDocument()
+    expect(card).not.toHaveClass('member-card-inactive')
   })
 
   it('links an Admin from project members to that person detail', async () => {

@@ -595,7 +595,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
           {members.map((member) => (
             <li
               className={
-                member.is_active
+                member.is_effectively_active
                   ? 'member-card'
                   : 'member-card member-card-inactive'
               }
@@ -612,7 +612,11 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
                   ) : (
                     (member.name_zh ?? member.username)
                   )}
-                  {member.is_active ? null : <span>（已停用）</span>}
+                  {!member.is_active ? (
+                    <span>（已停用）</span>
+                  ) : !member.is_effectively_active ? (
+                    <span>（已到期）</span>
+                  ) : null}
                 </p>
                 <p className="field-hint">
                   {[

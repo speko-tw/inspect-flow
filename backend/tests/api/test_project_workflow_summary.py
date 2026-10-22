@@ -213,10 +213,41 @@ def test_summary_counts_active_external_member_but_not_expired_account(
     )
     db_session.commit()
 
-    response = world["admin"].get(_summary_path(project.id))
+    def assert_counts_match() -> int:
+        listed = world["admin"].get("/api/v1/projects")
+        summary = world["admin"].get(_summary_path(project.id))
+        assert listed.status_code == 200, listed.text
+        assert summary.status_code == 200, summary.text
+        list_count = next(
+            row["member_count"]
+            for row in listed.json()["items"]
+            if row["id"] == str(project.id)
+        )
+        summary_count = summary.json()["member_count"]
+        assert list_count == summary_count == 2
+        return summary_count
 
-    assert response.status_code == 200, response.text
-    assert response.json()["member_count"] == 2
+    count_before_role = assert_counts_match()
+
+    role = Role(
+        name="summary external member role",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db_session.add(role)
+    db_session.flush()
+    member = db_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == active.id,
+        )
+    )
+    assert member is not None
+    member.role_assignments.append(ProjectMemberRole(role_id=role.id))
+    db_session.commit()
+
+    count_after_role = assert_counts_match()
+    assert count_before_role == count_after_role
 
 
 def test_summary_excludes_cancelled_or_archived_rechecks(

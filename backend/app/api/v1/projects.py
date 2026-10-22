@@ -28,6 +28,7 @@ from app.models import (
     RolePermission,
     User,
 )
+from app.services.account_status import effectively_active_user_clause
 from app.services.inspection_planning import PlanningError
 from app.services.module_permissions import (
     ExternalRoleAssignmentError,
@@ -220,6 +221,7 @@ class ProjectMemberDetailResponse(ProjectMemberResponse):
     company_id: UUID | None
     company_name: str | None
     is_active: bool
+    is_effectively_active: bool
     is_external_collaborator: bool
     module_status: ModuleStatusResponse
 
@@ -351,6 +353,7 @@ def _member_detail_response(
     member: ProjectMember,
     user: User,
     company: Company | None,
+    is_effectively_active: bool,
     module_permissions: frozenset[str],
 ) -> ProjectMemberDetailResponse:
     ordered_assignments = sorted(
@@ -367,6 +370,7 @@ def _member_detail_response(
         company_id=user.company_id,
         company_name=company.name if company is not None else None,
         is_active=user.is_active,
+        is_effectively_active=is_effectively_active,
         is_external_collaborator=user.is_external_collaborator,
         module_status=_module_status(module_permissions),
     )
@@ -630,11 +634,18 @@ def list_members(
     if not members:
         return []
     user_rows = db.execute(
-        select(User, Company)
+        select(
+            User,
+            Company,
+            effectively_active_user_clause().label("is_effectively_active"),
+        )
         .outerjoin(Company, Company.id == User.company_id)
         .where(User.id.in_(member.user_id for member in members))
     ).all()
-    users = {user.id: (user, company) for user, company in user_rows}
+    users = {
+        user.id: (user, company, is_effectively_active)
+        for user, company, is_effectively_active in user_rows
+    }
     if any(member.user_id not in users for member in members):
         raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     access_by_user = query_people_access(
