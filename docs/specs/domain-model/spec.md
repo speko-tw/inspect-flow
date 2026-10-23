@@ -579,3 +579,13 @@ HTTP 存取層級依每個操作的既有授權規則，不以 Issue 文字中�
 - 規格澄清（規格設計，非負責人裁定，[#553](https://github.com/speko-tw/inspect-flow/issues/553)，PR #563 第 1 輪審查）：DOM-AC50 的每專案 `has_office_access` 改依 AUT-R19 以有效權限計；DOM-R20、DOM-R64 依據欄註明「檢視專案」第三項為規格設計並引 07 圖 3 — [#553](https://github.com/speko-tw/inspect-flow/issues/553)
 - 規格澄清（負責人指示，#105）：「其他實體（草稿）」改指向 `field-evidence` 與 `completion-validation` 的實體定義；不改凍結範圍與既有需求 — [負責人直接指示](https://github.com/speko-tw/inspect-flow/issues/105#issuecomment-6093842135)
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態；建立者角色三項下限（含 `project.read`）改引 KD-69，標為負責人裁定（2026-10-13） — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
+
+## #515：帳號外觀欄位
+
+| 編號 | 需求 | 強度 | 依據 |
+|---|---|---|---|
+| DOM-R78 | `User.appearance` **必須**為不可空值字串，僅允許 `system`、`light`、`dark`，ORM 與資料庫預設 `system`。migration 回填所有既有帳號為 `system`，保留原資料與外鍵；DB CHECK 拒絕 null 以外的非法值，NOT NULL 拒絕 null。此欄位是本人偏好，不加入管理他人帳號的寫入欄位，讀寫 API 依 AUT-R55；修改紀錄依 PR-08，不新增 audit event | 必須 | [#515](https://github.com/speko-tw/inspect-flow/issues/515)、[最終導覽指示](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6250057575)；負責人 W-515 指示於同一任務澄清並落地 |
+
+| 編號 | 前置 | 操作 | 預期 | 對應需求 |
+|---|---|---|---|---|
+| DOM-AC77 | SQLite 與 PostgreSQL；migration 前已存在帳號 | 執行 upgrade、讀舊資料，透過 ORM 與 SQL 寫入三態、非法值與 null；降版再升版 | 舊帳號 system；三態持久化、其他值及 null 遭拒；單一線性 migration，降升版保留原帳號資料與外鍵；模型與 migration 一致 | DOM-R78 |

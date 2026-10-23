@@ -230,7 +230,7 @@
 | AUT-AC05 | 一個啟用中、`local`、已設定密碼、帳號名稱為 `anna.deng`、email 為 `Anna.Deng@demo.example` 的帳號 | 分別以 `anna.deng`、`ANNA.DENG`、`anna.deng@demo.example`、` Anna.Deng@DEMO.example `（前後有空白）與正確密碼呼叫 `POST /api/v1/auth/login` | 四次都是 200；本體含該帳號的 `id`、`username`、`email`、`name_en`、`name_zh`、`is_admin`、`must_change_password`、`company`、`department`、`location`、`employee_no`、`has_office_access`、`has_field_access`、`has_template_access`、`can_browse_templates`、`can_manage_template_library`、`can_inspect_tasks`，且與同一用戶端緊接著呼叫 `GET /api/v1/auth/me` 的本體逐欄相同；`Set-Cookie` 名稱為 `__Host-inspectflow_session`，帶 `HttpOnly`、`Secure`、`SameSite=Strict`、`Path=/`，沒有 `Domain`；每次資料庫多一筆該帳號的 `AuthSession`，其 `token_hash` 等於 Cookie 值的 SHA-256，且不等於 Cookie 值本身 | AUT-R05、AUT-R08、AUT-R11、AUT-R12、AUT-R52 |
 | AUT-AC06 | 六個帳號情境：帳號名稱或 email 不存在；密碼錯誤；帳號已停用；`auth_source = external`；`local` 但沒有 `UserPassword`（含尚未設定密碼的內建 `admin`）；輸入含 `@` 但只符合某人的帳號名稱前段（例如 `anna.deng@x`） | 各以一組登入名稱與密碼呼叫登入 | 六次都回 401，回應本體逐位元組相同（`error.code` 為 `auth.invalid_credentials`），都沒有 `Set-Cookie`，`AuthSession` 筆數不變；帳號不存在與沒有密碼的兩種情況，密碼驗證函式仍被呼叫一次 | AUT-R06 |
 | AUT-AC07 | 已登入的用戶端 | 呼叫 `POST /api/v1/auth/logout`，再以同一個 Cookie 呼叫 `GET /api/v1/auth/me`；另以沒有 Cookie 的用戶端呼叫登出 | 登出回 204，`Set-Cookie` 讓瀏覽器清除該 Cookie，該筆 `AuthSession` 已不存在；之後的 `me` 回 401 `auth.not_authenticated`；沒有 Cookie 的登出也回 204 | AUT-R07 |
-| AUT-AC08 | 已登入與未登入的用戶端各一；已登入者含內建 `admin`、一般帳號，以及具 `template.use` 但無 `template.manage` 的內部與外部帳號 | 各呼叫 `GET /api/v1/auth/me` | 已登入：200，本體的鍵恰為 `id`、`username`、`email`、`name_en`、`name_zh`、`is_admin`、`must_change_password`、`company`、`department`、`location`、`employee_no`、`has_office_access`、`has_field_access`、`has_template_access`、`can_browse_templates`、`can_manage_template_library`、`can_inspect_tasks`（任務 P 合併後另含 `can_create_project`、`has_project_access`、`is_external_collaborator`、`module_permissions`、`delegated_modules`）；有連結公司的帳號，`company` 為該公司的 `{id, name}`，沒有連結公司的帳號（含內建 `admin`）四個公司欄位皆為 `null`；所有帳號的 `username` 都不為 `null`；內建 `admin` 的 `email` 與 `name_zh` 為 `null`，一般帳號的 `email`、`name_zh` 有值，`name_en` 得為 `null`；`admin` 的 `has_office_access`、`has_field_access`、`has_template_access`、`can_browse_templates`、`can_manage_template_library` 與 `can_inspect_tasks` 皆為 `true`；有 `template.use` 而沒有 `template.manage` 的內部或外部帳號，其 `can_browse_templates` 為 `true`、`can_manage_template_library` 與 `has_template_access` 為 `false`；有 `template.manage` 的帳號兩個明確範本旗標皆為 `true`；未登入：401 `auth.not_authenticated` | AUT-R08、AUT-R10、AUT-R52、DOM-R46、DOM-R50 |
+| AUT-AC08 | 已登入與未登入的用戶端各一；已登入者含內建 `admin`、一般帳號，以及具 `template.use` 但無 `template.manage` 的內部與外部帳號 | 各呼叫 `GET /api/v1/auth/me` | 已登入：200，本體的鍵恰為 `appearance`、`id`、`username`、`email`、`name_en`、`name_zh`、`is_admin`、`must_change_password`、`company`、`department`、`location`、`employee_no`、`has_office_access`、`has_field_access`、`has_template_access`、`can_browse_templates`、`can_manage_template_library`、`can_inspect_tasks`（任務 P 合併後另含 `can_create_project`、`has_project_access`、`is_external_collaborator`、`module_permissions`、`delegated_modules`）；有連結公司的帳號，`company` 為該公司的 `{id, name}`，沒有連結公司的帳號（含內建 `admin`）四個公司欄位皆為 `null`；所有帳號的 `username` 都不為 `null`；內建 `admin` 的 `email` 與 `name_zh` 為 `null`，一般帳號的 `email`、`name_zh` 有值，`name_en` 得為 `null`；`admin` 的 `has_office_access`、`has_field_access`、`has_template_access`、`can_browse_templates`、`can_manage_template_library` 與 `can_inspect_tasks` 皆為 `true`；有 `template.use` 而沒有 `template.manage` 的內部或外部帳號，其 `can_browse_templates` 為 `true`、`can_manage_template_library` 與 `has_template_access` 為 `false`；有 `template.manage` 的帳號兩個明確範本旗標皆為 `true`；未登入：401 `auth.not_authenticated` | AUT-R08、AUT-R10、AUT-R52、DOM-R46、DOM-R50 |
 | AUT-AC09 | 一條僅存在於測試中、需登入、會透過目前操作者入口寫入一筆 `Company` 的路由；另有一段不經過 HTTP 請求、直接呼叫同一個 Service 的測試程式 | 以已登入的帳號 U 呼叫該路由；再不帶 Cookie 呼叫；再執行那段測試程式 | 第一次寫入的 `created_by`、`updated_by` 為 U；第二次回 401 且沒有寫入；第三次寫入的 `created_by` 為內建 `admin` | AUT-R09 |
 
 ### 登入狀態
@@ -333,7 +333,7 @@
 |---|---|---|---|---|
 | AUT-AC28 | 目前使用者 API 的測試替身回 401 | 分別渲染 `/tasks/123` 與 `/projects/456` | 兩者都導向 `/login`，並保留原本的路徑；登入 API 的替身回 200 後送出表單，畫面回到原本且仍可存取的路徑 | AUT-R29、AUT-R53 |
 | AUT-AC29 | 登入 API 的測試替身回 401 `auth.invalid_credentials` | 在登入頁送出表單 | 顯示一則通用錯誤訊息，文字不因失敗原因而不同；密碼欄位的 `type` 為 `password` | AUT-R29 |
-| AUT-AC30 | 已登入的畫面；測試監看 `localStorage`、`sessionStorage` 與 `fetch` | 完成登入、瀏覽、登出 | 登入與登出請求以 `credentials: 'same-origin'`（或預設）送出，前端沒有自行設定 Cookie 或 `Authorization` 標頭；`localStorage`、`sessionStorage` 沒有被寫入；登出後呼叫了登出 API 並導向 `/login` | AUT-R30 |
+| AUT-AC30 | 已登入的畫面；測試監看 `localStorage`、`sessionStorage` 與 `fetch` | 完成登入、瀏覽、登出 | 登入與登出請求以 `credentials: 'same-origin'`（或預設）送出，前端沒有自行設定 Cookie 或 `Authorization` 標頭；`sessionStorage` 未被寫入，`localStorage` 只允許 AUT-R55 的外觀快取，不含登入資訊；登出後呼叫了登出 API 並導向 `/login` | AUT-R30 |
 | AUT-AC41 | 目前使用者 API 的測試替身回 200、`must_change_password` 為 `true` | 分別從 `/tasks/123` 與 `/projects/456` 進入；在 `/settings` 的變更密碼表單送出，API 替身回 204 且目前使用者的替身改回 `must_change_password` 為 `false` | 兩者都在 `/settings` 強制變更密碼，保留原目的路徑；成功後回到原本且仍可存取的路徑 | AUT-R38、AUT-R53 |
 | AUT-AC42 | 變更密碼頁；變更密碼 API 的替身依序回 400 `auth.current_password_incorrect`、422 `auth.password_invalid`、422 `auth.password_unchanged` | 先在兩個新密碼欄位輸入不同的值送出；再輸入相同的值送出三次 | 兩次新密碼不同時沒有呼叫 API，並顯示不一致的訊息；三次錯誤各顯示一則不同的訊息；三個密碼欄位的 `type` 都是 `password` | AUT-R38 |
 
@@ -440,3 +440,23 @@ AUT-R20～AUT-R22 中「哪些端點必須使用哪一層」的部分（管理�
 - 規格澄清（依負責人對 #579 的裁定）：AUT-R50、AUT-AC74 明定歷史上持有 `template_admin` 的外部協作人員僅保留 `template.use`、不取得 `template.manage`；依 [#538 規則 25.3](https://github.com/speko-tw/inspect-flow/issues/538) 與已合併 [PR #612](https://github.com/speko-tw/inspect-flow/pull/612)，此例外不適用於內部人員的無權限損失驗收 — [#579](https://github.com/speko-tw/inspect-flow/issues/579)
 - 規格澄清（[#542](https://github.com/speko-tw/inspect-flow/issues/542)）：intents 整併後，已裁定的 OQ／G 與被取代的 KD 引用改指新位置，開工門檻比對改列仍擋門檻的 G-06、G-07 與已併入決策的原門檻項目；只改引用與依據欄，不改需求、驗收條件與狀態；回填補 `project.read` 改引 KD-69，標為負責人裁定（2026-10-13），移除「待負責人確認」 — [#542](https://github.com/speko-tw/inspect-flow/issues/542)
 - 規格澄清（#565）：AUT-R08 的 `has_project_access` 可與 `has_field_access` 並存，唯讀專案入口不改變現場落點；AUT-R50 回填的 `project.read` 沿用此存取摘要與 ADM-R23～R25 導覽行為，不附帶內業修改權 — [#565](https://github.com/speko-tw/inspect-flow/issues/565)
+
+## #515：本人外觀偏好
+
+本節為負責人已直接指示範圍內的規格澄清，依 [變更規則](../README.md#change) 在同一 PR 同步資料與 API；不再等待另一支 spec-change PR。個人偏好屬登入者本人操作，由 authentication 承接；持久欄位由 domain-model DOM-R78 承接。
+
+| 編號 | 需求 | 強度 | 依據 |
+|---|---|---|---|
+| AUT-R55 | 登入與 `GET /api/v1/auth/me` **必須**回必填 `appearance`，值僅為 `system`、`light`、`dark`，未設定及既有帳號預設 `system`。`PATCH /api/v1/auth/me` 本體僅接受必填 `{appearance}`，未知欄位、缺值、null、其他字串回 422 且資料不變；成功回 `{appearance}`。只從登入 session 取得本人，不接受 user_id，無需 Admin／模組權限；未登入 401。臨時密碼 gate 不增加允許項，此 PATCH 仍回 403 `auth.password_change_required`。本人設定頁在強制改密碼期間不顯示外觀操作。外觀立即預覽、保存失敗提示並回復前值；成功跨裝置沿用。前端只把三態值寫入 `localStorage` 的 `inspectflow.appearance`，不得保存識別資訊或憑證；首次繪製前驗證快取，無效或不可讀取時跟隨裝置，新帳號登入及 me 回應優先於舊快取。`system` 透過既有 media query 即時跟隨裝置。外觀不是 ALG 事件目錄中的安全／業務事件，不新增稽核事件，仍保留 PR-08 修改紀錄 | 必須 | [#515](https://github.com/speko-tw/inspect-flow/issues/515)、[最終導覽指示](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6250057575)；負責人 W-515 指示於同一任務澄清並落地 |
+
+沿用 `/auth/me` 是因為登入與 me 已共用登入者資料；以 PATCH 僅修改本人外觀，避免重複建立偏好讀取端點或混入管理他人的 `/users/{id}`。此 API 不改密碼、登入狀態與權限。
+
+| 方法 | 路徑 | 本體／回應 | 存取與錯誤 |
+|---|---|---|---|
+| PATCH | `/api/v1/auth/me` | `{appearance: system\|light\|dark}` → 200 `{appearance}` | 需登入、只改本人；401、臨時密碼 403、輸入錯誤 422 |
+
+| 編號 | 前置 | 操作 | 預期 | 對應需求 |
+|---|---|---|---|---|
+| AUT-AC80 | 已登入一般、Admin、無功能權限帳號；另一帳號 B | 依序保存三態，用另一登入 session 讀取 me，重新登入 | 值持久化；B 不變；登入與 me 都回必填 appearance；未登入 401；帶 user_id、非法值、null、空 body 回 422，資料不變 | AUT-R55 |
+| AUT-AC81 | 正常或強制改密碼帳號 | 從「姓名 ▾ → 設定」操作外觀；模擬保存失敗、快取存取失敗，換帳號登入 | 正常三態即時套用，保存失敗提示並回復；首次繪製前安全快取生效，換帳號服從新帳號；強制改密碼流程及允許清單不變 | AUT-R55、UDS-AC08、UDS-AC14 |
+| AUT-AC82 | 已保存外觀的帳號與既有稽核紀錄 | 修改外觀並查詢 audit_logs 及修改紀錄 | 無新增稽核事件，updated_by 為本人，updated_at 更新；權限與其他帳號資料不變 | AUT-R55、ALG-R07、PR-08 |

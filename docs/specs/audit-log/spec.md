@@ -384,3 +384,7 @@ Alembic batch migration。ALG-R30 的「不得重建」只約束新增或移除
 - 規格澄清（#435，W-P1c）：事件目錄補齊 `project_inspection_item.deleted`（`before.project_id`、`before.title`，`after=null`），以及 `template_item.created_from_project` 的 `after.title`；與既有事件登記及實作對齊，不改變事件行為。來源：[協調者更正與補充（#435，2026-10-22）](https://github.com/speko-tw/inspect-flow/issues/435)。
 
 - 整合 main（#622）：為保留 #712 帳號稽核的 ALG-R31／ALG-AC30，將 #382 範本稽核改編 ALG-R32／ALG-AC31，並同步範本規格與計畫引用；行為與驗收內容不變。
+
+## #515 外觀偏好的邊界澄清
+
+本人外觀 `User.appearance` 是非敏感呈現偏好，不屬事件目錄列出的帳號安全或業務變更；依 ALG-R07 不新增未登記事件，仍由 PR-08 的 `updated_at`／`updated_by` 記錄修改。API 與驗收見 authentication AUT-R55／AUT-AC82（依據：[#515](https://github.com/speko-tw/inspect-flow/issues/515)、[最終導覽指示](https://github.com/speko-tw/inspect-flow/issues/515#issuecomment-6250057575)；負責人 W-515 指示於同一任務澄清並落地）。
