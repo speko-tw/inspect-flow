@@ -51,7 +51,7 @@ class ModulePermissionError(ValueError):
 
 
 class ModulePermissionDeniedError(ModulePermissionError):
-    """表示登入者不具執行模組操作所需的有效權限。"""
+    """表示操作被拒絕，包括以 Admin 為目標的模組授權或委派。"""
 
     status_code = 403
 
@@ -162,8 +162,8 @@ def query_people_access(
 ) -> dict[uuid.UUID, PersonAccess]:
     """批次提供其他模組所需的人員最小存取資料（DOM-R60）。
 
-    同一查詢同時取回明確權限；Admin 的有效權限以登記表全集表示，
-    避免呼叫端各自推導不同的跨模組人員狀態。
+    批次取回明確權限，避免候選清單逐人查詢（DOM-R60）；
+    Admin 的有效權限以登記表內全部模組範圍代碼表示（DOM-R59、DOM-R69）。
     """
     if not user_ids:
         return {}
@@ -445,7 +445,10 @@ def _record_denied_role_assignment(
     role_ids: set[uuid.UUID],
     reason: str,
 ) -> None:
-    """在獨立交易保留拒絕稽核，不受請求主交易回滾影響（DOM-R70）。"""
+    """以獨立交易保留拒絕稽核，不受請求主交易回滾影響（DOM-R70）。
+
+    稽核失敗只記錄 log 並吞掉，避免覆蓋原本要回傳的拒絕錯誤。
+    """
     try:
         audit_service.record_audit_event_in_independent_transaction(
             session,
@@ -471,7 +474,7 @@ def validate_role_external_configuration(
     is_external_allowed: bool,
     permission_codes: Iterable[str],
 ) -> None:
-    """依 DOM-R72 驗證外部可用角色設定與目前持有人相容。
+    """依 DOM-R64、DOM-R72 驗證建立者角色下限及外部角色相容性。
 
     先鎖角色，再依 UUID 鎖持有人，與外部身分轉換使用相同鎖序，
     避免修改角色時忽略同時變更身分的人員。
@@ -578,7 +581,9 @@ def list_permission_bundles(
 ) -> list[PermissionBundle]:
     """列出 Admin 可管理的組合，或委派者可完整套用的組合。
 
-    委派跨模組組合會被整筆排除，避免部分套用被誤認為完整授權。
+    Admin 看全部；被委派者只看每個代碼都在其委派模組內、且不含
+    ``all_project_progress.read`` 的組合（DOM-R63）；其餘整筆排除，
+    避免部分套用被誤認為完整授權。
     """
     bundles = list(
         session.scalars(
@@ -874,10 +879,9 @@ def grant_module_delegation(
     user: User,
     module: str,
 ) -> bool:
-    """依 DOM-R72 管理員授予模組委派。
+    """依 DOM-R61 由 Admin 授予模組委派；Admin 權限為隱含狀態（DOM-R59）。
 
-    委派只開放代為授權該模組，不附帶模組功能權限；外部協作者不得
-    取得委派，且 Admin 的模組存取為隱含狀態，不另存資料列。
+    委派不附帶模組功能權限；外部協作者不得取得（DOM-R71、DOM-R72）。
     """
     if not actor.is_admin:
         raise ModulePermissionDeniedError("Only Admin may grant delegation")

@@ -38,11 +38,7 @@ def _audit_foreign_keys(table: str) -> list[sa.ForeignKeyConstraint]:
 
 
 def _normalized_name_expression(column: str):
-    """產生符合各資料庫語法的名稱正規化索引表達式（TPL-R03）。
-
-    PostgreSQL 分支明確產生 `lower(trim(BOTH FROM ...))`，其餘方言
-    沿用 SQLAlchemy 函式表達式；兩者都用來符合 TPL-R03 的名稱口徑。
-    """
+    """以正規化名稱落實唯一性，避免空白或大小寫差異造成重複（TPL-R03）。"""
     if op.get_bind().dialect.name == "postgresql":
         return sa.text(f"lower(trim(BOTH FROM {column}))")
     return sa.func.lower(sa.func.trim(sa.column(column)))

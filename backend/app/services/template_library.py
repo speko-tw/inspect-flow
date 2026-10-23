@@ -582,7 +582,7 @@ def replace_template(
     data: dict,
     audit_before: dict | None = None,
 ) -> TemplateItem:
-    """以完整結構取代範本內容並記錄變更前後的稽核差異（TPL-R02）。"""
+    """依 TPL-R02 覆蓋範本內容，並依 TPL-R25 記錄稽核差異。"""
     validate_template_structure(data)
     operator_id = get_current_operator(db).id
     before = audit_before or _template_audit_snapshot(db, item)

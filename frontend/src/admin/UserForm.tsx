@@ -13,7 +13,7 @@ const USERNAME_RULE = '3～32 字元，英文字母開頭，可用英數與 . _ 
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
 const ignoreDirtyChange = (): void => undefined
 
-/** 建立管理帳號，並在伺服器拒絕前先定位可由表單修正的欄位。 */
+/** 新增使用者帳號；送出前檢查必填欄位與帳號類型，並聚焦第一個錯誤。 */
 export default function UserForm({
   companies,
   onCompanyOptionsRequested,

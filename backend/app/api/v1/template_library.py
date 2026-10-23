@@ -120,8 +120,9 @@ class NumericStandardBody(StrictBody):
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_range(cls, data: Any) -> Any:
-        # 舊用戶端未送 range_form 時沿用 tolerance，明確送 null 則交由
-        # 後續欄位驗證拒絕，避免把錯誤輸入當成舊版省略欄位。
+        # 舊用戶端省略 range_form 時，由 matching_fields 預設 tolerance。
+        # 此時 tolerance 為 null 或空白補 "0"（TPL-R13）。
+        # 明填 range_form: null 不算省略，交由 matching_fields 拒絕。
         if not isinstance(data, dict):
             return data
         if data.get("condition") != "range" or "range_form" in data:
@@ -298,7 +299,7 @@ def _item(db: Session, template_id: UUID) -> TemplateItem:
 
 
 def _name_conflict(exc: IntegrityError) -> bool:
-    """辨識各資料庫回報的唯一索引衝突，統一映射為名稱衝突。"""
+    """辨識三個名稱唯一索引的衝突（TPL-R03）。"""
     constraint = getattr(
         getattr(exc.orig, "diag", None), "constraint_name", None
     )
