@@ -433,12 +433,12 @@ describe('登入欄位為「帳號名稱或 Email」（AUT-R29、AUT-AC65）', (
   )
 })
 
-describe('登入不碰 token／storage，登出會清狀態並導向 /login（AUT-AC30）', () => {
+describe('登入不儲存憑證，登出會清狀態並導向 /login（AUT-AC30）', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('完成登入、瀏覽、登出，全程不寫入 storage 也不自設認證標頭', async () => {
+  it('完成登入、瀏覽、登出，只快取外觀且不自設認證標頭', async () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
     let loggedIn = false
 
@@ -502,7 +502,12 @@ describe('登入不碰 token／storage，登出會清狀態並導向 /login（AU
     })
     await screen.findByRole('heading', { name: '登入' })
 
-    expect(setItemSpy).not.toHaveBeenCalled()
+    // AUT-R55：僅允許非敏感三態，仍禁止任何登入資訊或 sessionStorage。
+    expect(setItemSpy).toHaveBeenCalled()
+    for (const [index, call] of setItemSpy.mock.calls.entries()) {
+      expect(call).toEqual(['inspectflow.appearance', 'system'])
+      expect(setItemSpy.mock.contexts[index]).toBe(window.localStorage)
+    }
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
     for (const call of fetchMock.mock.calls) {

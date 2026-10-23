@@ -19,11 +19,13 @@ skipped under ``--db-backend=postgresql`` (see
 import os
 import uuid
 from collections.abc import Generator
+from copy import copy
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
-from sqlalchemy import insert, inspect
-from sqlalchemy.orm import Session
+from sqlalchemy import Column, MetaData, Table, event, inspect
+from sqlalchemy.orm import Session, defer, registry
 
 from app.db import clock
 from app.db.base import uuid7
@@ -155,6 +157,79 @@ def make_system_admin(user: User) -> User:
     return user
 
 
+@pytest.fixture
+def historical_user_schema():
+    """只供指定舊版回歸：當時的 User 讀取不包含後來才新增的外觀。"""
+
+    def omit_future_preference(state):
+        if not state.is_select:
+            return
+        descriptions = getattr(state.statement, "column_descriptions", [])
+        if any(d.get("expr") is User for d in descriptions):
+            state.statement = state.statement.options(defer(User.appearance))
+
+    event.listen(Session, "do_orm_execute", omit_future_preference)
+    try:
+        yield
+    finally:
+        event.remove(Session, "do_orm_execute", omit_future_preference)
+
+
+def run_historical_init(session_factory, **kwargs):
+    """舊 migration 的初始化測試使用當時欄位，仍執行完整初始化邏輯。"""
+    from unittest.mock import patch
+
+    from app.cli import init_system
+
+    with session_factory() as session:
+        columns = {
+            c["name"]
+            for c in inspect(session.connection()).get_columns("users")
+        }
+    historical_type = type(_historical_user(User(), columns))
+    with patch.object(init_system, "User", historical_type):
+        return init_system.run(session_factory, **kwargs)
+
+
+_historical_registry = registry()
+_historical_user_types: dict[frozenset[str], type[Any]] = {}
+
+
+def _historical_user(user: User, columns: set[str]) -> User:
+    """歷史 migration 只寫當時欄位，保留 ORM 追蹤後續角色與旗標修改。"""
+    key = frozenset(columns)
+    if key not in _historical_user_types:
+        table = Table(
+            "users",
+            MetaData(),
+            *[
+                Column(
+                    c.name,
+                    c.type,
+                    primary_key=c.primary_key,
+                    default=copy(c.default),
+                    onupdate=copy(c.onupdate),
+                )
+                for c in User.__table__.columns
+                if c.name in columns
+            ],
+        )
+        historical_type = type("HistoricalUser", (), {})
+        _historical_registry.map_imperatively(historical_type, table)
+        _historical_user_types[key] = historical_type
+    historical = _historical_user_types[key]()
+    for c in User.__table__.columns:
+        if c.name not in columns:
+            continue
+        value = getattr(user, c.name)
+        if value is None and c.default is not None and c.default.is_scalar:
+            value = c.default.arg
+        setattr(historical, c.name, value)
+    historical.created_at = clock.utc_now()
+    historical.updated_at = clock.utc_now()
+    return cast(User, historical)
+
+
 def create_root_user_with_company(session: Session, employee_no: str) -> User:
     """Build and flush a self-referential ``User`` (``created_by``/
     ``updated_by`` point at its own id, per DBF-R14/DBF-Q2) together
@@ -206,23 +281,11 @@ def create_root_user_with_company(session: Session, employee_no: str) -> User:
         column["name"]
         for column in inspect(session.connection()).get_columns("users")
     }
-    if "is_external_collaborator" in user_columns:
-        session.add(user)
-        session.flush()
-    else:
-        # Historical migration tests intentionally use the schema from
-        # before the external-collaborator migration. Insert only columns
-        # present at that revision; ORM persistence would include the new
-        # mapped fields and fail against the older table.
-        values = {
-            column.name: getattr(user, column.name)
-            for column in User.__table__.columns
-            if column.name in user_columns
-            and getattr(user, column.name) is not None
-        }
-        values["created_at"] = clock.utc_now()
-        values["updated_at"] = clock.utc_now()
-        session.execute(insert(User).values(values))
+    # 新 model 的預設值與 SELECT 不得滲入舊 schema；保留真正的歷史資料形狀。
+    if not {c.name for c in User.__table__.columns} <= user_columns:
+        user = _historical_user(user, user_columns)
+    session.add(user)
+    session.flush()
 
     session.add(
         Company(
