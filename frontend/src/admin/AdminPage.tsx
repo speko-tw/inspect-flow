@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Link,
   matchPath,
   Navigate,
   Route,
@@ -15,7 +14,6 @@ import type { CurrentUser } from '../auth/api'
 import {
   canBrowseTemplates,
   canManageTemplateLibrary,
-  landingLabel,
   landingPath,
 } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
@@ -23,6 +21,7 @@ import ChangePasswordPage from '../auth/ChangePasswordPage'
 import { ConfirmBox } from '../ui/ConfirmBox'
 import { useUnsavedNavigationGuard } from '../ui/navigation'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
+import AccessDeniedPage from '../components/layout/AccessDeniedPage'
 import { NAV_LABELS, PAGE_TITLES } from '../layout/navigationLabels'
 import {
   canAccessRoute,
@@ -533,21 +532,7 @@ function MemberAdminShell({
               // 使用者、公司、角色是管理者專用頁，其下任何路徑（例如
               // /accounts/users/abc）沿用無權限頁；其他不存在的網址一律
               // 顯示找不到（#493）。
-              restrictedPage ? (
-                <>
-                  <h1>無權限</h1>
-                  <p role="alert">
-                    {location.pathname.startsWith(ROUTES.adminTemplates.path)
-                      ? '你沒有權限瀏覽範本庫。'
-                      : '只有系統管理者可以使用這個管理頁面。'}
-                  </p>
-                  <Link className="btn" to={indexTarget}>
-                    返回{landingLabel(indexTarget)}
-                  </Link>
-                </>
-              ) : (
-                <RouteNotFound />
-              )
+              restrictedPage ? <AccessDeniedPage /> : <RouteNotFound />
             }
           />
         </Routes>
@@ -606,12 +591,7 @@ function DashboardRoute({
   user: CurrentUser
 }) {
   if (access.kind === 'denied') {
-    return (
-      <section aria-labelledby="dashboard-denied-heading">
-        <h1 id="dashboard-denied-heading">無權限</h1>
-        <p role="alert">你目前沒有可查看的專案進度。</p>
-      </section>
-    )
+    return <AccessDeniedPage />
   }
   return (
     <AdminRouteSuspense>
@@ -643,17 +623,6 @@ function DashboardRoute({
   )
 }
 
-const dashboardTaskDeniedMessage = [
-  '查看全部專案任務需要',
-  '「看全部專案進度」權限。',
-].join('')
-
 function DashboardTaskDenied() {
-  return (
-    <section aria-labelledby="dashboard-task-denied">
-      <h1 id="dashboard-task-denied">無權限</h1>
-      <p role="alert">{dashboardTaskDeniedMessage}</p>
-      <Link to={ROUTES.dashboardIndex.path}>返回專案進度總覽</Link>
-    </section>
-  )
+  return <AccessDeniedPage />
 }

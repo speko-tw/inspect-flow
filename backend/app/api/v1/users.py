@@ -575,6 +575,7 @@ def list_module_delegate_users(
         User.is_active.is_(True),
         User.is_system.is_(False),
         User.is_admin.is_(False),
+        User.id != _caller.id,
     ]
     query = (q or "").strip()
     if query:
@@ -611,6 +612,8 @@ def get_module_delegate_user(
     actor: User = Depends(_module_delegate_access, scope="function"),  # noqa
 ) -> ModuleDelegateUserResponse:
     """回傳委派者帳號詳情標題所需欄位，並拒絕 Admin 對象。"""
+    if not actor.is_admin and user_id == actor.id:
+        raise APIError(ErrorCode.RESOURCE_NOT_FOUND, 404)
     target = _get_module_permission_target(db, user_id, actor)
     return ModuleDelegateUserResponse(
         id=target.id,

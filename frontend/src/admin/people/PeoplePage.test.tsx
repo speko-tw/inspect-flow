@@ -17,7 +17,10 @@ vi.mock('../api', () => ({
 
 vi.mock('../../auth/useCurrentUser', () => ({
   useCurrentUser: () => ({
-    user: { is_admin: peopleApiMock.isAdmin },
+    user: {
+      id: 'delegate-self',
+      is_admin: peopleApiMock.isAdmin,
+    },
     clear: vi.fn(),
   }),
 }))
@@ -155,9 +158,14 @@ describe('PeoplePage', () => {
         return Promise.resolve({
           items: [
             {
-              id: 'delegate-person',
+              id: 'delegate-self',
               username: 'field.member',
               name_zh: '林沐青',
+            },
+            {
+              id: 'delegate-person',
+              username: 'field.other',
+              name_zh: '其他帳號',
             },
           ],
           next_cursor: null,
@@ -165,8 +173,8 @@ describe('PeoplePage', () => {
       }
       return Promise.resolve({
         id: 'delegate-person',
-        username: 'field.member',
-        name_zh: '林沐青',
+        username: 'field.other',
+        name_zh: '其他帳號',
       })
     })
     render(
@@ -176,11 +184,14 @@ describe('PeoplePage', () => {
     )
 
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
-    fireEvent.click(await screen.findByRole('button', { name: '林沐青' }))
+    expect(screen.queryByText('林沐青')).toBeNull()
+    fireEvent.click(await screen.findByRole('link', { name: '其他帳號' }))
 
     expect(await screen.findByText('模組授權')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '林沐青' })).toBeInTheDocument()
-    expect(screen.getByText('帳號：field.member')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: '其他帳號' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('帳號：field.other')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '新增帳號' })).toBeNull()
     expect(screen.queryByRole('heading', { name: '基本資料' })).toBeNull()
     expect(screen.queryByRole('button', { name: '修改資料' })).toBeNull()
@@ -266,7 +277,7 @@ describe('PeoplePage', () => {
     fireEvent.change(input, { target: { value: 'field.member' } })
     fireEvent.click(screen.getByRole('button', { name: '搜尋' }))
 
-    expect(await screen.findByRole('button', { name: '林沐青' })).toBeVisible()
+    expect(await screen.findByRole('link', { name: '林沐青' })).toBeVisible()
     expect(peopleApiMock.request).toHaveBeenCalledWith(
       '/module-delegate/users?limit=50&q=field.member',
     )

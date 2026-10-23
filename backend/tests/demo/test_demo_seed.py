@@ -160,6 +160,20 @@ def test_demo_projects_cover_statuses_and_real_dispatch_walkthrough():
     )
 
 
+def test_demo_task_locations_do_not_include_status_or_demo_notes():
+    data = load_seed_data()
+    locations = [
+        task["location"]
+        for project in data["projects"]
+        for task in project["tasks"]
+    ]
+
+    forbidden = ("已開始", "請開始查核", "完成紀錄", "取消紀錄", "草稿")
+    assert all(
+        word not in location for location in locations for word in forbidden
+    )
+
+
 def test_template_payload_links_numeric_standard_to_its_field():
     data = load_seed_data()
     seed = load_seed_module()

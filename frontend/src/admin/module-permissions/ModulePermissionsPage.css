@@ -1,0 +1,42 @@
+.role-candidate {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.role-candidate > label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.role-candidate > p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.permission-advanced-settings {
+  margin-block: var(--space-4);
+}
+
+.permission-bundle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border);
+}
+
+@media (max-width: 40rem) {
+  .permission-bundle-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .permission-bundle-row > button {
+    justify-self: start;
+  }
+}

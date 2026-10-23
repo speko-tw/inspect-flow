@@ -87,12 +87,6 @@ def test_module_delegate_user_picker_is_scoped_and_minimal(
                 "is_external_collaborator": False,
             },
             {
-                "id": str(delegate.id),
-                "username": "delegate",
-                "name_zh": "委派者",
-                "is_external_collaborator": False,
-            },
-            {
                 "id": str(external_candidate.id),
                 "username": "external-candidate",
                 "name_zh": "外部候選人",
@@ -193,6 +187,10 @@ def test_module_delegate_can_read_target_heading_but_not_admin_identity(
         return client
 
     delegate_client = client_for(delegate)
+    self_response = delegate_client.get(
+        f"/api/v1/module-delegate/users/{delegate.id}"
+    )
+    assert self_response.status_code == 404
     response = delegate_client.get(
         f"/api/v1/module-delegate/users/{target.id}"
     )

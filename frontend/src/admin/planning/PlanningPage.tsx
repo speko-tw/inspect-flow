@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 
 import { collectPages, HttpError, isForbidden, isNotFound } from '../../http'
 import { RequiredMark } from '../../ui/Form'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { StatusBadge } from '../../ui/Badge'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { fieldErrorMessage, mapFieldErrors } from '../../ui/fieldErrors'
@@ -1086,15 +1087,7 @@ export default function PlanningPage({
     ) : null
 
   if (accessDenied) {
-    return (
-      <section>
-        <h2>無權限</h2>
-        <p role="alert">你沒有這個專案的查核計畫讀取權限。</p>
-        <Link className="btn" to="/projects">
-          返回專案清單
-        </Link>
-      </section>
-    )
+    return <AccessDeniedPage headingLevel={2} />
   }
 
   if (projectNotFound) {

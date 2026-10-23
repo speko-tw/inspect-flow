@@ -60,6 +60,7 @@ function emptyRestorePreviewSelection(): RestorePreviewSelection {
   }
 }
 import { ACCOUNT_LABEL } from '../layout/navigationLabels'
+import './UsersPage.css'
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
@@ -165,6 +166,10 @@ export default function UsersPage({
     null,
   )
   const [actionError, setActionError] = useState('')
+  const [actionNotice, setActionNotice] = useState<{
+    userId: string
+    message: string
+  } | null>(null)
   const [actionPreview, setActionPreview] = useState<
     DeactivationCheck | RestorePreview | null
   >(null)
@@ -565,11 +570,19 @@ export default function UsersPage({
         setDetailUser((current) =>
           current?.id === user.id ? updated : current,
         )
+        setActionNotice({
+          userId: user.id,
+          message: `${user.name_zh || user.username} 已停用。`,
+        })
       } else {
         const updated = await reactivateUser(user.id, restoreSelection)
         setDetailUser((current) =>
           current?.id === user.id ? updated : current,
         )
+        setActionNotice({
+          userId: user.id,
+          message: `${user.name_zh || user.username} 已重新啟用。`,
+        })
       }
       setPendingAction(null)
       setEditingUser(null)
@@ -584,11 +597,12 @@ export default function UsersPage({
   }
 
   function actionMessage({ user, kind }: PendingAction): string {
+    const name = user.name_zh || user.username
     if (kind === 'deactivate') {
-      return `停用 ${user.username} 後，該帳號將無法登入。`
+      return `停用${name}（${user.username}）後，他將無法登入；過去的查核紀錄與專案資料都會保留。`
     }
     if (kind === 'activate') {
-      return `啟用 ${user.username} 後，該帳號可以再次登入。`
+      return `重新啟用${name}（${user.username}）後，他可以再次登入。`
     }
     if (user.is_admin) {
       return user.id === currentUser.id
@@ -824,7 +838,7 @@ export default function UsersPage({
               <p>電子郵件：{detail.email || '未填寫'}</p>
               <p>公司：{companyLabel(detail, companies)}</p>
               <p>狀態：{detail.is_active ? '啟用中' : '已停用'}</p>
-              <div>
+              <div className="account-detail-actions">
                 <button
                   disabled={detail.is_system || detail.auth_source !== 'local'}
                   onClick={() => setEditingUser(detail.id)}
@@ -832,61 +846,62 @@ export default function UsersPage({
                 >
                   修改資料
                 </button>
-                <details>
-                  <summary>更多</summary>
-                  <button
-                    disabled={
-                      detail.is_system || detail.auth_source !== 'local'
-                    }
-                    onClick={() => {
-                      setEditingCompany(detail.id)
-                      void loadCompanies()
-                    }}
-                    type="button"
-                  >
-                    修改公司連結
-                  </button>
-                  <button
-                    disabled={
-                      detail.is_system ||
-                      detail.id === currentUser.id ||
-                      detail.auth_source !== 'local' ||
-                      busyUser !== null
-                    }
-                    onClick={() => void resetTemporaryPassword(detail)}
-                    type="button"
-                  >
-                    {busyUser === detail.id
-                      ? '正在重設臨時密碼…'
-                      : '重設臨時密碼'}
-                  </button>
-                  {detail.id === currentUser.id && (
-                    <p className="field-hint">請到設定變更自己的密碼。</p>
-                  )}
-                  <button
-                    disabled={detail.is_system || busyUser !== null}
-                    onClick={() => toggleAdmin(detail)}
-                    type="button"
-                  >
-                    {detail.is_admin ? '收回管理者' : '指派管理者'}
-                  </button>
-                  <button
-                    disabled={detail.is_system || busyUser !== null}
-                    onClick={() =>
-                      requestAction(
-                        detail,
-                        detail.is_active ? 'deactivate' : 'activate',
-                      )
-                    }
-                    type="button"
-                  >
-                    {detail.is_active ? '停用帳號' : '啟用帳號'}
-                  </button>
-                </details>
+                <button
+                  disabled={detail.is_system || detail.auth_source !== 'local'}
+                  onClick={() => {
+                    setEditingCompany(detail.id)
+                    void loadCompanies()
+                  }}
+                  type="button"
+                >
+                  修改公司連結
+                </button>
+                <button
+                  disabled={detail.is_system || busyUser !== null}
+                  onClick={() => toggleAdmin(detail)}
+                  type="button"
+                >
+                  {detail.is_admin ? '收回管理者' : '指派管理者'}
+                </button>
+                <button
+                  className={detail.is_active ? 'btn-danger' : undefined}
+                  disabled={detail.is_system || busyUser !== null}
+                  onClick={() =>
+                    requestAction(
+                      detail,
+                      detail.is_active ? 'deactivate' : 'activate',
+                    )
+                  }
+                  type="button"
+                >
+                  {detail.is_active ? '停用帳號' : '啟用帳號'}
+                </button>
+                <button
+                  disabled={
+                    detail.is_system ||
+                    detail.id === currentUser.id ||
+                    detail.auth_source !== 'local' ||
+                    busyUser !== null
+                  }
+                  onClick={() => void resetTemporaryPassword(detail)}
+                  type="button"
+                >
+                  {busyUser === detail.id
+                    ? '正在重設臨時密碼…'
+                    : '重設臨時密碼'}
+                </button>
+                {detail.id === currentUser.id && (
+                  <p className="field-hint">請到設定變更自己的密碼。</p>
+                )}
                 {passwordResetError && (
                   <p role="alert">{passwordResetError}</p>
                 )}
               </div>
+              {actionNotice?.userId === detail.id && (
+                <p className="notice-success" role="status">
+                  {actionNotice.message}
+                </p>
+              )}
               {pendingAction?.user.id === detail.id && (
                 <ConfirmBox
                   busy={busyUser === detail.id}
@@ -1434,6 +1449,12 @@ function RestoreChoices({
   }
   onChange: (value: typeof selection) => void
 }) {
+  const hasRestorableContent =
+    preview.permission_codes.length > 0 ||
+    preview.delegated_modules.length > 0 ||
+    preview.project_memberships.length > 0 ||
+    preview.tasks.length > 0
+
   function toggle<K extends keyof typeof selection>(key: K, value: string) {
     const current = selection[key]
     onChange({
@@ -1449,50 +1470,72 @@ function RestoreChoices({
       {preview.account_expired && (
         <p role="alert">外部帳號已到期，請先修改到期日後再重新啟用。</p>
       )}
-      <h4>選擇要恢復的權限</h4>
-      {preview.permission_codes.map((code) => (
-        <label key={code}>
-          <input
-            checked={selection.permission_codes.includes(code)}
-            onChange={() => toggle('permission_codes', code)}
-            type="checkbox"
-          />
-          {code}
-        </label>
-      ))}
-      <h4>選擇要恢復的委派範圍</h4>
-      {preview.delegated_modules.map((module) => (
-        <label key={module}>
-          <input
-            checked={selection.delegated_modules.includes(module)}
-            onChange={() => toggle('delegated_modules', module)}
-            type="checkbox"
-          />
-          {module}
-        </label>
-      ))}
-      <h4>選擇要恢復的專案成員關係</h4>
-      {preview.project_memberships.map((member) => (
-        <label key={member.project_id}>
-          <input
-            checked={selection.project_ids.includes(member.project_id)}
-            onChange={() => toggle('project_ids', member.project_id)}
-            type="checkbox"
-          />
-          {member.project_code}／{member.project_name}
-        </label>
-      ))}
-      <h4>選擇要保留的未完成任務建議指派</h4>
-      {preview.tasks.map((task) => (
-        <label key={task.task_id}>
-          <input
-            checked={selection.task_ids.includes(task.task_id)}
-            onChange={() => toggle('task_ids', task.task_id)}
-            type="checkbox"
-          />
-          {task.name}（{task.status}）
-        </label>
-      ))}
+      {!hasRestorableContent ? (
+        <p>這個帳號沒有需要恢復的權限或專案。</p>
+      ) : (
+        <>
+          {preview.permission_codes.length > 0 && (
+            <section>
+              <h4>選擇要恢復的權限</h4>
+              {preview.permission_codes.map((code) => (
+                <label key={code}>
+                  <input
+                    checked={selection.permission_codes.includes(code)}
+                    onChange={() => toggle('permission_codes', code)}
+                    type="checkbox"
+                  />
+                  {code}
+                </label>
+              ))}
+            </section>
+          )}
+          {preview.delegated_modules.length > 0 && (
+            <section>
+              <h4>選擇要恢復的委派範圍</h4>
+              {preview.delegated_modules.map((module) => (
+                <label key={module}>
+                  <input
+                    checked={selection.delegated_modules.includes(module)}
+                    onChange={() => toggle('delegated_modules', module)}
+                    type="checkbox"
+                  />
+                  {module}
+                </label>
+              ))}
+            </section>
+          )}
+          {preview.project_memberships.length > 0 && (
+            <section>
+              <h4>選擇要恢復的專案成員關係</h4>
+              {preview.project_memberships.map((member) => (
+                <label key={member.project_id}>
+                  <input
+                    checked={selection.project_ids.includes(member.project_id)}
+                    onChange={() => toggle('project_ids', member.project_id)}
+                    type="checkbox"
+                  />
+                  {member.project_code}／{member.project_name}
+                </label>
+              ))}
+            </section>
+          )}
+          {preview.tasks.length > 0 && (
+            <section>
+              <h4>選擇要保留的未完成任務建議指派</h4>
+              {preview.tasks.map((task) => (
+                <label key={task.task_id}>
+                  <input
+                    checked={selection.task_ids.includes(task.task_id)}
+                    onChange={() => toggle('task_ids', task.task_id)}
+                    type="checkbox"
+                  />
+                  {task.name}（{task.status}）
+                </label>
+              ))}
+            </section>
+          )}
+        </>
+      )}
     </div>
   )
 }

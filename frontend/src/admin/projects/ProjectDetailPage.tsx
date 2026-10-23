@@ -8,6 +8,7 @@ import {
 import { Link, useParams } from 'react-router'
 
 import { useCurrentUser } from '../../auth/useCurrentUser'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { isForbidden } from '../../http'
 import { ConfirmBox } from '../../ui/ConfirmBox'
 import { UnsavedLeaveBox } from '../../ui/navigation'
@@ -386,14 +387,7 @@ function ProjectMembersSection({ projectId }: { projectId: string }) {
   // 沒有 project_member.manage：成員 API 回 403，不顯示任何新增、修改、
   // 移出操作（導覽也已隱藏成員區段，這裡處理直接輸入網址的情況）。
   if (membersState.status === 'failed' && membersState.forbidden) {
-    return (
-      <section aria-labelledby="project-heading">
-        <h2 id="project-heading">成員</h2>
-        <p role="alert">
-          你沒有權限管理這個專案的成員。需要「管理專案成員」的角色才能查看與修改。
-        </p>
-      </section>
-    )
+    return <AccessDeniedPage headingLevel={2} />
   }
 
   // 成員列表是判斷權限的依據（沒有管理權限時它回 403）；先等它回來，

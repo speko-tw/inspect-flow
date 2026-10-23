@@ -199,7 +199,11 @@ try {
   await page.getByRole('button', { name: '新增帳號' }).waitFor({
     state: 'detached',
   })
-  await page.getByRole('button', { name: '張立衡', exact: true }).click()
+  assert.equal(
+    await page.getByRole('link', { name: '張立衡', exact: true }).count(),
+    0,
+  )
+  await page.getByRole('link', { name: '陳柏勳', exact: true }).click()
   await page.getByText('只能開通受委派範圍內的權限').waitFor()
   assert.equal(
     await page.getByRole('link', { name: '範本', exact: true }).count(),
@@ -217,7 +221,7 @@ try {
 
   // 外部帳號不能被開通管理範本庫：畫面只列外部可用的功能。
   await page.goto(`${base}/accounts`)
-  await page.getByRole('button', { name: '黃子晴', exact: true }).click()
+  await page.getByRole('link', { name: '黃子晴', exact: true }).click()
   await page.getByText('只能開通受委派範圍內的權限').waitFor()
   await page.getByLabel('使用範本功能').waitFor()
   assert.equal(await page.getByText('管理範本庫').count(), 0)
@@ -225,7 +229,7 @@ try {
 
   // 內部帳號：委派者按「開通」，成功通知與 API 回讀都要看到 template.use。
   await page.goto(`${base}/accounts`)
-  await page.getByRole('button', { name: '陳柏勳', exact: true }).click()
+  await page.getByRole('link', { name: '陳柏勳', exact: true }).click()
   await page.getByLabel('管理範本庫').waitFor()
   await page.getByLabel('使用範本功能').check()
   const grantResponse = page.waitForResponse(
@@ -315,7 +319,7 @@ try {
   assert.ok(temporaryPassword.length >= 12)
   const restrictedRole = await api('/roles', 'POST', {
     name: '示範僅查閱專案角色',
-    permission_codes: ['project.read'],
+    permission_codes: ['project.read', 'inspection_task.read'],
   })
   assert.equal(restrictedRole.status, 201)
   const createdUsers = await api('/users')
@@ -343,6 +347,15 @@ try {
     { role_ids: [restrictedRole.data.id] },
   )
   assert.equal(restrictedMembership.status, 200)
+  const manageableRole = await api('/roles', 'POST', {
+    name: '示範成員管理角色',
+    permission_codes: [
+      'project.read',
+      'inspection_task.read',
+      'project_member.manage',
+    ],
+  })
+  assert.equal(manageableRole.status, 201)
   await page.getByRole('button', {
     name: '查看這個帳號的能力',
   }).click()
@@ -377,13 +390,12 @@ try {
   assert.ok(
     !(await page.locator('body').innerText()).includes(temporaryPassword),
   )
-  await page.getByRole('combobox').nth(0).selectOption('task-list')
+  await page.getByRole('combobox').nth(0).selectOption('members')
   const projectSelector = page.getByRole('combobox').nth(1)
   await projectSelector.focus()
   await page.getByRole('option', {
-    name: '示範廠擴建機電工程',
-    exact: true,
-  }).waitFor({ state: 'attached' })
+    name: '示範廠擴建機電工程', exact: true,
+  }).waitFor({state: 'attached'})
   await projectSelector.selectOption({
     label: '示範廠擴建機電工程',
   })
@@ -393,8 +405,14 @@ try {
   await page.getByRole('button', { name: '檢查', exact: true }).click()
   const diagnostic = await (await diagnosticResponse).json()
   assert.equal(
-    diagnostic.diagnostics.find((item) => item.action === 'task_list').allowed,
+    diagnostic.diagnostics.find(
+      (item) => item.action === 'manage_project_members',
+    ).allowed,
     false,
+  )
+  assert.equal(
+    diagnostic.diagnostics.find((item) => item.action === 'task_list').allowed,
+    true,
   )
   const participation = page.locator('li').filter({
     hasText: '示範廠擴建機電工程',
@@ -409,9 +427,10 @@ try {
       response.request().method() === 'PUT' &&
       response.url().endsWith('/roles'),
   )
-  await page.getByRole('button', {
-    name: '補上「現場工程師」角色',
-  }).click()
+  await page
+    .getByRole('radio', { name: /示範成員管理角色/ })
+    .check()
+  await page.getByRole('button', { name: '指派所選角色' }).click()
   assert.equal((await roleRepairResponse).status(), 200)
   const repaired = await api(
     `/users/${createdUser.id}/effective-access` +
@@ -419,17 +438,24 @@ try {
   )
   assert.equal(repaired.status, 200)
   assert.equal(
+    repaired.data.diagnostics.find(
+      (item) => item.action === 'manage_project_members',
+    )
+      .allowed,
+    true,
+  )
+  assert.equal(
     repaired.data.diagnostics.find((item) => item.action === 'task_list')
       .allowed,
     true,
   )
   assert.ok(
     repaired.data.project_roles.some(
-      (role) => role.name === '現場工程師',
+      (role) => role.name === '示範成員管理角色',
     ),
   )
   // #708：補上角色後，「參與專案與角色」清單要立即顯示新角色。
-  await participation.filter({ hasText: '現場工程師' }).waitFor()
+  await participation.filter({ hasText: '示範成員管理角色' }).waitFor()
 
   await page.screenshot({
     path: path.join(demo, 'screenshots/09-admin-role-diagnostic.png'),
