@@ -40,9 +40,12 @@ import {
   type RestorePreview,
   type UnmanagedProject,
   type User,
+  type UserDetail,
 } from './api'
 import { useCursorList } from './useCursorList'
 import UserForm from './UserForm'
+import { ACCOUNT_LABEL } from '../layout/navigationLabels'
+import './UsersPage.css'
 
 type RestorePreviewSelection = {
   permission_codes: string[]
@@ -59,8 +62,6 @@ function emptyRestorePreviewSelection(): RestorePreviewSelection {
     task_ids: [],
   }
 }
-import { ACCOUNT_LABEL } from '../layout/navigationLabels'
-import './UsersPage.css'
 
 const SELF_REVOKED_NOTICE = '已收回你的管理者權限。'
 const NEEDS_COMPANY_HINT = '連結公司後才能填寫'
@@ -244,7 +245,7 @@ export default function UsersPage({
     let active = true
     setDetailUser(null)
     setDetailError('')
-    void request<User>(`/users/${encodeURIComponent(detailUserId)}`)
+    void request<UserDetail>(`/users/${encodeURIComponent(detailUserId)}`)
       .then((user) => active && setDetailUser(user))
       .catch((caught: unknown) => {
         if (active) setDetailError(managementErrorMessage(caught))
@@ -302,7 +303,7 @@ export default function UsersPage({
     if (companyListRequest.current) return companyListRequest.current
     const id = ++companyRequestId.current
     setCompanyListError('')
-    const request = listCompanies()
+    const companyOptionsRequest = listCompanies()
       .then((nextCompanies) => {
         if (id === companyRequestId.current) {
           setCompanies(nextCompanies)
@@ -316,8 +317,8 @@ export default function UsersPage({
       .finally(() => {
         if (id === companyRequestId.current) companyListRequest.current = null
       })
-    companyListRequest.current = request
-    return request
+    companyListRequest.current = companyOptionsRequest
+    return companyOptionsRequest
   }, [])
 
   const loadLifecycleLists = useCallback(async () => {
@@ -693,6 +694,12 @@ export default function UsersPage({
           {batchActivationPreview.previews.map((preview) => (
             <fieldset key={preview.user_id}>
               <legend>{preview.username}</legend>
+              {preview.permission_codes.length === 0 &&
+                preview.delegated_modules.length === 0 &&
+                preview.project_memberships.length === 0 &&
+                preview.tasks.length === 0 && (
+                  <p>這個帳號沒有需要恢復的權限或專案。</p>
+                )}
               {preview.account_expired && (
                 <p role="alert">外部帳號已到期，無法啟用。</p>
               )}
@@ -890,13 +897,11 @@ export default function UsersPage({
                     ? '正在重設臨時密碼…'
                     : '重設臨時密碼'}
                 </button>
-                {detail.id === currentUser.id && (
-                  <p className="field-hint">請到設定變更自己的密碼。</p>
-                )}
-                {passwordResetError && (
-                  <p role="alert">{passwordResetError}</p>
-                )}
               </div>
+              {detail.id === currentUser.id && (
+                <p className="field-hint">請到設定變更自己的密碼。</p>
+              )}
+              {passwordResetError && <p role="alert">{passwordResetError}</p>}
               {actionNotice?.userId === detail.id && (
                 <p className="notice-success" role="status">
                   {actionNotice.message}
@@ -954,24 +959,37 @@ export default function UsersPage({
                 />
               )}
               {editingCompany === detail.id && (
-                <CompanyLinkForm
-                  busy={busyUser !== null}
-                  companies={companies}
-                  error={rowError(detail.id, 'company')}
-                  errorFocusRequest={saveError?.request}
-                  onCancel={() => setEditingCompany(null)}
-                  onDirtyChange={(dirty) =>
-                    reportDirty(`company:${detail.id}`, dirty)
-                  }
-                  onSave={(companyId, fields) =>
-                    act(detail.id, 'company', () =>
-                      companyId === detail.company_id
-                        ? updateUser(detail.id, fields)
-                        : linkUserCompany(detail.id, companyId, fields),
-                    )
-                  }
-                  user={detail}
-                />
+                <>
+                  {companyListError && (
+                    <div>
+                      <p role="alert">公司清單載入失敗：{companyListError}</p>
+                      <button
+                        onClick={() => void loadCompanies()}
+                        type="button"
+                      >
+                        重新載入公司清單
+                      </button>
+                    </div>
+                  )}
+                  <CompanyLinkForm
+                    busy={busyUser !== null}
+                    companies={companies}
+                    error={rowError(detail.id, 'company')}
+                    errorFocusRequest={saveError?.request}
+                    onCancel={() => setEditingCompany(null)}
+                    onDirtyChange={(dirty) =>
+                      reportDirty(`company:${detail.id}`, dirty)
+                    }
+                    onSave={(companyId, fields) =>
+                      act(detail.id, 'company', () =>
+                        companyId === detail.company_id
+                          ? updateUser(detail.id, fields)
+                          : linkUserCompany(detail.id, companyId, fields),
+                      )
+                    }
+                    user={detail}
+                  />
+                </>
               )}
             </>
           )}

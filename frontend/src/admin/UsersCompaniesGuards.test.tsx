@@ -1536,3 +1536,61 @@ describe('CompaniesPage 批次狀態（#414）', () => {
     expect(backend.count('POST', '/api/v1/companies:batch-status')).toBe(1)
   })
 })
+
+describe('帳號詳情與批次的審查修正（#414）', () => {
+  it('自己的密碼提示顯示在五顆按鈕列之後', async () => {
+    const self = { ...regularUser, id: currentUser.id }
+    stubBackend({ users: [self] })
+    renderUsers({ detailUserId: self.id })
+    const hint = await screen.findByText('請到設定變更自己的密碼。')
+    expect(hint.closest('.account-detail-actions')).toBeNull()
+    const row = screen.getByRole('button', { name: '修改資料' }).parentElement!
+    expect(
+      row.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('重設臨時密碼錯誤顯示在按鈕列之後', async () => {
+    stubBackend({ fail: (c) => c.path.endsWith('/temporary-password') })
+    renderUsers({ detailUserId: regularUser.id })
+    fireEvent.click(
+      await screen.findByRole('button', { name: '重設臨時密碼' }),
+    )
+    const alert = await screen.findByRole('alert')
+    expect(alert.closest('.account-detail-actions')).toBeNull()
+  })
+
+  it('批次啟用沒有恢復項目時逐帳號顯示空狀態', async () => {
+    stubBackend({ users: [{ ...regularUser, is_active: false }] })
+    renderUsers()
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '選取 anna.deng' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '批次啟用帳號' }))
+    const box = await screen.findByRole('region', { name: '批次啟用確認' })
+    expect(
+      within(box).getByText('這個帳號沒有需要恢復的權限或專案。'),
+    ).toBeVisible()
+  })
+
+  it('詳情的公司選項載入失敗時顯示原因並可重試', async () => {
+    let fail = true
+    const backend = stubBackend({
+      fail: (c) => c.path === '/api/v1/companies' && fail,
+    })
+    renderUsers({ detailUserId: regularUser.id })
+    fireEvent.click(
+      await screen.findByRole('button', { name: '修改公司連結' }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '公司清單載入失敗',
+    )
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: '重新載入公司清單' }))
+    expect(
+      await screen.findByRole('option', { name: '示範公司' }),
+    ).toBeInTheDocument()
+    expect(backend.count('GET', '/api/v1/companies')).toBe(2)
+    expect(screen.queryByText(/公司清單載入失敗/)).toBeNull()
+  })
+})

@@ -60,6 +60,8 @@ interface FixtureOptions {
   accessResponse?: (userId: string) => Promise<Response>
   participationResponse?: (path: string) => Promise<Response>
   bundleApplyResponse?: (path: string) => Promise<Response>
+  projectCatalogResponse?: () => Promise<Response>
+  bundleCatalogResponse?: () => Promise<Response>
 }
 
 function permissionPage(options: FixtureOptions = {}) {
@@ -83,6 +85,7 @@ function permissionPage(options: FixtureOptions = {}) {
     name_zh: '林沐青',
     name_en: null,
     company_id: null,
+    company_name: null,
     department: null,
     location: null,
     employee_no: null,
@@ -333,6 +336,8 @@ function permissionPage(options: FixtureOptions = {}) {
         })
       }
       if (method === 'GET' && path === '/permission-bundles') {
+        if (options.bundleCatalogResponse)
+          return options.bundleCatalogResponse()
         return Response.json({
           items: options.missingBundle ? [] : bundles,
           next_cursor: null,
@@ -350,6 +355,8 @@ function permissionPage(options: FixtureOptions = {}) {
         return Response.json({ role_id: 'office-role' })
       }
       if (method === 'GET' && path === '/projects') {
+        if (options.projectCatalogResponse)
+          return options.projectCatalogResponse()
         return Response.json({
           items: [{ id: 'project-1', name: '示範工程' }],
           next_cursor: null,
@@ -678,7 +685,7 @@ function assignCandidateRole(roleName: string) {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ModulePermissionsPage', () => {
-  it('帳號能力頁只載入該帳號，診斷選項按需載入', async () => {
+  it('帳號能力頁只載入該帳號，診斷出現即載入專案選項', async () => {
     const { calls } = permissionPage({
       embedded: true,
       openWizard: false,
@@ -690,7 +697,11 @@ describe('ModulePermissionsPage', () => {
     expect(calls.some((call) => call.path === '/users')).toBe(false)
     expect(calls.some((call) => call.path === '/companies')).toBe(false)
     expect(calls.some((call) => call.path === '/roles')).toBe(false)
-    expect(calls.some((call) => call.path === '/projects')).toBe(false)
+    await waitFor(() =>
+      expect(calls.filter((call) => call.path === '/projects')).toHaveLength(
+        1,
+      ),
+    )
   })
 
   it('新增精靈依步驟載入公司、專案與職務選項', async () => {
@@ -1994,7 +2005,11 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByRole('heading', { name: '新增帳號' }),
     ).toBeVisible()
-    expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+    expect(
+      screen.getByText('步驟 1／4：帳號資料', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
     expect(screen.queryByText('帳號清單')).toBeNull()
   })
 
@@ -2002,7 +2017,11 @@ describe('ModulePermissionsPage', () => {
     permissionPage()
     await screen.findByRole('heading', { name: '新增帳號' })
 
-    expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+    expect(
+      screen.getByText('步驟 1／4：帳號資料', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
     expect(screen.queryByText('尚未開始')).toBeNull()
   })
 
@@ -2543,7 +2562,11 @@ describe('ModulePermissionsPage', () => {
       await screen.findByRole('heading', { name: '新增帳號' }),
     ).toBeVisible()
     expect(screen.queryByText('帳號清單')).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent('步驟 1／4：帳號資料')
+    expect(
+      screen.getByText('步驟 1／4：帳號資料', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
   })
 
   it('compares candidate and current project permissions', async () => {
@@ -2620,5 +2643,134 @@ describe('ModulePermissionsPage', () => {
     await screen.findByRole('heading', { name: '帳號權限' })
     expect(screen.queryByRole('button', { name: '林沐青' })).toBeNull()
     expect(screen.getByRole('button', { name: '候選人' })).toBeVisible()
+  })
+})
+
+describe('帳號審查修正（#414）', () => {
+  it('同一帳號重新套用職務後查看能力會重新載入並可檢查', async () => {
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      permissionCodes: ['project.use'],
+    })
+    await screen.findByText(/能使用：使用專案功能/)
+    fireEvent.click(screen.getByRole('button', { name: '重新套用職務' }))
+    fireEvent.click(screen.getByRole('radio', { name: /內業規劃/ }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }))
+    fireEvent.click(
+      screen.getAllByRole('button', { name: '套用職務' }).at(-1)!,
+    )
+    await screen.findByText('林沐青 的職務與權限設定已完成。')
+    fireEvent.click(screen.getByRole('button', { name: '查看這個帳號的能力' }))
+    const summary = await screen.findByRole('region', { name: '帳號能力摘要' })
+    await waitFor(() => expect(summary).not.toHaveTextContent('載入中'))
+    expect(summary).toHaveTextContent('使用專案功能')
+    const select = within(summary).getByLabelText('專案')
+    await within(select).findByRole('option', { name: '示範工程' })
+    fireEvent.change(select, { target: { value: 'project-1' } })
+    expect(within(summary).getByRole('button', { name: '檢查' })).toBeEnabled()
+    expect(
+      calls.filter((c) => c.path === '/users/person/module-permissions')
+        .length,
+    ).toBeGreaterThan(1)
+  })
+
+  it('建立成功但組合失敗時以已知帳號顯示能力，不無限載入', async () => {
+    permissionPage({
+      embedded: true,
+      openWizard: false,
+      openWizardRequest: 1,
+      failBundleOnce: true,
+    })
+    await screen.findByRole('heading', { name: '設定帳號' })
+    await fillIdentity('partial.summary')
+    await chooseProfile('內業規劃')
+    fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
+    await screen.findByText(/帳號已建立；後續權限/)
+    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
+    expect(await within(summary).findByText(/尚未開通功能/)).toBeVisible()
+    expect(summary).not.toHaveTextContent('載入中')
+    expect(
+      screen.getByRole('button', { name: '重試未完成的步驟' }),
+    ).toBeVisible()
+  })
+
+  it('診斷出現即載入一次專案，等候時有停用的載入選項', async () => {
+    const projects = deferred<Response>()
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      projectCatalogResponse: () => projects.promise,
+    })
+    const select = screen.getByLabelText('專案')
+    expect(
+      await within(select).findByRole('option', { name: '載入專案中…' }),
+    ).toBeDisabled()
+    expect(select).toBeDisabled()
+    await act(async () =>
+      projects.resolve(
+        Response.json({
+          items: [{ id: 'project-1', name: '示範工程' }],
+          next_cursor: null,
+        }),
+      ),
+    )
+    expect(
+      await within(select).findByRole('option', { name: '示範工程' }),
+    ).toBeVisible()
+    expect(select).toBeEnabled()
+    fireEvent.focus(select)
+    fireEvent.blur(select)
+    fireEvent.focus(select)
+    expect(calls.filter((c) => c.path === '/projects')).toHaveLength(1)
+  })
+
+  it('進階設定載入時有提示，重新展開沿用第一次的資料', async () => {
+    const bundles = deferred<Response>()
+    const { calls } = permissionPage({
+      embedded: true,
+      openWizard: false,
+      selectedUserId: 'person',
+      bundleCatalogResponse: () => bundles.promise,
+    })
+    const toggle = screen.getByText('進階設定', { exact: true })
+    const details = toggle.closest('details')!
+    fireEvent.click(toggle)
+    expect(
+      await within(details).findByText('載入中…', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+    await act(async () =>
+      bundles.resolve(
+        Response.json({
+          items: [
+            {
+              id: 'cached',
+              name: '快取組合',
+              permission_codes: ['project.use'],
+            },
+          ],
+          next_cursor: null,
+        }),
+      ),
+    )
+    expect(await within(details).findByText('快取組合')).toBeVisible()
+    await waitFor(() =>
+      expect(within(details).queryByText('載入中…')).toBeNull(),
+    )
+    fireEvent.click(toggle)
+    await waitFor(() => expect(details).not.toHaveAttribute('open'))
+    fireEvent.click(toggle)
+    await waitFor(() => expect(details).toHaveAttribute('open'))
+    expect(within(details).queryByText('載入中…')).toBeNull()
+    expect(calls.filter((c) => c.path === '/permission-bundles')).toHaveLength(
+      1,
+    )
   })
 })
