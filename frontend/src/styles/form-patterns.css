@@ -6,6 +6,7 @@
   padding: var(--space-4) 0 0;
   border: 0;
   border-top: 1px solid var(--color-border);
+  border-radius: 0;
 }
 
 .form-pattern-group legend {

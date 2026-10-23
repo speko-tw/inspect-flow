@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DataMemoryRouter } from '../testing/DataMemoryRouter'
@@ -76,15 +77,75 @@ describe('AUT-R55 三態外觀', () => {
     render(accountView('dark'))
     fireEvent.click(screen.getByLabelText('淺色'))
     expect(document.documentElement).toHaveAttribute('data-theme', 'light')
-    expect(screen.getByLabelText('深色')).toBeDisabled()
+    expect(screen.getByLabelText('深色')).toBeEnabled()
+    expect(screen.getByRole('radiogroup')).toHaveAttribute('aria-busy', 'true')
     pending.resolve(Response.json({}, { status: 500 }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('已回復原設定')
+    expect(await screen.findByText(/外觀儲存失敗/)).toHaveTextContent(
+      '已回復原設定',
+    )
     expect(screen.getByLabelText('深色')).toBeChecked()
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
     expect(localStorage.getItem(APPEARANCE_CACHE_KEY)).toBe('dark')
     fireEvent.click(screen.getByLabelText('淺色'))
     await screen.findByText('外觀已儲存。')
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText(/外觀儲存失敗/)).toBeNull()
+  })
+
+  it('方向鍵連續切換時保存中的選擇會忽略，焦點與選取保持一致', async () => {
+    const keyboard = userEvent.setup()
+    const pending = deferred<Response>()
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(Response.json({ appearance: 'dark' }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(accountView('system'))
+    const initial = screen.getByLabelText('跟隨裝置（預設）')
+    const light = screen.getByLabelText('淺色')
+    const dark = screen.getByLabelText('深色')
+    await keyboard.tab()
+    expect(initial).toHaveFocus()
+    await keyboard.keyboard('{ArrowRight}')
+    expect(light).toBeChecked()
+    expect(light).toHaveFocus()
+    await keyboard.keyboard('{ArrowRight}{ArrowRight}')
+    expect(light).toBeChecked()
+    expect(light).toHaveFocus()
+    expect(dark).not.toBeChecked()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    pending.resolve(Response.json({ appearance: 'light' }))
+    await screen.findByText('外觀已儲存。')
+    expect(light).toHaveFocus()
+    await keyboard.keyboard('{ArrowRight}')
+    await waitFor(() => expect(dark).toBeChecked())
+    expect(dark).toHaveFocus()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('常駐 polite 容器在保存中、成功與失敗都只更新文字', async () => {
+    const keyboard = userEvent.setup()
+    const pending = deferred<Response>()
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(Response.json({}, { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const view = render(accountView('system'))
+    const live = view.container.querySelector('[aria-live="polite"]')!
+    expect(live).toBeEmptyDOMElement()
+    expect(live).toHaveAttribute('aria-atomic', 'true')
+    await keyboard.click(screen.getByLabelText('淺色'))
+    expect(live).toHaveTextContent('正在儲存外觀…')
+    pending.resolve(Response.json({ appearance: 'light' }))
+    await waitFor(() => expect(live).toHaveTextContent('外觀已儲存。'))
+    await keyboard.click(screen.getByLabelText('深色'))
+    await waitFor(() => expect(live).toHaveTextContent('已回復原設定'))
+    expect(view.container.querySelector('[aria-live="polite"]')).toBe(live)
+    expect(screen.getByLabelText('淺色')).toBeChecked()
+    expect(screen.getByLabelText('淺色')).toHaveFocus()
+    expect(screen.getByRole('group', { name: '外觀' })).toHaveClass(
+      'form-pattern-group',
+    )
   })
 
   it('快取不可寫也仍能套用並保存帳號偏好', async () => {

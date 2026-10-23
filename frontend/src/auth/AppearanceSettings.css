@@ -1,0 +1,43 @@
+.appearance-options {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* UDS-AC09：原生深色細外圈會受瀏覽器抗鋸齒影響，明確使用控制邊界 token。 */
+.appearance-options input[type='radio'] {
+  appearance: none;
+  display: grid;
+  flex-shrink: 0;
+  place-content: center;
+  border: 2px solid var(--color-border-control);
+  border-radius: 50%;
+  background: var(--color-bg-surface);
+}
+
+.appearance-options input[type='radio']::before {
+  content: '';
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--color-action-primary);
+  transform: scale(0);
+}
+
+.appearance-options input[type='radio']:checked::before {
+  transform: scale(1);
+}
+
+.appearance-feedback[data-error='true'] {
+  color: var(--color-status-danger);
+}
+
+@media (forced-colors: active) {
+  /* 高對比模式由瀏覽器提供系統色與原生選取狀態。 */
+  .appearance-options input[type='radio'] {
+    appearance: auto;
+  }
+
+  .appearance-options input[type='radio']::before {
+    display: none;
+  }
+}

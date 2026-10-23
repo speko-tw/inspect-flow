@@ -16,7 +16,7 @@ from app.auth.passwords import hash_password
 from app.auth.sessions import SESSION_COOKIE_NAME, create_session
 from app.db.engine import create_engine_from_settings
 from app.main import create_app
-from app.models import AuditLog, User, UserPassword
+from app.models import AuditLog, User, UserModulePermission, UserPassword
 from tests.db.conftest import create_root_user_with_company
 
 _CFG = str(Path(__file__).resolve().parents[2] / "alembic.ini")
@@ -34,11 +34,30 @@ def engine(db_url):
 
 
 @pytest.fixture
-def account(engine):
+def account_kind():
+    """一般回歸預設使用沒有功能權限的本人，不隱含 Admin 放行。"""
+    return "no-access"
+
+
+@pytest.fixture
+def account(engine, account_kind):
     """預備本人與另一帳號，避免 API 讀寫期間留著 fixture 寫鎖。"""
     with Session(engine) as db:
         user = create_root_user_with_company(db, "APPEAR515")
         other = create_root_user_with_company(db, "OTHER515")
+        if account_kind == "admin":
+            user.is_admin = True
+        elif account_kind == "general":
+            db.add(
+                UserModulePermission(
+                    user_id=user.id,
+                    permission_code="template.use",
+                    source="manual",
+                )
+            )
+        # AUT-AC82：初始修改者與時間刻意不同，漏寫任一欄位都必須使斷言失敗。
+        user.updated_by = other.id
+        user.updated_at = datetime(2020, 1, 1, tzinfo=UTC)
         db.add(
             UserPassword(
                 user_id=user.id,
@@ -59,14 +78,28 @@ def _client(token):
     return client
 
 
+@pytest.mark.parametrize("account_kind", ["general", "admin", "no-access"])
 @pytest.mark.parametrize("appearance", ["system", "light", "dark"])
 def test_self_appearance_persists_across_devices_without_audit(
-    engine, account, appearance
+    engine, account, appearance, account_kind
 ):
     """無模組權限也能改本人，另一裝置與重新登入均取帳號值。"""
     user_id, other_id, token, username = account
     client = _client(token)
+    profile = client.get("/api/v1/auth/me").json()
+    assert profile["is_admin"] == (account_kind == "admin")
+    if account_kind == "general":
+        assert "template.use" in profile["module_permissions"]
+        assert profile["can_browse_templates"] is True
+    elif account_kind == "no-access":
+        assert profile["module_permissions"] == []
+        assert profile["has_project_access"] is False
+        assert profile["can_browse_templates"] is False
     with Session(engine) as db:
+        original = db.get(User, user_id)
+        assert original is not None
+        previous_time = original.updated_at
+        assert original.updated_by == other_id
         before = db.scalar(select(func.count()).select_from(AuditLog))
     response = client.patch("/api/v1/auth/me", json={"appearance": appearance})
     assert response.status_code == 200
@@ -88,6 +121,7 @@ def test_self_appearance_persists_across_devices_without_audit(
         assert user is not None
         assert user.appearance == appearance
         assert user.updated_by == user_id
+        assert user.updated_at > previous_time
         other = db.get(User, other_id)
         assert other is not None and other.appearance == "system"
         assert db.scalar(select(func.count()).select_from(AuditLog)) == before
@@ -130,11 +164,40 @@ def test_appearance_requires_login_and_keeps_temporary_password_gate(
         assert password is not None
         password.must_change_password = True
         db.commit()
+        user = db.get(User, user_id)
+        assert user is not None
+        before = (user.appearance, user.updated_by, user.updated_at)
     client = _client(token)
     assert client.get("/api/v1/auth/me").status_code == 200
     response = client.patch("/api/v1/auth/me", json=body)
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "auth.password_change_required"
+    with Session(engine) as db:
+        user = db.get(User, user_id)
+        assert user is not None
+        assert (user.appearance, user.updated_by, user.updated_at) == before
+
+
+@pytest.mark.parametrize("account_kind", ["admin"])
+def test_admin_account_patch_ignores_another_users_appearance(
+    engine, account, account_kind
+):
+    """AUT-R55：管理他人的入口不能繞過本人偏好端點。"""
+    _, other_id, token, _ = account
+    with Session(engine) as db:
+        other = db.get(User, other_id)
+        assert other is not None
+        other.appearance = "light"
+        db.commit()
+    response = _client(token).patch(
+        f"/api/v1/users/{other_id}",
+        json={"appearance": "dark"},
+    )
+    assert response.status_code == 200
+    assert "appearance" not in response.json()
+    with Session(engine) as db:
+        other = db.get(User, other_id)
+        assert other is not None and other.appearance == "light"
 
 
 @pytest.mark.parametrize("value", [None, "sepia", "Dark", ""])
