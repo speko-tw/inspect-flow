@@ -56,9 +56,14 @@ describe('Dashboard 導覽與路由權限', () => {
     })
     renderAdmin('/overview', user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你目前沒有可查看的專案進度。',
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
     )
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(
       screen.queryByRole('link', { name: '總覽' }),
     ).not.toBeInTheDocument()
@@ -99,9 +104,14 @@ describe('Dashboard 導覽與路由權限', () => {
     })
     renderAdmin('/overview/projects/project-1/tasks/task-1', user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你目前沒有可查看的專案進度。',
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
     )
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(
       screen.queryByRole('heading', { name: '任務明細測試頁' }),
     ).not.toBeInTheDocument()

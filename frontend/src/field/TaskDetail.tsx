@@ -6,6 +6,7 @@ import { Card } from '../components/Card'
 import { InfoRow } from '../components/InfoRow'
 import { SectionHeader } from '../components/SectionHeader'
 import { ResourceState } from '../components/layout/LayoutPatterns'
+import AccessDeniedPage from '../components/layout/AccessDeniedPage'
 import { isNotFound } from '../http'
 import { BackLink } from '../layout/BackLink'
 import { ROUTES } from '../routes'
@@ -98,24 +99,20 @@ export default function TaskDetail({
           message="正在取得任務需求與操作狀態。"
         />
       )}
-      {error && (
+      {error === 'forbidden' ? (
+        <AccessDeniedPage />
+      ) : error ? (
         <section
           className="field-notice field-notice-error field-detail-error"
           role="alert"
         >
           <h1>
-            {error === 'missing'
-              ? '找不到這筆任務'
-              : error === 'forbidden'
-                ? '無法查看任務'
-                : '無法載入任務詳情'}
+            {error === 'missing' ? '找不到這筆任務' : '無法載入任務詳情'}
           </h1>
           <p>
             {error === 'missing'
               ? '任務不存在，或你目前無法查看這筆任務。'
-              : error === 'forbidden'
-                ? '你的帳號沒有查看現場任務的權限。'
-                : '請稍後再試。'}
+              : '請稍後再試。'}
           </p>
           {error === 'other' && (
             <Button
@@ -140,7 +137,7 @@ export default function TaskDetail({
             </Link>
           )}
         </section>
-      )}
+      ) : null}
       {task && (
         <>
           <Card className="field-detail-hero">

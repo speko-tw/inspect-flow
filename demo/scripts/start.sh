@@ -110,7 +110,7 @@ curl -fsS ${CURL_OPTS[@]+"${CURL_OPTS[@]}"} \
   || die "前端啟動逾時"
 
 "$REPO/backend/.venv/bin/python" "$HERE/seed.py" \
-  --base "http://127.0.0.1:$BACKEND_PORT" --code "$CODE" \
+  --base "http://127.0.0.1:$BACKEND_PORT" --code="$CODE" \
   --out "$DEMO_WORK_DIR/seed-result.json"
 trap - EXIT
 

@@ -848,6 +848,40 @@ describe('ProjectItemChangePage', () => {
     expect(screen.getByRole('button', { name: '儲存變更' })).toBeDisabled()
   })
 
+  it('keeps readable preview when the API marks it read-only', async () => {
+    const readOnlyPreview = { ...structuredClone(preview), readOnly: true }
+    renderPage(apiWith({ loadPreview: vi.fn(async () => readOnlyPreview) }))
+
+    expect(await screen.findByText('唯讀瀏覽')).toBeVisible()
+    expect(screen.getByLabelText('查核項目名稱')).toHaveValue('混凝土表面檢查')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '你沒有權限修改此專案查核項目。',
+    )
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
+  })
+
+  it('shows the shared denied page when the initial read returns 403', async () => {
+    const api = apiWith({
+      loadPreview: vi.fn(async () => {
+        throw new ManagementApiError(403, 'permission.denied')
+      }),
+    })
+    renderPage(api)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: '無權限' }),
+    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
+    )
+    expect(screen.getByRole('status')).toHaveClass('notice-info')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/overview',
+    )
+  })
+
   it('switches to readonly after a write 403', async () => {
     const api = apiWith({
       update: vi.fn(async () => {
@@ -858,6 +892,8 @@ describe('ProjectItemChangePage', () => {
     await confirm('no')
     expect(await screen.findByText('唯讀瀏覽')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('權限')
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
   })
 
   it('shows archived error beside the action after a write race', async () => {
@@ -1235,7 +1271,23 @@ describe('ProjectItemChangePage review round 2', () => {
           }),
         }),
       )
-      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      if (status === 403) {
+        expect(
+          await screen.findByRole('heading', {
+            level: 2,
+            name: '無權限',
+          }),
+        ).toBeVisible()
+        expect(await screen.findByRole('status')).toHaveTextContent(
+          '你沒有使用這個頁面的權限',
+        )
+        expect(screen.queryByRole('alert')).toBeNull()
+        expect(
+          screen.getByRole('link', { name: '回到我的首頁' }),
+        ).toHaveAttribute('href', '/overview')
+      } else {
+        expect(await screen.findByRole('alert')).toBeInTheDocument()
+      }
       fireEvent.click(screen.getByRole('link', { name: '外殼導覽' }))
       expect(await screen.findByText('專案查核項目列表')).toBeInTheDocument()
       expect(screen.queryByRole('group')).not.toBeInTheDocument()

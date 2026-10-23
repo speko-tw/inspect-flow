@@ -203,7 +203,7 @@ describe('存檔失敗的錯誤顯示在表單裡並聚焦（F-O02）', () => {
     fireEvent.change(input, { target: { value: '新角色' } })
     const form = input.closest('form') as HTMLFormElement
 
-    fireEvent.click(within(form).getByRole('button', { name: '新增角色' }))
+    fireEvent.click(within(form).getByRole('button', { name: '建立角色' }))
 
     const alert = await within(form).findByRole('alert')
     await waitFor(() => expect(alert).toHaveFocus())

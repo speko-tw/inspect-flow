@@ -10,13 +10,21 @@ import type { ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DataMemoryRouter } from '../../testing/DataMemoryRouter'
 
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
+import { currentUserFixture } from '../../testing/contractFixtures'
 import { expectImeEnterIgnored, holdRequests } from '../../testing/submitGuard'
 import TemplatesPage from './TemplatesPage'
 import wireFixture from './fixtures/template-item-payload.json'
 import type { TemplateItem } from './api'
 
 function render(ui: ReactElement) {
-  return renderWithoutRouter(<DataMemoryRouter>{ui}</DataMemoryRouter>)
+  return renderWithoutRouter(
+    <CurrentUserProvider
+      value={{ user: currentUserFixture(), clear: vi.fn() }}
+    >
+      <DataMemoryRouter>{ui}</DataMemoryRouter>
+    </CurrentUserProvider>,
+  )
 }
 
 const category = { id: 'category-1', name: '土木工程' }
@@ -1341,6 +1349,7 @@ describe('TemplatesPage', () => {
     )
     expect(screen.getByLabelText(/查核項目名稱/)).toHaveValue('管線查核')
     expect(screen.getByLabelText(/查核項目名稱/)).toBeDisabled()
+    expect(screen.queryByRole('heading', { name: '無權限' })).toBeNull()
   })
 
   it('keeps the draft after a generic 422 without field paths', async () => {
@@ -1875,16 +1884,95 @@ describe('TemplatesPage', () => {
     ).toBe(false)
   })
 
-  it('shows a read-only library after the read API returns 403', async () => {
+  it('shows the shared denied page after the read API returns 403', async () => {
     templateFetch({ categoryError: 403 })
     render(<TemplatesPage canManage />)
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你沒有權限瀏覽範本庫。',
-    )
     expect(
-      screen.queryByRole('button', { name: '新增工程類別' }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByText('唯讀瀏覽')).toBeInTheDocument()
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
+    )
+    expect(screen.getByRole('status')).toHaveClass('notice-info')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
+  })
+
+  it('keeps a read denial when another in-flight read later succeeds', async () => {
+    const baseFetch = templateFetch({
+      categories: [category, otherCategory],
+      systems: [system, { ...secondSystem, category_id: otherCategory.id }],
+    })
+    let delayCategoryOneSystems = false
+    let categoryOneSystemsCount = 0
+    let delayedSystems: ((response: Response) => void) | undefined
+    let delayedTemplates: ((response: Response) => void) | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(String(input), 'http://localhost').pathname
+        if (
+          delayCategoryOneSystems &&
+          path === `/api/v1/template-categories/${category.id}/systems` &&
+          (init?.method ?? 'GET') === 'GET' &&
+          ++categoryOneSystemsCount === 1
+        ) {
+          return new Promise<Response>((resolve) => {
+            delayedSystems = resolve
+          })
+        }
+        if (
+          delayCategoryOneSystems &&
+          path === `/api/v1/template-systems/${system.id}/templates` &&
+          (init?.method ?? 'GET') === 'GET'
+        ) {
+          return new Promise<Response>((resolve) => {
+            delayedTemplates = resolve
+          })
+        }
+        return baseFetch(input, init)
+      }),
+    )
+    render(<TemplatesPage canManage />)
+    const navigation = await screen.findByRole('complementary', {
+      name: '範本庫導覽',
+    })
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '建築工程' }),
+    )
+    await within(navigation).findByRole('button', { name: '排水' })
+    delayCategoryOneSystems = true
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '土木工程' }),
+    )
+    await waitFor(() => expect(delayedSystems).toBeTypeOf('function'))
+    fireEvent.click(
+      within(navigation).getByRole('button', { name: '土木工程' }),
+    )
+    fireEvent.click(
+      await within(navigation).findByRole('button', { name: '護欄' }),
+    )
+    await waitFor(() => expect(delayedTemplates).toBeTypeOf('function'))
+
+    await act(async () => {
+      delayedSystems?.(
+        Response.json(
+          { error: { code: 'permission.denied' } },
+          { status: 403 },
+        ),
+      )
+    })
+    expect(
+      await screen.findByRole('heading', { name: '無權限' }),
+    ).toBeVisible()
+
+    await act(async () => {
+      delayedTemplates?.(Response.json({ items: [], next_cursor: null }))
+    })
+    expect(screen.getByRole('heading', { name: '無權限' })).toBeVisible()
   })
 })
 

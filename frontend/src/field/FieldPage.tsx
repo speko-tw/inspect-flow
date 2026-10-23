@@ -7,10 +7,11 @@ import {
   useSearchParams,
 } from 'react-router'
 
-import { landingLabel, landingPath } from '../auth/landing'
+import { landingPath } from '../auth/landing'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { Button } from '../components/Button'
 import { ResourceState } from '../components/layout/LayoutPatterns'
+import AccessDeniedPage from '../components/layout/AccessDeniedPage'
 import { isForbidden } from '../http'
 import AppHeader, { memberNavItems } from '../layout/AppHeader'
 import { PAGE_TITLES } from '../layout/navigationLabels'
@@ -104,21 +105,7 @@ export default function FieldPage() {
             </p>
           )}
           {taskAccessDenied ? (
-            <section
-              aria-labelledby="field-access-denied-heading"
-              className="field-notice field-notice-error"
-              role="alert"
-            >
-              <h2 id="field-access-denied-heading">目前無法查看現場任務</h2>
-              <p>
-                你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。
-              </p>
-              <Link className="btn" to={landingPath(user)}>
-                {landingPath(user) === ROUTES.adminProjects.path
-                  ? '前往我的專案'
-                  : `前往${landingLabel(landingPath(user))}`}
-              </Link>
-            </section>
+            <AccessDeniedPage headingLevel={2} />
           ) : detailId ? (
             <TaskDetail
               key={detailId}
@@ -137,15 +124,6 @@ export default function FieldPage() {
             />
           )}
         </main>
-        {!detailId && !unknownPath && (
-          <details className="field-profile">
-            <summary>我的資料</summary>
-            <p>帳號名稱：{user.username}</p>
-            <p>中文姓名：{user.name_zh ?? '—'}</p>
-            <p>英文姓名：{user.name_en ?? '—'}</p>
-            <p>Email：{user.email ?? '—'}</p>
-          </details>
-        )}
       </div>
     </>
   )
@@ -180,7 +158,6 @@ function TaskList({
   const [loading, setLoading] = useState(() => !restore || !memory.has(key))
   const [error, setError] = useState<'forbidden' | 'other' | null>(null)
   const [retry, setRetry] = useState(0)
-  const { user } = useCurrentUser()
 
   useEffect(() => {
     let active = true
@@ -319,17 +296,7 @@ function TaskList({
           message="正在取得可查核任務。"
         />
       )}
-      {error === 'forbidden' && (
-        <section className="field-notice field-notice-error" role="alert">
-          <h2>目前無法查看現場任務</h2>
-          <p>你的帳號沒有任何專案的現場查核權限。請聯絡專案管理者確認權限。</p>
-          {(user.has_project_access || user.can_create_project) && (
-            <Link className="btn" to={ROUTES.adminProjects.path}>
-              前往我的專案
-            </Link>
-          )}
-        </section>
-      )}
+      {error === 'forbidden' && <AccessDeniedPage headingLevel={2} />}
       {error === 'other' && !state?.nextCursor && (
         <section className="field-notice field-notice-error" role="alert">
           <h2>無法載入任務</h2>

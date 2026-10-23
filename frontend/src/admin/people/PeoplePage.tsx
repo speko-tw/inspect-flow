@@ -152,12 +152,7 @@ export function PeoplePage({
         !personId && (
           <DelegatedPeopleList
             key={query}
-            onSelect={(id) =>
-              navigate({
-                pathname: routePath(ROUTES.adminPeople, { personId: id }),
-                search: query ? `?q=${encodeURIComponent(query)}` : '',
-              })
-            }
+            currentUserId={user.id}
             query={query}
             updateQuery={updateQuery}
             visible
@@ -222,12 +217,12 @@ function DelegatedPersonHeading({ userId }: { userId: string }) {
 }
 
 function DelegatedPeopleList({
-  onSelect,
+  currentUserId,
   query,
   updateQuery,
   visible,
 }: {
-  onSelect: (id: string) => void
+  currentUserId: string
   query: string
   updateQuery: (query: string) => void
   visible: boolean
@@ -325,15 +320,43 @@ function DelegatedPeopleList({
       </form>
       {error && <p role="alert">{error}</p>}
       {loading && <p role="status">載入中…</p>}
-      <ul aria-label="帳號清單">
-        {items.map((person) => (
-          <li key={person.id}>
-            <button onClick={() => onSelect(person.id)} type="button">
-              {person.name_zh || person.username}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div
+        aria-label="帳號清單，可水平捲動"
+        className="users-table-scroll"
+        role="region"
+        tabIndex={0}
+      >
+        <table className="users-account-table">
+          <thead>
+            <tr>
+              <th scope="col">姓名</th>
+              <th scope="col">帳號</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items
+              .filter((person) => person.id !== currentUserId)
+              .map((person) => (
+                <tr key={person.id}>
+                  <th scope="row">
+                    <Link
+                      className="users-account-name-link"
+                      to={{
+                        pathname: routePath(ROUTES.adminPeople, {
+                          personId: person.id,
+                        }),
+                        search: query ? `?q=${encodeURIComponent(query)}` : '',
+                      }}
+                    >
+                      {person.name_zh || person.username}
+                    </Link>
+                  </th>
+                  <td data-label="帳號">{person.username}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
       {cursor && (
         <button
           disabled={loading}
