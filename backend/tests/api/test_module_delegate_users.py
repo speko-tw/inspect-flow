@@ -187,6 +187,10 @@ def test_module_delegate_can_read_target_heading_but_not_admin_identity(
         return client
 
     delegate_client = client_for(delegate)
+    self_response = delegate_client.get(
+        f"/api/v1/module-delegate/users/{delegate.id}"
+    )
+    assert self_response.status_code == 404
     response = delegate_client.get(
         f"/api/v1/module-delegate/users/{target.id}"
     )

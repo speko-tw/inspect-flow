@@ -296,6 +296,16 @@ function ModulePermissionsPageContent({
   const [users, setUsers] = useState<User[]>([])
   const [companies, setCompanies] = useState<Company[]>([])
   const [permissions, setPermissions] = useState<ModulePermission[]>([])
+  const [usersCatalogState, setUsersCatalogState] = useState<{
+    status: 'loading' | 'ready' | 'error'
+    error: string
+  }>({ status: 'loading', error: '' })
+  const [permissionsCatalogState, setPermissionsCatalogState] = useState<{
+    status: 'loading' | 'ready' | 'error'
+    error: string
+  }>({ status: 'loading', error: '' })
+  const [usersCatalogRetry, setUsersCatalogRetry] = useState(0)
+  const [permissionsCatalogRetry, setPermissionsCatalogRetry] = useState(0)
   const [bundles, setBundles] = useState<PermissionBundle[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -311,14 +321,20 @@ function ModulePermissionsPageContent({
   const [safeCandidateRole, setSafeCandidateRole] = useState('')
   const [selectedUserState, setSelectedUserState] = useState('')
   const selectedUser = selectedUserId ?? selectedUserState
+  const selectedAccount = users.find((user) => user.id === selectedUser)
   const selectedUserIsExternal = Boolean(
-    users.find((user) => user.id === selectedUser)?.is_external_collaborator,
+    selectedAccount?.is_external_collaborator,
   )
-  const visiblePermissions = selectedUserIsExternal
-    ? permissions.filter((item) =>
-        EXTERNAL_ALLOWED_PERMISSION_CODES.has(item.code),
-      )
-    : permissions
+  const visiblePermissions =
+    !selectedAccount ||
+    usersCatalogState.status !== 'ready' ||
+    permissionsCatalogState.status !== 'ready'
+      ? []
+      : selectedUserIsExternal
+        ? permissions.filter((item) =>
+            EXTERNAL_ALLOWED_PERMISSION_CODES.has(item.code),
+          )
+        : permissions
   const participationForSelectedUser =
     participationResult?.userId === selectedUser &&
     participationResult.reloadRequest === participationReload
@@ -331,6 +347,66 @@ function ModulePermissionsPageContent({
   >([])
   const [delegatedModules, setDelegatedModules] = useState<string[]>([])
   const [accessLoadedFor, setAccessLoadedFor] = useState('')
+  const [accessLoad, setAccessLoad] = useState<{
+    userId: string
+    status: 'loading' | 'ready' | 'error'
+    error: string
+  }>({ userId: '', status: 'loading', error: '' })
+  const [accessRetry, setAccessRetry] = useState(0)
+  const accessReady =
+    accessLoad.userId === selectedUser &&
+    accessLoad.status === 'ready' &&
+    accessLoadedFor === selectedUser
+  const capabilitySummaryReady =
+    usersCatalogState.status === 'ready' &&
+    permissionsCatalogState.status === 'ready' &&
+    accessReady
+  const capabilitySummaryLoading =
+    usersCatalogState.status === 'loading' ||
+    permissionsCatalogState.status === 'loading' ||
+    (accessLoad.userId === selectedUser && accessLoad.status === 'loading')
+  const capabilitySummaryError =
+    usersCatalogState.status === 'error' ||
+    permissionsCatalogState.status === 'error' ||
+    (accessLoad.userId === selectedUser && accessLoad.status === 'error')
+
+  const catalogLoadErrors = (
+    <>
+      {usersCatalogState.status === 'error' && (
+        <>
+          <p role="alert">{usersCatalogState.error}</p>
+          <Button
+            onClick={() => {
+              setUsersCatalogState({ status: 'loading', error: '' })
+              setUsersCatalogRetry((retry) => retry + 1)
+            }}
+          >
+            重新載入帳號目錄
+          </Button>
+        </>
+      )}
+      {permissionsCatalogState.status === 'error' && (
+        <>
+          <p role="alert">{permissionsCatalogState.error}</p>
+          <Button
+            onClick={() => {
+              setPermissionsCatalogState({ status: 'loading', error: '' })
+              setPermissionsCatalogRetry((retry) => retry + 1)
+            }}
+          >
+            重新載入權限目錄
+          </Button>
+        </>
+      )}
+    </>
+  )
+
+  function selectUser(userId: string) {
+    setSelectedUserState(userId)
+    setAccessLoadedFor('')
+    setAccessLoad({ userId, status: 'loading', error: '' })
+  }
+
   const [profile, setProfile] = useState<Profile | null>(null)
   const [step, setStep] = useState(0)
   const [identityErrors, setIdentityErrors] = useState<IdentityErrors>({})
@@ -490,11 +566,44 @@ function ModulePermissionsPageContent({
     setWizardOpen(true)
   }
 
+  const userPath = currentUser.is_admin ? '/users' : '/module-delegate/users'
+
+  useEffect(() => {
+    let active = true
+    void listAllPages<User>(userPath)
+      .then((rows) => {
+        if (!active) return
+        setUsers(rows)
+        setUsersCatalogState({ status: 'ready', error: '' })
+      })
+      .catch((caught: unknown) => {
+        if (!active) return
+        setUsersCatalogState({ status: 'error', error: message(caught) })
+      })
+    return () => {
+      active = false
+    }
+  }, [userPath, usersCatalogRetry])
+
+  useEffect(() => {
+    let active = true
+    void listModulePermissions()
+      .then((rows) => {
+        if (!active) return
+        setPermissions(rows)
+        setPermissionsCatalogState({ status: 'ready', error: '' })
+      })
+      .catch((caught: unknown) => {
+        if (!active) return
+        setPermissionsCatalogState({ status: 'error', error: message(caught) })
+      })
+    return () => {
+      active = false
+    }
+  }, [permissionsCatalogRetry])
+
   const refresh = useCallback(async () => {
-    const userPath = currentUser.is_admin ? '/users' : '/module-delegate/users'
-    const [userRows, permissionRows, bundleRows] = await Promise.all([
-      listAllPages<User>(userPath),
-      listModulePermissions(),
+    const [bundleRows] = await Promise.all([
       currentUser.is_admin ? listPermissionBundles() : Promise.resolve([]),
     ])
     const [companyRows, roleRows, projectRows, creatorRole] =
@@ -506,9 +615,7 @@ function ModulePermissionsPageContent({
             getCreatorRole(),
           ])
         : [[], [], [], { role_id: '' }]
-    setUsers(userRows)
     setCompanies(companyRows)
-    setPermissions(permissionRows)
     setBundles(bundleRows)
     setRoles(roleRows)
     setProjects(projectRows)
@@ -540,17 +647,24 @@ function ModulePermissionsPageContent({
           setAccessDraft(access.permission_codes)
           setDelegatedModules(access.delegated_modules)
           setAccessLoadedFor(selectedUser)
+          setAccessLoad({ userId: selectedUser, status: 'ready', error: '' })
         }
       })
       .catch((caught: unknown) => {
         // 載入失敗時不標成已載入：否則開通控制項會以空的權限
         // 草稿啟用，使用者可能在不知道現況下送出覆寫（#711）。
-        if (active) setError(message(caught))
+        if (active) {
+          setAccessLoad({
+            userId: selectedUser,
+            status: 'error',
+            error: message(caught),
+          })
+        }
       })
     return () => {
       active = false
     }
-  }, [selectedUser])
+  }, [selectedUser, accessRetry])
 
   useEffect(() => {
     if (!selectedUser || !currentUser.is_admin) return
@@ -679,7 +793,7 @@ function ModulePermissionsPageContent({
       setBundleCodes([])
       setEditingBundle(null)
       setBundles(await listPermissionBundles())
-      setNotice('權限組合已儲存；既有帳號授權不會被改動。')
+      setNotice('權限組合已儲存；既有帳號權限不會被改動。')
     } catch (caught) {
       setError(message(caught))
     } finally {
@@ -720,7 +834,7 @@ function ModulePermissionsPageContent({
       existing &&
       existing.is_external_collaborator !== (profile === 'external')
     ) {
-      setError('帳號外部身分與所選職務不符，未變更授權。')
+      setError('帳號外部身分與所選職務不符，未變更權限。')
       return
     }
     setBusy(true)
@@ -752,7 +866,7 @@ function ModulePermissionsPageContent({
           ...current.filter((row) => row.id !== created.id),
         ])
       }
-      setSelectedUserState(target.id)
+      selectUser(target.id)
       const nextProvisioning: Provisioning = {
         userId: target.id,
         bundleId: matchingBundle?.id ?? null,
@@ -852,8 +966,8 @@ function ModulePermissionsPageContent({
       setError(message(caught))
       setPartial(
         next.mergeExistingRoles
-          ? '帳號資料保留；後續授權或專案加入未完成。'
-          : '帳號已建立；後續授權或專案加入未完成。',
+          ? '帳號資料保留；後續權限或專案加入未完成。'
+          : '帳號已建立；後續權限或專案加入未完成。',
       )
       return false
     }
@@ -1030,7 +1144,7 @@ function ModulePermissionsPageContent({
                 <Button
                   variant="tertiary"
                   onClick={() => {
-                    setSelectedUserState(user.id)
+                    selectUser(user.id)
                     setWizardOpen(false)
                     setTemporaryPassword('')
                     if (step === 4) resetWizard()
@@ -1060,7 +1174,28 @@ function ModulePermissionsPageContent({
           <h2>權限</h2>
           <p>只能開通受委派範圍內的權限，不能替自己開通或轉交委派。</p>
           {notice && <p role="status">{notice}</p>}
-          <fieldset disabled={busy || accessLoadedFor !== selectedUser}>
+          {catalogLoadErrors}
+          {accessLoad.userId === selectedUser &&
+            accessLoad.status === 'error' && (
+              <>
+                <p role="status">目前無法載入</p>
+                <p role="alert">{accessLoad.error}</p>
+                <Button
+                  onClick={() => {
+                    setAccessLoadedFor('')
+                    setAccessLoad({
+                      userId: selectedUser,
+                      status: 'loading',
+                      error: '',
+                    })
+                    setAccessRetry((retry) => retry + 1)
+                  }}
+                >
+                  重新載入權限
+                </Button>
+              </>
+            )}
+          <fieldset disabled={busy || !capabilitySummaryReady}>
             {visiblePermissions.map((item) => (
               <label key={item.code}>
                 <input
@@ -1081,12 +1216,13 @@ function ModulePermissionsPageContent({
               </label>
             ))}
           </fieldset>
-          {JSON.stringify([...accessDraft].sort()) !==
-            JSON.stringify([...userAccess].sort()) && (
-            <Button disabled={busy} onClick={() => void submitAccessDraft()}>
-              開通
-            </Button>
-          )}
+          {capabilitySummaryReady &&
+            JSON.stringify([...accessDraft].sort()) !==
+              JSON.stringify([...userAccess].sort()) && (
+              <Button disabled={busy} onClick={() => void submitAccessDraft()}>
+                開通
+              </Button>
+            )}
         </Card>
       )}
       {wizardOpen && currentUser.is_admin && (
@@ -1129,7 +1265,7 @@ function ModulePermissionsPageContent({
                 onClick={() => {
                   setWizardOpen(false)
                   setTemporaryPassword('')
-                  setSelectedUserState(createdId)
+                  selectUser(createdId)
                   onWizardViewUser?.(createdId)
                 }}
               >
@@ -1782,7 +1918,8 @@ function ModulePermissionsPageContent({
           <h2>{embedded ? '能做什麼' : '帳號能力與快速檢查'}</h2>
           {embedded &&
             currentUser.is_admin &&
-            !users.find((user) => user.id === selectedUser)?.is_admin && (
+            selectedAccount &&
+            !selectedAccount.is_admin && (
               <div>
                 <Button onClick={startExistingJob}>重新套用職務</Button>
                 <p>{JOB_REAPPLY_EXPLANATION}</p>
@@ -1791,13 +1928,41 @@ function ModulePermissionsPageContent({
           <div aria-label="帳號能力摘要" role="region">
             <p role="status">
               能使用：
-              {users.find((user) => user.id === selectedUser)?.is_admin
-                ? '系統管理者可使用全部功能。'
-                : permissions
-                    .filter((item) => userAccess.includes(item.code))
-                    .map((item) => item.description.replace('模組', '功能'))
-                    .join('、') || '尚未開通功能。'}
+              {capabilitySummaryLoading
+                ? '載入中…'
+                : capabilitySummaryError
+                  ? '目前無法載入'
+                  : !capabilitySummaryReady
+                    ? '載入中…'
+                    : users.find((user) => user.id === selectedUser)?.is_admin
+                      ? '系統管理者可使用全部功能。'
+                      : permissions
+                          .filter((item) => userAccess.includes(item.code))
+                          .map((item) =>
+                            item.description.replace('模組', '功能'),
+                          )
+                          .join('、') || '尚未開通功能。'}
             </p>
+            {catalogLoadErrors}
+            {accessLoad.userId === selectedUser &&
+              accessLoad.status === 'error' && (
+                <>
+                  <p role="alert">{accessLoad.error}</p>
+                  <Button
+                    onClick={() => {
+                      setAccessLoadedFor('')
+                      setAccessLoad({
+                        userId: selectedUser,
+                        status: 'loading',
+                        error: '',
+                      })
+                      setAccessRetry((retry) => retry + 1)
+                    }}
+                  >
+                    重新載入權限
+                  </Button>
+                </>
+              )}
             <h3>參與專案與角色</h3>
             {participationForSelectedUser?.error && (
               <p role="alert">{participationForSelectedUser.error}</p>

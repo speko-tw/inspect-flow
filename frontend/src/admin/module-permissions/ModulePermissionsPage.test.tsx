@@ -48,6 +48,12 @@ interface FixtureOptions {
   failCreate?: boolean
   createUserResponse?: Promise<Response>
   failUserAccess?: boolean
+  failUserAccessOnce?: boolean
+  failUserCatalogOnce?: boolean
+  failPermissionCatalogOnce?: boolean
+  userCatalogResponse?: () => Promise<Response>
+  permissionCatalogResponse?: () => Promise<Response>
+  accessResponse?: (userId: string) => Promise<Response>
   participationResponse?: (path: string) => Promise<Response>
   bundleApplyResponse?: (path: string) => Promise<Response>
 }
@@ -63,6 +69,9 @@ function permissionPage(options: FixtureOptions = {}) {
   let memberRoleIds = [...(options.memberRoleIds ?? [])]
   let createdMemberRoleIds: string[] | null = null
   let failMemberWriteOnce = options.failMemberWriteOnce ?? false
+  let failUserAccessOnce = options.failUserAccessOnce ?? false
+  let failUserCatalogOnce = options.failUserCatalogOnce ?? false
+  let failPermissionCatalogOnce = options.failPermissionCatalogOnce ?? false
   const member = {
     id: 'person',
     username: 'person.one',
@@ -217,9 +226,26 @@ function permissionPage(options: FixtureOptions = {}) {
       const body = String(init?.body ?? '')
       calls.push({ path, method, body })
       if (method === 'GET' && path === '/users') {
+        if (failUserCatalogOnce) {
+          failUserCatalogOnce = false
+          return Response.json(
+            { detail: 'users unavailable' },
+            { status: 500 },
+          )
+        }
         return Response.json({ items: [member], next_cursor: null })
       }
       if (method === 'GET' && path === '/module-delegate/users') {
+        if (failUserCatalogOnce) {
+          failUserCatalogOnce = false
+          return Response.json(
+            { detail: 'users unavailable' },
+            { status: 500 },
+          )
+        }
+        if (options.userCatalogResponse) {
+          return options.userCatalogResponse()
+        }
         return Response.json({
           items: [
             {
@@ -246,6 +272,16 @@ function permissionPage(options: FixtureOptions = {}) {
         return Response.json({ items: [], next_cursor: null })
       }
       if (method === 'GET' && path === '/module-permissions') {
+        if (failPermissionCatalogOnce) {
+          failPermissionCatalogOnce = false
+          return Response.json(
+            { detail: 'permissions unavailable' },
+            { status: 500 },
+          )
+        }
+        if (options.permissionCatalogResponse) {
+          return options.permissionCatalogResponse()
+        }
         return Response.json({
           items:
             options.permissionOptions ??
@@ -328,7 +364,10 @@ function permissionPage(options: FixtureOptions = {}) {
         method === 'GET' &&
         /^\/users\/[^/]+\/module-permissions$/.test(path)
       ) {
-        if (options.failUserAccess) {
+        const userId = path.split('/')[2]
+        if (options.accessResponse) return options.accessResponse(userId)
+        if (options.failUserAccess || failUserAccessOnce) {
+          failUserAccessOnce = false
           return Response.json({ detail: 'boom' }, { status: 500 })
         }
         return Response.json({
@@ -758,6 +797,77 @@ describe('ModulePermissionsPage', () => {
     expect(screen.queryByLabelText('管理範本庫')).not.toBeInTheDocument()
   })
 
+  it('hides internal permissions until delegated account identity loads', async () => {
+    const catalog = deferred<Response>()
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      delegateMode: true,
+      externalAccount: true,
+      userCatalogResponse: () => catalog.promise,
+      permissionOptions: [
+        {
+          code: 'template.use',
+          module: 'template',
+          description: '使用範本功能',
+        },
+        {
+          code: 'template.manage',
+          module: 'template',
+          description: '管理範本庫',
+        },
+      ],
+    })
+
+    await screen.findByRole('heading', { name: '權限' })
+    expect(screen.queryByLabelText('管理範本庫')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('使用範本功能')).not.toBeInTheDocument()
+
+    await act(async () => {
+      catalog.resolve(
+        Response.json({
+          items: [
+            {
+              id: 'person',
+              username: 'person.one',
+              name_zh: '林沐青',
+              is_external_collaborator: true,
+            },
+          ],
+          next_cursor: null,
+        }),
+      )
+    })
+
+    expect(await screen.findByLabelText('使用範本功能')).toBeInTheDocument()
+    expect(screen.queryByLabelText('管理範本庫')).not.toBeInTheDocument()
+  })
+
+  it('retries a failed delegated account catalog before showing permissions', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      delegateMode: true,
+      externalAccount: true,
+      failUserCatalogOnce: true,
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'API 錯誤（狀態碼 500）',
+    )
+    expect(
+      screen.getByRole('button', { name: '重新載入帳號目錄' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('管理範本庫')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '重新載入帳號目錄' }))
+
+    expect(await screen.findByLabelText('使用專案功能')).toBeInTheDocument()
+    expect(screen.queryByLabelText('管理範本庫')).not.toBeInTheDocument()
+  })
+
   it('shows the named success notice after a delegate explicitly opens access', async () => {
     const { calls } = permissionPage({
       openWizard: false,
@@ -799,21 +909,191 @@ describe('ModulePermissionsPage', () => {
   })
 
   it('keeps delegate grant controls disabled when access fails to load', async () => {
-    permissionPage({
+    const retryAccess = deferred<Response>()
+    let accessRequests = 0
+    const { calls } = permissionPage({
       openWizard: false,
       embedded: true,
       selectedUserId: 'person',
       delegateMode: true,
-      failUserAccess: true,
+      accessResponse: () => {
+        accessRequests += 1
+        return accessRequests === 1
+          ? Promise.resolve(Response.json({ detail: 'boom' }, { status: 500 }))
+          : retryAccess.promise
+      },
     })
-    await screen.findByRole('heading', { name: '權限' })
-
-    await waitFor(() =>
-      expect(screen.getAllByRole('alert').length).toBeGreaterThan(0),
-    )
+    const delegateCard = screen.getByRole('heading', {
+      name: '權限',
+    }).parentElement
+    expect(delegateCard).not.toBeNull()
+    expect(await within(delegateCard!).findByRole('alert')).toBeVisible()
+    expect(delegateCard).toHaveTextContent('目前無法載入')
+    expect(delegateCard).not.toHaveTextContent('載入中')
+    expect(
+      within(delegateCard!).getByRole('button', {
+        name: '重新載入權限',
+      }),
+    ).toBeVisible()
     expect(screen.getByLabelText('使用專案功能')).toBeDisabled()
     // 沒有可改的草稿，「開通」按鈕不會出現。
     expect(screen.queryByRole('button', { name: '開通' })).toBeNull()
+    expect(
+      calls.filter((call) => call.path === '/users/person/module-permissions'),
+    ).toHaveLength(1)
+    fireEvent.click(
+      within(delegateCard!).getByRole('button', {
+        name: '重新載入權限',
+      }),
+    )
+    await waitFor(() => {
+      expect(
+        calls.filter(
+          (call) => call.path === '/users/person/module-permissions',
+        ),
+      ).toHaveLength(2)
+    })
+    await act(async () => {
+      retryAccess.resolve(
+        Response.json({ permission_codes: [], delegated_modules: [] }),
+      )
+    })
+    await waitFor(() => {
+      expect(within(delegateCard!).queryByRole('alert')).toBeNull()
+      expect(screen.getByLabelText('使用專案功能')).toBeEnabled()
+    })
+  })
+
+  it('shows a retry state in the admin account capability summary', async () => {
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      failUserAccess: true,
+    })
+    const summary = await screen.findByRole('region', {
+      name: '帳號能力摘要',
+    })
+    expect(await within(summary).findByRole('alert')).toBeVisible()
+    expect(summary).toHaveTextContent('目前無法載入')
+    expect(summary).not.toHaveTextContent('載入中')
+    expect(summary).not.toHaveTextContent('尚未開通功能')
+    expect(
+      within(summary).getByRole('button', {
+        name: '重新載入權限',
+      }),
+    ).toBeVisible()
+  })
+
+  it('waits for permission descriptions before rendering an empty summary', async () => {
+    const catalog = deferred<Response>()
+    permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      permissionCodes: ['inspection.use'],
+      permissionCatalogResponse: () => catalog.promise,
+    })
+
+    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
+    expect(summary).toHaveTextContent('載入中')
+    expect(summary).not.toHaveTextContent('尚未開通功能')
+    await act(async () => {
+      catalog.resolve(
+        Response.json({
+          items: [
+            {
+              code: 'inspection.use',
+              module: 'inspection',
+              description: '使用查核功能',
+            },
+          ],
+        }),
+      )
+    })
+    expect(await within(summary).findByText(/使用查核功能/)).toBeVisible()
+  })
+
+  it('retries only the failed permission catalog and clears its error', async () => {
+    const { calls } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      failPermissionCatalogOnce: true,
+    })
+    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
+    expect(await within(summary).findByRole('alert')).toBeVisible()
+    expect(summary).not.toHaveTextContent('尚未開通功能')
+    const userAccessCalls = calls.filter((call) =>
+      /\/users\/[^/]+\/module-permissions$/.test(call.path),
+    ).length
+    const userCatalogCalls = calls.filter(
+      (call) => call.path === '/users',
+    ).length
+    fireEvent.click(
+      within(summary).getByRole('button', { name: '重新載入權限目錄' }),
+    )
+    expect(await within(summary).findByText(/尚未開通功能/)).toBeVisible()
+    expect(
+      calls.filter((call) =>
+        /\/users\/[^/]+\/module-permissions$/.test(call.path),
+      ),
+    ).toHaveLength(userAccessCalls)
+    expect(calls.filter((call) => call.path === '/users')).toHaveLength(
+      userCatalogCalls,
+    )
+    expect(within(summary).queryByRole('alert')).toBeNull()
+  })
+
+  it('ignores a late permission response after switching accounts', async () => {
+    const first = deferred<Response>()
+    const { calls, rerenderSelectedUser } = permissionPage({
+      openWizard: false,
+      embedded: true,
+      selectedUserId: 'person',
+      accessResponse: (userId) =>
+        userId === 'person'
+          ? first.promise
+          : Promise.resolve(
+              Response.json({
+                permission_codes: ['project.use'],
+                delegated_modules: [],
+              }),
+            ),
+    })
+    const summary = screen.getByRole('region', { name: '帳號能力摘要' })
+    expect(summary).toHaveTextContent('載入中')
+    await waitFor(() => {
+      expect(
+        calls.some((call) => call.path === '/users/person/module-permissions'),
+      ).toBe(true)
+    })
+    rerenderSelectedUser('other')
+    await waitFor(() => {
+      expect(
+        calls.some((call) => call.path === '/users/other/module-permissions'),
+      ).toBe(true)
+    })
+    expect(summary).not.toBeInTheDocument()
+    const summaryForB = await screen.findByRole('region', {
+      name: '帳號能力摘要',
+    })
+    expect(
+      await within(summaryForB).findByText(/能使用：使用專案功能/),
+    ).toBeVisible()
+    await act(async () => {
+      first.resolve(
+        Response.json({
+          permission_codes: ['inspection.use'],
+          delegated_modules: [],
+        }),
+      )
+    })
+    const currentSummary = screen.getByRole('region', {
+      name: '帳號能力摘要',
+    })
+    expect(currentSummary).toHaveTextContent('能使用：使用專案功能')
+    expect(currentSummary).not.toHaveTextContent('使用查核功能')
   })
 
   it('applies a job to an existing person without creating an account', async () => {
@@ -893,7 +1173,7 @@ describe('ModulePermissionsPage', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '帳號外部身分與所選職務不符，未變更授權。',
+      '帳號外部身分與所選職務不符，未變更權限。',
     )
     expect(calls.some((call) => call.method !== 'GET')).toBe(false)
   })
@@ -1154,7 +1434,7 @@ describe('ModulePermissionsPage', () => {
     await chooseProfile('內業規劃')
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
-    expect(await screen.findByText(/帳號已建立；後續授權/)).toBeVisible()
+    expect(await screen.findByText(/帳號已建立；後續權限/)).toBeVisible()
     expect(
       await screen.findByRole('heading', { name: '新增帳號' }),
     ).toBeVisible()
@@ -1181,7 +1461,7 @@ describe('ModulePermissionsPage', () => {
     expect(
       await screen.findByText('正在完成…', { selector: 'p[role="status"]' }),
     ).toBeVisible()
-    expect(screen.queryByText(/後續授權或專案加入未完成/)).toBeNull()
+    expect(screen.queryByText(/後續權限或專案加入未完成/)).toBeNull()
     expect(
       screen.queryByRole('button', { name: '重試未完成的步驟' }),
     ).toBeNull()
@@ -1228,7 +1508,7 @@ describe('ModulePermissionsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
 
     expect(
-      await screen.findByText(/帳號已建立；後續授權或專案加入未完成/),
+      await screen.findByText(/帳號已建立；後續權限或專案加入未完成/),
     ).toBeVisible()
     expect(
       calls.filter((call) => call.method === 'POST' && call.path === '/users'),
@@ -1267,7 +1547,7 @@ describe('ModulePermissionsPage', () => {
       await fillIdentity(`member.${conflictMembershipState}`)
       await chooseProfile('內業規劃', 'project-1')
       fireEvent.click(screen.getByRole('button', { name: '建立帳號' }))
-      await screen.findByText(/帳號已建立；後續授權或專案加入未完成/)
+      await screen.findByText(/帳號已建立；後續權限或專案加入未完成/)
       fireEvent.click(screen.getByRole('button', { name: '重試未完成的步驟' }))
 
       expect(await screen.findByRole('alert')).toHaveTextContent(/409/)

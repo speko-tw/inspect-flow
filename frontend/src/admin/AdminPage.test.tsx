@@ -1551,7 +1551,7 @@ describe('admin user and company pages', () => {
       has_field_access: false,
     })
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
-    const permissionNotice = screen.getByText('你沒有使用這個頁面的權限。', {
+    const permissionNotice = screen.getByText('你沒有使用這個頁面的權限', {
       selector: 'p',
     })
     expect(permissionNotice).toHaveTextContent('你沒有使用這個頁面的權限')
@@ -1559,7 +1559,7 @@ describe('admin user and company pages', () => {
     expect(permissionNotice).toHaveClass('notice-info')
     expect(permissionNotice).not.toHaveClass('notice-error')
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByRole('link', { name: '返回個人設定' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/settings',
     )
@@ -1574,12 +1574,14 @@ describe('admin user and company pages', () => {
         screen.getByRole('heading', { name: '無權限' }),
       ).toBeInTheDocument()
       expect(
-        screen.getByText('你沒有使用這個頁面的權限。', {
+        screen.getByText('你沒有使用這個頁面的權限', {
           selector: 'p',
         }),
       ).toHaveAttribute('role', 'status')
       expect(screen.queryByRole('alert')).toBeNull()
-      expect(screen.getByRole('link', { name: /^返回/ })).toBeInTheDocument()
+      expect(
+        screen.getByRole('link', { name: '回到我的首頁' }),
+      ).toBeInTheDocument()
       expect(screen.queryByRole('link', { name: '紀錄' })).toBeNull()
     },
   )
@@ -1879,7 +1881,7 @@ describe('admin user and company pages', () => {
 
     expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
     expect(
-      screen.getByText('你沒有使用這個頁面的權限。', {
+      screen.getByText('你沒有使用這個頁面的權限', {
         selector: 'p',
       }),
     ).toHaveAttribute('role', 'status')
@@ -2157,7 +2159,7 @@ describe('admin user and company pages', () => {
       })
 
       expect(
-        screen.getByText('你沒有使用這個頁面的權限。', {
+        screen.getByText('你沒有使用這個頁面的權限', {
           selector: 'p',
         }),
       ).toHaveAttribute('role', 'status')

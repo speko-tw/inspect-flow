@@ -171,7 +171,7 @@ describe('今日任務首頁', () => {
     })
 
     expect(
-      await screen.findByRole('link', { name: '前往我的專案' }),
+      await screen.findByRole('link', { name: '回到我的首頁' }),
     ).toHaveAttribute('href', '/projects')
     expect(screen.getByRole('link', { name: '專案' })).toHaveAttribute(
       'href',
@@ -433,10 +433,12 @@ describe('今日任務首頁', () => {
       },
     })
 
-    expect(
-      screen.getByRole('heading', { name: '目前無法查看現場任務' }),
-    ).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: '前往我的專案' })
+    expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    const link = screen.getByRole('link', { name: '回到我的首頁' })
     expect(link).toHaveAttribute('href', '/projects')
     expect(link).toHaveClass('btn')
     expect(fetcher).not.toHaveBeenCalled()
@@ -447,10 +449,12 @@ describe('今日任務首頁', () => {
     vi.stubGlobal('fetch', fetcher)
     renderPage({ user: { has_field_access: false, can_inspect_tasks: false } })
 
-    expect(
-      screen.getByRole('heading', { name: '目前無法查看現場任務' }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '前往個人設定' })).toHaveAttribute(
+    expect(screen.getByRole('heading', { name: '無權限' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/settings',
     )
@@ -470,7 +474,15 @@ describe('今日任務首頁', () => {
       ),
     )
     const page = renderPage()
-    expect(await screen.findByText('目前無法查看現場任務')).toBeInTheDocument()
+    expect(
+      await screen.findByText('你沒有使用這個頁面的權限', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/tasks',
+    )
     expect(screen.queryByText('目前沒有符合的任務')).not.toBeInTheDocument()
     page.unmount()
     vi.stubGlobal(

@@ -161,7 +161,7 @@
           "key": "walkthrough",
           "item": "排水管坡度檢查",
           "zone": "一樓",
-          "location": "示範廠 A 棟機房（請開始查核）",
+          "location": "示範廠 A 棟機房",
           "assignee": "field_a",
           "status": "DRAFT",
           "name": "擴建廠機房派工示範"
@@ -188,7 +188,7 @@
           "key": "completed",
           "item": "給水管試壓檢查",
           "zone": "二樓",
-          "location": "示範廠 D 棟設備間（示範完成紀錄）",
+          "location": "示範廠 D 棟設備間",
           "assignee": "field_b",
           "status": "COMPLETED",
           "name": "設備間試壓紀錄"
@@ -197,7 +197,7 @@
           "key": "cancelled",
           "item": "排水管坡度檢查",
           "zone": "二樓",
-          "location": "示範廠 E 棟管道間（示範取消紀錄）",
+          "location": "示範廠 E 棟管道間",
           "assignee": "field_a",
           "status": "CANCELLED",
           "name": "管道間排水坡度"
@@ -206,7 +206,7 @@
           "key": "draft",
           "item": "止水閥標示檢查",
           "zone": "一樓",
-          "location": "示範廠 F 棟草稿任務",
+          "location": "示範廠 F 棟設備間",
           "assignee": "field_a",
           "status": "DRAFT",
           "name": "草稿止水閥標示"

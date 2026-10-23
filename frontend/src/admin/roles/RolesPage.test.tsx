@@ -296,6 +296,73 @@ describe('角色表單未儲存導覽防護', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it('未修改角色時可直接切換到新增表單', async () => {
+    rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
+    renderRoles()
+    await screen.findByRole('row', { name: /檢視者/ })
+    fireEvent.click(screen.getByRole('button', { name: '修改角色 檢視者' }))
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '新增角色' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('角色名稱')).toHaveValue('')
+    expect(
+      screen.queryByRole('region', { name: '有尚未儲存的變更' }),
+    ).toBeNull()
+  })
+
+  it('新增表單已有內容時再次按新增不清除草稿', async () => {
+    rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
+    renderRoles('/roles')
+    await screen.findByRole('heading', { name: '專案角色' })
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: '新草稿' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+
+    expect(screen.getByLabelText('角色名稱')).toHaveValue('新草稿')
+  })
+
+  it('修改角色後切換新增可取消並保留編輯內容', async () => {
+    rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
+    renderRoles()
+    await screen.findByRole('row', { name: /檢視者/ })
+    fireEvent.click(screen.getByRole('button', { name: '修改角色 檢視者' }))
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: '修改中的檢視者' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '有尚未儲存的變更' }),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: '保留編輯' }))
+    expect(screen.getByLabelText('角色名稱')).toHaveValue('修改中的檢視者')
+    expect(
+      screen.getByRole('heading', { name: '修改角色「檢視者」' }),
+    ).toBeVisible()
+  })
+
+  it('確認捨棄角色編輯後清空欄位並開啟新增表單', async () => {
+    rolesFetch({ roles: [makeRole('role-1', '檢視者')] })
+    renderRoles()
+    await screen.findByRole('row', { name: /檢視者/ })
+    fireEvent.click(screen.getByRole('button', { name: '修改角色 檢視者' }))
+    fireEvent.change(screen.getByLabelText('角色名稱'), {
+      target: { value: '修改中的檢視者' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新增角色' }))
+    await screen.findByRole('heading', { name: '有尚未儲存的變更' })
+    fireEvent.click(screen.getByRole('button', { name: '捨棄變更並新增' }))
+
+    expect(
+      await screen.findByRole('heading', { name: '新增角色' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('角色名稱')).toHaveValue('')
+  })
+
   it('實際輸入後攔截 beforeunload', async () => {
     rolesFetch()
     renderRoles('/roles')

@@ -57,6 +57,7 @@ export default function RolesPage() {
   const [creatorRoleSaved, setCreatorRoleSaved] = useState(false)
   const [creatorRoleOpen, setCreatorRoleOpen] = useState(false)
   const [roleFormOpen, setRoleFormOpen] = useState(false)
+  const [confirmNewRole, setConfirmNewRole] = useState(false)
   // 待確認的刪除與修改；數字是按下按鈕當下向後端重新取得的。
   const [deleting, setDeleting] = useState<Role | null>(null)
   const [pending, setPending] = useState<{
@@ -187,6 +188,26 @@ export default function RolesPage() {
     setSelected(role.permission_codes)
     setIsAssignable(Boolean(role.is_assignable))
     setIsExternalAllowed(Boolean(role.is_external_allowed))
+  }
+
+  function startCreatingRole() {
+    if (editing && hasUnsavedChanges) {
+      setConfirmNewRole(true)
+      return
+    }
+    if (!editing) {
+      setRoleFormOpen(true)
+      return
+    }
+    resetForm()
+    setConfirmNewRole(false)
+    setRoleFormOpen(true)
+  }
+
+  function confirmCreateRole() {
+    resetForm()
+    setConfirmNewRole(false)
+    setRoleFormOpen(true)
   }
 
   function toggleCode(code: string, checked: boolean) {
@@ -342,6 +363,19 @@ export default function RolesPage() {
       <UnsavedLeaveBox guard={leaveGuard} />
       <h1 id="roles-heading">{PAGE_TITLES.projectRoles}</h1>
       <FormError>{error}</FormError>
+      {confirmNewRole && (
+        <ConfirmBox
+          cancelLabel="保留編輯"
+          confirmLabel="捨棄變更並新增"
+          onCancel={() => setConfirmNewRole(false)}
+          onConfirm={confirmCreateRole}
+          role="region"
+          title="有尚未儲存的變更"
+          variant="danger"
+        >
+          <p>切換到新增角色會捨棄目前尚未儲存的內容。</p>
+        </ConfirmBox>
+      )}
       {deleting && (
         <ConfirmBox
           busy={saving}
@@ -465,7 +499,7 @@ export default function RolesPage() {
         <button
           aria-controls="role-editor-panel"
           aria-expanded={roleFormOpen}
-          onClick={() => setRoleFormOpen(true)}
+          onClick={startCreatingRole}
           type="button"
         >
           新增角色
