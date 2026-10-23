@@ -62,6 +62,7 @@ const builtInUser: User = {
   name_zh: null,
   name_en: null,
   company_id: null,
+  company_name: null,
   department: null,
   location: null,
   employee_no: null,
@@ -2556,5 +2557,36 @@ describe('management error messages', () => {
     expect(managementErrorMessage(new TypeError('Failed to fetch'))).toBe(
       '無法連線到伺服器，請稍後再試。',
     )
+  })
+})
+
+describe('直接開啟帳號詳情（#414）', () => {
+  it('不在第一頁的帳號由單帳號回應顯示公司名', async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) => ({
+      ...regularUser,
+      id: `first-${index}`,
+      username: `first.${index}`,
+      company_id: null,
+      company_name: null,
+    }))
+    const fetchMock = managementFetch({
+      userRows: [...firstPage, regularUser],
+    })
+    renderAdmin('/accounts/user-1')
+    expect(await screen.findByText('公司：示範公司／工程部')).toBeVisible()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) =>
+          new URL(String(input), 'http://testserver').pathname ===
+          '/api/v1/users/user-1',
+      ),
+    ).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) =>
+          new URL(String(input), 'http://testserver').pathname ===
+          '/api/v1/companies',
+      ),
+    ).toBe(false)
   })
 })

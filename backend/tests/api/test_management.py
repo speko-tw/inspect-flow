@@ -1608,3 +1608,31 @@ def test_batch_status_rejects_more_than_200_items(admin_client, resource):
     assert response.json()["error"]["details"] == [
         "一次最多選取 200 筆，請減少數量後再試。"
     ]
+
+
+@pytest.mark.parametrize("linked", [True, False])
+def test_user_detail_includes_company_name_without_loading_the_list(
+    admin_client, db_session, linked
+):
+    """ADM-R47、#414：直接開啟非首頁帳號也取得公司名稱，無公司回 null。"""
+    client, _ = admin_client
+    user = create_root_user_with_company(db_session, "DETAIL414")
+    company = db_session.get(Company, user.company_id)
+    assert company is not None
+    company.name = "詳情的公司"
+    if not linked:
+        user.company_id = None
+        user.employee_no = None
+        user.department = None
+        user.location = None
+    db_session.commit()
+    first = client.get("/api/v1/users", params={"limit": 1})
+    assert first.status_code == 200
+    assert str(user.id) not in {item["id"] for item in first.json()["items"]}
+
+    response = client.get(f"/api/v1/users/{user.id}")
+
+    assert response.status_code == 200
+    assert response.json()["company_name"] == (
+        "詳情的公司" if linked else None
+    )

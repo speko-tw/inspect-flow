@@ -33,6 +33,11 @@ export interface User {
   account_expires_on?: string | null
 }
 
+/** ADM-R47：直接網址的詳情回應保證包含公司名稱，未連結時為 null。 */
+export interface UserDetail extends User {
+  company_name: string | null
+}
+
 export interface RestorePreview {
   user_id: string
   username: string

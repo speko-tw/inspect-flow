@@ -149,7 +149,7 @@ class UserResponse(BaseModel):
 
 
 class UserListItemResponse(UserResponse):
-    """Paged account row including company display data for ADM-R13."""
+    """ADM-R13、ADM-R47：清單與詳情共用公司名稱，避免依賴公司目錄。"""
 
     company_name: str | None
 
@@ -623,12 +623,13 @@ def get_module_delegate_user(
     )
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserListItemResponse)
 def get_user(
     user_id: UUID,
     db: Session = Depends(get_db, scope="function"),  # noqa
-) -> User:
-    return _get_user(db, user_id)
+) -> UserListItemResponse:
+    """ADM-R47：單帳號也帶公司名稱，使用同一批次序列化入口防止口徑分歧。"""
+    return _serialize_user_page(db, [_get_user(db, user_id)])[0]
 
 
 @router.post("", response_model=CreatedUserResponse, status_code=201)
