@@ -2830,8 +2830,17 @@ describe('project members for an office user (not admin, #481)', () => {
     })
     renderAt(path, officeUser)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '你沒有權限管理這個專案的成員',
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(
+      await screen.findByText('你沒有使用這個頁面的權限', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/settings',
     )
     expect(screen.queryByRole('button', { name: '加入成員' })).toBeNull()
     expect(screen.queryByRole('button', { name: /修改「/ })).toBeNull()

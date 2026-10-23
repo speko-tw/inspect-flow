@@ -2,11 +2,65 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { CurrentUserProvider } from '../../auth/useCurrentUser'
+import { currentUserFixture } from '../../testing/contractFixtures'
 import ProjectItemLinks from './ProjectItemLinks'
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('ProjectItemLinks', () => {
+  it('shows shared denial for a 403 item list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            { error: { code: 'permission.denied' } },
+            { status: 403 },
+          ),
+        ),
+    )
+
+    render(
+      <CurrentUserProvider
+        value={{
+          user: currentUserFixture({ is_admin: true }),
+          clear: vi.fn(),
+        }}
+      >
+        <MemoryRouter
+          initialEntries={['/projects/project-1/inspection-items']}
+        >
+          <Routes>
+            <Route
+              element={
+                <ProjectItemLinks
+                  projectId="project-1"
+                  viewerPermissions={[]}
+                />
+              }
+              path="/projects/:projectId/inspection-items"
+            />
+          </Routes>
+        </MemoryRouter>
+      </CurrentUserProvider>,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: '無權限', level: 2 }),
+    ).toBeVisible()
+    expect(
+      await screen.findByText('你沒有使用這個頁面的權限', {
+        selector: 'p[role="status"]',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
+      'href',
+      '/overview',
+    )
+  })
+
   it('shows source, applied time, and new-item highlight', async () => {
     vi.stubGlobal(
       'fetch',

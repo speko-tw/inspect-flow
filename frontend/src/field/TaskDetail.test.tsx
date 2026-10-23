@@ -3,6 +3,8 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import TaskDetail from './TaskDetail'
+import { currentUserFixture } from '../testing/contractFixtures'
+import { CurrentUserProvider } from '../auth/useCurrentUser'
 
 const field = {
   id: 'field-1',
@@ -76,12 +78,19 @@ const detail = {
 
 function renderDetail() {
   return render(
-    <MemoryRouter initialEntries={['/tasks/task-1?scope=all']}>
-      <Routes>
-        <Route path="/tasks/:id" element={<TaskDetail taskId="task-1" />} />
-        <Route path="/tasks/" element={<p>任務清單</p>} />
-      </Routes>
-    </MemoryRouter>,
+    <CurrentUserProvider
+      value={{
+        user: currentUserFixture({ has_field_access: true }),
+        clear: vi.fn(),
+      }}
+    >
+      <MemoryRouter initialEntries={['/tasks/task-1?scope=all']}>
+        <Routes>
+          <Route path="/tasks/:id" element={<TaskDetail taskId="task-1" />} />
+          <Route path="/tasks/" element={<p>任務清單</p>} />
+        </Routes>
+      </MemoryRouter>
+    </CurrentUserProvider>,
   )
 }
 
@@ -183,7 +192,7 @@ describe('現場任務詳情', () => {
   })
 
   it.each([
-    [403, '無法查看任務'],
+    [403, '無權限'],
     [500, '無法載入任務詳情'],
   ])('狀態 %i 顯示對應錯誤與返回連結', async (status, heading) => {
     vi.stubGlobal(
@@ -194,10 +203,19 @@ describe('現場任務詳情', () => {
     expect(
       await screen.findByRole('heading', { name: heading }),
     ).toBeInTheDocument()
-    const back = screen.getByRole('link', { name: '返回任務清單' })
-    expect(back).toHaveClass('btn')
-    fireEvent.click(back)
-    expect(screen.getByText('任務清單')).toBeInTheDocument()
+    if (status === 403) {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        '你沒有使用這個頁面的權限',
+      )
+      expect(
+        screen.getByRole('link', { name: '回到我的首頁' }),
+      ).toHaveAttribute('href', '/tasks')
+    } else {
+      const back = screen.getByRole('link', { name: '返回任務清單' })
+      expect(back).toHaveClass('btn')
+      fireEvent.click(back)
+      expect(screen.getByText('任務清單')).toBeInTheDocument()
+    }
   })
 
   it.each([404, 422])(

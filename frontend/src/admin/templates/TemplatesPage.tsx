@@ -9,6 +9,7 @@ import {
 } from 'react'
 
 import { HttpError, isForbidden } from '../../http'
+import AccessDeniedPage from '../../components/layout/AccessDeniedPage'
 import { BackButton } from '../../layout/BackLink'
 import { PAGE_TITLES } from '../../layout/navigationLabels'
 import { ConfirmBox } from '../../ui/ConfirmBox'
@@ -127,6 +128,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(true)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [readOnly, setReadOnly] = useState(!canManage)
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
   const [isMobile, setIsMobile] = useState(
@@ -213,12 +215,12 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
       })
       .catch((caught: unknown) => {
         if (!active) return
-        if (isForbidden(caught)) setReadOnly(true)
-        setError(
-          isForbidden(caught)
-            ? '你沒有權限瀏覽範本庫。'
-            : managementErrorMessage(caught),
-        )
+        if (isForbidden(caught)) {
+          setAccessDenied(true)
+          setError('')
+        } else {
+          setError(managementErrorMessage(caught))
+        }
       })
       .finally(() => active && setLoading(false))
     return () => {
@@ -241,12 +243,13 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
         setLoadedCategoryIds((current) => new Set([...current, categoryId]))
       })
       .catch((caught: unknown) => {
-        if (active)
-          setError(
-            isForbidden(caught)
-              ? '你沒有權限瀏覽範本庫。'
-              : managementErrorMessage(caught),
-          )
+        if (!active) return
+        if (isForbidden(caught)) {
+          setAccessDenied(true)
+          setError('')
+        } else {
+          setError(managementErrorMessage(caught))
+        }
       })
     return () => {
       active = false
@@ -269,12 +272,13 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
         }
       })
       .catch((caught: unknown) => {
-        if (active)
-          setError(
-            isForbidden(caught)
-              ? '你沒有權限瀏覽範本庫。'
-              : managementErrorMessage(caught),
-          )
+        if (!active) return
+        if (isForbidden(caught)) {
+          setAccessDenied(true)
+          setError('')
+        } else {
+          setError(managementErrorMessage(caught))
+        }
       })
     return () => {
       active = false
@@ -1280,6 +1284,8 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
       </div>
     )
   }
+
+  if (accessDenied) return <AccessDeniedPage />
 
   return (
     <section aria-labelledby="templates-heading" className="tpl-page">

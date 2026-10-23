@@ -1,0 +1,14 @@
+.roles-permissions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.roles-permission-group {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.roles-permission-group legend {
+  font-weight: 650;
+}

@@ -974,11 +974,11 @@ describe('project home', () => {
     expect(
       await screen.findByRole('heading', { name: '無權限' }),
     ).toBeVisible()
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      '你沒有權限執行這項操作。',
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '你沒有使用這個頁面的權限',
     )
-    // 有出路：依權限回到落點，不再固定回 /field（#480）。
-    expect(screen.getByRole('link', { name: '返回我的任務' })).toHaveAttribute(
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('link', { name: '回到我的首頁' })).toHaveAttribute(
       'href',
       '/tasks',
     )
