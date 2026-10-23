@@ -235,6 +235,11 @@ describe('#435 刪除專案查核項目', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const box = screen.getByRole('group', { name: '刪除查核項目' })
     expect(box).toHaveTextContent('刪除後無法復原')
+    expect(
+      within(box).getByText(
+        '只有沒有任務引用的項目可以刪除，草稿與已取消任務也算引用。',
+      ),
+    ).toBeVisible()
     fireEvent.click(within(box).getByRole('button', { name: '確認刪除' }))
     await waitFor(() => expect(screen.queryByText('未使用項目')).toBeNull())
     expect(fetchMock).toHaveBeenLastCalledWith(

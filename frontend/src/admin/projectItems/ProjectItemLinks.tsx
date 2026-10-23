@@ -193,7 +193,7 @@ export default function ProjectItemLinks({
                 >
                   <p>確定刪除「{item.title}」？刪除後無法復原。</p>
                   <p>
-                    只有沒有任務引用的項目可以刪除， 草稿與已取消任務也算引用。
+                    只有沒有任務引用的項目可以刪除，草稿與已取消任務也算引用。
                   </p>
                   {deleteError && <p role="alert">{deleteError}</p>}
                 </ConfirmBox>

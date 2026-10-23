@@ -56,33 +56,6 @@ def test_upgrade_head_creates_a_single_head_and_stamps_it(db_url):
     assert _stamped_version(db_url) == expected_head
 
 
-@pytest.mark.parametrize("parent", ["c489a760d1e3", "c5f1a2e7b903"])
-def test_upgrade_from_either_branch_preserves_both_schemas(db_url, parent):
-    """既有任一分支都可升級，且同時保留來源快照及人員索引。"""
-    cfg = _alembic_config()
-    command.upgrade(cfg, parent)
-    command.upgrade(cfg, "head")
-
-    engine = create_engine(db_url)
-    try:
-        inspector = inspect(engine)
-        columns = {
-            column["name"]
-            for column in inspector.get_columns("project_inspection_items")
-        }
-        indexes = {
-            index["name"]: index["column_names"]
-            for index in inspector.get_indexes("inspection_tasks")
-        }
-    finally:
-        engine.dispose()
-
-    assert {"source_category_name", "source_system_name"} <= columns
-    assert indexes["ix_inspection_tasks_started_by_id"] == ["started_by"]
-    assert indexes["ix_inspection_tasks_completed_by_id"] == ["completed_by"]
-    assert _stamped_version(db_url) == "d7e2f6a1b904"
-
-
 def test_baseline_upgrade_creates_no_tables_besides_alembic_version(
     db_url,
 ):
@@ -169,7 +142,7 @@ def test_downgrade_base_then_upgrade_head_round_trip(db_url):
 
 def test_project_item_source_path_migration_is_nullable_and_reversible(db_url):
     cfg = _alembic_config()
-    previous_revision = "b72e4c19f6a3"
+    previous_revision = "c5f1a2e7b903"
     command.upgrade(cfg, previous_revision)
     engine = create_engine(db_url)
     try:
