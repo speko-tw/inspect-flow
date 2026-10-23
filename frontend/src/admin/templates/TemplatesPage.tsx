@@ -98,7 +98,8 @@ function apiMessage(error: unknown): string {
 }
 
 /**
- * 顯示範本庫；只有具 `template.manage` 的使用者可進行寫入。
+ * 顯示範本分類、系統與查核項目，並管理其編輯及儲存流程。
+ * 只有具 `template.manage` 的使用者可寫入；唯讀狀態仍可檢視範本。
  */
 export default function TemplatesPage({ canManage }: { canManage: boolean }) {
   const [categories, setCategories] = useState<TemplateCategory[]>([])
@@ -200,6 +201,7 @@ export default function TemplatesPage({ canManage }: { canManage: boolean }) {
     selectedCategory?.name,
     selectedSystem?.name,
   ])
+  // 路由離開保護與樹狀選取保護各自涵蓋不同離開方式，需同步維持。
   const leaveGuard = navigationGuard.useUnsavedNavigationGuard(dirty)
 
   useEffect(() => {

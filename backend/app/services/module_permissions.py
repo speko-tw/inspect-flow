@@ -51,18 +51,26 @@ class ModulePermissionError(ValueError):
 
 
 class ModulePermissionDeniedError(ModulePermissionError):
+    """表示登入者不具執行模組操作所需的有效權限。"""
+
     status_code = 403
 
 
 class InvalidModulePermissionError(ModulePermissionError):
+    """表示請求的模組權限資料不符合登記表或目前資料狀態。"""
+
     pass
 
 
 class ExternalCollaboratorPermissionError(ModulePermissionError):
+    """表示外部協作人員收到不允許的模組權限。"""
+
     pass
 
 
 class ImpliedPermissionError(ModulePermissionError):
+    """表示操作漏掉另一權限依規格必須同時維持的權限。"""
+
     pass
 
 
@@ -152,7 +160,11 @@ def query_person_access(
 def query_people_access(
     session: Session, *, user_ids: set[uuid.UUID]
 ) -> dict[uuid.UUID, PersonAccess]:
-    """批次回答 DOM-R60 人員查詢，避免候選清單逐人查詢。"""
+    """批次提供其他模組所需的人員最小存取資料（DOM-R60）。
+
+    同一查詢同時取回明確權限；Admin 的有效權限以登記表全集表示，
+    避免呼叫端各自推導不同的跨模組人員狀態。
+    """
     if not user_ids:
         return {}
     rows = session.execute(
@@ -377,7 +389,11 @@ def _check_last_project_manager(
     project_id: uuid.UUID,
     desired_roles: list[Role],
 ) -> None:
-    """依 DOM-R70 序列化檢查是否會移除專案最後一位有效管理者。"""
+    """依 DOM-R70 序列化檢查是否會移除專案最後一位有效管理者。
+
+    專案列是同一專案角色異動共用的鎖；重讀有效成員後才判斷，避免
+    兩個並行請求各自看見另一位管理者並同時移除彼此。
+    """
     if actor_is_admin:
         return
     # 不同專案的角色異動可能同時發生；鎖專案列後再重算管理者集合，
@@ -429,6 +445,7 @@ def _record_denied_role_assignment(
     role_ids: set[uuid.UUID],
     reason: str,
 ) -> None:
+    """在獨立交易保留拒絕稽核，不受請求主交易回滾影響（DOM-R70）。"""
     try:
         audit_service.record_audit_event_in_independent_transaction(
             session,
@@ -454,7 +471,11 @@ def validate_role_external_configuration(
     is_external_allowed: bool,
     permission_codes: Iterable[str],
 ) -> None:
-    """依 DOM-R72 鎖定相關資料並拒絕不安全的角色修改。"""
+    """依 DOM-R72 驗證外部可用角色設定與目前持有人相容。
+
+    先鎖角色，再依 UUID 鎖持有人，與外部身分轉換使用相同鎖序，
+    避免修改角色時忽略同時變更身分的人員。
+    """
     locked_role = session.scalar(
         select(Role)
         .where(Role.id == role.id)
@@ -529,7 +550,7 @@ _CREATOR_ROLE_CODES = frozenset(
 def list_user_module_permissions(
     session: Session, *, user_id: uuid.UUID
 ) -> list[UserModulePermission]:
-    """List a person's explicit module permission rows."""
+    """依代碼排序列出人員明確授予的模組權限資料列。"""
     return list(
         session.scalars(
             select(UserModulePermission)
@@ -542,7 +563,7 @@ def list_user_module_permissions(
 def list_user_module_delegations(
     session: Session, *, user_id: uuid.UUID
 ) -> list[UserModuleDelegation]:
-    """List a person's module delegations in stable module order."""
+    """依模組排序列出人員收到的委派；委派本身不授予編輯權限。"""
     return list(
         session.scalars(
             select(UserModuleDelegation)
@@ -555,7 +576,10 @@ def list_user_module_delegations(
 def list_permission_bundles(
     session: Session, *, actor: User
 ) -> list[PermissionBundle]:
-    """List bundles an Admin or delegate can fully apply."""
+    """列出 Admin 可管理的組合，或委派者可完整套用的組合。
+
+    委派跨模組組合會被整筆排除，避免部分套用被誤認為完整授權。
+    """
     bundles = list(
         session.scalars(
             select(PermissionBundle)
@@ -622,7 +646,7 @@ def update_permission_bundle(
     name: str,
     permission_codes: Iterable[str],
 ) -> bool:
-    """Replace the bundle definition without changing prior grants."""
+    """更新組合定義並回報是否有變更；既有授權不隨定義改寫。"""
     _require_admin(actor)
     _validate_bundle_name(name)
     desired = _validated_module_codes(permission_codes)
@@ -666,7 +690,7 @@ def update_permission_bundle(
 def delete_permission_bundle(
     session: Session, *, actor: User, bundle: PermissionBundle
 ) -> None:
-    """Delete a bundle; already applied user grants remain unchanged."""
+    """刪除組合定義並保留先前已套用的人員權限。"""
     _require_admin(actor)
     before = {
         "name": bundle.name,
@@ -686,7 +710,11 @@ def delete_permission_bundle(
 
 
 def change_creator_role(session: Session, *, actor: User, role: Role) -> bool:
-    """依 DOM-R64 設定建立者角色並保護其權限下限。"""
+    """依 DOM-R64 設定建立者角色並保護其三項最低權限。
+
+    鎖定候選角色及其持有人後再鎖設定列，讓此處與角色修改流程
+    共用鎖序，避免建立者角色在檢查後被同步改成不合格設定。
+    """
     _require_admin(actor)
     # 先鎖候選角色再鎖設定列，與角色修改的順序一致。
     locked_role = session.scalar(
@@ -742,10 +770,9 @@ def grant_module_permission(
     permission_code: str,
     source: str = "manual",
 ) -> bool:
-    """Grant one module permission and its required implication.
+    """授予一項模組權限，並依規格同步授予其蘊含權限（DOM-R62）。
 
-    Returns ``True`` when any row was inserted. Existing grants are
-    idempotent and return ``False`` without audit writes.
+    有新增任何資料列時回傳 ``True``；重複授予具冪等性，不另寫稽核。
     """
     _check_permission_code(permission_code)
     module = permission_code_module(permission_code)
@@ -795,7 +822,7 @@ def revoke_module_permission(
     user: User,
     permission_code: str,
 ) -> bool:
-    """Revoke one grant; implied access requires a separate revoke."""
+    """收回一項明確授權；被其他權限蘊含的存取須先收回主權限。"""
     _check_permission_code(permission_code)
     module = permission_code_module(permission_code)
     _authorize_mutation(
@@ -849,7 +876,8 @@ def grant_module_delegation(
 ) -> bool:
     """依 DOM-R72 管理員授予模組委派。
 
-    外部協作者不得取得模組委派。
+    委派只開放代為授權該模組，不附帶模組功能權限；外部協作者不得
+    取得委派，且 Admin 的模組存取為隱含狀態，不另存資料列。
     """
     if not actor.is_admin:
         raise ModulePermissionDeniedError("Only Admin may grant delegation")
@@ -904,7 +932,7 @@ def revoke_module_delegation(
     user: User,
     module: str,
 ) -> bool:
-    """Admin-only, idempotent delegation removal."""
+    """由 Admin 收回模組委派；不存在時維持冪等且不寫稽核。"""
     if not actor.is_admin:
         raise ModulePermissionDeniedError("Only Admin may revoke delegation")
     row = session.scalar(
@@ -934,7 +962,11 @@ def apply_permission_bundle(
     user: User,
     bundle: PermissionBundle,
 ) -> bool:
-    """Apply every bundle item atomically after checking the full set."""
+    """先檢查整份組合，再原子套用全部權限（DOM-R63）。
+
+    委派者不能只套用自己能管理的部分，否則組合名稱會掩蓋實際授權
+    範圍；拒絕稽核則獨立於主交易保留。
+    """
     codes = sorted({item.permission_code for item in bundle.permission_codes})
     invalid_codes = [
         code

@@ -38,12 +38,18 @@ def _audit_foreign_keys(table: str) -> list[sa.ForeignKeyConstraint]:
 
 
 def _normalized_name_expression(column: str):
+    """產生符合各資料庫語法的名稱正規化索引表達式（TPL-R03）。
+
+    PostgreSQL 分支明確產生 `lower(trim(BOTH FROM ...))`，其餘方言
+    沿用 SQLAlchemy 函式表達式；兩者都用來符合 TPL-R03 的名稱口徑。
+    """
     if op.get_bind().dialect.name == "postgresql":
         return sa.text(f"lower(trim(BOTH FROM {column}))")
     return sa.func.lower(sa.func.trim(sa.column(column)))
 
 
 def upgrade() -> None:
+    """建立範本結構、套用快照及系統角色指派所需資料表。"""
     op.create_table(
         "template_categories",
         *_audit_columns(),
@@ -462,6 +468,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """依外鍵相依順序移除本 revision 建立的範本資料表。"""
     op.drop_table("project_evidence_requirements")
     op.drop_table("project_numeric_standards")
     op.drop_table("project_text_standards")

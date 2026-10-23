@@ -73,7 +73,11 @@ type Props = {
   stablePointErrorKeys?: boolean
 }
 
-/** 依 TPL-R16、TPL-R18 提供共用編輯器與送出前欄位驗證。 */
+/**
+ * 依 TPL-R16、TPL-R18 提供共用範本項目編輯器與送出前欄位驗證。
+ * 專案項目編輯頁也重用此元件，因此頁面專屬的導覽與錯誤身分由 props
+ * 傳入，避免兩處欄位規則逐漸分歧。
+ */
 export function TemplateItemEditor({
   itemDraft,
   errors,
@@ -154,6 +158,7 @@ export function TemplateItemEditor({
     }, 0)
   }
   const fieldForError = (key: string): HTMLElement | null => {
+    // 範圍錯誤沒有單一輸入框；聚焦下限欄能讓使用者直接修正區間。
     const fieldKey = key.endsWith(':range')
       ? key.slice(0, -':range'.length) + ':lower'
       : key

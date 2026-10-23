@@ -25,12 +25,14 @@ from app.services.operator import get_current_operator
 
 @dataclass(frozen=True)
 class TemplateFieldError:
+    """範本巢狀欄位驗證錯誤，供 API 對應欄位回報。"""
+
     path: str
     code: str
 
 
 class InvalidTemplateError(ValueError):
-    """The supplied nested structure violates template rules."""
+    """範本巢狀結構違反欄位規則時攜帶可定位的錯誤清單。"""
 
     def __init__(self, fields: Iterable[TemplateFieldError]) -> None:
         self.fields = tuple(fields)
@@ -220,7 +222,11 @@ def validate_system_structures(items: Iterable[dict]) -> None:
 def park_template_names(
     db: Session, items: Iterable[TemplateItem]
 ) -> dict[UUID, dict]:
-    """Free names for replacement while retaining their audit snapshots."""
+    """暫移既有名稱以釋放唯一索引，並保留原內容供後續稽核。
+
+    整系統覆蓋可能以另一項目的名稱取代原名；先暫移讓唯一約束不會
+    因更新順序而拒絕合法的整批替換，呼叫端仍在同一交易中完成操作。
+    """
     rows = list(items)
     snapshots = {item.id: _template_audit_snapshot(db, item) for item in rows}
     for item in rows:
@@ -230,6 +236,7 @@ def park_template_names(
 
 
 def create_category(db: Session, name: str) -> TemplateCategory:
+    """建立工程類別並留下對應稽核事件。"""
     operator = get_current_operator(db)
     category = TemplateCategory(
         name=name,
@@ -251,6 +258,7 @@ def create_category(db: Session, name: str) -> TemplateCategory:
 def rename_category(
     db: Session, category: TemplateCategory, name: str
 ) -> TemplateCategory:
+    """更新類別名稱；同名請求不寫入也不產生重複稽核事件。"""
     before = category.name
     if before == name:
         return category
@@ -268,6 +276,7 @@ def rename_category(
 
 
 def delete_category(db: Session, category: TemplateCategory) -> None:
+    """刪除已由 API 確認為空的類別並記錄刪除前名稱。"""
     record_audit_event(
         db,
         "template_category.deleted",
@@ -282,6 +291,7 @@ def delete_category(db: Session, category: TemplateCategory) -> None:
 def create_system(
     db: Session, category: TemplateCategory, name: str
 ) -> TemplateSystem:
+    """在類別下建立系統並留下對應稽核事件。"""
     operator = get_current_operator(db)
     system = TemplateSystem(
         category_id=category.id,
@@ -304,6 +314,7 @@ def create_system(
 def rename_system(
     db: Session, system: TemplateSystem, name: str
 ) -> TemplateSystem:
+    """更新系統名稱；同名請求不寫入也不產生重複稽核事件。"""
     before = system.name
     if before == name:
         return system
@@ -321,6 +332,7 @@ def rename_system(
 
 
 def delete_system(db: Session, system: TemplateSystem) -> None:
+    """刪除已由 API 確認為空的系統並記錄刪除前路徑。"""
     record_audit_event(
         db,
         "template_system.deleted",
@@ -539,6 +551,7 @@ def _record_template_update(
 def create_template(
     db: Session, data: dict, *, audit_created: bool = True
 ) -> TemplateItem:
+    """建立範本及其完整項次結構，並依呼叫情境記錄建立稽核。"""
     validate_template_structure(data)
     operator_id = get_current_operator(db).id
     item = TemplateItem(
@@ -569,6 +582,7 @@ def replace_template(
     data: dict,
     audit_before: dict | None = None,
 ) -> TemplateItem:
+    """以完整結構取代範本內容並記錄變更前後的稽核差異（TPL-R02）。"""
     validate_template_structure(data)
     operator_id = get_current_operator(db).id
     before = audit_before or _template_audit_snapshot(db, item)
@@ -596,6 +610,7 @@ def replace_template(
 def delete_template(
     db: Session, item: TemplateItem, *, audit_before: dict | None = None
 ) -> None:
+    """刪除範本前保存完整結構快照，供刪除事件稽核（TPL-R25）。"""
     record_audit_event(
         db,
         "template_item.deleted",
